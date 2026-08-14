@@ -1,9 +1,12 @@
 #include "tradutorlinux/cli.hpp"
 
 #include "tradutorlinux/diagnostics/trace.hpp"
-#include "tradutorlinux/loader/image_mapper.hpp"
+#include "tradutorlinux/loader/import_resolver.hpp"
+#include "tradutorlinux/loader/module.hpp"
+#include "tradutorlinux/loader/process.hpp"
 #include "tradutorlinux/pe/pe_reader.hpp"
 
+#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -219,12 +222,14 @@ void write_map_trace(std::ostream& stream, const loader::MappedImage& image) {
         diagnostics::write_trace(stream, diagnostics::TraceComponent::Loader,
                                  diagnostics::TraceLevel::Warning, "cannot-relocate", fields);
     }
+}
 
-    const std::array unmap_fields{
-        diagnostics::TraceField{"base", format_hex(image.base)},
+void write_unmap_trace(std::ostream& stream, const std::uint64_t base) {
+    const std::array fields{
+        diagnostics::TraceField{"base", format_hex(base)},
     };
     diagnostics::write_trace(stream, diagnostics::TraceComponent::Loader,
-                             diagnostics::TraceLevel::Info, "unmap", unmap_fields);
+                             diagnostics::TraceLevel::Info, "unmap", fields);
 }
 
 void write_map_failed_trace(std::ostream& stream, const std::string_view status,
@@ -248,6 +253,70 @@ void print_map_summary(std::ostream& stream, const loader::MappedImage& image) {
     for (const loader::MapRegion& region : image.regions) {
         stream << "    região " << region.name << " rva=" << format_hex(region.rva)
                << " perms=" << permissions_label(region.permissions) << '\n';
+    }
+}
+
+[[nodiscard]] const char* import_status_label(const loader::ImportStatus status) {
+    switch (status) {
+        case loader::ImportStatus::Resolved:
+            return "resolved";
+        case loader::ImportStatus::UnknownDll:
+            return "unknown-dll";
+        case loader::ImportStatus::UnknownSymbol:
+            return "unknown-symbol";
+        case loader::ImportStatus::UnknownOrdinal:
+            return "unknown-ordinal";
+        case loader::ImportStatus::NotImpl:
+            return "not-implemented";
+        case loader::ImportStatus::UnsupportedMechanism:
+            return "unsupported-mechanism";
+    }
+    return "unknown";
+}
+
+[[nodiscard]] std::string resolved_symbol_label(const loader::ResolvedImport& entry) {
+    if (entry.by_ordinal) {
+        return "ordinal(" + std::to_string(entry.ordinal) + ")";
+    }
+    return entry.symbol;
+}
+
+void write_imports_trace(std::ostream& stream, const loader::ResolveResult& imports) {
+    for (const loader::ResolvedImport& entry : imports.imports) {
+        if (entry.status == loader::ImportStatus::Resolved) {
+            const std::array fields{
+                diagnostics::TraceField{"dll", entry.dll},
+                diagnostics::TraceField{"symbol", resolved_symbol_label(entry)},
+                diagnostics::TraceField{"address", format_hex(entry.address)},
+            };
+            diagnostics::write_trace(stream, diagnostics::TraceComponent::Imports,
+                                     diagnostics::TraceLevel::Info, "resolved", fields);
+        } else {
+            const std::array fields{
+                diagnostics::TraceField{"dll", entry.dll},
+                diagnostics::TraceField{"symbol", resolved_symbol_label(entry)},
+                diagnostics::TraceField{"status", import_status_label(entry.status)},
+                diagnostics::TraceField{"detail", entry.detail},
+            };
+            diagnostics::write_trace(stream, diagnostics::TraceComponent::Imports,
+                                     diagnostics::TraceLevel::Error, "unresolved", fields);
+        }
+    }
+}
+
+void print_imports_summary(std::ostream& stream, const loader::ResolveResult& imports) {
+    const std::size_t resolved = static_cast<std::size_t>(std::count_if(
+        imports.imports.begin(), imports.imports.end(), [](const loader::ResolvedImport& entry) {
+            return entry.status == loader::ImportStatus::Resolved;
+        }));
+    stream << "  imports resolvidos: " << resolved << "/" << imports.imports.size() << '\n';
+    for (const loader::ResolvedImport& entry : imports.imports) {
+        stream << "    " << entry.dll << '!' << resolved_symbol_label(entry);
+        if (entry.status == loader::ImportStatus::Resolved) {
+            stream << " -> " << format_hex(entry.address) << '\n';
+        } else {
+            stream << " [" << import_status_label(entry.status) << "] " << entry.detail << '\n';
+        }
     }
 }
 
@@ -382,28 +451,54 @@ ExitCode run_command(const CommandLine& command_line, std::ostream& stdout_strea
         print_pe_summary(stderr_stream, parse_result.info);
     }
 
-    loader::MapResult map_result = loader::map_image(parse_result.info, *bytes);
-    if (map_result.status == loader::MapStatus::OutOfMemory) {
+    loader::register_builtin_modules();
+
+    loader::PrepareResult prepare_result = loader::prepare_process(parse_result.info, *bytes);
+    if (prepare_result.status == loader::PrepareStatus::OutOfMemory) {
         if (command_line.trace_enabled) {
-            write_map_failed_trace(stderr_stream, "out-of-memory", map_result.error_message);
+            write_map_failed_trace(stderr_stream, "out-of-memory", prepare_result.error_message);
         }
-        stderr_stream << "erro: " << map_result.error_message << '\n';
+        stderr_stream << "erro: " << prepare_result.error_message << '\n';
         return ExitCode::InternalError;
     }
-    if (map_result.status == loader::MapStatus::InvalidImage) {
+    if (prepare_result.status == loader::PrepareStatus::InvalidImage) {
         if (command_line.trace_enabled) {
-            write_map_failed_trace(stderr_stream, "invalid-image", map_result.error_message);
+            write_map_failed_trace(stderr_stream, "invalid-image", prepare_result.error_message);
         }
-        stderr_stream << "erro: " << map_result.error_message << '\n';
+        stderr_stream << "erro: " << prepare_result.error_message << '\n';
         return ExitCode::MalformedPe;
     }
 
+    loader::GuestProcess& process = prepare_result.process;
     if (command_line.trace_enabled) {
-        write_map_trace(stderr_stream, map_result.image);
+        write_map_trace(stderr_stream, process.image);
     } else {
-        print_map_summary(stderr_stream, map_result.image);
+        print_map_summary(stderr_stream, process.image);
     }
-    loader::unmap_image(map_result.image);
+    if (command_line.trace_enabled) {
+        write_imports_trace(stderr_stream, process.imports);
+    } else {
+        print_imports_summary(stderr_stream, process.imports);
+    }
+
+    if (prepare_result.status == loader::PrepareStatus::UnresolvedImports) {
+        if (!command_line.trace_enabled) {
+            stderr_stream << "erro: importações não resolvidas: "
+                          << prepare_result.error_message << '\n';
+        }
+        const std::uint64_t unmap_base = process.image.base;
+        loader::destroy_process(process);
+        if (command_line.trace_enabled) {
+            write_unmap_trace(stderr_stream, unmap_base);
+        }
+        return ExitCode::Unsupported;
+    }
+
+    const std::uint64_t unmap_base = process.image.base;
+    loader::destroy_process(process);
+    if (command_line.trace_enabled) {
+        write_unmap_trace(stderr_stream, unmap_base);
+    }
     return ExitCode::Success;
 }
 

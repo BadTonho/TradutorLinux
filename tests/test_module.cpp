@@ -1,0 +1,113 @@
+#include "tradutorlinux/loader/module.hpp"
+#include "tradutorlinux/runtime/winapi.hpp"
+
+#include <cstdint>
+#include <string_view>
+
+#include <gtest/gtest.h>
+
+namespace tradutorlinux::loader {
+namespace {
+
+constexpr ExportedFunction kFakeExports[] = {
+    {"DoWork", 1, 0x4000000000000001ULL},
+    {"CleanUp", 2, 0x4000000000000002ULL},
+};
+
+constexpr InternalModule kFakeModule{"FAKE.dll", kFakeExports};
+
+class ModuleTest : public ::testing::Test {
+protected:
+    void SetUp() override {
+        clear_modules();
+    }
+
+    void TearDown() override {
+        clear_modules();
+    }
+};
+
+TEST_F(ModuleTest, RegistersModuleAndFindsExports) {
+    ASSERT_TRUE(register_module(kFakeModule));
+    ASSERT_EQ(registered_module_count(), 1U);
+
+    const ExportLookup by_name = find_export(ExportQuery{"FAKE.dll", "DoWork"});
+    ASSERT_TRUE(by_name.found);
+    EXPECT_EQ(by_name.ordinal, 1U);
+    EXPECT_EQ(by_name.address, 0x4000000000000001ULL);
+
+    const ExportLookup by_ordinal = find_export_by_ordinal("FAKE.dll", 2);
+    ASSERT_TRUE(by_ordinal.found);
+    EXPECT_EQ(by_ordinal.ordinal, 2U);
+    EXPECT_EQ(by_ordinal.address, 0x4000000000000002ULL);
+}
+
+TEST_F(ModuleTest, DllNamesAreCaseInsensitive) {
+    ASSERT_TRUE(register_module(kFakeModule));
+    EXPECT_TRUE(find_export(ExportQuery{"fake.dll", "DoWork"}).found);
+    EXPECT_TRUE(find_export(ExportQuery{"FAKE.DLL", "DoWork"}).found);
+    EXPECT_TRUE(find_export(ExportQuery{"fake.Dll", "DoWork"}).found);
+}
+
+TEST_F(ModuleTest, SymbolNamesAreCaseSensitive) {
+    ASSERT_TRUE(register_module(kFakeModule));
+    EXPECT_FALSE(find_export(ExportQuery{"FAKE.dll", "dowork"}).found);
+}
+
+TEST_F(ModuleTest, UnknownDllAndSymbolAreNotFound) {
+    ASSERT_TRUE(register_module(kFakeModule));
+    EXPECT_FALSE(find_export(ExportQuery{"NOPE.dll", "DoWork"}).found);
+    EXPECT_FALSE(find_export(ExportQuery{"FAKE.dll", "Missing"}).found);
+    EXPECT_FALSE(find_export_by_ordinal("FAKE.dll", 99).found);
+    EXPECT_FALSE(find_export_by_ordinal("NOPE.dll", 1).found);
+}
+
+TEST_F(ModuleTest, DuplicateRegistrationIsRejected) {
+    ASSERT_TRUE(register_module(kFakeModule));
+    EXPECT_FALSE(register_module(kFakeModule));
+    EXPECT_FALSE(register_module(InternalModule{"fake.dll", kFakeExports}));
+    EXPECT_EQ(registered_module_count(), 1U);
+}
+
+TEST_F(ModuleTest, ClearModulesResetsRegistry) {
+    ASSERT_TRUE(register_module(kFakeModule));
+    clear_modules();
+    EXPECT_EQ(registered_module_count(), 0U);
+    EXPECT_FALSE(find_export(ExportQuery{"FAKE.dll", "DoWork"}).found);
+}
+
+TEST_F(ModuleTest, RegistersBuiltinKernel32Exports) {
+    register_builtin_modules();
+    ASSERT_EQ(registered_module_count(), 1U);
+    EXPECT_TRUE(is_module_registered("KERNEL32.dll"));
+
+    const ExportLookup std_handle = find_export(ExportQuery{"KERNEL32.dll", "GetStdHandle"});
+    ASSERT_TRUE(std_handle.found);
+    EXPECT_EQ(std_handle.address,
+              reinterpret_cast<std::uintptr_t>(&tl_GetStdHandle));
+    EXPECT_EQ(find_export(ExportQuery{"kernel32.dll", "WriteFile"}).address,
+              reinterpret_cast<std::uintptr_t>(&tl_WriteFile));
+    EXPECT_EQ(find_export(ExportQuery{"KERNEL32.dll", "ExitProcess"}).address,
+              reinterpret_cast<std::uintptr_t>(&tl_ExitProcess));
+    EXPECT_EQ(find_export_by_ordinal("KERNEL32.dll", 1).address,
+              reinterpret_cast<std::uintptr_t>(&tl_GetStdHandle));
+}
+
+TEST_F(ModuleTest, RegisterBuiltinModulesIsIdempotent) {
+    register_builtin_modules();
+    register_builtin_modules();
+    EXPECT_EQ(registered_module_count(), 1U);
+}
+
+TEST_F(ModuleTest, RegistryOwnsItsStrings) {
+    const char* name = "TRANSIENT.dll";
+    const char* symbol = "Temp";
+    ExportedFunction export_{symbol, 7, 0x5000000000000007ULL};
+    const ExportedFunction exports[] = {export_};
+    const InternalModule module{name, exports};
+    ASSERT_TRUE(register_module(module));
+    EXPECT_TRUE(find_export(ExportQuery{"transient.dll", "Temp"}).found);
+}
+
+}  // namespace
+}  // namespace tradutorlinux::loader

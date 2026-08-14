@@ -1,0 +1,12 @@
+{
+  "name": "tl_missing_dll",
+  "format": "PE32+",
+  "machine": "AMD64",
+  "entry_point": "tl_entry",
+  "uses_crt": false,
+  "imports": {
+    "USER32.dll": [
+      "MessageBoxA"
+    ]
+  }
+}

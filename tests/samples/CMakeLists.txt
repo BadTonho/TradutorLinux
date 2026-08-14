@@ -14,7 +14,7 @@ find_program(TL_LLVM_READOBJ
 set(TL_FIXTURE_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/generated")
 
 function(tl_add_pe_fixture target_name source_file manifest_file)
-    set(options LINK_KERNEL32 RELOCATABLE)
+    set(options LINK_KERNEL32 LINK_USER32 RELOCATABLE RUNTIME_FAILURE EXPECT_RESOLVED)
     cmake_parse_arguments(ARG "${options}" "" "" ${ARGN})
 
     set(output_file "${TL_FIXTURE_OUTPUT_DIRECTORY}/${target_name}.exe")
@@ -22,6 +22,9 @@ function(tl_add_pe_fixture target_name source_file manifest_file)
     set(link_flags)
     if(ARG_LINK_KERNEL32)
         list(APPEND link_libraries -lkernel32)
+    endif()
+    if(ARG_LINK_USER32)
+        list(APPEND link_libraries -luser32)
     endif()
     if(ARG_RELOCATABLE)
         list(APPEND link_flags -Wl,--dynamicbase)
@@ -64,16 +67,38 @@ function(tl_add_pe_fixture target_name source_file manifest_file)
     )
     set_tests_properties(fixture_${target_name}_metadata PROPERTIES LABELS "fixture;pe32plus")
 
-    if(TARGET tradutorlinux)
+    if(TARGET tradutorlinux AND NOT ARG_RUNTIME_FAILURE)
+        set(runtime_manifest_args)
+        if(ARG_EXPECT_RESOLVED)
+            set(runtime_manifest_args
+                "-DMANIFEST=${CMAKE_CURRENT_SOURCE_DIR}/${manifest_file}")
+        endif()
         add_test(
             NAME runtime_${target_name}_matches_readobj
             COMMAND "${CMAKE_COMMAND}"
                 "-DINPUT=${output_file}"
                 "-DRUNTIME=$<TARGET_FILE:tradutorlinux>"
                 "-DLLVM_READOBJ=${TL_LLVM_READOBJ}"
+                ${runtime_manifest_args}
                 -P "${CMAKE_CURRENT_SOURCE_DIR}/verify_runtime_output.cmake"
         )
         set_tests_properties(runtime_${target_name}_matches_readobj PROPERTIES
+            DEPENDS fixture_${target_name}_metadata
+            LABELS "runtime;pe32plus"
+        )
+    endif()
+
+    if(ARG_RUNTIME_FAILURE AND TARGET tradutorlinux)
+        add_test(
+            NAME runtime_${target_name}_rejected
+            COMMAND "${CMAKE_COMMAND}"
+                "-DINPUT=${output_file}"
+                "-DRUNTIME=$<TARGET_FILE:tradutorlinux>"
+                "-DEXPECTED_EXIT=5"
+                "-DREQUIRED_TRACE=unknown-dll"
+                -P "${CMAKE_CURRENT_SOURCE_DIR}/verify_runtime_rejection.cmake"
+        )
+        set_tests_properties(runtime_${target_name}_rejected PROPERTIES
             DEPENDS fixture_${target_name}_metadata
             LABELS "runtime;pe32plus"
         )
@@ -83,5 +108,8 @@ endfunction()
 add_custom_target(tradutorlinux_samples ALL)
 
 tl_add_pe_fixture(tl_nop src/tl_nop.c manifests/tl_nop.json)
-tl_add_pe_fixture(tl_hello src/tl_hello.c manifests/tl_hello.json LINK_KERNEL32)
+tl_add_pe_fixture(tl_hello src/tl_hello.c manifests/tl_hello.json
+    LINK_KERNEL32 EXPECT_RESOLVED)
 tl_add_pe_fixture(tl_reloc src/tl_reloc.c manifests/tl_reloc.json RELOCATABLE)
+tl_add_pe_fixture(tl_missing_dll src/tl_missing_dll.c manifests/tl_missing_dll.json
+    LINK_USER32 RUNTIME_FAILURE)

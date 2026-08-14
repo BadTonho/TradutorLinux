@@ -1,9 +1,13 @@
 add_subdirectory(samples)
 
 add_executable(tradutorlinux_unit_tests
+    test_abi.cpp
     test_cli.cpp
     test_image_mapper.cpp
+    test_import_resolver.cpp
+    test_module.cpp
     test_pe_reader.cpp
+    test_process.cpp
     test_trace.cpp
 )
 target_link_libraries(tradutorlinux_unit_tests

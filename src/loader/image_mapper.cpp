@@ -392,4 +392,38 @@ void unmap_image(MappedImage& image) {
     image.regions.clear();
 }
 
+PatchStatus write_image_bytes(MappedImage& image, const std::uint32_t rva,
+                              const std::byte* data, const std::size_t size) {
+    if (image.memory == nullptr || size == 0) {
+        return PatchStatus::InvalidAddress;
+    }
+    const MapRegion* covering = nullptr;
+    for (const MapRegion& region : image.regions) {
+        const std::uint64_t start = region.rva;
+        const std::uint64_t end = static_cast<std::uint64_t>(region.rva) + region.size;
+        if (static_cast<std::uint64_t>(rva) >= start &&
+            static_cast<std::uint64_t>(rva) + size <= end) {
+            covering = &region;
+            break;
+        }
+    }
+    if (covering == nullptr) {
+        return PatchStatus::InvalidAddress;
+    }
+    const std::size_t page = host_page_size();
+    const std::uint64_t page_start = align_down(rva, page);
+    const std::uint64_t page_end =
+        align_up(static_cast<std::uint64_t>(rva) + size, page);
+    auto* page_base = image.memory + static_cast<std::ptrdiff_t>(page_start);
+    const std::size_t page_size = static_cast<std::size_t>(page_end - page_start);
+    if (mprotect(page_base, page_size, PROT_READ | PROT_WRITE) != 0) {
+        return PatchStatus::MprotectFailed;
+    }
+    std::memcpy(image.memory + static_cast<std::ptrdiff_t>(rva), data, size);
+    if (mprotect(page_base, page_size, to_prot(covering->permissions)) != 0) {
+        return PatchStatus::MprotectFailed;
+    }
+    return PatchStatus::Success;
+}
+
 }  // namespace tradutorlinux::loader

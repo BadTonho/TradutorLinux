@@ -81,4 +81,17 @@ struct RelocationDirectory {
 
 void unmap_image(MappedImage& image);
 
+enum class PatchStatus {
+    Success,
+    InvalidAddress,
+    MprotectFailed,
+};
+
+// Writes `size` bytes into the mapped image at the given RVA, temporarily
+// relaxing the covering page permissions to read-write and restoring the
+// region permissions afterwards. Used to fill the import address table, which
+// lives in read-only image regions.
+[[nodiscard]] PatchStatus write_image_bytes(MappedImage& image, std::uint32_t rva,
+                                            const std::byte* data, std::size_t size);
+
 }  // namespace tradutorlinux::loader

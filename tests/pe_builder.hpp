@@ -60,6 +60,14 @@ inline void write_u32(std::vector<std::byte>& bytes, const std::size_t offset,
     }
 }
 
+inline void write_u64(std::vector<std::byte>& bytes, const std::size_t offset,
+                      const std::uint64_t value) {
+    for (int shift = 0; shift < 64; shift += 8) {
+        bytes[offset + static_cast<std::size_t>(shift / 8)] =
+            static_cast<std::byte>((value >> shift) & 0xFF);
+    }
+}
+
 struct BuildSpec {
     std::uint16_t machine{kMachineAmd64};
     std::uint16_t section_count{2};
@@ -173,6 +181,64 @@ inline std::vector<std::byte> build(const BuildSpec& spec) {
 
 inline std::vector<std::byte> make_minimal() {
     return build(BuildSpec{});
+}
+
+struct ImportSpec {
+    std::string dll;
+    std::vector<std::string> symbols_by_name;
+    std::vector<std::uint16_t> ordinals;
+};
+
+inline constexpr std::uint32_t kImportDataRva = 0x2000;
+
+// Builds the raw bytes of an import directory (descriptors, original thunk
+// tables, hint/name entries and the IAT) for the given DLLs. The RVAs stored
+// inside assume the blob is mapped at kImportDataRva. Keep the result smaller
+// than one 0x200-byte section.
+inline std::vector<std::byte> make_import_data(const std::vector<ImportSpec>& dlls) {
+    std::vector<std::byte> data;
+    const std::size_t descriptor_area = (dlls.size() + 1) * 20;
+    data.resize(descriptor_area, std::byte{0});
+    for (std::size_t dll_index = 0; dll_index < dlls.size(); ++dll_index) {
+        const ImportSpec& spec = dlls[dll_index];
+        const std::size_t descriptor_offset = dll_index * 20;
+        const std::size_t oft_offset = data.size();
+        const std::size_t symbol_count = spec.symbols_by_name.size() + spec.ordinals.size();
+        for (std::size_t index = 0; index < symbol_count + 1; ++index) {
+            push_u64(data, 0);
+        }
+        const std::size_t iat_offset = data.size();
+        for (std::size_t index = 0; index < symbol_count + 1; ++index) {
+            push_u64(data, 0);
+        }
+        std::vector<std::size_t> hint_offsets;
+        for (const std::string& name : spec.symbols_by_name) {
+            hint_offsets.push_back(data.size());
+            push_u16(data, 0);
+            push_cstr(data, name.c_str());
+        }
+        const std::size_t name_offset = data.size();
+        push_cstr(data, spec.dll.c_str());
+
+        constexpr std::uint64_t kOrdinalFlag = 0x8000000000000000ULL;
+        for (std::size_t symbol_index = 0; symbol_index < spec.symbols_by_name.size(); ++symbol_index) {
+            const std::uint64_t value =
+                static_cast<std::uint64_t>(kImportDataRva) + hint_offsets[symbol_index];
+            write_u64(data, oft_offset + symbol_index * 8, value);
+            write_u64(data, iat_offset + symbol_index * 8, value);
+        }
+        for (std::size_t ordinal_index = 0; ordinal_index < spec.ordinals.size(); ++ordinal_index) {
+            const std::size_t symbol_index = spec.symbols_by_name.size() + ordinal_index;
+            const std::uint64_t value =
+                kOrdinalFlag | static_cast<std::uint64_t>(spec.ordinals[ordinal_index]);
+            write_u64(data, oft_offset + symbol_index * 8, value);
+            write_u64(data, iat_offset + symbol_index * 8, value);
+        }
+        write_u32(data, descriptor_offset + 0, kImportDataRva + static_cast<std::uint32_t>(oft_offset));
+        write_u32(data, descriptor_offset + 12, kImportDataRva + static_cast<std::uint32_t>(name_offset));
+        write_u32(data, descriptor_offset + 16, kImportDataRva + static_cast<std::uint32_t>(iat_offset));
+    }
+    return data;
 }
 
 }  // namespace tradutorlinux::pe::testutil

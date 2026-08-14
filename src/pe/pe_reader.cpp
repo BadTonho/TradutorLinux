@@ -38,6 +38,7 @@ constexpr std::uint64_t kOrdinalFlag64 = 0x8000000000000000ULL;
 
 constexpr std::size_t kDirImport = 1;
 constexpr std::size_t kDirBaseReloc = 5;
+constexpr std::size_t kDirDelayImport = 13;
 
 constexpr std::size_t kMaxImportDlls = 1024;
 constexpr std::size_t kMaxSymbolsPerDll = 4096;
@@ -239,6 +240,12 @@ public:
             reader_.read_u32(directory_offset + kDirBaseReloc * kDataDirectoryEntrySize + 4,
                              info.relocation_directory_size);
         }
+        if (directory_count > kDirDelayImport) {
+            reader_.read_u32(directory_offset + kDirDelayImport * kDataDirectoryEntrySize,
+                             info.delay_import_directory_rva);
+            reader_.read_u32(directory_offset + kDirDelayImport * kDataDirectoryEntrySize + 4,
+                             info.delay_import_directory_size);
+        }
 
         for (std::size_t index = 0; index < section_count; ++index) {
             const std::size_t offset = section_table_offset + index * kSectionHeaderSize;
@@ -384,6 +391,9 @@ private:
                     }
 
                     ImportedSymbol symbol;
+                    symbol.iat_rva = static_cast<std::uint32_t>(
+                        static_cast<std::uint64_t>(first_thunk) +
+                        static_cast<std::uint64_t>(symbol_index) * kThunkEntrySize);
                     if ((thunk_value & kOrdinalFlag64) != 0) {
                         symbol.by_ordinal = true;
                         symbol.ordinal =

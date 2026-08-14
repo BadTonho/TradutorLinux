@@ -40,7 +40,8 @@ jobs:
         run: |
           clang-tidy --config-file=.clang-tidy --warnings-as-errors='*' \
             -p build/debug src/main.cpp src/cli.cpp src/diagnostics/trace.cpp \
-            src/pe/pe_reader.cpp src/loader/image_mapper.cpp
+            src/pe/pe_reader.cpp src/loader/image_mapper.cpp src/loader/module.cpp \
+            src/loader/import_resolver.cpp src/loader/process.cpp src/runtime/winapi.cpp
 
   sanitizers:
     name: Sanitizers

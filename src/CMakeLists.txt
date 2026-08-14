@@ -2,7 +2,11 @@ add_library(tradutorlinux_core STATIC
     cli.cpp
     diagnostics/trace.cpp
     loader/image_mapper.cpp
+    loader/import_resolver.cpp
+    loader/module.cpp
+    loader/process.cpp
     pe/pe_reader.cpp
+    runtime/winapi.cpp
 )
 
 target_include_directories(tradutorlinux_core

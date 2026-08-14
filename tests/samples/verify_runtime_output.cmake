@@ -72,3 +72,23 @@ foreach(symbol_match IN LISTS symbol_matches)
     string(REGEX MATCH "^[^ (]+" symbol_name "${symbol_token}")
     tl_check_trace_contains("${runtime_trace}" "${symbol_name}" "imported symbol")
 endforeach()
+
+if(DEFINED MANIFEST)
+    file(READ "${MANIFEST}" manifest_json)
+    string(JSON manifest_dll_count LENGTH "${manifest_json}" imports)
+    if(manifest_dll_count GREATER 0)
+        math(EXPR last_manifest_dll "${manifest_dll_count} - 1")
+        foreach(manifest_dll_index RANGE 0 ${last_manifest_dll})
+            string(JSON manifest_dll MEMBER "${manifest_json}" imports ${manifest_dll_index})
+            string(JSON manifest_symbol_count LENGTH "${manifest_json}" imports "${manifest_dll}")
+            math(EXPR last_manifest_symbol "${manifest_symbol_count} - 1")
+            foreach(manifest_symbol_index RANGE 0 ${last_manifest_symbol})
+                string(JSON manifest_symbol GET "${manifest_json}" imports
+                    "${manifest_dll}" ${manifest_symbol_index})
+                tl_check_trace_contains("${runtime_trace}"
+                    "resolved dll=\"${manifest_dll}\" symbol=\"${manifest_symbol}\""
+                    "resolved import ${manifest_dll}!${manifest_symbol}")
+            endforeach()
+        endforeach()
+    endif()
+endif()

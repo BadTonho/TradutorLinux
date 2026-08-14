@@ -29,6 +29,7 @@ struct ImportedSymbol {
     bool by_ordinal{};
     std::uint16_t ordinal{};
     std::string name;
+    std::uint32_t iat_rva{};
 };
 
 struct ImportedDll {
@@ -60,6 +61,8 @@ struct PeInfo {
     std::uint32_t import_directory_size{};
     std::uint32_t relocation_directory_rva{};
     std::uint32_t relocation_directory_size{};
+    std::uint32_t delay_import_directory_rva{};
+    std::uint32_t delay_import_directory_size{};
     std::vector<SectionInfo> sections;
     std::vector<ImportedDll> imports;
     std::vector<BaseRelocBlock> relocations;

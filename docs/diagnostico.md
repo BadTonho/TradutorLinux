@@ -25,8 +25,37 @@ Exemplo atual:
 [tl][loader][info] mapped preferred-base="0x140000000" base="0x140000000" delta="0x0" size="0x4000" at-preferred="sim" relocations-applied="0"
 [tl][loader][info] region name=".text" rva="0x1000" size="0x200" permissions="r-x"
 [tl][loader][info] region name=".rdata" rva="0x2000" size="0x200" permissions="r--"
+[tl][imports][info] resolved dll="KERNEL32.dll" symbol="ExitProcess" address="0x... "
+[tl][imports][info] resolved dll="KERNEL32.dll" symbol="GetStdHandle" address="0x..."
+[tl][imports][info] resolved dll="KERNEL32.dll" symbol="WriteFile" address="0x..."
 [tl][loader][info] unmap base="0x140000000"
 ```
+
+## Eventos do componente `imports`
+
+O resolvedor da Fase 3 emite um evento `resolved` por importação resolvida (`dll`, `symbol` — nome ou `ordinal(N)` — e `address`):
+
+```text
+[tl][imports][info] resolved dll="KERNEL32.dll" symbol="WriteFile" address="0x..."
+```
+
+Quando uma importação não pode ser resolvida, emite um evento `unresolved` com os campos `dll`, `symbol`, `status` e `detail`:
+
+```text
+[tl][imports][error] unresolved dll="USER32.dll" symbol="MessageBoxA" status="unknown-dll" detail="módulo não registrado"
+```
+
+Os valores possíveis de `status` são:
+
+| `status` | Significado |
+|---|---|
+| `unknown-dll` | DLL não registrada no runtime. |
+| `unknown-symbol` | DLL conhecida, símbolo não exportado. |
+| `unknown-ordinal` | DLL conhecida, ordinal não exportado. |
+| `not-implemented` | Símbolo conhecido, sem implementação no runtime. |
+| `unsupported-mechanism` | Mecanismo ainda não suportado (ex.: delay imports, IAT fora das seções). |
+
+Quando qualquer importação falha, a resolução inteira falha e o processo não tem entry point executado; o runtime retorna `5` (`Unsupported`). Mesmo na falha, todas as entradas são reportadas para que o diagnóstico seja completo.
 
 ## Eventos do componente `pe`
 
@@ -71,4 +100,4 @@ Quando a imagem é mapeada fora do endereço preferencial e não possui diretór
 | 5 | `Unsupported` | PE válido de arquitetura ou formato ainda não suportado (ex.: PE32/x86), ou etapa futura do runtime não disponível. |
 | 70 | `InternalError` | Erro interno inesperado do runtime. |
 
-Na Fase 1, um arquivo regular que não é PE válido retorna `4`, e um PE válido porém incompatível (arquitetura ou formato não suportado) retorna `5`. A partir da Fase 2, uma imagem válida porém não mapeável por inconsistência estrutural retorna `4`, e uma falha de mapeamento por memória insuficiente retorna `70`. A partir da Fase 4, o código bruto de `ExitProcess` do programa convidado será registrado no trace; a regra de propagação ao processo Linux será definida antes dessa implementação.
+Na Fase 1, um arquivo regular que não é PE válido retorna `4`, e um PE válido porém incompatível (arquitetura ou formato não suportado) retorna `5`. A partir da Fase 2, uma imagem válida porém não mapeável por inconsistência estrutural retorna `4`, e uma falha de mapeamento por memória insuficiente retorna `70`. A partir da Fase 3, um PE válido com dependências não suportadas (DLL, símbolo, ordinal ou mecanismo desconhecidos) também retorna `5`, com diagnóstico completo no trace e o entry point nunca executado. A partir da Fase 4, o código bruto de `ExitProcess` do programa convidado será registrado no trace; a regra de propagação ao processo Linux será definida antes dessa implementação.

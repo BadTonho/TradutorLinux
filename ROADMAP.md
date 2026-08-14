@@ -19,9 +19,9 @@ Os itens marcados como concluídos devem ter evidência no repositório: código
 
 ## Estado atual
 
-- **Fase atual:** Fase 2 — Mapeamento de imagem.
-- **Marco em andamento:** imagem PE32+ mapeada no endereço preferencial quando possível, headers/seções copiados com permissões de página e base relocations aplicadas para PE32+ x86-64.
-- **Próximo resultado observável:** CLI mapeia, realoca e inspeciona as fixtures mínimas (`tl_nop`, `tl_hello`, `tl_reloc`) com trace e resumo cobertos por CTest; nenhum entry point é executado antes da Fase 3.
+- **Fase atual:** Fase 3 — Imports e bootstrap mínimo.
+- **Marco concluído:** imagem PE32+ mapeada no endereço preferencial quando possível, headers/seções copiados com permissões de página, base relocations aplicadas e imports internos resolvidos para stubs Microsoft x64.
+- **Próximo resultado observável:** Fase 4 implementará as semânticas de console e executará o entry point de `tl_hello.exe`; a Fase 3 ainda não executa código convidado.
 
 ## Fase 0 — Fundação e contrato
 
@@ -64,15 +64,17 @@ Validação: `tl_nop.exe`, `tl_hello.exe` e `tl_reloc.exe` mapeados via CLI em `
 
 ## Fase 3 — Imports e bootstrap mínimo
 
-- [ ] Resolver a import table para módulos internos suportados.
-- [ ] Implementar trampolins e ponte de ABI para chamadas do programa à camada hospedeira.
-- [ ] Preparar as estruturas mínimas de processo e thread exigidas pelo escopo inicial.
-- [ ] Adicionar diagnóstico para DLL, símbolo, ordinal, forwarder ou delay import ausente.
-- [ ] Definir o comportamento de falha antes do entry point quando uma dependência não for suportada.
+- [x] Resolver a import table para módulos internos suportados.
+- [x] Implementar trampolins e ponte de ABI para chamadas do programa à camada hospedeira.
+- [x] Preparar as estruturas mínimas de processo e thread exigidas pelo escopo inicial.
+- [x] Adicionar diagnóstico para DLL, símbolo, ordinal, forwarder ou delay import ausente.
+- [x] Definir o comportamento de falha antes do entry point quando uma dependência não for suportada.
 
-### Critério de saída
+### Critério de saída — atendido
 
 O runtime resolve imports conhecidos com o ABI correto e informa de maneira reproduzível qualquer dependência desconhecida.
+
+Validação: registro interno de `KERNEL32.dll` com `GetStdHandle`, `WriteFile` e `ExitProcess`; resolução por nome e ordinal com patch da IAT e restauração das permissões; stubs `ms_abi` testados diretamente; processo convidado com pilha de 1 MiB e guard page; fixture `tl_missing_dll.exe` retorna `5` sem executar o entry point e emite `unknown-dll`; falhas de símbolo, ordinal, símbolo sem implementação, delay import e slot de IAT inválido têm testes unitários. Presets `debug` e `sanitize` passaram com 93 testes; no ambiente local, o sanitize foi executado com `LSAN_OPTIONS=detect_leaks=0` porque a descoberta do GoogleTest falha no LeakSanitizer sob ptrace.
 
 ## Fase 4 — Console: primeiro marco público
 
