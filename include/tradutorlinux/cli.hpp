@@ -20,6 +20,7 @@ struct CommandLine {
     bool show_help{false};
     bool show_version{false};
     bool trace_enabled{false};
+    bool report_only{false};
     std::optional<std::filesystem::path> executable_path;
 };
 

@@ -47,6 +47,10 @@ do código convidado:
 [tl][process][info] exit exit-code="0" explicit="sim"
 ```
 
+O modo `--report` produz um relatório textual em stdout sem executar o entry
+point. Cada import aparece com seu estado, seguido de `result: supported` ou
+`result: unsupported` e `execution: not-attempted`.
+
 Quando uma importação não pode ser resolvida, emite um evento `unresolved` com os campos `dll`, `symbol`, `status` e `detail`:
 
 ```text

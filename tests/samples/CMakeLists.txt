@@ -14,7 +14,7 @@ find_program(TL_LLVM_READOBJ
 set(TL_FIXTURE_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/generated")
 
 function(tl_add_pe_fixture target_name source_file manifest_file)
-    set(options LINK_KERNEL32 LINK_USER32 RELOCATABLE RUNTIME_FAILURE EXPECT_RESOLVED CONSOLE)
+    set(options LINK_KERNEL32 LINK_USER32 RELOCATABLE RUNTIME_FAILURE EXPECT_RESOLVED CONSOLE REPORT)
     cmake_parse_arguments(ARG "${options}" "" "" ${ARGN})
 
     set(output_file "${TL_FIXTURE_OUTPUT_DIRECTORY}/${target_name}.exe")
@@ -121,6 +121,20 @@ function(tl_add_pe_fixture target_name source_file manifest_file)
             LABELS "runtime;pe32plus"
         )
     endif()
+
+    if(ARG_REPORT AND TARGET tradutorlinux)
+        add_test(
+            NAME report_${target_name}_support
+            COMMAND "${CMAKE_COMMAND}"
+                "-DINPUT=${output_file}"
+                "-DRUNTIME=$<TARGET_FILE:tradutorlinux>"
+                -P "${CMAKE_CURRENT_SOURCE_DIR}/verify_report.cmake"
+        )
+        set_tests_properties(report_${target_name}_support PROPERTIES
+            DEPENDS fixture_${target_name}_metadata
+            LABELS "runtime;pe32plus"
+        )
+    endif()
 endfunction()
 
 add_custom_target(tradutorlinux_samples ALL)
@@ -131,7 +145,7 @@ tl_add_pe_fixture(tl_hello src/tl_hello.c manifests/tl_hello.json
 tl_add_pe_fixture(tl_echo src/tl_echo.c manifests/tl_echo.json
     LINK_KERNEL32 EXPECT_RESOLVED CONSOLE)
 tl_add_pe_fixture(tl_file src/tl_file.c manifests/tl_file.json
-    LINK_KERNEL32 EXPECT_RESOLVED CONSOLE)
+    LINK_KERNEL32 EXPECT_RESOLVED CONSOLE REPORT)
 tl_add_pe_fixture(tl_reloc src/tl_reloc.c manifests/tl_reloc.json RELOCATABLE)
 tl_add_pe_fixture(tl_missing_dll src/tl_missing_dll.c manifests/tl_missing_dll.json
     LINK_USER32 RUNTIME_FAILURE)

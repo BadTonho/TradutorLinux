@@ -2,7 +2,9 @@
 
 Runtime educacional de compatibilidade Win32 para Linux. O projeto executará, de forma gradual e documentada, um subconjunto de executáveis PE32+ x86-64 de console no Linux x86-64.
 
-O estado atual é a **Fase 1**: a Fase 0 (CLI, build, testes, fixtures e documentação de contratos) está concluída e validada, mas o parser e o loader de PE ainda não foram implementados. Por isso, ao receber um arquivo legível, o comando retorna uma mensagem de recurso não suportado.
+O estado atual é a **Fase 7**: as fases de parser, mapeamento, imports, console,
+runtime básico e relatório de cobertura estão concluídas. O suporte continua
+restrito às aplicações e limitações publicadas na matriz de compatibilidade.
 
 Consulte [PROJETO.md](PROJETO.md) para visão e arquitetura e [ROADMAP.md](ROADMAP.md) para os marcos.
 
@@ -40,12 +42,16 @@ As fixtures são geradas em `build/<preset>/tests/samples/generated/`; não deve
 ## CLI atual
 
 ```text
-tradutorlinux [--trace] <arquivo.exe>
+tradutorlinux [--trace] [--report] <arquivo.exe>
 tradutorlinux --help
 tradutorlinux --version
 ```
 
 `--trace` escreve diagnósticos somente em `stderr`. A saída padrão será reservada à futura saída do programa Windows. O contrato completo de trace e códigos de saída está em [docs/diagnostico.md](docs/diagnostico.md).
+
+`--report` lista os imports e o estado de suporte sem mapear nem executar o
+entry point. Retorna `0` quando todas as dependências pertencem ao subconjunto
+suportado e `5` quando há uma limitação conhecida.
 
 ## Qualidade
 

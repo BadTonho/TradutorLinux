@@ -19,9 +19,9 @@ Os itens marcados como concluídos devem ter evidência no repositório: código
 
 ## Estado atual
 
-- **Fase atual:** Fase 6 — Carregamento e cobertura controlada.
-- **Marco concluído:** `tl_file.exe` aloca memória, grava/reabre/lê arquivo relativo e verifica `GetLastError`; os testes unitários cobrem os contratos isolados.
-- **Próximo resultado observável:** publicar o relatório de cobertura e adicionar novas APIs somente para aplicações-alvo justificadas.
+- **Fase atual:** Fase 7 — Avaliar GUI.
+- **Marco concluído:** o modo `--report` lista imports suportados sem executar o PE; `tl_hello`, `tl_echo` e `tl_file` têm regressões e limitações publicadas na matriz.
+- **Próximo resultado observável:** decidir se uma interface Win32 mínima pertence ao produto, sem ampliar o runtime de console por antecipação.
 
 ## Fase 0 — Fundação e contrato
 
@@ -110,15 +110,17 @@ Validação: `tl_file.exe` usa `VirtualAlloc`, `CreateFileA`, `WriteFile`, `Read
 
 ## Fase 6 — Carregamento e cobertura controlada
 
-- [ ] Adicionar APIs somente guiadas por aplicações-alvo e testes de regressão.
-- [ ] Evoluir suporte a DLLs, resources, TLS callbacks, forwarders e delay-load conforme necessário.
-- [ ] Publicar uma matriz com aplicativo, arquitetura, imports, APIs usadas, estado e limitações.
-- [ ] Adicionar um modo de relatório que mostre o que falta para tentar executar um `.exe`.
-- [ ] Revisar periodicamente o custo de cada API em relação ao valor para os aplicativos-alvo.
+- [x] Adicionar APIs somente guiadas por aplicações-alvo e testes de regressão.
+- [x] Evoluir suporte a DLLs, resources, TLS callbacks, forwarders e delay-load conforme necessário.
+- [x] Publicar uma matriz com aplicativo, arquitetura, imports, APIs usadas, estado e limitações.
+- [x] Adicionar um modo de relatório que mostre o que falta para tentar executar um `.exe`.
+- [x] Revisar periodicamente o custo de cada API em relação ao valor para os aplicativos-alvo.
 
-### Critério de saída
+### Critério de saída — atendido
 
 Cada aplicação declarada como suportada possui um teste de regressão e uma lista explícita de limitações.
+
+Validação: `tl_hello.exe`, `tl_echo.exe` e `tl_file.exe` possuem testes de integração e entradas na matriz; `tl_missing_dll.exe` protege o caminho de rejeição; `--report` tem teste unitário e CTest real, retorna `0` para `tl_file.exe`, lista cada import e declara `execution: not-attempted`. O modo não mapeia nem executa a imagem.
 
 ## Fase 7 — Avaliar GUI
 

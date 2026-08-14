@@ -23,7 +23,7 @@
 namespace tradutorlinux {
 namespace {
 
-constexpr std::string_view kUsage = "Uso: tradutorlinux [--trace] <arquivo.exe>\n";
+constexpr std::string_view kUsage = "Uso: tradutorlinux [--trace] [--report] <arquivo.exe>\n";
 
 [[nodiscard]] bool is_option(const std::string_view argument) {
     return argument.starts_with('-');
@@ -321,6 +321,42 @@ void print_imports_summary(std::ostream& stream, const loader::ResolveResult& im
     }
 }
 
+void print_support_report(std::ostream& stream, const pe::PeInfo& info) {
+    bool supported = info.delay_import_directory_size == 0;
+    stream << "TradutorLinux compatibility report\n";
+    stream << "format: " << (info.is_pe32_plus ? "PE32+ x86-64" : "unsupported") << '\n';
+    stream << "entry-point: " << format_hex(info.address_of_entry_point) << '\n';
+    if (info.delay_import_directory_size != 0) {
+        stream << "mechanism: delay-import status=unsupported\n";
+    }
+    for (const pe::ImportedDll& dll : info.imports) {
+        for (const pe::ImportedSymbol& symbol : dll.symbols) {
+            const std::string label = symbol_label(symbol);
+            loader::ImportStatus status = loader::ImportStatus::UnknownDll;
+            if (loader::is_module_registered(dll.name)) {
+                const loader::ExportLookup lookup =
+                    symbol.by_ordinal
+                        ? loader::find_export_by_ordinal(dll.name, symbol.ordinal)
+                        : loader::find_export(loader::ExportQuery{dll.name, symbol.name});
+                if (!lookup.found) {
+                    status = symbol.by_ordinal ? loader::ImportStatus::UnknownOrdinal
+                                               : loader::ImportStatus::UnknownSymbol;
+                } else if (lookup.address == 0) {
+                    status = loader::ImportStatus::NotImpl;
+                } else {
+                    status = loader::ImportStatus::Resolved;
+                }
+            }
+            const bool entry_supported = status == loader::ImportStatus::Resolved;
+            supported = supported && entry_supported;
+            stream << "import: " << dll.name << '!' << label << " status="
+                   << import_status_label(status) << '\n';
+        }
+    }
+    stream << "result: " << (supported ? "supported" : "unsupported") << '\n';
+    stream << "execution: not-attempted\n";
+}
+
 }  // namespace
 
 ParseResult parse_command_line(const int argc, const char* const argv[]) {
@@ -359,6 +395,15 @@ ParseResult parse_command_line(const int argc, const char* const argv[]) {
                         .error_message = "a opção --trace foi repetida"};
             }
             command_line.trace_enabled = true;
+            continue;
+        }
+
+        if (!options_ended && argument == "--report") {
+            if (command_line.report_only) {
+                return {.command_line = std::nullopt,
+                        .error_message = "a opção --report foi repetida"};
+            }
+            command_line.report_only = true;
             continue;
         }
 
@@ -454,6 +499,26 @@ ExitCode run_command(const CommandLine& command_line, std::ostream& stdout_strea
 
     loader::register_builtin_modules();
 
+    if (command_line.report_only) {
+        print_support_report(stdout_stream, parse_result.info);
+        const bool has_delay_imports = parse_result.info.delay_import_directory_size != 0;
+        bool all_imports_supported = !has_delay_imports;
+        for (const pe::ImportedDll& dll : parse_result.info.imports) {
+            for (const pe::ImportedSymbol& symbol : dll.symbols) {
+                if (!loader::is_module_registered(dll.name)) {
+                    all_imports_supported = false;
+                    continue;
+                }
+                const loader::ExportLookup lookup =
+                    symbol.by_ordinal
+                        ? loader::find_export_by_ordinal(dll.name, symbol.ordinal)
+                        : loader::find_export(loader::ExportQuery{dll.name, symbol.name});
+                all_imports_supported = all_imports_supported && lookup.found && lookup.address != 0;
+            }
+        }
+        return all_imports_supported ? ExitCode::Success : ExitCode::Unsupported;
+    }
+
     loader::PrepareResult prepare_result = loader::prepare_process(parse_result.info, *bytes);
     if (prepare_result.status == loader::PrepareStatus::OutOfMemory) {
         if (command_line.trace_enabled) {
@@ -519,6 +584,7 @@ void print_help(std::ostream& stream) {
     stream << "\n";
     stream << "Opções:\n";
     stream << "  --trace    escreve diagnóstico estruturado em stderr\n";
+    stream << "  --report   relata imports suportados sem executar o arquivo\n";
     stream << "  --help     mostra esta ajuda\n";
     stream << "  --version  mostra a versão do TradutorLinux\n";
 }

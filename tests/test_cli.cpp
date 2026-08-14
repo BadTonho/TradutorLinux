@@ -25,6 +25,16 @@ TEST(CommandLineTest, AcceptsTraceAndExecutable) {
     EXPECT_EQ(result.command_line->executable_path->string(), "programa.exe");
 }
 
+TEST(CommandLineTest, AcceptsReportAndExecutable) {
+    const std::vector<const char*> arguments{"tradutorlinux", "--report", "programa.exe"};
+
+    const ParseResult result = parse_arguments(arguments);
+
+    ASSERT_TRUE(result.command_line.has_value());
+    EXPECT_TRUE(result.command_line->report_only);
+    ASSERT_TRUE(result.command_line->executable_path.has_value());
+}
+
 TEST(CommandLineTest, RejectsUnknownOption) {
     const std::vector<const char*> arguments{"tradutorlinux", "--invalida"};
 
@@ -83,6 +93,23 @@ TEST(CommandRunTest, RejectsReadableNonPeInputAsMalformed) {
     EXPECT_NE(stderr_stream.str().find("[tl][cli][info] input path="), std::string::npos);
     EXPECT_NE(stderr_stream.str().find("[tl][pe][error] parse-failed"), std::string::npos);
     EXPECT_NE(stderr_stream.str().find("assinatura DOS ausente"), std::string::npos);
+}
+
+TEST(CommandRunTest, ReportsSupportWithoutExecutingEntryPoint) {
+    CommandLine command_line;
+    command_line.report_only = true;
+    command_line.executable_path =
+        std::filesystem::path{TL_FIXTURE_OUTPUT_DIRECTORY} / "tl_file.exe";
+    std::ostringstream stdout_stream;
+    std::ostringstream stderr_stream;
+
+    const ExitCode exit_code = run_command(command_line, stdout_stream, stderr_stream);
+
+    EXPECT_EQ(exit_code, ExitCode::Success);
+    EXPECT_NE(stdout_stream.str().find("result: supported"), std::string::npos);
+    EXPECT_NE(stdout_stream.str().find("execution: not-attempted"), std::string::npos);
+    EXPECT_EQ(stdout_stream.str().find("fase5"), std::string::npos);
+    EXPECT_EQ(stderr_stream.str().find("mapped"), std::string::npos);
 }
 
 }  // namespace
