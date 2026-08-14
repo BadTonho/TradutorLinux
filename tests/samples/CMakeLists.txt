@@ -14,13 +14,17 @@ find_program(TL_LLVM_READOBJ
 set(TL_FIXTURE_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/generated")
 
 function(tl_add_pe_fixture target_name source_file manifest_file)
-    set(options LINK_KERNEL32)
+    set(options LINK_KERNEL32 RELOCATABLE)
     cmake_parse_arguments(ARG "${options}" "" "" ${ARGN})
 
     set(output_file "${TL_FIXTURE_OUTPUT_DIRECTORY}/${target_name}.exe")
     set(link_libraries)
+    set(link_flags)
     if(ARG_LINK_KERNEL32)
         list(APPEND link_libraries -lkernel32)
+    endif()
+    if(ARG_RELOCATABLE)
+        list(APPEND link_flags -Wl,--dynamicbase)
     endif()
 
     add_custom_command(
@@ -38,6 +42,7 @@ function(tl_add_pe_fixture target_name source_file manifest_file)
             -Wl,--no-insert-timestamp
             -o "${output_file}"
             "${CMAKE_CURRENT_SOURCE_DIR}/${source_file}"
+            ${link_flags}
             ${link_libraries}
         DEPENDS
             "${CMAKE_CURRENT_SOURCE_DIR}/${source_file}"
@@ -79,3 +84,4 @@ add_custom_target(tradutorlinux_samples ALL)
 
 tl_add_pe_fixture(tl_nop src/tl_nop.c manifests/tl_nop.json)
 tl_add_pe_fixture(tl_hello src/tl_hello.c manifests/tl_hello.json LINK_KERNEL32)
+tl_add_pe_fixture(tl_reloc src/tl_reloc.c manifests/tl_reloc.json RELOCATABLE)

@@ -19,9 +19,9 @@ Os itens marcados como concluídos devem ter evidência no repositório: código
 
 ## Estado atual
 
-- **Fase atual:** Fase 1 — Leitor de PE seguro.
-- **Marco em andamento:** implementar o leitor de PE validando headers, seções e imports.
-- **Próximo resultado observável:** parser de PE32+ que identifica fixtures válidos e rejeita entradas malformadas com segurança, coberto por CTest.
+- **Fase atual:** Fase 2 — Mapeamento de imagem.
+- **Marco em andamento:** imagem PE32+ mapeada no endereço preferencial quando possível, headers/seções copiados com permissões de página e base relocations aplicadas para PE32+ x86-64.
+- **Próximo resultado observável:** CLI mapeia, realoca e inspeciona as fixtures mínimas (`tl_nop`, `tl_hello`, `tl_reloc`) com trace e resumo cobertos por CTest; nenhum entry point é executado antes da Fase 3.
 
 ## Fase 0 — Fundação e contrato
 
@@ -50,15 +50,17 @@ O leitor identifica corretamente os fixtures válidos e nunca acessa memória fo
 
 ## Fase 2 — Mapeamento de imagem
 
-- [ ] Reservar a imagem no endereço preferencial quando possível.
-- [ ] Copiar headers e seções, respeitando alinhamentos e permissões de página.
-- [ ] Aplicar base relocations para PE32+ x86-64.
-- [ ] Validar o mapeamento com executáveis mínimos que ainda não chamam APIs.
-- [ ] Garantir que a imagem não permaneça inteira com permissão RWX por conveniência.
+- [x] Reservar a imagem no endereço preferencial quando possível.
+- [x] Copiar headers e seções, respeitando alinhamentos e permissões de página.
+- [x] Aplicar base relocations para PE32+ x86-64.
+- [x] Validar o mapeamento com executáveis mínimos que ainda não chamam APIs.
+- [x] Garantir que a imagem não permaneça inteira com permissão RWX por conveniência.
 
 ### Critério de saída
 
 Um executável mínimo pode ser mapeado e inspecionado pelo runtime sem executar funcionalidades fora do escopo.
+
+Validação: `tl_nop.exe`, `tl_hello.exe` e `tl_reloc.exe` mapeados via CLI em `debug` e `sanitize`; relocations aplicadas e verificadas em memória mapeada quando a base difere da preferencial (ASan bloqueia `0x140000000` no preset `sanitize`); permissões de região verificadas via `/proc/self/maps` (headers `r--`, `.text` `r-x`, nunca `rwx`); presets `debug` e `sanitize` verdes e análise estática sem pendências. O contrato de mapeamento está em `docs/arquitetura/mapeamento-imagem.md`.
 
 ## Fase 3 — Imports e bootstrap mínimo
 

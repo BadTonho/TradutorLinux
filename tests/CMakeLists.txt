@@ -2,6 +2,7 @@ add_subdirectory(samples)
 
 add_executable(tradutorlinux_unit_tests
     test_cli.cpp
+    test_image_mapper.cpp
     test_pe_reader.cpp
     test_trace.cpp
 )

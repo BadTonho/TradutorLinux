@@ -1,6 +1,7 @@
 #include "tradutorlinux/cli.hpp"
 
 #include "tradutorlinux/diagnostics/trace.hpp"
+#include "tradutorlinux/loader/image_mapper.hpp"
 #include "tradutorlinux/pe/pe_reader.hpp"
 
 #include <array>
@@ -171,6 +172,85 @@ void print_pe_summary(std::ostream& stream, const pe::PeInfo& info) {
     stream << "  relocations: " << info.relocations.size() << " blocos\n";
 }
 
+[[nodiscard]] std::string_view permissions_label(const loader::SectionPermissions permissions) {
+    switch (permissions) {
+        case loader::SectionPermissions::None:
+            return "---";
+        case loader::SectionPermissions::ReadOnly:
+            return "r--";
+        case loader::SectionPermissions::ReadWrite:
+            return "rw-";
+        case loader::SectionPermissions::ReadExecute:
+            return "r-x";
+    }
+    return "---";
+}
+
+void write_map_trace(std::ostream& stream, const loader::MappedImage& image) {
+    const std::string_view at_preferred = image.delta == 0 ? "sim" : "não";
+    const std::array image_fields{
+        diagnostics::TraceField{"preferred-base", format_hex(image.preferred_base)},
+        diagnostics::TraceField{"base", format_hex(image.base)},
+        diagnostics::TraceField{"delta", format_hex(static_cast<std::uint64_t>(image.delta))},
+        diagnostics::TraceField{"size", format_hex(image.size)},
+        diagnostics::TraceField{"at-preferred", std::string{at_preferred}},
+        diagnostics::TraceField{"relocations-applied", std::to_string(image.applied_relocations)},
+    };
+    diagnostics::write_trace(stream, diagnostics::TraceComponent::Loader,
+                             diagnostics::TraceLevel::Info, "mapped", image_fields);
+
+    for (const loader::MapRegion& region : image.regions) {
+        const std::array fields{
+            diagnostics::TraceField{"name", region.name},
+            diagnostics::TraceField{"rva", format_hex(region.rva)},
+            diagnostics::TraceField{"size", format_hex(region.size)},
+            diagnostics::TraceField{"permissions",
+                                    std::string{permissions_label(region.permissions)}},
+        };
+        diagnostics::write_trace(stream, diagnostics::TraceComponent::Loader,
+                                 diagnostics::TraceLevel::Info, "region", fields);
+    }
+
+    if (image.delta != 0 && !image.has_relocation_directory) {
+        const std::array fields{
+            diagnostics::TraceField{"reason", "imagem sem diretório de relocations"},
+            diagnostics::TraceField{"delta", format_hex(static_cast<std::uint64_t>(image.delta))},
+        };
+        diagnostics::write_trace(stream, diagnostics::TraceComponent::Loader,
+                                 diagnostics::TraceLevel::Warning, "cannot-relocate", fields);
+    }
+
+    const std::array unmap_fields{
+        diagnostics::TraceField{"base", format_hex(image.base)},
+    };
+    diagnostics::write_trace(stream, diagnostics::TraceComponent::Loader,
+                             diagnostics::TraceLevel::Info, "unmap", unmap_fields);
+}
+
+void write_map_failed_trace(std::ostream& stream, const std::string_view status,
+                            const std::string& detail) {
+    const std::array fields{
+        diagnostics::TraceField{"status", std::string{status}},
+        diagnostics::TraceField{"detail", detail},
+    };
+    diagnostics::write_trace(stream, diagnostics::TraceComponent::Loader,
+                             diagnostics::TraceLevel::Error, "map-failed", fields);
+}
+
+void print_map_summary(std::ostream& stream, const loader::MappedImage& image) {
+    stream << "  mapeado base=" << format_hex(image.base)
+           << " preferred=" << format_hex(image.preferred_base)
+           << " delta=" << format_hex(static_cast<std::uint64_t>(image.delta));
+    if (image.delta != 0) {
+        stream << " (realocado, " << image.applied_relocations << " relocations aplicados)";
+    }
+    stream << '\n';
+    for (const loader::MapRegion& region : image.regions) {
+        stream << "    região " << region.name << " rva=" << format_hex(region.rva)
+               << " perms=" << permissions_label(region.permissions) << '\n';
+    }
+}
+
 }  // namespace
 
 ParseResult parse_command_line(const int argc, const char* const argv[]) {
@@ -301,6 +381,29 @@ ExitCode run_command(const CommandLine& command_line, std::ostream& stdout_strea
     } else {
         print_pe_summary(stderr_stream, parse_result.info);
     }
+
+    loader::MapResult map_result = loader::map_image(parse_result.info, *bytes);
+    if (map_result.status == loader::MapStatus::OutOfMemory) {
+        if (command_line.trace_enabled) {
+            write_map_failed_trace(stderr_stream, "out-of-memory", map_result.error_message);
+        }
+        stderr_stream << "erro: " << map_result.error_message << '\n';
+        return ExitCode::InternalError;
+    }
+    if (map_result.status == loader::MapStatus::InvalidImage) {
+        if (command_line.trace_enabled) {
+            write_map_failed_trace(stderr_stream, "invalid-image", map_result.error_message);
+        }
+        stderr_stream << "erro: " << map_result.error_message << '\n';
+        return ExitCode::MalformedPe;
+    }
+
+    if (command_line.trace_enabled) {
+        write_map_trace(stderr_stream, map_result.image);
+    } else {
+        print_map_summary(stderr_stream, map_result.image);
+    }
+    loader::unmap_image(map_result.image);
     return ExitCode::Success;
 }
 

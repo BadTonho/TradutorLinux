@@ -215,7 +215,9 @@ public:
         info.number_of_sections = section_count;
         reader_.read_u32(opt_offset + 16, info.address_of_entry_point);
         reader_.read_u64(opt_offset + 24, info.image_base);
+        reader_.read_u32(opt_offset + 32, info.section_alignment);
         reader_.read_u32(opt_offset + 56, info.size_of_image);
+        reader_.read_u32(opt_offset + 60, info.size_of_headers);
         reader_.read_u16(opt_offset + 68, info.subsystem);
 
         std::uint32_t number_of_rva_and_sizes{};

@@ -39,7 +39,8 @@ jobs:
       - name: Executar clang-tidy
         run: |
           clang-tidy --config-file=.clang-tidy --warnings-as-errors='*' \
-            -p build/debug src/main.cpp src/cli.cpp src/diagnostics/trace.cpp
+            -p build/debug src/main.cpp src/cli.cpp src/diagnostics/trace.cpp \
+            src/pe/pe_reader.cpp src/loader/image_mapper.cpp
 
   sanitizers:
     name: Sanitizers

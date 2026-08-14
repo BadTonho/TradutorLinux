@@ -52,7 +52,9 @@ struct PeInfo {
     std::uint16_t number_of_sections{};
     std::uint32_t address_of_entry_point{};
     std::uint64_t image_base{};
+    std::uint32_t section_alignment{};
     std::uint32_t size_of_image{};
+    std::uint32_t size_of_headers{};
     std::uint16_t subsystem{};
     std::uint32_t import_directory_rva{};
     std::uint32_t import_directory_size{};

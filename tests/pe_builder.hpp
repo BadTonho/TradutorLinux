@@ -1,0 +1,178 @@
+// Synthetic PE32+ builder shared by unit tests.
+#pragma once
+
+#include <algorithm>
+#include <array>
+#include <cstddef>
+#include <cstdint>
+#include <string>
+#include <vector>
+
+namespace tradutorlinux::pe::testutil {
+
+inline constexpr std::size_t kDosHeaderSize = 64;
+inline constexpr std::size_t kLfanewOffset = 60;
+inline constexpr std::size_t kNtOffset = 0x40;
+inline constexpr std::size_t kMachineOffset = 0x44;
+inline constexpr std::size_t kSectionCountOffset = 0x46;
+inline constexpr std::size_t kOptionalSizeOffset = 0x54;
+inline constexpr std::size_t kOptionalMagicOffset = 0x58;
+inline constexpr std::size_t kRelocDirSizeOffset = 0xF4;
+inline constexpr std::size_t kSection0RawSizeOffset = 0x148 + 16;
+
+inline constexpr std::uint16_t kMachineAmd64 = 0x8664;
+
+inline void push_u16(std::vector<std::byte>& out, const std::uint16_t value) {
+    out.push_back(static_cast<std::byte>(value & 0xFF));
+    out.push_back(static_cast<std::byte>((value >> 8) & 0xFF));
+}
+
+inline void push_u32(std::vector<std::byte>& out, const std::uint32_t value) {
+    for (int shift = 0; shift < 32; shift += 8) {
+        out.push_back(static_cast<std::byte>((value >> shift) & 0xFF));
+    }
+}
+
+inline void push_u64(std::vector<std::byte>& out, const std::uint64_t value) {
+    for (int shift = 0; shift < 64; shift += 8) {
+        out.push_back(static_cast<std::byte>((value >> shift) & 0xFF));
+    }
+}
+
+inline void push_cstr(std::vector<std::byte>& out, const char* text) {
+    for (const char* cursor = text; *cursor != '\0'; ++cursor) {
+        out.push_back(static_cast<std::byte>(static_cast<unsigned char>(*cursor)));
+    }
+    out.push_back(std::byte{0});
+}
+
+inline void write_u16(std::vector<std::byte>& bytes, const std::size_t offset,
+                      const std::uint16_t value) {
+    bytes[offset] = static_cast<std::byte>(value & 0xFF);
+    bytes[offset + 1] = static_cast<std::byte>((value >> 8) & 0xFF);
+}
+
+inline void write_u32(std::vector<std::byte>& bytes, const std::size_t offset,
+                      const std::uint32_t value) {
+    for (int shift = 0; shift < 32; shift += 8) {
+        bytes[offset + static_cast<std::size_t>(shift / 8)] =
+            static_cast<std::byte>((value >> shift) & 0xFF);
+    }
+}
+
+struct BuildSpec {
+    std::uint16_t machine{kMachineAmd64};
+    std::uint16_t section_count{2};
+    std::uint16_t optional_size{240};
+    std::uint32_t entry_point{0x1000};
+    std::uint64_t image_base{0x140000000ULL};
+    std::uint32_t section_alignment{0x1000};
+    std::uint32_t size_of_image{0x3000};
+    std::uint32_t size_of_headers{0x200};
+    std::uint32_t number_of_rva_and_sizes{16};
+    std::uint32_t import_rva{};
+    std::uint32_t import_size{};
+    std::uint32_t reloc_rva{};
+    std::uint32_t reloc_size{};
+    std::vector<std::string> section_names{".text", ".rdata"};
+    std::vector<std::vector<std::byte>> section_data;
+};
+
+inline std::vector<std::byte> build(const BuildSpec& spec) {
+    std::vector<std::byte> out;
+    out.resize(kDosHeaderSize, std::byte{0});
+    write_u16(out, 0, 0x5A4D);
+    write_u32(out, kLfanewOffset, kNtOffset);
+
+    push_u32(out, 0x00004550);  // "PE\0\0" signature
+    push_u16(out, spec.machine);
+    push_u16(out, spec.section_count);
+    push_u32(out, 0);
+    push_u32(out, 0);
+    push_u32(out, 0);
+    push_u16(out, spec.optional_size);
+    push_u16(out, 0x22);
+
+    const std::size_t opt_start = out.size();
+    push_u16(out, 0x20B);
+    push_u16(out, 0);
+    push_u32(out, 0);
+    push_u32(out, 0);
+    push_u32(out, 0);
+    push_u32(out, spec.entry_point);
+    push_u32(out, 0x1000);
+    push_u64(out, spec.image_base);
+    push_u32(out, spec.section_alignment);
+    push_u32(out, 0x200);
+    push_u16(out, 0);
+    push_u16(out, 0);
+    push_u16(out, 0);
+    push_u16(out, 0);
+    push_u16(out, 5);
+    push_u16(out, 2);
+    push_u32(out, 0);
+    push_u32(out, spec.size_of_image);
+    push_u32(out, spec.size_of_headers);
+    push_u32(out, 0);
+    push_u16(out, 3);
+    push_u16(out, 0);
+    push_u64(out, 0x100000);
+    push_u64(out, 0x1000);
+    push_u64(out, 0x100000);
+    push_u64(out, 0x1000);
+    push_u32(out, 0);
+    push_u32(out, spec.number_of_rva_and_sizes);
+    for (std::size_t index = 0; index < 16; ++index) {
+        push_u32(out, 0);
+        push_u32(out, 0);
+    }
+    if (spec.import_rva != 0 || spec.import_size != 0) {
+        write_u32(out, opt_start + 112 + 8, spec.import_rva);
+        write_u32(out, opt_start + 112 + 8 + 4, spec.import_size);
+    }
+    if (spec.reloc_rva != 0 || spec.reloc_size != 0) {
+        write_u32(out, opt_start + 112 + 40, spec.reloc_rva);
+        write_u32(out, opt_start + 112 + 40 + 4, spec.reloc_size);
+    }
+    if (out.size() - opt_start < spec.optional_size) {
+        out.resize(opt_start + spec.optional_size, std::byte{0});
+    }
+
+    for (std::size_t index = 0; index < spec.section_count; ++index) {
+        const std::string name = index < spec.section_names.size() ? spec.section_names[index] : "";
+        for (std::size_t byte_index = 0; byte_index < 8; ++byte_index) {
+            out.push_back(byte_index < name.size()
+                              ? static_cast<std::byte>(static_cast<unsigned char>(name[byte_index]))
+                              : std::byte{0});
+        }
+        const std::uint32_t data_size =
+            index < spec.section_data.size()
+                ? static_cast<std::uint32_t>(spec.section_data[index].size())
+                : 0;
+        push_u32(out, data_size);
+        push_u32(out, 0x1000 + static_cast<std::uint32_t>(index) * 0x1000);
+        push_u32(out, 0x200);
+        push_u32(out, 0x200 + static_cast<std::uint32_t>(index) * 0x200);
+        push_u32(out, 0);
+        push_u32(out, 0);
+        push_u16(out, 0);
+        push_u16(out, 0);
+        push_u32(out, index == 0 ? 0x60000020 : 0x40000040);
+    }
+    out.resize(0x200 + static_cast<std::size_t>(spec.section_count) * 0x200, std::byte{0});
+
+    for (std::size_t index = 0; index < spec.section_count; ++index) {
+        const std::size_t raw_pointer = 0x200 + index * 0x200;
+        if (index < spec.section_data.size()) {
+            const std::vector<std::byte>& data = spec.section_data[index];
+            std::copy(data.begin(), data.end(), out.begin() + static_cast<std::ptrdiff_t>(raw_pointer));
+        }
+    }
+    return out;
+}
+
+inline std::vector<std::byte> make_minimal() {
+    return build(BuildSpec{});
+}
+
+}  // namespace tradutorlinux::pe::testutil

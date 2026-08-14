@@ -22,6 +22,10 @@ Exemplo atual:
 [tl][pe][info] section index="0" name=".text" virtual-address="0x1000" virtual-size="0x90" raw-pointer="0x400" raw-size="0x200" characteristics="0x60000020"
 [tl][pe][info] import dll="KERNEL32.dll" symbols="ExitProcess,GetStdHandle,WriteFile"
 [tl][pe][info] relocations blocks="0" entries="0"
+[tl][loader][info] mapped preferred-base="0x140000000" base="0x140000000" delta="0x0" size="0x4000" at-preferred="sim" relocations-applied="0"
+[tl][loader][info] region name=".text" rva="0x1000" size="0x200" permissions="r-x"
+[tl][loader][info] region name=".rdata" rva="0x2000" size="0x200" permissions="r--"
+[tl][loader][info] unmap base="0x140000000"
 ```
 
 ## Eventos do componente `pe`
@@ -38,6 +42,24 @@ Quando o arquivo não é um PE32+ aceitável, o leitor emite:
 
 Os valores possíveis de `status` são `truncated`, `malformed`, `unsupported-architecture` e `unsupported-format`. O campo `detail` informa a condição específica rejeitada. A partir da Fase 1, um arquivo de entrada regular que não seja PE válido retorna o código `4` (`MalformedPe`); o código `5` (`Unsupported`) fica reservado para arquivos PE válidos mas incompatíveis (arquitetura ou formato).
 
+## Eventos do componente `loader`
+
+O mapeador da Fase 2 emite um evento `mapped` com os campos `preferred-base`, `base`, `delta`, `size`, `at-preferred` (`sim` ou `não`) e `relocations-applied`, seguido de um evento `region` por região mapeada (`name`, `rva`, `size`, `permissions` em `r-x`, `r--`, `rw-` ou `---`) e um evento `unmap` (`base`) ao liberar a imagem.
+
+Quando o mapeamento falha:
+
+```text
+[tl][loader][error] map-failed status="invalid-image" detail="seções se sobrepõem na imagem"
+```
+
+Os valores possíveis de `status` são `invalid-image` e `out-of-memory`. Falhas de imagem malformada retornam `4` (`MalformedPe`); falta de memória retorna `70` (`InternalError`).
+
+Quando a imagem é mapeada fora do endereço preferencial e não possui diretório de relocations, o runtime registra o aviso honesto:
+
+```text
+[tl][loader][warning] cannot-relocate reason="imagem sem diretório de relocations" delta="0x... "
+```
+
 ## Códigos de saída do host
 
 | Código | Nome | Significado |
@@ -49,4 +71,4 @@ Os valores possíveis de `status` são `truncated`, `malformed`, `unsupported-ar
 | 5 | `Unsupported` | PE válido de arquitetura ou formato ainda não suportado (ex.: PE32/x86), ou etapa futura do runtime não disponível. |
 | 70 | `InternalError` | Erro interno inesperado do runtime. |
 
-Na Fase 1, um arquivo regular que não é PE válido retorna `4`, e um PE válido porém incompatível (arquitetura ou formato não suportado) retorna `5`. A partir da Fase 4, o código bruto de `ExitProcess` do programa convidado será registrado no trace; a regra de propagação ao processo Linux será definida antes dessa implementação.
+Na Fase 1, um arquivo regular que não é PE válido retorna `4`, e um PE válido porém incompatível (arquitetura ou formato não suportado) retorna `5`. A partir da Fase 2, uma imagem válida porém não mapeável por inconsistência estrutural retorna `4`, e uma falha de mapeamento por memória insuficiente retorna `70`. A partir da Fase 4, o código bruto de `ExitProcess` do programa convidado será registrado no trace; a regra de propagação ao processo Linux será definida antes dessa implementação.
