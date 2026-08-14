@@ -129,7 +129,7 @@ Validação: `tl_hello.exe`, `tl_echo.exe` e `tl_file.exe` possuem testes de int
 - [x] Começar por `MessageBoxA` e uma janela simples, com fixture PE32+ e teste automatizado de metadata/report.
 - [x] Definir a integração inicial com X11 direto, mantendo a camada isolada para futura decisão sobre Wayland/toolkit.
 
-Validação local: os 106 testes do preset `debug` passam, incluindo `tl_gui.exe`, resolução de `USER32.dll!MessageBoxA` e relatório sem execução. O smoke test visual ainda depende de uma sessão X11 acessível; no ambiente atual `DISPLAY=:0` não pôde ser aberto, e o runtime encerrou de forma controlada com código `1`.
+Validação local: os 107 testes dos presets `debug` e `sanitize` passam, incluindo `tl_gui.exe`, resolução de `USER32.dll!MessageBoxA` e relatório sem execução. O loader valida o entry point, usa a pilha convidada com guard page, aplica relocations e rejeita execução fora da base quando não há relocations. O smoke test visual ainda depende de uma sessão X11 acessível; no ambiente atual `DISPLAY=:0` não pôde ser aberto, e o runtime encerrou de forma controlada com código `1`.
 
 ### Critério de saída
 

@@ -22,6 +22,9 @@ __attribute__((dllimport)) dword_t GetLastError(void);
 __attribute__((dllimport)) void SetLastError(dword_t error);
 __attribute__((dllimport, noreturn)) void ExitProcess(dword_t exit_code);
 
+void tl_entry(void);
+__attribute__((used, section(".rdata"))) void (*const tl_relocation_anchor)(void) = &tl_entry;
+
 void tl_entry(void) {
     static const char path[] = "tl_phase5_data.bin";
     static const char text[] = "fase5\n";

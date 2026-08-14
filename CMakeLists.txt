@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.28)
 
-project(TradutorLinux VERSION 0.0.0 LANGUAGES C CXX)
+project(TradutorLinux VERSION 0.0.0 LANGUAGES C CXX ASM)
 
 include(CTest)
 include(FetchContent)

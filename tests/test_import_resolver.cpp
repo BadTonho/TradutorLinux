@@ -177,7 +177,7 @@ TEST_F(ImportResolverTest, PropagatesInvalidIatSlotToOverallStatus) {
     spec.section_data.push_back({});
     spec.section_data.push_back(data);
     spec.import_rva = kImportDataRva;
-    spec.import_size = 20;
+    spec.import_size = 40;
     std::vector<std::byte> bytes = build(spec);
 
     const pe::ParseResult parse_result = pe::parse_pe(bytes);
@@ -215,7 +215,7 @@ TEST_F(ImportResolverTest, RejectsDelayImportDirectory) {
     spec.section_data.push_back({});
     spec.section_data.push_back(data);
     spec.import_rva = kImportDataRva;
-    spec.import_size = 20;
+    spec.import_size = 40;
     std::vector<std::byte> bytes = build(spec);
     // Diretório de dados 13 (delay import): entrada com RVA não nulo.
     constexpr std::size_t kOptionalStart = 0x58;
@@ -258,7 +258,7 @@ TEST_F(ImportResolverTest, RestoresIatPagePermissionsAfterPatch) {
     spec.section_data.push_back({});
     spec.section_data.push_back(data);
     spec.import_rva = kImportDataRva;
-    spec.import_size = 20;
+    spec.import_size = 40;
     const std::vector<std::byte> bytes = build(spec);
     const pe::ParseResult parse_result = pe::parse_pe(bytes);
     ASSERT_EQ(parse_result.status, pe::ParseStatus::Success);

@@ -118,6 +118,14 @@ TEST(PeReaderTest, ParsesImportsByNameAndOrdinal) {
     EXPECT_EQ(dll.symbols[1].ordinal, 5);
 }
 
+TEST(PeReaderTest, RejectsImportDirectoryWithoutDescriptorTerminator) {
+    std::vector<std::byte> bytes = make_import_pe();
+    // Optional header starts at 0x58; import directory size is directory[1].Size.
+    write_u32(bytes, 0x58 + 112 + 8 + 4, 20);
+
+    EXPECT_EQ(parse_pe(bytes).status, ParseStatus::Malformed);
+}
+
 TEST(PeReaderTest, ParsesBaseRelocations) {
     const std::vector<std::byte> bytes = make_reloc_pe();
 
@@ -146,8 +154,8 @@ TEST(PeReaderTest, ParsesHelloFixture) {
     EXPECT_EQ(result.info.machine, kMachineAmd64);
     EXPECT_EQ(result.info.address_of_entry_point, 0x1000);
     EXPECT_EQ(result.info.image_base, 0x140000000ULL);
-    EXPECT_EQ(result.info.number_of_sections, 3);
-    ASSERT_EQ(result.info.sections.size(), 3);
+    EXPECT_EQ(result.info.number_of_sections, 4);
+    ASSERT_EQ(result.info.sections.size(), 4);
     EXPECT_EQ(result.info.sections[0].name, ".text");
     EXPECT_EQ(result.info.sections[0].virtual_address, 0x1000);
     ASSERT_EQ(result.info.imports.size(), 1);
@@ -156,7 +164,7 @@ TEST(PeReaderTest, ParsesHelloFixture) {
     EXPECT_EQ(result.info.imports[0].symbols[0].name, "ExitProcess");
     EXPECT_EQ(result.info.imports[0].symbols[1].name, "GetStdHandle");
     EXPECT_EQ(result.info.imports[0].symbols[2].name, "WriteFile");
-    EXPECT_TRUE(result.info.relocations.empty());
+    EXPECT_FALSE(result.info.relocations.empty());
 }
 
 TEST(PeReaderTest, ParsesNopFixtureWithoutImports) {
@@ -168,9 +176,9 @@ TEST(PeReaderTest, ParsesNopFixtureWithoutImports) {
     const ParseResult result = parse_pe(bytes);
 
     ASSERT_EQ(result.status, ParseStatus::Success) << result.error_message;
-    EXPECT_EQ(result.info.number_of_sections, 3);
+    EXPECT_EQ(result.info.number_of_sections, 4);
     EXPECT_TRUE(result.info.imports.empty());
-    EXPECT_TRUE(result.info.relocations.empty());
+    EXPECT_FALSE(result.info.relocations.empty());
 }
 
 // ---------------------------------------------------------------------------

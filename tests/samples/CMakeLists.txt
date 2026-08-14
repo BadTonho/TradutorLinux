@@ -144,15 +144,15 @@ endfunction()
 
 add_custom_target(tradutorlinux_samples ALL)
 
-tl_add_pe_fixture(tl_nop src/tl_nop.c manifests/tl_nop.json)
+tl_add_pe_fixture(tl_nop src/tl_nop.c manifests/tl_nop.json RELOCATABLE)
 tl_add_pe_fixture(tl_hello src/tl_hello.c manifests/tl_hello.json
-    LINK_KERNEL32 EXPECT_RESOLVED CONSOLE)
+    LINK_KERNEL32 EXPECT_RESOLVED CONSOLE RELOCATABLE)
 tl_add_pe_fixture(tl_echo src/tl_echo.c manifests/tl_echo.json
-    LINK_KERNEL32 EXPECT_RESOLVED CONSOLE)
+    LINK_KERNEL32 EXPECT_RESOLVED CONSOLE RELOCATABLE)
 tl_add_pe_fixture(tl_file src/tl_file.c manifests/tl_file.json
-    LINK_KERNEL32 EXPECT_RESOLVED CONSOLE REPORT)
+    LINK_KERNEL32 EXPECT_RESOLVED CONSOLE REPORT RELOCATABLE)
 tl_add_pe_fixture(tl_reloc src/tl_reloc.c manifests/tl_reloc.json RELOCATABLE)
 tl_add_pe_fixture(tl_missing_dll src/tl_missing_dll.c manifests/tl_missing_dll.json
-    LINK_USER32 RUNTIME_FAILURE)
+    LINK_USER32 RUNTIME_FAILURE RELOCATABLE)
 tl_add_pe_fixture(tl_gui src/tl_gui.c manifests/tl_gui.json
-    LINK_KERNEL32 LINK_USER32 EXPECT_RESOLVED REPORT_ONLY)
+    LINK_KERNEL32 LINK_USER32 EXPECT_RESOLVED REPORT_ONLY RELOCATABLE)

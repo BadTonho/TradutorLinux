@@ -165,6 +165,10 @@ public:
         }
         const std::size_t nt_offset = static_cast<std::size_t>(e_lfanew);
 
+        if (!reader_.has_range(nt_offset, kPeSignatureOffset + kCoffHeaderSize)) {
+            return fail(ParseStatus::Truncated, "cabeçalho NT/COFF truncado");
+        }
+
         std::uint32_t pe_signature{};
         reader_.read_u32(nt_offset, pe_signature);
         if (pe_signature != kPeSignature) {
@@ -226,6 +230,12 @@ public:
         const std::size_t directory_count =
             std::min<std::size_t>(static_cast<std::size_t>(number_of_rva_and_sizes),
                                   kDataDirectoryCount);
+        const std::size_t directory_bytes = directory_count * kDataDirectoryEntrySize;
+        if (directory_bytes > static_cast<std::size_t>(optional_size) -
+                                  kOptionalHeader64BaseSize) {
+            return fail(ParseStatus::Truncated,
+                        "diretórios de dados excedem o optional header");
+        }
         const std::size_t directory_offset = opt_offset + kOptionalHeader64BaseSize;
 
         if (directory_count > kDirImport) {
@@ -334,6 +344,7 @@ private:
         const std::size_t descriptor_limit =
             std::min<std::size_t>(parser_state_.import_directory_size / kImportDescriptorSize,
                                   kMaxImportDlls);
+        bool descriptor_terminated = false;
 
         for (std::size_t descriptor_index = 0; descriptor_index < descriptor_limit;
              ++descriptor_index) {
@@ -347,6 +358,7 @@ private:
             reader_.read_u32(descriptor_offset + 16, first_thunk);
 
             if (original_first_thunk == 0 && name_rva == 0 && first_thunk == 0) {
+                descriptor_terminated = true;
                 break;
             }
             if (name_rva == 0) {
@@ -369,15 +381,20 @@ private:
             ImportedDll dll{.name = *dll_name, .symbols = {}};
             const std::uint32_t thunk_rva =
                 original_first_thunk != 0 ? original_first_thunk : first_thunk;
-            if (thunk_rva != 0) {
-                const std::optional<std::size_t> thunk_table =
-                    rva_to_file_offset({thunk_rva, kThunkEntrySize});
-                if (!thunk_table.has_value()) {
-                    return fail(ParseStatus::Malformed,
-                                "tabela de thunks em RVA " + format_hex(thunk_rva) +
-                                    " fora da imagem");
-                }
-                for (std::size_t symbol_index = 0; symbol_index < kMaxSymbolsPerDll;
+            if (thunk_rva == 0 || first_thunk == 0) {
+                return fail(ParseStatus::Malformed,
+                            "descritor de import sem tabela de thunks (índice " +
+                                std::to_string(descriptor_index) + ")");
+            }
+            const std::optional<std::size_t> thunk_table =
+                rva_to_file_offset({thunk_rva, kThunkEntrySize});
+            if (!thunk_table.has_value()) {
+                return fail(ParseStatus::Malformed,
+                            "tabela de thunks em RVA " + format_hex(thunk_rva) +
+                                " fora da imagem");
+            }
+            bool thunk_terminated = false;
+            for (std::size_t symbol_index = 0; symbol_index < kMaxSymbolsPerDll;
                      ++symbol_index) {
                     const std::size_t thunk_offset =
                         *thunk_table + symbol_index * kThunkEntrySize;
@@ -387,6 +404,7 @@ private:
                     std::uint64_t thunk_value{};
                     reader_.read_u64(thunk_offset, thunk_value);
                     if (thunk_value == 0) {
+                        thunk_terminated = true;
                         break;
                     }
 
@@ -417,8 +435,15 @@ private:
                     }
                     dll.symbols.push_back(std::move(symbol));
                 }
+            if (!thunk_terminated) {
+                return fail(ParseStatus::Malformed,
+                            "tabela de thunks sem terminador nulo (DLL " + dll.name + ")");
             }
             parser_state_.imports.push_back(std::move(dll));
+        }
+        if (!descriptor_terminated) {
+            return fail(ParseStatus::Malformed,
+                        "diretório de imports sem descritor terminador");
         }
         return std::nullopt;
     }

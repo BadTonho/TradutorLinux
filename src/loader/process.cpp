@@ -2,6 +2,7 @@
 
 #include "tradutorlinux/loader/module.hpp"
 
+#include <algorithm>
 #include <cstdint>
 #include <string>
 #include <utility>
@@ -26,6 +27,19 @@ PrepareResult prepare_process(const pe::PeInfo& info, const std::span<const std:
     }
     if (map.status == MapStatus::InvalidImage) {
         return fail_prepare(PrepareStatus::InvalidImage, std::move(map.error_message));
+    }
+
+    const std::uint64_t entry_rva = info.address_of_entry_point;
+    const auto entry_region = std::find_if(
+        map.image.regions.begin(), map.image.regions.end(), [entry_rva](const MapRegion& region) {
+            const std::uint64_t end = static_cast<std::uint64_t>(region.rva) + region.size;
+            return entry_rva >= region.rva && entry_rva < end &&
+                   region.permissions == SectionPermissions::ReadExecute;
+        });
+    if (entry_region == map.image.regions.end()) {
+        loader::unmap_image(map.image);
+        return fail_prepare(PrepareStatus::InvalidImage,
+                            "entry point fora de uma seção executável");
     }
 
     GuestProcess process;

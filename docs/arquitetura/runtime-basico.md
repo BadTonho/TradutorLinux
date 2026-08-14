@@ -32,3 +32,8 @@ precisam estar zerados ou nulos.
 Os handles de arquivo são tokens internos limitados a 64 slots. Eles podem ser
 usados por `ReadFile`, `WriteFile` e `CloseHandle`; não são compatíveis com os
 tokens dos handles padrão nem com APIs futuras sem conversão explícita.
+
+As APIs que recebem ponteiros do programa convidado verificam o mapeamento e as
+permissões da faixa em `/proc/self/maps` antes de ler ou escrever. Strings ANSI
+também precisam estar terminadas dentro do limite suportado; entradas inválidas
+retornam erro Win32 em vez de serem desreferenciadas pelo host.

@@ -8,6 +8,9 @@ __attribute__((dllimport)) bool_t WriteFile(void* handle, const void* buffer, dw
                                              dword_t* bytes_written, void* overlapped);
 __attribute__((dllimport, noreturn)) void ExitProcess(dword_t exit_code);
 
+void tl_entry(void);
+__attribute__((used, section(".rdata"))) void (*const tl_relocation_anchor)(void) = &tl_entry;
+
 void tl_entry(void) {
     char buffer[64];
     dword_t bytes_read = 0;

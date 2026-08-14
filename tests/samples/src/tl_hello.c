@@ -6,6 +6,9 @@ __attribute__((dllimport)) void* GetStdHandle(dword_t standard_handle);
 __attribute__((dllimport)) bool_t WriteFile(void* handle, const void* buffer, dword_t bytes_to_write,
                                              dword_t* bytes_written, void* overlapped);
 
+void tl_entry(void);
+__attribute__((used, section(".rdata"))) void (*const tl_relocation_anchor)(void) = &tl_entry;
+
 void tl_entry(void) {
     static const char message[] = "Ola do Windows no Linux!\r\n";
     dword_t bytes_written = 0;

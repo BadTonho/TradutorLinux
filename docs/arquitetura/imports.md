@@ -71,6 +71,10 @@ O resolvedor reporta **todas** as entradas: para cada uma, um `ResolvedImport` c
 - Delay imports: a presença do diretório de dados 13 (`IMAGE_DIRECTORY_ENTRY_DELAY_IMPORT`) torna a resolução `unsupported-mechanism`.
 - Forwarders de export ainda não são resolvidos (a Fase 3 só usa exports diretos de módulos internos registrados).
 
+Antes da execução, o processo valida que o entry point está dentro de uma seção
+`r-x`. A pilha inicial possui uma guard page e é instalada no contexto Microsoft
+x64 por um trampolim assembly pequeno; o entry point não usa a pilha do host.
+
 ## Dependências não suportadas
 
 Qualquer dependência não suportada falha de forma controlada e reproduzível:

@@ -74,6 +74,43 @@ constexpr std::size_t kMaxRelocBlocks = 4096;
     return PROT_NONE;
 }
 
+[[nodiscard]] SectionPermissions permissions_for_page(const std::vector<MapRegion>& regions,
+                                                      const std::uint64_t page_start,
+                                                      const std::uint64_t page_end) {
+    bool read = false;
+    bool write = false;
+    bool execute = false;
+    for (const MapRegion& region : regions) {
+        const std::uint64_t region_start = region.rva;
+        const std::uint64_t region_end = region_start + region.size;
+        if (region_start >= page_end || region_end <= page_start) {
+            continue;
+        }
+        switch (region.permissions) {
+            case SectionPermissions::ReadOnly:
+                read = true;
+                break;
+            case SectionPermissions::ReadWrite:
+                read = true;
+                write = true;
+                break;
+            case SectionPermissions::ReadExecute:
+                read = true;
+                execute = true;
+                break;
+            case SectionPermissions::None:
+                break;
+        }
+    }
+    if (write) {
+        return SectionPermissions::ReadWrite;
+    }
+    if (execute) {
+        return SectionPermissions::ReadExecute;
+    }
+    return read ? SectionPermissions::ReadOnly : SectionPermissions::None;
+}
+
 [[nodiscard]] MapResult fail(const MapStatus status, std::string message) {
     return {.status = status, .error_message = std::move(message), .image = {}};
 }
@@ -245,6 +282,9 @@ MapResult map_image(const pe::PeInfo& info, const std::span<const std::byte> fil
     if (mapping_size_u64 == 0) {
         return fail(MapStatus::InvalidImage, "SizeOfImage inválido (0)");
     }
+    if (info.size_of_headers == 0 || info.size_of_headers > info.size_of_image) {
+        return fail(MapStatus::InvalidImage, "SizeOfHeaders inválido");
+    }
     if (mapping_size_u64 > std::numeric_limits<std::size_t>::max()) {
         return fail(MapStatus::InvalidImage, "SizeOfImage excede o espaço de endereço do host");
     }
@@ -258,9 +298,10 @@ MapResult map_image(const pe::PeInfo& info, const std::span<const std::byte> fil
             continue;
         }
         const std::uint64_t end = static_cast<std::uint64_t>(section.virtual_address) + span;
-        if (end > static_cast<std::uint64_t>(info.size_of_image)) {
+        if (end > static_cast<std::uint64_t>(info.size_of_image) ||
+            section.virtual_address < info.size_of_headers) {
             return fail(MapStatus::InvalidImage,
-                        "seção " + section.name + " excede o tamanho da imagem");
+                        "seção " + section.name + " sobrepõe os headers ou excede a imagem");
         }
         MapRegion region{
             .name = section.name,
@@ -327,7 +368,12 @@ MapResult map_image(const pe::PeInfo& info, const std::span<const std::byte> fil
     const std::int64_t delta =
         static_cast<std::int64_t>(static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(mapping))) -
         static_cast<std::int64_t>(preferred_base);
-    const bool has_relocation_directory = info.relocation_directory_rva != 0;
+    if ((info.relocation_directory_rva == 0) != (info.relocation_directory_size == 0)) {
+        munmap(mapping, mapping_size);
+        return fail(MapStatus::InvalidImage,
+                    "diretório de relocations com RVA e tamanho inconsistentes");
+    }
+    const bool has_relocation_directory = info.relocation_directory_size != 0;
     std::size_t applied_relocations = 0;
     if (delta != 0 && has_relocation_directory) {
         const RelocationResult relocation =
@@ -357,8 +403,10 @@ MapResult map_image(const pe::PeInfo& info, const std::span<const std::byte> fil
         }
         const std::size_t protect_size =
             static_cast<std::size_t>(std::min(page_end, mapping_size_u64) - page_start);
+        const SectionPermissions page_permissions =
+            permissions_for_page(regions, page_start, page_start + protect_size);
         if (mprotect(static_cast<std::byte*>(mapping) + static_cast<std::ptrdiff_t>(page_start),
-                     protect_size, to_prot(region.permissions)) != 0) {
+                     protect_size, to_prot(page_permissions)) != 0) {
             munmap(mapping, mapping_size);
             return fail(MapStatus::OutOfMemory,
                         "não foi possível proteger a seção " + region.name);
@@ -420,7 +468,9 @@ PatchStatus write_image_bytes(MappedImage& image, const std::uint32_t rva,
         return PatchStatus::MprotectFailed;
     }
     std::memcpy(image.memory + static_cast<std::ptrdiff_t>(rva), data, size);
-    if (mprotect(page_base, page_size, to_prot(covering->permissions)) != 0) {
+    const SectionPermissions page_permissions = permissions_for_page(
+        image.regions, page_start, page_end);
+    if (mprotect(page_base, page_size, to_prot(page_permissions)) != 0) {
         return PatchStatus::MprotectFailed;
     }
     return PatchStatus::Success;

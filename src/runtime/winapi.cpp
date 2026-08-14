@@ -6,11 +6,14 @@
 #include <array>
 #include <algorithm>
 #include <bit>
+#include <charconv>
 #include <csetjmp>
 #include <cerrno>
 #include <cstddef>
 #include <cstdint>
 #include <iostream>
+#include <fstream>
+#include <limits>
 #include <span>
 #include <string>
 #include <array>
@@ -26,6 +29,9 @@ thread_local std::jmp_buf g_guest_exit_context;
 thread_local bool g_guest_execution_active = false;
 thread_local std::uint32_t g_guest_exit_code = 0;
 thread_local std::uint32_t g_last_error = abi::kErrorSuccess;
+
+extern "C" void tl_call_guest_on_stack(std::uintptr_t entry,
+                                         std::uintptr_t stack_top) noexcept;
 
 char kStdInputToken = 0;
 char kStdOutputToken = 0;
@@ -70,6 +76,62 @@ FileSlot* find_file_slot(const void* handle) noexcept {
         return &*found;
     }
     return nullptr;
+}
+
+[[nodiscard]] bool mapped_guest_range(const void* address, const std::size_t size,
+                                      const bool writable) noexcept {
+    if (address == nullptr) {
+        return false;
+    }
+    const std::uintptr_t start = reinterpret_cast<std::uintptr_t>(address);
+    if (size > std::numeric_limits<std::uintptr_t>::max() - start) {
+        return false;
+    }
+    const std::uintptr_t end = start + size;
+    std::ifstream maps{ "/proc/self/maps" };
+    std::string line;
+    while (std::getline(maps, line)) {
+        const std::size_t dash = line.find('-');
+        const std::size_t space = line.find(' ', dash == std::string::npos ? 0 : dash);
+        if (dash == std::string::npos || space == std::string::npos || dash == 0) {
+            continue;
+        }
+        std::uintptr_t region_start{};
+        std::uintptr_t region_end{};
+        const auto start_result = std::from_chars(line.data(), line.data() + dash,
+                                                  region_start, 16);
+        const auto end_result = std::from_chars(line.data() + dash + 1, line.data() + space,
+                                                region_end, 16);
+        if (start_result.ec != std::errc{} || end_result.ec != std::errc{} ||
+            region_start > region_end || start < region_start || end > region_end) {
+            continue;
+        }
+        const std::string::size_type permissions_offset = space + 1;
+        if (line.size() < permissions_offset + 4 || line[permissions_offset] != 'r' ||
+            (writable && line[permissions_offset + 1] != 'w')) {
+            return false;
+        }
+        return true;
+    }
+    return false;
+}
+
+[[nodiscard]] bool mapped_guest_cstring(const char* value) noexcept {
+    if (value == nullptr) {
+        return true;
+    }
+    constexpr std::size_t kMaxGuestString = 65535;
+    const std::uintptr_t address = reinterpret_cast<std::uintptr_t>(value);
+    for (std::size_t index = 0; index < kMaxGuestString; ++index) {
+        if (index > std::numeric_limits<std::uintptr_t>::max() - address ||
+            !mapped_guest_range(reinterpret_cast<const void*>(address + index), 1, false)) { // NOLINT(performance-no-int-to-ptr)
+            return false;
+        }
+        if (value[index] == '\0') {
+            return true;
+        }
+    }
+    return false;
 }
 
 void runtime_trace(const char* event, const std::array<diagnostics::TraceField, 4>& fields,
@@ -135,11 +197,16 @@ TL_MSABI int tl_WriteFile(const void* handle, const void* const buffer,
                           const std::uint32_t bytes_to_write,
                           std::uint32_t* const bytes_written,
                           const void* overlapped) noexcept {
+    if (bytes_written != nullptr && !mapped_guest_range(bytes_written, sizeof(*bytes_written), true)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
     if (bytes_written != nullptr) {
         *bytes_written = 0;
     }
     const int fd = handle_fd(handle);
-    if (fd < 0 || (buffer == nullptr && bytes_to_write != 0) || overlapped != nullptr) {
+    if (fd < 0 || (bytes_to_write != 0 && !mapped_guest_range(buffer, bytes_to_write, false)) ||
+        overlapped != nullptr) {
         set_last_error(fd < 0 ? abi::kErrorInvalidHandle : abi::kErrorInvalidParameter);
         trace_stub("WriteFile");
         return 0;
@@ -170,24 +237,29 @@ TL_MSABI int tl_WriteFile(const void* handle, const void* const buffer,
     return total == bytes_to_write ? 1 : 0;
 }
 
-TL_MSABI int tl_ReadFile(const void* const handle, void* const buffer,
+TL_MSABI int tl_ReadFile(const void* const handle, void* const buffer, // NOLINT(bugprone-easily-swappable-parameters)
                          const std::uint32_t bytes_to_read,
                          std::uint32_t* const bytes_read,
                          const void* const overlapped) noexcept {
+    if (bytes_read != nullptr && !mapped_guest_range(bytes_read, sizeof(*bytes_read), true)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
     if (bytes_read != nullptr) {
         *bytes_read = 0;
     }
     const int fd = handle_fd(handle);
-    if (fd < 0 || (buffer == nullptr && bytes_to_read != 0) || overlapped != nullptr) {
+    if (fd < 0 || (bytes_to_read != 0 && !mapped_guest_range(buffer, bytes_to_read, true)) ||
+        overlapped != nullptr) {
         set_last_error(fd < 0 ? abi::kErrorInvalidHandle : abi::kErrorInvalidParameter);
         trace_stub("ReadFile");
         return 0;
     }
-    const ssize_t result = read(fd, buffer, bytes_to_read);
+    ssize_t result = 0;
+    do {
+        result = read(fd, buffer, bytes_to_read);
+    } while (result < 0 && errno == EINTR);
     if (result < 0) {
-        if (errno == EINTR) {
-            return tl_ReadFile(handle, buffer, bytes_to_read, bytes_read, overlapped);
-        }
         set_last_error(errno_to_win32(errno));
         trace_stub("ReadFile");
         return 0;
@@ -293,7 +365,7 @@ TL_MSABI void* tl_CreateFileA(const char* const path, const std::uint32_t desire
                               const std::uint32_t creation_disposition,
                               const std::uint32_t flags,
                               const void* const template_file) noexcept {
-    if (path == nullptr || path[0] == '\0' || path[0] == '/' || path[0] == '\\' ||
+    if (!mapped_guest_cstring(path) || path == nullptr || path[0] == '\0' || path[0] == '/' || path[0] == '\\' ||
         share_mode != 0 || security_attributes != nullptr || flags != 0 ||
         template_file != nullptr ||
         (desired_access & ~(abi::kGenericRead | abi::kGenericWrite)) != 0 ||
@@ -359,7 +431,7 @@ TL_MSABI int tl_CloseHandle(const void* const handle) noexcept {
 TL_MSABI std::uint32_t tl_MessageBoxA(const void* const, const char* const text,
                                       const char* const caption,
                                       const std::uint32_t type) noexcept {
-    if (type != 0) {
+    if (type != 0 || !mapped_guest_cstring(text) || !mapped_guest_cstring(caption)) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
@@ -370,15 +442,16 @@ TL_MSABI std::uint32_t tl_MessageBoxA(const void* const, const char* const text,
 
 }  // extern "C"
 
-GuestExecutionResult execute_guest_entry(const std::uintptr_t entry_point) noexcept {
+GuestExecutionResult execute_guest_entry(const std::uintptr_t entry_point, // NOLINT(bugprone-easily-swappable-parameters)
+                                         const std::uintptr_t stack_top) noexcept {
     using EntryPoint = TL_MSABI void (*)();
     const auto entry = std::bit_cast<EntryPoint>(entry_point);
-    if (entry == nullptr) {
+    if (entry == nullptr || stack_top == 0) {
         return {};
     }
     g_guest_execution_active = true;
     if (setjmp(g_guest_exit_context) == 0) {
-        entry();
+        tl_call_guest_on_stack(std::bit_cast<std::uintptr_t>(entry), stack_top);
         g_guest_execution_active = false;
         return {};
     }

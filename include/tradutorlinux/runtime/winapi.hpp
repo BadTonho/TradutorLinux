@@ -76,6 +76,7 @@ TL_MSABI std::uint32_t tl_MessageBoxA(const void* owner, const char* text, const
 // Executa um entry point Microsoft x64 e captura ExitProcess sem encerrar o
 // processo hospedeiro. O ponteiro deve apontar para código já mapeado como
 // executável e com imports resolvidos.
-[[nodiscard]] GuestExecutionResult execute_guest_entry(std::uintptr_t entry_point) noexcept;
+[[nodiscard]] GuestExecutionResult execute_guest_entry(std::uintptr_t entry_point,
+                                                       std::uintptr_t stack_top) noexcept;
 
 }  // namespace tradutorlinux

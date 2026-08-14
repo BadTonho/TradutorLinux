@@ -560,8 +560,27 @@ ExitCode run_command(const CommandLine& command_line, std::ostream& stdout_strea
         return ExitCode::Unsupported;
     }
 
+    if (process.image.delta != 0 && !process.image.has_relocation_directory) {
+        const std::uint64_t unmap_base = process.image.base;
+        if (command_line.trace_enabled) {
+            const std::array fields{
+                diagnostics::TraceField{"reason", "imagem sem diretório de relocations"},
+                diagnostics::TraceField{"delta", format_hex(static_cast<std::uint64_t>(process.image.delta))},
+            };
+            diagnostics::write_trace(stderr_stream, diagnostics::TraceComponent::Loader,
+                                     diagnostics::TraceLevel::Error, "execution-rejected", fields);
+        } else {
+            stderr_stream << "erro: imagem sem relocations não pode ser executada fora da base preferencial\n";
+        }
+        loader::destroy_process(process);
+        if (command_line.trace_enabled) {
+            write_unmap_trace(stderr_stream, unmap_base);
+        }
+        return ExitCode::Unsupported;
+    }
+
     const GuestExecutionResult execution =
-        execute_guest_entry(process.thread.entry_point);
+        execute_guest_entry(process.thread.entry_point, process.thread.stack_top);
     if (command_line.trace_enabled) {
         const std::array fields{
             diagnostics::TraceField{"exit-code", std::to_string(execution.exit_code)},

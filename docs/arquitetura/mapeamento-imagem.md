@@ -20,7 +20,7 @@ Produzir uma visão virtual da imagem tal como o loader Windows faria: headers n
 - O mapeador tenta reservar no endereço preferencial com `MAP_FIXED_NOREPLACE` (nunca sobrescreve mapeamentos existentes). Se falhar ou não estiver disponível, mapeia em endereço livre (`mmap` anônimo).
 - `delta = base_real - base_preferencial` (int64). Relocations são aplicadas **somente** quando `delta != 0`.
 - Tipos de relocations suportados: `ABSOLUTE` (0, ignorado), `HIGHLOW` (3) e `DIR64` (10). Tipo não suportado, bloco malformado, diretório com bytes residuais ou alvo fora da imagem mapeada resultam em `InvalidImage`.
-- Imagem realocada sem diretório de relocations é aceita apenas como aviso (`cannot-relocate` no trace): é falha de política não executar, mas o runtime registra que os ponteiros absolutos ficariam incorretos.
+- Imagem realocada sem diretório de relocations pode ser inspecionada e gera o aviso `cannot-relocate`, mas o runner rejeita sua execução com `execution-rejected`.
 
 ## Política de permissões
 
