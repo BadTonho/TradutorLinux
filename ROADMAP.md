@@ -8,6 +8,15 @@ Cada fase só deve avançar quando seus critérios de saída estiverem atendidos
 
 Os itens marcados como concluídos devem ter evidência no repositório: código, teste, documentação ou um artefato reproduzível. O roadmap descreve ordem de dependências, não uma promessa de prazo.
 
+## Stack decidido
+
+- **Linguagem principal:** C++20.
+- **C:** estruturas PE, interfaces C e trechos que precisem de ABI simples.
+- **Assembly x86-64:** somente trampolins, bootstrap ou outras fronteiras que não possam ser expressas com segurança pelo compilador.
+- **Build:** CMake + Ninja.
+- **Hospedeiro inicial:** Linux x86-64.
+- **Binários de teste:** PE32+ x86-64 produzidos com `mingw-w64`.
+
 ## Estado atual
 
 - **Fase atual:** Fase 0 — Fundação e contrato.

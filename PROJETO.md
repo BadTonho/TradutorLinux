@@ -18,6 +18,12 @@ O alvo inicial é deliberadamente restrito:
 
 Com CPU igual nos dois lados, as instruções x86-64 do programa podem ser executadas nativamente. O trabalho do TradutorLinux é carregar a imagem PE, preparar o contexto de processo esperado por ela e fornecer as APIs Windows que o programa importa.
 
+### Linguagem principal
+
+O projeto será escrito principalmente em **C++20**. C poderá ser usado em estruturas compatíveis com o formato PE, interfaces C e trechos em que uma ABI simples seja importante. Assembly x86-64 ficará restrito às fronteiras realmente necessárias, como trampolins ou bootstrap do processo.
+
+Essa divisão mantém o controle de baixo nível sem transformar todo o projeto em assembly ou em C puro. A regra é deixar a fronteira entre o código Windows e o código Linux pequena, explícita e coberta por testes.
+
 ## 2. O problema, com precisão
 
 Não é correto resumir o funcionamento a “traduzir syscalls do Windows para syscalls do Linux”. A maior parte dos aplicativos chama funções de DLLs Windows; essas funções, por sua vez, dependem de convenções de chamada, estruturas de processo, handles, erros e semânticas próprias do Windows.
