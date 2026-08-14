@@ -1,0 +1,11 @@
+/build/
+/compile_commands.json
+/.cache/
+
+# IDEs and operating systems
+.idea/
+.vscode/*.log
+*.user
+*.suo
+.DS_Store
+Thumbs.db

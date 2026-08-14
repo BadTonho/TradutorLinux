@@ -1,0 +1,62 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  debug-and-analysis:
+    name: Debug, testes e análise estática
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      - name: Instalar dependências
+        run: |
+          sudo apt update
+          sudo apt install --yes \
+            build-essential cmake ninja-build llvm clang-tidy cppcheck \
+            gcc-mingw-w64-x86-64-win32
+
+      - name: Configurar Debug
+        run: cmake --preset debug
+
+      - name: Compilar Debug
+        run: cmake --build --preset debug --parallel
+
+      - name: Executar testes Debug
+        run: ctest --preset debug --output-on-failure
+
+      - name: Executar cppcheck
+        run: |
+          cppcheck --enable=warning,style,performance,portability \
+            --error-exitcode=1 --inline-suppr --suppress=missingIncludeSystem \
+            --std=c++20 --language=c++ -I include src
+
+      - name: Executar clang-tidy
+        run: |
+          clang-tidy --config-file=.clang-tidy --warnings-as-errors='*' \
+            -p build/debug src/main.cpp src/cli.cpp src/diagnostics/trace.cpp
+
+  sanitizers:
+    name: Sanitizers
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      - name: Instalar dependências
+        run: |
+          sudo apt update
+          sudo apt install --yes build-essential cmake ninja-build llvm gcc-mingw-w64-x86-64-win32
+
+      - name: Configurar Sanitizers
+        run: cmake --preset sanitize
+
+      - name: Compilar Sanitizers
+        run: cmake --build --preset sanitize --parallel
+
+      - name: Executar testes Sanitizers
+        run: ctest --preset sanitize --output-on-failure

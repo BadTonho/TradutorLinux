@@ -20,8 +20,8 @@ Os itens marcados como concluídos devem ter evidência no repositório: código
 ## Estado atual
 
 - **Fase atual:** Fase 0 — Fundação e contrato.
-- **Marco em andamento:** criar a estrutura inicial de build, testes e fixtures.
-- **Próximo resultado observável:** um executável de teste PE32+ próprio e um leitor que imprima seus metadados.
+- **Marco em andamento:** validar a fundação na VM Ubuntu e no GitHub Actions.
+- **Próximo resultado observável:** presets Debug e Sanitizers aprovados, com fixtures PE32+ verificadas por CTest.
 
 ## Fase 0 — Fundação e contrato
 

@@ -128,25 +128,22 @@ TradutorLinux/
 ├── ROADMAP.md
 ├── README.md
 ├── CMakeLists.txt
+├── CMakePresets.json
 ├── docs/
 │   ├── arquitetura/
 │   ├── formatos/
 │   ├── api/
 │   └── compatibilidade.md
 ├── src/
-│   ├── cli/
-│   ├── pe/
-│   ├── loader/
-│   ├── runtime/
-│   ├── abi/
+│   ├── cli.cpp
 │   ├── diagnostics/
-│   └── main.cpp
+│   ├── main.cpp
+│   └── (pe/, loader/, runtime/ e abi/ nas fases posteriores)
 └── tests/
-    ├── fixtures/
     ├── samples/
-    ├── unit/
-    ├── integration/
-    └── malformed-pe/
+    ├── test_cli.cpp
+    ├── test_trace.cpp
+    └── (malformed-pe/ a partir da Fase 1)
 ```
 
 ## 8. Stack inicial

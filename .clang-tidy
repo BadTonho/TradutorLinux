@@ -1,0 +1,10 @@
+Checks: >
+  -*,
+  bugprone-*,
+  performance-*,
+  portability-*,
+  modernize-use-nullptr,
+  readability-avoid-const-params-in-decls
+WarningsAsErrors: '*'
+HeaderFilterRegex: '^(include|src)/'
+FormatStyle: file
