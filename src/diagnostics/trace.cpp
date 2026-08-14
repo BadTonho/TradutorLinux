@@ -20,6 +20,8 @@ namespace {
             return "runtime";
         case TraceComponent::Process:
             return "process";
+        case TraceComponent::Gui:
+            return "gui";
     }
 
     return "unknown";
@@ -71,6 +73,26 @@ namespace {
 }
 
 }  // namespace
+
+std::string_view failure_category_name(const FailureCategory category) {
+    switch (category) {
+        case FailureCategory::ExitProcess:
+            return "exit-process";
+        case FailureCategory::Unsupported:
+            return "unsupported";
+        case FailureCategory::InvalidImage:
+            return "invalid-image";
+        case FailureCategory::GuestMemory:
+            return "guest-memory";
+        case FailureCategory::LinuxError:
+            return "linux-error";
+        case FailureCategory::GuestSignal:
+            return "guest-signal";
+        case FailureCategory::InternalError:
+            return "internal-error";
+    }
+    return "unknown";
+}
 
 void write_trace(std::ostream& stream, const TraceComponent component, const TraceLevel level,
                  const std::string_view event, const std::span<const TraceField> fields) {

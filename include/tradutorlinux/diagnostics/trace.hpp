@@ -14,6 +14,17 @@ enum class TraceComponent {
     Imports,
     Runtime,
     Process,
+    Gui,
+};
+
+enum class FailureCategory {
+    ExitProcess,
+    Unsupported,
+    InvalidImage,
+    GuestMemory,
+    LinuxError,
+    GuestSignal,
+    InternalError,
 };
 
 enum class TraceLevel {
@@ -30,5 +41,7 @@ struct TraceField {
 
 void write_trace(std::ostream& stream, TraceComponent component, TraceLevel level,
                  std::string_view event, std::span<const TraceField> fields = {});
+
+[[nodiscard]] std::string_view failure_category_name(FailureCategory category);
 
 }  // namespace tradutorlinux::diagnostics

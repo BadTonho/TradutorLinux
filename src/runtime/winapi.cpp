@@ -141,6 +141,35 @@ void runtime_trace(const char* event, const std::array<diagnostics::TraceField, 
                              std::span<const diagnostics::TraceField>{fields.data(), field_count});
 }
 
+void trace_guest_failure(const char* symbol, const char* operation,
+                         const char* detail) noexcept {
+    const std::array<diagnostics::TraceField, 4> fields{
+        diagnostics::TraceField{"category", std::string{
+                                     diagnostics::failure_category_name(
+                                         diagnostics::FailureCategory::GuestMemory)}},
+        diagnostics::TraceField{"symbol", symbol},
+        diagnostics::TraceField{"operation", operation},
+        diagnostics::TraceField{"detail", detail},
+    };
+    diagnostics::write_trace(std::cerr, diagnostics::TraceComponent::Runtime,
+                             diagnostics::TraceLevel::Error, "api-failure", fields);
+}
+
+void trace_linux_failure(const char* symbol, const char* operation, const int error,
+                         const std::uint32_t win32_error) noexcept {
+    const std::array<diagnostics::TraceField, 5> fields{
+        diagnostics::TraceField{"category", std::string{
+                                     diagnostics::failure_category_name(
+                                         diagnostics::FailureCategory::LinuxError)}},
+        diagnostics::TraceField{"symbol", symbol},
+        diagnostics::TraceField{"operation", operation},
+        diagnostics::TraceField{"errno", std::to_string(error)},
+        diagnostics::TraceField{"win32-error", std::to_string(win32_error)},
+    };
+    diagnostics::write_trace(std::cerr, diagnostics::TraceComponent::Runtime,
+                             diagnostics::TraceLevel::Error, "linux-failure", fields);
+}
+
 int handle_fd(const void* handle) noexcept {
     if (handle == &kStdInputToken) {
             return STDIN_FILENO;
@@ -158,15 +187,7 @@ int handle_fd(const void* handle) noexcept {
 }
 
 void trace_stub(const char* symbol) noexcept {
-    const std::array<diagnostics::TraceField, 4> fields{
-        diagnostics::TraceField{"dll", "KERNEL32.dll"},
-        diagnostics::TraceField{"symbol", symbol},
-        diagnostics::TraceField{"detail", "símbolo não implementado"},
-        diagnostics::TraceField{"status", "not-implemented"},
-    };
-    diagnostics::write_trace(std::cerr, diagnostics::TraceComponent::Runtime,
-                             diagnostics::TraceLevel::Warning, "stub",
-                             std::span<const diagnostics::TraceField>{fields.data(), 4});
+    trace_guest_failure(symbol, "argument-validation", "ponteiro ou parâmetro inválido");
 }
 
 }  // namespace
@@ -199,6 +220,7 @@ TL_MSABI int tl_WriteFile(const void* handle, const void* const buffer,
                           const void* overlapped) noexcept {
     if (bytes_written != nullptr && !mapped_guest_range(bytes_written, sizeof(*bytes_written), true)) {
         set_last_error(abi::kErrorInvalidParameter);
+        trace_guest_failure("WriteFile", "output-count", "ponteiro sem permissão de escrita");
         return 0;
     }
     if (bytes_written != nullptr) {
@@ -212,11 +234,15 @@ TL_MSABI int tl_WriteFile(const void* handle, const void* const buffer,
         return 0;
     }
     std::uint32_t total = 0;
+    int failure_errno = EIO;
     while (total < bytes_to_write) {
         const ssize_t result = write(fd, static_cast<const std::byte*>(buffer) + total,
                                      bytes_to_write - total);
         if (result < 0 && errno == EINTR) {
             continue;
+        }
+        if (result < 0) {
+            failure_errno = errno;
         }
         if (result <= 0) {
             break;
@@ -226,7 +252,11 @@ TL_MSABI int tl_WriteFile(const void* handle, const void* const buffer,
     if (bytes_written != nullptr) {
         *bytes_written = total;
     }
-    set_last_error(total == bytes_to_write ? abi::kErrorSuccess : errno_to_win32(errno));
+    const std::uint32_t failure_error = errno_to_win32(failure_errno);
+    set_last_error(total == bytes_to_write ? abi::kErrorSuccess : failure_error);
+    if (total != bytes_to_write) {
+        trace_linux_failure("WriteFile", "write", failure_errno, failure_error);
+    }
     const std::array<diagnostics::TraceField, 4> fields{
         diagnostics::TraceField{"symbol", "WriteFile"},
         diagnostics::TraceField{"bytes-requested", std::to_string(bytes_to_write)},
@@ -243,6 +273,7 @@ TL_MSABI int tl_ReadFile(const void* const handle, void* const buffer, // NOLINT
                          const void* const overlapped) noexcept {
     if (bytes_read != nullptr && !mapped_guest_range(bytes_read, sizeof(*bytes_read), true)) {
         set_last_error(abi::kErrorInvalidParameter);
+        trace_guest_failure("ReadFile", "output-count", "ponteiro sem permissão de escrita");
         return 0;
     }
     if (bytes_read != nullptr) {
@@ -260,8 +291,9 @@ TL_MSABI int tl_ReadFile(const void* const handle, void* const buffer, // NOLINT
         result = read(fd, buffer, bytes_to_read);
     } while (result < 0 && errno == EINTR);
     if (result < 0) {
-        set_last_error(errno_to_win32(errno));
-        trace_stub("ReadFile");
+        const std::uint32_t failure_error = errno_to_win32(errno);
+        set_last_error(failure_error);
+        trace_linux_failure("ReadFile", "read", errno, failure_error);
         return 0;
     }
     if (bytes_read != nullptr) {
@@ -328,7 +360,9 @@ TL_MSABI void* tl_VirtualAlloc(const void* const address, const std::uintptr_t s
     const int prot = protection == abi::kPageReadOnly ? PROT_READ : (PROT_READ | PROT_WRITE);
     void* mapped = mmap(nullptr, mapped_size, prot, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
     if (mapped == MAP_FAILED) {
-        set_last_error(errno_to_win32(errno));
+        const std::uint32_t failure_error = errno_to_win32(errno);
+        set_last_error(failure_error);
+        trace_linux_failure("VirtualAlloc", "mmap", errno, failure_error);
         return nullptr;
     }
     free_slot->address = mapped;
@@ -347,7 +381,9 @@ TL_MSABI int tl_VirtualFree(const void* const address, const std::uintptr_t size
         if (slot.address == address) {
             const bool unmapped = munmap(slot.address, slot.size) == 0;
             if (!unmapped) {
-                set_last_error(errno_to_win32(errno));
+                const std::uint32_t failure_error = errno_to_win32(errno);
+                set_last_error(failure_error);
+                trace_linux_failure("VirtualFree", "munmap", errno, failure_error);
                 return 0;
             }
             slot = {};
@@ -399,7 +435,9 @@ TL_MSABI void* tl_CreateFileA(const char* const path, const std::uint32_t desire
     }
     const int fd = open(normalized, open_flags, 0666);
     if (fd < 0) {
-        set_last_error(errno_to_win32(errno));
+        const std::uint32_t failure_error = errno_to_win32(errno);
+        set_last_error(failure_error);
+        trace_linux_failure("CreateFileA", "open", errno, failure_error);
         return nullptr;
     }
     const auto free_it = std::find_if(g_files.begin(), g_files.end(), [](const FileSlot& slot) {
@@ -419,8 +457,15 @@ TL_MSABI void* tl_CreateFileA(const char* const path, const std::uint32_t desire
 
 TL_MSABI int tl_CloseHandle(const void* const handle) noexcept {
     FileSlot* slot = find_file_slot(handle);
-    if (slot == nullptr || close(slot->fd) != 0) {
+    if (slot == nullptr) {
         set_last_error(abi::kErrorInvalidHandle);
+        trace_guest_failure("CloseHandle", "handle-validation", "handle inválido");
+        return 0;
+    }
+    if (close(slot->fd) != 0) {
+        const std::uint32_t failure_error = errno_to_win32(errno);
+        set_last_error(failure_error);
+        trace_linux_failure("CloseHandle", "close", errno, failure_error);
         return 0;
     }
     *slot = {};

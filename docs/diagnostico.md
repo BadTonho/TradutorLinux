@@ -69,6 +69,30 @@ Os valores possíveis de `status` são:
 
 Quando qualquer importação falha, a resolução inteira falha e o processo não tem entry point executado; o runtime retorna `5` (`Unsupported`). Mesmo na falha, todas as entradas são reportadas para que o diagnóstico seja completo.
 
+## Categorias de falha
+
+Eventos de erro podem incluir o campo `category`:
+
+| Categoria | Significado |
+|---|---|
+| `exit-process` | O convidado encerrou explicitamente com `ExitProcess`. |
+| `unsupported` | Dependência ou operação fora do subconjunto suportado. |
+| `invalid-image` | PE malformado ou imagem não mapeável. |
+| `guest-memory` | Ponteiro ou faixa fornecida pelo convidado não é válida. |
+| `linux-error` | Operação Linux falhou; pode incluir `operation`, `errno` e `win32-error`. |
+| `guest-signal` | Futuramente, término do convidado por sinal Linux. |
+| `internal-error` | Falha inesperada do runtime. |
+
+Exemplo de falha Linux em uma API:
+
+```text
+[tl][runtime][error] linux-failure category="linux-error" symbol="CreateFileA" operation="open" errno="2" win32-error="2"
+```
+
+No estado atual, o guest ainda compartilha o processo hospedeiro. Portanto,
+`guest-signal` só será publicado de forma confiável depois da futura execução
+em processo filho; o runtime não instala um handler geral de sinais C++.
+
 ## Componente `gui`
 
 O protótipo X11 usa `USER32.dll!MessageBoxA` somente com `hWnd == NULL` e `type == 0`.

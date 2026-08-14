@@ -30,5 +30,11 @@ TEST(TraceTest, EscapesQuotedAndMultilineValues) {
     EXPECT_EQ(stream.str(), "[tl][cli][warning] input-warning message=\"linha \\\"um\\\"\\nlinha dois\"\n");
 }
 
+TEST(TraceTest, NamesFailureCategories) {
+    EXPECT_EQ(failure_category_name(FailureCategory::GuestMemory), "guest-memory");
+    EXPECT_EQ(failure_category_name(FailureCategory::LinuxError), "linux-error");
+    EXPECT_EQ(failure_category_name(FailureCategory::GuestSignal), "guest-signal");
+}
+
 }  // namespace
 }  // namespace tradutorlinux::diagnostics
