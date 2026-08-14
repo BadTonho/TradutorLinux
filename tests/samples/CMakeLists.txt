@@ -84,6 +84,10 @@ function(tl_add_pe_fixture target_name source_file manifest_file)
                 set(runtime_extra_args
                     "-DINPUT_TEXT=eco"
                     "-DEXPECTED_HEX=65636f")
+            elseif(target_name STREQUAL "tl_file")
+                set(runtime_extra_args
+                    "-DEXPECTED_HEX=66617365350a"
+                    "-DCLEANUP_FILE=tl_phase5_data.bin")
             endif()
         endif()
         add_test(
@@ -125,6 +129,8 @@ tl_add_pe_fixture(tl_nop src/tl_nop.c manifests/tl_nop.json)
 tl_add_pe_fixture(tl_hello src/tl_hello.c manifests/tl_hello.json
     LINK_KERNEL32 EXPECT_RESOLVED CONSOLE)
 tl_add_pe_fixture(tl_echo src/tl_echo.c manifests/tl_echo.json
+    LINK_KERNEL32 EXPECT_RESOLVED CONSOLE)
+tl_add_pe_fixture(tl_file src/tl_file.c manifests/tl_file.json
     LINK_KERNEL32 EXPECT_RESOLVED CONSOLE)
 tl_add_pe_fixture(tl_reloc src/tl_reloc.c manifests/tl_reloc.json RELOCATABLE)
 tl_add_pe_fixture(tl_missing_dll src/tl_missing_dll.c manifests/tl_missing_dll.json

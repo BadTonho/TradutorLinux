@@ -9,6 +9,7 @@ Esta matriz declara o comportamento suportado; ela não é uma promessa de compa
 | `tl_nop.exe` | PE32+ AMD64 | Não | Nenhum | Gerado, verificado, parseado, mapeado e com imports resolvidos na Fase 3; ainda não executado | Fase 4 |
 | `tl_hello.exe` | PE32+ AMD64 | Não | `KERNEL32.dll!ExitProcess`, `GetStdHandle`, `WriteFile` | Suportado no MVP: escreve `Ola do Windows no Linux!` em stdout, retorna `0` e emite trace | Fase 5 |
 | `tl_echo.exe` | PE32+ AMD64 | Não | `KERNEL32.dll!ExitProcess`, `GetStdHandle`, `ReadFile`, `WriteFile` | Suportado no MVP: ecoa stdin para stdout com handles padrão | Fase 5 |
+| `tl_file.exe` | PE32+ AMD64 | Não | `KERNEL32.dll!CloseHandle`, `CreateFileA`, `ExitProcess`, `GetLastError`, `GetStdHandle`, `ReadFile`, `SetLastError`, `VirtualAlloc`, `VirtualFree`, `WriteFile` | Suportado no subconjunto da Fase 5: aloca memória e grava/reabre/lê arquivo relativo | Fase 6 |
 | `tl_reloc.exe` | PE32+ AMD64 | Não | Nenhum | Gerado com `-Wl,--dynamicbase`, verificado, parseado e mapeado na Fase 2; usado para validar base relocations | Fase 4 |
 | `tl_missing_dll.exe` | PE32+ AMD64 | Não | `USER32.dll!MessageBoxA` | Gerado, verificado e rejeitado na Fase 3: o runtime diagnostica `unknown-dll` e retorna `5` sem executar o entry point | Fase 4 |
 
@@ -80,4 +81,14 @@ Os exports de `KERNEL32.dll` apontam para funções hospedeiras com a convençã
 | `KERNEL32.dll` | `ReadFile` | Suportado | Lê stdin; exige handle padrão de entrada válido, buffer válido e `lpOverlapped == NULL` |
 | `KERNEL32.dll` | `ExitProcess` | Suportado | Captura o código de saída e retorna o controle ao runner |
 
-Os handles não são compatíveis com APIs de arquivo e não há suporte a `GetLastError` nesta fase. A entrada e saída são bytes; nenhuma conversão de encoding é feita. O contrato detalhado está em `docs/arquitetura/console.md`.
+Os tokens de handles padrão não são handles de arquivo. A entrada e saída são bytes; nenhuma conversão de encoding é feita. O contrato detalhado está em `docs/arquitetura/console.md`.
+
+## Runtime básico (Fase 5)
+
+`GetLastError`/`SetLastError` usam estado por thread. O subconjunto de arquivos
+é `CreateFileA` com `GENERIC_READ`/`GENERIC_WRITE`, `CREATE_ALWAYS` ou
+`OPEN_EXISTING`, seguido por `ReadFile`, `WriteFile` e `CloseHandle`. Apenas
+caminhos relativos sem drive são aceitos; `\\` é normalizado para `/`.
+
+`VirtualAlloc` e `VirtualFree` têm o contrato limitado descrito em
+[`runtime-basico.md`](arquitetura/runtime-basico.md).

@@ -8,6 +8,7 @@ add_executable(tradutorlinux_unit_tests
     test_module.cpp
     test_pe_reader.cpp
     test_process.cpp
+    test_runtime.cpp
     test_trace.cpp
 )
 target_link_libraries(tradutorlinux_unit_tests

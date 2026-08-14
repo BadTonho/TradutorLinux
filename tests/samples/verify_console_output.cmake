@@ -30,3 +30,7 @@ string(FIND "${runtime_trace}" "resolved dll=\"KERNEL32.dll\"" position)
 if(position EQUAL -1)
     message(FATAL_ERROR "Resolved KERNEL32 imports not found in trace:\n${runtime_trace}")
 endif()
+
+if(DEFINED CLEANUP_FILE)
+    file(REMOVE "${CLEANUP_FILE}")
+endif()

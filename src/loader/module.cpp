@@ -81,6 +81,12 @@ void register_builtin_modules() {
         {"WriteFile", 2, reinterpret_cast<std::uintptr_t>(&tl_WriteFile)},
         {"ReadFile", 3, reinterpret_cast<std::uintptr_t>(&tl_ReadFile)},
         {"ExitProcess", 4, reinterpret_cast<std::uintptr_t>(&tl_ExitProcess)},
+        {"GetLastError", 5, reinterpret_cast<std::uintptr_t>(&tl_GetLastError)},
+        {"SetLastError", 6, reinterpret_cast<std::uintptr_t>(&tl_SetLastError)},
+        {"VirtualAlloc", 7, reinterpret_cast<std::uintptr_t>(&tl_VirtualAlloc)},
+        {"VirtualFree", 8, reinterpret_cast<std::uintptr_t>(&tl_VirtualFree)},
+        {"CreateFileA", 9, reinterpret_cast<std::uintptr_t>(&tl_CreateFileA)},
+        {"CloseHandle", 10, reinterpret_cast<std::uintptr_t>(&tl_CloseHandle)},
     };
     static const InternalModule kKernel32Module{"KERNEL32.dll", kKernel32Exports};
     register_module(kKernel32Module);

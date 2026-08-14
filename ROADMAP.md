@@ -19,9 +19,9 @@ Os itens marcados como concluídos devem ter evidência no repositório: código
 
 ## Estado atual
 
-- **Fase atual:** Fase 5 — Runtime básico.
-- **Marco concluído:** `tl_hello.exe` executa com saída real, `ExitProcess(0)` e trace; `tl_echo.exe` valida `ReadFile`/`WriteFile` com entrada controlada.
-- **Próximo resultado observável:** implementar `GetLastError`/`SetLastError` e memória virtual limitada, guiado por uma fixture de regressão.
+- **Fase atual:** Fase 6 — Carregamento e cobertura controlada.
+- **Marco concluído:** `tl_file.exe` aloca memória, grava/reabre/lê arquivo relativo e verifica `GetLastError`; os testes unitários cobrem os contratos isolados.
+- **Próximo resultado observável:** publicar o relatório de cobertura e adicionar novas APIs somente para aplicações-alvo justificadas.
 
 ## Fase 0 — Fundação e contrato
 
@@ -32,7 +32,7 @@ Os itens marcados como concluídos devem ter evidência no repositório: código
 - [x] Documentar as convenções Microsoft x64 e System V AMD64 usadas em cada fronteira.
 - [x] Configurar sanitizers e análise estática para os testes quando possível.
 
-### Critério de saída
+### Critério de saída — atendido
 
 O projeto compila de forma reproduzível, executa seus testes básicos e possui fixtures Windows versionadas com seus imports documentados.
 
@@ -96,15 +96,17 @@ Validação: `tl_hello.exe` e `tl_echo.exe` executados com stdout verificado; `E
 
 ## Fase 5 — Runtime básico
 
-- [ ] Implementar `GetLastError`/`SetLastError` e o mapeamento de erros necessário.
-- [ ] Implementar `VirtualAlloc`/`VirtualFree` com semântica limitada e documentada.
-- [ ] Implementar abertura, leitura, escrita e fechamento de arquivos para um subconjunto de flags.
-- [ ] Definir normalização de caminhos e política explícita para caminhos Windows.
-- [ ] Adicionar testes de concorrência somente quando o modelo de threads fizer parte do escopo.
+- [x] Implementar `GetLastError`/`SetLastError` e o mapeamento de erros necessário.
+- [x] Implementar `VirtualAlloc`/`VirtualFree` com semântica limitada e documentada.
+- [x] Implementar abertura, leitura, escrita e fechamento de arquivos para um subconjunto de flags.
+- [x] Definir normalização de caminhos e política explícita para caminhos Windows.
+- [x] Adicionar testes de concorrência somente quando o modelo de threads fizer parte do escopo.
 
-### Critério de saída
+### Critério de saída — atendido
 
 Uma aplicação de console consegue ler e escrever arquivos e usar memória alocada pelo runtime, com erros verificáveis e documentados.
+
+Validação: `tl_file.exe` usa `VirtualAlloc`, `CreateFileA`, `WriteFile`, `ReadFile`, `CloseHandle`, `VirtualFree`, `GetLastError` e `SetLastError`; caminhos relativos são normalizados de `\\` para `/`, enquanto caminhos absolutos e drives são rejeitados; `VirtualAlloc` aceita somente `MEM_COMMIT | MEM_RESERVE` com `PAGE_READONLY` ou `PAGE_READWRITE`, e `VirtualFree` somente `MEM_RELEASE` com tamanho zero. Debug e sanitize passaram com 101 testes; `cppcheck`, `clang-tidy` e `git diff --check` também passaram.
 
 ## Fase 6 — Carregamento e cobertura controlada
 
