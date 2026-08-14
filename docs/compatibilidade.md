@@ -12,7 +12,7 @@ Esta matriz declara o comportamento suportado; ela não é uma promessa de compa
 | `tl_file.exe` | PE32+ AMD64 | Não | `KERNEL32.dll!CloseHandle`, `CreateFileA`, `ExitProcess`, `GetLastError`, `GetStdHandle`, `ReadFile`, `SetLastError`, `VirtualAlloc`, `VirtualFree`, `WriteFile` | Suportado no subconjunto da Fase 5: aloca memória e grava/reabre/lê arquivo relativo | Fase 6 |
 | `tl_gui.exe` | PE32+ AMD64 | Não | `KERNEL32.dll!ExitProcess`, `USER32.dll!MessageBoxA` | Protótipo manual: caixa modal X11 mínima; não executado automaticamente por depender de display | Fase 7 |
 | `tl_reloc.exe` | PE32+ AMD64 | Não | Nenhum | Gerado com `-Wl,--dynamicbase`, verificado, parseado e mapeado na Fase 2; usado para validar base relocations | Fase 4 |
-| `tl_missing_dll.exe` | PE32+ AMD64 | Não | `USER32.dll!MessageBoxA` | Gerado, verificado e rejeitado na Fase 3: o runtime diagnostica `unknown-dll` e retorna `5` sem executar o entry point | Fase 4 |
+| `tl_missing_dll.exe` | PE32+ AMD64 | Não | `USER32.dll!MessageBoxW` | Gerado, verificado e rejeitado na Fase 3: `USER32.dll` é conhecida, mas o símbolo diagnostica `unknown-symbol`; retorna `5` sem executar o entry point | Fase 4 |
 
 As fontes e manifestos das fixtures ficam em `tests/samples/`. Os binários são produtos de build e ficam em `build/<preset>/tests/samples/generated/`.
 
