@@ -1,6 +1,7 @@
 add_library(tradutorlinux_core STATIC
     cli.cpp
     diagnostics/trace.cpp
+    pe/pe_reader.cpp
 )
 
 target_include_directories(tradutorlinux_core

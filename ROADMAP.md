@@ -38,15 +38,15 @@ O projeto compila de forma reproduzível, executa seus testes básicos e possui 
 
 ## Fase 1 — Leitor de PE seguro
 
-- [ ] Ler e validar DOS header, NT headers, optional header e section headers.
-- [ ] Exibir seções, entry point, imports, relocations e arquitetura.
-- [ ] Rejeitar PE inválido, truncado ou de arquitetura incompatível com mensagens precisas.
-- [ ] Cobrir o parser com testes unitários e corpus de arquivos malformados.
-- [ ] Comparar a saída com `llvm-objdump` e outras ferramentas de inspeção.
+- [x] Ler e validar DOS header, NT headers, optional header e section headers.
+- [x] Exibir seções, entry point, imports, relocations e arquitetura.
+- [x] Rejeitar PE inválido, truncado ou de arquitetura incompatível com mensagens precisas.
+- [x] Cobrir o parser com testes unitários e corpus de arquivos malformados.
+- [x] Comparar a saída com `llvm-readobj` nas fixtures geradas.
 
 ### Critério de saída
 
-O leitor identifica corretamente os fixtures válidos e nunca acessa memória fora dos limites ao processar fixtures inválidos.
+O leitor identifica corretamente os fixtures válidos e nunca acessa memória fora dos limites ao processar fixtures inválidos. Validação: fixtures `tl_hello.exe`/`tl_nop.exe` parseados e comparados com `llvm-readobj` em CTest, corpus malformado coberto por testes, presets `debug` e `sanitize` verdes e análise estática sem pendências.
 
 ## Fase 2 — Mapeamento de imagem
 

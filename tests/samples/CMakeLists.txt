@@ -58,6 +58,21 @@ function(tl_add_pe_fixture target_name source_file manifest_file)
             -P "${CMAKE_CURRENT_SOURCE_DIR}/verify_fixture.cmake"
     )
     set_tests_properties(fixture_${target_name}_metadata PROPERTIES LABELS "fixture;pe32plus")
+
+    if(TARGET tradutorlinux)
+        add_test(
+            NAME runtime_${target_name}_matches_readobj
+            COMMAND "${CMAKE_COMMAND}"
+                "-DINPUT=${output_file}"
+                "-DRUNTIME=$<TARGET_FILE:tradutorlinux>"
+                "-DLLVM_READOBJ=${TL_LLVM_READOBJ}"
+                -P "${CMAKE_CURRENT_SOURCE_DIR}/verify_runtime_output.cmake"
+        )
+        set_tests_properties(runtime_${target_name}_matches_readobj PROPERTIES
+            DEPENDS fixture_${target_name}_metadata
+            LABELS "runtime;pe32plus"
+        )
+    endif()
 endfunction()
 
 add_custom_target(tradutorlinux_samples ALL)

@@ -69,7 +69,7 @@ TEST(CommandRunTest, ReturnsInputUnavailableForMissingPath) {
     EXPECT_NE(stderr_stream.str().find("não foi possível acessar o arquivo"), std::string::npos);
 }
 
-TEST(CommandRunTest, TracesUnavailableLoaderForReadableInput) {
+TEST(CommandRunTest, RejectsReadableNonPeInputAsMalformed) {
     CommandLine command_line;
     command_line.trace_enabled = true;
     command_line.executable_path = std::filesystem::path{__FILE__};
@@ -78,10 +78,11 @@ TEST(CommandRunTest, TracesUnavailableLoaderForReadableInput) {
 
     const ExitCode exit_code = run_command(command_line, stdout_stream, stderr_stream);
 
-    EXPECT_EQ(exit_code, ExitCode::Unsupported);
+    EXPECT_EQ(exit_code, ExitCode::MalformedPe);
     EXPECT_TRUE(stdout_stream.str().empty());
     EXPECT_NE(stderr_stream.str().find("[tl][cli][info] input path="), std::string::npos);
-    EXPECT_NE(stderr_stream.str().find("[tl][runtime][error] feature-unavailable"), std::string::npos);
+    EXPECT_NE(stderr_stream.str().find("[tl][pe][error] parse-failed"), std::string::npos);
+    EXPECT_NE(stderr_stream.str().find("assinatura DOS ausente"), std::string::npos);
 }
 
 }  // namespace

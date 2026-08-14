@@ -2,6 +2,7 @@ add_subdirectory(samples)
 
 add_executable(tradutorlinux_unit_tests
     test_cli.cpp
+    test_pe_reader.cpp
     test_trace.cpp
 )
 target_link_libraries(tradutorlinux_unit_tests
@@ -14,6 +15,9 @@ tl_enable_sanitizers(tradutorlinux_unit_tests)
 
 if(TARGET tradutorlinux_samples)
     add_dependencies(tradutorlinux_unit_tests tradutorlinux_samples)
+    target_compile_definitions(tradutorlinux_unit_tests PRIVATE
+        TL_FIXTURE_OUTPUT_DIRECTORY="${CMAKE_CURRENT_BINARY_DIR}/samples/generated"
+    )
 endif()
 
 include(GoogleTest)

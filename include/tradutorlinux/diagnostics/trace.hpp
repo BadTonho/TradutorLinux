@@ -2,6 +2,7 @@
 
 #include <iosfwd>
 #include <span>
+#include <string>
 #include <string_view>
 
 namespace tradutorlinux::diagnostics {
@@ -22,8 +23,8 @@ enum class TraceLevel {
 };
 
 struct TraceField {
-    std::string_view key;
-    std::string_view value;
+    std::string key;
+    std::string value;
 };
 
 void write_trace(std::ostream& stream, TraceComponent component, TraceLevel level,

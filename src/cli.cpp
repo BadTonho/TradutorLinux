@@ -1,13 +1,19 @@
 #include "tradutorlinux/cli.hpp"
 
 #include "tradutorlinux/diagnostics/trace.hpp"
+#include "tradutorlinux/pe/pe_reader.hpp"
 
 #include <array>
+#include <cstddef>
+#include <cstdint>
 #include <filesystem>
+#include <fstream>
+#include <optional>
 #include <ostream>
 #include <string>
 #include <string_view>
 #include <utility>
+#include <vector>
 
 namespace tradutorlinux {
 namespace {
@@ -16,6 +22,153 @@ constexpr std::string_view kUsage = "Uso: tradutorlinux [--trace] <arquivo.exe>\
 
 [[nodiscard]] bool is_option(const std::string_view argument) {
     return argument.starts_with('-');
+}
+
+[[nodiscard]] std::string format_hex(const std::uint64_t value) {
+    constexpr char kDigits[] = "0123456789abcdef";
+    std::string result = "0x";
+    bool started = false;
+    for (int shift = 60; shift >= 0; shift -= 4) {
+        const unsigned int digit = static_cast<unsigned int>((value >> shift) & 0xFULL);
+        if (digit != 0 || started) {
+            result.push_back(kDigits[digit]);
+            started = true;
+        }
+    }
+    if (!started) {
+        result.push_back('0');
+    }
+    return result;
+}
+
+[[nodiscard]] std::optional<std::vector<std::byte>> read_file(
+    const std::filesystem::path& path) {
+    std::ifstream stream{path, std::ios::binary};
+    if (!stream) {
+        return std::nullopt;
+    }
+    stream.seekg(0, std::ios::end);
+    const std::streamoff end = stream.tellg();
+    if (end < 0) {
+        return std::nullopt;
+    }
+    stream.seekg(0, std::ios::beg);
+    std::vector<std::byte> bytes(static_cast<std::size_t>(end));
+    if (!bytes.empty()) {
+        stream.read(reinterpret_cast<char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
+        if (!stream) {
+            return std::nullopt;
+        }
+    }
+    return bytes;
+}
+
+[[nodiscard]] std::string symbol_label(const pe::ImportedSymbol& symbol) {
+    if (symbol.by_ordinal) {
+        return "ordinal(" + std::to_string(symbol.ordinal) + ")";
+    }
+    return symbol.name;
+}
+
+[[nodiscard]] const char* status_label(const pe::ParseStatus status) {
+    switch (status) {
+        case pe::ParseStatus::Success:
+            return "success";
+        case pe::ParseStatus::Truncated:
+            return "truncated";
+        case pe::ParseStatus::Malformed:
+            return "malformed";
+        case pe::ParseStatus::UnsupportedArchitecture:
+            return "unsupported-architecture";
+        case pe::ParseStatus::UnsupportedFormat:
+            return "unsupported-format";
+    }
+    return "unknown";
+}
+
+void write_pe_trace(std::ostream& stream, const pe::PeInfo& info) {
+    const std::string format = info.is_pe32_plus ? "PE32+" : "PE32";
+    const std::string arch = info.machine == 0x8664 ? "x86-64" : "desconhecida";
+    const std::array image_fields{
+        diagnostics::TraceField{"format", format},
+        diagnostics::TraceField{"arch", arch},
+        diagnostics::TraceField{"entry", format_hex(info.address_of_entry_point)},
+        diagnostics::TraceField{"image-base", format_hex(info.image_base)},
+        diagnostics::TraceField{"size-of-image", format_hex(info.size_of_image)},
+        diagnostics::TraceField{"sections", std::to_string(info.number_of_sections)},
+    };
+    diagnostics::write_trace(stream, diagnostics::TraceComponent::Pe,
+                             diagnostics::TraceLevel::Info, "image", image_fields);
+
+    for (std::size_t index = 0; index < info.sections.size(); ++index) {
+        const pe::SectionInfo& section = info.sections[index];
+        const std::array fields{
+            diagnostics::TraceField{"index", std::to_string(index)},
+            diagnostics::TraceField{"name", section.name},
+            diagnostics::TraceField{"virtual-address", format_hex(section.virtual_address)},
+            diagnostics::TraceField{"virtual-size", format_hex(section.virtual_size)},
+            diagnostics::TraceField{"raw-pointer", format_hex(section.raw_data_pointer)},
+            diagnostics::TraceField{"raw-size", format_hex(section.raw_data_size)},
+            diagnostics::TraceField{"characteristics", format_hex(section.characteristics)},
+        };
+        diagnostics::write_trace(stream, diagnostics::TraceComponent::Pe,
+                                 diagnostics::TraceLevel::Info, "section", fields);
+    }
+
+    for (const pe::ImportedDll& dll : info.imports) {
+        std::string symbols;
+        for (const pe::ImportedSymbol& symbol : dll.symbols) {
+            if (!symbols.empty()) {
+                symbols += ",";
+            }
+            symbols += symbol_label(symbol);
+        }
+        const std::array fields{
+            diagnostics::TraceField{"dll", dll.name},
+            diagnostics::TraceField{"symbols", symbols},
+        };
+        diagnostics::write_trace(stream, diagnostics::TraceComponent::Pe,
+                                 diagnostics::TraceLevel::Info, "import", fields);
+    }
+
+    std::size_t relocation_entries = 0;
+    for (const pe::BaseRelocBlock& block : info.relocations) {
+        relocation_entries += block.entries.size();
+        const std::array fields{
+            diagnostics::TraceField{"page", format_hex(block.page_rva)},
+            diagnostics::TraceField{"entries", std::to_string(block.entries.size())},
+        };
+        diagnostics::write_trace(stream, diagnostics::TraceComponent::Pe,
+                                 diagnostics::TraceLevel::Debug, "reloc-block", fields);
+    }
+    const std::array relocation_fields{
+        diagnostics::TraceField{"blocks", std::to_string(info.relocations.size())},
+        diagnostics::TraceField{"entries", std::to_string(relocation_entries)},
+    };
+    diagnostics::write_trace(stream, diagnostics::TraceComponent::Pe,
+                             diagnostics::TraceLevel::Info, "relocations", relocation_fields);
+}
+
+void print_pe_summary(std::ostream& stream, const pe::PeInfo& info) {
+    const std::string_view format = info.is_pe32_plus ? "PE32+" : "PE32";
+    stream << format << " x86-64 | entry=" << format_hex(info.address_of_entry_point)
+           << " | image-base=" << format_hex(info.image_base) << " | "
+           << info.number_of_sections << " seções\n";
+    for (const pe::SectionInfo& section : info.sections) {
+        stream << "  seção " << section.name << " va=" << format_hex(section.virtual_address)
+               << " vsize=" << format_hex(section.virtual_size)
+               << " raw=" << format_hex(section.raw_data_pointer) << "/"
+               << format_hex(section.raw_data_size) << " chars=" << format_hex(section.characteristics)
+               << '\n';
+    }
+    for (const pe::ImportedDll& dll : info.imports) {
+        stream << "  imports " << dll.name << ':';
+        for (const pe::ImportedSymbol& symbol : dll.symbols) {
+            stream << ' ' << symbol_label(symbol);
+        }
+        stream << '\n';
+    }
+    stream << "  relocations: " << info.relocations.size() << " blocos\n";
 }
 
 }  // namespace
@@ -114,19 +267,41 @@ ExitCode run_command(const CommandLine& command_line, std::ostream& stdout_strea
     if (command_line.trace_enabled) {
         const std::string input_path = command_line.executable_path->string();
         const std::array input_fields{diagnostics::TraceField{"path", input_path}};
-        const std::array feature_fields{
-            diagnostics::TraceField{"feature", "pe-loader"},
-            diagnostics::TraceField{"phase", "1"},
-        };
         diagnostics::write_trace(stderr_stream, diagnostics::TraceComponent::Cli,
                                  diagnostics::TraceLevel::Info, "input", input_fields);
-        diagnostics::write_trace(stderr_stream, diagnostics::TraceComponent::Runtime,
-                                 diagnostics::TraceLevel::Error, "feature-unavailable",
-                                 feature_fields);
     }
 
-    stderr_stream << "erro: o carregamento de PE ainda não está implementado (Fase 1)\n";
-    return ExitCode::Unsupported;
+    const std::optional<std::vector<std::byte>> bytes = read_file(*command_line.executable_path);
+    if (!bytes.has_value()) {
+        stderr_stream << "erro: não foi possível ler o arquivo: "
+                      << command_line.executable_path->string() << '\n';
+        return ExitCode::InputUnavailable;
+    }
+
+    const pe::ParseResult parse_result = pe::parse_pe(*bytes);
+    if (parse_result.status != pe::ParseStatus::Success) {
+        if (command_line.trace_enabled) {
+            const std::array fields{
+                diagnostics::TraceField{"status", status_label(parse_result.status)},
+                diagnostics::TraceField{"detail", parse_result.error_message},
+            };
+            diagnostics::write_trace(stderr_stream, diagnostics::TraceComponent::Pe,
+                                     diagnostics::TraceLevel::Error, "parse-failed", fields);
+        }
+        stderr_stream << "erro: " << parse_result.error_message << '\n';
+        if (parse_result.status == pe::ParseStatus::UnsupportedArchitecture ||
+            parse_result.status == pe::ParseStatus::UnsupportedFormat) {
+            return ExitCode::Unsupported;
+        }
+        return ExitCode::MalformedPe;
+    }
+
+    if (command_line.trace_enabled) {
+        write_pe_trace(stderr_stream, parse_result.info);
+    } else {
+        print_pe_summary(stderr_stream, parse_result.info);
+    }
+    return ExitCode::Success;
 }
 
 void print_help(std::ostream& stream) {
