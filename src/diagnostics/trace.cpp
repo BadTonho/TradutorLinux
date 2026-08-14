@@ -73,7 +73,7 @@ namespace {
 void write_trace(std::ostream& stream, const TraceComponent component, const TraceLevel level,
                  const std::string_view event, const std::span<const TraceField> fields) {
     stream << "[tl][" << component_name(component) << "][" << level_name(level) << "] " << event;
-    for (const TraceField field : fields) {
+    for (const TraceField& field : fields) {
         stream << ' ' << field.key << "=\"" << escape_value(field.value) << '"';
     }
     stream << '\n';

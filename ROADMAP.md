@@ -19,18 +19,18 @@ Os itens marcados como concluídos devem ter evidência no repositório: código
 
 ## Estado atual
 
-- **Fase atual:** Fase 0 — Fundação e contrato.
-- **Marco em andamento:** validar a fundação na VM Ubuntu e no GitHub Actions.
-- **Próximo resultado observável:** presets Debug e Sanitizers aprovados, com fixtures PE32+ verificadas por CTest.
+- **Fase atual:** Fase 1 — Leitor de PE seguro.
+- **Marco em andamento:** implementar o leitor de PE validando headers, seções e imports.
+- **Próximo resultado observável:** parser de PE32+ que identifica fixtures válidos e rejeita entradas malformadas com segurança, coberto por CTest.
 
 ## Fase 0 — Fundação e contrato
 
-- [ ] Criar a estrutura CMake, compilação com warnings rigorosos e testes automatizados.
-- [ ] Fixar o alvo: Linux x86-64 hospedando somente PE32+ x86-64.
-- [ ] Definir formato do trace, códigos de erro e matriz de compatibilidade.
-- [ ] Criar binários de teste próprios, incluindo um executável sem CRT para o primeiro salto ao entry point.
-- [ ] Documentar as convenções Microsoft x64 e System V AMD64 usadas em cada fronteira.
-- [ ] Configurar sanitizers e análise estática para os testes quando possível.
+- [x] Criar a estrutura CMake, compilação com warnings rigorosos e testes automatizados.
+- [x] Fixar o alvo: Linux x86-64 hospedando somente PE32+ x86-64.
+- [x] Definir formato do trace, códigos de erro e matriz de compatibilidade.
+- [x] Criar binários de teste próprios, incluindo um executável sem CRT para o primeiro salto ao entry point.
+- [x] Documentar as convenções Microsoft x64 e System V AMD64 usadas em cada fronteira.
+- [x] Configurar sanitizers e análise estática para os testes quando possível.
 
 ### Critério de saída
 

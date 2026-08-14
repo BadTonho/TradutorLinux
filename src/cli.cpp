@@ -34,7 +34,8 @@ ParseResult parse_command_line(const int argc, const char* const argv[]) {
 
         if (!options_ended && argument == "--help") {
             if (command_line.show_help) {
-                return {.error_message = "a opção --help foi repetida"};
+                return {.command_line = std::nullopt,
+                        .error_message = "a opção --help foi repetida"};
             }
             command_line.show_help = true;
             continue;
@@ -42,7 +43,8 @@ ParseResult parse_command_line(const int argc, const char* const argv[]) {
 
         if (!options_ended && argument == "--version") {
             if (command_line.show_version) {
-                return {.error_message = "a opção --version foi repetida"};
+                return {.command_line = std::nullopt,
+                        .error_message = "a opção --version foi repetida"};
             }
             command_line.show_version = true;
             continue;
@@ -50,31 +52,36 @@ ParseResult parse_command_line(const int argc, const char* const argv[]) {
 
         if (!options_ended && argument == "--trace") {
             if (command_line.trace_enabled) {
-                return {.error_message = "a opção --trace foi repetida"};
+                return {.command_line = std::nullopt,
+                        .error_message = "a opção --trace foi repetida"};
             }
             command_line.trace_enabled = true;
             continue;
         }
 
         if (!options_ended && is_option(argument)) {
-            return {.error_message = "opção desconhecida: " + std::string{argument}};
+            return {.command_line = std::nullopt,
+                    .error_message = "opção desconhecida: " + std::string{argument}};
         }
 
         if (command_line.executable_path.has_value()) {
-            return {.error_message = "apenas um arquivo executável pode ser informado"};
+            return {.command_line = std::nullopt,
+                    .error_message = "apenas um arquivo executável pode ser informado"};
         }
         command_line.executable_path = std::filesystem::path{std::string{argument}};
     }
 
     if ((command_line.show_help || command_line.show_version) && command_line.executable_path.has_value()) {
-        return {.error_message = "--help e --version não podem ser usados com um arquivo executável"};
+        return {.command_line = std::nullopt,
+                .error_message = "--help e --version não podem ser usados com um arquivo executável"};
     }
 
     if (command_line.show_help && command_line.show_version) {
-        return {.error_message = "--help e --version não podem ser usados juntos"};
+        return {.command_line = std::nullopt,
+                .error_message = "--help e --version não podem ser usados juntos"};
     }
 
-    return {.command_line = std::move(command_line)};
+    return {.command_line = std::move(command_line), .error_message = {}};
 }
 
 ExitCode run_command(const CommandLine& command_line, std::ostream& stdout_stream,

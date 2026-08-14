@@ -2,7 +2,7 @@
 
 Runtime educacional de compatibilidade Win32 para Linux. O projeto executará, de forma gradual e documentada, um subconjunto de executáveis PE32+ x86-64 de console no Linux x86-64.
 
-O estado atual é a **Fase 0**: a CLI, o build, os testes e as fixtures estão prontos, mas o parser e o loader de PE ainda não foram implementados. Por isso, ao receber um arquivo legível, o comando retorna uma mensagem de recurso não suportado.
+O estado atual é a **Fase 1**: a Fase 0 (CLI, build, testes, fixtures e documentação de contratos) está concluída e validada, mas o parser e o loader de PE ainda não foram implementados. Por isso, ao receber um arquivo legível, o comando retorna uma mensagem de recurso não suportado.
 
 Consulte [PROJETO.md](PROJETO.md) para visão e arquitetura e [ROADMAP.md](ROADMAP.md) para os marcos.
 
