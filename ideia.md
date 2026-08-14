@@ -1,1 +1,2 @@
 da pra implementa uma forma de detectar erros no linux quando algum programa falhar, e assim melhorando a usabilidade
+é correto C++ em tudo mesmo?
