@@ -5,6 +5,7 @@
 #include "tradutorlinux/loader/module.hpp"
 #include "tradutorlinux/loader/process.hpp"
 #include "tradutorlinux/pe/pe_reader.hpp"
+#include "tradutorlinux/runtime/winapi.hpp"
 
 #include <algorithm>
 #include <array>
@@ -494,12 +495,23 @@ ExitCode run_command(const CommandLine& command_line, std::ostream& stdout_strea
         return ExitCode::Unsupported;
     }
 
+    const GuestExecutionResult execution =
+        execute_guest_entry(process.thread.entry_point);
+    if (command_line.trace_enabled) {
+        const std::array fields{
+            diagnostics::TraceField{"exit-code", std::to_string(execution.exit_code)},
+            diagnostics::TraceField{"explicit", execution.exited_explicitly ? "sim" : "não"},
+        };
+        diagnostics::write_trace(stderr_stream, diagnostics::TraceComponent::Process,
+                                 diagnostics::TraceLevel::Info, "exit", fields);
+    }
+
     const std::uint64_t unmap_base = process.image.base;
     loader::destroy_process(process);
     if (command_line.trace_enabled) {
         write_unmap_trace(stderr_stream, unmap_base);
     }
-    return ExitCode::Success;
+    return static_cast<ExitCode>(execution.exit_code);
 }
 
 void print_help(std::ostream& stream) {

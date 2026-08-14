@@ -14,7 +14,7 @@ find_program(TL_LLVM_READOBJ
 set(TL_FIXTURE_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/generated")
 
 function(tl_add_pe_fixture target_name source_file manifest_file)
-    set(options LINK_KERNEL32 LINK_USER32 RELOCATABLE RUNTIME_FAILURE EXPECT_RESOLVED)
+    set(options LINK_KERNEL32 LINK_USER32 RELOCATABLE RUNTIME_FAILURE EXPECT_RESOLVED CONSOLE)
     cmake_parse_arguments(ARG "${options}" "" "" ${ARGN})
 
     set(output_file "${TL_FIXTURE_OUTPUT_DIRECTORY}/${target_name}.exe")
@@ -73,6 +73,19 @@ function(tl_add_pe_fixture target_name source_file manifest_file)
             set(runtime_manifest_args
                 "-DMANIFEST=${CMAKE_CURRENT_SOURCE_DIR}/${manifest_file}")
         endif()
+        set(runtime_script verify_runtime_output.cmake)
+        set(runtime_extra_args)
+        if(ARG_CONSOLE)
+            set(runtime_script verify_console_output.cmake)
+            if(target_name STREQUAL "tl_hello")
+                set(runtime_extra_args
+                    "-DEXPECTED_HEX=4f6c6120646f2057696e646f7773206e6f204c696e7578210a")
+            elseif(target_name STREQUAL "tl_echo")
+                set(runtime_extra_args
+                    "-DINPUT_TEXT=eco"
+                    "-DEXPECTED_HEX=65636f")
+            endif()
+        endif()
         add_test(
             NAME runtime_${target_name}_matches_readobj
             COMMAND "${CMAKE_COMMAND}"
@@ -80,7 +93,8 @@ function(tl_add_pe_fixture target_name source_file manifest_file)
                 "-DRUNTIME=$<TARGET_FILE:tradutorlinux>"
                 "-DLLVM_READOBJ=${TL_LLVM_READOBJ}"
                 ${runtime_manifest_args}
-                -P "${CMAKE_CURRENT_SOURCE_DIR}/verify_runtime_output.cmake"
+                ${runtime_extra_args}
+                -P "${CMAKE_CURRENT_SOURCE_DIR}/${runtime_script}"
         )
         set_tests_properties(runtime_${target_name}_matches_readobj PROPERTIES
             DEPENDS fixture_${target_name}_metadata
@@ -109,7 +123,9 @@ add_custom_target(tradutorlinux_samples ALL)
 
 tl_add_pe_fixture(tl_nop src/tl_nop.c manifests/tl_nop.json)
 tl_add_pe_fixture(tl_hello src/tl_hello.c manifests/tl_hello.json
-    LINK_KERNEL32 EXPECT_RESOLVED)
+    LINK_KERNEL32 EXPECT_RESOLVED CONSOLE)
+tl_add_pe_fixture(tl_echo src/tl_echo.c manifests/tl_echo.json
+    LINK_KERNEL32 EXPECT_RESOLVED CONSOLE)
 tl_add_pe_fixture(tl_reloc src/tl_reloc.c manifests/tl_reloc.json RELOCATABLE)
 tl_add_pe_fixture(tl_missing_dll src/tl_missing_dll.c manifests/tl_missing_dll.json
     LINK_USER32 RUNTIME_FAILURE)

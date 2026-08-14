@@ -13,6 +13,7 @@ enum class TraceComponent {
     Loader,
     Imports,
     Runtime,
+    Process,
 };
 
 enum class TraceLevel {

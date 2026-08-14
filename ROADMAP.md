@@ -19,9 +19,9 @@ Os itens marcados como concluídos devem ter evidência no repositório: código
 
 ## Estado atual
 
-- **Fase atual:** Fase 3 — Imports e bootstrap mínimo.
-- **Marco concluído:** imagem PE32+ mapeada no endereço preferencial quando possível, headers/seções copiados com permissões de página, base relocations aplicadas e imports internos resolvidos para stubs Microsoft x64.
-- **Próximo resultado observável:** Fase 4 implementará as semânticas de console e executará o entry point de `tl_hello.exe`; a Fase 3 ainda não executa código convidado.
+- **Fase atual:** Fase 5 — Runtime básico.
+- **Marco concluído:** `tl_hello.exe` executa com saída real, `ExitProcess(0)` e trace; `tl_echo.exe` valida `ReadFile`/`WriteFile` com entrada controlada.
+- **Próximo resultado observável:** implementar `GetLastError`/`SetLastError` e memória virtual limitada, guiado por uma fixture de regressão.
 
 ## Fase 0 — Fundação e contrato
 
@@ -78,19 +78,21 @@ Validação: registro interno de `KERNEL32.dll` com `GetStdHandle`, `WriteFile` 
 
 ## Fase 4 — Console: primeiro marco público
 
-- [ ] Implementar `GetStdHandle`, `WriteFile`, `ReadFile` e `ExitProcess`.
-- [ ] Definir e testar conversão entre handles Windows e descritores Linux.
-- [ ] Executar `tl_hello.exe` e uma ferramenta de eco construída no repositório.
-- [ ] Verificar saída, retorno, trace e tratamento de erros em CI.
-- [ ] Documentar exatamente quais flags, handles e encodings são suportados.
+- [x] Implementar `GetStdHandle`, `WriteFile`, `ReadFile` e `ExitProcess`.
+- [x] Definir e testar conversão entre handles Windows e descritores Linux.
+- [x] Executar `tl_hello.exe` e uma ferramenta de eco construída no repositório.
+- [x] Verificar saída, retorno, trace e tratamento de erros em CI.
+- [x] Documentar exatamente quais flags, handles e encodings são suportados.
 
-### Critério de saída — MVP
+### Critério de saída — MVP atendido
 
 ```text
 ./tradutorlinux --trace tests/samples/tl_hello.exe
 ```
 
 O comando escreve a saída esperada, retorna o código correto, produz trace reproduzível e possui testes para todas as APIs usadas pelo fixture.
+
+Validação: `tl_hello.exe` e `tl_echo.exe` executados com stdout verificado; `ExitProcess` e o código de retorno registrados no trace; handles padrão convertidos para descritores Linux por tokens opacos; `ReadFile`/`WriteFile` limitados a I/O síncrono de console e bytes sem conversão de encoding; 95 testes passaram nos presets `debug` e `sanitize` (sanitize local com `LSAN_OPTIONS=detect_leaks=0` por limitação do LeakSanitizer durante descoberta sob ptrace); `cppcheck` e `clang-tidy` passaram.
 
 ## Fase 5 — Runtime básico
 

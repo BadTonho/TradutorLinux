@@ -7,7 +7,8 @@ Esta matriz declara o comportamento suportado; ela não é uma promessa de compa
 | Fixture | Arquitetura | CRT | Imports esperados | Estado atual | Próximo marco |
 |---|---|---:|---|---|---|
 | `tl_nop.exe` | PE32+ AMD64 | Não | Nenhum | Gerado, verificado, parseado, mapeado e com imports resolvidos na Fase 3; ainda não executado | Fase 4 |
-| `tl_hello.exe` | PE32+ AMD64 | Não | `KERNEL32.dll!ExitProcess`, `GetStdHandle`, `WriteFile` | Gerado, verificado, parseado, mapeado e com os 3 imports resolvidos para stubs `ms_abi` na Fase 3; ainda não executado | Fase 4 |
+| `tl_hello.exe` | PE32+ AMD64 | Não | `KERNEL32.dll!ExitProcess`, `GetStdHandle`, `WriteFile` | Suportado no MVP: escreve `Ola do Windows no Linux!` em stdout, retorna `0` e emite trace | Fase 5 |
+| `tl_echo.exe` | PE32+ AMD64 | Não | `KERNEL32.dll!ExitProcess`, `GetStdHandle`, `ReadFile`, `WriteFile` | Suportado no MVP: ecoa stdin para stdout com handles padrão | Fase 5 |
 | `tl_reloc.exe` | PE32+ AMD64 | Não | Nenhum | Gerado com `-Wl,--dynamicbase`, verificado, parseado e mapeado na Fase 2; usado para validar base relocations | Fase 4 |
 | `tl_missing_dll.exe` | PE32+ AMD64 | Não | `USER32.dll!MessageBoxA` | Gerado, verificado e rejeitado na Fase 3: o runtime diagnostica `unknown-dll` e retorna `5` sem executar o entry point | Fase 4 |
 
@@ -68,14 +69,15 @@ Comportamento de rejeição:
 
 Em qualquer falha o entry point não é executado e todas as entradas são reportadas no trace (ver `docs/diagnostico.md`).
 
-## APIs atuais (stubs da Fase 3)
+## APIs de console (Fase 4)
 
-Até a Fase 4, os exports de `KERNEL32.dll` apontam para stubs hospedeiros com a convenção Microsoft x64 (`TL_MSABI`) e comportamento placeholder seguro e documentado. Eles nunca são chamados nesta fase (o entry point não é executado), mas a fronteira de ABI é exercitada e testada diretamente.
+Os exports de `KERNEL32.dll` apontam para funções hospedeiras com a convenção Microsoft x64 (`TL_MSABI`). O runner chama o entry point depois de mapear a imagem e resolver a IAT; `ExitProcess` transfere o controle de volta ao runner e não encerra diretamente o processo Linux.
 
-| Módulo | API | Estado | Comportamento atual do stub |
+| Módulo | API | Estado | Comportamento suportado |
 |---|---|---|---|
-| `KERNEL32.dll` | `GetStdHandle` | Stub `ms_abi` (Fase 3); semântica real na Fase 4 | Retorna `NULL` e registra aviso `stub` no trace |
-| `KERNEL32.dll` | `WriteFile` | Stub `ms_abi` (Fase 3); semântica real na Fase 4 | Retorna `0` (FALSE) e registra aviso `stub` no trace |
-| `KERNEL32.dll` | `ExitProcess` | Stub `ms_abi` (Fase 3); semântica real na Fase 4 | Não faz nada (no-op) e registra aviso `stub` no trace |
+| `KERNEL32.dll` | `GetStdHandle` | Suportado | Mapeia `STD_INPUT_HANDLE`, `STD_OUTPUT_HANDLE` e `STD_ERROR_HANDLE` para tokens opacos; outros valores retornam `NULL` |
+| `KERNEL32.dll` | `WriteFile` | Suportado | Escreve em stdout/stderr; exige handle padrão válido, buffer válido e `lpOverlapped == NULL` |
+| `KERNEL32.dll` | `ReadFile` | Suportado | Lê stdin; exige handle padrão de entrada válido, buffer válido e `lpOverlapped == NULL` |
+| `KERNEL32.dll` | `ExitProcess` | Suportado | Captura o código de saída e retorna o controle ao runner |
 
-Os avisos usam o componente `runtime` com `detail="placeholder da Fase 3; semântica real na Fase 4"`. A semântica de cada stub está em `docs/arquitetura/imports.md`.
+Os handles não são compatíveis com APIs de arquivo e não há suporte a `GetLastError` nesta fase. A entrada e saída são bytes; nenhuma conversão de encoding é feita. O contrato detalhado está em `docs/arquitetura/console.md`.

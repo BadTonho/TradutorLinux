@@ -79,7 +79,8 @@ void register_builtin_modules() {
     static const ExportedFunction kKernel32Exports[] = {
         {"GetStdHandle", 1, reinterpret_cast<std::uintptr_t>(&tl_GetStdHandle)},
         {"WriteFile", 2, reinterpret_cast<std::uintptr_t>(&tl_WriteFile)},
-        {"ExitProcess", 3, reinterpret_cast<std::uintptr_t>(&tl_ExitProcess)},
+        {"ReadFile", 3, reinterpret_cast<std::uintptr_t>(&tl_ReadFile)},
+        {"ExitProcess", 4, reinterpret_cast<std::uintptr_t>(&tl_ExitProcess)},
     };
     static const InternalModule kKernel32Module{"KERNEL32.dll", kKernel32Exports};
     register_module(kKernel32Module);

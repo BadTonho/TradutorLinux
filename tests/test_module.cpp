@@ -89,6 +89,8 @@ TEST_F(ModuleTest, RegistersBuiltinKernel32Exports) {
               reinterpret_cast<std::uintptr_t>(&tl_WriteFile));
     EXPECT_EQ(find_export(ExportQuery{"KERNEL32.dll", "ExitProcess"}).address,
               reinterpret_cast<std::uintptr_t>(&tl_ExitProcess));
+    EXPECT_EQ(find_export(ExportQuery{"KERNEL32.dll", "ReadFile"}).address,
+              reinterpret_cast<std::uintptr_t>(&tl_ReadFile));
     EXPECT_EQ(find_export_by_ordinal("KERNEL32.dll", 1).address,
               reinterpret_cast<std::uintptr_t>(&tl_GetStdHandle));
 }

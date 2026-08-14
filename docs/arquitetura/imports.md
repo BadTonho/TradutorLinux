@@ -20,33 +20,35 @@ O registro de módulos é populado por `loader::register_builtin_modules()` ante
 - `is_module_registered(dll)`, `find_export(ExportQuery{dll, symbol})`, `find_export_by_ordinal(dll, ordinal)`: consultas usadas pelo resolvedor.
 - `ExportLookup` devolve `found`, `ordinal` e `address`; `address == 0` significa símbolo conhecido sem implementação (`not-implemented`).
 
-### Módulos embutidos na Fase 3
+### Módulos embutidos
 
-`KERNEL32.dll` registra os três exports do marco, com ordinais internos definidos pelo projeto (não correspondem a ordinais reais do Windows, pois não são usados na ABI x64):
+`KERNEL32.dll` registra os quatro exports do marco, com ordinais internos definidos pelo projeto (não correspondem a ordinais reais do Windows, pois não são usados na ABI x64):
 
-| Símbolo | Ordinal interno | Endereço (Fase 3) |
+| Símbolo | Ordinal interno | Endereço |
 |---|---|---|
 | `GetStdHandle` | 1 | `tl_GetStdHandle` |
 | `WriteFile` | 2 | `tl_WriteFile` |
-| `ExitProcess` | 3 | `tl_ExitProcess` |
+| `ReadFile` | 3 | `tl_ReadFile` |
+| `ExitProcess` | 4 | `tl_ExitProcess` |
 
-## Fronteira de ABI (stubs `ms_abi`)
+## Fronteira de ABI (`ms_abi`)
 
 `include/tradutorlinux/runtime/winapi.hpp` define `TL_MSABI` como `__attribute__((ms_abi))` em GCC/Clang x86-64 e declara as funções hospedeiras com vinculação C (`extern "C"`), `noexcept` e a convenção Microsoft x64. Tipos mínimos Win32 usados nas assinaturas ficam em `tradutorlinux::abi` (`Handle`, `Bool`, `Dword`, `Uint` e as constantes de handle padrão).
 
 Regras da fronteira (ver também `docs/arquitetura/abi-x64.md`):
 
-- Nenhuma exceção C++ pode atravessar a fronteira; por isso os stubs são `noexcept` e não alocam.
+- Nenhuma exceção C++ pode atravessar a fronteira; por isso as funções são `noexcept`.
 - A chamada entra como código Windows (MS x64); o compilador gera o trampolim de convenção automaticamente via atributo.
-- Todo stub registra um aviso `[tl][runtime][warning] stub` com `dll`, `symbol` e `detail` explicando que a semântica real chega na Fase 4.
+- As APIs registram chamadas e resultados no componente `runtime`; parâmetros fora do contrato registram um aviso `stub` com status `not-implemented`.
 
-Comportamento placeholder documentado (Fase 3):
+Assinaturas hospedadas:
 
-| Stub | Assinatura | Comportamento |
+| API | Assinatura | Comportamento |
 |---|---|---|
-| `tl_GetStdHandle` | `void* (Dword)` | Retorna `NULL`. |
-| `tl_WriteFile` | `Bool (Handle, const void*, Dword, Dword*, void*)` | Retorna `0` (`FALSE`); não altera `*bytes_written`. |
-| `tl_ExitProcess` | `void (Dword)` | Não faz nada (no-op). |
+| `tl_GetStdHandle` | `void* (Dword)` | Retorna token opaco para um handle padrão ou `NULL`. |
+| `tl_WriteFile` | `Bool (Handle, const void*, Dword, Dword*, void*)` | Escreve bytes em stdout/stderr; `overlapped` precisa ser nulo. |
+| `tl_ReadFile` | `Bool (Handle, void*, Dword, Dword*, void*)` | Lê bytes de stdin; `overlapped` precisa ser nulo. |
+| `tl_ExitProcess` | `void (Dword)` | Registra o código e retorna o controle ao runner. |
 
 ## Patch da IAT
 

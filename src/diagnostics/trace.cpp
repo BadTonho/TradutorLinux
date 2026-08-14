@@ -18,6 +18,8 @@ namespace {
             return "imports";
         case TraceComponent::Runtime:
             return "runtime";
+        case TraceComponent::Process:
+            return "process";
     }
 
     return "unknown";

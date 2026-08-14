@@ -1,0 +1,15 @@
+{
+  "name": "tl_echo",
+  "format": "PE32+",
+  "machine": "AMD64",
+  "entry_point": "tl_entry",
+  "uses_crt": false,
+  "imports": {
+    "KERNEL32.dll": [
+      "ExitProcess",
+      "GetStdHandle",
+      "ReadFile",
+      "WriteFile"
+    ]
+  }
+}

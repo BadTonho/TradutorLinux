@@ -9,6 +9,11 @@
 #endif
 
 namespace tradutorlinux {
+
+struct GuestExecutionResult {
+    bool exited_explicitly{};
+    std::uint32_t exit_code{};
+};
 namespace abi {
 
 // Tipos mínimos do Win32 usados pelas APIs suportadas.
@@ -25,14 +30,22 @@ constexpr Dword kStdErrorHandle = 0xFFFFFFF4U;   // STD_ERROR_HANDLE (-12)
 
 // Fronteira de ABI: funções hospedeiras chamadas por código PE32+ x86-64.
 // Todas usam a convenção Microsoft x64 (TL_MSABI) e não propagam exceções
-// C++. Na Fase 3 são stubs placeholders com comportamento seguro e
-// documentado; a semântica real é implementada na Fase 4.
+// C++. Os handles retornados são tokens opacos válidos somente para as APIs
+// de console suportadas nesta fase.
 extern "C" {
 
 TL_MSABI void* tl_GetStdHandle(std::uint32_t n_std_handle) noexcept;
-TL_MSABI int tl_WriteFile(void* file, const void* buffer, std::uint32_t bytes_to_write,
-                          std::uint32_t* bytes_written, void* overlapped) noexcept;
+TL_MSABI int tl_WriteFile(const void* file, const void* buffer, std::uint32_t bytes_to_write,
+                          std::uint32_t* bytes_written, const void* overlapped) noexcept;
+TL_MSABI int tl_ReadFile(const void* file, void* buffer, std::uint32_t bytes_to_read,
+                         std::uint32_t* bytes_read, const void* overlapped) noexcept;
 TL_MSABI void tl_ExitProcess(std::uint32_t exit_code) noexcept;
 
 }  // extern "C"
+
+// Executa um entry point Microsoft x64 e captura ExitProcess sem encerrar o
+// processo hospedeiro. O ponteiro deve apontar para código já mapeado como
+// executável e com imports resolvidos.
+[[nodiscard]] GuestExecutionResult execute_guest_entry(std::uintptr_t entry_point) noexcept;
+
 }  // namespace tradutorlinux
