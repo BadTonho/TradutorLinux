@@ -14,7 +14,7 @@ find_program(TL_LLVM_READOBJ
 set(TL_FIXTURE_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/generated")
 
 function(tl_add_pe_fixture target_name source_file manifest_file)
-    set(options LINK_KERNEL32 LINK_USER32 RELOCATABLE RUNTIME_FAILURE EXPECT_RESOLVED CONSOLE REPORT)
+    set(options LINK_KERNEL32 LINK_USER32 RELOCATABLE RUNTIME_FAILURE EXPECT_RESOLVED CONSOLE REPORT REPORT_ONLY)
     cmake_parse_arguments(ARG "${options}" "" "" ${ARGN})
 
     set(output_file "${TL_FIXTURE_OUTPUT_DIRECTORY}/${target_name}.exe")
@@ -67,7 +67,7 @@ function(tl_add_pe_fixture target_name source_file manifest_file)
     )
     set_tests_properties(fixture_${target_name}_metadata PROPERTIES LABELS "fixture;pe32plus")
 
-    if(TARGET tradutorlinux AND NOT ARG_RUNTIME_FAILURE)
+    if(TARGET tradutorlinux AND NOT ARG_RUNTIME_FAILURE AND NOT ARG_REPORT_ONLY)
         set(runtime_manifest_args)
         if(ARG_EXPECT_RESOLVED)
             set(runtime_manifest_args
@@ -113,7 +113,7 @@ function(tl_add_pe_fixture target_name source_file manifest_file)
                 "-DINPUT=${output_file}"
                 "-DRUNTIME=$<TARGET_FILE:tradutorlinux>"
                 "-DEXPECTED_EXIT=5"
-                "-DREQUIRED_TRACE=unknown-dll"
+                "-DREQUIRED_TRACE=unknown-symbol"
                 -P "${CMAKE_CURRENT_SOURCE_DIR}/verify_runtime_rejection.cmake"
         )
         set_tests_properties(runtime_${target_name}_rejected PROPERTIES
@@ -122,12 +122,17 @@ function(tl_add_pe_fixture target_name source_file manifest_file)
         )
     endif()
 
-    if(ARG_REPORT AND TARGET tradutorlinux)
+    if((ARG_REPORT OR ARG_REPORT_ONLY) AND TARGET tradutorlinux)
+        set(report_extra_args)
+        if(ARG_REPORT_ONLY)
+            set(report_extra_args -DEXPECT_USER32=1)
+        endif()
         add_test(
             NAME report_${target_name}_support
             COMMAND "${CMAKE_COMMAND}"
                 "-DINPUT=${output_file}"
                 "-DRUNTIME=$<TARGET_FILE:tradutorlinux>"
+                ${report_extra_args}
                 -P "${CMAKE_CURRENT_SOURCE_DIR}/verify_report.cmake"
         )
         set_tests_properties(report_${target_name}_support PROPERTIES
@@ -149,3 +154,5 @@ tl_add_pe_fixture(tl_file src/tl_file.c manifests/tl_file.json
 tl_add_pe_fixture(tl_reloc src/tl_reloc.c manifests/tl_reloc.json RELOCATABLE)
 tl_add_pe_fixture(tl_missing_dll src/tl_missing_dll.c manifests/tl_missing_dll.json
     LINK_USER32 RUNTIME_FAILURE)
+tl_add_pe_fixture(tl_gui src/tl_gui.c manifests/tl_gui.json
+    LINK_KERNEL32 LINK_USER32 EXPECT_RESOLVED REPORT_ONLY)

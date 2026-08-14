@@ -1,6 +1,7 @@
 #include "tradutorlinux/runtime/winapi.hpp"
 
 #include "tradutorlinux/diagnostics/trace.hpp"
+#include "tradutorlinux/gui/x11.hpp"
 
 #include <array>
 #include <algorithm>
@@ -353,6 +354,18 @@ TL_MSABI int tl_CloseHandle(const void* const handle) noexcept {
     *slot = {};
     set_last_error(abi::kErrorSuccess);
     return 1;
+}
+
+TL_MSABI std::uint32_t tl_MessageBoxA(const void* const, const char* const text,
+                                      const char* const caption,
+                                      const std::uint32_t type) noexcept {
+    if (type != 0) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    const std::uint32_t result = gui::message_box(text, caption);
+    set_last_error(result == 0 ? abi::kErrorAccessDenied : abi::kErrorSuccess);
+    return result;
 }
 
 }  // extern "C"

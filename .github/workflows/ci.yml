@@ -19,7 +19,7 @@ jobs:
           sudo apt update
           sudo apt install --yes \
             build-essential cmake ninja-build llvm clang-tidy cppcheck \
-            gcc-mingw-w64-x86-64-win32
+            gcc-mingw-w64-x86-64-win32 libx11-dev
 
       - name: Configurar Debug
         run: cmake --preset debug
@@ -41,7 +41,8 @@ jobs:
           clang-tidy --config-file=.clang-tidy --warnings-as-errors='*' \
             -p build/debug src/main.cpp src/cli.cpp src/diagnostics/trace.cpp \
             src/pe/pe_reader.cpp src/loader/image_mapper.cpp src/loader/module.cpp \
-            src/loader/import_resolver.cpp src/loader/process.cpp src/runtime/winapi.cpp
+            src/loader/import_resolver.cpp src/loader/process.cpp src/runtime/winapi.cpp \
+            src/gui/x11.cpp
 
   sanitizers:
     name: Sanitizers
@@ -52,7 +53,7 @@ jobs:
       - name: Instalar dependências
         run: |
           sudo apt update
-          sudo apt install --yes build-essential cmake ninja-build llvm gcc-mingw-w64-x86-64-win32
+          sudo apt install --yes build-essential cmake ninja-build llvm gcc-mingw-w64-x86-64-win32 libx11-dev
 
       - name: Configurar Sanitizers
         run: cmake --preset sanitize

@@ -68,6 +68,8 @@ TL_MSABI void* tl_CreateFileA(const char* path, std::uint32_t desired_access,
                               std::uint32_t creation_disposition, std::uint32_t flags,
                               const void* template_file) noexcept;
 TL_MSABI int tl_CloseHandle(const void* handle) noexcept;
+TL_MSABI std::uint32_t tl_MessageBoxA(const void* owner, const char* text, const char* caption,
+                                      std::uint32_t type) noexcept;
 
 }  // extern "C"
 

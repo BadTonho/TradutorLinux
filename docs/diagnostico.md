@@ -8,7 +8,7 @@ O trace é habilitado por `--trace`, vai exclusivamente para `stderr` e ocupa um
 [tl][<componente>][<nível>] <evento> chave="valor"
 ```
 
-Componentes iniciais: `cli`, `pe`, `loader`, `imports`, `runtime` e `process`.
+Componentes iniciais: `cli`, `pe`, `loader`, `imports`, `runtime`, `process` e `gui`.
 
 Níveis iniciais: `debug`, `info`, `warning` e `error`.
 
@@ -68,6 +68,12 @@ Os valores possíveis de `status` são:
 | `unsupported-mechanism` | Mecanismo ainda não suportado (ex.: delay imports, IAT fora das seções). |
 
 Quando qualquer importação falha, a resolução inteira falha e o processo não tem entry point executado; o runtime retorna `5` (`Unsupported`). Mesmo na falha, todas as entradas são reportadas para que o diagnóstico seja completo.
+
+## Componente `gui`
+
+O protótipo X11 usa `USER32.dll!MessageBoxA` somente com `hWnd == NULL` e `type == 0`.
+Falha ao abrir o display ou fechar a janela sem confirmação retorna `0` ao programa
+convidado; a chamada não lança exceções nem compromete o diagnóstico do loader.
 
 ## Eventos do componente `pe`
 

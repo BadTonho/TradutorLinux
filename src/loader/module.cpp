@@ -90,6 +90,11 @@ void register_builtin_modules() {
     };
     static const InternalModule kKernel32Module{"KERNEL32.dll", kKernel32Exports};
     register_module(kKernel32Module);
+    static const ExportedFunction kUser32Exports[] = {
+        {"MessageBoxA", 1, reinterpret_cast<std::uintptr_t>(&tl_MessageBoxA)},
+    };
+    static const InternalModule kUser32Module{"USER32.dll", kUser32Exports};
+    register_module(kUser32Module);
 }
 
 bool is_module_registered(const std::string_view dll) {

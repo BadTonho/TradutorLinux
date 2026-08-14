@@ -20,8 +20,8 @@ Os itens marcados como concluídos devem ter evidência no repositório: código
 ## Estado atual
 
 - **Fase atual:** Fase 7 — Avaliar GUI.
-- **Marco concluído:** o modo `--report` lista imports suportados sem executar o PE; `tl_hello`, `tl_echo` e `tl_file` têm regressões e limitações publicadas na matriz.
-- **Próximo resultado observável:** decidir se uma interface Win32 mínima pertence ao produto, sem ampliar o runtime de console por antecipação.
+- **Marco concluído:** o modo `--report` lista imports suportados sem executar o PE; `tl_hello`, `tl_echo` e `tl_file` têm regressões e limitações publicadas na matriz; existe um protótipo isolado de GUI X11 para `MessageBoxA`.
+- **Próximo resultado observável:** validar visualmente `tl_gui.exe` em uma sessão X11 acessível antes de considerar a Fase 7 concluída.
 
 ## Fase 0 — Fundação e contrato
 
@@ -74,7 +74,7 @@ Validação: `tl_nop.exe`, `tl_hello.exe` e `tl_reloc.exe` mapeados via CLI em `
 
 O runtime resolve imports conhecidos com o ABI correto e informa de maneira reproduzível qualquer dependência desconhecida.
 
-Validação: registro interno de `KERNEL32.dll` com `GetStdHandle`, `WriteFile` e `ExitProcess`; resolução por nome e ordinal com patch da IAT e restauração das permissões; stubs `ms_abi` testados diretamente; processo convidado com pilha de 1 MiB e guard page; fixture `tl_missing_dll.exe` retorna `5` sem executar o entry point e emite `unknown-dll`; falhas de símbolo, ordinal, símbolo sem implementação, delay import e slot de IAT inválido têm testes unitários. Presets `debug` e `sanitize` passaram com 93 testes; no ambiente local, o sanitize foi executado com `LSAN_OPTIONS=detect_leaks=0` porque a descoberta do GoogleTest falha no LeakSanitizer sob ptrace.
+Validação: registro interno de `KERNEL32.dll` com `GetStdHandle`, `WriteFile` e `ExitProcess`; resolução por nome e ordinal com patch da IAT e restauração das permissões; stubs `ms_abi` testados diretamente; processo convidado com pilha de 1 MiB e guard page; fixture `tl_missing_dll.exe` retorna `5` sem executar o entry point e emite `unknown-symbol`; falhas de símbolo, ordinal, símbolo sem implementação, delay import e slot de IAT inválido têm testes unitários. Presets `debug` e `sanitize` passaram com 93 testes; no ambiente local, o sanitize foi executado com `LSAN_OPTIONS=detect_leaks=0` porque a descoberta do GoogleTest falha no LeakSanitizer sob ptrace.
 
 ## Fase 4 — Console: primeiro marco público
 
@@ -124,14 +124,16 @@ Validação: `tl_hello.exe`, `tl_echo.exe` e `tl_file.exe` possuem testes de int
 
 ## Fase 7 — Avaliar GUI
 
-- [ ] Decidir se uma interface Win32 mínima é um objetivo real de produto.
-- [ ] Se sim, criar um subsistema de janela e eventos separado do runtime de console.
-- [ ] Começar por `MessageBox` e uma janela simples, com testes manuais e automatizados quando viável.
-- [ ] Definir se a integração será com X11, Wayland, toolkit ou uma camada própria.
+- [x] Decidir que uma interface Win32 mínima é um objetivo experimental de produto.
+- [x] Criar um subsistema de janela e eventos separado do runtime de console.
+- [x] Começar por `MessageBoxA` e uma janela simples, com fixture PE32+ e teste automatizado de metadata/report.
+- [x] Definir a integração inicial com X11 direto, mantendo a camada isolada para futura decisão sobre Wayland/toolkit.
+
+Validação local: os 106 testes do preset `debug` passam, incluindo `tl_gui.exe`, resolução de `USER32.dll!MessageBoxA` e relatório sem execução. O smoke test visual ainda depende de uma sessão X11 acessível; no ambiente atual `DISPLAY=:0` não pôde ser aberto, e o runtime encerrou de forma controlada com código `1`.
 
 ### Critério de saída
 
-Uma aplicação gráfica de teste cria uma janela, recebe eventos básicos e encerra corretamente, sem comprometer o runtime de console.
+Uma aplicação gráfica de teste cria uma janela, recebe eventos básicos e encerra corretamente, sem comprometer o runtime de console. A implementação está pronta, mas a confirmação visual permanece pendente até executar `tl_gui.exe` em uma sessão X11 acessível.
 
 ## Próximos marcos
 

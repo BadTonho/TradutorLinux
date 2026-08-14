@@ -116,7 +116,7 @@ TEST_F(ProcessTest, PreparesHelloWithAllImportsResolved) {
     destroy_process(result.process);
 }
 
-TEST_F(ProcessTest, RejectsUnknownDllWithUnresolvedImports) {
+TEST_F(ProcessTest, RejectsUnknownSymbolWithUnresolvedImports) {
     const std::vector<std::byte> bytes = read_file(fixture_path("tl_missing_dll"));
     const pe::ParseResult parse_result = pe::parse_pe(bytes);
     ASSERT_EQ(parse_result.status, pe::ParseStatus::Success);
@@ -125,7 +125,7 @@ TEST_F(ProcessTest, RejectsUnknownDllWithUnresolvedImports) {
     ASSERT_EQ(result.status, PrepareStatus::UnresolvedImports);
     EXPECT_FALSE(result.error_message.empty());
     ASSERT_EQ(result.process.imports.imports.size(), 1U);
-    EXPECT_EQ(result.process.imports.imports[0].status, ImportStatus::UnknownDll);
+    EXPECT_EQ(result.process.imports.imports[0].status, ImportStatus::UnknownSymbol);
 
     destroy_process(result.process);
 }

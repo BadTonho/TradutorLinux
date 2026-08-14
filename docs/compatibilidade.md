@@ -10,6 +10,7 @@ Esta matriz declara o comportamento suportado; ela não é uma promessa de compa
 | `tl_hello.exe` | PE32+ AMD64 | Não | `KERNEL32.dll!ExitProcess`, `GetStdHandle`, `WriteFile` | Suportado no MVP: escreve `Ola do Windows no Linux!` em stdout, retorna `0` e emite trace | Fase 5 |
 | `tl_echo.exe` | PE32+ AMD64 | Não | `KERNEL32.dll!ExitProcess`, `GetStdHandle`, `ReadFile`, `WriteFile` | Suportado no MVP: ecoa stdin para stdout com handles padrão | Fase 5 |
 | `tl_file.exe` | PE32+ AMD64 | Não | `KERNEL32.dll!CloseHandle`, `CreateFileA`, `ExitProcess`, `GetLastError`, `GetStdHandle`, `ReadFile`, `SetLastError`, `VirtualAlloc`, `VirtualFree`, `WriteFile` | Suportado no subconjunto da Fase 5: aloca memória e grava/reabre/lê arquivo relativo | Fase 6 |
+| `tl_gui.exe` | PE32+ AMD64 | Não | `KERNEL32.dll!ExitProcess`, `USER32.dll!MessageBoxA` | Protótipo manual: caixa modal X11 mínima; não executado automaticamente por depender de display | Fase 7 |
 | `tl_reloc.exe` | PE32+ AMD64 | Não | Nenhum | Gerado com `-Wl,--dynamicbase`, verificado, parseado e mapeado na Fase 2; usado para validar base relocations | Fase 4 |
 | `tl_missing_dll.exe` | PE32+ AMD64 | Não | `USER32.dll!MessageBoxA` | Gerado, verificado e rejeitado na Fase 3: o runtime diagnostica `unknown-dll` e retorna `5` sem executar o entry point | Fase 4 |
 
@@ -92,3 +93,10 @@ caminhos relativos sem drive são aceitos; `\\` é normalizado para `/`.
 
 `VirtualAlloc` e `VirtualFree` têm o contrato limitado descrito em
 [`runtime-basico.md`](arquitetura/runtime-basico.md).
+
+## GUI mínima (Fase 7)
+
+O protótipo registra `USER32.dll!MessageBoxA` e usa X11 diretamente. Ele é
+experimental, não altera o subsistema de console e só aceita `type == 0`.
+`tl_gui.exe` é validado automaticamente quanto a formato e imports; a janela
+deve ser validada manualmente em uma sessão X11.

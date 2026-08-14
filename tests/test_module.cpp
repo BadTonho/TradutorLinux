@@ -78,7 +78,7 @@ TEST_F(ModuleTest, ClearModulesResetsRegistry) {
 
 TEST_F(ModuleTest, RegistersBuiltinKernel32Exports) {
     register_builtin_modules();
-    ASSERT_EQ(registered_module_count(), 1U);
+    ASSERT_EQ(registered_module_count(), 2U);
     EXPECT_TRUE(is_module_registered("KERNEL32.dll"));
 
     const ExportLookup std_handle = find_export(ExportQuery{"KERNEL32.dll", "GetStdHandle"});
@@ -93,12 +93,14 @@ TEST_F(ModuleTest, RegistersBuiltinKernel32Exports) {
               reinterpret_cast<std::uintptr_t>(&tl_ReadFile));
     EXPECT_EQ(find_export_by_ordinal("KERNEL32.dll", 1).address,
               reinterpret_cast<std::uintptr_t>(&tl_GetStdHandle));
+    EXPECT_EQ(find_export(ExportQuery{"USER32.dll", "MessageBoxA"}).address,
+              reinterpret_cast<std::uintptr_t>(&tl_MessageBoxA));
 }
 
 TEST_F(ModuleTest, RegisterBuiltinModulesIsIdempotent) {
     register_builtin_modules();
     register_builtin_modules();
-    EXPECT_EQ(registered_module_count(), 1U);
+    EXPECT_EQ(registered_module_count(), 2U);
 }
 
 TEST_F(ModuleTest, RegistryOwnsItsStrings) {
