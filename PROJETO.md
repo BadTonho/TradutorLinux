@@ -76,6 +76,8 @@ O resultado deve imprimir a saída esperada, retornar o código correto e gerar 
 - Suporte a 32 bits, ARM, WOW64 ou execução cruzada de arquitetura.
 - Segurança de executáveis não confiáveis. Compatibilidade não é sandbox: um `.exe` executado nativamente tem os privilégios do usuário atual.
 
+O plano de execução, dividido em fases, marcos e entregas verificáveis, está em [ROADMAP.md](ROADMAP.md).
+
 ## 4. Arquitetura proposta
 
 | Componente | Responsabilidade |
@@ -100,64 +102,7 @@ As “DLLs” iniciais não serão arquivos falsos soltos. Serão módulos regis
 - Tratar executáveis de entrada como dados hostis durante o parsing. Parser, tabelas e limites devem ser validados e testados contra entradas malformadas.
 - Usar documentação pública e testes de comportamento como referência. Qualquer reaproveitamento de código de terceiros exige revisão da licença aplicável antes de distribuição.
 
-## 6. Roadmap
-
-### Fase 0 — Fundação e contrato
-
-- [ ] Criar a estrutura CMake, compilação com warnings rigorosos e testes automatizados.
-- [ ] Fixar o alvo: Linux x86-64 hospedando somente PE32+ x86-64.
-- [ ] Definir formato do trace, códigos de erro e matriz de compatibilidade.
-- [ ] Criar binários de teste próprios, incluindo um executável sem CRT para o primeiro salto ao entry point.
-- [ ] Documentar convenções Microsoft x64 e System V AMD64 usadas em cada fronteira.
-
-### Fase 1 — Leitor de PE seguro
-
-- [ ] Ler e validar DOS header, NT headers, optional header e section headers.
-- [ ] Exibir seções, entry point, imports, relocations e arquitetura.
-- [ ] Rejeitar PE inválido, truncado ou de arquitetura incompatível com mensagens precisas.
-- [ ] Cobrir o parser com testes unitários e corpus de arquivos malformados.
-
-### Fase 2 — Mapeamento de imagem
-
-- [ ] Reservar a imagem no endereço preferencial quando possível.
-- [ ] Copiar headers e seções, respeitando alinhamentos e permissões de página.
-- [ ] Aplicar base relocations para PE32+ x86-64.
-- [ ] Validar o mapeamento com executáveis mínimos que ainda não chamam APIs.
-
-### Fase 3 — Imports e bootstrap mínimo
-
-- [ ] Resolver import table para módulos internos suportados.
-- [ ] Implementar trampolins e ponte de ABI para chamadas do programa à camada hospedeira.
-- [ ] Preparar as estruturas mínimas de processo e thread exigidas pelo escopo inicial.
-- [ ] Adicionar diagnóstico para DLL, símbolo, ordinal, forwarder ou delay import ainda ausente.
-
-### Fase 4 — Console: primeiro marco público
-
-- [ ] Implementar `GetStdHandle`, `WriteFile`, `ReadFile` e `ExitProcess`.
-- [ ] Definir e testar conversão entre handles Windows e descritores Linux.
-- [ ] Executar `tl_hello.exe` e uma ferramenta de eco construída no repositório.
-- [ ] Verificar saída, retorno, trace e tratamento de erros em CI.
-
-### Fase 5 — Runtime básico
-
-- [ ] Implementar `GetLastError`/`SetLastError` e mapeamento de erros necessários.
-- [ ] Implementar `VirtualAlloc`/`VirtualFree` com semântica limitada e documentada.
-- [ ] Implementar abertura, leitura, escrita e fechamento de arquivos para um subconjunto de flags.
-- [ ] Definir normalização de caminhos e política explícita para caminhos Windows.
-
-### Fase 6 — Carregamento e cobertura controlada
-
-- [ ] Adicionar APIs somente guiadas por aplicações-alvo e testes de regressão.
-- [ ] Evoluir suporte a DLLs, resources, TLS callbacks, forwarders e delay-load conforme necessário.
-- [ ] Publicar uma matriz: aplicativo, arquitetura, imports, APIs usadas, estado e limitações.
-
-### Fase 7 — Avaliar GUI
-
-- [ ] Decidir se uma interface Win32 mínima é um objetivo real de produto.
-- [ ] Se sim, criar um subsistema de janela e eventos separado do runtime de console.
-- [ ] Começar por `MessageBox` e uma janela simples, com testes manuais e automatizados quando viável.
-
-## 7. Estratégia de testes e qualidade
+## 6. Estratégia de testes e qualidade
 
 | Nível | O que verificar |
 |---|---|
@@ -169,11 +114,12 @@ As “DLLs” iniciais não serão arquivos falsos soltos. Serão módulos regis
 
 Cada marco deve ser reproduzível sem Windows. `mingw-w64` pode gerar os binários de teste, mas os primeiros exemplos devem controlar cuidadosamente CRT e imports para que cada dependência nova seja intencional.
 
-## 8. Estrutura de pastas
+## 7. Estrutura de pastas
 
 ```text
 TradutorLinux/
 ├── PROJETO.md
+├── ROADMAP.md
 ├── README.md
 ├── CMakeLists.txt
 ├── docs/
@@ -197,7 +143,7 @@ TradutorLinux/
     └── malformed-pe/
 ```
 
-## 9. Stack inicial
+## 8. Stack inicial
 
 - **Linguagem:** C++20, com C ou assembly somente nas fronteiras em que forem necessários.
 - **Build:** CMake + Ninja.
@@ -206,7 +152,7 @@ TradutorLinux/
 - **Inspeção e depuração:** `llvm-objdump`, `readelf`, `gdb`, `strace` e `ltrace`.
 - **CI:** build, testes unitários, testes de integração e análise estática desde a primeira fase.
 
-## 10. Riscos e respostas
+## 9. Riscos e respostas
 
 | Risco | Resposta |
 |---|---|
@@ -217,7 +163,7 @@ TradutorLinux/
 | Semântica difere do Linux | Contratos explícitos, `GetLastError`, testes de regressão e limitações declaradas. |
 | Execução de software malicioso | Não prometer isolamento; considerar sandbox Linux como recurso futuro independente. |
 
-## 11. Critérios de sucesso
+## 10. Critérios de sucesso
 
 - **Marco 1:** o leitor identifica corretamente um PE32+ válido e rejeita entradas inválidas com segurança.
 - **Marco 2:** uma imagem mínima é mapeada, relocada e tem seus imports resolvidos sem executar código fora do escopo.
@@ -225,7 +171,7 @@ TradutorLinux/
 - **Qualidade do MVP:** todas as APIs usadas pelo exemplo possuem testes; imports ausentes são diagnosticados; o trace é reproduzível.
 - **Expansão:** cada nova aplicação suportada entra na matriz de compatibilidade e na suíte de regressão.
 
-## 12. Exemplo de uso futuro
+## 11. Exemplo de uso futuro
 
 ```bash
 ./tradutorlinux --trace tests/samples/tl_hello.exe
