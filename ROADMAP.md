@@ -20,8 +20,8 @@ Os itens marcados como concluídos devem ter evidência no repositório: código
 ## Estado atual
 
 - **Fase atual:** Fase 7 — Avaliar GUI.
-- **Marco concluído:** o modo `--report` lista imports suportados sem executar o PE; `tl_hello`, `tl_echo` e `tl_file` têm regressões e limitações publicadas na matriz; existe um protótipo isolado de GUI X11 para `MessageBoxA`.
-- **Próximo resultado observável:** validar visualmente `tl_gui.exe` em uma sessão X11 acessível antes de considerar a Fase 7 concluída.
+- **Marco concluído:** a Fase 7 foi validada de ponta a ponta: `tl_gui.exe` abriu a janela X11, recebeu o clique em OK e encerrou com código `0`; o modo `--report` lista imports suportados sem executar o PE; `tl_hello`, `tl_echo` e `tl_file` têm regressões e limitações publicadas na matriz; existe um protótipo isolado de GUI X11 para `MessageBoxA`.
+- **Próximo resultado observável:** avaliar a decisão de produto da Fase 7 — seguir com a GUI Win32 mínima como objetivo ou encerrar a exploração — e atualizar o roadmap conforme a decisão.
 
 ## Fase 0 — Fundação e contrato
 
@@ -129,11 +129,13 @@ Validação: `tl_hello.exe`, `tl_echo.exe` e `tl_file.exe` possuem testes de int
 - [x] Começar por `MessageBoxA` e uma janela simples, com fixture PE32+ e teste automatizado de metadata/report.
 - [x] Definir a integração inicial com X11 direto, mantendo a camada isolada para futura decisão sobre Wayland/toolkit.
 
-Validação local: os 107 testes dos presets `debug` e `sanitize` passam, incluindo `tl_gui.exe`, resolução de `USER32.dll!MessageBoxA` e relatório sem execução. O loader valida o entry point, usa a pilha convidada com guard page, aplica relocations e rejeita execução fora da base quando não há relocations. O smoke test visual ainda depende de uma sessão X11 acessível; no ambiente atual `DISPLAY=:0` não pôde ser aberto, e o runtime encerrou de forma controlada com código `1`.
+Validação local: os 108 testes dos presets `debug` e `sanitize` passam, incluindo `tl_gui.exe`, resolução de `USER32.dll!MessageBoxA` e relatório sem execução. O loader valida o entry point, usa a pilha convidada com guard page, aplica relocations e rejeita execução fora da base quando não há relocations.
 
-### Critério de saída
+### Critério de saída — atendido
 
-Uma aplicação gráfica de teste cria uma janela, recebe eventos básicos e encerra corretamente, sem comprometer o runtime de console. A implementação está pronta, mas a confirmação visual permanece pendente até executar `tl_gui.exe` em uma sessão X11 acessível.
+Uma aplicação gráfica de teste cria uma janela, recebe eventos básicos e encerra corretamente, sem comprometer o runtime de console.
+
+Validação visual (2026-08-15, sessão X11 `DISPLAY=:0` acessível): `tl_gui.exe` executado com `--trace` abriu a janela "TradutorLinux GUI / Fase 7" com botão OK; ao clicar, o runtime registrou `[tl][runtime][info] ExitProcess exit-code="0" status="success" mechanism="guest-transfer"`, `[tl][process][info] exit exit-code="0" explicit="sim"` e encerrou com código `0`, liberando a imagem. O caminho X11 do `MessageBoxA` foi confirmado de ponta a ponta.
 
 ## Próximos marcos
 
