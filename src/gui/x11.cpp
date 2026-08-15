@@ -194,8 +194,10 @@ WindowEvent next_window_event(const NativeWindow window) noexcept {
         return {WindowEventType::Press, event.xbutton.x, event.xbutton.y};
     }
     if (event.type == ClientMessage) {
-        const Atom delete_protocol = XInternAtom(dpy, "WM_DELETE_WINDOW", False);
-        if (event.xclient.message_type == delete_protocol) {
+        const Atom protocols_atom = XInternAtom(dpy, "WM_PROTOCOLS", False);
+        const Atom delete_atom = XInternAtom(dpy, "WM_DELETE_WINDOW", False);
+        if (event.xclient.message_type == protocols_atom &&
+            event.xclient.data.l[0] == static_cast<long>(delete_atom)) {
             return {WindowEventType::CloseRequested, 0, 0};
         }
     }
