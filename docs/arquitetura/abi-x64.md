@@ -39,15 +39,15 @@ O alinhamento de stack antes de `call` também é de 16 bytes. Registros XMM nã
 - Nenhuma exceção C++ pode atravessar uma fronteira de ABI. Interfaces de trampolim serão `extern "C"` e `noexcept`; erros serão convertidos em resultado explícito e trace.
 - A primeira implementação deve preferir atributos `ms_abi`/`sysv_abi` de GCC ou Clang. Assembly entra apenas quando uma exigência não puder ser expressa e testada pelo compilador.
 
-## Fronteira implementada na Fase 3 (stubs `ms_abi`)
+## Fronteira implementada (`ms_abi`)
 
 A primeira fronteira concreta usa o atributo `ms_abi` de GCC/Clang: as funções hospedeiras de `KERNEL32.dll` são declaradas `TL_MSABI` (`__attribute__((ms_abi))`), `extern "C"` e `noexcept` em `include/tradutorlinux/runtime/winapi.hpp`. O compilador gera a transição System V → Microsoft x64 na chamada, incluindo shadow space e alinhamento de stack.
 
 Contrato vigente:
 
 - Tipos mínimos Win32 (`Handle`, `Bool`, `Dword`, `Uint` e as constantes de handle padrão) ficam em `tradutorlinux::abi` no mesmo cabeçalho.
-- Nenhuma exceção C++ atravessa a fronteira: os stubs não alocam e não lançam.
-- Todo stub registra um aviso `[tl][runtime][warning] stub` no trace com `dll`, `symbol` e `detail`, sinalizando que a semântica real chega na Fase 4.
-- Os stubs são exercitados diretamente em `tests/test_abi.cpp` por ponteiros de função tipados `ms_abi`; a Fase 4 substitui o corpo deles pela semântica real sem mudar a fronteira.
+- Nenhuma exceção C++ atravessa a fronteira: as APIs exportadas são `noexcept` e convertem falhas em retorno, `GetLastError` e trace.
+- As APIs de console, arquivos, memória e GUI são exercitadas por fixtures PE e testes de integração.
+- As chamadas host→guest de `WNDPROC` também usam ponteiros tipados `ms_abi` e são cobertas por testes de layout e execução.
 
-A lista completa de stubs, ordinais internos e comportamento placeholder está em `docs/arquitetura/imports.md`.
+A lista de módulos, exports, ordinais internos e comportamentos suportados está em `docs/arquitetura/imports.md` e `docs/compatibilidade.md`.

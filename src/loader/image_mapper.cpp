@@ -24,7 +24,6 @@ constexpr std::uint32_t kImageScnMemRead = 0x40000000;
 constexpr std::uint32_t kImageScnMemWrite = 0x80000000;
 
 constexpr std::uint16_t kImageRelBasedAbsolute = 0;
-constexpr std::uint16_t kImageRelBasedHighLow = 3;
 constexpr std::uint16_t kImageRelBasedDir64 = 10;
 
 constexpr std::size_t kBaseRelocBlockHeaderSize = 8;
@@ -161,13 +160,6 @@ constexpr std::size_t kMaxRelocBlocks = 4096;
     return true;
 }
 
-void write_le_u32(const std::span<std::byte> bytes, const std::size_t offset,
-                  const std::uint32_t value) {
-    for (std::size_t index = 0; index < 4; ++index) {
-        bytes[offset + index] = static_cast<std::byte>((value >> (8 * index)) & 0xFFU);
-    }
-}
-
 void write_le_u64(const std::span<std::byte> bytes, const std::size_t offset,
                   const std::uint64_t value) {
     for (std::size_t index = 0; index < 8; ++index) {
@@ -249,19 +241,10 @@ RelocationResult apply_relocations(const std::span<std::byte> image,
                 write_le_u64(image, target_rva,
                              value + static_cast<std::uint64_t>(delta));
                 ++applied;
-            } else if (type == kImageRelBasedHighLow) {
-                std::uint32_t value{};
-                if (!read_le_u32(image, target_rva, value)) {
-                    return fail_reloc(MapStatus::InvalidImage,
-                                      "alvo HIGHLOW em RVA " + std::to_string(target_rva) +
-                                          " fora da imagem");
-                }
-                write_le_u32(image, target_rva,
-                             value + static_cast<std::uint32_t>(delta));
-                ++applied;
             } else {
                 return fail_reloc(MapStatus::InvalidImage,
-                                  "tipo de relocação " + std::to_string(type) + " não suportado");
+                                  "tipo de relocação " + std::to_string(type) +
+                                      " não suportado para PE32+");
             }
         }
         consumed += static_cast<std::size_t>(block_size);

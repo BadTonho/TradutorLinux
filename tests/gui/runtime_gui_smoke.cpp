@@ -17,6 +17,7 @@
 #include <X11/Xatom.h>
 #include <X11/Xlib.h>
 
+#include <algorithm>
 #include <array>
 #include <chrono>
 #include <cstdio>
@@ -33,6 +34,7 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#include <poll.h>
 
 namespace {
 
@@ -46,6 +48,11 @@ constexpr unsigned int kPollDelayUs = 100000;
 [[noreturn]] void fail(const std::string& message) {
     std::fprintf(stderr, "runtime_gui_smoke: %s\n", message.c_str());
     std::exit(1);
+}
+
+[[noreturn]] void skip(const std::string& message) {
+    std::fprintf(stderr, "runtime_gui_smoke: SKIP: %s\n", message.c_str());
+    std::exit(77);
 }
 
 std::string read_file(const std::string& path) {
@@ -78,34 +85,73 @@ pid_t g_xvfb_pid = -1;
 // chegam ao runtime. Num display com WM (ex.: sessão mutter) a janela é
 // reparentada e o KeyPress iria para o frame, não para o cliente.
 std::string start_xvfb() {
-    for (int number = 90; number < 120; ++number) {
-        const std::string socket = "/tmp/.X11-unix/X" + std::to_string(number);
-        if (::access(socket.c_str(), F_OK) == 0) {
-            continue;
-        }
-        const pid_t server_pid = ::fork();
-        if (server_pid == 0) {
-            const std::string display_arg = ":" + std::to_string(number);
-            ::execlp("Xvfb", "Xvfb", display_arg.c_str(), "-screen", "0", "640x480x24",
-                     "-nolisten", "tcp", "-ac", static_cast<char*>(nullptr));
+    int display_pipe[2] = {-1, -1};
+    if (::pipe(display_pipe) != 0) {
+        skip("não foi possível criar o pipe do Xvfb");
+    }
+    const pid_t server_pid = ::fork();
+    if (server_pid == 0) {
+        ::close(display_pipe[0]);
+        if (::dup2(display_pipe[1], 3) < 0) {
             ::_exit(127);
         }
-        if (server_pid > 0) {
-            const std::string display = ":" + std::to_string(number);
-            for (int attempt = 0; attempt < 50; ++attempt) {
-                Display* const probe = XOpenDisplay(display.c_str());
-                if (probe != nullptr) {
-                    XCloseDisplay(probe);
-                    g_xvfb_pid = server_pid;
-                    return display;
-                }
-                ::usleep(kPollDelayUs);
+        ::close(display_pipe[1]);
+        const int null_fd = ::open("/dev/null", O_WRONLY);
+        if (null_fd >= 0) {
+            ::dup2(null_fd, STDERR_FILENO);
+            ::close(null_fd);
+        }
+        ::execlp("Xvfb", "Xvfb", "-displayfd", "3", "-screen", "0", "640x480x24",
+                 "-nolisten", "tcp", "-ac", static_cast<char*>(nullptr));
+        ::_exit(127);
+    }
+    ::close(display_pipe[1]);
+    if (server_pid < 0) {
+        ::close(display_pipe[0]);
+        skip("fork falhou ao iniciar Xvfb");
+    }
+
+    std::string display_number;
+    const auto deadline = std::chrono::steady_clock::now() +
+                          std::chrono::milliseconds(kReadyTimeoutMs);
+    while (std::chrono::steady_clock::now() < deadline && display_number.empty()) {
+        struct pollfd descriptor{display_pipe[0], POLLIN | POLLHUP, 0};
+        const int remaining = static_cast<int>(std::chrono::duration_cast<std::chrono::milliseconds>(
+            deadline - std::chrono::steady_clock::now()).count());
+        if (::poll(&descriptor, 1, std::max(1, std::min(remaining, 250))) <= 0) {
+            int status = 0;
+            if (::waitpid(server_pid, &status, WNOHANG) == server_pid) {
+                break;
             }
-            ::kill(server_pid, SIGKILL);
-            ::waitpid(server_pid, nullptr, 0);
+            continue;
+        }
+        char character = '\0';
+        const ::ssize_t count = ::read(display_pipe[0], &character, 1);
+        if (count == 1) {
+            if (character == '\n') {
+                break;
+            }
+            display_number.push_back(character);
+        } else if (count == 0) {
+            break;
         }
     }
-    fail("falha ao iniciar Xvfb (instale o pacote xvfb)");
+    ::close(display_pipe[0]);
+    if (!display_number.empty()) {
+        const std::string display = ":" + display_number;
+        for (int attempt = 0; attempt < 50; ++attempt) {
+            Display* const probe = XOpenDisplay(display.c_str());
+            if (probe != nullptr) {
+                XCloseDisplay(probe);
+                g_xvfb_pid = server_pid;
+                return display;
+            }
+            ::usleep(kPollDelayUs);
+        }
+    }
+    ::kill(server_pid, SIGKILL);
+    ::waitpid(server_pid, nullptr, 0);
+    skip("falha ao iniciar Xvfb (instale o pacote xvfb ou verifique o acesso a /tmp/.X11-unix)");
 }
 
 Window find_window_by_caption(Display* const dpy, const char* const caption) noexcept {

@@ -29,6 +29,21 @@ bool read_exact(const int fd, std::byte* const buffer, const std::size_t size) n
     return true;
 }
 
+bool write_exact(const int fd, const std::byte* const buffer, const std::size_t size) noexcept {
+    std::size_t total = 0;
+    while (total < size) {
+        const ::ssize_t count = ::write(fd, buffer + total, size - total);
+        if (count < 0 && errno == EINTR) {
+            continue;
+        }
+        if (count <= 0) {
+            return false;
+        }
+        total += static_cast<std::size_t>(count);
+    }
+    return true;
+}
+
 // The guest must run with the default disposition for fatal signals so that a
 // crash (ex.: SIGSEGV) reaches waitpid as a real signal. Host runtimes such as
 // AddressSanitizer install their own handlers, which would swallow the signal
@@ -99,9 +114,9 @@ GuestOutcome run_guest_isolated(const std::uintptr_t entry_point,
             std::byte{static_cast<unsigned char>((result.exit_code >> 16) & 0xFFU)},
             std::byte{static_cast<unsigned char>((result.exit_code >> 24) & 0xFFU)},
         };
-        const ::ssize_t written = ::write(pipe_fds[1], message.data(), message.size());
-        static_cast<void>(written);
-        ::_exit(0);
+        const bool sent = write_exact(pipe_fds[1], message.data(), message.size());
+        ::close(pipe_fds[1]);
+        ::_exit(sent ? 0 : 125);
     }
 
     ::close(pipe_fds[1]);
@@ -117,16 +132,22 @@ GuestOutcome run_guest_isolated(const std::uintptr_t entry_point,
     GuestOutcome outcome{};
     if (WIFEXITED(status)) {
         std::array<std::byte, kProtocolSize> message{};
-        if (read_exact(pipe_fds[0], message.data(), message.size())) {
-            outcome.exited_explicitly = message[0] == std::byte{1};
-            std::uint32_t code = 0;
-            for (std::uint32_t shift = 0; shift < 4; ++shift) {
-                const std::uint32_t byte =
-                    static_cast<std::uint32_t>(static_cast<unsigned char>(message[1 + shift]));
-                code |= byte << (8U * shift);
-            }
-            outcome.exit_code = code;
+        if (!read_exact(pipe_fds[0], message.data(), message.size())) {
+            ::close(pipe_fds[0]);
+            return {.kind = GuestOutcomeKind::SpawnFailed};
         }
+        if (message[0] != std::byte{0} && message[0] != std::byte{1}) {
+            ::close(pipe_fds[0]);
+            return {.kind = GuestOutcomeKind::SpawnFailed};
+        }
+        outcome.exited_explicitly = message[0] == std::byte{1};
+        std::uint32_t code = 0;
+        for (std::uint32_t shift = 0; shift < 4; ++shift) {
+            const std::uint32_t byte =
+                static_cast<std::uint32_t>(static_cast<unsigned char>(message[1 + shift]));
+            code |= byte << (8U * shift);
+        }
+        outcome.exit_code = code;
         outcome.kind = GuestOutcomeKind::Exited;
     } else {
         // Sem WUNTRACED/WCONTINUED o waitpid só relata WIFEXITED ou

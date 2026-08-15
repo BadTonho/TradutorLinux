@@ -109,9 +109,9 @@ Exemplo de falha Linux em uma API:
 [tl][runtime][error] linux-failure category="linux-error" symbol="CreateFileA" operation="open" errno="2" win32-error="2"
 ```
 
-No estado atual, o guest ainda compartilha o processo hospedeiro. Portanto,
-`guest-signal` só será publicado de forma confiável depois da futura execução
-em processo filho; o runtime não instala um handler geral de sinais C++.
+O guest executa em processo filho isolado. O hospedeiro não instala um handler
+geral de sinais C++; o pai observa o status do filho com `waitpid` e publica
+`guest-signal` quando o entry point termina por sinal.
 
 ## Componente `gui`
 

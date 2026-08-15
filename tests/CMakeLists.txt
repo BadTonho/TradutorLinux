@@ -53,5 +53,6 @@ if(TL_XVFB_EXECUTABLE AND TARGET tradutorlinux_samples AND TARGET tradutorlinux)
         DEPENDS "fixture_tl_win_metadata;fixture_tl_win2_metadata;fixture_tl_key_metadata;fixture_tl_timer_metadata;fixture_tl_gdi_metadata;fixture_tl_paint_metadata"
         LABELS "runtime;pe32plus;gui"
         TIMEOUT 90
+        SKIP_RETURN_CODE 77
     )
 endif()

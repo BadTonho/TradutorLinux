@@ -1,6 +1,6 @@
-# Resolução de imports (Fase 3)
+# Resolução de imports
 
-Este documento descreve o contrato do resolvedor de imports, o registro de módulos internos e a fronteira de ABI das funções hospedeiras. Nesta fase o entry point não é executado; a resolução serve para validar as dependências e preencher a IAT.
+Este documento descreve o contrato do resolvedor de imports, o registro de módulos internos e a fronteira de ABI das funções hospedeiras. A resolução ocorre antes do entry point, valida as dependências e preenche a IAT.
 
 ## Visão geral
 
@@ -22,14 +22,13 @@ O registro de módulos é populado por `loader::register_builtin_modules()` ante
 
 ### Módulos embutidos
 
-`KERNEL32.dll` registra os quatro exports do marco, com ordinais internos definidos pelo projeto (não correspondem a ordinais reais do Windows, pois não são usados na ABI x64):
+Os módulos internos registram exports com ordinais internos definidos pelo projeto (não correspondem a ordinais reais do Windows):
 
-| Símbolo | Ordinal interno | Endereço |
+| Módulo | Conteúdo |
 |---|---|---|
-| `GetStdHandle` | 1 | `tl_GetStdHandle` |
-| `WriteFile` | 2 | `tl_WriteFile` |
-| `ReadFile` | 3 | `tl_ReadFile` |
-| `ExitProcess` | 4 | `tl_ExitProcess` |
+| `KERNEL32.dll` | Console, erros, memória e arquivos; lista detalhada em `include/tradutorlinux/loader/module.hpp` |
+| `USER32.dll` | MessageBox, janelas, message loop, teclado, timers e pintura |
+| `GDI32.dll` | Stock objects e saída de texto |
 
 ## Fronteira de ABI (`ms_abi`)
 
@@ -39,7 +38,7 @@ Regras da fronteira (ver também `docs/arquitetura/abi-x64.md`):
 
 - Nenhuma exceção C++ pode atravessar a fronteira; por isso as funções são `noexcept`.
 - A chamada entra como código Windows (MS x64); o compilador gera o trampolim de convenção automaticamente via atributo.
-- As APIs registram chamadas e resultados no componente `runtime`; parâmetros fora do contrato registram um aviso `stub` com status `not-implemented`.
+- As APIs registram chamadas e resultados no componente `runtime`; parâmetros fora do contrato retornam erro Win32 e diagnóstico estruturado.
 
 Assinaturas hospedadas:
 
@@ -69,7 +68,7 @@ O resolvedor reporta **todas** as entradas: para cada uma, um `ResolvedImport` c
 ## Mecanismos fora de escopo
 
 - Delay imports: a presença do diretório de dados 13 (`IMAGE_DIRECTORY_ENTRY_DELAY_IMPORT`) torna a resolução `unsupported-mechanism`.
-- Forwarders de export ainda não são resolvidos (a Fase 3 só usa exports diretos de módulos internos registrados).
+- Forwarders de export ainda não são resolvidos; somente exports diretos de módulos internos registrados são aceitos.
 
 Antes da execução, o processo valida que o entry point está dentro de uma seção
 `r-x`. A pilha inicial possui uma guard page e é instalada no contexto Microsoft

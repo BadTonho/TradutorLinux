@@ -60,15 +60,6 @@ std::uint64_t read_le_u64(const std::vector<std::byte>& bytes, const std::size_t
     return value;
 }
 
-std::uint32_t read_le_u32(const std::vector<std::byte>& bytes, const std::size_t offset) {
-    std::uint32_t value = 0;
-    for (std::size_t index = 0; index < 4; ++index) {
-        value |= static_cast<std::uint32_t>(std::to_integer<unsigned char>(bytes[offset + index]))
-                 << (8 * index);
-    }
-    return value;
-}
-
 std::uint64_t read_le_u64_at(const std::byte* memory, const std::size_t offset) {
     std::uint64_t value = 0;
     for (std::size_t index = 0; index < 8; ++index) {
@@ -154,37 +145,45 @@ TEST(ApplyRelocations, EmptyDirectorySucceeds) {
     EXPECT_EQ(result.applied, 0U);
 }
 
-TEST(ApplyRelocations, AppliesDir64AndHighLowAndSkipsAbsolute) {
+TEST(ApplyRelocations, AppliesDir64AndSkipsAbsolute) {
     std::vector<std::byte> image(kTestBufferSize, std::byte{0});
-    const std::vector<std::byte> block =
-        make_reloc_block(0x2000, {0xA010, 0x3200, 0x0008});
+    const std::vector<std::byte> block = make_reloc_block(0x2000, {0xA010, 0x0008});
     std::copy(block.begin(), block.end(), image.begin() + 0x1000);
     write_le_u64(image, 0x2010, 0x140000000ULL);
-    write_le_u32(image, 0x2200, 0x10000000U);
 
     const RelocationResult result = apply_relocations(image, RelocationDirectory{0x1000, static_cast<std::uint32_t>(block.size())}, 0x1000);
 
     ASSERT_EQ(result.status, MapStatus::Success);
-    EXPECT_EQ(result.applied, 2U);
+    EXPECT_EQ(result.applied, 1U);
     EXPECT_EQ(read_le_u64(image, 0x2010), 0x140001000ULL);
-    EXPECT_EQ(read_le_u32(image, 0x2200), 0x10001000U);
+}
+
+TEST(ApplyRelocations, RejectsHighLowForPe32Plus) {
+    std::vector<std::byte> image(kTestBufferSize, std::byte{0});
+    const std::vector<std::byte> block = make_reloc_block(0x2000, {0x3200});
+    std::copy(block.begin(), block.end(), image.begin() + 0x1000);
+    write_le_u32(image, 0x2200, 0x10000000U);
+
+    const RelocationResult result =
+        apply_relocations(image, RelocationDirectory{0x1000, static_cast<std::uint32_t>(block.size())}, 0x1000);
+
+    EXPECT_EQ(result.status, MapStatus::InvalidImage);
+    EXPECT_EQ(result.applied, 0U);
 }
 
 TEST(ApplyRelocations, AppliesNegativeDelta) {
     std::vector<std::byte> image(kTestBufferSize, std::byte{0});
-    const std::vector<std::byte> block = make_reloc_block(0x2000, {0xA010, 0x3200});
+    const std::vector<std::byte> block = make_reloc_block(0x2000, {0xA010});
     std::copy(block.begin(), block.end(), image.begin() + 0x1000);
     write_le_u64(image, 0x2010, 0x140000000ULL);
-    write_le_u32(image, 0x2200, 0x10000000U);
 
     const RelocationResult result =
         apply_relocations(image, RelocationDirectory{0x1000, static_cast<std::uint32_t>(block.size())},
                           static_cast<std::int64_t>(-0x1000));
 
     ASSERT_EQ(result.status, MapStatus::Success);
-    EXPECT_EQ(result.applied, 2U);
+    EXPECT_EQ(result.applied, 1U);
     EXPECT_EQ(read_le_u64(image, 0x2010), 0x13FFFF000ULL);
-    EXPECT_EQ(read_le_u32(image, 0x2200), 0x0FFFF000U);
 }
 
 TEST(ApplyRelocations, RejectsUnsupportedType) {
@@ -370,11 +369,7 @@ TEST_F(ImageMapperTest, RejectsSectionBeyondImage) {
     spec.size_of_image = 0x2000;
     const std::vector<std::byte> bytes = build(spec);
     const pe::ParseResult parse = pe::parse_pe(bytes);
-    ASSERT_EQ(parse.status, pe::ParseStatus::Success);
-
-    MapResult result = map_image(parse.info, bytes);
-
-    EXPECT_EQ(result.status, MapStatus::InvalidImage);
+    EXPECT_EQ(parse.status, pe::ParseStatus::Malformed);
 }
 
 TEST_F(ImageMapperTest, UnmapsImageAndResetsState) {

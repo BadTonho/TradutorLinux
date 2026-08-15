@@ -3,8 +3,9 @@
 Runtime educacional de compatibilidade Win32 para Linux. O projeto executará, de forma gradual e documentada, um subconjunto de executáveis PE32+ x86-64 de console no Linux x86-64.
 
 O estado atual é a **Fase 7**: as fases de parser, mapeamento, imports, console,
-runtime básico e relatório de cobertura estão concluídas. O suporte continua
-restrito às aplicações e limitações publicadas na matriz de compatibilidade.
+runtime básico, diagnóstico, relatório de cobertura e GUI Win32 experimental
+estão concluídas. O suporte continua restrito às aplicações e limitações
+publicadas na matriz de compatibilidade.
 
 Consulte [PROJETO.md](PROJETO.md) para visão e arquitetura e [ROADMAP.md](ROADMAP.md) para os marcos.
 

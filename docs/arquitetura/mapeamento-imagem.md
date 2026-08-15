@@ -19,7 +19,7 @@ Produzir uma visão virtual da imagem tal como o loader Windows faria: headers n
 - O endereço preferencial é `ImageBase` (configurável via `MapOptions::preferred_base`).
 - O mapeador tenta reservar no endereço preferencial com `MAP_FIXED_NOREPLACE` (nunca sobrescreve mapeamentos existentes). Se falhar ou não estiver disponível, mapeia em endereço livre (`mmap` anônimo).
 - `delta = base_real - base_preferencial` (int64). Relocations são aplicadas **somente** quando `delta != 0`.
-- Tipos de relocations suportados: `ABSOLUTE` (0, ignorado), `HIGHLOW` (3) e `DIR64` (10). Tipo não suportado, bloco malformado, diretório com bytes residuais ou alvo fora da imagem mapeada resultam em `InvalidImage`.
+- Tipos de relocations suportados para PE32+: `ABSOLUTE` (0, ignorado) e `DIR64` (10). `HIGHLOW` (3) pertence ao PE32 e é rejeitado no alvo atual. Tipo não suportado, bloco malformado, diretório com bytes residuais ou alvo fora da imagem mapeada resultam em `InvalidImage`.
 - Imagem realocada sem diretório de relocations pode ser inspecionada e gera o aviso `cannot-relocate`, mas o runner rejeita sua execução com `execution-rejected`.
 
 ## Política de permissões

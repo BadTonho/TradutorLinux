@@ -225,6 +225,12 @@ public:
         reader_.read_u32(opt_offset + 60, info.size_of_headers);
         reader_.read_u16(opt_offset + 68, info.subsystem);
 
+        if (info.size_of_image == 0 || info.size_of_headers == 0 ||
+            info.size_of_headers > info.size_of_image || info.section_alignment == 0) {
+            return fail(ParseStatus::Malformed,
+                        "optional header com SizeOfImage, SizeOfHeaders ou SectionAlignment inválido");
+        }
+
         std::uint32_t number_of_rva_and_sizes{};
         reader_.read_u32(opt_offset + 108, number_of_rva_and_sizes);
         const std::size_t directory_count =
@@ -276,6 +282,17 @@ public:
             reader_.read_u32(offset + 16, section.raw_data_size);
             reader_.read_u32(offset + 20, section.raw_data_pointer);
             reader_.read_u32(offset + 36, section.characteristics);
+
+            const std::uint64_t section_span =
+                std::max<std::uint64_t>(section.virtual_size, section.raw_data_size);
+            const std::uint64_t section_end =
+                static_cast<std::uint64_t>(section.virtual_address) + section_span;
+            if (section_span != 0 &&
+                (section.virtual_address < info.size_of_headers ||
+                 section_end > info.size_of_image)) {
+                return fail(ParseStatus::Malformed,
+                            "seção " + section.name + " excede os limites da imagem");
+            }
 
             if (section.raw_data_size > 0) {
                 const std::uint64_t raw_end =

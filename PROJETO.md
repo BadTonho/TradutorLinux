@@ -12,8 +12,8 @@ O alvo inicial é deliberadamente restrito:
 |---|---|
 | Arquitetura do programa | PE32+ x86-64 |
 | Máquina hospedeira | Linux x86-64 |
-| Tipo de aplicativo | Console Win32, sem GUI |
-| Dependências | Conjunto documentado de APIs `kernel32`/`KernelBase` |
+| Tipo de aplicativo | Console Win32 e GUI Win32 experimental |
+| Dependências | Conjunto documentado de APIs `KERNEL32`, `USER32` e `GDI32` |
 | Fora do escopo inicial | PE32 x86, ARM, .NET, COM, drivers, DirectX e anticheat |
 
 Com CPU igual nos dois lados, as instruções x86-64 do programa podem ser executadas nativamente. O trabalho do TradutorLinux é carregar a imagem PE, preparar o contexto de processo esperado por ela e fornecer as APIs Windows que o programa importa.
