@@ -141,3 +141,32 @@ Uma interface futura pode oferecer uma lista interativa, mas a seleção direta
 por caminho deve continuar disponível para automação e scripts. A listagem de
 aplicativos Linux em geral não é suficiente: o foco dessa funcionalidade é
 encontrar executáveis Windows que possam ser carregados pelo runtime.
+
+## Integração com “Abrir com”
+
+O TradutorLinux deve oferecer uma integração opcional com os gerenciadores de
+arquivos Linux. Ao clicar com o botão direito em um arquivo `.exe`, o usuário
+poderá escolher uma ação do TradutorLinux, sem que o runtime precise monitorar
+processos ou arquivos automaticamente.
+
+Um comando de instalação por usuário pode registrar essa integração:
+
+```text
+tradutorlinux --install-file-association
+```
+
+Esse comando deve criar um lançador `.desktop` no perfil do usuário e associar
+o caminho selecionado ao comando do runtime. A instalação não deve exigir
+permissões administrativas nem modificar associações globais sem confirmação.
+
+As ações disponíveis podem incluir:
+
+- **Analisar com TradutorLinux**: executa `--report arquivo.exe` sem iniciar o
+  programa convidado;
+- **Executar com TradutorLinux**: carrega o executável selecionado;
+- **Executar com trace**: inicia o programa e salva o diagnóstico em um arquivo
+  escolhido pelo usuário.
+
+O lançador deve receber somente o arquivo selecionado pelo usuário, manter os
+  diagnósticos em arquivos locais e preservar as mesmas validações de formato,
+  arquitetura e compatibilidade usadas pela CLI.
