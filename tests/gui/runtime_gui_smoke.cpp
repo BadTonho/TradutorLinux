@@ -13,6 +13,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <filesystem>
 #include <fstream>
 #include <string>
 
@@ -240,6 +241,12 @@ int main(const int argc, char** argv) {
     const std::string runtime = argv[1];
     const std::string input = argv[2];
     const std::string work_dir = argv[3];
+
+    std::error_code error;
+    std::filesystem::create_directories(work_dir, error);
+    if (error) {
+        fail("falha ao criar o diretório de trabalho");
+    }
 
     const std::string display = ensure_display();
 
