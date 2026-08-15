@@ -107,12 +107,15 @@ As APIs de janela emitem eventos do componente `runtime`:
 ```text
 [tl][runtime][info] RegisterClassExA symbol="RegisterClassExA" class="tlwin" atom="1" status="success"
 [tl][runtime][info] CreateWindowExA symbol="CreateWindowExA" class="tlwin" window="Ola do Windows no Linux!" status="success"
+[tl][runtime][info] TranslateMessage symbol="TranslateMessage" message="WM_CHAR" wparam="113" status="translated"
 [tl][runtime][info] GetMessageA symbol="GetMessageA" message="WM_QUIT" exit-code="0" result="quit"
 ```
 
 `GetMessageA` registra somente o fim do loop (`WM_QUIT`), confirmando que
 `PostQuitMessage` foi acionado; as mensagens ordinárias não são registradas
-para não poluir o trace.
+para não poluir o trace. `TranslateMessage` registra a conversão de um
+`WM_KEYDOWN` em `WM_CHAR` com o `wparam` (código do caractere) e `status`
+(`translated` quando houve conversão; o evento só é emitido nesse caso).
 
 ## Eventos do componente `pe`
 

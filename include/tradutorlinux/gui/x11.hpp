@@ -9,6 +9,7 @@ enum class WindowEventType {
     Idle,           // nenhum evento pendente para a janela
     Redraw,         // redesenho disponível (equivale a WM_PAINT)
     Press,          // clique primário (equivale a WM_LBUTTONDOWN)
+    KeyDown,        // tecla com caractere (equivale a WM_KEYDOWN/WM_CHAR)
     CloseRequested, // WM_DELETE_WINDOW do gerenciador de janelas (equivale a WM_CLOSE)
 };
 
@@ -16,6 +17,7 @@ struct WindowEvent {
     WindowEventType type{WindowEventType::Idle};
     int x{};
     int y{};
+    char character{}; // primeiro caractere traduzido da tecla (KeyDown)
 };
 
 // Handle opaco de janela persistente. Válido somente para as funções abaixo.

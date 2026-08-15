@@ -1,11 +1,12 @@
 // Driver de integração GUI: executa tl_win.exe num Xvfb próprio e valida o
-// message loop de ponta a ponta em dois cenários:
+// message loop de ponta a ponta em três cenários:
 //   1. autoclose  (TL_GUI_AUTOCLOSE_MS != 0): WM_QUIT sem interação.
 //   2. fechar     (TL_GUI_AUTOCLOSE_MS == 0): envia WM_DELETE_WINDOW via X11,
 //      como o botão de fechar de um window manager faria.
-// Em ambos exige exit-code 1 (a fixture só chega ao WM_DESTROY com
-// PostQuitMessage(1) se o WM_CREATE foi despachado), stdout vazio e os eventos
-// esperados no trace.
+//   3. teclado    (TL_GUI_AUTOCLOSE_MS == 0): envia um KeyPress sintético 'q'
+//      via X11; a fixture encerra quando recebe o WM_CHAR('q').
+// Exit codes da fixture: 1 = WM_CREATE despachado; 3 = WM_CREATE + WM_CHAR('q').
+// Cada cenário exige o exit code esperado, stdout vazio e os eventos do trace.
 
 #include <X11/Xatom.h>
 #include <X11/Xlib.h>
@@ -50,23 +51,23 @@ std::string read_file(const std::string& path) {
     return contents;
 }
 
-void require_trace_contains(const std::string& trace, const char* const needle,
+void require_trace_contains(const std::string& trace, const std::string& needle,
                             const std::string& scenario) {
     if (trace.find(needle) == std::string::npos) {
         std::fprintf(stderr,
                      "runtime_gui_smoke: '%s' não encontrado no trace (%s):\n%s\n",
-                     needle, scenario.c_str(), trace.c_str());
+                     needle.c_str(), scenario.c_str(), trace.c_str());
         std::exit(1);
     }
 }
 
 pid_t g_xvfb_pid = -1;
 
-std::string ensure_display() {
-    const char* const existing = std::getenv("DISPLAY");
-    if (existing != nullptr && existing[0] != '\0') {
-        return existing;
-    }
+// O teste roda sempre num Xvfb próprio, sem window manager: a janela é filha
+// direta da root (find_window_by_caption a encontra) e os eventos sintéticos
+// chegam ao runtime. Num display com WM (ex.: sessão mutter) a janela é
+// reparentada e o KeyPress iria para o frame, não para o cliente.
+std::string start_xvfb() {
     for (int number = 90; number < 120; ++number) {
         const std::string socket = "/tmp/.X11-unix/X" + std::to_string(number);
         if (::access(socket.c_str(), F_OK) == 0) {
@@ -94,41 +95,24 @@ std::string ensure_display() {
             ::waitpid(server_pid, nullptr, 0);
         }
     }
-    fail("falha ao iniciar Xvfb");
+    fail("falha ao iniciar Xvfb (instale o pacote xvfb)");
 }
 
-bool send_wm_delete(const std::string& display) {
-    Display* const dpy = XOpenDisplay(display.c_str());
-    if (dpy == nullptr) {
-        return false;
-    }
+Window find_window_by_caption(Display* const dpy, const char* const caption) noexcept {
     Window root_return = 0;
     Window parent_return = 0;
     Window* children = nullptr;
     unsigned int child_count = 0;
     if (XQueryTree(dpy, RootWindow(dpy, DefaultScreen(dpy)), &root_return, &parent_return,
                    &children, &child_count) == 0) {
-        XCloseDisplay(dpy);
-        return false;
+        return 0;
     }
-    const Atom protocols_atom = XInternAtom(dpy, "WM_PROTOCOLS", False);
-    const Atom delete_atom = XInternAtom(dpy, "WM_DELETE_WINDOW", False);
-    bool found = false;
-    for (unsigned int i = 0; i < child_count; ++i) {
+    Window found = 0;
+    for (unsigned int i = 0; i < child_count && found == 0; ++i) {
         char* name = nullptr;
         if (XFetchName(dpy, children[i], &name) != 0 && name != nullptr &&
-            std::strcmp(name, kWindowCaption) == 0) {
-            XEvent event{};
-            event.xclient.type = ClientMessage;
-            event.xclient.display = dpy;
-            event.xclient.window = children[i];
-            event.xclient.message_type = protocols_atom;
-            event.xclient.format = 32;
-            event.xclient.data.l[0] = static_cast<long>(delete_atom);
-            event.xclient.data.l[1] = static_cast<long>(CurrentTime);
-            XSendEvent(dpy, children[i], False, NoEventMask, &event);
-            XFlush(dpy);
-            found = true;
+            std::strcmp(name, caption) == 0) {
+            found = children[i];
         }
         if (name != nullptr) {
             XFree(name);
@@ -137,12 +121,79 @@ bool send_wm_delete(const std::string& display) {
     if (children != nullptr) {
         XFree(children);
     }
-    XCloseDisplay(dpy);
     return found;
 }
 
+bool send_wm_delete(const std::string& display) {
+    Display* const dpy = XOpenDisplay(display.c_str());
+    if (dpy == nullptr) {
+        return false;
+    }
+    const Window window = find_window_by_caption(dpy, kWindowCaption);
+    if (window == 0) {
+        XCloseDisplay(dpy);
+        return false;
+    }
+    const Atom protocols_atom = XInternAtom(dpy, "WM_PROTOCOLS", False);
+    const Atom delete_atom = XInternAtom(dpy, "WM_DELETE_WINDOW", False);
+    XEvent event{};
+    event.xclient.type = ClientMessage;
+    event.xclient.display = dpy;
+    event.xclient.window = window;
+    event.xclient.message_type = protocols_atom;
+    event.xclient.format = 32;
+    event.xclient.data.l[0] = static_cast<long>(delete_atom);
+    event.xclient.data.l[1] = static_cast<long>(CurrentTime);
+    XSendEvent(dpy, window, False, NoEventMask, &event);
+    XFlush(dpy);
+    XCloseDisplay(dpy);
+    return true;
+}
+
+bool send_key_q(const std::string& display) {
+    Display* const dpy = XOpenDisplay(display.c_str());
+    if (dpy == nullptr) {
+        return false;
+    }
+    const Window window = find_window_by_caption(dpy, kWindowCaption);
+    if (window == 0) {
+        XCloseDisplay(dpy);
+        return false;
+    }
+    const KeyCode keycode = XKeysymToKeycode(dpy, XStringToKeysym("q"));
+    if (keycode == 0) {
+        XCloseDisplay(dpy);
+        return false;
+    }
+    XEvent event{};
+    event.xkey.type = KeyPress;
+    event.xkey.display = dpy;
+    event.xkey.window = window;
+    event.xkey.root = RootWindow(dpy, DefaultScreen(dpy));
+    event.xkey.time = CurrentTime;
+    event.xkey.x = 10;
+    event.xkey.y = 10;
+    event.xkey.x_root = 10;
+    event.xkey.y_root = 10;
+    event.xkey.state = 0;
+    event.xkey.keycode = keycode;
+    event.xkey.same_screen = True;
+    XSendEvent(dpy, window, False, KeyPressMask, &event);
+    XFlush(dpy);
+    XCloseDisplay(dpy);
+    return true;
+}
+
+enum class Trigger : unsigned char {
+    Nothing,
+    CloseRequest,
+    KeyQ,
+};
+
 struct RunOptions {
     bool autoclose;
+    Trigger trigger;
+    int expected_exit;
     std::string trace_path;
     std::string stdout_path;
 };
@@ -170,12 +221,16 @@ void run_runtime(const std::string& runtime, const std::string& input,
         fail("fork falhou ao lançar o runtime");
     }
 
-    if (!options.autoclose) {
+    if (options.trigger != Trigger::Nothing) {
         bool sent = false;
         const auto deadline =
             std::chrono::steady_clock::now() + std::chrono::milliseconds(kReadyTimeoutMs);
         while (!sent && std::chrono::steady_clock::now() < deadline) {
-            sent = send_wm_delete(display);
+            if (options.trigger == Trigger::CloseRequest) {
+                sent = send_wm_delete(display);
+            } else {
+                sent = send_key_q(display);
+            }
             if (!sent) {
                 ::usleep(kPollDelayUs);
             }
@@ -183,7 +238,7 @@ void run_runtime(const std::string& runtime, const std::string& input,
         if (!sent) {
             ::kill(runtime_pid, SIGKILL);
             ::waitpid(runtime_pid, nullptr, 0);
-            fail("janela não encontrada para enviar WM_DELETE_WINDOW");
+            fail("janela não encontrada para enviar o evento do cenário");
         }
     }
 
@@ -205,31 +260,40 @@ void run_runtime(const std::string& runtime, const std::string& input,
         ::waitpid(runtime_pid, &status, 0);
         fail("timeout aguardando o runtime encerrar");
     }
-    if (!WIFEXITED(status) || WEXITSTATUS(status) != 1) {
-        fail("runtime não terminou com exit-code 1 (WM_CREATE deve ter sido despachado)");
+    if (!WIFEXITED(status) || WEXITSTATUS(status) != options.expected_exit) {
+        fail("runtime não terminou com o exit-code esperado " +
+             std::to_string(options.expected_exit));
     }
 }
 
 void verify_run(const std::string& work_dir, const std::string& scenario,
-                const bool autoclose) {
+                const int expected_exit, const bool expect_char) {
     const std::string trace = read_file(work_dir + "/trace_" + scenario + ".log");
     const std::string output = read_file(work_dir + "/stdout_" + scenario + ".log");
     if (!output.empty()) {
         fail("stdout não vazio (deve ir tudo para stderr) no cenário " + scenario);
     }
-    const std::array<const char*, 5> expected = {
+    const std::string exit_code = std::to_string(expected_exit);
+    const std::array<std::string, 5> expected = {
         "RegisterClassExA symbol=\"RegisterClassExA\" class=\"tlwin\" atom=\"1\" "
         "status=\"success\"",
         "CreateWindowExA symbol=\"CreateWindowExA\" class=\"tlwin\" "
         "window=\"Ola do Windows no Linux!\" status=\"success\"",
-        "GetMessageA symbol=\"GetMessageA\" message=\"WM_QUIT\" exit-code=\"1\" "
-        "result=\"quit\"",
-        "ExitProcess symbol=\"ExitProcess\" exit-code=\"1\" status=\"success\" "
-        "mechanism=\"guest-transfer\"",
-        "exit exit-code=\"1\" explicit=\"sim\"",
+        "GetMessageA symbol=\"GetMessageA\" message=\"WM_QUIT\" exit-code=\"" + exit_code +
+            "\" result=\"quit\"",
+        "ExitProcess symbol=\"ExitProcess\" exit-code=\"" + exit_code +
+            "\" status=\"success\" mechanism=\"guest-transfer\"",
+        "exit exit-code=\"" + exit_code + "\" explicit=\"sim\"",
     };
-    for (const char* const needle : expected) {
-        require_trace_contains(trace, needle, scenario + (autoclose ? " (autoclose)" : ""));
+    for (const std::string& needle : expected) {
+        require_trace_contains(trace, needle, scenario);
+    }
+    if (expect_char) {
+        require_trace_contains(
+            trace,
+            "TranslateMessage symbol=\"TranslateMessage\" message=\"WM_CHAR\" "
+            "wparam=\"113\" status=\"translated\"",
+            scenario);
     }
 }
 
@@ -250,23 +314,37 @@ int main(const int argc, char** argv) {
         fail("falha ao criar o diretório de trabalho");
     }
 
-    const std::string display = ensure_display();
+    const std::string display = start_xvfb();
 
     const RunOptions autoclose_options{
         .autoclose = true,
+        .trigger = Trigger::Nothing,
+        .expected_exit = 1,
         .trace_path = work_dir + "/trace_autoclose.log",
         .stdout_path = work_dir + "/stdout_autoclose.log",
     };
     run_runtime(runtime, input, display, autoclose_options);
-    verify_run(work_dir, "autoclose", true);
+    verify_run(work_dir, "autoclose", 1, false);
 
     const RunOptions close_options{
         .autoclose = false,
+        .trigger = Trigger::CloseRequest,
+        .expected_exit = 1,
         .trace_path = work_dir + "/trace_close.log",
         .stdout_path = work_dir + "/stdout_close.log",
     };
     run_runtime(runtime, input, display, close_options);
-    verify_run(work_dir, "close", false);
+    verify_run(work_dir, "close", 1, false);
+
+    const RunOptions key_options{
+        .autoclose = false,
+        .trigger = Trigger::KeyQ,
+        .expected_exit = 3,
+        .trace_path = work_dir + "/trace_key.log",
+        .stdout_path = work_dir + "/stdout_key.log",
+    };
+    run_runtime(runtime, input, display, key_options);
+    verify_run(work_dir, "key", 3, true);
 
     if (g_xvfb_pid > 0) {
         ::kill(g_xvfb_pid, SIGTERM);

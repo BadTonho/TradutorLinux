@@ -54,19 +54,27 @@ static const char kClassName[] = "tlwin";
 static const char kWindowName[] = "Ola do Windows no Linux!";
 
 static int g_wm_create_seen = 0;
+static int g_q_seen = 0;
 
 static lresult_t wndproc(hwnd_t hwnd, uint_t message, wparam_t wparam, lparam_t lparam) {
     (void)hwnd;
-    (void)wparam;
     (void)lparam;
     if (message == 0x0001U) { /* WM_CREATE */
         g_wm_create_seen = 1;
         return 0;
     }
-    if (message == 0x0002U) { /* WM_DESTROY */
-        PostQuitMessage(g_wm_create_seen);
+    if (message == 0x0102U) { /* WM_CHAR */
+        if (wparam == (wparam_t)0x71U) { /* 'q' */
+            g_q_seen = 1;
+            DestroyWindow(hwnd);
+        }
         return 0;
     }
+    if (message == 0x0002U) { /* WM_DESTROY */
+        PostQuitMessage(g_wm_create_seen + (g_q_seen ? 2 : 0));
+        return 0;
+    }
+    (void)wparam;
     return DefWindowProcA(hwnd, message, wparam, lparam);
 }
 

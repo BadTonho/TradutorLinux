@@ -54,6 +54,8 @@ constexpr Uint kWmCreate = 0x0001;
 
 constexpr Uint kWmDestroy = 0x0002;
 constexpr Uint kWmQuit = 0x0012;
+constexpr Uint kWmKeyDown = 0x0100;
+constexpr Uint kWmChar = 0x0102;
 constexpr Uint kWmLButtonDown = 0x0201;
 constexpr int kSwShow = 1;
 

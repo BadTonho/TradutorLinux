@@ -203,6 +203,9 @@ struct WindowSlot {
     std::string class_name;
     gui::NativeWindow native{nullptr};
     bool mapped{false};
+    abi::GuestMsg pending{};  // mensagem traduzida (ex.: WM_CHAR) aguardando GetMessageA
+    bool has_pending{false};
+    char last_key{'\0'};  // caractere do WM_KEYDOWN mais recente, para TranslateMessage
 };
 
 std::array<ClassSlot, 32> g_classes{};
@@ -271,6 +274,16 @@ void write_guest_msg(void* const msg, const abi::HWnd hwnd, const std::uint32_t 
     out->time = 0;
     out->pt_x = 0;
     out->pt_y = 0;
+}
+
+// Virtual key do subconjunto suportado: para letras usa a maiúscula (como
+// VK_A), demais caracteres ASCII imprimíveis usam o próprio valor.
+[[nodiscard]] abi::Wparam keydown_vkey(const char character) noexcept {
+    const auto value = static_cast<std::uint32_t>(static_cast<unsigned char>(character));
+    if (value >= 'a' && value <= 'z') {
+        return static_cast<abi::Wparam>(value - 0x20U);
+    }
+    return static_cast<abi::Wparam>(value);
 }
 
 }  // namespace
@@ -721,6 +734,18 @@ TL_MSABI int tl_GetMessageA(void* const msg, const void* const window,  // NOLIN
         runtime_trace("GetMessageA", fields, 4);
         return 0;
     }
+    for (WindowSlot& slot : g_windows) {
+        if (!slot.used || (window != nullptr && window != &slot)) {
+            continue;
+        }
+        if (slot.has_pending) {
+            write_guest_msg(msg, &slot, slot.pending.message, slot.pending.wparam,
+                            slot.pending.lparam);
+            slot.has_pending = false;
+            set_last_error(abi::kErrorSuccess);
+            return 1;
+        }
+    }
     for (;;) {
         for (WindowSlot& slot : g_windows) {
             if (!slot.used || slot.native == nullptr || (window != nullptr && window != &slot)) {
@@ -740,6 +765,12 @@ TL_MSABI int tl_GetMessageA(void* const msg, const void* const window,  // NOLIN
                 set_last_error(abi::kErrorSuccess);
                 return 1;
             }
+            if (event.type == gui::WindowEventType::KeyDown) {
+                slot.last_key = event.character;
+                write_guest_msg(msg, &slot, abi::kWmKeyDown, keydown_vkey(event.character), 0);
+                set_last_error(abi::kErrorSuccess);
+                return 1;
+            }
             if (event.type == gui::WindowEventType::CloseRequested) {
                 write_guest_msg(msg, &slot, abi::kWmClose, 0, 0);
                 set_last_error(abi::kErrorSuccess);
@@ -756,6 +787,30 @@ TL_MSABI int tl_TranslateMessage(const void* const msg) noexcept {
         trace_guest_failure("TranslateMessage", "message", "ponteiro de mensagem inválido");
         return 0;
     }
+    const auto* const message = static_cast<const abi::GuestMsg*>(msg);
+    if (message->message == abi::kWmKeyDown) {
+        WindowSlot* const slot = find_window_slot(message->hwnd);
+        if (slot != nullptr && slot->last_key != '\0' && !slot->has_pending) {
+            slot->pending = {};
+            slot->pending.message = abi::kWmChar;
+            slot->pending.wparam =
+                static_cast<abi::Wparam>(static_cast<unsigned char>(slot->last_key));
+            slot->pending.lparam = 0;
+            const abi::Wparam char_code = slot->pending.wparam;
+            slot->last_key = '\0';
+            slot->has_pending = true;
+            set_last_error(abi::kErrorSuccess);
+            const std::array<diagnostics::TraceField, 4> fields{
+                diagnostics::TraceField{"symbol", "TranslateMessage"},
+                diagnostics::TraceField{"message", "WM_CHAR"},
+                diagnostics::TraceField{"wparam", std::to_string(char_code)},
+                diagnostics::TraceField{"status", "translated"},
+            };
+            runtime_trace("TranslateMessage", fields, 4);
+            return 1;
+        }
+    }
+    set_last_error(abi::kErrorSuccess);
     return 0;
 }
 

@@ -9,9 +9,10 @@ runtime de console independente.
 `src/gui/x11.cpp` abre um único display (lazy) compartilhado por todas as
 janelas do processo. Cada janela é um token opaco num pool fixo (`NativeWindow`).
 Os eventos X11 são drenados pelo runtime via `next_window_event` e traduzidos
-para o subconjunto Win32: `Expose` → `WM_PAINT`, `ButtonPress` → `WM_LBUTTONDOWN`
-e `WM_DELETE_WINDOW` (protocolo de janela) → `WM_CLOSE`. Eventos não relevantes
-para a janela consultada são descartados.
+para o subconjunto Win32: `Expose` → `WM_PAINT`, `ButtonPress` → `WM_LBUTTONDOWN`,
+`KeyPress` → `WM_KEYDOWN`/`WM_CHAR` (via `TranslateMessage`) e `WM_DELETE_WINDOW`
+(protocolo de janela) → `WM_CLOSE`. Eventos não relevantes para a janela
+consultada são descartados.
 
 Quando `TL_GUI_AUTOCLOSE_MS` é diferente de `0`, o pump gera `CloseRequested`
 (→ `WM_CLOSE`) após aproximadamente 100 ms, permitindo testes de integração
@@ -36,8 +37,8 @@ Além de `MessageBoxA`, `USER32.dll` exporta um subconjunto mínimo de janela:
 | `CreateWindowExA` | Procura a classe, cria a janela X11 e despacha `WM_CREATE` ao `WNDPROC` do convidado antes de devolver o `HWND` token opaco; se o `WNDPROC` retornar `-1`, destrói a janela e devolve `NULL` (`lParam` do `WM_CREATE` é `0`; não há `CREATESTRUCT`). Aceita largura/altura `<= 0` (usa 480×180). Parent, menu, instância e parâmetro são ignorados. |
 | `ShowWindow` | Mapeia/desmapeia a janela X11; `cmdShow != 0` mostra, `0` esconde. |
 | `UpdateWindow` | Despacha `WM_PAINT` diretamente ao `WNDPROC` do convidado. |
-| `GetMessageA` | Drena os eventos X11 da janela, traduz e preenche o `MSG` do convidado; retorna `0` quando `PostQuitMessage` foi chamado (preenche `WM_QUIT`). Os filtros `wMsgFilterMin`/`wMsgFilterMax` e `hWnd` (quando `NULL` não filtra) são ignorados; `hWnd != NULL` filtra por janela. |
-| `TranslateMessage` | No-op; valida apenas o ponteiro do `MSG`. |
+| `GetMessageA` | Drena os eventos X11 da janela, traduz e preenche o `MSG` do convidado; retorna `0` quando `PostQuitMessage` foi chamado (preenche `WM_QUIT`). Uma mensagem traduzida em espera (`WM_CHAR` gerado por `TranslateMessage`) é entregue antes dos próximos eventos X11. `KeyPress` vira `WM_KEYDOWN` com a virtual key (letras viram maiúsculas) e guarda o caractere para o `TranslateMessage` subsequente. Os filtros `wMsgFilterMin`/`wMsgFilterMax` e `hWnd` (quando `NULL` não filtra) são ignorados; `hWnd != NULL` filtra por janela. |
+| `TranslateMessage` | Converte o `WM_KEYDOWN` mais recente de cada janela em `WM_CHAR` (com o caractere real) enfileirado para o próximo `GetMessageA`; retorna `1` quando traduziu e `0` caso contrário. |
 | `DispatchMessageA` | Lê o `MSG`, localiza o `HWND` e invoca o `WNDPROC` do convidado. |
 | `DefWindowProcA` | `WM_CLOSE` → `DestroyWindow`; demais mensagens retornam `0`. |
 | `DestroyWindow` | Destrói a janela X11 e despacha `WM_DESTROY` ao `WNDPROC` do convidado. |
@@ -58,8 +59,9 @@ escopo.
 As fixtures `tl_gui.exe` e `tl_win.exe` são validadas automaticamente pelo
 parser, metadata e `--report`, que confirmam os imports sem executar o entry
 point. Além disso, `tl_win.exe` é executado de ponta a ponta no teste
-`runtime_gui_smoke` (`tests/gui/runtime_gui_smoke.cpp`), que sobe um `Xvfb`
-próprio e cobre dois cenários:
+`runtime_gui_smoke` (`tests/gui/runtime_gui_smoke.cpp`), que sobe sempre um
+`Xvfb` próprio — sem window manager, para que a janela seja filha direta da
+root e os eventos sintéticos cheguem ao cliente — e cobre três cenários:
 
 1. **autoclose** — `TL_GUI_AUTOCLOSE_MS != 0`: o message loop encerra sozinho
    via `WM_QUIT`, sem interação.
@@ -68,14 +70,21 @@ próprio e cobre dois cenários:
    fechar de um window manager envia), exercitando
    `WM_CLOSE → DefWindowProcA → DestroyWindow → WM_DESTROY →
    PostQuitMessage(0) → GetMessageA/WM_QUIT → ExitProcess(0)`.
+3. **teclado** — `TL_GUI_AUTOCLOSE_MS == 0`: o driver envia um `KeyPress`
+   sintético `'q'` (via `XSendEvent`), exercitando
+   `WM_KEYDOWN → TranslateMessage → WM_CHAR('q') → DestroyWindow → WM_DESTROY →
+   PostQuitMessage(3) → GetMessageA/WM_QUIT → ExitProcess(3)`.
 
-Ambos exigem exit-code `1` — a fixture `tl_win.c` marca uma flag no `WM_CREATE`
-e faz `PostQuitMessage(flag)` no `WM_DESTROY`, então o exit code prova que o
-`WM_CREATE` foi despachado — `stdout` vazio (trace só em `stderr`) e os eventos
-`RegisterClassExA`, `CreateWindowExA`, `GetMessageA message="WM_QUIT"`,
-`ExitProcess` e `exit explicit="sim"` no trace. O teste é configurado pelo CMake
-somente quando `xvfb` está disponível (CI instala `xvfb`). Para o smoke test
-manual interativo de `tl_win.exe`:
+Cada cenário exige o exit-code esperado — a `tl_win.c` marca uma flag no
+`WM_CREATE` e outra ao receber `WM_CHAR('q')`, e faz `PostQuitMessage(flag)` no
+`WM_DESTROY`; assim o exit code prova quais mensagens foram despachadas
+(autoclose e fechar exigem `1`; teclado exige `3`). O teste também exige
+`stdout` vazio (trace só em `stderr`), os eventos `RegisterClassExA`,
+`CreateWindowExA`, `GetMessageA message="WM_QUIT"`, `ExitProcess` e
+`exit explicit="sim"` no trace, além do `TranslateMessage message="WM_CHAR"` no
+cenário de teclado. O teste é configurado pelo CMake somente quando `xvfb` está
+disponível (CI instala `xvfb`). Para o smoke test manual interativo de
+`tl_win.exe`:
 
 ```bash
 TL_GUI_AUTOCLOSE_MS=0 ./build/debug/src/tradutorlinux \
@@ -84,6 +93,11 @@ TL_GUI_AUTOCLOSE_MS=0 ./build/debug/src/tradutorlinux \
 
 A janela "Ola do Windows no Linux!" abre; fechá-la pelo botão do gerenciador de
 janelas percorre o mesmo caminho de encerramento e termina com código `0`.
+
+A entrada de teclado no runtime é testada de ponta a ponta pelo cenário
+**teclado** (KeyPress sintético), mas num display com window manager o evento
+real do teclado também chega como `KeyPress` ao cliente, então digitar na janela
+funciona da mesma forma; não há teste automatizado com um WM real.
 
 Wayland nativo, GDI, recursos, ícones, menus, múltiplas janelas simultâneas e
 toolkits não fazem parte deste protótipo.

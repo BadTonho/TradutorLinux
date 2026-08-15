@@ -2,6 +2,7 @@
 
 #include <X11/Xatom.h>
 #include <X11/Xlib.h>
+#include <X11/Xutil.h>
 
 #include <algorithm>
 #include <array>
@@ -101,7 +102,7 @@ NativeWindow create_window(const char* const caption, const int width,  // NOLIN
         return nullptr;
     }
     XStoreName(dpy, window, caption != nullptr ? caption : "TradutorLinux");
-    XSelectInput(dpy, window, ExposureMask | ButtonPressMask | StructureNotifyMask);
+    XSelectInput(dpy, window, ExposureMask | ButtonPressMask | KeyPressMask | StructureNotifyMask);
     Atom delete_protocol = XInternAtom(dpy, "WM_DELETE_WINDOW", False);
     XSetWMProtocols(dpy, window, &delete_protocol, 1);
     *state = WindowState{
@@ -208,6 +209,16 @@ WindowEvent next_window_event(const NativeWindow window) noexcept {
     }
     if (event.type == ButtonPress) {
         return {WindowEventType::Press, event.xbutton.x, event.xbutton.y};
+    }
+    if (event.type == KeyPress) {
+        char buffer[8];
+        KeySym keysym = 0;
+        const int length =
+            XLookupString(&event.xkey, buffer, sizeof(buffer), &keysym, nullptr);
+        (void)keysym;
+        if (length > 0) {
+            return {WindowEventType::KeyDown, 0, 0, buffer[0]};
+        }
     }
     if (event.type == ClientMessage) {
         const Atom protocols_atom = XInternAtom(dpy, "WM_PROTOCOLS", False);
