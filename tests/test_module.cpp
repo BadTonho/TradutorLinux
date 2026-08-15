@@ -97,6 +97,12 @@ TEST_F(ModuleTest, RegistersBuiltinKernel32Exports) {
               reinterpret_cast<std::uintptr_t>(&tl_GetStdHandle));
     EXPECT_EQ(find_export(ExportQuery{"USER32.dll", "MessageBoxA"}).address,
               reinterpret_cast<std::uintptr_t>(&tl_MessageBoxA));
+    EXPECT_EQ(find_export(ExportQuery{"GDI32.dll", "GetStockObject"}).address,
+              reinterpret_cast<std::uintptr_t>(&tl_GetStockObject));
+    EXPECT_EQ(find_export(ExportQuery{"USER32.dll", "FillRect"}).address,
+              reinterpret_cast<std::uintptr_t>(&tl_FillRect));
+    EXPECT_EQ(find_export(ExportQuery{"GDI32.dll", "Rectangle"}).address,
+              reinterpret_cast<std::uintptr_t>(&tl_Rectangle));
 }
 
 TEST_F(ModuleTest, RegisterBuiltinModulesIsIdempotent) {

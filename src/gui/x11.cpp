@@ -34,6 +34,45 @@ struct WindowState {
 
 std::array<WindowState, kMaxWindows> g_windows{};
 
+// Cores dos stock brushes do Win32 (24 bits), usadas no preenchimento sólido.
+constexpr std::array<unsigned long, 6> kBrushRgb = {
+    0xFFFFFFU,  // 0 WHITE_BRUSH
+    0xC0C0C0U,  // 1 LTGRAY_BRUSH
+    0x808080U,  // 2 GRAY_BRUSH
+    0x404040U,  // 3 DKGRAY_BRUSH
+    0x000000U,  // 4 BLACK_BRUSH
+    0x000000U,  // 5 NULL_BRUSH (sem preenchimento)
+};
+
+// GC e pixels de preenchimento, criados sob demanda no display compartilhado.
+struct FillState {
+    GC gc{};
+    std::array<unsigned long, 6> pixels{};
+    bool ready{false};
+};
+
+FillState& fill_state(Display* const dpy, const int screen) {
+    static FillState state;
+    if (!state.ready) {
+        state.gc = XCreateGC(dpy, RootWindow(dpy, screen), 0, nullptr);
+        const Colormap colormap = DefaultColormap(dpy, screen);
+        for (std::size_t index = 0; index < kBrushRgb.size(); ++index) {
+            XColor color{};
+            color.flags = DoRed | DoGreen | DoBlue;
+            color.red = static_cast<unsigned short>(((kBrushRgb[index] >> 16) & 0xFFU) * 257U);
+            color.green = static_cast<unsigned short>(((kBrushRgb[index] >> 8) & 0xFFU) * 257U);
+            color.blue = static_cast<unsigned short>((kBrushRgb[index] & 0xFFU) * 257U);
+            if (XAllocColor(dpy, colormap, &color)) {
+                state.pixels[index] = color.pixel;
+            } else {
+                state.pixels[index] = BlackPixel(dpy, screen);
+            }
+        }
+        state.ready = true;
+    }
+    return state;
+}
+
 class DisplayCloser {
 public:
     explicit DisplayCloser(Display* const dpy) noexcept : dpy_(dpy) {}
@@ -101,7 +140,20 @@ void push_event_for(Display* const dpy, WindowState* const state, XEvent& event)
         return;
     }
     if (event.type == ButtonPress) {
-        state->pending.push_back({WindowEventType::Press, event.xbutton.x, event.xbutton.y});
+        if (event.xbutton.button == 1) {
+            state->pending.push_back({WindowEventType::Press, event.xbutton.x, event.xbutton.y});
+        }
+        return;
+    }
+    if (event.type == ButtonRelease) {
+        if (event.xbutton.button == 1) {
+            state->pending.push_back({WindowEventType::Release, event.xbutton.x, event.xbutton.y});
+        }
+        return;
+    }
+    if (event.type == MotionNotify) {
+        state->pending.push_back(
+            {WindowEventType::MouseMove, event.xmotion.x, event.xmotion.y});
         return;
     }
     if (event.type == KeyPress || event.type == KeyRelease) {
@@ -170,7 +222,8 @@ NativeWindow create_window(const char* const caption, const int width,  // NOLIN
         return nullptr;
     }
     XStoreName(dpy, window, caption != nullptr ? caption : "TradutorLinux");
-    XSelectInput(dpy, window, ExposureMask | ButtonPressMask | KeyPressMask | KeyReleaseMask |
+    XSelectInput(dpy, window, ExposureMask | ButtonPressMask | ButtonReleaseMask |
+                                 PointerMotionMask | KeyPressMask | KeyReleaseMask |
                                  StructureNotifyMask);
     Atom delete_protocol = XInternAtom(dpy, "WM_DELETE_WINDOW", False);
     XSetWMProtocols(dpy, window, &delete_protocol, 1);
@@ -254,6 +307,22 @@ void draw_rectangle(const NativeWindow window, const int x, const int y, const i
         return;
     }
     XDrawRectangle(dpy, state->window, DefaultGC(dpy, state->screen), x, y,
+                   static_cast<unsigned int>(width), static_cast<unsigned int>(height));
+}
+
+void fill_rectangle(const NativeWindow window, const int x, const int y, const int width,
+                    const int height, const int brush_index) noexcept {
+    if (brush_index == 5) {  // NULL_BRUSH: nenhum preenchimento
+        return;
+    }
+    Display* const dpy = display();
+    WindowState* state = find_state(window);
+    if (dpy == nullptr || state == nullptr) {
+        return;
+    }
+    FillState& fill = fill_state(dpy, state->screen);
+    XSetForeground(dpy, fill.gc, fill.pixels[static_cast<std::size_t>(brush_index)]);
+    XFillRectangle(dpy, state->window, fill.gc, x, y,
                    static_cast<unsigned int>(width), static_cast<unsigned int>(height));
 }
 

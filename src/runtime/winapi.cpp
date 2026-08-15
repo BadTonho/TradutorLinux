@@ -40,6 +40,10 @@ char kStdInputToken = 0;
 char kStdOutputToken = 0;
 char kStdErrorToken = 0;
 
+// Tokens opacos para stock objects do GDI: o próprio endereço serve de handle
+// e o deslocamento identifica o objeto. Stock objects não são liberados.
+char kStockObjectTokens[24]{};
+
 struct FileSlot {
     int fd{-1};
     bool used{false};
@@ -214,6 +218,7 @@ struct WindowSlot {
     abi::GuestMsg pending{};  // mensagem traduzida (ex.: WM_CHAR) aguardando GetMessageA
     bool has_pending{false};
     char last_key{'\0'};  // caractere do WM_KEYDOWN mais recente, para TranslateMessage
+    bool left_button_down{false};  // estado do botão primário, para o wParam do mouse
     std::vector<GuestTimer> timers;  // timers ativos (WM_TIMER)
     int width{0};
     int height{0};
@@ -300,6 +305,24 @@ constexpr unsigned long kKeysymUp = 0xFF52;
 constexpr unsigned long kKeysymRight = 0xFF53;
 constexpr unsigned long kKeysymDown = 0xFF54;
 constexpr unsigned long kKeysymDelete = 0xFFFF;
+
+// Índice do stock object correspondente a um token opaco (o endereço dentro da
+// tabela estática de tokens), ou -1 quando o ponteiro não pertence à tabela.
+[[nodiscard]] int stock_object_index(const void* const token) noexcept {
+    if (token == nullptr) {
+        return -1;
+    }
+    const std::uintptr_t base = reinterpret_cast<std::uintptr_t>(kStockObjectTokens);
+    const std::uintptr_t value = reinterpret_cast<std::uintptr_t>(token);
+    if (value < base) {
+        return -1;
+    }
+    const std::size_t offset = static_cast<std::size_t>(value - base);
+    if (offset >= sizeof(kStockObjectTokens)) {
+        return -1;
+    }
+    return static_cast<int>(offset);
+}
 
 // Virtual key do subconjunto suportado. Teclas especiais são mapeadas pelo
 // keysym; letras usam a maiúscula (como VK_A), demais caracteres ASCII
@@ -810,10 +833,29 @@ TL_MSABI int tl_GetMessageA(void* const msg, const void* const window,  // NOLIN
                 return 1;
             }
             if (event.type == gui::WindowEventType::Press) {
+                slot.left_button_down = true;
                 const abi::Lparam lparam =
                     (static_cast<std::intptr_t>(event.y & 0xFFFF) << 16) |
                     static_cast<std::intptr_t>(event.x & 0xFFFF);
-                write_guest_msg(msg, &slot, abi::kWmLButtonDown, 0, lparam);
+                write_guest_msg(msg, &slot, abi::kWmLButtonDown, abi::kMkLButton, lparam);
+                set_last_error(abi::kErrorSuccess);
+                return 1;
+            }
+            if (event.type == gui::WindowEventType::Release) {
+                slot.left_button_down = false;
+                const abi::Lparam lparam =
+                    (static_cast<std::intptr_t>(event.y & 0xFFFF) << 16) |
+                    static_cast<std::intptr_t>(event.x & 0xFFFF);
+                write_guest_msg(msg, &slot, abi::kWmLButtonUp, 0, lparam);
+                set_last_error(abi::kErrorSuccess);
+                return 1;
+            }
+            if (event.type == gui::WindowEventType::MouseMove) {
+                const abi::Lparam lparam =
+                    (static_cast<std::intptr_t>(event.y & 0xFFFF) << 16) |
+                    static_cast<std::intptr_t>(event.x & 0xFFFF);
+                const abi::Wparam wparam = slot.left_button_down ? abi::kMkLButton : 0;
+                write_guest_msg(msg, &slot, abi::kWmMouseMove, wparam, lparam);
                 set_last_error(abi::kErrorSuccess);
                 return 1;
             }
@@ -1019,8 +1061,7 @@ TL_MSABI int tl_KillTimer(const void* const window, const std::uintptr_t id) noe
 
 // Tokens opacos para stock objects do GDI: o próprio endereço serve de handle
 // e o deslocamento identifica o objeto. Stock objects não são liberados.
-char kStockObjectTokens[24]{};
-
+// (Definido no namespace anônimo; o deslocamento do token é o índice do objeto.)
 TL_MSABI void* tl_GetStockObject(const int object) noexcept {
     if (object < 0 || object >= 24) {
         set_last_error(abi::kErrorInvalidParameter);
@@ -1124,6 +1165,72 @@ TL_MSABI int tl_TextOut(const void* const dc, const int x, const int y,  // NOLI
         diagnostics::TraceField{"length", std::to_string(length)},
     };
     runtime_trace("TextOut", fields, 4);
+    return 1;
+}
+
+TL_MSABI int tl_FillRect(const void* const dc,  // NOLINT(bugprone-easily-swappable-parameters)
+                         const void* const rect, const void* const brush) noexcept {
+    if (rect == nullptr || !mapped_guest_range(rect, sizeof(abi::GuestRect), false)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        trace_guest_failure("FillRect", "rect", "ponteiro RECT inválido");
+        return 0;
+    }
+    WindowSlot* const slot = find_window_slot(dc);
+    if (slot == nullptr || slot->native == nullptr) {
+        set_last_error(abi::kErrorInvalidHandle);
+        trace_guest_failure("FillRect", "dc", "HDC inválido");
+        return 0;
+    }
+    const int brush_index = stock_object_index(brush);
+    if (brush_index < 0 || brush_index >= 6) {
+        set_last_error(abi::kErrorInvalidParameter);
+        trace_guest_failure("FillRect", "brush", "brush deve ser um stock object WHITE..NULL");
+        return 0;
+    }
+    const auto* const rc = static_cast<const abi::GuestRect*>(rect);
+    const int width = rc->right - rc->left;
+    const int height = rc->bottom - rc->top;
+    if (width > 0 && height > 0 && brush_index != 5) {
+        gui::fill_rectangle(slot->native, rc->left, rc->top, width, height, brush_index);
+        gui::flush_window(slot->native);
+    }
+    set_last_error(abi::kErrorSuccess);
+    const std::array<diagnostics::TraceField, 4> fields{
+        diagnostics::TraceField{"symbol", "FillRect"},
+        diagnostics::TraceField{"brush", std::to_string(brush_index)},
+        diagnostics::TraceField{"rect", std::to_string(rc->left) + "," + std::to_string(rc->top) +
+                                     "-" + std::to_string(rc->right) + "," +
+                                     std::to_string(rc->bottom)},
+        diagnostics::TraceField{"status", "success"},
+    };
+    runtime_trace("FillRect", fields, 4);
+    return 1;
+}
+
+TL_MSABI int tl_Rectangle(const void* const dc,  // NOLINT(bugprone-easily-swappable-parameters)
+                          const int left, const int top, const int right,
+                          const int bottom) noexcept {
+    WindowSlot* const slot = find_window_slot(dc);
+    if (slot == nullptr || slot->native == nullptr) {
+        set_last_error(abi::kErrorInvalidHandle);
+        trace_guest_failure("Rectangle", "dc", "HDC inválido");
+        return 0;
+    }
+    const int width = right - left;
+    const int height = bottom - top;
+    if (width > 0 && height > 0) {
+        gui::draw_rectangle(slot->native, left, top, width, height);
+        gui::flush_window(slot->native);
+    }
+    set_last_error(abi::kErrorSuccess);
+    const std::array<diagnostics::TraceField, 4> fields{
+        diagnostics::TraceField{"symbol", "Rectangle"},
+        diagnostics::TraceField{"rect", std::to_string(left) + "," + std::to_string(top) + "-" +
+                                     std::to_string(right) + "," + std::to_string(bottom)},
+        diagnostics::TraceField{"mechanism", "contorno"},
+        diagnostics::TraceField{"status", "success"},
+    };
+    runtime_trace("Rectangle", fields, 4);
     return 1;
 }
 

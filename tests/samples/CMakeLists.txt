@@ -179,6 +179,9 @@ tl_add_pe_fixture(tl_timer src/tl_timer.c manifests/tl_timer.json
 tl_add_pe_fixture(tl_gdi src/tl_gdi.c manifests/tl_gdi.json
     LINK_KERNEL32 LINK_USER32 LINK_GDI32 EXPECT_RESOLVED REPORT_ONLY RELOCATABLE
     REPORT_SYMBOL "GDI32.dll!TextOutA")
+tl_add_pe_fixture(tl_paint src/tl_paint.c manifests/tl_paint.json
+    LINK_KERNEL32 LINK_USER32 LINK_GDI32 EXPECT_RESOLVED REPORT_ONLY RELOCATABLE
+    REPORT_SYMBOL "USER32.dll!FillRect")
 
 tl_add_pe_fixture(tl_crash src/tl_crash.c manifests/tl_crash.json RELOCATABLE NO_RUNTIME_CHECK)
 

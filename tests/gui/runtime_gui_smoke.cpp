@@ -7,8 +7,11 @@
 //      via X11; a fixture encerra quando recebe o WM_CHAR('q').
 //   4. janelas    (opcional, com <input2>): duas janelas simultâneas, cada uma
 //      com WNDPROC próprio; o driver envia 'q' à janela A e 'k' à janela B.
+//   5. mouse      (opcional, com <input6>): envia MotionNotify, ButtonPress e
+//      ButtonRelease sintéticos e depois 'q'; a fixture acumula flags de mouse.
 // Exit codes: tl_win: 1 = WM_CREATE; 3 = WM_CREATE + WM_CHAR('q').
 // tl_win2: 15 = create A + 'q' A + create B + 'k' B (flags 1+2+4+8).
+// tl_paint: 127 = create+paint+down+up+move+click+q (flags 1+2+4+8+16+32+64).
 // Cada cenário exige o exit code esperado, stdout vazio e os eventos do trace.
 
 #include <X11/Xatom.h>
@@ -36,6 +39,7 @@ namespace {
 constexpr const char* kWindowCaption = "Ola do Windows no Linux!";
 constexpr const char* kCaptionA = "Janela A";
 constexpr const char* kCaptionB = "Janela B";
+constexpr const char* kPaintCaption = "Pinte e Clique";
 constexpr int kReadyTimeoutMs = 15000;
 constexpr unsigned int kPollDelayUs = 100000;
 
@@ -208,12 +212,57 @@ bool send_key_pair(const std::string& display, const char* const caption,  // NO
            send_key_state(display, caption, keysym_name, KeyRelease, state);
 }
 
+// Envia um evento sintético de mouse (ButtonPress, ButtonRelease ou
+// MotionNotify do botão 1) para a janela com o título informado nas
+// coordenadas de cliente dadas; o runtime deve produzir WM_LBUTTONDOWN,
+// WM_LBUTTONUP ou WM_MOUSEMOVE.
+bool send_mouse_state(const std::string& display, const char* const caption,  // NOLINT(bugprone-easily-swappable-parameters)
+                      const int x, const int y, const int type, const long mask) {
+    Display* const dpy = XOpenDisplay(display.c_str());
+    if (dpy == nullptr) {
+        return false;
+    }
+    const Window window = find_window_by_caption(dpy, caption);
+    if (window == 0) {
+        XCloseDisplay(dpy);
+        return false;
+    }
+    XEvent event{};
+    event.xbutton.type = type;
+    event.xbutton.display = dpy;
+    event.xbutton.window = window;
+    event.xbutton.root = RootWindow(dpy, DefaultScreen(dpy));
+    event.xbutton.time = CurrentTime;
+    event.xbutton.x = x;
+    event.xbutton.y = y;
+    event.xbutton.x_root = x;
+    event.xbutton.y_root = y;
+    event.xbutton.button = 1;
+    event.xbutton.state = 0;
+    event.xbutton.same_screen = True;
+    XSendEvent(dpy, window, False, mask, &event);
+    XFlush(dpy);
+    XCloseDisplay(dpy);
+    return true;
+}
+
+bool send_motion(const std::string& display, const char* const caption, const int x, const int y) {
+    return send_mouse_state(display, caption, x, y, MotionNotify, PointerMotionMask);
+}
+
+bool send_button(const std::string& display, const char* const caption, const int x, const int y,
+                 const int type) {
+    const long mask = type == ButtonPress ? ButtonPressMask : ButtonReleaseMask;
+    return send_mouse_state(display, caption, x, y, type, mask);
+}
+
 enum class Trigger : unsigned char {
     Nothing,
     CloseRequest,
     KeyQ,
     TwoKeys,
     KeyPairs,
+    Mouse,
 };
 
 struct RunOptions {
@@ -250,6 +299,7 @@ void run_runtime(const std::string& runtime, const std::string& input,
     if (options.trigger != Trigger::Nothing) {
         bool sent_a = false;
         bool sent_b = false;
+        bool sent_c = false;
         bool done = false;
         const auto deadline =
             std::chrono::steady_clock::now() + std::chrono::milliseconds(kReadyTimeoutMs);
@@ -267,6 +317,20 @@ void run_runtime(const std::string& runtime, const std::string& input,
                     sent_b = send_key_pair(display, kWindowCaption, "Return", false);
                 } else {
                     done = send_key_pair(display, kWindowCaption, "Left", false);
+                }
+            } else if (options.trigger == Trigger::Mouse) {
+                // Ordem importa: movimento, pressionar, soltar no botao, 'q'.
+                // As coordenadas (50,50)/(200,100) estão no client area da
+                // janela 480x260 da fixture tl_paint; o botao fica em
+                // (170,90)-(310,130).
+                if (!sent_a) {
+                    sent_a = send_motion(display, kPaintCaption, 50, 50);
+                } else if (!sent_b) {
+                    sent_b = send_button(display, kPaintCaption, 200, 100, ButtonPress);
+                } else if (!sent_c) {
+                    sent_c = send_button(display, kPaintCaption, 200, 100, ButtonRelease);
+                } else {
+                    done = send_key(display, kPaintCaption, "q");
                 }
             } else {
                 if (!sent_a) {
@@ -366,10 +430,10 @@ const std::string kWinKeyChar = "TranslateMessage symbol=\"TranslateMessage\" me
 }  // namespace
 
 int main(const int argc, char** argv) {
-    if (argc < 4 || argc > 8) {
+    if (argc < 4 || argc > 9) {
         std::fprintf(stderr,
                      "uso: runtime_gui_smoke <runtime> <input> <work-dir> [input2] [input3] "
-                     "[input4] [input5]\n");
+                     "[input4] [input5] [input6]\n");
         return 2;
     }
     const std::string runtime = argv[1];
@@ -379,6 +443,7 @@ int main(const int argc, char** argv) {
     const std::string input3 = argc >= 6 ? argv[5] : std::string{};
     const std::string input4 = argc >= 7 ? argv[6] : std::string{};
     const std::string input5 = argc >= 8 ? argv[7] : std::string{};
+    const std::string input6 = argc >= 9 ? argv[8] : std::string{};
 
     std::error_code error;
     std::filesystem::create_directories(work_dir, error);
@@ -517,6 +582,33 @@ int main(const int argc, char** argv) {
                 {"GetStockObject symbol=\"GetStockObject\" object=\"0\" status=\"success\"",
                  "BeginPaint symbol=\"BeginPaint\" status=\"success\"",
                  "TextOut symbol=\"TextOut\" x=\"10\" y=\"10\" length=\"17\"",
+                 "EndPaint symbol=\"EndPaint\" status=\"success\""},
+            });
+    }
+
+    if (!input6.empty()) {
+        const RunOptions paint_options{
+            .autoclose = false,
+            .trigger = Trigger::Mouse,
+            .expected_exit = 127,
+            .trace_path = work_dir + "/trace_paint.log",
+            .stdout_path = work_dir + "/stdout_paint.log",
+        };
+        run_runtime(runtime, input6, display, paint_options);
+        verify_run(
+            work_dir, "paint",
+            RunExpectations{
+                127,
+                {"RegisterClassExA symbol=\"RegisterClassExA\" class=\"tlpaint\" "
+                 "atom=\"1\" status=\"success\""},
+                {"CreateWindowExA symbol=\"CreateWindowExA\" class=\"tlpaint\" "
+                 "window=\"Pinte e Clique\" status=\"success\""},
+                {"TranslateMessage symbol=\"TranslateMessage\" message=\"WM_CHAR\" "
+                 "wparam=\"113\" status=\"translated\""},
+                {"GetStockObject symbol=\"GetStockObject\" object=\"0\" status=\"success\"",
+                 "FillRect symbol=\"FillRect\" brush=\"1\"",
+                 "Rectangle symbol=\"Rectangle\"",
+                 "BeginPaint symbol=\"BeginPaint\" status=\"success\"",
                  "EndPaint symbol=\"EndPaint\" status=\"success\""},
             });
     }

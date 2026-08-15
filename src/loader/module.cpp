@@ -108,6 +108,7 @@ void register_builtin_modules() {
         {"ReleaseDC", 15, reinterpret_cast<std::uintptr_t>(&tl_ReleaseDC)},
         {"BeginPaint", 16, reinterpret_cast<std::uintptr_t>(&tl_BeginPaint)},
         {"EndPaint", 17, reinterpret_cast<std::uintptr_t>(&tl_EndPaint)},
+        {"FillRect", 18, reinterpret_cast<std::uintptr_t>(&tl_FillRect)},
     };
     static const InternalModule kUser32Module{"USER32.dll", kUser32Exports};
     register_module(kUser32Module);
@@ -115,6 +116,7 @@ void register_builtin_modules() {
         {"GetStockObject", 1, reinterpret_cast<std::uintptr_t>(&tl_GetStockObject)},
         {"TextOutA", 2, reinterpret_cast<std::uintptr_t>(&tl_TextOut)},
         {"TextOut", 3, reinterpret_cast<std::uintptr_t>(&tl_TextOut)},
+        {"Rectangle", 4, reinterpret_cast<std::uintptr_t>(&tl_Rectangle)},
     };
     static const InternalModule kGdi32Module{"GDI32.dll", kGdi32Exports};
     register_module(kGdi32Module);

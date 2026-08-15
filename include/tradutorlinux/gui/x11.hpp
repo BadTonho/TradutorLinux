@@ -8,7 +8,9 @@ namespace tradutorlinux::gui {
 enum class WindowEventType {
     Idle,           // nenhum evento pendente para a janela
     Redraw,         // redesenho disponível (equivale a WM_PAINT)
-    Press,          // clique primário (equivale a WM_LBUTTONDOWN)
+    Press,          // botão primário pressionado (equivale a WM_LBUTTONDOWN)
+    Release,        // botão primário liberado (equivale a WM_LBUTTONUP)
+    MouseMove,      // ponteiro movido (equivale a WM_MOUSEMOVE)
     KeyDown,        // tecla pressionada (equivale a WM_KEYDOWN)
     KeyUp,          // tecla liberada (equivale a WM_KEYUP)
     CloseRequested, // WM_DELETE_WINDOW do gerenciador de janelas (equivale a WM_CLOSE)
@@ -33,10 +35,14 @@ bool map_window(NativeWindow window) noexcept;
 void unmap_window(NativeWindow window) noexcept;
 void flush_window(NativeWindow window) noexcept;
 
-// Desenha texto e um retângulo de contorno no client area da janela.
+// Desenha texto, um retângulo de contorno e um preenchimento sólido no client
+// area da janela. `brush_index` segue os stock brushes do Win32: 0 WHITE,
+// 1 LTGRAY, 2 GRAY, 3 DKGRAY, 4 BLACK, 5 NULL (sem preenchimento).
 void draw_text(NativeWindow window, const char* text, int x, int y) noexcept;
 void draw_text_len(NativeWindow window, const char* text, int length, int x, int y) noexcept;
 void draw_rectangle(NativeWindow window, int x, int y, int width, int height) noexcept;
+void fill_rectangle(NativeWindow window, int x, int y, int width, int height,
+                    int brush_index) noexcept;
 
 // Retorna o próximo evento pendente da janela, drenando um evento X por chamada.
 // Eventos não relevantes para a janela informada são descartados.

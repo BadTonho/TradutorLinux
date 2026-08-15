@@ -58,7 +58,10 @@ constexpr Uint kWmKeyDown = 0x0100;
 constexpr Uint kWmKeyUp = 0x0101;
 constexpr Uint kWmChar = 0x0102;
 constexpr Uint kWmTimer = 0x0113;
+constexpr Uint kWmMouseMove = 0x0200;
 constexpr Uint kWmLButtonDown = 0x0201;
+constexpr Uint kWmLButtonUp = 0x0202;
+constexpr Wparam kMkLButton = 0x0001;  // MK_LBUTTON
 constexpr int kSwShow = 1;
 
 // Virtual keys (subconjunto suportado).
@@ -173,6 +176,8 @@ TL_MSABI void* tl_GetStockObject(int object) noexcept;
 TL_MSABI void* tl_BeginPaint(const void* window, void* paint_struct) noexcept;
 TL_MSABI int tl_EndPaint(const void* window, const void* paint_struct) noexcept;
 TL_MSABI int tl_TextOut(const void* dc, int x, int y, const char* text, int length) noexcept;
+TL_MSABI int tl_FillRect(const void* dc, const void* rect, const void* brush) noexcept;
+TL_MSABI int tl_Rectangle(const void* dc, int left, int top, int right, int bottom) noexcept;
 TL_MSABI void* tl_GetDC(const void* window) noexcept;
 TL_MSABI int tl_ReleaseDC(const void* window, const void* dc) noexcept;
 
