@@ -53,12 +53,18 @@ __attribute__((dllimport, noreturn)) void ExitProcess(dword_t exit_code);
 static const char kClassName[] = "tlwin";
 static const char kWindowName[] = "Ola do Windows no Linux!";
 
+static int g_wm_create_seen = 0;
+
 static lresult_t wndproc(hwnd_t hwnd, uint_t message, wparam_t wparam, lparam_t lparam) {
     (void)hwnd;
     (void)wparam;
     (void)lparam;
+    if (message == 0x0001U) { /* WM_CREATE */
+        g_wm_create_seen = 1;
+        return 0;
+    }
     if (message == 0x0002U) { /* WM_DESTROY */
-        PostQuitMessage(0);
+        PostQuitMessage(g_wm_create_seen);
         return 0;
     }
     return DefWindowProcA(hwnd, message, wparam, lparam);

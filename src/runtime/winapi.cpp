@@ -645,6 +645,14 @@ TL_MSABI abi::HWnd tl_CreateWindowExA(const std::uint32_t,  // NOLINT(bugprone-e
     slot.wndproc = cls->wndproc;
     slot.class_name = cls->name;
     slot.native = native;
+    const abi::Lresult create_result = call_wndproc(slot.wndproc, &slot, abi::kWmCreate, 0, 0);
+    if (create_result == -1) {
+        gui::destroy_window(slot.native);
+        slot = {};
+        set_last_error(abi::kErrorInvalidParameter);
+        trace_guest_failure("CreateWindowExA", "wm-create", "WM_CREATE rejeitou a criação");
+        return nullptr;
+    }
     set_last_error(abi::kErrorSuccess);
     const std::array<diagnostics::TraceField, 4> fields{
         diagnostics::TraceField{"symbol", "CreateWindowExA"},

@@ -50,6 +50,8 @@ constexpr Dword kStdErrorHandle = 0xFFFFFFF4U;   // STD_ERROR_HANDLE (-12)
 
 constexpr Uint kWmPaint = 0x000F;
 constexpr Uint kWmClose = 0x0010;
+constexpr Uint kWmCreate = 0x0001;
+
 constexpr Uint kWmDestroy = 0x0002;
 constexpr Uint kWmQuit = 0x0012;
 constexpr Uint kWmLButtonDown = 0x0201;

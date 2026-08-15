@@ -3,7 +3,9 @@
 //   1. autoclose  (TL_GUI_AUTOCLOSE_MS != 0): WM_QUIT sem interação.
 //   2. fechar     (TL_GUI_AUTOCLOSE_MS == 0): envia WM_DELETE_WINDOW via X11,
 //      como o botão de fechar de um window manager faria.
-// Em ambos exige exit-code 0, stdout vazio e os eventos esperados no trace.
+// Em ambos exige exit-code 1 (a fixture só chega ao WM_DESTROY com
+// PostQuitMessage(1) se o WM_CREATE foi despachado), stdout vazio e os eventos
+// esperados no trace.
 
 #include <X11/Xatom.h>
 #include <X11/Xlib.h>
@@ -203,8 +205,8 @@ void run_runtime(const std::string& runtime, const std::string& input,
         ::waitpid(runtime_pid, &status, 0);
         fail("timeout aguardando o runtime encerrar");
     }
-    if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) {
-        fail("runtime não terminou com exit-code 0");
+    if (!WIFEXITED(status) || WEXITSTATUS(status) != 1) {
+        fail("runtime não terminou com exit-code 1 (WM_CREATE deve ter sido despachado)");
     }
 }
 
@@ -220,11 +222,11 @@ void verify_run(const std::string& work_dir, const std::string& scenario,
         "status=\"success\"",
         "CreateWindowExA symbol=\"CreateWindowExA\" class=\"tlwin\" "
         "window=\"Ola do Windows no Linux!\" status=\"success\"",
-        "GetMessageA symbol=\"GetMessageA\" message=\"WM_QUIT\" exit-code=\"0\" "
+        "GetMessageA symbol=\"GetMessageA\" message=\"WM_QUIT\" exit-code=\"1\" "
         "result=\"quit\"",
-        "ExitProcess symbol=\"ExitProcess\" exit-code=\"0\" status=\"success\" "
+        "ExitProcess symbol=\"ExitProcess\" exit-code=\"1\" status=\"success\" "
         "mechanism=\"guest-transfer\"",
-        "exit exit-code=\"0\" explicit=\"sim\"",
+        "exit exit-code=\"1\" explicit=\"sim\"",
     };
     for (const char* const needle : expected) {
         require_trace_contains(trace, needle, scenario + (autoclose ? " (autoclose)" : ""));

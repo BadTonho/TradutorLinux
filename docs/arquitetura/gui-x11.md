@@ -33,7 +33,7 @@ Além de `MessageBoxA`, `USER32.dll` exporta um subconjunto mínimo de janela:
 | API | Comportamento suportado |
 |---|---|
 | `RegisterClassExA` | Lê a `WNDCLASSEXA` do convidado (layout Microsoft x64, 80 bytes), valida `cbSize >= 80`, `lpfnWndProc` e `lpszClassName`, registra por nome (comparação sem diferenciar maiúsculas) e retorna um atom `>= 1`. |
-| `CreateWindowExA` | Procura a classe, cria a janela X11 e devolve um `HWND` token opaco. Aceita largura/altura `<= 0` (usa 480×180). Parent, menu, instância e parâmetro são ignorados. |
+| `CreateWindowExA` | Procura a classe, cria a janela X11 e despacha `WM_CREATE` ao `WNDPROC` do convidado antes de devolver o `HWND` token opaco; se o `WNDPROC` retornar `-1`, destrói a janela e devolve `NULL` (`lParam` do `WM_CREATE` é `0`; não há `CREATESTRUCT`). Aceita largura/altura `<= 0` (usa 480×180). Parent, menu, instância e parâmetro são ignorados. |
 | `ShowWindow` | Mapeia/desmapeia a janela X11; `cmdShow != 0` mostra, `0` esconde. |
 | `UpdateWindow` | Despacha `WM_PAINT` diretamente ao `WNDPROC` do convidado. |
 | `GetMessageA` | Drena os eventos X11 da janela, traduz e preenche o `MSG` do convidado; retorna `0` quando `PostQuitMessage` foi chamado (preenche `WM_QUIT`). Os filtros `wMsgFilterMin`/`wMsgFilterMax` e `hWnd` (quando `NULL` não filtra) são ignorados; `hWnd != NULL` filtra por janela. |
@@ -69,7 +69,9 @@ próprio e cobre dois cenários:
    `WM_CLOSE → DefWindowProcA → DestroyWindow → WM_DESTROY →
    PostQuitMessage(0) → GetMessageA/WM_QUIT → ExitProcess(0)`.
 
-Ambos exigem exit-code `0`, `stdout` vazio (trace só em `stderr`) e os eventos
+Ambos exigem exit-code `1` — a fixture `tl_win.c` marca uma flag no `WM_CREATE`
+e faz `PostQuitMessage(flag)` no `WM_DESTROY`, então o exit code prova que o
+`WM_CREATE` foi despachado — `stdout` vazio (trace só em `stderr`) e os eventos
 `RegisterClassExA`, `CreateWindowExA`, `GetMessageA message="WM_QUIT"`,
 `ExitProcess` e `exit explicit="sim"` no trace. O teste é configurado pelo CMake
 somente quando `xvfb` está disponível (CI instala `xvfb`). Para o smoke test
