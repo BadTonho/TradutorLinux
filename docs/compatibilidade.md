@@ -11,7 +11,7 @@ Esta matriz declara o comportamento suportado; ela não é uma promessa de compa
 | `tl_echo.exe` | PE32+ AMD64 | Não | `KERNEL32.dll!ExitProcess`, `GetStdHandle`, `ReadFile`, `WriteFile` | Suportado no MVP: ecoa stdin para stdout com handles padrão | Fase 5 |
 | `tl_file.exe` | PE32+ AMD64 | Não | `KERNEL32.dll!CloseHandle`, `CreateFileA`, `ExitProcess`, `GetLastError`, `GetStdHandle`, `ReadFile`, `SetLastError`, `VirtualAlloc`, `VirtualFree`, `WriteFile` | Suportado no subconjunto da Fase 5: aloca memória e grava/reabre/lê arquivo relativo | Fase 6 |
 | `tl_gui.exe` | PE32+ AMD64 | Não | `KERNEL32.dll!ExitProcess`, `USER32.dll!MessageBoxA` | Protótipo manual: caixa modal X11 mínima; não executado automaticamente por depender de display | Fase 7 |
-| `tl_win.exe` | PE32+ AMD64 | Não | `KERNEL32.dll!ExitProcess`, `USER32.dll!RegisterClassExA`, `CreateWindowExA`, `ShowWindow`, `UpdateWindow`, `GetMessageA`, `TranslateMessage`, `DispatchMessageA`, `DefWindowProcA`, `PostQuitMessage` | Protótipo manual: janela real com message loop X11; fecha via `WM_CLOSE`/autoclose; não executado automaticamente por depender de display | Fase 7 |
+| `tl_win.exe` | PE32+ AMD64 | Não | `KERNEL32.dll!ExitProcess`, `USER32.dll!RegisterClassExA`, `CreateWindowExA`, `ShowWindow`, `UpdateWindow`, `GetMessageA`, `TranslateMessage`, `DispatchMessageA`, `DefWindowProcA`, `PostQuitMessage` | Janela real com message loop X11; fecha via `WM_CLOSE`/autoclose; executado automaticamente sob Xvfb (teste `runtime_gui_smoke`, cenários autoclose e `WM_DELETE_WINDOW`) | Fase 7 |
 | `tl_reloc.exe` | PE32+ AMD64 | Não | Nenhum | Gerado com `-Wl,--dynamicbase`, verificado, parseado e mapeado na Fase 2; usado para validar base relocations | Fase 4 |
 | `tl_missing_dll.exe` | PE32+ AMD64 | Não | `USER32.dll!MessageBoxW` | Gerado, verificado e rejeitado na Fase 3: `USER32.dll` é conhecida, mas o símbolo diagnostica `unknown-symbol`; retorna `5` sem executar o entry point | Fase 4 |
 
@@ -115,6 +115,8 @@ experimental, não altera o subsistema de console e só aceita `type == 0` em
 | `USER32.dll` | `DestroyWindow` | Suportado | Destrói a janela e despacha `WM_DESTROY` |
 | `USER32.dll` | `PostQuitMessage` | Suportado | Sinaliza `WM_QUIT`; `GetMessageA` retorna `0` |
 
-`tl_gui.exe` e `tl_win.exe` são validados automaticamente quanto a formato e
-imports; a janela deve ser validada manualmente em uma sessão X11 (ver
+`tl_gui.exe` é validado automaticamente quanto a formato e imports; a janela
+deve ser validada manualmente numa sessão X11. `tl_win.exe` é executado de
+ponta a ponta sob `Xvfb` pelo teste `runtime_gui_smoke`, que cobre o message
+loop (autoclose) e o fechamento real por `WM_DELETE_WINDOW` (ver
 [`gui-x11.md`](arquitetura/gui-x11.md)).

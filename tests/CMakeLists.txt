@@ -28,3 +28,25 @@ endif()
 
 include(GoogleTest)
 gtest_discover_tests(tradutorlinux_unit_tests)
+
+find_program(TL_XVFB_EXECUTABLE xvfb)
+if(TL_XVFB_EXECUTABLE AND TARGET tradutorlinux_samples AND TARGET tradutorlinux)
+    find_library(TL_X11_LIBRARY X11 REQUIRED)
+    add_executable(runtime_gui_smoke
+        gui/runtime_gui_smoke.cpp
+    )
+    target_link_libraries(runtime_gui_smoke PRIVATE "${TL_X11_LIBRARY}")
+    tl_enable_warnings(runtime_gui_smoke)
+    add_test(
+        NAME runtime_gui_smoke
+        COMMAND runtime_gui_smoke
+            "$<TARGET_FILE:tradutorlinux>"
+            "${CMAKE_CURRENT_BINARY_DIR}/samples/generated/tl_win.exe"
+            "${CMAKE_CURRENT_BINARY_DIR}/runtime_gui_smoke"
+    )
+    set_tests_properties(runtime_gui_smoke PROPERTIES
+        DEPENDS fixture_tl_win_metadata
+        LABELS "runtime;pe32plus;gui"
+        TIMEOUT 90
+    )
+endif()

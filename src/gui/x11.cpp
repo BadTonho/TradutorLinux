@@ -31,8 +31,24 @@ struct WindowState {
 
 std::array<WindowState, kMaxWindows> g_windows{};
 
+class DisplayCloser {
+public:
+    explicit DisplayCloser(Display* const dpy) noexcept : dpy_(dpy) {}
+    ~DisplayCloser() {
+        if (dpy_ != nullptr) {
+            XCloseDisplay(dpy_);
+        }
+    }
+    DisplayCloser(const DisplayCloser&) = delete;
+    DisplayCloser& operator=(const DisplayCloser&) = delete;
+
+private:
+    Display* dpy_;
+};
+
 [[nodiscard]] Display* display() noexcept {
-    static Display* instance = XOpenDisplay(nullptr);
+    static Display* const instance = XOpenDisplay(nullptr);
+    static DisplayCloser closer{instance};
     return instance;
 }
 

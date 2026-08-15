@@ -16,7 +16,8 @@ para a janela consultada são descartados.
 Quando `TL_GUI_AUTOCLOSE_MS` é diferente de `0`, o pump gera `CloseRequested`
 (→ `WM_CLOSE`) após aproximadamente 100 ms, permitindo testes de integração
 numa sessão X11 sem interação humana. O ambiente precisa fornecer `DISPLAY`
-acessível.
+acessível. O display X11 do processo é fechado no teardown (`DisplayCloser` em
+`src/gui/x11.cpp`), de modo que o runtime não deixa conexão aberta ao sair.
 
 ## `MessageBoxA`
 
@@ -56,7 +57,23 @@ escopo.
 
 As fixtures `tl_gui.exe` e `tl_win.exe` são validadas automaticamente pelo
 parser, metadata e `--report`, que confirmam os imports sem executar o entry
-point. Para o smoke test manual de `tl_win.exe` (janela real + message loop):
+point. Além disso, `tl_win.exe` é executado de ponta a ponta no teste
+`runtime_gui_smoke` (`tests/gui/runtime_gui_smoke.cpp`), que sobe um `Xvfb`
+próprio e cobre dois cenários:
+
+1. **autoclose** — `TL_GUI_AUTOCLOSE_MS != 0`: o message loop encerra sozinho
+   via `WM_QUIT`, sem interação.
+2. **fechar** — `TL_GUI_AUTOCLOSE_MS == 0`: o driver localiza a janela pelo
+   título e envia `WM_DELETE_WINDOW` (o mesmo `ClientMessage` que o botão de
+   fechar de um window manager envia), exercitando
+   `WM_CLOSE → DefWindowProcA → DestroyWindow → WM_DESTROY →
+   PostQuitMessage(0) → GetMessageA/WM_QUIT → ExitProcess(0)`.
+
+Ambos exigem exit-code `0`, `stdout` vazio (trace só em `stderr`) e os eventos
+`RegisterClassExA`, `CreateWindowExA`, `GetMessageA message="WM_QUIT"`,
+`ExitProcess` e `exit explicit="sim"` no trace. O teste é configurado pelo CMake
+somente quando `xvfb` está disponível (CI instala `xvfb`). Para o smoke test
+manual interativo de `tl_win.exe`:
 
 ```bash
 TL_GUI_AUTOCLOSE_MS=0 ./build/debug/src/tradutorlinux \
@@ -64,9 +81,7 @@ TL_GUI_AUTOCLOSE_MS=0 ./build/debug/src/tradutorlinux \
 ```
 
 A janela "Ola do Windows no Linux!" abre; fechá-la pelo botão do gerenciador de
-janelas (ou aguardar o autoclose com `TL_GUI_AUTOCLOSE_MS=1`) percorre o caminho
-`WM_CLOSE → DefWindowProcA → DestroyWindow → WM_DESTROY → PostQuitMessage(0) →
-GetMessageA/WM_QUIT → ExitProcess(0)` e encerra com código `0`.
+janelas percorre o mesmo caminho de encerramento e termina com código `0`.
 
 Wayland nativo, GDI, recursos, ícones, menus, múltiplas janelas simultâneas e
 toolkits não fazem parte deste protótipo.

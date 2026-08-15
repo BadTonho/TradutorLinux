@@ -19,7 +19,7 @@ jobs:
           sudo apt update
           sudo apt install --yes \
             build-essential cmake ninja-build llvm clang-tidy cppcheck \
-            gcc-mingw-w64-x86-64-win32 libx11-dev
+            gcc-mingw-w64-x86-64-win32 libx11-dev xvfb
 
       - name: Configurar Debug
         run: cmake --preset debug
@@ -53,7 +53,7 @@ jobs:
       - name: Instalar dependências
         run: |
           sudo apt update
-          sudo apt install --yes build-essential cmake ninja-build llvm gcc-mingw-w64-x86-64-win32 libx11-dev
+          sudo apt install --yes build-essential cmake ninja-build llvm gcc-mingw-w64-x86-64-win32 libx11-dev xvfb
 
       - name: Configurar Sanitizers
         run: cmake --preset sanitize

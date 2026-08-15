@@ -21,7 +21,8 @@ Os itens marcados como concluídos devem ter evidência no repositório: código
 
 - **Fase atual:** Fase 7 — Avaliar GUI.
 - **Marco concluído:** a Fase 7 foi validada de ponta a ponta e a decisão de produto foi tomada: **seguir com a GUI Win32 mínima como objetivo experimental**. `tl_gui.exe` abriu a janela X11, recebeu o clique em OK e encerrou com código `0`; `tl_win.exe` criou uma janela real e executou um message loop completo (`RegisterClassExA`, `CreateWindowExA`, `ShowWindow`, `GetMessageA`, `DispatchMessageA`, `DefWindowProcA`, `PostQuitMessage`), encerrando via `WM_CLOSE`/autoclose com código `0`; o modo `--report` lista imports suportados sem executar o PE; `tl_hello`, `tl_echo` e `tl_file` têm regressões e limitações publicadas na matriz.
-- **Próximo resultado observável:** definir a próxima API ou aplicativo-alvo do subsistema de janela (ex.: `WM_CREATE` explícito, teclado em `TranslateMessage`, segunda janela) ou migrar o smoke test de GUI para um display virtual em CI (ex.: Xvfb) para cobertura automática.
+- **Marco concluído:** o smoke test de GUI passou a ter cobertura automática em CI. O teste `runtime_gui_smoke` sobe um `Xvfb` próprio e executa `tl_win.exe` de ponta a ponta em dois cenários: autoclose (message loop encerra sozinho via `WM_QUIT`) e fechamento real por `WM_DELETE_WINDOW` (mesmo `ClientMessage` do botão de fechar do WM), exigindo exit-code `0`, stdout vazio e os eventos esperados no trace. A conexão X11 do runtime é fechada no teardown (`DisplayCloser`), validado sob ASAN com `detect_leaks=1`.
+- **Próximo resultado observável:** definir a próxima API ou aplicativo-alvo do subsistema de janela (ex.: `WM_CREATE` explícito, teclado em `TranslateMessage`, segunda janela) e adicionar o teste de integração correspondente.
 
 ## Fase 0 — Fundação e contrato
 
