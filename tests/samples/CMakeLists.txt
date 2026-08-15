@@ -15,7 +15,8 @@ set(TL_FIXTURE_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/generated")
 
 function(tl_add_pe_fixture target_name source_file manifest_file)
     set(options LINK_KERNEL32 LINK_USER32 RELOCATABLE RUNTIME_FAILURE EXPECT_RESOLVED CONSOLE REPORT REPORT_ONLY)
-    cmake_parse_arguments(ARG "${options}" "" "" ${ARGN})
+    set(oneValueArgs REPORT_SYMBOL)
+    cmake_parse_arguments(ARG "${options}" "${oneValueArgs}" "" ${ARGN})
 
     set(output_file "${TL_FIXTURE_OUTPUT_DIRECTORY}/${target_name}.exe")
     set(link_libraries)
@@ -127,6 +128,9 @@ function(tl_add_pe_fixture target_name source_file manifest_file)
         if(ARG_REPORT_ONLY)
             set(report_extra_args -DEXPECT_USER32=1)
         endif()
+        if(ARG_REPORT_SYMBOL)
+            list(APPEND report_extra_args "-DEXPECTED_SYMBOL=${ARG_REPORT_SYMBOL}")
+        endif()
         add_test(
             NAME report_${target_name}_support
             COMMAND "${CMAKE_COMMAND}"
@@ -156,3 +160,6 @@ tl_add_pe_fixture(tl_missing_dll src/tl_missing_dll.c manifests/tl_missing_dll.j
     LINK_USER32 RUNTIME_FAILURE RELOCATABLE)
 tl_add_pe_fixture(tl_gui src/tl_gui.c manifests/tl_gui.json
     LINK_KERNEL32 LINK_USER32 EXPECT_RESOLVED REPORT_ONLY RELOCATABLE)
+tl_add_pe_fixture(tl_win src/tl_win.c manifests/tl_win.json
+    LINK_KERNEL32 LINK_USER32 EXPECT_RESOLVED REPORT_ONLY RELOCATABLE
+    REPORT_SYMBOL "USER32.dll!RegisterClassExA")

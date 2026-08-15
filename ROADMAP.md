@@ -20,8 +20,8 @@ Os itens marcados como concluídos devem ter evidência no repositório: código
 ## Estado atual
 
 - **Fase atual:** Fase 7 — Avaliar GUI.
-- **Marco concluído:** a Fase 7 foi validada de ponta a ponta: `tl_gui.exe` abriu a janela X11, recebeu o clique em OK e encerrou com código `0`; o modo `--report` lista imports suportados sem executar o PE; `tl_hello`, `tl_echo` e `tl_file` têm regressões e limitações publicadas na matriz; existe um protótipo isolado de GUI X11 para `MessageBoxA`.
-- **Próximo resultado observável:** avaliar a decisão de produto da Fase 7 — seguir com a GUI Win32 mínima como objetivo ou encerrar a exploração — e atualizar o roadmap conforme a decisão.
+- **Marco concluído:** a Fase 7 foi validada de ponta a ponta e a decisão de produto foi tomada: **seguir com a GUI Win32 mínima como objetivo experimental**. `tl_gui.exe` abriu a janela X11, recebeu o clique em OK e encerrou com código `0`; `tl_win.exe` criou uma janela real e executou um message loop completo (`RegisterClassExA`, `CreateWindowExA`, `ShowWindow`, `GetMessageA`, `DispatchMessageA`, `DefWindowProcA`, `PostQuitMessage`), encerrando via `WM_CLOSE`/autoclose com código `0`; o modo `--report` lista imports suportados sem executar o PE; `tl_hello`, `tl_echo` e `tl_file` têm regressões e limitações publicadas na matriz.
+- **Próximo resultado observável:** definir a próxima API ou aplicativo-alvo do subsistema de janela (ex.: `WM_CREATE` explícito, teclado em `TranslateMessage`, segunda janela) ou migrar o smoke test de GUI para um display virtual em CI (ex.: Xvfb) para cobertura automática.
 
 ## Fase 0 — Fundação e contrato
 
@@ -128,14 +128,16 @@ Validação: `tl_hello.exe`, `tl_echo.exe` e `tl_file.exe` possuem testes de int
 - [x] Criar um subsistema de janela e eventos separado do runtime de console.
 - [x] Começar por `MessageBoxA` e uma janela simples, com fixture PE32+ e teste automatizado de metadata/report.
 - [x] Definir a integração inicial com X11 direto, mantendo a camada isolada para futura decisão sobre Wayland/toolkit.
+- [x] Implementar um subconjunto mínimo de janela e eventos (`RegisterClassExA`, `CreateWindowExA`, `ShowWindow`, `UpdateWindow`, `GetMessageA`, `TranslateMessage`, `DispatchMessageA`, `DefWindowProcA`, `DestroyWindow`, `PostQuitMessage`) com fixture `tl_win.exe` que cria janela, desenha texto e encerra ao fechar (`WM_CLOSE`).
+- [x] Provar a fronteira de ABI host→convidado invocando o `WNDPROC` do convidado pela convenção Microsoft x64.
 
-Validação local: os 108 testes dos presets `debug` e `sanitize` passam, incluindo `tl_gui.exe`, resolução de `USER32.dll!MessageBoxA` e relatório sem execução. O loader valida o entry point, usa a pilha convidada com guard page, aplica relocations e rejeita execução fora da base quando não há relocations.
+Validação local: os 113 testes dos presets `debug` e `sanitize` passam, incluindo `tl_win.exe`, resolução dos novos imports de `USER32.dll`, o relatório sem execução e os testes unitários de layout `MSG`/`WNDCLASSEXA` e do ponteiro `WNDPROC` reconstruído por `bit_cast`. O loader valida o entry point, usa a pilha convidada com guard page, aplica relocations e rejeita execução fora da base quando não há relocations. `cppcheck` e `clang-tidy` passam sem pendências.
 
 ### Critério de saída — atendido
 
 Uma aplicação gráfica de teste cria uma janela, recebe eventos básicos e encerra corretamente, sem comprometer o runtime de console.
 
-Validação visual (2026-08-15, sessão X11 `DISPLAY=:0` acessível): `tl_gui.exe` executado com `--trace` abriu a janela "TradutorLinux GUI / Fase 7" com botão OK; ao clicar, o runtime registrou `[tl][runtime][info] ExitProcess exit-code="0" status="success" mechanism="guest-transfer"`, `[tl][process][info] exit exit-code="0" explicit="sim"` e encerrou com código `0`, liberando a imagem. O caminho X11 do `MessageBoxA` foi confirmado de ponta a ponta.
+Validação visual (2026-08-15, sessão X11 `DISPLAY=:0` acessível): `tl_gui.exe` executado com `--trace` abriu a janela "TradutorLinux GUI / Fase 7" com botão OK; ao clicar, o runtime registrou `[tl][runtime][info] ExitProcess exit-code="0" status="success" mechanism="guest-transfer"`, `[tl][process][info] exit exit-code="0" explicit="sim"` e encerrou com código `0`, liberando a imagem. `tl_win.exe` executado com `--trace` e `TL_GUI_AUTOCLOSE_MS=1` registrou `RegisterClassExA`, `CreateWindowExA`, `GetMessageA message="WM_QUIT"` e `ExitProcess exit-code="0"`, confirmando o message loop de ponta a ponta (autoclose → `WM_CLOSE` → `DefWindowProcA` → `DestroyWindow` → `WM_DESTROY` → `PostQuitMessage(0)`).
 
 ## Próximos marcos
 
@@ -147,7 +149,7 @@ Validação visual (2026-08-15, sessão X11 `DISPLAY=:0` acessível): `tl_gui.ex
 | M4 — Console | `tl_hello.exe` executa com saída e retorno corretos. |
 | M5 — Arquivos | Fixture lê e escreve arquivo com semântica documentada. |
 | M6 — Cobertura | Primeira aplicação-alvo adicional incluída na matriz e na regressão. |
-| M7 — GUI | Decisão de produto tomada e, se aprovada, primeiro protótipo funcional. |
+| M7 — GUI | Janela real com message loop (`tl_win.exe`) e decisão de produto tomada: GUI Win32 mínima segue como objetivo experimental. |
 
 ## Definição de pronto
 

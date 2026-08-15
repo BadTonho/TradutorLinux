@@ -18,9 +18,14 @@ namespace abi {
 
 // Tipos mínimos do Win32 usados pelas APIs suportadas.
 using Handle = void*;
+using HWnd = void*;
 using Bool = int;
 using Dword = std::uint32_t;
 using Uint = std::uint32_t;
+using Wparam = std::uintptr_t;
+using Lparam = std::intptr_t;
+using Lresult = std::intptr_t;
+using Atom = std::uint16_t;
 
 constexpr Dword kErrorSuccess = 0;
 constexpr Dword kErrorFileNotFound = 2;
@@ -42,6 +47,44 @@ constexpr Dword kPageReadWrite = 0x04U;
 constexpr Dword kStdInputHandle = 0xFFFFFFF6U;   // STD_INPUT_HANDLE (-10)
 constexpr Dword kStdOutputHandle = 0xFFFFFFF5U;  // STD_OUTPUT_HANDLE (-11)
 constexpr Dword kStdErrorHandle = 0xFFFFFFF4U;   // STD_ERROR_HANDLE (-12)
+
+constexpr Uint kWmPaint = 0x000F;
+constexpr Uint kWmClose = 0x0010;
+constexpr Uint kWmDestroy = 0x0002;
+constexpr Uint kWmQuit = 0x0012;
+constexpr Uint kWmLButtonDown = 0x0201;
+constexpr int kSwShow = 1;
+
+// MSG com layout Microsoft x64 (48 bytes). Campos em offsets fixos para
+// leitura/escrita de memória convidada.
+struct GuestMsg {
+    HWnd hwnd{};
+    std::uint32_t message{};
+    std::uint32_t padding{};
+    Wparam wparam{};
+    Lparam lparam{};
+    std::uint32_t time{};
+    std::int32_t pt_x{};
+    std::int32_t pt_y{};
+};
+static_assert(sizeof(GuestMsg) == 48);
+
+// WNDCLASSEXA com layout Microsoft x64 (80 bytes).
+struct GuestWndClassExA {
+    std::uint32_t cb_size{};
+    std::uint32_t style{};
+    std::uintptr_t window_proc{};
+    std::int32_t class_extra{};
+    std::int32_t window_extra{};
+    void* instance{};
+    void* icon{};
+    void* cursor{};
+    void* background{};
+    const char* menu_name{};
+    const char* class_name{};
+    void* icon_sm{};
+};
+static_assert(sizeof(GuestWndClassExA) == 80);
 
 }  // namespace abi
 
@@ -70,6 +113,21 @@ TL_MSABI void* tl_CreateFileA(const char* path, std::uint32_t desired_access,
 TL_MSABI int tl_CloseHandle(const void* handle) noexcept;
 TL_MSABI std::uint32_t tl_MessageBoxA(const void* owner, const char* text, const char* caption,
                                       std::uint32_t type) noexcept;
+TL_MSABI abi::Atom tl_RegisterClassExA(const void* wnd_class) noexcept;
+TL_MSABI abi::HWnd tl_CreateWindowExA(std::uint32_t ex_style, const char* class_name,
+                                      const char* window_name, std::uint32_t style, int x, int y,
+                                      int width, int height, const void* parent, const void* menu,
+                                      const void* instance, const void* param) noexcept;
+TL_MSABI int tl_ShowWindow(const void* window, int cmd_show) noexcept;
+TL_MSABI int tl_UpdateWindow(const void* window) noexcept;
+TL_MSABI int tl_GetMessageA(void* msg, const void* window, std::uint32_t filter_min,
+                            std::uint32_t filter_max) noexcept;
+TL_MSABI int tl_TranslateMessage(const void* msg) noexcept;
+TL_MSABI abi::Lresult tl_DispatchMessageA(const void* msg) noexcept;
+TL_MSABI abi::Lresult tl_DefWindowProcA(const void* window, std::uint32_t message,
+                                        abi::Wparam wparam, abi::Lparam lparam) noexcept;
+TL_MSABI int tl_DestroyWindow(const void* window) noexcept;
+TL_MSABI void tl_PostQuitMessage(int exit_code) noexcept;
 
 }  // extern "C"
 

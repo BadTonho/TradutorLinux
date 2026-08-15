@@ -11,6 +11,7 @@ Esta matriz declara o comportamento suportado; ela não é uma promessa de compa
 | `tl_echo.exe` | PE32+ AMD64 | Não | `KERNEL32.dll!ExitProcess`, `GetStdHandle`, `ReadFile`, `WriteFile` | Suportado no MVP: ecoa stdin para stdout com handles padrão | Fase 5 |
 | `tl_file.exe` | PE32+ AMD64 | Não | `KERNEL32.dll!CloseHandle`, `CreateFileA`, `ExitProcess`, `GetLastError`, `GetStdHandle`, `ReadFile`, `SetLastError`, `VirtualAlloc`, `VirtualFree`, `WriteFile` | Suportado no subconjunto da Fase 5: aloca memória e grava/reabre/lê arquivo relativo | Fase 6 |
 | `tl_gui.exe` | PE32+ AMD64 | Não | `KERNEL32.dll!ExitProcess`, `USER32.dll!MessageBoxA` | Protótipo manual: caixa modal X11 mínima; não executado automaticamente por depender de display | Fase 7 |
+| `tl_win.exe` | PE32+ AMD64 | Não | `KERNEL32.dll!ExitProcess`, `USER32.dll!RegisterClassExA`, `CreateWindowExA`, `ShowWindow`, `UpdateWindow`, `GetMessageA`, `TranslateMessage`, `DispatchMessageA`, `DefWindowProcA`, `PostQuitMessage` | Protótipo manual: janela real com message loop X11; fecha via `WM_CLOSE`/autoclose; não executado automaticamente por depender de display | Fase 7 |
 | `tl_reloc.exe` | PE32+ AMD64 | Não | Nenhum | Gerado com `-Wl,--dynamicbase`, verificado, parseado e mapeado na Fase 2; usado para validar base relocations | Fase 4 |
 | `tl_missing_dll.exe` | PE32+ AMD64 | Não | `USER32.dll!MessageBoxW` | Gerado, verificado e rejeitado na Fase 3: `USER32.dll` é conhecida, mas o símbolo diagnostica `unknown-symbol`; retorna `5` sem executar o entry point | Fase 4 |
 
@@ -96,7 +97,24 @@ caminhos relativos sem drive são aceitos; `\\` é normalizado para `/`.
 
 ## GUI mínima (Fase 7)
 
-O protótipo registra `USER32.dll!MessageBoxA` e usa X11 diretamente. Ele é
-experimental, não altera o subsistema de console e só aceita `type == 0`.
-`tl_gui.exe` é validado automaticamente quanto a formato e imports; a janela
-deve ser validada manualmente em uma sessão X11.
+O protótipo registra um subconjunto de `USER32.dll` e usa X11 diretamente. Ele é
+experimental, não altera o subsistema de console e só aceita `type == 0` em
+`MessageBoxA`.
+
+| Módulo | API | Estado | Comportamento suportado |
+|---|---|---|---|
+| `USER32.dll` | `MessageBoxA` | Suportado | Caixa modal com `hWnd == NULL` e `uType == 0`; OK retorna `1`, fechar retorna `0` |
+| `USER32.dll` | `RegisterClassExA` | Suportado | Classe única por nome (case-insensitive); retorna atom `>= 1` |
+| `USER32.dll` | `CreateWindowExA` | Suportado | Cria janela X11 a partir da classe registrada; parent/menu/instância/param ignorados |
+| `USER32.dll` | `ShowWindow` | Suportado | Mostra/esconde a janela X11 |
+| `USER32.dll` | `UpdateWindow` | Suportado | Despacha `WM_PAINT` diretamente ao `WNDPROC` |
+| `USER32.dll` | `GetMessageA` | Suportado | Traduz eventos X11 para `WM_PAINT`/`WM_LBUTTONDOWN`/`WM_CLOSE`; retorna `0` com `WM_QUIT` após `PostQuitMessage` |
+| `USER32.dll` | `TranslateMessage` | Suportado | No-op (valida o `MSG`) |
+| `USER32.dll` | `DispatchMessageA` | Suportado | Invoca o `WNDPROC` do convidado (`TL_MSABI`, host→convidado) |
+| `USER32.dll` | `DefWindowProcA` | Suportado | `WM_CLOSE` → `DestroyWindow`; demais retornam `0` |
+| `USER32.dll` | `DestroyWindow` | Suportado | Destrói a janela e despacha `WM_DESTROY` |
+| `USER32.dll` | `PostQuitMessage` | Suportado | Sinaliza `WM_QUIT`; `GetMessageA` retorna `0` |
+
+`tl_gui.exe` e `tl_win.exe` são validados automaticamente quanto a formato e
+imports; a janela deve ser validada manualmente em uma sessão X11 (ver
+[`gui-x11.md`](arquitetura/gui-x11.md)).

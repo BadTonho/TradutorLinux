@@ -95,9 +95,24 @@ em processo filho; o runtime não instala um handler geral de sinais C++.
 
 ## Componente `gui`
 
-O protótipo X11 usa `USER32.dll!MessageBoxA` somente com `hWnd == NULL` e `type == 0`.
-Falha ao abrir o display ou fechar a janela sem confirmação retorna `0` ao programa
-convidado; a chamada não lança exceções nem compromete o diagnóstico do loader.
+O protótipo X11 usa um subconjunto de `USER32.dll`: `MessageBoxA` (somente com
+`hWnd == NULL` e `type == 0`) e as APIs de janela/eventos documentadas em
+[`gui-x11.md`](arquitetura/gui-x11.md). Falha ao abrir o display, fechar a janela
+sem confirmação ou criar uma janela retorna o comportamento documentado ao
+programa convidado; a chamada não lança exceções nem compromete o diagnóstico
+do loader.
+
+As APIs de janela emitem eventos do componente `runtime`:
+
+```text
+[tl][runtime][info] RegisterClassExA symbol="RegisterClassExA" class="tlwin" atom="1" status="success"
+[tl][runtime][info] CreateWindowExA symbol="CreateWindowExA" class="tlwin" window="Ola do Windows no Linux!" status="success"
+[tl][runtime][info] GetMessageA symbol="GetMessageA" message="WM_QUIT" exit-code="0" result="quit"
+```
+
+`GetMessageA` registra somente o fim do loop (`WM_QUIT`), confirmando que
+`PostQuitMessage` foi acionado; as mensagens ordinárias não são registradas
+para não poluir o trace.
 
 ## Eventos do componente `pe`
 

@@ -1,5 +1,6 @@
 #include "tradutorlinux/runtime/winapi.hpp"
 
+#include <bit>
 #include <cstddef>
 #include <cstdint>
 
@@ -14,6 +15,11 @@ using WriteFileFn = TL_MSABI int (*)(const void*, const void*, std::uint32_t, st
 using ReadFileFn = TL_MSABI int (*)(const void*, void*, std::uint32_t, std::uint32_t*,
                                     const void*);
 using ExitProcessFn = TL_MSABI void (*)(std::uint32_t);
+using WndProcFn = TL_MSABI abi::Lresult (*)(abi::HWnd, std::uint32_t, abi::Wparam, abi::Lparam);
+
+TL_MSABI abi::Lresult sample_wndproc(abi::HWnd, std::uint32_t message, abi::Wparam, abi::Lparam) noexcept {
+    return message == abi::kWmDestroy ? 0 : 42;
+}
 
 TEST(AbiTest, ExposesMsAbiMacro) {
 #ifndef TL_MSABI
@@ -61,6 +67,30 @@ TEST(AbiTest, ConsoleApisAreReachableThroughMsAbiPointers) {
 
 TEST(AbiTest, SymbolsHaveCAndNoexceptLinkage) {
     EXPECT_EQ(static_cast<GetStdHandleFn>(&tl_GetStdHandle), &tl_GetStdHandle);
+}
+
+TEST(AbiTest, MsAbiFunctionPointerCanBeInvoked) {
+    const WndProcFn wndproc = &sample_wndproc;
+    EXPECT_EQ(wndproc(nullptr, abi::kWmDestroy, 0, 0), 0);
+    EXPECT_EQ(wndproc(nullptr, abi::kWmPaint, 0, 0), 42);
+}
+
+TEST(AbiTest, WndProcAddressCanBeReconstructedFromInteger) {
+    const WndProcFn source = &sample_wndproc;
+    const auto address = std::bit_cast<std::uintptr_t>(source);
+    const WndProcFn wndproc = std::bit_cast<WndProcFn>(address);
+    EXPECT_EQ(wndproc(nullptr, abi::kWmPaint, 0, 0), 42);
+    EXPECT_EQ(wndproc(nullptr, abi::kWmDestroy, 0, 0), 0);
+}
+
+TEST(AbiTest, Win32WindowStructsHaveMicrosoftX64Layout) {
+    EXPECT_EQ(sizeof(abi::GuestMsg), 48);
+    EXPECT_EQ(offsetof(abi::GuestMsg, message), 8);
+    EXPECT_EQ(offsetof(abi::GuestMsg, wparam), 16);
+    EXPECT_EQ(offsetof(abi::GuestMsg, lparam), 24);
+    EXPECT_EQ(sizeof(abi::GuestWndClassExA), 80);
+    EXPECT_EQ(offsetof(abi::GuestWndClassExA, window_proc), 8);
+    EXPECT_EQ(offsetof(abi::GuestWndClassExA, class_name), 64);
 }
 
 }  // namespace
