@@ -6,6 +6,7 @@ add_library(tradutorlinux_core STATIC
     loader/module.cpp
     loader/process.cpp
     pe/pe_reader.cpp
+    process/isolate.cpp
     runtime/winapi.cpp
     runtime/guest_entry.S
     gui/x11.cpp

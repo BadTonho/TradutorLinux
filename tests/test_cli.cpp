@@ -112,5 +112,22 @@ TEST(CommandRunTest, ReportsSupportWithoutExecutingEntryPoint) {
     EXPECT_EQ(stderr_stream.str().find("mapped"), std::string::npos);
 }
 
+TEST(CommandRunTest, ReturnsGuestFaultWhenGuestTerminatesBySignal) {
+    CommandLine command_line;
+    command_line.trace_enabled = true;
+    command_line.executable_path =
+        std::filesystem::path{TL_FIXTURE_OUTPUT_DIRECTORY} / "tl_crash.exe";
+    std::ostringstream stdout_stream;
+    std::ostringstream stderr_stream;
+
+    const ExitCode exit_code = run_command(command_line, stdout_stream, stderr_stream);
+
+    EXPECT_EQ(exit_code, ExitCode::GuestFault);
+    EXPECT_TRUE(stdout_stream.str().empty());
+    EXPECT_NE(stderr_stream.str().find("terminated category=\"guest-signal\""),
+              std::string::npos);
+    EXPECT_EQ(stderr_stream.str().find("exit exit-code="), std::string::npos);
+}
+
 }  // namespace
 }  // namespace tradutorlinux

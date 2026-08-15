@@ -14,7 +14,7 @@ find_program(TL_LLVM_READOBJ
 set(TL_FIXTURE_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/generated")
 
 function(tl_add_pe_fixture target_name source_file manifest_file)
-    set(options LINK_KERNEL32 LINK_USER32 LINK_GDI32 RELOCATABLE RUNTIME_FAILURE EXPECT_RESOLVED CONSOLE REPORT REPORT_ONLY)
+    set(options LINK_KERNEL32 LINK_USER32 LINK_GDI32 RELOCATABLE RUNTIME_FAILURE EXPECT_RESOLVED CONSOLE REPORT REPORT_ONLY NO_RUNTIME_CHECK)
     set(oneValueArgs REPORT_SYMBOL)
     cmake_parse_arguments(ARG "${options}" "${oneValueArgs}" "" ${ARGN})
 
@@ -71,7 +71,8 @@ function(tl_add_pe_fixture target_name source_file manifest_file)
     )
     set_tests_properties(fixture_${target_name}_metadata PROPERTIES LABELS "fixture;pe32plus")
 
-    if(TARGET tradutorlinux AND NOT ARG_RUNTIME_FAILURE AND NOT ARG_REPORT_ONLY)
+    if(TARGET tradutorlinux AND NOT ARG_RUNTIME_FAILURE AND NOT ARG_REPORT_ONLY
+       AND NOT ARG_NO_RUNTIME_CHECK)
         set(runtime_manifest_args)
         if(ARG_EXPECT_RESOLVED)
             set(runtime_manifest_args
@@ -178,3 +179,21 @@ tl_add_pe_fixture(tl_timer src/tl_timer.c manifests/tl_timer.json
 tl_add_pe_fixture(tl_gdi src/tl_gdi.c manifests/tl_gdi.json
     LINK_KERNEL32 LINK_USER32 LINK_GDI32 EXPECT_RESOLVED REPORT_ONLY RELOCATABLE
     REPORT_SYMBOL "GDI32.dll!TextOutA")
+
+tl_add_pe_fixture(tl_crash src/tl_crash.c manifests/tl_crash.json RELOCATABLE NO_RUNTIME_CHECK)
+
+if(TARGET tradutorlinux)
+    add_test(
+        NAME runtime_tl_crash_guest_signal
+        COMMAND "${CMAKE_COMMAND}"
+            "-DINPUT=${TL_FIXTURE_OUTPUT_DIRECTORY}/tl_crash.exe"
+            "-DRUNTIME=$<TARGET_FILE:tradutorlinux>"
+            "-DEXPECTED_EXIT=71"
+            "-DREQUIRED_TRACE=terminated category=\"guest-signal\""
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/verify_runtime_rejection.cmake"
+    )
+    set_tests_properties(runtime_tl_crash_guest_signal PROPERTIES
+        DEPENDS fixture_tl_crash_metadata
+        LABELS "runtime;pe32plus"
+    )
+endif()

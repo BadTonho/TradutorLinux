@@ -57,6 +57,16 @@ GUI da Fase 7.
 4. Avaliar a execução em processo filho antes de prometer recuperação de
    `SIGSEGV`, `SIGILL` ou `SIGBUS`.
 
+### Status
+
+Implementado com o marco M8 (isolamento em processo filho): o convidado executa
+em um filho (`fork`/`waitpid`), os sinais fatais do filho são restaurados para
+`SIG_DFL`, e término por sinal gera `[tl][process][error] terminated
+category="guest-signal" signal="SIGSEGV" detail="..."` e exit code `71`
+(`GuestFault`) no hospedeiro, sem derrubar o processo principal. O exit code
+bruto do convidado é transmitido por pipe e não é truncado pelo status POSIX.
+Validado por `tl_crash.exe` nos presets `debug`, `sanitize` e `release`.
+
 ## 2. Política de linguagens
 
 C++20 deve continuar sendo a linguagem principal do runtime hospedeiro. Ele é

@@ -14,6 +14,7 @@ enum class ExitCode : int {
     MalformedPe = 4,
     Unsupported = 5,
     InternalError = 70,
+    GuestFault = 71,
 };
 
 struct CommandLine {

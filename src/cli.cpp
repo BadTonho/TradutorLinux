@@ -5,7 +5,7 @@
 #include "tradutorlinux/loader/module.hpp"
 #include "tradutorlinux/loader/process.hpp"
 #include "tradutorlinux/pe/pe_reader.hpp"
-#include "tradutorlinux/runtime/winapi.hpp"
+#include "tradutorlinux/process/isolate.hpp"
 
 #include <algorithm>
 #include <array>
@@ -579,23 +579,62 @@ ExitCode run_command(const CommandLine& command_line, std::ostream& stdout_strea
         return ExitCode::Unsupported;
     }
 
-    const GuestExecutionResult execution =
-        execute_guest_entry(process.thread.entry_point, process.thread.stack_top);
-    if (command_line.trace_enabled) {
-        const std::array fields{
-            diagnostics::TraceField{"exit-code", std::to_string(execution.exit_code)},
-            diagnostics::TraceField{"explicit", execution.exited_explicitly ? "sim" : "não"},
-        };
-        diagnostics::write_trace(stderr_stream, diagnostics::TraceComponent::Process,
-                                 diagnostics::TraceLevel::Info, "exit", fields);
-    }
+    const process::GuestOutcome outcome =
+        process::run_guest_isolated(process.thread.entry_point, process.thread.stack_top);
 
     const std::uint64_t unmap_base = process.image.base;
     loader::destroy_process(process);
-    if (command_line.trace_enabled) {
-        write_unmap_trace(stderr_stream, unmap_base);
+
+    if (outcome.kind == process::GuestOutcomeKind::Exited) {
+        if (command_line.trace_enabled) {
+            const std::array fields{
+                diagnostics::TraceField{"exit-code", std::to_string(outcome.exit_code)},
+                diagnostics::TraceField{"explicit", outcome.exited_explicitly ? "sim" : "não"},
+            };
+            diagnostics::write_trace(stderr_stream, diagnostics::TraceComponent::Process,
+                                     diagnostics::TraceLevel::Info, "exit", fields);
+            write_unmap_trace(stderr_stream, unmap_base);
+        }
+        return static_cast<ExitCode>(outcome.exit_code);
     }
-    return static_cast<ExitCode>(execution.exit_code);
+
+    if (outcome.kind == process::GuestOutcomeKind::Signaled) {
+        const process::SignalDescription signal = process::describe_signal(outcome.signal_number);
+        if (command_line.trace_enabled) {
+            const std::array fields{
+                diagnostics::TraceField{
+                    "category",
+                    std::string{diagnostics::failure_category_name(
+                        diagnostics::FailureCategory::GuestSignal)}},
+                diagnostics::TraceField{"signal", std::string{signal.name}},
+                diagnostics::TraceField{"detail", std::string{signal.detail}},
+            };
+            diagnostics::write_trace(stderr_stream, diagnostics::TraceComponent::Process,
+                                     diagnostics::TraceLevel::Error, "terminated", fields);
+            write_unmap_trace(stderr_stream, unmap_base);
+        } else {
+            stderr_stream << "erro: o programa convidado terminou por sinal " << signal.name
+                          << " (" << signal.detail << ")\n";
+        }
+        return ExitCode::GuestFault;
+    }
+
+    if (command_line.trace_enabled) {
+        const std::array fields{
+            diagnostics::TraceField{
+                "category",
+                std::string{diagnostics::failure_category_name(
+                    diagnostics::FailureCategory::InternalError)}},
+            diagnostics::TraceField{"detail",
+                                    "não foi possível criar o processo filho do convidado"},
+        };
+        diagnostics::write_trace(stderr_stream, diagnostics::TraceComponent::Process,
+                                 diagnostics::TraceLevel::Error, "terminated", fields);
+        write_unmap_trace(stderr_stream, unmap_base);
+    } else {
+        stderr_stream << "erro: não foi possível criar o processo filho do convidado\n";
+    }
+    return ExitCode::InternalError;
 }
 
 void print_help(std::ostream& stream) {

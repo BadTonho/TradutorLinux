@@ -42,6 +42,7 @@ jobs:
             -p build/debug src/main.cpp src/cli.cpp src/diagnostics/trace.cpp \
             src/pe/pe_reader.cpp src/loader/image_mapper.cpp src/loader/module.cpp \
             src/loader/import_resolver.cpp src/loader/process.cpp src/runtime/winapi.cpp \
+            src/process/isolate.cpp \
             src/gui/x11.cpp
 
   sanitizers:

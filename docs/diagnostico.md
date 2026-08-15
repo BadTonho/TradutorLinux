@@ -47,6 +47,26 @@ do código convidado:
 [tl][process][info] exit exit-code="0" explicit="sim"
 ```
 
+A partir do diagnóstico de falhas, o convidado executa em um processo filho
+isolado (`fork`/`waitpid`). O processo hospedeiro prepara o PE, o mapeamento e
+os imports, inicia o convidado no filho, espera o término e distingue saída
+normal de término por sinal. Os handlers de sinais fatais do filho são
+restaurados para o padrão antes do entry point, para que um `SIGSEGV` do
+convidado não seja interceptado pelo runtime do hospedeiro (ex.: AddressSanitizer).
+
+Quando o convidado termina por um sinal Linux, o componente `process` emite um
+evento `terminated` de nível `error` com a categoria `guest-signal`, o nome do
+sinal e uma descrição:
+
+```text
+[tl][process][error] terminated category="guest-signal" signal="SIGSEGV" detail="acesso inválido à memória"
+```
+
+Falha ao criar o processo filho emite o mesmo evento com `category="internal-error"`.
+O exit code bruto do convidado é transmitido por um pipe interno e propagado
+como status do processo Linux; quando o convidado morre por sinal, o hospedeiro
+retorna `71` (`GuestFault`).
+
 O modo `--report` produz um relatório textual em stdout sem executar o entry
 point. Cada import aparece com seu estado, seguido de `result: supported` ou
 `result: unsupported` e `execution: not-attempted`.
@@ -173,5 +193,6 @@ Quando a imagem é mapeada fora do endereço preferencial e não possui diretór
 | 4 | `MalformedPe` | O arquivo é reconhecido como PE malformado ou truncado. |
 | 5 | `Unsupported` | PE válido de arquitetura ou formato ainda não suportado (ex.: PE32/x86), ou etapa futura do runtime não disponível. |
 | 70 | `InternalError` | Erro interno inesperado do runtime. |
+| 71 | `GuestFault` | O programa convidado terminou por um sinal Linux (`guest-signal`). |
 
-Na Fase 1, um arquivo regular que não é PE válido retorna `4`, e um PE válido porém incompatível (arquitetura ou formato não suportado) retorna `5`. A partir da Fase 2, uma imagem válida porém não mapeável por inconsistência estrutural retorna `4`, e uma falha de mapeamento por memória insuficiente retorna `70`. A partir da Fase 3, um PE válido com dependências não suportadas (DLL, símbolo, ordinal ou mecanismo desconhecidos) também retorna `5`, com diagnóstico completo no trace e o entry point nunca executado. Na Fase 4, `ExitProcess` gera `[tl][runtime][info]` com o código bruto e `[tl][process][info] exit`; esse código é propagado como status do processo Linux.
+Na Fase 1, um arquivo regular que não é PE válido retorna `4`, e um PE válido porém incompatível (arquitetura ou formato não suportado) retorna `5`. A partir da Fase 2, uma imagem válida porém não mapeável por inconsistência estrutural retorna `4`, e uma falha de mapeamento por memória insuficiente retorna `70`. A partir da Fase 3, um PE válido com dependências não suportadas (DLL, símbolo, ordinal ou mecanismo desconhecidos) também retorna `5`, com diagnóstico completo no trace e o entry point nunca executado. Na Fase 4, `ExitProcess` gera `[tl][runtime][info]` com o código bruto e `[tl][process][info] exit`; esse código é propagado como status do processo Linux. Com o isolamento em processo filho, o convidado que termina por sinal (`SIGSEGV`, `SIGILL`, `SIGBUS`, etc.) não derruba o hospedeiro: o pai observa o sinal via `waitpid`, emite `terminated category="guest-signal"` e retorna `71`.
