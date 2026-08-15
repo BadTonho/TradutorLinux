@@ -1,0 +1,68 @@
+# Teste visual das aplicações Win32
+
+O `runtime_gui_smoke` valida automaticamente a GUI em um `Xvfb`, mas esse
+teste não substitui uma sessão visual. Para abrir as janelas na sua área de
+trabalho Linux, use uma sessão X11 real ou uma sessão Wayland com XWayland
+ativo (`DISPLAY` definido).
+
+## Preparar as fixtures
+
+```bash
+cmake --preset debug
+cmake --build --preset debug
+```
+
+As aplicações ficam em `build/debug/tests/samples/generated/`.
+
+## Abrir a caixa de diálogo
+
+```bash
+./build/debug/src/tradutorlinux --trace \
+  build/debug/tests/samples/generated/tl_gui.exe
+```
+
+`tl_gui.exe` abre uma caixa X11 com o botão `OK`. Fechar a janela ou clicar no
+botão encerra a fixture.
+
+## Abrir uma janela com message loop
+
+```bash
+TL_GUI_AUTOCLOSE_MS=0 \
+./build/debug/src/tradutorlinux --trace \
+  build/debug/tests/samples/generated/tl_win.exe
+```
+
+A janela permanece aberta até ser fechada pelo gerenciador de janelas ou até
+pressionar `q`, que gera `WM_KEYDOWN` e `WM_CHAR`. O valor `TL_GUI_AUTOCLOSE_MS=1`
+ativa o fechamento automático usado nos testes.
+
+## Outras demonstrações
+
+```bash
+./build/debug/src/tradutorlinux --trace build/debug/tests/samples/generated/tl_win2.exe
+./build/debug/src/tradutorlinux --trace build/debug/tests/samples/generated/tl_key.exe
+./build/debug/src/tradutorlinux --trace build/debug/tests/samples/generated/tl_timer.exe
+./build/debug/src/tradutorlinux --trace build/debug/tests/samples/generated/tl_gdi.exe
+./build/debug/src/tradutorlinux --trace build/debug/tests/samples/generated/tl_paint.exe
+```
+
+Essas fixtures demonstram múltiplas janelas, teclado, timers, pintura/texto e
+entrada de mouse. Os comportamentos suportados estão em
+[`docs/compatibilidade.md`](compatibilidade.md) e
+[`docs/arquitetura/gui-x11.md`](arquitetura/gui-x11.md).
+
+## Diagnóstico de ambiente
+
+Verifique se o processo possui um display acessível:
+
+```bash
+echo "DISPLAY=$DISPLAY"
+xdpyinfo >/dev/null
+```
+
+Se `DISPLAY` estiver vazio, inicie uma sessão gráfica ou configure XWayland.
+`Xvfb` é adequado para CI e testes automáticos, mas não exibe uma janela
+visível.
+
+O runtime não é um sandbox: o executável convidado roda com os privilégios do
+usuário atual. A GUI continua experimental e limitada à matriz publicada.
