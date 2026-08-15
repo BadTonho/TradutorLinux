@@ -1,11 +1,14 @@
-// Driver de integração GUI: executa tl_win.exe num Xvfb próprio e valida o
-// message loop de ponta a ponta em três cenários:
+// Driver de integração GUI: executa as fixtures num Xvfb próprio e valida o
+// message loop de ponta a ponta. Cenários:
 //   1. autoclose  (TL_GUI_AUTOCLOSE_MS != 0): WM_QUIT sem interação.
 //   2. fechar     (TL_GUI_AUTOCLOSE_MS == 0): envia WM_DELETE_WINDOW via X11,
 //      como o botão de fechar de um window manager faria.
 //   3. teclado    (TL_GUI_AUTOCLOSE_MS == 0): envia um KeyPress sintético 'q'
 //      via X11; a fixture encerra quando recebe o WM_CHAR('q').
-// Exit codes da fixture: 1 = WM_CREATE despachado; 3 = WM_CREATE + WM_CHAR('q').
+//   4. janelas    (opcional, com <input2>): duas janelas simultâneas, cada uma
+//      com WNDPROC próprio; o driver envia 'q' à janela A e 'k' à janela B.
+// Exit codes: tl_win: 1 = WM_CREATE; 3 = WM_CREATE + WM_CHAR('q').
+// tl_win2: 15 = create A + 'q' A + create B + 'k' B (flags 1+2+4+8).
 // Cada cenário exige o exit code esperado, stdout vazio e os eventos do trace.
 
 #include <X11/Xatom.h>
@@ -19,6 +22,7 @@
 #include <filesystem>
 #include <fstream>
 #include <string>
+#include <vector>
 
 #include <fcntl.h>
 #include <signal.h>
@@ -30,6 +34,8 @@
 namespace {
 
 constexpr const char* kWindowCaption = "Ola do Windows no Linux!";
+constexpr const char* kCaptionA = "Janela A";
+constexpr const char* kCaptionB = "Janela B";
 constexpr int kReadyTimeoutMs = 15000;
 constexpr unsigned int kPollDelayUs = 100000;
 
@@ -150,17 +156,18 @@ bool send_wm_delete(const std::string& display) {
     return true;
 }
 
-bool send_key_q(const std::string& display) {
+bool send_key(const std::string& display, const char* const caption,  // NOLINT(bugprone-easily-swappable-parameters)
+              const char* const keysym_name) {
     Display* const dpy = XOpenDisplay(display.c_str());
     if (dpy == nullptr) {
         return false;
     }
-    const Window window = find_window_by_caption(dpy, kWindowCaption);
+    const Window window = find_window_by_caption(dpy, caption);
     if (window == 0) {
         XCloseDisplay(dpy);
         return false;
     }
-    const KeyCode keycode = XKeysymToKeycode(dpy, XStringToKeysym("q"));
+    const KeyCode keycode = XKeysymToKeycode(dpy, XStringToKeysym(keysym_name));
     if (keycode == 0) {
         XCloseDisplay(dpy);
         return false;
@@ -188,6 +195,7 @@ enum class Trigger : unsigned char {
     Nothing,
     CloseRequest,
     KeyQ,
+    TwoKeys,
 };
 
 struct RunOptions {
@@ -222,23 +230,33 @@ void run_runtime(const std::string& runtime, const std::string& input,
     }
 
     if (options.trigger != Trigger::Nothing) {
-        bool sent = false;
+        bool sent_a = false;
+        bool sent_b = false;
+        bool done = false;
         const auto deadline =
             std::chrono::steady_clock::now() + std::chrono::milliseconds(kReadyTimeoutMs);
-        while (!sent && std::chrono::steady_clock::now() < deadline) {
+        while (!done && std::chrono::steady_clock::now() < deadline) {
             if (options.trigger == Trigger::CloseRequest) {
-                sent = send_wm_delete(display);
+                done = send_wm_delete(display);
+            } else if (options.trigger == Trigger::KeyQ) {
+                done = send_key(display, kWindowCaption, "q");
             } else {
-                sent = send_key_q(display);
+                if (!sent_a) {
+                    sent_a = send_key(display, kCaptionA, "q");
+                }
+                if (!sent_b) {
+                    sent_b = send_key(display, kCaptionB, "k");
+                }
+                done = sent_a && sent_b;
             }
-            if (!sent) {
+            if (!done) {
                 ::usleep(kPollDelayUs);
             }
         }
-        if (!sent) {
+        if (!done) {
             ::kill(runtime_pid, SIGKILL);
             ::waitpid(runtime_pid, nullptr, 0);
-            fail("janela não encontrada para enviar o evento do cenário");
+            fail("janela(s) não encontrada(s) para enviar o(s) evento(s) do cenário");
         }
     }
 
@@ -266,47 +284,65 @@ void run_runtime(const std::string& runtime, const std::string& input,
     }
 }
 
+struct RunExpectations {
+    int expected_exit;
+    std::vector<std::string> registers;  // needles do RegisterClassExA
+    std::vector<std::string> creates;    // needles do CreateWindowExA
+    std::vector<std::string> chars;      // needles do TranslateMessage WM_CHAR (opcional)
+};
+
 void verify_run(const std::string& work_dir, const std::string& scenario,
-                const int expected_exit, const bool expect_char) {
+                const RunExpectations& expected) {
     const std::string trace = read_file(work_dir + "/trace_" + scenario + ".log");
     const std::string output = read_file(work_dir + "/stdout_" + scenario + ".log");
     if (!output.empty()) {
         fail("stdout não vazio (deve ir tudo para stderr) no cenário " + scenario);
     }
-    const std::string exit_code = std::to_string(expected_exit);
-    const std::array<std::string, 5> expected = {
-        "RegisterClassExA symbol=\"RegisterClassExA\" class=\"tlwin\" atom=\"1\" "
-        "status=\"success\"",
-        "CreateWindowExA symbol=\"CreateWindowExA\" class=\"tlwin\" "
-        "window=\"Ola do Windows no Linux!\" status=\"success\"",
+    const std::string exit_code = std::to_string(expected.expected_exit);
+    const std::array<std::string, 3> base = {
         "GetMessageA symbol=\"GetMessageA\" message=\"WM_QUIT\" exit-code=\"" + exit_code +
             "\" result=\"quit\"",
         "ExitProcess symbol=\"ExitProcess\" exit-code=\"" + exit_code +
             "\" status=\"success\" mechanism=\"guest-transfer\"",
         "exit exit-code=\"" + exit_code + "\" explicit=\"sim\"",
     };
-    for (const std::string& needle : expected) {
+    for (const std::string& needle : expected.registers) {
         require_trace_contains(trace, needle, scenario);
     }
-    if (expect_char) {
-        require_trace_contains(
-            trace,
-            "TranslateMessage symbol=\"TranslateMessage\" message=\"WM_CHAR\" "
-            "wparam=\"113\" status=\"translated\"",
-            scenario);
+    for (const std::string& needle : expected.creates) {
+        require_trace_contains(trace, needle, scenario);
+    }
+    for (const std::string& needle : base) {
+        require_trace_contains(trace, needle, scenario);
+    }
+    for (const std::string& needle : expected.chars) {
+        require_trace_contains(trace, needle, scenario);
     }
 }
+
+const std::string kWinRegisters[] = {
+    "RegisterClassExA symbol=\"RegisterClassExA\" class=\"tlwin\" atom=\"1\" "
+    "status=\"success\"",
+};
+const std::string kWinCreates[] = {
+    "CreateWindowExA symbol=\"CreateWindowExA\" class=\"tlwin\" "
+    "window=\"Ola do Windows no Linux!\" status=\"success\"",
+};
+const std::string kWinKeyChar = "TranslateMessage symbol=\"TranslateMessage\" message=\"WM_CHAR\" "
+                                "wparam=\"113\" status=\"translated\"";
 
 }  // namespace
 
 int main(const int argc, char** argv) {
-    if (argc != 4) {
-        std::fprintf(stderr, "uso: runtime_gui_smoke <runtime> <input> <work-dir>\n");
+    if (argc != 4 && argc != 5) {
+        std::fprintf(stderr,
+                     "uso: runtime_gui_smoke <runtime> <input> <work-dir> [input2]\n");
         return 2;
     }
     const std::string runtime = argv[1];
     const std::string input = argv[2];
     const std::string work_dir = argv[3];
+    const std::string input2 = argc == 5 ? argv[4] : std::string{};
 
     std::error_code error;
     std::filesystem::create_directories(work_dir, error);
@@ -324,7 +360,8 @@ int main(const int argc, char** argv) {
         .stdout_path = work_dir + "/stdout_autoclose.log",
     };
     run_runtime(runtime, input, display, autoclose_options);
-    verify_run(work_dir, "autoclose", 1, false);
+    verify_run(work_dir, "autoclose",
+               RunExpectations{1, {kWinRegisters[0]}, {kWinCreates[0]}, {}});
 
     const RunOptions close_options{
         .autoclose = false,
@@ -334,7 +371,8 @@ int main(const int argc, char** argv) {
         .stdout_path = work_dir + "/stdout_close.log",
     };
     run_runtime(runtime, input, display, close_options);
-    verify_run(work_dir, "close", 1, false);
+    verify_run(work_dir, "close",
+               RunExpectations{1, {kWinRegisters[0]}, {kWinCreates[0]}, {}});
 
     const RunOptions key_options{
         .autoclose = false,
@@ -344,7 +382,36 @@ int main(const int argc, char** argv) {
         .stdout_path = work_dir + "/stdout_key.log",
     };
     run_runtime(runtime, input, display, key_options);
-    verify_run(work_dir, "key", 3, true);
+    verify_run(work_dir, "key",
+               RunExpectations{3, {kWinRegisters[0]}, {kWinCreates[0]}, {kWinKeyChar}});
+
+    if (!input2.empty()) {
+        const RunOptions windows_options{
+            .autoclose = false,
+            .trigger = Trigger::TwoKeys,
+            .expected_exit = 15,
+            .trace_path = work_dir + "/trace_windows.log",
+            .stdout_path = work_dir + "/stdout_windows.log",
+        };
+        run_runtime(runtime, input2, display, windows_options);
+        verify_run(
+            work_dir, "windows",
+            RunExpectations{
+                15,
+                {"RegisterClassExA symbol=\"RegisterClassExA\" class=\"tlwin2a\" "
+                 "atom=\"1\" status=\"success\"",
+                 "RegisterClassExA symbol=\"RegisterClassExA\" class=\"tlwin2b\" "
+                 "atom=\"2\" status=\"success\""},
+                {"CreateWindowExA symbol=\"CreateWindowExA\" class=\"tlwin2a\" "
+                 "window=\"Janela A\" status=\"success\"",
+                 "CreateWindowExA symbol=\"CreateWindowExA\" class=\"tlwin2b\" "
+                 "window=\"Janela B\" status=\"success\""},
+                {"TranslateMessage symbol=\"TranslateMessage\" message=\"WM_CHAR\" "
+                 "wparam=\"113\" status=\"translated\"",
+                 "TranslateMessage symbol=\"TranslateMessage\" message=\"WM_CHAR\" "
+                 "wparam=\"107\" status=\"translated\""},
+            });
+    }
 
     if (g_xvfb_pid > 0) {
         ::kill(g_xvfb_pid, SIGTERM);

@@ -9,6 +9,7 @@
 #include <chrono>
 #include <cstdlib>
 #include <cstring>
+#include <deque>
 #include <string>
 #include <thread>
 
@@ -28,6 +29,7 @@ struct WindowState {
     int height{kDefaultHeight};
     std::string caption;
     std::chrono::steady_clock::time_point created_at{};
+    std::deque<WindowEvent> pending;  // fila por janela, demultiplexada do X11
 };
 
 std::array<WindowState, kMaxWindows> g_windows{};
@@ -78,6 +80,69 @@ WindowState* free_state() noexcept {
     return nullptr;
 }
 
+WindowState* find_state_by_xwindow(const Window window) noexcept {
+    const auto found = std::find_if(g_windows.begin(), g_windows.end(),
+                                    [window](const WindowState& state) {
+                                        return state.used && window == state.window;
+                                    });
+    if (found != g_windows.end()) {
+        return &*found;
+    }
+    return nullptr;
+}
+
+void push_event_for(Display* const dpy, WindowState* const state, XEvent& event) noexcept {
+    if (event.type == Expose) {
+        const char* const caption = state->caption.c_str();
+        XDrawString(dpy, state->window, DefaultGC(dpy, state->screen), 24, 40, caption,
+                    static_cast<int>(state->caption.size()));
+        XFlush(dpy);
+        state->pending.push_back({WindowEventType::Redraw, 0, 0});
+        return;
+    }
+    if (event.type == ButtonPress) {
+        state->pending.push_back({WindowEventType::Press, event.xbutton.x, event.xbutton.y});
+        return;
+    }
+    if (event.type == KeyPress) {
+        char buffer[8];
+        KeySym keysym = 0;
+        const int length =
+            XLookupString(&event.xkey, buffer, sizeof(buffer), &keysym, nullptr);
+        (void)keysym;
+        if (length > 0) {
+            state->pending.push_back({WindowEventType::KeyDown, 0, 0, buffer[0]});
+        }
+        return;
+    }
+    if (event.type == ClientMessage) {
+        const Atom protocols_atom = XInternAtom(dpy, "WM_PROTOCOLS", False);
+        const Atom delete_atom = XInternAtom(dpy, "WM_DELETE_WINDOW", False);
+        if (event.xclient.message_type == protocols_atom &&
+            event.xclient.data.l[0] == static_cast<long>(delete_atom)) {
+            state->pending.push_back({WindowEventType::CloseRequested, 0, 0});
+        }
+        return;
+    }
+    if (event.type == DestroyNotify) {
+        state->pending.push_back({WindowEventType::CloseRequested, 0, 0});
+    }
+}
+
+// Demultiplexa todos os eventos X11 pendentes para a fila de cada janela.
+// Eventos de janelas desconhecidas são descartados; nada é perdido entre
+// janelas conhecidas, independentemente da ordem de consulta do pump.
+void drain_events(Display* const dpy) noexcept {
+    while (XPending(dpy) > 0) {
+        XEvent event{};
+        XNextEvent(dpy, &event);
+        WindowState* const target = find_state_by_xwindow(event.xany.window);
+        if (target != nullptr) {
+            push_event_for(dpy, target, event);
+        }
+    }
+}
+
 }  // namespace
 
 NativeWindow create_window(const char* const caption, const int width,  // NOLINT(bugprone-easily-swappable-parameters)
@@ -113,6 +178,7 @@ NativeWindow create_window(const char* const caption, const int width,  // NOLIN
         .height = resolved_height,
         .caption = caption != nullptr ? caption : "TradutorLinux",
         .created_at = std::chrono::steady_clock::now(),
+        .pending = {},
     };
     return state;
 }
@@ -192,46 +258,13 @@ WindowEvent next_window_event(const NativeWindow window) noexcept {
                 .count() >= kAutocloseDelayMs) {
         return {WindowEventType::CloseRequested, 0, 0};
     }
-    if (XPending(dpy) == 0) {
+    drain_events(dpy);
+    if (state->pending.empty()) {
         return {};
     }
-    XEvent event{};
-    XNextEvent(dpy, &event);
-    if (event.xany.window != state->window) {
-        return {};
-    }
-    if (event.type == Expose) {
-        const char* const caption = state->caption.c_str();
-        XDrawString(dpy, state->window, DefaultGC(dpy, state->screen), 24, 40, caption,
-                    static_cast<int>(state->caption.size()));
-        XFlush(dpy);
-        return {WindowEventType::Redraw, 0, 0};
-    }
-    if (event.type == ButtonPress) {
-        return {WindowEventType::Press, event.xbutton.x, event.xbutton.y};
-    }
-    if (event.type == KeyPress) {
-        char buffer[8];
-        KeySym keysym = 0;
-        const int length =
-            XLookupString(&event.xkey, buffer, sizeof(buffer), &keysym, nullptr);
-        (void)keysym;
-        if (length > 0) {
-            return {WindowEventType::KeyDown, 0, 0, buffer[0]};
-        }
-    }
-    if (event.type == ClientMessage) {
-        const Atom protocols_atom = XInternAtom(dpy, "WM_PROTOCOLS", False);
-        const Atom delete_atom = XInternAtom(dpy, "WM_DELETE_WINDOW", False);
-        if (event.xclient.message_type == protocols_atom &&
-            event.xclient.data.l[0] == static_cast<long>(delete_atom)) {
-            return {WindowEventType::CloseRequested, 0, 0};
-        }
-    }
-    if (event.type == DestroyNotify) {
-        return {WindowEventType::CloseRequested, 0, 0};
-    }
-    return {};
+    WindowEvent event = state->pending.front();
+    state->pending.pop_front();
+    return event;
 }
 
 std::uint32_t message_box(const char* const text,  // NOLINT(bugprone-easily-swappable-parameters)

@@ -11,8 +11,15 @@ janelas do processo. Cada janela é um token opaco num pool fixo (`NativeWindow`
 Os eventos X11 são drenados pelo runtime via `next_window_event` e traduzidos
 para o subconjunto Win32: `Expose` → `WM_PAINT`, `ButtonPress` → `WM_LBUTTONDOWN`,
 `KeyPress` → `WM_KEYDOWN`/`WM_CHAR` (via `TranslateMessage`) e `WM_DELETE_WINDOW`
-(protocolo de janela) → `WM_CLOSE`. Eventos não relevantes para a janela
-consultada são descartados.
+(protocolo de janela) → `WM_CLOSE`.
+
+O pump mantém uma **fila de eventos por janela**: a cada consulta, todos os
+eventos X11 pendentes do display são demultiplexados para a fila da janela-alvo
+(de acordo com `event.xany.window`) e a próxima entrada da janela consultada é
+devolvida. Eventos de janelas desconhecidas são descartados; nada é perdido
+entre janelas conhecidas, independentemente da ordem de consulta. Assim, duas
+janelas simultâneas recebem eventos independentes mesmo quando o message loop
+consulta `GetMessageA` sem filtro de `hWnd`.
 
 Quando `TL_GUI_AUTOCLOSE_MS` é diferente de `0`, o pump gera `CloseRequested`
 (→ `WM_CLOSE`) após aproximadamente 100 ms, permitindo testes de integração
@@ -56,12 +63,13 @@ escopo.
 
 ## Validação
 
-As fixtures `tl_gui.exe` e `tl_win.exe` são validadas automaticamente pelo
-parser, metadata e `--report`, que confirmam os imports sem executar o entry
-point. Além disso, `tl_win.exe` é executado de ponta a ponta no teste
-`runtime_gui_smoke` (`tests/gui/runtime_gui_smoke.cpp`), que sobe sempre um
-`Xvfb` próprio — sem window manager, para que a janela seja filha direta da
-root e os eventos sintéticos cheguem ao cliente — e cobre três cenários:
+As fixtures `tl_gui.exe`, `tl_win.exe` e `tl_win2.exe` são validadas
+automaticamente pelo parser, metadata e `--report`, que confirmam os imports
+sem executar o entry point. Além disso, `tl_win.exe` e `tl_win2.exe` são
+executados de ponta a ponta no teste `runtime_gui_smoke`
+(`tests/gui/runtime_gui_smoke.cpp`), que sobe sempre um `Xvfb` próprio — sem
+window manager, para que a janela seja filha direta da root e os eventos
+sintéticos cheguem ao cliente — e cobre quatro cenários:
 
 1. **autoclose** — `TL_GUI_AUTOCLOSE_MS != 0`: o message loop encerra sozinho
    via `WM_QUIT`, sem interação.
@@ -74,15 +82,23 @@ root e os eventos sintéticos cheguem ao cliente — e cobre três cenários:
    sintético `'q'` (via `XSendEvent`), exercitando
    `WM_KEYDOWN → TranslateMessage → WM_CHAR('q') → DestroyWindow → WM_DESTROY →
    PostQuitMessage(3) → GetMessageA/WM_QUIT → ExitProcess(3)`.
+4. **janelas** — com `tl_win2.exe`: duas janelas simultâneas, cada uma com
+   classe e `WNDPROC` próprios. O driver envia `'q'` à janela "Janela A" e `'k'`
+   à "Janela B" (cada `KeyPress` é roteado para a fila da própria janela pelo
+   pump), exercitando as duas cadeias independentes de
+   `WM_KEYDOWN → WM_CHAR → DestroyWindow → WM_DESTROY` e provando a
+   demultiplexação de eventos entre janelas.
 
-Cada cenário exige o exit-code esperado — a `tl_win.c` marca uma flag no
+Cada cenário exige o exit-code esperado — `tl_win.c` marca uma flag no
 `WM_CREATE` e outra ao receber `WM_CHAR('q')`, e faz `PostQuitMessage(flag)` no
-`WM_DESTROY`; assim o exit code prova quais mensagens foram despachadas
-(autoclose e fechar exigem `1`; teclado exige `3`). O teste também exige
+`WM_DESTROY` (autoclose e fechar exigem `1`; teclado exige `3`). `tl_win2.c`
+acumula flags de cada janela (criada A=1, `'q'` A=2, criada B=4, `'k'` B=8) e
+faz `PostQuitMessage` quando a última janela é destruída (exit-code `15` com
+tudo funcionando). O teste também exige
 `stdout` vazio (trace só em `stderr`), os eventos `RegisterClassExA`,
 `CreateWindowExA`, `GetMessageA message="WM_QUIT"`, `ExitProcess` e
-`exit explicit="sim"` no trace, além do `TranslateMessage message="WM_CHAR"` no
-cenário de teclado. O teste é configurado pelo CMake somente quando `xvfb` está
+`exit explicit="sim"` no trace, além dos `TranslateMessage message="WM_CHAR"`
+por janela. O teste é configurado pelo CMake somente quando `xvfb` está
 disponível (CI instala `xvfb`). Para o smoke test manual interativo de
 `tl_win.exe`:
 

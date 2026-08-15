@@ -163,3 +163,6 @@ tl_add_pe_fixture(tl_gui src/tl_gui.c manifests/tl_gui.json
 tl_add_pe_fixture(tl_win src/tl_win.c manifests/tl_win.json
     LINK_KERNEL32 LINK_USER32 EXPECT_RESOLVED REPORT_ONLY RELOCATABLE
     REPORT_SYMBOL "USER32.dll!RegisterClassExA")
+tl_add_pe_fixture(tl_win2 src/tl_win2.c manifests/tl_win2.json
+    LINK_KERNEL32 LINK_USER32 EXPECT_RESOLVED REPORT_ONLY RELOCATABLE
+    REPORT_SYMBOL "USER32.dll!RegisterClassExA")

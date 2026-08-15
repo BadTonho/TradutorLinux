@@ -43,9 +43,10 @@ if(TL_XVFB_EXECUTABLE AND TARGET tradutorlinux_samples AND TARGET tradutorlinux)
             "$<TARGET_FILE:tradutorlinux>"
             "${CMAKE_CURRENT_BINARY_DIR}/samples/generated/tl_win.exe"
             "${CMAKE_CURRENT_BINARY_DIR}/runtime_gui_smoke_work"
+            "${CMAKE_CURRENT_BINARY_DIR}/samples/generated/tl_win2.exe"
     )
     set_tests_properties(runtime_gui_smoke PROPERTIES
-        DEPENDS fixture_tl_win_metadata
+        DEPENDS "fixture_tl_win_metadata;fixture_tl_win2_metadata"
         LABELS "runtime;pe32plus;gui"
         TIMEOUT 90
     )
