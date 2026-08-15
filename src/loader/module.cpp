@@ -102,9 +102,22 @@ void register_builtin_modules() {
         {"DefWindowProcA", 9, reinterpret_cast<std::uintptr_t>(&tl_DefWindowProcA)},
         {"DestroyWindow", 10, reinterpret_cast<std::uintptr_t>(&tl_DestroyWindow)},
         {"PostQuitMessage", 11, reinterpret_cast<std::uintptr_t>(&tl_PostQuitMessage)},
+        {"SetTimer", 12, reinterpret_cast<std::uintptr_t>(&tl_SetTimer)},
+        {"KillTimer", 13, reinterpret_cast<std::uintptr_t>(&tl_KillTimer)},
+        {"GetDC", 14, reinterpret_cast<std::uintptr_t>(&tl_GetDC)},
+        {"ReleaseDC", 15, reinterpret_cast<std::uintptr_t>(&tl_ReleaseDC)},
+        {"BeginPaint", 16, reinterpret_cast<std::uintptr_t>(&tl_BeginPaint)},
+        {"EndPaint", 17, reinterpret_cast<std::uintptr_t>(&tl_EndPaint)},
     };
     static const InternalModule kUser32Module{"USER32.dll", kUser32Exports};
     register_module(kUser32Module);
+    static const ExportedFunction kGdi32Exports[] = {
+        {"GetStockObject", 1, reinterpret_cast<std::uintptr_t>(&tl_GetStockObject)},
+        {"TextOutA", 2, reinterpret_cast<std::uintptr_t>(&tl_TextOut)},
+        {"TextOut", 3, reinterpret_cast<std::uintptr_t>(&tl_TextOut)},
+    };
+    static const InternalModule kGdi32Module{"GDI32.dll", kGdi32Exports};
+    register_module(kGdi32Module);
 }
 
 bool is_module_registered(const std::string_view dll) {

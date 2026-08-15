@@ -134,8 +134,11 @@ Validação: `tl_hello.exe`, `tl_echo.exe` e `tl_file.exe` possuem testes de int
 - [x] Definir a integração inicial com X11 direto, mantendo a camada isolada para futura decisão sobre Wayland/toolkit.
 - [x] Implementar um subconjunto mínimo de janela e eventos (`RegisterClassExA`, `CreateWindowExA`, `ShowWindow`, `UpdateWindow`, `GetMessageA`, `TranslateMessage`, `DispatchMessageA`, `DefWindowProcA`, `DestroyWindow`, `PostQuitMessage`) com fixture `tl_win.exe` que cria janela, desenha texto e encerra ao fechar (`WM_CLOSE`).
 - [x] Provar a fronteira de ABI host→convidado invocando o `WNDPROC` do convidado pela convenção Microsoft x64.
+- [x] Estender o teclado: `WM_KEYUP`, virtual keys por `keysym` (incluindo teclas sem caractere), `Shift` refletido no `WM_CHAR` (fixture `tl_key.exe`).
+- [x] Implementar `SetTimer`/`KillTimer` com despacho periódico de `WM_TIMER` no pump (fixture `tl_timer.exe`).
+- [x] Implementar o GDI mínimo (`GDI32.dll!GetStockObject`/`TextOutA`; `USER32.dll!BeginPaint`/`EndPaint`/`GetDC`/`ReleaseDC`) com `HDC == HWND` e `PAINTSTRUCT` real (fixture `tl_gdi.exe`).
 
-Validação local: os 116 testes dos presets `debug` e `sanitize` passam, incluindo `tl_win.exe` e `tl_win2.exe`, resolução dos novos imports de `USER32.dll`, o relatório sem execução e os testes unitários de layout `MSG`/`WNDCLASSEXA` e do ponteiro `WNDPROC` reconstruído por `bit_cast`. O loader valida o entry point, usa a pilha convidada com guard page, aplica relocations e rejeita execução fora da base quando não há relocations. O `runtime_gui_smoke` executa as fixtures sob `Xvfb` próprio nos cenários autoclose, `WM_DELETE_WINDOW`, `KeyPress 'q'` (teclado) e duas janelas (`'q'` em A + `'k'` em B), exigindo os exit codes `1`/`1`/`3`/`15` e o trace esperado. `cppcheck` e `clang-tidy` passam sem pendências.
+Validação local: os 122 testes dos presets `debug`, `sanitize` e `release` passam, incluindo `tl_win.exe`, `tl_win2.exe`, `tl_key.exe`, `tl_timer.exe` e `tl_gdi.exe`, resolução dos novos imports de `USER32.dll`/`GDI32.dll`, o relatório sem execução e os testes unitários de layout `MSG`/`WNDCLASSEXA`/`PAINTSTRUCT` e do ponteiro `WNDPROC` reconstruído por `bit_cast`. O loader valida o entry point, usa a pilha convidada com guard page, aplica relocations e rejeita execução fora da base quando não há relocations. O `runtime_gui_smoke` executa as fixtures sob `Xvfb` próprio nos cenários autoclose, `WM_DELETE_WINDOW`, `KeyPress 'q'` (teclado), duas janelas (`'q'` em A + `'k'` em B), teclado estendido (`Shift+q`, `Return`, `Left`), timer (dois `WM_TIMER` de 200 ms) e GDI (`BeginPaint`/`TextOut`/`EndPaint`), exigindo os exit codes `1`/`1`/`3`/`15`/`7`/`7`/`3` e o trace esperado. `cppcheck` e `clang-tidy` passam sem pendências.
 
 ### Critério de saída — atendido
 
@@ -154,6 +157,13 @@ Validação visual (2026-08-15, sessão X11 `DISPLAY=:0` acessível): `tl_gui.ex
 | M5 — Arquivos | Fixture lê e escreve arquivo com semântica documentada. |
 | M6 — Cobertura | Primeira aplicação-alvo adicional incluída na matriz e na regressão. |
 | M7 — GUI | Janela real com message loop (`tl_win.exe`) e decisão de produto tomada: GUI Win32 mínima segue como objetivo experimental. |
+
+Com o marco M7 concluído, a GUI mínima avançou além do planejado e passa a ser
+acompanhada no próprio roadmap da Fase 7: teclado estendido (`WM_KEYUP`, virtual
+keys, `Shift`), timers (`WM_TIMER` periódico) e um GDI mínimo (pintura com
+`BeginPaint`/`EndPaint`/`TextOut`). Cada nova API exige fixture e regressão; o
+próximo passo natural, quando justificado por um aplicativo-alvo, é o desenho de
+formas (`Rectangle`/`FillRect`), fontes/cores ou a entrada de mouse completa.
 
 ## Definição de pronto
 

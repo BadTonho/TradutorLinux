@@ -104,14 +104,17 @@ void push_event_for(Display* const dpy, WindowState* const state, XEvent& event)
         state->pending.push_back({WindowEventType::Press, event.xbutton.x, event.xbutton.y});
         return;
     }
-    if (event.type == KeyPress) {
+    if (event.type == KeyPress || event.type == KeyRelease) {
         char buffer[8];
         KeySym keysym = 0;
         const int length =
             XLookupString(&event.xkey, buffer, sizeof(buffer), &keysym, nullptr);
-        (void)keysym;
-        if (length > 0) {
-            state->pending.push_back({WindowEventType::KeyDown, 0, 0, buffer[0]});
+        if (keysym != NoSymbol) {
+            const char character = length > 0 ? buffer[0] : '\0';
+            const WindowEventType type =
+                event.type == KeyPress ? WindowEventType::KeyDown : WindowEventType::KeyUp;
+            state->pending.push_back(
+                {type, 0, 0, character, static_cast<unsigned long>(keysym)});
         }
         return;
     }
@@ -167,7 +170,8 @@ NativeWindow create_window(const char* const caption, const int width,  // NOLIN
         return nullptr;
     }
     XStoreName(dpy, window, caption != nullptr ? caption : "TradutorLinux");
-    XSelectInput(dpy, window, ExposureMask | ButtonPressMask | KeyPressMask | StructureNotifyMask);
+    XSelectInput(dpy, window, ExposureMask | ButtonPressMask | KeyPressMask | KeyReleaseMask |
+                                 StructureNotifyMask);
     Atom delete_protocol = XInternAtom(dpy, "WM_DELETE_WINDOW", False);
     XSetWMProtocols(dpy, window, &delete_protocol, 1);
     *state = WindowState{
@@ -226,13 +230,20 @@ void flush_window(const NativeWindow window) noexcept {
 }
 
 void draw_text(const NativeWindow window, const char* const text, const int x, const int y) noexcept {
-    Display* const dpy = display();
-    WindowState* state = find_state(window);
-    if (dpy == nullptr || state == nullptr || text == nullptr) {
+    if (text == nullptr) {
         return;
     }
-    XDrawString(dpy, state->window, DefaultGC(dpy, state->screen), x, y, text,
-                static_cast<int>(std::strlen(text)));
+    draw_text_len(window, text, static_cast<int>(std::strlen(text)), x, y);
+}
+
+void draw_text_len(const NativeWindow window, const char* const text, const int length, const int x,
+                   const int y) noexcept {
+    Display* const dpy = display();
+    WindowState* state = find_state(window);
+    if (dpy == nullptr || state == nullptr || text == nullptr || length <= 0) {
+        return;
+    }
+    XDrawString(dpy, state->window, DefaultGC(dpy, state->screen), x, y, text, length);
 }
 
 void draw_rectangle(const NativeWindow window, const int x, const int y, const int width,

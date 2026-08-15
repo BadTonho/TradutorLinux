@@ -14,7 +14,7 @@ find_program(TL_LLVM_READOBJ
 set(TL_FIXTURE_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/generated")
 
 function(tl_add_pe_fixture target_name source_file manifest_file)
-    set(options LINK_KERNEL32 LINK_USER32 RELOCATABLE RUNTIME_FAILURE EXPECT_RESOLVED CONSOLE REPORT REPORT_ONLY)
+    set(options LINK_KERNEL32 LINK_USER32 LINK_GDI32 RELOCATABLE RUNTIME_FAILURE EXPECT_RESOLVED CONSOLE REPORT REPORT_ONLY)
     set(oneValueArgs REPORT_SYMBOL)
     cmake_parse_arguments(ARG "${options}" "${oneValueArgs}" "" ${ARGN})
 
@@ -26,6 +26,9 @@ function(tl_add_pe_fixture target_name source_file manifest_file)
     endif()
     if(ARG_LINK_USER32)
         list(APPEND link_libraries -luser32)
+    endif()
+    if(ARG_LINK_GDI32)
+        list(APPEND link_libraries -lgdi32)
     endif()
     if(ARG_RELOCATABLE)
         list(APPEND link_flags -Wl,--dynamicbase)
@@ -166,3 +169,12 @@ tl_add_pe_fixture(tl_win src/tl_win.c manifests/tl_win.json
 tl_add_pe_fixture(tl_win2 src/tl_win2.c manifests/tl_win2.json
     LINK_KERNEL32 LINK_USER32 EXPECT_RESOLVED REPORT_ONLY RELOCATABLE
     REPORT_SYMBOL "USER32.dll!RegisterClassExA")
+tl_add_pe_fixture(tl_key src/tl_key.c manifests/tl_key.json
+    LINK_KERNEL32 LINK_USER32 EXPECT_RESOLVED REPORT_ONLY RELOCATABLE
+    REPORT_SYMBOL "USER32.dll!RegisterClassExA")
+tl_add_pe_fixture(tl_timer src/tl_timer.c manifests/tl_timer.json
+    LINK_KERNEL32 LINK_USER32 EXPECT_RESOLVED REPORT_ONLY RELOCATABLE
+    REPORT_SYMBOL "USER32.dll!SetTimer")
+tl_add_pe_fixture(tl_gdi src/tl_gdi.c manifests/tl_gdi.json
+    LINK_KERNEL32 LINK_USER32 LINK_GDI32 EXPECT_RESOLVED REPORT_ONLY RELOCATABLE
+    REPORT_SYMBOL "GDI32.dll!TextOutA")

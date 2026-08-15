@@ -10,8 +10,9 @@ runtime de console independente.
 janelas do processo. Cada janela é um token opaco num pool fixo (`NativeWindow`).
 Os eventos X11 são drenados pelo runtime via `next_window_event` e traduzidos
 para o subconjunto Win32: `Expose` → `WM_PAINT`, `ButtonPress` → `WM_LBUTTONDOWN`,
-`KeyPress` → `WM_KEYDOWN`/`WM_CHAR` (via `TranslateMessage`) e `WM_DELETE_WINDOW`
-(protocolo de janela) → `WM_CLOSE`.
+`KeyPress` → `WM_KEYDOWN`, `KeyRelease` → `WM_KEYUP`, `KeyPress` com caractere →
+`WM_CHAR` (via `TranslateMessage`) e `WM_DELETE_WINDOW` (protocolo de janela) →
+`WM_CLOSE`. O pump também despacha timers expirados como `WM_TIMER`.
 
 O pump mantém uma **fila de eventos por janela**: a cada consulta, todos os
 eventos X11 pendentes do display são demultiplexados para a fila da janela-alvo
@@ -44,12 +45,26 @@ Além de `MessageBoxA`, `USER32.dll` exporta um subconjunto mínimo de janela:
 | `CreateWindowExA` | Procura a classe, cria a janela X11 e despacha `WM_CREATE` ao `WNDPROC` do convidado antes de devolver o `HWND` token opaco; se o `WNDPROC` retornar `-1`, destrói a janela e devolve `NULL` (`lParam` do `WM_CREATE` é `0`; não há `CREATESTRUCT`). Aceita largura/altura `<= 0` (usa 480×180). Parent, menu, instância e parâmetro são ignorados. |
 | `ShowWindow` | Mapeia/desmapeia a janela X11; `cmdShow != 0` mostra, `0` esconde. |
 | `UpdateWindow` | Despacha `WM_PAINT` diretamente ao `WNDPROC` do convidado. |
-| `GetMessageA` | Drena os eventos X11 da janela, traduz e preenche o `MSG` do convidado; retorna `0` quando `PostQuitMessage` foi chamado (preenche `WM_QUIT`). Uma mensagem traduzida em espera (`WM_CHAR` gerado por `TranslateMessage`) é entregue antes dos próximos eventos X11. `KeyPress` vira `WM_KEYDOWN` com a virtual key (letras viram maiúsculas) e guarda o caractere para o `TranslateMessage` subsequente. Os filtros `wMsgFilterMin`/`wMsgFilterMax` e `hWnd` (quando `NULL` não filtra) são ignorados; `hWnd != NULL` filtra por janela. |
+| `GetMessageA` | Drena os eventos X11 da janela, traduz e preenche o `MSG` do convidado; retorna `0` quando `PostQuitMessage` foi chamado (preenche `WM_QUIT`). Uma mensagem traduzida em espera (`WM_CHAR` gerado por `TranslateMessage`) é entregue antes dos próximos eventos X11. `KeyPress` vira `WM_KEYDOWN` e `KeyRelease` vira `WM_KEYUP`, ambos com a virtual key; o caractere da tecla é guardado para o `TranslateMessage` subsequente. Timers expirados são entregues como `WM_TIMER` entre as consultas X11. Os filtros `wMsgFilterMin`/`wMsgFilterMax` e `hWnd` (quando `NULL` não filtra) são ignorados; `hWnd != NULL` filtra por janela. |
 | `TranslateMessage` | Converte o `WM_KEYDOWN` mais recente de cada janela em `WM_CHAR` (com o caractere real) enfileirado para o próximo `GetMessageA`; retorna `1` quando traduziu e `0` caso contrário. |
+| `SetTimer` | Cria/atualiza um timer periódico por janela (`WM_TIMER`), exigindo `lpTimerFunc == NULL` e `uElapse != 0`; devolve o id informado ou `0` em falha. |
+| `KillTimer` | Remove um timer ativo; devolve `1` quando existia, `0` caso contrário. |
 | `DispatchMessageA` | Lê o `MSG`, localiza o `HWND` e invoca o `WNDPROC` do convidado. |
 | `DefWindowProcA` | `WM_CLOSE` → `DestroyWindow`; demais mensagens retornam `0`. |
 | `DestroyWindow` | Destrói a janela X11 e despacha `WM_DESTROY` ao `WNDPROC` do convidado. |
 | `PostQuitMessage` | Sinaliza `WM_QUIT` com o código informado; `GetMessageA` passa a retornar `0`. |
+| `GetDC` / `ReleaseDC` | Devolvem um `HDC` que é o próprio handle de janela (token opaco) e validam o par `hwnd`/`dc`; servem de base para o desenho com GDI mínimo. |
+
+### Virtual keys e `TranslateMessage`
+
+O mapeamento tecla→virtual key usa o `keysym` X11 entregue pelo pump. Teclas
+especiais têm tabela fixa (`XK_Return`→`VK_RETURN`, `XK_BackSpace`→`VK_BACK`,
+`XK_Tab`→`VK_TAB`, `XK_Escape`→`VK_ESCAPE`, setas `XK_Left/Up/Right/Down`→
+`VK_LEFT/UP/RIGHT/DOWN`, `XK_Delete`→`VK_DELETE`); letras usam a maiúscula
+(`VK_A`…`VK_Z`, já refletindo o estado de `Shift` via `XLookupString`) e demais
+caracteres ASCII imprimíveis usam o próprio valor. Teclas sem caractere (setas,
+`Return`, etc.) geram `WM_KEYDOWN`/`WM_KEYUP` normalmente, mas `TranslateMessage`
+só emite `WM_CHAR` quando o `WM_KEYDOWN` tinha caractere real.
 
 `MSG` é tratado com o layout Microsoft x64 (48 bytes). O `WNDPROC` do convidado
 é invocado pela convenção Microsoft x64 (`TL_MSABI`) a partir do endereço lido
@@ -58,18 +73,31 @@ convidado chama as APIs hospedeiras, essa fronteira host→convidado não precis
 de trampolim de pilha (`call_wndproc` em `src/runtime/winapi.cpp`).
 
 O texto desenhado no `Expose` é o título da janela, gravado pelo próprio
-runtime; desenho arbitrário via GDI (como `TextOut`/`BeginPaint`) fica fora de
-escopo.
+runtime. Além disso, o GDI mínimo desenha na janela X11:
+
+### GDI mínimo (subconjunto)
+
+`GDI32.dll` exporta `GetStockObject` e `TextOutA`/`TextOut`; `USER32.dll`
+exporta `BeginPaint`/`EndPaint` (que são do USER32 no SDK Windows). O `HDC`
+devolvido por `GetDC` e `BeginPaint` é o próprio handle de janela: como o
+modelo suportado é uma janela por operação de desenho, o `HDC` identifica o
+destino sem objeto DC real. `BeginPaint` preenche o `PAINTSTRUCT` convidado
+(layout Microsoft x64, 72 bytes; `R`ECT de 16 bytes) com o tamanho armazenado
+no `CreateWindowExA` e marca a janela como "pintando" até o `EndPaint`
+correspondente. `TextOutA` desenha o texto (com o comprimento explícito) via
+`XDrawString` no `HDC`/janela. `GetStockObject` devolve um token opaco por
+objeto (endereço de uma tabela estática; stock objects não são liberados).
 
 ## Validação
 
-As fixtures `tl_gui.exe`, `tl_win.exe` e `tl_win2.exe` são validadas
-automaticamente pelo parser, metadata e `--report`, que confirmam os imports
-sem executar o entry point. Além disso, `tl_win.exe` e `tl_win2.exe` são
-executados de ponta a ponta no teste `runtime_gui_smoke`
+As fixtures `tl_gui.exe`, `tl_win.exe`, `tl_win2.exe`, `tl_key.exe`,
+`tl_timer.exe` e `tl_gdi.exe` são validadas automaticamente pelo parser,
+metadata e `--report`, que confirmam os imports sem executar o entry point.
+Além disso, `tl_win.exe`, `tl_win2.exe`, `tl_key.exe`, `tl_timer.exe` e
+`tl_gdi.exe` são executados de ponta a ponta no teste `runtime_gui_smoke`
 (`tests/gui/runtime_gui_smoke.cpp`), que sobe sempre um `Xvfb` próprio — sem
 window manager, para que a janela seja filha direta da root e os eventos
-sintéticos cheguem ao cliente — e cobre quatro cenários:
+sintéticos cheguem ao cliente — e cobre sete cenários:
 
 1. **autoclose** — `TL_GUI_AUTOCLOSE_MS != 0`: o message loop encerra sozinho
    via `WM_QUIT`, sem interação.
@@ -88,19 +116,39 @@ sintéticos cheguem ao cliente — e cobre quatro cenários:
    pump), exercitando as duas cadeias independentes de
    `WM_KEYDOWN → WM_CHAR → DestroyWindow → WM_DESTROY` e provando a
    demultiplexação de eventos entre janelas.
+5. **teclado estendido** — com `tl_key.exe`: o driver envia `KeyPress`+`KeyRelease`
+   sintéticos de `Shift+q`, `Return` e `Left` (via `XSendEvent`), exercitando
+   `WM_KEYDOWN('Q')` com Shift, `WM_CHAR(81)`, `WM_KEYDOWN(VK_RETURN)`,
+   `WM_KEYDOWN(VK_LEFT)` e `WM_KEYUP(VK_LEFT)`; a fixture destrói a janela só
+   depois de receber os três marcadores (exit-code `7`), provando que o Shift
+   produziu maiúscula e que teclas sem caractere geram `WM_KEYUP`.
+6. **timer** — com `tl_timer.exe` (sem interação): `SetTimer` cria um timer
+   periódico de 200 ms; dois disparos `WM_TIMER` chegam ao `WNDPROC`, o segundo
+   faz `KillTimer` + `DestroyWindow` (exit-code `7`), exercitando a entrega de
+   `WM_TIMER` pelo pump com periodicidade.
+7. **GDI mínimo** — com `tl_gdi.exe` (sem interação): no `WM_PAINT` a fixture
+   chama `BeginPaint`, verifica `ps.hdc == hdc` e o `rcPaint` com o tamanho da
+   janela, desenha "Ola GDI no Linux!" com `TextOutA`, chama `EndPaint` e
+   destrói a janela (exit-code `3`), exercitando o `PAINTSTRUCT`, o `HDC == hwnd`
+   e o desenho com comprimento explícito.
 
 Cada cenário exige o exit-code esperado — `tl_win.c` marca uma flag no
 `WM_CREATE` e outra ao receber `WM_CHAR('q')`, e faz `PostQuitMessage(flag)` no
 `WM_DESTROY` (autoclose e fechar exigem `1`; teclado exige `3`). `tl_win2.c`
 acumula flags de cada janela (criada A=1, `'q'` A=2, criada B=4, `'k'` B=8) e
 faz `PostQuitMessage` quando a última janela é destruída (exit-code `15` com
-tudo funcionando). O teste também exige
-`stdout` vazio (trace só em `stderr`), os eventos `RegisterClassExA`,
-`CreateWindowExA`, `GetMessageA message="WM_QUIT"`, `ExitProcess` e
-`exit explicit="sim"` no trace, além dos `TranslateMessage message="WM_CHAR"`
-por janela. O teste é configurado pelo CMake somente quando `xvfb` está
-disponível (CI instala `xvfb`). Para o smoke test manual interativo de
-`tl_win.exe`:
+tudo funcionando). `tl_key.c` acumula `WM_CHAR('Q')`=1, `WM_KEYDOWN(VK_RETURN)`=2
+e `WM_KEYUP(VK_LEFT)`=4 (exit-code `7`). `tl_timer.c` acumula `WM_CREATE`=1 e o
+primeiro/segundo `WM_TIMER`=2/4 (exit-code `7`). `tl_gdi.c` acumula `WM_CREATE`=1
+e pintura válida com `BeginPaint`/`EndPaint`/`TextOutA`=2 (exit-code `3`). O
+teste também exige `stdout` vazio (trace só em `stderr`), os eventos
+`RegisterClassExA`, `CreateWindowExA`, `GetMessageA message="WM_QUIT"`,
+`ExitProcess` e `exit explicit="sim"` no trace, além dos
+`TranslateMessage message="WM_CHAR"` por janela, `SetTimer`/`KillTimer`/
+`GetMessageA message="WM_TIMER"` no cenário timer e `GetStockObject`/
+`BeginPaint`/`TextOut`/`EndPaint` no cenário GDI. O teste é configurado pelo
+CMake somente quando `xvfb` está disponível (CI instala `xvfb`). Para o smoke
+test manual interativo de `tl_win.exe`:
 
 ```bash
 TL_GUI_AUTOCLOSE_MS=0 ./build/debug/src/tradutorlinux \
@@ -115,5 +163,6 @@ A entrada de teclado no runtime é testada de ponta a ponta pelo cenário
 real do teclado também chega como `KeyPress` ao cliente, então digitar na janela
 funciona da mesma forma; não há teste automatizado com um WM real.
 
-Wayland nativo, GDI, recursos, ícones, menus, múltiplas janelas simultâneas e
-toolkits não fazem parte deste protótipo.
+Wayland nativo, recursos, ícones, menus, toolkits e a maioria do GDI (regiões,
+pincéis, fontes, `BeginPaint` com atualização de região inválida, HDC de
+verdade) não fazem parte deste protótipo.

@@ -13,6 +13,9 @@ Esta matriz declara o comportamento suportado; ela não é uma promessa de compa
 | `tl_gui.exe` | PE32+ AMD64 | Não | `KERNEL32.dll!ExitProcess`, `USER32.dll!MessageBoxA` | Protótipo manual: caixa modal X11 mínima; não executado automaticamente por depender de display | Fase 7 |
 | `tl_win.exe` | PE32+ AMD64 | Não | `KERNEL32.dll!ExitProcess`, `USER32.dll!RegisterClassExA`, `CreateWindowExA`, `ShowWindow`, `UpdateWindow`, `GetMessageA`, `TranslateMessage`, `DispatchMessageA`, `DefWindowProcA`, `DestroyWindow`, `PostQuitMessage` | Janela real com message loop X11; fecha via `WM_CLOSE`/autoclose; teclado via `WM_KEYDOWN`/`WM_CHAR`; executado automaticamente sob Xvfb (teste `runtime_gui_smoke`, cenários autoclose, `WM_DELETE_WINDOW` e `KeyPress 'q'`) | Fase 7 |
 | `tl_win2.exe` | PE32+ AMD64 | Não | `KERNEL32.dll!ExitProcess`, `USER32.dll!RegisterClassExA`, `CreateWindowExA`, `ShowWindow`, `UpdateWindow`, `GetMessageA`, `TranslateMessage`, `DispatchMessageA`, `DefWindowProcA`, `DestroyWindow`, `PostQuitMessage` | Duas janelas simultâneas com `WNDPROC`s independentes; eventos roteados por janela (fila por janela no pump); executado automaticamente sob Xvfb (cenário `janelas` do `runtime_gui_smoke`, `KeyPress 'q'` em A e `'k'` em B) | Fase 7 |
+| `tl_key.exe` | PE32+ AMD64 | Não | `KERNEL32.dll!ExitProcess`, `USER32.dll!RegisterClassExA`, `CreateWindowExA`, `ShowWindow`, `UpdateWindow`, `GetMessageA`, `TranslateMessage`, `DispatchMessageA`, `DefWindowProcA`, `DestroyWindow`, `PostQuitMessage` | Teclado estendido: `Shift+q` → `WM_CHAR('Q')`, `Return` → `WM_KEYDOWN(VK_RETURN)` e `Left` → `WM_KEYUP(VK_LEFT)`; executado sob Xvfb (cenário `keys`, exit-code `7`) | Fase 7 |
+| `tl_timer.exe` | PE32+ AMD64 | Não | `KERNEL32.dll!ExitProcess`, `USER32.dll!RegisterClassExA`, `CreateWindowExA`, `ShowWindow`, `GetMessageA`, `DispatchMessageA`, `DefWindowProcA`, `SetTimer`, `KillTimer`, `DestroyWindow`, `PostQuitMessage` | Timer periódico de 200 ms: dois `WM_TIMER`, depois `KillTimer` + `DestroyWindow`; executado sob Xvfb (cenário `timer`, exit-code `7`) | Fase 7 |
+| `tl_gdi.exe` | PE32+ AMD64 | Não | `KERNEL32.dll!ExitProcess`, `USER32.dll!RegisterClassExA`, `CreateWindowExA`, `ShowWindow`, `UpdateWindow`, `GetMessageA`, `DispatchMessageA`, `DefWindowProcA`, `DestroyWindow`, `PostQuitMessage`, `BeginPaint`, `EndPaint`; `GDI32.dll!GetStockObject`, `TextOutA` | Pintura mínima no `WM_PAINT` (`BeginPaint`/`TextOutA`/`EndPaint`) validando `HDC == HWND` e `rcPaint`; executado sob Xvfb (cenário `gdi`, exit-code `3`) | Fase 7 |
 | `tl_reloc.exe` | PE32+ AMD64 | Não | Nenhum | Gerado com `-Wl,--dynamicbase`, verificado, parseado e mapeado na Fase 2; usado para validar base relocations | Fase 4 |
 | `tl_missing_dll.exe` | PE32+ AMD64 | Não | `USER32.dll!MessageBoxW` | Gerado, verificado e rejeitado na Fase 3: `USER32.dll` é conhecida, mas o símbolo diagnostica `unknown-symbol`; retorna `5` sem executar o entry point | Fase 4 |
 
@@ -98,9 +101,9 @@ caminhos relativos sem drive são aceitos; `\\` é normalizado para `/`.
 
 ## GUI mínima (Fase 7)
 
-O protótipo registra um subconjunto de `USER32.dll` e usa X11 diretamente. Ele é
-experimental, não altera o subsistema de console e só aceita `type == 0` em
-`MessageBoxA`.
+O protótipo registra um subconjunto de `USER32.dll` e `GDI32.dll` e usa X11
+diretamente. Ele é experimental, não altera o subsistema de console e só aceita
+`type == 0` em `MessageBoxA`.
 
 | Módulo | API | Estado | Comportamento suportado |
 |---|---|---|---|
@@ -109,17 +112,27 @@ experimental, não altera o subsistema de console e só aceita `type == 0` em
 | `USER32.dll` | `CreateWindowExA` | Suportado | Cria janela X11 a partir da classe registrada e despacha `WM_CREATE` ao `WNDPROC` (retorno `-1` aborta a criação); parent/menu/instância/param ignorados |
 | `USER32.dll` | `ShowWindow` | Suportado | Mostra/esconde a janela X11 |
 | `USER32.dll` | `UpdateWindow` | Suportado | Despacha `WM_PAINT` diretamente ao `WNDPROC` |
-| `USER32.dll` | `GetMessageA` | Suportado | Traduz eventos X11 para `WM_PAINT`/`WM_LBUTTONDOWN`/`WM_KEYDOWN`/`WM_CLOSE`, roteados por janela (fila por janela no pump); entrega mensagens pendentes antes dos eventos X11; retorna `0` com `WM_QUIT` após `PostQuitMessage` |
-| `USER32.dll` | `TranslateMessage` | Suportado | Converte o `WM_KEYDOWN` mais recente em `WM_CHAR` com o caractere real |
+| `USER32.dll` | `GetMessageA` | Suportado | Traduz eventos X11 para `WM_PAINT`/`WM_LBUTTONDOWN`/`WM_KEYDOWN`/`WM_KEYUP`/`WM_CLOSE`, roteados por janela (fila por janela no pump); entrega mensagens pendentes antes dos eventos X11; despacha `WM_TIMER` expirados; retorna `0` com `WM_QUIT` após `PostQuitMessage` |
+| `USER32.dll` | `TranslateMessage` | Suportado | Converte o `WM_KEYDOWN` mais recente em `WM_CHAR` com o caractere real (sem `WM_CHAR` para teclas sem caractere) |
+| `USER32.dll` | `SetTimer` | Suportado | Timer periódico por janela → `WM_TIMER`; só `lpTimerFunc == NULL` |
+| `USER32.dll` | `KillTimer` | Suportado | Remove um timer ativo |
 | `USER32.dll` | `DispatchMessageA` | Suportado | Invoca o `WNDPROC` do convidado (`TL_MSABI`, host→convidado) |
 | `USER32.dll` | `DefWindowProcA` | Suportado | `WM_CLOSE` → `DestroyWindow`; demais retornam `0` |
 | `USER32.dll` | `DestroyWindow` | Suportado | Destrói a janela e despacha `WM_DESTROY` |
 | `USER32.dll` | `PostQuitMessage` | Suportado | Sinaliza `WM_QUIT`; `GetMessageA` retorna `0` |
+| `USER32.dll` | `GetDC` / `ReleaseDC` | Suportado | `HDC == HWND` (token opaco da janela); validam o par `hwnd`/`dc` |
+| `USER32.dll` | `BeginPaint` / `EndPaint` | Suportado | Preenchem o `PAINTSTRUCT` (layout Microsoft x64, 72 bytes) com o tamanho da janela e marcam/desmarcam o estado de pintura; `HDC == HWND` |
+| `GDI32.dll` | `GetStockObject` | Suportado | Token opaco por stock object (tabela estática, `object` em `0..23`); stock objects não são liberados |
+| `GDI32.dll` | `TextOutA` / `TextOut` | Suportado | Desenha texto ANSI com comprimento explícito via `XDrawString` no `HDC`/janela |
 
 `tl_gui.exe` é validado automaticamente quanto a formato e imports; a janela
-deve ser validada manualmente numa sessão X11. `tl_win.exe` e `tl_win2.exe` são
-executados de ponta a ponta sob `Xvfb` (sempre um servidor próprio, sem window
-manager) pelo teste `runtime_gui_smoke`, que cobre o message loop (autoclose),
-o fechamento real por `WM_DELETE_WINDOW`, a entrada de teclado (`KeyPress`
-sintético → `WM_KEYDOWN`/`WM_CHAR`) e a demultiplexação entre duas janelas
-simultâneas — ver [`gui-x11.md`](arquitetura/gui-x11.md).
+deve ser validada manualmente numa sessão X11. `tl_win.exe`, `tl_win2.exe`,
+`tl_key.exe`, `tl_timer.exe` e `tl_gdi.exe` são executados de ponta a ponta sob
+`Xvfb` (sempre um servidor próprio, sem window manager) pelo teste
+`runtime_gui_smoke`, que cobre o message loop (autoclose), o fechamento real por
+`WM_DELETE_WINDOW`, a entrada de teclado (`KeyPress` sintético →
+`WM_KEYDOWN`/`WM_CHAR`), a demultiplexação entre duas janelas simultâneas, o
+teclado estendido (`KeyPress`+`KeyRelease`, `Shift`, teclas sem caractere →
+`WM_KEYDOWN`/`WM_KEYUP`), os timers (`SetTimer` → `WM_TIMER` → `KillTimer`) e a
+pintura mínima (`BeginPaint`/`TextOut`/`EndPaint`) — ver
+[`gui-x11.md`](arquitetura/gui-x11.md).

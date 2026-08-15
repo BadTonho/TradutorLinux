@@ -55,9 +55,23 @@ constexpr Uint kWmCreate = 0x0001;
 constexpr Uint kWmDestroy = 0x0002;
 constexpr Uint kWmQuit = 0x0012;
 constexpr Uint kWmKeyDown = 0x0100;
+constexpr Uint kWmKeyUp = 0x0101;
 constexpr Uint kWmChar = 0x0102;
+constexpr Uint kWmTimer = 0x0113;
 constexpr Uint kWmLButtonDown = 0x0201;
 constexpr int kSwShow = 1;
+
+// Virtual keys (subconjunto suportado).
+constexpr Wparam kVkBack = 0x08;
+constexpr Wparam kVkTab = 0x09;
+constexpr Wparam kVkReturn = 0x0D;
+constexpr Wparam kVkEscape = 0x1B;
+constexpr Wparam kVkSpace = 0x20;
+constexpr Wparam kVkLeft = 0x25;
+constexpr Wparam kVkUp = 0x26;
+constexpr Wparam kVkRight = 0x27;
+constexpr Wparam kVkDown = 0x28;
+constexpr Wparam kVkDelete = 0x2E;
 
 // MSG com layout Microsoft x64 (48 bytes). Campos em offsets fixos para
 // leitura/escrita de memória convidada.
@@ -89,6 +103,26 @@ struct GuestWndClassExA {
     void* icon_sm{};
 };
 static_assert(sizeof(GuestWndClassExA) == 80);
+
+// RECT com layout Microsoft x64 (16 bytes).
+struct GuestRect {
+    std::int32_t left{};
+    std::int32_t top{};
+    std::int32_t right{};
+    std::int32_t bottom{};
+};
+static_assert(sizeof(GuestRect) == 16);
+
+// PAINTSTRUCT com layout Microsoft x64 (72 bytes).
+struct GuestPaintStruct {
+    void* hdc{};
+    std::int32_t f_erase{};
+    GuestRect rc_paint{};
+    std::int32_t f_restore{};
+    std::int32_t f_inc_update{};
+    std::uint8_t rgb_reserved[32]{};
+};
+static_assert(sizeof(GuestPaintStruct) == 72);
 
 }  // namespace abi
 
@@ -132,6 +166,15 @@ TL_MSABI abi::Lresult tl_DefWindowProcA(const void* window, std::uint32_t messag
                                         abi::Wparam wparam, abi::Lparam lparam) noexcept;
 TL_MSABI int tl_DestroyWindow(const void* window) noexcept;
 TL_MSABI void tl_PostQuitMessage(int exit_code) noexcept;
+TL_MSABI std::uintptr_t tl_SetTimer(const void* window, std::uintptr_t id, std::uint32_t elapsed_ms,
+                                    const void* timer_proc) noexcept;
+TL_MSABI int tl_KillTimer(const void* window, std::uintptr_t id) noexcept;
+TL_MSABI void* tl_GetStockObject(int object) noexcept;
+TL_MSABI void* tl_BeginPaint(const void* window, void* paint_struct) noexcept;
+TL_MSABI int tl_EndPaint(const void* window, const void* paint_struct) noexcept;
+TL_MSABI int tl_TextOut(const void* dc, int x, int y, const char* text, int length) noexcept;
+TL_MSABI void* tl_GetDC(const void* window) noexcept;
+TL_MSABI int tl_ReleaseDC(const void* window, const void* dc) noexcept;
 
 }  // extern "C"
 

@@ -9,7 +9,8 @@ enum class WindowEventType {
     Idle,           // nenhum evento pendente para a janela
     Redraw,         // redesenho disponível (equivale a WM_PAINT)
     Press,          // clique primário (equivale a WM_LBUTTONDOWN)
-    KeyDown,        // tecla com caractere (equivale a WM_KEYDOWN/WM_CHAR)
+    KeyDown,        // tecla pressionada (equivale a WM_KEYDOWN)
+    KeyUp,          // tecla liberada (equivale a WM_KEYUP)
     CloseRequested, // WM_DELETE_WINDOW do gerenciador de janelas (equivale a WM_CLOSE)
 };
 
@@ -17,7 +18,8 @@ struct WindowEvent {
     WindowEventType type{WindowEventType::Idle};
     int x{};
     int y{};
-    char character{}; // primeiro caractere traduzido da tecla (KeyDown)
+    char character{};        // primeiro caractere traduzido da tecla (pode ser '\0')
+    unsigned long keysym{0}; // keysym X11 da tecla (0 quando ausente)
 };
 
 // Handle opaco de janela persistente. Válido somente para as funções abaixo.
@@ -33,6 +35,7 @@ void flush_window(NativeWindow window) noexcept;
 
 // Desenha texto e um retângulo de contorno no client area da janela.
 void draw_text(NativeWindow window, const char* text, int x, int y) noexcept;
+void draw_text_len(NativeWindow window, const char* text, int length, int x, int y) noexcept;
 void draw_rectangle(NativeWindow window, int x, int y, int width, int height) noexcept;
 
 // Retorna o próximo evento pendente da janela, drenando um evento X por chamada.

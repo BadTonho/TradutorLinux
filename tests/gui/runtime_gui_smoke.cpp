@@ -156,8 +156,9 @@ bool send_wm_delete(const std::string& display) {
     return true;
 }
 
-bool send_key(const std::string& display, const char* const caption,  // NOLINT(bugprone-easily-swappable-parameters)
-              const char* const keysym_name) {
+bool send_key_state(const std::string& display, const char* const caption,  // NOLINT(bugprone-easily-swappable-parameters)
+                    const char* const keysym_name, const int type,  // NOLINT(bugprone-easily-swappable-parameters)
+                    const unsigned int state) {
     Display* const dpy = XOpenDisplay(display.c_str());
     if (dpy == nullptr) {
         return false;
@@ -173,7 +174,7 @@ bool send_key(const std::string& display, const char* const caption,  // NOLINT(
         return false;
     }
     XEvent event{};
-    event.xkey.type = KeyPress;
+    event.xkey.type = type;
     event.xkey.display = dpy;
     event.xkey.window = window;
     event.xkey.root = RootWindow(dpy, DefaultScreen(dpy));
@@ -182,13 +183,29 @@ bool send_key(const std::string& display, const char* const caption,  // NOLINT(
     event.xkey.y = 10;
     event.xkey.x_root = 10;
     event.xkey.y_root = 10;
-    event.xkey.state = 0;
+    event.xkey.state = static_cast<unsigned int>(state);
     event.xkey.keycode = keycode;
     event.xkey.same_screen = True;
-    XSendEvent(dpy, window, False, KeyPressMask, &event);
+    const long mask = type == KeyPress ? KeyPressMask : KeyReleaseMask;
+    XSendEvent(dpy, window, False, mask, &event);
     XFlush(dpy);
     XCloseDisplay(dpy);
     return true;
+}
+
+bool send_key(const std::string& display, const char* const caption,  // NOLINT(bugprone-easily-swappable-parameters)
+              const char* const keysym_name) {
+    return send_key_state(display, caption, keysym_name, KeyPress, 0);
+}
+
+// Envia KeyPress + KeyRelease da mesma tecla (estado opcional de Shift),
+// como uma digitação real; o runtime deve produzir WM_KEYDOWN, WM_CHAR
+// (quando há caractere) e WM_KEYUP.
+bool send_key_pair(const std::string& display, const char* const caption,  // NOLINT(bugprone-easily-swappable-parameters)
+                   const char* const keysym_name, const bool shift) {
+    const unsigned int state = shift ? static_cast<unsigned int>(ShiftMask) : 0;
+    return send_key_state(display, caption, keysym_name, KeyPress, state) &&
+           send_key_state(display, caption, keysym_name, KeyRelease, state);
 }
 
 enum class Trigger : unsigned char {
@@ -196,6 +213,7 @@ enum class Trigger : unsigned char {
     CloseRequest,
     KeyQ,
     TwoKeys,
+    KeyPairs,
 };
 
 struct RunOptions {
@@ -240,6 +258,16 @@ void run_runtime(const std::string& runtime, const std::string& input,
                 done = send_wm_delete(display);
             } else if (options.trigger == Trigger::KeyQ) {
                 done = send_key(display, kWindowCaption, "q");
+            } else if (options.trigger == Trigger::KeyPairs) {
+                // Ordem importa: Shift+q, Return, Left. A fixture encerra após
+                // o WM_KEYUP de Left.
+                if (!sent_a) {
+                    sent_a = send_key_pair(display, kWindowCaption, "q", true);
+                } else if (!sent_b) {
+                    sent_b = send_key_pair(display, kWindowCaption, "Return", false);
+                } else {
+                    done = send_key_pair(display, kWindowCaption, "Left", false);
+                }
             } else {
                 if (!sent_a) {
                     sent_a = send_key(display, kCaptionA, "q");
@@ -289,6 +317,7 @@ struct RunExpectations {
     std::vector<std::string> registers;  // needles do RegisterClassExA
     std::vector<std::string> creates;    // needles do CreateWindowExA
     std::vector<std::string> chars;      // needles do TranslateMessage WM_CHAR (opcional)
+    std::vector<std::string> extra;      // needles adicionais de runtime (opcional)
 };
 
 void verify_run(const std::string& work_dir, const std::string& scenario,
@@ -318,6 +347,9 @@ void verify_run(const std::string& work_dir, const std::string& scenario,
     for (const std::string& needle : expected.chars) {
         require_trace_contains(trace, needle, scenario);
     }
+    for (const std::string& needle : expected.extra) {
+        require_trace_contains(trace, needle, scenario);
+    }
 }
 
 const std::string kWinRegisters[] = {
@@ -334,15 +366,19 @@ const std::string kWinKeyChar = "TranslateMessage symbol=\"TranslateMessage\" me
 }  // namespace
 
 int main(const int argc, char** argv) {
-    if (argc != 4 && argc != 5) {
+    if (argc < 4 || argc > 8) {
         std::fprintf(stderr,
-                     "uso: runtime_gui_smoke <runtime> <input> <work-dir> [input2]\n");
+                     "uso: runtime_gui_smoke <runtime> <input> <work-dir> [input2] [input3] "
+                     "[input4] [input5]\n");
         return 2;
     }
     const std::string runtime = argv[1];
     const std::string input = argv[2];
     const std::string work_dir = argv[3];
-    const std::string input2 = argc == 5 ? argv[4] : std::string{};
+    const std::string input2 = argc >= 5 ? argv[4] : std::string{};
+    const std::string input3 = argc >= 6 ? argv[5] : std::string{};
+    const std::string input4 = argc >= 7 ? argv[6] : std::string{};
+    const std::string input5 = argc >= 8 ? argv[7] : std::string{};
 
     std::error_code error;
     std::filesystem::create_directories(work_dir, error);
@@ -361,7 +397,7 @@ int main(const int argc, char** argv) {
     };
     run_runtime(runtime, input, display, autoclose_options);
     verify_run(work_dir, "autoclose",
-               RunExpectations{1, {kWinRegisters[0]}, {kWinCreates[0]}, {}});
+               RunExpectations{1, {kWinRegisters[0]}, {kWinCreates[0]}, {}, {}});
 
     const RunOptions close_options{
         .autoclose = false,
@@ -372,7 +408,7 @@ int main(const int argc, char** argv) {
     };
     run_runtime(runtime, input, display, close_options);
     verify_run(work_dir, "close",
-               RunExpectations{1, {kWinRegisters[0]}, {kWinCreates[0]}, {}});
+               RunExpectations{1, {kWinRegisters[0]}, {kWinCreates[0]}, {}, {}});
 
     const RunOptions key_options{
         .autoclose = false,
@@ -383,7 +419,7 @@ int main(const int argc, char** argv) {
     };
     run_runtime(runtime, input, display, key_options);
     verify_run(work_dir, "key",
-               RunExpectations{3, {kWinRegisters[0]}, {kWinCreates[0]}, {kWinKeyChar}});
+               RunExpectations{3, {kWinRegisters[0]}, {kWinCreates[0]}, {kWinKeyChar}, {}});
 
     if (!input2.empty()) {
         const RunOptions windows_options{
@@ -406,10 +442,82 @@ int main(const int argc, char** argv) {
                  "window=\"Janela A\" status=\"success\"",
                  "CreateWindowExA symbol=\"CreateWindowExA\" class=\"tlwin2b\" "
                  "window=\"Janela B\" status=\"success\""},
+                 {"TranslateMessage symbol=\"TranslateMessage\" message=\"WM_CHAR\" "
+                  "wparam=\"113\" status=\"translated\"",
+                  "TranslateMessage symbol=\"TranslateMessage\" message=\"WM_CHAR\" "
+                  "wparam=\"107\" status=\"translated\""},
+                {}});
+    }
+
+    if (!input3.empty()) {
+        const RunOptions keys_options{
+            .autoclose = false,
+            .trigger = Trigger::KeyPairs,
+            .expected_exit = 7,
+            .trace_path = work_dir + "/trace_keys.log",
+            .stdout_path = work_dir + "/stdout_keys.log",
+        };
+        run_runtime(runtime, input3, display, keys_options);
+        verify_run(
+            work_dir, "keys",
+            RunExpectations{
+                7,
+                {"RegisterClassExA symbol=\"RegisterClassExA\" class=\"tlkey\" "
+                 "atom=\"1\" status=\"success\""},
+                {"CreateWindowExA symbol=\"CreateWindowExA\" class=\"tlkey\" "
+                 "window=\"Ola do Windows no Linux!\" status=\"success\""},
                 {"TranslateMessage symbol=\"TranslateMessage\" message=\"WM_CHAR\" "
-                 "wparam=\"113\" status=\"translated\"",
-                 "TranslateMessage symbol=\"TranslateMessage\" message=\"WM_CHAR\" "
-                 "wparam=\"107\" status=\"translated\""},
+                 "wparam=\"81\" status=\"translated\""},
+                {}});
+    }
+
+    if (!input4.empty()) {
+        const RunOptions timer_options{
+            .autoclose = false,
+            .trigger = Trigger::Nothing,
+            .expected_exit = 7,
+            .trace_path = work_dir + "/trace_timer.log",
+            .stdout_path = work_dir + "/stdout_timer.log",
+        };
+        run_runtime(runtime, input4, display, timer_options);
+        verify_run(
+            work_dir, "timer",
+            RunExpectations{
+                7,
+                {"RegisterClassExA symbol=\"RegisterClassExA\" class=\"tltimer\" "
+                 "atom=\"1\" status=\"success\""},
+                {"CreateWindowExA symbol=\"CreateWindowExA\" class=\"tltimer\" "
+                 "window=\"Ola do Windows no Linux!\" status=\"success\""},
+                {},
+                 {"SetTimer symbol=\"SetTimer\" id=\"1\" elapsed-ms=\"200\" status=\"success\"",
+                  "GetMessageA symbol=\"GetMessageA\" message=\"WM_TIMER\" id=\"1\" "
+                  "status=\"delivered\"",
+                  "KillTimer symbol=\"KillTimer\" id=\"1\" status=\"success\""},
+            });
+    }
+
+    if (!input5.empty()) {
+        const RunOptions gdi_options{
+            .autoclose = false,
+            .trigger = Trigger::Nothing,
+            .expected_exit = 3,
+            .trace_path = work_dir + "/trace_gdi.log",
+            .stdout_path = work_dir + "/stdout_gdi.log",
+        };
+        run_runtime(runtime, input5, display, gdi_options);
+        verify_run(
+            work_dir, "gdi",
+            RunExpectations{
+                3,
+                {"RegisterClassExA symbol=\"RegisterClassExA\" class=\"tlgdi\" "
+                 "atom=\"1\" status=\"success\""},
+                {"CreateWindowExA symbol=\"CreateWindowExA\" class=\"tlgdi\" "
+                 "window=\"Ola do Windows no Linux!\" status=\"success\""},
+                {},
+                {"GetStockObject symbol=\"GetStockObject\" object=\"0\" status=\"success\"",
+                 "BeginPaint symbol=\"BeginPaint\" status=\"success\"",
+                 "TextOut symbol=\"TextOut\" x=\"10\" y=\"10\" length=\"17\"",
+                 "EndPaint symbol=\"EndPaint\" status=\"success\""},
             });
     }
 

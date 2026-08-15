@@ -9,6 +9,7 @@
 #include <cctype>
 #include <cerrno>
 #include <charconv>
+#include <chrono>
 #include <csetjmp>
 #include <cstddef>
 #include <cstdint>
@@ -18,6 +19,7 @@
 #include <span>
 #include <string>
 #include <thread>
+#include <vector>
 #include <fcntl.h>
 #include <sys/mman.h>
 #include <sys/types.h>
@@ -197,6 +199,12 @@ struct ClassSlot {
     std::uintptr_t wndproc{0};
 };
 
+struct GuestTimer {
+    std::uintptr_t id{0};
+    std::chrono::steady_clock::time_point deadline{};
+    std::chrono::milliseconds interval{};
+};
+
 struct WindowSlot {
     bool used{false};
     std::uintptr_t wndproc{0};
@@ -206,6 +214,10 @@ struct WindowSlot {
     abi::GuestMsg pending{};  // mensagem traduzida (ex.: WM_CHAR) aguardando GetMessageA
     bool has_pending{false};
     char last_key{'\0'};  // caractere do WM_KEYDOWN mais recente, para TranslateMessage
+    std::vector<GuestTimer> timers;  // timers ativos (WM_TIMER)
+    int width{0};
+    int height{0};
+    bool painting{false};  // BeginPaint sem EndPaint correspondente
 };
 
 std::array<ClassSlot, 32> g_classes{};
@@ -276,9 +288,47 @@ void write_guest_msg(void* const msg, const abi::HWnd hwnd, const std::uint32_t 
     out->pt_y = 0;
 }
 
-// Virtual key do subconjunto suportado: para letras usa a maiúscula (como
-// VK_A), demais caracteres ASCII imprimíveis usam o próprio valor.
-[[nodiscard]] abi::Wparam keydown_vkey(const char character) noexcept {
+// KeySyms X11 usados na fronteira (valores estáveis do protocolo X11). A
+// camada gui entrega o keysym em WindowEvent; este mapeamento mantém o X11
+// fora do módulo de runtime.
+constexpr unsigned long kKeysymBackspace = 0xFF08;
+constexpr unsigned long kKeysymTab = 0xFF09;
+constexpr unsigned long kKeysymReturn = 0xFF0D;
+constexpr unsigned long kKeysymEscape = 0xFF1B;
+constexpr unsigned long kKeysymLeft = 0xFF51;
+constexpr unsigned long kKeysymUp = 0xFF52;
+constexpr unsigned long kKeysymRight = 0xFF53;
+constexpr unsigned long kKeysymDown = 0xFF54;
+constexpr unsigned long kKeysymDelete = 0xFFFF;
+
+// Virtual key do subconjunto suportado. Teclas especiais são mapeadas pelo
+// keysym; letras usam a maiúscula (como VK_A), demais caracteres ASCII
+// imprimíveis usam o próprio valor. O keysym de letras/dígitos já reflete o
+// estado de Shift (XLookupString).
+[[nodiscard]] abi::Wparam keydown_vkey(const unsigned long keysym,  // NOLINT(bugprone-easily-swappable-parameters)
+                                       const char character) noexcept {
+    switch (keysym) {
+        case kKeysymBackspace:
+            return abi::kVkBack;
+        case kKeysymTab:
+            return abi::kVkTab;
+        case kKeysymReturn:
+            return abi::kVkReturn;
+        case kKeysymEscape:
+            return abi::kVkEscape;
+        case kKeysymLeft:
+            return abi::kVkLeft;
+        case kKeysymUp:
+            return abi::kVkUp;
+        case kKeysymRight:
+            return abi::kVkRight;
+        case kKeysymDown:
+            return abi::kVkDown;
+        case kKeysymDelete:
+            return abi::kVkDelete;
+        default:
+            break;
+    }
     const auto value = static_cast<std::uint32_t>(static_cast<unsigned char>(character));
     if (value >= 'a' && value <= 'z') {
         return static_cast<abi::Wparam>(value - 0x20U);
@@ -658,6 +708,8 @@ TL_MSABI abi::HWnd tl_CreateWindowExA(const std::uint32_t,  // NOLINT(bugprone-e
     slot.wndproc = cls->wndproc;
     slot.class_name = cls->name;
     slot.native = native;
+    slot.width = width;
+    slot.height = height;
     const abi::Lresult create_result = call_wndproc(slot.wndproc, &slot, abi::kWmCreate, 0, 0);
     if (create_result == -1) {
         gui::destroy_window(slot.native);
@@ -767,7 +819,14 @@ TL_MSABI int tl_GetMessageA(void* const msg, const void* const window,  // NOLIN
             }
             if (event.type == gui::WindowEventType::KeyDown) {
                 slot.last_key = event.character;
-                write_guest_msg(msg, &slot, abi::kWmKeyDown, keydown_vkey(event.character), 0);
+                write_guest_msg(msg, &slot, abi::kWmKeyDown,
+                                keydown_vkey(event.keysym, event.character), 0);
+                set_last_error(abi::kErrorSuccess);
+                return 1;
+            }
+            if (event.type == gui::WindowEventType::KeyUp) {
+                write_guest_msg(msg, &slot, abi::kWmKeyUp,
+                                keydown_vkey(event.keysym, event.character), 0);
                 set_last_error(abi::kErrorSuccess);
                 return 1;
             }
@@ -775,6 +834,27 @@ TL_MSABI int tl_GetMessageA(void* const msg, const void* const window,  // NOLIN
                 write_guest_msg(msg, &slot, abi::kWmClose, 0, 0);
                 set_last_error(abi::kErrorSuccess);
                 return 1;
+            }
+        }
+        const auto now = std::chrono::steady_clock::now();
+        for (WindowSlot& slot : g_windows) {
+            if (!slot.used || (window != nullptr && window != &slot)) {
+                continue;
+            }
+            for (GuestTimer& timer : slot.timers) {
+                if (now >= timer.deadline) {
+                    write_guest_msg(msg, &slot, abi::kWmTimer, timer.id, 0);
+                    timer.deadline = std::chrono::steady_clock::now() + timer.interval;
+                    set_last_error(abi::kErrorSuccess);
+                    const std::array<diagnostics::TraceField, 4> fields{
+                        diagnostics::TraceField{"symbol", "GetMessageA"},
+                        diagnostics::TraceField{"message", "WM_TIMER"},
+                        diagnostics::TraceField{"id", std::to_string(timer.id)},
+                        diagnostics::TraceField{"status", "delivered"},
+                    };
+                    runtime_trace("GetMessageA", fields, 4);
+                    return 1;
+                }
             }
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
@@ -869,6 +949,217 @@ TL_MSABI int tl_DestroyWindow(const void* const window) noexcept {
 TL_MSABI void tl_PostQuitMessage(const int exit_code) noexcept {
     g_quit_code = static_cast<std::uint32_t>(exit_code);
     g_quit_requested = true;
+}
+
+TL_MSABI std::uintptr_t tl_SetTimer(const void* const window,  // NOLINT(bugprone-easily-swappable-parameters)
+                                    const std::uintptr_t id,
+                                    const std::uint32_t elapsed_ms,
+                                    const void* const timer_proc) noexcept {
+    WindowSlot* const slot = find_window_slot(window);
+    if (slot == nullptr || elapsed_ms == 0) {
+        set_last_error(abi::kErrorInvalidParameter);
+        trace_guest_failure("SetTimer", "argument-validation",
+                            "hwnd inválido ou intervalo zero");
+        return 0;
+    }
+    if (timer_proc != nullptr) {
+        set_last_error(abi::kErrorInvalidParameter);
+        trace_guest_failure("SetTimer", "timer-proc",
+                            "TIMERPROC ainda não suportado; use WM_TIMER");
+        return 0;
+    }
+    const auto interval = std::chrono::milliseconds{elapsed_ms};
+    GuestTimer* timer = nullptr;
+    const auto found = std::find_if(slot->timers.begin(), slot->timers.end(),
+                                    [id](const GuestTimer& entry) { return entry.id == id; });
+    if (found != slot->timers.end()) {
+        timer = &*found;
+    } else {
+        slot->timers.push_back(GuestTimer{});
+        timer = &slot->timers.back();
+        timer->id = id;
+    }
+    timer->interval = interval;
+    timer->deadline = std::chrono::steady_clock::now() + interval;
+    set_last_error(abi::kErrorSuccess);
+    const std::array<diagnostics::TraceField, 4> fields{
+        diagnostics::TraceField{"symbol", "SetTimer"},
+        diagnostics::TraceField{"id", std::to_string(id)},
+        diagnostics::TraceField{"elapsed-ms", std::to_string(elapsed_ms)},
+        diagnostics::TraceField{"status", "success"},
+    };
+    runtime_trace("SetTimer", fields, 4);
+    return id;
+}
+
+TL_MSABI int tl_KillTimer(const void* const window, const std::uintptr_t id) noexcept {
+    WindowSlot* const slot = find_window_slot(window);
+    if (slot == nullptr) {
+        set_last_error(abi::kErrorInvalidParameter);
+        trace_guest_failure("KillTimer", "handle-validation", "hwnd inválido");
+        return 0;
+    }
+    const auto found = std::find_if(slot->timers.begin(), slot->timers.end(),
+                                    [id](const GuestTimer& timer) { return timer.id == id; });
+    if (found == slot->timers.end()) {
+        set_last_error(abi::kErrorSuccess);
+        return 0;
+    }
+    slot->timers.erase(found);
+    set_last_error(abi::kErrorSuccess);
+    const std::array<diagnostics::TraceField, 4> fields{
+        diagnostics::TraceField{"symbol", "KillTimer"},
+        diagnostics::TraceField{"id", std::to_string(id)},
+        diagnostics::TraceField{"status", "success"},
+        diagnostics::TraceField{"result", "killed"},
+    };
+    runtime_trace("KillTimer", fields, 4);
+    return 1;
+}
+
+// Tokens opacos para stock objects do GDI: o próprio endereço serve de handle
+// e o deslocamento identifica o objeto. Stock objects não são liberados.
+char kStockObjectTokens[24]{};
+
+TL_MSABI void* tl_GetStockObject(const int object) noexcept {
+    if (object < 0 || object >= 24) {
+        set_last_error(abi::kErrorInvalidParameter);
+        trace_guest_failure("GetStockObject", "object", "stock object fora da faixa suportada");
+        return nullptr;
+    }
+    set_last_error(abi::kErrorSuccess);
+    const std::array<diagnostics::TraceField, 4> fields{
+        diagnostics::TraceField{"symbol", "GetStockObject"},
+        diagnostics::TraceField{"object", std::to_string(object)},
+        diagnostics::TraceField{"status", "success"},
+        diagnostics::TraceField{"mechanism", "token"},
+    };
+    runtime_trace("GetStockObject", fields, 4);
+    return kStockObjectTokens + object;
+}
+
+// Inicia a pintura de uma janela: preenche o PAINTSTRUCT convidado e devolve
+// um HDC (o próprio handle de janela, que identifica o destino de desenho).
+TL_MSABI void* tl_BeginPaint(const void* const window,  // NOLINT(bugprone-easily-swappable-parameters)
+                             void* const paint_struct) noexcept {
+    if (paint_struct == nullptr ||
+        !mapped_guest_range(paint_struct, sizeof(abi::GuestPaintStruct), true)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        trace_guest_failure("BeginPaint", "paint-struct", "ponteiro sem permissão de escrita");
+        return nullptr;
+    }
+    WindowSlot* const slot = find_window_slot(window);
+    if (slot == nullptr || slot->native == nullptr) {
+        set_last_error(abi::kErrorInvalidHandle);
+        trace_guest_failure("BeginPaint", "handle-validation", "hwnd inválido");
+        return nullptr;
+    }
+    auto* const ps = static_cast<abi::GuestPaintStruct*>(paint_struct);
+    *ps = {};
+    ps->hdc = const_cast<void*>(window);
+    ps->f_erase = 1;
+    ps->rc_paint = {0, 0, slot->width, slot->height};
+    slot->painting = true;
+    set_last_error(abi::kErrorSuccess);
+    const std::array<diagnostics::TraceField, 4> fields{
+        diagnostics::TraceField{"symbol", "BeginPaint"},
+        diagnostics::TraceField{"status", "success"},
+        diagnostics::TraceField{"mechanism", "hdc=hwnd"},
+        diagnostics::TraceField{"result", "painting"},
+    };
+    runtime_trace("BeginPaint", fields, 4);
+    return ps->hdc;
+}
+
+TL_MSABI int tl_EndPaint(const void* const window,  // NOLINT(bugprone-easily-swappable-parameters)
+                         const void* const paint_struct) noexcept {
+    if (paint_struct == nullptr ||
+        !mapped_guest_range(paint_struct, sizeof(abi::GuestPaintStruct), false)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        trace_guest_failure("EndPaint", "paint-struct", "ponteiro inválido");
+        return 0;
+    }
+    WindowSlot* const slot = find_window_slot(window);
+    if (slot == nullptr) {
+        set_last_error(abi::kErrorInvalidHandle);
+        trace_guest_failure("EndPaint", "handle-validation", "hwnd inválido");
+        return 0;
+    }
+    slot->painting = false;
+    set_last_error(abi::kErrorSuccess);
+    const std::array<diagnostics::TraceField, 4> fields{
+        diagnostics::TraceField{"symbol", "EndPaint"},
+        diagnostics::TraceField{"status", "success"},
+        diagnostics::TraceField{"result", "painted"},
+        diagnostics::TraceField{"mechanism", "hdc=hwnd"},
+    };
+    runtime_trace("EndPaint", fields, 4);
+    return 1;
+}
+
+TL_MSABI int tl_TextOut(const void* const dc, const int x, const int y,  // NOLINT(bugprone-easily-swappable-parameters)
+                        const char* const text, const int length) noexcept {
+    if (text == nullptr || length < 0 ||
+        (length > 0 &&
+         !mapped_guest_range(text, static_cast<std::size_t>(length), false))) {
+        set_last_error(abi::kErrorInvalidParameter);
+        trace_guest_failure("TextOut", "text", "ponteiro ou comprimento inválido");
+        return 0;
+    }
+    WindowSlot* const slot = find_window_slot(dc);
+    if (slot == nullptr || slot->native == nullptr) {
+        set_last_error(abi::kErrorInvalidHandle);
+        trace_guest_failure("TextOut", "dc", "HDC inválido");
+        return 0;
+    }
+    if (length > 0) {
+        gui::draw_text_len(slot->native, text, length, x, y);
+        gui::flush_window(slot->native);
+    }
+    set_last_error(abi::kErrorSuccess);
+    const std::array<diagnostics::TraceField, 4> fields{
+        diagnostics::TraceField{"symbol", "TextOut"},
+        diagnostics::TraceField{"x", std::to_string(x)},
+        diagnostics::TraceField{"y", std::to_string(y)},
+        diagnostics::TraceField{"length", std::to_string(length)},
+    };
+    runtime_trace("TextOut", fields, 4);
+    return 1;
+}
+
+TL_MSABI void* tl_GetDC(const void* const window) noexcept {
+    const WindowSlot* const slot = find_window_slot(window);
+    if (slot == nullptr || slot->native == nullptr) {
+        set_last_error(abi::kErrorInvalidHandle);
+        trace_guest_failure("GetDC", "handle-validation", "hwnd inválido");
+        return nullptr;
+    }
+    set_last_error(abi::kErrorSuccess);
+    const std::array<diagnostics::TraceField, 4> fields{
+        diagnostics::TraceField{"symbol", "GetDC"},
+        diagnostics::TraceField{"status", "success"},
+        diagnostics::TraceField{"mechanism", "hdc=hwnd"},
+        diagnostics::TraceField{"result", "window-dc"},
+    };
+    runtime_trace("GetDC", fields, 4);
+    return const_cast<void*>(window);
+}
+
+TL_MSABI int tl_ReleaseDC(const void* const window, const void* const dc) noexcept {
+    if (window == nullptr || dc != window) {
+        set_last_error(abi::kErrorInvalidParameter);
+        trace_guest_failure("ReleaseDC", "dc", "HDC não pertence à janela");
+        return 0;
+    }
+    set_last_error(abi::kErrorSuccess);
+    const std::array<diagnostics::TraceField, 4> fields{
+        diagnostics::TraceField{"symbol", "ReleaseDC"},
+        diagnostics::TraceField{"status", "success"},
+        diagnostics::TraceField{"mechanism", "hdc=hwnd"},
+        diagnostics::TraceField{"result", "released"},
+    };
+    runtime_trace("ReleaseDC", fields, 4);
+    return 1;
 }
 
 }  // extern "C"

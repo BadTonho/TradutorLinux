@@ -108,14 +108,28 @@ As APIs de janela emitem eventos do componente `runtime`:
 [tl][runtime][info] RegisterClassExA symbol="RegisterClassExA" class="tlwin" atom="1" status="success"
 [tl][runtime][info] CreateWindowExA symbol="CreateWindowExA" class="tlwin" window="Ola do Windows no Linux!" status="success"
 [tl][runtime][info] TranslateMessage symbol="TranslateMessage" message="WM_CHAR" wparam="113" status="translated"
+[tl][runtime][info] SetTimer symbol="SetTimer" id="1" elapsed-ms="200" status="success"
+[tl][runtime][info] GetMessageA symbol="GetMessageA" message="WM_TIMER" id="1" status="delivered"
+[tl][runtime][info] KillTimer symbol="KillTimer" id="1" status="success" result="killed"
+[tl][runtime][info] GetStockObject symbol="GetStockObject" object="0" status="success" mechanism="token"
+[tl][runtime][info] BeginPaint symbol="BeginPaint" status="success" mechanism="hdc=hwnd" result="painting"
+[tl][runtime][info] TextOut symbol="TextOut" x="10" y="10" length="17"
+[tl][runtime][info] EndPaint symbol="EndPaint" status="success" result="painted" mechanism="hdc=hwnd"
 [tl][runtime][info] GetMessageA symbol="GetMessageA" message="WM_QUIT" exit-code="0" result="quit"
 ```
 
-`GetMessageA` registra somente o fim do loop (`WM_QUIT`), confirmando que
-`PostQuitMessage` foi acionado; as mensagens ordinárias não são registradas
-para não poluir o trace. `TranslateMessage` registra a conversão de um
-`WM_KEYDOWN` em `WM_CHAR` com o `wparam` (código do caractere) e `status`
+`GetMessageA` registra somente eventos notáveis: o fim do loop (`WM_QUIT`),
+confirmando que `PostQuitMessage` foi acionado, e cada timer expirado entregue
+(`WM_TIMER` com `id` e `status` `delivered`). As mensagens ordinárias não são
+registradas para não poluir o trace. `TranslateMessage` registra a conversão de
+um `WM_KEYDOWN` em `WM_CHAR` com o `wparam` (código do caractere) e `status`
 (`translated` quando houve conversão; o evento só é emitido nesse caso).
+
+As APIs do GDI mínimo emitem eventos do mesmo componente: `SetTimer`/`KillTimer`
+confirmam criação e remoção de timers; `GetStockObject` registra o objeto e o
+mecanismo `token`; `BeginPaint`/`EndPaint` registram o par de pintura (o `HDC`
+é o próprio `HWND`); `TextOut` registra as coordenadas e o comprimento do texto
+desenhado.
 
 ## Eventos do componente `pe`
 
