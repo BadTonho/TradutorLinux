@@ -25,7 +25,9 @@ constexpr int kInputX = 24;
 constexpr int kInputY = 74;
 constexpr int kInputWidth = 852;
 constexpr int kButtonY = 104;
-constexpr int kOutputY = 184;
+constexpr int kOutputLabelY = 164;
+constexpr int kOutputBoxY = 178;
+constexpr int kOutputY = 205;
 constexpr int kOutputBottom = kHeight - 24;
 constexpr int kLineHeight = 17;
 
@@ -46,9 +48,14 @@ bool inside(const Button& button, const int x, const int y) {
     return x >= button.left && x <= button.right && y >= kButtonY && y <= kButtonY + 32;
 }
 
-void draw_text(Display* display, const Window window, const GC gc, const int x, const int y,
-               const std::string& text) {
-    XDrawString(display, window, gc, x, y, text.c_str(), static_cast<int>(text.size()));
+void draw_text(Display* display, const Window window, const GC gc, const XFontSet font_set,
+               const int x, const int y, const std::string& text) {
+    if (font_set != nullptr) {
+        Xutf8DrawString(display, window, font_set, gc, x, y, text.c_str(),
+                        static_cast<int>(text.size()));
+    } else {
+        XDrawString(display, window, gc, x, y, text.c_str(), static_cast<int>(text.size()));
+    }
 }
 
 std::string read_pipe(const int fd) {
@@ -104,27 +111,28 @@ std::string run_runtime(const std::string& runtime, const std::string& executabl
            std::to_string(WIFEXITED(status) ? WEXITSTATUS(status) : 128) + "\n";
 }
 
-void redraw(Display* display, const Window window, const GC gc, const std::string& path,
-            const std::string& output) {
+void redraw(Display* display, const Window window, const GC gc, const XFontSet font_set,
+            const std::string& path, const std::string& output) {
     XClearWindow(display, window);
-    draw_text(display, window, gc, 24, 28, "TradutorLinux - Launcher de aplicativos Win32");
-    draw_text(display, window, gc, 24, 56, "Arquivo PE32+ x86-64:");
+    draw_text(display, window, gc, font_set, 24, 30,
+              "TradutorLinux - Launcher de aplicativos Win32");
+    draw_text(display, window, gc, font_set, 24, 58, "Arquivo PE32+ x86-64:");
     XDrawRectangle(display, window, gc, kInputX, kInputY - 24, kInputWidth, 28);
-    draw_text(display, window, gc, kInputX + 8, kInputY - 5, path);
+    draw_text(display, window, gc, font_set, kInputX + 8, kInputY - 5, path);
     for (const Button& button : kButtons) {
         XDrawRectangle(display, window, gc, button.left, kButtonY,
                        static_cast<unsigned int>(button.right - button.left), 32U);
-        draw_text(display, window, gc, button.left + 10, kButtonY + 21, button.label);
+        draw_text(display, window, gc, font_set, button.left + 10, kButtonY + 21, button.label);
     }
-    draw_text(display, window, gc, 24, 140, "Diagnóstico e saída:");
-    XDrawRectangle(display, window, gc, 20, 154, kWidth - 40,
-                   static_cast<unsigned int>(kOutputBottom - 154));
+    draw_text(display, window, gc, font_set, 24, kOutputLabelY, "Diagnóstico e saída:");
+    XDrawRectangle(display, window, gc, 20, kOutputBoxY, kWidth - 40,
+                   static_cast<unsigned int>(kOutputBottom - kOutputBoxY));
     int y = kOutputY;
     std::string line;
     constexpr std::size_t kMaxCharactersPerLine = 112;
     const auto flush_line = [&]() {
         if (y <= kOutputBottom - kLineHeight) {
-            draw_text(display, window, gc, 24, y, line);
+            draw_text(display, window, gc, font_set, 24, y, line);
             y += kLineHeight;
         }
         line.clear();
@@ -140,7 +148,7 @@ void redraw(Display* display, const Window window, const GC gc, const std::strin
         }
     }
     if (!line.empty() && y <= kOutputBottom - kLineHeight) {
-        draw_text(display, window, gc, 24, y, line);
+        draw_text(display, window, gc, font_set, 24, y, line);
     }
     XFlush(display);
 }
@@ -162,9 +170,19 @@ int main() {
                                      StructureNotifyMask);
     XMapWindow(display, window);
     const GC gc = DefaultGC(display, screen);
-    XFontStruct* const font = XLoadQueryFont(display, "9x15");
-    if (font != nullptr) {
-        XSetFont(display, gc, font->fid);
+    char** missing = nullptr;
+    int missing_count = 0;
+    char* default_string = nullptr;
+    XFontSet font_set = XCreateFontSet(display, "sans-12", &missing, &missing_count,
+                                       &default_string);
+    if (missing != nullptr) {
+        XFreeStringList(missing);
+    }
+    if (font_set == nullptr) {
+        XFontStruct* const fallback = XLoadQueryFont(display, "9x15");
+        if (fallback != nullptr) {
+            XSetFont(display, gc, fallback->fid);
+        }
     }
     std::string path;
     std::string output = "Digite o caminho de um .exe e escolha uma operação.";
@@ -173,7 +191,7 @@ int main() {
         XEvent event{};
         XNextEvent(display, &event);
         if (event.type == Expose) {
-            redraw(display, window, gc, path, output);
+            redraw(display, window, gc, font_set, path, output);
         } else if (event.type == KeyPress) {
             char buffer[32]{};
             KeySym keysym{};
@@ -186,7 +204,7 @@ int main() {
                        path.size() < 240) {
                 path.append(buffer, static_cast<std::size_t>(length));
             }
-            redraw(display, window, gc, path, output);
+            redraw(display, window, gc, font_set, path, output);
         } else if (event.type == ButtonPress) {
             for (const Button& button : kButtons) {
                 if (!inside(button, event.xbutton.x, event.xbutton.y)) {
@@ -202,7 +220,7 @@ int main() {
                 } else if (!path.empty() && button.label == std::string_view{"Executar"}) {
                     output = run_runtime("./build/debug/src/tradutorlinux", path, false);
                 }
-                redraw(display, window, gc, path, output);
+                redraw(display, window, gc, font_set, path, output);
                 break;
             }
         } else if (event.type == ClientMessage || event.type == DestroyNotify) {
@@ -210,8 +228,8 @@ int main() {
         }
     }
     XDestroyWindow(display, window);
-    if (font != nullptr) {
-        XFreeFont(display, font);
+    if (font_set != nullptr) {
+        XFreeFontSet(display, font_set);
     }
     XCloseDisplay(display);
     return 0;
