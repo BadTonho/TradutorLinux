@@ -14,6 +14,18 @@ cmake --build --preset debug
 
 As aplicações ficam em `build/debug/tests/samples/generated/`.
 
+## Abrir a GUI principal
+
+```bash
+./build/debug/src/tradutorlinux_gui
+```
+
+A tela principal aceita o caminho do executável pelo teclado. Digite o caminho
+completo ou relativo, clique em **Analisar** para executar `--report`, ou em
+**Executar** para iniciar o programa convidado. O painel inferior mostra o
+trace, imports, erros e código de saída. **Limpar** apaga o formulário e
+**Sair** fecha a aplicação.
+
 ## Abrir a caixa de diálogo
 
 ```bash

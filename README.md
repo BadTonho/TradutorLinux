@@ -13,6 +13,15 @@ Para testar visualmente as aplicações GUI em uma sessão X11 real, consulte o
 [guia de teste visual](docs/guia-visual.md). O smoke test automático usa
 `Xvfb` e valida comportamento sem abrir uma janela visível.
 
+A tela principal pode ser aberta com:
+
+```bash
+./build/debug/src/tradutorlinux_gui
+```
+
+Ela permite informar um `.exe`, analisar imports, executar o convidado e
+acompanhar o diagnóstico diretamente na janela.
+
 ## Ambiente de desenvolvimento
 
 O ambiente suportado inicialmente é Ubuntu 24.04 LTS x86-64, instalado nativamente ou em uma máquina virtual.
