@@ -19,7 +19,7 @@ Os itens marcados como concluídos devem ter evidência no repositório: código
 
 ## Estado atual
 
-- **Fase atual:** Fase 7 — Avaliar GUI.
+- **Fase atual:** Fase 8 — Aplicativos-alvo reais.
 - **Marco concluído:** a Fase 7 foi validada de ponta a ponta e a decisão de produto foi tomada: **seguir com a GUI Win32 mínima como objetivo experimental**. `tl_gui.exe` abriu a janela X11, recebeu o clique em OK e encerrou com código `0`; `tl_win.exe` criou uma janela real e executou um message loop completo (`RegisterClassExA`, `CreateWindowExA`, `ShowWindow`, `GetMessageA`, `DispatchMessageA`, `DefWindowProcA`, `PostQuitMessage`), encerrando via `WM_CLOSE`/autoclose com código `0`; o modo `--report` lista imports suportados sem executar o PE; `tl_hello`, `tl_echo` e `tl_file` têm regressões e limitações publicadas na matriz.
 - **Marco concluído:** o smoke test de GUI passou a ter cobertura automática em CI. O teste `runtime_gui_smoke` sobe um `Xvfb` próprio e executa `tl_win.exe` de ponta a ponta em dois cenários: autoclose (message loop encerra sozinho via `WM_QUIT`) e fechamento real por `WM_DELETE_WINDOW` (mesmo `ClientMessage` do botão de fechar do WM), exigindo exit-code `1`, stdout vazio e os eventos esperados no trace. A conexão X11 do runtime é fechada no teardown (`DisplayCloser`), validado sob ASAN com `detect_leaks=1`.
 - **Marco concluído:** `CreateWindowExA` agora despacha `WM_CREATE` ao `WNDPROC` do convidado antes de devolver o `HWND` (retorno `-1` aborta a criação e devolve `NULL`). A fixture `tl_win.c` marca uma flag no `WM_CREATE` e propaga no exit code via `PostQuitMessage`, então o `runtime_gui_smoke` prova o despacho exigindo exit-code `1`.
@@ -147,6 +147,101 @@ Uma aplicação gráfica de teste cria uma janela, recebe eventos básicos e enc
 
 Validação visual (2026-08-15, sessão X11 `DISPLAY=:0` acessível): `tl_gui.exe` executado com `--trace` abriu a janela "TradutorLinux GUI / Fase 7" com botão OK; ao clicar, o runtime registrou `[tl][runtime][info] ExitProcess exit-code="0" status="success" mechanism="guest-transfer"`, `[tl][process][info] exit exit-code="0" explicit="sim"` e encerrou com código `0`, liberando a imagem. `tl_win.exe` executado com `--trace` e `TL_GUI_AUTOCLOSE_MS=1` registrou `RegisterClassExA`, `CreateWindowExA`, `GetMessageA message="WM_QUIT"` e `ExitProcess exit-code="0"`, confirmando o message loop de ponta a ponta (autoclose → `WM_CLOSE` → `DefWindowProcA` → `DestroyWindow` → `WM_DESTROY` → `PostQuitMessage(0)`).
 
+## Fase 8 — Aplicativos-alvo reais
+
+O projeto deixa de medir progresso apenas por fixtures e passa a medir por
+aplicativos pequenos, úteis e reproduzíveis. Cada aplicativo-alvo deve ser
+fixado por versão, arquitetura, toolchain e lista de imports.
+
+- [ ] Definir de 3 a 5 aplicativos-alvo reais, preferencialmente de código aberto e compiláveis no CI.
+- [ ] Priorizar utilitários de console: ferramentas de texto, arquivos, configuração e empacotamento simples.
+- [ ] Criar teste por aplicativo com stdout, stderr, exit code, arquivos produzidos e timeout.
+- [ ] Fazer o `--report` agrupar imports ausentes por DLL e por fase.
+- [ ] Separar “não suportado”, “falhou durante a execução” e “resultado incorreto”.
+- [ ] Publicar pontuação de compatibilidade por aplicativo; iniciar não é suficiente.
+
+### Critério de saída
+
+Pelo menos três aplicativos reais, pequenos e úteis executam um fluxo completo
+de teste no Linux, com limitações publicadas e regressão automatizada. Fixtures
+continuam obrigatórias para proteger contratos de ABI, mas deixam de ser a
+única evidência do produto.
+
+## Fase 9 — Base de processo e CRT
+
+A maior barreira para aplicativos compilados normalmente será a camada de
+runtime C e o estado básico do processo. Esta fase é guiada pelos imports dos
+aplicativos escolhidos.
+
+- [ ] Implementar `GetModuleHandleA/W`, `GetProcAddress` limitado aos módulos registrados e informações básicas do processo.
+- [ ] Implementar linha de comando e ambiente: `GetCommandLineA/W`, `GetEnvironmentVariableA/W` e conversão documentada de encoding.
+- [ ] Implementar heap básico: `HeapAlloc`, `HeapFree`, `HeapReAlloc`, `GetProcessHeap`.
+- [ ] Implementar tempo e espera necessários: `GetTickCount64`, `Sleep`, `GetSystemTimeAsFileTime`.
+- [ ] Adicionar apenas a CRT exigida pelo primeiro alvo (`msvcrt.dll` ou `ucrtbase.dll`).
+- [ ] Cobrir inicialização/encerramento do CRT, argumentos `argc/argv`, retorno de `main` e erros.
+
+### Critério de saída
+
+Ao menos dois aplicativos compilados com CRT executam seus fluxos principais,
+recebem argumentos e retornam seus códigos corretamente.
+
+## Fase 10 — Sistema de arquivos e utilitários
+
+Expandir a camada para programas que trabalham com diretórios, configuração e
+arquivos, mantendo uma tradução de caminhos segura e explícita.
+
+- [ ] Implementar `FindFirstFileA/W`, `FindNextFileA/W` e `FindClose`.
+- [ ] Implementar `GetFileAttributesA/W`, `DeleteFileA/W`, `MoveFileA/W` e `CreateDirectoryA/W`.
+- [ ] Implementar `SetFilePointer`, tamanhos de arquivo e modo append quando exigidos.
+- [ ] Definir diretório atual, diretório do executável e variáveis de ambiente sem inventar letras de drive.
+- [ ] Implementar conversão UTF-16/UTF-8 e testar nomes não ASCII.
+- [ ] Adicionar testes de permissões, arquivos inexistentes, diretórios e concorrência controlada.
+
+### Critério de saída
+
+Um aplicativo-alvo consegue descobrir arquivos, criar saída em diretório, ler
+configuração e lidar com erros de filesystem sem caminhos fixos do projeto.
+
+## Fase 11 — Concorrência e rede opcional
+
+Esta fase só começa se um aplicativo-alvo justificar threads ou rede.
+
+- [ ] Implementar `CreateThread`, `ExitThread`, `WaitForSingleObject` e `CloseHandle`.
+- [ ] Implementar sincronização mínima (`CRITICAL_SECTION`, eventos e mutexes).
+- [ ] Definir TLS, encerramento de threads e chamadas ABI em threads convidadas.
+- [ ] Se houver alvo concreto, criar uma camada WinSock mínima separada de `KERNEL32.dll`.
+- [ ] Testar deadlock, timeout, cancelamento e propagação de falha do convidado.
+
+### Critério de saída
+
+Um aplicativo-alvo multithread passa testes repetíveis sem corrida conhecida,
+deadlock ou corrupção de estado. Rede só entra com alvo concreto e testes
+reprodutíveis.
+
+## Fase 12 — GUI útil por aplicativo
+
+A GUI evolui a partir de um aplicativo-alvo, e não de uma lista abstrata de
+APIs.
+
+- [ ] Escolher um aplicativo GUI pequeno, de código aberto, com janela e controles básicos.
+- [ ] Implementar mouse completo, foco, mensagens de comando, menus e ciclo de vida exigidos pelo alvo.
+- [ ] Implementar Unicode (`W`), fontes, desenho e invalidação somente quando usados.
+- [ ] Implementar controles e diálogos somente se o aplicativo exigir.
+- [ ] Avaliar Wayland/toolkit depois de existir uma aplicação GUI real suportada.
+- [ ] Automatizar testes visuais por screenshot ou propriedades observáveis, além do exit code.
+
+### Critério de saída
+
+Um aplicativo GUI real abre, recebe interação, renderiza seu fluxo principal e
+encerra corretamente em uma sessão X11 de teste, com limitações publicadas.
+
+## O que fica explicitamente fora deste roadmap
+
+- Compatibilidade geral com executáveis Windows arbitrários ou substituição do Wine.
+- Jogos, DirectX, drivers, anti-cheat, .NET, COM, ActiveX e serviços Windows.
+- Implementar centenas de APIs sem aplicativo-alvo e regressão.
+- Declarar suporte porque o programa abriu; o fluxo principal precisa ser verificável.
+
 ## Próximos marcos
 
 | Marco | Resultado verificável |
@@ -159,6 +254,10 @@ Validação visual (2026-08-15, sessão X11 `DISPLAY=:0` acessível): `tl_gui.ex
 | M6 — Cobertura | Primeira aplicação-alvo adicional incluída na matriz e na regressão. |
 | M7 — GUI | Janela real com message loop (`tl_win.exe`) e decisão de produto tomada: GUI Win32 mínima segue como objetivo experimental. |
 | M8 — Diagnóstico controlado | Convidado executado em processo filho isolado; término por sinal vira `guest-signal` no trace e `71` no exit code; falhas controladas (ponteiro, arquivo, memória, imports) cobertas por testes. |
+| M9 — Alvos reais | Três aplicativos pequenos e úteis executam fluxos completos com regressão no CI. |
+| M10 — CRT mínimo | Um aplicativo compilado com CRT recebe argumentos, usa ambiente e termina corretamente. |
+| M11 — Arquivos reais | Um aplicativo cria, enumera e manipula arquivos e diretórios usando caminhos traduzidos. |
+| M12 — GUI real | Um aplicativo GUI escolhido por seus imports completa um fluxo principal sob X11. |
 
 Com o marco M7 concluído, a GUI mínima avançou além do planejado e passa a ser
 acompanhada no próprio roadmap da Fase 7: teclado estendido (`WM_KEYUP`, virtual
