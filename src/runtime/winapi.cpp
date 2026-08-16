@@ -13,6 +13,8 @@
 #include <csetjmp>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
+#include <ctime>
 #include <fstream>
 #include <iostream>
 #include <limits>
@@ -22,6 +24,7 @@
 #include <vector>
 #include <fcntl.h>
 #include <sys/mman.h>
+#include <sys/syscall.h>
 #include <sys/types.h>
 #include <unistd.h>
 
@@ -322,6 +325,283 @@ constexpr unsigned long kKeysymDelete = 0xFFFF;
         return -1;
     }
     return static_cast<int>(offset);
+}
+
+// Região lida do /proc/self/maps: intervalo, permissões e presença de arquivo.
+struct MapsRegion {
+    std::uintptr_t start{0};
+    std::uintptr_t end{0};
+    char perms[4]{};  // r w x p
+    bool has_path{false};
+};
+
+[[nodiscard]] bool find_maps_region(const void* const address, MapsRegion& region) noexcept {
+    if (address == nullptr) {
+        return false;
+    }
+    const std::uintptr_t target = reinterpret_cast<std::uintptr_t>(address);
+    std::ifstream maps{"/proc/self/maps"};
+    std::string line;
+    while (std::getline(maps, line)) {
+        const std::size_t dash = line.find('-');
+        const std::size_t space = line.find(' ', dash == std::string::npos ? 0 : dash);
+        if (dash == std::string::npos || space == std::string::npos || dash == 0) {
+            continue;
+        }
+        std::uintptr_t start{0};
+        std::uintptr_t end{0};
+        if (std::from_chars(line.data(), line.data() + dash, start, 16).ec != std::errc{} ||
+            std::from_chars(line.data() + dash + 1, line.data() + space, end, 16).ec != std::errc{} ||
+            start > end || target < start || target >= end) {
+            continue;
+        }
+        const std::size_t permissions_offset = space + 1;
+        if (line.size() < permissions_offset + 4) {
+            return false;
+        }
+        region.start = start;
+        region.end = end;
+        region.perms[0] = line[permissions_offset];
+        region.perms[1] = line[permissions_offset + 1];
+        region.perms[2] = line[permissions_offset + 2];
+        region.perms[3] = line[permissions_offset + 3];
+        region.has_path = line.find('/', permissions_offset + 4) != std::string::npos;
+        return true;
+    }
+    return false;
+}
+
+[[nodiscard]] std::uint32_t win32_protection(const char perms[4]) noexcept {
+    const bool readable = perms[0] == 'r';
+    const bool writable = perms[1] == 'w';
+    const bool executable = perms[2] == 'x';
+    if (writable) {
+        return executable ? abi::kPageExecuteReadWrite : abi::kPageReadWrite;
+    }
+    if (executable) {
+        return readable ? abi::kPageExecuteRead : abi::kPageExecute;
+    }
+    return readable ? abi::kPageReadOnly : abi::kPageNoAccess;
+}
+
+[[nodiscard]] int host_protection(const std::uint32_t protection) noexcept {
+    switch (protection) {
+        case abi::kPageNoAccess:
+            return PROT_NONE;
+        case abi::kPageReadOnly:
+            return PROT_READ;
+        case abi::kPageReadWrite:
+        case abi::kPageWriteCopy:
+            return PROT_READ | PROT_WRITE;
+        case abi::kPageExecute:
+            return PROT_EXEC;
+        case abi::kPageExecuteRead:
+            return PROT_READ | PROT_EXEC;
+        case abi::kPageExecuteReadWrite:
+        case abi::kPageExecuteWriteCopy:
+            return PROT_READ | PROT_WRITE | PROT_EXEC;
+        default:
+            return -1;
+    }
+}
+
+// Handler registrado pelo convidado via SetUnhandledExceptionFilter. O runtime
+// não invoca o handler (o convidado é de console e a falha é reportada pelo
+// trace), mas o valor é armazenado para preservar a semântica da API.
+std::uintptr_t g_unhandled_exception_filter = 0;
+
+// Slots TLS por thread hospedeira. O convidado roda em uma única thread e o
+// índice vem do __tls_index de seu módulo; nenhum slot é inicializado nesta
+// fase, então TlsGetValue retorna null como no Windows para índice não usado.
+thread_local std::array<void*, 64> g_guest_tls_slots{};
+
+// Sequência inválida de entrada nas conversões de codepage (fora do intervalo
+// Unicode). Utilizado como sentinela interno das conversões.
+constexpr std::uint32_t kInvalidCodepoint = 0x110000U;
+
+// CP1252: mapeamento dos bytes de controle 0x80-0x9F para Unicode. Os demais
+// bytes são iguais ao Latin-1 (0xA0-0xFF -> U+00A0-U+00FF).
+constexpr std::array<std::uint32_t, 32> kCp1252Control{
+    0x20AC, 0x0081, 0x201A, 0x0192, 0x201E, 0x2026, 0x2020, 0x2021,
+    0x02C6, 0x2030, 0x0160, 0x2039, 0x0152, 0x008D, 0x017D, 0x008F,
+    0x0090, 0x2018, 0x2019, 0x201C, 0x201D, 0x2022, 0x2013, 0x2014,
+    0x02DC, 0x2122, 0x0161, 0x203A, 0x0153, 0x009D, 0x017E, 0x0178,
+};
+
+[[nodiscard]] std::uint32_t cp1252_to_unicode(const std::uint8_t byte) noexcept {
+    if (byte >= 0x80U && byte <= 0x9FU) {
+        return kCp1252Control[static_cast<std::size_t>(byte - 0x80U)];
+    }
+    return static_cast<std::uint32_t>(byte);
+}
+
+[[nodiscard]] bool unicode_to_cp1252(const std::uint32_t codepoint, std::uint8_t& byte) noexcept {
+    if (codepoint <= 0xFFU) {
+        byte = static_cast<std::uint8_t>(codepoint);
+        return true;
+    }
+    const auto found = std::find(kCp1252Control.begin(), kCp1252Control.end(), codepoint);
+    if (found == kCp1252Control.end()) {
+        return false;
+    }
+    byte = static_cast<std::uint8_t>(0x80U + static_cast<std::size_t>(found - kCp1252Control.begin()));
+    return true;
+}
+
+// Decodifica um caractere de UTF-8 ou CP1252 a partir de `bytes`; avança `pos`.
+// Retorna kInvalidCodepoint para sequência inválida (consumindo 1 byte).
+[[nodiscard]] std::uint32_t decode_multibyte(const std::uint32_t code_page,
+                                             const std::uint8_t* const bytes,
+                                             const std::size_t length,
+                                             std::size_t& pos) noexcept {
+    const std::uint8_t first = bytes[pos];
+    if (first < 0x80U) {
+        pos += 1;
+        return static_cast<std::uint32_t>(first);
+    }
+    if (code_page == abi::kCpAcp || code_page == abi::kCp1252) {
+        pos += 1;
+        return cp1252_to_unicode(first);
+    }
+    std::size_t needed = 0;
+    std::uint32_t value = 0;
+    if ((first & 0xE0U) == 0xC0U) {
+        needed = 2;
+        value = static_cast<std::uint32_t>(first & 0x1FU);
+    } else if ((first & 0xF0U) == 0xE0U) {
+        needed = 3;
+        value = static_cast<std::uint32_t>(first & 0x0FU);
+    } else if ((first & 0xF8U) == 0xF0U) {
+        needed = 4;
+        value = static_cast<std::uint32_t>(first & 0x07U);
+    } else {
+        pos += 1;
+        return kInvalidCodepoint;
+    }
+    if (pos + needed > length) {
+        pos += 1;
+        return kInvalidCodepoint;
+    }
+    for (std::size_t index = 1; index < needed; ++index) {
+        const std::uint8_t continuation = bytes[pos + index];
+        if ((continuation & 0xC0U) != 0x80U) {
+            pos += 1;
+            return kInvalidCodepoint;
+        }
+        value = (value << 6U) | static_cast<std::uint32_t>(continuation & 0x3FU);
+    }
+    pos += needed;
+    const bool overlong = (needed == 2 && value < 0x80U) ||
+                          (needed == 3 && value < 0x800U) ||
+                          (needed == 4 && value < 0x10000U);
+    if (overlong || value > 0x10FFFFU || (value >= 0xD800U && value <= 0xDFFFU)) {
+        return kInvalidCodepoint;
+    }
+    return value;
+}
+
+[[nodiscard]] std::size_t utf16_units_for(const std::uint32_t codepoint,
+                                          std::uint16_t out[2]) noexcept {
+    if (codepoint < 0x10000U) {
+        out[0] = static_cast<std::uint16_t>(codepoint);
+        return 1;
+    }
+    const std::uint32_t value = codepoint - 0x10000U;
+    out[0] = static_cast<std::uint16_t>(0xD800U | (value >> 10U));
+    out[1] = static_cast<std::uint16_t>(0xDC00U | (value & 0x3FFU));
+    return 2;
+}
+
+[[nodiscard]] std::uint32_t decode_utf16(const std::uint16_t* const units,
+                                         const std::size_t length,
+                                         std::size_t& pos) noexcept {
+    const std::uint16_t first = units[pos];
+    if (first >= 0xD800U && first <= 0xDBFFU) {
+        if (pos + 1 < length && units[pos + 1] >= 0xDC00U && units[pos + 1] <= 0xDFFFU) {
+            const std::uint32_t value =
+                (static_cast<std::uint32_t>(first - 0xD800U) << 10U) |
+                static_cast<std::uint32_t>(units[pos + 1] - 0xDC00U);
+            pos += 2;
+            return value + 0x10000U;
+        }
+        pos += 1;
+        return kInvalidCodepoint;
+    }
+    if (first >= 0xDC00U && first <= 0xDFFFU) {
+        pos += 1;
+        return kInvalidCodepoint;
+    }
+    pos += 1;
+    return static_cast<std::uint32_t>(first);
+}
+
+[[nodiscard]] std::size_t utf8_bytes_for(const std::uint32_t codepoint, char out[4]) noexcept {
+    if (codepoint < 0x80U) {
+        out[0] = static_cast<char>(codepoint);
+        return 1;
+    }
+    if (codepoint < 0x800U) {
+        out[0] = static_cast<char>(0xC0U | (codepoint >> 6U));
+        out[1] = static_cast<char>(0x80U | (codepoint & 0x3FU));
+        return 2;
+    }
+    if (codepoint < 0x10000U) {
+        out[0] = static_cast<char>(0xE0U | (codepoint >> 12U));
+        out[1] = static_cast<char>(0x80U | ((codepoint >> 6U) & 0x3FU));
+        out[2] = static_cast<char>(0x80U | (codepoint & 0x3FU));
+        return 3;
+    }
+    out[0] = static_cast<char>(0xF0U | (codepoint >> 18U));
+    out[1] = static_cast<char>(0x80U | ((codepoint >> 12U) & 0x3FU));
+    out[2] = static_cast<char>(0x80U | ((codepoint >> 6U) & 0x3FU));
+    out[3] = static_cast<char>(0x80U | (codepoint & 0x3FU));
+    return 4;
+}
+
+// CRITICAL_SECTION é um token opaco para a fronteira: o convidado roda em uma
+// única thread, então a exclusão mútua é trivialmente satisfeita e a estrutura
+// interna do convidado nunca é tocada. As funções validam apenas o ponteiro.
+bool critical_section_valid(void* const critical_section) noexcept {
+    if (critical_section == nullptr ||
+        !mapped_guest_range(critical_section, 8, true)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        trace_guest_failure("CriticalSection", "critical-section", "ponteiro inválido");
+        return false;
+    }
+    set_last_error(abi::kErrorSuccess);
+    return true;
+}
+
+// TEB (Thread Environment Block) mínimo Microsoft x64. O convidado mingw lê o
+// endereço do próprio TEB via %gs:[0x30] e campos como StackBase (offset 0x8).
+// Em Linux x86-64 o segmento GS é livre, então a fronteira aloca um TEB de uma
+// página, o aponta via arch_prctl(ARCH_SET_GS) durante a execução do convidado
+// e restaura o GS após o retorno.
+struct GuestTeb {
+    void* exception_list{nullptr};                // 0x00
+    void* stack_base{nullptr};                    // 0x08
+    void* stack_limit{nullptr};                   // 0x10
+    void* sub_system_tib{nullptr};                // 0x18
+    void* fiber_data{nullptr};                    // 0x20
+    void* arbitrary_user_pointer{nullptr};        // 0x28
+    void* self{nullptr};                          // 0x30
+    void* environment_pointer{nullptr};           // 0x38
+    std::uint64_t client_id[2]{0, 0};             // 0x40
+    void* active_rpc_handle{nullptr};             // 0x50
+    void* thread_local_storage_pointer{nullptr};  // 0x58
+    void* peb{nullptr};                           // 0x60
+    std::uint8_t reserved[0x110]{};               // até 0x178
+    std::uint64_t tls_slots[64]{};                // 0x178
+    std::uint8_t tail[0xC88]{};                   // até 0x1000 (tamanho da página)
+};
+static_assert(sizeof(GuestTeb) == 0x1000);
+
+// Configura a base do segmento GS da thread atual (Linux x86-64). Em Linux o
+// FS é usado pelo TLS do hospedeiro; GS fica livre para a fronteira de ABI.
+bool set_guest_gs_base(const void* const base) noexcept {
+    constexpr long kArchSetGs = 0x1001;  // ARCH_SET_GS
+    return ::syscall(SYS_arch_prctl, kArchSetGs,
+                     static_cast<std::uintptr_t>(reinterpret_cast<std::uintptr_t>(base))) == 0;
 }
 
 // Virtual key do subconjunto suportado. Teclas especiais são mapeadas pelo
@@ -1269,6 +1549,362 @@ TL_MSABI int tl_ReleaseDC(const void* const window, const void* const dc) noexce
     return 1;
 }
 
+TL_MSABI void tl_InitializeCriticalSection(void* const critical_section) noexcept {
+    critical_section_valid(critical_section);
+}
+
+TL_MSABI void tl_DeleteCriticalSection(void* const critical_section) noexcept {
+    critical_section_valid(critical_section);
+}
+
+TL_MSABI void tl_EnterCriticalSection(void* const critical_section) noexcept {
+    critical_section_valid(critical_section);
+}
+
+TL_MSABI void tl_LeaveCriticalSection(void* const critical_section) noexcept {
+    critical_section_valid(critical_section);
+}
+
+TL_MSABI int tl_GetConsoleMode(const void* const handle, std::uint32_t* const mode) noexcept {
+    if (mode == nullptr || !mapped_guest_range(mode, sizeof(*mode), true)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        trace_guest_failure("GetConsoleMode", "mode", "ponteiro sem permissão de escrita");
+        return 0;
+    }
+    const int fd = handle_fd(handle);
+    if (fd < 0 || ::isatty(fd) == 0) {
+        set_last_error(abi::kErrorInvalidHandle);
+        return 0;
+    }
+    *mode = fd == STDIN_FILENO ? 0x3U : 0x3U;
+    set_last_error(abi::kErrorSuccess);
+    const std::array<diagnostics::TraceField, 4> fields{
+        diagnostics::TraceField{"symbol", "GetConsoleMode"},
+        diagnostics::TraceField{"fd", std::to_string(fd)},
+        diagnostics::TraceField{"mode", std::to_string(*mode)},
+        diagnostics::TraceField{"status", "success"},
+    };
+    runtime_trace("GetConsoleMode", fields, 4);
+    return 1;
+}
+
+TL_MSABI int tl_SetConsoleMode(const void* const handle, const std::uint32_t mode) noexcept {
+    const int fd = handle_fd(handle);
+    if (fd < 0) {
+        set_last_error(abi::kErrorInvalidHandle);
+        return 0;
+    }
+    set_last_error(abi::kErrorSuccess);
+    const std::array<diagnostics::TraceField, 4> fields{
+        diagnostics::TraceField{"symbol", "SetConsoleMode"},
+        diagnostics::TraceField{"fd", std::to_string(fd)},
+        diagnostics::TraceField{"mode", std::to_string(mode)},
+        diagnostics::TraceField{"status", "success"},
+    };
+    runtime_trace("SetConsoleMode", fields, 4);
+    return 1;
+}
+
+TL_MSABI int tl_IsDBCSLeadByteEx(const std::uint32_t, const std::uint8_t) noexcept {
+    set_last_error(abi::kErrorSuccess);
+    return 0;
+}
+
+TL_MSABI std::uintptr_t tl_SetUnhandledExceptionFilter(const std::uintptr_t handler) noexcept {
+    const std::uintptr_t previous = g_unhandled_exception_filter;
+    g_unhandled_exception_filter = handler;
+    set_last_error(abi::kErrorSuccess);
+    const std::array<diagnostics::TraceField, 4> fields{
+        diagnostics::TraceField{"symbol", "SetUnhandledExceptionFilter"},
+        diagnostics::TraceField{"handler", std::to_string(handler)},
+        diagnostics::TraceField{"previous", std::to_string(previous)},
+        diagnostics::TraceField{"mechanism", "registrado-sem-invocacao"},
+    };
+    runtime_trace("SetUnhandledExceptionFilter", fields, 4);
+    return previous;
+}
+
+TL_MSABI void tl_Sleep(const std::uint32_t milliseconds) noexcept {
+    timespec requested{
+        .tv_sec = static_cast<std::time_t>(milliseconds / 1000U),
+        .tv_nsec = static_cast<long>((milliseconds % 1000U) * 1000000L),
+    };
+    timespec remaining{};
+    while (nanosleep(&requested, &remaining) != 0 && errno == EINTR) {
+        requested = remaining;
+    }
+    set_last_error(abi::kErrorSuccess);
+}
+
+TL_MSABI void* tl_TlsGetValue(const std::uint32_t tls_index) noexcept {
+    if (tls_index >= g_guest_tls_slots.size()) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return nullptr;
+    }
+    set_last_error(abi::kErrorSuccess);
+    return g_guest_tls_slots[tls_index];
+}
+
+TL_MSABI int tl_VirtualProtect(void* const address, const std::uintptr_t size, // NOLINT(bugprone-easily-swappable-parameters)
+                               const std::uint32_t new_protection,
+                               std::uint32_t* const old_protection) noexcept {
+    if (old_protection == nullptr ||
+        !mapped_guest_range(old_protection, sizeof(*old_protection), true)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        trace_guest_failure("VirtualProtect", "old-protection", "ponteiro sem permissão de escrita");
+        return 0;
+    }
+    const int prot = host_protection(new_protection);
+    if (address == nullptr || size == 0 || prot < 0) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    MapsRegion region{};
+    if (!find_maps_region(address, region)) {
+        set_last_error(abi::kErrorInvalidAddress);
+        trace_guest_failure("VirtualProtect", "region-lookup", "endereço não mapeado");
+        return 0;
+    }
+    *old_protection = win32_protection(region.perms);
+    const std::uintptr_t start = reinterpret_cast<std::uintptr_t>(address);
+    if (start > std::numeric_limits<std::uintptr_t>::max() - size) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    const std::uintptr_t end = start + size;
+    if (start < region.start || end > region.end) {
+        set_last_error(abi::kErrorInvalidAddress);
+        return 0;
+    }
+    constexpr std::uintptr_t kPageSize = 0x1000U;
+    const std::uintptr_t rounded_start = start / kPageSize * kPageSize;
+    std::uintptr_t rounded_end = (end + kPageSize - 1U) / kPageSize * kPageSize;
+    if (rounded_end > region.end) {
+        rounded_end = region.end;
+    }
+    if (rounded_start >= rounded_end ||
+        mprotect(std::bit_cast<void*>(rounded_start),
+                 static_cast<std::size_t>(rounded_end - rounded_start), prot) != 0) {
+        const std::uint32_t failure_error = errno_to_win32(errno);
+        set_last_error(failure_error);
+        trace_linux_failure("VirtualProtect", "mprotect", errno, failure_error);
+        return 0;
+    }
+    set_last_error(abi::kErrorSuccess);
+    const std::array<diagnostics::TraceField, 4> fields{
+        diagnostics::TraceField{"symbol", "VirtualProtect"},
+        diagnostics::TraceField{"address", std::to_string(start)},
+        diagnostics::TraceField{"protection", std::to_string(new_protection)},
+        diagnostics::TraceField{"old-protection", std::to_string(*old_protection)},
+    };
+    runtime_trace("VirtualProtect", fields, 4);
+    return 1;
+}
+
+TL_MSABI std::uintptr_t tl_VirtualQuery(const void* const address, void* const memory_information, // NOLINT(bugprone-easily-swappable-parameters)
+                                        const std::uintptr_t length) noexcept {
+    if (memory_information == nullptr ||
+        length < sizeof(abi::GuestMemoryBasicInformation) ||
+        !mapped_guest_range(memory_information, sizeof(abi::GuestMemoryBasicInformation), true)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        trace_guest_failure("VirtualQuery", "memory-information", "buffer de saída inválido");
+        return 0;
+    }
+    MapsRegion region{};
+    if (!find_maps_region(address, region)) {
+        set_last_error(abi::kErrorInvalidAddress);
+        return 0;
+    }
+    auto* const info = static_cast<abi::GuestMemoryBasicInformation*>(memory_information);
+    info->base_address = std::bit_cast<void*>(region.start);
+    info->allocation_base = std::bit_cast<void*>(region.start);
+    info->allocation_protect = win32_protection(region.perms);
+    info->padding1 = 0;
+    info->region_size = static_cast<std::uintptr_t>(region.end - region.start);
+    info->state = abi::kMemCommit;
+    info->protect = win32_protection(region.perms);
+    info->type = region.has_path ? abi::kMemImage : abi::kMemPrivate;
+    info->padding2 = 0;
+    set_last_error(abi::kErrorSuccess);
+    const std::array<diagnostics::TraceField, 4> fields{
+        diagnostics::TraceField{"symbol", "VirtualQuery"},
+        diagnostics::TraceField{"address", std::to_string(reinterpret_cast<std::uintptr_t>(address))},
+        diagnostics::TraceField{"region-size", std::to_string(info->region_size)},
+        diagnostics::TraceField{"status", "success"},
+    };
+    runtime_trace("VirtualQuery", fields, 4);
+    return sizeof(abi::GuestMemoryBasicInformation);
+}
+
+TL_MSABI int tl_MultiByteToWideChar(const std::uint32_t code_page, const std::uint32_t flags, // NOLINT(bugprone-easily-swappable-parameters)
+                                    const char* const mb_str, const int mb_count,
+                                    std::uint16_t* const wide_str, const int wide_count) noexcept {
+    const bool supported_page = code_page == abi::kCpAcp || code_page == abi::kCp1252 ||
+                                code_page == abi::kCpUtf8;
+    if (mb_str == nullptr || mb_count == 0 || !supported_page ||
+        (flags & ~(abi::kMbPrecomposed | abi::kMbErrInvalidChars)) != 0 ||
+        (wide_count != 0 && wide_str == nullptr)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    const bool null_terminated = mb_count == -1;
+    if (null_terminated && !mapped_guest_cstring(mb_str)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        trace_guest_failure("MultiByteToWideChar", "source", "string convidada inválida");
+        return 0;
+    }
+    const std::uint32_t byte_count =
+        null_terminated ? static_cast<std::uint32_t>(std::strlen(mb_str))
+                        : static_cast<std::uint32_t>(mb_count);
+    if (!mapped_guest_range(mb_str, byte_count, false)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        trace_guest_failure("MultiByteToWideChar", "source", "memória convidada inválida");
+        return 0;
+    }
+    const auto* const bytes = reinterpret_cast<const std::uint8_t*>(mb_str);
+    std::size_t index = 0;
+    std::size_t needed = 0;
+    while (index < byte_count) {
+        std::uint32_t codepoint = decode_multibyte(code_page, bytes, byte_count, index);
+        if (codepoint > 0x10FFFFU) {
+            if ((flags & abi::kMbErrInvalidChars) != 0) {
+                set_last_error(abi::kErrorNoUnicodeTranslation);
+                return 0;
+            }
+            codepoint = 0x3FU;
+        }
+        std::uint16_t units[2]{};
+        needed += utf16_units_for(codepoint, units);
+    }
+    if (null_terminated) {
+        needed += 1;
+    }
+    if (needed > static_cast<std::size_t>(std::numeric_limits<int>::max())) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    if (wide_str == nullptr) {
+        set_last_error(abi::kErrorSuccess);
+        return static_cast<int>(needed);
+    }
+    if (wide_count < 0 || static_cast<std::size_t>(wide_count) < needed ||
+        !mapped_guest_range(wide_str, needed * sizeof(std::uint16_t), true)) {
+        set_last_error(abi::kErrorInsufficientBuffer);
+        return 0;
+    }
+    index = 0;
+    std::size_t written = 0;
+    while (index < byte_count) {
+        std::uint32_t codepoint = decode_multibyte(code_page, bytes, byte_count, index);
+        if (codepoint > 0x10FFFFU) {
+            codepoint = 0x3FU;
+        }
+        std::uint16_t units[2]{};
+        const std::size_t count = utf16_units_for(codepoint, units);
+        for (std::size_t unit = 0; unit < count; ++unit) {
+            wide_str[written] = units[unit];
+            written += 1;
+        }
+    }
+    if (null_terminated) {
+        wide_str[written] = 0;
+        written += 1;
+    }
+    set_last_error(abi::kErrorSuccess);
+    return static_cast<int>(written);
+}
+
+TL_MSABI int tl_WideCharToMultiByte(const std::uint32_t code_page, const std::uint32_t flags, // NOLINT(bugprone-easily-swappable-parameters)
+                                    const std::uint16_t* const wide_str, const int wide_count,
+                                    char* const mb_str, const int mb_count,
+                                    const char* const default_char,
+                                    int* const used_default_char) noexcept {
+    const bool supported_page = code_page == abi::kCpAcp || code_page == abi::kCp1252 ||
+                                code_page == abi::kCpUtf8;
+    if (wide_str == nullptr || wide_count == 0 || !supported_page ||
+        (flags & ~(abi::kWcCompositeCheck | abi::kWcNoBestFitChars)) != 0 ||
+        (mb_count != 0 && mb_str == nullptr) ||
+        (used_default_char != nullptr &&
+         !mapped_guest_range(used_default_char, sizeof(*used_default_char), true))) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    const bool null_terminated = wide_count == -1;
+    std::size_t unit_count = 0;
+    if (null_terminated) {
+        while (wide_str[unit_count] != 0) {
+            unit_count += 1;
+        }
+    } else {
+        unit_count = static_cast<std::size_t>(wide_count);
+    }
+    if (!mapped_guest_range(wide_str, unit_count * sizeof(std::uint16_t), false)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        trace_guest_failure("WideCharToMultiByte", "source", "memória convidada inválida");
+        return 0;
+    }
+    const bool utf8 = code_page == abi::kCpUtf8;
+    std::size_t index = 0;
+    std::size_t needed = 0;
+    while (index < unit_count) {
+        const std::uint32_t codepoint = decode_utf16(wide_str, unit_count, index);
+        if (utf8) {
+            char bytes[4]{};
+            needed += utf8_bytes_for(codepoint > 0x10FFFFU ? 0x3FU : codepoint, bytes);
+        } else {
+            needed += 1;
+        }
+    }
+    if (null_terminated) {
+        needed += 1;
+    }
+    if (mb_str == nullptr) {
+        set_last_error(abi::kErrorSuccess);
+        return static_cast<int>(needed);
+    }
+    if (mb_count < 0 || static_cast<std::size_t>(mb_count) < needed ||
+        !mapped_guest_range(mb_str, needed, true)) {
+        set_last_error(abi::kErrorInsufficientBuffer);
+        return 0;
+    }
+    const char fallback = default_char != nullptr ? *default_char : '?';
+    bool used_default = false;
+    index = 0;
+    std::size_t written = 0;
+    while (index < unit_count) {
+        std::uint32_t codepoint = decode_utf16(wide_str, unit_count, index);
+        if (codepoint > 0x10FFFFU) {
+            codepoint = 0x3FU;
+        }
+        if (utf8) {
+            char bytes[4]{};
+            const std::size_t count = utf8_bytes_for(codepoint, bytes);
+            for (std::size_t byte_index = 0; byte_index < count; ++byte_index) {
+                mb_str[written] = bytes[byte_index];
+                written += 1;
+            }
+        } else {
+            std::uint8_t byte = 0;
+            if (unicode_to_cp1252(codepoint, byte)) {
+                mb_str[written] = static_cast<char>(byte);
+            } else {
+                mb_str[written] = fallback;
+                used_default = true;
+            }
+            written += 1;
+        }
+    }
+    if (null_terminated) {
+        mb_str[written] = '\0';
+        written += 1;
+    }
+    if (used_default_char != nullptr) {
+        *used_default_char = used_default ? 1 : 0;
+    }
+    set_last_error(abi::kErrorSuccess);
+    return static_cast<int>(written);
+}
+
 }  // extern "C"
 
 GuestExecutionResult execute_guest_entry(const std::uintptr_t entry_point, // NOLINT(bugprone-easily-swappable-parameters)
@@ -1278,15 +1914,34 @@ GuestExecutionResult execute_guest_entry(const std::uintptr_t entry_point, // NO
     if (entry == nullptr || stack_top == 0) {
         return {};
     }
+    constexpr std::size_t kTebSize = sizeof(GuestTeb);
+    void* const teb = mmap(nullptr, kTebSize, PROT_READ | PROT_WRITE,
+                           MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    if (teb == MAP_FAILED) {
+        return {};
+    }
+    auto* const fields = static_cast<GuestTeb*>(teb);
+    fields->self = teb;
+    fields->stack_base = std::bit_cast<void*>(stack_top);
+    fields->stack_limit = std::bit_cast<void*>(stack_top - 0x100000U);  // kGuestStackSize
+    const bool gs_configured = set_guest_gs_base(teb);
+    if (!gs_configured) {
+        static_cast<void>(munmap(teb, kTebSize));
+        return {};
+    }
     g_quit_requested = false;
     g_quit_code = 0;
     g_guest_execution_active = true;
     if (setjmp(g_guest_exit_context) == 0) {
         tl_call_guest_on_stack(std::bit_cast<std::uintptr_t>(entry), stack_top);
         g_guest_execution_active = false;
+        static_cast<void>(set_guest_gs_base(nullptr));
+        static_cast<void>(munmap(teb, kTebSize));
         return {};
     }
     g_guest_execution_active = false;
+    static_cast<void>(set_guest_gs_base(nullptr));
+    static_cast<void>(munmap(teb, kTebSize));
     return {.exited_explicitly = true, .exit_code = g_guest_exit_code};
 }
 

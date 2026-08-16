@@ -22,6 +22,8 @@ namespace {
             return "process";
         case TraceComponent::Gui:
             return "gui";
+        case TraceComponent::Crt:
+            return "crt";
     }
 
     return "unknown";

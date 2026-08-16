@@ -148,31 +148,68 @@ toolchain e lista de imports; a lista real é capturada por `llvm-readobj` e por
 
 As fontes são baixadas com hash SHA-256 verificado pelo módulo
 `tests/targets/CMakeLists.txt` (opção `TL_BUILD_TARGET_APPS=ON`, usada no job
-`target-apps` do CI). Nenhum alvo executa ainda: todos importam `msvcrt.dll`,
-que só entra em escopo na Fase 9. O `--report` os classifica como
-`result: unsupported` / `execution: not-attempted` (exit code `5`), sem mapear
-nem executar a imagem.
+`target-apps` do CI). O `--report` lista os imports reais e classifica o alvo
+como `result: supported` (exit code `0`) ou `result: unsupported` (exit code
+`5`), sem mapear nem executar a imagem; o script
+`tests/targets/verify_target_report.cmake` aceita as duas respostas e exige que
+todo import do manifest apareça listado.
 
 | Aplicativo | Versão / toolchain | Imports (símbolos) | Estado |
 |---|---|---|---|
-| `xxd.exe` | vim `v9.2.0957` (`src/xxd.c`), `-O2 -s` | `KERNEL32.dll` (16), `msvcrt.dll` (57) | Cross-build no CI; imports pinados; não executa (msvcrt fora de escopo) |
-| `bzip2.exe` | bzip2 `1.0.8`, `-O2 -s` | `KERNEL32.dll` (13), `msvcrt.dll` (56) | Idem |
-| `dos2unix.exe` | dos2unix `7.5.6`, `-O2 -DD2U_UNIFILE -s` | `KERNEL32.dll` (24), `msvcrt.dll` (63), `SHELL32.dll!CommandLineToArgvW` (1) | Idem |
+| `xxd.exe` | vim `v9.2.0957` (`src/xxd.c`), `-O2 -s` | `KERNEL32.dll` (16), `msvcrt.dll` (57) | **Executa de ponta a ponta**: saída byte-idêntica ao `xxd` do sistema nos modos padrão e `-p`, exit `0`; arquivo inexistente → exit `2` com erro em stderr. Regressão e2e em CTest (ouro em `tests/targets/golden/xxd/`, 3 testes) |
+| `bzip2.exe` | bzip2 `1.0.8`, `-O2 -s` | `KERNEL32.dll` (13), `msvcrt.dll` (56) | Cross-build no CI; imports pinados; `result: unsupported` por 3 símbolos de `msvcrt.dll` (`strncpy`, `strstr`, `ungetc`) |
+| `dos2unix.exe` | dos2unix `7.5.6`, `-O2 -DD2U_UNIFILE -s` | `KERNEL32.dll` (24), `msvcrt.dll` (63), `SHELL32.dll!CommandLineToArgvW` (1) | Cross-build no CI; imports pinados; `result: unsupported` (SHELL32 e caminho `W` fora de escopo) |
 | `unix2dos.exe` | dos2unix `7.5.6` | idem `dos2unix.exe` | Idem |
 
 Os manifests com a lista completa de imports ficam em
 `tests/targets/manifests/`. Os binários são produtos de build e ficam em
 `build/<dir>/tests/targets/out/`.
 
-Observações que orientam a Fase 9:
+## CRT mínimo e KERNEL32 de console (Fase 9)
+
+O subconjunto de `msvcrt.dll` implementado é o núcleo do CRT do mingw-w64 e o
+subconjunto de `KERNEL32.dll` exigido pelo `xxd.exe`. A fronteira usa a
+convenção Microsoft x64 (`TL_CRT_MSABI`/`TL_MSABI`) e não propaga exceções C++.
+Contratos de ABI em `docs/arquitetura/msvcrt.md` e
+`docs/arquitetura/console.md`.
+
+| Módulo | API | Estado | Comportamento suportado |
+|---|---|---|---|
+| `msvcrt.dll` | `__getmainargs` | Suportado | Constrói `argc`/`argv`/`envp` a partir da linha de comando do convidado (definida pelo CLI via `msvcrt_set_guest_command_line`); `argv[0]` é o caminho do executável; o final da lista é `NULL` |
+| `msvcrt.dll` | `__initterm`, `__set_app_type`, `__setusermatherr`, `_cexit`, `_lock`, `_unlock`, `__C_specific_handler` | Suportado | `__initterm` executa a lista de callbacks (TLS/CTOR); demais são no-ops ou terminam o convidado (`__C_specific_handler` → exit `3`) |
+| `msvcrt.dll` | `_amsg_exit`, `abort`, `exit`, `atexit` | Suportado | Terminam via `ExitProcess`; `atexit` acumula handlers executados no encerramento |
+| `msvcrt.dll` | `_errno`, `getenv`, `strerror` | Suportado | Célula `errno` global do hospedeiro; `getenv` lê o ambiente do host |
+| `msvcrt.dll` | `fopen`/`fclose`/`fflush`/`ferror`/`fseek`/`ftell`/`rewind`/`fgetc`/`fputc`/`fputs`/`fprintf`/`vfprintf`/`fwrite` | Suportado | I/O em `GuestFile` (layout `_iobuf` de 48 bytes), unbuffered via `::write` com loop `EINTR` |
+| `msvcrt.dll` | `_open`/`_fdopen`/`_fileno`/`_isatty`/`_setmode`/`__iob_func` | Suportado | Tradução de flags `_O_*`; modo por fd (`_O_TEXT`/`_O_BINARY`) refletido na flag `_IOSTRG` do `GuestFile` |
+| `msvcrt.dll` | `malloc`/`calloc`/`free`, `memcpy`/`memset` | Suportado | Alocação e memória diretas do hospedeiro |
+| `msvcrt.dll` | `strlen`/`strcmp`/`strncmp`/`strcpy`/`strtol`/`strtoul`/`wcslen`/`isalnum`/`toupper` | Suportado | Semântica libc para ASCII/latin-1 |
+| `msvcrt.dll` | `localeconv`, `___lc_codepage_func`, `___mb_cur_max_func` | Suportado | Locale C fixo: `lconv` estático, code page `1252`, `mb_cur_max == 1` |
+| `msvcrt.dll` | `signal` | Suportado | Registra handlers em tabela por sinal; nenhuma entrega real ao convidado |
+| `KERNEL32.dll` | `VirtualQuery` | Suportado | Preenche `MEMORY_BASIC_INFORMATION` (48 bytes) a partir do `/proc/self/maps`: `BaseAddress`/`AllocationBase` = início da VMA, `RegionSize`, `State=MEM_COMMIT`, `Protect`/`AllocationProtect` mapeados de `rwx`, `Type=MEM_IMAGE`/`MEM_PRIVATE` |
+| `KERNEL32.dll` | `VirtualProtect` | Suportado | `mprotect` sobre a página alinhada dentro da região; escreve a proteção antiga em `*lpflOldProtect`; rejeita região que não contém `[address, address+size)` |
+| `KERNEL32.dll` | `MultiByteToWideChar` / `WideCharToMultiByte` | Suportado | CP `0` (ACP → 1252), `1252` e `65001` (UTF-8), conversões manuais sem locale; contagem com ponteiros `NULL`; `MB_ERR_INVALID_CHARS`; `ERROR_INSUFFICIENT_BUFFER` (122) |
+| `KERNEL32.dll` | `Initialize/Enter/Leave/DeleteCriticalSection` | Suportado | No-ops com validação de ponteiro (convidado single-thread → exclusão trivial) |
+| `KERNEL32.dll` | `TlsGetValue` | Suportado | Retorna `NULL` com `ERROR_SUCCESS` para slot não usado (TLS do CRT não é inicializado por nenhum callback do xxd) |
+| `KERNEL32.dll` | `GetConsoleMode` / `SetConsoleMode` | Suportado | `GetConsoleMode` devolve `0x3` e `TRUE` só para fd com `isatty`; caso contrário `ERROR_INVALID_HANDLE` |
+| `KERNEL32.dll` | `IsDBCSLeadByteEx` | Suportado | Sempre `FALSE` (sem DBCS) |
+| `KERNEL32.dll` | `Sleep` | Suportado | `nanosleep` com loop `EINTR` |
+| `KERNEL32.dll` | `SetUnhandledExceptionFilter` | Suportado | Registra o handler em célula global (nunca invoca); retorna o anterior |
+
+O `xxd.exe` tem 42 testes unitários novos (`tests/test_win32.cpp` e
+`tests/test_msvcrt.cpp`) cobrindo as conversões de code page (inclusive
+surrogate pairs e erro `1113`), `VirtualQuery`/`VirtualProtect`, `TlsGetValue`,
+critical sections, `__getmainargs`, stdio em `GuestFile`, `strtol`/`wcslen`,
+locale e sinais.
+
+Observações que orientam a próxima etapa (Fase 9/10):
 
 - Todos os alvos compartilham o núcleo de CRT do mingw-w64: `__getmainargs`,
   `__iob_func`, `__initenv`, `_fmode`, `_errno`, `_commode`, `_initterm`,
   `_amsg_exit`, `_lock`/`_unlock`, `malloc`/`free`/`calloc`, `exit`/`atexit`/
   `abort`, `fopen`/`fclose`/`fread`/`fwrite`/`fprintf`/`vfprintf`/`fseek` e o
   grupo de strings (`strlen`/`strcmp`/`strcpy`/`memcpy`/`memset`).
-- `xxd.exe` é o alvo mais simples e natural para o primeiro fluxo de ponta a
-  ponta da Fase 9.
+- `bzip2.exe` é o próximo alvo natural: faltam apenas `strncpy`, `strstr` e
+  `ungetc` em `msvcrt.dll`.
 - `dos2unix`/`unix2dos` exigem o caminho `W` (`GetCommandLineW`,
   `FindFirstFileW`/`FindNextFileW`/`FindClose`, `GetFileAttributesW`,
   `_wfopen`, `wcs*`) e `SHELL32.dll!CommandLineToArgvW` (expansão de curingas

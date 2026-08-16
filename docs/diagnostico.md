@@ -151,6 +151,47 @@ mecanismo `token`; `BeginPaint`/`EndPaint` registram o par de pintura (o `HDC`
 é o próprio `HWND`); `TextOut` registra as coordenadas e o comprimento do texto
 desenhado.
 
+## Componente `crt`
+
+As funções da fronteira do `msvcrt.dll` mínimo emitem eventos do componente
+`crt` no nível `info` para o startup e o término, e no nível `error` para
+falhas que encerram o convidado:
+
+```text
+[tl][crt][info] getmainargs argc="2" argv0="xxd.exe"
+[tl][crt][error] amsg-exit code="1"
+[tl][crt][error] abort
+[tl][crt][error] seh-stub
+[tl][crt][info] exit code="0"
+```
+
+As demais APIs de CRT não registram evento (são chamadas em volume e o detalhe
+relevante está na saída do convidado). O `__getmainargs` reporta o `argc` final
+e o `argv[0]`, que são os argumentos do convidado encaminhados pelo CLI depois
+do executável.
+
+As APIs de `KERNEL32.dll` do subconjunto de console/CRT (por exemplo
+`VirtualQuery`, `VirtualProtect`, `MultiByteToWideChar`, `GetConsoleMode`,
+`SetUnhandledExceptionFilter`, `Sleep`) emitem eventos do componente `runtime`
+com os parâmetros relevantes:
+
+```text
+[tl][runtime][info] VirtualQuery symbol="VirtualQuery" address="1400080000" region-size="4096" status="success"
+[tl][runtime][info] SetUnhandledExceptionFilter symbol="SetUnhandledExceptionFilter" handler="5368718352" previous="0" mechanism="registrado-sem-invocacao"
+```
+
+## Processo convidado: TEB e segmento GS
+
+O `__mingw_CRTStartup` (crt2.o) lê o TEB x64 via `%gs:[0x30]` para obter o
+`StackBase` (offset `0x8`) e marcar a inicialização. Em Linux x86-64 o segmento
+`GS` é livre, então a fronteira aloca um TEB de uma página (`mmap` anônimo),
+aponta o `GS` para ele com `arch_prctl(ARCH_SET_GS)` imediatamente antes de
+chamar o entry point do convidado e restaura o `GS` do hospedeiro (e libera o
+TEB) no retorno — tanto na saída normal quanto no `longjmp` do `ExitProcess`
+capturado. Campos preenchidos: `Self`, `StackBase` (= topo da pilha convidada)
+e `StackLimit` (= `StackBase - kGuestStackSize`). Um convidado que não lê o
+TEB (fixtures sem CRT) não é afetado.
+
 ## Eventos do componente `pe`
 
 O leitor da Fase 1 emite um evento `image` com os campos `format`, `arch`, `entry`, `image-base`, `size-of-image` e `sections`, seguido de um evento `section` por seção (`index`, `name`, `virtual-address`, `virtual-size`, `raw-pointer`, `raw-size`, `characteristics`), um evento `import` por DLL (`dll`, `symbols`) e um evento `relocations` (`blocks`, `entries`).

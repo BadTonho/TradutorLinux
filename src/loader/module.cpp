@@ -1,6 +1,7 @@
 #include "tradutorlinux/loader/module.hpp"
 
 #include "tradutorlinux/runtime/winapi.hpp"
+#include "tradutorlinux/runtime/msvcrt.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -87,6 +88,20 @@ void register_builtin_modules() {
         {"VirtualFree", 8, reinterpret_cast<std::uintptr_t>(&tl_VirtualFree)},
         {"CreateFileA", 9, reinterpret_cast<std::uintptr_t>(&tl_CreateFileA)},
         {"CloseHandle", 10, reinterpret_cast<std::uintptr_t>(&tl_CloseHandle)},
+        {"DeleteCriticalSection", 11, reinterpret_cast<std::uintptr_t>(&tl_DeleteCriticalSection)},
+        {"EnterCriticalSection", 12, reinterpret_cast<std::uintptr_t>(&tl_EnterCriticalSection)},
+        {"GetConsoleMode", 13, reinterpret_cast<std::uintptr_t>(&tl_GetConsoleMode)},
+        {"InitializeCriticalSection", 14, reinterpret_cast<std::uintptr_t>(&tl_InitializeCriticalSection)},
+        {"IsDBCSLeadByteEx", 15, reinterpret_cast<std::uintptr_t>(&tl_IsDBCSLeadByteEx)},
+        {"LeaveCriticalSection", 16, reinterpret_cast<std::uintptr_t>(&tl_LeaveCriticalSection)},
+        {"MultiByteToWideChar", 17, reinterpret_cast<std::uintptr_t>(&tl_MultiByteToWideChar)},
+        {"SetConsoleMode", 18, reinterpret_cast<std::uintptr_t>(&tl_SetConsoleMode)},
+        {"SetUnhandledExceptionFilter", 19, reinterpret_cast<std::uintptr_t>(&tl_SetUnhandledExceptionFilter)},
+        {"Sleep", 20, reinterpret_cast<std::uintptr_t>(&tl_Sleep)},
+        {"TlsGetValue", 21, reinterpret_cast<std::uintptr_t>(&tl_TlsGetValue)},
+        {"VirtualProtect", 22, reinterpret_cast<std::uintptr_t>(&tl_VirtualProtect)},
+        {"VirtualQuery", 23, reinterpret_cast<std::uintptr_t>(&tl_VirtualQuery)},
+        {"WideCharToMultiByte", 24, reinterpret_cast<std::uintptr_t>(&tl_WideCharToMultiByte)},
     };
     static const InternalModule kKernel32Module{"KERNEL32.dll", kKernel32Exports};
     register_module(kKernel32Module);
@@ -120,6 +135,67 @@ void register_builtin_modules() {
     };
     static const InternalModule kGdi32Module{"GDI32.dll", kGdi32Exports};
     register_module(kGdi32Module);
+    static const ExportedFunction kMsvcrtExports[] = {
+        {"__C_specific_handler", 1, reinterpret_cast<std::uintptr_t>(&tl___C_specific_handler)},
+        {"__getmainargs", 2, reinterpret_cast<std::uintptr_t>(&tl___getmainargs)},
+        {"__iob_func", 3, reinterpret_cast<std::uintptr_t>(&tl___iob_func)},
+        {"___lc_codepage_func", 4, reinterpret_cast<std::uintptr_t>(&tl___lc_codepage_func)},
+        {"___mb_cur_max_func", 5, reinterpret_cast<std::uintptr_t>(&tl___mb_cur_max_func)},
+        {"__set_app_type", 6, reinterpret_cast<std::uintptr_t>(&tl___set_app_type)},
+        {"__setusermatherr", 7, reinterpret_cast<std::uintptr_t>(&tl___setusermatherr)},
+        {"_amsg_exit", 8, reinterpret_cast<std::uintptr_t>(&tl__amsg_exit)},
+        {"_cexit", 9, reinterpret_cast<std::uintptr_t>(&tl__cexit)},
+        {"_errno", 10, reinterpret_cast<std::uintptr_t>(&tl__errno)},
+        {"_fdopen", 11, reinterpret_cast<std::uintptr_t>(&tl__fdopen)},
+        {"_fileno", 12, reinterpret_cast<std::uintptr_t>(&tl__fileno)},
+        {"_initterm", 13, reinterpret_cast<std::uintptr_t>(&tl___initterm)},
+        {"_isatty", 14, reinterpret_cast<std::uintptr_t>(&tl__isatty)},
+        {"_lock", 15, reinterpret_cast<std::uintptr_t>(&tl__lock)},
+        {"_open", 16, reinterpret_cast<std::uintptr_t>(&tl__open)},
+        {"_setmode", 17, reinterpret_cast<std::uintptr_t>(&tl__setmode)},
+        {"_unlock", 18, reinterpret_cast<std::uintptr_t>(&tl__unlock)},
+        {"abort", 19, reinterpret_cast<std::uintptr_t>(&tl_abort)},
+        {"atexit", 20, reinterpret_cast<std::uintptr_t>(&tl_atexit)},
+        {"calloc", 21, reinterpret_cast<std::uintptr_t>(&tl_calloc)},
+        {"exit", 22, reinterpret_cast<std::uintptr_t>(&tl_exit)},
+        {"fclose", 23, reinterpret_cast<std::uintptr_t>(&tl_fclose)},
+        {"ferror", 24, reinterpret_cast<std::uintptr_t>(&tl_ferror)},
+        {"fflush", 25, reinterpret_cast<std::uintptr_t>(&tl_fflush)},
+        {"fopen", 26, reinterpret_cast<std::uintptr_t>(&tl_fopen)},
+        {"fprintf", 27, reinterpret_cast<std::uintptr_t>(&tl_fprintf)},
+        {"fputc", 28, reinterpret_cast<std::uintptr_t>(&tl_fputc)},
+        {"fputs", 29, reinterpret_cast<std::uintptr_t>(&tl_fputs)},
+        {"free", 30, reinterpret_cast<std::uintptr_t>(&tl_free)},
+        {"fseek", 31, reinterpret_cast<std::uintptr_t>(&tl_fseek)},
+        {"ftell", 32, reinterpret_cast<std::uintptr_t>(&tl_ftell)},
+        {"fwrite", 33, reinterpret_cast<std::uintptr_t>(&tl_fwrite)},
+        {"getc", 34, reinterpret_cast<std::uintptr_t>(&tl_getc)},
+        {"getenv", 35, reinterpret_cast<std::uintptr_t>(&tl_getenv)},
+        {"isalnum", 36, reinterpret_cast<std::uintptr_t>(&tl_isalnum)},
+        {"localeconv", 37, reinterpret_cast<std::uintptr_t>(&tl_localeconv)},
+        {"malloc", 38, reinterpret_cast<std::uintptr_t>(&tl_malloc)},
+        {"memcpy", 39, reinterpret_cast<std::uintptr_t>(&tl_memcpy)},
+        {"memset", 40, reinterpret_cast<std::uintptr_t>(&tl_memset)},
+        {"perror", 41, reinterpret_cast<std::uintptr_t>(&tl_perror)},
+        {"putc", 42, reinterpret_cast<std::uintptr_t>(&tl_putc)},
+        {"rewind", 43, reinterpret_cast<std::uintptr_t>(&tl_rewind)},
+        {"signal", 44, reinterpret_cast<std::uintptr_t>(&tl_signal)},
+        {"strcmp", 45, reinterpret_cast<std::uintptr_t>(&tl_strcmp)},
+        {"strcpy", 46, reinterpret_cast<std::uintptr_t>(&tl_strcpy)},
+        {"strerror", 47, reinterpret_cast<std::uintptr_t>(&tl_strerror)},
+        {"strlen", 48, reinterpret_cast<std::uintptr_t>(&tl_strlen)},
+        {"strncmp", 49, reinterpret_cast<std::uintptr_t>(&tl_strncmp)},
+        {"strtol", 50, reinterpret_cast<std::uintptr_t>(&tl_strtol)},
+        {"strtoul", 51, reinterpret_cast<std::uintptr_t>(&tl_strtoul)},
+        {"toupper", 52, reinterpret_cast<std::uintptr_t>(&tl_toupper)},
+        {"vfprintf", 53, reinterpret_cast<std::uintptr_t>(&tl_vfprintf)},
+        {"wcslen", 54, reinterpret_cast<std::uintptr_t>(&tl_wcslen)},
+        {"__initenv", 55, reinterpret_cast<std::uintptr_t>(&g_guest_initenv)},
+        {"_commode", 56, reinterpret_cast<std::uintptr_t>(&g_guest_commode)},
+        {"_fmode", 57, reinterpret_cast<std::uintptr_t>(&g_guest_fmode)},
+    };
+    static const InternalModule kMsvcrtModule{"msvcrt.dll", kMsvcrtExports};
+    register_module(kMsvcrtModule);
 }
 
 bool is_module_registered(const std::string_view dll) {

@@ -6,6 +6,7 @@
 #include "tradutorlinux/loader/process.hpp"
 #include "tradutorlinux/pe/pe_reader.hpp"
 #include "tradutorlinux/process/isolate.hpp"
+#include "tradutorlinux/runtime/msvcrt.hpp"
 
 #include <algorithm>
 #include <array>
@@ -23,7 +24,8 @@
 namespace tradutorlinux {
 namespace {
 
-constexpr std::string_view kUsage = "Uso: tradutorlinux [--trace] [--report] <arquivo.exe>\n";
+constexpr std::string_view kUsage =
+    "Uso: tradutorlinux [--trace] [--report] <arquivo.exe> [argumentos do convidado...]\n";
 
 [[nodiscard]] bool is_option(const std::string_view argument) {
     return argument.starts_with('-');
@@ -366,6 +368,13 @@ ParseResult parse_command_line(const int argc, const char* const argv[]) {
     for (int index = 1; index < argc; ++index) {
         const std::string_view argument{argv[index]};
 
+        if (command_line.executable_path.has_value()) {
+            // Tudo depois do executável pertence ao convidado, inclusive
+            // argumentos que começam com '-'.
+            command_line.guest_arguments.emplace_back(argument);
+            continue;
+        }
+
         if (!options_ended && argument == "--") {
             options_ended = true;
             continue;
@@ -412,10 +421,6 @@ ParseResult parse_command_line(const int argc, const char* const argv[]) {
                     .error_message = "opção desconhecida: " + std::string{argument}};
         }
 
-        if (command_line.executable_path.has_value()) {
-            return {.command_line = std::nullopt,
-                    .error_message = "apenas um arquivo executável pode ser informado"};
-        }
         command_line.executable_path = std::filesystem::path{std::string{argument}};
     }
 
@@ -578,6 +583,13 @@ ExitCode run_command(const CommandLine& command_line, std::ostream& stdout_strea
         }
         return ExitCode::Unsupported;
     }
+
+    std::vector<std::string> guest_argv;
+    guest_argv.reserve(1 + command_line.guest_arguments.size());
+    guest_argv.push_back(command_line.executable_path->string());
+    guest_argv.insert(guest_argv.end(), command_line.guest_arguments.begin(),
+                      command_line.guest_arguments.end());
+    msvcrt_set_guest_command_line(std::move(guest_argv));
 
     const process::GuestOutcome outcome =
         process::run_guest_isolated(process.thread.entry_point, process.thread.stack_top);

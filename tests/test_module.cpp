@@ -1,4 +1,5 @@
 #include "tradutorlinux/loader/module.hpp"
+#include "tradutorlinux/runtime/msvcrt.hpp"
 #include "tradutorlinux/runtime/winapi.hpp"
 
 #include <cstdint>
@@ -78,10 +79,11 @@ TEST_F(ModuleTest, ClearModulesResetsRegistry) {
 
 TEST_F(ModuleTest, RegistersBuiltinKernel32Exports) {
     register_builtin_modules();
-    ASSERT_EQ(registered_module_count(), 3U);
+    ASSERT_EQ(registered_module_count(), 4U);
     EXPECT_TRUE(is_module_registered("KERNEL32.dll"));
     EXPECT_TRUE(is_module_registered("USER32.dll"));
     EXPECT_TRUE(is_module_registered("GDI32.dll"));
+    EXPECT_TRUE(is_module_registered("msvcrt.dll"));
 
     const ExportLookup std_handle = find_export(ExportQuery{"KERNEL32.dll", "GetStdHandle"});
     ASSERT_TRUE(std_handle.found);
@@ -93,8 +95,18 @@ TEST_F(ModuleTest, RegistersBuiltinKernel32Exports) {
               reinterpret_cast<std::uintptr_t>(&tl_ExitProcess));
     EXPECT_EQ(find_export(ExportQuery{"KERNEL32.dll", "ReadFile"}).address,
               reinterpret_cast<std::uintptr_t>(&tl_ReadFile));
+    EXPECT_EQ(find_export(ExportQuery{"KERNEL32.dll", "VirtualQuery"}).address,
+              reinterpret_cast<std::uintptr_t>(&tl_VirtualQuery));
+    EXPECT_EQ(find_export(ExportQuery{"KERNEL32.dll", "MultiByteToWideChar"}).address,
+              reinterpret_cast<std::uintptr_t>(&tl_MultiByteToWideChar));
+    EXPECT_EQ(find_export(ExportQuery{"KERNEL32.dll", "SetUnhandledExceptionFilter"}).address,
+              reinterpret_cast<std::uintptr_t>(&tl_SetUnhandledExceptionFilter));
+    EXPECT_EQ(find_export(ExportQuery{"KERNEL32.dll", "TlsGetValue"}).address,
+              reinterpret_cast<std::uintptr_t>(&tl_TlsGetValue));
     EXPECT_EQ(find_export_by_ordinal("KERNEL32.dll", 1).address,
               reinterpret_cast<std::uintptr_t>(&tl_GetStdHandle));
+    EXPECT_EQ(find_export_by_ordinal("KERNEL32.dll", 24).address,
+              reinterpret_cast<std::uintptr_t>(&tl_WideCharToMultiByte));
     EXPECT_EQ(find_export(ExportQuery{"USER32.dll", "MessageBoxA"}).address,
               reinterpret_cast<std::uintptr_t>(&tl_MessageBoxA));
     EXPECT_EQ(find_export(ExportQuery{"GDI32.dll", "GetStockObject"}).address,
@@ -105,10 +117,24 @@ TEST_F(ModuleTest, RegistersBuiltinKernel32Exports) {
               reinterpret_cast<std::uintptr_t>(&tl_Rectangle));
 }
 
+TEST_F(ModuleTest, RegistersMsvcrtExports) {
+    register_builtin_modules();
+    const ExportLookup getmainargs = find_export(ExportQuery{"msvcrt.dll", "__getmainargs"});
+    ASSERT_TRUE(getmainargs.found);
+    EXPECT_EQ(getmainargs.address,
+              reinterpret_cast<std::uintptr_t>(&tl___getmainargs));
+    EXPECT_EQ(find_export(ExportQuery{"MSVCRT.dll", "fopen"}).address,
+              reinterpret_cast<std::uintptr_t>(&tl_fopen));
+    EXPECT_EQ(find_export(ExportQuery{"msvcrt.dll", "___lc_codepage_func"}).address,
+              reinterpret_cast<std::uintptr_t>(&tl___lc_codepage_func));
+    EXPECT_EQ(find_export_by_ordinal("msvcrt.dll", 57).address,
+              reinterpret_cast<std::uintptr_t>(&g_guest_fmode));
+}
+
 TEST_F(ModuleTest, RegisterBuiltinModulesIsIdempotent) {
     register_builtin_modules();
     register_builtin_modules();
-    EXPECT_EQ(registered_module_count(), 3U);
+    EXPECT_EQ(registered_module_count(), 4U);
 }
 
 TEST_F(ModuleTest, RegistryOwnsItsStrings) {

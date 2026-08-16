@@ -10,10 +10,12 @@ add_executable(tradutorlinux_unit_tests
     test_image_mapper.cpp
     test_import_resolver.cpp
     test_module.cpp
+    test_msvcrt.cpp
     test_pe_reader.cpp
     test_process.cpp
     test_runtime.cpp
     test_trace.cpp
+    test_win32.cpp
 )
 target_link_libraries(tradutorlinux_unit_tests
     PRIVATE

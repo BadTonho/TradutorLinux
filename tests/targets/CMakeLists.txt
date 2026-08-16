@@ -20,8 +20,10 @@ find_program(TL_LLVM_READOBJ
 # verificado. Os imports são pinados nos manifests em manifests/ e protegidos
 # por teste: qualquer mudança de toolchain que altere os imports quebra o CI.
 #
-# Esta etapa não executa os aplicativos: todos importam msvcrt.dll, que ainda
-# não tem suporte (Fase 9). O --report é a fonte de verdade do catálogo.
+# O --report é a fonte de verdade do catálogo: aceita result: supported (exit 0)
+# ou result: unsupported (exit 5). Quando o runtime suporta o CRT do alvo, uma
+# fixture dourada em golden/<alvo>/ habilita também a execução de ponta a ponta
+# (targetapp_<alvo>_run*, ver tl_add_target_app_run_test abaixo).
 
 set(TL_TARGETS_SOURCE_DIR "${CMAKE_CURRENT_BINARY_DIR}/source")
 set(TL_TARGETS_OUTPUT_DIR "${CMAKE_CURRENT_BINARY_DIR}/out")
@@ -209,8 +211,68 @@ function(tl_add_target_app_test target_name output_file manifest_file)
     endif()
 endfunction()
 
+# Execução e2e de ponta a ponta. O convidado é executado de verdade e o stdout
+# deve ser byte-idêntico ao ouro fixado em tests/targets/golden/. Requer que o
+# runtime já suporte o CRT (Fase 9+) e só é adicionado para alvos com fixture
+# dourada e manifesta de imports resolvidos (result: supported).
+function(tl_add_target_app_run_test target_name output_file)
+    set(_golden_dir "${CMAKE_CURRENT_SOURCE_DIR}/golden/${target_name}")
+    if(NOT EXISTS "${_golden_dir}")
+        return()
+    endif()
+    if(NOT TARGET tradutorlinux)
+        return()
+    endif()
+
+    add_test(
+        NAME targetapp_${target_name}_run
+        COMMAND "${CMAKE_COMMAND}"
+            "-DINPUT=${output_file}"
+            "-DRUNTIME=$<TARGET_FILE:tradutorlinux>"
+            "-DGOLDEN_INPUT=${_golden_dir}/input.bin"
+            "-DGOLDEN_OUTPUT=${_golden_dir}/expected.txt"
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/verify_target_run.cmake"
+    )
+    set_tests_properties(targetapp_${target_name}_run PROPERTIES
+        DEPENDS targetapp_${target_name}_report
+        LABELS "targetapp;runtime;pe32plus"
+    )
+
+    add_test(
+        NAME targetapp_${target_name}_run_plain
+        COMMAND "${CMAKE_COMMAND}"
+            "-DINPUT=${output_file}"
+            "-DRUNTIME=$<TARGET_FILE:tradutorlinux>"
+            "-DGOLDEN_INPUT=${_golden_dir}/input.bin"
+            "-DGOLDEN_OUTPUT=${_golden_dir}/expected_plain.txt"
+            "-DGUEST_ARGS=-p"
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/verify_target_run.cmake"
+    )
+    set_tests_properties(targetapp_${target_name}_run_plain PROPERTIES
+        DEPENDS targetapp_${target_name}_run
+        LABELS "targetapp;runtime;pe32plus"
+    )
+
+    add_test(
+        NAME targetapp_${target_name}_run_missing_input
+        COMMAND "${CMAKE_COMMAND}"
+            "-DINPUT=${output_file}"
+            "-DRUNTIME=$<TARGET_FILE:tradutorlinux>"
+            "-DGOLDEN_INPUT=${_golden_dir}/does-not-exist.bin"
+            "-DGOLDEN_OUTPUT=${_golden_dir}/expected_missing.txt"
+            "-DEXPECTED_EXIT=2"
+            "-DALLOW_MISSING_GOLDEN_INPUT=TRUE"
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/verify_target_run.cmake"
+    )
+    set_tests_properties(targetapp_${target_name}_run_missing_input PROPERTIES
+        DEPENDS targetapp_${target_name}_run
+        LABELS "targetapp;runtime;pe32plus"
+    )
+endfunction()
+
 tl_add_target_app_test(xxd      "${TL_TARGETS_OUTPUT_DIR}/xxd.exe"
     "${CMAKE_CURRENT_SOURCE_DIR}/manifests/xxd.json")
+tl_add_target_app_run_test(xxd   "${TL_TARGETS_OUTPUT_DIR}/xxd.exe")
 tl_add_target_app_test(bzip2    "${TL_TARGETS_OUTPUT_DIR}/bzip2.exe"
     "${CMAKE_CURRENT_SOURCE_DIR}/manifests/bzip2.json")
 tl_add_target_app_test(dos2unix "${TL_TARGETS_OUTPUT_DIR}/dos2unix.exe"

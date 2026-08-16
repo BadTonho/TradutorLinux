@@ -15,6 +15,7 @@ enum class TraceComponent {
     Runtime,
     Process,
     Gui,
+    Crt,
 };
 
 enum class FailureCategory {

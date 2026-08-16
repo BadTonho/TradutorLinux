@@ -41,8 +41,31 @@ constexpr Dword kOpenExisting = 3;
 constexpr Dword kMemCommit = 0x1000U;
 constexpr Dword kMemReserve = 0x2000U;
 constexpr Dword kMemRelease = 0x8000U;
+constexpr Dword kMemImage = 0x1000000U;
+constexpr Dword kMemPrivate = 0x20000U;
+constexpr Dword kPageNoAccess = 0x01U;
 constexpr Dword kPageReadOnly = 0x02U;
 constexpr Dword kPageReadWrite = 0x04U;
+constexpr Dword kPageWriteCopy = 0x08U;
+constexpr Dword kPageExecute = 0x10U;
+constexpr Dword kPageExecuteRead = 0x20U;
+constexpr Dword kPageExecuteReadWrite = 0x40U;
+constexpr Dword kPageExecuteWriteCopy = 0x80U;
+
+constexpr Dword kErrorInsufficientBuffer = 122;
+constexpr Dword kErrorInvalidAddress = 487;
+constexpr Dword kErrorNoUnicodeTranslation = 1113;
+
+// Code pages suportadas pela conversão de strings.
+constexpr Dword kCpAcp = 0;          // CP_ACP -> CP1252 (locale C do runtime)
+constexpr Dword kCp1252 = 1252;
+constexpr Dword kCpUtf8 = 65001;
+
+// Flags aceitas por MultiByteToWideChar / WideCharToMultiByte.
+constexpr Dword kMbPrecomposed = 0x01U;
+constexpr Dword kMbErrInvalidChars = 0x08U;
+constexpr Dword kWcCompositeCheck = 0x200U;
+constexpr Dword kWcNoBestFitChars = 0x400U;
 
 constexpr Dword kStdInputHandle = 0xFFFFFFF6U;   // STD_INPUT_HANDLE (-10)
 constexpr Dword kStdOutputHandle = 0xFFFFFFF5U;  // STD_OUTPUT_HANDLE (-11)
@@ -127,6 +150,22 @@ struct GuestPaintStruct {
 };
 static_assert(sizeof(GuestPaintStruct) == 72);
 
+// MEMORY_BASIC_INFORMATION com layout Microsoft x64 (48 bytes, sem o campo
+// PartitionId das versões recentes do SDK). Os campos são preenchidos pela
+// fronteira a partir do /proc/self/maps do hospedeiro.
+struct GuestMemoryBasicInformation {
+    void* base_address{};
+    void* allocation_base{};
+    std::uint32_t allocation_protect{};
+    std::uint32_t padding1{};
+    std::uintptr_t region_size{};
+    std::uint32_t state{};
+    std::uint32_t protect{};
+    std::uint32_t type{};
+    std::uint32_t padding2{};
+};
+static_assert(sizeof(GuestMemoryBasicInformation) == 48);
+
 }  // namespace abi
 
 // Fronteira de ABI: funções hospedeiras chamadas por código PE32+ x86-64.
@@ -180,6 +219,26 @@ TL_MSABI int tl_FillRect(const void* dc, const void* rect, const void* brush) no
 TL_MSABI int tl_Rectangle(const void* dc, int left, int top, int right, int bottom) noexcept;
 TL_MSABI void* tl_GetDC(const void* window) noexcept;
 TL_MSABI int tl_ReleaseDC(const void* window, const void* dc) noexcept;
+TL_MSABI void tl_DeleteCriticalSection(void* critical_section) noexcept;
+TL_MSABI void tl_EnterCriticalSection(void* critical_section) noexcept;
+TL_MSABI int tl_GetConsoleMode(const void* handle, std::uint32_t* mode) noexcept;
+TL_MSABI void tl_InitializeCriticalSection(void* critical_section) noexcept;
+TL_MSABI int tl_IsDBCSLeadByteEx(std::uint32_t code_page, std::uint8_t test_char) noexcept;
+TL_MSABI void tl_LeaveCriticalSection(void* critical_section) noexcept;
+TL_MSABI int tl_MultiByteToWideChar(std::uint32_t code_page, std::uint32_t flags, const char* mb_str,
+                                   int mb_count, std::uint16_t* wide_str, int wide_count) noexcept;
+TL_MSABI int tl_SetConsoleMode(const void* handle, std::uint32_t mode) noexcept;
+TL_MSABI std::uintptr_t tl_SetUnhandledExceptionFilter(std::uintptr_t handler) noexcept;
+TL_MSABI void tl_Sleep(std::uint32_t milliseconds) noexcept;
+TL_MSABI void* tl_TlsGetValue(std::uint32_t tls_index) noexcept;
+TL_MSABI int tl_VirtualProtect(void* address, std::uintptr_t size, std::uint32_t new_protection,
+                               std::uint32_t* old_protection) noexcept;
+TL_MSABI std::uintptr_t tl_VirtualQuery(const void* address, void* memory_information,
+                                        std::uintptr_t length) noexcept;
+TL_MSABI int tl_WideCharToMultiByte(std::uint32_t code_page, std::uint32_t flags,
+                                    const std::uint16_t* wide_str, int wide_count, char* mb_str,
+                                    int mb_count, const char* default_char,
+                                    int* used_default_char) noexcept;
 
 }  // extern "C"
 

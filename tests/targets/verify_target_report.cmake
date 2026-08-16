@@ -17,11 +17,16 @@ if(NOT report_result EQUAL 0 AND NOT report_result EQUAL 5)
         "Report returned unexpected code ${report_result} (esperado 0 ou 5 = Unsupported):\n${report_output}\n${report_error}")
 endif()
 
-string(FIND "${report_output}" "result: unsupported" result_position)
+string(FIND "${report_output}" "result: unsupported" unsupported_position)
+string(FIND "${report_output}" "result: supported" supported_position)
 string(FIND "${report_output}" "execution: not-attempted" execution_position)
-if(result_position EQUAL -1 OR execution_position EQUAL -1)
+if(execution_position EQUAL -1)
     message(FATAL_ERROR
-        "Expected result: unsupported and execution: not-attempted:\n${report_output}")
+        "Expected execution: not-attempted in the report:\n${report_output}")
+endif()
+if(unsupported_position EQUAL -1 AND supported_position EQUAL -1)
+    message(FATAL_ERROR
+        "Expected result: unsupported or result: supported:\n${report_output}")
 endif()
 
 file(READ "${MANIFEST}" manifest_json)

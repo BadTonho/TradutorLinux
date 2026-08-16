@@ -4,6 +4,7 @@
 #include <iosfwd>
 #include <optional>
 #include <string>
+#include <vector>
 
 namespace tradutorlinux {
 
@@ -23,6 +24,10 @@ struct CommandLine {
     bool trace_enabled{false};
     bool report_only{false};
     std::optional<std::filesystem::path> executable_path;
+    // Argumentos encaminhados ao programa convidado (argv[1..]), na ordem em
+    // que foram informados depois do executável. argv[0] é o caminho do
+    // executável informado na linha de comando.
+    std::vector<std::string> guest_arguments;
 };
 
 struct ParseResult {
