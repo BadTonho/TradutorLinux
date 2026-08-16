@@ -4,7 +4,7 @@
 
 O TradutorLinux é um projeto educativo e funcional de sistemas: um runtime capaz de executar uma **classe explicitamente suportada de executáveis Windows no Linux**, sem máquina virtual e sem emular a CPU.
 
-A primeira meta não é substituir o Wine nem prometer compatibilidade geral com aplicativos Windows. É construir, do zero, uma implementação pequena, legível, observável e confiável para programas Win32 de console selecionados.
+A primeira meta não é substituir o Wine nem prometer compatibilidade geral com aplicativos Windows. É construir, do zero, uma implementação pequena, legível, observável e confiável para programas Win32 de console selecionados e para um subconjunto experimental de GUI.
 
 O alvo inicial é deliberadamente restrito:
 
@@ -12,9 +12,9 @@ O alvo inicial é deliberadamente restrito:
 |---|---|
 | Arquitetura do programa | PE32+ x86-64 |
 | Máquina hospedeira | Linux x86-64 |
-| Tipo de aplicativo | Console Win32 e GUI Win32 experimental |
+| Tipo de aplicativo | Console Win32 e GUI Win32 mínima experimental |
 | Dependências | Conjunto documentado de APIs `KERNEL32`, `USER32` e `GDI32` |
-| Fora do escopo inicial | PE32 x86, ARM, .NET, COM, drivers, DirectX e anticheat |
+| Fora do escopo inicial | PE32 x86, ARM, .NET, COM, drivers, GUI Win32 ampla, GDI completo, DirectX e anticheat |
 
 Com CPU igual nos dois lados, as instruções x86-64 do programa podem ser executadas nativamente. O trabalho do TradutorLinux é carregar a imagem PE, preparar o contexto de processo esperado por ela e fornecer as APIs Windows que o programa importa.
 
@@ -77,7 +77,7 @@ O resultado deve imprimir a saída esperada, retornar o código correto e gerar 
 ### 3.4. Fora de escopo, por enquanto
 
 - Compatibilidade ampla com programas comerciais ou jogos.
-- Interface gráfica Win32, GDI, DirectX, áudio e GPU.
+- Interface gráfica Win32 além do subconjunto experimental, GDI completo, DirectX, áudio e GPU.
 - COM, ActiveX, .NET, drivers e serviços Windows.
 - Suporte a 32 bits, ARM, WOW64 ou execução cruzada de arquitetura.
 - Segurança de executáveis não confiáveis. Compatibilidade não é sandbox: um `.exe` executado nativamente tem os privilégios do usuário atual.
