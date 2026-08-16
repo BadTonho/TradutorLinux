@@ -2,9 +2,9 @@
 
 ## 1. Visão geral
 
-O TradutorLinux é um projeto educativo e funcional de sistemas: um runtime capaz de executar uma **classe explicitamente suportada de executáveis Windows no Linux**, sem máquina virtual e sem emular a CPU.
+O TradutorLinux é um projeto educativo e funcional de sistemas: um runtime capaz de executar, de forma progressiva, **classes cada vez mais amplas de executáveis Windows no Linux**, sem máquina virtual e sem emular a CPU.
 
-A primeira meta não é substituir o Wine nem prometer compatibilidade geral com aplicativos Windows. É construir, do zero, uma implementação pequena, legível, observável e confiável para programas Win32 de console selecionados e para um subconjunto experimental de GUI.
+O objetivo estratégico é tornar o runtime útil para aplicativos Windows em geral, avançando por classes de uso e por aplicativos-alvo reais. O projeto não promete compatibilidade universal imediata: cada capacidade precisa ser implementada, testada e publicada antes de ser considerada suportada.
 
 O alvo inicial é deliberadamente restrito:
 
@@ -54,6 +54,7 @@ Linux / POSIX
 ### 3.1. Objetivos de produto
 
 - Executar bem um conjunto pequeno e publicado de utilitários Win32 de console.
+- Expandir progressivamente o conjunto de aplicativos suportados para incluir arquivos, ferramentas, bibliotecas comuns e GUI, conforme os aplicativos-alvo justifiquem suas dependências.
 - Informar com clareza quando um executável ou API ainda não é suportado.
 - Produzir rastros de execução que expliquem imports, chamadas e falhas.
 - Manter uma matriz de compatibilidade e testes automatizados para cada função implementada.
@@ -74,13 +75,15 @@ Executar `tl_hello.exe`, um binário de teste próprio para x86-64 que importe a
 
 O resultado deve imprimir a saída esperada, retornar o código correto e gerar um trace reproduzível. Se uma importação desconhecida aparecer, o runtime deve encerrar de forma controlada e explicar qual módulo, símbolo e mecanismo não foram suportados.
 
-### 3.4. Fora de escopo, por enquanto
+### 3.4. Fora de escopo no estágio atual
 
-- Compatibilidade ampla com programas comerciais ou jogos.
+- Compatibilidade presumida com qualquer executável sem análise, implementação e regressão correspondentes.
 - Interface gráfica Win32 além do subconjunto experimental, GDI completo, DirectX, áudio e GPU.
 - COM, ActiveX, .NET, drivers e serviços Windows.
 - Suporte a 32 bits, ARM, WOW64 ou execução cruzada de arquitetura.
 - Segurança de executáveis não confiáveis. Compatibilidade não é sandbox: um `.exe` executado nativamente tem os privilégios do usuário atual.
+
+Esses limites descrevem o estágio atual, não o limite definitivo do produto. A expansão para novas classes exige uma fase ou aplicativo-alvo explícito, contratos técnicos, testes de integração e atualização da matriz de compatibilidade.
 
 O plano de execução, dividido em fases, marcos e entregas verificáveis, está em [ROADMAP.md](ROADMAP.md).
 

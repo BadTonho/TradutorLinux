@@ -2,9 +2,9 @@
 
 ## Missão do projeto
 
-O TradutorLinux é um runtime de compatibilidade educacional e funcional para executar uma **classe explicitamente suportada de programas Win32 de console** no Linux, sem máquina virtual e sem emular a CPU.
+O TradutorLinux é um runtime de compatibilidade educacional e funcional para executar, de forma progressiva, **classes cada vez mais amplas de aplicativos Win32** no Linux, sem máquina virtual e sem emular a CPU.
 
-O alvo inicial é estrito: **executáveis PE32+ x86-64 em Linux x86-64**. A meta é construir uma base correta, observável e bem testada para programas selecionados — não substituir o Wine nem prometer compatibilidade geral com Windows.
+O alvo inicial é estrito: **executáveis PE32+ x86-64 em Linux x86-64**. A meta estratégica é tornar o runtime útil para uma variedade crescente de aplicativos Windows, começando por programas selecionados e avançando por classes de uso, sem prometer compatibilidade universal imediata.
 
 Antes de iniciar qualquer trabalho, leia `PROJETO.md`, `ROADMAP.md`, `docs/compatibilidade.md` e os contratos técnicos relevantes em `docs/`.
 
@@ -15,28 +15,30 @@ Antes de iniciar qualquer trabalho, leia `PROJETO.md`, `ROADMAP.md`, `docs/compa
 - Nunca alegue que um executável, DLL ou API é suportado sem teste de integração e registro na matriz de compatibilidade.
 - Quando algo ainda não for suportado, falhe de forma controlada: informe módulo, símbolo, mecanismo e próxima limitação conhecida no trace ou na mensagem de erro.
 - Cada API nova precisa ter um aplicativo-alvo ou fixture que justifique sua existência e um teste de regressão que a proteja.
-- Priorize correção do loader, ABI, memória, imports e diagnósticos antes de GUI, cobertura ampla ou otimização.
+- Priorize correção do loader, ABI, memória, imports e diagnósticos antes de ampliar a cobertura de APIs, famílias de DLL ou GUI.
 
 ## Escopo atual
 
-Em cada momento, `ROADMAP.md` é a fonte de verdade para a fase em andamento. Na Fase 0, o projeto deve apenas fornecer infraestrutura: build, testes, fixtures, documentação, CLI e diagnóstico. Não tente carregar, mapear ou executar um PE antes da Fase 1 e das fases subsequentes.
+Em cada momento, `ROADMAP.md` é a fonte de verdade para a fase em andamento. As restrições de cada fase são gates reais: uma capacidade só pode ser usada ou declarada quando a fase correspondente e seus testes a autorizarem. Na Fase 0, por exemplo, o projeto fornecia apenas infraestrutura; o carregamento e a execução de PE só começaram nas fases seguintes.
 
-O primeiro marco funcional é um `tl_hello.exe` próprio, sem CRT, que importe somente:
+O primeiro marco funcional do projeto foi um `tl_hello.exe` próprio, sem CRT, que importa somente:
 
 - `KERNEL32.dll!GetStdHandle`
 - `KERNEL32.dll!WriteFile`
 - `KERNEL32.dll!ExitProcess`
 
-Esse marco só é considerado atingido quando a saída, o código de retorno, o trace e as APIs usadas forem testados automaticamente.
+Esse marco continua protegido por testes automáticos de saída, código de retorno, trace e APIs usadas.
 
 ## Fora de escopo sem autorização explícita
 
-- Tentar ser uma alternativa geral ao Wine ou rodar aplicativos Windows arbitrários.
+- Declarar suporte ou executar de forma presumidamente compatível um aplicativo Windows arbitrário sem análise de imports, implementação, teste de integração e registro na matriz.
 - PE32/x86, ARM, WOW64, emulação de CPU ou execução cruzada de arquitetura.
-- .NET, COM, ActiveX, drivers, serviços Windows, anticheat, DirectX, GPU, áudio, jogos ou GDI.
-- Interface gráfica Win32 antes da decisão registrada na Fase 7.
+- .NET, COM, ActiveX, drivers, serviços Windows, anticheat, DirectX, GPU, áudio, jogos e GDI completo permanecem fora do escopo atual; qualquer inclusão futura exige decisão explícita, aplicativo-alvo e testes.
+- GUI Win32 ampla sem aplicativo-alvo e sem uma fase que defina seus contratos; a GUI mínima experimental já faz parte do roadmap.
 - Adicionar dependências grandes, frameworks, APIs ou compatibilidade de terceiros apenas por antecipação.
 - Tratar execução nativa de `.exe` como recurso de segurança. O runtime não é sandbox.
+
+Compatibilidade ampla é o objetivo de longo prazo, não uma autorização para implementar APIs sem alvo. Cada novo aplicativo ou classe de aplicativos deve avançar por etapas verificáveis, com limitações publicadas e nível de compatibilidade explícito.
 
 ## Regras técnicas
 

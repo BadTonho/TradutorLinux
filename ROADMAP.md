@@ -179,9 +179,12 @@ aplicativos escolhidos.
 - [ ] Implementar `GetModuleHandleA/W`, `GetProcAddress` limitado aos módulos registrados e informações básicas do processo.
 - [ ] Implementar linha de comando e ambiente: `GetCommandLineA/W`, `GetEnvironmentVariableA/W` e conversão documentada de encoding.
 - [ ] Implementar heap básico: `HeapAlloc`, `HeapFree`, `HeapReAlloc`, `GetProcessHeap`.
-- [ ] Implementar tempo e espera necessários: `GetTickCount64`, `Sleep`, `GetSystemTimeAsFileTime`.
-- [ ] Adicionar apenas a CRT exigida pelo primeiro alvo (`msvcrt.dll` ou `ucrtbase.dll`).
-- [ ] Cobrir inicialização/encerramento do CRT, argumentos `argc/argv`, retorno de `main` e erros.
+- [x] Implementar a espera exigida pelo primeiro alvo: `Sleep`.
+- [ ] Implementar tempo adicional quando um aplicativo-alvo justificar: `GetTickCount64` e `GetSystemTimeAsFileTime`.
+- [x] Adicionar o subconjunto mínimo de `msvcrt.dll` exigido pelo primeiro alvo (`xxd`).
+- [ ] Expandir a CRT somente pelos imports e fluxos exigidos pelos próximos aplicativos-alvo.
+- [x] Cobrir inicialização/encerramento do CRT, argumentos `argc/argv`, retorno de `main` e erros para o primeiro alvo.
+- [ ] Ampliar essa cobertura para cada nova família de CRT ou aplicativo suportado.
 
 ### Critério de saída
 
@@ -210,7 +213,8 @@ configuração e lidar com erros de filesystem sem caminhos fixos do projeto.
 Esta fase só começa se um aplicativo-alvo justificar threads ou rede.
 
 - [ ] Implementar `CreateThread`, `ExitThread`, `WaitForSingleObject` e `CloseHandle`.
-- [ ] Implementar sincronização mínima (`CRITICAL_SECTION`, eventos e mutexes).
+- [x] Implementar `CRITICAL_SECTION` compatível com o escopo atual de convidado single-thread.
+- [ ] Ampliar sincronização para threads, eventos e mutexes quando um aplicativo-alvo justificar.
 - [ ] Definir TLS, encerramento de threads e chamadas ABI em threads convidadas.
 - [ ] Se houver alvo concreto, criar uma camada WinSock mínima separada de `KERNEL32.dll`.
 - [ ] Testar deadlock, timeout, cancelamento e propagação de falha do convidado.
@@ -238,24 +242,25 @@ APIs.
 Um aplicativo GUI real abre, recebe interação, renderiza seu fluxo principal e
 encerra corretamente em uma sessão X11 de teste, com limitações publicadas.
 
-## O que fica explicitamente fora deste roadmap
+## O que fica explicitamente fora do estágio atual
 
-- Jogos, DirectX, drivers, anti-cheat, .NET, COM, ActiveX e serviços Windows.
+- Jogos, DirectX, drivers, anti-cheat, .NET, COM, ActiveX e serviços Windows, até que exista decisão explícita, alvo concreto e fase própria.
 - Implementar centenas de APIs sem aplicativo-alvo e regressão.
 - Declarar suporte porque o programa abriu; o fluxo principal precisa ser verificável.
 
-## Objetivo de longo prazo — ampla compatibilidade
+## Objetivo estratégico — compatibilidade ampla por etapas
 
-O objetivo do projeto passa a ser aumentar continuamente a quantidade e o
-tamanho dos aplicativos Windows que funcionam no Linux. Isso inclui chegar,
-progressivamente, a aplicativos grandes, desde que suas dependências possam
-ser implementadas com segurança e testadas.
+O objetivo do projeto é tornar o TradutorLinux útil para aplicativos Windows em
+geral, aumentando continuamente a quantidade, as categorias e o tamanho dos
+aplicativos que funcionam no Linux. Isso inclui chegar progressivamente a
+aplicativos grandes, desde que suas dependências possam ser implementadas com
+segurança e testadas.
 
-Esse objetivo não significa prometer compatibilidade universal ou substituir o
-Wine em curto prazo. “Máximo de aplicativos possível” será medido por dados:
-aplicativos reais testados, imports cobertos, fluxos principais aprovados e
-falhas reproduzíveis. Não será medido por quantidade de APIs declaradas sem uso
-real.
+“Aplicativos em geral” é um objetivo de cobertura, não uma declaração de que
+qualquer `.exe` já funciona. O progresso será medido por dados: aplicativos
+reais testados, categorias cobertas, imports implementados, fluxos principais
+aprovados, resultados corretos e falhas reproduzíveis. Não será medido por
+quantidade de APIs declaradas sem uso real.
 
 ### Estratégia de expansão
 
