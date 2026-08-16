@@ -237,10 +237,51 @@ encerra corretamente em uma sessão X11 de teste, com limitações publicadas.
 
 ## O que fica explicitamente fora deste roadmap
 
-- Compatibilidade geral com executáveis Windows arbitrários ou substituição do Wine.
 - Jogos, DirectX, drivers, anti-cheat, .NET, COM, ActiveX e serviços Windows.
 - Implementar centenas de APIs sem aplicativo-alvo e regressão.
 - Declarar suporte porque o programa abriu; o fluxo principal precisa ser verificável.
+
+## Objetivo de longo prazo — ampla compatibilidade
+
+O objetivo do projeto passa a ser aumentar continuamente a quantidade e o
+tamanho dos aplicativos Windows que funcionam no Linux. Isso inclui chegar,
+progressivamente, a aplicativos grandes, desde que suas dependências possam
+ser implementadas com segurança e testadas.
+
+Esse objetivo não significa prometer compatibilidade universal ou substituir o
+Wine em curto prazo. “Máximo de aplicativos possível” será medido por dados:
+aplicativos reais testados, imports cobertos, fluxos principais aprovados e
+falhas reproduzíveis. Não será medido por quantidade de APIs declaradas sem uso
+real.
+
+### Estratégia de expansão
+
+- [ ] Criar um catálogo de aplicativos reais por categoria: console, arquivos, rede, ferramentas de desenvolvimento, produtividade e GUI.
+- [ ] Manter níveis de compatibilidade: inicia, fluxo principal, uso diário e cobertura avançada.
+- [ ] Coletar imports de muitos aplicativos e priorizar APIs que aparecem em vários alvos.
+- [ ] Implementar famílias de DLLs por demanda: `KERNEL32`, `NTDLL` limitada, `ADVAPI32`, `USER32`, `GDI32`, `SHELL32`, `OLE32`, `COMDLG32`, `WS2_32` e CRTs.
+- [ ] Criar testes de integração por aplicativo e uma matriz pública de limitações.
+- [ ] Adicionar execução isolada, timeout, limites de recursos e diagnóstico para que aplicativos grandes não derrubem o host.
+- [ ] Avaliar compatibilidade por versões e builds específicos, sem assumir que duas versões do mesmo aplicativo usam as mesmas APIs.
+
+### Etapas para aplicativos grandes
+
+1. **Base de execução:** PE, relocations, imports, TLS, exceções, processo,
+   argumentos, ambiente, heap e CRT.
+2. **Sistema operacional básico:** arquivos, diretórios, Unicode, registry
+   limitado, sincronização, threads, processos filhos e tempo.
+3. **Bibliotecas comuns:** shell, diálogos, controles, recursos, clipboard,
+   fontes, GDI e rede.
+4. **Aplicativos de médio porte:** ferramentas com múltiplas DLLs, plugins,
+   configuração e vários threads.
+5. **Aplicativos grandes:** GUI complexa, instaladores, suítes de produtividade
+   e outros alvos escolhidos por cobertura e valor.
+6. **Recursos especializados:** COM, DirectX, áudio, impressão e .NET somente
+   quando houver decisão explícita de escopo e aplicativos-alvo.
+
+Cada etapa depende da anterior. Um aplicativo grande não será considerado
+suportado por simplesmente abrir a janela: ele precisa concluir operações
+representativas sem corrupção, travamento ou resultado incorreto.
 
 ## Próximos marcos
 
