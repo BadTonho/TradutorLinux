@@ -1,5 +1,9 @@
 add_subdirectory(samples)
 
+if(TL_BUILD_TARGET_APPS)
+    add_subdirectory(targets)
+endif()
+
 add_executable(tradutorlinux_unit_tests
     test_abi.cpp
     test_cli.cpp

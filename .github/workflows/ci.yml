@@ -64,3 +64,26 @@ jobs:
 
       - name: Executar testes Sanitizers
         run: ctest --preset sanitize --output-on-failure
+
+  target-apps:
+    name: Aplicativos-alvo reais (cross-build e imports)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      - name: Instalar dependências
+        run: |
+          sudo apt update
+          sudo apt install --yes \
+            build-essential cmake ninja-build llvm gcc-mingw-w64-x86-64-win32
+
+      - name: Configurar com TL_BUILD_TARGET_APPS
+        run: |
+          cmake -S . -B build/targetapps -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release -DTL_BUILD_TARGET_APPS=ON
+
+      - name: Compilar (runtime + aplicativos-alvo)
+        run: cmake --build build/targetapps --parallel
+
+      - name: Verificar imports dos aplicativos-alvo
+        run: ctest --test-dir build/targetapps -L targetapp --output-on-failure

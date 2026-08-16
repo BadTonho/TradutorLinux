@@ -137,3 +137,47 @@ teclado estendido (`KeyPress`+`KeyRelease`, `Shift`, teclas sem caractere →
 `WM_KEYDOWN`/`WM_KEYUP`), os timers (`SetTimer` → `WM_TIMER` → `KillTimer`) e a
 pintura mínima (`BeginPaint`/`TextOut`/`EndPaint`) — ver
 [`gui-x11.md`](arquitetura/gui-x11.md).
+
+## Aplicativos-alvo reais (Fase 8)
+
+A Fase 8 mede progresso por aplicativos reais, e não apenas por fixtures. Os
+primeiros alvos escolhidos são utilitários de console pequenos, de código
+aberto e compilados em CI com `mingw-w64`. Cada alvo é fixado por versão,
+toolchain e lista de imports; a lista real é capturada por `llvm-readobj` e por
+`--report` do runtime e protegida por teste (label `targetapp`, 8 testes).
+
+As fontes são baixadas com hash SHA-256 verificado pelo módulo
+`tests/targets/CMakeLists.txt` (opção `TL_BUILD_TARGET_APPS=ON`, usada no job
+`target-apps` do CI). Nenhum alvo executa ainda: todos importam `msvcrt.dll`,
+que só entra em escopo na Fase 9. O `--report` os classifica como
+`result: unsupported` / `execution: not-attempted` (exit code `5`), sem mapear
+nem executar a imagem.
+
+| Aplicativo | Versão / toolchain | Imports (símbolos) | Estado |
+|---|---|---|---|
+| `xxd.exe` | vim `v9.2.0957` (`src/xxd.c`), `-O2 -s` | `KERNEL32.dll` (16), `msvcrt.dll` (57) | Cross-build no CI; imports pinados; não executa (msvcrt fora de escopo) |
+| `bzip2.exe` | bzip2 `1.0.8`, `-O2 -s` | `KERNEL32.dll` (13), `msvcrt.dll` (56) | Idem |
+| `dos2unix.exe` | dos2unix `7.5.6`, `-O2 -DD2U_UNIFILE -s` | `KERNEL32.dll` (24), `msvcrt.dll` (63), `SHELL32.dll!CommandLineToArgvW` (1) | Idem |
+| `unix2dos.exe` | dos2unix `7.5.6` | idem `dos2unix.exe` | Idem |
+
+Os manifests com a lista completa de imports ficam em
+`tests/targets/manifests/`. Os binários são produtos de build e ficam em
+`build/<dir>/tests/targets/out/`.
+
+Observações que orientam a Fase 9:
+
+- Todos os alvos compartilham o núcleo de CRT do mingw-w64: `__getmainargs`,
+  `__iob_func`, `__initenv`, `_fmode`, `_errno`, `_commode`, `_initterm`,
+  `_amsg_exit`, `_lock`/`_unlock`, `malloc`/`free`/`calloc`, `exit`/`atexit`/
+  `abort`, `fopen`/`fclose`/`fread`/`fwrite`/`fprintf`/`vfprintf`/`fseek` e o
+  grupo de strings (`strlen`/`strcmp`/`strcpy`/`memcpy`/`memset`).
+- `xxd.exe` é o alvo mais simples e natural para o primeiro fluxo de ponta a
+  ponta da Fase 9.
+- `dos2unix`/`unix2dos` exigem o caminho `W` (`GetCommandLineW`,
+  `FindFirstFileW`/`FindNextFileW`/`FindClose`, `GetFileAttributesW`,
+  `_wfopen`, `wcs*`) e `SHELL32.dll!CommandLineToArgvW` (expansão de curingas
+  do mingw) — decidir se esse subconjunto entra na Fase 9 ou fica para depois.
+- Nenhum alvo usa `GetStartupInfoA`/`GetEnvironmentStringsA` diretamente: o
+  `crt2.o` do mingw delega a linha de comando e o ambiente ao `__getmainargs`
+  de `msvcrt.dll`, então essas APIs são dependência interna do CRT mínimo, e
+  não do aplicativo.
