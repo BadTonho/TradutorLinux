@@ -1,8 +1,10 @@
 #include "tradutorlinux/loader/process.hpp"
 
 #include "tradutorlinux/loader/module.hpp"
+#include "tradutorlinux/util/basics.hpp"
 
 #include <algorithm>
+#include <cerrno>
 #include <cstdint>
 #include <string>
 #include <utility>
@@ -29,17 +31,15 @@ PrepareResult prepare_process(const pe::PeInfo& info, const std::span<const std:
         return fail_prepare(PrepareStatus::InvalidImage, std::move(map.error_message));
     }
 
-    const std::uint64_t entry_rva = info.address_of_entry_point;
-    const auto entry_region = std::find_if(
-        map.image.regions.begin(), map.image.regions.end(), [entry_rva](const MapRegion& region) {
-            const std::uint64_t end = static_cast<std::uint64_t>(region.rva) + region.size;
-            return entry_rva >= region.rva && entry_rva < end &&
-                   region.permissions == SectionPermissions::ReadExecute;
-        });
-    if (entry_region == map.image.regions.end()) {
+    // A checagem usa a permissão efetiva da página do host: duas seções que
+    // compartilham a mesma página (ex.: .text e .data alinhadas por 4 KiB)
+    // podem elevar a permissão real acima da característica individual de cada
+    // uma, e é essa permissão que o entry point encontrará na execução.
+    const std::uint32_t entry_rva = info.address_of_entry_point;
+    if (effective_page_permissions(map.image, entry_rva) != SectionPermissions::ReadExecute) {
         loader::unmap_image(map.image);
         return fail_prepare(PrepareStatus::InvalidImage,
-                            "entry point fora de uma seção executável");
+                            "entry point fora de uma página executável");
     }
 
     GuestProcess process;
@@ -47,9 +47,7 @@ PrepareResult prepare_process(const pe::PeInfo& info, const std::span<const std:
     process.image = std::move(map.image);
     process.imports = resolve_imports(process.image, process.info);
 
-    const long page_value = sysconf(_SC_PAGESIZE);
-    const std::size_t page =
-        page_value > 0 ? static_cast<std::size_t>(page_value) : static_cast<std::size_t>(0x1000);
+    const std::size_t page = util::host_page_size();
     const std::size_t guard_size = page;
     const std::size_t total_stack_size = guard_size + kGuestStackSize;
     void* stack = mmap(nullptr, total_stack_size, PROT_READ | PROT_WRITE,
@@ -60,10 +58,12 @@ PrepareResult prepare_process(const pe::PeInfo& info, const std::span<const std:
                             "não foi possível alocar a pilha do thread inicial");
     }
     if (mprotect(stack, guard_size, PROT_NONE) != 0) {
+        const int error = errno;
         munmap(stack, total_stack_size);
         loader::unmap_image(process.image);
         return fail_prepare(PrepareStatus::OutOfMemory,
-                            "não foi possível proteger a guard page da pilha");
+                            "não foi possível proteger a guard page da pilha (errno=" +
+                                std::to_string(error) + ")");
     }
     process.stack = static_cast<std::byte*>(stack);
     process.stack_size = total_stack_size;

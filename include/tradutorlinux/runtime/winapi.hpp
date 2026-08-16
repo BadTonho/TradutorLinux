@@ -33,6 +33,7 @@ constexpr Dword kErrorAccessDenied = 5;
 constexpr Dword kErrorInvalidHandle = 6;
 constexpr Dword kErrorNotEnoughMemory = 8;
 constexpr Dword kErrorInvalidParameter = 87;
+constexpr Dword kErrorBrokenPipe = 109;
 
 constexpr Dword kGenericRead = 0x80000000U;
 constexpr Dword kGenericWrite = 0x40000000U;

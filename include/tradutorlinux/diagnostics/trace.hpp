@@ -25,6 +25,7 @@ enum class FailureCategory {
     GuestMemory,
     LinuxError,
     GuestSignal,
+    GuestTimeout,
     InternalError,
 };
 

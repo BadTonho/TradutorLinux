@@ -126,6 +126,19 @@ TEST(PeReaderTest, RejectsImportDirectoryWithoutDescriptorTerminator) {
     EXPECT_EQ(parse_pe(bytes).status, ParseStatus::Malformed);
 }
 
+TEST(PeReaderTest, RejectsFirstThunkOutsideImage) {
+    std::vector<std::byte> bytes = make_import_pe();
+    // Corrompe o FirstThunk do descritor (campo +16, dentro do .rdata com raw
+    // pointer 0x400) para um valor próximo de UINT32_MAX. Sem validação, o
+    // cálculo da IAT em uint32 estoura e aceita um descritor hostil.
+    write_u32(bytes, 0x400 + 16, 0xFFFFFFF8);
+
+    const ParseResult result = parse_pe(bytes);
+
+    EXPECT_EQ(result.status, ParseStatus::Malformed);
+    EXPECT_NE(result.error_message.find("IAT em RVA"), std::string::npos);
+}
+
 TEST(PeReaderTest, ParsesBaseRelocations) {
     const std::vector<std::byte> bytes = make_reloc_pe();
 

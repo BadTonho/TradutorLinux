@@ -7,6 +7,7 @@
 #include "tradutorlinux/pe/pe_reader.hpp"
 #include "tradutorlinux/process/isolate.hpp"
 #include "tradutorlinux/runtime/msvcrt.hpp"
+#include "tradutorlinux/util/basics.hpp"
 
 #include <algorithm>
 #include <array>
@@ -14,6 +15,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <limits>
 #include <optional>
 #include <ostream>
 #include <string>
@@ -25,28 +27,16 @@ namespace tradutorlinux {
 namespace {
 
 constexpr std::string_view kUsage =
-    "Uso: tradutorlinux [--trace] [--report] <arquivo.exe> [argumentos do convidado...]\n";
+    "Uso: tradutorlinux [--trace] [--report] [--timeout <segundos>] <arquivo.exe> "
+    "[argumentos do convidado...]\n";
 
 [[nodiscard]] bool is_option(const std::string_view argument) {
     return argument.starts_with('-');
 }
 
-[[nodiscard]] std::string format_hex(const std::uint64_t value) {
-    constexpr char kDigits[] = "0123456789abcdef";
-    std::string result = "0x";
-    bool started = false;
-    for (int shift = 60; shift >= 0; shift -= 4) {
-        const unsigned int digit = static_cast<unsigned int>((value >> shift) & 0xFULL);
-        if (digit != 0 || started) {
-            result.push_back(kDigits[digit]);
-            started = true;
-        }
-    }
-    if (!started) {
-        result.push_back('0');
-    }
-    return result;
-}
+// Um PE legítimo tem poucos megabytes; um arquivo muito maior é tratado como
+// entrada hostil e rejeitado antes do parse.
+constexpr std::uint64_t kMaxPeFileSize = 512ULL * 1024 * 1024;
 
 [[nodiscard]] std::optional<std::vector<std::byte>> read_file(
     const std::filesystem::path& path) {
@@ -57,6 +47,9 @@ constexpr std::string_view kUsage =
     stream.seekg(0, std::ios::end);
     const std::streamoff end = stream.tellg();
     if (end < 0) {
+        return std::nullopt;
+    }
+    if (static_cast<std::uint64_t>(end) > kMaxPeFileSize) {
         return std::nullopt;
     }
     stream.seekg(0, std::ios::beg);
@@ -99,9 +92,9 @@ void write_pe_trace(std::ostream& stream, const pe::PeInfo& info) {
     const std::array image_fields{
         diagnostics::TraceField{"format", format},
         diagnostics::TraceField{"arch", arch},
-        diagnostics::TraceField{"entry", format_hex(info.address_of_entry_point)},
-        diagnostics::TraceField{"image-base", format_hex(info.image_base)},
-        diagnostics::TraceField{"size-of-image", format_hex(info.size_of_image)},
+        diagnostics::TraceField{"entry", util::format_hex(info.address_of_entry_point)},
+        diagnostics::TraceField{"image-base", util::format_hex(info.image_base)},
+        diagnostics::TraceField{"size-of-image", util::format_hex(info.size_of_image)},
         diagnostics::TraceField{"sections", std::to_string(info.number_of_sections)},
     };
     diagnostics::write_trace(stream, diagnostics::TraceComponent::Pe,
@@ -112,11 +105,11 @@ void write_pe_trace(std::ostream& stream, const pe::PeInfo& info) {
         const std::array fields{
             diagnostics::TraceField{"index", std::to_string(index)},
             diagnostics::TraceField{"name", section.name},
-            diagnostics::TraceField{"virtual-address", format_hex(section.virtual_address)},
-            diagnostics::TraceField{"virtual-size", format_hex(section.virtual_size)},
-            diagnostics::TraceField{"raw-pointer", format_hex(section.raw_data_pointer)},
-            diagnostics::TraceField{"raw-size", format_hex(section.raw_data_size)},
-            diagnostics::TraceField{"characteristics", format_hex(section.characteristics)},
+            diagnostics::TraceField{"virtual-address", util::format_hex(section.virtual_address)},
+            diagnostics::TraceField{"virtual-size", util::format_hex(section.virtual_size)},
+            diagnostics::TraceField{"raw-pointer", util::format_hex(section.raw_data_pointer)},
+            diagnostics::TraceField{"raw-size", util::format_hex(section.raw_data_size)},
+            diagnostics::TraceField{"characteristics", util::format_hex(section.characteristics)},
         };
         diagnostics::write_trace(stream, diagnostics::TraceComponent::Pe,
                                  diagnostics::TraceLevel::Info, "section", fields);
@@ -142,7 +135,7 @@ void write_pe_trace(std::ostream& stream, const pe::PeInfo& info) {
     for (const pe::BaseRelocBlock& block : info.relocations) {
         relocation_entries += block.entries.size();
         const std::array fields{
-            diagnostics::TraceField{"page", format_hex(block.page_rva)},
+            diagnostics::TraceField{"page", util::format_hex(block.page_rva)},
             diagnostics::TraceField{"entries", std::to_string(block.entries.size())},
         };
         diagnostics::write_trace(stream, diagnostics::TraceComponent::Pe,
@@ -158,14 +151,14 @@ void write_pe_trace(std::ostream& stream, const pe::PeInfo& info) {
 
 void print_pe_summary(std::ostream& stream, const pe::PeInfo& info) {
     const std::string_view format = info.is_pe32_plus ? "PE32+" : "PE32";
-    stream << format << " x86-64 | entry=" << format_hex(info.address_of_entry_point)
-           << " | image-base=" << format_hex(info.image_base) << " | "
+    stream << format << " x86-64 | entry=" << util::format_hex(info.address_of_entry_point)
+           << " | image-base=" << util::format_hex(info.image_base) << " | "
            << info.number_of_sections << " seções\n";
     for (const pe::SectionInfo& section : info.sections) {
-        stream << "  seção " << section.name << " va=" << format_hex(section.virtual_address)
-               << " vsize=" << format_hex(section.virtual_size)
-               << " raw=" << format_hex(section.raw_data_pointer) << "/"
-               << format_hex(section.raw_data_size) << " chars=" << format_hex(section.characteristics)
+        stream << "  seção " << section.name << " va=" << util::format_hex(section.virtual_address)
+               << " vsize=" << util::format_hex(section.virtual_size)
+               << " raw=" << util::format_hex(section.raw_data_pointer) << "/"
+               << util::format_hex(section.raw_data_size) << " chars=" << util::format_hex(section.characteristics)
                << '\n';
     }
     for (const pe::ImportedDll& dll : info.imports) {
@@ -195,10 +188,10 @@ void print_pe_summary(std::ostream& stream, const pe::PeInfo& info) {
 void write_map_trace(std::ostream& stream, const loader::MappedImage& image) {
     const std::string_view at_preferred = image.delta == 0 ? "sim" : "não";
     const std::array image_fields{
-        diagnostics::TraceField{"preferred-base", format_hex(image.preferred_base)},
-        diagnostics::TraceField{"base", format_hex(image.base)},
-        diagnostics::TraceField{"delta", format_hex(static_cast<std::uint64_t>(image.delta))},
-        diagnostics::TraceField{"size", format_hex(image.size)},
+        diagnostics::TraceField{"preferred-base", util::format_hex(image.preferred_base)},
+        diagnostics::TraceField{"base", util::format_hex(image.base)},
+        diagnostics::TraceField{"delta", util::format_signed_hex(image.delta)},
+        diagnostics::TraceField{"size", util::format_hex(image.size)},
         diagnostics::TraceField{"at-preferred", std::string{at_preferred}},
         diagnostics::TraceField{"relocations-applied", std::to_string(image.applied_relocations)},
     };
@@ -208,8 +201,8 @@ void write_map_trace(std::ostream& stream, const loader::MappedImage& image) {
     for (const loader::MapRegion& region : image.regions) {
         const std::array fields{
             diagnostics::TraceField{"name", region.name},
-            diagnostics::TraceField{"rva", format_hex(region.rva)},
-            diagnostics::TraceField{"size", format_hex(region.size)},
+            diagnostics::TraceField{"rva", util::format_hex(region.rva)},
+            diagnostics::TraceField{"size", util::format_hex(region.size)},
             diagnostics::TraceField{"permissions",
                                     std::string{permissions_label(region.permissions)}},
         };
@@ -220,7 +213,7 @@ void write_map_trace(std::ostream& stream, const loader::MappedImage& image) {
     if (image.delta != 0 && !image.has_relocation_directory) {
         const std::array fields{
             diagnostics::TraceField{"reason", "imagem sem diretório de relocations"},
-            diagnostics::TraceField{"delta", format_hex(static_cast<std::uint64_t>(image.delta))},
+            diagnostics::TraceField{"delta", util::format_signed_hex(image.delta)},
         };
         diagnostics::write_trace(stream, diagnostics::TraceComponent::Loader,
                                  diagnostics::TraceLevel::Warning, "cannot-relocate", fields);
@@ -229,7 +222,7 @@ void write_map_trace(std::ostream& stream, const loader::MappedImage& image) {
 
 void write_unmap_trace(std::ostream& stream, const std::uint64_t base) {
     const std::array fields{
-        diagnostics::TraceField{"base", format_hex(base)},
+        diagnostics::TraceField{"base", util::format_hex(base)},
     };
     diagnostics::write_trace(stream, diagnostics::TraceComponent::Loader,
                              diagnostics::TraceLevel::Info, "unmap", fields);
@@ -246,15 +239,15 @@ void write_map_failed_trace(std::ostream& stream, const std::string_view status,
 }
 
 void print_map_summary(std::ostream& stream, const loader::MappedImage& image) {
-    stream << "  mapeado base=" << format_hex(image.base)
-           << " preferred=" << format_hex(image.preferred_base)
-           << " delta=" << format_hex(static_cast<std::uint64_t>(image.delta));
+    stream << "  mapeado base=" << util::format_hex(image.base)
+           << " preferred=" << util::format_hex(image.preferred_base)
+           << " delta=" << util::format_signed_hex(image.delta);
     if (image.delta != 0) {
         stream << " (realocado, " << image.applied_relocations << " relocations aplicados)";
     }
     stream << '\n';
     for (const loader::MapRegion& region : image.regions) {
-        stream << "    região " << region.name << " rva=" << format_hex(region.rva)
+        stream << "    região " << region.name << " rva=" << util::format_hex(region.rva)
                << " perms=" << permissions_label(region.permissions) << '\n';
     }
 }
@@ -290,7 +283,7 @@ void write_imports_trace(std::ostream& stream, const loader::ResolveResult& impo
             const std::array fields{
                 diagnostics::TraceField{"dll", entry.dll},
                 diagnostics::TraceField{"symbol", resolved_symbol_label(entry)},
-                diagnostics::TraceField{"address", format_hex(entry.address)},
+                diagnostics::TraceField{"address", util::format_hex(entry.address)},
             };
             diagnostics::write_trace(stream, diagnostics::TraceComponent::Imports,
                                      diagnostics::TraceLevel::Info, "resolved", fields);
@@ -316,7 +309,7 @@ void print_imports_summary(std::ostream& stream, const loader::ResolveResult& im
     for (const loader::ResolvedImport& entry : imports.imports) {
         stream << "    " << entry.dll << '!' << resolved_symbol_label(entry);
         if (entry.status == loader::ImportStatus::Resolved) {
-            stream << " -> " << format_hex(entry.address) << '\n';
+            stream << " -> " << util::format_hex(entry.address) << '\n';
         } else {
             stream << " [" << import_status_label(entry.status) << "] " << entry.detail << '\n';
         }
@@ -327,7 +320,7 @@ void print_support_report(std::ostream& stream, const pe::PeInfo& info) {
     bool supported = info.delay_import_directory_size == 0;
     stream << "TradutorLinux compatibility report\n";
     stream << "format: " << (info.is_pe32_plus ? "PE32+ x86-64" : "unsupported") << '\n';
-    stream << "entry-point: " << format_hex(info.address_of_entry_point) << '\n';
+    stream << "entry-point: " << util::format_hex(info.address_of_entry_point) << '\n';
     if (info.delay_import_directory_size != 0) {
         stream << "mechanism: delay-import status=unsupported\n";
     }
@@ -413,6 +406,38 @@ ParseResult parse_command_line(const int argc, const char* const argv[]) {
                         .error_message = "a opção --report foi repetida"};
             }
             command_line.report_only = true;
+            continue;
+        }
+
+        if (!options_ended && argument == "--timeout") {
+            if (command_line.timeout_set) {
+                return {.command_line = std::nullopt,
+                        .error_message = "a opção --timeout foi repetida"};
+            }
+            if (index + 1 >= argc) {
+                return {.command_line = std::nullopt,
+                        .error_message = "a opção --timeout requer um valor em segundos"};
+            }
+            const std::string_view value{argv[index + 1]};
+            if (value.empty() || value.size() > 9) {
+                return {.command_line = std::nullopt,
+                        .error_message = "valor inválido para --timeout: " + std::string{value}};
+            }
+            std::uint64_t seconds = 0;
+            for (const char digit : value) {
+                if (digit < '0' || digit > '9') {
+                    return {.command_line = std::nullopt,
+                            .error_message = "valor inválido para --timeout: " + std::string{value}};
+                }
+                seconds = seconds * 10 + static_cast<std::uint64_t>(digit - '0');
+            }
+            if (seconds > std::numeric_limits<std::uint64_t>::max() / 1000U) {
+                return {.command_line = std::nullopt,
+                        .error_message = "valor de --timeout muito grande: " + std::string{value}};
+            }
+            command_line.timeout_ms = seconds * 1000U;
+            command_line.timeout_set = true;
+            ++index;
             continue;
         }
 
@@ -570,7 +595,7 @@ ExitCode run_command(const CommandLine& command_line, std::ostream& stdout_strea
         if (command_line.trace_enabled) {
             const std::array fields{
                 diagnostics::TraceField{"reason", "imagem sem diretório de relocations"},
-                diagnostics::TraceField{"delta", format_hex(static_cast<std::uint64_t>(process.image.delta))},
+                diagnostics::TraceField{"delta", util::format_signed_hex(process.image.delta)},
             };
             diagnostics::write_trace(stderr_stream, diagnostics::TraceComponent::Loader,
                                      diagnostics::TraceLevel::Error, "execution-rejected", fields);
@@ -591,8 +616,8 @@ ExitCode run_command(const CommandLine& command_line, std::ostream& stdout_strea
                       command_line.guest_arguments.end());
     msvcrt_set_guest_command_line(std::move(guest_argv));
 
-    const process::GuestOutcome outcome =
-        process::run_guest_isolated(process.thread.entry_point, process.thread.stack_top);
+    const process::GuestOutcome outcome = process::run_guest_isolated(
+        process.thread.entry_point, process.thread.stack_top, command_line.timeout_ms);
 
     const std::uint64_t unmap_base = process.image.base;
     loader::destroy_process(process);
@@ -631,6 +656,24 @@ ExitCode run_command(const CommandLine& command_line, std::ostream& stdout_strea
         return ExitCode::GuestFault;
     }
 
+    if (outcome.kind == process::GuestOutcomeKind::TimedOut) {
+        if (command_line.trace_enabled) {
+            const std::array fields{
+                diagnostics::TraceField{"category",
+                                        std::string{diagnostics::failure_category_name(
+                                            diagnostics::FailureCategory::GuestTimeout)}},
+                diagnostics::TraceField{"timeout-ms", std::to_string(command_line.timeout_ms)},
+            };
+            diagnostics::write_trace(stderr_stream, diagnostics::TraceComponent::Process,
+                                     diagnostics::TraceLevel::Error, "terminated", fields);
+            write_unmap_trace(stderr_stream, unmap_base);
+        } else {
+            stderr_stream << "erro: o programa convidado não terminou dentro de "
+                          << command_line.timeout_ms << " ms\n";
+        }
+        return ExitCode::GuestTimeout;
+    }
+
     if (command_line.trace_enabled) {
         const std::array fields{
             diagnostics::TraceField{
@@ -655,6 +698,8 @@ void print_help(std::ostream& stream) {
     stream << "Opções:\n";
     stream << "  --trace    escreve diagnóstico estruturado em stderr\n";
     stream << "  --report   relata imports suportados sem executar o arquivo\n";
+    stream << "  --timeout <segundos>\n";
+    stream << "             limita a execução do convidado; 0 = sem limite (padrão)\n";
     stream << "  --help     mostra esta ajuda\n";
     stream << "  --version  mostra a versão do TradutorLinux\n";
 }

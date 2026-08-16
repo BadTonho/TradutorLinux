@@ -81,6 +81,13 @@ struct RelocationDirectory {
 
 void unmap_image(MappedImage& image);
 
+// Permissões efetivas da página do host que contém o RVA informado, levando em
+// conta a fusão de atributos quando regiões compartilham a mesma página
+// (escrita > execução > leitura). É a permissão real após mprotect, não apenas
+// a característica da seção.
+[[nodiscard]] SectionPermissions effective_page_permissions(const MappedImage& image,
+                                                            std::uint32_t rva);
+
 enum class PatchStatus {
     Success,
     InvalidAddress,

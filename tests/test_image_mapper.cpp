@@ -440,5 +440,39 @@ TEST_F(ImageMapperTest, RejectsRelocationTargetOutsideMappedImage) {
     EXPECT_EQ(result.status, MapStatus::InvalidImage);
 }
 
+TEST(EffectivePagePermissions, MergesRegionsSharingAPage) {
+    // .text (r-x) e .data (rw-) compartilham a mesma página do host quando o
+    // alinhamento de seção é 0x1000: a permissão efetiva da página sobe para
+    // ReadWrite, mesmo que o entry point caia na seção .text.
+    MappedImage image;
+    image.regions.push_back(
+        MapRegion{.name = ".text", .rva = 0x1000, .size = 0x200,
+                  .permissions = SectionPermissions::ReadExecute});
+    image.regions.push_back(
+        MapRegion{.name = ".data", .rva = 0x1100, .size = 0x100,
+                  .permissions = SectionPermissions::ReadWrite});
+
+    EXPECT_EQ(effective_page_permissions(image, 0x1000), SectionPermissions::ReadWrite);
+    EXPECT_EQ(effective_page_permissions(image, 0x10FF), SectionPermissions::ReadWrite);
+    EXPECT_EQ(effective_page_permissions(image, 0x11F0), SectionPermissions::ReadWrite);
+    // A página 0x1000-0x1FFF é parcialmente coberta pelo .data, então qualquer
+    // endereço dentro dela herda rw-; uma página sem nenhuma região é None.
+    EXPECT_EQ(effective_page_permissions(image, 0x1F00), SectionPermissions::ReadWrite);
+    EXPECT_EQ(effective_page_permissions(image, 0x3000), SectionPermissions::None);
+}
+
+TEST(EffectivePagePermissions, KeepExecuteWhenOnlyReadExecuteRegionsOverlap) {
+    MappedImage image;
+    image.regions.push_back(
+        MapRegion{.name = ".text", .rva = 0x1000, .size = 0x200,
+                  .permissions = SectionPermissions::ReadExecute});
+    image.regions.push_back(
+        MapRegion{.name = ".rdata", .rva = 0x1100, .size = 0x100,
+                  .permissions = SectionPermissions::ReadOnly});
+
+    EXPECT_EQ(effective_page_permissions(image, 0x1000), SectionPermissions::ReadExecute);
+    EXPECT_EQ(effective_page_permissions(image, 0x11F0), SectionPermissions::ReadExecute);
+}
+
 }  // namespace
 }  // namespace tradutorlinux::loader

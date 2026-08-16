@@ -19,7 +19,6 @@ namespace {
 constexpr int kDefaultWidth = 480;
 constexpr int kDefaultHeight = 180;
 constexpr std::size_t kMaxWindows = 16;
-constexpr long kAutocloseDelayMs = 100;
 
 struct WindowState {
     bool used{false};
@@ -94,9 +93,17 @@ private:
     return instance;
 }
 
-[[nodiscard]] bool autoclose_enabled() noexcept {
+[[nodiscard]] std::chrono::milliseconds autoclose_delay() noexcept {
     const char* value = std::getenv("TL_GUI_AUTOCLOSE_MS");
-    return value != nullptr && std::strcmp(value, "0") != 0;
+    if (value == nullptr) {
+        return std::chrono::milliseconds{0};
+    }
+    char* end = nullptr;
+    const long parsed = std::strtol(value, &end, 10);
+    if (end == value || *end != '\0' || parsed <= 0) {
+        return std::chrono::milliseconds{0};
+    }
+    return std::chrono::milliseconds{parsed};
 }
 
 WindowState* find_state(const NativeWindow window) noexcept {
@@ -332,10 +339,10 @@ WindowEvent next_window_event(const NativeWindow window) noexcept {
     if (dpy == nullptr || state == nullptr) {
         return {};
     }
-    if (autoclose_enabled() &&
+    const std::chrono::milliseconds delay = autoclose_delay();
+    if (delay.count() > 0 &&
         std::chrono::duration_cast<std::chrono::milliseconds>(
-            std::chrono::steady_clock::now() - state->created_at)
-                .count() >= kAutocloseDelayMs) {
+            std::chrono::steady_clock::now() - state->created_at) >= delay) {
         return {WindowEventType::CloseRequested, 0, 0};
     }
     drain_events(dpy);

@@ -4,7 +4,10 @@
 
 #include "tradutorlinux/loader/image_mapper.hpp"
 
+#include "tradutorlinux/util/basics.hpp"
+
 #include <algorithm>
+#include <cerrno>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -28,11 +31,6 @@ constexpr std::uint16_t kImageRelBasedDir64 = 10;
 
 constexpr std::size_t kBaseRelocBlockHeaderSize = 8;
 constexpr std::size_t kMaxRelocBlocks = 4096;
-
-[[nodiscard]] std::size_t host_page_size() {
-    const long value = sysconf(_SC_PAGESIZE);
-    return value > 0 ? static_cast<std::size_t>(value) : 0x1000;
-}
 
 [[nodiscard]] std::uint64_t align_down(const std::uint64_t value, const std::uint64_t alignment) {
     return value - value % alignment;
@@ -109,6 +107,17 @@ constexpr std::size_t kMaxRelocBlocks = 4096;
     }
     return read ? SectionPermissions::ReadOnly : SectionPermissions::None;
 }
+
+}  // namespace
+
+SectionPermissions effective_page_permissions(const MappedImage& image, const std::uint32_t rva) {
+    const std::size_t page = util::host_page_size();
+    const std::uint64_t page_start = align_down(rva, page);
+    const std::uint64_t page_end = align_up(static_cast<std::uint64_t>(rva) + 1, page);
+    return permissions_for_page(image.regions, page_start, page_end);
+}
+
+namespace {
 
 [[nodiscard]] MapResult fail(const MapStatus status, std::string message) {
     return {.status = status, .error_message = std::move(message), .image = {}};
@@ -259,7 +268,7 @@ RelocationResult apply_relocations(const std::span<std::byte> image,
 
 MapResult map_image(const pe::PeInfo& info, const std::span<const std::byte> file_bytes,
                     const MapOptions& options) {
-    const std::size_t page = host_page_size();
+    const std::size_t page = util::host_page_size();
     const std::uint64_t mapping_size_u64 =
         align_up(static_cast<std::uint64_t>(info.size_of_image), page);
     if (mapping_size_u64 == 0) {
@@ -375,8 +384,11 @@ MapResult map_image(const pe::PeInfo& info, const std::span<const std::byte> fil
         std::min<std::uint64_t>(static_cast<std::uint64_t>(info.size_of_headers), mapping_size_u64),
         page);
     if (header_protect_size > 0 && mprotect(mapping, header_protect_size, PROT_READ) != 0) {
+        const int error = errno;
         munmap(mapping, mapping_size);
-        return fail(MapStatus::OutOfMemory, "não foi possível proteger os headers da imagem");
+        return fail(MapStatus::OutOfMemory,
+                    "não foi possível proteger os headers da imagem (errno=" +
+                        std::to_string(error) + ")");
     }
     for (const MapRegion& region : regions) {
         const std::uint64_t page_start = align_down(region.rva, page);
@@ -390,9 +402,11 @@ MapResult map_image(const pe::PeInfo& info, const std::span<const std::byte> fil
             permissions_for_page(regions, page_start, page_start + protect_size);
         if (mprotect(static_cast<std::byte*>(mapping) + static_cast<std::ptrdiff_t>(page_start),
                      protect_size, to_prot(page_permissions)) != 0) {
+            const int error = errno;
             munmap(mapping, mapping_size);
             return fail(MapStatus::OutOfMemory,
-                        "não foi possível proteger a seção " + region.name);
+                        "não foi possível proteger a seção " + region.name + " (errno=" +
+                            std::to_string(error) + ")");
         }
     }
 
@@ -441,7 +455,7 @@ PatchStatus write_image_bytes(MappedImage& image, const std::uint32_t rva,
     if (covering == nullptr) {
         return PatchStatus::InvalidAddress;
     }
-    const std::size_t page = host_page_size();
+    const std::size_t page = util::host_page_size();
     const std::uint64_t page_start = align_down(rva, page);
     const std::uint64_t page_end =
         align_up(static_cast<std::uint64_t>(rva) + size, page);

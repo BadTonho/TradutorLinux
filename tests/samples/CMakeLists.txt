@@ -185,6 +185,8 @@ tl_add_pe_fixture(tl_paint src/tl_paint.c manifests/tl_paint.json
 
 tl_add_pe_fixture(tl_crash src/tl_crash.c manifests/tl_crash.json RELOCATABLE NO_RUNTIME_CHECK)
 
+tl_add_pe_fixture(tl_hang src/tl_hang.c manifests/tl_hang.json RELOCATABLE NO_RUNTIME_CHECK)
+
 if(TARGET tradutorlinux)
     add_test(
         NAME runtime_tl_crash_guest_signal
@@ -197,6 +199,33 @@ if(TARGET tradutorlinux)
     )
     set_tests_properties(runtime_tl_crash_guest_signal PROPERTIES
         DEPENDS fixture_tl_crash_metadata
+        LABELS "runtime;pe32plus"
+    )
+
+    add_test(
+        NAME runtime_tl_hang_timeout
+        COMMAND "${CMAKE_COMMAND}"
+            "-DINPUT=${TL_FIXTURE_OUTPUT_DIRECTORY}/tl_hang.exe"
+            "-DRUNTIME=$<TARGET_FILE:tradutorlinux>"
+            "-DEXPECTED_EXIT=72"
+            "-DREQUIRED_TRACE=terminated category=\"guest-timeout\""
+            "-DEXTRA_ARGS=--timeout;1"
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/verify_runtime_rejection.cmake"
+    )
+    set_tests_properties(runtime_tl_hang_timeout PROPERTIES
+        DEPENDS fixture_tl_hang_metadata
+        LABELS "runtime;pe32plus"
+    )
+
+    add_test(
+        NAME runtime_tl_hello_broken_pipe
+        COMMAND "${CMAKE_COMMAND}"
+            "-DINPUT=${TL_FIXTURE_OUTPUT_DIRECTORY}/tl_hello.exe"
+            "-DRUNTIME=$<TARGET_FILE:tradutorlinux>"
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/verify_broken_pipe.cmake"
+    )
+    set_tests_properties(runtime_tl_hello_broken_pipe PROPERTIES
+        DEPENDS fixture_tl_hello_metadata
         LABELS "runtime;pe32plus"
     )
 endif()

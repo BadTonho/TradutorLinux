@@ -8,6 +8,7 @@ namespace tradutorlinux::process {
 enum class GuestOutcomeKind {
     Exited,       // o guest retornou do entry point ou chamou ExitProcess
     Signaled,     // o guest terminou por um sinal Linux (ex.: SIGSEGV)
+    TimedOut,     // o guest não terminou dentro de timeout_ms e foi morto
     SpawnFailed,  // não foi possível criar o processo filho
 };
 
@@ -30,8 +31,11 @@ struct SignalDescription {
 // the child only runs the guest and reports the outcome through a pipe before
 // _exit(0). When the guest terminates by a signal, the parent observes it via
 // waitpid and the caller can publish a controlled guest-signal diagnosis.
-// Must not be called while the process has other running threads.
+// timeout_ms > 0 limits how long the guest may run; on expiry the child is
+// SIGKILLed and GuestOutcomeKind::TimedOut is returned (timeout_ms == 0 means
+// no limit). Must not be called while the process has other running threads.
 [[nodiscard]] GuestOutcome run_guest_isolated(std::uintptr_t entry_point,
-                                              std::uintptr_t stack_top) noexcept;
+                                              std::uintptr_t stack_top,
+                                              std::uint64_t timeout_ms) noexcept;
 
 }  // namespace tradutorlinux::process

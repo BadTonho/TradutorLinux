@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include <filesystem>
 #include <iosfwd>
 #include <optional>
@@ -16,6 +17,7 @@ enum class ExitCode : int {
     Unsupported = 5,
     InternalError = 70,
     GuestFault = 71,
+    GuestTimeout = 72,
 };
 
 struct CommandLine {
@@ -23,6 +25,9 @@ struct CommandLine {
     bool show_version{false};
     bool trace_enabled{false};
     bool report_only{false};
+    // Tempo máximo de execução do convidado, em milissegundos; 0 = sem limite.
+    std::uint64_t timeout_ms{0};
+    bool timeout_set{false};
     std::optional<std::filesystem::path> executable_path;
     // Argumentos encaminhados ao programa convidado (argv[1..]), na ordem em
     // que foram informados depois do executável. argv[0] é o caminho do

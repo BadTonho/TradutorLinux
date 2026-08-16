@@ -2,6 +2,7 @@
 
 #include "tradutorlinux/diagnostics/trace.hpp"
 #include "tradutorlinux/gui/x11.hpp"
+#include "tradutorlinux/util/basics.hpp"
 
 #include <algorithm>
 #include <array>
@@ -57,6 +58,15 @@ struct AllocationSlot {
     std::size_t size{0};
 };
 
+// Uma faixa contígua do espaço de endereçamento com permissões uniformes,
+// conforme /proc/self/maps.
+struct GuestMapRegion {
+    std::uintptr_t start{};
+    std::uintptr_t end{};
+    bool readable{false};
+    bool writable{false};
+};
+
 std::array<FileSlot, 64> g_files{};
 std::array<AllocationSlot, 64> g_allocations{};
 
@@ -73,19 +83,59 @@ void set_last_error(const std::uint32_t error) noexcept {
             return abi::kErrorAccessDenied;
         case ENOMEM:
             return abi::kErrorNotEnoughMemory;
+        case EPIPE:
+            // Escrever em um pipe sem leitor (ex.: stdout para `head -c0`) é
+            // um erro controlado de I/O, não uma morte por sinal.
+            return abi::kErrorBrokenPipe;
         default:
             return abi::kErrorInvalidParameter;
     }
 }
 
-FileSlot* find_file_slot(const void* handle) noexcept {
-    const auto found = std::find_if(g_files.begin(), g_files.end(), [handle](const FileSlot& slot) {
-        return slot.used && handle == &slot;
-    });
-    if (found != g_files.end()) {
-        return &*found;
+std::vector<GuestMapRegion> g_guest_map_regions{};
+std::size_t g_guest_map_generation = 0;
+std::size_t g_guest_allocation_generation = 0;
+
+// O convidado executa em processo filho, onde as únicas fontes de mmap/munmap
+// são VirtualAlloc/VirtualFree; a geração só muda por essas duas APIs, então a
+// cache permanece correta entre consultas.
+void bump_guest_allocation_generation() noexcept {
+    ++g_guest_allocation_generation;
+}
+
+void rebuild_guest_map_cache() noexcept {
+    g_guest_map_regions.clear();
+    std::ifstream maps{"/proc/self/maps"};
+    std::string line;
+    while (std::getline(maps, line)) {
+        const std::size_t dash = line.find('-');
+        const std::size_t space = line.find(' ', dash == std::string::npos ? 0 : dash);
+        if (dash == std::string::npos || space == std::string::npos || dash == 0) {
+            continue;
+        }
+        std::uintptr_t region_start{};
+        std::uintptr_t region_end{};
+        if (std::from_chars(line.data(), line.data() + dash, region_start, 16).ec != std::errc{} ||
+            std::from_chars(line.data() + dash + 1, line.data() + space, region_end, 16).ec !=
+                std::errc{} ||
+            region_start > region_end) {
+            continue;
+        }
+        const std::string::size_type permissions_offset = space + 1;
+        if (line.size() < permissions_offset + 4) {
+            continue;
+        }
+        g_guest_map_regions.push_back(
+            GuestMapRegion{region_start, region_end, line[permissions_offset] == 'r',
+                           line[permissions_offset + 1] == 'w'});
     }
-    return nullptr;
+    g_guest_map_generation = g_guest_allocation_generation;
+}
+
+[[nodiscard]] bool region_holds(const GuestMapRegion& region, const std::uintptr_t start,
+                                const std::uintptr_t end, const bool writable) noexcept {
+    return start >= region.start && end <= region.end &&
+           (writable ? region.writable : region.readable);
 }
 
 [[nodiscard]] bool mapped_guest_range(const void* address, const std::size_t size,
@@ -98,32 +148,34 @@ FileSlot* find_file_slot(const void* handle) noexcept {
         return false;
     }
     const std::uintptr_t end = start + size;
-    std::ifstream maps{ "/proc/self/maps" };
-    std::string line;
-    while (std::getline(maps, line)) {
-        const std::size_t dash = line.find('-');
-        const std::size_t space = line.find(' ', dash == std::string::npos ? 0 : dash);
-        if (dash == std::string::npos || space == std::string::npos || dash == 0) {
-            continue;
+    if (g_guest_map_generation != g_guest_allocation_generation) {
+        rebuild_guest_map_cache();
+    }
+    for (const GuestMapRegion& region : g_guest_map_regions) {
+        if (region_holds(region, start, end, writable)) {
+            return true;
         }
-        std::uintptr_t region_start{};
-        std::uintptr_t region_end{};
-        const auto start_result = std::from_chars(line.data(), line.data() + dash,
-                                                  region_start, 16);
-        const auto end_result = std::from_chars(line.data() + dash + 1, line.data() + space,
-                                                region_end, 16);
-        if (start_result.ec != std::errc{} || end_result.ec != std::errc{} ||
-            region_start > region_end || start < region_start || end > region_end) {
-            continue;
+    }
+    // Consulta sem achado: reconstrói uma vez e tenta de novo, cobrindo
+    // mapeamentos criados fora do runtime (ex.: alocador do processo de teste)
+    // sem pagar o custo do /proc/self/maps em toda chamada.
+    rebuild_guest_map_cache();
+    for (const GuestMapRegion& region : g_guest_map_regions) {
+        if (region_holds(region, start, end, writable)) {
+            return true;
         }
-        const std::string::size_type permissions_offset = space + 1;
-        if (line.size() < permissions_offset + 4 || line[permissions_offset] != 'r' ||
-            (writable && line[permissions_offset + 1] != 'w')) {
-            return false;
-        }
-        return true;
     }
     return false;
+}
+
+FileSlot* find_file_slot(const void* handle) noexcept {
+    const auto found = std::find_if(g_files.begin(), g_files.end(), [handle](const FileSlot& slot) {
+        return slot.used && handle == &slot;
+    });
+    if (found != g_files.end()) {
+        return &*found;
+    }
+    return nullptr;
 }
 
 [[nodiscard]] bool mapped_guest_cstring(const char* value) noexcept {
@@ -245,26 +297,13 @@ abi::Lresult call_wndproc(const std::uintptr_t wndproc, const abi::HWnd hwnd,
     return std::bit_cast<WndProc>(wndproc)(hwnd, message, wparam, lparam);
 }
 
-[[nodiscard]] bool ascii_iequals(const std::string_view a, const std::string_view b) noexcept {
-    if (a.size() != b.size()) {
-        return false;
-    }
-    for (std::size_t index = 0; index < a.size(); ++index) {
-        if (std::tolower(static_cast<unsigned char>(a[index])) !=
-            std::tolower(static_cast<unsigned char>(b[index]))) {
-            return false;
-        }
-    }
-    return true;
-}
-
 ClassSlot* find_class_slot(const char* const name) noexcept {
     if (name == nullptr) {
         return nullptr;
     }
     const auto found = std::find_if(g_classes.begin(), g_classes.end(),
                                     [name](const ClassSlot& slot) {
-                                        return slot.used && ascii_iequals(slot.name, name);
+                                        return slot.used && util::ascii_iequals(slot.name, name);
                                     });
     if (found != g_classes.end()) {
         return &*found;
@@ -784,8 +823,7 @@ TL_MSABI void tl_SetLastError(const std::uint32_t error) noexcept {
 TL_MSABI void* tl_VirtualAlloc(const void* const address, const std::uintptr_t size,
                                const std::uint32_t allocation_type,
                                const std::uint32_t protection) noexcept {
-    const long page_value = sysconf(_SC_PAGESIZE);
-    const std::size_t page = page_value > 0 ? static_cast<std::size_t>(page_value) : 0x1000U;
+    const std::size_t page = util::host_page_size();
     if (address != nullptr || size == 0 || allocation_type != (abi::kMemCommit | abi::kMemReserve) ||
         (protection != abi::kPageReadOnly && protection != abi::kPageReadWrite)) {
         set_last_error(abi::kErrorInvalidParameter);
@@ -816,6 +854,7 @@ TL_MSABI void* tl_VirtualAlloc(const void* const address, const std::uintptr_t s
     }
     free_slot->address = mapped;
     free_slot->size = mapped_size;
+    bump_guest_allocation_generation();
     set_last_error(abi::kErrorSuccess);
     return mapped;
 }
@@ -836,6 +875,7 @@ TL_MSABI int tl_VirtualFree(const void* const address, const std::uintptr_t size
                 return 0;
             }
             slot = {};
+            bump_guest_allocation_generation();
             set_last_error(abi::kErrorSuccess);
             return 1;
         }

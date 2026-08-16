@@ -8,8 +8,11 @@
 
 #include <cerrno>
 #include <csignal>
+#include <limits>
+#include <poll.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <time.h>
 #include <unistd.h>
 
 namespace tradutorlinux::process {
@@ -21,6 +24,9 @@ bool read_exact(const int fd, std::byte* const buffer, const std::size_t size) n
     std::size_t total = 0;
     while (total < size) {
         const ::ssize_t count = ::read(fd, buffer + total, size - total);
+        if (count < 0 && errno == EINTR) {
+            continue;
+        }
         if (count <= 0) {
             return false;
         }
@@ -60,6 +66,23 @@ void reset_fatal_signal_handlers() noexcept {
     }
 }
 
+// Writes from the guest to a closed pipe (ex.: stdout piped to `head -c0`)
+// must surface as EPIPE to WriteFile, not kill the child with SIGPIPE. Ignore
+// the signal in the child so the failure is a controlled win32 error.
+void ignore_broken_pipe() noexcept {
+    struct sigaction action {};
+    action.sa_handler = SIG_IGN;
+    ::sigemptyset(&action.sa_mask);
+    static_cast<void>(::sigaction(SIGPIPE, &action, nullptr));
+}
+
+std::uint64_t monotonic_ms() noexcept {
+    struct ::timespec now {};
+    static_cast<void>(::clock_gettime(CLOCK_MONOTONIC, &now));
+    return static_cast<std::uint64_t>(now.tv_sec) * 1000U +
+           static_cast<std::uint64_t>(now.tv_nsec) / 1000000U;
+}
+
 }  // namespace
 
 SignalDescription describe_signal(const int signal_number) noexcept {
@@ -80,6 +103,8 @@ SignalDescription describe_signal(const int signal_number) noexcept {
             return {"SIGSYS", "chamada de sistema inválida"};
         case SIGKILL:
             return {"SIGKILL", "terminado por SIGKILL"};
+        case SIGPIPE:
+            return {"SIGPIPE", "escrita em pipe sem leitor"};
         case SIGTERM:
             return {"SIGTERM", "terminado por SIGTERM"};
         case SIGQUIT:
@@ -90,7 +115,8 @@ SignalDescription describe_signal(const int signal_number) noexcept {
 }
 
 GuestOutcome run_guest_isolated(const std::uintptr_t entry_point,
-                                const std::uintptr_t stack_top) noexcept {
+                                const std::uintptr_t stack_top,
+                                const std::uint64_t timeout_ms) noexcept {
     int pipe_fds[2] = {-1, -1};
     if (::pipe(pipe_fds) != 0) {
         return {.kind = GuestOutcomeKind::SpawnFailed};
@@ -106,6 +132,7 @@ GuestOutcome run_guest_isolated(const std::uintptr_t entry_point,
     if (child == 0) {
         ::close(pipe_fds[0]);
         reset_fatal_signal_handlers();
+        ignore_broken_pipe();
         const GuestExecutionResult result = execute_guest_entry(entry_point, stack_top);
         const std::array<std::byte, kProtocolSize> message{
             result.exited_explicitly ? std::byte{1} : std::byte{0},
@@ -121,12 +148,54 @@ GuestOutcome run_guest_isolated(const std::uintptr_t entry_point,
 
     ::close(pipe_fds[1]);
 
+    // Espera o filho com poll no pipe de resultado. O lado de escrita é
+    // fechado quando o filho termina (HUP), então o pai não fica preso e pode
+    // também aplicar o limite de tempo do convidado (timeout_ms; 0 = ilimitado).
+    bool timed_out = false;
     int status = 0;
-    while (::waitpid(child, &status, 0) < 0) {
-        if (errno != EINTR) {
+    const std::uint64_t deadline =
+        timeout_ms == 0 ? 0 : monotonic_ms() + timeout_ms;
+    while (true) {
+        std::uint64_t remaining = 0;
+        if (timeout_ms != 0) {
+            const std::uint64_t now = monotonic_ms();
+            if (now >= deadline) {
+                timed_out = true;
+                break;
+            }
+            remaining = deadline - now;
+            if (remaining > static_cast<std::uint64_t>(std::numeric_limits<int>::max())) {
+                remaining = static_cast<std::uint64_t>(std::numeric_limits<int>::max());
+            }
+        }
+        struct ::pollfd descriptor {};
+        descriptor.fd = pipe_fds[0];
+        descriptor.events = POLLIN;
+        const int poll_result =
+            ::poll(&descriptor, 1, timeout_ms == 0 ? -1 : static_cast<int>(remaining));
+        if (poll_result < 0) {
+            if (errno == EINTR) {
+                continue;
+            }
             ::close(pipe_fds[0]);
             return {.kind = GuestOutcomeKind::SpawnFailed};
         }
+        const ::pid_t waited = ::waitpid(child, &status, WNOHANG);
+        if (waited == child) {
+            break;
+        }
+        if (waited < 0 && errno != EINTR) {
+            ::close(pipe_fds[0]);
+            return {.kind = GuestOutcomeKind::SpawnFailed};
+        }
+    }
+
+    if (timed_out) {
+        static_cast<void>(::kill(child, SIGKILL));
+        while (::waitpid(child, &status, 0) < 0 && errno == EINTR) {
+        }
+        ::close(pipe_fds[0]);
+        return {.kind = GuestOutcomeKind::TimedOut, .signal_number = SIGKILL};
     }
 
     GuestOutcome outcome{};

@@ -2,9 +2,9 @@
 
 #include "tradutorlinux/runtime/winapi.hpp"
 #include "tradutorlinux/runtime/msvcrt.hpp"
+#include "tradutorlinux/util/basics.hpp"
 
 #include <algorithm>
-#include <cctype>
 #include <string>
 #include <utility>
 #include <vector>
@@ -28,23 +28,10 @@ std::vector<OwnedModule>& modules() {
     return instance;
 }
 
-[[nodiscard]] bool ascii_iequals(const std::string_view a, const std::string_view b) {
-    if (a.size() != b.size()) {
-        return false;
-    }
-    for (std::size_t index = 0; index < a.size(); ++index) {
-        if (std::tolower(static_cast<unsigned char>(a[index])) !=
-            std::tolower(static_cast<unsigned char>(b[index]))) {
-            return false;
-        }
-    }
-    return true;
-}
-
 const OwnedModule* find_module(const std::string_view dll) {
     const std::vector<OwnedModule>& registry = modules();
     const auto found = std::find_if(registry.begin(), registry.end(), [&](const OwnedModule& module) {
-        return ascii_iequals(module.name, dll);
+        return util::ascii_iequals(module.name, dll);
     });
     if (found == registry.end()) {
         return nullptr;

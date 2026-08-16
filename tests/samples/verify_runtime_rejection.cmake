@@ -7,8 +7,14 @@ if(NOT EXISTS "${INPUT}")
     message(FATAL_ERROR "Fixture was not generated: ${INPUT}")
 endif()
 
+set(runtime_command "${RUNTIME}" --trace)
+if(DEFINED EXTRA_ARGS)
+    list(APPEND runtime_command ${EXTRA_ARGS})
+endif()
+list(APPEND runtime_command "${INPUT}")
+
 execute_process(
-    COMMAND "${RUNTIME}" --trace "${INPUT}"
+    COMMAND ${runtime_command}
     RESULT_VARIABLE runtime_result
     OUTPUT_VARIABLE runtime_stdout
     ERROR_VARIABLE runtime_trace

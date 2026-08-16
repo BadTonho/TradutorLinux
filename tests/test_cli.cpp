@@ -44,6 +44,65 @@ TEST(CommandLineTest, RejectsUnknownOption) {
     EXPECT_EQ(result.error_message, "opção desconhecida: --invalida");
 }
 
+TEST(CommandLineTest, AcceptsTimeoutOption) {
+    const std::vector<const char*> arguments{"tradutorlinux", "--timeout", "5", "programa.exe"};
+
+    const ParseResult result = parse_arguments(arguments);
+
+    ASSERT_TRUE(result.command_line.has_value());
+    EXPECT_EQ(result.command_line->timeout_ms, 5000);
+    EXPECT_TRUE(result.command_line->timeout_set);
+}
+
+TEST(CommandLineTest, AcceptsZeroTimeoutAsUnlimited) {
+    const std::vector<const char*> arguments{"tradutorlinux", "--timeout", "0", "programa.exe"};
+
+    const ParseResult result = parse_arguments(arguments);
+
+    ASSERT_TRUE(result.command_line.has_value());
+    EXPECT_EQ(result.command_line->timeout_ms, 0);
+    EXPECT_TRUE(result.command_line->timeout_set);
+}
+
+TEST(CommandLineTest, RejectsTimeoutWithoutValue) {
+    const std::vector<const char*> arguments{"tradutorlinux", "--timeout"};
+
+    const ParseResult result = parse_arguments(arguments);
+
+    EXPECT_FALSE(result.command_line.has_value());
+    EXPECT_NE(result.error_message.find("requer um valor em segundos"), std::string::npos);
+}
+
+TEST(CommandLineTest, RejectsNonNumericTimeout) {
+    const std::vector<const char*> arguments{"tradutorlinux", "--timeout", "abc"};
+
+    const ParseResult result = parse_arguments(arguments);
+
+    EXPECT_FALSE(result.command_line.has_value());
+    EXPECT_NE(result.error_message.find("valor inválido para --timeout"), std::string::npos);
+}
+
+TEST(CommandLineTest, RejectsRepeatedTimeout) {
+    const std::vector<const char*> arguments{"tradutorlinux", "--timeout", "1", "--timeout", "2"};
+
+    const ParseResult result = parse_arguments(arguments);
+
+    EXPECT_FALSE(result.command_line.has_value());
+    EXPECT_NE(result.error_message.find("foi repetida"), std::string::npos);
+}
+
+TEST(CommandLineTest, TimeoutAfterExecutableBelongsToGuest) {
+    const std::vector<const char*> arguments{"tradutorlinux", "programa.exe", "--timeout", "3"};
+
+    const ParseResult result = parse_arguments(arguments);
+
+    ASSERT_TRUE(result.command_line.has_value());
+    EXPECT_EQ(result.command_line->timeout_ms, 0);
+    ASSERT_EQ(result.command_line->guest_arguments.size(), 2);
+    EXPECT_EQ(result.command_line->guest_arguments[0], "--timeout");
+    EXPECT_EQ(result.command_line->guest_arguments[1], "3");
+}
+
 TEST(CommandLineTest, RejectsHelpWithExecutable) {
     const std::vector<const char*> arguments{"tradutorlinux", "--help", "programa.exe"};
 
@@ -125,6 +184,24 @@ TEST(CommandRunTest, ReturnsGuestFaultWhenGuestTerminatesBySignal) {
     EXPECT_EQ(exit_code, ExitCode::GuestFault);
     EXPECT_TRUE(stdout_stream.str().empty());
     EXPECT_NE(stderr_stream.str().find("terminated category=\"guest-signal\""),
+              std::string::npos);
+    EXPECT_EQ(stderr_stream.str().find("exit exit-code="), std::string::npos);
+}
+
+TEST(CommandRunTest, ReturnsGuestTimeoutWhenGuestHangs) {
+    CommandLine command_line;
+    command_line.trace_enabled = true;
+    command_line.timeout_ms = 1000;
+    command_line.executable_path =
+        std::filesystem::path{TL_FIXTURE_OUTPUT_DIRECTORY} / "tl_hang.exe";
+    std::ostringstream stdout_stream;
+    std::ostringstream stderr_stream;
+
+    const ExitCode exit_code = run_command(command_line, stdout_stream, stderr_stream);
+
+    EXPECT_EQ(exit_code, ExitCode::GuestTimeout);
+    EXPECT_TRUE(stdout_stream.str().empty());
+    EXPECT_NE(stderr_stream.str().find("terminated category=\"guest-timeout\""),
               std::string::npos);
     EXPECT_EQ(stderr_stream.str().find("exit exit-code="), std::string::npos);
 }

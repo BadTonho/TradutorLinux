@@ -1,5 +1,7 @@
 #include "tradutorlinux/pe/pe_reader.hpp"
 
+#include "tradutorlinux/util/basics.hpp"
+
 #include <algorithm>
 #include <array>
 #include <cstddef>
@@ -44,23 +46,6 @@ constexpr std::size_t kMaxImportDlls = 1024;
 constexpr std::size_t kMaxSymbolsPerDll = 4096;
 constexpr std::size_t kMaxRelocBlocks = 4096;
 constexpr std::size_t kMaxCString = 65535;
-
-[[nodiscard]] std::string format_hex(const std::uint64_t value) {
-    constexpr char kDigits[] = "0123456789abcdef";
-    std::string result = "0x";
-    bool started = false;
-    for (int shift = 60; shift >= 0; shift -= 4) {
-        const unsigned int digit = static_cast<unsigned int>((value >> shift) & 0xFULL);
-        if (digit != 0 || started) {
-            result.push_back(kDigits[digit]);
-            started = true;
-        }
-    }
-    if (!started) {
-        result.push_back('0');
-    }
-    return result;
-}
 
 [[nodiscard]] ParseResult fail(const ParseStatus status, std::string message) {
     return {.status = status, .error_message = std::move(message), .info = {}};
@@ -185,7 +170,7 @@ public:
 
         if (machine != kMachineAmd64) {
             return fail(ParseStatus::UnsupportedArchitecture,
-                        "arquitetura de máquina " + format_hex(machine) +
+                        "arquitetura de máquina " + util::format_hex(machine) +
                             " não suportada (esperado AMD64)");
         }
 
@@ -210,7 +195,7 @@ public:
         }
         if (opt_magic != kOptionalMagic64) {
             return fail(ParseStatus::Malformed,
-                        "magic do optional header " + format_hex(opt_magic) +
+                        "magic do optional header " + util::format_hex(opt_magic) +
                             " não reconhecido (esperado 0x20b)");
         }
 
@@ -354,7 +339,7 @@ private:
         if (!directory.has_value()) {
             return fail(ParseStatus::Malformed,
                         "diretório de imports em RVA " +
-                            format_hex(parser_state_.import_directory_rva) +
+                            util::format_hex(parser_state_.import_directory_rva) +
                             " fora da imagem");
         }
 
@@ -387,12 +372,12 @@ private:
             const std::optional<std::size_t> name_offset = rva_to_file_offset({name_rva, 1});
             if (!name_offset.has_value()) {
                 return fail(ParseStatus::Malformed,
-                            "nome de DLL em RVA " + format_hex(name_rva) + " fora da imagem");
+                            "nome de DLL em RVA " + util::format_hex(name_rva) + " fora da imagem");
             }
             const std::optional<std::string> dll_name = reader_.read_cstring(*name_offset);
             if (!dll_name.has_value()) {
                 return fail(ParseStatus::Malformed,
-                            "nome de DLL sem terminação nula (RVA " + format_hex(name_rva) + ")");
+                            "nome de DLL sem terminação nula (RVA " + util::format_hex(name_rva) + ")");
             }
 
             ImportedDll dll{.name = *dll_name, .symbols = {}};
@@ -407,7 +392,7 @@ private:
                 rva_to_file_offset({thunk_rva, kThunkEntrySize});
             if (!thunk_table.has_value()) {
                 return fail(ParseStatus::Malformed,
-                            "tabela de thunks em RVA " + format_hex(thunk_rva) +
+                            "tabela de thunks em RVA " + util::format_hex(thunk_rva) +
                                 " fora da imagem");
             }
             bool thunk_terminated = false;
@@ -426,9 +411,19 @@ private:
                     }
 
                     ImportedSymbol symbol;
-                    symbol.iat_rva = static_cast<std::uint32_t>(
+                    // first_thunk é uint32; o cálculo em uint64 evita o
+                    // overflow que faria a IAT de um descritor hostil apontar
+                    // para dentro dos cabeçalhos ou para fora da imagem.
+                    const std::uint64_t iat_slot_rva =
                         static_cast<std::uint64_t>(first_thunk) +
-                        static_cast<std::uint64_t>(symbol_index) * kThunkEntrySize);
+                        static_cast<std::uint64_t>(symbol_index) * kThunkEntrySize;
+                    if (iat_slot_rva > parser_state_.size_of_image ||
+                        iat_slot_rva + kThunkEntrySize > parser_state_.size_of_image) {
+                        return fail(ParseStatus::Malformed,
+                                    "IAT em RVA " + util::format_hex(iat_slot_rva) +
+                                        " fora da imagem (DLL " + dll.name + ")");
+                    }
+                    symbol.iat_rva = static_cast<std::uint32_t>(iat_slot_rva);
                     if ((thunk_value & kOrdinalFlag64) != 0) {
                         symbol.by_ordinal = true;
                         symbol.ordinal =
@@ -438,7 +433,7 @@ private:
                             {static_cast<std::uint32_t>(thunk_value), kImportByNameHintSize});
                         if (!by_name_offset.has_value()) {
                             return fail(ParseStatus::Malformed,
-                                        "nome de símbolo em RVA " + format_hex(thunk_value) +
+                                        "nome de símbolo em RVA " + util::format_hex(thunk_value) +
                                             " fora da imagem");
                         }
                         const std::optional<std::string> symbol_name = reader_.read_cstring(
@@ -446,7 +441,7 @@ private:
                         if (!symbol_name.has_value()) {
                             return fail(ParseStatus::Malformed,
                                         "nome de símbolo sem terminação nula (RVA " +
-                                            format_hex(thunk_value) + ")");
+                                            util::format_hex(thunk_value) + ")");
                         }
                         symbol.name = *symbol_name;
                     }
@@ -479,7 +474,7 @@ private:
         if (!directory.has_value()) {
             return fail(ParseStatus::Malformed,
                         "diretório de relocations em RVA " +
-                            format_hex(parser_state_.relocation_directory_rva) +
+                            util::format_hex(parser_state_.relocation_directory_rva) +
                             " fora da imagem");
         }
 

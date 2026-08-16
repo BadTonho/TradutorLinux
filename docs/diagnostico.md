@@ -67,6 +67,20 @@ O exit code bruto do convidado é transmitido por um pipe interno e propagado
 como status do processo Linux; quando o convidado morre por sinal, o hospedeiro
 retorna `71` (`GuestFault`).
 
+O CLI aceita `--timeout <segundos>` para limitar a duração do convidado (padrão
+`0`, sem limite). Quando o limite expira, o hospedeiro envia `SIGKILL` ao
+filho, aguarda o término, emite o evento `terminated` com `category="guest-timeout"`
+e `timeout-ms`, e retorna `72` (`GuestTimeout`):
+
+```text
+[tl][process][error] terminated category="guest-timeout" timeout-ms="1000"
+```
+
+O filho ignora `SIGPIPE` antes do entry point: uma escrita do convidado em um
+pipe sem leitor (ex.: `tradutorlinux prog.exe | head -c 0`) falha com
+`errno=32` e `win32-error="109"` (`ERROR_BROKEN_PIPE`) no evento
+`linux-failure` do `WriteFile`, em vez de matar o convidado pelo sinal.
+
 O modo `--report` produz um relatório textual em stdout sem executar o entry
 point. Cada import aparece com seu estado, seguido de `result: supported` ou
 `result: unsupported` e `execution: not-attempted`.
@@ -100,7 +114,8 @@ Eventos de erro podem incluir o campo `category`:
 | `invalid-image` | PE malformado ou imagem não mapeável. |
 | `guest-memory` | Ponteiro ou faixa fornecida pelo convidado não é válida. |
 | `linux-error` | Operação Linux falhou; pode incluir `operation`, `errno` e `win32-error`. |
-| `guest-signal` | Futuramente, término do convidado por sinal Linux. |
+| `guest-signal` | Término do convidado por sinal Linux. |
+| `guest-timeout` | O convidado não terminou dentro do limite de `--timeout` e foi morto pelo hospedeiro. |
 | `internal-error` | Falha inesperada do runtime. |
 
 Exemplo de falha Linux em uma API:
@@ -235,5 +250,6 @@ Quando a imagem é mapeada fora do endereço preferencial e não possui diretór
 | 5 | `Unsupported` | PE válido de arquitetura ou formato ainda não suportado (ex.: PE32/x86), ou etapa futura do runtime não disponível. |
 | 70 | `InternalError` | Erro interno inesperado do runtime. |
 | 71 | `GuestFault` | O programa convidado terminou por um sinal Linux (`guest-signal`). |
+| 72 | `GuestTimeout` | O programa convidado não terminou dentro do limite informado em `--timeout` e foi morto pelo hospedeiro (`guest-timeout`). |
 
 Na Fase 1, um arquivo regular que não é PE válido retorna `4`, e um PE válido porém incompatível (arquitetura ou formato não suportado) retorna `5`. A partir da Fase 2, uma imagem válida porém não mapeável por inconsistência estrutural retorna `4`, e uma falha de mapeamento por memória insuficiente retorna `70`. A partir da Fase 3, um PE válido com dependências não suportadas (DLL, símbolo, ordinal ou mecanismo desconhecidos) também retorna `5`, com diagnóstico completo no trace e o entry point nunca executado. Na Fase 4, `ExitProcess` gera `[tl][runtime][info]` com o código bruto e `[tl][process][info] exit`; esse código é propagado como status do processo Linux. Com o isolamento em processo filho, o convidado que termina por sinal (`SIGSEGV`, `SIGILL`, `SIGBUS`, etc.) não derruba o hospedeiro: o pai observa o sinal via `waitpid`, emite `terminated category="guest-signal"` e retorna `71`.
