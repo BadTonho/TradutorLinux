@@ -168,5 +168,137 @@ As ações disponíveis podem incluir:
   escolhido pelo usuário.
 
 O lançador deve receber somente o arquivo selecionado pelo usuário, manter os
-  diagnósticos em arquivos locais e preservar as mesmas validações de formato,
-  arquitetura e compatibilidade usadas pela CLI.
+diagnósticos em arquivos locais e preservar as mesmas validações de formato,
+arquitetura e compatibilidade usadas pela CLI.
+
+## Auditoria do projeto — direção para compatibilidade ampla
+
+Esta auditoria foi registrada em 2026-08-16. A conclusão é que a direção
+arquitetural está correta, mas o runtime ainda está na fase de fundação: o
+`xxd.exe` é o primeiro aplicativo real executado de ponta a ponta; `bzip2`,
+`dos2unix` e `unix2dos` ainda estão em estado `unsupported`.
+
+O objetivo estratégico continua sendo ampliar progressivamente o suporte para
+aplicativos Windows em geral. Esse objetivo deve ser medido por aplicativos
+reais, fluxos completos, resultados corretos e regressões automatizadas, não
+apenas pela quantidade de APIs implementadas.
+
+### Prioridade imediata — concluir a Fase 8
+
+- [ ] Implementar `msvcrt.dll!strncpy`.
+- [ ] Implementar `msvcrt.dll!strstr`.
+- [ ] Implementar `msvcrt.dll!ungetc`.
+- [ ] Criar e executar o teste e2e do `bzip2.exe`, verificando stdout, stderr,
+      exit code, arquivos produzidos e timeout.
+- [ ] Atualizar `docs/compatibilidade.md` somente depois de haver evidência
+      reproduzível.
+- [ ] Escolher o caminho de `dos2unix`/`unix2dos`: implementar o subconjunto
+      `W` e `SHELL32.dll!CommandLineToArgvW`, ou registrar formalmente a
+      decisão de adiar esses alvos.
+- [ ] Encerrar a Fase 8 somente quando pelo menos três aplicativos reais
+      executarem fluxos completos no Linux.
+
+### Prioridade estrutural — preparar o runtime para crescer
+
+- [ ] Separar `src/runtime/winapi.cpp` em subsistemas menores: console,
+      arquivos, memória, processo, sincronização, GUI e GDI.
+- [ ] Substituir o estado global por um contexto explícito do processo
+      convidado (`GuestContext` ou equivalente).
+- [ ] Substituir limites fixos de handles, arquivos, alocações, janelas e TLS
+      por gerenciadores controlados, com diagnóstico claro de exaustão.
+- [ ] Definir uma política de handles única, com tipo, proprietário, validade,
+      encerramento e conversão documentados.
+- [ ] Garantir que cada API nova continue tendo contrato, fixture ou aplicativo
+      real, teste de regressão e entrada na matriz.
+
+### Loader e processo — bloqueios para aplicativos comuns
+
+- [ ] Implementar carregamento de DLLs PE convidadas e dependências recursivas.
+- [ ] Implementar `LoadLibrary`/`GetProcAddress` dentro do conjunto permitido.
+- [ ] Implementar forwarders, inicialização de módulos e encerramento de DLLs.
+- [ ] Definir suporte para TLS callbacks e dados TLS por thread.
+- [ ] Implementar threads convidadas, TEB por thread, `WaitForSingleObject`,
+      eventos e mutexes quando um aplicativo-alvo justificar.
+- [ ] Substituir o stub de `__C_specific_handler` por suporte compatível com o
+      fluxo de exceções estruturadas que os alvos exigirem.
+- [ ] Testar falhas de `SIGSEGV`, `SIGILL`, `SIGBUS`, timeout e encerramento
+      durante operações com múltiplas threads.
+
+### Arquivos e Unicode — maior ganho prático depois do CRT
+
+- [ ] Implementar diretório atual e diretório do executável.
+- [ ] Definir tradução segura de caminhos Windows, incluindo separadores,
+      caminhos absolutos e a política para letras de unidade.
+- [ ] Implementar `FindFirstFileA/W`, `FindNextFileA/W`, `FindClose`,
+      `GetFileAttributesA/W`, `CreateDirectoryA/W`, `MoveFileA/W` e
+      `DeleteFileA/W` conforme os aplicativos-alvo exigirem.
+- [ ] Completar o caminho UTF-16/UTF-8 e testar nomes não ASCII.
+- [ ] Expandir `VirtualAlloc`/`VirtualFree` somente quando um alvo real exigir
+      reserva, commit parcial ou memória executável.
+
+### GUI — continuar orientada por aplicativo
+
+- [ ] Escolher um aplicativo GUI real, pequeno e de código aberto antes de
+      ampliar genericamente `USER32.dll` ou `GDI32.dll`.
+- [ ] Implementar somente os controles, mensagens, recursos, fontes, Unicode,
+      mouse e pintura exigidos por esse alvo.
+- [ ] Adicionar teste automatizado do fluxo principal, além de verificar apenas
+      abertura de janela e exit code.
+- [ ] Manter a GUI mínima atual explicitamente experimental até existir um
+      aplicativo GUI real com fluxo principal validado.
+
+### Documentação a alinhar
+
+- [ ] Revisar `ideia.md`, que ainda contém linguagem anterior dizendo que o
+      projeto não autoriza compatibilidade geral.
+- [ ] Revisar o cabeçalho de `docs/compatibilidade.md` para distinguir
+      “objetivo de compatibilidade ampla” de “suporte comprovado atual”.
+- [ ] Separar nos documentos as referências históricas às Fases 5, 7 e 9 da
+      fase atualmente ativa.
+- [ ] Manter `AGENTS.md`, `PROJETO.md`, `ROADMAP.md`, `README.md` e a matriz
+      com a mesma definição de objetivo e de suporte.
+
+### Checklist de validação no Linux
+
+Executar no Linux x86-64, com `cmake`, `ninja`, `llvm`, `mingw-w64`, X11 e
+`Xvfb` instalados:
+
+```bash
+cmake --preset debug
+cmake --build --preset debug --parallel
+ctest --preset debug --output-on-failure
+
+cmake --preset release
+cmake --build --preset release --parallel
+ctest --preset release --output-on-failure
+
+cmake --preset sanitize
+cmake --build --preset sanitize --parallel
+ctest --preset sanitize --output-on-failure
+
+cmake -S . -B build/targetapps -G Ninja \
+  -DCMAKE_BUILD_TYPE=Release -DTL_BUILD_TARGET_APPS=ON
+cmake --build build/targetapps --parallel
+ctest --test-dir build/targetapps -L targetapp --output-on-failure
+```
+
+Antes de marcar uma tarefa como concluída, confirmar também:
+
+- `cppcheck` sem pendências;
+- `clang-tidy` sem warnings tratados como erro;
+- `stdout` preservado para o convidado;
+- trace e erros em `stderr`;
+- matriz de compatibilidade atualizada;
+- nenhuma regressão nos aplicativos e fixtures anteriores;
+- limitações novas documentadas de forma honesta.
+
+### Estado da auditoria
+
+- [x] Loader, relocations, imports básicos e ponte de ABI possuem fundação
+      testada.
+- [x] Diagnóstico, timeout e isolamento por processo filho estão implementados.
+- [x] Existe um aplicativo real (`xxd.exe`) executando de ponta a ponta.
+- [ ] A Fase 8 ainda não atingiu três aplicativos reais executando fluxos
+      completos.
+- [ ] A compatibilidade ampla ainda depende de DLLs convidadas, threads,
+      exceções, filesystem completo, Unicode e maior cobertura de APIs.
