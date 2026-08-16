@@ -44,6 +44,43 @@ constexpr std::array<Button, 4> kButtons{{
     {450, 560, "Sair"},
 }};
 
+std::string ascii_fallback(const std::string& text) {
+    std::string result;
+    result.reserve(text.size());
+    for (std::size_t index = 0; index < text.size(); ++index) {
+        const unsigned char first = static_cast<unsigned char>(text[index]);
+        if (first == 0xC3U && index + 1 < text.size()) {
+            const unsigned char second = static_cast<unsigned char>(text[++index]);
+            switch (second) {
+                case 0x81: case 0x82: case 0x83: case 0x84: case 0x85: case 0x86: case 0x87:
+                    result.push_back('A'); break;
+                case 0xA1: case 0xA2: case 0xA3: case 0xA4: case 0xA5: case 0xA6: case 0xA7:
+                    result.push_back('a'); break;
+                case 0x89: result.push_back('E'); break;
+                case 0xA9: result.push_back('e'); break;
+                case 0x8D: result.push_back('I'); break;
+                case 0xAD: result.push_back('i'); break;
+                case 0x93: case 0x94: case 0x95: case 0x96: case 0x98:
+                    result.push_back('O'); break;
+                case 0xB3: case 0xB4: case 0xB5: case 0xB6: case 0xB8:
+                    result.push_back('o'); break;
+                case 0x9A: case 0x9B: case 0x9C: case 0x9D:
+                    result.push_back('U'); break;
+                case 0xBA: case 0xBB: case 0xBC: case 0xBD:
+                    result.push_back('u'); break;
+                default: result.push_back('?'); break;
+            }
+        } else if (first == 0xC2U && index + 1 < text.size()) {
+            result.push_back(static_cast<char>(text[++index]));
+        } else if (first < 0x80U) {
+            result.push_back(static_cast<char>(first));
+        } else {
+            result.push_back('?');
+        }
+    }
+    return result;
+}
+
 bool inside(const Button& button, const int x, const int y) {
     return x >= button.left && x <= button.right && y >= kButtonY && y <= kButtonY + 32;
 }
@@ -54,7 +91,9 @@ void draw_text(Display* display, const Window window, const GC gc, const XFontSe
         Xutf8DrawString(display, window, font_set, gc, x, y, text.c_str(),
                         static_cast<int>(text.size()));
     } else {
-        XDrawString(display, window, gc, x, y, text.c_str(), static_cast<int>(text.size()));
+        const std::string fallback = ascii_fallback(text);
+        XDrawString(display, window, gc, x, y, fallback.c_str(),
+                    static_cast<int>(fallback.size()));
     }
 }
 
@@ -124,7 +163,7 @@ void redraw(Display* display, const Window window, const GC gc, const XFontSet f
                        static_cast<unsigned int>(button.right - button.left), 32U);
         draw_text(display, window, gc, font_set, button.left + 10, kButtonY + 21, button.label);
     }
-    draw_text(display, window, gc, font_set, 24, kOutputLabelY, "Diagnóstico e saída:");
+    draw_text(display, window, gc, font_set, 24, kOutputLabelY, "Diagnostico e saida:");
     XDrawRectangle(display, window, gc, 20, kOutputBoxY, kWidth - 40,
                    static_cast<unsigned int>(kOutputBottom - kOutputBoxY));
     int y = kOutputY;
