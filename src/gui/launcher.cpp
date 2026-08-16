@@ -20,12 +20,14 @@
 namespace {
 
 constexpr int kWidth = 900;
-constexpr int kHeight = 560;
+constexpr int kHeight = 700;
 constexpr int kInputX = 24;
 constexpr int kInputY = 74;
 constexpr int kInputWidth = 852;
 constexpr int kButtonY = 104;
-constexpr int kOutputY = 154;
+constexpr int kOutputY = 184;
+constexpr int kOutputBottom = kHeight - 24;
+constexpr int kLineHeight = 17;
 
 struct Button {
     int left;
@@ -115,20 +117,29 @@ void redraw(Display* display, const Window window, const GC gc, const std::strin
         draw_text(display, window, gc, button.left + 10, kButtonY + 21, button.label);
     }
     draw_text(display, window, gc, 24, 140, "Diagnóstico e saída:");
+    XDrawRectangle(display, window, gc, 20, 154, kWidth - 40,
+                   static_cast<unsigned int>(kOutputBottom - 154));
     int y = kOutputY;
     std::string line;
+    constexpr std::size_t kMaxCharactersPerLine = 112;
+    const auto flush_line = [&]() {
+        if (y <= kOutputBottom - kLineHeight) {
+            draw_text(display, window, gc, 24, y, line);
+            y += kLineHeight;
+        }
+        line.clear();
+    };
     for (const char character : output) {
-        if (character == '\n' || y > kHeight - 12) {
-            if (y <= kHeight - 12) {
-                draw_text(display, window, gc, 24, y, line);
-                y += 14;
-            }
-            line.clear();
+        if (character == '\n') {
+            flush_line();
         } else if (character != '\r') {
             line.push_back(character);
+            if (line.size() >= kMaxCharactersPerLine) {
+                flush_line();
+            }
         }
     }
-    if (!line.empty() && y <= kHeight - 12) {
+    if (!line.empty() && y <= kOutputBottom - kLineHeight) {
         draw_text(display, window, gc, 24, y, line);
     }
     XFlush(display);
@@ -151,6 +162,10 @@ int main() {
                                      StructureNotifyMask);
     XMapWindow(display, window);
     const GC gc = DefaultGC(display, screen);
+    XFontStruct* const font = XLoadQueryFont(display, "9x15");
+    if (font != nullptr) {
+        XSetFont(display, gc, font->fid);
+    }
     std::string path;
     std::string output = "Digite o caminho de um .exe e escolha uma operação.";
     bool running = true;
@@ -195,6 +210,9 @@ int main() {
         }
     }
     XDestroyWindow(display, window);
+    if (font != nullptr) {
+        XFreeFont(display, font);
+    }
     XCloseDisplay(display);
     return 0;
 }
