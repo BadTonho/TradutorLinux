@@ -114,6 +114,15 @@ void register_builtin_modules() {
         {"GetCurrentDirectoryA", 47, reinterpret_cast<std::uintptr_t>(&tl_GetCurrentDirectoryA)},
         {"GetCurrentDirectoryW", 48, reinterpret_cast<std::uintptr_t>(&tl_GetCurrentDirectoryW)},
         {"GetModuleFileNameA", 49, reinterpret_cast<std::uintptr_t>(&tl_GetModuleFileNameA)},
+        // Fase 11: Concorrência.
+        {"TlsAlloc", 50, reinterpret_cast<std::uintptr_t>(&tl_TlsAlloc)},
+        {"TlsSetValue", 51, reinterpret_cast<std::uintptr_t>(&tl_TlsSetValue)},
+        {"TlsFree", 52, reinterpret_cast<std::uintptr_t>(&tl_TlsFree)},
+        {"CreateThread", 53, reinterpret_cast<std::uintptr_t>(&tl_CreateThread)},
+        {"ExitThread", 54, reinterpret_cast<std::uintptr_t>(&tl_ExitThread)},
+        {"WaitForSingleObject", 55, reinterpret_cast<std::uintptr_t>(&tl_WaitForSingleObject)},
+        {"GetCurrentThreadId", 56, reinterpret_cast<std::uintptr_t>(&tl_GetCurrentThreadId)},
+        {"GetCurrentProcessId", 57, reinterpret_cast<std::uintptr_t>(&tl_GetCurrentProcessId)},
     };
     static const InternalModule kKernel32Module{"KERNEL32.dll", kKernel32Exports};
     register_module(kKernel32Module);

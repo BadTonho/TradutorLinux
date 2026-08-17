@@ -20,6 +20,7 @@ Esta matriz declara o comportamento suportado; ela não é uma promessa de compa
 | `tl_missing_dll.exe` | PE32+ AMD64 | Não | `USER32.dll!MessageBoxW` | Gerado, verificado e rejeitado na Fase 3: `USER32.dll` é conhecida, mas o símbolo diagnostica `unknown-symbol`; retorna `5` sem executar o entry point | Fase 4 |
 | `tl_crash.exe` | PE32+ AMD64 | Não | Nenhum | Gerado, verificado, mapeado e executado em processo filho isolado: o convidado acessa o endereço `0`, o hospedeiro observa o `SIGSEGV` via `waitpid`, emite `terminated category="guest-signal" signal="SIGSEGV"` e retorna `71` (`GuestFault`) | Diagnóstico de falhas |
 | `tl_hang.exe` | PE32+ AMD64 | Não | Nenhum | Gerado, verificado e executado em processo filho isolado com `--timeout 1`: o convidado entra em loop infinito, o hospedeiro o mata com `SIGKILL`, emite `terminated category="guest-timeout"` e retorna `72` (`GuestTimeout`) | Diagnóstico de falhas |
+| `tl_thread.exe` | PE32+ AMD64 | Não | `KERNEL32.dll!CloseHandle`, `CreateThread`, `ExitProcess`, `ExitThread`, `GetStdHandle`, `WaitForSingleObject`, `WriteFile` | Cria duas threads sequenciais, cada uma escreve "Thread done" e termina via `ExitThread`; thread principal escreve "Main done" e encerra | Fase 11 |
 
 As fontes e manifestos das fixtures ficam em `tests/samples/`. Os binários são produtos de build e ficam em `build/<preset>/tests/samples/generated/`.
 
@@ -288,3 +289,45 @@ enumeração. A tradução de caminhos Windows (`\\` → `/`) é reutilizável v
   `MoveFileA` (existente/inexistente), `CreateDirectoryA` (novo/duplicado),
   `FindFirstFileA`/`FindClose`, `GetCurrentDirectoryA/W`,
   `GetModuleFileNameA` e conversão UTF-8/UTF-16 com caracteres acentuados.
+
+## Concorrência (Fase 11)
+
+O subsistema de concorrência adiciona suporte a threads convidadas, TLS,
+sincronização por mutexe e handles de thread. O runtime executa no mesmo
+processo filho; cada thread convidada recebe seu próprio TEB/GS, stack e
+`thread_local` isolado. Handles de thread são codificados por endereço
+(`kThreadHandleBase + índice`).
+
+| Módulo | API | Estado | Comportamento suportado |
+|---|---|---|---|
+| `KERNEL32.dll` | `CreateThread` | Suportado | Aloca stack com guard page, TEB, `arch_prctl(GS)`, cria `std::thread` com wrapper que preserva GS; retorna handle de thread |
+| `KERNEL32.dll` | `ExitThread` | Suportado | `longjmp` para o `setjmp` do wrapper; thread termina sem encerrar o processo |
+| `KERNEL32.dll` | `WaitForSingleObject` | Suportado | Join na thread convidada; suporta `INFINITE` e timeout com `condition_variable`; retorna `WAIT_OBJECT_0` |
+| `KERNEL32.dll` | `CloseHandle` | Suportado | Para handles de thread: join + libera stack; mantém suporte a handles de arquivo e console |
+| `KERNEL32.dll` | `GetCurrentThreadId` | Suportado | Retorna `thread_local` `g_guest_thread_id` atribuído por `execute_guest_entry` |
+| `KERNEL32.dll` | `GetCurrentProcessId` | Suportado | Retorna PID real do processo via `getpid()` |
+| `KERNEL32.dll` | `TlsAlloc` | Suportado | Aloca índice de slot `thread_local` (0–63); retorna `0xFFFFFFFF` na exaustão |
+| `KERNEL32.dll` | `TlsSetValue` | Suportado | Armazena valor em `g_guest_tls_slots[index]`; rejeita índice inválido |
+| `KERNEL32.dll` | `TlsFree` | Suportado | Libera índice para reuso |
+| `KERNEL32.dll` | `InitializeCriticalSection` | Suportado | Side-table com `pthread_mutex_t` (máximo 32 entradas) |
+| `KERNEL32.dll` | `EnterCriticalSection` | Suportado | `pthread_mutex_lock` via side-table |
+| `KERNEL32.dll` | `LeaveCriticalSection` | Suportado | `pthread_mutex_unlock` via side-table |
+| `KERNEL32.dll` | `DeleteCriticalSection` | Suportado | `pthread_mutex_destroy` + libera entrada na side-table |
+
+### Limitações conhecidas
+
+- O slot 0 de TLS (`TlsGetValue(0)`) é reservado para o ponteiro ao TEB
+  (`NtTib.Self`); o convidado não deve chamar `TlsAlloc` para obter o TEB.
+- A side-table de `CRITICAL_SECTION` suporta no máximo 32 seções simultâneas;
+  exaustão emite trace de `side-table` com `category="exhaustion"`.
+- `WaitForSingleObject` só aceita handles de thread; handles de evento, mutex
+  e arquivo retornam `WAIT_FAILED`.
+- `CreateThread` não suporta `CREATE_SUSPENDED`; `stack_size == 0` usa o
+  tamanho padrão (64 KiB).
+- `ExitThread` termina somente a thread corrente; não limpa destructors C++.
+- O fixture `tl_thread.exe` requer mingw-w64 para cross-build (não disponível
+  no ambiente atual).
+- 13 testes unitários em `tests/test_win32.cpp` cobrem `TlsAlloc`,
+  `TlsSetValue`, `TlsFree`, `GetCurrentThreadId`, `GetCurrentProcessId`,
+  `CRITICAL_SECTION`, `CloseHandle` e `WaitForSingleObject` com handles
+  inválidos.

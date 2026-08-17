@@ -93,6 +93,9 @@ function(tl_add_pe_fixture target_name source_file manifest_file)
                 set(runtime_extra_args
                     "-DEXPECTED_HEX=66617365350a"
                     "-DCLEANUP_FILE=tl_phase5_data.bin")
+            elseif(target_name STREQUAL "tl_thread")
+                set(runtime_extra_args
+                    "-DEXPECTED_HEX=54687265616420646f6e650d0a54687265616420646f6e650d0a4d61696e20646f6e650d0a")
             endif()
         endif()
         add_test(
@@ -186,6 +189,9 @@ tl_add_pe_fixture(tl_paint src/tl_paint.c manifests/tl_paint.json
 tl_add_pe_fixture(tl_crash src/tl_crash.c manifests/tl_crash.json RELOCATABLE NO_RUNTIME_CHECK)
 
 tl_add_pe_fixture(tl_hang src/tl_hang.c manifests/tl_hang.json RELOCATABLE NO_RUNTIME_CHECK)
+
+tl_add_pe_fixture(tl_thread src/tl_thread.c manifests/tl_thread.json
+    LINK_KERNEL32 EXPECT_RESOLVED CONSOLE RELOCATABLE)
 
 if(TARGET tradutorlinux)
     add_test(

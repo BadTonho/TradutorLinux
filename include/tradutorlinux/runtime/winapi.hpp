@@ -56,6 +56,13 @@ constexpr Dword kPageExecuteWriteCopy = 0x80U;
 constexpr Dword kErrorInsufficientBuffer = 122;
 constexpr Dword kErrorInvalidAddress = 487;
 constexpr Dword kErrorNoUnicodeTranslation = 1113;
+constexpr Dword kErrorTooManyTlsIndexes = 4323;
+
+// Fase 11: WaitForSingleObject.
+constexpr Dword kWaitObject0 = 0;
+constexpr Dword kWaitTimeout = 0x102;
+constexpr Dword kWaitFailed = 0xFFFFFFFF;
+constexpr Dword kInfinite = 0xFFFFFFFF;
 
 // Code pages suportadas pela conversão de strings.
 constexpr Dword kCpAcp = 0;          // CP_ACP -> CP1252 (locale C do runtime)
@@ -277,6 +284,20 @@ TL_MSABI std::uint32_t tl_GetCurrentDirectoryW(std::uint32_t buffer_length,
                                                 std::uint16_t* buffer) noexcept;
 TL_MSABI std::uint32_t tl_GetModuleFileNameA(const void* module_handle, char* buffer,
                                               std::uint32_t size) noexcept;
+
+// Fase 11: Concorrência.
+
+TL_MSABI void* tl_CreateThread(const void* security_attributes, std::uintptr_t stack_size,
+                                std::uintptr_t start_address, void* parameter,
+                                std::uint32_t creation_flags, std::uint32_t* thread_id) noexcept;
+TL_MSABI void tl_ExitThread(std::uint32_t exit_code) noexcept;
+TL_MSABI std::uint32_t tl_WaitForSingleObject(const void* handle,
+                                               std::uint32_t milliseconds) noexcept;
+TL_MSABI std::uint32_t tl_GetCurrentThreadId() noexcept;
+TL_MSABI std::uint32_t tl_GetCurrentProcessId() noexcept;
+TL_MSABI std::uint32_t tl_TlsAlloc() noexcept;
+TL_MSABI int tl_TlsSetValue(std::uint32_t tls_index, void* tls_value) noexcept;
+TL_MSABI int tl_TlsFree(std::uint32_t tls_index) noexcept;
 
 }  // extern "C"
 

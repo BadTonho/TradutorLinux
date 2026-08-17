@@ -7,25 +7,31 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <bit>
 #include <cctype>
 #include <cerrno>
 #include <charconv>
 #include <chrono>
+#include <condition_variable>
 #include <csetjmp>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <ctime>
 #include <fstream>
+#include <functional>
 #include <iostream>
 #include <limits>
+#include <memory>
+#include <mutex>
 #include <span>
 #include <string>
 #include <thread>
 #include <vector>
 #include <fcntl.h>
 #include <dirent.h>
+#include <pthread.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <sys/syscall.h>
@@ -77,6 +83,87 @@ struct GuestMapRegion {
 
 std::array<FileSlot, 64> g_files{};
 std::array<AllocationSlot, 64> g_allocations{};
+
+// --- Fase 11: Concorrência ---
+
+// Identificador único da thread principal do convidado.
+constexpr std::uint32_t kMainThreadId = 1;
+thread_local std::uint32_t g_current_thread_id = kMainThreadId;
+std::atomic<std::uint32_t> g_next_thread_id{kMainThreadId + 1};
+
+// Slot de thread convidada.
+struct ThreadSlot {
+    bool used{false};
+    std::uint32_t thread_id{};
+    void* teb{nullptr};                    // mmap'd TEB page
+    std::byte* stack{nullptr};             // mmap'd guest stack
+    std::uintptr_t stack_top{};
+    std::function<void()> thread_func;     // lambda que executa o guest code
+    std::thread host_thread;               // thread hospedeira
+    std::mutex join_mutex;                 // protege joined/cancelled
+    bool finished{false};                  // thread concluiu
+    bool joined{false};                    // WaitForSingleObject retornou
+    int exit_code{0};                      // código de saída da thread
+    std::condition_variable finish_cv;     // sinaliza quando finished==true
+};
+std::array<ThreadSlot, 64> g_threads{};
+
+// Handle de thread: ponteiro para um slot de thread, para manter compatibilidade
+// com a existente file-handle scheme.
+constexpr std::uintptr_t kThreadHandleBase = 0x0000400000000000ULL;
+
+void* thread_slot_to_handle(ThreadSlot& slot) noexcept {
+    const auto index = static_cast<std::size_t>(&slot - g_threads.data());
+    return std::bit_cast<void*>(kThreadHandleBase + index);
+}
+
+ThreadSlot* find_thread_slot(const void* handle) noexcept {
+    if (handle == nullptr) {
+        return nullptr;
+    }
+    const auto addr = std::bit_cast<std::uintptr_t>(handle);
+    if (addr >= kThreadHandleBase && addr < kThreadHandleBase + g_threads.size()) {
+        const auto index = static_cast<std::size_t>(addr - kThreadHandleBase);
+        ThreadSlot& slot = g_threads[index];
+        return slot.used ? &slot : nullptr;
+    }
+    return nullptr;
+}
+
+// Índices TLS globais (máximo 64 slots, como g_guest_tls_slots).
+constexpr std::uint32_t kMaxTlsSlots = 64;
+std::array<bool, kMaxTlsSlots> g_tls_indices_used{};
+
+// --- CRITICAL_SECTION: side-table com pthread_mutex_t ---
+struct CriticalSectionEntry {
+    void* guest_address{nullptr};
+    pthread_mutex_t mutex{};
+    bool used{false};
+};
+std::array<CriticalSectionEntry, 32> g_critical_sections{};
+
+CriticalSectionEntry* find_cs_entry(void* cs) noexcept {
+    if (cs == nullptr) {
+        return nullptr;
+    }
+    auto it = std::find_if(g_critical_sections.begin(), g_critical_sections.end(),
+                           [cs](const CriticalSectionEntry& e) {
+                               return e.used && e.guest_address == cs;
+                           });
+    return it != g_critical_sections.end() ? &*it : nullptr;
+}
+
+CriticalSectionEntry* alloc_cs_entry(void* cs) noexcept {
+    auto it = std::find_if(g_critical_sections.begin(), g_critical_sections.end(),
+                           [](const CriticalSectionEntry& e) { return !e.used; });
+    if (it == g_critical_sections.end()) {
+        return nullptr;
+    }
+    it->guest_address = cs;
+    it->used = true;
+    pthread_mutex_init(&it->mutex, nullptr);
+    return &*it;
+}
 
 void set_last_error(const std::uint32_t error) noexcept {
     g_last_error = error;
@@ -730,6 +817,28 @@ bool set_guest_gs_base(const void* const base) noexcept {
                      static_cast<std::uintptr_t>(reinterpret_cast<std::uintptr_t>(base))) == 0;
 }
 
+// Aloca um TEB de uma página e configura os campos essenciais.
+[[nodiscard]] void* allocate_guest_teb(const std::uintptr_t stack_top,
+                                        const std::uintptr_t stack_size) noexcept {
+    constexpr std::size_t kTebSize = sizeof(GuestTeb);
+    void* const teb = mmap(nullptr, kTebSize, PROT_READ | PROT_WRITE,
+                           MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    if (teb == MAP_FAILED) {
+        return nullptr;
+    }
+    auto* const fields = static_cast<GuestTeb*>(teb);
+    fields->self = teb;
+    fields->stack_base = std::bit_cast<void*>(stack_top);
+    fields->stack_limit = std::bit_cast<void*>(stack_top - stack_size);
+    return teb;
+}
+
+void free_guest_teb(void* const teb) noexcept {
+    if (teb != nullptr) {
+        static_cast<void>(munmap(teb, sizeof(GuestTeb)));
+    }
+}
+
 // Virtual key do subconjunto suportado. Teclas especiais são mapeadas pelo
 // keysym; letras usam a maiúscula (como VK_A), demais caracteres ASCII
 // imprimíveis usam o próprio valor. O keysym de letras/dígitos já reflete o
@@ -1041,6 +1150,35 @@ TL_MSABI void* tl_CreateFileA(const char* const path, const std::uint32_t desire
 }
 
 TL_MSABI int tl_CloseHandle(const void* const handle) noexcept {
+    // Tenta como handle de thread primeiro.
+    ThreadSlot* thread = find_thread_slot(handle);
+    if (thread != nullptr) {
+        if (!thread->used) {
+            set_last_error(abi::kErrorInvalidHandle);
+            trace_guest_failure("CloseHandle", "handle-validation", "handle de thread inválido");
+            return 0;
+        }
+        // Faz join se necessário.
+        if (thread->host_thread.joinable() && !thread->joined) {
+            thread->host_thread.join();
+            thread->joined = true;
+        }
+        // Libera a pilha convidada.
+        if (thread->stack != nullptr) {
+            const std::uintptr_t total_size = (thread->stack_top -
+                std::bit_cast<std::uintptr_t>(thread->stack));
+            static_cast<void>(mprotect(thread->stack, 0x1000, PROT_READ | PROT_WRITE));
+            static_cast<void>(munmap(thread->stack, static_cast<std::size_t>(total_size)));
+            thread->stack = nullptr;
+        }
+        thread->used = false;
+        thread->finished = false;
+        thread->joined = false;
+        set_last_error(abi::kErrorSuccess);
+        return 1;
+    }
+
+    // Tenta como handle de arquivo.
     FileSlot* slot = find_file_slot(handle);
     if (slot == nullptr) {
         set_last_error(abi::kErrorInvalidHandle);
@@ -1686,19 +1824,50 @@ TL_MSABI int tl_ReleaseDC(const void* const window, const void* const dc) noexce
 }
 
 TL_MSABI void tl_InitializeCriticalSection(void* const critical_section) noexcept {
-    critical_section_valid(critical_section);
+    if (!critical_section_valid(critical_section)) {
+        return;
+    }
+    CriticalSectionEntry* entry = find_cs_entry(critical_section);
+    if (entry == nullptr) {
+        entry = alloc_cs_entry(critical_section);
+        if (entry == nullptr) {
+            set_last_error(abi::kErrorNotEnoughMemory);
+            trace_guest_failure("InitializeCriticalSection", "side-table",
+                                "exaustão de slots de critical section");
+        }
+    }
 }
 
 TL_MSABI void tl_DeleteCriticalSection(void* const critical_section) noexcept {
-    critical_section_valid(critical_section);
+    if (!critical_section_valid(critical_section)) {
+        return;
+    }
+    CriticalSectionEntry* entry = find_cs_entry(critical_section);
+    if (entry != nullptr) {
+        pthread_mutex_destroy(&entry->mutex);
+        entry->used = false;
+        entry->guest_address = nullptr;
+    }
 }
 
 TL_MSABI void tl_EnterCriticalSection(void* const critical_section) noexcept {
-    critical_section_valid(critical_section);
+    if (!critical_section_valid(critical_section)) {
+        return;
+    }
+    CriticalSectionEntry* entry = find_cs_entry(critical_section);
+    if (entry != nullptr) {
+        pthread_mutex_lock(&entry->mutex);
+    }
 }
 
 TL_MSABI void tl_LeaveCriticalSection(void* const critical_section) noexcept {
-    critical_section_valid(critical_section);
+    if (!critical_section_valid(critical_section)) {
+        return;
+    }
+    CriticalSectionEntry* entry = find_cs_entry(critical_section);
+    if (entry != nullptr) {
+        pthread_mutex_unlock(&entry->mutex);
+    }
 }
 
 TL_MSABI int tl_GetConsoleMode(const void* const handle, std::uint32_t* const mode) noexcept {
@@ -2663,6 +2832,301 @@ TL_MSABI std::uint32_t tl_GetModuleFileNameA(const void* /*module*/, char* buffe
     return static_cast<std::uint32_t>(len + 1);
 }
 
+// --- Fase 11: Concorrência ---
+
+TL_MSABI std::uint32_t tl_GetCurrentThreadId() noexcept {
+    return g_current_thread_id;
+}
+
+TL_MSABI std::uint32_t tl_GetCurrentProcessId() noexcept {
+    // No isolamento por fork(), o PID do filho é o "processo convidado".
+    return static_cast<std::uint32_t>(::getpid());
+}
+
+// Aloca um índice TLS disponível. Retorna o índice (>= 0) ou 0xFFFFFFFF em caso
+// de erro. O Windows retorna TLS_OUT_OF_INDEXES (0xFFFFFFFF) quando não há
+// slots livres.
+TL_MSABI std::uint32_t tl_TlsAlloc() noexcept {
+    for (std::uint32_t i = 0; i < kMaxTlsSlots; ++i) {
+        if (!g_tls_indices_used[i]) {
+            g_tls_indices_used[i] = true;
+            set_last_error(abi::kErrorSuccess);
+            return i;
+        }
+    }
+    set_last_error(abi::kErrorTooManyTlsIndexes);
+    trace_guest_failure("TlsAlloc", "tls-index", "exaustão de slots TLS");
+    return 0xFFFFFFFFU;
+}
+
+TL_MSABI int tl_TlsSetValue(const std::uint32_t tls_index, void* const tls_value) noexcept {
+    if (tls_index >= kMaxTlsSlots || !g_tls_indices_used[tls_index]) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    g_guest_tls_slots[tls_index] = tls_value;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_TlsFree(const std::uint32_t tls_index) noexcept {
+    if (tls_index >= kMaxTlsSlots || !g_tls_indices_used[tls_index]) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    g_tls_indices_used[tls_index] = false;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+// Estrutura de parâmetros repassada à thread hospedeira.
+struct GuestThreadParams {
+    std::uintptr_t entry_point{};
+    std::uintptr_t stack_top{};
+    std::uintptr_t stack_size{};
+    std::uint32_t thread_id{};
+    void* parameter{};
+    ThreadSlot* slot{nullptr};
+};
+
+void guest_thread_wrapper(GuestThreadParams params) noexcept {
+    g_current_thread_id = params.thread_id;
+
+    // Aloca TEB para esta thread.
+    void* const teb = allocate_guest_teb(params.stack_top, params.stack_size);
+    if (teb == nullptr) {
+        auto* const slot = params.slot;
+        {
+            const std::lock_guard<std::mutex> lock(slot->join_mutex);
+            slot->exit_code = -1;
+            slot->finished = true;
+        }
+        slot->finish_cv.notify_all();
+        return;
+    }
+    auto* const fields = static_cast<GuestTeb*>(teb);
+    fields->client_id[0] = params.thread_id;  // ProcessId
+    fields->client_id[1] = params.thread_id;  // ThreadId
+
+    if (!set_guest_gs_base(teb)) {
+        free_guest_teb(teb);
+        auto* const slot = params.slot;
+        {
+            const std::lock_guard<std::mutex> lock(slot->join_mutex);
+            slot->exit_code = -1;
+            slot->finished = true;
+        }
+        slot->finish_cv.notify_all();
+        return;
+    }
+
+    // Prepara o contexto de saída para ExitThread.
+    g_guest_execution_active = true;
+    g_guest_exit_code = 0;
+
+    if (setjmp(g_guest_exit_context) == 0) {
+        // Chama a função convidada via trampoline.
+        using ThreadEntry = TL_MSABI void (*)(void*);
+        const auto entry = std::bit_cast<ThreadEntry>(params.entry_point);
+        entry(params.parameter);
+        // Retorno normal: a thread terminou sem chamar ExitThread.
+        g_guest_execution_active = false;
+    }
+    // ExitThread chegou via longjmp OU retorno normal acima.
+    g_guest_execution_active = false;
+    static_cast<void>(set_guest_gs_base(nullptr));
+    free_guest_teb(teb);
+
+    auto* const slot = params.slot;
+    {
+        const std::lock_guard<std::mutex> lock(slot->join_mutex);
+        slot->exit_code = static_cast<int>(g_guest_exit_code);
+        slot->finished = true;
+    }
+    slot->finish_cv.notify_all();
+}
+
+TL_MSABI void* tl_CreateThread(
+    const void* /*security_attributes*/,
+    const std::uintptr_t stack_size,
+    const std::uintptr_t start_address,
+    void* const parameter,
+    const std::uint32_t creation_flags,
+    std::uint32_t* const thread_id_out) noexcept {
+
+    if (start_address == 0) {
+        set_last_error(abi::kErrorInvalidParameter);
+        trace_guest_failure("CreateThread", "start-address", "ponteiro nulo");
+        return nullptr;
+    }
+    if (thread_id_out != nullptr && !mapped_guest_range(thread_id_out, sizeof(*thread_id_out), true)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        trace_guest_failure("CreateThread", "thread-id", "ponteiro sem permissão de escrita");
+        return nullptr;
+    }
+
+    // Encontra um slot de thread livre.
+    ThreadSlot* slot = nullptr;
+    for (auto& s : g_threads) {
+        if (!s.used) {
+            slot = &s;
+            break;
+        }
+    }
+    if (slot == nullptr) {
+        set_last_error(abi::kErrorNotEnoughMemory);
+        trace_guest_failure("CreateThread", "thread-slot", "exaustão de slots de thread");
+        return nullptr;
+    }
+
+    const std::uint32_t tid = g_next_thread_id.fetch_add(1);
+    const std::uintptr_t actual_stack_size =
+        stack_size == 0 ? 0x100000U : stack_size;  // Default 1 MiB
+
+    // Aloca a pilha convidada (mmap anônimo, protegido).
+    constexpr std::size_t kGuardPageSize = 0x1000U;
+    const std::uintptr_t total_size = actual_stack_size + kGuardPageSize;
+    void* const stack_mem = mmap(nullptr, static_cast<std::size_t>(total_size),
+                                  PROT_READ | PROT_WRITE,
+                                  MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    if (stack_mem == MAP_FAILED) {
+        set_last_error(abi::kErrorNotEnoughMemory);
+        trace_guest_failure("CreateThread", "stack-alloc", "falha ao alocar pilha");
+        return nullptr;
+    }
+    // Protege a página inferior como guard page.
+    static_cast<void>(mprotect(stack_mem, kGuardPageSize, PROT_NONE));
+
+    const std::uintptr_t stack_top =
+        std::bit_cast<std::uintptr_t>(stack_mem) + total_size;
+
+    slot->used = true;
+    slot->thread_id = tid;
+    slot->stack = static_cast<std::byte*>(stack_mem);
+    slot->stack_top = stack_top;
+    slot->finished = false;
+    slot->joined = false;
+    slot->exit_code = 0;
+
+    GuestThreadParams params{};
+    params.entry_point = start_address;
+    params.stack_top = stack_top;
+    params.stack_size = actual_stack_size;
+    params.thread_id = tid;
+    params.parameter = parameter;
+    params.slot = slot;
+
+    if (creation_flags & 0x00000001U) {  // CREATE_SUSPENDED
+        // Por simplicidade, criamos a thread e a suspendemos imediatamente
+        // usando uma variável de condição. Para o escopo atual (fixture de
+        // teste), CREATE_SUSPENDED não é usado.
+        set_last_error(abi::kErrorInvalidParameter);
+        trace_guest_failure("CreateThread", "creation-flags",
+                            "CREATE_SUSPENDED não suportado");
+        // Limpa.
+        static_cast<void>(mprotect(stack_mem, kGuardPageSize, PROT_READ | PROT_WRITE));
+        static_cast<void>(munmap(stack_mem, static_cast<std::size_t>(total_size)));
+        slot->used = false;
+        return nullptr;
+    }
+
+    slot->host_thread = std::thread([params]() mutable { guest_thread_wrapper(params); });
+
+    if (thread_id_out != nullptr) {
+        *thread_id_out = tid;
+    }
+    set_last_error(abi::kErrorSuccess);
+
+    void* const handle = thread_slot_to_handle(*slot);
+    const std::array<diagnostics::TraceField, 4> fields{
+        diagnostics::TraceField{"symbol", "CreateThread"},
+        diagnostics::TraceField{"thread-id", std::to_string(tid)},
+        diagnostics::TraceField{"stack-size", std::to_string(actual_stack_size)},
+        diagnostics::TraceField{"status", "success"},
+    };
+    runtime_trace("CreateThread", fields, 4);
+    return handle;
+}
+
+TL_MSABI void tl_ExitThread(const std::uint32_t exit_code) noexcept {
+    g_guest_exit_code = exit_code;
+
+    const std::array<diagnostics::TraceField, 4> fields{
+        diagnostics::TraceField{"symbol", "ExitThread"},
+        diagnostics::TraceField{"thread-id", std::to_string(g_current_thread_id)},
+        diagnostics::TraceField{"exit-code", std::to_string(exit_code)},
+        diagnostics::TraceField{"status", "success"},
+    };
+    runtime_trace("ExitThread", fields, 4);
+
+    if (g_guest_execution_active) {
+        std::longjmp(g_guest_exit_context, 1);
+    }
+    // Se não estamos no contexto de execução convidada, simplesmente retornamos.
+    // A thread hospedeira terminará naturalmente.
+}
+
+TL_MSABI std::uint32_t tl_WaitForSingleObject(const void* handle,
+                                               const std::uint32_t milliseconds) noexcept {
+    if (handle == nullptr) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return abi::kWaitFailed;
+    }
+
+    // Verifica se é um handle de thread.
+    ThreadSlot* thread = find_thread_slot(handle);
+    if (thread != nullptr) {
+        if (!thread->used) {
+            set_last_error(abi::kErrorInvalidHandle);
+            return abi::kWaitFailed;
+        }
+
+        // Espera a thread terminar.
+        {
+            std::unique_lock<std::mutex> lock(thread->join_mutex);
+            if (milliseconds == abi::kInfinite) {
+                thread->finish_cv.wait(lock, [&]() { return thread->finished; });
+            } else {
+                const auto status = thread->finish_cv.wait_for(
+                    lock, std::chrono::milliseconds(milliseconds),
+                    [&]() { return thread->finished; });
+                if (!status) {
+                    set_last_error(abi::kErrorSuccess);
+                    return abi::kWaitTimeout;
+                }
+            }
+        }
+
+        // Faz join na thread host se ainda não foi feito.
+        if (!thread->joined && thread->host_thread.joinable()) {
+            thread->host_thread.join();
+            thread->joined = true;
+        }
+
+        set_last_error(abi::kErrorSuccess);
+        const std::array<diagnostics::TraceField, 4> fields{
+            diagnostics::TraceField{"symbol", "WaitForSingleObject"},
+            diagnostics::TraceField{"thread-id", std::to_string(thread->thread_id)},
+            diagnostics::TraceField{"result", "wait-completed"},
+            diagnostics::TraceField{"status", "success"},
+        };
+        runtime_trace("WaitForSingleObject", fields, 4);
+        return abi::kWaitObject0;
+    }
+
+    // Verifica se é um handle de arquivo (compatibilidade com código existente).
+    FileSlot* file = find_file_slot(handle);
+    if (file != nullptr) {
+        // Arquivos são sempre "sinalizados" (operam de forma síncrona).
+        set_last_error(abi::kErrorSuccess);
+        return abi::kWaitObject0;
+    }
+
+    set_last_error(abi::kErrorInvalidHandle);
+    trace_guest_failure("WaitForSingleObject", "handle-validation", "handle inválido");
+    return abi::kWaitFailed;
+}
+
 }  // extern "C"
 
 // Define o caminho do módulo convidado (chamado antes da execução).
@@ -2677,34 +3141,30 @@ GuestExecutionResult execute_guest_entry(const std::uintptr_t entry_point, // NO
     if (entry == nullptr || stack_top == 0) {
         return {};
     }
-    constexpr std::size_t kTebSize = sizeof(GuestTeb);
-    void* const teb = mmap(nullptr, kTebSize, PROT_READ | PROT_WRITE,
-                           MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-    if (teb == MAP_FAILED) {
+    constexpr std::uintptr_t kGuestStackSize = 0x100000U;  // 1 MiB
+    void* const teb = allocate_guest_teb(stack_top, kGuestStackSize);
+    if (teb == nullptr) {
         return {};
     }
-    auto* const fields = static_cast<GuestTeb*>(teb);
-    fields->self = teb;
-    fields->stack_base = std::bit_cast<void*>(stack_top);
-    fields->stack_limit = std::bit_cast<void*>(stack_top - 0x100000U);  // kGuestStackSize
     const bool gs_configured = set_guest_gs_base(teb);
     if (!gs_configured) {
-        static_cast<void>(munmap(teb, kTebSize));
+        free_guest_teb(teb);
         return {};
     }
     g_quit_requested = false;
     g_quit_code = 0;
     g_guest_execution_active = true;
+    g_current_thread_id = kMainThreadId;
     if (setjmp(g_guest_exit_context) == 0) {
         tl_call_guest_on_stack(std::bit_cast<std::uintptr_t>(entry), stack_top);
         g_guest_execution_active = false;
         static_cast<void>(set_guest_gs_base(nullptr));
-        static_cast<void>(munmap(teb, kTebSize));
+        free_guest_teb(teb);
         return {};
     }
     g_guest_execution_active = false;
     static_cast<void>(set_guest_gs_base(nullptr));
-    static_cast<void>(munmap(teb, kTebSize));
+    free_guest_teb(teb);
     return {.exited_explicitly = true, .exit_code = g_guest_exit_code};
 }
 

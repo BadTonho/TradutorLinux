@@ -620,5 +620,108 @@ TEST(Win32Utf16Test, GetCurrentDirectoryWReturnsWideString) {
                 (buf[0] >= L'a' && buf[0] <= L'z'));
 }
 
+// ==================== Fase 11: Concorrência ====================
+
+TEST(Win32ConcurrencyTest, TlsAllocReturnsValidIndex) {
+    const std::uint32_t idx1 = tl_TlsAlloc();
+    EXPECT_NE(idx1, 0xFFFFFFFFU);
+    EXPECT_LT(idx1, 64U);
+
+    const std::uint32_t idx2 = tl_TlsAlloc();
+    EXPECT_NE(idx2, 0xFFFFFFFFU);
+    EXPECT_NE(idx2, idx1);
+
+    // Liberar ambos para não consumir slots entre testes.
+    EXPECT_NE(tl_TlsFree(idx1), 0);
+    EXPECT_NE(tl_TlsFree(idx2), 0);
+}
+
+TEST(Win32ConcurrencyTest, TlsSetValueAndGetValueRoundTrip) {
+    const std::uint32_t idx = tl_TlsAlloc();
+    ASSERT_NE(idx, abi::kErrorTooManyTlsIndexes);
+
+    void* sentinel = reinterpret_cast<void*>(static_cast<std::uintptr_t>(0xDEADBEEF));
+    EXPECT_NE(tl_TlsSetValue(idx, sentinel), 0);
+    EXPECT_EQ(tl_TlsGetValue(idx), sentinel);
+
+    EXPECT_NE(tl_TlsFree(idx), 0);
+}
+
+TEST(Win32ConcurrencyTest, TlsSetValueRejectsInvalidIndex) {
+    EXPECT_EQ(tl_TlsSetValue(63, nullptr), 0);
+    EXPECT_EQ(tl_TlsSetValue(0xFFFFFFFF, nullptr), 0);
+}
+
+TEST(Win32ConcurrencyTest, TlsFreeInvalidIndexFails) {
+    EXPECT_EQ(tl_TlsFree(63), 0);
+    EXPECT_EQ(tl_TlsFree(0xFFFFFFFF), 0);
+}
+
+TEST(Win32ConcurrencyTest, GetCurrentThreadIdReturnsNonZero) {
+    const std::uint32_t tid = tl_GetCurrentThreadId();
+    EXPECT_NE(tid, 0U);
+}
+
+TEST(Win32ConcurrencyTest, GetCurrentProcessIdMatchesHost) {
+    const std::uint32_t pid = tl_GetCurrentProcessId();
+    EXPECT_EQ(pid, static_cast<std::uint32_t>(getpid()));
+}
+
+TEST(Win32ConcurrencyTest, CriticalSectionInitEnterLeaveDelete) {
+    // CRITICAL_SECTION is 40 bytes on Windows x64.
+    alignas(8) char cs[40]{};
+    tl_InitializeCriticalSection(cs);
+    tl_EnterCriticalSection(cs);
+    tl_LeaveCriticalSection(cs);
+    tl_DeleteCriticalSection(cs);
+}
+
+TEST(Win32ConcurrencyTest, CriticalSectionRejectsNull) {
+    // All four should fail gracefully.
+    tl_InitializeCriticalSection(nullptr);
+    tl_EnterCriticalSection(nullptr);
+    tl_LeaveCriticalSection(nullptr);
+    tl_DeleteCriticalSection(nullptr);
+}
+
+TEST(Win32ConcurrencyTest, CloseHandleRejectsNull) {
+    EXPECT_EQ(tl_CloseHandle(nullptr), 0);
+}
+
+TEST(Win32ConcurrencyTest, CloseHandleRejectsGarbage) {
+    EXPECT_EQ(tl_CloseHandle(reinterpret_cast<const void*>(0x12345678ULL)), 0);
+}
+
+TEST(Win32ConcurrencyTest, WaitForSingleObjectRejectsInvalidHandle) {
+    EXPECT_EQ(tl_WaitForSingleObject(reinterpret_cast<const void*>(0xBADULL), 0),
+              abi::kWaitFailed);
+}
+
+TEST(Win32ConcurrencyTest, TlsAllocExhaustion) {
+    // Allocate all 64 slots.
+    std::uint32_t indices[64];
+    std::uint32_t allocated = 0;
+    for (std::uint32_t i = 0; i < 64; ++i) {
+        indices[i] = tl_TlsAlloc();
+        if (indices[i] == abi::kErrorTooManyTlsIndexes) break;
+        ++allocated;
+    }
+    EXPECT_EQ(allocated, 64U);
+
+    // The next allocation should fail (TLS_OUT_OF_INDEXES = 0xFFFFFFFF).
+    EXPECT_EQ(tl_TlsAlloc(), 0xFFFFFFFFU);
+
+    // Free all.
+    for (std::uint32_t i = 0; i < allocated; ++i) {
+        EXPECT_NE(tl_TlsFree(indices[i]), 0);
+    }
+}
+
+TEST(Win32ConcurrencyTest, TlsFreeIdempotentOnInvalidIndex) {
+    // Freeing an already-free or never-allocated index should fail but not crash.
+    EXPECT_EQ(tl_TlsFree(0), 0);
+    EXPECT_EQ(tl_TlsFree(0), 0);
+}
+
 }  // namespace
 }  // namespace tradutorlinux
