@@ -19,7 +19,7 @@ Os itens marcados como concluídos devem ter evidência no repositório: código
 
 ## Estado atual
 
-- **Fase atual:** Fase 8 — Aplicativos-alvo reais.
+- **Fase atual:** Fase 10 — Sistema de arquivos e utilitários.
 - **Marco concluído:** a Fase 7 foi validada de ponta a ponta e a decisão de produto foi tomada: **seguir com a GUI Win32 mínima como objetivo experimental**. `tl_gui.exe` abriu a janela X11, recebeu o clique em OK e encerrou com código `0`; `tl_win.exe` criou uma janela real e executou um message loop completo (`RegisterClassExA`, `CreateWindowExA`, `ShowWindow`, `GetMessageA`, `DispatchMessageA`, `DefWindowProcA`, `PostQuitMessage`), encerrando via `WM_CLOSE`/autoclose com código `0`; o modo `--report` lista imports suportados sem executar o PE; `tl_hello`, `tl_echo` e `tl_file` têm regressões e limitações publicadas na matriz.
 - **Marco concluído:** o smoke test de GUI passou a ter cobertura automática em CI. O teste `runtime_gui_smoke` sobe um `Xvfb` próprio e executa `tl_win.exe` de ponta a ponta em dois cenários: autoclose (message loop encerra sozinho via `WM_QUIT`) e fechamento real por `WM_DELETE_WINDOW` (mesmo `ClientMessage` do botão de fechar do WM), exigindo exit-code `1`, stdout vazio e os eventos esperados no trace. A conexão X11 do runtime é fechada no teardown (`DisplayCloser`), validado sob ASAN com `detect_leaks=1`.
 - **Marco concluído:** `CreateWindowExA` agora despacha `WM_CREATE` ao `WNDPROC` do convidado antes de devolver o `HWND` (retorno `-1` aborta a criação e devolve `NULL`). A fixture `tl_win.c` marca uma flag no `WM_CREATE` e propaga no exit code via `PostQuitMessage`, então o `runtime_gui_smoke` prova o despacho exigindo exit-code `1`.
@@ -196,9 +196,9 @@ recebem argumentos e retornam seus códigos corretamente.
 Expandir a camada para programas que trabalham com diretórios, configuração e
 arquivos, mantendo uma tradução de caminhos segura e explícita.
 
-- [ ] Implementar `FindFirstFileA/W`, `FindNextFileA/W` e `FindClose`.
-- [ ] Implementar `GetFileAttributesA/W`, `DeleteFileA/W`, `MoveFileA/W` e `CreateDirectoryA/W`.
-- [ ] Implementar `SetFilePointer`, tamanhos de arquivo e modo append quando exigidos.
+- [x] Implementar `FindFirstFileA/W`, `FindNextFileA/W` e `FindClose`.
+- [x] Implementar `GetFileAttributesA/W`, `DeleteFileA/W`, `MoveFileA/W` e `CreateDirectoryA/W`.
+- [x] Implementar `SetFilePointer`, tamanhos de arquivo e modo append quando exigidos.
 - [ ] Definir diretório atual, diretório do executável e variáveis de ambiente sem inventar letras de drive.
 - [ ] Implementar conversão UTF-16/UTF-8 e testar nomes não ASCII.
 - [ ] Adicionar testes de permissões, arquivos inexistentes, diretórios e concorrência controlada.

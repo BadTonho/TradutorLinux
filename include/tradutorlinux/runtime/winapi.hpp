@@ -257,6 +257,19 @@ TL_MSABI void* tl_HeapReAlloc(void* heap, std::uint32_t flags, void* memory,
 TL_MSABI std::uint64_t tl_GetTickCount64() noexcept;
 TL_MSABI void tl_GetSystemTimeAsFileTime(void* file_time) noexcept;
 
+// Fase 10: Sistema de arquivos e utilitários.
+TL_MSABI std::uint32_t tl_GetFileSize(const void* handle, std::uint32_t* high_size) noexcept;
+TL_MSABI std::int32_t tl_SetFilePointer(const void* handle, std::int32_t distance,
+                                         std::int32_t* high_distance,
+                                         std::uint32_t move_method) noexcept;
+TL_MSABI std::uint32_t tl_GetFileAttributesA(const char* path) noexcept;
+TL_MSABI int tl_DeleteFileA(const char* path) noexcept;
+TL_MSABI int tl_MoveFileA(const char* from, const char* to) noexcept;
+TL_MSABI int tl_CreateDirectoryA(const char* path, const void* security_attributes) noexcept;
+TL_MSABI void* tl_FindFirstFileA(const char* path, void* find_data) noexcept;
+TL_MSABI int tl_FindNextFileA(const void* handle, void* find_data) noexcept;
+TL_MSABI int tl_FindClose(const void* handle) noexcept;
+
 }  // extern "C"
 
 // Executa um entry point Microsoft x64 e captura ExitProcess sem encerrar o

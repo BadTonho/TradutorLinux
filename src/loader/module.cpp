@@ -102,6 +102,15 @@ void register_builtin_modules() {
         {"HeapReAlloc", 35, reinterpret_cast<std::uintptr_t>(&tl_HeapReAlloc)},
         {"GetTickCount64", 36, reinterpret_cast<std::uintptr_t>(&tl_GetTickCount64)},
         {"GetSystemTimeAsFileTime", 37, reinterpret_cast<std::uintptr_t>(&tl_GetSystemTimeAsFileTime)},
+        {"GetFileSize", 38, reinterpret_cast<std::uintptr_t>(&tl_GetFileSize)},
+        {"SetFilePointer", 39, reinterpret_cast<std::uintptr_t>(&tl_SetFilePointer)},
+        {"GetFileAttributesA", 40, reinterpret_cast<std::uintptr_t>(&tl_GetFileAttributesA)},
+        {"DeleteFileA", 41, reinterpret_cast<std::uintptr_t>(&tl_DeleteFileA)},
+        {"MoveFileA", 42, reinterpret_cast<std::uintptr_t>(&tl_MoveFileA)},
+        {"CreateDirectoryA", 43, reinterpret_cast<std::uintptr_t>(&tl_CreateDirectoryA)},
+        {"FindFirstFileA", 44, reinterpret_cast<std::uintptr_t>(&tl_FindFirstFileA)},
+        {"FindNextFileA", 45, reinterpret_cast<std::uintptr_t>(&tl_FindNextFileA)},
+        {"FindClose", 46, reinterpret_cast<std::uintptr_t>(&tl_FindClose)},
     };
     static const InternalModule kKernel32Module{"KERNEL32.dll", kKernel32Exports};
     register_module(kKernel32Module);

@@ -3,12 +3,16 @@
 #include <array>
 #include <chrono>
 #include <cstdint>
+#include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <string>
 #include <thread>
 #include <vector>
 
 #include <gtest/gtest.h>
+#include <unistd.h>
+#include <sys/stat.h>
 
 namespace tradutorlinux {
 namespace {
@@ -338,6 +342,175 @@ TEST(Win32TimeTest, GetSystemTimeAsFileTimeReturnsReasonableValue) {
     // Year 2020 in 100-ns intervals since 1601
     const std::uint64_t year_2020 = 132537600000000000ULL;
     EXPECT_GT(ft, year_2020);
+}
+
+// --- Fase 10: Sistema de arquivos e utilitários ---
+
+// Helper: cria um diretório temporário relativo para testes de filesystem.
+class TempDirFixture {
+public:
+    TempDirFixture() {
+        mkdir("_tl_test", 0777);
+    }
+    ~TempDirFixture() {
+        // Limpa arquivos criados.
+        for (const auto& f : created_files_) {
+            std::remove(f.c_str());
+        }
+        rmdir("_tl_test");
+    }
+    std::string path(const char* name) const {
+        const std::string p = std::string("_tl_test/") + name;
+        created_files_.push_back(p);
+        return p;
+    }
+private:
+    mutable std::vector<std::string> created_files_;
+};
+
+TEST(Win32FileTest, GetFileSizeReturnsCorrectSize) {
+    TempDirFixture ctx;
+    const std::string fpath = ctx.path("size_test.bin");
+    FILE* f = std::fopen(fpath.c_str(), "wb");
+    ASSERT_NE(f, nullptr);
+    const char data[] = "hello world";
+    std::fwrite(data, 1, sizeof(data) - 1, f);
+    std::fclose(f);
+
+    void* handle = tl_CreateFileA(fpath.c_str(), abi::kGenericRead, 0, nullptr,
+                                   abi::kOpenExisting, 0, nullptr);
+    ASSERT_NE(handle, nullptr);
+    std::uint32_t high = 0;
+    const std::uint32_t size = tl_GetFileSize(handle, &high);
+    EXPECT_EQ(size, sizeof(data) - 1);
+    EXPECT_EQ(high, 0U);
+    tl_CloseHandle(handle);
+}
+
+TEST(Win32FileTest, SetFilePointerSeeksToBeginning) {
+    TempDirFixture ctx;
+    const std::string fpath = ctx.path("seek_test.bin");
+    FILE* f = std::fopen(fpath.c_str(), "wb");
+    ASSERT_NE(f, nullptr);
+    const char data[] = "0123456789";
+    std::fwrite(data, 1, sizeof(data) - 1, f);
+    std::fclose(f);
+
+    void* handle = tl_CreateFileA(fpath.c_str(), abi::kGenericRead, 0, nullptr,
+                                   abi::kOpenExisting, 0, nullptr);
+    ASSERT_NE(handle, nullptr);
+    char buf[4]{};
+    std::uint32_t bytes_read = 0;
+    tl_ReadFile(handle, buf, 4, &bytes_read, nullptr);
+    EXPECT_EQ(bytes_read, 4U);
+    EXPECT_EQ(std::string(buf, 4), "0123");
+
+    const std::int32_t pos = tl_SetFilePointer(handle, 0, nullptr, 0);
+    EXPECT_EQ(pos, 0);
+
+    bytes_read = 0;
+    std::memset(buf, 0, sizeof(buf));
+    tl_ReadFile(handle, buf, 4, &bytes_read, nullptr);
+    EXPECT_EQ(std::string(buf, 4), "0123");
+    tl_CloseHandle(handle);
+}
+
+TEST(Win32FileTest, SetFilePointerSeekFromEnd) {
+    TempDirFixture ctx;
+    const std::string fpath = ctx.path("seek_end_test.bin");
+    FILE* f = std::fopen(fpath.c_str(), "wb");
+    ASSERT_NE(f, nullptr);
+    const char data[] = "ABCDEFGHIJ";
+    std::fwrite(data, 1, sizeof(data) - 1, f);
+    std::fclose(f);
+
+    void* handle = tl_CreateFileA(fpath.c_str(), abi::kGenericRead, 0, nullptr,
+                                   abi::kOpenExisting, 0, nullptr);
+    ASSERT_NE(handle, nullptr);
+    const std::int32_t pos = tl_SetFilePointer(handle, -3, nullptr, 2);
+    EXPECT_EQ(pos, 7);
+
+    char buf[4]{};
+    std::uint32_t bytes_read = 0;
+    tl_ReadFile(handle, buf, 3, &bytes_read, nullptr);
+    EXPECT_EQ(std::string(buf, 3), "HIJ");
+    tl_CloseHandle(handle);
+}
+
+TEST(Win32FileTest, GetFileAttributesAReturnsArchiveForFile) {
+    TempDirFixture ctx;
+    const std::string fpath = ctx.path("attrs_test.bin");
+    FILE* f = std::fopen(fpath.c_str(), "wb");
+    ASSERT_NE(f, nullptr);
+    std::fwrite("x", 1, 1, f);
+    std::fclose(f);
+
+    const std::uint32_t attrs = tl_GetFileAttributesA(fpath.c_str());
+    EXPECT_NE(attrs, 0xFFFFFFFFU);
+    EXPECT_NE(attrs & 0x20U, 0U);   // FILE_ATTRIBUTE_ARCHIVE
+}
+
+TEST(Win32FileTest, GetFileAttributesAReturnsDirectory) {
+    const char* tmpdir = "_tl_test_dir";
+    mkdir(tmpdir, 0777);
+    const std::uint32_t attrs = tl_GetFileAttributesA(tmpdir);
+    EXPECT_NE(attrs, 0xFFFFFFFFU);
+    EXPECT_NE(attrs & 0x10U, 0U);   // FILE_ATTRIBUTE_DIRECTORY
+    rmdir(tmpdir);
+}
+
+TEST(Win32FileTest, DeleteFileARemovesFile) {
+    TempDirFixture ctx;
+    const std::string fpath = ctx.path("delete_test.bin");
+    FILE* f = std::fopen(fpath.c_str(), "wb");
+    ASSERT_NE(f, nullptr);
+    std::fwrite("x", 1, 1, f);
+    std::fclose(f);
+
+    EXPECT_EQ(tl_DeleteFileA(fpath.c_str()), 1);
+    EXPECT_EQ(tl_GetFileAttributesA(fpath.c_str()), 0xFFFFFFFFU);
+}
+
+TEST(Win32FileTest, MoveFileARenamesFile) {
+    TempDirFixture ctx;
+    const std::string from = ctx.path("move_src.bin");
+    const std::string to = "_tl_test/move_dst.bin";
+    FILE* f = std::fopen(from.c_str(), "wb");
+    ASSERT_NE(f, nullptr);
+    std::fwrite("data", 1, 4, f);
+    std::fclose(f);
+
+    EXPECT_EQ(tl_MoveFileA(from.c_str(), to.c_str()), 1);
+    EXPECT_EQ(tl_GetFileAttributesA(from.c_str()), 0xFFFFFFFFU);
+    EXPECT_NE(tl_GetFileAttributesA(to.c_str()), 0xFFFFFFFFU);
+    std::remove(to.c_str());
+}
+
+TEST(Win32FileTest, CreateDirectoryACreatesDirectory) {
+    const char* tmpdir = "_tl_test_mkdir";
+    EXPECT_EQ(tl_CreateDirectoryA(tmpdir, nullptr), 1);
+    struct stat st{};
+    EXPECT_EQ(stat(tmpdir, &st), 0);
+    EXPECT_TRUE(S_ISDIR(st.st_mode));
+    rmdir(tmpdir);
+}
+
+TEST(Win32FileTest, FindFirstFileAFindsFileInDirectory) {
+    const char* tmpdir = "_tl_test_find";
+    mkdir(tmpdir, 0777);
+    const std::string file_path = std::string(tmpdir) + "/testfile.txt";
+    FILE* f = std::fopen(file_path.c_str(), "wb");
+    ASSERT_NE(f, nullptr);
+    std::fwrite("content", 1, 7, f);
+    std::fclose(f);
+
+    const std::string pattern = std::string(tmpdir) + "/*";
+    char find_data_buf[400]{};
+    void* find_handle = tl_FindFirstFileA(pattern.c_str(), find_data_buf);
+    ASSERT_NE(find_handle, reinterpret_cast<void*>(std::numeric_limits<std::uintptr_t>::max()));
+    tl_FindClose(find_handle);
+    std::remove(file_path.c_str());
+    rmdir(tmpdir);
 }
 
 }  // namespace

@@ -242,3 +242,37 @@ Observações que orientam a próxima etapa (Fase 9/10):
   `crt2.o` do mingw delega a linha de comando e o ambiente ao `__getmainargs`
   de `msvcrt.dll`, então essas APIs são dependência interna do CRT mínimo, e
   não do aplicativo.
+
+## Sistema de arquivos (Fase 10)
+
+O subsistema de arquivos expande o `CreateFileA`/`ReadFile`/`WriteFile`/
+`CloseHandle` da Fase 5 com APIs de manipulação de diretórios, atributos e
+enumeração. A tradução de caminhos Windows (`\\` → `/`) é reutilizável via
+`translate_windows_path()` e rejeita letras de drive e caminhos absolutos.
+
+| Módulo | API | Estado | Comportamento suportado |
+|---|---|---|---|
+| `KERNEL32.dll` | `GetFileSize` | Suportado | Retorna tamanho do arquivo aberto via `FileSlot.file_size`; suporta ponteiro `high_size` para arquivos > 4 GiB |
+| `KERNEL32.dll` | `SetFilePointer` | Suportado | Seek por `FILE_BEGIN`/`FILE_CURRENT`/`FILE_END`; suporta ponteiro `high_distance`; atualiza `FileSlot.position` |
+| `KERNEL32.dll` | `GetFileAttributesA` | Suportado | `stat()` + bits `FILE_ATTRIBUTE_DIRECTORY`/`FILE_ATTRIBUTE_ARCHIVE`/`FILE_ATTRIBUTE_READONLY` |
+| `KERNEL32.dll` | `DeleteFileA` | Suportado | `unlink()` com mapeamento de erros |
+| `KERNEL32.dll` | `MoveFileA` | Suportado | `rename()` com mapeamento de erros |
+| `KERNEL32.dll` | `CreateDirectoryA` | Suportado | `mkdir()` com permissão 0777 |
+| `KERNEL32.dll` | `FindFirstFileA` | Suportado | Abre `opendir()` + `readdir()` com padrão simples (`*` e correspondência exata); preenche `WIN32_FIND_DATAA` simplificado |
+| `KERNEL32.dll` | `FindNextFileA` | Suportado | Continua iteração com o mesmo padrão |
+| `KERNEL32.dll` | `FindClose` | Suportado | Fecha `DIR*` e libera slot |
+
+### Limitações conhecidas
+
+- `WIN32_FIND_DATAA` é 328 bytes (padded), não 336 como no Windows nativo;
+  o convidado não deve depender do tamanho exato da estrutura.
+- `FindFirstFileA` só aceita `*` como curinga; `?` e sequências `[a-z]` não
+  são suportados.
+- `CreateFileA` continua limitado a caminhos relativos sem letra de drive.
+- `FileSlot` agora rastreia `file_size` e `position`; `ReadFile` e `WriteFile`
+  atualizam a posição automaticamente.
+- `GetFileAttributesA` para arquivos inexistentes retorna `0xFFFFFFFF` com
+  `ERROR_FILE_NOT_FOUND`.
+- 9 testes unitários novos em `tests/test_win32.cpp` cobrem `GetFileSize`,
+  `SetFilePointer` (seek beginning/end), `GetFileAttributesA` (file/directory),
+  `DeleteFileA`, `MoveFileA`, `CreateDirectoryA` e `FindFirstFileA`/`FindClose`.

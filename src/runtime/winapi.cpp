@@ -25,7 +25,9 @@
 #include <thread>
 #include <vector>
 #include <fcntl.h>
+#include <dirent.h>
 #include <sys/mman.h>
+#include <sys/stat.h>
 #include <sys/syscall.h>
 #include <sys/types.h>
 #include <unistd.h>
@@ -52,6 +54,8 @@ char kStockObjectTokens[24]{};
 struct FileSlot {
     int fd{-1};
     bool used{false};
+    std::uint64_t file_size{0};
+    std::int64_t position{0};
 };
 
 struct AllocationSlot {
@@ -251,6 +255,85 @@ int handle_fd(const void* handle) noexcept {
 
 void trace_stub(const char* symbol) noexcept {
     trace_guest_failure(symbol, "argument-validation", "ponteiro ou parâmetro inválido");
+}
+
+// Tradução de caminho Windows → Linux. Converte barras invertidas para
+// normais, rejeita letras de drive e caminhos absolutos. Retorna false se o
+// caminho for inválido.
+[[nodiscard]] bool translate_windows_path(const char* win_path,
+                                          char* linux_out,
+                                          std::size_t out_size) noexcept {
+    if (win_path == nullptr || win_path[0] == '\0' || win_path[0] == '/' ||
+        win_path[0] == '\\') {
+        return false;
+    }
+    std::size_t length = 0;
+    for (; win_path[length] != '\0'; ++length) {
+        if (length + 1U >= out_size || win_path[length] == ':') {
+            return false;
+        }
+        linux_out[length] = win_path[length] == '\\' ? '/' : win_path[length];
+    }
+    linux_out[length] = '\0';
+    return true;
+}
+
+// WIN32_FIND_DATAA simplificado (layout compatível com o convidado).
+// Tamanho total: 320 bytes (padding alinhado a 8).
+struct Win32FindDataA {
+    std::uint32_t dw_file_attributes{0};
+    std::uint64_t ft_creation_time{0};
+    std::uint64_t ft_last_access_time{0};
+    std::uint64_t ft_last_write_time{0};
+    std::uint32_t n_file_size_high{0};
+    std::uint32_t n_file_size_low{0};
+    std::uint32_t dw_reserved0{0};
+    std::uint32_t dw_reserved1{0};
+    char c_file_name[260]{};
+    char c_alternate_file_name[14]{};
+};
+static_assert(sizeof(Win32FindDataA) == 328);
+
+// Atributos de arquivo Win32.
+constexpr std::uint32_t kFileAttributeReadOnly = 0x00000001U;
+constexpr std::uint32_t kFileAttributeHidden = 0x00000002U;
+constexpr std::uint32_t kFileAttributeSystem = 0x00000004U;
+constexpr std::uint32_t kFileAttributeDirectory = 0x00000010U;
+constexpr std::uint32_t kFileAttributeArchive = 0x00000020U;
+constexpr std::uint32_t kFileAttributeNormal = 0x00000080U;
+
+// Handle sentinela para FindFirstFile/FindNextFile: usa um intervalo alto do
+// espaço de ponteiros para distinguir de handles de arquivo normais.
+constexpr std::uintptr_t kFindHandleBase = 0x0000800000000000ULL;
+
+struct FindSlot {
+    bool used{false};
+    DIR* dir{nullptr};
+    std::string pattern;
+    std::string directory;
+};
+std::array<FindSlot, 16> g_find_slots{};
+
+[[nodiscard]] FindSlot* find_slot_for_handle(const void* handle) noexcept {
+    const auto idx = reinterpret_cast<std::uintptr_t>(handle) - kFindHandleBase;
+    if (idx >= g_find_slots.size()) {
+        return nullptr;
+    }
+    return &g_find_slots[idx];
+}
+
+// Retorna os atributos Win32 a partir de stat(). Bit somente-leitura é
+// derivado da permissão de escrita.
+[[nodiscard]] std::uint32_t stat_to_win32_attributes(const char* path,
+                                                     const struct stat& st) noexcept {
+    if (S_ISDIR(st.st_mode)) {
+        return kFileAttributeDirectory | kFileAttributeArchive;
+    }
+    std::uint32_t attrs = kFileAttributeArchive;
+    if (access(path, W_OK) != 0) {
+        attrs |= kFileAttributeReadOnly;
+    }
+    return attrs;
 }
 
 struct ClassSlot {
@@ -738,6 +821,12 @@ TL_MSABI int tl_WriteFile(const void* handle, const void* const buffer,
         }
         total += static_cast<std::uint32_t>(result);
     }
+    if (FileSlot* slot = find_file_slot(handle); slot != nullptr) {
+        slot->position += total;
+        if (static_cast<std::uint64_t>(slot->position) > slot->file_size) {
+            slot->file_size = static_cast<std::uint64_t>(slot->position);
+        }
+    }
     if (bytes_written != nullptr) {
         *bytes_written = total;
     }
@@ -784,6 +873,9 @@ TL_MSABI int tl_ReadFile(const void* const handle, void* const buffer, // NOLINT
         set_last_error(failure_error);
         trace_linux_failure("ReadFile", "read", errno, failure_error);
         return 0;
+    }
+    if (FileSlot* slot = find_file_slot(handle); slot != nullptr) {
+        slot->position += result;
     }
     if (bytes_read != nullptr) {
         *bytes_read = static_cast<std::uint32_t>(result);
@@ -891,7 +983,7 @@ TL_MSABI void* tl_CreateFileA(const char* const path, const std::uint32_t desire
                               const std::uint32_t creation_disposition,
                               const std::uint32_t flags,
                               const void* const template_file) noexcept {
-    if (!mapped_guest_cstring(path) || path == nullptr || path[0] == '\0' || path[0] == '/' || path[0] == '\\' ||
+    if (!mapped_guest_cstring(path) || path == nullptr || path[0] == '\0' ||
         share_mode != 0 || security_attributes != nullptr || flags != 0 ||
         template_file != nullptr ||
         (desired_access & ~(abi::kGenericRead | abi::kGenericWrite)) != 0 ||
@@ -901,15 +993,10 @@ TL_MSABI void* tl_CreateFileA(const char* const path, const std::uint32_t desire
         return nullptr;
     }
     char normalized[4096]{};
-    std::size_t length = 0;
-    for (; path[length] != '\0'; ++length) {
-        if (length + 1U >= sizeof(normalized) || path[length] == ':') {
-            set_last_error(abi::kErrorInvalidParameter);
-            return nullptr;
-        }
-        normalized[length] = path[length] == '\\' ? '/' : path[length];
+    if (!translate_windows_path(path, normalized, sizeof(normalized))) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return nullptr;
     }
-    normalized[length] = '\0';
     int open_flags = 0;
     const bool can_read = (desired_access & abi::kGenericRead) != 0;
     const bool can_write = (desired_access & abi::kGenericWrite) != 0;
@@ -937,6 +1024,11 @@ TL_MSABI void* tl_CreateFileA(const char* const path, const std::uint32_t desire
         FileSlot& slot = *free_it;
         slot.fd = fd;
         slot.used = true;
+        slot.position = 0;
+        struct stat st{};
+        if (fstat(fd, &st) == 0) {
+            slot.file_size = static_cast<std::uint64_t>(st.st_size);
+        }
         set_last_error(abi::kErrorSuccess);
         return &slot;
     }
@@ -2153,6 +2245,327 @@ void tl_GetSystemTimeAsFileTime(void* file_time) noexcept {
     const std::uint64_t ticks_100ns = static_cast<std::uint64_t>(since_epoch) / 100;
     const std::uint64_t epoch_diff = 116444736000000000ULL;
     *ft = ticks_100ns + epoch_diff;
+}
+
+// --- Fase 10: Sistema de arquivos e utilitários ---
+
+TL_MSABI std::uint32_t tl_GetFileSize(const void* handle, std::uint32_t* high_size) noexcept {
+    const FileSlot* slot = find_file_slot(handle);
+    if (slot == nullptr) {
+        set_last_error(abi::kErrorInvalidHandle);
+        return 0xFFFFFFFFU;
+    }
+    if (high_size != nullptr && !mapped_guest_range(high_size, sizeof(*high_size), true)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0xFFFFFFFFU;
+    }
+    if (high_size != nullptr) {
+        *high_size = static_cast<std::uint32_t>(slot->file_size >> 32);
+    }
+    set_last_error(abi::kErrorSuccess);
+    return static_cast<std::uint32_t>(slot->file_size & 0xFFFFFFFFU);
+}
+
+// Métodos de SeekFilePointer.
+constexpr std::uint32_t kFileBegin = 0;
+constexpr std::uint32_t kFileCurrent = 1;
+constexpr std::uint32_t kFileEnd = 2;
+
+TL_MSABI std::int32_t tl_SetFilePointer(const void* handle, std::int32_t distance,
+                                         std::int32_t* high_distance,
+                                         std::uint32_t move_method) noexcept {
+    FileSlot* slot = find_file_slot(handle);
+    if (slot == nullptr) {
+        set_last_error(abi::kErrorInvalidHandle);
+        return -1;
+    }
+    if (move_method > kFileEnd) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return -1;
+    }
+    if (high_distance != nullptr && !mapped_guest_range(high_distance, sizeof(*high_distance), true)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return -1;
+    }
+
+    std::int64_t offset = distance;
+    if (high_distance != nullptr) {
+        offset |= static_cast<std::int64_t>(*high_distance) << 32;
+    }
+
+    std::int64_t new_pos = 0;
+    switch (move_method) {
+        case kFileBegin:
+            new_pos = offset;
+            break;
+        case kFileCurrent:
+            new_pos = slot->position + offset;
+            break;
+        case kFileEnd:
+            new_pos = static_cast<std::int64_t>(slot->file_size) + offset;
+            break;
+    }
+    if (new_pos < 0) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return -1;
+    }
+    const off_t result = lseek(slot->fd, static_cast<off_t>(new_pos), SEEK_SET);
+    if (result < 0) {
+        const std::uint32_t failure_error = errno_to_win32(errno);
+        set_last_error(failure_error);
+        return -1;
+    }
+    slot->position = static_cast<std::int64_t>(result);
+    if (high_distance != nullptr) {
+        *high_distance = static_cast<std::int32_t>(slot->position >> 32);
+    }
+    set_last_error(abi::kErrorSuccess);
+    return static_cast<std::int32_t>(slot->position & 0xFFFFFFFFU);
+}
+
+TL_MSABI std::uint32_t tl_GetFileAttributesA(const char* path) noexcept {
+    if (!mapped_guest_cstring(path) || path == nullptr || path[0] == '\0') {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0xFFFFFFFF;
+    }
+    char normalized[4096]{};
+    if (!translate_windows_path(path, normalized, sizeof(normalized))) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0xFFFFFFFF;
+    }
+    struct stat st{};
+    if (stat(normalized, &st) != 0) {
+        const std::uint32_t failure_error = errno_to_win32(errno);
+        set_last_error(failure_error);
+        return 0xFFFFFFFF;
+    }
+    set_last_error(abi::kErrorSuccess);
+    return stat_to_win32_attributes(normalized, st);
+}
+
+TL_MSABI int tl_DeleteFileA(const char* path) noexcept {
+    if (!mapped_guest_cstring(path) || path == nullptr || path[0] == '\0') {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    char normalized[4096]{};
+    if (!translate_windows_path(path, normalized, sizeof(normalized))) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    if (unlink(normalized) != 0) {
+        const std::uint32_t failure_error = errno_to_win32(errno);
+        set_last_error(failure_error);
+        return 0;
+    }
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_MoveFileA(const char* from, const char* to) noexcept {
+    if (!mapped_guest_cstring(from) || from == nullptr || from[0] == '\0' ||
+        !mapped_guest_cstring(to) || to == nullptr || to[0] == '\0') {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    char from_norm[4096]{};
+    char to_norm[4096]{};
+    if (!translate_windows_path(from, from_norm, sizeof(from_norm)) ||
+        !translate_windows_path(to, to_norm, sizeof(to_norm))) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    if (rename(from_norm, to_norm) != 0) {
+        const std::uint32_t failure_error = errno_to_win32(errno);
+        set_last_error(failure_error);
+        return 0;
+    }
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_CreateDirectoryA(const char* path, const void* /*security_attributes*/) noexcept {
+    if (!mapped_guest_cstring(path) || path == nullptr || path[0] == '\0') {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    char normalized[4096]{};
+    if (!translate_windows_path(path, normalized, sizeof(normalized))) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    if (mkdir(normalized, 0777) != 0) {
+        const std::uint32_t failure_error = errno_to_win32(errno);
+        set_last_error(failure_error);
+        return 0;
+    }
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI void* tl_FindFirstFileA(const char* path, void* find_data) noexcept {
+    if (!mapped_guest_cstring(path) || path == nullptr || path[0] == '\0' ||
+        find_data == nullptr || !mapped_guest_range(find_data, sizeof(Win32FindDataA), true)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return reinterpret_cast<void*>(std::numeric_limits<std::uintptr_t>::max());
+    }
+    char normalized[4096]{};
+    if (!translate_windows_path(path, normalized, sizeof(normalized))) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return reinterpret_cast<void*>(std::numeric_limits<std::uintptr_t>::max());
+    }
+    // Separar diretório do padrão. Se não há '/', o padrão é ".".
+    std::string dir_path;
+    std::string pattern;
+    const char* last_slash = strrchr(normalized, '/');
+    if (last_slash != nullptr) {
+        dir_path.assign(normalized, static_cast<std::size_t>(last_slash - normalized));
+        pattern = last_slash + 1;
+    } else {
+        dir_path = ".";
+        pattern = normalized;
+    }
+    DIR* dir = opendir(dir_path.c_str());
+    if (dir == nullptr) {
+        const std::uint32_t failure_error = errno_to_win32(errno);
+        set_last_error(failure_error);
+        return reinterpret_cast<void*>(std::numeric_limits<std::uintptr_t>::max());
+    }
+    // Encontrar um slot livre.
+    FindSlot* slot = nullptr;
+    for (auto& s : g_find_slots) {
+        if (!s.used) {
+            slot = &s;
+            break;
+        }
+    }
+    if (slot == nullptr) {
+        closedir(dir);
+        set_last_error(abi::kErrorNotEnoughMemory);
+        return reinterpret_cast<void*>(std::numeric_limits<std::uintptr_t>::max());
+    }
+    // Procurar a primeira entrada que combine com o padrão.
+    struct dirent* entry = nullptr;
+    auto* data = static_cast<Win32FindDataA*>(find_data);
+    // Limpar a estrutura.
+    *data = {};
+    while ((entry = readdir(dir)) != nullptr) {
+        if (entry->d_name[0] == '.' &&
+            (entry->d_name[1] == '\0' ||
+             (entry->d_name[1] == '.' && entry->d_name[2] == '\0'))) {
+            continue;
+        }
+        // Correspondência simples: se o padrão contém '*', aceitar qualquer
+        // coisa antes do '*'; caso contrário, correspondência exata.
+        bool matches = false;
+        if (pattern == "*") {
+            matches = true;
+        } else if (pattern.find('*') != std::string::npos) {
+            const auto star_pos = pattern.find('*');
+            const std::string prefix = pattern.substr(0, star_pos);
+            matches = std::string_view(entry->d_name).substr(0, prefix.size()) == prefix;
+        } else {
+            matches = (pattern == entry->d_name);
+        }
+        if (!matches) {
+            continue;
+        }
+        // Preencher WIN32_FIND_DATAA.
+        std::string full_path = dir_path + "/" + entry->d_name;
+        struct stat st{};
+        if (stat(full_path.c_str(), &st) == 0) {
+            data->dw_file_attributes = stat_to_win32_attributes(full_path.c_str(), st);
+            data->n_file_size_low = static_cast<std::uint32_t>(st.st_size & 0xFFFFFFFF);
+            data->n_file_size_high = static_cast<std::uint32_t>(st.st_size >> 32);
+        } else {
+            data->dw_file_attributes = kFileAttributeNormal;
+        }
+        const std::size_t name_len = std::strlen(entry->d_name);
+        if (name_len < sizeof(data->c_file_name)) {
+            std::memcpy(data->c_file_name, entry->d_name, name_len + 1);
+        }
+        slot->used = true;
+        slot->dir = dir;
+        slot->pattern = pattern;
+        slot->directory = dir_path;
+        set_last_error(abi::kErrorSuccess);
+        const auto handle_val = kFindHandleBase +
+                               static_cast<std::uintptr_t>(slot - g_find_slots.data());
+        return reinterpret_cast<void*>(handle_val);
+    }
+    // Nenhuma entrada encontrada.
+    closedir(dir);
+    set_last_error(abi::kErrorFileNotFound);
+    return reinterpret_cast<void*>(std::numeric_limits<std::uintptr_t>::max());
+}
+
+TL_MSABI int tl_FindNextFileA(const void* handle, void* find_data) noexcept {
+    if (find_data == nullptr || !mapped_guest_range(find_data, sizeof(Win32FindDataA), true)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    FindSlot* slot = find_slot_for_handle(handle);
+    if (slot == nullptr || !slot->used || slot->dir == nullptr) {
+        set_last_error(abi::kErrorInvalidHandle);
+        return 0;
+    }
+    auto* data = static_cast<Win32FindDataA*>(find_data);
+    struct dirent* entry = nullptr;
+    while ((entry = readdir(slot->dir)) != nullptr) {
+        if (entry->d_name[0] == '.' &&
+            (entry->d_name[1] == '\0' ||
+             (entry->d_name[1] == '.' && entry->d_name[2] == '\0'))) {
+            continue;
+        }
+        bool matches = false;
+        if (slot->pattern == "*") {
+            matches = true;
+        } else if (slot->pattern.find('*') != std::string::npos) {
+            const auto star_pos = slot->pattern.find('*');
+            const std::string prefix = slot->pattern.substr(0, star_pos);
+            matches = std::string_view(entry->d_name).substr(0, prefix.size()) == prefix;
+        } else {
+            matches = (slot->pattern == entry->d_name);
+        }
+        if (!matches) {
+            continue;
+        }
+        *data = {};
+        std::string full_path = slot->directory + "/" + entry->d_name;
+        struct stat st{};
+        if (stat(full_path.c_str(), &st) == 0) {
+            data->dw_file_attributes = stat_to_win32_attributes(full_path.c_str(), st);
+            data->n_file_size_low = static_cast<std::uint32_t>(st.st_size & 0xFFFFFFFF);
+            data->n_file_size_high = static_cast<std::uint32_t>(st.st_size >> 32);
+        } else {
+            data->dw_file_attributes = kFileAttributeNormal;
+        }
+        const std::size_t name_len = std::strlen(entry->d_name);
+        if (name_len < sizeof(data->c_file_name)) {
+            std::memcpy(data->c_file_name, entry->d_name, name_len + 1);
+        }
+        set_last_error(abi::kErrorSuccess);
+        return 1;
+    }
+    set_last_error(abi::kErrorFileNotFound);
+    return 0;
+}
+
+TL_MSABI int tl_FindClose(const void* handle) noexcept {
+    FindSlot* slot = find_slot_for_handle(handle);
+    if (slot == nullptr || !slot->used) {
+        set_last_error(abi::kErrorInvalidHandle);
+        return 0;
+    }
+    if (slot->dir != nullptr) {
+        closedir(slot->dir);
+        slot->dir = nullptr;
+    }
+    slot->used = false;
+    slot->pattern.clear();
+    slot->directory.clear();
+    set_last_error(abi::kErrorSuccess);
+    return 1;
 }
 
 }  // extern "C"
