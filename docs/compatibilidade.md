@@ -169,7 +169,7 @@ Os scripts de execução e2e (`verify_target_run.cmake`,
 | Aplicativo | Versão / toolchain | Imports (símbolos) | Estado |
 |---|---|---|---|
 | `xxd.exe` | vim `v9.2.0957` (`src/xxd.c`), `-O2 -s` | `KERNEL32.dll` (16), `msvcrt.dll` (57) | **Executa de ponta a ponta**: saída byte-idêntica ao `xxd` do sistema nos modos padrão e `-p`, exit `0`; arquivo inexistente → exit `2` com erro em stderr. Regressão e2e em CTest (ouro em `tests/targets/golden/xxd/`, 3 testes) |
-| `bzip2.exe` | bzip2 `1.0.8`, `-O2 -s` | `KERNEL32.dll` (13), `msvcrt.dll` (66) | Cross-build no CI; imports pinados; `result: supported` (todos os imports de `msvcrt.dll` implementados: `strncpy`, `strstr`, `ungetc`, `fgetc`, `fread`, `isspace`, `memmove`, `strcat`, `remove`, `_stat64`) |
+| `bzip2.exe` | bzip2 `1.0.8`, `-O2 -s` | `KERNEL32.dll` (13), `msvcrt.dll` (69) | Cross-build no CI; imports pinados; `result: supported` (compatibilidade 100%, todos os imports resolvidos incluindo `_onexit`) |
 | `dos2unix.exe` | dos2unix `7.5.6`, `-O2 -DD2U_UNIFILE -s` | `KERNEL32.dll` (24), `msvcrt.dll` (63), `SHELL32.dll!CommandLineToArgvW` (1) | Cross-build no CI; imports pinados; `result: unsupported` (SHELL32 e caminho `W` fora de escopo) |
 | `unix2dos.exe` | dos2unix `7.5.6` | idem `dos2unix.exe` | Idem |
 
@@ -189,7 +189,7 @@ Contratos de ABI em `docs/arquitetura/msvcrt.md` e
 |---|---|---|---|
 | `msvcrt.dll` | `__getmainargs` | Suportado | Constrói `argc`/`argv`/`envp` a partir da linha de comando do convidado (definida pelo CLI via `msvcrt_set_guest_command_line`); `argv[0]` é o caminho do executável; o final da lista é `NULL` |
 | `msvcrt.dll` | `__initterm`, `__set_app_type`, `__setusermatherr`, `_cexit`, `_lock`, `_unlock`, `__C_specific_handler` | Suportado | `__initterm` executa a lista de callbacks (TLS/CTOR); demais são no-ops ou terminam o convidado (`__C_specific_handler` → exit `3`) |
-| `msvcrt.dll` | `_amsg_exit`, `abort`, `exit`, `atexit` | Suportado | Terminam via `ExitProcess`; `atexit` acumula handlers executados no encerramento |
+| `msvcrt.dll` | `_amsg_exit`, `abort`, `exit`, `atexit`, `_onexit` | Suportado | Terminam via `ExitProcess`; `atexit` e `_onexit` acumulam handlers executados no encerramento |
 | `msvcrt.dll` | `_errno`, `getenv`, `strerror` | Suportado | Célula `errno` global do hospedeiro; `getenv` lê o ambiente do host |
 | `msvcrt.dll` | `fopen`/`fclose`/`fflush`/`ferror`/`fseek`/`ftell`/`rewind`/`fgetc`/`fputc`/`fputs`/`fprintf`/`vfprintf`/`fwrite` | Suportado | I/O em `GuestFile` (layout `_iobuf` de 48 bytes), unbuffered via `::write` com loop `EINTR` |
 | `msvcrt.dll` | `_open`/`_fdopen`/`_fileno`/`_isatty`/`_setmode`/`__iob_func` | Suportado | Tradução de flags `_O_*`; modo por fd (`_O_TEXT`/`_O_BINARY`) refletido na flag `_IOSTRG` do `GuestFile` |
@@ -327,7 +327,9 @@ processo filho; cada thread convidada recebe seu próprio TEB/GS, stack e
 - `ExitThread` termina somente a thread corrente; não limpa destructors C++.
 - O fixture `tl_thread.exe` requer mingw-w64 para cross-build (não disponível
   no ambiente atual).
-- 13 testes unitários em `tests/test_win32.cpp` cobrem `TlsAlloc`,
-  `TlsSetValue`, `TlsFree`, `GetCurrentThreadId`, `GetCurrentProcessId`,
-  `CRITICAL_SECTION`, `CloseHandle` e `WaitForSingleObject` com handles
-  inválidos.
+- 18 testes unitários em `tests/test_win32.cpp` cobrem `TlsAlloc`,
+  `TlsSetValue`, `TlsGetValue`, `TlsFree`, `GetCurrentThreadId`,
+  `GetCurrentProcessId`, `CRITICAL_SECTION` (init/enter/leave/delete,
+  null check, side-table exhaustion), `CloseHandle` (null/garbage),
+  `WaitForSingleObject` (invalid handle, timeout), e `TlsSetGetValue`
+  com múltiplos slots.

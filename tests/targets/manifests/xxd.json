@@ -37,17 +37,12 @@
       "_cexit",
       "_commode",
       "_errno",
-      "_fdopen",
-      "_fileno",
       "_fmode",
       "_initterm",
-      "_isatty",
       "_lock",
-      "_open",
-      "_setmode",
+      "_onexit",
       "_unlock",
       "abort",
-      "atexit",
       "calloc",
       "exit",
       "fclose",
@@ -81,7 +76,12 @@
       "strtoul",
       "toupper",
       "vfprintf",
-      "wcslen"
+      "wcslen",
+      "_setmode",
+      "_open",
+      "_isatty",
+      "_fileno",
+      "_fdopen"
     ]
   }
 }

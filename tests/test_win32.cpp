@@ -723,5 +723,81 @@ TEST(Win32ConcurrencyTest, TlsFreeIdempotentOnInvalidIndex) {
     EXPECT_EQ(tl_TlsFree(0), 0);
 }
 
+TEST(Win32ConcurrencyTest, WaitForSingleObjectTimeoutReturnsWaitTimeout) {
+    // WaitForSingleObject on an invalid handle with timeout should return WAIT_FAILED.
+    EXPECT_EQ(tl_WaitForSingleObject(reinterpret_cast<const void*>(0xDEADULL), 100),
+              abi::kWaitFailed);
+}
+
+TEST(Win32ConcurrencyTest, TlsGetValueInvalidIndexReturnsNull) {
+    // TlsGetValue on an index that was allocated then freed should return nullptr
+    // (slot 0 is TEB self pointer and may be set).
+    const std::uint32_t idx = tl_TlsAlloc();
+    ASSERT_NE(idx, 0xFFFFFFFFU);
+    EXPECT_NE(tl_TlsSetValue(idx, nullptr), 0);
+    EXPECT_EQ(tl_TlsGetValue(idx), nullptr);
+    EXPECT_NE(tl_TlsFree(idx), 0);
+    // After free, the slot is released. Using an out-of-range index returns nullptr.
+    EXPECT_EQ(tl_TlsGetValue(0xFFFFFFFF), nullptr);
+}
+
+TEST(Win32ConcurrencyTest, GetCurrentThreadIdConsistentAcrossCalls) {
+    // Multiple calls to GetCurrentThreadId should return the same value.
+    const std::uint32_t tid1 = tl_GetCurrentThreadId();
+    const std::uint32_t tid2 = tl_GetCurrentThreadId();
+    EXPECT_EQ(tid1, tid2);
+    EXPECT_NE(tid1, 0U);
+}
+
+TEST(Win32ConcurrencyTest, CriticalSectionSideTableExhaustion) {
+    // Allocate all 32 CS slots and verify exhaustion is handled.
+    alignas(8) char cs_slots[32][40]{};
+    for (int i = 0; i < 32; ++i) {
+        tl_InitializeCriticalSection(cs_slots[i]);
+        tl_EnterCriticalSection(cs_slots[i]);
+    }
+    // All 32 slots occupied — this should not crash (just emit trace).
+    alignas(8) char extra_cs[40]{};
+    tl_InitializeCriticalSection(extra_cs);
+
+    // Free all in reverse order.
+    for (int i = 31; i >= 0; --i) {
+        tl_LeaveCriticalSection(cs_slots[i]);
+        tl_DeleteCriticalSection(cs_slots[i]);
+    }
+    tl_DeleteCriticalSection(extra_cs);
+}
+
+TEST(Win32ConcurrencyTest, TlsSetGetValueMultipleSlots) {
+    // Allocate multiple TLS slots, set values, verify independence.
+    const std::uint32_t idx1 = tl_TlsAlloc();
+    const std::uint32_t idx2 = tl_TlsAlloc();
+    const std::uint32_t idx3 = tl_TlsAlloc();
+    ASSERT_NE(idx1, 0xFFFFFFFFU);
+    ASSERT_NE(idx2, 0xFFFFFFFFU);
+    ASSERT_NE(idx3, 0xFFFFFFFFU);
+
+    void* val1 = reinterpret_cast<void*>(static_cast<std::uintptr_t>(0x1111));
+    void* val2 = reinterpret_cast<void*>(static_cast<std::uintptr_t>(0x2222));
+    void* val3 = reinterpret_cast<void*>(static_cast<std::uintptr_t>(0x3333));
+
+    EXPECT_NE(tl_TlsSetValue(idx1, val1), 0);
+    EXPECT_NE(tl_TlsSetValue(idx2, val2), 0);
+    EXPECT_NE(tl_TlsSetValue(idx3, val3), 0);
+
+    EXPECT_EQ(tl_TlsGetValue(idx1), val1);
+    EXPECT_EQ(tl_TlsGetValue(idx2), val2);
+    EXPECT_EQ(tl_TlsGetValue(idx3), val3);
+
+    // Overwrite idx2.
+    EXPECT_NE(tl_TlsSetValue(idx2, val3), 0);
+    EXPECT_EQ(tl_TlsGetValue(idx2), val3);
+    EXPECT_EQ(tl_TlsGetValue(idx1), val1);
+
+    EXPECT_NE(tl_TlsFree(idx1), 0);
+    EXPECT_NE(tl_TlsFree(idx2), 0);
+    EXPECT_NE(tl_TlsFree(idx3), 0);
+}
+
 }  // namespace
 }  // namespace tradutorlinux

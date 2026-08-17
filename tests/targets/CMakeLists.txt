@@ -11,7 +11,7 @@ find_program(TL_MINGW_AR
     REQUIRED
 )
 find_program(TL_LLVM_READOBJ
-    NAMES llvm-readobj llvm-readobj-18 llvm-readobj-17
+    NAMES llvm-readobj llvm-readobj-19 llvm-readobj-18 llvm-readobj-17
     REQUIRED
 )
 

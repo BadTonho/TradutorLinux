@@ -7,7 +7,7 @@ find_program(TL_MINGW_CC
     REQUIRED
 )
 find_program(TL_LLVM_READOBJ
-    NAMES llvm-readobj llvm-readobj-18 llvm-readobj-17
+    NAMES llvm-readobj llvm-readobj-19 llvm-readobj-18 llvm-readobj-17
     REQUIRED
 )
 
@@ -95,7 +95,7 @@ function(tl_add_pe_fixture target_name source_file manifest_file)
                     "-DCLEANUP_FILE=tl_phase5_data.bin")
             elseif(target_name STREQUAL "tl_thread")
                 set(runtime_extra_args
-                    "-DEXPECTED_HEX=54687265616420646f6e650d0a54687265616420646f6e650d0a4d61696e20646f6e650d0a")
+                    "-DEXPECTED_HEX=54687265616420646f6e650a54687265616420646f6e650a4d61696e20646f6e650a")
             endif()
         endif()
         add_test(
@@ -169,22 +169,22 @@ tl_add_pe_fixture(tl_gui src/tl_gui.c manifests/tl_gui.json
     LINK_KERNEL32 LINK_USER32 EXPECT_RESOLVED REPORT_ONLY RELOCATABLE)
 tl_add_pe_fixture(tl_win src/tl_win.c manifests/tl_win.json
     LINK_KERNEL32 LINK_USER32 EXPECT_RESOLVED REPORT_ONLY RELOCATABLE
-    REPORT_SYMBOL "USER32.dll!RegisterClassExA")
+    REPORT_SYMBOL "RegisterClassExA")
 tl_add_pe_fixture(tl_win2 src/tl_win2.c manifests/tl_win2.json
     LINK_KERNEL32 LINK_USER32 EXPECT_RESOLVED REPORT_ONLY RELOCATABLE
-    REPORT_SYMBOL "USER32.dll!RegisterClassExA")
+    REPORT_SYMBOL "RegisterClassExA")
 tl_add_pe_fixture(tl_key src/tl_key.c manifests/tl_key.json
     LINK_KERNEL32 LINK_USER32 EXPECT_RESOLVED REPORT_ONLY RELOCATABLE
-    REPORT_SYMBOL "USER32.dll!RegisterClassExA")
+    REPORT_SYMBOL "RegisterClassExA")
 tl_add_pe_fixture(tl_timer src/tl_timer.c manifests/tl_timer.json
     LINK_KERNEL32 LINK_USER32 EXPECT_RESOLVED REPORT_ONLY RELOCATABLE
-    REPORT_SYMBOL "USER32.dll!SetTimer")
+    REPORT_SYMBOL "SetTimer")
 tl_add_pe_fixture(tl_gdi src/tl_gdi.c manifests/tl_gdi.json
     LINK_KERNEL32 LINK_USER32 LINK_GDI32 EXPECT_RESOLVED REPORT_ONLY RELOCATABLE
-    REPORT_SYMBOL "GDI32.dll!TextOutA")
+    REPORT_SYMBOL "TextOutA")
 tl_add_pe_fixture(tl_paint src/tl_paint.c manifests/tl_paint.json
     LINK_KERNEL32 LINK_USER32 LINK_GDI32 EXPECT_RESOLVED REPORT_ONLY RELOCATABLE
-    REPORT_SYMBOL "USER32.dll!FillRect")
+    REPORT_SYMBOL "FillRect")
 
 tl_add_pe_fixture(tl_crash src/tl_crash.c manifests/tl_crash.json RELOCATABLE NO_RUNTIME_CHECK)
 

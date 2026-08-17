@@ -224,6 +224,7 @@ void register_builtin_modules() {
         {"memmove", 65, reinterpret_cast<std::uintptr_t>(&tl_memmove)},
         {"remove", 66, reinterpret_cast<std::uintptr_t>(&tl_remove)},
         {"_stat64", 67, reinterpret_cast<std::uintptr_t>(&tl__stat64)},
+        {"_onexit", 68, reinterpret_cast<std::uintptr_t>(&tl_atexit)},
     };
     static const InternalModule kMsvcrtModule{"msvcrt.dll", kMsvcrtExports};
     register_module(kMsvcrtModule);
