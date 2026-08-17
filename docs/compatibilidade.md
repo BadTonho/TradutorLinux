@@ -149,11 +149,21 @@ toolchain e lista de imports; a lista real é capturada por `llvm-readobj` e por
 
 As fontes são baixadas com hash SHA-256 verificado pelo módulo
 `tests/targets/CMakeLists.txt` (opção `TL_BUILD_TARGET_APPS=ON`, usada no job
-`target-apps` do CI). O `--report` lista os imports reais e classifica o alvo
-como `result: supported` (exit code `0`) ou `result: unsupported` (exit code
-`5`), sem mapear nem executar a imagem; o script
-`tests/targets/verify_target_report.cmake` aceita as duas respostas e exige que
-todo import do manifest apareça listado.
+`target-apps` do CI). O `--report` lista os imports reais, agrupados por DLL
+com contagem de resolução, e classifica o alvo como `result: supported`
+(exit code `0`) ou `result: unsupported` (exit code `5`), sem mapear nem
+executar a imagem; inclui linha `compatibility:` com porcentagem de imports
+resolvidos e `execution-result: not-attempted`. O script
+`tests/targets/verify_target_report.cmake` aceita as duas respostas, exige que
+todo import do manifest apareça listado sob o grupo `dll:` correspondente e
+valida as linhas `compatibility:` e `execution-result:`.
+
+Os scripts de execução e2e (`verify_target_run.cmake`,
+`verify_target_execution.cmake`) categorizam o resultado em:
+- `supported` — execução concluída, saída idêntica ao ouro
+- `failed` — terminou por sinal, timeout ou exit code inesperado
+- `incorrect` — saída diverge do ouro
+- `not-attempted` — sem execução (`--report` apenas)
 
 | Aplicativo | Versão / toolchain | Imports (símbolos) | Estado |
 |---|---|---|---|

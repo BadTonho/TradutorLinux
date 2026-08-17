@@ -318,13 +318,46 @@ void print_imports_summary(std::ostream& stream, const loader::ResolveResult& im
 
 void print_support_report(std::ostream& stream, const pe::PeInfo& info) {
     bool supported = info.delay_import_directory_size == 0;
+    std::size_t total_imports = 0;
+    std::size_t resolved_imports = 0;
+
     stream << "TradutorLinux compatibility report\n";
     stream << "format: " << (info.is_pe32_plus ? "PE32+ x86-64" : "unsupported") << '\n';
     stream << "entry-point: " << util::format_hex(info.address_of_entry_point) << '\n';
     if (info.delay_import_directory_size != 0) {
         stream << "mechanism: delay-import status=unsupported\n";
     }
+
     for (const pe::ImportedDll& dll : info.imports) {
+        std::size_t dll_resolved = 0;
+        std::size_t dll_total = dll.symbols.size();
+        total_imports += dll_total;
+
+        for (const pe::ImportedSymbol& symbol : dll.symbols) {
+            loader::ImportStatus status = loader::ImportStatus::UnknownDll;
+            if (loader::is_module_registered(dll.name)) {
+                const loader::ExportLookup lookup =
+                    symbol.by_ordinal
+                        ? loader::find_export_by_ordinal(dll.name, symbol.ordinal)
+                        : loader::find_export(loader::ExportQuery{dll.name, symbol.name});
+                if (!lookup.found) {
+                    status = symbol.by_ordinal ? loader::ImportStatus::UnknownOrdinal
+                                               : loader::ImportStatus::UnknownSymbol;
+                } else if (lookup.address == 0) {
+                    status = loader::ImportStatus::NotImpl;
+                } else {
+                    status = loader::ImportStatus::Resolved;
+                }
+            }
+            if (status == loader::ImportStatus::Resolved) {
+                ++dll_resolved;
+                ++resolved_imports;
+            }
+            supported = supported && (status == loader::ImportStatus::Resolved);
+        }
+
+        stream << "dll: " << dll.name << " (" << dll_resolved << '/'
+               << dll_total << " resolved)\n";
         for (const pe::ImportedSymbol& symbol : dll.symbols) {
             const std::string label = symbol_label(symbol);
             loader::ImportStatus status = loader::ImportStatus::UnknownDll;
@@ -342,14 +375,17 @@ void print_support_report(std::ostream& stream, const pe::PeInfo& info) {
                     status = loader::ImportStatus::Resolved;
                 }
             }
-            const bool entry_supported = status == loader::ImportStatus::Resolved;
-            supported = supported && entry_supported;
-            stream << "import: " << dll.name << '!' << label << " status="
-                   << import_status_label(status) << '\n';
+            stream << "  import: " << label << " status=" << import_status_label(status)
+                   << '\n';
         }
     }
+
+    const std::size_t pct = total_imports > 0 ? (resolved_imports * 100 / total_imports) : 100;
     stream << "result: " << (supported ? "supported" : "unsupported") << '\n';
+    stream << "compatibility: " << pct << "% (" << resolved_imports << '/'
+           << total_imports << " imports resolved)\n";
     stream << "execution: not-attempted\n";
+    stream << "execution-result: not-attempted\n";
 }
 
 }  // namespace
