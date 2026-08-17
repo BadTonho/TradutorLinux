@@ -270,7 +270,18 @@ TL_MSABI void* tl_FindFirstFileA(const char* path, void* find_data) noexcept;
 TL_MSABI int tl_FindNextFileA(const void* handle, void* find_data) noexcept;
 TL_MSABI int tl_FindClose(const void* handle) noexcept;
 
+// Diretório atual e módulo.
+TL_MSABI std::uint32_t tl_GetCurrentDirectoryA(std::uint32_t buffer_length,
+                                                char* buffer) noexcept;
+TL_MSABI std::uint32_t tl_GetCurrentDirectoryW(std::uint32_t buffer_length,
+                                                std::uint16_t* buffer) noexcept;
+TL_MSABI std::uint32_t tl_GetModuleFileNameA(const void* module_handle, char* buffer,
+                                              std::uint32_t size) noexcept;
+
 }  // extern "C"
+
+// Define o caminho do módulo convidado antes da execução.
+void set_guest_module_path(const char* path) noexcept;
 
 // Executa um entry point Microsoft x64 e captura ExitProcess sem encerrar o
 // processo hospedeiro. O ponteiro deve apontar para código já mapeado como

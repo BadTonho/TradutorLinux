@@ -111,6 +111,9 @@ void register_builtin_modules() {
         {"FindFirstFileA", 44, reinterpret_cast<std::uintptr_t>(&tl_FindFirstFileA)},
         {"FindNextFileA", 45, reinterpret_cast<std::uintptr_t>(&tl_FindNextFileA)},
         {"FindClose", 46, reinterpret_cast<std::uintptr_t>(&tl_FindClose)},
+        {"GetCurrentDirectoryA", 47, reinterpret_cast<std::uintptr_t>(&tl_GetCurrentDirectoryA)},
+        {"GetCurrentDirectoryW", 48, reinterpret_cast<std::uintptr_t>(&tl_GetCurrentDirectoryW)},
+        {"GetModuleFileNameA", 49, reinterpret_cast<std::uintptr_t>(&tl_GetModuleFileNameA)},
     };
     static const InternalModule kKernel32Module{"KERNEL32.dll", kKernel32Exports};
     register_module(kKernel32Module);

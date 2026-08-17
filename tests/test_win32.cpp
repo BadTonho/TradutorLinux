@@ -513,5 +513,112 @@ TEST(Win32FileTest, FindFirstFileAFindsFileInDirectory) {
     rmdir(tmpdir);
 }
 
+TEST(Win32FileTest, GetFileSizeFailsForInvalidHandle) {
+    std::uint32_t high = 0;
+    const std::uint32_t size = tl_GetFileSize(nullptr, &high);
+    EXPECT_EQ(size, 0xFFFFFFFFU);
+}
+
+TEST(Win32FileTest, GetFileAttributesAFailsForNonExistent) {
+    const std::uint32_t attrs = tl_GetFileAttributesA("_tl_nonexistent_file_999");
+    EXPECT_EQ(attrs, 0xFFFFFFFFU);
+}
+
+TEST(Win32FileTest, DeleteFileAFailsForNonExistent) {
+    EXPECT_EQ(tl_DeleteFileA("_tl_nonexistent_file_999"), 0);
+}
+
+TEST(Win32FileTest, MoveFileAFailsForNonExistentSource) {
+    EXPECT_EQ(tl_MoveFileA("_tl_nonexistent_src", "_tl_nonexistent_dst"), 0);
+}
+
+TEST(Win32FileTest, CreateDirectoryAFailsForExistingDir) {
+    const char* tmpdir = "_tl_test_mkdir_dup";
+    mkdir(tmpdir, 0777);
+    EXPECT_EQ(tl_CreateDirectoryA(tmpdir, nullptr), 0);
+    rmdir(tmpdir);
+}
+
+TEST(Win32FileTest, SetFilePointerFailsForNegativePosition) {
+    TempDirFixture ctx;
+    const std::string fpath = ctx.path("seek_neg.bin");
+    FILE* f = std::fopen(fpath.c_str(), "wb");
+    ASSERT_NE(f, nullptr);
+    std::fwrite("01234", 1, 5, f);
+    std::fclose(f);
+
+    void* handle = tl_CreateFileA(fpath.c_str(), abi::kGenericRead, 0, nullptr,
+                                   abi::kOpenExisting, 0, nullptr);
+    ASSERT_NE(handle, nullptr);
+    // Seek before beginning.
+    const std::int32_t pos = tl_SetFilePointer(handle, -10, nullptr, 0);
+    EXPECT_EQ(pos, -1);
+    tl_CloseHandle(handle);
+}
+
+TEST(Win32DirTest, GetCurrentDirectoryAReturnsNonEmpty) {
+    char buf[4096]{};
+    const std::uint32_t needed = tl_GetCurrentDirectoryA(sizeof(buf), buf);
+    EXPECT_GT(needed, 1U);
+    EXPECT_STRNE(buf, "");
+    // Deve conter \ (convertido de /).
+    EXPECT_NE(std::strchr(buf, '\\'), nullptr);
+}
+
+TEST(Win32DirTest, GetCurrentDirectoryAReturnsNeededWhenBufferTooSmall) {
+    const std::uint32_t needed = tl_GetCurrentDirectoryA(1, nullptr);
+    EXPECT_GT(needed, 1U);
+}
+
+TEST(Win32DirTest, GetModuleFileNameAReturnsSetPath) {
+    set_guest_module_path("test/path/app.exe");
+    char buf[4096]{};
+    const std::uint32_t len = tl_GetModuleFileNameA(nullptr, buf, sizeof(buf));
+    EXPECT_GT(len, 0U);
+    EXPECT_STREQ(buf, "test/path/app.exe");
+    set_guest_module_path(nullptr);
+}
+
+TEST(Win32DirTest, GetModuleFileNameAReturnsNeededWhenBufferTooSmall) {
+    set_guest_module_path("long/path.exe");
+    const std::uint32_t needed = tl_GetModuleFileNameA(nullptr, nullptr, 0);
+    EXPECT_GT(needed, 0U);
+    set_guest_module_path(nullptr);
+}
+
+TEST(Win32Utf16Test, MultiByteToWideCharUtf8ConvertsAccentedChar) {
+    // "café" em UTF-8: c a f é(0xC3 0xA9)
+    const char utf8[] = {'c', 'a', 'f', static_cast<char>(0xC3), static_cast<char>(0xA9), '\0'};
+    std::uint16_t wide[8]{};
+    const int written = tl_MultiByteToWideChar(abi::kCpUtf8, 0, utf8, -1, wide, 8);
+    ASSERT_EQ(written, 5);
+    EXPECT_EQ(wide[0], 'c');
+    EXPECT_EQ(wide[1], 'a');
+    EXPECT_EQ(wide[2], 'f');
+    EXPECT_EQ(wide[3], 0x00E9);  // é
+    EXPECT_EQ(wide[4], 0);
+}
+
+TEST(Win32Utf16Test, WideCharToMultiByteUtf8ConvertsAccentedChar) {
+    // é em UTF-16 → 0xC3 0xA9 em UTF-8.
+    const std::uint16_t wide[] = {0x00E9, 0};
+    char utf8[8]{};
+    const int written = tl_WideCharToMultiByte(abi::kCpUtf8, 0, wide, -1, utf8, 8,
+                                               nullptr, nullptr);
+    ASSERT_EQ(written, 3);
+    EXPECT_EQ(static_cast<unsigned char>(utf8[0]), 0xC3);
+    EXPECT_EQ(static_cast<unsigned char>(utf8[1]), 0xA9);
+    EXPECT_EQ(utf8[2], '\0');
+}
+
+TEST(Win32Utf16Test, GetCurrentDirectoryWReturnsWideString) {
+    std::uint16_t buf[4096]{};
+    const std::uint32_t needed = tl_GetCurrentDirectoryW(sizeof(buf) / sizeof(buf[0]), buf);
+    EXPECT_GT(needed, 1U);
+    // O primeiro caractere deve ser uma letra ou '\' (CWD relativo).
+    EXPECT_TRUE(buf[0] == L'\\' || (buf[0] >= L'A' && buf[0] <= L'Z') ||
+                (buf[0] >= L'a' && buf[0] <= L'z'));
+}
+
 }  // namespace
 }  // namespace tradutorlinux

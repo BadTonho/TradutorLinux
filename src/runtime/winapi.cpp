@@ -40,6 +40,9 @@ thread_local bool g_guest_execution_active = false;
 thread_local std::uint32_t g_guest_exit_code = 0;
 thread_local std::uint32_t g_last_error = abi::kErrorSuccess;
 
+// Caminho do executável convidado, definido antes da execução.
+std::string g_module_file_name;
+
 extern "C" void tl_call_guest_on_stack(std::uintptr_t entry,
                                          std::uintptr_t stack_top) noexcept;
 
@@ -2568,7 +2571,104 @@ TL_MSABI int tl_FindClose(const void* handle) noexcept {
     return 1;
 }
 
+// --- Diretório atual e módulo ---
+
+TL_MSABI std::uint32_t tl_GetCurrentDirectoryA(const std::uint32_t buffer_length,
+                                                char* buffer) noexcept {
+    if (buffer_length == 0) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    if (buffer != nullptr && !mapped_guest_range(buffer, buffer_length, true)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    char cwd[4096]{};
+    if (getcwd(cwd, sizeof(cwd)) == nullptr) {
+        const std::uint32_t failure_error = errno_to_win32(errno);
+        set_last_error(failure_error);
+        return 0;
+    }
+    // Traduzir para caminho relativo sem barra inicial (estilo Windows CWD).
+    const char* path = cwd;
+    if (path[0] == '/') {
+        ++path;
+    }
+    const std::size_t len = std::strlen(path);
+    if (len == 0) {
+        // Raiz: retornar "\"
+        if (buffer != nullptr && buffer_length >= 2) {
+            buffer[0] = '\\';
+            buffer[1] = '\0';
+        }
+        set_last_error(abi::kErrorSuccess);
+        return 2;
+    }
+    if (buffer == nullptr || len + 1 > buffer_length) {
+        set_last_error(abi::kErrorInsufficientBuffer);
+        return static_cast<std::uint32_t>(len + 1);
+    }
+    // Copiar e converter / para \.
+    for (std::size_t i = 0; i < len; ++i) {
+        buffer[i] = path[i] == '/' ? '\\' : path[i];
+    }
+    buffer[len] = '\0';
+    set_last_error(abi::kErrorSuccess);
+    return static_cast<std::uint32_t>(len + 1);
+}
+
+TL_MSABI std::uint32_t tl_GetCurrentDirectoryW(const std::uint32_t buffer_length,
+                                                std::uint16_t* buffer) noexcept {
+    // Delega à versão A e converte para UTF-16.
+    char narrow[4096]{};
+    const std::uint32_t needed = tl_GetCurrentDirectoryA(sizeof(narrow), narrow);
+    if (needed == 0) {
+        return 0;
+    }
+    if (buffer == nullptr || buffer_length < needed) {
+        if (buffer != nullptr && buffer_length > 0) {
+            buffer[0] = L'\0';
+        }
+        set_last_error(abi::kErrorInsufficientBuffer);
+        return needed;
+    }
+    // Converter ASCII para UTF-16 (cada byte vira um wchar_t).
+    for (std::uint32_t i = 0; i < needed; ++i) {
+        buffer[i] = static_cast<std::uint16_t>(narrow[i]);
+    }
+    set_last_error(abi::kErrorSuccess);
+    return needed;
+}
+
+TL_MSABI std::uint32_t tl_GetModuleFileNameA(const void* /*module*/, char* buffer,
+                                               std::uint32_t size) noexcept {
+    if (buffer != nullptr && size > 0 && !mapped_guest_range(buffer, size, true)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    if (g_module_file_name.empty()) {
+        if (buffer != nullptr && size > 0) {
+            buffer[0] = '\0';
+        }
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    const std::size_t len = g_module_file_name.size();
+    if (buffer == nullptr || len + 1 > size) {
+        set_last_error(abi::kErrorInsufficientBuffer);
+        return static_cast<std::uint32_t>(len + 1);
+    }
+    std::memcpy(buffer, g_module_file_name.data(), len + 1);
+    set_last_error(abi::kErrorSuccess);
+    return static_cast<std::uint32_t>(len + 1);
+}
+
 }  // extern "C"
+
+// Define o caminho do módulo convidado (chamado antes da execução).
+void set_guest_module_path(const char* path) noexcept {
+    g_module_file_name = path != nullptr ? path : "";
+}
 
 GuestExecutionResult execute_guest_entry(const std::uintptr_t entry_point, // NOLINT(bugprone-easily-swappable-parameters)
                                          const std::uintptr_t stack_top) noexcept {

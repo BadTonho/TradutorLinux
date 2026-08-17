@@ -199,9 +199,9 @@ arquivos, mantendo uma tradução de caminhos segura e explícita.
 - [x] Implementar `FindFirstFileA/W`, `FindNextFileA/W` e `FindClose`.
 - [x] Implementar `GetFileAttributesA/W`, `DeleteFileA/W`, `MoveFileA/W` e `CreateDirectoryA/W`.
 - [x] Implementar `SetFilePointer`, tamanhos de arquivo e modo append quando exigidos.
-- [ ] Definir diretório atual, diretório do executável e variáveis de ambiente sem inventar letras de drive.
-- [ ] Implementar conversão UTF-16/UTF-8 e testar nomes não ASCII.
-- [ ] Adicionar testes de permissões, arquivos inexistentes, diretórios e concorrência controlada.
+- [x] Definir diretório atual, diretório do executável e variáveis de ambiente sem inventar letras de drive.
+- [x] Implementar conversão UTF-16/UTF-8 e testar nomes não ASCII.
+- [x] Adicionar testes de permissões, arquivos inexistentes, diretórios e concorrência controlada.
 
 ### Critério de saída
 

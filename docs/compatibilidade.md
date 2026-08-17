@@ -261,6 +261,9 @@ enumeração. A tradução de caminhos Windows (`\\` → `/`) é reutilizável v
 | `KERNEL32.dll` | `FindFirstFileA` | Suportado | Abre `opendir()` + `readdir()` com padrão simples (`*` e correspondência exata); preenche `WIN32_FIND_DATAA` simplificado |
 | `KERNEL32.dll` | `FindNextFileA` | Suportado | Continua iteração com o mesmo padrão |
 | `KERNEL32.dll` | `FindClose` | Suportado | Fecha `DIR*` e libera slot |
+| `KERNEL32.dll` | `GetCurrentDirectoryA` | Suportado | `getcwd()` → caminho relativo sem barra inicial; conversão `/` → `\` |
+| `KERNEL32.dll` | `GetCurrentDirectoryW` | Suportado | Delega à versão A e converte resultado para UTF-16 |
+| `KERNEL32.dll` | `GetModuleFileNameA` | Suportado | Retorna caminho definido via `set_guest_module_path()` antes da execução |
 
 ### Limitações conhecidas
 
@@ -273,6 +276,15 @@ enumeração. A tradução de caminhos Windows (`\\` → `/`) é reutilizável v
   atualizam a posição automaticamente.
 - `GetFileAttributesA` para arquivos inexistentes retorna `0xFFFFFFFF` com
   `ERROR_FILE_NOT_FOUND`.
-- 9 testes unitários novos em `tests/test_win32.cpp` cobrem `GetFileSize`,
-  `SetFilePointer` (seek beginning/end), `GetFileAttributesA` (file/directory),
-  `DeleteFileA`, `MoveFileA`, `CreateDirectoryA` e `FindFirstFileA`/`FindClose`.
+- `GetCurrentDirectoryA/W` retorna o CWD do processo host; caminhos são
+  relativos e sem letra de drive.
+- `GetModuleFileNameA` depende de `set_guest_module_path()` chamado antes da
+  execução; sem configuração retorna 0 com `ERROR_INVALID_PARAMETER`.
+- `MultiByteToWideChar` e `WideCharToMultiByte` suportam CP_UTF8 (65001) para
+  conversão UTF-8/UTF-16; surrogates pair são suportados.
+- 14 testes unitários novos em `tests/test_win32.cpp` cobrem `GetFileSize`,
+  `SetFilePointer` (seek beginning/end/negative), `GetFileAttributesA`
+  (file/directory/nonexistent), `DeleteFileA` (existente/inexistente),
+  `MoveFileA` (existente/inexistente), `CreateDirectoryA` (novo/duplicado),
+  `FindFirstFileA`/`FindClose`, `GetCurrentDirectoryA/W`,
+  `GetModuleFileNameA` e conversão UTF-8/UTF-16 com caracteres acentuados.
