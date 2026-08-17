@@ -74,8 +74,9 @@ stdio é unbuffered e usa `write`/`read` diretos com loop `EINTR`.
 
 - O subconjunto cobre exatamente os símbolos que os aplicativos-alvo importam;
   símbolos ausentes são diagnosticados como `unknown-symbol` no `--report`.
-  Ex.: `bzip2.exe` ainda exige `strncpy`, `strstr` e `ungetc`; `fread` não é
-  usado por `xxd.exe` (que lê com `getc`), então não está implementado.
+  Os símbolos adicionais para `bzip2.exe` (`strncpy`, `strstr`, `ungetc`,
+  `fgetc`, `fread`, `isspace`, `memmove`, `strcat`, `remove`, `_stat64`) foram
+  implementados; `_stat64` é um stub que retorna `ENOSYS`.
 - Locale fixo C: code page `1252`, `mb_cur_max == 1`, `lconv` estático.
 - `signal` apenas registra; nenhuma entrega real ao convidado.
 - `wcs*` e o caminho `W` ficam para os alvos que os exigirem (`dos2unix`).

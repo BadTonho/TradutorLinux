@@ -93,6 +93,17 @@ TL_CRT_MSABI int tl__setmode(int file_descriptor, int mode) noexcept;
 TL_CRT_MSABI unsigned int tl___lc_codepage_func() noexcept;
 TL_CRT_MSABI int tl___mb_cur_max_func() noexcept;
 TL_CRT_MSABI std::int64_t tl___C_specific_handler() noexcept;
+TL_CRT_MSABI int tl_fgetc(GuestFile* file) noexcept;
+TL_CRT_MSABI std::size_t tl_fread(void* buffer, std::size_t size, std::size_t count,
+                                   GuestFile* file) noexcept;
+TL_CRT_MSABI int tl_ungetc(int character, GuestFile* file) noexcept;
+TL_CRT_MSABI char* tl_strncpy(char* destination, const char* source, std::size_t count) noexcept;
+TL_CRT_MSABI char* tl_strstr(const char* haystack, const char* needle) noexcept;
+TL_CRT_MSABI int tl_isspace(int character) noexcept;
+TL_CRT_MSABI char* tl_strcat(char* destination, const char* source) noexcept;
+TL_CRT_MSABI void* tl_memmove(void* destination, const void* source, std::size_t count) noexcept;
+TL_CRT_MSABI int tl_remove(const char* path) noexcept;
+TL_CRT_MSABI int tl__stat64(const char* path, void* stat_buffer) noexcept;
 
 // Dados exportados por msvcrt.dll: células graváveis do hospedeiro cujos
 // endereços são gravados nos slots da IAT (imports-dados __initenv, _commode

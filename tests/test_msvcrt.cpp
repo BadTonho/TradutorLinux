@@ -166,5 +166,116 @@ TEST(MsvcrtCharTest, IsalnumAndToupperFollowAscii) {
     EXPECT_EQ(tl_toupper('Z'), 'Z');
 }
 
+TEST(MsvcrtCharTest, IsspaceClassifiesWhitespace) {
+    EXPECT_EQ(tl_isspace(' '), 1);
+    EXPECT_EQ(tl_isspace('\t'), 1);
+    EXPECT_EQ(tl_isspace('\n'), 1);
+    EXPECT_EQ(tl_isspace('\r'), 1);
+    EXPECT_EQ(tl_isspace('a'), 0);
+    EXPECT_EQ(tl_isspace('0'), 0);
+}
+
+TEST(MsvcrtStringTest, StrncpyCopiesAndPads) {
+    char dest[8]{};
+    tl_strncpy(dest, "hello", 5);
+    EXPECT_EQ(std::string(dest, 5), "hello");
+
+    std::memset(dest, 'X', sizeof(dest));
+    tl_strncpy(dest, "hi", 8);
+    EXPECT_STREQ(dest, "hi");
+    EXPECT_EQ(dest[2], '\0');
+
+    tl_strncpy(dest, nullptr, 8);
+    EXPECT_EQ(dest[0], '\0');
+}
+
+TEST(MsvcrtStringTest, StrstrFindsSubstring) {
+    EXPECT_STREQ(tl_strstr("hello world", "world"), "world");
+    EXPECT_STREQ(tl_strstr("hello world", "xyz"), nullptr);
+    EXPECT_STREQ(tl_strstr("hello", ""), "hello");
+    EXPECT_EQ(tl_strstr(nullptr, "a"), nullptr);
+    EXPECT_EQ(tl_strstr("a", nullptr), nullptr);
+}
+
+TEST(MsvcrtStringTest, StrcatAppends) {
+    char buf[16] = "hello";
+    tl_strcat(buf, " world");
+    EXPECT_STREQ(buf, "hello world");
+
+    tl_strcat(buf, nullptr);
+    EXPECT_STREQ(buf, "hello world");
+}
+
+TEST(MsvcrtMemoryTest, MemmoveHandlesOverlap) {
+    char data[] = "abcdefghij";
+    tl_memmove(data + 2, data, 5);
+    EXPECT_EQ(std::string(data, 10), "ababcdehij");
+}
+
+TEST(MsvcrtIoTest, FgetcReadsAndUngetcPushesBack) {
+    const std::string path = "tl_msvcrt_fgetc_" + std::to_string(static_cast<long>(getpid())) + ".txt";
+    std::remove(path.c_str());
+
+    GuestFile* file = tl_fopen(path.c_str(), "wb");
+    ASSERT_NE(file, nullptr);
+    tl_fputs("AB", file);
+    tl_fclose(file);
+
+    file = tl_fopen(path.c_str(), "rb");
+    ASSERT_NE(file, nullptr);
+    EXPECT_EQ(tl_fgetc(file), 'A');
+    EXPECT_EQ(tl_fgetc(file), 'B');
+    EXPECT_EQ(tl_fgetc(file), EOF);
+
+    tl_ungetc('X', file);
+    EXPECT_EQ(tl_fgetc(file), 'X');
+    EXPECT_EQ(tl_fgetc(file), EOF);
+
+    tl_fclose(file);
+    std::remove(path.c_str());
+}
+
+TEST(MsvcrtIoTest, FreadReadsBlocks) {
+    const std::string path = "tl_msvcrt_fread_" + std::to_string(static_cast<long>(getpid())) + ".txt";
+    std::remove(path.c_str());
+
+    GuestFile* file = tl_fopen(path.c_str(), "wb");
+    ASSERT_NE(file, nullptr);
+    tl_fwrite("0123456789", 1, 10, file);
+    tl_fclose(file);
+
+    file = tl_fopen(path.c_str(), "rb");
+    ASSERT_NE(file, nullptr);
+    char buf[4]{};
+    const std::size_t read = tl_fread(buf, 1, 3, file);
+    EXPECT_EQ(read, 3U);
+    EXPECT_EQ(std::string(buf, 3), "012");
+
+    const std::size_t read2 = tl_fread(buf, 2, 2, file);
+    EXPECT_EQ(read2, 2U);
+    EXPECT_EQ(buf[0], '3');
+    EXPECT_EQ(buf[1], '4');
+
+    tl_fclose(file);
+    std::remove(path.c_str());
+}
+
+TEST(MsvcrtIoTest, RemoveDeletesFile) {
+    const std::string path = "tl_msvcrt_remove_" + std::to_string(static_cast<long>(getpid())) + ".txt";
+    GuestFile* file = tl_fopen(path.c_str(), "wb");
+    ASSERT_NE(file, nullptr);
+    tl_fputs("data", file);
+    tl_fclose(file);
+
+    EXPECT_EQ(tl_remove(path.c_str()), 0);
+    EXPECT_EQ(tl_fopen(path.c_str(), "rb"), nullptr);
+
+    EXPECT_EQ(tl_remove(nullptr), -1);
+}
+
+TEST(MsvcrtIoTest, Stat64ReturnsEnosys) {
+    EXPECT_EQ(tl__stat64("/tmp", nullptr), -1);
+}
+
 }  // namespace
 }  // namespace tradutorlinux

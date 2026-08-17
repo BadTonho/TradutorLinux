@@ -75,10 +75,13 @@ void ensure_standard_files() {
     g_slot_used[0] = g_slot_used[1] = g_slot_used[2] = true;
     g_file_pool[0].file = 0;
     g_file_pool[0].flag = kIoRead;
+    g_file_pool[0].charbuf = -1;
     g_file_pool[1].file = 1;
     g_file_pool[1].flag = kIoWrite;
+    g_file_pool[1].charbuf = -1;
     g_file_pool[2].file = 2;
     g_file_pool[2].flag = kIoWrite;
+    g_file_pool[2].charbuf = -1;
     g_fd_modes.fill(kO_TEXT);
 }
 
@@ -100,6 +103,7 @@ GuestFile* alloc_slot(int fd, int flag) {
             g_file_pool[index] = GuestFile{};
             g_file_pool[index].file = fd;
             g_file_pool[index].flag = flag;
+            g_file_pool[index].charbuf = -1;
             return &g_file_pool[index];
         }
     }
@@ -857,6 +861,73 @@ TL_CRT_MSABI int tl_fputc(int character, GuestFile* file) noexcept {
     return tl_putc(character, file);
 }
 
+TL_CRT_MSABI int tl_fgetc(GuestFile* file) noexcept {
+    if (file == nullptr) {
+        set_error(EINVAL);
+        return EOF;
+    }
+    if (file->charbuf != -1) {
+        const int character = file->charbuf;
+        file->charbuf = -1;
+        return character;
+    }
+    unsigned char byte = 0;
+    for (;;) {
+        const ssize_t result = ::read(file->file, &byte, 1);
+        if (result == 1) {
+            return byte;
+        }
+        if (result == 0) {
+            return EOF;
+        }
+        if (errno != EINTR) {
+            file->flag |= kIoError;
+            set_error(errno);
+            return EOF;
+        }
+    }
+}
+
+TL_CRT_MSABI int tl_ungetc(int character, GuestFile* file) noexcept {
+    if (file == nullptr || character == EOF) {
+        return EOF;
+    }
+    file->charbuf = static_cast<int>(static_cast<unsigned char>(character));
+    file->flag &= ~kIoError;
+    return character;
+}
+
+TL_CRT_MSABI std::size_t tl_fread(void* buffer, std::size_t size, std::size_t count,
+                                   GuestFile* file) noexcept {
+    if (buffer == nullptr || file == nullptr) {
+        set_error(EINVAL);
+        return 0;
+    }
+    if (size == 0 || count == 0) {
+        return 0;
+    }
+    const std::size_t total = size * count;
+    std::size_t total_read = 0;
+    auto* dest = static_cast<char*>(buffer);
+    while (total_read < total) {
+        const ssize_t result = ::read(file->file, dest + total_read, total - total_read);
+        if (result > 0) {
+            total_read += static_cast<std::size_t>(result);
+            continue;
+        }
+        if (result == 0) {
+            break;
+        }
+        if (errno == EINTR) {
+            continue;
+        }
+        file->flag |= kIoError;
+        set_error(errno);
+        break;
+    }
+    return total_read / size;
+}
+
 TL_CRT_MSABI int tl_fputs(const char* text, GuestFile* file) noexcept {
     if (text == nullptr || file == nullptr) {
         set_error(EINVAL);
@@ -914,6 +985,7 @@ TL_CRT_MSABI int tl_fseek(GuestFile* file, long offset, int origin) noexcept {
         set_error(errno);
         return -1;
     }
+    file->charbuf = -1;
     return 0;
 }
 
@@ -936,6 +1008,7 @@ TL_CRT_MSABI void tl_rewind(GuestFile* file) noexcept {
     }
     if (::lseek(file->file, 0, SEEK_SET) != static_cast<off_t>(-1)) {
         file->flag &= ~kIoError;
+        file->charbuf = -1;
     } else {
         set_error(errno);
     }
@@ -1067,6 +1140,68 @@ TL_CRT_MSABI unsigned long tl_strtoul(const char* text, char** end_pointer, int 
         *end_pointer = end;
     }
     return value;
+}
+
+TL_CRT_MSABI char* tl_strncpy(char* destination, const char* source, std::size_t count) noexcept {
+    if (destination == nullptr || count == 0) {
+        return destination;
+    }
+    if (source == nullptr) {
+        std::memset(destination, 0, count);
+        return destination;
+    }
+    const std::size_t len = std::strlen(source);
+    if (len < count) {
+        std::memcpy(destination, source, len);
+        std::memset(destination + len, 0, count - len);
+    } else {
+        std::memcpy(destination, source, count);
+    }
+    return destination;
+}
+
+TL_CRT_MSABI char* tl_strstr(const char* haystack, const char* needle) noexcept {
+    if (haystack == nullptr || needle == nullptr) {
+        return nullptr;
+    }
+    return const_cast<char*>(std::strstr(haystack, needle));
+}
+
+TL_CRT_MSABI char* tl_strcat(char* destination, const char* source) noexcept {
+    if (destination == nullptr) {
+        return destination;
+    }
+    if (source == nullptr) {
+        return destination;
+    }
+    return std::strcat(destination, source);
+}
+
+TL_CRT_MSABI int tl_isspace(int character) noexcept {
+    return std::isspace(static_cast<unsigned char>(character)) != 0 ? 1 : 0;
+}
+
+TL_CRT_MSABI void* tl_memmove(void* destination, const void* source, std::size_t count) noexcept {
+    return std::memmove(destination, source, count);
+}
+
+TL_CRT_MSABI int tl_remove(const char* path) noexcept {
+    if (path == nullptr) {
+        set_error(EINVAL);
+        return -1;
+    }
+    if (std::remove(path) != 0) {
+        set_error(errno);
+        return -1;
+    }
+    return 0;
+}
+
+TL_CRT_MSABI int tl__stat64(const char* path, void* stat_buffer) noexcept {
+    (void)path;
+    (void)stat_buffer;
+    set_error(ENOSYS);
+    return -1;
 }
 
 // ---------------------------------------------------------------------------

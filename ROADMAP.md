@@ -19,7 +19,7 @@ Os itens marcados como concluídos devem ter evidência no repositório: código
 
 ## Estado atual
 
-- **Fase atual:** Fase 8 — Aplicativos-alvo reais.
+- **Fase atual:** Fase 9 — Base de processo e CRT.
 - **Marco concluído:** a Fase 7 foi validada de ponta a ponta e a decisão de produto foi tomada: **seguir com a GUI Win32 mínima como objetivo experimental**. `tl_gui.exe` abriu a janela X11, recebeu o clique em OK e encerrou com código `0`; `tl_win.exe` criou uma janela real e executou um message loop completo (`RegisterClassExA`, `CreateWindowExA`, `ShowWindow`, `GetMessageA`, `DispatchMessageA`, `DefWindowProcA`, `PostQuitMessage`), encerrando via `WM_CLOSE`/autoclose com código `0`; o modo `--report` lista imports suportados sem executar o PE; `tl_hello`, `tl_echo` e `tl_file` têm regressões e limitações publicadas na matriz.
 - **Marco concluído:** o smoke test de GUI passou a ter cobertura automática em CI. O teste `runtime_gui_smoke` sobe um `Xvfb` próprio e executa `tl_win.exe` de ponta a ponta em dois cenários: autoclose (message loop encerra sozinho via `WM_QUIT`) e fechamento real por `WM_DELETE_WINDOW` (mesmo `ClientMessage` do botão de fechar do WM), exigindo exit-code `1`, stdout vazio e os eventos esperados no trace. A conexão X11 do runtime é fechada no teardown (`DisplayCloser`), validado sob ASAN com `detect_leaks=1`.
 - **Marco concluído:** `CreateWindowExA` agora despacha `WM_CREATE` ao `WNDPROC` do convidado antes de devolver o `HWND` (retorno `-1` aborta a criação e devolve `NULL`). A fixture `tl_win.c` marca uma flag no `WM_CREATE` e propaga no exit code via `PostQuitMessage`, então o `runtime_gui_smoke` prova o despacho exigindo exit-code `1`.
@@ -29,7 +29,7 @@ Os itens marcados como concluídos devem ter evidência no repositório: código
 - **Marco concluído:** a Fase 8 começou com a definição dos primeiros aplicativos-alvo reais, de código aberto e compilados em CI: `xxd` (vim `v9.2.0957`), `bzip2` (`1.0.8`) e `dos2unix`/`unix2dos` (`7.5.6`). O módulo `tests/targets` baixa as fontes pinadas por hash SHA-256, faz o cross-build com `mingw-w64` (opção `TL_BUILD_TARGET_APPS=ON`, job `target-apps` do CI) e protege os imports reais em manifests via `llvm-readobj` e `--report` (8 testes, label `targetapp`). Nenhum alvo executava ainda: todos importam `msvcrt.dll` (fora de escopo até a Fase 9) e o `--report` os classificava como `result: unsupported` / `execution: not-attempted`. Os imports capturados (xxd: 73 símbolos; bzip2: 69; dos2unix/unix2dos: 88, incluindo `SHELL32.dll!CommandLineToArgvW`) guiam o subconjunto mínimo de CRT da Fase 9.
 - **Marco concluído:** o subconjunto mínimo de `msvcrt.dll` foi implementado e registrado (57 símbolos, ordinais 1–57), junto com as 14 APIs de `KERNEL32.dll` que o CRT interno do mingw e o `xxd.exe` exigem (`VirtualQuery`/`VirtualProtect` via `/proc/self/maps` + `mprotect`, `MultiByteToWideChar`/`WideCharToMultiByte` com CP 0/1252/65001, critical sections no-op para convidado single-thread, `TlsGetValue`, `GetConsoleMode`/`SetConsoleMode`, `Sleep`, `SetUnhandledExceptionFilter`, `IsDBCSLeadByteEx`). O `--report` do `xxd.exe` passou a `result: supported`.
 - **Marco concluído:** `xxd.exe` executa de ponta a ponta com saída **byte-idêntica** ao `xxd` do sistema (exit `0`). Para isso a fronteira agora aloca um TEB de uma página e aponta o segmento `%gs` via `arch_prctl(ARCH_SET_GS)` durante a execução do convidado (o mingw lê `%gs:[0x30]` no `__mingw_CRTStartup`), restaurando o `GS` e liberando o TEB em seguida. O teste e2e fixa um ouro em `tests/targets/golden/xxd/` (entrada de 4880 bytes que cruza a coluna de offset em `0x1000`) e verifica em CTest: modo padrão, `-p` (plain) e caminho de erro (arquivo inexistente → exit `2`, stderr não vazio), 3 testes novos com label `targetapp`. As conversões de código de página, `VirtualQuery`/`VirtualProtect`, `TlsGetValue`, critical sections e o subconjunto de CRT têm 42 testes unitários novos (`test_win32.cpp`, `test_msvcrt.cpp`). Total: 180 testes verdes no preset com alvos; 169 em `debug`, `release` e `sanitize`.
-- **Próximo resultado observável:** o segundo aplicativo-alvo. `bzip2.exe` ainda reporta `result: unsupported` por 3 símbolos de `msvcrt.dll` (`strncpy`, `strstr`, `ungetc`); `dos2unix`/`unix2dos` dependem de `SHELL32.dll!CommandLineToArgvW` e do caminho `W` (decidir se entra na Fase 9 ou fica para depois). Fechar os símbolos que faltam do `msvcrt.dll` para `bzip2.exe` e criar a regressão e2e correspondente.
+- **Próximo resultado observável:** validar `bzip2.exe` com os 10 novos símbolos de `msvcrt.dll` implementados (`strncpy`, `strstr`, `ungetc`, `fgetc`, `fread`, `isspace`, `memmove`, `strcat`, `remove`, `_stat64`). `dos2unix`/`unix2dos` dependem de `SHELL32.dll!CommandLineToArgvW` e do caminho `W` (Fase 9+). Fechar o `bzip2.exe` e criar a regressão e2e correspondente.
 
 ## Fase 0 — Fundação e contrato
 
@@ -157,10 +157,10 @@ aplicativos pequenos, úteis e reproduzíveis. Cada aplicativo-alvo deve ser
 fixado por versão, arquitetura, toolchain e lista de imports.
 
 - [x] Definir de 3 a 5 aplicativos-alvo reais, preferencialmente de código aberto e compiláveis no CI.
-- [ ] Priorizar utilitários de console: ferramentas de texto, arquivos, configuração e empacotamento simples.
+- [x] Priorizar utilitários de console: ferramentas de texto, arquivos, configuração e empacotamento simples.
 - [ ] Criar teste por aplicativo com stdout, stderr, exit code, arquivos produzidos e timeout.
 - [ ] Fazer o `--report` agrupar imports ausentes por DLL e por fase.
-- [ ] Separar “não suportado”, “falhou durante a execução” e “resultado incorreto”.
+- [ ] Separar "não suportado", "falhou durante a execução" e "resultado incorreto".
 - [ ] Publicar pontuação de compatibilidade por aplicativo; iniciar não é suficiente.
 
 ### Critério de saída

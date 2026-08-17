@@ -180,6 +180,16 @@ void register_builtin_modules() {
         {"__initenv", 55, reinterpret_cast<std::uintptr_t>(&g_guest_initenv)},
         {"_commode", 56, reinterpret_cast<std::uintptr_t>(&g_guest_commode)},
         {"_fmode", 57, reinterpret_cast<std::uintptr_t>(&g_guest_fmode)},
+        {"fgetc", 58, reinterpret_cast<std::uintptr_t>(&tl_fgetc)},
+        {"fread", 59, reinterpret_cast<std::uintptr_t>(&tl_fread)},
+        {"ungetc", 60, reinterpret_cast<std::uintptr_t>(&tl_ungetc)},
+        {"strncpy", 61, reinterpret_cast<std::uintptr_t>(&tl_strncpy)},
+        {"strstr", 62, reinterpret_cast<std::uintptr_t>(&tl_strstr)},
+        {"isspace", 63, reinterpret_cast<std::uintptr_t>(&tl_isspace)},
+        {"strcat", 64, reinterpret_cast<std::uintptr_t>(&tl_strcat)},
+        {"memmove", 65, reinterpret_cast<std::uintptr_t>(&tl_memmove)},
+        {"remove", 66, reinterpret_cast<std::uintptr_t>(&tl_remove)},
+        {"_stat64", 67, reinterpret_cast<std::uintptr_t>(&tl__stat64)},
     };
     static const InternalModule kMsvcrtModule{"msvcrt.dll", kMsvcrtExports};
     register_module(kMsvcrtModule);
