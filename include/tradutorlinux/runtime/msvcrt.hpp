@@ -118,4 +118,6 @@ extern int g_guest_fmode;
 // CLI antes da execução; o convidado lê em __getmainargs no processo filho.
 void msvcrt_set_guest_command_line(std::vector<std::string> arguments);
 
+const std::vector<std::string>& msvcrt_get_guest_arguments() noexcept;
+
 }  // namespace tradutorlinux

@@ -1,8 +1,11 @@
 #include "tradutorlinux/runtime/winapi.hpp"
 
 #include <array>
+#include <chrono>
 #include <cstdint>
+#include <cstring>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include <gtest/gtest.h>
@@ -213,6 +216,128 @@ TEST(Win32SleepTest, SleepsZeroAndOneMillisecond) {
     EXPECT_EQ(tl_GetLastError(), abi::kErrorSuccess);
     tl_Sleep(1);
     EXPECT_EQ(tl_GetLastError(), abi::kErrorSuccess);
+}
+
+TEST(Win32ModuleTest, GetModuleHandleAKnownDllReturnsNonZero) {
+    EXPECT_NE(tl_GetModuleHandleA("kernel32.dll"), nullptr);
+    EXPECT_NE(tl_GetModuleHandleA("msvcrt.dll"), nullptr);
+    EXPECT_NE(tl_GetModuleHandleA("USER32.dll"), nullptr);
+}
+
+TEST(Win32ModuleTest, GetModuleHandleAUnknownReturnsNull) {
+    EXPECT_EQ(tl_GetModuleHandleA("foo.dll"), nullptr);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorFileNotFound);
+}
+
+TEST(Win32ModuleTest, GetModuleHandleANullReturnsDefault) {
+    EXPECT_NE(tl_GetModuleHandleA(nullptr), nullptr);
+}
+
+TEST(Win32ModuleTest, GetModuleHandleWConvertsToA) {
+    const std::uint16_t name[] = {'k', 'e', 'r', 'n', 'e', 'l', '3', '2', '.', 'd', 'l', 'l', 0};
+    EXPECT_NE(tl_GetModuleHandleW(name), nullptr);
+}
+
+TEST(Win32ModuleTest, GetProcAddressReturnsNullForStub) {
+    void* handle = tl_GetModuleHandleA("kernel32.dll");
+    EXPECT_EQ(tl_GetProcAddress(handle, "SomeFunction"), nullptr);
+}
+
+TEST(Win32CommandLineTest, GetCommandLineAReturnsNonEmpty) {
+    const char* cmdline = tl_GetCommandLineA();
+    ASSERT_NE(cmdline, nullptr);
+    EXPECT_GT(std::strlen(cmdline), 0U);
+}
+
+TEST(Win32CommandLineTest, GetCommandLineWReturnsNonEmpty) {
+    const std::uint16_t* cmdline = tl_GetCommandLineW();
+    ASSERT_NE(cmdline, nullptr);
+    EXPECT_NE(cmdline[0], 0);
+}
+
+TEST(Win32EnvTest, GetEnvironmentVariableAFindsPath) {
+    const std::uint32_t needed = tl_GetEnvironmentVariableA("PATH", nullptr, 0);
+    EXPECT_GT(needed, 0U);
+
+    std::vector<char> buffer(needed + 1, '\0');
+    const std::uint32_t written = tl_GetEnvironmentVariableA("PATH", buffer.data(),
+                                                               needed + 1);
+    EXPECT_EQ(written, needed);
+    EXPECT_GT(std::strlen(buffer.data()), 0U);
+}
+
+TEST(Win32EnvTest, GetEnvironmentVariableAMissingReturnsZero) {
+    EXPECT_EQ(tl_GetEnvironmentVariableA("TL_NONEXISTENT_VAR_12345", nullptr, 0), 0U);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorFileNotFound);
+}
+
+TEST(Win32EnvTest, GetEnvironmentVariableAInsufficientBuffer) {
+    const std::uint32_t needed = tl_GetEnvironmentVariableA("PATH", nullptr, 0);
+    if (needed > 0) {
+        std::vector<char> tiny(2, '\0');
+        const std::uint32_t result = tl_GetEnvironmentVariableA("PATH", tiny.data(), 2);
+        EXPECT_EQ(result, needed);
+        EXPECT_EQ(tl_GetLastError(), abi::kErrorInsufficientBuffer);
+    }
+}
+
+TEST(Win32EnvTest, GetEnvironmentVariableWConvertsResult) {
+    const std::uint16_t name[] = {'P', 'A', 'T', 'H', 0};
+    const std::uint32_t needed = tl_GetEnvironmentVariableW(name, nullptr, 0);
+    EXPECT_GT(needed, 0U);
+}
+
+TEST(Win32HeapTest, GetProcessHeapReturnsNonNull) {
+    EXPECT_NE(tl_GetProcessHeap(), nullptr);
+}
+
+TEST(Win32HeapTest, HeapAllocAndHeapFreeRoundTrip) {
+    void* heap = tl_GetProcessHeap();
+    ASSERT_NE(heap, nullptr);
+
+    void* block = tl_HeapAlloc(heap, 0, 128);
+    ASSERT_NE(block, nullptr);
+    std::memset(block, 0xAB, 128);
+    EXPECT_EQ(static_cast<unsigned char*>(block)[0], 0xAB);
+    EXPECT_EQ(tl_HeapFree(heap, 0, block), 1);
+}
+
+TEST(Win32HeapTest, HeapAllocZeroFlagClearsMemory) {
+    void* heap = tl_GetProcessHeap();
+    void* block = tl_HeapAlloc(heap, 0x0008, 64);
+    ASSERT_NE(block, nullptr);
+    for (std::size_t i = 0; i < 64; ++i) {
+        EXPECT_EQ(static_cast<unsigned char*>(block)[i], 0);
+    }
+    tl_HeapFree(heap, 0, block);
+}
+
+TEST(Win32HeapTest, HeapReAllocGrowsBlock) {
+    void* heap = tl_GetProcessHeap();
+    void* block = tl_HeapAlloc(heap, 0, 32);
+    ASSERT_NE(block, nullptr);
+    std::memset(block, 0xCC, 32);
+
+    void* grown = tl_HeapReAlloc(heap, 0, block, 64);
+    ASSERT_NE(grown, nullptr);
+    EXPECT_EQ(static_cast<unsigned char*>(grown)[0], 0xCC);
+    tl_HeapFree(heap, 0, grown);
+}
+
+TEST(Win32TimeTest, GetTickCount64ReturnsIncreasingValue) {
+    const std::uint64_t t1 = tl_GetTickCount64();
+    tl_Sleep(1);
+    const std::uint64_t t2 = tl_GetTickCount64();
+    EXPECT_GE(t2, t1);
+    EXPECT_GT(t2 - t1, 0U);
+}
+
+TEST(Win32TimeTest, GetSystemTimeAsFileTimeReturnsReasonableValue) {
+    std::uint64_t ft = 0;
+    tl_GetSystemTimeAsFileTime(&ft);
+    // Year 2020 in 100-ns intervals since 1601
+    const std::uint64_t year_2020 = 132537600000000000ULL;
+    EXPECT_GT(ft, year_2020);
 }
 
 }  // namespace

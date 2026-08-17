@@ -197,6 +197,16 @@ Contratos de ABI em `docs/arquitetura/msvcrt.md` e
 | `KERNEL32.dll` | `IsDBCSLeadByteEx` | Suportado | Sempre `FALSE` (sem DBCS) |
 | `KERNEL32.dll` | `Sleep` | Suportado | `nanosleep` com loop `EINTR` |
 | `KERNEL32.dll` | `SetUnhandledExceptionFilter` | Suportado | Registra o handler em célula global (nunca invoca); retorna o anterior |
+| `KERNEL32.dll` | `GetModuleHandleA/W` | Suportado | Retorna handle para módulos conhecidos (`kernel32.dll`, `user32.dll`, `gdi32.dll`, `msvcrt.dll`); NULL para desconhecidos |
+| `KERNEL32.dll` | `GetProcAddress` | Suportado | Stub: retorna NULL (resolução dinâmica de símbolos não suportada) |
+| `KERNEL32.dll` | `GetCommandLineA/W` | Suportado | Retorna linha de comando formatada com aspas a partir do `argv` do convidado |
+| `KERNEL32.dll` | `GetEnvironmentVariableA/W` | Suportado | Delega ao `getenv` do host; retorna tamanho em contagem-only, erro `ERROR_FILE_NOT_FOUND` se inexistente |
+| `KERNEL32.dll` | `GetProcessHeap` | Suportado | Retorna token opaco fixo (heap único do processo) |
+| `KERNEL32.dll` | `HeapAlloc` | Suportado | `malloc` do hospedeiro; flag `HEAP_ZERO_MEMORY` (0x0008) → `calloc` |
+| `KERNEL32.dll` | `HeapFree` | Suportado | `free` do hospedeiro |
+| `KERNEL32.dll` | `HeapReAlloc` | Suportado | `realloc` do hospedeiro |
+| `KERNEL32.dll` | `GetTickCount64` | Suportado | `steady_clock` em milissegundos |
+| `KERNEL32.dll` | `GetSystemTimeAsFileTime` | Suportado | `system_clock` convertido para ticks de 100ns desde 1601 |
 
 O `xxd.exe` tem 42 testes unitários novos (`tests/test_win32.cpp` e
 `tests/test_msvcrt.cpp`) cobrindo as conversões de code page (inclusive

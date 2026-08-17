@@ -89,6 +89,19 @@ void register_builtin_modules() {
         {"VirtualProtect", 22, reinterpret_cast<std::uintptr_t>(&tl_VirtualProtect)},
         {"VirtualQuery", 23, reinterpret_cast<std::uintptr_t>(&tl_VirtualQuery)},
         {"WideCharToMultiByte", 24, reinterpret_cast<std::uintptr_t>(&tl_WideCharToMultiByte)},
+        {"GetModuleHandleA", 25, reinterpret_cast<std::uintptr_t>(&tl_GetModuleHandleA)},
+        {"GetModuleHandleW", 26, reinterpret_cast<std::uintptr_t>(&tl_GetModuleHandleW)},
+        {"GetProcAddress", 27, reinterpret_cast<std::uintptr_t>(&tl_GetProcAddress)},
+        {"GetCommandLineA", 28, reinterpret_cast<std::uintptr_t>(&tl_GetCommandLineA)},
+        {"GetCommandLineW", 29, reinterpret_cast<std::uintptr_t>(&tl_GetCommandLineW)},
+        {"GetEnvironmentVariableA", 30, reinterpret_cast<std::uintptr_t>(&tl_GetEnvironmentVariableA)},
+        {"GetEnvironmentVariableW", 31, reinterpret_cast<std::uintptr_t>(&tl_GetEnvironmentVariableW)},
+        {"GetProcessHeap", 32, reinterpret_cast<std::uintptr_t>(&tl_GetProcessHeap)},
+        {"HeapAlloc", 33, reinterpret_cast<std::uintptr_t>(&tl_HeapAlloc)},
+        {"HeapFree", 34, reinterpret_cast<std::uintptr_t>(&tl_HeapFree)},
+        {"HeapReAlloc", 35, reinterpret_cast<std::uintptr_t>(&tl_HeapReAlloc)},
+        {"GetTickCount64", 36, reinterpret_cast<std::uintptr_t>(&tl_GetTickCount64)},
+        {"GetSystemTimeAsFileTime", 37, reinterpret_cast<std::uintptr_t>(&tl_GetSystemTimeAsFileTime)},
     };
     static const InternalModule kKernel32Module{"KERNEL32.dll", kKernel32Exports};
     register_module(kKernel32Module);

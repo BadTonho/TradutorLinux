@@ -478,6 +478,10 @@ void msvcrt_set_guest_command_line(std::vector<std::string> arguments) {
     g_guest_arguments = std::move(arguments);
 }
 
+const std::vector<std::string>& msvcrt_get_guest_arguments() noexcept {
+    return g_guest_arguments;
+}
+
 // ---------------------------------------------------------------------------
 // Startup e término.
 // ---------------------------------------------------------------------------

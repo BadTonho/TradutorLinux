@@ -2,6 +2,7 @@
 
 #include "tradutorlinux/diagnostics/trace.hpp"
 #include "tradutorlinux/gui/x11.hpp"
+#include "tradutorlinux/runtime/msvcrt.hpp"
 #include "tradutorlinux/util/basics.hpp"
 
 #include <algorithm>
@@ -1943,6 +1944,215 @@ TL_MSABI int tl_WideCharToMultiByte(const std::uint32_t code_page, const std::ui
     }
     set_last_error(abi::kErrorSuccess);
     return static_cast<int>(written);
+}
+
+// ---------------------------------------------------------------------------
+// GetModuleHandle / GetProcAddress (Fase 9)
+// ---------------------------------------------------------------------------
+
+// Módulos conhecidos internamente. O handle é o endereço do próprio
+// registrations (token opaco); GetProcAddress consulta o registro interno.
+struct KnownModule {
+    const char* name;
+    std::uintptr_t handle;
+};
+
+std::vector<KnownModule>& known_modules() {
+    static std::vector<KnownModule> instance;
+    return instance;
+}
+
+void ensure_known_modules() {
+    if (!known_modules().empty()) {
+        return;
+    }
+    known_modules().push_back({"kernel32.dll", 0x1000});
+    known_modules().push_back({"user32.dll", 0x2000});
+    known_modules().push_back({"gdi32.dll", 0x3000});
+    known_modules().push_back({"msvcrt.dll", 0x4000});
+}
+
+void* tl_GetModuleHandleA(const char* module_name) noexcept {
+    ensure_known_modules();
+    if (module_name == nullptr) {
+        return reinterpret_cast<void*>(0x1000);
+    }
+    std::string name_lower(module_name);
+    for (auto& c : name_lower) {
+        c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    }
+    for (const auto& mod : known_modules()) {
+        if (name_lower == mod.name) {
+            return reinterpret_cast<void*>(mod.handle);
+        }
+    }
+    set_last_error(abi::kErrorFileNotFound);
+    return nullptr;
+}
+
+void* tl_GetModuleHandleW(const std::uint16_t* module_name) noexcept {
+    if (module_name == nullptr) {
+        return tl_GetModuleHandleA(nullptr);
+    }
+    std::string narrow;
+    while (*module_name != 0) {
+        narrow.push_back(static_cast<char>(*module_name & 0x7F));
+        ++module_name;
+    }
+    return tl_GetModuleHandleA(narrow.c_str());
+}
+
+void* tl_GetProcAddress(void* module, const char* name) noexcept {
+    (void)module;
+    (void)name;
+    set_last_error(abi::kErrorFileNotFound);
+    return nullptr;
+}
+
+// ---------------------------------------------------------------------------
+// GetCommandLine / GetEnvironmentVariable (Fase 9)
+// ---------------------------------------------------------------------------
+
+static std::string g_command_line_string;
+
+const char* tl_GetCommandLineA() noexcept {
+    if (g_command_line_string.empty()) {
+        const auto& args = msvcrt_get_guest_arguments();
+        if (args.empty()) {
+            g_command_line_string = "\"\"";
+        } else {
+            for (std::size_t i = 0; i < args.size(); ++i) {
+                if (i > 0) {
+                    g_command_line_string.push_back(' ');
+                }
+                g_command_line_string.push_back('"');
+                g_command_line_string += args[i];
+                g_command_line_string.push_back('"');
+            }
+        }
+    }
+    return g_command_line_string.c_str();
+}
+
+const std::uint16_t* tl_GetCommandLineW() noexcept {
+    static std::vector<std::uint16_t> wide_cmdline;
+    const char* narrow = tl_GetCommandLineA();
+    wide_cmdline.clear();
+    while (*narrow != '\0') {
+        wide_cmdline.push_back(static_cast<std::uint16_t>(static_cast<unsigned char>(*narrow)));
+        ++narrow;
+    }
+    wide_cmdline.push_back(0);
+    return wide_cmdline.data();
+}
+
+extern char** environ;
+
+std::uint32_t tl_GetEnvironmentVariableA(const char* name, char* buffer,
+                                          std::uint32_t size) noexcept {
+    if (name == nullptr) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    const char* value = ::getenv(name);
+    if (value == nullptr) {
+        set_last_error(abi::kErrorFileNotFound);
+        return 0;
+    }
+    const std::size_t len = std::strlen(value);
+    if (buffer == nullptr || size == 0) {
+        return static_cast<std::uint32_t>(len);
+    }
+    if (size <= len) {
+        set_last_error(abi::kErrorInsufficientBuffer);
+        return static_cast<std::uint32_t>(len);
+    }
+    std::memcpy(buffer, value, len);
+    buffer[len] = '\0';
+    set_last_error(abi::kErrorSuccess);
+    return static_cast<std::uint32_t>(len);
+}
+
+std::uint32_t tl_GetEnvironmentVariableW(const std::uint16_t* name, std::uint16_t* buffer,
+                                          std::uint32_t size) noexcept {
+    if (name == nullptr) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    std::string narrow_name;
+    while (*name != 0) {
+        narrow_name.push_back(static_cast<char>(*name & 0x7F));
+        ++name;
+    }
+    const std::uint32_t result = tl_GetEnvironmentVariableA(narrow_name.c_str(), nullptr, 0);
+    if (result == 0) {
+        return 0;
+    }
+    if (buffer == nullptr || size == 0) {
+        return result;
+    }
+    if (size <= result) {
+        set_last_error(abi::kErrorInsufficientBuffer);
+        return result;
+    }
+    char narrow_buf[1024]{};
+    tl_GetEnvironmentVariableA(narrow_name.c_str(), narrow_buf, sizeof(narrow_buf));
+    for (std::uint32_t i = 0; i <= result; ++i) {
+        buffer[i] = static_cast<std::uint16_t>(static_cast<unsigned char>(narrow_buf[i]));
+    }
+    set_last_error(abi::kErrorSuccess);
+    return result;
+}
+
+// ---------------------------------------------------------------------------
+// Heap (Fase 9) — wrapper sobre malloc/free do hospedeiro.
+// ---------------------------------------------------------------------------
+
+void* tl_GetProcessHeap() noexcept {
+    static char g_process_heap_token = 0;
+    return &g_process_heap_token;
+}
+
+void* tl_HeapAlloc(void* heap, std::uint32_t flags, std::uintptr_t size) noexcept {
+    (void)heap;
+    if ((flags & 0x0008) != 0) {
+        return std::calloc(1, size);
+    }
+    return std::malloc(size);
+}
+
+int tl_HeapFree(void* heap, std::uint32_t flags, void* memory) noexcept {
+    (void)heap;
+    (void)flags;
+    std::free(memory);
+    return 1;
+}
+
+void* tl_HeapReAlloc(void* heap, std::uint32_t flags, void* memory,
+                      std::uintptr_t new_size) noexcept {
+    (void)heap;
+    (void)flags;
+    return std::realloc(memory, new_size);
+}
+
+// ---------------------------------------------------------------------------
+// Tempo (Fase 9)
+// ---------------------------------------------------------------------------
+
+std::uint64_t tl_GetTickCount64() noexcept {
+    using namespace std::chrono;
+    const auto now = steady_clock::now().time_since_epoch();
+    return static_cast<std::uint64_t>(duration_cast<milliseconds>(now).count());
+}
+
+void tl_GetSystemTimeAsFileTime(void* file_time) noexcept {
+    auto* ft = static_cast<std::uint64_t*>(file_time);
+    using namespace std::chrono;
+    const auto now = system_clock::now().time_since_epoch();
+    const auto since_epoch = duration_cast<nanoseconds>(now).count();
+    const std::uint64_t ticks_100ns = static_cast<std::uint64_t>(since_epoch) / 100;
+    const std::uint64_t epoch_diff = 116444736000000000ULL;
+    *ft = ticks_100ns + epoch_diff;
 }
 
 }  // extern "C"

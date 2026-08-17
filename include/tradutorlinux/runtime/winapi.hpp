@@ -237,9 +237,25 @@ TL_MSABI int tl_VirtualProtect(void* address, std::uintptr_t size, std::uint32_t
 TL_MSABI std::uintptr_t tl_VirtualQuery(const void* address, void* memory_information,
                                         std::uintptr_t length) noexcept;
 TL_MSABI int tl_WideCharToMultiByte(std::uint32_t code_page, std::uint32_t flags,
-                                    const std::uint16_t* wide_str, int wide_count, char* mb_str,
-                                    int mb_count, const char* default_char,
-                                    int* used_default_char) noexcept;
+                                     const std::uint16_t* wide_str, int wide_count, char* mb_str,
+                                     int mb_count, const char* default_char,
+                                     int* used_default_char) noexcept;
+TL_MSABI void* tl_GetModuleHandleA(const char* module_name) noexcept;
+TL_MSABI void* tl_GetModuleHandleW(const std::uint16_t* module_name) noexcept;
+TL_MSABI void* tl_GetProcAddress(void* module, const char* name) noexcept;
+TL_MSABI const char* tl_GetCommandLineA() noexcept;
+TL_MSABI const std::uint16_t* tl_GetCommandLineW() noexcept;
+TL_MSABI std::uint32_t tl_GetEnvironmentVariableA(const char* name, char* buffer,
+                                                   std::uint32_t size) noexcept;
+TL_MSABI std::uint32_t tl_GetEnvironmentVariableW(const std::uint16_t* name, std::uint16_t* buffer,
+                                                   std::uint32_t size) noexcept;
+TL_MSABI void* tl_GetProcessHeap() noexcept;
+TL_MSABI void* tl_HeapAlloc(void* heap, std::uint32_t flags, std::uintptr_t size) noexcept;
+TL_MSABI int tl_HeapFree(void* heap, std::uint32_t flags, void* memory) noexcept;
+TL_MSABI void* tl_HeapReAlloc(void* heap, std::uint32_t flags, void* memory,
+                               std::uintptr_t new_size) noexcept;
+TL_MSABI std::uint64_t tl_GetTickCount64() noexcept;
+TL_MSABI void tl_GetSystemTimeAsFileTime(void* file_time) noexcept;
 
 }  // extern "C"
 
