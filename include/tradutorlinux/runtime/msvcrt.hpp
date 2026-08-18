@@ -22,7 +22,7 @@ struct GuestFile {
     char* base{nullptr};
     int flag{0};
     int file{-1};
-    int charbuf{0};
+    int charbuf{-1};
     int bufsiz{0};
     char* tmpfname{nullptr};
 };
@@ -52,6 +52,7 @@ TL_CRT_MSABI int tl_atexit(void (*handler)(void)) noexcept;
 TL_CRT_MSABI void* tl_calloc(std::size_t count, std::size_t size) noexcept;
 TL_CRT_MSABI void tl_exit(int exit_code) noexcept;
 TL_CRT_MSABI int tl_fclose(GuestFile* file) noexcept;
+TL_CRT_MSABI int tl_feof(const GuestFile* file) noexcept;
 TL_CRT_MSABI int tl_ferror(const GuestFile* file) noexcept;
 TL_CRT_MSABI int tl_fflush(GuestFile* file) noexcept;
 TL_CRT_MSABI GuestFile* tl_fopen(const char* path, const char* mode) noexcept;

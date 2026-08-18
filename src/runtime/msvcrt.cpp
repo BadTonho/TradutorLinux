@@ -35,6 +35,7 @@ using diagnostics::write_trace;
 constexpr int kIoRead = 0x0001;
 constexpr int kIoWrite = 0x0002;
 constexpr int kIoReadWrite = 0x0004;
+constexpr int kIoEof = 0x0010;
 constexpr int kIoError = 0x0020;
 constexpr int kIoBinary = 0x8000;
 
@@ -527,9 +528,15 @@ TL_CRT_MSABI void tl___initterm(void (**start)(void), void (**end)(void)) noexce
     if (start == nullptr || end == nullptr) {
         return;
     }
+    std::ptrdiff_t count = end - start;
+    trace_crt(TraceLevel::Info, "initterm",
+              {TraceField{"count", std::to_string(count)}});
     for (GuestFnPtr* current = reinterpret_cast<GuestFnPtr*>(start);
          current != reinterpret_cast<GuestFnPtr*>(end); ++current) {
         if (*current != nullptr) {
+            trace_crt(TraceLevel::Info, "initterm-call",
+                      {TraceField{"address", std::to_string(reinterpret_cast<std::uintptr_t>(*current))},
+                       TraceField{"index", std::to_string(static_cast<std::uintptr_t>(current - reinterpret_cast<GuestFnPtr*>(start)))}});
             (*current)();
         }
     }
@@ -733,6 +740,7 @@ TL_CRT_MSABI GuestFile* tl_fopen(const char* path, const char* mode) noexcept {
         set_error(EINVAL);
         return nullptr;
     }
+    trace_crt(TraceLevel::Info, "fopen", {TraceField{"path", path}, TraceField{"mode", mode}});
     char kind = '\0';
     bool plus = false;
     bool binary = false;
@@ -882,6 +890,8 @@ TL_CRT_MSABI int tl_fgetc(GuestFile* file) noexcept {
             return byte;
         }
         if (result == 0) {
+            file->flag |= kIoEof;
+            trace_crt(TraceLevel::Info, "fgetc_eof", {TraceField{"fd", std::to_string(file->file)}});
             return EOF;
         }
         if (errno != EINTR) {
@@ -890,6 +900,13 @@ TL_CRT_MSABI int tl_fgetc(GuestFile* file) noexcept {
             return EOF;
         }
     }
+}
+
+TL_CRT_MSABI int tl_feof(const GuestFile* file) noexcept {
+    if (file == nullptr) {
+        return 0;
+    }
+    return (file->flag & kIoEof) != 0 ? 1 : 0;
 }
 
 TL_CRT_MSABI int tl_ungetc(int character, GuestFile* file) noexcept {
@@ -913,6 +930,11 @@ TL_CRT_MSABI std::size_t tl_fread(void* buffer, std::size_t size, std::size_t co
     const std::size_t total = size * count;
     std::size_t total_read = 0;
     auto* dest = static_cast<char*>(buffer);
+    if (file->charbuf != -1 && total > 0) {
+        dest[0] = static_cast<char>(static_cast<unsigned char>(file->charbuf));
+        file->charbuf = -1;
+        total_read = 1;
+    }
     while (total_read < total) {
         const ssize_t result = ::read(file->file, dest + total_read, total - total_read);
         if (result > 0) {
@@ -920,6 +942,7 @@ TL_CRT_MSABI std::size_t tl_fread(void* buffer, std::size_t size, std::size_t co
             continue;
         }
         if (result == 0) {
+            file->flag |= kIoEof;
             break;
         }
         if (errno == EINTR) {
@@ -929,6 +952,9 @@ TL_CRT_MSABI std::size_t tl_fread(void* buffer, std::size_t size, std::size_t co
         set_error(errno);
         break;
     }
+    trace_crt(TraceLevel::Info, "fread", {TraceField{"fd", std::to_string(file->file)},
+                                          TraceField{"total", std::to_string(total)},
+                                          TraceField{"read", std::to_string(total_read)}});
     return total_read / size;
 }
 
