@@ -368,13 +368,16 @@ void trace_stub(const char* symbol) noexcept {
     return true;
 }
 
-// WIN32_FIND_DATAA simplificado (layout compatível com o convidado).
-// Tamanho total: 320 bytes (padding alinhado a 8).
+// WIN32_FIND_DATAA (layout exato do mingw: FILETIME = 2 DWORDs, align 4;
+// cFileName em 44, tamanho total 320).
 struct Win32FindDataA {
     std::uint32_t dw_file_attributes{0};
-    std::uint64_t ft_creation_time{0};
-    std::uint64_t ft_last_access_time{0};
-    std::uint64_t ft_last_write_time{0};
+    std::uint32_t ft_creation_time_lo{0};
+    std::uint32_t ft_creation_time_hi{0};
+    std::uint32_t ft_last_access_time_lo{0};
+    std::uint32_t ft_last_access_time_hi{0};
+    std::uint32_t ft_last_write_time_lo{0};
+    std::uint32_t ft_last_write_time_hi{0};
     std::uint32_t n_file_size_high{0};
     std::uint32_t n_file_size_low{0};
     std::uint32_t dw_reserved0{0};
@@ -382,7 +385,8 @@ struct Win32FindDataA {
     char c_file_name[260]{};
     char c_alternate_file_name[14]{};
 };
-static_assert(sizeof(Win32FindDataA) == 328);
+static_assert(sizeof(Win32FindDataA) == 320);
+static_assert(offsetof(Win32FindDataA, c_file_name) == 44);
 
 // Atributos de arquivo Win32.
 constexpr std::uint32_t kFileAttributeReadOnly = 0x00000001U;
@@ -2066,6 +2070,8 @@ TL_MSABI int tl_MultiByteToWideChar(const std::uint32_t code_page, const std::ui
         trace_guest_failure("MultiByteToWideChar", "source", "memória convidada inválida");
         return 0;
     }
+    std::fprintf(stderr, "[tl][dbg] MultiByteToWideChar cp=%u flags=%u src=\"%s\" (mb_count=%d)\n",
+                 code_page, flags, mb_str, mb_count);
     const auto* const bytes = reinterpret_cast<const std::uint8_t*>(mb_str);
     std::size_t index = 0;
     std::size_t needed = 0;
@@ -2115,6 +2121,12 @@ TL_MSABI int tl_MultiByteToWideChar(const std::uint32_t code_page, const std::ui
         wide_str[written] = 0;
         written += 1;
     }
+    std::fprintf(stderr, "[tl][dbg]   MultiByteToWideChar dst=%p wrote=%zu units:", static_cast<void*>(wide_str),
+                 written);
+    for (std::size_t unit = 0; unit < written && unit < 8; ++unit) {
+        std::fprintf(stderr, " %04X", static_cast<unsigned>(wide_str[unit]));
+    }
+    std::fprintf(stderr, "\n");
     set_last_error(abi::kErrorSuccess);
     return static_cast<int>(written);
 }
@@ -3166,6 +3178,482 @@ GuestExecutionResult execute_guest_entry(const std::uintptr_t entry_point, // NO
     static_cast<void>(set_guest_gs_base(nullptr));
     free_guest_teb(teb);
     return {.exited_explicitly = true, .exit_code = g_guest_exit_code};
+}
+
+// ---------------------------------------------------------------------------
+// Variantes wide do sistema de arquivos (Fase 10+).
+// ---------------------------------------------------------------------------
+
+// Valida uma string wide terminada em zero na memória convidada.
+[[nodiscard]] bool mapped_guest_wstring(const std::uint16_t* value) noexcept {
+    if (value == nullptr) {
+        return true;
+    }
+    constexpr std::size_t kMaxGuestWideString = 65535;
+    const std::uintptr_t address = reinterpret_cast<std::uintptr_t>(value);
+    for (std::size_t index = 0; index < kMaxGuestWideString; ++index) {
+        if (index > (std::numeric_limits<std::uintptr_t>::max() - address) / sizeof(std::uint16_t) ||
+            !mapped_guest_range(reinterpret_cast<const void*>(address + index * sizeof(std::uint16_t)),
+                                sizeof(std::uint16_t), false)) {
+            return false;
+        }
+        if (value[index] == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// Converte uma string wide convidada para UTF-8 (host).
+[[nodiscard]] std::string wide_to_utf8(const std::uint16_t* const wide) noexcept {
+    std::string out;
+    if (wide == nullptr) {
+        return out;
+    }
+    std::size_t index = 0;
+    while (wide[index] != 0) {
+        const std::uint32_t codepoint = decode_utf16(wide, index + 2, index);
+        if (codepoint == kInvalidCodepoint) {
+            index += 1;
+            continue;
+        }
+        char bytes[4]{};
+        const std::size_t count = utf8_bytes_for(codepoint, bytes);
+        for (std::size_t i = 0; i < count; ++i) {
+            out.push_back(bytes[i]);
+        }
+    }
+    return out;
+}
+
+// Converte uma string UTF-8 (host) para wide, retornando em `out` (unidades
+// sem terminador; o chamador adiciona o 0 final se necessário).
+[[nodiscard]] std::vector<std::uint16_t> utf8_to_wide(const std::string& text) noexcept {
+    std::vector<std::uint16_t> out;
+    out.reserve(text.size());
+    std::size_t pos = 0;
+    const auto* bytes = reinterpret_cast<const std::uint8_t*>(text.data());
+    while (pos < text.size()) {
+        const std::uint32_t codepoint = decode_multibyte(abi::kCpUtf8, bytes, text.size(), pos);
+        if (codepoint == kInvalidCodepoint) {
+            out.push_back(0x3FU);
+            continue;
+        }
+        std::uint16_t units[2]{};
+        const std::size_t count = utf16_units_for(codepoint, units);
+        for (std::size_t i = 0; i < count; ++i) {
+            out.push_back(units[i]);
+        }
+    }
+    return out;
+}
+
+// WIN32_FIND_DATAW: mesmo layout da versão A, com nomes wide (592 bytes;
+// cFileName em 44).
+struct Win32FindDataW {
+    std::uint32_t dw_file_attributes{0};
+    std::uint32_t ft_creation_time_lo{0};
+    std::uint32_t ft_creation_time_hi{0};
+    std::uint32_t ft_last_access_time_lo{0};
+    std::uint32_t ft_last_access_time_hi{0};
+    std::uint32_t ft_last_write_time_lo{0};
+    std::uint32_t ft_last_write_time_hi{0};
+    std::uint32_t n_file_size_high{0};
+    std::uint32_t n_file_size_low{0};
+    std::uint32_t dw_reserved0{0};
+    std::uint32_t dw_reserved1{0};
+    std::uint16_t c_file_name[260]{};
+    std::uint16_t c_alternate_file_name[14]{};
+};
+static_assert(sizeof(Win32FindDataW) == 592);
+static_assert(offsetof(Win32FindDataW, c_file_name) == 44);
+
+TL_MSABI std::uint32_t tl_GetFileAttributesW(const std::uint16_t* path) noexcept {
+    if (!mapped_guest_wstring(path) || path == nullptr || path[0] == 0) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0xFFFFFFFF;
+    }
+    const std::string utf8 = wide_to_utf8(path);
+    if (utf8.empty()) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0xFFFFFFFF;
+    }
+    char normalized[4096]{};
+    if (!translate_windows_path(utf8.c_str(), normalized, sizeof(normalized))) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0xFFFFFFFF;
+    }
+    struct stat st{};
+    if (stat(normalized, &st) != 0) {
+        const std::uint32_t failure_error = errno_to_win32(errno);
+        set_last_error(failure_error);
+        return 0xFFFFFFFF;
+    }
+    set_last_error(abi::kErrorSuccess);
+    return stat_to_win32_attributes(normalized, st);
+}
+
+TL_MSABI void* tl_FindFirstFileW(const std::uint16_t* path, void* find_data) noexcept {
+    if (!mapped_guest_wstring(path) || path == nullptr || path[0] == 0 ||
+        find_data == nullptr || !mapped_guest_range(find_data, sizeof(Win32FindDataW), true)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return reinterpret_cast<void*>(std::numeric_limits<std::uintptr_t>::max());
+    }
+    const std::string utf8 = wide_to_utf8(path);
+    if (utf8.empty()) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return reinterpret_cast<void*>(std::numeric_limits<std::uintptr_t>::max());
+    }
+    char normalized[4096]{};
+    if (!translate_windows_path(utf8.c_str(), normalized, sizeof(normalized))) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return reinterpret_cast<void*>(std::numeric_limits<std::uintptr_t>::max());
+    }
+    std::string dir_path;
+    std::string pattern;
+    const char* last_slash = strrchr(normalized, '/');
+    if (last_slash != nullptr) {
+        dir_path.assign(normalized, static_cast<std::size_t>(last_slash - normalized));
+        pattern = last_slash + 1;
+    } else {
+        dir_path = ".";
+        pattern = normalized;
+    }
+    DIR* dir = opendir(dir_path.c_str());
+    if (dir == nullptr) {
+        const std::uint32_t failure_error = errno_to_win32(errno);
+        set_last_error(failure_error);
+        return reinterpret_cast<void*>(std::numeric_limits<std::uintptr_t>::max());
+    }
+    FindSlot* slot = nullptr;
+    for (auto& s : g_find_slots) {
+        if (!s.used) {
+            slot = &s;
+            break;
+        }
+    }
+    if (slot == nullptr) {
+        closedir(dir);
+        set_last_error(abi::kErrorNotEnoughMemory);
+        return reinterpret_cast<void*>(std::numeric_limits<std::uintptr_t>::max());
+    }
+    struct dirent* entry = nullptr;
+    auto* data = static_cast<Win32FindDataW*>(find_data);
+    *data = {};
+    while ((entry = readdir(dir)) != nullptr) {
+        if (entry->d_name[0] == '.' &&
+            (entry->d_name[1] == '\0' ||
+             (entry->d_name[1] == '.' && entry->d_name[2] == '\0'))) {
+            continue;
+        }
+        bool matches = false;
+        if (pattern == "*") {
+            matches = true;
+        } else if (pattern.find('*') != std::string::npos) {
+            const auto star_pos = pattern.find('*');
+            const std::string prefix = pattern.substr(0, star_pos);
+            matches = std::string_view(entry->d_name).substr(0, prefix.size()) == prefix;
+        } else {
+            matches = (pattern == entry->d_name);
+        }
+        if (!matches) {
+            continue;
+        }
+        std::string full_path = dir_path + "/" + entry->d_name;
+        struct stat st{};
+        if (stat(full_path.c_str(), &st) == 0) {
+            data->dw_file_attributes = stat_to_win32_attributes(full_path.c_str(), st);
+            data->n_file_size_low = static_cast<std::uint32_t>(st.st_size & 0xFFFFFFFF);
+            data->n_file_size_high = static_cast<std::uint32_t>(st.st_size >> 32);
+        } else {
+            data->dw_file_attributes = kFileAttributeNormal;
+        }
+        const std::vector<std::uint16_t> wide_name = utf8_to_wide(entry->d_name);
+        if (wide_name.size() < sizeof(data->c_file_name) / sizeof(data->c_file_name[0])) {
+            std::copy(wide_name.begin(), wide_name.end(), data->c_file_name);
+            data->c_file_name[wide_name.size()] = 0;
+        }
+        slot->used = true;
+        slot->dir = dir;
+        slot->pattern = pattern;
+        slot->directory = dir_path;
+        set_last_error(abi::kErrorSuccess);
+        const auto handle_val = kFindHandleBase +
+                               static_cast<std::uintptr_t>(slot - g_find_slots.data());
+        return reinterpret_cast<void*>(handle_val);
+    }
+    closedir(dir);
+    set_last_error(abi::kErrorFileNotFound);
+    return reinterpret_cast<void*>(std::numeric_limits<std::uintptr_t>::max());
+}
+
+TL_MSABI int tl_FindNextFileW(const void* handle, void* find_data) noexcept {
+    if (find_data == nullptr || !mapped_guest_range(find_data, sizeof(Win32FindDataW), true)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    FindSlot* slot = find_slot_for_handle(handle);
+    if (slot == nullptr || !slot->used || slot->dir == nullptr) {
+        set_last_error(abi::kErrorInvalidHandle);
+        return 0;
+    }
+    auto* data = static_cast<Win32FindDataW*>(find_data);
+    struct dirent* entry = nullptr;
+    while ((entry = readdir(slot->dir)) != nullptr) {
+        if (entry->d_name[0] == '.' &&
+            (entry->d_name[1] == '\0' ||
+             (entry->d_name[1] == '.' && entry->d_name[2] == '\0'))) {
+            continue;
+        }
+        bool matches = false;
+        if (slot->pattern == "*") {
+            matches = true;
+        } else if (slot->pattern.find('*') != std::string::npos) {
+            const auto star_pos = slot->pattern.find('*');
+            const std::string prefix = slot->pattern.substr(0, star_pos);
+            matches = std::string_view(entry->d_name).substr(0, prefix.size()) == prefix;
+        } else {
+            matches = (slot->pattern == entry->d_name);
+        }
+        if (!matches) {
+            continue;
+        }
+        *data = {};
+        std::string full_path = slot->directory + "/" + entry->d_name;
+        struct stat st{};
+        if (stat(full_path.c_str(), &st) == 0) {
+            data->dw_file_attributes = stat_to_win32_attributes(full_path.c_str(), st);
+            data->n_file_size_low = static_cast<std::uint32_t>(st.st_size & 0xFFFFFFFF);
+            data->n_file_size_high = static_cast<std::uint32_t>(st.st_size >> 32);
+        } else {
+            data->dw_file_attributes = kFileAttributeNormal;
+        }
+        const std::vector<std::uint16_t> wide_name = utf8_to_wide(entry->d_name);
+        if (wide_name.size() < sizeof(data->c_file_name) / sizeof(data->c_file_name[0])) {
+            std::copy(wide_name.begin(), wide_name.end(), data->c_file_name);
+            data->c_file_name[wide_name.size()] = 0;
+        }
+        set_last_error(abi::kErrorSuccess);
+        return 1;
+    }
+    set_last_error(abi::kErrorFileNotFound);
+    return 0;
+}
+
+// FormatMessageW mínimo: suporta FORMAT_MESSAGE_FROM_SYSTEM com buffer
+// alocado (ALLOCATE_BUFFER) ou fornecido. Mensagens conhecidas do runtime;
+// códigos desconhecidos viram "Unknown error <n>".
+TL_MSABI std::uint32_t tl_FormatMessageW(const std::uint32_t flags, const void* /*source*/,
+                                         const std::uint32_t message_id,
+                                         const std::uint32_t /*language_id*/, std::uint16_t* buffer,
+                                         const std::uint32_t size,
+                                         const void* /*arguments*/) noexcept {
+    constexpr std::uint32_t kFormatMessageAllocateBuffer = 0x100U;
+    constexpr std::uint32_t kFormatMessageFromSystem = 0x1000U;
+    constexpr std::uint32_t kFormatMessageIgnoreInserts = 0x200U;
+    constexpr std::uint32_t kKnownFlags = kFormatMessageAllocateBuffer | kFormatMessageFromSystem |
+                                          kFormatMessageIgnoreInserts;
+    if (buffer == nullptr || (flags & ~kKnownFlags) != 0) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    const bool allocate = (flags & kFormatMessageAllocateBuffer) != 0;
+    const bool from_system = (flags & kFormatMessageFromSystem) != 0;
+    std::string text;
+    if (from_system) {
+        switch (message_id) {
+            case abi::kErrorFileNotFound:
+                text = "The system cannot find the file specified.";
+                break;
+            case abi::kErrorAccessDenied:
+                text = "Access is denied.";
+                break;
+            case abi::kErrorInvalidHandle:
+                text = "The handle is invalid.";
+                break;
+            case abi::kErrorNotEnoughMemory:
+                text = "Not enough memory resources are available.";
+                break;
+            case abi::kErrorInvalidParameter:
+                text = "The parameter is incorrect.";
+                break;
+            case abi::kErrorInsufficientBuffer:
+                text = "The data area passed to a system call is too small.";
+                break;
+            case abi::kErrorNoUnicodeTranslation:
+                text = "No mapping for the Unicode character exists in the target multi-byte code page.";
+                break;
+            default:
+                text = "Unknown error " + std::to_string(message_id) + ".";
+                break;
+        }
+    } else {
+        text = "Unknown error " + std::to_string(message_id) + ".";
+    }
+    const std::vector<std::uint16_t> wide_text = utf8_to_wide(text);
+    const std::size_t required = wide_text.size() + 1;
+    if (allocate) {
+        auto* storage = static_cast<std::uint16_t*>(std::malloc(required * sizeof(std::uint16_t)));
+        if (storage == nullptr) {
+            set_last_error(abi::kErrorNotEnoughMemory);
+            return 0;
+        }
+        std::copy(wide_text.begin(), wide_text.end(), storage);
+        storage[wide_text.size()] = 0;
+        auto** output = reinterpret_cast<std::uint16_t**>(buffer);
+        *output = storage;
+        set_last_error(abi::kErrorSuccess);
+        return static_cast<std::uint32_t>(wide_text.size());
+    }
+    if (required > size) {
+        set_last_error(abi::kErrorInsufficientBuffer);
+        return 0;
+    }
+    std::copy(wide_text.begin(), wide_text.end(), buffer);
+    buffer[wide_text.size()] = 0;
+    set_last_error(abi::kErrorSuccess);
+    return static_cast<std::uint32_t>(wide_text.size());
+}
+
+TL_MSABI std::uint32_t tl_GetConsoleOutputCP() noexcept {
+    return abi::kCpUtf8;
+}
+
+TL_MSABI int tl_SetConsoleOutputCP(const std::uint32_t /*code_page*/) noexcept {
+    return 1;
+}
+
+TL_MSABI void* tl_LocalFree(void* memory) noexcept {
+    std::free(memory);
+    return nullptr;
+}
+
+// GetTempFileNameW: cria um arquivo temporário único no diretório dado e
+// preenche o nome completo em temp_file_name (buffer wide de MAX_PATH).
+TL_MSABI std::uint32_t tl_GetTempFileNameW(const std::uint16_t* path_name,
+                                           const std::uint16_t* prefix_string,
+                                           const std::uint32_t unique,
+                                           std::uint16_t* temp_file_name) noexcept {
+    constexpr std::size_t kMaxTempPath = 260;
+    if (!mapped_guest_wstring(path_name) || !mapped_guest_wstring(prefix_string) ||
+        path_name == nullptr || prefix_string == nullptr || temp_file_name == nullptr ||
+        !mapped_guest_range(temp_file_name, kMaxTempPath * sizeof(std::uint16_t), true)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    const std::string dir_utf8 = wide_to_utf8(path_name);
+    const std::string prefix_utf8 = wide_to_utf8(prefix_string);
+    std::fprintf(stderr, "[tl][dbg] GetTempFileNameW dir=\"%s\" prefix=\"%s\" unique=%u\n",
+                 dir_utf8.c_str(), prefix_utf8.c_str(), unique);
+    std::fprintf(stderr, "[tl][dbg] raw dir16:");
+    for (int i = 0; i < 8; ++i) {
+        std::fprintf(stderr, " %04X", path_name[i]);
+    }
+    std::fprintf(stderr, "\n");
+    if (dir_utf8.empty()) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    std::string dir_normalized = dir_utf8;
+    for (char& c : dir_normalized) {
+        if (c == '\\') {
+            c = '/';
+        }
+    }
+    while (!dir_normalized.empty() && dir_normalized.back() == '/') {
+        dir_normalized.pop_back();
+    }
+    // O Windows usa os três primeiros caracteres do prefixo.
+    const std::string prefix3 = prefix_utf8.substr(0, 3);
+    constexpr std::uint32_t kMaxAttempts = 100000;
+    for (std::uint32_t attempt = 0; attempt < kMaxAttempts; ++attempt) {
+        const std::uint32_t candidate = (unique != 0) ? unique : (1U + (static_cast<std::uint32_t>(std::rand()) % 0xFFFEU));
+        char name[512]{};
+        std::snprintf(name, sizeof(name), "%s/%s%04X.tmp", dir_normalized.c_str(), prefix3.c_str(),
+                      static_cast<unsigned>(candidate));
+        const int fd = ::open(name, O_CREAT | O_EXCL | O_WRONLY, 0600);
+        if (fd >= 0) {
+            ::close(fd);
+            const std::vector<std::uint16_t> wide_name = utf8_to_wide(name);
+            if (wide_name.size() < kMaxTempPath) {
+                std::copy(wide_name.begin(), wide_name.end(), temp_file_name);
+                temp_file_name[wide_name.size()] = 0;
+            }
+            set_last_error(abi::kErrorSuccess);
+            return candidate;
+        }
+        if (unique != 0) {
+            set_last_error(errno_to_win32(errno));
+            return 0;
+        }
+    }
+    set_last_error(abi::kErrorFileNotFound);
+    return 0;
+}
+
+// CommandLineToArgvW: parseia a linha de comando no formato Windows e retorna
+// um array de wchar_t* terminado em NULL. O resultado é liberado com
+// LocalFree (aqui free()). O array e as strings ficam num único bloco.
+TL_MSABI std::uint16_t** tl_CommandLineToArgvW(const std::uint16_t* command_line,
+                                               int* argument_count) noexcept {
+    if (command_line == nullptr || argument_count == nullptr) {
+        return nullptr;
+    }
+    std::vector<std::string> arguments;
+    std::string current;
+    bool in_quotes = false;
+    const std::uint16_t* p = command_line;
+    for (;;) {
+        const std::uint16_t c = *p;
+        if (c == 0) {
+            if (!current.empty() || in_quotes) {
+                arguments.push_back(current);
+            }
+            break;
+        }
+        if (c == L'"') {
+            in_quotes = !in_quotes;
+            ++p;
+            continue;
+        }
+        if (c == L' ' || c == L'\t' || c == L'\n' || c == L'\r') {
+            if (!in_quotes) {
+                if (!current.empty()) {
+                    arguments.push_back(current);
+                    current.clear();
+                }
+                ++p;
+                continue;
+            }
+        }
+        const std::uint16_t literal[2] = {c, 0};
+        current += wide_to_utf8(literal);
+        ++p;
+    }
+    const std::size_t count = arguments.size();
+    std::size_t total_units = 0;
+    for (const std::string& argument : arguments) {
+        total_units += utf8_to_wide(argument).size() + 1;
+    }
+    total_units += 1;
+    auto* block = static_cast<std::uint8_t*>(
+        std::calloc((count + 1) * sizeof(std::uint16_t*) + total_units * sizeof(std::uint16_t), 1));
+    if (block == nullptr) {
+        return nullptr;
+    }
+    auto** argv = reinterpret_cast<std::uint16_t**>(block);
+    auto* strings = reinterpret_cast<std::uint16_t*>(block + (count + 1) * sizeof(std::uint16_t*));
+    for (std::size_t i = 0; i < count; ++i) {
+        const std::vector<std::uint16_t> units = utf8_to_wide(arguments[i]);
+        argv[i] = strings;
+        std::copy(units.begin(), units.end(), strings);
+        strings += units.size();
+        *strings = 0;
+        ++strings;
+    }
+    argv[count] = nullptr;
+    *argument_count = static_cast<int>(count);
+    return argv;
 }
 
 }  // namespace tradutorlinux

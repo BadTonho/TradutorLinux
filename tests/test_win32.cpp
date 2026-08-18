@@ -799,5 +799,157 @@ TEST(Win32ConcurrencyTest, TlsSetGetValueMultipleSlots) {
     EXPECT_NE(tl_TlsFree(idx3), 0);
 }
 
+// ---------------------------------------------------------------------------
+// Variantes wide (Fase 10+).
+// ---------------------------------------------------------------------------
+
+TEST(Win32WideTest, GetFileAttributesWMatchesAByConvertedPath) {
+    const char* tmpdir = "_tl_test_attrw";
+    mkdir(tmpdir, 0777);
+    const std::string file_path = std::string(tmpdir) + "/wide_attr.txt";
+    FILE* f = std::fopen(file_path.c_str(), "wb");
+    ASSERT_NE(f, nullptr);
+    std::fclose(f);
+    std::uint16_t wide_path[260]{};
+    for (std::size_t i = 0; i < file_path.size(); ++i) {
+        wide_path[i] = static_cast<std::uint16_t>(static_cast<unsigned char>(file_path[i]));
+    }
+    const std::uint32_t attrs_w = tl_GetFileAttributesW(wide_path);
+    const std::uint32_t attrs_a = tl_GetFileAttributesA(file_path.c_str());
+    EXPECT_EQ(attrs_w, attrs_a);
+    std::remove(file_path.c_str());
+    rmdir(tmpdir);
+}
+
+TEST(Win32WideTest, GetFileAttributesWFailsForNonExistent) {
+    const std::uint16_t wide_path[] = {'_', 't', 'l', '_', 'n', 'o', 'n', 'e', 'x', 'i', 's', 't',
+                                       '_', 'w', 0};
+    EXPECT_EQ(tl_GetFileAttributesW(wide_path), 0xFFFFFFFFU);
+}
+
+TEST(Win32WideTest, FindFirstFileWReturnsWideName) {
+    const char* tmpdir = "_tl_test_findw";
+    mkdir(tmpdir, 0777);
+    const std::string file_path = std::string(tmpdir) + "/widefile.txt";
+    FILE* f = std::fopen(file_path.c_str(), "wb");
+    ASSERT_NE(f, nullptr);
+    std::fwrite("content", 1, 7, f);
+    std::fclose(f);
+
+    std::uint16_t wide_pattern[260]{};
+    const std::string pattern = std::string(tmpdir) + "/*";
+    for (std::size_t i = 0; i < pattern.size(); ++i) {
+        wide_pattern[i] = static_cast<std::uint16_t>(static_cast<unsigned char>(pattern[i]));
+    }
+    alignas(8) unsigned char find_data_buf[592]{};
+    void* find_handle = tl_FindFirstFileW(wide_pattern, find_data_buf);
+    ASSERT_NE(find_handle, reinterpret_cast<void*>(std::numeric_limits<std::uintptr_t>::max()));
+    const auto* data = reinterpret_cast<const std::uint16_t*>(find_data_buf + 44);
+    EXPECT_EQ(std::u16string(reinterpret_cast<const char16_t*>(data)), u"widefile.txt");
+    EXPECT_EQ(tl_FindNextFileW(find_handle, find_data_buf), 0);
+    tl_FindClose(find_handle);
+    std::remove(file_path.c_str());
+    rmdir(tmpdir);
+}
+
+TEST(Win32WideTest, FindFirstFileWFailsForMissingDirectory) {
+    std::uint16_t wide_pattern[] = {'_', 't', 'l', '_', 'm', 'i', 's', 's', 'i', 'n', 'g', '_', 'w',
+                                    '/', '*', 0};
+    alignas(8) unsigned char find_data_buf[592]{};
+    EXPECT_EQ(tl_FindFirstFileW(wide_pattern, find_data_buf),
+              reinterpret_cast<void*>(std::numeric_limits<std::uintptr_t>::max()));
+}
+
+TEST(Win32WideTest, FormatMessageWWithAllocateBufferReturnsKnownMessage) {
+    constexpr std::uint32_t kFormatMessageAllocateBuffer = 0x100U;
+    constexpr std::uint32_t kFormatMessageFromSystem = 0x1000U;
+    constexpr std::uint32_t kFormatMessageIgnoreInserts = 0x200U;
+    std::uint16_t* buffer = nullptr;
+    const std::uint32_t written =
+        tl_FormatMessageW(kFormatMessageAllocateBuffer | kFormatMessageFromSystem |
+                              kFormatMessageIgnoreInserts,
+                          nullptr, abi::kErrorFileNotFound, 0,
+                          reinterpret_cast<std::uint16_t*>(&buffer), 0, nullptr);
+    ASSERT_GT(written, 0U);
+    ASSERT_NE(buffer, nullptr);
+    const std::u16string expected = u"The system cannot find the file specified.";
+    EXPECT_EQ(std::u16string(reinterpret_cast<const char16_t*>(buffer)), expected);
+    tl_LocalFree(buffer);
+}
+
+TEST(Win32WideTest, FormatMessageWWithGuestBufferHonorsSize) {
+    constexpr std::uint32_t kFormatMessageFromSystem = 0x1000U;
+    std::uint16_t small[4]{};
+    EXPECT_EQ(tl_FormatMessageW(kFormatMessageFromSystem, nullptr, abi::kErrorFileNotFound, 0,
+                                small, 4, nullptr),
+              0U);
+    std::uint16_t big[64]{};
+    const std::uint32_t written =
+        tl_FormatMessageW(kFormatMessageFromSystem, nullptr, abi::kErrorAccessDenied, 0, big,
+                          sizeof(big) / sizeof(big[0]), nullptr);
+    ASSERT_GT(written, 0U);
+    EXPECT_EQ(std::u16string(reinterpret_cast<const char16_t*>(big)), u"Access is denied.");
+}
+
+TEST(Win32WideTest, GetConsoleOutputCPReturnsUtf8) {
+    EXPECT_EQ(tl_GetConsoleOutputCP(), 65001U);
+    EXPECT_NE(tl_SetConsoleOutputCP(65001U), 0);
+}
+
+TEST(Win32WideTest, LocalFreeReturnsNull) {
+    void* memory = std::malloc(16);
+    ASSERT_NE(memory, nullptr);
+    EXPECT_EQ(tl_LocalFree(memory), nullptr);
+}
+
+TEST(Win32WideTest, GetTempFileNameWCreatesFileAndReturnsName) {
+    const char* tmpdir = "_tl_test_tmpw";
+    mkdir(tmpdir, 0777);
+    std::uint16_t dir[260]{};
+    std::uint16_t prefix[260]{};
+    std::uint16_t out[260]{};
+    const std::string dir_str = tmpdir;
+    for (std::size_t i = 0; i < dir_str.size(); ++i) {
+        dir[i] = static_cast<std::uint16_t>(static_cast<unsigned char>(dir_str[i]));
+    }
+    const std::string prefix_str = "d2utmp";
+    for (std::size_t i = 0; i < prefix_str.size(); ++i) {
+        prefix[i] = static_cast<std::uint16_t>(static_cast<unsigned char>(prefix_str[i]));
+    }
+    const std::uint32_t ret = tl_GetTempFileNameW(dir, prefix, 0, out);
+    ASSERT_NE(ret, 0U);
+    std::string name;
+    for (int i = 0; i < 260 && out[i] != 0; ++i) {
+        name.push_back(static_cast<char>(out[i]));
+    }
+    EXPECT_EQ(name.compare(0, dir_str.size() + 1, dir_str + "/"), 0);
+    struct stat st{};
+    EXPECT_EQ(stat(name.c_str(), &st), 0);
+    EXPECT_NE(std::remove(name.c_str()), -1);
+    rmdir(tmpdir);
+}
+
+TEST(Win32WideTest, CommandLineToArgvWParsesQuotedArguments) {
+    const std::uint16_t cmd[] = {L'"', L'/', L'p', L'a', L't', L'h', L'/', L'a', L'p', L'p',
+                                 L'.', L'e', L'x', L'e', L'"', L' ', L'f', L'i', L'l', L'e',
+                                 L'1', L'.', L't', L'x', L't', L' ', L'-', L'k', L' ', L'"',
+                                 L'a', L'r', L'g', L' ', L'w', L'i', L't', L'h', L' ', L's',
+                                 L'p', L'a', L'c', L'e', L'"', 0};
+    int argc = 0;
+    std::uint16_t** argv = tl_CommandLineToArgvW(cmd, &argc);
+    ASSERT_NE(argv, nullptr);
+    EXPECT_EQ(argc, 4);
+    EXPECT_EQ(std::u16string(reinterpret_cast<const char16_t*>(argv[0])), u"/path/app.exe");
+    EXPECT_EQ(std::u16string(reinterpret_cast<const char16_t*>(argv[1])), u"file1.txt");
+    EXPECT_EQ(std::u16string(reinterpret_cast<const char16_t*>(argv[2])), u"-k");
+    EXPECT_EQ(std::u16string(reinterpret_cast<const char16_t*>(argv[3])), u"arg with space");
+    EXPECT_EQ(argv[4], nullptr);
+    tl_LocalFree(argv);
+}
+
+TEST(Win32WideTest, CommandLineToArgvWFailsOnNullArguments) {
+    EXPECT_EQ(tl_CommandLineToArgvW(nullptr, nullptr), nullptr);
+}
+
 }  // namespace
 }  // namespace tradutorlinux

@@ -270,12 +270,25 @@ TL_MSABI std::int32_t tl_SetFilePointer(const void* handle, std::int32_t distanc
                                          std::int32_t* high_distance,
                                          std::uint32_t move_method) noexcept;
 TL_MSABI std::uint32_t tl_GetFileAttributesA(const char* path) noexcept;
+TL_MSABI std::uint32_t tl_GetFileAttributesW(const std::uint16_t* path) noexcept;
 TL_MSABI int tl_DeleteFileA(const char* path) noexcept;
 TL_MSABI int tl_MoveFileA(const char* from, const char* to) noexcept;
 TL_MSABI int tl_CreateDirectoryA(const char* path, const void* security_attributes) noexcept;
 TL_MSABI void* tl_FindFirstFileA(const char* path, void* find_data) noexcept;
+TL_MSABI void* tl_FindFirstFileW(const std::uint16_t* path, void* find_data) noexcept;
 TL_MSABI int tl_FindNextFileA(const void* handle, void* find_data) noexcept;
+TL_MSABI int tl_FindNextFileW(const void* handle, void* find_data) noexcept;
 TL_MSABI int tl_FindClose(const void* handle) noexcept;
+TL_MSABI std::uint32_t tl_FormatMessageW(std::uint32_t flags, const void* source,
+                                         std::uint32_t message_id, std::uint32_t language_id,
+                                         std::uint16_t* buffer, std::uint32_t size,
+                                         const void* arguments) noexcept;
+TL_MSABI std::uint32_t tl_GetConsoleOutputCP() noexcept;
+TL_MSABI int tl_SetConsoleOutputCP(std::uint32_t code_page) noexcept;
+TL_MSABI std::uint32_t tl_GetTempFileNameW(const std::uint16_t* path_name,
+                                           const std::uint16_t* prefix_string,
+                                           std::uint32_t unique, std::uint16_t* temp_file_name) noexcept;
+TL_MSABI void* tl_LocalFree(void* memory) noexcept;
 
 // Diretório atual e módulo.
 TL_MSABI std::uint32_t tl_GetCurrentDirectoryA(std::uint32_t buffer_length,
@@ -298,6 +311,10 @@ TL_MSABI std::uint32_t tl_GetCurrentProcessId() noexcept;
 TL_MSABI std::uint32_t tl_TlsAlloc() noexcept;
 TL_MSABI int tl_TlsSetValue(std::uint32_t tls_index, void* tls_value) noexcept;
 TL_MSABI int tl_TlsFree(std::uint32_t tls_index) noexcept;
+
+// SHELL32.dll (Fase 10+): linha de comando no formato wide.
+TL_MSABI std::uint16_t** tl_CommandLineToArgvW(const std::uint16_t* command_line,
+                                               int* argument_count) noexcept;
 
 }  // extern "C"
 

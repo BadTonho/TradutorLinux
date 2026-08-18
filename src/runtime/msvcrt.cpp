@@ -182,6 +182,60 @@ std::string utf16_to_utf8(const std::uint16_t* text, std::size_t char_limit) {
     return out;
 }
 
+// Converte UTF-8 para UTF-16, limitando a quantidade de unidades de saída
+// (se out_size for 0, apenas calcula o tamanho necessário).
+std::size_t utf8_to_utf16(const char* text, std::uint16_t* out, std::size_t out_units) {
+    if (text == nullptr) {
+        return static_cast<std::size_t>(-1);
+    }
+    std::size_t written = 0;
+    std::size_t index = 0;
+    while (text[index] != '\0') {
+        const auto byte = static_cast<unsigned char>(text[index]);
+        std::uint32_t code_point = 0;
+        std::size_t length = 0;
+        if (byte < 0x80) {
+            code_point = byte;
+            length = 1;
+        } else if ((byte & 0xE0U) == 0xC0U) {
+            code_point = byte & 0x1FU;
+            length = 2;
+        } else if ((byte & 0xF0U) == 0xE0U) {
+            code_point = byte & 0x0FU;
+            length = 3;
+        } else if ((byte & 0xF8U) == 0xF0U) {
+            code_point = byte & 0x07U;
+            length = 4;
+        } else {
+            return static_cast<std::size_t>(-1);
+        }
+        if (length > 1) {
+            for (std::size_t i = 1; i < length; ++i) {
+                if (text[index + i] == '\0' || (static_cast<unsigned char>(text[index + i]) & 0xC0U) != 0x80U) {
+                    return static_cast<std::size_t>(-1);
+                }
+                code_point = (code_point << 6) | (static_cast<unsigned char>(text[index + i]) & 0x3FU);
+            }
+        }
+        index += length;
+        const std::size_t needed_units = code_point > 0xFFFFU ? 2 : 1;
+        if (out != nullptr) {
+            if (written + needed_units > out_units) {
+                return static_cast<std::size_t>(-1);
+            }
+            if (code_point > 0xFFFFU) {
+                const std::uint32_t adjusted = code_point - 0x10000U;
+                out[written] = static_cast<std::uint16_t>(0xD800U | (adjusted >> 10));
+                out[written + 1] = static_cast<std::uint16_t>(0xDC00U | (adjusted & 0x3FFU));
+            } else {
+                out[written] = static_cast<std::uint16_t>(code_point);
+            }
+        }
+        written += needed_units;
+    }
+    return written;
+}
+
 // ---------------------------------------------------------------------------
 // Motor de formatação do printf mínimo (subset documentado em docs).
 // ---------------------------------------------------------------------------
@@ -1084,7 +1138,9 @@ TL_CRT_MSABI int tl_fprintf(GuestFile* file, const char* format, ...) noexcept {
 // ---------------------------------------------------------------------------
 
 TL_CRT_MSABI void* tl_malloc(std::size_t size) noexcept {
-    return std::malloc(size);
+    void* result = std::malloc(size);
+    std::fprintf(stderr, "[tl][dbg] malloc size=%zu -> %p\n", size, result);
+    return result;
 }
 
 TL_CRT_MSABI void* tl_calloc(std::size_t count, std::size_t size) noexcept {
@@ -1332,6 +1388,424 @@ TL_CRT_MSABI void* tl_signal(int signal_number, void (*handler)(int)) noexcept {
     const GuestSignalFn previous = *slot;
     *slot = reinterpret_cast<GuestSignalFn>(handler);
     return reinterpret_cast<void*>(previous);
+}
+
+// ---------------------------------------------------------------------------
+// Strings e conversões wide (Fase 10+): caminhos, formatação e locale.
+// ---------------------------------------------------------------------------
+
+TL_CRT_MSABI void* tl_realloc(void* pointer, std::size_t size) noexcept {
+    const auto old_ptr = reinterpret_cast<std::uintptr_t>(pointer);
+    void* result = std::realloc(pointer, size);
+    std::fprintf(stderr, "[tl][dbg] realloc ptr=0x%zx size=%zu -> %p\n", old_ptr, size, result);
+    return result;
+}
+
+TL_CRT_MSABI char* tl_setlocale(int category, const char* locale) noexcept {
+    (void)category;
+    if (locale != nullptr && locale[0] != '\0' && std::strcmp(locale, "C") != 0 &&
+        std::strcmp(locale, "POSIX") != 0) {
+        return nullptr;
+    }
+    static char kCLocale[] = "C";
+    return kCLocale;
+}
+
+TL_CRT_MSABI char* tl_strchr(const char* text, int character) noexcept {
+    if (text == nullptr) {
+        return nullptr;
+    }
+    return const_cast<char*>(std::strchr(text, character));
+}
+
+TL_CRT_MSABI char* tl_strrchr(const char* text, int character) noexcept {
+    if (text == nullptr) {
+        return nullptr;
+    }
+    return const_cast<char*>(std::strrchr(text, character));
+}
+
+TL_CRT_MSABI int tl__stricmp(const char* left, const char* right) noexcept {
+    if (left == nullptr || right == nullptr) {
+        return left == right ? 0 : (left == nullptr ? -1 : 1);
+    }
+    while (*left != '\0' && *right != '\0') {
+        const int l = std::tolower(static_cast<unsigned char>(*left));
+        const int r = std::tolower(static_cast<unsigned char>(*right));
+        if (l != r) {
+            return l - r;
+        }
+        ++left;
+        ++right;
+    }
+    return std::tolower(static_cast<unsigned char>(*left)) -
+           std::tolower(static_cast<unsigned char>(*right));
+}
+
+TL_CRT_MSABI char* tl__strdup(const char* text) noexcept {
+    std::fprintf(stderr, "[tl][dbg] strdup src=\"%s\"\n", text != nullptr ? text : "(null)");
+    if (text == nullptr) {
+        return nullptr;
+    }
+    const std::size_t length = std::strlen(text) + 1;
+    char* copy = static_cast<char*>(std::malloc(length));
+    if (copy != nullptr) {
+        std::memcpy(copy, text, length);
+        std::fprintf(stderr, "[tl][dbg] strdup copy=%p len=%zu\n", static_cast<void*>(copy),
+                     length);
+    }
+    return copy;
+}
+
+TL_CRT_MSABI int tl__umask(int mask) noexcept {
+    return static_cast<int>(::umask(static_cast<mode_t>(mask)));
+}
+
+TL_CRT_MSABI int tl__chmod(const char* path, int mode) noexcept {
+    if (path == nullptr) {
+        set_error(EINVAL);
+        return -1;
+    }
+    if (::chmod(path, static_cast<mode_t>(mode)) != 0) {
+        set_error(errno);
+        return -1;
+    }
+    return 0;
+}
+
+TL_CRT_MSABI int tl__utime64(const char* path, const void* times) noexcept {
+    if (path == nullptr || times == nullptr) {
+        set_error(EINVAL);
+        return -1;
+    }
+    // struct _utimbuf64 do mingw: { __time64_t actime; __time64_t modtime; }
+    // com pack 8, equivalente ao utimbuf do Linux em x86-64.
+    struct GuestUtimbuf64 {
+        std::int64_t actime;
+        std::int64_t modtime;
+    };
+    const auto* time_buffer = static_cast<const GuestUtimbuf64*>(times);
+    const struct ::timespec host_times[2] = {
+        {.tv_sec = time_buffer->actime, .tv_nsec = 0},
+        {.tv_sec = time_buffer->modtime, .tv_nsec = 0},
+    };
+    if (::utimensat(AT_FDCWD, path, host_times, 0) != 0) {
+        set_error(errno);
+        return -1;
+    }
+    return 0;
+}
+
+TL_CRT_MSABI GuestFile* tl__wfopen(const std::uint16_t* path, const std::uint16_t* mode) noexcept {
+    if (path == nullptr || mode == nullptr) {
+        set_error(EINVAL);
+        return nullptr;
+    }
+    const std::string path_utf8 = utf16_to_utf8(path, std::numeric_limits<std::size_t>::max());
+    const std::string mode_utf8 = utf16_to_utf8(mode, std::numeric_limits<std::size_t>::max());
+    if (path_utf8.empty() || mode_utf8.empty()) {
+        set_error(EINVAL);
+        return nullptr;
+    }
+    return tl_fopen(path_utf8.c_str(), mode_utf8.c_str());
+}
+
+TL_CRT_MSABI int tl__wstat64(const std::uint16_t* path, void* stat_buffer) noexcept {
+    if (path == nullptr || stat_buffer == nullptr) {
+        set_error(EINVAL);
+        return -1;
+    }
+    const std::string path_utf8 = utf16_to_utf8(path, std::numeric_limits<std::size_t>::max());
+    if (path_utf8.empty()) {
+        set_error(EINVAL);
+        return -1;
+    }
+    return tl__stat64(path_utf8.c_str(), stat_buffer);
+}
+
+TL_CRT_MSABI int tl__wrename(const std::uint16_t* old_path, const std::uint16_t* new_path) noexcept {
+    if (old_path == nullptr || new_path == nullptr) {
+        set_error(EINVAL);
+        return -1;
+    }
+    const std::string old_utf8 = utf16_to_utf8(old_path, std::numeric_limits<std::size_t>::max());
+    const std::string new_utf8 = utf16_to_utf8(new_path, std::numeric_limits<std::size_t>::max());
+    if (old_utf8.empty() || new_utf8.empty()) {
+        set_error(EINVAL);
+        return -1;
+    }
+    if (::rename(old_utf8.c_str(), new_utf8.c_str()) != 0) {
+        set_error(errno);
+        return -1;
+    }
+    return 0;
+}
+
+TL_CRT_MSABI int tl__wunlink(const std::uint16_t* path) noexcept {
+    if (path == nullptr) {
+        set_error(EINVAL);
+        return -1;
+    }
+    const std::string path_utf8 = utf16_to_utf8(path, std::numeric_limits<std::size_t>::max());
+    if (path_utf8.empty()) {
+        set_error(EINVAL);
+        return -1;
+    }
+    if (::unlink(path_utf8.c_str()) != 0) {
+        set_error(errno);
+        return -1;
+    }
+    return 0;
+}
+
+TL_CRT_MSABI std::uint16_t* tl__wcsdup(const std::uint16_t* text) noexcept {
+    if (text == nullptr) {
+        return nullptr;
+    }
+    const std::size_t length = tl_wcslen(text) + 1;
+    auto* copy = static_cast<std::uint16_t*>(std::malloc(length * sizeof(std::uint16_t)));
+    if (copy != nullptr) {
+        std::memcpy(copy, text, length * sizeof(std::uint16_t));
+    }
+    return copy;
+}
+
+TL_CRT_MSABI std::uint16_t* tl_wcschr(const std::uint16_t* text, std::uint16_t character) noexcept {
+    if (text == nullptr) {
+        return nullptr;
+    }
+    while (*text != 0) {
+        if (*text == character) {
+            return const_cast<std::uint16_t*>(text);
+        }
+        ++text;
+    }
+    return character == 0 ? const_cast<std::uint16_t*>(text) : nullptr;
+}
+
+TL_CRT_MSABI std::uint16_t* tl_wcsrchr(const std::uint16_t* text, std::uint16_t character) noexcept {
+    if (text == nullptr) {
+        return nullptr;
+    }
+    const std::uint16_t* last = nullptr;
+    while (*text != 0) {
+        if (*text == character) {
+            last = text;
+        }
+        ++text;
+    }
+    if (character == 0) {
+        return const_cast<std::uint16_t*>(text);
+    }
+    return const_cast<std::uint16_t*>(last);
+}
+
+TL_CRT_MSABI std::uint16_t* tl_wcsncat(std::uint16_t* destination, const std::uint16_t* source,
+                                       std::size_t count) noexcept {
+    if (destination == nullptr || source == nullptr) {
+        return destination;
+    }
+    std::uint16_t* end = destination + tl_wcslen(destination);
+    std::size_t remaining = count;
+    while (remaining > 0 && *source != 0) {
+        *end++ = *source++;
+        --remaining;
+    }
+    *end = 0;
+    return destination;
+}
+
+TL_CRT_MSABI std::uint16_t* tl_wcsncpy(std::uint16_t* destination, const std::uint16_t* source,
+                                       std::size_t count) noexcept {
+    if (destination == nullptr || source == nullptr) {
+        return destination;
+    }
+    std::size_t index = 0;
+    while (index < count && source[index] != 0) {
+        destination[index] = source[index];
+        ++index;
+    }
+    while (index < count) {
+        destination[index] = 0;
+        ++index;
+    }
+    return destination;
+}
+
+TL_CRT_MSABI std::size_t tl_mbstowcs(std::uint16_t* destination, const char* source,
+                                     std::size_t count) noexcept {
+    std::fprintf(stderr, "[tl][dbg] mbstowcs src=\"%s\" count=%zu dst=%p\n",
+                 source != nullptr ? source : "(null)", count,
+                 static_cast<void*>(destination));
+    if (source == nullptr) {
+        return static_cast<std::size_t>(-1);
+    }
+    const std::size_t needed = utf8_to_utf16(source, nullptr, 0);
+    if (needed == static_cast<std::size_t>(-1)) {
+        set_error(EILSEQ);
+        return static_cast<std::size_t>(-1);
+    }
+    if (destination == nullptr) {
+        return needed;
+    }
+    if (count < needed) {
+        set_error(E2BIG);
+        return static_cast<std::size_t>(-1);
+    }
+    const std::size_t written = utf8_to_utf16(source, destination, count);
+    std::fprintf(stderr, "[tl][dbg] mbstowcs result: %zu units:", written);
+    for (std::size_t i = 0; i < written && i < 20; ++i) {
+        std::fprintf(stderr, " %04X", destination[i]);
+    }
+    std::fprintf(stderr, "\n");
+    return needed;
+}
+
+TL_CRT_MSABI std::size_t tl_wcstombs(char* destination, const std::uint16_t* source,
+                                     std::size_t count) noexcept {
+    std::fprintf(stderr, "[tl][dbg] wcstombs src16=");
+    if (source != nullptr) {
+        for (int i = 0; i < 8; ++i) {
+            std::fprintf(stderr, " %04X", source[i]);
+        }
+    } else {
+        std::fprintf(stderr, " (null)");
+    }
+    std::fprintf(stderr, " count=%zu\n", count);
+    if (source == nullptr) {
+        return static_cast<std::size_t>(-1);
+    }
+    const std::string converted = utf16_to_utf8(source, std::numeric_limits<std::size_t>::max());
+    std::fprintf(stderr, "[tl][dbg] wcstombs result=\"%s\" len=%zu dst=%p\n", converted.c_str(),
+                 converted.size(), static_cast<void*>(destination));
+    if (destination == nullptr) {
+        return converted.size();
+    }
+    if (converted.size() > count) {
+        set_error(E2BIG);
+        return static_cast<std::size_t>(-1);
+    }
+    std::memcpy(destination, converted.data(), converted.size());
+    return converted.size();
+}
+
+// Formata e escreve um caractere wide em um arquivo (fputwc).
+TL_CRT_MSABI int tl_fputwc(std::uint16_t character, GuestFile* file) noexcept {
+    if (file == nullptr) {
+        set_error(EINVAL);
+        return 0xFFFF;
+    }
+    const std::uint16_t units[2] = {character, 0};
+    const std::string utf8 = utf16_to_utf8(units, 1);
+    if (utf8.empty()) {
+        set_error(EILSEQ);
+        return 0xFFFF;
+    }
+    if (write_all(file->file, utf8.data(), utf8.size())) {
+        return static_cast<int>(character);
+    }
+    file->flag |= kIoError;
+    return 0xFFFF;
+}
+
+// Converte o formato wide de fwprintf para o formato narrow do motor existente:
+// no printf wide do msvcrt, %s/%ls são strings wide e %S/%hs são strings
+// estreitas; %c/%lc são wide e %C/%hc são estreitas.
+std::string wformat_to_narrow(const std::uint16_t* format) {
+    std::string out;
+    while (*format != 0) {
+        if (*format != '%') {
+            const std::uint16_t literal[2] = {*format, 0};
+            out += utf16_to_utf8(literal, 1);
+            ++format;
+            continue;
+        }
+        ++format;
+        out.push_back('%');
+        if (*format == '%') {
+            out.push_back('%');
+            ++format;
+            continue;
+        }
+        while (*format != 0 && std::strchr("-+0 #", static_cast<int>(static_cast<char>(*format))) != nullptr) {
+            out.push_back(static_cast<char>(*format));
+            ++format;
+        }
+        if (*format == '*') {
+            out.push_back('*');
+            ++format;
+        } else {
+            while (*format != 0 && *format >= '0' && *format <= '9') {
+                out.push_back(static_cast<char>(*format));
+                ++format;
+            }
+        }
+        if (*format == '.') {
+            out.push_back('.');
+            ++format;
+            if (*format == '*') {
+                out.push_back('*');
+                ++format;
+            } else {
+                while (*format != 0 && *format >= '0' && *format <= '9') {
+                    out.push_back(static_cast<char>(*format));
+                    ++format;
+                }
+            }
+        }
+        std::string length;
+        while (*format != 0 && (*format == 'h' || *format == 'l' || *format == 'w' ||
+                                *format == 'I' || *format == 'j' || *format == 'z' ||
+                                *format == 't' || *format == 'L')) {
+            if (*format == 'I' && format[1] == '6' && format[2] == '4') {
+                length += "I64";
+                format += 3;
+            } else {
+                length.push_back(static_cast<char>(*format));
+                ++format;
+            }
+        }
+        const char conv = static_cast<char>(*format);
+        if (conv == '\0') {
+            break;
+        }
+        ++format;
+        if (conv == 's') {
+            if (length == "h") {
+                out += "s";
+            } else {
+                out += "ls";
+            }
+        } else if (conv == 'S') {
+            out += "s";
+        } else if (conv == 'c') {
+            if (length == "h") {
+                out += "c";
+            } else {
+                out += "lc";
+            }
+        } else if (conv == 'C') {
+            out += "c";
+        } else {
+            out += length;
+            out.push_back(conv);
+        }
+    }
+    return out;
+}
+
+TL_CRT_MSABI int tl_fwprintf(GuestFile* file, const std::uint16_t* format, ...) noexcept {
+    ensure_standard_files();
+    if (file == nullptr || format == nullptr) {
+        set_error(EINVAL);
+        return EOF;
+    }
+    const std::string narrow = wformat_to_narrow(format);
+    __builtin_ms_va_list ap;
+    __builtin_ms_va_start(ap, format);
+    const int result = tl_vfprintf(file, narrow.c_str(), ap);
+    __builtin_ms_va_end(ap);
+    return result;
 }
 
 }  // namespace tradutorlinux

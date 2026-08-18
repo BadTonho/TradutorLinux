@@ -105,6 +105,32 @@ TL_CRT_MSABI char* tl_strcat(char* destination, const char* source) noexcept;
 TL_CRT_MSABI void* tl_memmove(void* destination, const void* source, std::size_t count) noexcept;
 TL_CRT_MSABI int tl_remove(const char* path) noexcept;
 TL_CRT_MSABI int tl__stat64(const char* path, void* stat_buffer) noexcept;
+TL_CRT_MSABI void* tl_realloc(void* pointer, std::size_t size) noexcept;
+TL_CRT_MSABI char* tl_setlocale(int category, const char* locale) noexcept;
+TL_CRT_MSABI char* tl_strchr(const char* text, int character) noexcept;
+TL_CRT_MSABI char* tl_strrchr(const char* text, int character) noexcept;
+TL_CRT_MSABI int tl__stricmp(const char* left, const char* right) noexcept;
+TL_CRT_MSABI char* tl__strdup(const char* text) noexcept;
+TL_CRT_MSABI int tl__umask(int mask) noexcept;
+TL_CRT_MSABI int tl__chmod(const char* path, int mode) noexcept;
+TL_CRT_MSABI int tl__utime64(const char* path, const void* times) noexcept;
+TL_CRT_MSABI GuestFile* tl__wfopen(const std::uint16_t* path, const std::uint16_t* mode) noexcept;
+TL_CRT_MSABI int tl__wstat64(const std::uint16_t* path, void* stat_buffer) noexcept;
+TL_CRT_MSABI int tl__wrename(const std::uint16_t* old_path, const std::uint16_t* new_path) noexcept;
+TL_CRT_MSABI int tl__wunlink(const std::uint16_t* path) noexcept;
+TL_CRT_MSABI std::uint16_t* tl__wcsdup(const std::uint16_t* text) noexcept;
+TL_CRT_MSABI std::uint16_t* tl_wcschr(const std::uint16_t* text, std::uint16_t character) noexcept;
+TL_CRT_MSABI std::uint16_t* tl_wcsrchr(const std::uint16_t* text, std::uint16_t character) noexcept;
+TL_CRT_MSABI std::uint16_t* tl_wcsncat(std::uint16_t* destination, const std::uint16_t* source,
+                                       std::size_t count) noexcept;
+TL_CRT_MSABI std::uint16_t* tl_wcsncpy(std::uint16_t* destination, const std::uint16_t* source,
+                                       std::size_t count) noexcept;
+TL_CRT_MSABI std::size_t tl_mbstowcs(std::uint16_t* destination, const char* source,
+                                     std::size_t count) noexcept;
+TL_CRT_MSABI std::size_t tl_wcstombs(char* destination, const std::uint16_t* source,
+                                    std::size_t count) noexcept;
+TL_CRT_MSABI int tl_fwprintf(GuestFile* file, const std::uint16_t* format, ...) noexcept;
+TL_CRT_MSABI int tl_fputwc(std::uint16_t character, GuestFile* file) noexcept;
 
 // Dados exportados por msvcrt.dll: células graváveis do hospedeiro cujos
 // endereços são gravados nos slots da IAT (imports-dados __initenv, _commode

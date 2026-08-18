@@ -123,6 +123,15 @@ void register_builtin_modules() {
         {"WaitForSingleObject", 55, reinterpret_cast<std::uintptr_t>(&tl_WaitForSingleObject)},
         {"GetCurrentThreadId", 56, reinterpret_cast<std::uintptr_t>(&tl_GetCurrentThreadId)},
         {"GetCurrentProcessId", 57, reinterpret_cast<std::uintptr_t>(&tl_GetCurrentProcessId)},
+        // Fase 10+: variantes wide do sistema de arquivos e console.
+        {"GetFileAttributesW", 58, reinterpret_cast<std::uintptr_t>(&tl_GetFileAttributesW)},
+        {"FindFirstFileW", 59, reinterpret_cast<std::uintptr_t>(&tl_FindFirstFileW)},
+        {"FindNextFileW", 60, reinterpret_cast<std::uintptr_t>(&tl_FindNextFileW)},
+        {"FormatMessageW", 61, reinterpret_cast<std::uintptr_t>(&tl_FormatMessageW)},
+        {"GetConsoleOutputCP", 62, reinterpret_cast<std::uintptr_t>(&tl_GetConsoleOutputCP)},
+        {"GetTempFileNameW", 63, reinterpret_cast<std::uintptr_t>(&tl_GetTempFileNameW)},
+        {"LocalFree", 64, reinterpret_cast<std::uintptr_t>(&tl_LocalFree)},
+        {"SetConsoleOutputCP", 65, reinterpret_cast<std::uintptr_t>(&tl_SetConsoleOutputCP)},
     };
     static const InternalModule kKernel32Module{"KERNEL32.dll", kKernel32Exports};
     register_module(kKernel32Module);
@@ -225,9 +234,37 @@ void register_builtin_modules() {
         {"remove", 66, reinterpret_cast<std::uintptr_t>(&tl_remove)},
         {"_stat64", 67, reinterpret_cast<std::uintptr_t>(&tl__stat64)},
         {"_onexit", 68, reinterpret_cast<std::uintptr_t>(&tl_atexit)},
+        // Fase 10+: strings wide, locale, arquivos wide e formatação wide.
+        {"realloc", 69, reinterpret_cast<std::uintptr_t>(&tl_realloc)},
+        {"setlocale", 70, reinterpret_cast<std::uintptr_t>(&tl_setlocale)},
+        {"strchr", 71, reinterpret_cast<std::uintptr_t>(&tl_strchr)},
+        {"strrchr", 72, reinterpret_cast<std::uintptr_t>(&tl_strrchr)},
+        {"_stricmp", 73, reinterpret_cast<std::uintptr_t>(&tl__stricmp)},
+        {"_strdup", 74, reinterpret_cast<std::uintptr_t>(&tl__strdup)},
+        {"_umask", 75, reinterpret_cast<std::uintptr_t>(&tl__umask)},
+        {"_chmod", 76, reinterpret_cast<std::uintptr_t>(&tl__chmod)},
+        {"_utime64", 77, reinterpret_cast<std::uintptr_t>(&tl__utime64)},
+        {"_wfopen", 78, reinterpret_cast<std::uintptr_t>(&tl__wfopen)},
+        {"_wstat64", 79, reinterpret_cast<std::uintptr_t>(&tl__wstat64)},
+        {"_wrename", 80, reinterpret_cast<std::uintptr_t>(&tl__wrename)},
+        {"_wunlink", 81, reinterpret_cast<std::uintptr_t>(&tl__wunlink)},
+        {"_wcsdup", 82, reinterpret_cast<std::uintptr_t>(&tl__wcsdup)},
+        {"wcschr", 83, reinterpret_cast<std::uintptr_t>(&tl_wcschr)},
+        {"wcsrchr", 84, reinterpret_cast<std::uintptr_t>(&tl_wcsrchr)},
+        {"wcsncat", 85, reinterpret_cast<std::uintptr_t>(&tl_wcsncat)},
+        {"wcsncpy", 86, reinterpret_cast<std::uintptr_t>(&tl_wcsncpy)},
+        {"mbstowcs", 87, reinterpret_cast<std::uintptr_t>(&tl_mbstowcs)},
+        {"wcstombs", 88, reinterpret_cast<std::uintptr_t>(&tl_wcstombs)},
+        {"fwprintf", 89, reinterpret_cast<std::uintptr_t>(&tl_fwprintf)},
+        {"fputwc", 90, reinterpret_cast<std::uintptr_t>(&tl_fputwc)},
     };
     static const InternalModule kMsvcrtModule{"msvcrt.dll", kMsvcrtExports};
     register_module(kMsvcrtModule);
+    static const ExportedFunction kShell32Exports[] = {
+        {"CommandLineToArgvW", 1, reinterpret_cast<std::uintptr_t>(&tl_CommandLineToArgvW)},
+    };
+    static const InternalModule kShell32Module{"SHELL32.dll", kShell32Exports};
+    register_module(kShell32Module);
 }
 
 bool is_module_registered(const std::string_view dll) {

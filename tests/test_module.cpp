@@ -79,11 +79,12 @@ TEST_F(ModuleTest, ClearModulesResetsRegistry) {
 
 TEST_F(ModuleTest, RegistersBuiltinKernel32Exports) {
     register_builtin_modules();
-    ASSERT_EQ(registered_module_count(), 4U);
+    ASSERT_EQ(registered_module_count(), 5U);
     EXPECT_TRUE(is_module_registered("KERNEL32.dll"));
     EXPECT_TRUE(is_module_registered("USER32.dll"));
     EXPECT_TRUE(is_module_registered("GDI32.dll"));
     EXPECT_TRUE(is_module_registered("msvcrt.dll"));
+    EXPECT_TRUE(is_module_registered("SHELL32.dll"));
 
     const ExportLookup std_handle = find_export(ExportQuery{"KERNEL32.dll", "GetStdHandle"});
     ASSERT_TRUE(std_handle.found);
@@ -115,6 +116,20 @@ TEST_F(ModuleTest, RegistersBuiltinKernel32Exports) {
               reinterpret_cast<std::uintptr_t>(&tl_FillRect));
     EXPECT_EQ(find_export(ExportQuery{"GDI32.dll", "Rectangle"}).address,
               reinterpret_cast<std::uintptr_t>(&tl_Rectangle));
+    EXPECT_EQ(find_export(ExportQuery{"KERNEL32.dll", "GetFileAttributesW"}).address,
+              reinterpret_cast<std::uintptr_t>(&tl_GetFileAttributesW));
+    EXPECT_EQ(find_export(ExportQuery{"KERNEL32.dll", "FormatMessageW"}).address,
+              reinterpret_cast<std::uintptr_t>(&tl_FormatMessageW));
+    EXPECT_EQ(find_export(ExportQuery{"KERNEL32.dll", "GetTempFileNameW"}).address,
+              reinterpret_cast<std::uintptr_t>(&tl_GetTempFileNameW));
+    EXPECT_EQ(find_export(ExportQuery{"KERNEL32.dll", "LocalFree"}).address,
+              reinterpret_cast<std::uintptr_t>(&tl_LocalFree));
+    EXPECT_EQ(find_export(ExportQuery{"SHELL32.dll", "CommandLineToArgvW"}).address,
+              reinterpret_cast<std::uintptr_t>(&tl_CommandLineToArgvW));
+    EXPECT_EQ(find_export_by_ordinal("KERNEL32.dll", 58).address,
+              reinterpret_cast<std::uintptr_t>(&tl_GetFileAttributesW));
+    EXPECT_EQ(find_export_by_ordinal("SHELL32.dll", 1).address,
+              reinterpret_cast<std::uintptr_t>(&tl_CommandLineToArgvW));
 }
 
 TEST_F(ModuleTest, RegistersMsvcrtExports) {
@@ -129,12 +144,22 @@ TEST_F(ModuleTest, RegistersMsvcrtExports) {
               reinterpret_cast<std::uintptr_t>(&tl___lc_codepage_func));
     EXPECT_EQ(find_export_by_ordinal("msvcrt.dll", 57).address,
               reinterpret_cast<std::uintptr_t>(&g_guest_fmode));
+    EXPECT_EQ(find_export(ExportQuery{"msvcrt.dll", "_wfopen"}).address,
+              reinterpret_cast<std::uintptr_t>(&tl__wfopen));
+    EXPECT_EQ(find_export(ExportQuery{"msvcrt.dll", "fwprintf"}).address,
+              reinterpret_cast<std::uintptr_t>(&tl_fwprintf));
+    EXPECT_EQ(find_export(ExportQuery{"msvcrt.dll", "wcstombs"}).address,
+              reinterpret_cast<std::uintptr_t>(&tl_wcstombs));
+    EXPECT_EQ(find_export_by_ordinal("msvcrt.dll", 69).address,
+              reinterpret_cast<std::uintptr_t>(&tl_realloc));
+    EXPECT_EQ(find_export_by_ordinal("msvcrt.dll", 90).address,
+              reinterpret_cast<std::uintptr_t>(&tl_fputwc));
 }
 
 TEST_F(ModuleTest, RegisterBuiltinModulesIsIdempotent) {
     register_builtin_modules();
     register_builtin_modules();
-    EXPECT_EQ(registered_module_count(), 4U);
+    EXPECT_EQ(registered_module_count(), 5U);
 }
 
 TEST_F(ModuleTest, RegistryOwnsItsStrings) {
