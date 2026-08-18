@@ -275,6 +275,36 @@ tl_add_target_app_test(xxd      "${TL_TARGETS_OUTPUT_DIR}/xxd.exe"
 tl_add_target_app_run_test(xxd   "${TL_TARGETS_OUTPUT_DIR}/xxd.exe")
 tl_add_target_app_test(bzip2    "${TL_TARGETS_OUTPUT_DIR}/bzip2.exe"
     "${CMAKE_CURRENT_SOURCE_DIR}/manifests/bzip2.json")
+if(TARGET tradutorlinux)
+    add_test(
+        NAME targetapp_bzip2_run_compress
+        COMMAND "${CMAKE_COMMAND}"
+            "-DINPUT=${TL_TARGETS_OUTPUT_DIR}/bzip2.exe"
+            "-DRUNTIME=$<TARGET_FILE:tradutorlinux>"
+            "-DGOLDEN_INPUT=${CMAKE_CURRENT_SOURCE_DIR}/golden/bzip2/input.bin"
+            "-DGOLDEN_OUTPUT=${CMAKE_CURRENT_SOURCE_DIR}/golden/bzip2/expected.txt"
+            "-DGUEST_ARGS=-c"
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/verify_target_run_bytes.cmake"
+    )
+    set_tests_properties(targetapp_bzip2_run_compress PROPERTIES
+        DEPENDS targetapp_bzip2_report
+        LABELS "targetapp;runtime;pe32plus"
+    )
+    add_test(
+        NAME targetapp_bzip2_run_decompress
+        COMMAND "${CMAKE_COMMAND}"
+            "-DINPUT=${TL_TARGETS_OUTPUT_DIR}/bzip2.exe"
+            "-DRUNTIME=$<TARGET_FILE:tradutorlinux>"
+            "-DGOLDEN_INPUT=${CMAKE_CURRENT_SOURCE_DIR}/golden/bzip2_decompress/input.bin"
+            "-DGOLDEN_OUTPUT=${CMAKE_CURRENT_SOURCE_DIR}/golden/bzip2_decompress/expected.txt"
+            "-DGUEST_ARGS=-d;-c"
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/verify_target_run.cmake"
+    )
+    set_tests_properties(targetapp_bzip2_run_decompress PROPERTIES
+        DEPENDS targetapp_bzip2_report
+        LABELS "targetapp;runtime;pe32plus"
+    )
+endif()
 tl_add_target_app_test(dos2unix "${TL_TARGETS_OUTPUT_DIR}/dos2unix.exe"
     "${CMAKE_CURRENT_SOURCE_DIR}/manifests/dos2unix.json")
 tl_add_target_app_test(unix2dos "${TL_TARGETS_OUTPUT_DIR}/unix2dos.exe"

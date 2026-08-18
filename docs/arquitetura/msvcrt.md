@@ -76,7 +76,8 @@ stdio é unbuffered e usa `write`/`read` diretos com loop `EINTR`.
   símbolos ausentes são diagnosticados como `unknown-symbol` no `--report`.
   Os símbolos adicionais para `bzip2.exe` (`strncpy`, `strstr`, `ungetc`,
   `fgetc`, `fread`, `isspace`, `memmove`, `strcat`, `remove`, `_stat64`) foram
-  implementados; `_stat64` é um stub que retorna `ENOSYS`.
+  implementados; `_stat64` preenche o `struct _stat64` do MinGW (pack 8,
+  `st_mode` em `0x06`) a partir do `stat()` do host.
 - Locale fixo C: code page `1252`, `mb_cur_max == 1`, `lconv` estático.
 - `signal` apenas registra; nenhuma entrega real ao convidado.
 - `wcs*` e o caminho `W` ficam para os alvos que os exigirem (`dos2unix`).

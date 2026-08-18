@@ -273,8 +273,40 @@ TEST(MsvcrtIoTest, RemoveDeletesFile) {
     EXPECT_EQ(tl_remove(nullptr), -1);
 }
 
-TEST(MsvcrtIoTest, Stat64ReturnsEnosys) {
-    EXPECT_EQ(tl__stat64("/tmp", nullptr), -1);
+TEST(MsvcrtIoTest, Stat64RegularFileFillsMode) {
+    const std::string path = "tl_msvcrt_stat64_" + std::to_string(static_cast<long>(getpid())) + ".txt";
+    {
+        GuestFile* file = tl_fopen(path.c_str(), "wb");
+        ASSERT_NE(file, nullptr);
+        tl_fputs("data", file);
+        tl_fclose(file);
+    }
+
+    std::array<std::byte, 56> buffer{};
+    EXPECT_EQ(tl__stat64(path.c_str(), buffer.data()), 0);
+
+    const std::uint16_t mode = [&buffer]() {
+        std::uint16_t value = 0;
+        std::memcpy(&value, buffer.data() + 6, sizeof(value));
+        return value;
+    }();
+    EXPECT_NE(mode & 0x8000, 0);
+
+    std::uint64_t size = 0;
+    std::memcpy(&size, buffer.data() + 24, sizeof(size));
+    EXPECT_EQ(size, 4U);
+
+    std::remove(path.c_str());
+}
+
+TEST(MsvcrtIoTest, Stat64RejectsNullArgs) {
+    EXPECT_EQ(tl__stat64(nullptr, nullptr), -1);
+}
+
+TEST(MsvcrtIoTest, Stat64MissingFileReturnsError) {
+    const std::string path = "tl_msvcrt_stat64_missing_" + std::to_string(static_cast<long>(getpid())) + ".txt";
+    std::array<std::byte, 56> buffer{};
+    EXPECT_EQ(tl__stat64(path.c_str(), buffer.data()), -1);
 }
 
 }  // namespace

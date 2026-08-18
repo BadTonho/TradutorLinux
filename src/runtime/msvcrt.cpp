@@ -19,6 +19,7 @@
 #include <vector>
 
 #include <fcntl.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 extern "C" char** environ;
@@ -1227,11 +1228,50 @@ TL_CRT_MSABI int tl_remove(const char* path) noexcept {
     return 0;
 }
 
+// Layout do struct _stat64 do MinGW (pack 8): os bits de tipo e de
+// permissão coincidem com os do Linux (S_IFREG = 0x8000, S_IFDIR = 0x4000).
+struct MingwStat64 {
+    std::uint32_t st_dev;   // offset 0
+    std::uint16_t st_ino;   // offset 4
+    std::uint16_t st_mode;  // offset 6
+    std::int16_t st_nlink;  // offset 8
+    std::int16_t st_uid;    // offset 10
+    std::int16_t st_gid;    // offset 12
+    std::uint32_t st_rdev;  // offset 14
+    std::uint64_t st_size;  // offset 24 (alinhado a 8)
+    std::int64_t atime_sec; // offset 32
+    std::int64_t mtime_sec; // offset 40
+    std::int64_t ctime_sec; // offset 48
+};
+
 TL_CRT_MSABI int tl__stat64(const char* path, void* stat_buffer) noexcept {
-    (void)path;
-    (void)stat_buffer;
-    set_error(ENOSYS);
-    return -1;
+    if (path == nullptr || stat_buffer == nullptr) {
+        set_error(EINVAL);
+        return -1;
+    }
+    struct ::stat st;
+    if (::stat(path, &st) != 0) {
+        set_error(errno);
+        trace_crt(TraceLevel::Info, "_stat64",
+                  {{"path", path}, {"result", "-1"}, {"errno", std::to_string(errno)}});
+        return -1;
+    }
+    MingwStat64* out = static_cast<MingwStat64*>(stat_buffer);
+    *out = {};
+    out->st_dev = static_cast<std::uint32_t>(st.st_dev);
+    out->st_ino = static_cast<std::uint16_t>(st.st_ino);
+    out->st_mode = static_cast<std::uint16_t>(st.st_mode);
+    out->st_nlink = static_cast<std::int16_t>(st.st_nlink);
+    out->st_uid = static_cast<std::int16_t>(st.st_uid);
+    out->st_gid = static_cast<std::int16_t>(st.st_gid);
+    out->st_rdev = static_cast<std::uint32_t>(st.st_rdev);
+    out->st_size = static_cast<std::uint64_t>(st.st_size);
+    out->atime_sec = static_cast<std::int64_t>(st.st_atime);
+    out->mtime_sec = static_cast<std::int64_t>(st.st_mtime);
+    out->ctime_sec = static_cast<std::int64_t>(st.st_ctime);
+    trace_crt(TraceLevel::Info, "_stat64",
+              {{"path", path}, {"result", "0"}, {"mode", std::to_string(out->st_mode)}});
+    return 0;
 }
 
 // ---------------------------------------------------------------------------
