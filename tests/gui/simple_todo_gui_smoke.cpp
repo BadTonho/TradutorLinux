@@ -262,7 +262,9 @@ pid_t start_guest(const std::string& runtime, const std::string& executable,
         ::dup2(stderr_fd, STDERR_FILENO);
         ::close(stdout_fd);
         ::close(stderr_fd);
-        ::chdir(work.c_str());
+        if (::chdir(work.c_str()) != 0) {
+            ::_exit(127);
+        }
         ::setenv("DISPLAY", display.c_str(), 1);
         ::setenv("APPDATA", "appdata", 1);
         ::execl(runtime.c_str(), runtime.c_str(), "--trace", executable.c_str(),
