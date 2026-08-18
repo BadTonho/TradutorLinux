@@ -20,7 +20,7 @@ Esta matriz declara o comportamento suportado; ela não é uma promessa de compa
 | `tl_missing_dll.exe` | PE32+ AMD64 | Não | `USER32.dll!MessageBoxW` | Gerado, verificado e rejeitado na Fase 3: `USER32.dll` é conhecida, mas o símbolo diagnostica `unknown-symbol`; retorna `5` sem executar o entry point | Fase 4 |
 | `tl_crash.exe` | PE32+ AMD64 | Não | Nenhum | Gerado, verificado, mapeado e executado em processo filho isolado: o convidado acessa o endereço `0`, o hospedeiro observa o `SIGSEGV` via `waitpid`, emite `terminated category="guest-signal" signal="SIGSEGV"` e retorna `71` (`GuestFault`) | Diagnóstico de falhas |
 | `tl_hang.exe` | PE32+ AMD64 | Não | Nenhum | Gerado, verificado e executado em processo filho isolado com `--timeout 1`: o convidado entra em loop infinito, o hospedeiro o mata com `SIGKILL`, emite `terminated category="guest-timeout"` e retorna `72` (`GuestTimeout`) | Diagnóstico de falhas |
-| `tl_thread.exe` | PE32+ AMD64 | Não | `KERNEL32.dll!CloseHandle`, `CreateThread`, `ExitProcess`, `ExitThread`, `GetStdHandle`, `WaitForSingleObject`, `WriteFile` | Cria duas threads sequenciais, cada uma escreve "Thread done" e termina via `ExitThread`; thread principal escreve "Main done" e encerra | Fase 11 |
+| `tl_thread.exe` | PE32+ AMD64 | Não | `KERNEL32.dll!CloseHandle`, `CreateThread`, `ExitProcess`, `ExitThread`, `GetStdHandle`, `WaitForSingleObject`, `WriteFile` | **Suportado no escopo da Fase 11**: cria duas threads sequenciais, cada uma escreve "Thread done" e termina via `ExitThread`; a thread principal aguarda cada handle, escreve "Main done" e encerra. Metadata e execução e2e passam em Debug, Release e Sanitize (`LSAN_OPTIONS=detect_leaks=0`); saída esperada: `Thread done\nThread done\nMain done\n` e exit `0` | Fase 11 |
 
 As fontes e manifestos das fixtures ficam em `tests/samples/`. Os binários são produtos de build e ficam em `build/<preset>/tests/samples/generated/`.
 
@@ -325,8 +325,9 @@ processo filho; cada thread convidada recebe seu próprio TEB/GS, stack e
 - `CreateThread` não suporta `CREATE_SUSPENDED`; `stack_size == 0` usa o
   tamanho padrão (64 KiB).
 - `ExitThread` termina somente a thread corrente; não limpa destructors C++.
-- O fixture `tl_thread.exe` requer mingw-w64 para cross-build (não disponível
-  no ambiente atual).
+- O fixture `tl_thread.exe` requer mingw-w64 para cross-build; a regressão e2e
+  está coberta por `fixture_tl_thread_metadata` e
+  `runtime_tl_thread_matches_readobj`.
 - 18 testes unitários em `tests/test_win32.cpp` cobrem `TlsAlloc`,
   `TlsSetValue`, `TlsGetValue`, `TlsFree`, `GetCurrentThreadId`,
   `GetCurrentProcessId`, `CRITICAL_SECTION` (init/enter/leave/delete,
