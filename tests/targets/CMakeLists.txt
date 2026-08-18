@@ -309,3 +309,42 @@ tl_add_target_app_test(dos2unix "${TL_TARGETS_OUTPUT_DIR}/dos2unix.exe"
     "${CMAKE_CURRENT_SOURCE_DIR}/manifests/dos2unix.json")
 tl_add_target_app_test(unix2dos "${TL_TARGETS_OUTPUT_DIR}/unix2dos.exe"
     "${CMAKE_CURRENT_SOURCE_DIR}/manifests/unix2dos.json")
+
+# Os arquivos oficiais de teste do dos2unix são pinados junto com a fonte do
+# alvo. Eles fornecem entradas CRLF/LF e um nome UTF-8 sem duplicar fixtures do
+# projeto; o diretório de teste vira o CWD do convidado para preservar caminhos
+# relativos Windows.
+function(tl_add_target_conversion_test target_name scenario guest_input golden_output working_directory)
+    if(NOT TARGET tradutorlinux)
+        return()
+    endif()
+    add_test(
+        NAME targetapp_${target_name}_${scenario}
+        COMMAND "${CMAKE_COMMAND}"
+            "-DINPUT=${TL_TARGETS_OUTPUT_DIR}/${target_name}.exe"
+            "-DRUNTIME=$<TARGET_FILE:tradutorlinux>"
+            "-DWORKING_DIRECTORY=${working_directory}"
+            "-DGUEST_INPUT=${guest_input}"
+            "-DGOLDEN_OUTPUT=${golden_output}"
+            "-DGUEST_ARGS=-O"
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/verify_target_conversion.cmake"
+    )
+    set_tests_properties(targetapp_${target_name}_${scenario} PROPERTIES
+        DEPENDS targetapp_${target_name}_report
+        LABELS "targetapp;runtime;pe32plus"
+    )
+endfunction()
+
+if(TARGET tradutorlinux)
+    set(_dos2unix_test_dir "${_dos2unix_source_dir}/test")
+    tl_add_target_conversion_test(
+        dos2unix eol eol_dos.txt
+        "${_dos2unix_test_dir}/eol_unix.txt" "${_dos2unix_test_dir}")
+    tl_add_target_conversion_test(
+        unix2dos eol eol_unix.txt
+        "${_dos2unix_test_dir}/eol_dos.txt" "${_dos2unix_test_dir}")
+    tl_add_target_conversion_test(
+        dos2unix unicode-glob "uni_el_*.txt"
+        "${CMAKE_CURRENT_SOURCE_DIR}/golden/dos2unix/uni_el_expected.txt"
+        "${_dos2unix_test_dir}")
+endif()

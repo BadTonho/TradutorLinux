@@ -29,6 +29,8 @@ Os módulos internos registram exports com ordinais internos definidos pelo proj
 | `KERNEL32.dll` | Console, erros, memória e arquivos; lista detalhada em `include/tradutorlinux/loader/module.hpp` |
 | `USER32.dll` | MessageBox, janelas, message loop, teclado, timers e pintura |
 | `GDI32.dll` | Stock objects e saída de texto |
+| `msvcrt.dll` | CRT mínimo, stdio, conversões e strings wide guiados pelos aplicativos-alvo |
+| `SHELL32.dll` | `CommandLineToArgvW` no subconjunto usado por `dos2unix`/`unix2dos` |
 
 ## Fronteira de ABI (`ms_abi`)
 

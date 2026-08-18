@@ -80,4 +80,8 @@ stdio é unbuffered e usa `write`/`read` diretos com loop `EINTR`.
   `st_mode` em `0x06`) a partir do `stat()` do host.
 - Locale fixo C: code page `1252`, `mb_cur_max == 1`, `lconv` estático.
 - `signal` apenas registra; nenhuma entrega real ao convidado.
-- `wcs*` e o caminho `W` ficam para os alvos que os exigirem (`dos2unix`).
+- O subconjunto wide usado por `dos2unix`/`unix2dos` inclui `_wfopen`,
+  `_wstat64`, `_wrename`, `_wunlink`, `_wcsdup`, `wcschr`, `wcsrchr`,
+  `wcsncat`, `wcsncpy`, `mbstowcs`, `wcstombs`, `fwprintf` e `fputwc`.
+- As conversões wide usam UTF-16 de 16 bits e UTF-8; o locale continua fixo
+  em `C` e o caminho de arquivos aceita somente caminhos relativos sem drive.

@@ -146,7 +146,7 @@ A Fase 8 mede progresso por aplicativos reais, e não apenas por fixtures. Os
 primeiros alvos escolhidos são utilitários de console pequenos, de código
 aberto e compilados em CI com `mingw-w64`. Cada alvo é fixado por versão,
 toolchain e lista de imports; a lista real é capturada por `llvm-readobj` e por
-`--report` do runtime e protegida por teste (label `targetapp`, 8 testes).
+`--report` do runtime e protegida por testes com o label `targetapp`.
 
 As fontes são baixadas com hash SHA-256 verificado pelo módulo
 `tests/targets/CMakeLists.txt` (opção `TL_BUILD_TARGET_APPS=ON`, usada no job
@@ -160,7 +160,8 @@ todo import do manifest apareça listado sob o grupo `dll:` correspondente e
 valida as linhas `compatibility:` e `execution-result:`.
 
 Os scripts de execução e2e (`verify_target_run.cmake`,
-`verify_target_execution.cmake`) categorizam o resultado em:
+`verify_target_run_bytes.cmake` e `verify_target_conversion.cmake`) categorizam
+o resultado em:
 - `supported` — execução concluída, saída idêntica ao ouro
 - `failed` — terminou por sinal, timeout ou exit code inesperado
 - `incorrect` — saída diverge do ouro
@@ -170,8 +171,8 @@ Os scripts de execução e2e (`verify_target_run.cmake`,
 |---|---|---|---|
 | `xxd.exe` | vim `v9.2.0957` (`src/xxd.c`), `-O2 -s` | `KERNEL32.dll` (16), `msvcrt.dll` (57) | **Executa de ponta a ponta**: saída byte-idêntica ao `xxd` do sistema nos modos padrão e `-p`, exit `0`; arquivo inexistente → exit `2` com erro em stderr. Regressão e2e em CTest (ouro em `tests/targets/golden/xxd/`, 3 testes) |
 | `bzip2.exe` | bzip2 `1.0.8`, `-O2 -s` | `KERNEL32.dll` (13), `msvcrt.dll` (69) | **Executa de ponta a ponta**: compressão (`-c`) e descompressão (`-d`) de arquivo; saída válida verificada com `bzip2` nativo nos dois sentidos; exit `0` |
-| `dos2unix.exe` | dos2unix `7.5.6`, `-O2 -DD2U_UNIFILE -s` | `KERNEL32.dll` (24), `msvcrt.dll` (63), `SHELL32.dll!CommandLineToArgvW` (1) | Cross-build no CI; imports pinados; `result: unsupported` (SHELL32 e caminho `W` fora de escopo) |
-| `unix2dos.exe` | dos2unix `7.5.6` | idem `dos2unix.exe` | Idem |
+| `dos2unix.exe` | dos2unix `7.5.6`, `-O2 -DD2U_UNIFILE -s` | `KERNEL32.dll` (23), `msvcrt.dll` (67), `SHELL32.dll!CommandLineToArgvW` (1) | **Executa de ponta a ponta no fluxo validado**: `--report` resolve 91/91 imports; regressões convertem CRLF/misto para LF e processam `uni_el_*.txt` com nome UTF-8, usando `CommandLineToArgvW` e enumeração `W`; exit `0` |
+| `unix2dos.exe` | dos2unix `7.5.6`, `-O2 -DD2U_UNIFILE -s` | idem `dos2unix.exe` | **Executa de ponta a ponta no fluxo validado**: `--report` resolve 91/91 imports; regressão converte LF para CRLF por stdout; exit `0` |
 
 Os manifests com a lista completa de imports ficam em
 `tests/targets/manifests/`. Os binários são produtos de build e ficam em
@@ -233,12 +234,12 @@ Observações que orientam a próxima etapa (Fase 9/10):
   `abort`, `fopen`/`fclose`/`fread`/`fwrite`/`fprintf`/`vfprintf`/`fseek` e o
   grupo de strings (`strlen`/`strcmp`/`strcpy`/`strncpy`/`strstr`/`strcat`/
   `memcpy`/`memmove`/`memset`).
-- `bzip2.exe` agora tem todos os imports de `msvcrt.dll` implementados;
-  o próximo passo é criar a regressão e2e de execução (stdin/stdout/exit code).
-- `dos2unix`/`unix2dos` exigem o caminho `W` (`GetCommandLineW`,
+- `bzip2.exe` tem todos os imports de `msvcrt.dll` implementados e sua
+  regressão e2e cobre compressão e descompressão byte-idênticas.
+- `dos2unix`/`unix2dos` agora exercitam o caminho `W` (`GetCommandLineW`,
   `FindFirstFileW`/`FindNextFileW`/`FindClose`, `GetFileAttributesW`,
-  `_wfopen`, `wcs*`) e `SHELL32.dll!CommandLineToArgvW` (expansão de curingas
-  do mingw) — decidir se esse subconjunto entra na Fase 9 ou fica para depois.
+  `_wfopen`, `wcs*`) e `SHELL32.dll!CommandLineToArgvW`; os fluxos validados
+  usam somente caminhos relativos, UTF-8 e o curinga `*`.
 - Nenhum alvo usa `GetStartupInfoA`/`GetEnvironmentStringsA` diretamente: o
   `crt2.o` do mingw delega a linha de comando e o ambiente ao `__getmainargs`
   de `msvcrt.dll`, então essas APIs são dependência interna do CRT mínimo, e
@@ -261,10 +262,14 @@ enumeração. A tradução de caminhos Windows (`\\` → `/`) é reutilizável v
 | `KERNEL32.dll` | `CreateDirectoryA` | Suportado | `mkdir()` com permissão 0777 |
 | `KERNEL32.dll` | `FindFirstFileA` | Suportado | Abre `opendir()` + `readdir()` com padrão simples (`*` e correspondência exata); preenche `WIN32_FIND_DATAA` simplificado |
 | `KERNEL32.dll` | `FindNextFileA` | Suportado | Continua iteração com o mesmo padrão |
+| `KERNEL32.dll` | `FindFirstFileW` | Suportado | Converte UTF-16 para UTF-8, enumera com o mesmo padrão simples e preenche `WIN32_FIND_DATAW` simplificado |
+| `KERNEL32.dll` | `FindNextFileW` | Suportado | Continua enumeração wide e converte o nome encontrado para UTF-16 |
 | `KERNEL32.dll` | `FindClose` | Suportado | Fecha `DIR*` e libera slot |
+| `KERNEL32.dll` | `GetFileAttributesW` | Suportado | Converte o caminho UTF-16 e delega ao mesmo `stat()` da variante A |
 | `KERNEL32.dll` | `GetCurrentDirectoryA` | Suportado | `getcwd()` → caminho relativo sem barra inicial; conversão `/` → `\` |
 | `KERNEL32.dll` | `GetCurrentDirectoryW` | Suportado | Delega à versão A e converte resultado para UTF-16 |
 | `KERNEL32.dll` | `GetModuleFileNameA` | Suportado | Retorna caminho definido via `set_guest_module_path()` antes da execução |
+| `SHELL32.dll` | `CommandLineToArgvW` | Suportado | Divide a linha de comando UTF-16 em argumentos, preservando grupos entre aspas; o bloco único retornado é liberado por `LocalFree` |
 
 ### Limitações conhecidas
 
@@ -272,6 +277,11 @@ enumeração. A tradução de caminhos Windows (`\\` → `/`) é reutilizável v
   o convidado não deve depender do tamanho exato da estrutura.
 - `FindFirstFileA` só aceita `*` como curinga; `?` e sequências `[a-z]` não
   são suportados.
+- `FindFirstFileW`/`FindNextFileW` têm a mesma limitação de curinga e retornam
+  somente a estrutura wide mínima usada pelos alvos atuais.
+- `CommandLineToArgvW` cobre aspas e separação por espaço usadas pelos alvos;
+  as regras completas de escape com barras invertidas antes de aspas ainda não
+  fazem parte do subconjunto publicado.
 - `CreateFileA` continua limitado a caminhos relativos sem letra de drive.
 - `FileSlot` agora rastreia `file_size` e `position`; `ReadFile` e `WriteFile`
   atualizam a posição automaticamente.
@@ -289,6 +299,10 @@ enumeração. A tradução de caminhos Windows (`\\` → `/`) é reutilizável v
   `MoveFileA` (existente/inexistente), `CreateDirectoryA` (novo/duplicado),
   `FindFirstFileA`/`FindClose`, `GetCurrentDirectoryA/W`,
   `GetModuleFileNameA` e conversão UTF-8/UTF-16 com caracteres acentuados.
+- Os fluxos dos alvos reais são cobertos por `targetapp_dos2unix_eol`,
+  `targetapp_unix2dos_eol` e `targetapp_dos2unix_unicode-glob`; os arquivos de
+  entrada CRLF/LF vêm da fonte pinada do dos2unix e o ouro UTF-8 está em
+  `tests/targets/golden/dos2unix/`.
 
 ## Concorrência (Fase 11)
 
