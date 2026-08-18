@@ -9,6 +9,7 @@ add_library(tradutorlinux_core STATIC
     process/isolate.cpp
     runtime/winapi.cpp
     runtime/msvcrt.cpp
+    runtime/advapi.cpp
     runtime/guest_entry.S
     gui/x11.cpp
 )

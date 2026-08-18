@@ -29,6 +29,7 @@
 #include <string>
 #include <thread>
 #include <vector>
+#include <deque>
 #include <fcntl.h>
 #include <dirent.h>
 #include <pthread.h>
@@ -436,6 +437,13 @@ struct ClassSlot {
     std::uintptr_t wndproc{0};
 };
 
+enum class ControlKind { None, Edit, Button, ComboBox, Static, ListView };
+
+struct ListViewRow {
+    std::vector<std::string> columns;
+    std::intptr_t param{};
+};
+
 struct GuestTimer {
     std::uintptr_t id{0};
     std::chrono::steady_clock::time_point deadline{};
@@ -446,22 +454,46 @@ struct WindowSlot {
     bool used{false};
     std::uintptr_t wndproc{0};
     std::string class_name;
+    std::string window_title;
     gui::NativeWindow native{nullptr};
     bool mapped{false};
     abi::GuestMsg pending{};  // mensagem traduzida (ex.: WM_CHAR) aguardando GetMessageA
     bool has_pending{false};
+    std::deque<abi::GuestMsg> queued_messages;
     char last_key{'\0'};  // caractere do WM_KEYDOWN mais recente, para TranslateMessage
     bool left_button_down{false};  // estado do botão primário, para o wParam do mouse
     std::vector<GuestTimer> timers;  // timers ativos (WM_TIMER)
     int width{0};
     int height{0};
     bool painting{false};  // BeginPaint sem EndPaint correspondente
+    bool is_control{false};
+    ControlKind control_kind{ControlKind::None};
+    WindowSlot* parent{nullptr};
+    std::uintptr_t control_id{0};
+    int x{0};
+    int y{0};
+    std::string text;
+    bool visible{true};
+    bool enabled{true};
+    bool focused{false};
+    bool pressed{false};
+    std::vector<std::string> combo_items;
+    int combo_selection{-1};
+    std::vector<ListViewRow> list_rows;
+    int list_selection{-1};
 };
 
 std::array<ClassSlot, 32> g_classes{};
-std::array<WindowSlot, 16> g_windows{};
+std::array<WindowSlot, 32> g_windows{};
+WindowSlot* g_focused_control = nullptr;
 bool g_quit_requested = false;
 std::uint32_t g_quit_code = 0;
+
+struct MenuSlot {
+    bool used{false};
+    std::vector<gui::PopupMenuItem> items;
+};
+std::array<MenuSlot, 16> g_menus{};
 
 using WndProc = TL_MSABI abi::Lresult (*)(abi::HWnd, std::uint32_t, abi::Wparam, abi::Lparam);
 
@@ -498,6 +530,213 @@ WindowSlot* find_window_slot(const void* const handle) noexcept {
         return &*found;
     }
     return nullptr;
+}
+
+[[nodiscard]] bool is_builtin_control(const char* name) noexcept {
+    return name != nullptr && (util::ascii_iequals(name, "EDIT") ||
+                               util::ascii_iequals(name, "BUTTON") ||
+                               util::ascii_iequals(name, "COMBOBOX") ||
+                               util::ascii_iequals(name, "STATIC") ||
+                               util::ascii_iequals(name, "SysListView32"));
+}
+
+[[nodiscard]] ControlKind control_kind_for(const char* name) noexcept {
+    if (util::ascii_iequals(name, "EDIT")) {
+        return ControlKind::Edit;
+    }
+    if (util::ascii_iequals(name, "BUTTON")) {
+        return ControlKind::Button;
+    }
+    if (util::ascii_iequals(name, "COMBOBOX")) {
+        return ControlKind::ComboBox;
+    }
+    if (util::ascii_iequals(name, "STATIC")) {
+        return ControlKind::Static;
+    }
+    return ControlKind::ListView;
+}
+
+void queue_window_message(WindowSlot& slot, const std::uint32_t message,
+                          const abi::Wparam wparam, const abi::Lparam lparam) noexcept {
+    slot.queued_messages.push_back(abi::GuestMsg{.hwnd = &slot,
+                                                 .message = message,
+                                                 .padding = 0,
+                                                 .wparam = wparam,
+                                                 .lparam = lparam});
+}
+
+void queue_command(WindowSlot& control, const std::uint32_t notification) noexcept {
+    if (control.parent == nullptr) {
+        return;
+    }
+    const abi::Wparam value = (static_cast<abi::Wparam>(notification) << 16U) |
+                              (control.control_id & 0xFFFFU);
+    queue_window_message(*control.parent, abi::kWmCommand, value,
+                         reinterpret_cast<abi::Lparam>(&control));
+}
+
+void queue_list_notification(WindowSlot& list, const std::int32_t code, const int item) noexcept {
+    if (list.parent == nullptr) {
+        return;
+    }
+    static thread_local abi::GuestNmListView notification{};
+    notification = {};
+    notification.hwnd_from = &list;
+    notification.id_from = list.control_id;
+    notification.code = code;
+    notification.item = item;
+    notification.new_state = 0x0002U;
+    notification.changed = 0x0001U;
+    queue_window_message(*list.parent, abi::kWmNotify, 0,
+                         reinterpret_cast<abi::Lparam>(&notification));
+}
+
+void render_controls(WindowSlot& parent) noexcept {
+    if (!parent.used || parent.native == nullptr || !parent.mapped) {
+        return;
+    }
+    gui::fill_rectangle(parent.native, 0, 0, parent.width, parent.height, 0);
+    for (WindowSlot& control : g_windows) {
+        if (!control.used || !control.is_control || control.parent != &parent || !control.visible) {
+            continue;
+        }
+        const int x = control.x;
+        const int y = control.y;
+        if (control.control_kind == ControlKind::Static) {
+            gui::draw_text(parent.native, control.text.c_str(), x, y + 14);
+        } else if (control.control_kind == ControlKind::Edit) {
+            gui::fill_rectangle(parent.native, x, y, control.width, control.height, 0);
+            gui::draw_rectangle(parent.native, x, y, control.width, control.height);
+            gui::draw_text(parent.native, control.text.c_str(), x + 5, y + control.height - 8);
+        } else if (control.control_kind == ControlKind::Button) {
+            gui::fill_rectangle(parent.native, x, y, control.width, control.height, 1);
+            gui::draw_rectangle(parent.native, x, y, control.width, control.height);
+            gui::draw_text(parent.native, control.text.c_str(), x + 8, y + control.height - 8);
+        } else if (control.control_kind == ControlKind::ComboBox) {
+            gui::fill_rectangle(parent.native, x, y, control.width, control.height, 0);
+            gui::draw_rectangle(parent.native, x, y, control.width, control.height);
+            if (control.combo_selection >= 0 &&
+                static_cast<std::size_t>(control.combo_selection) < control.combo_items.size()) {
+                gui::draw_text(parent.native,
+                               control.combo_items[static_cast<std::size_t>(control.combo_selection)].c_str(),
+                               x + 5, y + control.height - 8);
+            }
+        } else if (control.control_kind == ControlKind::ListView) {
+            gui::draw_rectangle(parent.native, x, y, control.width, control.height);
+            const std::array<int, 6> columns{40, 150, 200, 80, 100, 150};
+            const std::array<const char*, 6> headings{"ID", "Title", "Description", "Priority",
+                                                      "Status", "Created"};
+            int column_x = x + 5;
+            for (std::size_t index = 0; index < headings.size(); ++index) {
+                gui::draw_text(parent.native, headings[index], column_x, y + 17);
+                column_x += columns[index];
+            }
+            for (std::size_t row = 0; row < control.list_rows.size(); ++row) {
+                const int row_y = y + 24 + static_cast<int>(row) * 20;
+                if (static_cast<int>(row) == control.list_selection) {
+                    gui::fill_rectangle(parent.native, x + 1, row_y - 15, control.width - 2, 20, 1);
+                }
+                column_x = x + 5;
+                for (std::size_t column = 0; column < control.list_rows[row].columns.size() &&
+                                             column < columns.size(); ++column) {
+                    gui::draw_text(parent.native, control.list_rows[row].columns[column].c_str(),
+                                   column_x, row_y);
+                    column_x += columns[column];
+                }
+            }
+        }
+    }
+    gui::flush_window(parent.native);
+}
+
+WindowSlot* hit_control(WindowSlot& parent, const int x, const int y) noexcept {
+    for (auto it = g_windows.rbegin(); it != g_windows.rend(); ++it) {
+        WindowSlot& control = *it;
+        if (control.used && control.is_control && control.parent == &parent && control.visible &&
+            x >= control.x && x < control.x + control.width && y >= control.y &&
+            y < control.y + control.height) {
+            return &control;
+        }
+    }
+    return nullptr;
+}
+
+void set_focus_control(WindowSlot* control) noexcept {
+    if (g_focused_control == control) {
+        return;
+    }
+    if (g_focused_control != nullptr) {
+        g_focused_control->focused = false;
+        queue_command(*g_focused_control, abi::kEnKillFocus);
+    }
+    g_focused_control = control;
+    if (g_focused_control != nullptr) {
+        g_focused_control->focused = true;
+        queue_command(*g_focused_control, abi::kEnSetFocus);
+    }
+}
+
+void copy_control_text(const WindowSlot& control, char* output, const int capacity) noexcept {
+    if (output == nullptr || capacity <= 0) {
+        return;
+    }
+    const std::size_t count = std::min<std::size_t>(
+        control.text.size(), static_cast<std::size_t>(capacity - 1));
+    std::memcpy(output, control.text.data(), count);
+    output[count] = '\0';
+}
+
+void handle_control_key(WindowSlot& parent, const gui::WindowEvent& event) noexcept {
+    WindowSlot* control = g_focused_control;
+    if (control == nullptr || control->parent != &parent || control->control_kind != ControlKind::Edit ||
+        !control->enabled) {
+        return;
+    }
+    bool changed = false;
+    if (event.keysym == 0xFF08 || event.keysym == 0xFFFF) {
+        if (!control->text.empty()) {
+            control->text.pop_back();
+            changed = true;
+        }
+    } else if (event.character >= 0x20 && event.character != 0x7F) {
+        control->text.push_back(event.character);
+        changed = true;
+    }
+    if (changed) {
+        queue_command(*control, abi::kEnChange);
+        render_controls(parent);
+    }
+}
+
+void handle_control_mouse(WindowSlot& parent, const gui::WindowEvent& event) noexcept {
+    WindowSlot* control = hit_control(parent, event.x, event.y);
+    if (event.type == gui::WindowEventType::Press) {
+        if (control == nullptr) {
+            return;
+        }
+        set_focus_control(control->control_kind == ControlKind::Edit ? control : nullptr);
+        control->pressed = true;
+        if (control->control_kind == ControlKind::ListView) {
+            const int row = (event.y - control->y - 24) / 20;
+            if (row >= 0 && static_cast<std::size_t>(row) < control->list_rows.size()) {
+                control->list_selection = row;
+                queue_list_notification(*control, abi::kLvnItemChanged, row);
+                render_controls(parent);
+            }
+        }
+    } else if (event.type == gui::WindowEventType::Release) {
+        if (control == nullptr || !control->pressed) {
+            return;
+        }
+        control->pressed = false;
+        if (control->control_kind == ControlKind::Button) {
+            queue_command(*control, abi::kBnClicked);
+        } else if (control->control_kind == ControlKind::ComboBox && !control->combo_items.empty()) {
+            control->combo_selection = (control->combo_selection + 1) %
+                                       static_cast<int>(control->combo_items.size());
+        }
+        render_controls(parent);
+    }
 }
 
 void write_guest_msg(void* const msg, const abi::HWnd hwnd, const std::uint32_t message,  // NOLINT(bugprone-easily-swappable-parameters)
@@ -1256,9 +1495,10 @@ TL_MSABI abi::Atom tl_RegisterClassExA(const void* const wnd_class) noexcept {
 
 TL_MSABI abi::HWnd tl_CreateWindowExA(const std::uint32_t,  // NOLINT(bugprone-easily-swappable-parameters)
                                       const char* const class_name, const char* const window_name,
-                                      const std::uint32_t, const int, const int, const int width,
-                                      const int height, const void* const, const void* const,
-                                      const void* const, const void* const) noexcept {
+                                      const std::uint32_t, const int x, const int y,
+                                      const int width, const int height, const void* const parent,
+                                      const void* const menu, const void* const,
+                                      const void* const) noexcept {
     if (!mapped_guest_cstring(class_name) || class_name == nullptr ||
         (window_name != nullptr && !mapped_guest_cstring(window_name))) {
         set_last_error(abi::kErrorInvalidParameter);
@@ -1266,7 +1506,7 @@ TL_MSABI abi::HWnd tl_CreateWindowExA(const std::uint32_t,  // NOLINT(bugprone-e
         return nullptr;
     }
     ClassSlot* const cls = find_class_slot(class_name);
-    if (cls == nullptr) {
+    if (cls == nullptr && !is_builtin_control(class_name)) {
         set_last_error(abi::kErrorInvalidParameter);
         trace_guest_failure("CreateWindowExA", "class-lookup", "classe não registrada");
         return nullptr;
@@ -1276,6 +1516,31 @@ TL_MSABI abi::HWnd tl_CreateWindowExA(const std::uint32_t,  // NOLINT(bugprone-e
     if (free_it == g_windows.end()) {
         set_last_error(abi::kErrorNotEnoughMemory);
         return nullptr;
+    }
+    if (is_builtin_control(class_name)) {
+        WindowSlot& slot = *free_it;
+        WindowSlot* parent_slot = find_window_slot(parent);
+        if (parent_slot == nullptr || parent_slot->is_control) {
+            set_last_error(abi::kErrorInvalidHandle);
+            return nullptr;
+        }
+        slot = {};
+        slot.used = true;
+        slot.class_name = class_name;
+        slot.is_control = true;
+        slot.control_kind = control_kind_for(class_name);
+        slot.parent = parent_slot;
+        slot.control_id = reinterpret_cast<std::uintptr_t>(menu);
+        slot.x = x;
+        slot.y = y;
+        slot.width = width > 0 ? width : 1;
+        slot.height = height > 0 ? height : 1;
+        slot.text = window_name != nullptr ? window_name : "";
+        slot.visible = true;
+        slot.enabled = true;
+        slot.combo_selection = -1;
+        set_last_error(abi::kErrorSuccess);
+        return &slot;
     }
     const char* const caption = window_name != nullptr ? window_name : cls->name.c_str();
     gui::NativeWindow native = gui::create_window(caption, width, height);
@@ -1288,7 +1553,10 @@ TL_MSABI abi::HWnd tl_CreateWindowExA(const std::uint32_t,  // NOLINT(bugprone-e
     slot.used = true;
     slot.wndproc = cls->wndproc;
     slot.class_name = cls->name;
+    slot.window_title = caption;
     slot.native = native;
+    slot.x = x;
+    slot.y = y;
     slot.width = width;
     slot.height = height;
     const abi::Lresult create_result = call_wndproc(slot.wndproc, &slot, abi::kWmCreate, 0, 0);
@@ -1299,6 +1567,7 @@ TL_MSABI abi::HWnd tl_CreateWindowExA(const std::uint32_t,  // NOLINT(bugprone-e
         trace_guest_failure("CreateWindowExA", "wm-create", "WM_CREATE rejeitou a criação");
         return nullptr;
     }
+    render_controls(slot);
     set_last_error(abi::kErrorSuccess);
     const std::array<diagnostics::TraceField, 4> fields{
         diagnostics::TraceField{"symbol", "CreateWindowExA"},
@@ -1317,21 +1586,27 @@ TL_MSABI int tl_ShowWindow(const void* const window, const int cmd_show) noexcep
         trace_guest_failure("ShowWindow", "handle-validation", "handle inválido");
         return 0;
     }
-    const bool was_mapped = slot->mapped;
+    const bool was_visible = slot->visible;
     if (cmd_show == 0) {
-        if (slot->mapped && slot->native != nullptr) {
-            gui::unmap_window(slot->native);
-        }
-        slot->mapped = false;
+        // A bandeja é uma janela X11 emulada: mantemos o cliente mapeado para
+        // que o botão secundário continue abrindo o menu mesmo quando a
+        // visibilidade lógica da janela principal é FALSE.
+        slot->visible = false;
     } else if (slot->native != nullptr) {
         slot->mapped = gui::map_window(slot->native);
+        slot->visible = true;
+    } else {
+        slot->visible = true;
+    }
+    if (slot->is_control && slot->parent != nullptr) {
+        render_controls(*slot->parent);
     }
     set_last_error(abi::kErrorSuccess);
-    return was_mapped ? 1 : 0;
+    return was_visible ? 1 : 0;
 }
 
 TL_MSABI int tl_UpdateWindow(const void* const window) noexcept {
-    const WindowSlot* slot = find_window_slot(window);
+    WindowSlot* slot = find_window_slot(window);
     if (slot == nullptr) {
         set_last_error(abi::kErrorInvalidHandle);
         trace_guest_failure("UpdateWindow", "handle-validation", "handle inválido");
@@ -1340,6 +1615,7 @@ TL_MSABI int tl_UpdateWindow(const void* const window) noexcept {
     if (slot->wndproc != 0) {
         call_wndproc(slot->wndproc, const_cast<abi::HWnd>(window), abi::kWmPaint, 0, 0);
     }
+    render_controls(*slot);
     set_last_error(abi::kErrorSuccess);
     return 1;
 }
@@ -1378,6 +1654,13 @@ TL_MSABI int tl_GetMessageA(void* const msg, const void* const window,  // NOLIN
             set_last_error(abi::kErrorSuccess);
             return 1;
         }
+        if (!slot.queued_messages.empty()) {
+            const abi::GuestMsg queued = slot.queued_messages.front();
+            slot.queued_messages.pop_front();
+            write_guest_msg(msg, queued.hwnd, queued.message, queued.wparam, queued.lparam);
+            set_last_error(abi::kErrorSuccess);
+            return 1;
+        }
     }
     for (;;) {
         for (WindowSlot& slot : g_windows) {
@@ -1391,6 +1674,7 @@ TL_MSABI int tl_GetMessageA(void* const msg, const void* const window,  // NOLIN
                 return 1;
             }
             if (event.type == gui::WindowEventType::Press) {
+                handle_control_mouse(slot, event);
                 slot.left_button_down = true;
                 const abi::Lparam lparam =
                     (static_cast<std::intptr_t>(event.y & 0xFFFF) << 16) |
@@ -1400,6 +1684,7 @@ TL_MSABI int tl_GetMessageA(void* const msg, const void* const window,  // NOLIN
                 return 1;
             }
             if (event.type == gui::WindowEventType::Release) {
+                handle_control_mouse(slot, event);
                 slot.left_button_down = false;
                 const abi::Lparam lparam =
                     (static_cast<std::intptr_t>(event.y & 0xFFFF) << 16) |
@@ -1419,8 +1704,14 @@ TL_MSABI int tl_GetMessageA(void* const msg, const void* const window,  // NOLIN
             }
             if (event.type == gui::WindowEventType::KeyDown) {
                 slot.last_key = event.character;
+                handle_control_key(slot, event);
                 write_guest_msg(msg, &slot, abi::kWmKeyDown,
                                 keydown_vkey(event.keysym, event.character), 0);
+                set_last_error(abi::kErrorSuccess);
+                return 1;
+            }
+            if (event.type == gui::WindowEventType::RightPress) {
+                write_guest_msg(msg, &slot, abi::kWmTrayIcon, 0, 0x0205);
                 set_last_error(abi::kErrorSuccess);
                 return 1;
             }
@@ -1534,6 +1825,10 @@ TL_MSABI int tl_DestroyWindow(const void* const window) noexcept {
     if (slot->native != nullptr) {
         gui::destroy_window(slot->native);
     }
+    WindowSlot* const parent = slot->parent;
+    if (g_focused_control == slot) {
+        g_focused_control = nullptr;
+    }
     slot->native = nullptr;
     slot->mapped = false;
     const abi::HWnd hwnd = const_cast<abi::HWnd>(window);
@@ -1541,6 +1836,9 @@ TL_MSABI int tl_DestroyWindow(const void* const window) noexcept {
     *slot = {};
     if (wndproc != 0) {
         call_wndproc(wndproc, hwnd, abi::kWmDestroy, 0, 0);
+    }
+    if (parent != nullptr) {
+        render_controls(*parent);
     }
     set_last_error(abi::kErrorSuccess);
     return 1;
@@ -3654,6 +3952,502 @@ TL_MSABI std::uint16_t** tl_CommandLineToArgvW(const std::uint16_t* command_line
     argv[count] = nullptr;
     *argument_count = static_cast<int>(count);
     return argv;
+}
+
+TL_MSABI void* tl_CreateMutexA(const void* security_attributes, const int initial_owner,
+                               const char* name) noexcept {
+    (void)security_attributes;
+    (void)initial_owner;
+    (void)name;
+    static char token{};
+    set_last_error(abi::kErrorSuccess);
+    return &token;
+}
+
+TL_MSABI void tl_GetStartupInfoA(void* startup_info) noexcept {
+    if (startup_info != nullptr) {
+        std::memset(startup_info, 0, 104);
+        *static_cast<std::uint32_t*>(startup_info) = 104;
+    }
+    set_last_error(abi::kErrorSuccess);
+}
+
+TL_MSABI int tl_MulDiv(const int number, const int numerator, const int denominator) noexcept {
+    if (denominator == 0) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return -1;
+    }
+    const std::int64_t product = static_cast<std::int64_t>(number) * numerator;
+    const std::int64_t divisor = denominator;
+    const std::int64_t adjustment = product >= 0 ? divisor / 2 : -(divisor / 2);
+    set_last_error(abi::kErrorSuccess);
+    return static_cast<int>((product + adjustment) / divisor);
+}
+
+TL_MSABI int tl_ShellNotifyIconA(const std::uint32_t message, void* data) noexcept {
+    (void)message;
+    (void)data;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI void* tl_CreateFontA(int height, int width, int escapement, int orientation, int weight,
+                              std::uint32_t italic, std::uint32_t underline,
+                              std::uint32_t strikeout, std::uint32_t charset,
+                              std::uint32_t output_precision, std::uint32_t clip_precision,
+                              std::uint32_t quality, std::uint32_t pitch_and_family,
+                              const char* face_name) noexcept {
+    (void)height;
+    (void)width;
+    (void)escapement;
+    (void)orientation;
+    (void)weight;
+    (void)italic;
+    (void)underline;
+    (void)strikeout;
+    (void)charset;
+    (void)output_precision;
+    (void)clip_precision;
+    (void)quality;
+    (void)pitch_and_family;
+    (void)face_name;
+    static std::array<char, 16> tokens{};
+    for (char& token : tokens) {
+        if (token == 0) {
+            token = 1;
+            set_last_error(abi::kErrorSuccess);
+            return &token;
+        }
+    }
+    set_last_error(abi::kErrorNotEnoughMemory);
+    return nullptr;
+}
+
+TL_MSABI void* tl_CreateSolidBrush(const std::uint32_t color) noexcept {
+    (void)color;
+    static std::array<char, 16> tokens{};
+    for (char& token : tokens) {
+        if (token == 0) {
+            token = 1;
+            set_last_error(abi::kErrorSuccess);
+            return &token;
+        }
+    }
+    set_last_error(abi::kErrorNotEnoughMemory);
+    return nullptr;
+}
+
+TL_MSABI int tl_DeleteObject(const void* object) noexcept {
+    (void)object;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI std::uint32_t tl_SetBkColor(const void* dc, const std::uint32_t color) noexcept {
+    (void)dc;
+    set_last_error(abi::kErrorSuccess);
+    return color;
+}
+
+TL_MSABI std::uint32_t tl_SetTextColor(const void* dc, const std::uint32_t color) noexcept {
+    (void)dc;
+    set_last_error(abi::kErrorSuccess);
+    return color;
+}
+
+TL_MSABI abi::Atom tl_RegisterClassA(const void* wnd_class) noexcept {
+    if (wnd_class == nullptr || !mapped_guest_range(wnd_class, sizeof(abi::GuestWndClassA), false)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    const auto* wc = static_cast<const abi::GuestWndClassA*>(wnd_class);
+    abi::GuestWndClassExA ex{};
+    ex.cb_size = sizeof(ex);
+    ex.style = wc->style;
+    ex.window_proc = wc->window_proc;
+    ex.class_extra = wc->class_extra;
+    ex.window_extra = wc->window_extra;
+    ex.instance = wc->instance;
+    ex.icon = wc->icon;
+    ex.cursor = wc->cursor;
+    ex.background = wc->background;
+    ex.menu_name = wc->menu_name;
+    ex.class_name = wc->class_name;
+    return tl_RegisterClassExA(&ex);
+}
+
+TL_MSABI int tl_GetClientRect(const void* window, void* rect) noexcept {
+    WindowSlot* slot = find_window_slot(window);
+    if (slot == nullptr || rect == nullptr || !mapped_guest_range(rect, sizeof(abi::GuestRect), true)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    auto* out = static_cast<abi::GuestRect*>(rect);
+    *out = {0, 0, slot->width, slot->height};
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_GetCursorPos(void* point) noexcept {
+    if (point == nullptr || !mapped_guest_range(point, sizeof(std::int32_t) * 2U, true)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    auto* coordinates = static_cast<std::int32_t*>(point);
+    coordinates[0] = 0;
+    coordinates[1] = 0;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_MoveWindow(const void* window, int x, int y, int width, int height,
+                           int repaint) noexcept {
+    (void)repaint;
+    WindowSlot* slot = find_window_slot(window);
+    if (slot == nullptr) {
+        set_last_error(abi::kErrorInvalidHandle);
+        return 0;
+    }
+    slot->x = x;
+    slot->y = y;
+    slot->width = width;
+    slot->height = height;
+    if (slot->parent != nullptr) {
+        render_controls(*slot->parent);
+    }
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI std::intptr_t tl_SetWindowPos(const void* window, const void* insert_after, int x, int y,
+                                       int width, int height, std::uint32_t flags) noexcept {
+    (void)insert_after;
+    (void)flags;
+    return tl_MoveWindow(window, x, y, width, height, 1);
+}
+
+TL_MSABI int tl_SetWindowTextA(const void* window, const char* text) noexcept {
+    WindowSlot* slot = find_window_slot(window);
+    if (slot == nullptr || text == nullptr || !mapped_guest_cstring(text)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    slot->text = text;
+    if (slot->parent != nullptr) {
+        render_controls(*slot->parent);
+    }
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_GetWindowTextA(const void* window, char* text, int capacity) noexcept {
+    WindowSlot* slot = find_window_slot(window);
+    if (slot == nullptr || text == nullptr || capacity <= 0 ||
+        !mapped_guest_range(text, static_cast<std::size_t>(capacity), true)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    copy_control_text(*slot, text, capacity);
+    set_last_error(abi::kErrorSuccess);
+    return 0;
+}
+
+TL_MSABI int tl_EnableWindow(const void* window, int enable) noexcept {
+    WindowSlot* slot = find_window_slot(window);
+    if (slot == nullptr) {
+        set_last_error(abi::kErrorInvalidHandle);
+        return 0;
+    }
+    const bool previous = slot->enabled;
+    slot->enabled = enable != 0;
+    set_last_error(abi::kErrorSuccess);
+    return previous ? 1 : 0;
+}
+
+TL_MSABI const void* tl_SetFocus(const void* window) noexcept {
+    WindowSlot* slot = find_window_slot(window);
+    if (slot == nullptr || !slot->is_control) {
+        set_last_error(abi::kErrorInvalidHandle);
+        return nullptr;
+    }
+    WindowSlot* previous = g_focused_control;
+    set_focus_control(slot);
+    set_last_error(abi::kErrorSuccess);
+    return previous;
+}
+
+TL_MSABI int tl_IsWindowVisible(const void* window) noexcept {
+    const WindowSlot* slot = find_window_slot(window);
+    return slot != nullptr && slot->visible ? 1 : 0;
+}
+
+TL_MSABI int tl_InvalidateRect(const void* window, const void* rect, int erase) noexcept {
+    (void)rect;
+    (void)erase;
+    WindowSlot* slot = find_window_slot(window);
+    if (slot == nullptr) {
+        set_last_error(abi::kErrorInvalidHandle);
+        return 0;
+    }
+    if (slot->native != nullptr) {
+        gui::flush_window(slot->native);
+    }
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI const void* tl_FindWindowA(const char* class_name, const char* window_name) noexcept {
+    for (const WindowSlot& slot : g_windows) {
+        if (!slot.used || slot.native == nullptr ||
+            (class_name != nullptr && !util::ascii_iequals(slot.class_name, class_name))) {
+            continue;
+        }
+        if (window_name == nullptr || window_name[0] == '\0' ||
+            slot.window_title == window_name) {
+            return &slot;
+        }
+    }
+    return nullptr;
+}
+
+TL_MSABI std::uintptr_t tl_LoadCursorA(const void* instance, const char* name) noexcept {
+    (void)instance;
+    (void)name;
+    return 1;
+}
+
+TL_MSABI std::uintptr_t tl_LoadIconA(const void* instance, const char* name) noexcept {
+    (void)instance;
+    (void)name;
+    return 1;
+}
+
+TL_MSABI std::intptr_t tl_SetClassLongPtrA(const void* window, int index,
+                                            std::intptr_t value) noexcept {
+    (void)window;
+    (void)index;
+    (void)value;
+    return 0;
+}
+
+TL_MSABI int tl_SetForegroundWindow(const void* window) noexcept {
+    (void)window;
+    return 1;
+}
+
+TL_MSABI int tl_SendMessageA(const void* window, const std::uint32_t message,
+                             const abi::Wparam wparam, const abi::Lparam lparam) noexcept {
+    WindowSlot* slot = find_window_slot(window);
+    if (slot == nullptr) {
+        set_last_error(abi::kErrorInvalidHandle);
+        return 0;
+    }
+    if (slot->is_control) {
+        if (message == abi::kWmSetFont) {
+            return 0;
+        }
+        if (slot->control_kind == ControlKind::Edit) {
+            if (message == 0x000C && lparam != 0 &&
+                mapped_guest_cstring(reinterpret_cast<const char*>(lparam))) {
+                slot->text = reinterpret_cast<const char*>(lparam);
+                if (slot->parent != nullptr) {
+                    render_controls(*slot->parent);
+                }
+                return 1;
+            }
+        }
+        if (slot->control_kind == ControlKind::ComboBox) {
+            if (message == abi::kCbAddString && lparam != 0 &&
+                mapped_guest_cstring(reinterpret_cast<const char*>(lparam))) {
+                slot->combo_items.emplace_back(reinterpret_cast<const char*>(lparam));
+                return static_cast<int>(slot->combo_items.size() - 1U);
+            }
+            if (message == abi::kCbSetCurSel) {
+                slot->combo_selection = static_cast<int>(wparam);
+                if (slot->parent != nullptr) {
+                    render_controls(*slot->parent);
+                }
+                return slot->combo_selection;
+            }
+            if (message == abi::kCbGetCurSel) {
+                return slot->combo_selection;
+            }
+        }
+        if (slot->control_kind == ControlKind::ListView) {
+            if (message == abi::kLvmSetExtendedListViewStyle) {
+                return 0;
+            }
+            if (message == abi::kLvmInsertColumnA) {
+                return static_cast<int>(wparam);
+            }
+            if (message == abi::kLvmDeleteAllItems) {
+                slot->list_rows.clear();
+                slot->list_selection = -1;
+                if (slot->parent != nullptr) {
+                    render_controls(*slot->parent);
+                }
+                return 1;
+            }
+            if (message == abi::kLvmInsertItemA && lparam != 0 &&
+                mapped_guest_range(reinterpret_cast<const void*>(lparam), sizeof(abi::GuestLvItemA),
+                                    false)) {
+                const auto* item = reinterpret_cast<const abi::GuestLvItemA*>(lparam);
+                ListViewRow row;
+                row.columns.resize(6);
+                row.param = item->param;
+                if (item->text != nullptr && mapped_guest_cstring(item->text)) {
+                    row.columns[0] = item->text;
+                }
+                int index = item->item;
+                if (index < 0 || index > static_cast<int>(slot->list_rows.size())) {
+                    index = static_cast<int>(slot->list_rows.size());
+                }
+                slot->list_rows.insert(slot->list_rows.begin() + index, std::move(row));
+                if (slot->parent != nullptr) {
+                    render_controls(*slot->parent);
+                }
+                return index;
+            }
+            if (message == abi::kLvmSetItemTextA && lparam != 0 &&
+                mapped_guest_range(reinterpret_cast<const void*>(lparam), sizeof(abi::GuestLvItemA),
+                                    false)) {
+                const int index = static_cast<int>(wparam);
+                const auto* item = reinterpret_cast<const abi::GuestLvItemA*>(lparam);
+                if (index >= 0 && static_cast<std::size_t>(index) < slot->list_rows.size() &&
+                    item->subitem >= 0 && item->subitem < 6 && item->text != nullptr &&
+                    mapped_guest_cstring(item->text)) {
+                    slot->list_rows[static_cast<std::size_t>(index)].columns[static_cast<std::size_t>(item->subitem)] =
+                        item->text;
+                    if (slot->parent != nullptr) {
+                        render_controls(*slot->parent);
+                    }
+                    return 1;
+                }
+                return 0;
+            }
+            if (message == abi::kLvmGetNextItem) {
+                return slot->list_selection;
+            }
+            if (message == abi::kLvmGetItemA && lparam != 0 &&
+                mapped_guest_range(reinterpret_cast<const void*>(lparam), sizeof(abi::GuestLvItemA),
+                                    true)) {
+                const int index = static_cast<int>(wparam);
+                auto* item = reinterpret_cast<abi::GuestLvItemA*>(lparam);
+                if (index >= 0 && static_cast<std::size_t>(index) < slot->list_rows.size()) {
+                    item->param = slot->list_rows[static_cast<std::size_t>(index)].param;
+                    return 1;
+                }
+                return 0;
+            }
+            if (message == abi::kLvmGetItemTextA && lparam != 0 &&
+                mapped_guest_range(reinterpret_cast<const void*>(lparam), sizeof(abi::GuestLvItemA),
+                                    true)) {
+                const int index = static_cast<int>(wparam);
+                auto* item = reinterpret_cast<abi::GuestLvItemA*>(lparam);
+                if (index >= 0 && static_cast<std::size_t>(index) < slot->list_rows.size() &&
+                    item->subitem >= 0 && item->subitem < 6 && item->text != nullptr &&
+                    item->text_capacity > 0 &&
+                    mapped_guest_range(item->text, static_cast<std::size_t>(item->text_capacity), true)) {
+                    const std::string& value = slot->list_rows[static_cast<std::size_t>(index)].columns[
+                        static_cast<std::size_t>(item->subitem)];
+                    const std::size_t count = std::min<std::size_t>(value.size(),
+                                                                     static_cast<std::size_t>(item->text_capacity - 1));
+                    std::memcpy(item->text, value.data(), count);
+                    item->text[count] = '\0';
+                    return static_cast<int>(count);
+                }
+                return 0;
+            }
+            if (message == abi::kLvmSortItemsEx) {
+                return 1;
+            }
+        }
+        set_last_error(abi::kErrorSuccess);
+        return 0;
+    }
+    if (slot->wndproc != 0) {
+        return static_cast<int>(call_wndproc(slot->wndproc, const_cast<abi::HWnd>(window), message,
+                                             wparam, lparam));
+    }
+    set_last_error(abi::kErrorSuccess);
+    return 0;
+}
+
+TL_MSABI int tl_PostMessageA(const void* window, const std::uint32_t message,
+                             const abi::Wparam wparam, const abi::Lparam lparam) noexcept {
+    WindowSlot* slot = find_window_slot(window);
+    if (slot == nullptr) {
+        set_last_error(abi::kErrorInvalidHandle);
+        return 0;
+    }
+    slot->pending = {};
+    slot->pending.message = message;
+    slot->pending.wparam = wparam;
+    slot->pending.lparam = lparam;
+    slot->has_pending = true;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI void* tl_CreatePopupMenu() noexcept {
+    const auto free_it = std::find_if(g_menus.begin(), g_menus.end(),
+                                      [](const MenuSlot& menu) { return !menu.used; });
+    if (free_it == g_menus.end()) {
+        set_last_error(abi::kErrorNotEnoughMemory);
+        return nullptr;
+    }
+    free_it->used = true;
+    free_it->items.clear();
+    set_last_error(abi::kErrorSuccess);
+    return &*free_it;
+}
+
+TL_MSABI int tl_AppendMenuA(const void* menu, std::uint32_t flags, std::uintptr_t command,
+                            const char* text) noexcept {
+    const auto it = std::find_if(g_menus.begin(), g_menus.end(),
+                                 [menu](const MenuSlot& entry) { return entry.used && &entry == menu; });
+    if (it == g_menus.end()) {
+        set_last_error(abi::kErrorInvalidHandle);
+        return 0;
+    }
+    it->items.push_back(gui::PopupMenuItem{.command = static_cast<std::uint32_t>(command),
+                                           .text = text != nullptr ? text : "",
+                                           .separator = (flags & 0x00000800U) != 0});
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_DestroyMenu(const void* menu) noexcept {
+    const auto it = std::find_if(g_menus.begin(), g_menus.end(),
+                                 [menu](const MenuSlot& entry) { return entry.used && &entry == menu; });
+    if (it == g_menus.end()) {
+        set_last_error(abi::kErrorInvalidHandle);
+        return 0;
+    }
+    *it = {};
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_TrackPopupMenu(const void* menu, std::uint32_t flags, int x, int y, int reserved,
+                               const void* owner, const void* rect) noexcept {
+    (void)flags;
+    (void)reserved;
+    (void)rect;
+    const auto it = std::find_if(g_menus.begin(), g_menus.end(),
+                                 [menu](const MenuSlot& entry) { return entry.used && &entry == menu; });
+    WindowSlot* owner_slot = find_window_slot(owner);
+    if (it == g_menus.end() || owner_slot == nullptr) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    const std::uint32_t command = gui::track_popup_menu(it->items, x, y);
+    if (command != 0) {
+        queue_window_message(*owner_slot, abi::kWmCommand, command,
+                             reinterpret_cast<abi::Lparam>(menu));
+    }
+    set_last_error(abi::kErrorSuccess);
+    return 1;
 }
 
 }  // namespace tradutorlinux

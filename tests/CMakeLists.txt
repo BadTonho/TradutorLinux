@@ -1,5 +1,15 @@
 add_subdirectory(samples)
 
+find_program(TL_XVFB_EXECUTABLE NAMES Xvfb xvfb)
+if(TL_XVFB_EXECUTABLE)
+    find_library(TL_X11_LIBRARY X11 REQUIRED)
+    add_executable(simple_todo_gui_smoke
+        gui/simple_todo_gui_smoke.cpp
+    )
+    target_link_libraries(simple_todo_gui_smoke PRIVATE "${TL_X11_LIBRARY}")
+    tl_enable_warnings(simple_todo_gui_smoke)
+endif()
+
 if(TL_BUILD_TARGET_APPS)
     add_subdirectory(targets)
 endif()
@@ -33,9 +43,15 @@ if(TARGET tradutorlinux_samples)
 endif()
 
 include(GoogleTest)
-gtest_discover_tests(tradutorlinux_unit_tests)
+if(TL_ENABLE_SANITIZERS)
+    # LeakSanitizer cannot run while CMake performs post-build discovery in
+    # environments that trace child processes. Discover at ctest time instead,
+    # after the sanitize test preset has supplied its runtime environment.
+    gtest_discover_tests(tradutorlinux_unit_tests DISCOVERY_MODE PRE_TEST)
+else()
+    gtest_discover_tests(tradutorlinux_unit_tests)
+endif()
 
-find_program(TL_XVFB_EXECUTABLE NAMES Xvfb xvfb)
 if(TL_XVFB_EXECUTABLE AND TARGET tradutorlinux_samples AND TARGET tradutorlinux)
     find_library(TL_X11_LIBRARY X11 REQUIRED)
     add_executable(runtime_gui_smoke

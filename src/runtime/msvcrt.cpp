@@ -12,6 +12,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <ctime>
 #include <initializer_list>
 #include <iostream>
 #include <limits>
@@ -57,6 +58,7 @@ using GuestSignalFn = void (TL_CRT_MSABI *)(int);
 // ---------------------------------------------------------------------------
 
 std::vector<std::string> g_guest_arguments;
+std::string g_guest_command_line;
 
 thread_local int g_crt_errno = 0;
 
@@ -529,9 +531,18 @@ void run_atexit_handlers() {
 char** g_guest_initenv = nullptr;
 int g_guest_commode = 0;
 int g_guest_fmode = 0;
+char* g_guest_acmdln = nullptr;
 
 void msvcrt_set_guest_command_line(std::vector<std::string> arguments) {
     g_guest_arguments = std::move(arguments);
+    g_guest_command_line.clear();
+    for (const std::string& argument : g_guest_arguments) {
+        if (!g_guest_command_line.empty()) {
+            g_guest_command_line.push_back(' ');
+        }
+        g_guest_command_line += argument;
+    }
+    g_guest_acmdln = g_guest_command_line.empty() ? nullptr : g_guest_command_line.data();
 }
 
 const std::vector<std::string>& msvcrt_get_guest_arguments() noexcept {
@@ -1193,6 +1204,11 @@ TL_CRT_MSABI std::size_t tl_wcslen(const std::uint16_t* text) noexcept {
     return length;
 }
 
+TL_CRT_MSABI int tl__ismbblead(const unsigned int character) noexcept {
+    (void)character;
+    return 0;
+}
+
 TL_CRT_MSABI int tl_isalnum(int character) noexcept {
     return std::isalnum(static_cast<unsigned char>(character)) != 0 ? 1 : 0;
 }
@@ -1262,6 +1278,16 @@ TL_CRT_MSABI char* tl_strcat(char* destination, const char* source) noexcept {
         return destination;
     }
     return std::strcat(destination, source);
+}
+
+TL_CRT_MSABI char* tl__strlwr(char* text) noexcept {
+    if (text == nullptr) {
+        return nullptr;
+    }
+    for (char* current = text; *current != '\0'; ++current) {
+        *current = static_cast<char>(std::tolower(static_cast<unsigned char>(*current)));
+    }
+    return text;
 }
 
 TL_CRT_MSABI int tl_isspace(int character) noexcept {
@@ -1372,6 +1398,40 @@ TL_CRT_MSABI void* tl_localeconv() noexcept {
         nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
     };
     return &kCLocale;
+}
+
+TL_CRT_MSABI std::int64_t tl__time64(std::int64_t* value) noexcept {
+    const std::int64_t now = static_cast<std::int64_t>(std::time(nullptr));
+    if (value != nullptr) {
+        *value = now;
+    }
+    return now;
+}
+
+TL_CRT_MSABI void* tl__localtime64(const std::int64_t* value) noexcept {
+    if (value == nullptr) {
+        return nullptr;
+    }
+    static thread_local std::tm result{};
+    const std::time_t seconds = static_cast<std::time_t>(*value);
+    return localtime_r(&seconds, &result) != nullptr ? &result : nullptr;
+}
+
+TL_CRT_MSABI std::size_t tl_strftime(char* buffer, const std::size_t capacity,
+                                     const char* format, const void* time_value) noexcept {
+    if (buffer == nullptr || format == nullptr || time_value == nullptr) {
+        return 0;
+    }
+#if defined(__GNUC__) || defined(__clang__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wformat-nonliteral"
+#endif
+    const std::size_t result = std::strftime(buffer, capacity, format,
+                                              static_cast<const std::tm*>(time_value));
+#if defined(__GNUC__) || defined(__clang__)
+#pragma GCC diagnostic pop
+#endif
+    return result;
 }
 
 // ---------------------------------------------------------------------------

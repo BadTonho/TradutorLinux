@@ -2,6 +2,7 @@
 
 #include "tradutorlinux/runtime/winapi.hpp"
 #include "tradutorlinux/runtime/msvcrt.hpp"
+#include "tradutorlinux/runtime/advapi.hpp"
 #include "tradutorlinux/util/basics.hpp"
 
 #include <algorithm>
@@ -132,6 +133,9 @@ void register_builtin_modules() {
         {"GetTempFileNameW", 63, reinterpret_cast<std::uintptr_t>(&tl_GetTempFileNameW)},
         {"LocalFree", 64, reinterpret_cast<std::uintptr_t>(&tl_LocalFree)},
         {"SetConsoleOutputCP", 65, reinterpret_cast<std::uintptr_t>(&tl_SetConsoleOutputCP)},
+        {"CreateMutexA", 66, reinterpret_cast<std::uintptr_t>(&tl_CreateMutexA)},
+        {"GetStartupInfoA", 67, reinterpret_cast<std::uintptr_t>(&tl_GetStartupInfoA)},
+        {"MulDiv", 68, reinterpret_cast<std::uintptr_t>(&tl_MulDiv)},
     };
     static const InternalModule kKernel32Module{"KERNEL32.dll", kKernel32Exports};
     register_module(kKernel32Module);
@@ -154,6 +158,28 @@ void register_builtin_modules() {
         {"BeginPaint", 16, reinterpret_cast<std::uintptr_t>(&tl_BeginPaint)},
         {"EndPaint", 17, reinterpret_cast<std::uintptr_t>(&tl_EndPaint)},
         {"FillRect", 18, reinterpret_cast<std::uintptr_t>(&tl_FillRect)},
+        {"RegisterClassA", 19, reinterpret_cast<std::uintptr_t>(&tl_RegisterClassA)},
+        {"GetClientRect", 20, reinterpret_cast<std::uintptr_t>(&tl_GetClientRect)},
+        {"GetCursorPos", 40, reinterpret_cast<std::uintptr_t>(&tl_GetCursorPos)},
+        {"MoveWindow", 21, reinterpret_cast<std::uintptr_t>(&tl_MoveWindow)},
+        {"SetWindowPos", 22, reinterpret_cast<std::uintptr_t>(&tl_SetWindowPos)},
+        {"SetWindowTextA", 23, reinterpret_cast<std::uintptr_t>(&tl_SetWindowTextA)},
+        {"GetWindowTextA", 24, reinterpret_cast<std::uintptr_t>(&tl_GetWindowTextA)},
+        {"EnableWindow", 25, reinterpret_cast<std::uintptr_t>(&tl_EnableWindow)},
+        {"SetFocus", 26, reinterpret_cast<std::uintptr_t>(&tl_SetFocus)},
+        {"IsWindowVisible", 27, reinterpret_cast<std::uintptr_t>(&tl_IsWindowVisible)},
+        {"InvalidateRect", 28, reinterpret_cast<std::uintptr_t>(&tl_InvalidateRect)},
+        {"FindWindowA", 29, reinterpret_cast<std::uintptr_t>(&tl_FindWindowA)},
+        {"LoadCursorA", 30, reinterpret_cast<std::uintptr_t>(&tl_LoadCursorA)},
+        {"LoadIconA", 31, reinterpret_cast<std::uintptr_t>(&tl_LoadIconA)},
+        {"SetClassLongPtrA", 32, reinterpret_cast<std::uintptr_t>(&tl_SetClassLongPtrA)},
+        {"SetForegroundWindow", 33, reinterpret_cast<std::uintptr_t>(&tl_SetForegroundWindow)},
+        {"SendMessageA", 34, reinterpret_cast<std::uintptr_t>(&tl_SendMessageA)},
+        {"PostMessageA", 35, reinterpret_cast<std::uintptr_t>(&tl_PostMessageA)},
+        {"CreatePopupMenu", 36, reinterpret_cast<std::uintptr_t>(&tl_CreatePopupMenu)},
+        {"AppendMenuA", 37, reinterpret_cast<std::uintptr_t>(&tl_AppendMenuA)},
+        {"DestroyMenu", 38, reinterpret_cast<std::uintptr_t>(&tl_DestroyMenu)},
+        {"TrackPopupMenu", 39, reinterpret_cast<std::uintptr_t>(&tl_TrackPopupMenu)},
     };
     static const InternalModule kUser32Module{"USER32.dll", kUser32Exports};
     register_module(kUser32Module);
@@ -162,6 +188,11 @@ void register_builtin_modules() {
         {"TextOutA", 2, reinterpret_cast<std::uintptr_t>(&tl_TextOut)},
         {"TextOut", 3, reinterpret_cast<std::uintptr_t>(&tl_TextOut)},
         {"Rectangle", 4, reinterpret_cast<std::uintptr_t>(&tl_Rectangle)},
+        {"CreateFontA", 5, reinterpret_cast<std::uintptr_t>(&tl_CreateFontA)},
+        {"CreateSolidBrush", 6, reinterpret_cast<std::uintptr_t>(&tl_CreateSolidBrush)},
+        {"DeleteObject", 7, reinterpret_cast<std::uintptr_t>(&tl_DeleteObject)},
+        {"SetBkColor", 8, reinterpret_cast<std::uintptr_t>(&tl_SetBkColor)},
+        {"SetTextColor", 9, reinterpret_cast<std::uintptr_t>(&tl_SetTextColor)},
     };
     static const InternalModule kGdi32Module{"GDI32.dll", kGdi32Exports};
     register_module(kGdi32Module);
@@ -257,14 +288,30 @@ void register_builtin_modules() {
         {"wcstombs", 88, reinterpret_cast<std::uintptr_t>(&tl_wcstombs)},
         {"fwprintf", 89, reinterpret_cast<std::uintptr_t>(&tl_fwprintf)},
         {"fputwc", 90, reinterpret_cast<std::uintptr_t>(&tl_fputwc)},
+        {"_acmdln", 91, reinterpret_cast<std::uintptr_t>(&g_guest_acmdln)},
+        {"_ismbblead", 92, reinterpret_cast<std::uintptr_t>(&tl__ismbblead)},
+        {"_localtime64", 93, reinterpret_cast<std::uintptr_t>(&tl__localtime64)},
+        {"_time64", 94, reinterpret_cast<std::uintptr_t>(&tl__time64)},
+        {"strftime", 95, reinterpret_cast<std::uintptr_t>(&tl_strftime)},
+        {"_strlwr", 96, reinterpret_cast<std::uintptr_t>(&tl__strlwr)},
     };
     static const InternalModule kMsvcrtModule{"msvcrt.dll", kMsvcrtExports};
     register_module(kMsvcrtModule);
     static const ExportedFunction kShell32Exports[] = {
         {"CommandLineToArgvW", 1, reinterpret_cast<std::uintptr_t>(&tl_CommandLineToArgvW)},
+        {"Shell_NotifyIconA", 2, reinterpret_cast<std::uintptr_t>(&tl_ShellNotifyIconA)},
     };
     static const InternalModule kShell32Module{"SHELL32.dll", kShell32Exports};
     register_module(kShell32Module);
+    static const ExportedFunction kAdvapi32Exports[] = {
+        {"RegCloseKey", 1, reinterpret_cast<std::uintptr_t>(&tl_RegCloseKey)},
+        {"RegDeleteValueA", 2, reinterpret_cast<std::uintptr_t>(&tl_RegDeleteValueA)},
+        {"RegOpenKeyExA", 3, reinterpret_cast<std::uintptr_t>(&tl_RegOpenKeyExA)},
+        {"RegQueryValueExA", 4, reinterpret_cast<std::uintptr_t>(&tl_RegQueryValueExA)},
+        {"RegSetValueExA", 5, reinterpret_cast<std::uintptr_t>(&tl_RegSetValueExA)},
+    };
+    static const InternalModule kAdvapi32Module{"ADVAPI32.dll", kAdvapi32Exports};
+    register_module(kAdvapi32Module);
 }
 
 bool is_module_registered(const std::string_view dll) {

@@ -79,12 +79,13 @@ TEST_F(ModuleTest, ClearModulesResetsRegistry) {
 
 TEST_F(ModuleTest, RegistersBuiltinKernel32Exports) {
     register_builtin_modules();
-    ASSERT_EQ(registered_module_count(), 5U);
+    ASSERT_EQ(registered_module_count(), 6U);
     EXPECT_TRUE(is_module_registered("KERNEL32.dll"));
     EXPECT_TRUE(is_module_registered("USER32.dll"));
     EXPECT_TRUE(is_module_registered("GDI32.dll"));
     EXPECT_TRUE(is_module_registered("msvcrt.dll"));
     EXPECT_TRUE(is_module_registered("SHELL32.dll"));
+    EXPECT_TRUE(is_module_registered("ADVAPI32.dll"));
 
     const ExportLookup std_handle = find_export(ExportQuery{"KERNEL32.dll", "GetStdHandle"});
     ASSERT_TRUE(std_handle.found);
@@ -130,6 +131,7 @@ TEST_F(ModuleTest, RegistersBuiltinKernel32Exports) {
               reinterpret_cast<std::uintptr_t>(&tl_GetFileAttributesW));
     EXPECT_EQ(find_export_by_ordinal("SHELL32.dll", 1).address,
               reinterpret_cast<std::uintptr_t>(&tl_CommandLineToArgvW));
+    EXPECT_EQ(find_export(ExportQuery{"ADVAPI32.dll", "RegOpenKeyExA"}).found, true);
 }
 
 TEST_F(ModuleTest, RegistersMsvcrtExports) {
@@ -159,7 +161,7 @@ TEST_F(ModuleTest, RegistersMsvcrtExports) {
 TEST_F(ModuleTest, RegisterBuiltinModulesIsIdempotent) {
     register_builtin_modules();
     register_builtin_modules();
-    EXPECT_EQ(registered_module_count(), 5U);
+    EXPECT_EQ(registered_module_count(), 6U);
 }
 
 TEST_F(ModuleTest, RegistryOwnsItsStrings) {

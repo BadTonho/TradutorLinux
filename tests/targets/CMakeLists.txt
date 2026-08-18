@@ -10,6 +10,10 @@ find_program(TL_MINGW_AR
     NAMES x86_64-w64-mingw32-ar x86_64-w64-mingw32-gcc-ar
     REQUIRED
 )
+find_program(TL_MINGW_WINDRES
+    NAMES x86_64-w64-mingw32-windres windres
+    REQUIRED
+)
 find_program(TL_LLVM_READOBJ
     NAMES llvm-readobj llvm-readobj-19 llvm-readobj-18 llvm-readobj-17
     REQUIRED
@@ -74,6 +78,34 @@ if(NOT EXISTS "${TL_TARGETS_SOURCE_DIR}/dos2unix-7.5.6/README.txt")
         COMMAND "${CMAKE_COMMAND}" -E tar xzf "${_dos2unix_archive}"
         WORKING_DIRECTORY "${TL_TARGETS_SOURCE_DIR}"
     )
+endif()
+
+# Simple Todo C no commit bcdf3d5fcebb8c0b445edb791d54511194c1b6ca. O alvo é
+# compilado sem alterar a fonte upstream; o app.rc é gerado no diretório de
+# build porque o script original o cria durante a compilação.
+set(_simple_todo_archive "${TL_TARGETS_SOURCE_DIR}/simple-todo-c-bcdf3d5.tar.gz")
+if(NOT EXISTS "${_simple_todo_archive}")
+    file(DOWNLOAD
+        "https://github.com/Efeckc17/simple-todo-c/archive/bcdf3d5fcebb8c0b445edb791d54511194c1b6ca.tar.gz"
+        "${_simple_todo_archive}"
+        EXPECTED_HASH SHA256=fda0e4ebe292a8bdad2a72ccd02ba1c1c08a2b0610c42fee87389ac29a9565a5
+        TLS_VERIFY ON
+    )
+endif()
+set(_simple_todo_source_dir "${TL_TARGETS_SOURCE_DIR}/simple-todo-c-bcdf3d5fcebb8c0b445edb791d54511194c1b6ca")
+if(NOT EXISTS "${_simple_todo_source_dir}/src/main.c")
+    execute_process(
+        COMMAND "${CMAKE_COMMAND}" -E tar xzf "${_simple_todo_archive}"
+        WORKING_DIRECTORY "${TL_TARGETS_SOURCE_DIR}"
+        RESULT_VARIABLE _simple_todo_extract_result
+    )
+    if(NOT _simple_todo_extract_result EQUAL 0)
+        message(FATAL_ERROR "Falha ao extrair Simple Todo C pinado")
+    endif()
+endif()
+set(_simple_todo_rc "${_simple_todo_source_dir}/src/app.rc")
+if(NOT EXISTS "${_simple_todo_rc}")
+    file(WRITE "${_simple_todo_rc}" "1 24 \"app.manifest\"\n400 ICON \"../img/todo.ico\"\n")
 endif()
 
 # --- Build cruzado ----------------------------------------------------------
@@ -172,12 +204,41 @@ add_custom_command(
     COMMENT "Cross-compilando unix2dos.exe (dos2unix 7.5.6)"
 )
 
+# Simple Todo C (C puro, Win32, commit pinado).
+set(_simple_todo_sources
+    "${_simple_todo_source_dir}/src/main.c"
+    "${_simple_todo_source_dir}/src/todo.c"
+    "${_simple_todo_source_dir}/src/gui.c"
+    "${_simple_todo_source_dir}/src/utils/search.c"
+)
+set(_simple_todo_resource "${TL_TARGETS_OUTPUT_DIR}/simple_todo.res")
+add_custom_command(
+    OUTPUT "${_simple_todo_resource}"
+    COMMAND "${TL_MINGW_WINDRES}" -i "${_simple_todo_rc}" -O coff -o "${_simple_todo_resource}"
+    DEPENDS
+        "${_simple_todo_rc}"
+        "${_simple_todo_source_dir}/src/app.manifest"
+        "${_simple_todo_source_dir}/img/todo.ico"
+    VERBATIM
+    COMMENT "Compilando recursos do Simple Todo C"
+)
+add_custom_command(
+    OUTPUT "${TL_TARGETS_OUTPUT_DIR}/simple_todo.exe"
+    COMMAND "${TL_MINGW_CC}" ${_simple_todo_sources} "${_simple_todo_resource}"
+        -o "${TL_TARGETS_OUTPUT_DIR}/simple_todo.exe"
+        -mwindows -lcomctl32 -luxtheme -lshell32 -ladvapi32 -Os -s
+    DEPENDS ${_simple_todo_sources} "${_simple_todo_resource}"
+    VERBATIM
+    COMMENT "Cross-compilando simple_todo.exe (Simple Todo C pinado)"
+)
+
 add_custom_target(tradutorlinux_target_apps ALL
     DEPENDS
         "${TL_TARGETS_OUTPUT_DIR}/xxd.exe"
         "${TL_TARGETS_OUTPUT_DIR}/bzip2.exe"
         "${TL_TARGETS_OUTPUT_DIR}/dos2unix.exe"
         "${TL_TARGETS_OUTPUT_DIR}/unix2dos.exe"
+        "${TL_TARGETS_OUTPUT_DIR}/simple_todo.exe"
 )
 
 # --- Testes de verificação ---------------------------------------------------
@@ -309,6 +370,24 @@ tl_add_target_app_test(dos2unix "${TL_TARGETS_OUTPUT_DIR}/dos2unix.exe"
     "${CMAKE_CURRENT_SOURCE_DIR}/manifests/dos2unix.json")
 tl_add_target_app_test(unix2dos "${TL_TARGETS_OUTPUT_DIR}/unix2dos.exe"
     "${CMAKE_CURRENT_SOURCE_DIR}/manifests/unix2dos.json")
+tl_add_target_app_test(simple_todo "${TL_TARGETS_OUTPUT_DIR}/simple_todo.exe"
+    "${CMAKE_CURRENT_SOURCE_DIR}/manifests/simple_todo.json")
+
+if(TARGET simple_todo_gui_smoke AND TARGET tradutorlinux AND TL_XVFB_EXECUTABLE)
+    add_test(
+        NAME targetapp_simple_todo_gui_smoke
+        COMMAND simple_todo_gui_smoke
+            "$<TARGET_FILE:tradutorlinux>"
+            "${TL_TARGETS_OUTPUT_DIR}/simple_todo.exe"
+            "${CMAKE_CURRENT_BINARY_DIR}/simple_todo_gui_smoke_work"
+    )
+    set_tests_properties(targetapp_simple_todo_gui_smoke PROPERTIES
+        DEPENDS targetapp_simple_todo_report
+        LABELS "targetapp;runtime;pe32plus;gui"
+        TIMEOUT 120
+        SKIP_RETURN_CODE 77
+    )
+endif()
 
 # Os arquivos oficiais de teste do dos2unix são pinados junto com a fonte do
 # alvo. Eles fornecem entradas CRLF/LF e um nome UTF-8 sem duplicar fixtures do

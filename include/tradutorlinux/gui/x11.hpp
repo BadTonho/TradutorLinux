@@ -1,6 +1,8 @@
 #pragma once
 
 #include <cstdint>
+#include <string>
+#include <vector>
 
 namespace tradutorlinux::gui {
 
@@ -10,6 +12,7 @@ enum class WindowEventType {
     Redraw,         // redesenho disponível (equivale a WM_PAINT)
     Press,          // botão primário pressionado (equivale a WM_LBUTTONDOWN)
     Release,        // botão primário liberado (equivale a WM_LBUTTONUP)
+    RightPress,     // botão secundário pressionado (bandeja emulada)
     MouseMove,      // ponteiro movido (equivale a WM_MOUSEMOVE)
     KeyDown,        // tecla pressionada (equivale a WM_KEYDOWN)
     KeyUp,          // tecla liberada (equivale a WM_KEYUP)
@@ -51,5 +54,14 @@ void fill_rectangle(NativeWindow window, int x, int y, int width, int height,
 // Exibe uma caixa modal mínima no X11. Retorna 1 quando o botão OK foi
 // acionado, 0 quando a GUI não pôde ser criada ou a janela foi fechada.
 [[nodiscard]] std::uint32_t message_box(const char* text, const char* caption) noexcept;
+
+struct PopupMenuItem {
+    std::uint32_t command{};
+    std::string text;
+    bool separator{false};
+};
+
+[[nodiscard]] std::uint32_t track_popup_menu(const std::vector<PopupMenuItem>& items, int x,
+                                             int y) noexcept;
 
 }  // namespace tradutorlinux::gui

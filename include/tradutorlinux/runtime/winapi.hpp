@@ -82,6 +82,15 @@ constexpr Dword kStdErrorHandle = 0xFFFFFFF4U;   // STD_ERROR_HANDLE (-12)
 constexpr Uint kWmPaint = 0x000F;
 constexpr Uint kWmClose = 0x0010;
 constexpr Uint kWmCreate = 0x0001;
+constexpr Uint kWmSize = 0x0005;
+constexpr Uint kWmCommand = 0x0111;
+constexpr Uint kWmSysCommand = 0x0112;
+constexpr Uint kWmNotify = 0x004E;
+constexpr Uint kWmSetFont = 0x0030;
+constexpr Uint kWmCtlColorEdit = 0x0133;
+constexpr Uint kWmCtlColorListBox = 0x0134;
+constexpr Uint kWmCtlColorStatic = 0x0138;
+constexpr Uint kWmTrayIcon = 0x0400 + 1;
 
 constexpr Uint kWmDestroy = 0x0002;
 constexpr Uint kWmQuit = 0x0012;
@@ -106,6 +115,85 @@ constexpr Wparam kVkUp = 0x26;
 constexpr Wparam kVkRight = 0x27;
 constexpr Wparam kVkDown = 0x28;
 constexpr Wparam kVkDelete = 0x2E;
+
+constexpr std::uint32_t kEnSetFocus = 0x0100;
+constexpr std::uint32_t kEnKillFocus = 0x0200;
+constexpr std::uint32_t kEnChange = 0x0300;
+constexpr std::uint32_t kBnClicked = 0;
+constexpr std::int32_t kNmDblClk = -3;
+constexpr std::int32_t kLvnItemChanged = -101;
+constexpr std::int32_t kLvnColumnClick = -108;
+constexpr std::uint32_t kCbAddString = 0x0143;
+constexpr std::uint32_t kCbGetCurSel = 0x0147;
+constexpr std::uint32_t kCbSetCurSel = 0x014E;
+constexpr std::uint32_t kLvmDeleteAllItems = 0x1009;
+constexpr std::uint32_t kLvmGetItemA = 0x1005;
+constexpr std::uint32_t kLvmSetItemTextA = 0x1006;
+constexpr std::uint32_t kLvmInsertItemA = 0x1007;
+constexpr std::uint32_t kLvmGetNextItem = 0x100C;
+constexpr std::uint32_t kLvmInsertColumnA = 0x101B;
+constexpr std::uint32_t kLvmGetItemTextA = 0x102D;
+constexpr std::uint32_t kLvmSetExtendedListViewStyle = 0x1036;
+constexpr std::uint32_t kLvmSortItemsEx = 0x1051;
+
+// WNDCLASSA usado pelo alvo (sem o campo cbSize de WNDCLASSEXA).
+struct GuestWndClassA {
+    std::uint32_t style{};
+    std::uint32_t padding{};
+    std::uintptr_t window_proc{};
+    std::int32_t class_extra{};
+    std::int32_t window_extra{};
+    void* instance{};
+    void* icon{};
+    void* cursor{};
+    void* background{};
+    const char* menu_name{};
+    const char* class_name{};
+};
+static_assert(sizeof(GuestWndClassA) == 72);
+
+struct GuestLvColumnA {
+    std::uint32_t mask{};
+    std::int32_t format{};
+    std::int32_t width{};
+    const char* text{};
+    std::int32_t text_capacity{};
+    std::int32_t subitem{};
+};
+static_assert(sizeof(GuestLvColumnA) == 32);
+
+struct GuestLvItemA {
+    std::uint32_t mask{};
+    std::int32_t item{};
+    std::int32_t subitem{};
+    std::uint32_t state{};
+    std::uint32_t state_mask{};
+    char* text{};
+    std::int32_t text_capacity{};
+    std::int32_t image{};
+    std::intptr_t param{};
+    std::int32_t indent{};
+    std::int32_t group_id{};
+    std::int32_t columns{};
+    const void* column_data{};
+};
+static_assert(sizeof(GuestLvItemA) == 72);
+
+struct GuestNmListView {
+    void* hwnd_from{};
+    std::uintptr_t id_from{};
+    std::int32_t code{};
+    std::int32_t padding{};
+    std::int32_t item{};
+    std::int32_t subitem{};
+    std::uint32_t new_state{};
+    std::uint32_t old_state{};
+    std::uint32_t changed{};
+    std::int32_t point_x{};
+    std::int32_t point_y{};
+    std::intptr_t param{};
+};
+static_assert(sizeof(GuestNmListView) == 64);
 
 // MSG com layout Microsoft x64 (48 bytes). Campos em offsets fixos para
 // leitura/escrita de memória convidada.
@@ -199,9 +287,14 @@ TL_MSABI void* tl_CreateFileA(const char* path, std::uint32_t desired_access,
                               std::uint32_t creation_disposition, std::uint32_t flags,
                               const void* template_file) noexcept;
 TL_MSABI int tl_CloseHandle(const void* handle) noexcept;
+TL_MSABI void* tl_CreateMutexA(const void* security_attributes, int initial_owner,
+                               const char* name) noexcept;
+TL_MSABI void tl_GetStartupInfoA(void* startup_info) noexcept;
+TL_MSABI int tl_MulDiv(int number, int numerator, int denominator) noexcept;
 TL_MSABI std::uint32_t tl_MessageBoxA(const void* owner, const char* text, const char* caption,
                                       std::uint32_t type) noexcept;
 TL_MSABI abi::Atom tl_RegisterClassExA(const void* wnd_class) noexcept;
+TL_MSABI abi::Atom tl_RegisterClassA(const void* wnd_class) noexcept;
 TL_MSABI abi::HWnd tl_CreateWindowExA(std::uint32_t ex_style, const char* class_name,
                                       const char* window_name, std::uint32_t style, int x, int y,
                                       int width, int height, const void* parent, const void* menu,
@@ -227,6 +320,44 @@ TL_MSABI int tl_FillRect(const void* dc, const void* rect, const void* brush) no
 TL_MSABI int tl_Rectangle(const void* dc, int left, int top, int right, int bottom) noexcept;
 TL_MSABI void* tl_GetDC(const void* window) noexcept;
 TL_MSABI int tl_ReleaseDC(const void* window, const void* dc) noexcept;
+TL_MSABI void* tl_CreateFontA(int height, int width, int escapement, int orientation, int weight,
+                              std::uint32_t italic, std::uint32_t underline,
+                              std::uint32_t strikeout, std::uint32_t charset,
+                              std::uint32_t output_precision, std::uint32_t clip_precision,
+                              std::uint32_t quality, std::uint32_t pitch_and_family,
+                              const char* face_name) noexcept;
+TL_MSABI void* tl_CreateSolidBrush(std::uint32_t color) noexcept;
+TL_MSABI int tl_DeleteObject(const void* object) noexcept;
+TL_MSABI std::uint32_t tl_SetBkColor(const void* dc, std::uint32_t color) noexcept;
+TL_MSABI std::uint32_t tl_SetTextColor(const void* dc, std::uint32_t color) noexcept;
+TL_MSABI int tl_GetClientRect(const void* window, void* rect) noexcept;
+TL_MSABI int tl_GetCursorPos(void* point) noexcept;
+TL_MSABI int tl_MoveWindow(const void* window, int x, int y, int width, int height,
+                           int repaint) noexcept;
+TL_MSABI std::intptr_t tl_SetWindowPos(const void* window, const void* insert_after, int x, int y,
+                                       int width, int height, std::uint32_t flags) noexcept;
+TL_MSABI int tl_SetWindowTextA(const void* window, const char* text) noexcept;
+TL_MSABI int tl_GetWindowTextA(const void* window, char* text, int capacity) noexcept;
+TL_MSABI int tl_EnableWindow(const void* window, int enable) noexcept;
+TL_MSABI const void* tl_SetFocus(const void* window) noexcept;
+TL_MSABI int tl_IsWindowVisible(const void* window) noexcept;
+TL_MSABI int tl_InvalidateRect(const void* window, const void* rect, int erase) noexcept;
+TL_MSABI const void* tl_FindWindowA(const char* class_name, const char* window_name) noexcept;
+TL_MSABI std::uintptr_t tl_LoadCursorA(const void* instance, const char* name) noexcept;
+TL_MSABI std::uintptr_t tl_LoadIconA(const void* instance, const char* name) noexcept;
+TL_MSABI std::intptr_t tl_SetClassLongPtrA(const void* window, int index,
+                                            std::intptr_t value) noexcept;
+TL_MSABI int tl_SetForegroundWindow(const void* window) noexcept;
+TL_MSABI int tl_SendMessageA(const void* window, std::uint32_t message, abi::Wparam wparam,
+                             abi::Lparam lparam) noexcept;
+TL_MSABI int tl_PostMessageA(const void* window, std::uint32_t message, abi::Wparam wparam,
+                             abi::Lparam lparam) noexcept;
+TL_MSABI void* tl_CreatePopupMenu() noexcept;
+TL_MSABI int tl_AppendMenuA(const void* menu, std::uint32_t flags, std::uintptr_t command,
+                            const char* text) noexcept;
+TL_MSABI int tl_DestroyMenu(const void* menu) noexcept;
+TL_MSABI int tl_TrackPopupMenu(const void* menu, std::uint32_t flags, int x, int y, int reserved,
+                               const void* owner, const void* rect) noexcept;
 TL_MSABI void tl_DeleteCriticalSection(void* critical_section) noexcept;
 TL_MSABI void tl_EnterCriticalSection(void* critical_section) noexcept;
 TL_MSABI int tl_GetConsoleMode(const void* handle, std::uint32_t* mode) noexcept;
@@ -315,6 +446,7 @@ TL_MSABI int tl_TlsFree(std::uint32_t tls_index) noexcept;
 // SHELL32.dll (Fase 10+): linha de comando no formato wide.
 TL_MSABI std::uint16_t** tl_CommandLineToArgvW(const std::uint16_t* command_line,
                                                int* argument_count) noexcept;
+TL_MSABI int tl_ShellNotifyIconA(std::uint32_t message, void* data) noexcept;
 
 }  // extern "C"
 

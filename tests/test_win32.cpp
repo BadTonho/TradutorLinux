@@ -1,4 +1,5 @@
 #include "tradutorlinux/runtime/winapi.hpp"
+#include "tradutorlinux/runtime/advapi.hpp"
 
 #include <array>
 #include <chrono>
@@ -285,6 +286,48 @@ TEST(Win32EnvTest, GetEnvironmentVariableAInsufficientBuffer) {
     }
 }
 
+TEST(Win32GuiAbiTest, TargetControlLayoutsMatchMicrosoftX64) {
+    EXPECT_EQ(sizeof(abi::GuestWndClassA), 72U);
+    EXPECT_EQ(sizeof(abi::GuestWndClassExA), 80U);
+    EXPECT_EQ(sizeof(abi::GuestLvColumnA), 32U);
+    EXPECT_EQ(sizeof(abi::GuestLvItemA), 72U);
+    EXPECT_EQ(sizeof(abi::GuestNmListView), 64U);
+}
+
+TEST(Win32GuiTest, MulDivRoundsAndRejectsZeroDenominator) {
+    EXPECT_EQ(tl_MulDiv(5, 3, 2), 8);
+    EXPECT_EQ(tl_MulDiv(-5, 3, 2), -8);
+    EXPECT_EQ(tl_MulDiv(1, 1, 0), -1);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+}
+
+TEST(Win32GuiTest, PopupMenuHandleHasLifecycle) {
+    void* menu = tl_CreatePopupMenu();
+    ASSERT_NE(menu, nullptr);
+    EXPECT_EQ(tl_AppendMenuA(menu, 0, 101, "Exit"), 1);
+    EXPECT_EQ(tl_DestroyMenu(menu), 1);
+}
+
+TEST(Win32RegistryTest, TodoAutorunValueRoundTrips) {
+    const void* current_user = reinterpret_cast<const void*>(0x80000001U);
+    void* key = nullptr;
+    ASSERT_EQ(tl_RegOpenKeyExA(current_user,
+                               "Software\\Microsoft\\Windows\\CurrentVersion\\Run", 0,
+                               0, &key), abi::kErrorSuccess);
+    const char executable[] = "simple_todo.exe\0";
+    ASSERT_EQ(tl_RegSetValueExA(key, "TodoApp", 0, 1,
+                                reinterpret_cast<const unsigned char*>(executable),
+                                sizeof(executable)), abi::kErrorSuccess);
+    char value[64]{};
+    std::uint32_t size = sizeof(value);
+    EXPECT_EQ(tl_RegQueryValueExA(key, "TodoApp", nullptr, nullptr,
+                                  reinterpret_cast<unsigned char*>(value), &size),
+              abi::kErrorSuccess);
+    EXPECT_STREQ(value, "simple_todo.exe");
+    EXPECT_EQ(tl_RegDeleteValueA(key, "TodoApp"), abi::kErrorSuccess);
+    EXPECT_EQ(tl_RegCloseKey(key), abi::kErrorSuccess);
+    std::remove(".tl_registry_todo");
+}
 TEST(Win32EnvTest, GetEnvironmentVariableWConvertsResult) {
     const std::uint16_t name[] = {'P', 'A', 'T', 'H', 0};
     const std::uint32_t needed = tl_GetEnvironmentVariableW(name, nullptr, 0);

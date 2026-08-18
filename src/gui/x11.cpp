@@ -149,6 +149,9 @@ void push_event_for(Display* const dpy, WindowState* const state, XEvent& event)
     if (event.type == ButtonPress) {
         if (event.xbutton.button == 1) {
             state->pending.push_back({WindowEventType::Press, event.xbutton.x, event.xbutton.y});
+        } else if (event.xbutton.button == 3) {
+            state->pending.push_back({WindowEventType::RightPress, event.xbutton.x,
+                                      event.xbutton.y});
         }
         return;
     }
@@ -390,6 +393,66 @@ std::uint32_t message_box(const char* const text,  // NOLINT(bugprone-easily-swa
         }
     }
     destroy_window(window);
+    return result;
+}
+
+std::uint32_t track_popup_menu(const std::vector<PopupMenuItem>& items, int x, int y) noexcept {
+    Display* const dpy = display();
+    if (dpy == nullptr || items.empty()) {
+        return 0;
+    }
+    const int screen = DefaultScreen(dpy);
+    const Window root = RootWindow(dpy, screen);
+    constexpr int row_height = 24;
+    constexpr int menu_width = 220;
+    const unsigned int menu_height = static_cast<unsigned int>(row_height * items.size());
+    XSetWindowAttributes attributes{};
+    attributes.override_redirect = True;
+    const Window menu = XCreateWindow(dpy, root, x > 0 ? x : 80, y > 0 ? y : 80, menu_width,
+                                      menu_height, 1, CopyFromParent, InputOutput, CopyFromParent,
+                                      CWOverrideRedirect, &attributes);
+    if (menu == 0) {
+        return 0;
+    }
+    XStoreName(dpy, menu, "TradutorLinuxPopup");
+    XSelectInput(dpy, menu, ExposureMask | ButtonPressMask | StructureNotifyMask);
+    XMapRaised(dpy, menu);
+    XFlush(dpy);
+    std::uint32_t result = 0;
+    bool done = false;
+    while (!done) {
+        XEvent event{};
+        XNextEvent(dpy, &event);
+        if (event.type == Expose) {
+            GC gc = DefaultGC(dpy, screen);
+            XSetForeground(dpy, gc, WhitePixel(dpy, screen));
+            XFillRectangle(dpy, menu, gc, 0, 0, menu_width, menu_height);
+            XSetForeground(dpy, gc, BlackPixel(dpy, screen));
+            for (std::size_t index = 0; index < items.size(); ++index) {
+                const int top = static_cast<int>(index) * row_height;
+                if (items[index].separator) {
+                    XDrawLine(dpy, menu, gc, 8, top + row_height / 2, menu_width - 8,
+                              top + row_height / 2);
+                } else {
+                    XDrawString(dpy, menu, gc, 10, top + 17, items[index].text.c_str(),
+                                static_cast<int>(items[index].text.size()));
+                }
+            }
+            XFlush(dpy);
+        } else if (event.type == ButtonPress && event.xbutton.window == menu &&
+                   event.xbutton.button == 1) {
+            const int index = event.xbutton.y / row_height;
+            if (index >= 0 && static_cast<std::size_t>(index) < items.size() &&
+                !items[static_cast<std::size_t>(index)].separator) {
+                result = items[static_cast<std::size_t>(index)].command;
+                done = true;
+            }
+        } else if (event.type == DestroyNotify && event.xdestroywindow.window == menu) {
+            done = true;
+        }
+    }
+    XDestroyWindow(dpy, menu);
+    XFlush(dpy);
     return result;
 }
 

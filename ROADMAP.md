@@ -19,7 +19,7 @@ Os itens marcados como concluídos devem ter evidência no repositório: código
 
 ## Estado atual
 
-- **Fase atual:** Fase 11 — Concorrência e rede opcional.
+- **Fase atual:** Fase 12 — GUI útil por aplicativo.
 - **Marco concluído:** a Fase 7 foi validada de ponta a ponta e a decisão de produto foi tomada: **seguir com a GUI Win32 mínima como objetivo experimental**. `tl_gui.exe` abriu a janela X11, recebeu o clique em OK e encerrou com código `0`; `tl_win.exe` criou uma janela real e executou um message loop completo (`RegisterClassExA`, `CreateWindowExA`, `ShowWindow`, `GetMessageA`, `DispatchMessageA`, `DefWindowProcA`, `PostQuitMessage`), encerrando via `WM_CLOSE`/autoclose com código `0`; o modo `--report` lista imports suportados sem executar o PE; `tl_hello`, `tl_echo` e `tl_file` têm regressões e limitações publicadas na matriz.
 - **Marco concluído:** o smoke test de GUI passou a ter cobertura automática em CI. O teste `runtime_gui_smoke` sobe um `Xvfb` próprio e executa `tl_win.exe` de ponta a ponta em dois cenários: autoclose (message loop encerra sozinho via `WM_QUIT`) e fechamento real por `WM_DELETE_WINDOW` (mesmo `ClientMessage` do botão de fechar do WM), exigindo exit-code `1`, stdout vazio e os eventos esperados no trace. A conexão X11 do runtime é fechada no teardown (`DisplayCloser`), validado sob ASAN com `detect_leaks=1`.
 - **Marco concluído:** `CreateWindowExA` agora despacha `WM_CREATE` ao `WNDPROC` do convidado antes de devolver o `HWND` (retorno `-1` aborta a criação e devolve `NULL`). A fixture `tl_win.c` marca uma flag no `WM_CREATE` e propaga no exit code via `PostQuitMessage`, então o `runtime_gui_smoke` prova o despacho exigindo exit-code `1`.
@@ -31,8 +31,9 @@ Os itens marcados como concluídos devem ter evidência no repositório: código
 - **Marco concluído:** `xxd.exe` executa de ponta a ponta com saída **byte-idêntica** ao `xxd` do sistema (exit `0`). Para isso a fronteira agora aloca um TEB de uma página e aponta o segmento `%gs` via `arch_prctl(ARCH_SET_GS)` durante a execução do convidado (o mingw lê `%gs:[0x30]` no `__mingw_CRTStartup`), restaurando o `GS` e liberando o TEB em seguida. O teste e2e fixa um ouro em `tests/targets/golden/xxd/` (entrada de 4880 bytes que cruza a coluna de offset em `0x1000`) e verifica em CTest: modo padrão, `-p` (plain) e caminho de erro (arquivo inexistente → exit `2`, stderr não vazio), 3 testes novos com label `targetapp`. As conversões de código de página, `VirtualQuery`/`VirtualProtect`, `TlsGetValue`, critical sections e o subconjunto de CRT têm 42 testes unitários novos (`test_win32.cpp`, `test_msvcrt.cpp`). Total: 180 testes verdes no preset com alvos; 169 em `debug`, `release` e `sanitize`.
 - **Marco concluído:** `bzip2.exe` executa de ponta a ponta nos dois sentidos. `__iob_func()` devolve o ponteiro do array `GuestFile` (o convidado indexa `[0..2]` com `sizeof(_iobuf)` = 48 bytes — o argumento `rcx` é ignorado, como no CRT MSVC clássico) e `_stat64` passou de stub `ENOSYS` para implementação real que preenche o `struct _stat64` do MinGW (pack 8, `st_mode` em `0x06`, tamanho 56 bytes) via `stat()` do host; a verificação `S_ISREG` do bzip2 (`testb $0x40, +7`) depende dos bits de tipo do Linux, idênticos aos do Windows (`S_IFREG = 0x8000`). Compressão (`-c`) e descompressão (`-d`, `-d -c`) de arquivo são byte-idênticas ao `bzip2` nativo; e2e em CTest (ouro em `tests/targets/golden/bzip2/` e `golden/bzip2_decompress/`, comparação binária via `verify_target_run_bytes.cmake`), 2 testes novos com label `targetapp`, e 3 testes unitários novos para `_stat64` (`test_msvcrt.cpp`). Total: 265 testes verdes no preset com alvos; 218 em `debug` e `sanitize`.
 - **Marco concluído:** `tl_thread.exe` fecha a validação do subconjunto atual de concorrência. O fixture cria duas threads convidadas sequenciais, cada uma escreve `Thread done`, termina via `ExitThread` e é aguardada por `WaitForSingleObject`; a thread principal escreve `Main done` e encerra com código `0`. Metadata e execução passam em Debug, Release e Sanitize (`LSAN_OPTIONS=detect_leaks=0`); a regressão é coberta por `fixture_tl_thread_metadata` e `runtime_tl_thread_matches_readobj`. Eventos, mutexes adicionais e WinSock continuam condicionais a novos aplicativos-alvo.
+- **Fase 12 em implementação:** o alvo pinado `Efeckc17/simple-todo-c` (`bcdf3d5fcebb8c0b445edb791d54511194c1b6ca`) compila como PE32+ x64 com manifesto/ícone e tem metadata e `--report` protegidos. O relatório resolve **110/110 imports**; `USER32` agora possui controles lógicos EDIT/BUTTON/COMBOBOX/STATIC/SysListView32, comandos/notificações, foco e teclado; `ADVAPI32` persiste o autorun limitado e `SHELL32` usa menu X11 como bandeja emulada. O smoke completo foi adicionado para ambientes com Xvfb; a validação local deste ambiente ainda fica pendente porque `Xvfb` não está instalado.
 - **Marco concluído:** `dos2unix.exe` e `unix2dos.exe` executam o fluxo de conversão validado. O `--report` resolve 91/91 imports em cada binário; regressões e2e cobrem CRLF→LF, LF→CRLF e expansão de `uni_el_*.txt` com nome UTF-8. Os testes `targetapp_dos2unix_eol`, `targetapp_unix2dos_eol` e `targetapp_dos2unix_unicode-glob` passam com exit `0`; os arquivos de entrada CRLF/LF vêm da fonte pinada do dos2unix e o ouro UTF-8 está versionado em `tests/targets/golden/dos2unix/`.
-- **Próximo resultado observável:** escolher o próximo aplicativo-alvo real, preferencialmente de outra categoria, levantando seus imports e fluxo principal antes de adicionar novas APIs.
+- **Próximo resultado observável:** executar `targetapp_simple_todo_gui_smoke` em CI/Xvfb e só então promover o Simple Todo para suportado na matriz.
 
 ## Fase 0 — Fundação e contrato
 
@@ -233,12 +234,13 @@ reprodutíveis.
 A GUI evolui a partir de um aplicativo-alvo, e não de uma lista abstrata de
 APIs.
 
-- [ ] Escolher um aplicativo GUI pequeno, de código aberto, com janela e controles básicos.
-- [ ] Implementar mouse completo, foco, mensagens de comando, menus e ciclo de vida exigidos pelo alvo.
-- [ ] Implementar Unicode (`W`), fontes, desenho e invalidação somente quando usados.
-- [ ] Implementar controles e diálogos somente se o aplicativo exigir.
+- [x] Escolher e fixar `Efeckc17/simple-todo-c` no commit `bcdf3d5fcebb8c0b445edb791d54511194c1b6ca`.
+- [x] Implementar o subconjunto de mouse, foco, teclado, comandos, notificações, menus e ciclo de vida exigido pelo alvo.
+- [x] Implementar fontes, brushes, desenho e invalidação somente no subconjunto usado pelo alvo.
+- [x] Implementar EDIT, BUTTON, COMBOBOX, STATIC e SysListView32 como controles lógicos.
+- [ ] Validar o smoke completo sob Xvfb e promover o alvo após evidência de integração.
 - [ ] Avaliar Wayland/toolkit depois de existir uma aplicação GUI real suportada.
-- [ ] Automatizar testes visuais por screenshot ou propriedades observáveis, além do exit code.
+- [x] Automatizar propriedades observáveis, stdout, exit code, trace, persistência e visibilidade; screenshot permanece fora do escopo.
 
 ### Critério de saída
 
