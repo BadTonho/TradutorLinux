@@ -8,6 +8,7 @@
 #include "tradutorlinux/prefix/prefix.hpp"
 #include "tradutorlinux/runtime/memory_validator.hpp"
 #include "tradutorlinux/runtime/msvcrt.hpp"
+#include "tradutorlinux/runtime/teb.hpp"
 #include "tradutorlinux/util/basics.hpp"
 #include "gui_controls.hpp"
 
@@ -54,6 +55,8 @@ thread_local std::jmp_buf g_guest_exit_context;
 thread_local bool g_guest_execution_active = false;
 thread_local std::uint32_t g_guest_exit_code = 0;
 thread_local std::uint32_t g_last_error = abi::kErrorSuccess;
+thread_local runtime::GuestTeb* g_current_teb = nullptr;
+runtime::GuestPeb g_guest_peb{};
 
 // Caminho do executável convidado, definido antes da execução.
 std::string g_module_file_name;
@@ -226,6 +229,9 @@ CriticalSectionEntry* alloc_cs_entry(void* cs) noexcept {
 
 void set_last_error(const std::uint32_t error) noexcept {
     g_last_error = error;
+    if (g_current_teb != nullptr) {
+        g_current_teb->last_error_value = error;
+    }
 }
 
 [[nodiscard]] std::uint32_t errno_to_win32(const int error) noexcept {
@@ -438,10 +444,22 @@ void trace_stub(const char* symbol) noexcept {
 [[nodiscard]] bool translate_windows_path(const char* win_path,
                                           char* linux_out,
                                           std::size_t out_size) noexcept {
-    if (win_path == nullptr || win_path[0] == '\0' || win_path[0] == '/' ||
-        win_path[0] == '\\') {
+    if (win_path == nullptr || win_path[0] == '\0') {
         return false;
     }
+
+    std::string_view view{win_path};
+    if ((view.size() >= 2 && std::isalpha(static_cast<unsigned char>(view[0])) && view[1] == ':') ||
+        view.starts_with('\\') || view.starts_with('/')) {
+        const std::filesystem::path resolved = prefix::resolve_windows_path(view);
+        const std::string s = resolved.string();
+        if (s.size() + 1 > out_size) {
+            return false;
+        }
+        std::memcpy(linux_out, s.c_str(), s.size() + 1);
+        return true;
+    }
+
     std::size_t length = 0;
     for (; win_path[length] != '\0'; ++length) {
         if (length + 1U >= out_size || win_path[length] == ':') {
@@ -885,30 +903,6 @@ bool critical_section_valid(void* const critical_section) noexcept {
     return true;
 }
 
-// TEB (Thread Environment Block) mínimo Microsoft x64. O convidado mingw lê o
-// endereço do próprio TEB via %gs:[0x30] e campos como StackBase (offset 0x8).
-// Em Linux x86-64 o segmento GS é livre, então a fronteira aloca um TEB de uma
-// página, o aponta via arch_prctl(ARCH_SET_GS) durante a execução do convidado
-// e restaura o GS após o retorno.
-struct GuestTeb {
-    void* exception_list{nullptr};                // 0x00
-    void* stack_base{nullptr};                    // 0x08
-    void* stack_limit{nullptr};                   // 0x10
-    void* sub_system_tib{nullptr};                // 0x18
-    void* fiber_data{nullptr};                    // 0x20
-    void* arbitrary_user_pointer{nullptr};        // 0x28
-    void* self{nullptr};                          // 0x30
-    void* environment_pointer{nullptr};           // 0x38
-    std::uint64_t client_id[2]{0, 0};             // 0x40
-    void* active_rpc_handle{nullptr};             // 0x50
-    void* thread_local_storage_pointer{nullptr};  // 0x58
-    void* peb{nullptr};                           // 0x60
-    std::uint8_t reserved[0x110]{};               // até 0x178
-    std::uint64_t tls_slots[64]{};                // 0x178
-    std::uint8_t tail[0xC88]{};                   // até 0x1000 (tamanho da página)
-};
-static_assert(sizeof(GuestTeb) == 0x1000);
-
 // Configura a base do segmento GS da thread atual (Linux x86-64). Em Linux o
 // FS é usado pelo TLS do hospedeiro; GS fica livre para a fronteira de ABI.
 bool set_guest_gs_base(const void* const base) noexcept {
@@ -917,25 +911,27 @@ bool set_guest_gs_base(const void* const base) noexcept {
                      static_cast<std::uintptr_t>(reinterpret_cast<std::uintptr_t>(base))) == 0;
 }
 
-// Aloca um TEB de uma página e configura os campos essenciais.
+// Aloca um TEB de uma página e configura os campos essenciais do Windows x86-64.
 [[nodiscard]] void* allocate_guest_teb(const std::uintptr_t stack_top,
                                         const std::uintptr_t stack_size) noexcept {
-    constexpr std::size_t kTebSize = sizeof(GuestTeb);
+    constexpr std::size_t kTebSize = sizeof(runtime::GuestTeb);
     void* const teb = mmap(nullptr, kTebSize, PROT_READ | PROT_WRITE,
                            MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
     if (teb == MAP_FAILED) {
         return nullptr;
     }
-    auto* const fields = static_cast<GuestTeb*>(teb);
-    fields->self = teb;
-    fields->stack_base = std::bit_cast<void*>(stack_top);
-    fields->stack_limit = std::bit_cast<void*>(stack_top - stack_size);
+    auto* const fields = static_cast<runtime::GuestTeb*>(teb);
+    runtime::initialize_guest_teb(fields, &g_guest_peb, stack_top, stack_top - stack_size, g_current_thread_id);
+    g_current_teb = fields;
     return teb;
 }
 
 void free_guest_teb(void* const teb) noexcept {
     if (teb != nullptr) {
-        static_cast<void>(munmap(teb, sizeof(GuestTeb)));
+        if (g_current_teb == teb) {
+            g_current_teb = nullptr;
+        }
+        static_cast<void>(munmap(teb, sizeof(runtime::GuestTeb)));
     }
 }
 
@@ -1118,6 +1114,9 @@ TL_MSABI void tl_ExitProcess(const std::uint32_t exit_code) noexcept {
 }
 
 TL_MSABI std::uint32_t tl_GetLastError() noexcept {
+    if (g_current_teb != nullptr) {
+        return g_current_teb->last_error_value;
+    }
     return g_last_error;
 }
 
@@ -2125,6 +2124,10 @@ TL_MSABI void tl_Sleep(const std::uint32_t milliseconds) noexcept {
 }
 
 TL_MSABI void* tl_TlsGetValue(const std::uint32_t tls_index) noexcept {
+    if (g_current_teb != nullptr && tls_index < g_current_teb->tls_slots.size()) {
+        set_last_error(abi::kErrorSuccess);
+        return reinterpret_cast<void*>(g_current_teb->tls_slots[tls_index]);
+    }
     if (tls_index >= g_guest_tls_slots.size()) {
         set_last_error(abi::kErrorInvalidParameter);
         return nullptr;
@@ -3070,7 +3073,12 @@ TL_MSABI int tl_TlsSetValue(const std::uint32_t tls_index, void* const tls_value
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
-    g_guest_tls_slots[tls_index] = tls_value;
+    if (g_current_teb != nullptr && tls_index < g_current_teb->tls_slots.size()) {
+        g_current_teb->tls_slots[tls_index] = reinterpret_cast<std::uint64_t>(tls_value);
+    }
+    if (tls_index < g_guest_tls_slots.size()) {
+        g_guest_tls_slots[tls_index] = tls_value;
+    }
     set_last_error(abi::kErrorSuccess);
     return 1;
 }

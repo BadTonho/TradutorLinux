@@ -131,6 +131,34 @@ std::string encode_hex(const std::vector<unsigned char>& value) {
     return result;
 }
 
+void ensure_default_registry_keys() noexcept {
+    auto set_default_sz = [](const std::string& key, const std::string& name, const std::string& str) {
+        auto it = std::find_if(g_values.begin(), g_values.end(), [&](const RegistryValue& v) {
+            return v.key_path == key && v.value_name == name;
+        });
+        if (it == g_values.end()) {
+            std::vector<unsigned char> data(str.begin(), str.end());
+            data.push_back('\0');
+            g_values.push_back(RegistryValue{key, name, kRegSz, data});
+        }
+    };
+
+    // Chaves padrão consultadas por instaladores (Inno Setup, NSIS, MSI, etc.)
+    set_default_sz("HKEY_LOCAL_MACHINE\\Software\\Microsoft\\Windows\\CurrentVersion", "ProgramFilesDir", "C:\\Program Files");
+    set_default_sz("HKEY_LOCAL_MACHINE\\Software\\Microsoft\\Windows\\CurrentVersion", "ProgramFilesDir (x86)", "C:\\Program Files (x86)");
+    set_default_sz("HKEY_LOCAL_MACHINE\\Software\\Microsoft\\Windows\\CurrentVersion", "CommonFilesDir", "C:\\Program Files\\Common Files");
+    set_default_sz("HKEY_LOCAL_MACHINE\\Software\\Microsoft\\Windows\\CurrentVersion", "SystemRoot", "C:\\windows");
+
+    set_default_sz("HKEY_LOCAL_MACHINE\\Software\\Microsoft\\Windows NT\\CurrentVersion", "ProductName", "Windows 10 Pro");
+    set_default_sz("HKEY_LOCAL_MACHINE\\Software\\Microsoft\\Windows NT\\CurrentVersion", "CurrentVersion", "6.3");
+    set_default_sz("HKEY_LOCAL_MACHINE\\Software\\Microsoft\\Windows NT\\CurrentVersion", "CurrentBuild", "19045");
+    set_default_sz("HKEY_LOCAL_MACHINE\\Software\\Microsoft\\Windows NT\\CurrentVersion", "CurrentBuildNumber", "19045");
+    set_default_sz("HKEY_LOCAL_MACHINE\\Software\\Microsoft\\Windows NT\\CurrentVersion", "SystemRoot", "C:\\windows");
+
+    set_default_sz("HKEY_CURRENT_USER\\Environment", "TEMP", "C:\\windows\\temp");
+    set_default_sz("HKEY_CURRENT_USER\\Environment", "TMP", "C:\\windows\\temp");
+}
+
 void load_registry() noexcept {
     if (g_loaded) {
         return;
@@ -165,6 +193,7 @@ void load_registry() noexcept {
             .data = data,
         });
     }
+    ensure_default_registry_keys();
 }
 
 void save_registry() noexcept {
