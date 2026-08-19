@@ -41,7 +41,8 @@ void save_registry() noexcept {
 }
 
 bool is_current_user(const void* key) noexcept {
-    return reinterpret_cast<std::uintptr_t>(key) == kHkeyCurrentUser;
+    return static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(key)) ==
+           static_cast<std::uint32_t>(kHkeyCurrentUser);
 }
 
 bool is_open_key(const void* key) noexcept {

@@ -32,6 +32,7 @@ constexpr Dword kErrorFileNotFound = 2;
 constexpr Dword kErrorAccessDenied = 5;
 constexpr Dword kErrorInvalidHandle = 6;
 constexpr Dword kErrorNotEnoughMemory = 8;
+constexpr Dword kErrorAlreadyExists = 183;
 constexpr Dword kErrorInvalidParameter = 87;
 constexpr Dword kErrorBrokenPipe = 109;
 

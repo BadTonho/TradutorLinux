@@ -7,6 +7,7 @@
 #include "tradutorlinux/pe/pe_reader.hpp"
 #include "tradutorlinux/process/isolate.hpp"
 #include "tradutorlinux/runtime/msvcrt.hpp"
+#include "tradutorlinux/runtime/winapi.hpp"
 #include "tradutorlinux/util/basics.hpp"
 
 #include <algorithm>
@@ -651,6 +652,7 @@ ExitCode run_command(const CommandLine& command_line, std::ostream& stdout_strea
     guest_argv.insert(guest_argv.end(), command_line.guest_arguments.begin(),
                       command_line.guest_arguments.end());
     msvcrt_set_guest_command_line(std::move(guest_argv));
+    set_guest_module_path(command_line.executable_path->c_str());
 
     const process::GuestOutcome outcome = process::run_guest_isolated(
         process.thread.entry_point, process.thread.stack_top, command_line.timeout_ms);

@@ -93,6 +93,26 @@ void set_error(int error) {
     g_crt_errno = error;
 }
 
+// Tradução de caminhos usados pelo CRT do convidado. O Win32 aceita barra
+// invertida como separador; o host usa barra normal. Drives e raízes Windows
+// continuam fora do contrato, mas caminhos absolutos Linux são usados pelos
+// testes e pelos argumentos de aplicativos-alvo.
+[[nodiscard]] bool translate_guest_path(const char* guest_path, char* host_path,
+                                        const std::size_t host_path_size) noexcept {
+    if (guest_path == nullptr || guest_path[0] == '\0' || guest_path[0] == '\\') {
+        return false;
+    }
+    std::size_t length = 0;
+    for (; guest_path[length] != '\0'; ++length) {
+        if (length + 1U >= host_path_size || guest_path[length] == ':') {
+            return false;
+        }
+        host_path[length] = guest_path[length] == '\\' ? '/' : guest_path[length];
+    }
+    host_path[length] = '\0';
+    return true;
+}
+
 void trace_crt(const TraceLevel level, const std::string_view event,
                const std::initializer_list<TraceField> fields = {}) {
     const std::vector<TraceField> list(fields.begin(), fields.end());
@@ -753,6 +773,11 @@ TL_CRT_MSABI int tl__open(const char* path, int oflag, ...) noexcept {
         set_error(EINVAL);
         return -1;
     }
+    char normalized_path[4096]{};
+    if (!translate_guest_path(path, normalized_path, sizeof(normalized_path))) {
+        set_error(EINVAL);
+        return -1;
+    }
     int mode = 0666;
     if (oflag & 0x100) {
         __builtin_ms_va_list ap;
@@ -760,7 +785,7 @@ TL_CRT_MSABI int tl__open(const char* path, int oflag, ...) noexcept {
         mode = read_int_slot(ap);
         __builtin_ms_va_end(ap);
     }
-    const int fd = ::open(path, translate_open_flags(oflag), mode);
+    const int fd = ::open(normalized_path, translate_open_flags(oflag), mode);
     if (fd < 0) {
         set_error(errno);
         return -1;
@@ -839,6 +864,11 @@ TL_CRT_MSABI GuestFile* tl_fopen(const char* path, const char* mode) noexcept {
         set_error(EINVAL);
         return nullptr;
     }
+    char normalized_path[4096]{};
+    if (!translate_guest_path(path, normalized_path, sizeof(normalized_path))) {
+        set_error(EINVAL);
+        return nullptr;
+    }
     int host_flags = 0;
     switch (kind) {
         case 'r':
@@ -857,7 +887,7 @@ TL_CRT_MSABI GuestFile* tl_fopen(const char* path, const char* mode) noexcept {
         host_flags = (host_flags & ~(O_RDONLY | O_WRONLY)) | O_RDWR |
                      (host_flags & (O_CREAT | O_TRUNC | O_APPEND));
     }
-    const int fd = ::open(path, host_flags, 0666);
+    const int fd = ::open(normalized_path, host_flags, 0666);
     if (fd < 0) {
         set_error(errno);
         return nullptr;

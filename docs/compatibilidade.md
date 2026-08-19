@@ -21,7 +21,7 @@ Esta matriz declara o comportamento suportado; ela não é uma promessa de compa
 | `tl_crash.exe` | PE32+ AMD64 | Não | Nenhum | Gerado, verificado, mapeado e executado em processo filho isolado: o convidado acessa o endereço `0`, o hospedeiro observa o `SIGSEGV` via `waitpid`, emite `terminated category="guest-signal" signal="SIGSEGV"` e retorna `71` (`GuestFault`) | Diagnóstico de falhas |
 | `tl_hang.exe` | PE32+ AMD64 | Não | Nenhum | Gerado, verificado e executado em processo filho isolado com `--timeout 1`: o convidado entra em loop infinito, o hospedeiro o mata com `SIGKILL`, emite `terminated category="guest-timeout"` e retorna `72` (`GuestTimeout`) | Diagnóstico de falhas |
 | `tl_thread.exe` | PE32+ AMD64 | Não | `KERNEL32.dll!CloseHandle`, `CreateThread`, `ExitProcess`, `ExitThread`, `GetStdHandle`, `WaitForSingleObject`, `WriteFile` | **Suportado no escopo da Fase 11**: cria duas threads sequenciais, cada uma escreve "Thread done" e termina via `ExitThread`; a thread principal aguarda cada handle, escreve "Main done" e encerra. Metadata e execução e2e passam em Debug, Release e Sanitize (`LSAN_OPTIONS=detect_leaks=0`); saída esperada: `Thread done\nThread done\nMain done\n` e exit `0` | Fase 11 |
-| `simple_todo.exe` | PE32+ AMD64 | mingw-w64 CRT | 110 imports em `ADVAPI32`, `GDI32`, `KERNEL32`, `msvcrt`, `SHELL32` e `USER32` | Fonte pinada no commit `bcdf3d5fcebb8c0b445edb791d54511194c1b6ca`; build, metadata e `--report` resolvem 110/110. O smoke GUI sob Xvfb está implementado, mas ainda aguarda execução em CI antes da declaração de suporte | Fase 12 |
+| `simple_todo.exe` | PE32+ AMD64 | mingw-w64 CRT | 110 imports em `ADVAPI32`, `GDI32`, `KERNEL32`, `msvcrt`, `SHELL32` e `USER32` | **Suportado no subconjunto da Fase 12**: fonte pinada no commit `bcdf3d5fcebb8c0b445edb791d54511194c1b6ca`; build, metadata e `--report` resolvem 110/110; `targetapp_simple_todo_gui_smoke` passa sob Xvfb e valida o fluxo principal, persistência, menu e encerramento | Fase 12 |
 
 As fontes e manifestos das fixtures ficam em `tests/samples/`. Os binários são produtos de build e ficam em `build/<preset>/tests/samples/generated/`.
 
@@ -159,9 +159,9 @@ mostrar e sair pelo menu emulado.
 | `ADVAPI32.dll` | `RegOpenKeyExA`, `RegQueryValueExA`, `RegSetValueExA`, `RegDeleteValueA`, `RegCloseKey` | Implementado para o alvo | Só a chave `HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run` e o valor `TodoApp` são persistidos em `.tl_registry_todo` no CWD |
 | `msvcrt.dll` | `_acmdln`, `_ismbblead`, `_time64`, `_localtime64`, `strftime`, `_strlwr` | Implementado para o alvo | Locale/DBCS continuam no subconjunto C/ANSI do runtime |
 
-Até o smoke de integração passar sob Xvfb, o Simple Todo permanece classificado
-como “imports resolvidos, execução GUI não promovida”. Abrir a janela ou
-resolver imports não constitui suporte geral a aplicativos Win32.
+O smoke de integração passa sob Xvfb e promove o Simple Todo ao subconjunto
+suportado da Fase 12. Isso não constitui suporte geral a aplicativos Win32;
+permanecem válidas as limitações específicas das APIs listadas acima.
 
 ## Aplicativos-alvo reais (Fase 8)
 
@@ -273,7 +273,9 @@ Observações que orientam a próxima etapa (Fase 9/10):
 O subsistema de arquivos expande o `CreateFileA`/`ReadFile`/`WriteFile`/
 `CloseHandle` da Fase 5 com APIs de manipulação de diretórios, atributos e
 enumeração. A tradução de caminhos Windows (`\\` → `/`) é reutilizável via
-`translate_windows_path()` e rejeita letras de drive e caminhos absolutos.
+`translate_windows_path()`; `CreateFileA` rejeita letras de drive e caminhos
+absolutos, enquanto o CRT aceita caminhos absolutos Linux para os aplicativos
+que recebem arquivos do host como argumentos.
 
 | Módulo | API | Estado | Comportamento suportado |
 |---|---|---|---|

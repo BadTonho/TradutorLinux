@@ -326,6 +326,11 @@ TEST(Win32RegistryTest, TodoAutorunValueRoundTrips) {
     EXPECT_STREQ(value, "simple_todo.exe");
     EXPECT_EQ(tl_RegDeleteValueA(key, "TodoApp"), abi::kErrorSuccess);
     EXPECT_EQ(tl_RegCloseKey(key), abi::kErrorSuccess);
+    void* sign_extended_key = nullptr;
+    ASSERT_EQ(tl_RegOpenKeyExA(reinterpret_cast<const void*>(0xFFFFFFFF80000001ULL),
+                               "Software\\Microsoft\\Windows\\CurrentVersion\\Run", 0,
+                               0, &sign_extended_key), abi::kErrorSuccess);
+    EXPECT_EQ(tl_RegCloseKey(sign_extended_key), abi::kErrorSuccess);
     std::remove(".tl_registry_todo");
 }
 TEST(Win32EnvTest, GetEnvironmentVariableWConvertsResult) {
@@ -579,6 +584,7 @@ TEST(Win32FileTest, CreateDirectoryAFailsForExistingDir) {
     const char* tmpdir = "_tl_test_mkdir_dup";
     mkdir(tmpdir, 0777);
     EXPECT_EQ(tl_CreateDirectoryA(tmpdir, nullptr), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorAlreadyExists);
     rmdir(tmpdir);
 }
 

@@ -179,6 +179,8 @@ void set_last_error(const std::uint32_t error) noexcept {
             return abi::kErrorAccessDenied;
         case ENOMEM:
             return abi::kErrorNotEnoughMemory;
+        case EEXIST:
+            return abi::kErrorAlreadyExists;
         case EPIPE:
             // Escrever em um pipe sem leitor (ex.: stdout para `head -c0`) é
             // um erro controlado de I/O, não uma morte por sinal.
@@ -4326,6 +4328,11 @@ TL_MSABI int tl_SendMessageA(const void* window, const std::uint32_t message,
                 return 0;
             }
             if (message == abi::kLvmGetNextItem) {
+                const std::int32_t start = static_cast<std::int32_t>(wparam);
+                if (slot->list_selection < 0 ||
+                    (start >= 0 && slot->list_selection <= start)) {
+                    return -1;
+                }
                 return slot->list_selection;
             }
             if (message == abi::kLvmGetItemA && lparam != 0 &&
@@ -4380,11 +4387,11 @@ TL_MSABI int tl_PostMessageA(const void* window, const std::uint32_t message,
         set_last_error(abi::kErrorInvalidHandle);
         return 0;
     }
-    slot->pending = {};
-    slot->pending.message = message;
-    slot->pending.wparam = wparam;
-    slot->pending.lparam = lparam;
-    slot->has_pending = true;
+    // PostMessage insere uma mensagem na fila. `pending` é reservado para a
+    // mensagem WM_CHAR produzida por TranslateMessage; sobrescrevê-la também
+    // descartaria comandos já enfileirados, como os enviados por
+    // TrackPopupMenu antes do WM_NULL padrão do aplicativo.
+    queue_window_message(*slot, message, wparam, lparam);
     set_last_error(abi::kErrorSuccess);
     return 1;
 }

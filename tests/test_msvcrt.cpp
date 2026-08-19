@@ -4,10 +4,12 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <filesystem>
 #include <string>
 #include <vector>
 
 #include <gtest/gtest.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 namespace tradutorlinux {
@@ -71,6 +73,37 @@ TEST(MsvcrtFileTest, FopenFprintfFseekAndFcloseRoundTrip) {
 
 TEST(MsvcrtFileTest, FopenOfMissingFileReturnsNull) {
     EXPECT_EQ(tl_fopen("tl_msvcrt_nao_existe_12345.txt", "rb"), nullptr);
+}
+
+TEST(MsvcrtFileTest, FopenNormalizesWindowsPathSeparators) {
+    const std::string directory =
+        "tl_msvcrt_path_" + std::to_string(static_cast<long>(getpid()));
+    const std::string host_path = directory + "/arquivo.txt";
+    const std::string guest_path = directory + "\\arquivo.txt";
+    std::remove(host_path.c_str());
+    rmdir(directory.c_str());
+    ASSERT_EQ(mkdir(directory.c_str(), 0777), 0);
+
+    GuestFile* file = tl_fopen(guest_path.c_str(), "wb");
+    ASSERT_NE(file, nullptr);
+    ASSERT_EQ(tl_fclose(file), 0);
+    EXPECT_EQ(access(host_path.c_str(), F_OK), 0);
+    EXPECT_EQ(access(guest_path.c_str(), F_OK), -1);
+
+    std::remove(host_path.c_str());
+    rmdir(directory.c_str());
+}
+
+TEST(MsvcrtFileTest, FopenAcceptsAbsoluteLinuxPath) {
+    const std::filesystem::path path =
+        std::filesystem::absolute("tl_msvcrt_absolute_" + std::to_string(getpid()) + ".txt");
+    std::remove(path.c_str());
+
+    GuestFile* file = tl_fopen(path.c_str(), "wb");
+    ASSERT_NE(file, nullptr);
+    ASSERT_EQ(tl_fclose(file), 0);
+    EXPECT_EQ(access(path.c_str(), F_OK), 0);
+    std::remove(path.c_str());
 }
 
 TEST(MsvcrtStringTest, StrcatFamilyBehavesLikeLibc) {

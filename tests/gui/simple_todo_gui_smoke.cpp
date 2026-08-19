@@ -47,6 +47,14 @@ void sleep_short() {
 
 pid_t g_xvfb = -1;
 
+void stop_xvfb() noexcept {
+    if (g_xvfb > 0) {
+        ::kill(g_xvfb, SIGTERM);
+        ::waitpid(g_xvfb, nullptr, 0);
+        g_xvfb = -1;
+    }
+}
+
 std::string start_xvfb() {
     int pipe_fds[2] = {-1, -1};
     if (::pipe(pipe_fds) != 0) {
@@ -62,6 +70,7 @@ std::string start_xvfb() {
         const int null_fd = ::open("/dev/null", O_WRONLY);
         if (null_fd >= 0) {
             ::dup2(null_fd, STDERR_FILENO);
+            ::dup2(null_fd, STDOUT_FILENO);
             ::close(null_fd);
         }
         ::execlp("Xvfb", "Xvfb", "-displayfd", "3", "-screen", "0", "900x700x24",
@@ -379,6 +388,7 @@ int main(int argc, char** argv) {
     const std::filesystem::path work = argv[3];
     std::filesystem::remove_all(work);
     std::filesystem::create_directories(work / "appdata");
+    std::atexit(stop_xvfb);
     const std::string display = start_xvfb();
     const pid_t child = start_guest(runtime, executable, display, work);
     const Window main_window = wait_for_window(display, "Todo Application");
@@ -417,6 +427,7 @@ int main(int argc, char** argv) {
     send_button(display, main_window, 100, 24);
     type_text(display, main_window, "edited");
     send_button(display, main_window, 100, 80);
+    sleep_short();
     send_button(display, main_window, 410, 428);
     sleep_short();
     require_todo_state(todo_file, 1, 4, 1);
@@ -460,9 +471,6 @@ int main(int argc, char** argv) {
              std::to_string(second_exit_code));
     }
     require_run_artifacts(work);
-    if (g_xvfb > 0) {
-        ::kill(g_xvfb, SIGTERM);
-        ::waitpid(g_xvfb, nullptr, 0);
-    }
+    stop_xvfb();
     return 0;
 }
