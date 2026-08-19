@@ -2686,6 +2686,155 @@ TL_MSABI int tl_SetConsoleTextAttribute(const void* console_handle, const std::u
     return 1;
 }
 
+namespace {
+
+struct InternalTpWork {
+    bool used{false};
+    void* callback{nullptr};
+    void* context{nullptr};
+};
+std::array<InternalTpWork, 32> g_tp_works{};
+
+struct InternalTpTimer {
+    bool used{false};
+    void* callback{nullptr};
+    void* context{nullptr};
+};
+std::array<InternalTpTimer, 32> g_tp_timers{};
+
+thread_local void* g_current_fiber_data = nullptr;
+
+}  // namespace
+
+TL_MSABI void* tl_CreateThreadpoolWork(void* callback, void* context, void* environment) noexcept {
+    (void)environment;
+    for (auto& w : g_tp_works) {
+        if (!w.used) {
+            w.used = true;
+            w.callback = callback;
+            w.context = context;
+            return &w;
+        }
+    }
+    return nullptr;
+}
+
+TL_MSABI void tl_SubmitThreadpoolWork(void* work) noexcept {
+    if (work == nullptr) return;
+    auto* w = static_cast<InternalTpWork*>(work);
+    if (!w->used || w->callback == nullptr) return;
+    std::thread([cb = w->callback, ctx = w->context]() {
+        using CallbackFn = void (*)(void*, void*, void*);
+        reinterpret_cast<CallbackFn>(cb)(nullptr, ctx, nullptr);
+    }).detach();
+}
+
+TL_MSABI void tl_WaitForThreadpoolWorkCallbacks(void* work, const int cancel_pending) noexcept {
+    (void)work;
+    (void)cancel_pending;
+}
+
+TL_MSABI void tl_CloseThreadpoolWork(void* work) noexcept {
+    if (work != nullptr) {
+        static_cast<InternalTpWork*>(work)->used = false;
+    }
+}
+
+TL_MSABI void* tl_CreateThreadpoolTimer(void* callback, void* context, void* environment) noexcept {
+    (void)environment;
+    for (auto& t : g_tp_timers) {
+        if (!t.used) {
+            t.used = true;
+            t.callback = callback;
+            t.context = context;
+            return &t;
+        }
+    }
+    return nullptr;
+}
+
+TL_MSABI void tl_SetThreadpoolTimer(void* timer, const void* due_time, const std::uint32_t period, const std::uint32_t window_length) noexcept {
+    (void)timer;
+    (void)due_time;
+    (void)period;
+    (void)window_length;
+}
+
+TL_MSABI void tl_WaitForThreadpoolTimerCallbacks(void* timer, const int cancel_pending) noexcept {
+    (void)timer;
+    (void)cancel_pending;
+}
+
+TL_MSABI void tl_CloseThreadpoolTimer(void* timer) noexcept {
+    if (timer != nullptr) {
+        static_cast<InternalTpTimer*>(timer)->used = false;
+    }
+}
+
+TL_MSABI void* tl_ConvertThreadToFiber(void* parameter) noexcept {
+    g_current_fiber_data = parameter;
+    static char g_fiber_token = 0;
+    return &g_fiber_token;
+}
+
+TL_MSABI int tl_ConvertFiberToThread() noexcept {
+    g_current_fiber_data = nullptr;
+    return 1;
+}
+
+TL_MSABI void* tl_CreateFiber(const std::size_t stack_size, void* start_address, void* parameter) noexcept {
+    (void)stack_size;
+    (void)start_address;
+    (void)parameter;
+    static char g_fiber_created_token = 0;
+    return &g_fiber_created_token;
+}
+
+TL_MSABI void tl_SwitchToFiber(void* fiber) noexcept {
+    (void)fiber;
+}
+
+TL_MSABI void tl_DeleteFiber(void* fiber) noexcept {
+    (void)fiber;
+}
+
+TL_MSABI void* tl_GetFiberData() noexcept {
+    return g_current_fiber_data;
+}
+
+TL_MSABI void* tl_HeapCreate(const std::uint32_t options, const std::size_t initial_size, const std::size_t maximum_size) noexcept {
+    (void)options;
+    (void)initial_size;
+    (void)maximum_size;
+    static char g_custom_heap_token = 0;
+    return &g_custom_heap_token;
+}
+
+TL_MSABI int tl_HeapDestroy(void* heap) noexcept {
+    (void)heap;
+    return 1;
+}
+
+TL_MSABI int tl_HeapValidate(void* heap, const std::uint32_t flags, const void* memory) noexcept {
+    (void)heap;
+    (void)flags;
+    (void)memory;
+    return 1;
+}
+
+TL_MSABI std::size_t tl_HeapSize(void* heap, const std::uint32_t flags, const void* memory) noexcept {
+    (void)heap;
+    (void)flags;
+    (void)memory;
+    return 4096;
+}
+
+TL_MSABI std::size_t tl_HeapCompact(void* heap, const std::uint32_t flags) noexcept {
+    (void)heap;
+    (void)flags;
+    return 0;
+}
+
 }  // extern "C"
 
 }  // namespace tradutorlinux

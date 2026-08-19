@@ -23,6 +23,11 @@ add_library(tradutorlinux_core STATIC
     runtime/ole32.cpp
     runtime/shlwapi.cpp
     runtime/version.cpp
+    runtime/winmm.cpp
+    runtime/comctl32.cpp
+    runtime/comdlg32.cpp
+    runtime/imm32.cpp
+    runtime/psapi.cpp
     runtime/guest_entry.S
     util/unicode.cpp
     gui/x11.cpp

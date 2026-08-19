@@ -7,6 +7,11 @@
 #include "tradutorlinux/runtime/ole32.hpp"
 #include "tradutorlinux/runtime/shlwapi.hpp"
 #include "tradutorlinux/runtime/version.hpp"
+#include "tradutorlinux/runtime/winmm.hpp"
+#include "tradutorlinux/runtime/comctl32.hpp"
+#include "tradutorlinux/runtime/comdlg32.hpp"
+#include "tradutorlinux/runtime/imm32.hpp"
+#include "tradutorlinux/runtime/psapi.hpp"
 #include "tradutorlinux/util/basics.hpp"
 
 #include <algorithm>
@@ -228,6 +233,25 @@ void register_builtin_modules() {
         {"GetPrivateProfileSectionW", 149, reinterpret_cast<std::uintptr_t>(&tl_GetPrivateProfileSectionW)},
         {"GetConsoleScreenBufferInfo", 150, reinterpret_cast<std::uintptr_t>(&tl_GetConsoleScreenBufferInfo)},
         {"SetConsoleTextAttribute", 151, reinterpret_cast<std::uintptr_t>(&tl_SetConsoleTextAttribute)},
+        {"CreateThreadpoolWork", 152, reinterpret_cast<std::uintptr_t>(&tl_CreateThreadpoolWork)},
+        {"SubmitThreadpoolWork", 153, reinterpret_cast<std::uintptr_t>(&tl_SubmitThreadpoolWork)},
+        {"WaitForThreadpoolWorkCallbacks", 154, reinterpret_cast<std::uintptr_t>(&tl_WaitForThreadpoolWorkCallbacks)},
+        {"CloseThreadpoolWork", 155, reinterpret_cast<std::uintptr_t>(&tl_CloseThreadpoolWork)},
+        {"CreateThreadpoolTimer", 156, reinterpret_cast<std::uintptr_t>(&tl_CreateThreadpoolTimer)},
+        {"SetThreadpoolTimer", 157, reinterpret_cast<std::uintptr_t>(&tl_SetThreadpoolTimer)},
+        {"WaitForThreadpoolTimerCallbacks", 158, reinterpret_cast<std::uintptr_t>(&tl_WaitForThreadpoolTimerCallbacks)},
+        {"CloseThreadpoolTimer", 159, reinterpret_cast<std::uintptr_t>(&tl_CloseThreadpoolTimer)},
+        {"ConvertThreadToFiber", 160, reinterpret_cast<std::uintptr_t>(&tl_ConvertThreadToFiber)},
+        {"ConvertFiberToThread", 161, reinterpret_cast<std::uintptr_t>(&tl_ConvertFiberToThread)},
+        {"CreateFiber", 162, reinterpret_cast<std::uintptr_t>(&tl_CreateFiber)},
+        {"SwitchToFiber", 163, reinterpret_cast<std::uintptr_t>(&tl_SwitchToFiber)},
+        {"DeleteFiber", 164, reinterpret_cast<std::uintptr_t>(&tl_DeleteFiber)},
+        {"GetFiberData", 165, reinterpret_cast<std::uintptr_t>(&tl_GetFiberData)},
+        {"HeapCreate", 166, reinterpret_cast<std::uintptr_t>(&tl_HeapCreate)},
+        {"HeapDestroy", 167, reinterpret_cast<std::uintptr_t>(&tl_HeapDestroy)},
+        {"HeapValidate", 168, reinterpret_cast<std::uintptr_t>(&tl_HeapValidate)},
+        {"HeapSize", 169, reinterpret_cast<std::uintptr_t>(&tl_HeapSize)},
+        {"HeapCompact", 170, reinterpret_cast<std::uintptr_t>(&tl_HeapCompact)},
     };
     static const InternalModule kKernel32Module{"KERNEL32.dll", kKernel32Exports};
     register_module(kKernel32Module);
@@ -519,6 +543,59 @@ void register_builtin_modules() {
     };
     static const InternalModule kVersionModule{"version.dll", kVersionExports};
     register_module(kVersionModule);
+    static const ExportedFunction kWinmmExports[] = {
+        {"timeGetTime", 1, reinterpret_cast<std::uintptr_t>(&tl_timeGetTime)},
+        {"timeBeginPeriod", 2, reinterpret_cast<std::uintptr_t>(&tl_timeBeginPeriod)},
+        {"timeEndPeriod", 3, reinterpret_cast<std::uintptr_t>(&tl_timeEndPeriod)},
+        {"timeGetDevCaps", 4, reinterpret_cast<std::uintptr_t>(&tl_timeGetDevCaps)},
+        {"PlaySoundA", 5, reinterpret_cast<std::uintptr_t>(&tl_PlaySoundA)},
+        {"PlaySoundW", 6, reinterpret_cast<std::uintptr_t>(&tl_PlaySoundW)},
+    };
+    static const InternalModule kWinmmModule{"WINMM.dll", kWinmmExports};
+    register_module(kWinmmModule);
+    static const ExportedFunction kComctl32Exports[] = {
+        {"InitCommonControls", 1, reinterpret_cast<std::uintptr_t>(&tl_InitCommonControls)},
+        {"InitCommonControlsEx", 2, reinterpret_cast<std::uintptr_t>(&tl_InitCommonControlsEx)},
+        {"ImageList_Create", 3, reinterpret_cast<std::uintptr_t>(&tl_ImageList_Create)},
+        {"ImageList_Destroy", 4, reinterpret_cast<std::uintptr_t>(&tl_ImageList_Destroy)},
+        {"ImageList_Add", 5, reinterpret_cast<std::uintptr_t>(&tl_ImageList_Add)},
+        {"ImageList_AddMasked", 6, reinterpret_cast<std::uintptr_t>(&tl_ImageList_AddMasked)},
+        {"ImageList_ReplaceIcon", 7, reinterpret_cast<std::uintptr_t>(&tl_ImageList_ReplaceIcon)},
+    };
+    static const InternalModule kComctl32Module{"COMCTL32.dll", kComctl32Exports};
+    register_module(kComctl32Module);
+    static const ExportedFunction kComdlg32Exports[] = {
+        {"GetOpenFileNameA", 1, reinterpret_cast<std::uintptr_t>(&tl_GetOpenFileNameA)},
+        {"GetOpenFileNameW", 2, reinterpret_cast<std::uintptr_t>(&tl_GetOpenFileNameW)},
+        {"GetSaveFileNameA", 3, reinterpret_cast<std::uintptr_t>(&tl_GetSaveFileNameA)},
+        {"GetSaveFileNameW", 4, reinterpret_cast<std::uintptr_t>(&tl_GetSaveFileNameW)},
+        {"ChooseColorA", 5, reinterpret_cast<std::uintptr_t>(&tl_ChooseColorA)},
+        {"ChooseColorW", 6, reinterpret_cast<std::uintptr_t>(&tl_ChooseColorW)},
+    };
+    static const InternalModule kComdlg32Module{"COMDLG32.dll", kComdlg32Exports};
+    register_module(kComdlg32Module);
+    static const ExportedFunction kImm32Exports[] = {
+        {"ImmGetContext", 1, reinterpret_cast<std::uintptr_t>(&tl_ImmGetContext)},
+        {"ImmReleaseContext", 2, reinterpret_cast<std::uintptr_t>(&tl_ImmReleaseContext)},
+        {"ImmSetCompositionWindow", 3, reinterpret_cast<std::uintptr_t>(&tl_ImmSetCompositionWindow)},
+        {"ImmGetCompositionStringA", 4, reinterpret_cast<std::uintptr_t>(&tl_ImmGetCompositionStringA)},
+        {"ImmGetCompositionStringW", 5, reinterpret_cast<std::uintptr_t>(&tl_ImmGetCompositionStringW)},
+        {"ImmAssociateContext", 6, reinterpret_cast<std::uintptr_t>(&tl_ImmAssociateContext)},
+    };
+    static const InternalModule kImm32Module{"IMM32.dll", kImm32Exports};
+    register_module(kImm32Module);
+    static const ExportedFunction kPsapiExports[] = {
+        {"EnumProcesses", 1, reinterpret_cast<std::uintptr_t>(&tl_EnumProcesses)},
+        {"EnumProcessModules", 2, reinterpret_cast<std::uintptr_t>(&tl_EnumProcessModules)},
+        {"EnumProcessModulesEx", 3, reinterpret_cast<std::uintptr_t>(&tl_EnumProcessModulesEx)},
+        {"GetModuleBaseNameA", 4, reinterpret_cast<std::uintptr_t>(&tl_GetModuleBaseNameA)},
+        {"GetModuleBaseNameW", 5, reinterpret_cast<std::uintptr_t>(&tl_GetModuleBaseNameW)},
+        {"GetModuleFileNameExA", 6, reinterpret_cast<std::uintptr_t>(&tl_GetModuleFileNameExA)},
+        {"GetModuleFileNameExW", 7, reinterpret_cast<std::uintptr_t>(&tl_GetModuleFileNameExW)},
+        {"GetProcessMemoryInfo", 8, reinterpret_cast<std::uintptr_t>(&tl_GetProcessMemoryInfo)},
+    };
+    static const InternalModule kPsapiModule{"PSAPI.dll", kPsapiExports};
+    register_module(kPsapiModule);
 }
 
 bool is_module_registered(const std::string_view dll) {

@@ -739,6 +739,31 @@ TL_MSABI int tl_SetConsoleTextAttribute(const void* console_handle, std::uint16_
 TL_MSABI int tl_LoadStringA(void* instance, std::uint32_t id, char* buffer, int buffer_max) noexcept;
 TL_MSABI int tl_LoadStringW(void* instance, std::uint32_t id, std::uint16_t* buffer, int buffer_max) noexcept;
 
+// KERNEL32: Thread Pool
+TL_MSABI void* tl_CreateThreadpoolWork(void* callback, void* context, void* environment) noexcept;
+TL_MSABI void tl_SubmitThreadpoolWork(void* work) noexcept;
+TL_MSABI void tl_WaitForThreadpoolWorkCallbacks(void* work, int cancel_pending) noexcept;
+TL_MSABI void tl_CloseThreadpoolWork(void* work) noexcept;
+TL_MSABI void* tl_CreateThreadpoolTimer(void* callback, void* context, void* environment) noexcept;
+TL_MSABI void tl_SetThreadpoolTimer(void* timer, const void* due_time, std::uint32_t period, std::uint32_t window_length) noexcept;
+TL_MSABI void tl_WaitForThreadpoolTimerCallbacks(void* timer, int cancel_pending) noexcept;
+TL_MSABI void tl_CloseThreadpoolTimer(void* timer) noexcept;
+
+// KERNEL32: Fibras e Corrotinas
+TL_MSABI void* tl_ConvertThreadToFiber(void* parameter) noexcept;
+TL_MSABI int tl_ConvertFiberToThread() noexcept;
+TL_MSABI void* tl_CreateFiber(std::size_t stack_size, void* start_address, void* parameter) noexcept;
+TL_MSABI void tl_SwitchToFiber(void* fiber) noexcept;
+TL_MSABI void tl_DeleteFiber(void* fiber) noexcept;
+TL_MSABI void* tl_GetFiberData() noexcept;
+
+// KERNEL32: Gestão Avançada de Múltiplos Heaps
+TL_MSABI void* tl_HeapCreate(std::uint32_t options, std::size_t initial_size, std::size_t maximum_size) noexcept;
+TL_MSABI int tl_HeapDestroy(void* heap) noexcept;
+TL_MSABI int tl_HeapValidate(void* heap, std::uint32_t flags, const void* memory) noexcept;
+TL_MSABI std::size_t tl_HeapSize(void* heap, std::uint32_t flags, const void* memory) noexcept;
+TL_MSABI std::size_t tl_HeapCompact(void* heap, std::uint32_t flags) noexcept;
+
 }  // extern "C"
 
 // Define o caminho do módulo convidado antes da execução.
