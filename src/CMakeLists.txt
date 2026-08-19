@@ -1,4 +1,5 @@
 add_library(tradutorlinux_core STATIC
+    catalog/app_catalog.cpp
     cli.cpp
     diagnostics/trace.cpp
     loader/image_mapper.cpp
@@ -6,6 +7,7 @@ add_library(tradutorlinux_core STATIC
     loader/module.cpp
     loader/process.cpp
     pe/pe_reader.cpp
+    prefix/prefix.cpp
     process/isolate.cpp
     runtime/winapi.cpp
     runtime/gui_controls.cpp
@@ -37,6 +39,6 @@ tl_enable_sanitizers(tradutorlinux)
 
 add_executable(tradutorlinux_gui gui/launcher.cpp)
 target_include_directories(tradutorlinux_gui PRIVATE "${TL_X11_INCLUDE_DIR}")
-target_link_libraries(tradutorlinux_gui PRIVATE "${TL_X11_LIBRARY}")
+target_link_libraries(tradutorlinux_gui PRIVATE tradutorlinux_core "${TL_X11_LIBRARY}")
 tl_enable_warnings(tradutorlinux_gui)
 tl_enable_sanitizers(tradutorlinux_gui)

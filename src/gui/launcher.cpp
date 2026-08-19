@@ -1,3 +1,6 @@
+#include "tradutorlinux/catalog/app_catalog.hpp"
+#include "tradutorlinux/prefix/prefix.hpp"
+
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
 #include <X11/keysym.h>
@@ -8,6 +11,7 @@
 #include <cstdio>
 #include <filesystem>
 #include <string>
+#include <vector>
 
 #include <sys/wait.h>
 #include <unistd.h>
@@ -24,8 +28,26 @@ constexpr int kButtonHeight = 38;
 constexpr int kOutputY = 330;
 constexpr int kLineHeight = 18;
 
-struct Palette { unsigned long background, header, card, border, text, muted, primary, success, danger, white; };
-struct Button { int left, right; const char* label; unsigned long color; };
+struct Palette {
+    unsigned long background;
+    unsigned long header;
+    unsigned long card;
+    unsigned long border;
+    unsigned long text;
+    unsigned long muted;
+    unsigned long primary;
+    unsigned long success;
+    unsigned long warning;
+    unsigned long danger;
+    unsigned long white;
+};
+
+struct Button {
+    int left;
+    int right;
+    const char* label;
+    unsigned long color;
+};
 
 std::string ascii_fallback(const std::string& value) {
     std::string result;
@@ -45,9 +67,14 @@ std::string ascii_fallback(const std::string& value) {
             else if (second >= 0x93U && second <= 0x96U) result += 'O';
             else if (second >= 0x9AU && second <= 0x9DU) result += 'U';
             else result += '?';
-        } else if (first == 0xC2U && i + 1 < value.size()) { ++i; result += '?';
-        } else if (first < 0x80U) result += static_cast<char>(first);
-        else result += '?';
+        } else if (first == 0xC2U && i + 1 < value.size()) {
+            ++i;
+            result += '?';
+        } else if (first < 0x80U) {
+            result += static_cast<char>(first);
+        } else {
+            result += '?';
+        }
     }
     return result;
 }
@@ -58,8 +85,12 @@ unsigned long color(Display* display, Colormap map, const char* name, unsigned l
 }
 
 void draw_text(Display* display, Window window, GC gc, XFontSet fonts, int x, int y, const std::string& value) {
-    if (fonts != nullptr) Xutf8DrawString(display, window, fonts, gc, x, y, value.c_str(), static_cast<int>(value.size()));
-    else { const std::string plain = ascii_fallback(value); XDrawString(display, window, gc, x, y, plain.c_str(), static_cast<int>(plain.size())); }
+    if (fonts != nullptr) {
+        Xutf8DrawString(display, window, fonts, gc, x, y, value.c_str(), static_cast<int>(value.size()));
+    } else {
+        const std::string plain = ascii_fallback(value);
+        XDrawString(display, window, gc, x, y, plain.c_str(), static_cast<int>(plain.size()));
+    }
 }
 
 std::string read_pipe(int fd) {
@@ -67,29 +98,45 @@ std::string read_pipe(int fd) {
     std::array<char, 4096> buffer{};
     for (;;) {
         const ssize_t count = ::read(fd, buffer.data(), buffer.size());
-        if (count > 0) result.append(buffer.data(), static_cast<std::size_t>(count));
-        else if (count < 0 && errno == EINTR) continue;
-        else break;
+        if (count > 0) {
+            result.append(buffer.data(), static_cast<std::size_t>(count));
+        } else if (count < 0 && errno == EINTR) {
+            continue;
+        } else {
+            break;
+        }
     }
     return result;
 }
 
 std::string run_runtime(const std::string& runtime, const std::string& executable, bool report) {
     int pipes[2] = {-1, -1};
-    if (::pipe(pipes) != 0) return "Erro: nao foi possivel criar o pipe de diagnostico.\n";
+    if (::pipe(pipes) != 0) return "Erro: não foi possível criar o pipe de diagnóstico.\n";
     const pid_t child = ::fork();
-    if (child < 0) { ::close(pipes[0]); ::close(pipes[1]); return "Erro: nao foi possivel iniciar o runtime.\n"; }
+    if (child < 0) {
+        ::close(pipes[0]);
+        ::close(pipes[1]);
+        return "Erro: não foi possível iniciar o runtime.\n";
+    }
     if (child == 0) {
-        ::close(pipes[0]); (void)::dup2(pipes[1], STDOUT_FILENO); (void)::dup2(pipes[1], STDERR_FILENO); ::close(pipes[1]);
-        if (report) ::execl(runtime.c_str(), runtime.c_str(), "--trace", "--report", executable.c_str(), static_cast<char*>(nullptr));
-        else ::execl(runtime.c_str(), runtime.c_str(), "--trace", executable.c_str(), static_cast<char*>(nullptr));
+        ::close(pipes[0]);
+        (void)::dup2(pipes[1], STDOUT_FILENO);
+        (void)::dup2(pipes[1], STDERR_FILENO);
+        ::close(pipes[1]);
+        if (report) {
+            ::execl(runtime.c_str(), runtime.c_str(), "--trace", "--report", executable.c_str(), static_cast<char*>(nullptr));
+        } else {
+            ::execl(runtime.c_str(), runtime.c_str(), "--trace", executable.c_str(), static_cast<char*>(nullptr));
+        }
         ::_exit(127);
     }
-    ::close(pipes[1]); const std::string output = read_pipe(pipes[0]); ::close(pipes[0]);
+    ::close(pipes[1]);
+    const std::string output = read_pipe(pipes[0]);
+    ::close(pipes[0]);
     int status = 0;
     if (::waitpid(child, &status, 0) < 0) return output + "\nErro: falha ao aguardar o processo convidado.\n";
     const int code = WIFEXITED(status) != 0 ? WEXITSTATUS(status) : 128;
-    return output + "\n[launcher] codigo de saida: " + std::to_string(code) + "\n";
+    return output + "\n[launcher] código de saída: " + std::to_string(code) + "\n";
 }
 
 std::string choose_file() {
@@ -97,11 +144,21 @@ std::string choose_file() {
     if (::pipe(pipes) != 0) return {};
     const pid_t child = ::fork();
     if (child == 0) {
-        ::close(pipes[0]); (void)::dup2(pipes[1], STDOUT_FILENO); ::close(pipes[1]);
-        ::execlp("zenity", "zenity", "--file-selection", "--title=Selecionar executavel Windows", static_cast<char*>(nullptr)); ::_exit(127);
+        ::close(pipes[0]);
+        (void)::dup2(pipes[1], STDOUT_FILENO);
+        ::close(pipes[1]);
+        ::execlp("zenity", "zenity", "--file-selection", "--title=Selecionar executavel Windows", static_cast<char*>(nullptr));
+        ::_exit(127);
     }
-    if (child < 0) { ::close(pipes[0]); ::close(pipes[1]); return {}; }
-    ::close(pipes[1]); std::string path = read_pipe(pipes[0]); ::close(pipes[0]); (void)::waitpid(child, nullptr, 0);
+    if (child < 0) {
+        ::close(pipes[0]);
+        ::close(pipes[1]);
+        return {};
+    }
+    ::close(pipes[1]);
+    std::string path = read_pipe(pipes[0]);
+    ::close(pipes[0]);
+    (void)::waitpid(child, nullptr, 0);
     while (!path.empty() && (path.back() == '\n' || path.back() == '\r')) path.pop_back();
     return path;
 }
@@ -109,45 +166,106 @@ std::string choose_file() {
 std::string runtime_path(const char* argv0) {
     char resolved[4096]{};
     const ssize_t length = ::readlink("/proc/self/exe", resolved, sizeof(resolved) - 1U);
-    if (length > 0) { resolved[length] = '\0'; return (std::filesystem::path(resolved).parent_path() / "tradutorlinux").string(); }
+    if (length > 0) {
+        resolved[length] = '\0';
+        return (std::filesystem::path(resolved).parent_path() / "tradutorlinux").string();
+    }
     return (std::filesystem::absolute(argv0).parent_path() / "tradutorlinux").string();
 }
 
 void redraw(Display* display, Window window, GC gc, XFontSet fonts, const Palette& p,
-            const std::string& path, const std::string& status, const std::string& output) {
-    XSetForeground(display, gc, p.background); XClearWindow(display, window);
-    XSetForeground(display, gc, p.header); XFillRectangle(display, window, gc, 0, 0, kWidth, 92);
-    XSetForeground(display, gc, p.white); draw_text(display, window, gc, fonts, kMargin, 38, "TradutorLinux");
-    draw_text(display, window, gc, fonts, kMargin, 65, "Runtime Win32 para Linux x86-64");
-    XSetForeground(display, gc, p.text); draw_text(display, window, gc, fonts, kMargin, 132, "Executavel PE32+ x86-64");
-    XSetForeground(display, gc, p.muted); draw_text(display, window, gc, fonts, kMargin, 154, "Informe um arquivo .exe proprio ou selecione-o no disco.");
+            const std::string& path, const std::string& status, const std::string& output,
+            const tradutorlinux::catalog::AppCatalog& catalog) {
+    XSetForeground(display, gc, p.background);
+    XClearWindow(display, window);
 
-    XSetForeground(display, gc, p.card); XFillRectangle(display, window, gc, kMargin, kInputY, 824, kInputHeight);
-    XSetForeground(display, gc, p.border); XDrawRectangle(display, window, gc, kMargin, kInputY, 824, kInputHeight);
-    XSetForeground(display, gc, p.text); draw_text(display, window, gc, fonts, kMargin + 12, kInputY + 25, path.empty() ? "Nenhum arquivo selecionado" : path);
-    const std::array<Button, 5> buttons{{
-        {kMargin + 840, kMargin + 980, "Escolher...", p.muted}, {kMargin, kMargin + 130, "Analisar", p.primary},
-        {kMargin + 142, kMargin + 272, "Executar", p.success}, {kMargin + 284, kMargin + 414, "Limpar", p.muted},
-        {kMargin + 426, kMargin + 536, "Sair", p.danger},
+    // Header
+    XSetForeground(display, gc, p.header);
+    XFillRectangle(display, window, gc, 0, 0, kWidth, 92);
+    XSetForeground(display, gc, p.white);
+    draw_text(display, window, gc, fonts, kMargin, 38, "TradutorLinux");
+    draw_text(display, window, gc, fonts, kMargin, 65, "Runtime Win32 & Launcher de Aplicativos");
+
+    // Contador de apps na biblioteca
+    const auto& apps = catalog.list_apps();
+    std::string lib_badge = "Biblioteca: " + std::to_string(apps.size()) + " app(s) cadastrado(s)";
+    XSetForeground(display, gc, p.muted);
+    draw_text(display, window, gc, fonts, kWidth - 320, 52, lib_badge);
+
+    // Seção de Seleção do Executável
+    XSetForeground(display, gc, p.text);
+    draw_text(display, window, gc, fonts, kMargin, 132, "Executavel Windows (PE32+ x86-64)");
+    XSetForeground(display, gc, p.muted);
+    draw_text(display, window, gc, fonts, kMargin, 154, "Informe o caminho, selecione no disco ou clique em Cadastrar para salvar na biblioteca.");
+
+    // Input Box
+    XSetForeground(display, gc, p.card);
+    XFillRectangle(display, window, gc, kMargin, kInputY, 824, kInputHeight);
+    XSetForeground(display, gc, p.border);
+    XDrawRectangle(display, window, gc, kMargin, kInputY, 824, kInputHeight);
+    XSetForeground(display, gc, p.text);
+    draw_text(display, window, gc, fonts, kMargin + 12, kInputY + 25,
+              path.empty() ? "Nenhum arquivo selecionado (digite o caminho ou escolha no disco)" : path);
+
+    // Botões
+    const std::array<Button, 6> buttons{{
+        {kMargin + 840, kMargin + 980, "Escolher...", p.muted},
+        {kMargin, kMargin + 130, "Analisar", p.primary},
+        {kMargin + 142, kMargin + 272, "Executar", p.success},
+        {kMargin + 284, kMargin + 424, "Cadastrar", p.warning},
+        {kMargin + 436, kMargin + 566, "Limpar", p.muted},
+        {kMargin + 578, kMargin + 688, "Sair", p.danger},
     }};
+
     for (std::size_t i = 0; i < buttons.size(); ++i) {
-        const Button& button = buttons[i]; const int y = i == 0U ? kInputY : kButtonY;
-        XSetForeground(display, gc, button.color); XFillRectangle(display, window, gc, button.left, y, static_cast<unsigned int>(button.right - button.left), kButtonHeight);
-        XSetForeground(display, gc, p.white); draw_text(display, window, gc, fonts, button.left + 12, y + 25, button.label);
+        const Button& button = buttons[i];
+        const int y = i == 0U ? kInputY : kButtonY;
+        XSetForeground(display, gc, button.color);
+        XFillRectangle(display, window, gc, button.left, y,
+                       static_cast<unsigned int>(button.right - button.left), kButtonHeight);
+        XSetForeground(display, gc, p.white);
+        draw_text(display, window, gc, fonts, button.left + 14, y + 25, button.label);
     }
 
-    XSetForeground(display, gc, p.text); draw_text(display, window, gc, fonts, kMargin, 310, "Diagnostico e saida");
-    XSetForeground(display, gc, p.primary); XFillRectangle(display, window, gc, kMargin, 318, 4, 22);
-    XSetForeground(display, gc, p.card); XFillRectangle(display, window, gc, kMargin + 16, 318, 968, 34);
-    XSetForeground(display, gc, p.muted); draw_text(display, window, gc, fonts, kMargin + 30, 341, "Status:");
-    XSetForeground(display, gc, p.text); draw_text(display, window, gc, fonts, kMargin + 88, 341, status);
-    XSetForeground(display, gc, p.card); XFillRectangle(display, window, gc, kMargin, kOutputY, 984, 390);
-    XSetForeground(display, gc, p.border); XDrawRectangle(display, window, gc, kMargin, kOutputY, 984, 390);
+    // Seção de Diagnóstico e Saída
     XSetForeground(display, gc, p.text);
-    int y = kOutputY + 28; std::string line;
-    const auto flush = [&]() { if (y < kOutputY + 370) { draw_text(display, window, gc, fonts, kMargin + 14, y, line); y += kLineHeight; } line.clear(); };
-    for (const char character : output) { if (character == '\n') flush(); else if (character != '\r') { line += character; if (line.size() >= 124U) flush(); } }
+    draw_text(display, window, gc, fonts, kMargin, 310, "Diagnostico e Execucao");
+    XSetForeground(display, gc, p.primary);
+    XFillRectangle(display, window, gc, kMargin, 318, 4, 22);
+    XSetForeground(display, gc, p.card);
+    XFillRectangle(display, window, gc, kMargin + 16, 318, 968, 34);
+    XSetForeground(display, gc, p.muted);
+    draw_text(display, window, gc, fonts, kMargin + 30, 341, "Status:");
+    XSetForeground(display, gc, p.text);
+    draw_text(display, window, gc, fonts, kMargin + 88, 341, status);
+
+    // Terminal / Output Box
+    XSetForeground(display, gc, p.card);
+    XFillRectangle(display, window, gc, kMargin, kOutputY, 984, 390);
+    XSetForeground(display, gc, p.border);
+    XDrawRectangle(display, window, gc, kMargin, kOutputY, 984, 390);
+    XSetForeground(display, gc, p.text);
+
+    int y = kOutputY + 28;
+    std::string line;
+    const auto flush = [&]() {
+        if (y < kOutputY + 370) {
+            draw_text(display, window, gc, fonts, kMargin + 14, y, line);
+            y += kLineHeight;
+        }
+        line.clear();
+    };
+
+    for (const char character : output) {
+        if (character == '\n') {
+            flush();
+        } else if (character != '\r') {
+            line += character;
+            if (line.size() >= 124U) flush();
+        }
+    }
     if (!line.empty()) flush();
+
     XFlush(display);
 }
 
@@ -155,46 +273,140 @@ void redraw(Display* display, Window window, GC gc, XFontSet fonts, const Palett
 
 int main(int argc, char** argv) {
     Display* const display = XOpenDisplay(nullptr);
-    if (display == nullptr) { std::fprintf(stderr, "tradutorlinux_gui: nao foi possivel abrir o display X11\n"); return 2; }
-    const int screen = DefaultScreen(display); const Colormap map = DefaultColormap(display, screen);
+    if (display == nullptr) {
+        std::fprintf(stderr, "tradutorlinux_gui: nao foi possivel abrir o display X11\n");
+        return 2;
+    }
+
+    const int screen = DefaultScreen(display);
+    const Colormap map = DefaultColormap(display, screen);
     const Palette p{
-        color(display, map, "#f4f6f8", WhitePixel(display, screen)), color(display, map, "#1f2937", BlackPixel(display, screen)),
-        color(display, map, "#ffffff", WhitePixel(display, screen)), color(display, map, "#cbd5e1", BlackPixel(display, screen)),
-        color(display, map, "#111827", BlackPixel(display, screen)), color(display, map, "#64748b", BlackPixel(display, screen)),
-        color(display, map, "#2563eb", BlackPixel(display, screen)), color(display, map, "#16a34a", BlackPixel(display, screen)),
-        color(display, map, "#dc2626", BlackPixel(display, screen)), color(display, map, "#ffffff", WhitePixel(display, screen)),
+        color(display, map, "#f4f6f8", WhitePixel(display, screen)),
+        color(display, map, "#1f2937", BlackPixel(display, screen)),
+        color(display, map, "#ffffff", WhitePixel(display, screen)),
+        color(display, map, "#cbd5e1", BlackPixel(display, screen)),
+        color(display, map, "#111827", BlackPixel(display, screen)),
+        color(display, map, "#64748b", BlackPixel(display, screen)),
+        color(display, map, "#2563eb", BlackPixel(display, screen)),
+        color(display, map, "#16a34a", BlackPixel(display, screen)),
+        color(display, map, "#d97706", BlackPixel(display, screen)),
+        color(display, map, "#dc2626", BlackPixel(display, screen)),
+        color(display, map, "#ffffff", WhitePixel(display, screen)),
     };
-    const Window window = XCreateSimpleWindow(display, RootWindow(display, screen), 80, 80, kWidth, kHeight, 0, p.border, p.background);
-    XStoreName(display, window, "TradutorLinux"); XSelectInput(display, window, ExposureMask | KeyPressMask | ButtonPressMask | StructureNotifyMask); XMapWindow(display, window);
-    char** missing = nullptr; int missing_count = 0; char* default_string = nullptr;
-    XFontSet fonts = XCreateFontSet(display, "-*-dejavu sans-*-r-*-*-14-*-*-*-*-*-iso10646-1", &missing, &missing_count, &default_string);
+
+    const Window window = XCreateSimpleWindow(display, RootWindow(display, screen),
+                                             80, 80, kWidth, kHeight, 0, p.border, p.background);
+    XStoreName(display, window, "TradutorLinux");
+    XSelectInput(display, window, ExposureMask | KeyPressMask | ButtonPressMask | StructureNotifyMask);
+    XMapWindow(display, window);
+
+    char** missing = nullptr;
+    int missing_count = 0;
+    char* default_string = nullptr;
+    XFontSet fonts = XCreateFontSet(display, "-*-dejavu sans-*-r-*-*-14-*-*-*-*-*-iso10646-1",
+                                    &missing, &missing_count, &default_string);
     if (missing != nullptr) XFreeStringList(missing);
-    if (fonts == nullptr) { XFontStruct* const fallback = XLoadQueryFont(display, "9x15"); if (fallback != nullptr) XSetFont(display, DefaultGC(display, screen), fallback->fid); }
+    if (fonts == nullptr) {
+        XFontStruct* const fallback = XLoadQueryFont(display, "9x15");
+        if (fallback != nullptr) {
+            XSetFont(display, DefaultGC(display, screen), fallback->fid);
+        }
+    }
+
+    tradutorlinux::catalog::AppCatalog catalog;
+    catalog.load_from_file();
+
     const std::string runtime = runtime_path(argc > 0 ? argv[0] : "tradutorlinux_gui");
-    std::string path; std::string status = "Pronto para analisar";
-    std::string output = "Selecione um executavel e escolha Analisar para ver imports, secoes e compatibilidade.";
+    std::string path;
+    std::string status = "Pronto para analisar ou executar";
+    std::string output = "Selecione um executavel Windows e escolha Analisar, Executar ou Cadastrar na biblioteca.";
+
     bool running = true;
     while (running) {
-        XEvent event{}; XNextEvent(display, &event); const GC gc = DefaultGC(display, screen);
-        if (event.type == Expose) redraw(display, window, gc, fonts, p, path, status, output);
-        else if (event.type == KeyPress) {
-            char buffer[32]{}; KeySym keysym{}; const int length = XLookupString(&event.xkey, buffer, sizeof(buffer), &keysym, nullptr);
-            if (keysym == XK_BackSpace && !path.empty()) path.pop_back();
-            else if (keysym == XK_Return && !path.empty()) { status = "Analisando..."; redraw(display, window, gc, fonts, p, path, status, output); output = run_runtime(runtime, path, true); status = "Analise concluida"; }
-            else if (length > 0 && std::isprint(static_cast<unsigned char>(buffer[0])) != 0 && path.size() < 4096U) path.append(buffer, static_cast<std::size_t>(length));
-            redraw(display, window, gc, fonts, p, path, status, output);
-        } else if (event.type == ButtonPress) {
-            const int x = event.xbutton.x; const int y = event.xbutton.y;
-            if (x >= kMargin + 840 && x <= kMargin + 980 && y >= kInputY && y <= kInputY + kInputHeight) {
-                const std::string selected = choose_file(); if (!selected.empty()) { path = selected; status = "Arquivo selecionado"; }
-            } else if (y >= kButtonY && y <= kButtonY + kButtonHeight) {
-                if (x >= kMargin && x <= kMargin + 130 && !path.empty()) { status = "Analisando..."; redraw(display, window, gc, fonts, p, path, status, output); output = run_runtime(runtime, path, true); status = "Analise concluida"; }
-                else if (x >= kMargin + 142 && x <= kMargin + 272 && !path.empty()) { status = "Executando..."; redraw(display, window, gc, fonts, p, path, status, output); output = run_runtime(runtime, path, false); status = "Execucao concluida"; }
-                else if (x >= kMargin + 284 && x <= kMargin + 414) { path.clear(); status = "Pronto para analisar"; output = "Selecione um executavel e escolha Analisar para ver imports, secoes e compatibilidade."; }
-                else if (x >= kMargin + 426 && x <= kMargin + 536) running = false;
+        XEvent event{};
+        XNextEvent(display, &event);
+        const GC gc = DefaultGC(display, screen);
+
+        if (event.type == Expose) {
+            redraw(display, window, gc, fonts, p, path, status, output, catalog);
+        } else if (event.type == KeyPress) {
+            char buffer[32]{};
+            KeySym keysym{};
+            const int length = XLookupString(&event.xkey, buffer, sizeof(buffer), &keysym, nullptr);
+            if (keysym == XK_BackSpace && !path.empty()) {
+                path.pop_back();
+            } else if (keysym == XK_Return && !path.empty()) {
+                status = "Analisando...";
+                redraw(display, window, gc, fonts, p, path, status, output, catalog);
+                output = run_runtime(runtime, path, true);
+                status = "Analise concluida";
+            } else if (length > 0 && std::isprint(static_cast<unsigned char>(buffer[0])) != 0 && path.size() < 4096U) {
+                path.append(buffer, static_cast<std::size_t>(length));
             }
-            redraw(display, window, gc, fonts, p, path, status, output);
-        } else if (event.type == ClientMessage || event.type == DestroyNotify) running = false;
+            redraw(display, window, gc, fonts, p, path, status, output, catalog);
+        } else if (event.type == ButtonPress) {
+            const int x = event.xbutton.x;
+            const int y = event.xbutton.y;
+
+            // Botão Escolher Arquivo
+            if (x >= kMargin + 840 && x <= kMargin + 980 && y >= kInputY && y <= kInputY + kInputHeight) {
+                const std::string selected = choose_file();
+                if (!selected.empty()) {
+                    path = selected;
+                    status = "Arquivo selecionado";
+                }
+            } else if (y >= kButtonY && y <= kButtonY + kButtonHeight) {
+                // Botão Analisar
+                if (x >= kMargin && x <= kMargin + 130 && !path.empty()) {
+                    status = "Analisando...";
+                    redraw(display, window, gc, fonts, p, path, status, output, catalog);
+                    output = run_runtime(runtime, path, true);
+                    status = "Analise concluida";
+                }
+                // Botão Executar
+                else if (x >= kMargin + 142 && x <= kMargin + 272 && !path.empty()) {
+                    status = "Executando...";
+                    redraw(display, window, gc, fonts, p, path, status, output, catalog);
+                    output = run_runtime(runtime, path, false);
+                    status = "Execucao concluida";
+                }
+                // Botão Cadastrar na Biblioteca
+                else if (x >= kMargin + 284 && x <= kMargin + 424 && !path.empty()) {
+                    tradutorlinux::catalog::AppEntry entry;
+                    entry.name = std::filesystem::path(path).filename().string();
+                    entry.id = tradutorlinux::catalog::AppCatalog::generate_id(entry.name);
+                    entry.executable_path = path;
+                    entry.prefix_path = tradutorlinux::prefix::default_prefix_root().string();
+                    entry.working_directory = std::filesystem::path(path).parent_path().string();
+
+                    if (catalog.add_app(entry) && catalog.save_to_file()) {
+                        status = "Cadastrado na biblioteca!";
+                        output = "Aplicativo '" + entry.name + "' adicionado com sucesso a biblioteca [id: " + entry.id + "].\n"
+                                 "Arquivo salvo em: " + tradutorlinux::catalog::AppCatalog::default_catalog_path().string() + "\n";
+                    } else {
+                        status = "Erro ao cadastrar aplicativo";
+                        output = "Nao foi possivel salvar o aplicativo na biblioteca.\n";
+                    }
+                }
+                // Botão Limpar
+                else if (x >= kMargin + 436 && x <= kMargin + 566) {
+                    path.clear();
+                    status = "Pronto para analisar ou executar";
+                    output = "Selecione um executavel Windows e escolha Analisar, Executar ou Cadastrar na biblioteca.";
+                }
+                // Botão Sair
+                else if (x >= kMargin + 578 && x <= kMargin + 688) {
+                    running = false;
+                }
+            }
+            redraw(display, window, gc, fonts, p, path, status, output, catalog);
+        } else if (event.type == ClientMessage || event.type == DestroyNotify) {
+            running = false;
+        }
     }
-    XDestroyWindow(display, window); if (fonts != nullptr) XFreeFontSet(display, fonts); XCloseDisplay(display); return 0;
+
+    XDestroyWindow(display, window);
+    if (fonts != nullptr) XFreeFontSet(display, fonts);
+    XCloseDisplay(display);
+    return 0;
 }

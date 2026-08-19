@@ -20,7 +20,17 @@ enum class ExitCode : int {
     GuestTimeout = 72,
 };
 
+enum class CommandMode {
+    DirectRun,   // Execução tradicional de um arquivo .exe
+    Install,     // Instalação de aplicativo no prefixo virtual com auto-cadastro
+    AppList,     // Listar biblioteca de aplicativos cadastrados
+    AppRun,      // Executar aplicativo da biblioteca
+    AppAdd,      // Cadastrar aplicativo manualmente na biblioteca
+    AppRemove,   // Remover aplicativo do catálogo da biblioteca
+};
+
 struct CommandLine {
+    CommandMode mode{CommandMode::DirectRun};
     bool show_help{false};
     bool show_version{false};
     bool trace_enabled{false};
@@ -29,6 +39,9 @@ struct CommandLine {
     std::uint64_t timeout_ms{0};
     bool timeout_set{false};
     std::optional<std::filesystem::path> executable_path;
+    std::optional<std::filesystem::path> custom_prefix;
+    std::string app_id;
+    std::string app_name;
     // Argumentos encaminhados ao programa convidado (argv[1..]), na ordem em
     // que foram informados depois do executável. argv[0] é o caminho do
     // executável informado na linha de comando.

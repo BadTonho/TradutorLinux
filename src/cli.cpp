@@ -1,10 +1,12 @@
 #include "tradutorlinux/cli.hpp"
 
+#include "tradutorlinux/catalog/app_catalog.hpp"
 #include "tradutorlinux/diagnostics/trace.hpp"
 #include "tradutorlinux/loader/import_resolver.hpp"
 #include "tradutorlinux/loader/module.hpp"
 #include "tradutorlinux/loader/process.hpp"
 #include "tradutorlinux/pe/pe_reader.hpp"
+#include "tradutorlinux/prefix/prefix.hpp"
 #include "tradutorlinux/process/isolate.hpp"
 #include "tradutorlinux/runtime/msvcrt.hpp"
 #include "tradutorlinux/runtime/winapi.hpp"
@@ -28,8 +30,13 @@ namespace tradutorlinux {
 namespace {
 
 constexpr std::string_view kUsage =
-    "Uso: tradutorlinux [--trace] [--report] [--timeout <segundos>] <arquivo.exe> "
-    "[argumentos do convidado...]\n";
+    "Uso:\n"
+    "  tradutorlinux [--trace] [--report] [--timeout <segundos>] <arquivo.exe> [argumentos...]\n"
+    "  tradutorlinux install <setup.exe> [--name <Nome>] [--prefix <dir>]\n"
+    "  tradutorlinux app list\n"
+    "  tradutorlinux app run <id_ou_nome> [argumentos...]\n"
+    "  tradutorlinux app add <arquivo.exe> [--name <Nome>] [--prefix <dir>]\n"
+    "  tradutorlinux app remove <id>\n";
 
 [[nodiscard]] bool is_option(const std::string_view argument) {
     return argument.starts_with('-');
@@ -393,6 +400,100 @@ void print_support_report(std::ostream& stream, const pe::PeInfo& info) {
 
 ParseResult parse_command_line(const int argc, const char* const argv[]) {
     CommandLine command_line;
+    if (argc <= 1) {
+        return {.command_line = std::move(command_line), .error_message = {}};
+    }
+
+    const std::string_view first_arg{argv[1]};
+
+    // Subcomando: install <setup.exe>
+    if (first_arg == "install") {
+        command_line.mode = CommandMode::Install;
+        for (int i = 2; i < argc; ++i) {
+            const std::string_view arg{argv[i]};
+            if (arg == "--name" && i + 1 < argc) {
+                command_line.app_name = argv[++i];
+            } else if (arg == "--prefix" && i + 1 < argc) {
+                command_line.custom_prefix = std::filesystem::path{argv[++i]};
+            } else if (arg == "--trace") {
+                command_line.trace_enabled = true;
+            } else if (arg == "--report") {
+                command_line.report_only = true;
+            } else if (!command_line.executable_path.has_value() && !arg.starts_with('-')) {
+                command_line.executable_path = std::filesystem::path{std::string{arg}};
+            } else {
+                command_line.guest_arguments.emplace_back(arg);
+            }
+        }
+        if (!command_line.executable_path.has_value()) {
+            return {.command_line = std::nullopt,
+                    .error_message = "o comando 'install' requer o caminho do arquivo instalador (.exe)"};
+        }
+        return {.command_line = std::move(command_line), .error_message = {}};
+    }
+
+    // Subcomando: app <list|run|add|remove>
+    if (first_arg == "app") {
+        if (argc < 3) {
+            return {.command_line = std::nullopt,
+                    .error_message = "o comando 'app' requer uma ação: list, run, add ou remove"};
+        }
+        const std::string_view action{argv[2]};
+        if (action == "list") {
+            command_line.mode = CommandMode::AppList;
+            return {.command_line = std::move(command_line), .error_message = {}};
+        }
+        if (action == "run") {
+            if (argc < 4) {
+                return {.command_line = std::nullopt,
+                        .error_message = "o comando 'app run' requer o ID ou nome do aplicativo"};
+            }
+            command_line.mode = CommandMode::AppRun;
+            command_line.app_id = argv[3];
+            for (int i = 4; i < argc; ++i) {
+                const std::string_view arg{argv[i]};
+                if (arg == "--trace") {
+                    command_line.trace_enabled = true;
+                } else if (arg == "--report") {
+                    command_line.report_only = true;
+                } else {
+                    command_line.guest_arguments.emplace_back(arg);
+                }
+            }
+            return {.command_line = std::move(command_line), .error_message = {}};
+        }
+        if (action == "add") {
+            if (argc < 4) {
+                return {.command_line = std::nullopt,
+                        .error_message = "o comando 'app add' requer o caminho do executável"};
+            }
+            command_line.mode = CommandMode::AppAdd;
+            command_line.executable_path = std::filesystem::path{argv[3]};
+            for (int i = 4; i < argc; ++i) {
+                const std::string_view arg{argv[i]};
+                if (arg == "--name" && i + 1 < argc) {
+                    command_line.app_name = argv[++i];
+                } else if (arg == "--prefix" && i + 1 < argc) {
+                    command_line.custom_prefix = std::filesystem::path{argv[++i]};
+                } else if (arg == "--id" && i + 1 < argc) {
+                    command_line.app_id = argv[++i];
+                }
+            }
+            return {.command_line = std::move(command_line), .error_message = {}};
+        }
+        if (action == "remove") {
+            if (argc < 4) {
+                return {.command_line = std::nullopt,
+                        .error_message = "o comando 'app remove' requer o ID do aplicativo"};
+            }
+            command_line.mode = CommandMode::AppRemove;
+            command_line.app_id = argv[3];
+            return {.command_line = std::move(command_line), .error_message = {}};
+        }
+        return {.command_line = std::nullopt,
+                .error_message = "ação desconhecida para 'app': " + std::string{action}};
+    }
+
     bool options_ended = false;
 
     for (int index = 1; index < argc; ++index) {
@@ -511,38 +612,170 @@ ExitCode run_command(const CommandLine& command_line, std::ostream& stdout_strea
         return ExitCode::Success;
     }
 
-    if (!command_line.executable_path.has_value()) {
+    // Modo: Listar biblioteca de aplicativos
+    if (command_line.mode == CommandMode::AppList) {
+        catalog::AppCatalog app_catalog;
+        app_catalog.load_from_file();
+        const auto& apps = app_catalog.list_apps();
+        if (apps.empty()) {
+            stdout_stream << "Nenhum aplicativo cadastrado na biblioteca.\n";
+            stdout_stream << "Dica: use 'tradutorlinux app add <arquivo.exe> --name \"Nome\"' ou 'tradutorlinux install <setup.exe>'.\n";
+            return ExitCode::Success;
+        }
+        stdout_stream << "Aplicativos cadastrados na biblioteca (" << apps.size() << "):\n\n";
+        for (const auto& app : apps) {
+            stdout_stream << "  [" << app.id << "] " << app.name << '\n';
+            stdout_stream << "    Executável: " << app.executable_path << '\n';
+            if (!app.prefix_path.empty()) {
+                stdout_stream << "    Prefixo:    " << app.prefix_path << '\n';
+            }
+            stdout_stream << '\n';
+        }
+        return ExitCode::Success;
+    }
+
+    // Modo: Cadastrar aplicativo manualmente na biblioteca
+    if (command_line.mode == CommandMode::AppAdd) {
+        if (!command_line.executable_path.has_value()) {
+            stderr_stream << "erro: informe o caminho do executável para cadastrar\n";
+            return ExitCode::Usage;
+        }
+        catalog::AppCatalog app_catalog;
+        app_catalog.load_from_file();
+        catalog::AppEntry entry;
+        entry.name = command_line.app_name.empty()
+                         ? command_line.executable_path->filename().string()
+                         : command_line.app_name;
+        entry.id = command_line.app_id.empty()
+                       ? catalog::AppCatalog::generate_id(entry.name)
+                       : command_line.app_id;
+        entry.executable_path = command_line.executable_path->string();
+        entry.prefix_path = command_line.custom_prefix.has_value()
+                                ? command_line.custom_prefix->string()
+                                : prefix::default_prefix_root().string();
+        entry.working_directory = command_line.executable_path->parent_path().string();
+
+        if (!app_catalog.add_app(entry) || !app_catalog.save_to_file()) {
+            stderr_stream << "erro: falha ao salvar aplicativo na biblioteca\n";
+            return ExitCode::InternalError;
+        }
+        stdout_stream << "Aplicativo '" << entry.name << "' cadastrado com sucesso [id: "
+                      << entry.id << "].\n";
+        return ExitCode::Success;
+    }
+
+    // Modo: Remover aplicativo da biblioteca
+    if (command_line.mode == CommandMode::AppRemove) {
+        if (command_line.app_id.empty()) {
+            stderr_stream << "erro: informe o ID do aplicativo a remover\n";
+            return ExitCode::Usage;
+        }
+        catalog::AppCatalog app_catalog;
+        app_catalog.load_from_file();
+        if (!app_catalog.remove_app(command_line.app_id) || !app_catalog.save_to_file()) {
+            stderr_stream << "erro: aplicativo com ID '" << command_line.app_id
+                          << "' não encontrado na biblioteca\n";
+            return ExitCode::Usage;
+        }
+        stdout_stream << "Aplicativo '" << command_line.app_id
+                      << "' removido da biblioteca com sucesso.\n";
+        return ExitCode::Success;
+    }
+
+    CommandLine effective_cmd = command_line;
+
+    // Modo: Executar aplicativo cadastrado
+    if (command_line.mode == CommandMode::AppRun) {
+        if (command_line.app_id.empty()) {
+            stderr_stream << "erro: informe o ID ou nome do aplicativo para executar\n";
+            return ExitCode::Usage;
+        }
+        catalog::AppCatalog app_catalog;
+        app_catalog.load_from_file();
+        const auto app_opt = app_catalog.find_app(command_line.app_id);
+        if (!app_opt) {
+            stderr_stream << "erro: aplicativo '" << command_line.app_id
+                          << "' não encontrado na biblioteca\n";
+            return ExitCode::InputUnavailable;
+        }
+        effective_cmd.executable_path = std::filesystem::path(app_opt->executable_path);
+        if (!app_opt->prefix_path.empty()) {
+            effective_cmd.custom_prefix = std::filesystem::path(app_opt->prefix_path);
+        }
+        std::vector<std::string> combined_args = app_opt->args;
+        combined_args.insert(combined_args.end(), command_line.guest_arguments.begin(),
+                             command_line.guest_arguments.end());
+        effective_cmd.guest_arguments = std::move(combined_args);
+    }
+
+    // Modo: Instalar aplicativo
+    if (command_line.mode == CommandMode::Install) {
+        const std::filesystem::path p_root =
+            effective_cmd.custom_prefix.value_or(prefix::default_prefix_root());
+        prefix::initialize_prefix(p_root);
+
+        catalog::AppCatalog app_catalog;
+        app_catalog.load_from_file();
+        catalog::AppEntry entry;
+        entry.name = effective_cmd.app_name.empty()
+                         ? effective_cmd.executable_path->filename().string()
+                         : effective_cmd.app_name;
+        entry.id = catalog::AppCatalog::generate_id(entry.name);
+        entry.executable_path = effective_cmd.executable_path->string();
+        entry.prefix_path = p_root.string();
+        entry.working_directory = effective_cmd.executable_path->parent_path().string();
+        app_catalog.add_app(entry);
+        app_catalog.save_to_file();
+
+        stdout_stream << "[install] Ambiente de prefixo preparado em " << p_root.string() << "\n";
+        stdout_stream << "[install] Aplicativo registrado na biblioteca como '" << entry.name
+                      << "' [id: " << entry.id << "]\n";
+    }
+
+    if (!effective_cmd.executable_path.has_value()) {
         stderr_stream << "erro: informe um arquivo .exe\n";
         print_help(stderr_stream);
         return ExitCode::Usage;
     }
 
+    const std::filesystem::path prefix_dir =
+        effective_cmd.custom_prefix.value_or(prefix::default_prefix_root());
+    prefix::initialize_prefix(prefix_dir);
+
+    if (!std::filesystem::exists(*effective_cmd.executable_path)) {
+        const std::filesystem::path resolved =
+            prefix::resolve_windows_path(effective_cmd.executable_path->string(), prefix_dir);
+        if (std::filesystem::exists(resolved)) {
+            effective_cmd.executable_path = resolved;
+        }
+    }
+
     std::error_code filesystem_error;
     const bool is_regular_file =
-        std::filesystem::is_regular_file(*command_line.executable_path, filesystem_error);
+        std::filesystem::is_regular_file(*effective_cmd.executable_path, filesystem_error);
     if (filesystem_error || !is_regular_file) {
         stderr_stream << "erro: não foi possível acessar o arquivo: "
-                      << command_line.executable_path->string() << '\n';
+                      << effective_cmd.executable_path->string() << '\n';
         return ExitCode::InputUnavailable;
     }
 
-    if (command_line.trace_enabled) {
-        const std::string input_path = command_line.executable_path->string();
+    if (effective_cmd.trace_enabled) {
+        const std::string input_path = effective_cmd.executable_path->string();
         const std::array input_fields{diagnostics::TraceField{"path", input_path}};
         diagnostics::write_trace(stderr_stream, diagnostics::TraceComponent::Cli,
                                  diagnostics::TraceLevel::Info, "input", input_fields);
     }
 
-    const std::optional<std::vector<std::byte>> bytes = read_file(*command_line.executable_path);
+    const std::optional<std::vector<std::byte>> bytes = read_file(*effective_cmd.executable_path);
     if (!bytes.has_value()) {
         stderr_stream << "erro: não foi possível ler o arquivo: "
-                      << command_line.executable_path->string() << '\n';
+                      << effective_cmd.executable_path->string() << '\n';
         return ExitCode::InputUnavailable;
     }
 
     const pe::ParseResult parse_result = pe::parse_pe(*bytes);
     if (parse_result.status != pe::ParseStatus::Success) {
-        if (command_line.trace_enabled) {
+        if (effective_cmd.trace_enabled) {
             const std::array fields{
                 diagnostics::TraceField{"status", status_label(parse_result.status)},
                 diagnostics::TraceField{"detail", parse_result.error_message},
@@ -558,7 +791,7 @@ ExitCode run_command(const CommandLine& command_line, std::ostream& stdout_strea
         return ExitCode::MalformedPe;
     }
 
-    if (command_line.trace_enabled) {
+    if (effective_cmd.trace_enabled) {
         write_pe_trace(stderr_stream, parse_result.info);
     } else {
         print_pe_summary(stderr_stream, parse_result.info);
@@ -566,7 +799,7 @@ ExitCode run_command(const CommandLine& command_line, std::ostream& stdout_strea
 
     loader::register_builtin_modules();
 
-    if (command_line.report_only) {
+    if (effective_cmd.report_only) {
         print_support_report(stdout_stream, parse_result.info);
         const bool has_delay_imports = parse_result.info.delay_import_directory_size != 0;
         bool all_imports_supported = !has_delay_imports;
@@ -588,14 +821,14 @@ ExitCode run_command(const CommandLine& command_line, std::ostream& stdout_strea
 
     loader::PrepareResult prepare_result = loader::prepare_process(parse_result.info, *bytes);
     if (prepare_result.status == loader::PrepareStatus::OutOfMemory) {
-        if (command_line.trace_enabled) {
+        if (effective_cmd.trace_enabled) {
             write_map_failed_trace(stderr_stream, "out-of-memory", prepare_result.error_message);
         }
         stderr_stream << "erro: " << prepare_result.error_message << '\n';
         return ExitCode::InternalError;
     }
     if (prepare_result.status == loader::PrepareStatus::InvalidImage) {
-        if (command_line.trace_enabled) {
+        if (effective_cmd.trace_enabled) {
             write_map_failed_trace(stderr_stream, "invalid-image", prepare_result.error_message);
         }
         stderr_stream << "erro: " << prepare_result.error_message << '\n';
@@ -603,25 +836,25 @@ ExitCode run_command(const CommandLine& command_line, std::ostream& stdout_strea
     }
 
     loader::GuestProcess& process = prepare_result.process;
-    if (command_line.trace_enabled) {
+    if (effective_cmd.trace_enabled) {
         write_map_trace(stderr_stream, process.image);
     } else {
         print_map_summary(stderr_stream, process.image);
     }
-    if (command_line.trace_enabled) {
+    if (effective_cmd.trace_enabled) {
         write_imports_trace(stderr_stream, process.imports);
     } else {
         print_imports_summary(stderr_stream, process.imports);
     }
 
     if (prepare_result.status == loader::PrepareStatus::UnresolvedImports) {
-        if (!command_line.trace_enabled) {
+        if (!effective_cmd.trace_enabled) {
             stderr_stream << "erro: importações não resolvidas: "
                           << prepare_result.error_message << '\n';
         }
         const std::uint64_t unmap_base = process.image.base;
         loader::destroy_process(process);
-        if (command_line.trace_enabled) {
+        if (effective_cmd.trace_enabled) {
             write_unmap_trace(stderr_stream, unmap_base);
         }
         return ExitCode::Unsupported;
@@ -629,7 +862,7 @@ ExitCode run_command(const CommandLine& command_line, std::ostream& stdout_strea
 
     if (process.image.delta != 0 && !process.image.has_relocation_directory) {
         const std::uint64_t unmap_base = process.image.base;
-        if (command_line.trace_enabled) {
+        if (effective_cmd.trace_enabled) {
             const std::array fields{
                 diagnostics::TraceField{"reason", "imagem sem diretório de relocations"},
                 diagnostics::TraceField{"delta", util::format_signed_hex(process.image.delta)},
@@ -640,32 +873,32 @@ ExitCode run_command(const CommandLine& command_line, std::ostream& stdout_strea
             stderr_stream << "erro: imagem sem relocations não pode ser executada fora da base preferencial\n";
         }
         loader::destroy_process(process);
-        if (command_line.trace_enabled) {
+        if (effective_cmd.trace_enabled) {
             write_unmap_trace(stderr_stream, unmap_base);
         }
         return ExitCode::Unsupported;
     }
 
     std::vector<std::string> guest_argv;
-    guest_argv.reserve(1 + command_line.guest_arguments.size());
-    guest_argv.push_back(command_line.executable_path->string());
-    guest_argv.insert(guest_argv.end(), command_line.guest_arguments.begin(),
-                      command_line.guest_arguments.end());
+    guest_argv.reserve(1 + effective_cmd.guest_arguments.size());
+    guest_argv.push_back(effective_cmd.executable_path->string());
+    guest_argv.insert(guest_argv.end(), effective_cmd.guest_arguments.begin(),
+                      effective_cmd.guest_arguments.end());
     msvcrt_set_guest_command_line(std::move(guest_argv));
-    set_guest_module_path(command_line.executable_path->c_str());
+    set_guest_module_path(effective_cmd.executable_path->c_str());
     set_guest_image_view(process.image.memory, process.image.size,
                          parse_result.info.resource_directory_rva,
                          parse_result.info.resource_directory_size);
 
     const process::GuestOutcome outcome = process::run_guest_isolated(
-        process.thread.entry_point, process.thread.stack_top, command_line.timeout_ms);
+        process.thread.entry_point, process.thread.stack_top, effective_cmd.timeout_ms);
 
     const std::uint64_t unmap_base = process.image.base;
     loader::destroy_process(process);
     set_guest_image_view(nullptr, 0, 0, 0);
 
     if (outcome.kind == process::GuestOutcomeKind::Exited) {
-        if (command_line.trace_enabled) {
+        if (effective_cmd.trace_enabled) {
             const std::array fields{
                 diagnostics::TraceField{"exit-code", std::to_string(outcome.exit_code)},
                 diagnostics::TraceField{"explicit", outcome.exited_explicitly ? "sim" : "não"},
@@ -679,7 +912,7 @@ ExitCode run_command(const CommandLine& command_line, std::ostream& stdout_strea
 
     if (outcome.kind == process::GuestOutcomeKind::Signaled) {
         const process::SignalDescription signal = process::describe_signal(outcome.signal_number);
-        if (command_line.trace_enabled) {
+        if (effective_cmd.trace_enabled) {
             const std::array fields{
                 diagnostics::TraceField{
                     "category",
@@ -699,24 +932,24 @@ ExitCode run_command(const CommandLine& command_line, std::ostream& stdout_strea
     }
 
     if (outcome.kind == process::GuestOutcomeKind::TimedOut) {
-        if (command_line.trace_enabled) {
+        if (effective_cmd.trace_enabled) {
             const std::array fields{
                 diagnostics::TraceField{"category",
                                         std::string{diagnostics::failure_category_name(
                                             diagnostics::FailureCategory::GuestTimeout)}},
-                diagnostics::TraceField{"timeout-ms", std::to_string(command_line.timeout_ms)},
+                diagnostics::TraceField{"timeout-ms", std::to_string(effective_cmd.timeout_ms)},
             };
             diagnostics::write_trace(stderr_stream, diagnostics::TraceComponent::Process,
                                      diagnostics::TraceLevel::Error, "terminated", fields);
             write_unmap_trace(stderr_stream, unmap_base);
         } else {
             stderr_stream << "erro: o programa convidado não terminou dentro de "
-                          << command_line.timeout_ms << " ms\n";
+                          << effective_cmd.timeout_ms << " ms\n";
         }
         return ExitCode::GuestTimeout;
     }
 
-    if (command_line.trace_enabled) {
+    if (effective_cmd.trace_enabled) {
         const std::array fields{
             diagnostics::TraceField{
                 "category",
@@ -737,7 +970,17 @@ ExitCode run_command(const CommandLine& command_line, std::ostream& stdout_strea
 void print_help(std::ostream& stream) {
     stream << kUsage;
     stream << "\n";
-    stream << "Opções:\n";
+    stream << "Comandos de Gerenciamento da Biblioteca e Instalação:\n";
+    stream << "  install <setup.exe> [--name <Nome>] [--prefix <dir>]\n";
+    stream << "             prepara o prefixo e executa o instalador cadastrando o app\n";
+    stream << "  app list   lista todos os aplicativos cadastrados na biblioteca\n";
+    stream << "  app run <id_ou_nome> [args...]\n";
+    stream << "             executa um aplicativo cadastrado na biblioteca\n";
+    stream << "  app add <arquivo.exe> [--name <Nome>] [--prefix <dir>]\n";
+    stream << "             cadastra manualmente um executável na biblioteca\n";
+    stream << "  app remove <id>\n";
+    stream << "             remove um aplicativo do catálogo da biblioteca\n\n";
+    stream << "Opções Gerais de Execução:\n";
     stream << "  --trace    escreve diagnóstico estruturado em stderr\n";
     stream << "  --report   relata imports suportados sem executar o arquivo\n";
     stream << "  --timeout <segundos>\n";
