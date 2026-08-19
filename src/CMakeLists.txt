@@ -20,6 +20,9 @@ add_library(tradutorlinux_core STATIC
     runtime/msvcrt.cpp
     runtime/advapi.cpp
     runtime/ws2_32.cpp
+    runtime/ole32.cpp
+    runtime/shlwapi.cpp
+    runtime/version.cpp
     runtime/guest_entry.S
     util/unicode.cpp
     gui/x11.cpp

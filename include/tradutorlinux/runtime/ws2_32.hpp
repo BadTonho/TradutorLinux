@@ -39,6 +39,11 @@ TL_MSABI std::uint32_t tl_htonl(std::uint32_t host_long) noexcept;
 TL_MSABI std::uint32_t tl_ntohl(std::uint32_t network_long) noexcept;
 TL_MSABI std::uint32_t tl_inet_addr(const char* address) noexcept;
 TL_MSABI int tl_WSAPoll(void* descriptors, std::uint32_t count, int timeout) noexcept;
+TL_MSABI int tl_select(int nfds, void* readfds, void* writefds, void* exceptfds, const void* timeout) noexcept;
+TL_MSABI int tl_ioctlsocket(std::uintptr_t socket, std::int32_t cmd, std::uint32_t* argp) noexcept;
+TL_MSABI int tl_gethostname(char* name, int namelen) noexcept;
+TL_MSABI const char* tl_inet_ntop(int af, const void* src, char* dst, std::size_t size) noexcept;
+TL_MSABI int tl_inet_pton(int af, const char* src, void* dst) noexcept;
 
 }
 

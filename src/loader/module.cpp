@@ -4,6 +4,9 @@
 #include "tradutorlinux/runtime/msvcrt.hpp"
 #include "tradutorlinux/runtime/advapi.hpp"
 #include "tradutorlinux/runtime/ws2_32.hpp"
+#include "tradutorlinux/runtime/ole32.hpp"
+#include "tradutorlinux/runtime/shlwapi.hpp"
+#include "tradutorlinux/runtime/version.hpp"
 #include "tradutorlinux/util/basics.hpp"
 
 #include <algorithm>
@@ -204,6 +207,27 @@ void register_builtin_modules() {
         {"GetSystemDefaultLCID", 128, reinterpret_cast<std::uintptr_t>(&tl_GetSystemDefaultLCID)},
         {"GetComputerNameA", 129, reinterpret_cast<std::uintptr_t>(&tl_GetComputerNameA)},
         {"GetComputerNameW", 130, reinterpret_cast<std::uintptr_t>(&tl_GetComputerNameW)},
+        {"InitializeSRWLock", 131, reinterpret_cast<std::uintptr_t>(&tl_InitializeSRWLock)},
+        {"AcquireSRWLockExclusive", 132, reinterpret_cast<std::uintptr_t>(&tl_AcquireSRWLockExclusive)},
+        {"ReleaseSRWLockExclusive", 133, reinterpret_cast<std::uintptr_t>(&tl_ReleaseSRWLockExclusive)},
+        {"AcquireSRWLockShared", 134, reinterpret_cast<std::uintptr_t>(&tl_AcquireSRWLockShared)},
+        {"ReleaseSRWLockShared", 135, reinterpret_cast<std::uintptr_t>(&tl_ReleaseSRWLockShared)},
+        {"SleepConditionVariableSRW", 136, reinterpret_cast<std::uintptr_t>(&tl_SleepConditionVariableSRW)},
+        {"WakeConditionVariable", 137, reinterpret_cast<std::uintptr_t>(&tl_WakeConditionVariable)},
+        {"WakeAllConditionVariable", 138, reinterpret_cast<std::uintptr_t>(&tl_WakeAllConditionVariable)},
+        {"AddVectoredExceptionHandler", 139, reinterpret_cast<std::uintptr_t>(&tl_AddVectoredExceptionHandler)},
+        {"RemoveVectoredExceptionHandler", 140, reinterpret_cast<std::uintptr_t>(&tl_RemoveVectoredExceptionHandler)},
+        {"RaiseException", 141, reinterpret_cast<std::uintptr_t>(&tl_RaiseException)},
+        {"GetPrivateProfileStringA", 142, reinterpret_cast<std::uintptr_t>(&tl_GetPrivateProfileStringA)},
+        {"GetPrivateProfileStringW", 143, reinterpret_cast<std::uintptr_t>(&tl_GetPrivateProfileStringW)},
+        {"GetPrivateProfileIntA", 144, reinterpret_cast<std::uintptr_t>(&tl_GetPrivateProfileIntA)},
+        {"GetPrivateProfileIntW", 145, reinterpret_cast<std::uintptr_t>(&tl_GetPrivateProfileIntW)},
+        {"WritePrivateProfileStringA", 146, reinterpret_cast<std::uintptr_t>(&tl_WritePrivateProfileStringA)},
+        {"WritePrivateProfileStringW", 147, reinterpret_cast<std::uintptr_t>(&tl_WritePrivateProfileStringW)},
+        {"GetPrivateProfileSectionA", 148, reinterpret_cast<std::uintptr_t>(&tl_GetPrivateProfileSectionA)},
+        {"GetPrivateProfileSectionW", 149, reinterpret_cast<std::uintptr_t>(&tl_GetPrivateProfileSectionW)},
+        {"GetConsoleScreenBufferInfo", 150, reinterpret_cast<std::uintptr_t>(&tl_GetConsoleScreenBufferInfo)},
+        {"SetConsoleTextAttribute", 151, reinterpret_cast<std::uintptr_t>(&tl_SetConsoleTextAttribute)},
     };
     static const InternalModule kKernel32Module{"KERNEL32.dll", kKernel32Exports};
     register_module(kKernel32Module);
@@ -265,6 +289,8 @@ void register_builtin_modules() {
         {"GetAsyncKeyState", 55, reinterpret_cast<std::uintptr_t>(&tl_GetAsyncKeyState)},
         {"MsgWaitForMultipleObjects", 56, reinterpret_cast<std::uintptr_t>(&tl_MsgWaitForMultipleObjects)},
         {"MsgWaitForMultipleObjectsEx", 57, reinterpret_cast<std::uintptr_t>(&tl_MsgWaitForMultipleObjectsEx)},
+        {"LoadStringA", 58, reinterpret_cast<std::uintptr_t>(&tl_LoadStringA)},
+        {"LoadStringW", 59, reinterpret_cast<std::uintptr_t>(&tl_LoadStringW)},
     };
     static const InternalModule kUser32Module{"USER32.dll", kUser32Exports};
     register_module(kUser32Module);
@@ -314,6 +340,11 @@ void register_builtin_modules() {
         {"ntohl", 21, reinterpret_cast<std::uintptr_t>(&tl_ntohl)},
         {"inet_addr", 22, reinterpret_cast<std::uintptr_t>(&tl_inet_addr)},
         {"WSAPoll", 23, reinterpret_cast<std::uintptr_t>(&tl_WSAPoll)},
+        {"select", 24, reinterpret_cast<std::uintptr_t>(&tl_select)},
+        {"ioctlsocket", 25, reinterpret_cast<std::uintptr_t>(&tl_ioctlsocket)},
+        {"gethostname", 26, reinterpret_cast<std::uintptr_t>(&tl_gethostname)},
+        {"inet_ntop", 27, reinterpret_cast<std::uintptr_t>(&tl_inet_ntop)},
+        {"inet_pton", 28, reinterpret_cast<std::uintptr_t>(&tl_inet_pton)},
     };
     static const InternalModule kWs2_32Module{"WS2_32.dll", kWs2_32Exports};
     register_module(kWs2_32Module);
@@ -443,6 +474,51 @@ void register_builtin_modules() {
     };
     static const InternalModule kAdvapi32Module{"ADVAPI32.dll", kAdvapi32Exports};
     register_module(kAdvapi32Module);
+    static const ExportedFunction kOle32Exports[] = {
+        {"CoInitialize", 1, reinterpret_cast<std::uintptr_t>(&tl_CoInitialize)},
+        {"CoInitializeEx", 2, reinterpret_cast<std::uintptr_t>(&tl_CoInitializeEx)},
+        {"CoUninitialize", 3, reinterpret_cast<std::uintptr_t>(&tl_CoUninitialize)},
+        {"CoCreateGuid", 4, reinterpret_cast<std::uintptr_t>(&tl_CoCreateGuid)},
+        {"CoTaskMemAlloc", 5, reinterpret_cast<std::uintptr_t>(&tl_CoTaskMemAlloc)},
+        {"CoTaskMemFree", 6, reinterpret_cast<std::uintptr_t>(&tl_CoTaskMemFree)},
+        {"CoTaskMemRealloc", 7, reinterpret_cast<std::uintptr_t>(&tl_CoTaskMemRealloc)},
+    };
+    static const InternalModule kOle32Module{"ole32.dll", kOle32Exports};
+    register_module(kOle32Module);
+    static const ExportedFunction kShlwapiExports[] = {
+        {"PathFileExistsA", 1, reinterpret_cast<std::uintptr_t>(&tl_PathFileExistsA)},
+        {"PathFileExistsW", 2, reinterpret_cast<std::uintptr_t>(&tl_PathFileExistsW)},
+        {"PathIsDirectoryA", 3, reinterpret_cast<std::uintptr_t>(&tl_PathIsDirectoryA)},
+        {"PathIsDirectoryW", 4, reinterpret_cast<std::uintptr_t>(&tl_PathIsDirectoryW)},
+        {"PathCombineA", 5, reinterpret_cast<std::uintptr_t>(&tl_PathCombineA)},
+        {"PathCombineW", 6, reinterpret_cast<std::uintptr_t>(&tl_PathCombineW)},
+        {"PathFindFileNameA", 7, reinterpret_cast<std::uintptr_t>(&tl_PathFindFileNameA)},
+        {"PathFindFileNameW", 8, reinterpret_cast<std::uintptr_t>(&tl_PathFindFileNameW)},
+        {"PathFindExtensionA", 9, reinterpret_cast<std::uintptr_t>(&tl_PathFindExtensionA)},
+        {"PathFindExtensionW", 10, reinterpret_cast<std::uintptr_t>(&tl_PathFindExtensionW)},
+        {"PathRemoveFileSpecA", 11, reinterpret_cast<std::uintptr_t>(&tl_PathRemoveFileSpecA)},
+        {"PathRemoveFileSpecW", 12, reinterpret_cast<std::uintptr_t>(&tl_PathRemoveFileSpecW)},
+        {"PathAddBackslashA", 13, reinterpret_cast<std::uintptr_t>(&tl_PathAddBackslashA)},
+        {"PathAddBackslashW", 14, reinterpret_cast<std::uintptr_t>(&tl_PathAddBackslashW)},
+        {"PathRemoveBackslashA", 15, reinterpret_cast<std::uintptr_t>(&tl_PathRemoveBackslashA)},
+        {"PathRemoveBackslashW", 16, reinterpret_cast<std::uintptr_t>(&tl_PathRemoveBackslashW)},
+        {"StrStrIA", 17, reinterpret_cast<std::uintptr_t>(&tl_StrStrIA)},
+        {"StrStrIW", 18, reinterpret_cast<std::uintptr_t>(&tl_StrStrIW)},
+        {"StrCmpIA", 19, reinterpret_cast<std::uintptr_t>(&tl_StrCmpIA)},
+        {"StrCmpIW", 20, reinterpret_cast<std::uintptr_t>(&tl_StrCmpIW)},
+    };
+    static const InternalModule kShlwapiModule{"SHLWAPI.dll", kShlwapiExports};
+    register_module(kShlwapiModule);
+    static const ExportedFunction kVersionExports[] = {
+        {"GetFileVersionInfoSizeA", 1, reinterpret_cast<std::uintptr_t>(&tl_GetFileVersionInfoSizeA)},
+        {"GetFileVersionInfoSizeW", 2, reinterpret_cast<std::uintptr_t>(&tl_GetFileVersionInfoSizeW)},
+        {"GetFileVersionInfoA", 3, reinterpret_cast<std::uintptr_t>(&tl_GetFileVersionInfoA)},
+        {"GetFileVersionInfoW", 4, reinterpret_cast<std::uintptr_t>(&tl_GetFileVersionInfoW)},
+        {"VerQueryValueA", 5, reinterpret_cast<std::uintptr_t>(&tl_VerQueryValueA)},
+        {"VerQueryValueW", 6, reinterpret_cast<std::uintptr_t>(&tl_VerQueryValueW)},
+    };
+    static const InternalModule kVersionModule{"version.dll", kVersionExports};
+    register_module(kVersionModule);
 }
 
 bool is_module_registered(const std::string_view dll) {

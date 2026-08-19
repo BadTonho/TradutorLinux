@@ -12,6 +12,7 @@
 #include <fstream>
 #include <limits>
 #include <mutex>
+#include <shared_mutex>
 #include <string>
 #include <thread>
 #include <vector>
@@ -2398,6 +2399,289 @@ TL_MSABI int tl_GetComputerNameW(std::uint16_t* buffer, std::uint32_t* size) noe
     std::copy(u16.begin(), u16.end(), buffer);
     buffer[u16.size()] = 0;
     *size = static_cast<std::uint32_t>(u16.size());
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+namespace {
+
+struct InternalSrwLock {
+    std::shared_mutex mutex;
+};
+std::array<InternalSrwLock, 128> g_srw_locks{};
+std::mutex g_srw_meta_mutex;
+
+InternalSrwLock* get_or_create_srw(void* ptr) {
+    if (ptr == nullptr) return nullptr;
+    auto** slot_ptr = reinterpret_cast<InternalSrwLock**>(ptr);
+    if (*slot_ptr != nullptr) return *slot_ptr;
+    std::lock_guard<std::mutex> lock(g_srw_meta_mutex);
+    for (auto& lock_entry : g_srw_locks) {
+        *slot_ptr = &lock_entry;
+        return &lock_entry;
+    }
+    return &g_srw_locks[0];
+}
+
+std::vector<void*> g_veh_handlers;
+std::mutex g_veh_mutex;
+
+}  // namespace
+
+TL_MSABI void tl_InitializeSRWLock(void* srw_lock) noexcept {
+    if (srw_lock != nullptr && mapped_guest_range(srw_lock, sizeof(void*), true)) {
+        *reinterpret_cast<void**>(srw_lock) = nullptr;
+    }
+}
+
+TL_MSABI void tl_AcquireSRWLockExclusive(void* srw_lock) noexcept {
+    if (auto* lock = get_or_create_srw(srw_lock)) {
+        lock->mutex.lock();
+    }
+}
+
+TL_MSABI void tl_ReleaseSRWLockExclusive(void* srw_lock) noexcept {
+    if (auto* lock = get_or_create_srw(srw_lock)) {
+        lock->mutex.unlock();
+    }
+}
+
+TL_MSABI void tl_AcquireSRWLockShared(void* srw_lock) noexcept {
+    if (auto* lock = get_or_create_srw(srw_lock)) {
+        lock->mutex.lock_shared();
+    }
+}
+
+TL_MSABI void tl_ReleaseSRWLockShared(void* srw_lock) noexcept {
+    if (auto* lock = get_or_create_srw(srw_lock)) {
+        lock->mutex.unlock_shared();
+    }
+}
+
+TL_MSABI int tl_SleepConditionVariableSRW(void* cond, void* srw_lock,
+                                          const std::uint32_t milliseconds, const std::uint32_t flags) noexcept {
+    (void)cond;
+    (void)srw_lock;
+    (void)flags;
+    if (milliseconds != 0 && milliseconds != abi::kInfinite) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(milliseconds));
+    }
+    return 1;
+}
+
+TL_MSABI void tl_WakeConditionVariable(void*) noexcept {}
+TL_MSABI void tl_WakeAllConditionVariable(void*) noexcept {}
+
+TL_MSABI void* tl_AddVectoredExceptionHandler(const std::uint32_t first, void* handler) noexcept {
+    if (handler == nullptr) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return nullptr;
+    }
+    std::lock_guard<std::mutex> lock(g_veh_mutex);
+    if (first != 0) {
+        g_veh_handlers.insert(g_veh_handlers.begin(), handler);
+    } else {
+        g_veh_handlers.push_back(handler);
+    }
+    set_last_error(abi::kErrorSuccess);
+    return handler;
+}
+
+TL_MSABI std::uint32_t tl_RemoveVectoredExceptionHandler(void* handle) noexcept {
+    if (handle == nullptr) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    std::lock_guard<std::mutex> lock(g_veh_mutex);
+    auto it = std::find(g_veh_handlers.begin(), g_veh_handlers.end(), handle);
+    if (it != g_veh_handlers.end()) {
+        g_veh_handlers.erase(it);
+        set_last_error(abi::kErrorSuccess);
+        return 1;
+    }
+    set_last_error(abi::kErrorInvalidParameter);
+    return 0;
+}
+
+TL_MSABI void tl_RaiseException(const std::uint32_t exception_code, const std::uint32_t exception_flags,
+                                const std::uint32_t number_of_arguments, const std::uint64_t* arguments) noexcept {
+    (void)exception_code;
+    (void)exception_flags;
+    (void)number_of_arguments;
+    (void)arguments;
+    trace_guest_failure("RaiseException", "code", std::to_string(exception_code));
+}
+
+TL_MSABI std::uint32_t tl_GetPrivateProfileStringA(const char* app_name, const char* key_name,
+                                                   const char* default_val, char* returned_string,
+                                                   const std::uint32_t size, const char* file_name) noexcept {
+    if (returned_string == nullptr || size == 0 || !mapped_guest_range(returned_string, size, true)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    std::string fallback = (default_val != nullptr && mapped_guest_cstring(default_val)) ? default_val : "";
+    if (file_name == nullptr || !mapped_guest_cstring(file_name)) {
+        std::strncpy(returned_string, fallback.c_str(), size - 1);
+        returned_string[size - 1] = '\0';
+        return static_cast<std::uint32_t>(std::strlen(returned_string));
+    }
+    char normalized[4096]{};
+    const char* path_to_open = file_name;
+    if (translate_windows_path(file_name, normalized, sizeof(normalized))) {
+        path_to_open = normalized;
+    }
+    std::ifstream file{path_to_open};
+    if (!file) {
+        std::strncpy(returned_string, fallback.c_str(), size - 1);
+        returned_string[size - 1] = '\0';
+        return static_cast<std::uint32_t>(std::strlen(returned_string));
+    }
+    std::string target_section = (app_name != nullptr && mapped_guest_cstring(app_name)) ? app_name : "";
+    std::string target_key = (key_name != nullptr && mapped_guest_cstring(key_name)) ? key_name : "";
+    std::string current_section;
+    std::string line;
+    std::string found_val = fallback;
+
+    while (std::getline(file, line)) {
+        line.erase(0, line.find_first_not_of(" \t\r\n"));
+        line.erase(line.find_last_not_of(" \t\r\n") + 1);
+        if (line.empty() || line[0] == ';' || line[0] == '#') continue;
+        if (line.front() == '[' && line.back() == ']') {
+            current_section = line.substr(1, line.size() - 2);
+            continue;
+        }
+        if (!target_section.empty() && !util::ascii_iequals(current_section, target_section)) {
+            continue;
+        }
+        const auto eq = line.find('=');
+        if (eq != std::string::npos) {
+            std::string k = line.substr(0, eq);
+            std::string v = line.substr(eq + 1);
+            k.erase(k.find_last_not_of(" \t") + 1);
+            v.erase(0, v.find_first_not_of(" \t"));
+            if (util::ascii_iequals(k, target_key)) {
+                found_val = v;
+                break;
+            }
+        }
+    }
+    std::strncpy(returned_string, found_val.c_str(), size - 1);
+    returned_string[size - 1] = '\0';
+    set_last_error(abi::kErrorSuccess);
+    return static_cast<std::uint32_t>(std::strlen(returned_string));
+}
+
+TL_MSABI std::uint32_t tl_GetPrivateProfileStringW(const std::uint16_t* app_name, const std::uint16_t* key_name,
+                                                   const std::uint16_t* default_val, std::uint16_t* returned_string,
+                                                   const std::uint32_t size, const std::uint16_t* file_name) noexcept {
+    if (returned_string == nullptr || size == 0 || !mapped_guest_range(returned_string, size * sizeof(std::uint16_t), true)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    const std::string utf8_app = (app_name != nullptr && mapped_guest_wstring(app_name)) ? util::wide_to_utf8(app_name) : "";
+    const std::string utf8_key = (key_name != nullptr && mapped_guest_wstring(key_name)) ? util::wide_to_utf8(key_name) : "";
+    const std::string utf8_def = (default_val != nullptr && mapped_guest_wstring(default_val)) ? util::wide_to_utf8(default_val) : "";
+    const std::string utf8_file = (file_name != nullptr && mapped_guest_wstring(file_name)) ? util::wide_to_utf8(file_name) : "";
+    char buf[4096]{};
+    tl_GetPrivateProfileStringA(utf8_app.empty() ? nullptr : utf8_app.c_str(),
+                                utf8_key.empty() ? nullptr : utf8_key.c_str(),
+                                utf8_def.empty() ? nullptr : utf8_def.c_str(),
+                                buf, sizeof(buf),
+                                utf8_file.empty() ? nullptr : utf8_file.c_str());
+    const std::u16string u16 = util::utf8_to_wide(buf);
+    const std::size_t len = std::min<std::size_t>(u16.size(), size - 1);
+    std::copy(u16.begin(), u16.begin() + len, returned_string);
+    returned_string[len] = 0;
+    return static_cast<std::uint32_t>(len);
+}
+
+TL_MSABI std::uint32_t tl_GetPrivateProfileIntA(const char* app_name, const char* key_name,
+                                                const int default_val, const char* file_name) noexcept {
+    char buf[64]{};
+    tl_GetPrivateProfileStringA(app_name, key_name, std::to_string(default_val).c_str(), buf, sizeof(buf), file_name);
+    return static_cast<std::uint32_t>(std::atoi(buf));
+}
+
+TL_MSABI std::uint32_t tl_GetPrivateProfileIntW(const std::uint16_t* app_name, const std::uint16_t* key_name,
+                                                const int default_val, const std::uint16_t* file_name) noexcept {
+    std::uint16_t buf[64]{};
+    std::u16string def_u16 = util::utf8_to_wide(std::to_string(default_val));
+    tl_GetPrivateProfileStringW(app_name, key_name, def_u16.c_str(), buf, 64, file_name);
+    return static_cast<std::uint32_t>(std::atoi(util::wide_to_utf8(buf).c_str()));
+}
+
+TL_MSABI int tl_WritePrivateProfileStringA(const char* app_name, const char* key_name,
+                                           const char* string_val, const char* file_name) noexcept {
+    (void)app_name;
+    (void)key_name;
+    (void)string_val;
+    (void)file_name;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_WritePrivateProfileStringW(const std::uint16_t* app_name, const std::uint16_t* key_name,
+                                           const std::uint16_t* string_val, const std::uint16_t* file_name) noexcept {
+    (void)app_name;
+    (void)key_name;
+    (void)string_val;
+    (void)file_name;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI std::uint32_t tl_GetPrivateProfileSectionA(const char* app_name, char* returned_string,
+                                                    const std::uint32_t size, const char* file_name) noexcept {
+    (void)app_name;
+    (void)file_name;
+    if (returned_string != nullptr && size >= 2 && mapped_guest_range(returned_string, size, true)) {
+        returned_string[0] = '\0';
+        returned_string[1] = '\0';
+    }
+    return 0;
+}
+
+TL_MSABI std::uint32_t tl_GetPrivateProfileSectionW(const std::uint16_t* app_name, std::uint16_t* returned_string,
+                                                    const std::uint32_t size, const std::uint16_t* file_name) noexcept {
+    (void)app_name;
+    (void)file_name;
+    if (returned_string != nullptr && size >= 2 && mapped_guest_range(returned_string, size * sizeof(std::uint16_t), true)) {
+        returned_string[0] = 0;
+        returned_string[1] = 0;
+    }
+    return 0;
+}
+
+TL_MSABI int tl_GetConsoleScreenBufferInfo(const void* console_handle, void* buffer_info) noexcept {
+    (void)console_handle;
+    if (buffer_info == nullptr || !mapped_guest_range(buffer_info, sizeof(abi::GuestConsoleScreenBufferInfo), true)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    auto* csbi = static_cast<abi::GuestConsoleScreenBufferInfo*>(buffer_info);
+    *csbi = {};
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_SetConsoleTextAttribute(const void* console_handle, const std::uint16_t attributes) noexcept {
+    (void)console_handle;
+    const bool red = (attributes & 0x0004) != 0;
+    const bool green = (attributes & 0x0002) != 0;
+    const bool blue = (attributes & 0x0001) != 0;
+    const bool bold = (attributes & 0x0008) != 0;
+
+    int ansi_color = 37;
+    if (red && green && blue) ansi_color = 37;
+    else if (red && green) ansi_color = 33;
+    else if (red && blue) ansi_color = 35;
+    else if (green && blue) ansi_color = 36;
+    else if (red) ansi_color = 31;
+    else if (green) ansi_color = 32;
+    else if (blue) ansi_color = 34;
+
+    std::fprintf(stdout, "\033[%d;%dm", bold ? 1 : 0, ansi_color);
+    std::fflush(stdout);
     set_last_error(abi::kErrorSuccess);
     return 1;
 }

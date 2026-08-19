@@ -310,6 +310,27 @@ struct GuestSystemTime {
 };
 static_assert(sizeof(GuestSystemTime) == 16);
 
+struct GuestCoord {
+    std::int16_t x{};
+    std::int16_t y{};
+};
+
+struct GuestSmallRect {
+    std::int16_t left{};
+    std::int16_t top{};
+    std::int16_t right{};
+    std::int16_t bottom{};
+};
+
+struct GuestConsoleScreenBufferInfo {
+    GuestCoord dw_size{80, 25};
+    GuestCoord dw_cursor_position{0, 0};
+    std::uint16_t w_attributes{0x07};
+    GuestSmallRect sr_window{0, 0, 79, 24};
+    GuestCoord dw_maximum_window_size{80, 25};
+};
+static_assert(sizeof(GuestConsoleScreenBufferInfo) == 22);
+
 }  // namespace abi
 
 // Fronteira de ABI: funções hospedeiras chamadas por código PE32+ x86-64.
@@ -672,6 +693,51 @@ TL_MSABI int tl_RegCreateKeyExW(void* key, const std::uint16_t* sub_key, std::ui
 TL_MSABI std::uint16_t** tl_CommandLineToArgvW(const std::uint16_t* command_line,
                                                int* argument_count) noexcept;
 TL_MSABI int tl_ShellNotifyIconA(std::uint32_t message, void* data) noexcept;
+
+// KERNEL32: Slim Reader/Writer (SRW) Locks & Condition Variables
+TL_MSABI void tl_InitializeSRWLock(void* srw_lock) noexcept;
+TL_MSABI void tl_AcquireSRWLockExclusive(void* srw_lock) noexcept;
+TL_MSABI void tl_ReleaseSRWLockExclusive(void* srw_lock) noexcept;
+TL_MSABI void tl_AcquireSRWLockShared(void* srw_lock) noexcept;
+TL_MSABI void tl_ReleaseSRWLockShared(void* srw_lock) noexcept;
+TL_MSABI int tl_SleepConditionVariableSRW(void* cond, void* srw_lock,
+                                          std::uint32_t milliseconds, std::uint32_t flags) noexcept;
+TL_MSABI void tl_WakeConditionVariable(void* cond) noexcept;
+TL_MSABI void tl_WakeAllConditionVariable(void* cond) noexcept;
+
+// KERNEL32: Vectored Exception Handling & RaiseException
+TL_MSABI void* tl_AddVectoredExceptionHandler(std::uint32_t first, void* handler) noexcept;
+TL_MSABI std::uint32_t tl_RemoveVectoredExceptionHandler(void* handle) noexcept;
+TL_MSABI void tl_RaiseException(std::uint32_t exception_code, std::uint32_t exception_flags,
+                                std::uint32_t number_of_arguments, const std::uint64_t* arguments) noexcept;
+
+// KERNEL32: Arquivos INI (PrivateProfile)
+TL_MSABI std::uint32_t tl_GetPrivateProfileStringA(const char* app_name, const char* key_name,
+                                                   const char* default_val, char* returned_string,
+                                                   std::uint32_t size, const char* file_name) noexcept;
+TL_MSABI std::uint32_t tl_GetPrivateProfileStringW(const std::uint16_t* app_name, const std::uint16_t* key_name,
+                                                   const std::uint16_t* default_val, std::uint16_t* returned_string,
+                                                   std::uint32_t size, const std::uint16_t* file_name) noexcept;
+TL_MSABI std::uint32_t tl_GetPrivateProfileIntA(const char* app_name, const char* key_name,
+                                                int default_val, const char* file_name) noexcept;
+TL_MSABI std::uint32_t tl_GetPrivateProfileIntW(const std::uint16_t* app_name, const std::uint16_t* key_name,
+                                                int default_val, const std::uint16_t* file_name) noexcept;
+TL_MSABI int tl_WritePrivateProfileStringA(const char* app_name, const char* key_name,
+                                           const char* string_val, const char* file_name) noexcept;
+TL_MSABI int tl_WritePrivateProfileStringW(const std::uint16_t* app_name, const std::uint16_t* key_name,
+                                           const std::uint16_t* string_val, const std::uint16_t* file_name) noexcept;
+TL_MSABI std::uint32_t tl_GetPrivateProfileSectionA(const char* app_name, char* returned_string,
+                                                    std::uint32_t size, const char* file_name) noexcept;
+TL_MSABI std::uint32_t tl_GetPrivateProfileSectionW(const std::uint16_t* app_name, std::uint16_t* returned_string,
+                                                    std::uint32_t size, const std::uint16_t* file_name) noexcept;
+
+// KERNEL32: Console Color and Screen Buffer
+TL_MSABI int tl_GetConsoleScreenBufferInfo(const void* console_handle, void* buffer_info) noexcept;
+TL_MSABI int tl_SetConsoleTextAttribute(const void* console_handle, std::uint16_t attributes) noexcept;
+
+// USER32: Recursos de Strings
+TL_MSABI int tl_LoadStringA(void* instance, std::uint32_t id, char* buffer, int buffer_max) noexcept;
+TL_MSABI int tl_LoadStringW(void* instance, std::uint32_t id, std::uint16_t* buffer, int buffer_max) noexcept;
 
 }  // extern "C"
 

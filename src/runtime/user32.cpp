@@ -1172,6 +1172,30 @@ TL_MSABI std::int16_t tl_GetAsyncKeyState(const int) noexcept {
     return 0;
 }
 
+TL_MSABI int tl_LoadStringA(void* instance, const std::uint32_t id, char* buffer, const int buffer_max) noexcept {
+    (void)instance;
+    (void)id;
+    if (buffer == nullptr || buffer_max <= 0 || !mapped_guest_range(buffer, static_cast<std::size_t>(buffer_max), true)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    buffer[0] = '\0';
+    set_last_error(abi::kErrorSuccess);
+    return 0;
+}
+
+TL_MSABI int tl_LoadStringW(void* instance, const std::uint32_t id, std::uint16_t* buffer, const int buffer_max) noexcept {
+    (void)instance;
+    (void)id;
+    if (buffer == nullptr || buffer_max <= 0 || !mapped_guest_range(buffer, static_cast<std::size_t>(buffer_max) * sizeof(std::uint16_t), true)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    buffer[0] = 0;
+    set_last_error(abi::kErrorSuccess);
+    return 0;
+}
+
 }  // extern "C"
 
 }  // namespace tradutorlinux

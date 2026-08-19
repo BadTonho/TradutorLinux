@@ -10,8 +10,10 @@
 #include <string>
 
 #include <arpa/inet.h>
+#include <fcntl.h>
 #include <netinet/in.h>
 #include <poll.h>
+#include <sys/select.h>
 #include <sys/socket.h>
 #include <unistd.h>
 
@@ -508,6 +510,189 @@ TL_MSABI int tl_WSAPoll(void* descriptors, const std::uint32_t count,
     }
     g_wsa_last_error = 0;
     return result;
+}
+
+namespace {
+
+struct Win32FdSet {
+    std::uint32_t fd_count;
+    std::uintptr_t fd_array[64];
+};
+
+struct Win32TimeVal {
+    std::int32_t tv_sec;
+    std::int32_t tv_usec;
+};
+
+}  // namespace
+
+TL_MSABI int tl_select(const int nfds, void* readfds, void* writefds, void* exceptfds, const void* timeout) noexcept {
+    (void)nfds;
+    fd_set rset, wset, eset;
+    FD_ZERO(&rset);
+    FD_ZERO(&wset);
+    FD_ZERO(&eset);
+    int max_fd = -1;
+
+    auto* r_win = static_cast<Win32FdSet*>(readfds);
+    auto* w_win = static_cast<Win32FdSet*>(writefds);
+    auto* e_win = static_cast<Win32FdSet*>(exceptfds);
+
+    if (r_win != nullptr && mapped_range(r_win, sizeof(Win32FdSet), true)) {
+        for (std::uint32_t i = 0; i < std::min<std::uint32_t>(r_win->fd_count, 64); ++i) {
+            if (SocketSlot* slot = find_socket(r_win->fd_array[i])) {
+                FD_SET(slot->fd, &rset);
+                max_fd = std::max(max_fd, slot->fd);
+            }
+        }
+    }
+    if (w_win != nullptr && mapped_range(w_win, sizeof(Win32FdSet), true)) {
+        for (std::uint32_t i = 0; i < std::min<std::uint32_t>(w_win->fd_count, 64); ++i) {
+            if (SocketSlot* slot = find_socket(w_win->fd_array[i])) {
+                FD_SET(slot->fd, &wset);
+                max_fd = std::max(max_fd, slot->fd);
+            }
+        }
+    }
+    if (e_win != nullptr && mapped_range(e_win, sizeof(Win32FdSet), true)) {
+        for (std::uint32_t i = 0; i < std::min<std::uint32_t>(e_win->fd_count, 64); ++i) {
+            if (SocketSlot* slot = find_socket(e_win->fd_array[i])) {
+                FD_SET(slot->fd, &eset);
+                max_fd = std::max(max_fd, slot->fd);
+            }
+        }
+    }
+
+    struct timeval tv{};
+    struct timeval* ptv = nullptr;
+    if (timeout != nullptr && mapped_range(timeout, sizeof(Win32TimeVal), false)) {
+        const auto* wt = static_cast<const Win32TimeVal*>(timeout);
+        tv.tv_sec = wt->tv_sec;
+        tv.tv_usec = wt->tv_usec;
+        ptv = &tv;
+    }
+
+    const int result = ::select(max_fd + 1, (r_win ? &rset : nullptr), (w_win ? &wset : nullptr), (e_win ? &eset : nullptr), ptv);
+    if (result < 0) {
+        g_wsa_last_error = errno_to_wsa(errno);
+        return -1;
+    }
+
+    if (r_win != nullptr && mapped_range(r_win, sizeof(Win32FdSet), true)) {
+        std::vector<std::uintptr_t> active;
+        for (std::uint32_t i = 0; i < std::min<std::uint32_t>(r_win->fd_count, 64); ++i) {
+            if (SocketSlot* slot = find_socket(r_win->fd_array[i])) {
+                if (FD_ISSET(slot->fd, &rset)) {
+                    active.push_back(r_win->fd_array[i]);
+                }
+            }
+        }
+        r_win->fd_count = static_cast<std::uint32_t>(active.size());
+        for (std::size_t i = 0; i < active.size(); ++i) {
+            r_win->fd_array[i] = active[i];
+        }
+    }
+    if (w_win != nullptr && mapped_range(w_win, sizeof(Win32FdSet), true)) {
+        std::vector<std::uintptr_t> active;
+        for (std::uint32_t i = 0; i < std::min<std::uint32_t>(w_win->fd_count, 64); ++i) {
+            if (SocketSlot* slot = find_socket(w_win->fd_array[i])) {
+                if (FD_ISSET(slot->fd, &wset)) {
+                    active.push_back(w_win->fd_array[i]);
+                }
+            }
+        }
+        w_win->fd_count = static_cast<std::uint32_t>(active.size());
+        for (std::size_t i = 0; i < active.size(); ++i) {
+            w_win->fd_array[i] = active[i];
+        }
+    }
+    if (e_win != nullptr && mapped_range(e_win, sizeof(Win32FdSet), true)) {
+        std::vector<std::uintptr_t> active;
+        for (std::uint32_t i = 0; i < std::min<std::uint32_t>(e_win->fd_count, 64); ++i) {
+            if (SocketSlot* slot = find_socket(e_win->fd_array[i])) {
+                if (FD_ISSET(slot->fd, &eset)) {
+                    active.push_back(e_win->fd_array[i]);
+                }
+            }
+        }
+        e_win->fd_count = static_cast<std::uint32_t>(active.size());
+        for (std::size_t i = 0; i < active.size(); ++i) {
+            e_win->fd_array[i] = active[i];
+        }
+    }
+
+    g_wsa_last_error = 0;
+    return result;
+}
+
+TL_MSABI int tl_ioctlsocket(const std::uintptr_t socket, const std::int32_t cmd, std::uint32_t* argp) noexcept {
+    SocketSlot* slot = find_socket(socket);
+    if (slot == nullptr || argp == nullptr || !mapped_range(argp, sizeof(*argp), true)) {
+        g_wsa_last_error = slot == nullptr ? kWsaENotSocket : kWsaEInvalidArgument;
+        return -1;
+    }
+    // FIONBIO = 0x8004667EU
+    if (static_cast<std::uint32_t>(cmd) == 0x8004667EU) {
+        int flags = fcntl(slot->fd, F_GETFL, 0);
+        if (flags < 0) {
+            g_wsa_last_error = errno_to_wsa(errno);
+            return -1;
+        }
+        if (*argp != 0) {
+            flags |= O_NONBLOCK;
+        } else {
+            flags &= ~O_NONBLOCK;
+        }
+        if (fcntl(slot->fd, F_SETFL, flags) < 0) {
+            g_wsa_last_error = errno_to_wsa(errno);
+            return -1;
+        }
+        g_wsa_last_error = 0;
+        return 0;
+    }
+    g_wsa_last_error = 0;
+    return 0;
+}
+
+TL_MSABI int tl_gethostname(char* name, const int namelen) noexcept {
+    if (name == nullptr || namelen <= 0 || !mapped_range(name, static_cast<std::size_t>(namelen), true)) {
+        g_wsa_last_error = kWsaEInvalidArgument;
+        return -1;
+    }
+    if (::gethostname(name, static_cast<std::size_t>(namelen)) != 0) {
+        g_wsa_last_error = errno_to_wsa(errno);
+        return -1;
+    }
+    g_wsa_last_error = 0;
+    return 0;
+}
+
+TL_MSABI const char* tl_inet_ntop(const int af, const void* src, char* dst, const std::size_t size) noexcept {
+    if (src == nullptr || dst == nullptr || size == 0 || !mapped_range(dst, size, true)) {
+        g_wsa_last_error = kWsaEInvalidArgument;
+        return nullptr;
+    }
+    const char* res = ::inet_ntop(af == kAfInet ? AF_INET : AF_INET6, src, dst, static_cast<socklen_t>(size));
+    if (res == nullptr) {
+        g_wsa_last_error = errno_to_wsa(errno);
+        return nullptr;
+    }
+    g_wsa_last_error = 0;
+    return res;
+}
+
+TL_MSABI int tl_inet_pton(const int af, const char* src, void* dst) noexcept {
+    if (src == nullptr || dst == nullptr || !mapped_cstring(src)) {
+        g_wsa_last_error = kWsaEInvalidArgument;
+        return -1;
+    }
+    const int res = ::inet_pton(af == kAfInet ? AF_INET : AF_INET6, src, dst);
+    if (res <= 0) {
+        g_wsa_last_error = (res == 0) ? kWsaEInvalidArgument : errno_to_wsa(errno);
+        return res;
+    }
+    g_wsa_last_error = 0;
+    return res;
 }
 
 }  // extern "C"
