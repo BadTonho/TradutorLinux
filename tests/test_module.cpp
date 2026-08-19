@@ -79,13 +79,14 @@ TEST_F(ModuleTest, ClearModulesResetsRegistry) {
 
 TEST_F(ModuleTest, RegistersBuiltinKernel32Exports) {
     register_builtin_modules();
-    ASSERT_EQ(registered_module_count(), 6U);
+    ASSERT_EQ(registered_module_count(), 7U);
     EXPECT_TRUE(is_module_registered("KERNEL32.dll"));
     EXPECT_TRUE(is_module_registered("USER32.dll"));
     EXPECT_TRUE(is_module_registered("GDI32.dll"));
     EXPECT_TRUE(is_module_registered("msvcrt.dll"));
     EXPECT_TRUE(is_module_registered("SHELL32.dll"));
     EXPECT_TRUE(is_module_registered("ADVAPI32.dll"));
+    EXPECT_TRUE(is_module_registered("WS2_32.dll"));
 
     const ExportLookup std_handle = find_export(ExportQuery{"KERNEL32.dll", "GetStdHandle"});
     ASSERT_TRUE(std_handle.found);
@@ -161,7 +162,7 @@ TEST_F(ModuleTest, RegistersMsvcrtExports) {
 TEST_F(ModuleTest, RegisterBuiltinModulesIsIdempotent) {
     register_builtin_modules();
     register_builtin_modules();
-    EXPECT_EQ(registered_module_count(), 6U);
+    EXPECT_EQ(registered_module_count(), 7U);
 }
 
 TEST_F(ModuleTest, RegistryOwnsItsStrings) {

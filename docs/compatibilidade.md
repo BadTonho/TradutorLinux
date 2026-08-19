@@ -21,6 +21,12 @@ Esta matriz declara o comportamento suportado; ela não é uma promessa de compa
 | `tl_crash.exe` | PE32+ AMD64 | Não | Nenhum | Gerado, verificado, mapeado e executado em processo filho isolado: o convidado acessa o endereço `0`, o hospedeiro observa o `SIGSEGV` via `waitpid`, emite `terminated category="guest-signal" signal="SIGSEGV"` e retorna `71` (`GuestFault`) | Diagnóstico de falhas |
 | `tl_hang.exe` | PE32+ AMD64 | Não | Nenhum | Gerado, verificado e executado em processo filho isolado com `--timeout 1`: o convidado entra em loop infinito, o hospedeiro o mata com `SIGKILL`, emite `terminated category="guest-timeout"` e retorna `72` (`GuestTimeout`) | Diagnóstico de falhas |
 | `tl_thread.exe` | PE32+ AMD64 | Não | `KERNEL32.dll!CloseHandle`, `CreateThread`, `ExitProcess`, `ExitThread`, `GetStdHandle`, `WaitForSingleObject`, `WriteFile` | **Suportado no escopo da Fase 11**: cria duas threads sequenciais, cada uma escreve "Thread done" e termina via `ExitThread`; a thread principal aguarda cada handle, escreve "Main done" e encerra. Metadata e execução e2e passam em Debug, Release e Sanitize (`LSAN_OPTIONS=detect_leaks=0`); saída esperada: `Thread done\nThread done\nMain done\n` e exit `0` | Fase 11 |
+| `tl_files_wide.exe` | PE32+ AMD64 | Não | `KERNEL32.dll` — arquivos, metadados, tempos e caminhos Unicode | Fixture genérica suportada: cria arquivo com `é`, consulta tamanho/atributos/tempos, copia, move e remove; saída `files\n`, exit `0` | Base de arquivos |
+| `tl_resources.exe` | PE32+ AMD64 | Não | `KERNEL32.dll!FindResourceW`, `LoadResource`, `LockResource`, `SizeofResource` | Lê somente o recurso `RCDATA` embutido após validação de limites; saída byte-idêntica ao payload, exit `0`; `--report` não executa | Recursos PE |
+| `tl_sync.exe` | PE32+ AMD64 | Não | eventos, mutex, semáforo e esperas em `KERNEL32.dll` | Cobre evento manual/automático, timeout, semáforo, mutex recursivo e `WaitForMultipleObjects`; saída `sync\n`, exit `0` | Sincronização |
+| `tl_process_parent.exe` / `tl_process_child.exe` | PE32+ AMD64 | Não | `CreateProcessW`, `GetExitCodeProcess`, `TerminateProcess` e `WaitForSingleObject` | Pai cria filhos PE32+ pelo mesmo parser/loader/import resolver; valida código `7` e encerramento controlado `9`; saída `child\nparent\n`, exit `0` | Processos filhos |
+| `tl_network_loopback.exe` | PE32+ AMD64 | Não | `WS2_32.dll` TCP/UDP, resolução local e `WSAPoll` | Fixture somente loopback, com TCP, UDP e `localhost`; passa com sockets permitidos e é skip controlado em sandbox que retorna `EACCES/EPERM` | WS2_32 |
+| `tl_registry_unicode.exe` | PE32+ AMD64 | Não | `ADVAPI32.dll` chaves/valores Unicode | Cria, persiste, reabre, consulta e remove chave/valor UTF-16 em armazenamento genérico por escopo; saída `registry\n`, exit `0` | Registro |
 | `simple_todo.exe` | PE32+ AMD64 | mingw-w64 CRT | 105 imports em `GDI32`, `KERNEL32`, `msvcrt`, `SHELL32` e `USER32` | **Suportado no subconjunto da Fase 12**: fonte pinada no commit `bcdf3d5fcebb8c0b445edb791d54511194c1b6ca` com overlay Linux versionado; build e `--report` resolvem 105/105; `targetapp_simple_todo_gui_smoke` cobre o fluxo principal, persistência, menu da bandeja, encerramento pela bandeja e fechamento da janela, com coordenadas do layout Linux | Fase 12 |
 
 As fontes e manifestos das fixtures ficam em `tests/samples/`. Os binários são produtos de build e ficam em `build/<preset>/tests/samples/generated/`.
@@ -227,7 +233,7 @@ Contratos de ABI em `docs/arquitetura/msvcrt.md` e
 | `msvcrt.dll` | `memmove`/`remove`/`_stat64` | Suportado | `memmove` com tratamento de overlap; `remove` delega ao host; `_stat64` preenche o `struct _stat64` do MinGW (pack 8, `st_mode` em `0x06`, tamanho 56 bytes) a partir do `stat()` do host |
 | `msvcrt.dll` | `localeconv`, `___lc_codepage_func`, `___mb_cur_max_func` | Suportado | Locale C fixo: `lconv` estático, code page `1252`, `mb_cur_max == 1` |
 | `msvcrt.dll` | `signal` | Suportado | Registra handlers em tabela por sinal; nenhuma entrega real ao convidado |
-| `KERNEL32.dll` | `VirtualQuery` | Suportado | Preenche `MEMORY_BASIC_INFORMATION` (48 bytes) a partir do `/proc/self/maps`: `BaseAddress`/`AllocationBase` = início da VMA, `RegionSize`, `State=MEM_COMMIT`, `Protect`/`AllocationProtect` mapeados de `rwx`, `Type=MEM_IMAGE`/`MEM_PRIVATE` |
+| `KERNEL32.dll` | `VirtualQuery` | Suportado | Preenche `MEMORY_BASIC_INFORMATION` (48 bytes); alocações privadas do `VirtualAlloc` usam a base/tamanho rastreados pelo runtime, e os demais mapeamentos usam `/proc/self/maps`; `State=MEM_COMMIT`, `Protect`/`AllocationProtect` mapeados de `rwx`, `Type=MEM_IMAGE`/`MEM_PRIVATE` |
 | `KERNEL32.dll` | `VirtualProtect` | Suportado | `mprotect` sobre a página alinhada dentro da região; escreve a proteção antiga em `*lpflOldProtect`; rejeita região que não contém `[address, address+size)` |
 | `KERNEL32.dll` | `MultiByteToWideChar` / `WideCharToMultiByte` | Suportado | CP `0` (ACP → 1252), `1252` e `65001` (UTF-8), conversões manuais sem locale; contagem com ponteiros `NULL`; `MB_ERR_INVALID_CHARS`; `ERROR_INSUFFICIENT_BUFFER` (122) |
 | `KERNEL32.dll` | `Initialize/Enter/Leave/DeleteCriticalSection` | Suportado | No-ops com validação de ponteiro (convidado single-thread → exclusão trivial) |
@@ -312,6 +318,10 @@ que recebem arquivos do host como argumentos.
   as regras completas de escape com barras invertidas antes de aspas ainda não
   fazem parte do subconjunto publicado.
 - `CreateFileA` continua limitado a caminhos relativos sem letra de drive.
+- As APIs wide de arquivo cobrem o subconjunto exercitado por `tl_files_wide`:
+  `CreateFileW`, tamanho/posição, atributos, tempos, cópia/movimentação,
+  diretórios e nomes finais; não inventam letras de drive nem aceitam caminhos
+  absolutos Windows.
 - `FileSlot` agora rastreia `file_size` e `position`; `ReadFile` e `WriteFile`
   atualizam a posição automaticamente.
 - `GetFileAttributesA` para arquivos inexistentes retorna `0xFFFFFFFF` com
@@ -322,7 +332,7 @@ que recebem arquivos do host como argumentos.
   execução; sem configuração retorna 0 com `ERROR_INVALID_PARAMETER`.
 - `MultiByteToWideChar` e `WideCharToMultiByte` suportam CP_UTF8 (65001) para
   conversão UTF-8/UTF-16; surrogates pair são suportados.
-- 14 testes unitários novos em `tests/test_win32.cpp` cobrem `GetFileSize`,
+- 15 testes unitários novos em `tests/test_win32.cpp` cobrem `GetFileSize`,
   `SetFilePointer` (seek beginning/end/negative), `GetFileAttributesA`
   (file/directory/nonexistent), `DeleteFileA` (existente/inexistente),
   `MoveFileA` (existente/inexistente), `CreateDirectoryA` (novo/duplicado),
@@ -332,6 +342,41 @@ que recebem arquivos do host como argumentos.
   `targetapp_unix2dos_eol` e `targetapp_dos2unix_unicode-glob`; os arquivos de
   entrada CRLF/LF vêm da fonte pinada do dos2unix e o ouro UTF-8 está em
   `tests/targets/golden/dos2unix/`.
+
+## Recursos PE, processos e rede
+
+O loader expõe a faixa do diretório de recursos da imagem corrente somente após
+mapear headers/seções. `FindResourceW` percorre diretórios com contagem e
+offsets validados; `LoadResource`/`LockResource` devolvem uma visão somente
+leitura e `SizeofResource` nunca ultrapassa a imagem. O fixture
+`tl_resources.exe` protege esse contrato e o `--report` continua sem mapear ou
+executar o entry point.
+
+Handles de eventos, mutexes, semáforos, processos e arquivos são tokens opacos
+validados pelo runtime. `WaitForMultipleObjects` aceita até 64 handles e
+retorna timeout/índice conforme o subconjunto testado. `CreateProcessW` só
+aceita PE32+ x86-64 com caminho relativo; o filho passa por `parse_pe`,
+relocations, imports e isolamento antes do entry point. A implementação atual
+usa um pipe de resultado, suporta `GetExitCodeProcess` e `TerminateProcess` e
+não executa um programa Windows diretamente pelo Linux.
+As tabelas internas ainda são separadas por família de recurso; a validação do
+tipo ocorre pelo espaço de tokens e a unificação em uma tabela única continua
+pendente.
+
+`WS2_32.dll` é um módulo separado. O contrato inicial aceita AF_INET, TCP/UDP,
+`getaddrinfo` para `localhost`/loopback, conversões de ordem de bytes e
+`WSAPoll`. A fixture nunca acessa Internet; no sandbox sem permissão de socket,
+o teste retorna um skip controlado, enquanto a validação com loopback permitido
+passa de ponta a ponta.
+
+## Registro genérico
+
+`ADVAPI32.dll` não possui mais chave ou valor específicos do Todo. O subconjunto
+de `RegCreateKeyEx[A/W]`, `RegOpenKeyEx[A/W]`, `RegSetValueEx[A/W]`,
+`RegQueryValueEx[A/W]`, `RegDeleteValue[A/W]` e `RegCloseKey` usa chaves/valores
+genéricos e persiste bytes, tipo e nomes UTF-8/UTF-16 em um arquivo por escopo
+(`APPDATA`, ou `TL_REGISTRY_FILE` para testes). Segurança, ACL, hive real,
+COM e `CRYPT32` continuam fora deste contrato.
 
 ## Concorrência (Fase 11)
 
@@ -345,8 +390,14 @@ processo filho; cada thread convidada recebe seu próprio TEB/GS, stack e
 |---|---|---|---|
 | `KERNEL32.dll` | `CreateThread` | Suportado | Aloca stack com guard page, TEB, `arch_prctl(GS)`, cria `std::thread` com wrapper que preserva GS; retorna handle de thread |
 | `KERNEL32.dll` | `ExitThread` | Suportado | `longjmp` para o `setjmp` do wrapper; thread termina sem encerrar o processo |
-| `KERNEL32.dll` | `WaitForSingleObject` | Suportado | Join na thread convidada; suporta `INFINITE` e timeout com `condition_variable`; retorna `WAIT_OBJECT_0` |
-| `KERNEL32.dll` | `CloseHandle` | Suportado | Para handles de thread: join + libera stack; mantém suporte a handles de arquivo e console |
+| `KERNEL32.dll` | `WaitForSingleObject` | Suportado | Thread, evento, mutex, semáforo, processo e arquivo síncrono; suporta `INFINITE` e timeout |
+| `KERNEL32.dll` | `WaitForMultipleObjects` | Suportado | Até 64 handles válidos, espera any/all e retorno por índice; polling controlado para o subconjunto atual |
+| `KERNEL32.dll` | `CreateEventA/W`, `SetEvent`, `ResetEvent` | Suportado | Eventos manuais/automáticos com `condition_variable` |
+| `KERNEL32.dll` | `CreateMutexA/W`, `ReleaseMutex` | Suportado | Mutex recursivo e ownership pela thread convidada corrente |
+| `KERNEL32.dll` | `CreateSemaphoreA/W`, `ReleaseSemaphore` | Suportado | Contagem inicial/máxima e consumo por espera |
+| `KERNEL32.dll` | `CloseHandle` | Suportado | Fecha thread/processo/sincronização/arquivo e libera os recursos associados |
+| `KERNEL32.dll` | `CreateProcessW` | Suportado no contrato limitado | Cria um filho PE32+ pelo mesmo loader e devolve processo assíncrono; sem drives, WOW64 ou execução nativa direta |
+| `KERNEL32.dll` | `GetExitCodeProcess` / `TerminateProcess` | Suportado no contrato limitado | Consulta código e encerra filho isolado via sinal controlado |
 | `KERNEL32.dll` | `GetCurrentThreadId` | Suportado | Retorna `thread_local` `g_guest_thread_id` atribuído por `execute_guest_entry` |
 | `KERNEL32.dll` | `GetCurrentProcessId` | Suportado | Retorna PID real do processo via `getpid()` |
 | `KERNEL32.dll` | `TlsAlloc` | Suportado | Aloca índice de slot `thread_local` (0–63); retorna `0xFFFFFFFF` na exaustão |
@@ -363,10 +414,10 @@ processo filho; cada thread convidada recebe seu próprio TEB/GS, stack e
   (`NtTib.Self`); o convidado não deve chamar `TlsAlloc` para obter o TEB.
 - A side-table de `CRITICAL_SECTION` suporta no máximo 32 seções simultâneas;
   exaustão emite trace de `side-table` com `category="exhaustion"`.
-- `WaitForSingleObject` só aceita handles de thread; handles de evento, mutex
-  e arquivo retornam `WAIT_FAILED`.
+- Handles nomeados não são compartilhados entre processos; o nome é validado,
+  mas a tabela é local ao processo host.
 - `CreateThread` não suporta `CREATE_SUSPENDED`; `stack_size == 0` usa o
-  tamanho padrão (64 KiB).
+  tamanho padrão (1 MiB).
 - `ExitThread` termina somente a thread corrente; não limpa destructors C++.
 - O fixture `tl_thread.exe` requer mingw-w64 para cross-build; a regressão e2e
   está coberta por `fixture_tl_thread_metadata` e

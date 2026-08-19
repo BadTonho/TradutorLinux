@@ -39,6 +39,7 @@ constexpr std::uint16_t kOptionalMagic32 = 0x10B;
 constexpr std::uint64_t kOrdinalFlag64 = 0x8000000000000000ULL;
 
 constexpr std::size_t kDirImport = 1;
+constexpr std::size_t kDirResource = 2;
 constexpr std::size_t kDirBaseReloc = 5;
 constexpr std::size_t kDirDelayImport = 13;
 
@@ -234,6 +235,12 @@ public:
                              info.import_directory_rva);
             reader_.read_u32(directory_offset + kDirImport * kDataDirectoryEntrySize + 4,
                              info.import_directory_size);
+        }
+        if (directory_count > kDirResource) {
+            reader_.read_u32(directory_offset + kDirResource * kDataDirectoryEntrySize,
+                             info.resource_directory_rva);
+            reader_.read_u32(directory_offset + kDirResource * kDataDirectoryEntrySize + 4,
+                             info.resource_directory_size);
         }
         if (directory_count > kDirBaseReloc) {
             reader_.read_u32(directory_offset + kDirBaseReloc * kDataDirectoryEntrySize,

@@ -11,6 +11,7 @@ add_library(tradutorlinux_core STATIC
     runtime/gui_controls.cpp
     runtime/msvcrt.cpp
     runtime/advapi.cpp
+    runtime/ws2_32.cpp
     runtime/guest_entry.S
     gui/x11.cpp
 )

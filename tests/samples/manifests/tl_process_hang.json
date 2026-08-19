@@ -1,0 +1,8 @@
+{
+  "name": "tl_process_hang",
+  "format": "PE32+",
+  "machine": "AMD64",
+  "entry_point": "tl_entry",
+  "uses_crt": false,
+  "imports": {}
+}

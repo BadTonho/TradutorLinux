@@ -17,7 +17,15 @@ execute_process(
     OUTPUT_VARIABLE runtime_stdout
     ERROR_VARIABLE runtime_trace
 )
-if(NOT runtime_result EQUAL 0)
+if(DEFINED SKIP_EXIT AND runtime_result EQUAL SKIP_EXIT)
+    message(STATUS "Skipping ${INPUT}: runtime environment does not permit this fixture")
+    return()
+endif()
+if(DEFINED EXPECTED_EXIT)
+    if(NOT runtime_result EQUAL EXPECTED_EXIT)
+        message(FATAL_ERROR "Runtime returned ${runtime_result} for ${INPUT}, expected ${EXPECTED_EXIT}\n${runtime_trace}")
+    endif()
+elseif(NOT runtime_result EQUAL 0)
     message(FATAL_ERROR "Runtime returned ${runtime_result} for ${INPUT}\n${runtime_trace}")
 endif()
 

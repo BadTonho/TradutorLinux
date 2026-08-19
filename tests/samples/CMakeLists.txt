@@ -10,15 +10,33 @@ find_program(TL_LLVM_READOBJ
     NAMES llvm-readobj llvm-readobj-19 llvm-readobj-18 llvm-readobj-17
     REQUIRED
 )
+find_program(TL_MINGW_WINDRES
+    NAMES x86_64-w64-mingw32-windres windres
+    REQUIRED
+)
 
 set(TL_FIXTURE_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/generated")
 
 function(tl_add_pe_fixture target_name source_file manifest_file)
-    set(options LINK_KERNEL32 LINK_USER32 LINK_GDI32 RELOCATABLE RUNTIME_FAILURE EXPECT_RESOLVED CONSOLE REPORT REPORT_ONLY NO_RUNTIME_CHECK)
-    set(oneValueArgs REPORT_SYMBOL)
+    set(options LINK_KERNEL32 LINK_USER32 LINK_GDI32 LINK_WS2_32 LINK_ADVAPI32 RELOCATABLE RUNTIME_FAILURE EXPECT_RESOLVED CONSOLE REPORT REPORT_ONLY NO_RUNTIME_CHECK)
+    set(oneValueArgs REPORT_SYMBOL RESOURCE_FILE)
     cmake_parse_arguments(ARG "${options}" "${oneValueArgs}" "" ${ARGN})
 
     set(output_file "${TL_FIXTURE_OUTPUT_DIRECTORY}/${target_name}.exe")
+    set(resource_object)
+    if(ARG_RESOURCE_FILE)
+        set(resource_object "${TL_FIXTURE_OUTPUT_DIRECTORY}/${target_name}.rsrc.o")
+        add_custom_command(
+            OUTPUT "${resource_object}"
+            COMMAND "${CMAKE_COMMAND}" -E make_directory "${TL_FIXTURE_OUTPUT_DIRECTORY}"
+            COMMAND "${TL_MINGW_WINDRES}" -O coff
+                -i "${CMAKE_CURRENT_SOURCE_DIR}/${ARG_RESOURCE_FILE}"
+                -o "${resource_object}"
+            DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/${ARG_RESOURCE_FILE}"
+            COMMENT "Generating PE resources for ${target_name}.exe"
+            VERBATIM
+        )
+    endif()
     set(link_libraries)
     set(link_flags)
     if(ARG_LINK_KERNEL32)
@@ -29,6 +47,12 @@ function(tl_add_pe_fixture target_name source_file manifest_file)
     endif()
     if(ARG_LINK_GDI32)
         list(APPEND link_libraries -lgdi32)
+    endif()
+    if(ARG_LINK_WS2_32)
+        list(APPEND link_libraries -lws2_32)
+    endif()
+    if(ARG_LINK_ADVAPI32)
+        list(APPEND link_libraries -ladvapi32)
     endif()
     if(ARG_RELOCATABLE)
         list(APPEND link_flags -Wl,--dynamicbase)
@@ -49,11 +73,13 @@ function(tl_add_pe_fixture target_name source_file manifest_file)
             -Wl,--no-insert-timestamp
             -o "${output_file}"
             "${CMAKE_CURRENT_SOURCE_DIR}/${source_file}"
+            ${resource_object}
             ${link_flags}
             ${link_libraries}
         DEPENDS
             "${CMAKE_CURRENT_SOURCE_DIR}/${source_file}"
             "${CMAKE_CURRENT_SOURCE_DIR}/${manifest_file}"
+            ${resource_object}
         VERBATIM
         COMMENT "Generating PE32+ fixture ${target_name}.exe"
     )
@@ -96,6 +122,29 @@ function(tl_add_pe_fixture target_name source_file manifest_file)
             elseif(target_name STREQUAL "tl_thread")
                 set(runtime_extra_args
                     "-DEXPECTED_HEX=54687265616420646f6e650a54687265616420646f6e650a4d61696e20646f6e650a")
+            elseif(target_name STREQUAL "tl_resources")
+                set(runtime_extra_args
+                    "-DEXPECTED_HEX=546c207265736f75726365207061796c6f61640a")
+            elseif(target_name STREQUAL "tl_sync")
+                set(runtime_extra_args
+                    "-DEXPECTED_HEX=73796e630a")
+            elseif(target_name STREQUAL "tl_files_wide")
+                set(runtime_extra_args
+                    "-DEXPECTED_HEX=66696c65730a")
+            elseif(target_name STREQUAL "tl_process_parent")
+                set(runtime_extra_args
+                    "-DEXPECTED_HEX=6368696c640a706172656e740a")
+            elseif(target_name STREQUAL "tl_process_child")
+                set(runtime_extra_args
+                    "-DEXPECTED_HEX=6368696c640a"
+                    "-DEXPECTED_EXIT=7")
+            elseif(target_name STREQUAL "tl_network_loopback")
+                set(runtime_extra_args
+                    "-DEXPECTED_HEX=6e6574776f726b0a"
+                    "-DSKIP_EXIT=77")
+            elseif(target_name STREQUAL "tl_registry_unicode")
+                set(runtime_extra_args
+                    "-DEXPECTED_HEX=72656769737472790a")
             endif()
         endif()
         add_test(
@@ -192,6 +241,39 @@ tl_add_pe_fixture(tl_hang src/tl_hang.c manifests/tl_hang.json RELOCATABLE NO_RU
 
 tl_add_pe_fixture(tl_thread src/tl_thread.c manifests/tl_thread.json
     LINK_KERNEL32 EXPECT_RESOLVED CONSOLE RELOCATABLE)
+
+tl_add_pe_fixture(tl_resources src/tl_resources.c manifests/tl_resources.json
+    LINK_KERNEL32 EXPECT_RESOLVED CONSOLE REPORT RELOCATABLE
+    REPORT_SYMBOL "FindResourceW"
+    RESOURCE_FILE src/tl_resources.rc)
+
+tl_add_pe_fixture(tl_sync src/tl_sync.c manifests/tl_sync.json
+    LINK_KERNEL32 EXPECT_RESOLVED CONSOLE REPORT RELOCATABLE
+    REPORT_SYMBOL "CreateEventA")
+
+tl_add_pe_fixture(tl_files_wide src/tl_files_wide.c manifests/tl_files_wide.json
+    LINK_KERNEL32 EXPECT_RESOLVED CONSOLE REPORT RELOCATABLE
+    REPORT_SYMBOL "CreateFileW")
+
+tl_add_pe_fixture(tl_process_child src/tl_process_child.c manifests/tl_process_child.json
+    LINK_KERNEL32 EXPECT_RESOLVED CONSOLE REPORT RELOCATABLE
+    REPORT_SYMBOL "ExitProcess")
+
+tl_add_pe_fixture(tl_process_hang src/tl_process_hang.c manifests/tl_process_hang.json
+    RELOCATABLE NO_RUNTIME_CHECK)
+
+tl_add_pe_fixture(tl_process_parent src/tl_process_parent.c manifests/tl_process_parent.json
+    LINK_KERNEL32 EXPECT_RESOLVED CONSOLE REPORT RELOCATABLE
+    REPORT_SYMBOL "CreateProcessW")
+add_dependencies(tl_process_parent_fixture tl_process_child_fixture tl_process_hang_fixture)
+
+tl_add_pe_fixture(tl_network_loopback src/tl_network_loopback.c manifests/tl_network_loopback.json
+    LINK_KERNEL32 LINK_WS2_32 EXPECT_RESOLVED CONSOLE REPORT RELOCATABLE
+    REPORT_SYMBOL "socket")
+
+tl_add_pe_fixture(tl_registry_unicode src/tl_registry_unicode.c manifests/tl_registry_unicode.json
+    LINK_KERNEL32 LINK_ADVAPI32 EXPECT_RESOLVED CONSOLE REPORT RELOCATABLE
+    REPORT_SYMBOL "RegCreateKeyExW")
 
 if(TARGET tradutorlinux)
     add_test(

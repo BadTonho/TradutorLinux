@@ -653,12 +653,16 @@ ExitCode run_command(const CommandLine& command_line, std::ostream& stdout_strea
                       command_line.guest_arguments.end());
     msvcrt_set_guest_command_line(std::move(guest_argv));
     set_guest_module_path(command_line.executable_path->c_str());
+    set_guest_image_view(process.image.memory, process.image.size,
+                         parse_result.info.resource_directory_rva,
+                         parse_result.info.resource_directory_size);
 
     const process::GuestOutcome outcome = process::run_guest_isolated(
         process.thread.entry_point, process.thread.stack_top, command_line.timeout_ms);
 
     const std::uint64_t unmap_base = process.image.base;
     loader::destroy_process(process);
+    set_guest_image_view(nullptr, 0, 0, 0);
 
     if (outcome.kind == process::GuestOutcomeKind::Exited) {
         if (command_line.trace_enabled) {

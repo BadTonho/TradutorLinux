@@ -3,6 +3,7 @@
 #include "tradutorlinux/runtime/winapi.hpp"
 #include "tradutorlinux/runtime/msvcrt.hpp"
 #include "tradutorlinux/runtime/advapi.hpp"
+#include "tradutorlinux/runtime/ws2_32.hpp"
 #include "tradutorlinux/util/basics.hpp"
 
 #include <algorithm>
@@ -75,6 +76,7 @@ void register_builtin_modules() {
         {"VirtualAlloc", 7, reinterpret_cast<std::uintptr_t>(&tl_VirtualAlloc)},
         {"VirtualFree", 8, reinterpret_cast<std::uintptr_t>(&tl_VirtualFree)},
         {"CreateFileA", 9, reinterpret_cast<std::uintptr_t>(&tl_CreateFileA)},
+        {"CreateFileW", 69, reinterpret_cast<std::uintptr_t>(&tl_CreateFileW)},
         {"CloseHandle", 10, reinterpret_cast<std::uintptr_t>(&tl_CloseHandle)},
         {"DeleteCriticalSection", 11, reinterpret_cast<std::uintptr_t>(&tl_DeleteCriticalSection)},
         {"EnterCriticalSection", 12, reinterpret_cast<std::uintptr_t>(&tl_EnterCriticalSection)},
@@ -136,6 +138,46 @@ void register_builtin_modules() {
         {"CreateMutexA", 66, reinterpret_cast<std::uintptr_t>(&tl_CreateMutexA)},
         {"GetStartupInfoA", 67, reinterpret_cast<std::uintptr_t>(&tl_GetStartupInfoA)},
         {"MulDiv", 68, reinterpret_cast<std::uintptr_t>(&tl_MulDiv)},
+        {"GetFileSizeEx", 70, reinterpret_cast<std::uintptr_t>(&tl_GetFileSizeEx)},
+        {"SetFilePointerEx", 71, reinterpret_cast<std::uintptr_t>(&tl_SetFilePointerEx)},
+        {"SetEndOfFile", 72, reinterpret_cast<std::uintptr_t>(&tl_SetEndOfFile)},
+        {"FlushFileBuffers", 73, reinterpret_cast<std::uintptr_t>(&tl_FlushFileBuffers)},
+        {"GetFileAttributesExW", 74, reinterpret_cast<std::uintptr_t>(&tl_GetFileAttributesExW)},
+        {"DeleteFileW", 75, reinterpret_cast<std::uintptr_t>(&tl_DeleteFileW)},
+        {"MoveFileW", 76, reinterpret_cast<std::uintptr_t>(&tl_MoveFileW)},
+        {"MoveFileExW", 77, reinterpret_cast<std::uintptr_t>(&tl_MoveFileExW)},
+        {"CopyFileW", 78, reinterpret_cast<std::uintptr_t>(&tl_CopyFileW)},
+        {"CreateDirectoryW", 79, reinterpret_cast<std::uintptr_t>(&tl_CreateDirectoryW)},
+        {"RemoveDirectoryW", 80, reinterpret_cast<std::uintptr_t>(&tl_RemoveDirectoryW)},
+        {"GetTempPathW", 81, reinterpret_cast<std::uintptr_t>(&tl_GetTempPathW)},
+        {"GetFullPathNameW", 82, reinterpret_cast<std::uintptr_t>(&tl_GetFullPathNameW)},
+        {"GetFileTime", 83, reinterpret_cast<std::uintptr_t>(&tl_GetFileTime)},
+        {"SetFileTime", 84, reinterpret_cast<std::uintptr_t>(&tl_SetFileTime)},
+        {"GetFileInformationByHandle", 85,
+         reinterpret_cast<std::uintptr_t>(&tl_GetFileInformationByHandle)},
+        {"GetFileInformationByHandleEx", 86,
+         reinterpret_cast<std::uintptr_t>(&tl_GetFileInformationByHandleEx)},
+        {"GetFinalPathNameByHandleW", 87,
+         reinterpret_cast<std::uintptr_t>(&tl_GetFinalPathNameByHandleW)},
+        {"FindResourceW", 88, reinterpret_cast<std::uintptr_t>(&tl_FindResourceW)},
+        {"LoadResource", 89, reinterpret_cast<std::uintptr_t>(&tl_LoadResource)},
+        {"LockResource", 90, reinterpret_cast<std::uintptr_t>(&tl_LockResource)},
+        {"SizeofResource", 91, reinterpret_cast<std::uintptr_t>(&tl_SizeofResource)},
+        {"CreateMutexW", 92, reinterpret_cast<std::uintptr_t>(&tl_CreateMutexW)},
+        {"CreateEventA", 93, reinterpret_cast<std::uintptr_t>(&tl_CreateEventA)},
+        {"CreateEventW", 94, reinterpret_cast<std::uintptr_t>(&tl_CreateEventW)},
+        {"SetEvent", 95, reinterpret_cast<std::uintptr_t>(&tl_SetEvent)},
+        {"ResetEvent", 96, reinterpret_cast<std::uintptr_t>(&tl_ResetEvent)},
+        {"ReleaseMutex", 101, reinterpret_cast<std::uintptr_t>(&tl_ReleaseMutex)},
+        {"CreateProcessW", 102, reinterpret_cast<std::uintptr_t>(&tl_CreateProcessW)},
+        {"GetExitCodeProcess", 103,
+         reinterpret_cast<std::uintptr_t>(&tl_GetExitCodeProcess)},
+        {"TerminateProcess", 104, reinterpret_cast<std::uintptr_t>(&tl_TerminateProcess)},
+        {"CreateSemaphoreA", 97, reinterpret_cast<std::uintptr_t>(&tl_CreateSemaphoreA)},
+        {"CreateSemaphoreW", 98, reinterpret_cast<std::uintptr_t>(&tl_CreateSemaphoreW)},
+        {"ReleaseSemaphore", 99, reinterpret_cast<std::uintptr_t>(&tl_ReleaseSemaphore)},
+        {"WaitForMultipleObjects", 100,
+         reinterpret_cast<std::uintptr_t>(&tl_WaitForMultipleObjects)},
     };
     static const InternalModule kKernel32Module{"KERNEL32.dll", kKernel32Exports};
     register_module(kKernel32Module);
@@ -196,6 +238,33 @@ void register_builtin_modules() {
     };
     static const InternalModule kGdi32Module{"GDI32.dll", kGdi32Exports};
     register_module(kGdi32Module);
+    static const ExportedFunction kWs2_32Exports[] = {
+        {"WSAStartup", 1, reinterpret_cast<std::uintptr_t>(&tl_WSAStartup)},
+        {"WSACleanup", 2, reinterpret_cast<std::uintptr_t>(&tl_WSACleanup)},
+        {"WSAGetLastError", 3, reinterpret_cast<std::uintptr_t>(&tl_WSAGetLastError)},
+        {"socket", 4, reinterpret_cast<std::uintptr_t>(&tl_socket)},
+        {"closesocket", 5, reinterpret_cast<std::uintptr_t>(&tl_closesocket)},
+        {"bind", 6, reinterpret_cast<std::uintptr_t>(&tl_bind)},
+        {"listen", 7, reinterpret_cast<std::uintptr_t>(&tl_listen)},
+        {"accept", 8, reinterpret_cast<std::uintptr_t>(&tl_accept)},
+        {"connect", 9, reinterpret_cast<std::uintptr_t>(&tl_connect)},
+        {"send", 10, reinterpret_cast<std::uintptr_t>(&tl_send)},
+        {"recv", 11, reinterpret_cast<std::uintptr_t>(&tl_recv)},
+        {"sendto", 12, reinterpret_cast<std::uintptr_t>(&tl_sendto)},
+        {"recvfrom", 13, reinterpret_cast<std::uintptr_t>(&tl_recvfrom)},
+        {"getsockname", 14, reinterpret_cast<std::uintptr_t>(&tl_getsockname)},
+        {"shutdown", 15, reinterpret_cast<std::uintptr_t>(&tl_shutdown)},
+        {"getaddrinfo", 16, reinterpret_cast<std::uintptr_t>(&tl_getaddrinfo)},
+        {"freeaddrinfo", 17, reinterpret_cast<std::uintptr_t>(&tl_freeaddrinfo)},
+        {"htons", 18, reinterpret_cast<std::uintptr_t>(&tl_htons)},
+        {"ntohs", 19, reinterpret_cast<std::uintptr_t>(&tl_ntohs)},
+        {"htonl", 20, reinterpret_cast<std::uintptr_t>(&tl_htonl)},
+        {"ntohl", 21, reinterpret_cast<std::uintptr_t>(&tl_ntohl)},
+        {"inet_addr", 22, reinterpret_cast<std::uintptr_t>(&tl_inet_addr)},
+        {"WSAPoll", 23, reinterpret_cast<std::uintptr_t>(&tl_WSAPoll)},
+    };
+    static const InternalModule kWs2_32Module{"WS2_32.dll", kWs2_32Exports};
+    register_module(kWs2_32Module);
     static const ExportedFunction kMsvcrtExports[] = {
         {"__C_specific_handler", 1, reinterpret_cast<std::uintptr_t>(&tl___C_specific_handler)},
         {"__getmainargs", 2, reinterpret_cast<std::uintptr_t>(&tl___getmainargs)},
@@ -306,9 +375,15 @@ void register_builtin_modules() {
     static const ExportedFunction kAdvapi32Exports[] = {
         {"RegCloseKey", 1, reinterpret_cast<std::uintptr_t>(&tl_RegCloseKey)},
         {"RegDeleteValueA", 2, reinterpret_cast<std::uintptr_t>(&tl_RegDeleteValueA)},
+        {"RegDeleteValueW", 6, reinterpret_cast<std::uintptr_t>(&tl_RegDeleteValueW)},
+        {"RegCreateKeyExA", 7, reinterpret_cast<std::uintptr_t>(&tl_RegCreateKeyExA)},
+        {"RegCreateKeyExW", 8, reinterpret_cast<std::uintptr_t>(&tl_RegCreateKeyExW)},
         {"RegOpenKeyExA", 3, reinterpret_cast<std::uintptr_t>(&tl_RegOpenKeyExA)},
+        {"RegOpenKeyExW", 9, reinterpret_cast<std::uintptr_t>(&tl_RegOpenKeyExW)},
         {"RegQueryValueExA", 4, reinterpret_cast<std::uintptr_t>(&tl_RegQueryValueExA)},
+        {"RegQueryValueExW", 10, reinterpret_cast<std::uintptr_t>(&tl_RegQueryValueExW)},
         {"RegSetValueExA", 5, reinterpret_cast<std::uintptr_t>(&tl_RegSetValueExA)},
+        {"RegSetValueExW", 11, reinterpret_cast<std::uintptr_t>(&tl_RegSetValueExW)},
     };
     static const InternalModule kAdvapi32Module{"ADVAPI32.dll", kAdvapi32Exports};
     register_module(kAdvapi32Module);

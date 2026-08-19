@@ -7,6 +7,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <limits>
 #include <string>
 #include <thread>
 #include <vector>
@@ -605,6 +606,96 @@ TEST(Win32FileTest, SetFilePointerFailsForNegativePosition) {
     tl_CloseHandle(handle);
 }
 
+TEST(Win32WideFileTest, UnicodeFileMetadataPositionAndCopyAreConsistent) {
+    TempDirFixture ctx;
+    const auto to_wide = [](const std::u16string& value) {
+        std::vector<std::uint16_t> result(value.begin(), value.end());
+        result.push_back(0);
+        return result;
+    };
+    const std::vector<std::uint16_t> source = to_wide(u"_tl_test/arquivo_\u00e9.txt");
+    const std::vector<std::uint16_t> copy = to_wide(u"_tl_test/arquivo_\u00e9.copy");
+    const std::vector<std::uint16_t> moved = to_wide(u"_tl_test/arquivo_\u00e9.moved");
+    ctx.path("arquivo_\xC3\xA9.txt");
+    ctx.path("arquivo_\xC3\xA9.copy");
+    ctx.path("arquivo_\xC3\xA9.moved");
+
+    void* handle = tl_CreateFileW(source.data(), abi::kGenericRead | abi::kGenericWrite, 0,
+                                  nullptr, abi::kCreateAlways, 0, nullptr);
+    ASSERT_NE(handle, nullptr);
+    const char payload[] = "unicode";
+    std::uint32_t written = 0;
+    ASSERT_EQ(tl_WriteFile(handle, payload, sizeof(payload) - 1, &written, nullptr), 1);
+    EXPECT_EQ(written, sizeof(payload) - 1);
+
+    std::int64_t size = 0;
+    ASSERT_EQ(tl_GetFileSizeEx(handle, &size), 1);
+    EXPECT_EQ(size, static_cast<std::int64_t>(sizeof(payload) - 1));
+
+    std::int64_t position = -1;
+    ASSERT_EQ(tl_SetFilePointerEx(handle, 2, &position, 0), 1);
+    EXPECT_EQ(position, 2);
+    ASSERT_EQ(tl_SetEndOfFile(handle), 1);
+    ASSERT_EQ(tl_GetFileSizeEx(handle, &size), 1);
+    EXPECT_EQ(size, 2);
+    ASSERT_EQ(tl_FlushFileBuffers(handle), 1);
+
+    struct FileTime {
+        std::uint32_t low{};
+        std::uint32_t high{};
+    } creation{}, access{}, write{};
+    ASSERT_EQ(tl_GetFileTime(handle, &creation, &access, &write), 1);
+    ASSERT_EQ(tl_SetFileTime(handle, &creation, &access, &write), 1);
+
+    struct ByHandleInfo {
+        std::uint32_t attributes{};
+        FileTime creation{};
+        FileTime access{};
+        FileTime write{};
+        std::uint32_t volume{};
+        std::uint32_t size_high{};
+        std::uint32_t size_low{};
+        std::uint32_t links{};
+        std::uint32_t index_high{};
+        std::uint32_t index_low{};
+    } info{};
+    ASSERT_EQ(tl_GetFileInformationByHandle(handle, &info), 1);
+    EXPECT_EQ(info.size_low, 2U);
+    EXPECT_NE(info.links, 0U);
+
+    struct BasicInfo {
+        std::int64_t creation{};
+        std::int64_t access{};
+        std::int64_t write{};
+        std::int64_t change{};
+        std::uint32_t attributes{};
+        std::uint32_t reserved{};
+    } basic{};
+    ASSERT_EQ(tl_GetFileInformationByHandleEx(handle, 0, &basic, sizeof(basic)), 1);
+    EXPECT_NE(basic.attributes & 0x20U, 0U);
+
+    std::uint16_t final_path[260]{};
+    EXPECT_GT(tl_GetFinalPathNameByHandleW(handle, final_path, 260, 0), 0U);
+    EXPECT_NE(std::u16string(reinterpret_cast<const char16_t*>(final_path)).find(u"arquivo_\u00e9"),
+              std::u16string::npos);
+    ASSERT_EQ(tl_CloseHandle(handle), 1);
+
+    struct AttributeData {
+        std::uint32_t attributes{};
+        FileTime creation{};
+        FileTime access{};
+        FileTime write{};
+        std::uint32_t size_high{};
+        std::uint32_t size_low{};
+    } attributes{};
+    ASSERT_EQ(tl_GetFileAttributesExW(source.data(), 0, &attributes), 1);
+    EXPECT_EQ(attributes.size_low, 2U);
+    ASSERT_EQ(tl_CopyFileW(source.data(), copy.data(), 1), 1);
+    ASSERT_EQ(tl_MoveFileExW(copy.data(), moved.data(), 1), 1);
+    EXPECT_EQ(tl_DeleteFileW(source.data()), 1);
+    EXPECT_EQ(tl_DeleteFileW(moved.data()), 1);
+}
+
 TEST(Win32DirTest, GetCurrentDirectoryAReturnsNonEmpty) {
     char buf[4096]{};
     const std::uint32_t needed = tl_GetCurrentDirectoryA(sizeof(buf), buf);
@@ -776,6 +867,54 @@ TEST(Win32ConcurrencyTest, WaitForSingleObjectTimeoutReturnsWaitTimeout) {
     // WaitForSingleObject on an invalid handle with timeout should return WAIT_FAILED.
     EXPECT_EQ(tl_WaitForSingleObject(reinterpret_cast<const void*>(0xDEADULL), 100),
               abi::kWaitFailed);
+}
+
+TEST(Win32ConcurrencyTest, EventsSemaphoresMutexAndMultipleWaitsHaveWin32Semantics) {
+    void* auto_event = tl_CreateEventA(nullptr, 0, 0, nullptr);
+    ASSERT_NE(auto_event, nullptr);
+    EXPECT_EQ(tl_WaitForSingleObject(auto_event, 0), abi::kWaitTimeout);
+    ASSERT_EQ(tl_SetEvent(auto_event), 1);
+    EXPECT_EQ(tl_WaitForSingleObject(auto_event, 0), abi::kWaitObject0);
+    EXPECT_EQ(tl_WaitForSingleObject(auto_event, 0), abi::kWaitTimeout);
+
+    void* manual_event = tl_CreateEventW(nullptr, 1, 1, nullptr);
+    ASSERT_NE(manual_event, nullptr);
+    EXPECT_EQ(tl_WaitForSingleObject(manual_event, 0), abi::kWaitObject0);
+    EXPECT_EQ(tl_WaitForSingleObject(manual_event, 0), abi::kWaitObject0);
+    ASSERT_EQ(tl_ResetEvent(manual_event), 1);
+    EXPECT_EQ(tl_WaitForSingleObject(manual_event, 0), abi::kWaitTimeout);
+
+    void* semaphore = tl_CreateSemaphoreW(nullptr, 0, 2, nullptr);
+    ASSERT_NE(semaphore, nullptr);
+    std::int32_t previous = -1;
+    ASSERT_EQ(tl_ReleaseSemaphore(semaphore, 2, &previous), 1);
+    EXPECT_EQ(previous, 0);
+    EXPECT_EQ(tl_WaitForSingleObject(semaphore, 0), abi::kWaitObject0);
+    EXPECT_EQ(tl_WaitForSingleObject(semaphore, 0), abi::kWaitObject0);
+    EXPECT_EQ(tl_WaitForSingleObject(semaphore, 0), abi::kWaitTimeout);
+
+    void* mutex = tl_CreateMutexW(nullptr, 0, nullptr);
+    ASSERT_NE(mutex, nullptr);
+    EXPECT_EQ(tl_WaitForSingleObject(mutex, 0), abi::kWaitObject0);
+    EXPECT_EQ(tl_WaitForSingleObject(mutex, 0), abi::kWaitObject0);
+    ASSERT_EQ(tl_ReleaseMutex(mutex), 1);
+    ASSERT_EQ(tl_ReleaseMutex(mutex), 1);
+    EXPECT_EQ(tl_ReleaseMutex(mutex), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorAccessDenied);
+
+    void* first = tl_CreateEventA(nullptr, 1, 1, nullptr);
+    void* second = tl_CreateEventA(nullptr, 1, 1, nullptr);
+    ASSERT_NE(first, nullptr);
+    ASSERT_NE(second, nullptr);
+    const void* handles[2] = {first, second};
+    EXPECT_EQ(tl_WaitForMultipleObjects(2, handles, 1, 0), abi::kWaitObject0);
+
+    EXPECT_EQ(tl_CloseHandle(auto_event), 1);
+    EXPECT_EQ(tl_CloseHandle(manual_event), 1);
+    EXPECT_EQ(tl_CloseHandle(semaphore), 1);
+    EXPECT_EQ(tl_CloseHandle(mutex), 1);
+    EXPECT_EQ(tl_CloseHandle(first), 1);
+    EXPECT_EQ(tl_CloseHandle(second), 1);
 }
 
 TEST(Win32ConcurrencyTest, TlsGetValueInvalidIndexReturnsNull) {

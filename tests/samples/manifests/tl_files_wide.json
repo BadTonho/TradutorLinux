@@ -1,0 +1,34 @@
+{
+  "name": "tl_files_wide",
+  "format": "PE32+",
+  "machine": "AMD64",
+  "entry_point": "tl_entry",
+  "uses_crt": false,
+  "imports": {
+    "KERNEL32.dll": [
+      "CloseHandle",
+      "CopyFileW",
+      "CreateDirectoryW",
+      "CreateFileW",
+      "DeleteFileW",
+      "ExitProcess",
+      "FlushFileBuffers",
+      "GetFileAttributesExW",
+      "GetFileAttributesW",
+      "GetFileInformationByHandle",
+      "GetFileInformationByHandleEx",
+      "GetFileSizeEx",
+      "GetFileTime",
+      "GetFinalPathNameByHandleW",
+      "GetFullPathNameW",
+      "GetStdHandle",
+      "GetTempPathW",
+      "MoveFileExW",
+      "RemoveDirectoryW",
+      "SetEndOfFile",
+      "SetFilePointerEx",
+      "SetFileTime",
+      "WriteFile"
+    ]
+  }
+}

@@ -1,0 +1,41 @@
+{
+  "name": "tl_network_loopback",
+  "format": "PE32+",
+  "machine": "AMD64",
+  "entry_point": "tl_entry",
+  "uses_crt": false,
+  "imports": {
+    "KERNEL32.dll": [
+      "CloseHandle",
+      "CreateThread",
+      "ExitProcess",
+      "ExitThread",
+      "GetStdHandle",
+      "WaitForSingleObject",
+      "WriteFile"
+    ],
+    "WS2_32.dll": [
+      "WSACleanup",
+      "WSAGetLastError",
+      "WSAStartup",
+      "WSAPoll",
+      "accept",
+      "bind",
+      "closesocket",
+      "connect",
+      "freeaddrinfo",
+      "getaddrinfo",
+      "getsockname",
+      "htons",
+      "inet_addr",
+      "listen",
+      "ntohs",
+      "recv",
+      "recvfrom",
+      "send",
+      "sendto",
+      "shutdown",
+      "socket"
+    ]
+  }
+}

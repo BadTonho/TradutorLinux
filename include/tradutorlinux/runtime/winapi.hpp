@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 
 #if defined(__GNUC__) || defined(__clang__)
@@ -35,6 +36,10 @@ constexpr Dword kErrorNotEnoughMemory = 8;
 constexpr Dword kErrorAlreadyExists = 183;
 constexpr Dword kErrorInvalidParameter = 87;
 constexpr Dword kErrorBrokenPipe = 109;
+constexpr Dword kErrorBadLength = 24;
+constexpr Dword kErrorResourceDataNotFound = 1812;
+constexpr Dword kErrorResourceTypeNotFound = 1813;
+constexpr Dword kErrorResourceNameNotFound = 1814;
 
 constexpr Dword kGenericRead = 0x80000000U;
 constexpr Dword kGenericWrite = 0x40000000U;
@@ -61,9 +66,11 @@ constexpr Dword kErrorTooManyTlsIndexes = 4323;
 
 // Fase 11: WaitForSingleObject.
 constexpr Dword kWaitObject0 = 0;
+constexpr Dword kWaitAbandoned0 = 0x80;
 constexpr Dword kWaitTimeout = 0x102;
 constexpr Dword kWaitFailed = 0xFFFFFFFF;
 constexpr Dword kInfinite = 0xFFFFFFFF;
+constexpr Dword kRtRsrcData = 10;
 
 // Code pages suportadas pela conversão de strings.
 constexpr Dword kCpAcp = 0;          // CP_ACP -> CP1252 (locale C do runtime)
@@ -287,9 +294,39 @@ TL_MSABI void* tl_CreateFileA(const char* path, std::uint32_t desired_access,
                               std::uint32_t share_mode, const void* security_attributes,
                               std::uint32_t creation_disposition, std::uint32_t flags,
                               const void* template_file) noexcept;
+TL_MSABI void* tl_CreateFileW(const std::uint16_t* path, std::uint32_t desired_access,
+                              std::uint32_t share_mode, const void* security_attributes,
+                              std::uint32_t creation_disposition, std::uint32_t flags,
+                              const void* template_file) noexcept;
 TL_MSABI int tl_CloseHandle(const void* handle) noexcept;
 TL_MSABI void* tl_CreateMutexA(const void* security_attributes, int initial_owner,
                                const char* name) noexcept;
+TL_MSABI void* tl_CreateMutexW(const void* security_attributes, int initial_owner,
+                               const std::uint16_t* name) noexcept;
+TL_MSABI void* tl_CreateEventA(const void* security_attributes, int manual_reset,
+                               int initial_state, const char* name) noexcept;
+TL_MSABI void* tl_CreateEventW(const void* security_attributes, int manual_reset,
+                               int initial_state, const std::uint16_t* name) noexcept;
+TL_MSABI int tl_SetEvent(const void* event_handle) noexcept;
+TL_MSABI int tl_ResetEvent(const void* event_handle) noexcept;
+TL_MSABI int tl_ReleaseMutex(const void* mutex) noexcept;
+TL_MSABI int tl_CreateProcessW(const std::uint16_t* application_name,
+                               std::uint16_t* command_line, const void* process_attributes,
+                               const void* thread_attributes, int inherit_handles,
+                               std::uint32_t creation_flags, const void* environment,
+                               const std::uint16_t* current_directory, void* startup_info,
+                               void* process_information) noexcept;
+TL_MSABI int tl_GetExitCodeProcess(const void* process, std::uint32_t* exit_code) noexcept;
+TL_MSABI int tl_TerminateProcess(const void* process, std::uint32_t exit_code) noexcept;
+TL_MSABI void* tl_CreateSemaphoreA(const void* security_attributes, std::int32_t initial_count,
+                                   std::int32_t maximum_count, const char* name) noexcept;
+TL_MSABI void* tl_CreateSemaphoreW(const void* security_attributes, std::int32_t initial_count,
+                                   std::int32_t maximum_count, const std::uint16_t* name) noexcept;
+TL_MSABI int tl_ReleaseSemaphore(const void* semaphore, std::int32_t release_count,
+                                  std::int32_t* previous_count) noexcept;
+TL_MSABI std::uint32_t tl_WaitForMultipleObjects(std::uint32_t count,
+                                                  const void* const* handles, int wait_all,
+                                                  std::uint32_t milliseconds) noexcept;
 TL_MSABI void tl_GetStartupInfoA(void* startup_info) noexcept;
 TL_MSABI int tl_MulDiv(int number, int numerator, int denominator) noexcept;
 TL_MSABI std::uint32_t tl_MessageBoxA(const void* owner, const char* text, const char* caption,
@@ -398,14 +435,30 @@ TL_MSABI void tl_GetSystemTimeAsFileTime(void* file_time) noexcept;
 
 // Fase 10: Sistema de arquivos e utilitários.
 TL_MSABI std::uint32_t tl_GetFileSize(const void* handle, std::uint32_t* high_size) noexcept;
+TL_MSABI int tl_GetFileSizeEx(const void* handle, std::int64_t* size) noexcept;
 TL_MSABI std::int32_t tl_SetFilePointer(const void* handle, std::int32_t distance,
                                          std::int32_t* high_distance,
                                          std::uint32_t move_method) noexcept;
+TL_MSABI int tl_SetFilePointerEx(const void* handle, std::int64_t distance,
+                                 std::int64_t* new_position, std::uint32_t move_method) noexcept;
+TL_MSABI int tl_SetEndOfFile(const void* handle) noexcept;
+TL_MSABI int tl_FlushFileBuffers(const void* handle) noexcept;
 TL_MSABI std::uint32_t tl_GetFileAttributesA(const char* path) noexcept;
 TL_MSABI std::uint32_t tl_GetFileAttributesW(const std::uint16_t* path) noexcept;
+TL_MSABI int tl_GetFileAttributesExW(const std::uint16_t* path, int info_level,
+                                     void* data) noexcept;
 TL_MSABI int tl_DeleteFileA(const char* path) noexcept;
+TL_MSABI int tl_DeleteFileW(const std::uint16_t* path) noexcept;
 TL_MSABI int tl_MoveFileA(const char* from, const char* to) noexcept;
+TL_MSABI int tl_MoveFileW(const std::uint16_t* from, const std::uint16_t* to) noexcept;
+TL_MSABI int tl_MoveFileExW(const std::uint16_t* from, const std::uint16_t* to,
+                            std::uint32_t flags) noexcept;
+TL_MSABI int tl_CopyFileW(const std::uint16_t* from, const std::uint16_t* to,
+                          int fail_if_exists) noexcept;
 TL_MSABI int tl_CreateDirectoryA(const char* path, const void* security_attributes) noexcept;
+TL_MSABI int tl_CreateDirectoryW(const std::uint16_t* path,
+                                 const void* security_attributes) noexcept;
+TL_MSABI int tl_RemoveDirectoryW(const std::uint16_t* path) noexcept;
 TL_MSABI void* tl_FindFirstFileA(const char* path, void* find_data) noexcept;
 TL_MSABI void* tl_FindFirstFileW(const std::uint16_t* path, void* find_data) noexcept;
 TL_MSABI int tl_FindNextFileA(const void* handle, void* find_data) noexcept;
@@ -420,6 +473,26 @@ TL_MSABI int tl_SetConsoleOutputCP(std::uint32_t code_page) noexcept;
 TL_MSABI std::uint32_t tl_GetTempFileNameW(const std::uint16_t* path_name,
                                            const std::uint16_t* prefix_string,
                                            std::uint32_t unique, std::uint16_t* temp_file_name) noexcept;
+TL_MSABI std::uint32_t tl_GetTempPathW(std::uint32_t buffer_length,
+                                       std::uint16_t* buffer) noexcept;
+TL_MSABI std::uint32_t tl_GetFullPathNameW(const std::uint16_t* path, std::uint32_t buffer_length,
+                                           std::uint16_t* buffer,
+                                           std::uint16_t** file_part) noexcept;
+TL_MSABI int tl_GetFileTime(const void* handle, void* creation_time, void* access_time,
+                            void* write_time) noexcept;
+TL_MSABI int tl_SetFileTime(const void* handle, const void* creation_time,
+                            const void* access_time, const void* write_time) noexcept;
+TL_MSABI int tl_GetFileInformationByHandle(const void* handle, void* information) noexcept;
+TL_MSABI int tl_GetFileInformationByHandleEx(const void* handle, int info_class,
+                                             void* buffer, std::uint32_t size) noexcept;
+TL_MSABI std::uint32_t tl_GetFinalPathNameByHandleW(const void* handle, std::uint16_t* buffer,
+                                                    std::uint32_t buffer_length,
+                                                    std::uint32_t flags) noexcept;
+TL_MSABI void* tl_FindResourceW(const void* module, const std::uint16_t* name,
+                                const std::uint16_t* type) noexcept;
+TL_MSABI void* tl_LoadResource(const void* module, const void* resource) noexcept;
+TL_MSABI void* tl_LockResource(const void* resource) noexcept;
+TL_MSABI std::uint32_t tl_SizeofResource(const void* module, const void* resource) noexcept;
 TL_MSABI void* tl_LocalFree(void* memory) noexcept;
 
 // Diretório atual e módulo.
@@ -453,6 +526,8 @@ TL_MSABI int tl_ShellNotifyIconA(std::uint32_t message, void* data) noexcept;
 
 // Define o caminho do módulo convidado antes da execução.
 void set_guest_module_path(const char* path) noexcept;
+void set_guest_image_view(const void* image_base, std::size_t image_size,
+                          std::uint32_t resource_rva, std::uint32_t resource_size) noexcept;
 
 // Executa um entry point Microsoft x64 e captura ExitProcess sem encerrar o
 // processo hospedeiro. O ponteiro deve apontar para código já mapeado como

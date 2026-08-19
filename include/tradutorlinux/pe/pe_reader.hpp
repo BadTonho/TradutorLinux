@@ -59,6 +59,8 @@ struct PeInfo {
     std::uint16_t subsystem{};
     std::uint32_t import_directory_rva{};
     std::uint32_t import_directory_size{};
+    std::uint32_t resource_directory_rva{};
+    std::uint32_t resource_directory_size{};
     std::uint32_t relocation_directory_rva{};
     std::uint32_t relocation_directory_size{};
     std::uint32_t delay_import_directory_rva{};

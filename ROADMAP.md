@@ -30,7 +30,8 @@ Os itens marcados como concluídos devem ter evidência no repositório: código
 - **Marco concluído:** o subconjunto mínimo de `msvcrt.dll` foi implementado e registrado (57 símbolos, ordinais 1–57), junto com as 14 APIs de `KERNEL32.dll` que o CRT interno do mingw e o `xxd.exe` exigem (`VirtualQuery`/`VirtualProtect` via `/proc/self/maps` + `mprotect`, `MultiByteToWideChar`/`WideCharToMultiByte` com CP 0/1252/65001, critical sections no-op para convidado single-thread, `TlsGetValue`, `GetConsoleMode`/`SetConsoleMode`, `Sleep`, `SetUnhandledExceptionFilter`, `IsDBCSLeadByteEx`). O `--report` do `xxd.exe` passou a `result: supported`.
 - **Marco concluído:** `xxd.exe` executa de ponta a ponta com saída **byte-idêntica** ao `xxd` do sistema (exit `0`). Para isso a fronteira agora aloca um TEB de uma página e aponta o segmento `%gs` via `arch_prctl(ARCH_SET_GS)` durante a execução do convidado (o mingw lê `%gs:[0x30]` no `__mingw_CRTStartup`), restaurando o `GS` e liberando o TEB em seguida. O teste e2e fixa um ouro em `tests/targets/golden/xxd/` (entrada de 4880 bytes que cruza a coluna de offset em `0x1000`) e verifica em CTest: modo padrão, `-p` (plain) e caminho de erro (arquivo inexistente → exit `2`, stderr não vazio), 3 testes novos com label `targetapp`. As conversões de código de página, `VirtualQuery`/`VirtualProtect`, `TlsGetValue`, critical sections e o subconjunto de CRT têm 42 testes unitários novos (`test_win32.cpp`, `test_msvcrt.cpp`). Total: 180 testes verdes no preset com alvos; 169 em `debug`, `release` e `sanitize`.
 - **Marco concluído:** `bzip2.exe` executa de ponta a ponta nos dois sentidos. `__iob_func()` devolve o ponteiro do array `GuestFile` (o convidado indexa `[0..2]` com `sizeof(_iobuf)` = 48 bytes — o argumento `rcx` é ignorado, como no CRT MSVC clássico) e `_stat64` passou de stub `ENOSYS` para implementação real que preenche o `struct _stat64` do MinGW (pack 8, `st_mode` em `0x06`, tamanho 56 bytes) via `stat()` do host; a verificação `S_ISREG` do bzip2 (`testb $0x40, +7`) depende dos bits de tipo do Linux, idênticos aos do Windows (`S_IFREG = 0x8000`). Compressão (`-c`) e descompressão (`-d`, `-d -c`) de arquivo são byte-idênticas ao `bzip2` nativo; e2e em CTest (ouro em `tests/targets/golden/bzip2/` e `golden/bzip2_decompress/`, comparação binária via `verify_target_run_bytes.cmake`), 2 testes novos com label `targetapp`, e 3 testes unitários novos para `_stat64` (`test_msvcrt.cpp`). Total: 265 testes verdes no preset com alvos; 218 em `debug` e `sanitize`.
-- **Marco concluído:** `tl_thread.exe` fecha a validação do subconjunto atual de concorrência. O fixture cria duas threads convidadas sequenciais, cada uma escreve `Thread done`, termina via `ExitThread` e é aguardada por `WaitForSingleObject`; a thread principal escreve `Main done` e encerra com código `0`. Metadata e execução passam em Debug, Release e Sanitize (`LSAN_OPTIONS=detect_leaks=0`); a regressão é coberta por `fixture_tl_thread_metadata` e `runtime_tl_thread_matches_readobj`. Eventos, mutexes adicionais e WinSock continuam condicionais a novos aplicativos-alvo.
+- **Marco concluído:** `tl_thread.exe` fecha a validação do subconjunto atual de concorrência. O fixture cria duas threads convidadas sequenciais, cada uma escreve `Thread done`, termina via `ExitThread` e é aguardada por `WaitForSingleObject`; a thread principal escreve `Main done` e encerra com código `0`. Metadata e execução passam em Debug, Release e Sanitize (`LSAN_OPTIONS=detect_leaks=0`); a regressão é coberta por `fixture_tl_thread_metadata` e `runtime_tl_thread_matches_readobj`. A expansão seguinte de concorrência e WinSock passou a ser validada pelas fixtures genéricas descritas no marco abaixo.
+- **Marco concluído:** a primeira entrega genérica do plano foi validada por fixtures próprias. `tl_files_wide.exe` cobre arquivos Unicode, posição, metadados, tempos, cópia e movimentação; `tl_resources.exe` acessa `RCDATA` somente leitura com limites validados; `tl_sync.exe` cobre eventos, mutex recursivo, semáforo, timeouts e `WaitForMultipleObjects`; `tl_process_parent.exe` cria filhos PE32+ pelo mesmo loader e testa código de saída/encerramento; `tl_network_loopback.exe` cobre TCP/UDP local, `localhost` e `WSAPoll`; `tl_registry_unicode.exe` cobre armazenamento genérico persistente Unicode. Cada fixture possui manifesto, metadata, execução e `--report`, sem tratamento específico para Roblox.
 - **Marco concluído:** o alvo pinado `Efeckc17/simple-todo-c` (`bcdf3d5fcebb8c0b445edb791d54511194c1b6ca`) compila como PE32+ x64 com manifesto/ícone, overlay Linux versionado e metadata/`--report` protegidos. O relatório resolve **105/105 imports**; `USER32` possui controles lógicos EDIT/BUTTON/COMBOBOX/STATIC/SysListView32, comandos/notificações, foco, teclado e fechamento nativo; `SHELL32` usa menu X11 como bandeja emulada, sem a opção de autorun exclusiva do Windows. O smoke foi atualizado para o layout Linux e cobre adicionar, editar, buscar, concluir, excluir, esconder, mostrar, persistência e saída pela bandeja ou pela janela.
 - **Marco concluído:** `dos2unix.exe` e `unix2dos.exe` executam o fluxo de conversão validado. O `--report` resolve 91/91 imports em cada binário; regressões e2e cobrem CRLF→LF, LF→CRLF e expansão de `uni_el_*.txt` com nome UTF-8. Os testes `targetapp_dos2unix_eol`, `targetapp_unix2dos_eol` e `targetapp_dos2unix_unicode-glob` passam com exit `0`; os arquivos de entrada CRLF/LF vêm da fonte pinada do dos2unix e o ouro UTF-8 está versionado em `tests/targets/golden/dos2unix/`.
 - **Próximo resultado observável:** ampliar a validação do subconjunto GUI por novos aplicativos-alvo; Wayland/toolkit permanece posterior à existência de uma aplicação GUI real suportada.
@@ -49,12 +50,13 @@ para Roblox. Ele fica registrado apenas como evidência para priorizar
 capacidades reutilizáveis por várias classes de aplicativos. As lacunas
 observadas são:
 
-- [ ] ampliar o núcleo `KERNEL32` para arquivos e caminhos Unicode, recursos,
-  tempo, sincronização, memória mapeada, carregamento dinâmico e processos
-  filhos;
-- [ ] criar uma camada `WS2_32`/rede com sockets, DNS e eventos de rede;
-- [ ] criar o subconjunto necessário de `ADVAPI32`/`CRYPT32` para registro,
-  identidade, segurança, criptografia e certificados;
+- [x] ampliar o núcleo `KERNEL32` para arquivos e caminhos Unicode, recursos,
+  tempo, sincronização e processos filhos, com fixtures próprias; memória
+  mapeada e carregamento dinâmico continuam pendentes;
+- [x] criar uma camada `WS2_32`/rede com sockets, resolução local e polling,
+  validada somente em loopback;
+- [x] criar o armazenamento genérico Unicode de `ADVAPI32` para registro;
+  `CRYPT32`, identidade, segurança e certificados continuam pendentes;
 - [ ] definir uma camada `OLE32`/COM mínima somente quando houver um alvo e
   contrato de ABI que a justifiquem;
 - [ ] ampliar a GUI de forma genérica: variantes Unicode de `USER32`, controles
@@ -243,6 +245,8 @@ arquivos, mantendo uma tradução de caminhos segura e explícita.
 - [x] Definir diretório atual, diretório do executável e variáveis de ambiente sem inventar letras de drive.
 - [x] Implementar conversão UTF-16/UTF-8 e testar nomes não ASCII.
 - [x] Adicionar testes de permissões, arquivos inexistentes, diretórios e concorrência controlada.
+- [x] Adicionar tamanho/posição, tempos, metadados, cópia, movimentação,
+  diretórios wide e leitura segura de recursos PE com fixtures independentes.
 
 ### Critério de saída
 
@@ -255,9 +259,11 @@ Esta fase só começa se um aplicativo-alvo justificar threads ou rede.
 
 - [x] Implementar `CreateThread`, `ExitThread`, `WaitForSingleObject` e `CloseHandle`.
 - [x] Implementar `CRITICAL_SECTION` compatível com o escopo atual de convidado single-thread.
-- [ ] Ampliar sincronização para threads, eventos e mutexes quando um aplicativo-alvo justificar.
+- [x] Ampliar sincronização para eventos, mutexes, semáforos e `WaitForMultipleObjects` com fixture própria.
 - [x] Definir TLS, encerramento de threads e chamadas ABI em threads convidadas.
-- [ ] Se houver alvo concreto, criar uma camada WinSock mínima separada de `KERNEL32.dll`.
+- [x] Criar uma camada WinSock mínima separada de `KERNEL32.dll`, com teste TCP/UDP em loopback.
+- [x] Criar `CreateProcessW`, `GetExitCodeProcess` e `TerminateProcess` sob o
+  contrato de filhos PE32+ validados pelo mesmo loader.
 - [x] Testar deadlock, timeout, cancelamento e propagação de falha do convidado.
 
 ### Critério de saída

@@ -1,0 +1,24 @@
+{
+  "name": "tl_sync",
+  "format": "PE32+",
+  "machine": "AMD64",
+  "entry_point": "tl_entry",
+  "uses_crt": false,
+  "imports": {
+    "KERNEL32.dll": [
+      "CloseHandle",
+      "CreateEventA",
+      "CreateMutexA",
+      "CreateSemaphoreA",
+      "ExitProcess",
+      "GetStdHandle",
+      "ReleaseMutex",
+      "ReleaseSemaphore",
+      "ResetEvent",
+      "SetEvent",
+      "WaitForMultipleObjects",
+      "WaitForSingleObject",
+      "WriteFile"
+    ]
+  }
+}

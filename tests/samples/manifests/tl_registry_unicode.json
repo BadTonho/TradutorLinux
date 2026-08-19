@@ -1,0 +1,22 @@
+{
+  "name": "tl_registry_unicode",
+  "format": "PE32+",
+  "machine": "AMD64",
+  "entry_point": "tl_entry",
+  "uses_crt": false,
+  "imports": {
+    "ADVAPI32.dll": [
+      "RegCloseKey",
+      "RegCreateKeyExW",
+      "RegDeleteValueW",
+      "RegOpenKeyExW",
+      "RegQueryValueExW",
+      "RegSetValueExW"
+    ],
+    "KERNEL32.dll": [
+      "ExitProcess",
+      "GetStdHandle",
+      "WriteFile"
+    ]
+  }
+}

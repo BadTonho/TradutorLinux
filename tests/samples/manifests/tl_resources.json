@@ -1,0 +1,19 @@
+{
+  "name": "tl_resources",
+  "format": "PE32+",
+  "machine": "AMD64",
+  "entry_point": "tl_entry",
+  "uses_crt": false,
+  "imports": {
+    "KERNEL32.dll": [
+      "ExitProcess",
+      "FindResourceW",
+      "GetModuleHandleW",
+      "GetStdHandle",
+      "LoadResource",
+      "LockResource",
+      "SizeofResource",
+      "WriteFile"
+    ]
+  }
+}
