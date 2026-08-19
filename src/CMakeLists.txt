@@ -17,6 +17,7 @@ add_library(tradutorlinux_core STATIC
     runtime/advapi.cpp
     runtime/ws2_32.cpp
     runtime/guest_entry.S
+    util/unicode.cpp
     gui/x11.cpp
 )
 

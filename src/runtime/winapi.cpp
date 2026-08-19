@@ -6,10 +6,12 @@
 #include "tradutorlinux/loader/process.hpp"
 #include "tradutorlinux/pe/pe_reader.hpp"
 #include "tradutorlinux/prefix/prefix.hpp"
+#include "tradutorlinux/runtime/error_map.hpp"
 #include "tradutorlinux/runtime/memory_validator.hpp"
 #include "tradutorlinux/runtime/msvcrt.hpp"
 #include "tradutorlinux/runtime/teb.hpp"
 #include "tradutorlinux/util/basics.hpp"
+#include "tradutorlinux/util/unicode.hpp"
 #include "gui_controls.hpp"
 
 #include <algorithm>
@@ -235,23 +237,7 @@ void set_last_error(const std::uint32_t error) noexcept {
 }
 
 [[nodiscard]] std::uint32_t errno_to_win32(const int error) noexcept {
-    switch (error) {
-        case ENOENT:
-            return abi::kErrorFileNotFound;
-        case EACCES:
-        case EPERM:
-            return abi::kErrorAccessDenied;
-        case ENOMEM:
-            return abi::kErrorNotEnoughMemory;
-        case EEXIST:
-            return abi::kErrorAlreadyExists;
-        case EPIPE:
-            // Escrever em um pipe sem leitor (ex.: stdout para `head -c0`) é
-            // um erro controlado de I/O, não uma morte por sinal.
-            return abi::kErrorBrokenPipe;
-        default:
-            return abi::kErrorInvalidParameter;
-    }
+    return runtime::errno_to_win32(error);
 }
 
 void bump_guest_allocation_generation() noexcept {
@@ -746,39 +732,6 @@ std::uintptr_t g_unhandled_exception_filter = 0;
 // fase, então TlsGetValue retorna null como no Windows para índice não usado.
 thread_local std::array<void*, 64> g_guest_tls_slots{};
 
-// Sequência inválida de entrada nas conversões de codepage (fora do intervalo
-// Unicode). Utilizado como sentinela interno das conversões.
-constexpr std::uint32_t kInvalidCodepoint = 0x110000U;
-
-// CP1252: mapeamento dos bytes de controle 0x80-0x9F para Unicode. Os demais
-// bytes são iguais ao Latin-1 (0xA0-0xFF -> U+00A0-U+00FF).
-constexpr std::array<std::uint32_t, 32> kCp1252Control{
-    0x20AC, 0x0081, 0x201A, 0x0192, 0x201E, 0x2026, 0x2020, 0x2021,
-    0x02C6, 0x2030, 0x0160, 0x2039, 0x0152, 0x008D, 0x017D, 0x008F,
-    0x0090, 0x2018, 0x2019, 0x201C, 0x201D, 0x2022, 0x2013, 0x2014,
-    0x02DC, 0x2122, 0x0161, 0x203A, 0x0153, 0x009D, 0x017E, 0x0178,
-};
-
-[[nodiscard]] std::uint32_t cp1252_to_unicode(const std::uint8_t byte) noexcept {
-    if (byte >= 0x80U && byte <= 0x9FU) {
-        return kCp1252Control[static_cast<std::size_t>(byte - 0x80U)];
-    }
-    return static_cast<std::uint32_t>(byte);
-}
-
-[[nodiscard]] bool unicode_to_cp1252(const std::uint32_t codepoint, std::uint8_t& byte) noexcept {
-    if (codepoint <= 0xFFU) {
-        byte = static_cast<std::uint8_t>(codepoint);
-        return true;
-    }
-    const auto found = std::find(kCp1252Control.begin(), kCp1252Control.end(), codepoint);
-    if (found == kCp1252Control.end()) {
-        return false;
-    }
-    byte = static_cast<std::uint8_t>(0x80U + static_cast<std::size_t>(found - kCp1252Control.begin()));
-    return true;
-}
-
 // Decodifica um caractere de UTF-8 ou CP1252 a partir de `bytes`; avança `pos`.
 // Retorna kInvalidCodepoint para sequência inválida (consumindo 1 byte).
 [[nodiscard]] std::uint32_t decode_multibyte(const std::uint32_t code_page,
@@ -792,101 +745,9 @@ constexpr std::array<std::uint32_t, 32> kCp1252Control{
     }
     if (code_page == abi::kCpAcp || code_page == abi::kCp1252) {
         pos += 1;
-        return cp1252_to_unicode(first);
+        return util::cp1252_to_unicode(first);
     }
-    std::size_t needed = 0;
-    std::uint32_t value = 0;
-    if ((first & 0xE0U) == 0xC0U) {
-        needed = 2;
-        value = static_cast<std::uint32_t>(first & 0x1FU);
-    } else if ((first & 0xF0U) == 0xE0U) {
-        needed = 3;
-        value = static_cast<std::uint32_t>(first & 0x0FU);
-    } else if ((first & 0xF8U) == 0xF0U) {
-        needed = 4;
-        value = static_cast<std::uint32_t>(first & 0x07U);
-    } else {
-        pos += 1;
-        return kInvalidCodepoint;
-    }
-    if (pos + needed > length) {
-        pos += 1;
-        return kInvalidCodepoint;
-    }
-    for (std::size_t index = 1; index < needed; ++index) {
-        const std::uint8_t continuation = bytes[pos + index];
-        if ((continuation & 0xC0U) != 0x80U) {
-            pos += 1;
-            return kInvalidCodepoint;
-        }
-        value = (value << 6U) | static_cast<std::uint32_t>(continuation & 0x3FU);
-    }
-    pos += needed;
-    const bool overlong = (needed == 2 && value < 0x80U) ||
-                          (needed == 3 && value < 0x800U) ||
-                          (needed == 4 && value < 0x10000U);
-    if (overlong || value > 0x10FFFFU || (value >= 0xD800U && value <= 0xDFFFU)) {
-        return kInvalidCodepoint;
-    }
-    return value;
-}
-
-[[nodiscard]] std::size_t utf16_units_for(const std::uint32_t codepoint,
-                                          std::uint16_t out[2]) noexcept {
-    if (codepoint < 0x10000U) {
-        out[0] = static_cast<std::uint16_t>(codepoint);
-        return 1;
-    }
-    const std::uint32_t value = codepoint - 0x10000U;
-    out[0] = static_cast<std::uint16_t>(0xD800U | (value >> 10U));
-    out[1] = static_cast<std::uint16_t>(0xDC00U | (value & 0x3FFU));
-    return 2;
-}
-
-[[nodiscard]] std::uint32_t decode_utf16(const std::uint16_t* const units,
-                                         const std::size_t length,
-                                         std::size_t& pos) noexcept {
-    const std::uint16_t first = units[pos];
-    if (first >= 0xD800U && first <= 0xDBFFU) {
-        if (pos + 1 < length && units[pos + 1] >= 0xDC00U && units[pos + 1] <= 0xDFFFU) {
-            const std::uint32_t value =
-                (static_cast<std::uint32_t>(first - 0xD800U) << 10U) |
-                static_cast<std::uint32_t>(units[pos + 1] - 0xDC00U);
-            pos += 2;
-            return value + 0x10000U;
-        }
-        pos += 1;
-        return kInvalidCodepoint;
-    }
-    if (first >= 0xDC00U && first <= 0xDFFFU) {
-        pos += 1;
-        return kInvalidCodepoint;
-    }
-    pos += 1;
-    return static_cast<std::uint32_t>(first);
-}
-
-[[nodiscard]] std::size_t utf8_bytes_for(const std::uint32_t codepoint, char out[4]) noexcept {
-    if (codepoint < 0x80U) {
-        out[0] = static_cast<char>(codepoint);
-        return 1;
-    }
-    if (codepoint < 0x800U) {
-        out[0] = static_cast<char>(0xC0U | (codepoint >> 6U));
-        out[1] = static_cast<char>(0x80U | (codepoint & 0x3FU));
-        return 2;
-    }
-    if (codepoint < 0x10000U) {
-        out[0] = static_cast<char>(0xE0U | (codepoint >> 12U));
-        out[1] = static_cast<char>(0x80U | ((codepoint >> 6U) & 0x3FU));
-        out[2] = static_cast<char>(0x80U | (codepoint & 0x3FU));
-        return 3;
-    }
-    out[0] = static_cast<char>(0xF0U | (codepoint >> 18U));
-    out[1] = static_cast<char>(0x80U | ((codepoint >> 12U) & 0x3FU));
-    out[2] = static_cast<char>(0x80U | ((codepoint >> 6U) & 0x3FU));
-    out[3] = static_cast<char>(0x80U | (codepoint & 0x3FU));
-    return 4;
+    return util::decode_utf8(reinterpret_cast<const char*>(bytes), length, pos);
 }
 
 // CRITICAL_SECTION é um token opaco para a fronteira: o convidado roda em uma
@@ -3857,7 +3718,7 @@ void write_filetime(const timespec& source, GuestFileTime& target) noexcept {
     if (!mapped_guest_wstring(path) || path == nullptr || path[0] == 0) {
         return false;
     }
-    result = wide_to_utf8(path);
+    result = util::wide_to_utf8(path);
     return !result.empty();
 }
 

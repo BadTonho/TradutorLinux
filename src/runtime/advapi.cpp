@@ -18,6 +18,7 @@
 #include <sys/types.h>
 
 #include "tradutorlinux/runtime/memory_validator.hpp"
+#include "tradutorlinux/util/unicode.hpp"
 
 namespace tradutorlinux {
 namespace {
@@ -57,32 +58,10 @@ inline bool mapped_wstring(const std::uint16_t* value) noexcept {
 }
 
 std::string wide_to_utf8(const std::uint16_t* value) {
-    std::string result;
     if (!mapped_wstring(value)) {
-        return result;
+        return {};
     }
-    for (std::size_t index = 0; value[index] != 0; ++index) {
-        const std::uint32_t unit = value[index];
-        if (unit >= 0xD800U && unit <= 0xDBFFU && value[index + 1] >= 0xDC00U &&
-            value[index + 1] <= 0xDFFFU) {
-            const std::uint32_t codepoint = 0x10000U + ((unit - 0xD800U) << 10U) +
-                                            (value[++index] - 0xDC00U);
-            result.push_back(static_cast<char>(0xF0U | (codepoint >> 18U)));
-            result.push_back(static_cast<char>(0x80U | ((codepoint >> 12U) & 0x3FU)));
-            result.push_back(static_cast<char>(0x80U | ((codepoint >> 6U) & 0x3FU)));
-            result.push_back(static_cast<char>(0x80U | (codepoint & 0x3FU)));
-        } else if (unit < 0x80U) {
-            result.push_back(static_cast<char>(unit));
-        } else if (unit < 0x800U) {
-            result.push_back(static_cast<char>(0xC0U | (unit >> 6U)));
-            result.push_back(static_cast<char>(0x80U | (unit & 0x3FU)));
-        } else {
-            result.push_back(static_cast<char>(0xE0U | (unit >> 12U)));
-            result.push_back(static_cast<char>(0x80U | ((unit >> 6U) & 0x3FU)));
-            result.push_back(static_cast<char>(0x80U | (unit & 0x3FU)));
-        }
-    }
-    return result;
+    return util::wide_to_utf8(value);
 }
 
 std::string registry_path() {

@@ -1,7 +1,9 @@
 #include "tradutorlinux/runtime/msvcrt.hpp"
 
 #include "tradutorlinux/diagnostics/trace.hpp"
+#include "tradutorlinux/runtime/error_map.hpp"
 #include "tradutorlinux/runtime/winapi.hpp"
+#include "tradutorlinux/util/unicode.hpp"
 
 #include <algorithm>
 #include <array>
@@ -183,39 +185,10 @@ std::uintptr_t read_ptr_slot(GuestVaList& ap) {
 }
 
 std::string utf16_to_utf8(const std::uint16_t* text, std::size_t char_limit) {
-    std::string out;
     if (text == nullptr) {
-        return out;
+        return {};
     }
-    while (char_limit > 0 && *text != 0) {
-        --char_limit;
-        const std::uint16_t unit = *text++;
-        std::uint32_t code_point = unit;
-        if (unit >= 0xD800 && unit <= 0xDBFF && text[0] != 0 && text[0] >= 0xDC00 &&
-            text[0] <= 0xDFFF) {
-            code_point =
-                0x10000U + ((static_cast<std::uint32_t>(unit - 0xD800U) << 10) | (text[0] - 0xDC00U));
-            ++text;
-        } else if (unit >= 0xD800 && unit <= 0xDFFF) {
-            continue;
-        }
-        if (code_point < 0x80) {
-            out.push_back(static_cast<char>(code_point));
-        } else if (code_point < 0x800) {
-            out.push_back(static_cast<char>(0xC0U | (code_point >> 6)));
-            out.push_back(static_cast<char>(0x80U | (code_point & 0x3FU)));
-        } else if (code_point < 0x10000) {
-            out.push_back(static_cast<char>(0xE0U | (code_point >> 12)));
-            out.push_back(static_cast<char>(0x80U | ((code_point >> 6) & 0x3FU)));
-            out.push_back(static_cast<char>(0x80U | (code_point & 0x3FU)));
-        } else {
-            out.push_back(static_cast<char>(0xF0U | (code_point >> 18)));
-            out.push_back(static_cast<char>(0x80U | ((code_point >> 12) & 0x3FU)));
-            out.push_back(static_cast<char>(0x80U | ((code_point >> 6) & 0x3FU)));
-            out.push_back(static_cast<char>(0x80U | (code_point & 0x3FU)));
-        }
-    }
-    return out;
+    return util::wide_to_utf8(text, char_limit);
 }
 
 // Converte UTF-8 para UTF-16, limitando a quantidade de unidades de saída
