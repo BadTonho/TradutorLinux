@@ -1,0 +1,11 @@
+--- a/src/gui.c
++++ b/src/gui.c
+@@ -391,7 +391,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
+         case WM_CLOSE: {
+             
+-            ShowWindow(hwnd, SW_HIDE);
++            DestroyWindow(hwnd);
+             return 0;
+         }
+         
+         case WM_NOTIFY: {

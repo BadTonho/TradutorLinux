@@ -195,6 +195,24 @@ void send_right_click(const std::string& display_name, const Window window, cons
     send_button(display_name, window, x, y, 3);
 }
 
+void send_window_close(const std::string& display_name, const Window window) {
+    Display* dpy = XOpenDisplay(display_name.c_str());
+    if (dpy == nullptr) {
+        fail("display indisponível ao enviar fechamento");
+    }
+    XEvent event{};
+    event.xclient.type = ClientMessage;
+    event.xclient.display = dpy;
+    event.xclient.window = window;
+    event.xclient.message_type = XInternAtom(dpy, "WM_PROTOCOLS", False);
+    event.xclient.format = 32;
+    event.xclient.data.l[0] = static_cast<long>(XInternAtom(dpy, "WM_DELETE_WINDOW", False));
+    event.xclient.data.l[1] = CurrentTime;
+    XSendEvent(dpy, window, False, NoEventMask, &event);
+    XFlush(dpy);
+    XCloseDisplay(dpy);
+}
+
 void send_key(const std::string& display_name, const Window window, const KeySym keysym,
               const unsigned int state = 0) {
     Display* dpy = XOpenDisplay(display_name.c_str());
@@ -299,7 +317,7 @@ int wait_guest(const pid_t child) {
     }
     ::kill(child, SIGKILL);
     ::waitpid(child, nullptr, 0);
-    fail("runtime não encerrou pelo menu Exit");
+    fail("runtime não encerrou pelo fluxo de fechamento");
 }
 
 void require_file(const std::filesystem::path& path, const char* description) {
@@ -382,7 +400,7 @@ int main(int argc, char** argv) {
     const Window main_window = wait_for_window(display, "Todo Application");
 
     // Adicionar tarefa, incluindo descrição e prioridade 3.
-    send_button(display, main_window, 70, 515);
+    send_button(display, main_window, 100, 473);
     type_text(display, main_window, "Task alpha");
     send_button(display, main_window, 400, 473);
     type_text(display, main_window, "Description beta");
@@ -398,14 +416,17 @@ int main(int argc, char** argv) {
 
     // Editar título, descrição e prioridade.
     send_button(display, main_window, 100, 110);
+    sleep_short();
     send_button(display, main_window, 100, 473);
-    erase_text(display, main_window, 64);
+    sleep_short();
+    erase_text(display, main_window, 32);
     type_text(display, main_window, "Task edited");
     send_button(display, main_window, 400, 473);
-    erase_text(display, main_window, 64);
+    erase_text(display, main_window, 32);
     type_text(display, main_window, "Description edited");
     send_button(display, main_window, 650, 473);
-    send_button(display, main_window, 190, 515);
+    sleep_short();
+    send_button(display, main_window, 570, 515);
     sleep_short();
     require_binary_contains(todo_file, "Task edited", "todos.dat após editar");
     require_binary_contains(todo_file, "Description edited", "todos.dat após editar");
@@ -448,8 +469,7 @@ int main(int argc, char** argv) {
     send_button(display, second_window, 310, 515);
     sleep_short();
     require_todo_state(todo_file, 0, 0, 0);
-    send_right_click(display, second_window, 700, 200);
-    choose_menu(display, 3);
+    send_window_close(display, second_window);
 
     const int second_exit_code = wait_guest(second_child);
     if (second_exit_code != 0) {

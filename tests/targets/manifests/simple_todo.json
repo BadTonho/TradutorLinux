@@ -89,6 +89,7 @@
       "CreateWindowExA",
       "DefWindowProcA",
       "DestroyMenu",
+      "DestroyWindow",
       "DispatchMessageA",
       "EnableWindow",
       "FindWindowA",

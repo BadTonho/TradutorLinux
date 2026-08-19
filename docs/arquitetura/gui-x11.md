@@ -197,6 +197,7 @@ uma integração com o tray do desktop.
 
 O alvo Simple Todo recebe um overlay Linux versionado em
 `tests/targets/patches/`: a opção de inicialização com Windows é removida e o
-fluxo continua usando somente dados relativos em `APPDATA`. O smoke
+fechamento da janela destrói o alvo em vez de apenas ocultá-lo; o fluxo continua
+usando somente dados relativos em `APPDATA`. O smoke
 `targetapp_simple_todo_gui_smoke` cria um CWD próprio, prepara `appdata` para
 os caminhos relativos e verifica o artefato persistente de todos.

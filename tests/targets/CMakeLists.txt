@@ -132,6 +132,19 @@ if(NOT EXISTS "${_simple_todo_patch_stamp}")
     endif()
     file(WRITE "${_simple_todo_patch_stamp}" "linux-overlay-v1\n")
 endif()
+set(_simple_todo_close_patch_stamp "${_simple_todo_source_dir}/.tradutorlinux-linux-close-applied")
+if(NOT EXISTS "${_simple_todo_close_patch_stamp}")
+    execute_process(
+        COMMAND "${TL_PATCH_EXECUTABLE}" --batch --forward -p1
+            -i "${CMAKE_CURRENT_SOURCE_DIR}/patches/simple_todo_linux_close.patch"
+        WORKING_DIRECTORY "${_simple_todo_source_dir}"
+        RESULT_VARIABLE _simple_todo_close_patch_result
+    )
+    if(NOT _simple_todo_close_patch_result EQUAL 0)
+        message(FATAL_ERROR "Falha ao configurar fechamento nativo Linux do Simple Todo")
+    endif()
+    file(WRITE "${_simple_todo_close_patch_stamp}" "linux-close-v1\n")
+endif()
 
 # --- Build cruzado ----------------------------------------------------------
 
@@ -255,6 +268,7 @@ add_custom_command(
     DEPENDS ${_simple_todo_sources} "${_simple_todo_resource}"
         "${CMAKE_CURRENT_SOURCE_DIR}/patches/simple_todo_linux.patch"
         "${CMAKE_CURRENT_SOURCE_DIR}/patches/simple_todo_linux_autorun.patch"
+        "${CMAKE_CURRENT_SOURCE_DIR}/patches/simple_todo_linux_close.patch"
     VERBATIM
     COMMENT "Cross-compilando simple_todo.exe (Simple Todo C pinado)"
 )
