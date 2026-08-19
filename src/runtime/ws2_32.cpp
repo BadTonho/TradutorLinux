@@ -15,6 +15,8 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
+#include "tradutorlinux/runtime/memory_validator.hpp"
+
 namespace tradutorlinux {
 namespace {
 
@@ -41,7 +43,7 @@ struct SocketSlot {
     int fd{-1};
     int type{0};
 };
-std::array<SocketSlot, 64> g_sockets{};
+std::array<SocketSlot, 256> g_sockets{};
 
 struct GuestAddrInfo {
     int flags{};
@@ -55,7 +57,7 @@ struct GuestAddrInfo {
     sockaddr_in socket_address{};
     std::string canon_name;
 };
-std::array<GuestAddrInfo, 16> g_addrinfos{};
+std::array<GuestAddrInfo, 128> g_addrinfos{};
 
 struct GuestPollFd {
     std::uintptr_t socket{};
@@ -64,51 +66,15 @@ struct GuestPollFd {
 };
 static_assert(sizeof(GuestPollFd) == 16);
 
-bool mapped_range(const void* address, const std::size_t size, const bool writable) noexcept {
-    if (address == nullptr) {
-        return false;
-    }
-    const std::uintptr_t target = reinterpret_cast<std::uintptr_t>(address);
-    if (size > std::numeric_limits<std::uintptr_t>::max() - target) {
-        return false;
-    }
-    std::ifstream maps{"/proc/self/maps"};
-    std::string line;
-    while (std::getline(maps, line)) {
-        const std::size_t dash = line.find('-');
-        const std::size_t space = line.find(' ', dash == std::string::npos ? 0 : dash);
-        if (dash == std::string::npos || space == std::string::npos) {
-            continue;
-        }
-        std::uintptr_t begin = 0;
-        std::uintptr_t end = 0;
-        if (std::from_chars(line.data(), line.data() + dash, begin, 16).ec != std::errc{} ||
-            std::from_chars(line.data() + dash + 1, line.data() + space, end, 16).ec != std::errc{} ||
-            target < begin || target > end || size > end - target) {
-            continue;
-        }
-        const std::size_t permissions = space + 1;
-        return line.size() >= permissions + 2 && line[permissions] == 'r' &&
-               (!writable || line[permissions + 1] == 'w');
-    }
-    return false;
+inline bool mapped_range(const void* address, const std::size_t size, const bool writable) noexcept {
+    return runtime::validate_mapped_range(address, size, writable);
 }
 
-bool mapped_cstring(const char* value) noexcept {
+inline bool mapped_cstring(const char* value) noexcept {
     if (value == nullptr) {
         return true;
     }
-    const std::uintptr_t address = reinterpret_cast<std::uintptr_t>(value);
-    for (std::size_t index = 0; index < 65535U; ++index) {
-        if (index > std::numeric_limits<std::uintptr_t>::max() - address ||
-            !mapped_range(reinterpret_cast<const void*>(address + index), 1, false)) {
-            return false;
-        }
-        if (value[index] == '\0') {
-            return true;
-        }
-    }
-    return false;
+    return runtime::validate_mapped_cstring(value);
 }
 
 SocketSlot* find_socket(const std::uintptr_t handle) noexcept {

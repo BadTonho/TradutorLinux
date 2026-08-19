@@ -9,6 +9,7 @@ add_library(tradutorlinux_core STATIC
     pe/pe_reader.cpp
     prefix/prefix.cpp
     process/isolate.cpp
+    runtime/memory_validator.cpp
     runtime/winapi.cpp
     runtime/gui_controls.cpp
     runtime/msvcrt.cpp

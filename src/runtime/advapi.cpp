@@ -17,6 +17,8 @@
 
 #include <sys/types.h>
 
+#include "tradutorlinux/runtime/memory_validator.hpp"
+
 namespace tradutorlinux {
 namespace {
 
@@ -38,73 +40,20 @@ struct RegistryValue {
     std::vector<unsigned char> data;
 };
 
-std::array<RegistryKey, 64> g_keys{};
+std::array<RegistryKey, 256> g_keys{};
 std::vector<RegistryValue> g_values;
 bool g_loaded = false;
 
-bool mapped_range(const void* address, const std::size_t size, const bool writable) noexcept {
-    if (address == nullptr) {
-        return false;
-    }
-    const std::uintptr_t target = reinterpret_cast<std::uintptr_t>(address);
-    if (size > std::numeric_limits<std::uintptr_t>::max() - target) {
-        return false;
-    }
-    std::ifstream maps{"/proc/self/maps"};
-    std::string line;
-    while (std::getline(maps, line)) {
-        const std::size_t dash = line.find('-');
-        const std::size_t space = line.find(' ', dash == std::string::npos ? 0 : dash);
-        if (dash == std::string::npos || space == std::string::npos) {
-            continue;
-        }
-        std::uintptr_t begin = 0;
-        std::uintptr_t end = 0;
-        if (std::from_chars(line.data(), line.data() + dash, begin, 16).ec != std::errc{} ||
-            std::from_chars(line.data() + dash + 1, line.data() + space, end, 16).ec != std::errc{} ||
-            target < begin || target > end || size > end - target) {
-            continue;
-        }
-        const std::size_t permissions = space + 1;
-        return line.size() >= permissions + 2 && line[permissions] == 'r' &&
-               (!writable || line[permissions + 1] == 'w');
-    }
-    return false;
+inline bool mapped_range(const void* address, const std::size_t size, const bool writable) noexcept {
+    return runtime::validate_mapped_range(address, size, writable);
 }
 
-bool mapped_cstring(const char* value) noexcept {
-    if (value == nullptr) {
-        return false;
-    }
-    const std::uintptr_t address = reinterpret_cast<std::uintptr_t>(value);
-    for (std::size_t index = 0; index < 65535U; ++index) {
-        if (index > std::numeric_limits<std::uintptr_t>::max() - address ||
-            !mapped_range(reinterpret_cast<const void*>(address + index), 1, false)) {
-            return false;
-        }
-        if (value[index] == '\0') {
-            return true;
-        }
-    }
-    return false;
+inline bool mapped_cstring(const char* value) noexcept {
+    return runtime::validate_mapped_cstring(value);
 }
 
-bool mapped_wstring(const std::uint16_t* value) noexcept {
-    if (value == nullptr) {
-        return false;
-    }
-    const std::uintptr_t address = reinterpret_cast<std::uintptr_t>(value);
-    for (std::size_t index = 0; index < 65535U; ++index) {
-        if (index > (std::numeric_limits<std::uintptr_t>::max() - address) / sizeof(*value) ||
-            !mapped_range(reinterpret_cast<const void*>(address + index * sizeof(*value)),
-                          sizeof(*value), false)) {
-            return false;
-        }
-        if (value[index] == 0) {
-            return true;
-        }
-    }
-    return false;
+inline bool mapped_wstring(const std::uint16_t* value) noexcept {
+    return runtime::validate_mapped_wstring(value);
 }
 
 std::string wide_to_utf8(const std::uint16_t* value) {

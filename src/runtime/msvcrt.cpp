@@ -42,11 +42,13 @@ constexpr int kIoError = 0x0020;
 constexpr int kIoBinary = 0x8000;
 
 // Modos de arquivo do msvcrt.
+#include "tradutorlinux/prefix/prefix.hpp"
+
 constexpr int kO_BINARY = 0x8000;
 constexpr int kO_TEXT = 0x4000;
 
-constexpr int kFileSlotCount = 16;
-constexpr int kFdModeCount = 64;
+constexpr int kFileSlotCount = 256;
+constexpr int kFdModeCount = 512;
 
 // Ponteiro para função convidada (convenção Microsoft x64).
 using GuestFnPtr = void (TL_CRT_MSABI *)();
@@ -94,14 +96,26 @@ void set_error(int error) {
 }
 
 // Tradução de caminhos usados pelo CRT do convidado. O Win32 aceita barra
-// invertida como separador; o host usa barra normal. Drives e raízes Windows
-// continuam fora do contrato, mas caminhos absolutos Linux são usados pelos
-// testes e pelos argumentos de aplicativos-alvo.
+// invertida como separador; o host usa barra normal. Drives virtuais C:\ e caminhos
+// absolutos são resolvidos dentro do prefixo do TradutorLinux.
 [[nodiscard]] bool translate_guest_path(const char* guest_path, char* host_path,
                                         const std::size_t host_path_size) noexcept {
-    if (guest_path == nullptr || guest_path[0] == '\0' || guest_path[0] == '\\') {
+    if (guest_path == nullptr || guest_path[0] == '\0') {
         return false;
     }
+
+    std::string_view view{guest_path};
+    if ((view.size() >= 2 && (view[0] == 'C' || view[0] == 'c') && view[1] == ':') ||
+        view.starts_with('\\')) {
+        const std::filesystem::path resolved = prefix::resolve_windows_path(view);
+        const std::string s = resolved.string();
+        if (s.size() + 1 > host_path_size) {
+            return false;
+        }
+        std::memcpy(host_path, s.c_str(), s.size() + 1);
+        return true;
+    }
+
     std::size_t length = 0;
     for (; guest_path[length] != '\0'; ++length) {
         if (length + 1U >= host_path_size || guest_path[length] == ':') {

@@ -5,6 +5,8 @@
 #include "tradutorlinux/loader/module.hpp"
 #include "tradutorlinux/loader/process.hpp"
 #include "tradutorlinux/pe/pe_reader.hpp"
+#include "tradutorlinux/prefix/prefix.hpp"
+#include "tradutorlinux/runtime/memory_validator.hpp"
 #include "tradutorlinux/runtime/msvcrt.hpp"
 #include "tradutorlinux/util/basics.hpp"
 #include "gui_controls.hpp"
@@ -89,8 +91,11 @@ struct GuestMapRegion {
     bool writable{false};
 };
 
-std::array<FileSlot, 64> g_files{};
-std::array<AllocationSlot, 64> g_allocations{};
+std::mutex g_files_mutex;
+std::array<FileSlot, 256> g_files{};
+
+std::mutex g_allocations_mutex;
+std::array<AllocationSlot, 256> g_allocations{};
 
 // Visão somente-leitura da imagem convidada corrente, usada pelas APIs de
 // recursos. O loader configura estes valores antes de transferir o controle
@@ -106,7 +111,8 @@ struct ResourceSlot {
     std::uint32_t data_rva{0};
     std::uint32_t data_size{0};
 };
-std::array<ResourceSlot, 64> g_resources{};
+std::mutex g_resource_mutex;
+std::array<ResourceSlot, 256> g_resources{};
 
 constexpr std::uintptr_t kSyncHandleBase = 0x0000600000000000ULL;
 enum class SyncKind { Mutex, Event, Semaphore, Process };
@@ -127,7 +133,8 @@ struct SyncSlot {
     bool process_running{false};
     std::uint32_t process_exit_code{259U};  // STILL_ACTIVE
 };
-std::array<SyncSlot, 64> g_syncs{};
+std::mutex g_sync_mutex;
+std::array<SyncSlot, 256> g_syncs{};
 
 [[nodiscard]] std::uint32_t wait_process_slot(SyncSlot& slot,
                                               std::uint32_t milliseconds) noexcept;
@@ -154,7 +161,8 @@ struct ThreadSlot {
     int exit_code{0};                      // código de saída da thread
     std::condition_variable finish_cv;     // sinaliza quando finished==true
 };
-std::array<ThreadSlot, 64> g_threads{};
+std::mutex g_threads_mutex;
+std::array<ThreadSlot, 256> g_threads{};
 
 // Handle de thread: ponteiro para um slot de thread, para manter compatibilidade
 // com a existente file-handle scheme.
@@ -178,8 +186,8 @@ ThreadSlot* find_thread_slot(const void* handle) noexcept {
     return nullptr;
 }
 
-// Índices TLS globais (máximo 64 slots, como g_guest_tls_slots).
-constexpr std::uint32_t kMaxTlsSlots = 64;
+// Índices TLS globais (máximo 256 slots, como g_guest_tls_slots).
+constexpr std::uint32_t kMaxTlsSlots = 256;
 std::array<bool, kMaxTlsSlots> g_tls_indices_used{};
 
 // --- CRITICAL_SECTION: side-table com pthread_mutex_t ---
@@ -188,12 +196,14 @@ struct CriticalSectionEntry {
     pthread_mutex_t mutex{};
     bool used{false};
 };
-std::array<CriticalSectionEntry, 32> g_critical_sections{};
+std::mutex g_cs_mutex;
+std::array<CriticalSectionEntry, 256> g_critical_sections{};
 
 CriticalSectionEntry* find_cs_entry(void* cs) noexcept {
     if (cs == nullptr) {
         return nullptr;
     }
+    std::lock_guard<std::mutex> lock(g_cs_mutex);
     auto it = std::find_if(g_critical_sections.begin(), g_critical_sections.end(),
                            [cs](const CriticalSectionEntry& e) {
                                return e.used && e.guest_address == cs;
@@ -202,6 +212,7 @@ CriticalSectionEntry* find_cs_entry(void* cs) noexcept {
 }
 
 CriticalSectionEntry* alloc_cs_entry(void* cs) noexcept {
+    std::lock_guard<std::mutex> lock(g_cs_mutex);
     auto it = std::find_if(g_critical_sections.begin(), g_critical_sections.end(),
                            [](const CriticalSectionEntry& e) { return !e.used; });
     if (it == g_critical_sections.end()) {
@@ -237,80 +248,13 @@ void set_last_error(const std::uint32_t error) noexcept {
     }
 }
 
-std::vector<GuestMapRegion> g_guest_map_regions{};
-std::size_t g_guest_map_generation = 0;
-std::size_t g_guest_allocation_generation = 0;
-
-// O convidado executa em processo filho, onde as únicas fontes de mmap/munmap
-// são VirtualAlloc/VirtualFree; a geração só muda por essas duas APIs, então a
-// cache permanece correta entre consultas.
 void bump_guest_allocation_generation() noexcept {
-    ++g_guest_allocation_generation;
-}
-
-void rebuild_guest_map_cache() noexcept {
-    g_guest_map_regions.clear();
-    std::ifstream maps{"/proc/self/maps"};
-    std::string line;
-    while (std::getline(maps, line)) {
-        const std::size_t dash = line.find('-');
-        const std::size_t space = line.find(' ', dash == std::string::npos ? 0 : dash);
-        if (dash == std::string::npos || space == std::string::npos || dash == 0) {
-            continue;
-        }
-        std::uintptr_t region_start{};
-        std::uintptr_t region_end{};
-        if (std::from_chars(line.data(), line.data() + dash, region_start, 16).ec != std::errc{} ||
-            std::from_chars(line.data() + dash + 1, line.data() + space, region_end, 16).ec !=
-                std::errc{} ||
-            region_start > region_end) {
-            continue;
-        }
-        const std::string::size_type permissions_offset = space + 1;
-        if (line.size() < permissions_offset + 4) {
-            continue;
-        }
-        g_guest_map_regions.push_back(
-            GuestMapRegion{region_start, region_end, line[permissions_offset] == 'r',
-                           line[permissions_offset + 1] == 'w'});
-    }
-    g_guest_map_generation = g_guest_allocation_generation;
-}
-
-[[nodiscard]] bool region_holds(const GuestMapRegion& region, const std::uintptr_t start,
-                                const std::uintptr_t end, const bool writable) noexcept {
-    return start >= region.start && end <= region.end &&
-           (writable ? region.writable : region.readable);
+    runtime::invalidate_memory_map_cache();
 }
 
 [[nodiscard]] bool mapped_guest_range(const void* address, const std::size_t size,
                                       const bool writable) noexcept {
-    if (address == nullptr) {
-        return false;
-    }
-    const std::uintptr_t start = reinterpret_cast<std::uintptr_t>(address);
-    if (size > std::numeric_limits<std::uintptr_t>::max() - start) {
-        return false;
-    }
-    const std::uintptr_t end = start + size;
-    if (g_guest_map_generation != g_guest_allocation_generation) {
-        rebuild_guest_map_cache();
-    }
-    for (const GuestMapRegion& region : g_guest_map_regions) {
-        if (region_holds(region, start, end, writable)) {
-            return true;
-        }
-    }
-    // Consulta sem achado: reconstrói uma vez e tenta de novo, cobrindo
-    // mapeamentos criados fora do runtime (ex.: alocador do processo de teste)
-    // sem pagar o custo do /proc/self/maps em toda chamada.
-    rebuild_guest_map_cache();
-    for (const GuestMapRegion& region : g_guest_map_regions) {
-        if (region_holds(region, start, end, writable)) {
-            return true;
-        }
-    }
-    return false;
+    return runtime::validate_mapped_range(address, size, writable);
 }
 
 FileSlot* find_file_slot(const void* handle) noexcept {
@@ -429,18 +373,7 @@ void consume_sync_signal(SyncSlot& slot) noexcept {
     if (value == nullptr) {
         return true;
     }
-    constexpr std::size_t kMaxGuestString = 65535;
-    const std::uintptr_t address = reinterpret_cast<std::uintptr_t>(value);
-    for (std::size_t index = 0; index < kMaxGuestString; ++index) {
-        if (index > std::numeric_limits<std::uintptr_t>::max() - address ||
-            !mapped_guest_range(reinterpret_cast<const void*>(address + index), 1, false)) { // NOLINT(performance-no-int-to-ptr)
-            return false;
-        }
-        if (value[index] == '\0') {
-            return true;
-        }
-    }
-    return false;
+    return runtime::validate_mapped_cstring(value);
 }
 
 void runtime_trace(const char* event, const std::array<diagnostics::TraceField, 4>& fields,
