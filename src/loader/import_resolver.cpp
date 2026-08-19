@@ -1,5 +1,6 @@
 #include "tradutorlinux/loader/import_resolver.hpp"
 
+#include "tradutorlinux/loader/dll_overrides.hpp"
 #include "tradutorlinux/loader/module.hpp"
 
 #include <array>

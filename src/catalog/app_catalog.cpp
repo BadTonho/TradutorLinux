@@ -349,4 +349,43 @@ bool AppCatalog::load_from_file(const std::filesystem::path& path) {
     return true;
 }
 
+std::filesystem::path AppCatalog::default_desktop_entries_dir() {
+    const char* home = std::getenv("HOME");
+    if (home != nullptr && *home != '\0') {
+        return std::filesystem::path(home) / ".local" / "share" / "applications";
+    }
+    return {};
+}
+
+bool AppCatalog::create_desktop_entry(const AppEntry& app, const std::filesystem::path& destination_dir) {
+    std::filesystem::path dir = destination_dir.empty() ? default_desktop_entries_dir() : destination_dir;
+    if (dir.empty()) {
+        return false;
+    }
+
+    std::error_code ec;
+    std::filesystem::create_directories(dir, ec);
+    if (ec) return false;
+
+    const std::filesystem::path file_path = dir / ("tradutorlinux-" + app.id + ".desktop");
+    std::ofstream out(file_path, std::ios::trunc);
+    if (!out) {
+        return false;
+    }
+
+    out << "[Desktop Entry]\n";
+    out << "Type=Application\n";
+    out << "Name=" << app.name << "\n";
+    out << "Comment=Executado via TradutorLinux\n";
+    out << "Exec=tradutorlinux app run " << app.id << "\n";
+    if (!app.icon_path.empty()) {
+        out << "Icon=" << app.icon_path << "\n";
+    }
+    out << "Terminal=false\n";
+    out << "Categories=Utility;Game;Wine;\n";
+    out << "StartupNotify=true\n";
+
+    return true;
+}
+
 }  // namespace tradutorlinux::catalog

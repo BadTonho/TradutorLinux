@@ -8,6 +8,10 @@
 namespace tradutorlinux::prefix {
 
 std::filesystem::path default_prefix_root() {
+    const char* custom_prefix = std::getenv("TL_PREFIX");
+    if (custom_prefix != nullptr && *custom_prefix != '\0') {
+        return std::filesystem::path(custom_prefix);
+    }
     const char* home = std::getenv("HOME");
     if (home != nullptr && *home != '\0') {
         return std::filesystem::path(home) / ".tradutorlinux";
@@ -89,6 +93,16 @@ std::filesystem::path resolve_windows_path(
     }
 
     std::string_view view = normalized;
+
+    // Tratar Named Pipes (ex: "\\.\pipe\NomeDoPipe")
+    if (view.starts_with("//./pipe/") || view.starts_with("/./pipe/")) {
+        const auto pos = view.rfind('/');
+        const std::string_view pipe_name = (pos != std::string_view::npos) ? view.substr(pos + 1) : view;
+        const auto pipes_dir = prefix_root / "windows" / "temp";
+        std::error_code ec;
+        std::filesystem::create_directories(pipes_dir, ec);
+        return pipes_dir / (std::string(pipe_name) + ".pipe");
+    }
 
     // Tratar drive com letra (ex: "C:", "Z:", "D:")
     if (view.size() >= 2 && std::isalpha(static_cast<unsigned char>(view[0])) && view[1] == ':') {

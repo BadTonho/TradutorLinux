@@ -511,6 +511,14 @@ TL_MSABI void* tl_CreateThread(const void* security_attributes, std::uintptr_t s
 TL_MSABI void tl_ExitThread(std::uint32_t exit_code) noexcept;
 TL_MSABI std::uint32_t tl_WaitForSingleObject(const void* handle,
                                                std::uint32_t milliseconds) noexcept;
+TL_MSABI std::uint32_t tl_WaitForMultipleObjects(std::uint32_t count, const void* const* handles,
+                                                 int wait_all, std::uint32_t milliseconds) noexcept;
+TL_MSABI std::uint32_t tl_MsgWaitForMultipleObjects(std::uint32_t count, const void* const* handles,
+                                                    int wait_all, std::uint32_t milliseconds,
+                                                    std::uint32_t wake_mask) noexcept;
+TL_MSABI std::uint32_t tl_MsgWaitForMultipleObjectsEx(std::uint32_t count, const void* const* handles,
+                                                      std::uint32_t milliseconds, std::uint32_t wake_mask,
+                                                      std::uint32_t flags) noexcept;
 TL_MSABI std::uint32_t tl_GetCurrentThreadId() noexcept;
 TL_MSABI std::uint32_t tl_GetCurrentProcessId() noexcept;
 TL_MSABI std::uint32_t tl_TlsAlloc() noexcept;

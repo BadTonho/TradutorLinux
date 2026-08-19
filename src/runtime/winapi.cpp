@@ -3348,6 +3348,110 @@ TL_MSABI std::uint32_t tl_WaitForSingleObject(const void* handle,
     return abi::kWaitFailed;
 }
 
+TL_MSABI std::uint32_t tl_WaitForMultipleObjects(const std::uint32_t count,
+                                                 const void* const* const handles,
+                                                 const int wait_all,
+                                                 const std::uint32_t milliseconds) noexcept {
+    if (count == 0 || count > 64 || handles == nullptr ||
+        !mapped_guest_range(handles, count * sizeof(void*), false)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return abi::kWaitFailed;
+    }
+    const auto start = std::chrono::steady_clock::now();
+    while (true) {
+        if (!wait_all) {
+            for (std::uint32_t i = 0; i < count; ++i) {
+                const std::uint32_t res = tl_WaitForSingleObject(handles[i], 0);
+                if (res == abi::kWaitObject0) {
+                    set_last_error(abi::kErrorSuccess);
+                    return abi::kWaitObject0 + i;
+                }
+            }
+        } else {
+            bool all_signaled = true;
+            for (std::uint32_t i = 0; i < count; ++i) {
+                const std::uint32_t res = tl_WaitForSingleObject(handles[i], 0);
+                if (res != abi::kWaitObject0) {
+                    all_signaled = false;
+                    break;
+                }
+            }
+            if (all_signaled) {
+                set_last_error(abi::kErrorSuccess);
+                return abi::kWaitObject0;
+            }
+        }
+        if (milliseconds == 0) {
+            set_last_error(abi::kErrorSuccess);
+            return abi::kWaitTimeout;
+        }
+        if (milliseconds != abi::kInfinite) {
+            const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::steady_clock::now() - start).count();
+            if (elapsed >= milliseconds) {
+                set_last_error(abi::kErrorSuccess);
+                return abi::kWaitTimeout;
+            }
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+}
+
+TL_MSABI std::uint32_t tl_MsgWaitForMultipleObjectsEx(const std::uint32_t count,
+                                                      const void* const* const handles,
+                                                      const std::uint32_t milliseconds,
+                                                      const std::uint32_t wake_mask,
+                                                      const std::uint32_t flags) noexcept {
+    (void)wake_mask;
+    (void)flags;
+    if (count > 64 || (count > 0 && (handles == nullptr || !mapped_guest_range(handles, count * sizeof(void*), false)))) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return abi::kWaitFailed;
+    }
+    const auto start = std::chrono::steady_clock::now();
+    while (true) {
+        for (std::uint32_t i = 0; i < count; ++i) {
+            const std::uint32_t res = tl_WaitForSingleObject(handles[i], 0);
+            if (res == abi::kWaitObject0) {
+                set_last_error(abi::kErrorSuccess);
+                return abi::kWaitObject0 + i;
+            }
+        }
+        for (const auto& w : g_windows) {
+            if (w.used && (w.has_pending || !w.queued_messages.empty())) {
+                set_last_error(abi::kErrorSuccess);
+                return abi::kWaitObject0 + count;
+            }
+        }
+        if (g_quit_requested) {
+            set_last_error(abi::kErrorSuccess);
+            return abi::kWaitObject0 + count;
+        }
+        if (milliseconds == 0) {
+            set_last_error(abi::kErrorSuccess);
+            return abi::kWaitTimeout;
+        }
+        if (milliseconds != abi::kInfinite) {
+            const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::steady_clock::now() - start).count();
+            if (elapsed >= milliseconds) {
+                set_last_error(abi::kErrorSuccess);
+                return abi::kWaitTimeout;
+            }
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+}
+
+TL_MSABI std::uint32_t tl_MsgWaitForMultipleObjects(const std::uint32_t count,
+                                                    const void* const* const handles,
+                                                    const int wait_all,
+                                                    const std::uint32_t milliseconds,
+                                                    const std::uint32_t wake_mask) noexcept {
+    (void)wait_all;
+    return tl_MsgWaitForMultipleObjectsEx(count, handles, milliseconds, wake_mask, 0);
+}
+
 }  // extern "C"
 
 // Define o caminho do módulo convidado (chamado antes da execução).

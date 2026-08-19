@@ -24,6 +24,7 @@ public:
     AppCatalog() = default;
 
     [[nodiscard]] static std::filesystem::path default_catalog_path();
+    [[nodiscard]] static std::filesystem::path default_desktop_entries_dir();
 
     [[nodiscard]] bool load_from_file(const std::filesystem::path& path = default_catalog_path());
     [[nodiscard]] bool save_to_file(const std::filesystem::path& path = default_catalog_path()) const;
@@ -35,6 +36,7 @@ public:
     [[nodiscard]] const std::vector<AppEntry>& list_apps() const noexcept { return apps_; }
 
     [[nodiscard]] static std::string generate_id(std::string_view name_or_filename);
+    [[nodiscard]] static bool create_desktop_entry(const AppEntry& app, const std::filesystem::path& destination_dir = {});
 
 private:
     std::vector<AppEntry> apps_;

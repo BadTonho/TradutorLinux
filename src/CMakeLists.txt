@@ -2,6 +2,7 @@ add_library(tradutorlinux_core STATIC
     catalog/app_catalog.cpp
     cli.cpp
     diagnostics/trace.cpp
+    loader/dll_overrides.cpp
     loader/image_mapper.cpp
     loader/import_resolver.cpp
     loader/module.cpp
