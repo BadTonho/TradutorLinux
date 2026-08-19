@@ -11,6 +11,10 @@ add_library(tradutorlinux_core STATIC
     prefix/prefix.cpp
     process/isolate.cpp
     runtime/memory_validator.cpp
+    runtime/kernel32.cpp
+    runtime/user32.cpp
+    runtime/gdi32.cpp
+    runtime/shell32.cpp
     runtime/winapi.cpp
     runtime/gui_controls.cpp
     runtime/msvcrt.cpp
