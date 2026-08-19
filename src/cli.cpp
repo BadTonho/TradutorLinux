@@ -615,7 +615,7 @@ ExitCode run_command(const CommandLine& command_line, std::ostream& stdout_strea
     // Modo: Listar biblioteca de aplicativos
     if (command_line.mode == CommandMode::AppList) {
         catalog::AppCatalog app_catalog;
-        app_catalog.load_from_file();
+        (void)app_catalog.load_from_file();
         const auto& apps = app_catalog.list_apps();
         if (apps.empty()) {
             stdout_stream << "Nenhum aplicativo cadastrado na biblioteca.\n";
@@ -641,7 +641,7 @@ ExitCode run_command(const CommandLine& command_line, std::ostream& stdout_strea
             return ExitCode::Usage;
         }
         catalog::AppCatalog app_catalog;
-        app_catalog.load_from_file();
+        (void)app_catalog.load_from_file();
         catalog::AppEntry entry;
         entry.name = command_line.app_name.empty()
                          ? command_line.executable_path->filename().string()
@@ -671,7 +671,7 @@ ExitCode run_command(const CommandLine& command_line, std::ostream& stdout_strea
             return ExitCode::Usage;
         }
         catalog::AppCatalog app_catalog;
-        app_catalog.load_from_file();
+        (void)app_catalog.load_from_file();
         if (!app_catalog.remove_app(command_line.app_id) || !app_catalog.save_to_file()) {
             stderr_stream << "erro: aplicativo com ID '" << command_line.app_id
                           << "' não encontrado na biblioteca\n";
@@ -691,7 +691,7 @@ ExitCode run_command(const CommandLine& command_line, std::ostream& stdout_strea
             return ExitCode::Usage;
         }
         catalog::AppCatalog app_catalog;
-        app_catalog.load_from_file();
+        (void)app_catalog.load_from_file();
         const auto app_opt = app_catalog.find_app(command_line.app_id);
         if (!app_opt) {
             stderr_stream << "erro: aplicativo '" << command_line.app_id
@@ -712,10 +712,10 @@ ExitCode run_command(const CommandLine& command_line, std::ostream& stdout_strea
     if (command_line.mode == CommandMode::Install) {
         const std::filesystem::path p_root =
             effective_cmd.custom_prefix.value_or(prefix::default_prefix_root());
-        prefix::initialize_prefix(p_root);
+        (void)prefix::initialize_prefix(p_root);
 
         catalog::AppCatalog app_catalog;
-        app_catalog.load_from_file();
+        (void)app_catalog.load_from_file();
         catalog::AppEntry entry;
         entry.name = effective_cmd.app_name.empty()
                          ? effective_cmd.executable_path->filename().string()
@@ -724,8 +724,8 @@ ExitCode run_command(const CommandLine& command_line, std::ostream& stdout_strea
         entry.executable_path = effective_cmd.executable_path->string();
         entry.prefix_path = p_root.string();
         entry.working_directory = effective_cmd.executable_path->parent_path().string();
-        app_catalog.add_app(entry);
-        app_catalog.save_to_file();
+        (void)app_catalog.add_app(entry);
+        (void)app_catalog.save_to_file();
 
         stdout_stream << "[install] Ambiente de prefixo preparado em " << p_root.string() << "\n";
         stdout_stream << "[install] Aplicativo registrado na biblioteca como '" << entry.name
@@ -740,7 +740,7 @@ ExitCode run_command(const CommandLine& command_line, std::ostream& stdout_strea
 
     const std::filesystem::path prefix_dir =
         effective_cmd.custom_prefix.value_or(prefix::default_prefix_root());
-    prefix::initialize_prefix(prefix_dir);
+    (void)prefix::initialize_prefix(prefix_dir);
 
     if (!std::filesystem::exists(*effective_cmd.executable_path)) {
         const std::filesystem::path resolved =

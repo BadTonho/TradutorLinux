@@ -1,238 +1,144 @@
-# Guia de Implementação da Interface Desktop com Qt6
+# Launcher desktop com Qt6
 
-Este documento estabelece o guia prático e a arquitetura para substituir a interface experimental em Xlib puro ([src/gui/launcher.cpp](file:///c:/Users/Admin/Desktop/ProjetosCode/Linux/TradutorLinux/src/gui/launcher.cpp)) por uma aplicação desktop moderna, robusta e modular utilizando **Qt6 (C++)**.
+Este documento descreve o launcher desktop do TradutorLinux. A interface é
+uma aplicação host independente do runtime Win32 convidado: ela usa Qt6 para
+apresentação e `QProcess` para iniciar o executável `tradutorlinux`.
 
----
+O launcher Qt6 substitui o protótipo Xlib anterior e mantém o executável
+`tradutorlinux_gui`. A GUI não amplia o conjunto de APIs Win32 suportadas; a
+compatibilidade continua definida por [`compatibilidade.md`](../compatibilidade.md)
+e pelos contratos do runtime.
 
-## 1. Por Que Migrar do Xlib para o Qt6?
-
-| Desafio no Xlib Puro | Solução com Qt6 |
-|---|---|
-| Cálculo manual de pixels (`kInputY = 190`, `kButtonY = 246`) | Layouts dinâmicos e responsivos (`QVBoxLayout`, `QHBoxLayout`) |
-| Detecção manual de cliques em coordenadas | Sistema moderno de Sinais e Slots (`connect(button, &QPushButton::clicked, ...)`) |
-| Dificuldade para criar listas com barra de rolagem | `QListWidget` / `QTableView` com scroll e seleção prontos |
-| Janela trava durante a execução (`waitpid` síncrono) | Execução assíncrona em segundo plano com `QProcess` |
-| Dependência de chamar `zenity` via `fork()` para escolher arquivos | Diálogo de arquivos nativo do sistema (`QFileDialog`) |
-| Sem suporte a atalhos (Ctrl+C, Ctrl+V, seleção de texto) | Suporte completo e nativo a teclado, mouse e clipboard |
-
----
-
-## 2. Arquitetura Desacoplada (Frontend Qt6 + Backend Core)
-
-A interface gráfica passa a ser uma camada de apresentação pura, consumindo os módulos já implementados no Core:
+## Arquitetura
 
 ```text
-┌─────────────────────────────────────────────────────────────┐
-│                 Interface Desktop (Qt6 GUI)                 │
-│  - MainWindow: Barra de busca, Grade de apps, Botões        │
-│  - LogConsole: Terminal com saída colorida e status         │
-│  - InstallWizard: Assistente de instalação de executáveis   │
-└──────────────────────────────┬──────────────────────────────┘
-                               │ (Chama APIs C++)
+┌──────────────────────────────────────────────────────────────┐
+│ tradutorlinux_gui                                            │
+│  MainWindow                                                   │
+│  ├─ busca e seleção da biblioteca                            │
+│  ├─ seletor de executável e ações                            │
+│  ├─ status e console de diagnóstico                          │
+│  └─ QProcess assíncrono                                       │
+└──────────────────────────────┬───────────────────────────────┘
+                               │ subprocesso
                                ▼
-┌─────────────────────────────────────────────────────────────┐
-│             Serviços e Core do TradutorLinux                │
-│  ├─ AppCatalog: Leitura/Escrita de library.json             │
-│  ├─ Prefix: Gerenciamento do drive virtual C:\              │
-│  ├─ PE Parser & Loader: Inspeção de imagens e imports       │
-│  └─ Process Isolate: Execução do binário convidado          │
-└─────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│ tradutorlinux                                                 │
+│  CLI → AppCatalog/Prefix → PE parser/loader → convidado       │
+└──────────────────────────────────────────────────────────────┘
 ```
 
----
+O core (`tradutorlinux_core`) não depende de Qt. A janela é implementada em
+[`src/gui/main_window.cpp`](../../src/gui/main_window.cpp), declarada em
+[`src/gui/main_window.hpp`](../../src/gui/main_window.hpp) e iniciada por
+[`src/gui/qt_main.cpp`](../../src/gui/qt_main.cpp).
 
-## 3. Pacotes Necessários no Linux
+## Dependências e build
 
-Para compilar a interface Qt6 no Linux, os seguintes pacotes de desenvolvimento são necessários:
+Qt6 Widgets é uma dependência obrigatória do build. Em Debian,
+Ubuntu e Pop!_OS:
 
-### Ubuntu / Debian / Pop!_OS
 ```bash
 sudo apt update
-sudo apt install qt6-base-dev qt6-tools-dev libgl1-mesa-dev
+sudo apt install qt6-base-dev
 ```
 
-### Fedora / RHEL
+O CMake habilita `AUTOMOC`, `AUTOUIC` e `AUTORCC`, localiza Qt6 e vincula o
+launcher a `Qt6::Widgets`. O smoke test usa a própria aplicação Qt6 em modo
+`offscreen`, sem depender de um toolkit de testes adicional.
+
 ```bash
-sudo dnf install qt6-qtbase-devel
+cmake --preset debug
+cmake --build --preset debug
+ctest --preset debug --output-on-failure
 ```
 
-### Arch Linux / Manjaro
-```bash
-sudo pacman -S qt6-base
+O alvo continua sendo gerado no caminho conhecido:
+
+```text
+build/debug/src/tradutorlinux_gui
 ```
 
----
+O launcher procura o runtime `tradutorlinux` no mesmo diretório do próprio
+executável. Essa regra vale para builds normais e evita dependência do diretório
+de trabalho ou de `PATH`.
 
-## 4. Configuração no `CMakeLists.txt`
+## Interface e comportamento
 
-Ajuste no arquivo [src/CMakeLists.txt](file:///c:/Users/Admin/Desktop/ProjetosCode/Linux/TradutorLinux/src/CMakeLists.txt):
+`MainWindow` expõe os seguintes elementos:
 
-```cmake
-# Habilitar automação do Qt (MOC)
-set(CMAKE_AUTOMOC ON)
-set(CMAKE_AUTORCC ON)
-set(CMAKE_AUTOUIC ON)
+- campo de busca e lista filtrável dos aplicativos registrados em
+  `library.json`;
+- campo de caminho e `QFileDialog` com filtro para `.exe`;
+- ações **Analisar**, **Executar**, **Cadastrar**, **Limpar** e **Sair**;
+- indicador de quantidade de aplicativos cadastrados;
+- status textual e console somente leitura para logs.
 
-# Encontrar componentes do Qt6
-find_package(Qt6 COMPONENTS Widgets REQUIRED)
+Ao selecionar um item da biblioteca, o caminho do executável é preenchido e as
+ações usam o identificador cadastrado. Assim, a execução chama:
 
-# Executável do Launcher Desktop
-add_executable(tradutorlinux_gui
-    gui/qt_main.cpp
-    gui/main_window.cpp
-    gui/main_window.hpp
-)
-
-target_link_libraries(tradutorlinux_gui PRIVATE
-    tradutorlinux_core
-    Qt6::Widgets
-)
-
-tl_enable_warnings(tradutorlinux_gui)
-tl_enable_sanitizers(tradutorlinux_gui)
+```text
+tradutorlinux app run <id> --trace
+tradutorlinux app run <id> --trace --report
 ```
 
----
+Um caminho digitado ou escolhido fora da biblioteca usa a forma direta:
 
-## 5. Estrutura das Classes da Interface
-
-### 5.1. `MainWindow` ([src/gui/main_window.hpp](file:///c:/Users/Admin/Desktop/ProjetosCode/Linux/TradutorLinux/src/gui/main_window.hpp))
-
-```cpp
-#pragma once
-
-#include <QMainWindow>
-#include <QListWidget>
-#include <QLineEdit>
-#include <QTextEdit>
-#include <QPushButton>
-#include <QProcess>
-
-#include "tradutorlinux/catalog/app_catalog.hpp"
-
-namespace tradutorlinux::gui {
-
-class MainWindow : public QMainWindow {
-    Q_OBJECT
-
-public:
-    explicit MainWindow(QWidget* parent = nullptr);
-    ~MainWindow() override = default;
-
-private slots:
-    void on_search_text_changed(const QString& query);
-    void on_app_selected(QListWidgetItem* item);
-    void on_btn_choose_clicked();
-    void on_btn_run_clicked();
-    void on_btn_report_clicked();
-    void on_btn_register_clicked();
-    void on_process_output_ready();
-    void on_process_finished(int exit_code, QProcess::ExitStatus status);
-
-private:
-    void setup_ui();
-    void refresh_app_list();
-    void append_log(const QString& text, const QString& color = "#e2e8f0");
-
-    // Componentes visuais
-    QLineEdit* search_input_{nullptr};
-    QListWidget* app_list_{nullptr};
-    QLineEdit* path_input_{nullptr};
-    QTextEdit* log_output_{nullptr};
-    QPushButton* btn_run_{nullptr};
-    QPushButton* btn_report_{nullptr};
-    QPushButton* btn_register_{nullptr};
-
-    // Estado e Core
-    catalog::AppCatalog catalog_;
-    QProcess* current_process_{nullptr};
-};
-
-}  // namespace tradutorlinux::gui
+```text
+tradutorlinux --trace <arquivo.exe>
+tradutorlinux --trace --report <arquivo.exe>
 ```
 
----
+O catálogo continua sendo lido e salvo por `catalog::AppCatalog`. O cadastro
+manual deriva o nome e o ID do nome do arquivo, usa o prefixo padrão retornado
+por `prefix::default_prefix_root()` e registra o diretório pai como diretório
+de trabalho. Ao recadastrar um item selecionado, seu ID, prefixo, argumentos e
+demais metadados são preservados.
 
-## 6. Exemplos de Implementação das Funcionalidades
+## Execução assíncrona
 
-### A. Listar e Filtrar Aplicativos da Biblioteca em Tempo Real
-```cpp
-void MainWindow::refresh_app_list() {
-    app_list_->clear();
-    catalog_.load_from_file();
+O launcher mantém um único `QProcess` ativo. Enquanto ele está iniciando ou
+executando:
 
-    for (const auto& app : catalog_.list_apps()) {
-        auto* item = new QListWidgetItem(QString::fromStdString(app.name));
-        item->setData(Qt::UserRole, QString::fromStdString(app.executable_path));
-        item->setToolTip(QString::fromStdString(app.executable_path));
-        app_list_->addItem(item);
-    }
-}
+- Analisar, Executar, Cadastrar, Limpar, busca e seleção ficam desabilitados;
+- stdout e stderr são lidos por sinais independentes;
+- o status informa que a operação está em andamento;
+- fechar a janela tenta terminar o subprocesso e, após um limite curto,
+  força seu encerramento.
 
-void MainWindow::on_search_text_changed(const QString& query) {
-    for (int i = 0; i < app_list_->count(); ++i) {
-        auto* item = app_list_->item(i);
-        const bool matches = item->text().contains(query, Qt::CaseInsensitive);
-        item->setHidden(!matches);
-    }
-}
-```
+As mensagens são exibidas no console com os canais `[stdout]`, `[stderr]` e
+`[launcher]`. O launcher não mistura esses dados com a saída do próprio
+processo Linux.
 
-### B. Escolher Executável Nativo do Sistema
-```cpp
-void MainWindow::on_btn_choose_clicked() {
-    const QString file = QFileDialog::getOpenFileName(
-        this,
-        tr("Selecionar Executável Windows"),
-        QDir::homePath(),
-        tr("Executáveis Windows (*.exe *.EXE);;Todos os Arquivos (*)")
-    );
+Ao terminar, o status distingue conclusão normal, código de saída diferente
+de zero e término por sinal/crash. Falhas `QProcess::FailedToStart` exibem o
+erro de inicialização sem atribuir um código de saída falso ao runtime.
 
-    if (!file.isEmpty()) {
-        path_input_->setText(file);
-        append_log(tr("Arquivo selecionado: %1").arg(file), "#38bdf8");
-    }
-}
-```
+## Testes
 
-### C. Executar Programa em Segundo Plano sem Travar a Janela
-```cpp
-void MainWindow::on_btn_run_clicked() {
-    const QString exe_path = path_input_->text().trimmed();
-    if (exe_path.isEmpty()) return;
+O teste [`tests/gui/qt_launcher_test.cpp`](../../tests/gui/qt_launcher_test.cpp)
+usa `QT_QPA_PLATFORM=offscreen` e cobre:
 
-    if (current_process_ && current_process_->state() != QProcess::NotRunning) {
-        append_log(tr("Aviso: um programa já está em execução."), "#f59e0b");
-        return;
-    }
+1. carregamento, filtragem e seleção de itens do catálogo;
+2. cadastro e persistência em um `library.json` temporário;
+3. limpeza do formulário sem perder a biblioteca;
+4. relatório assíncrono de `tl_hello.exe`, incluindo stdout e stderr;
+5. execução real de `tl_hello.exe`, incluindo a saída do convidado e o código
+   de saída;
+6. falha controlada quando o caminho do runtime não pode ser iniciado.
 
-    current_process_ = new QProcess(this);
-    connect(current_process_, &QProcess::readyReadStandardOutput, this, &MainWindow::on_process_output_ready);
-    connect(current_process_, &QProcess::readyReadStandardError, this, &MainWindow::on_process_output_ready);
-    connect(current_process_, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
-            this, &MainWindow::on_process_finished);
+O teste usa o runtime e as fixtures produzidos pelo mesmo build. O diretório
+de configuração é temporário, portanto os testes não alteram a biblioteca do
+usuário.
 
-    append_log(tr("Iniciando execução: %1").arg(exe_path), "#22c55e");
-    
-    // Executa através do runner CLI do TradutorLinux
-    current_process_->start("./tradutorlinux", QStringList() << "--trace" << exe_path);
-}
+## Limites desta entrega
 
-void MainWindow::on_process_output_ready() {
-    if (!current_process_) return;
-    const QString stdout_data = current_process_->readAllStandardOutput();
-    const QString stderr_data = current_process_->readAllStandardError();
-    
-    if (!stdout_data.isEmpty()) append_log(stdout_data, "#f8fafc");
-    if (!stderr_data.isEmpty()) append_log(stderr_data, "#cbd5e1");
-}
-```
-
----
-
-## 7. Roteiro de Migração
-
-1. **Instalar pacotes Qt6** no ambiente Linux de desenvolvimento (`qt6-base-dev`).
-2. **Atualizar `CMakeLists.txt`** com `find_package(Qt6 COMPONENTS Widgets REQUIRED)`.
-3. **Criar a classe `MainWindow`** conectando os slots com as chamadas de `catalog::AppCatalog` e `prefix::initialize_prefix`.
-4. **Validar a interface no Linux** com testes de busca, seleção de arquivos, cadastro na biblioteca e visualização de logs em tempo real.
+- O launcher não implementa instalação visual de setups; o comando CLI
+  `install` continua sendo a interface existente para essa operação.
+- Não há wizard de instalação, gerenciamento de ícones ou integração nativa
+  com bandeja nesta versão.
+- Qt6 é usado para a interface host. A GUI Win32 do executável convidado
+  continua usando o subsistema X11 documentado em
+  [`gui-x11.md`](gui-x11.md).
+- Executar um `.exe` continua tendo os privilégios do usuário atual; o
+  launcher não é sandbox.

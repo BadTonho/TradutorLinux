@@ -52,8 +52,14 @@ target_link_libraries(tradutorlinux PRIVATE tradutorlinux_core)
 tl_enable_warnings(tradutorlinux)
 tl_enable_sanitizers(tradutorlinux)
 
-add_executable(tradutorlinux_gui gui/launcher.cpp)
-target_include_directories(tradutorlinux_gui PRIVATE "${TL_X11_INCLUDE_DIR}")
-target_link_libraries(tradutorlinux_gui PRIVATE tradutorlinux_core "${TL_X11_LIBRARY}")
+add_executable(tradutorlinux_gui
+    gui/main_window.cpp
+    gui/main_window.hpp
+    gui/qt_main.cpp
+)
+target_link_libraries(tradutorlinux_gui PRIVATE tradutorlinux_core Qt6::Widgets)
 tl_enable_warnings(tradutorlinux_gui)
 tl_enable_sanitizers(tradutorlinux_gui)
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options(tradutorlinux_gui PRIVATE -Wno-conversion -Wno-sign-conversion)
+endif()

@@ -679,16 +679,6 @@ TL_MSABI int tl_CryptAcquireContextW(void** prov_handle, const std::uint16_t* co
                                      const std::uint16_t* provider, std::uint32_t prov_type, std::uint32_t flags) noexcept;
 TL_MSABI int tl_CryptGenRandom(void* prov_handle, std::uint32_t length, std::uint8_t* buffer) noexcept;
 TL_MSABI int tl_CryptReleaseContext(void* prov_handle, std::uint32_t flags) noexcept;
-TL_MSABI int tl_RegOpenKeyExW(void* key, const std::uint16_t* sub_key, std::uint32_t options,
-                              std::uint32_t desired, void** result) noexcept;
-TL_MSABI int tl_RegQueryValueExW(void* key, const std::uint16_t* value_name, std::uint32_t* reserved,
-                                 std::uint32_t* type, std::uint8_t* data, std::uint32_t* data_size) noexcept;
-TL_MSABI int tl_RegSetValueExW(void* key, const std::uint16_t* value_name, std::uint32_t reserved,
-                               std::uint32_t type, const std::uint8_t* data, std::uint32_t data_size) noexcept;
-TL_MSABI int tl_RegCreateKeyExW(void* key, const std::uint16_t* sub_key, std::uint32_t reserved,
-                                std::uint16_t* class_name, std::uint32_t options, std::uint32_t desired,
-                                const void* security_attributes, void** result, std::uint32_t* disposition) noexcept;
-
 // SHELL32.dll (Fase 10+): linha de comando no formato wide.
 TL_MSABI std::uint16_t** tl_CommandLineToArgvW(const std::uint16_t* command_line,
                                                int* argument_count) noexcept;

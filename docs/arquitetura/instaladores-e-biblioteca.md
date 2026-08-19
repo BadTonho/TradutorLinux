@@ -78,10 +78,22 @@ O catálogo é persistido em formato JSON em `~/.config/tradutorlinux/library.js
 
 ## 4. Interface Gráfica do Launcher (`tradutorlinux_gui`)
 
-Localização:
-- [src/gui/launcher.cpp](file:///c:/Users/Admin/Desktop/ProjetosCode/Linux/TradutorLinux/src/gui/launcher.cpp)
+A interface usa Qt6 e está implementada em
+[`src/gui/main_window.cpp`](../../src/gui/main_window.cpp), com entrada em
+[`src/gui/qt_main.cpp`](../../src/gui/qt_main.cpp). O alvo continua sendo
+`tradutorlinux_gui`.
 
-A interface gráfica X11 do launcher exibe a contagem de aplicativos cadastrados na biblioteca, permite selecionar executáveis no disco via seletor nativo ou caixa de texto, e disponibiliza ações diretas:
-- **Analisar**: Executa relatório estático (`--report`).
-- **Executar**: Inicia a aplicação com diagnóstico.
-- **Cadastrar**: Salva o executável atual na biblioteca `library.json`.
+O launcher exibe a biblioteca, filtra aplicativos, permite selecionar um
+executável pelo `QFileDialog` ou pelo campo de caminho e disponibiliza ações
+assíncronas:
+
+- **Analisar**: executa o relatório estático (`--report`) e captura o
+  diagnóstico;
+- **Executar**: inicia o programa com `--trace` sem bloquear a janela;
+- **Cadastrar**: salva ou atualiza a entrada no `library.json`;
+- **Limpar**: restaura o formulário sem apagar a biblioteca.
+
+A execução usa `QProcess`, procura o binário `tradutorlinux` no mesmo diretório
+do launcher e separa stdout de stderr no console visual. O contrato completo,
+os limites e os testes estão em
+[`guia-ui-qt6.md`](guia-ui-qt6.md).

@@ -52,6 +52,41 @@ else()
     gtest_discover_tests(tradutorlinux_unit_tests)
 endif()
 
+add_executable(tradutorlinux_qt_launcher_tests
+    gui/qt_launcher_test.cpp
+    ../src/gui/main_window.cpp
+    ../src/gui/main_window.hpp
+)
+target_include_directories(tradutorlinux_qt_launcher_tests PRIVATE
+    "${PROJECT_SOURCE_DIR}/src/gui"
+)
+target_compile_definitions(tradutorlinux_qt_launcher_tests PRIVATE
+    TL_GUI_TEST_RUNTIME_PATH="$<TARGET_FILE:tradutorlinux>"
+)
+target_link_libraries(tradutorlinux_qt_launcher_tests
+    PRIVATE
+        tradutorlinux_core
+        Qt6::Widgets
+)
+tl_enable_warnings(tradutorlinux_qt_launcher_tests)
+tl_enable_sanitizers(tradutorlinux_qt_launcher_tests)
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options(tradutorlinux_qt_launcher_tests PRIVATE
+        -Wno-conversion -Wno-sign-conversion
+    )
+endif()
+if(TARGET tradutorlinux_samples)
+    add_dependencies(tradutorlinux_qt_launcher_tests tradutorlinux_samples)
+    target_compile_definitions(tradutorlinux_qt_launcher_tests PRIVATE
+        TL_FIXTURE_OUTPUT_DIRECTORY="${CMAKE_CURRENT_BINARY_DIR}/samples/generated"
+    )
+endif()
+add_test(NAME qt_launcher_smoke COMMAND tradutorlinux_qt_launcher_tests)
+set_tests_properties(qt_launcher_smoke PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+    LABELS "gui;qt"
+)
+
 if(TL_XVFB_EXECUTABLE AND TARGET tradutorlinux_samples AND TARGET tradutorlinux)
     find_library(TL_X11_LIBRARY X11 REQUIRED)
     add_executable(runtime_gui_smoke

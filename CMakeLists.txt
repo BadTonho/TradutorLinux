@@ -5,6 +5,11 @@ project(TradutorLinux VERSION 0.0.0 LANGUAGES C CXX ASM)
 include(CTest)
 include(FetchContent)
 
+set(CMAKE_AUTOMOC ON)
+set(CMAKE_AUTORCC ON)
+set(CMAKE_AUTOUIC ON)
+find_package(Qt6 REQUIRED COMPONENTS Widgets)
+
 option(TL_ENABLE_SANITIZERS "Enable AddressSanitizer and UndefinedBehaviorSanitizer" OFF)
 option(TL_BUILD_SAMPLES "Build PE32+ integration fixtures" ON)
 option(TL_BUILD_TARGET_APPS "Cross-compile real target applications (downloads pinned sources)" OFF)

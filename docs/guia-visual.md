@@ -20,11 +20,16 @@ As aplicações ficam em `build/debug/tests/samples/generated/`.
 ./build/debug/src/tradutorlinux_gui
 ```
 
-A tela principal aceita o caminho do executável pelo teclado. Digite o caminho
-completo ou relativo, clique em **Analisar** para executar `--report`, ou em
+A tela principal é o launcher Qt6. Ela aceita o caminho do executável pelo
+teclado ou pela biblioteca `library.json`; também permite filtrar e selecionar
+aplicativos cadastrados. Digite o caminho completo ou relativo, clique em
+**Analisar** para executar `--report`, ou em
 **Executar** para iniciar o programa convidado. O painel inferior mostra o
 trace, imports, erros e código de saída. **Limpar** apaga o formulário e
 **Sair** fecha a aplicação.
+
+O contrato da interface, o fluxo assíncrono e os limites do launcher estão em
+[`docs/arquitetura/guia-ui-qt6.md`](arquitetura/guia-ui-qt6.md).
 
 ## Abrir a caixa de diálogo
 

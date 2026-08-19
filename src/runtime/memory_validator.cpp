@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <atomic>
 #include <charconv>
+#include <cstring>
 #include <fstream>
 #include <limits>
 #include <mutex>
