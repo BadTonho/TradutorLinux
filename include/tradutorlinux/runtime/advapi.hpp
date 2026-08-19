@@ -52,6 +52,16 @@ TL_ADVAPI_MSABI std::uint32_t tl_RegSetValueExW(const void* key,
                                                  const unsigned char* data,
                                                  std::uint32_t data_size) noexcept;
 
+TL_ADVAPI_MSABI int tl_CryptAcquireContextA(void** prov_handle, const char* container,
+                                            const char* provider, std::uint32_t prov_type,
+                                            std::uint32_t flags) noexcept;
+TL_ADVAPI_MSABI int tl_CryptAcquireContextW(void** prov_handle, const std::uint16_t* container,
+                                            const std::uint16_t* provider, std::uint32_t prov_type,
+                                            std::uint32_t flags) noexcept;
+TL_ADVAPI_MSABI int tl_CryptGenRandom(void* prov_handle, std::uint32_t length,
+                                      std::uint8_t* buffer) noexcept;
+TL_ADVAPI_MSABI int tl_CryptReleaseContext(void* prov_handle, std::uint32_t flags) noexcept;
+
 }  // extern "C"
 
 }  // namespace tradutorlinux

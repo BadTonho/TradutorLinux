@@ -1862,6 +1862,546 @@ TL_MSABI int tl_TerminateProcess(const void* process, const std::uint32_t exit_c
     return 1;
 }
 
+TL_MSABI int tl_QueryPerformanceCounter(std::int64_t* performance_count) noexcept {
+    if (performance_count == nullptr || !mapped_guest_range(performance_count, sizeof(*performance_count), true)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    struct timespec ts{};
+    if (clock_gettime(CLOCK_MONOTONIC_RAW, &ts) != 0) {
+        clock_gettime(CLOCK_MONOTONIC, &ts);
+    }
+    const std::int64_t ticks = static_cast<std::int64_t>(ts.tv_sec) * 10000000LL +
+                               static_cast<std::int64_t>(ts.tv_nsec) / 100LL;
+    *performance_count = ticks;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_QueryPerformanceFrequency(std::int64_t* frequency) noexcept {
+    if (frequency == nullptr || !mapped_guest_range(frequency, sizeof(*frequency), true)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    *frequency = 10000000LL;  // 10 MHz
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI void tl_GetSystemInfo(void* system_info) noexcept {
+    if (system_info == nullptr || !mapped_guest_range(system_info, sizeof(abi::GuestSystemInfo), true)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return;
+    }
+    auto* si = static_cast<abi::GuestSystemInfo*>(system_info);
+    std::memset(si, 0, sizeof(*si));
+    si->processor_architecture = 9;  // PROCESSOR_ARCHITECTURE_AMD64
+    si->page_size = 4096;
+    si->minimum_application_address = reinterpret_cast<void*>(0x10000);
+    si->maximum_application_address = reinterpret_cast<void*>(0x7FFFFFFF0000ULL);
+    long nprocs = sysconf(_SC_NPROCESSORS_ONLN);
+    if (nprocs < 1) nprocs = 1;
+    si->number_of_processors = static_cast<std::uint32_t>(nprocs);
+    si->active_processor_mask = (1ULL << std::min<long>(nprocs, 64)) - 1ULL;
+    si->allocation_granularity = 65536;
+    si->processor_type = 8664; // PROCESSOR_AMD_X8664
+    si->processor_level = 6;
+    set_last_error(abi::kErrorSuccess);
+}
+
+TL_MSABI void tl_GetNativeSystemInfo(void* system_info) noexcept {
+    tl_GetSystemInfo(system_info);
+}
+
+TL_MSABI int tl_GlobalMemoryStatusEx(void* buffer) noexcept {
+    if (buffer == nullptr || !mapped_guest_range(buffer, sizeof(abi::GuestMemoryStatusEx), true)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    auto* ms = static_cast<abi::GuestMemoryStatusEx*>(buffer);
+    if (ms->length < sizeof(abi::GuestMemoryStatusEx)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    long pages = sysconf(_SC_PHYS_PAGES);
+    long avail_pages = sysconf(_SC_AVPHYS_PAGES);
+    long page_size = sysconf(_SC_PAGE_SIZE);
+    if (pages <= 0) pages = 1048576;
+    if (avail_pages <= 0) avail_pages = 524288;
+    if (page_size <= 0) page_size = 4096;
+
+    const std::uint64_t total_phys = static_cast<std::uint64_t>(pages) * page_size;
+    const std::uint64_t avail_phys = static_cast<std::uint64_t>(avail_pages) * page_size;
+    const std::uint64_t used_phys = total_phys > avail_phys ? total_phys - avail_phys : 0;
+    const std::uint32_t load = total_phys > 0 ? static_cast<std::uint32_t>((used_phys * 100ULL) / total_phys) : 0;
+
+    ms->memory_load = load;
+    ms->total_phys = total_phys;
+    ms->avail_phys = avail_phys;
+    ms->total_page_file = total_phys * 2;
+    ms->avail_page_file = avail_phys * 2;
+    ms->total_virtual = 0x7FFFFFFF0000ULL;
+    ms->avail_virtual = 0x700000000000ULL;
+    ms->avail_extended_virtual = 0;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI void* tl_CreateFileMappingA(const void* file, const void* file_mapping_attributes,
+                                     const std::uint32_t protect, const std::uint32_t maximum_size_high,
+                                     const std::uint32_t maximum_size_low, const char* name) noexcept {
+    (void)file_mapping_attributes;
+    int fd = -1;
+    if (file != nullptr && file != reinterpret_cast<const void*>(~static_cast<std::uintptr_t>(0))) {
+        fd = handle_fd(file);
+        if (fd < 0) {
+            set_last_error(abi::kErrorInvalidHandle);
+            return nullptr;
+        }
+    }
+    std::uint64_t max_size = (static_cast<std::uint64_t>(maximum_size_high) << 32) | maximum_size_low;
+    if (max_size == 0 && fd >= 0) {
+        struct stat st{};
+        if (fstat(fd, &st) == 0) {
+            max_size = static_cast<std::uint64_t>(st.st_size);
+        }
+    }
+    std::lock_guard<std::mutex> lock(g_mapping_mutex);
+    auto it = std::find_if(g_mappings.begin(), g_mappings.end(), [](const FileMappingSlot& s) { return !s.used; });
+    if (it == g_mappings.end()) {
+        set_last_error(abi::kErrorNotEnoughMemory);
+        return nullptr;
+    }
+    it->used = true;
+    it->fd = fd >= 0 ? ::dup(fd) : -1;
+    it->size = max_size;
+    it->protect = protect;
+    if (name != nullptr && mapped_guest_cstring(name)) {
+        it->name = name;
+    }
+    set_last_error(abi::kErrorSuccess);
+    return &*it;
+}
+
+TL_MSABI void* tl_CreateFileMappingW(const void* file, const void* file_mapping_attributes,
+                                     const std::uint32_t protect, const std::uint32_t maximum_size_high,
+                                     const std::uint32_t maximum_size_low, const std::uint16_t* name) noexcept {
+    std::string utf8_name;
+    if (name != nullptr && mapped_guest_wstring(name)) {
+        utf8_name = util::wide_to_utf8(name);
+    }
+    return tl_CreateFileMappingA(file, file_mapping_attributes, protect, maximum_size_high, maximum_size_low,
+                                 utf8_name.empty() ? nullptr : utf8_name.c_str());
+}
+
+TL_MSABI void* tl_MapViewOfFile(const void* file_mapping_object, const std::uint32_t desired_access,
+                                const std::uint32_t file_offset_high, const std::uint32_t file_offset_low,
+                                const std::size_t number_of_bytes_to_map) noexcept {
+    if (file_mapping_object == nullptr) {
+        set_last_error(abi::kErrorInvalidHandle);
+        return nullptr;
+    }
+    const auto* slot = static_cast<const FileMappingSlot*>(file_mapping_object);
+    if (!slot->used) {
+        set_last_error(abi::kErrorInvalidHandle);
+        return nullptr;
+    }
+    int prot = PROT_READ;
+    if ((desired_access & 0x0002) != 0 || (desired_access & 0xF0000) != 0) {
+        prot |= PROT_WRITE;
+    }
+    int flags = (slot->fd >= 0) ? MAP_SHARED : (MAP_PRIVATE | MAP_ANONYMOUS);
+    const off_t offset = (static_cast<off_t>(file_offset_high) << 32) | file_offset_low;
+    const std::size_t size = number_of_bytes_to_map > 0 ? number_of_bytes_to_map :
+                             (slot->size > static_cast<std::uint64_t>(offset) ? static_cast<std::size_t>(slot->size - offset) : 4096);
+    void* result = mmap(nullptr, size, prot, flags, slot->fd >= 0 ? slot->fd : -1, slot->fd >= 0 ? offset : 0);
+    if (result == MAP_FAILED) {
+        set_last_error(errno_to_win32(errno));
+        return nullptr;
+    }
+    {
+        std::lock_guard<std::mutex> lock(g_allocations_mutex);
+        auto it = std::find_if(g_allocations.begin(), g_allocations.end(), [](const AllocationSlot& s) { return s.address == nullptr; });
+        if (it != g_allocations.end()) {
+            it->address = result;
+            it->size = size;
+        }
+    }
+    bump_guest_allocation_generation();
+    set_last_error(abi::kErrorSuccess);
+    return result;
+}
+
+TL_MSABI int tl_UnmapViewOfFile(const void* base_address) noexcept {
+    if (base_address == nullptr) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    std::size_t size = 4096;
+    {
+        std::lock_guard<std::mutex> lock(g_allocations_mutex);
+        auto it = std::find_if(g_allocations.begin(), g_allocations.end(), [base_address](const AllocationSlot& s) { return s.address == base_address; });
+        if (it != g_allocations.end()) {
+            size = it->size;
+            *it = {};
+        }
+    }
+    if (munmap(const_cast<void*>(base_address), size) != 0) {
+        set_last_error(errno_to_win32(errno));
+        return 0;
+    }
+    bump_guest_allocation_generation();
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_FlushViewOfFile(const void* base_address, const std::size_t number_of_bytes_to_flush) noexcept {
+    if (base_address == nullptr) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    const std::size_t size = number_of_bytes_to_flush > 0 ? number_of_bytes_to_flush : 4096;
+    if (msync(const_cast<void*>(base_address), size, MS_SYNC) != 0) {
+        set_last_error(errno_to_win32(errno));
+        return 0;
+    }
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_GetDiskFreeSpaceExA(const char* directory_name,
+                                    std::uint64_t* free_bytes_available_to_caller,
+                                    std::uint64_t* total_number_of_bytes,
+                                    std::uint64_t* total_number_of_free_bytes) noexcept {
+    char normalized[4096]{};
+    const char* path_to_stat = ".";
+    if (directory_name != nullptr && mapped_guest_cstring(directory_name) && directory_name[0] != '\0') {
+        if (translate_windows_path(directory_name, normalized, sizeof(normalized))) {
+            path_to_stat = normalized;
+        }
+    }
+    struct statvfs sv{};
+    if (statvfs(path_to_stat, &sv) != 0) {
+        set_last_error(errno_to_win32(errno));
+        return 0;
+    }
+    const std::uint64_t total = static_cast<std::uint64_t>(sv.f_blocks) * sv.f_frsize;
+    const std::uint64_t free_bytes = static_cast<std::uint64_t>(sv.f_bfree) * sv.f_frsize;
+    const std::uint64_t avail_bytes = static_cast<std::uint64_t>(sv.f_bavail) * sv.f_frsize;
+    if (free_bytes_available_to_caller != nullptr && mapped_guest_range(free_bytes_available_to_caller, sizeof(std::uint64_t), true)) {
+        *free_bytes_available_to_caller = avail_bytes;
+    }
+    if (total_number_of_bytes != nullptr && mapped_guest_range(total_number_of_bytes, sizeof(std::uint64_t), true)) {
+        *total_number_of_bytes = total;
+    }
+    if (total_number_of_free_bytes != nullptr && mapped_guest_range(total_number_of_free_bytes, sizeof(std::uint64_t), true)) {
+        *total_number_of_free_bytes = free_bytes;
+    }
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_GetDiskFreeSpaceExW(const std::uint16_t* directory_name,
+                                    std::uint64_t* free_bytes_available_to_caller,
+                                    std::uint64_t* total_number_of_bytes,
+                                    std::uint64_t* total_number_of_free_bytes) noexcept {
+    std::string utf8;
+    if (directory_name != nullptr && mapped_guest_wstring(directory_name)) {
+        utf8 = util::wide_to_utf8(directory_name);
+    }
+    return tl_GetDiskFreeSpaceExA(utf8.empty() ? nullptr : utf8.c_str(),
+                                  free_bytes_available_to_caller, total_number_of_bytes,
+                                  total_number_of_free_bytes);
+}
+
+TL_MSABI std::uint32_t tl_GetDriveTypeA(const char*) noexcept {
+    return 3; // DRIVE_FIXED
+}
+
+TL_MSABI std::uint32_t tl_GetDriveTypeW(const std::uint16_t*) noexcept {
+    return 3; // DRIVE_FIXED
+}
+
+TL_MSABI int tl_GetVolumeInformationA(const char*, char* volume_name_buffer,
+                                      std::uint32_t volume_name_size, std::uint32_t* volume_serial_number,
+                                      std::uint32_t* maximum_component_length, std::uint32_t* file_system_flags,
+                                      char* file_system_name_buffer, std::uint32_t file_system_name_size) noexcept {
+    if (volume_name_buffer != nullptr && volume_name_size > 0 && mapped_guest_range(volume_name_buffer, volume_name_size, true)) {
+        std::strncpy(volume_name_buffer, "Local Disk", volume_name_size - 1);
+        volume_name_buffer[volume_name_size - 1] = '\0';
+    }
+    if (volume_serial_number != nullptr && mapped_guest_range(volume_serial_number, sizeof(std::uint32_t), true)) {
+        *volume_serial_number = 0x12345678U;
+    }
+    if (maximum_component_length != nullptr && mapped_guest_range(maximum_component_length, sizeof(std::uint32_t), true)) {
+        *maximum_component_length = 255;
+    }
+    if (file_system_flags != nullptr && mapped_guest_range(file_system_flags, sizeof(std::uint32_t), true)) {
+        *file_system_flags = 0x00000002U | 0x00000004U;
+    }
+    if (file_system_name_buffer != nullptr && file_system_name_size > 0 && mapped_guest_range(file_system_name_buffer, file_system_name_size, true)) {
+        std::strncpy(file_system_name_buffer, "NTFS", file_system_name_size - 1);
+        file_system_name_buffer[file_system_name_size - 1] = '\0';
+    }
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_GetVolumeInformationW(const std::uint16_t*, std::uint16_t* volume_name_buffer,
+                                      std::uint32_t volume_name_size, std::uint32_t* volume_serial_number,
+                                      std::uint32_t* maximum_component_length, std::uint32_t* file_system_flags,
+                                      std::uint16_t* file_system_name_buffer, std::uint32_t file_system_name_size) noexcept {
+    if (volume_name_buffer != nullptr && volume_name_size > 0 && mapped_guest_range(volume_name_buffer, volume_name_size * sizeof(std::uint16_t), true)) {
+        const std::u16string u16 = util::utf8_to_wide("Local Disk");
+        const std::size_t len = std::min<std::size_t>(u16.size(), volume_name_size - 1);
+        std::copy(u16.begin(), u16.begin() + len, volume_name_buffer);
+        volume_name_buffer[len] = 0;
+    }
+    if (volume_serial_number != nullptr && mapped_guest_range(volume_serial_number, sizeof(std::uint32_t), true)) {
+        *volume_serial_number = 0x12345678U;
+    }
+    if (maximum_component_length != nullptr && mapped_guest_range(maximum_component_length, sizeof(std::uint32_t), true)) {
+        *maximum_component_length = 255;
+    }
+    if (file_system_flags != nullptr && mapped_guest_range(file_system_flags, sizeof(std::uint32_t), true)) {
+        *file_system_flags = 0x00000002U | 0x00000004U;
+    }
+    if (file_system_name_buffer != nullptr && file_system_name_size > 0 && mapped_guest_range(file_system_name_buffer, file_system_name_size * sizeof(std::uint16_t), true)) {
+        const std::u16string u16 = util::utf8_to_wide("NTFS");
+        const std::size_t len = std::min<std::size_t>(u16.size(), file_system_name_size - 1);
+        std::copy(u16.begin(), u16.begin() + len, file_system_name_buffer);
+        file_system_name_buffer[len] = 0;
+    }
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI void tl_GetSystemTime(void* system_time) noexcept {
+    if (system_time == nullptr || !mapped_guest_range(system_time, sizeof(abi::GuestSystemTime), true)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return;
+    }
+    std::time_t t = std::time(nullptr);
+    std::tm tm_utc{};
+    gmtime_r(&t, &tm_utc);
+    auto* st = static_cast<abi::GuestSystemTime*>(system_time);
+    st->year = static_cast<std::uint16_t>(tm_utc.tm_year + 1900);
+    st->month = static_cast<std::uint16_t>(tm_utc.tm_mon + 1);
+    st->day_of_week = static_cast<std::uint16_t>(tm_utc.tm_wday);
+    st->day = static_cast<std::uint16_t>(tm_utc.tm_mday);
+    st->hour = static_cast<std::uint16_t>(tm_utc.tm_hour);
+    st->minute = static_cast<std::uint16_t>(tm_utc.tm_min);
+    st->second = static_cast<std::uint16_t>(tm_utc.tm_sec);
+    st->milliseconds = 0;
+    set_last_error(abi::kErrorSuccess);
+}
+
+TL_MSABI void tl_GetLocalTime(void* system_time) noexcept {
+    if (system_time == nullptr || !mapped_guest_range(system_time, sizeof(abi::GuestSystemTime), true)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return;
+    }
+    std::time_t t = std::time(nullptr);
+    std::tm tm_loc{};
+    localtime_r(&t, &tm_loc);
+    auto* st = static_cast<abi::GuestSystemTime*>(system_time);
+    st->year = static_cast<std::uint16_t>(tm_loc.tm_year + 1900);
+    st->month = static_cast<std::uint16_t>(tm_loc.tm_mon + 1);
+    st->day_of_week = static_cast<std::uint16_t>(tm_loc.tm_wday);
+    st->day = static_cast<std::uint16_t>(tm_loc.tm_mday);
+    st->hour = static_cast<std::uint16_t>(tm_loc.tm_hour);
+    st->minute = static_cast<std::uint16_t>(tm_loc.tm_min);
+    st->second = static_cast<std::uint16_t>(tm_loc.tm_sec);
+    st->milliseconds = 0;
+    set_last_error(abi::kErrorSuccess);
+}
+
+TL_MSABI int tl_FileTimeToSystemTime(const void* file_time, void* system_time) noexcept {
+    if (file_time == nullptr || system_time == nullptr ||
+        !mapped_guest_range(file_time, 8, false) ||
+        !mapped_guest_range(system_time, sizeof(abi::GuestSystemTime), true)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    const auto* ft = static_cast<const GuestFileTime*>(file_time);
+    const std::time_t t = filetime_to_unix_time(*ft);
+    std::tm tm_utc{};
+    gmtime_r(&t, &tm_utc);
+    auto* st = static_cast<abi::GuestSystemTime*>(system_time);
+    st->year = static_cast<std::uint16_t>(tm_utc.tm_year + 1900);
+    st->month = static_cast<std::uint16_t>(tm_utc.tm_mon + 1);
+    st->day_of_week = static_cast<std::uint16_t>(tm_utc.tm_wday);
+    st->day = static_cast<std::uint16_t>(tm_utc.tm_mday);
+    st->hour = static_cast<std::uint16_t>(tm_utc.tm_hour);
+    st->minute = static_cast<std::uint16_t>(tm_utc.tm_min);
+    st->second = static_cast<std::uint16_t>(tm_utc.tm_sec);
+    st->milliseconds = 0;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_SystemTimeToFileTime(const void* system_time, void* file_time) noexcept {
+    if (system_time == nullptr || file_time == nullptr ||
+        !mapped_guest_range(system_time, sizeof(abi::GuestSystemTime), false) ||
+        !mapped_guest_range(file_time, 8, true)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    const auto* st = static_cast<const abi::GuestSystemTime*>(system_time);
+    std::tm tm_utc{};
+    tm_utc.tm_year = st->year - 1900;
+    tm_utc.tm_mon = st->month - 1;
+    tm_utc.tm_mday = st->day;
+    tm_utc.tm_hour = st->hour;
+    tm_utc.tm_min = st->minute;
+    tm_utc.tm_sec = st->second;
+    const std::time_t t = timegm(&tm_utc);
+    auto* ft = static_cast<GuestFileTime*>(file_time);
+    filetime_from_unix(t, *ft);
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_FlushFileBuffers(const void* handle) noexcept {
+    const int fd = handle_fd(handle);
+    if (fd < 0) {
+        set_last_error(abi::kErrorInvalidHandle);
+        return 0;
+    }
+    if (fsync(fd) != 0) {
+        set_last_error(errno_to_win32(errno));
+        return 0;
+    }
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_SetFilePointerEx(const void* handle, const std::int64_t distance_to_move,
+                                 std::int64_t* new_file_pointer, const std::uint32_t move_method) noexcept {
+    FileSlot* slot = find_file_slot(handle);
+    if (slot == nullptr) {
+        set_last_error(abi::kErrorInvalidHandle);
+        return 0;
+    }
+    if (move_method > kFileEnd) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    std::int64_t new_pos = 0;
+    switch (move_method) {
+        case kFileBegin: new_pos = distance_to_move; break;
+        case kFileCurrent: new_pos = slot->position + distance_to_move; break;
+        case kFileEnd: new_pos = static_cast<std::int64_t>(slot->file_size) + distance_to_move; break;
+    }
+    if (new_pos < 0) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    const off_t result = lseek(slot->fd, static_cast<off_t>(new_pos), SEEK_SET);
+    if (result < 0) {
+        set_last_error(errno_to_win32(errno));
+        return 0;
+    }
+    slot->position = static_cast<std::int64_t>(result);
+    if (new_file_pointer != nullptr && mapped_guest_range(new_file_pointer, sizeof(std::int64_t), true)) {
+        *new_file_pointer = slot->position;
+    }
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_GetFileSizeEx(const void* handle, std::int64_t* file_size) noexcept {
+    const FileSlot* slot = find_file_slot(handle);
+    if (slot == nullptr || file_size == nullptr || !mapped_guest_range(file_size, sizeof(std::int64_t), true)) {
+        set_last_error(slot == nullptr ? abi::kErrorInvalidHandle : abi::kErrorInvalidParameter);
+        return 0;
+    }
+    *file_size = static_cast<std::int64_t>(slot->file_size);
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_CompareStringA(const std::uint32_t, const std::uint32_t flags,
+                               const char* string1, const int count1,
+                               const char* string2, const int count2) noexcept {
+    if (string1 == nullptr || string2 == nullptr) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    const std::string_view s1(string1, count1 >= 0 ? static_cast<std::size_t>(count1) : std::strlen(string1));
+    const std::string_view s2(string2, count2 >= 0 ? static_cast<std::size_t>(count2) : std::strlen(string2));
+    const bool ignore_case = (flags & 0x00000001) != 0;
+    int res = 0;
+    if (ignore_case) {
+        res = util::ascii_case_insensitive_compare(s1, s2);
+    } else {
+        res = s1.compare(s2);
+    }
+    set_last_error(abi::kErrorSuccess);
+    return (res < 0) ? 1 : ((res > 0) ? 3 : 2);
+}
+
+TL_MSABI int tl_CompareStringW(const std::uint32_t locale, const std::uint32_t flags,
+                               const std::uint16_t* string1, const int count1,
+                               const std::uint16_t* string2, const int count2) noexcept {
+    const std::string utf8_1 = (string1 != nullptr) ? util::wide_to_utf8(string1, count1 >= 0 ? count1 : 65535) : "";
+    const std::string utf8_2 = (string2 != nullptr) ? util::wide_to_utf8(string2, count2 >= 0 ? count2 : 65535) : "";
+    return tl_CompareStringA(locale, flags, utf8_1.c_str(), -1, utf8_2.c_str(), -1);
+}
+
+TL_MSABI std::uint32_t tl_GetUserDefaultLCID() noexcept {
+    return 0x0409U;
+}
+
+TL_MSABI std::uint32_t tl_GetSystemDefaultLCID() noexcept {
+    return 0x0409U;
+}
+
+TL_MSABI int tl_GetComputerNameA(char* buffer, std::uint32_t* size) noexcept {
+    if (buffer == nullptr || size == nullptr || *size == 0 || !mapped_guest_range(buffer, *size, true)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    char host[256]{};
+    if (gethostname(host, sizeof(host)) != 0) {
+        set_last_error(errno_to_win32(errno));
+        return 0;
+    }
+    const std::size_t len = std::strlen(host);
+    if (*size <= len) {
+        *size = static_cast<std::uint32_t>(len + 1);
+        set_last_error(abi::kErrorInsufficientBuffer);
+        return 0;
+    }
+    std::memcpy(buffer, host, len + 1);
+    *size = static_cast<std::uint32_t>(len);
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_GetComputerNameW(std::uint16_t* buffer, std::uint32_t* size) noexcept {
+    if (buffer == nullptr || size == nullptr || *size == 0 || !mapped_guest_range(buffer, *size * sizeof(std::uint16_t), true)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    char host[256]{};
+    if (gethostname(host, sizeof(host)) != 0) {
+        set_last_error(errno_to_win32(errno));
+        return 0;
+    }
+    const std::u16string u16 = util::utf8_to_wide(host);
+    if (*size <= u16.size()) {
+        *size = static_cast<std::uint32_t>(u16.size() + 1);
+        set_last_error(abi::kErrorInsufficientBuffer);
+        return 0;
+    }
+    std::copy(u16.begin(), u16.end(), buffer);
+    buffer[u16.size()] = 0;
+    *size = static_cast<std::uint32_t>(u16.size());
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
 }  // extern "C"
 
 }  // namespace tradutorlinux

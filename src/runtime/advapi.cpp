@@ -450,4 +450,59 @@ TL_ADVAPI_MSABI std::uint32_t tl_RegDeleteValueW(const void* key,
     return delete_value(key, wide_to_utf8(value_name));
 }
 
+TL_ADVAPI_MSABI int tl_CryptAcquireContextA(void** prov_handle, const char* container,
+                                            const char* provider, const std::uint32_t prov_type,
+                                            const std::uint32_t flags) noexcept {
+    (void)container;
+    (void)provider;
+    (void)prov_type;
+    (void)flags;
+    if (prov_handle == nullptr || !mapped_range(prov_handle, sizeof(void*), true)) {
+        return 0;
+    }
+    static char g_crypto_provider_token = 0;
+    *prov_handle = &g_crypto_provider_token;
+    return 1;
+}
+
+TL_ADVAPI_MSABI int tl_CryptAcquireContextW(void** prov_handle, const std::uint16_t* container,
+                                            const std::uint16_t* provider, const std::uint32_t prov_type,
+                                            const std::uint32_t flags) noexcept {
+    (void)container;
+    (void)provider;
+    (void)prov_type;
+    (void)flags;
+    if (prov_handle == nullptr || !mapped_range(prov_handle, sizeof(void*), true)) {
+        return 0;
+    }
+    static char g_crypto_provider_token = 0;
+    *prov_handle = &g_crypto_provider_token;
+    return 1;
+}
+
+TL_ADVAPI_MSABI int tl_CryptGenRandom(void* prov_handle, const std::uint32_t length,
+                                      std::uint8_t* buffer) noexcept {
+    if (prov_handle == nullptr || buffer == nullptr || length == 0 ||
+        !mapped_range(buffer, length, true)) {
+        return 0;
+    }
+    std::ifstream urandom{"/dev/urandom", std::ios::binary};
+    if (urandom) {
+        urandom.read(reinterpret_cast<char*>(buffer), length);
+        if (urandom.gcount() == static_cast<std::streamsize>(length)) {
+            return 1;
+        }
+    }
+    for (std::uint32_t i = 0; i < length; ++i) {
+        buffer[i] = static_cast<std::uint8_t>(std::rand() & 0xFF);
+    }
+    return 1;
+}
+
+TL_ADVAPI_MSABI int tl_CryptReleaseContext(void* prov_handle, const std::uint32_t flags) noexcept {
+    (void)prov_handle;
+    (void)flags;
+    return 1;
+}
+
 }  // namespace tradutorlinux

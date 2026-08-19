@@ -56,6 +56,7 @@ struct WindowSlot {
     int combo_selection{-1};
     std::vector<ListViewRow> list_rows;
     int list_selection{-1};
+    void* user_data{nullptr};
 };
 
 [[nodiscard]] bool is_builtin_control(const char* name) noexcept;

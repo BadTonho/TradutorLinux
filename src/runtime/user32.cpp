@@ -1002,6 +1002,176 @@ TL_MSABI std::uint32_t tl_MsgWaitForMultipleObjects(const std::uint32_t count,
     return tl_MsgWaitForMultipleObjectsEx(count, handles, milliseconds, wake_mask, 0);
 }
 
+TL_MSABI int tl_GetSystemMetrics(const int index) noexcept {
+    switch (index) {
+        case 0: return 1920; // SM_CXSCREEN
+        case 1: return 1080; // SM_CYSCREEN
+        case 2: return 16;   // SM_CXVSCROLL
+        case 3: return 16;   // SM_CYHSCROLL
+        case 4: return 24;   // SM_CYCAPTION
+        case 5: return 2;    // SM_CXBORDER
+        case 6: return 2;    // SM_CYBORDER
+        case 7: return 4;    // SM_CXDLGFRAME
+        case 8: return 4;    // SM_CYDLGFRAME
+        case 11: return 32;  // SM_CXICON
+        case 12: return 32;  // SM_CYICON
+        case 13: return 32;  // SM_CXCURSOR
+        case 14: return 32;  // SM_CYCURSOR
+        case 15: return 20;  // SM_CYMENU
+        case 16: return 1920; // SM_CXFULLSCREEN
+        case 17: return 1040; // SM_CYFULLSCREEN
+        case 43: return 1;   // SM_CMOUSEBUTTONS
+        case 74: return 0;   // SM_REMOTESESSION
+        case 75: return 0;   // SM_SHUTTINGDOWN
+        case 80: return 1;   // SM_CMONITORS
+        default: return 0;
+    }
+}
+
+TL_MSABI std::intptr_t tl_GetWindowLongPtrA(const void* window, const int index) noexcept {
+    WindowSlot* slot = find_window_slot(window);
+    if (slot == nullptr) {
+        set_last_error(abi::kErrorInvalidHandle);
+        return 0;
+    }
+    set_last_error(abi::kErrorSuccess);
+    switch (index) {
+        case -4: return static_cast<std::intptr_t>(slot->wndproc); // GWLP_WNDPROC
+        case -6: return 0; // GWLP_HINSTANCE
+        case -8: return reinterpret_cast<std::intptr_t>(slot->parent); // GWLP_HWNDPARENT
+        case -12: return static_cast<std::intptr_t>(slot->control_id); // GWLP_ID
+        case -16: return 0x10000000 | 0x00C00000; // GWL_STYLE (WS_VISIBLE | WS_CAPTION)
+        case -20: return 0; // GWL_EXSTYLE
+        case -21: return reinterpret_cast<std::intptr_t>(slot->user_data); // GWLP_USERDATA
+        default: return 0;
+    }
+}
+
+TL_MSABI std::intptr_t tl_GetWindowLongPtrW(const void* window, const int index) noexcept {
+    return tl_GetWindowLongPtrA(window, index);
+}
+
+TL_MSABI std::intptr_t tl_SetWindowLongPtrA(const void* window, const int index, const std::intptr_t new_long) noexcept {
+    WindowSlot* slot = find_window_slot(window);
+    if (slot == nullptr) {
+        set_last_error(abi::kErrorInvalidHandle);
+        return 0;
+    }
+    set_last_error(abi::kErrorSuccess);
+    switch (index) {
+        case -4: {
+            const std::intptr_t prev = static_cast<std::intptr_t>(slot->wndproc);
+            slot->wndproc = static_cast<std::uintptr_t>(new_long);
+            return prev;
+        }
+        case -21: {
+            const std::intptr_t prev = reinterpret_cast<std::intptr_t>(slot->user_data);
+            slot->user_data = reinterpret_cast<void*>(new_long);
+            return prev;
+        }
+        case -12: {
+            const std::intptr_t prev = static_cast<std::intptr_t>(slot->control_id);
+            slot->control_id = static_cast<std::uintptr_t>(new_long);
+            return prev;
+        }
+        default:
+            return 0;
+    }
+}
+
+TL_MSABI std::intptr_t tl_SetWindowLongPtrW(const void* window, const int index, const std::intptr_t new_long) noexcept {
+    return tl_SetWindowLongPtrA(window, index, new_long);
+}
+
+TL_MSABI void* tl_GetParent(const void* window) noexcept {
+    WindowSlot* slot = find_window_slot(window);
+    if (slot == nullptr) {
+        set_last_error(abi::kErrorInvalidHandle);
+        return nullptr;
+    }
+    set_last_error(abi::kErrorSuccess);
+    return slot->parent;
+}
+
+TL_MSABI void* tl_SetParent(const void* child_window, const void* new_parent_window) noexcept {
+    WindowSlot* child = find_window_slot(child_window);
+    if (child == nullptr) {
+        set_last_error(abi::kErrorInvalidHandle);
+        return nullptr;
+    }
+    WindowSlot* old_parent = child->parent;
+    child->parent = find_window_slot(new_parent_window);
+    set_last_error(abi::kErrorSuccess);
+    return old_parent;
+}
+
+TL_MSABI int tl_IsWindow(const void* window) noexcept {
+    return find_window_slot(window) != nullptr ? 1 : 0;
+}
+
+TL_MSABI int tl_MessageBoxW(const void* window, const std::uint16_t* text,
+                            const std::uint16_t* caption, const std::uint32_t type) noexcept {
+    (void)window;
+    if (type != 0 || !mapped_guest_wstring(text) || !mapped_guest_wstring(caption)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    const std::string utf8_text = util::wide_to_utf8(text);
+    const std::string utf8_cap = util::wide_to_utf8(caption);
+    const std::uint32_t result = gui::message_box(utf8_text.c_str(), utf8_cap.c_str());
+    set_last_error(result == 0 ? abi::kErrorAccessDenied : abi::kErrorSuccess);
+    return static_cast<int>(result);
+}
+
+TL_MSABI void* tl_GetDC(const void* window) noexcept {
+    if (window == nullptr) {
+        static char g_screen_dc_token = 0;
+        set_last_error(abi::kErrorSuccess);
+        return &g_screen_dc_token;
+    }
+    WindowSlot* slot = find_window_slot(window);
+    if (slot == nullptr) {
+        set_last_error(abi::kErrorInvalidHandle);
+        return nullptr;
+    }
+    set_last_error(abi::kErrorSuccess);
+    return const_cast<void*>(window);
+}
+
+TL_MSABI int tl_ReleaseDC(const void* window, const void* dc) noexcept {
+    (void)window;
+    (void)dc;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI void* tl_GetWindowDC(const void* window) noexcept {
+    return tl_GetDC(window);
+}
+
+TL_MSABI void* tl_SetCursor(const void* cursor) noexcept {
+    (void)cursor;
+    static char g_cursor_token = 0;
+    return &g_cursor_token;
+}
+
+TL_MSABI int tl_ShowCursor(const int show) noexcept {
+    return show >= 0 ? 0 : -1;
+}
+
+TL_MSABI int tl_SetCursorPos(const int, const int) noexcept {
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI std::int16_t tl_GetKeyState(const int) noexcept {
+    return 0;
+}
+
+TL_MSABI std::int16_t tl_GetAsyncKeyState(const int) noexcept {
+    return 0;
+}
+
 }  // extern "C"
 
 }  // namespace tradutorlinux

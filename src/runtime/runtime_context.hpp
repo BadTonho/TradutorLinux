@@ -86,6 +86,16 @@ struct AllocationSlot {
 extern std::mutex g_files_mutex;
 extern std::array<FileSlot, 256> g_files;
 
+struct FileMappingSlot {
+    bool used{false};
+    int fd{-1};
+    std::uint64_t size{0};
+    std::uint32_t protect{0};
+    std::string name;
+};
+extern std::mutex g_mapping_mutex;
+extern std::array<FileMappingSlot, 64> g_mappings;
+
 extern std::mutex g_allocations_mutex;
 extern std::array<AllocationSlot, 256> g_allocations;
 

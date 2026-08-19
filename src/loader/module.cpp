@@ -178,6 +178,32 @@ void register_builtin_modules() {
         {"ReleaseSemaphore", 99, reinterpret_cast<std::uintptr_t>(&tl_ReleaseSemaphore)},
         {"WaitForMultipleObjects", 100,
          reinterpret_cast<std::uintptr_t>(&tl_WaitForMultipleObjects)},
+        {"QueryPerformanceCounter", 105, reinterpret_cast<std::uintptr_t>(&tl_QueryPerformanceCounter)},
+        {"QueryPerformanceFrequency", 106, reinterpret_cast<std::uintptr_t>(&tl_QueryPerformanceFrequency)},
+        {"GetSystemInfo", 107, reinterpret_cast<std::uintptr_t>(&tl_GetSystemInfo)},
+        {"GetNativeSystemInfo", 108, reinterpret_cast<std::uintptr_t>(&tl_GetNativeSystemInfo)},
+        {"GlobalMemoryStatusEx", 109, reinterpret_cast<std::uintptr_t>(&tl_GlobalMemoryStatusEx)},
+        {"CreateFileMappingA", 110, reinterpret_cast<std::uintptr_t>(&tl_CreateFileMappingA)},
+        {"CreateFileMappingW", 111, reinterpret_cast<std::uintptr_t>(&tl_CreateFileMappingW)},
+        {"MapViewOfFile", 112, reinterpret_cast<std::uintptr_t>(&tl_MapViewOfFile)},
+        {"UnmapViewOfFile", 113, reinterpret_cast<std::uintptr_t>(&tl_UnmapViewOfFile)},
+        {"FlushViewOfFile", 114, reinterpret_cast<std::uintptr_t>(&tl_FlushViewOfFile)},
+        {"GetDiskFreeSpaceExA", 115, reinterpret_cast<std::uintptr_t>(&tl_GetDiskFreeSpaceExA)},
+        {"GetDiskFreeSpaceExW", 116, reinterpret_cast<std::uintptr_t>(&tl_GetDiskFreeSpaceExW)},
+        {"GetDriveTypeA", 117, reinterpret_cast<std::uintptr_t>(&tl_GetDriveTypeA)},
+        {"GetDriveTypeW", 118, reinterpret_cast<std::uintptr_t>(&tl_GetDriveTypeW)},
+        {"GetVolumeInformationA", 119, reinterpret_cast<std::uintptr_t>(&tl_GetVolumeInformationA)},
+        {"GetVolumeInformationW", 120, reinterpret_cast<std::uintptr_t>(&tl_GetVolumeInformationW)},
+        {"GetSystemTime", 121, reinterpret_cast<std::uintptr_t>(&tl_GetSystemTime)},
+        {"GetLocalTime", 122, reinterpret_cast<std::uintptr_t>(&tl_GetLocalTime)},
+        {"FileTimeToSystemTime", 123, reinterpret_cast<std::uintptr_t>(&tl_FileTimeToSystemTime)},
+        {"SystemTimeToFileTime", 124, reinterpret_cast<std::uintptr_t>(&tl_SystemTimeToFileTime)},
+        {"CompareStringA", 125, reinterpret_cast<std::uintptr_t>(&tl_CompareStringA)},
+        {"CompareStringW", 126, reinterpret_cast<std::uintptr_t>(&tl_CompareStringW)},
+        {"GetUserDefaultLCID", 127, reinterpret_cast<std::uintptr_t>(&tl_GetUserDefaultLCID)},
+        {"GetSystemDefaultLCID", 128, reinterpret_cast<std::uintptr_t>(&tl_GetSystemDefaultLCID)},
+        {"GetComputerNameA", 129, reinterpret_cast<std::uintptr_t>(&tl_GetComputerNameA)},
+        {"GetComputerNameW", 130, reinterpret_cast<std::uintptr_t>(&tl_GetComputerNameW)},
     };
     static const InternalModule kKernel32Module{"KERNEL32.dll", kKernel32Exports};
     register_module(kKernel32Module);
@@ -222,6 +248,23 @@ void register_builtin_modules() {
         {"AppendMenuA", 37, reinterpret_cast<std::uintptr_t>(&tl_AppendMenuA)},
         {"DestroyMenu", 38, reinterpret_cast<std::uintptr_t>(&tl_DestroyMenu)},
         {"TrackPopupMenu", 39, reinterpret_cast<std::uintptr_t>(&tl_TrackPopupMenu)},
+        {"GetSystemMetrics", 41, reinterpret_cast<std::uintptr_t>(&tl_GetSystemMetrics)},
+        {"GetWindowLongPtrA", 42, reinterpret_cast<std::uintptr_t>(&tl_GetWindowLongPtrA)},
+        {"GetWindowLongPtrW", 43, reinterpret_cast<std::uintptr_t>(&tl_GetWindowLongPtrW)},
+        {"SetWindowLongPtrA", 44, reinterpret_cast<std::uintptr_t>(&tl_SetWindowLongPtrA)},
+        {"SetWindowLongPtrW", 45, reinterpret_cast<std::uintptr_t>(&tl_SetWindowLongPtrW)},
+        {"GetParent", 46, reinterpret_cast<std::uintptr_t>(&tl_GetParent)},
+        {"SetParent", 47, reinterpret_cast<std::uintptr_t>(&tl_SetParent)},
+        {"IsWindow", 48, reinterpret_cast<std::uintptr_t>(&tl_IsWindow)},
+        {"MessageBoxW", 49, reinterpret_cast<std::uintptr_t>(&tl_MessageBoxW)},
+        {"GetWindowDC", 50, reinterpret_cast<std::uintptr_t>(&tl_GetWindowDC)},
+        {"SetCursor", 51, reinterpret_cast<std::uintptr_t>(&tl_SetCursor)},
+        {"ShowCursor", 52, reinterpret_cast<std::uintptr_t>(&tl_ShowCursor)},
+        {"SetCursorPos", 53, reinterpret_cast<std::uintptr_t>(&tl_SetCursorPos)},
+        {"GetKeyState", 54, reinterpret_cast<std::uintptr_t>(&tl_GetKeyState)},
+        {"GetAsyncKeyState", 55, reinterpret_cast<std::uintptr_t>(&tl_GetAsyncKeyState)},
+        {"MsgWaitForMultipleObjects", 56, reinterpret_cast<std::uintptr_t>(&tl_MsgWaitForMultipleObjects)},
+        {"MsgWaitForMultipleObjectsEx", 57, reinterpret_cast<std::uintptr_t>(&tl_MsgWaitForMultipleObjectsEx)},
     };
     static const InternalModule kUser32Module{"USER32.dll", kUser32Exports};
     register_module(kUser32Module);
@@ -235,6 +278,15 @@ void register_builtin_modules() {
         {"DeleteObject", 7, reinterpret_cast<std::uintptr_t>(&tl_DeleteObject)},
         {"SetBkColor", 8, reinterpret_cast<std::uintptr_t>(&tl_SetBkColor)},
         {"SetTextColor", 9, reinterpret_cast<std::uintptr_t>(&tl_SetTextColor)},
+        {"GetDeviceCaps", 10, reinterpret_cast<std::uintptr_t>(&tl_GetDeviceCaps)},
+        {"CreateCompatibleDC", 11, reinterpret_cast<std::uintptr_t>(&tl_CreateCompatibleDC)},
+        {"DeleteDC", 12, reinterpret_cast<std::uintptr_t>(&tl_DeleteDC)},
+        {"CreateCompatibleBitmap", 13, reinterpret_cast<std::uintptr_t>(&tl_CreateCompatibleBitmap)},
+        {"BitBlt", 14, reinterpret_cast<std::uintptr_t>(&tl_BitBlt)},
+        {"SelectObject", 15, reinterpret_cast<std::uintptr_t>(&tl_SelectObject)},
+        {"SetBkMode", 16, reinterpret_cast<std::uintptr_t>(&tl_SetBkMode)},
+        {"CreateFontIndirectA", 17, reinterpret_cast<std::uintptr_t>(&tl_CreateFontIndirectA)},
+        {"CreateFontIndirectW", 18, reinterpret_cast<std::uintptr_t>(&tl_CreateFontIndirectW)},
     };
     static const InternalModule kGdi32Module{"GDI32.dll", kGdi32Exports};
     register_module(kGdi32Module);
@@ -384,6 +436,10 @@ void register_builtin_modules() {
         {"RegQueryValueExW", 10, reinterpret_cast<std::uintptr_t>(&tl_RegQueryValueExW)},
         {"RegSetValueExA", 5, reinterpret_cast<std::uintptr_t>(&tl_RegSetValueExA)},
         {"RegSetValueExW", 11, reinterpret_cast<std::uintptr_t>(&tl_RegSetValueExW)},
+        {"CryptAcquireContextA", 12, reinterpret_cast<std::uintptr_t>(&tl_CryptAcquireContextA)},
+        {"CryptAcquireContextW", 13, reinterpret_cast<std::uintptr_t>(&tl_CryptAcquireContextW)},
+        {"CryptGenRandom", 14, reinterpret_cast<std::uintptr_t>(&tl_CryptGenRandom)},
+        {"CryptReleaseContext", 15, reinterpret_cast<std::uintptr_t>(&tl_CryptReleaseContext)},
     };
     static const InternalModule kAdvapi32Module{"ADVAPI32.dll", kAdvapi32Exports};
     register_module(kAdvapi32Module);

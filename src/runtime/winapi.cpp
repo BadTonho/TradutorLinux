@@ -74,6 +74,9 @@ char kStockObjectTokens[24]{};
 std::mutex g_files_mutex;
 std::array<FileSlot, 256> g_files{};
 
+std::mutex g_mapping_mutex;
+std::array<FileMappingSlot, 64> g_mappings{};
+
 std::mutex g_allocations_mutex;
 std::array<AllocationSlot, 256> g_allocations{};
 

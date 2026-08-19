@@ -163,6 +163,87 @@ TL_MSABI std::uint32_t tl_SetTextColor(const void* dc, const std::uint32_t color
     return color;
 }
 
+TL_MSABI int tl_GetDeviceCaps(const void* dc, const int index) noexcept {
+    (void)dc;
+    switch (index) {
+        case 8: return 1920; // HORZRES
+        case 10: return 1080; // VERTRES
+        case 12: return 32;   // BITSPIXEL
+        case 14: return 1;    // PLANES
+        case 88: return 96;   // LOGPIXELSX
+        case 90: return 96;   // LOGPIXELSY
+        case 115: return 24;  // SIZEPALETTE
+        case 116: return 20;  // NUMRESERVED
+        case 117: return 16777216; // COLORRES
+        default: return 0;
+    }
+}
+
+TL_MSABI void* tl_CreateCompatibleDC(const void* dc) noexcept {
+    (void)dc;
+    static char g_compat_dc_token = 0;
+    set_last_error(abi::kErrorSuccess);
+    return &g_compat_dc_token;
+}
+
+TL_MSABI int tl_DeleteDC(const void* dc) noexcept {
+    (void)dc;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI void* tl_CreateCompatibleBitmap(const void* dc, const int width, const int height) noexcept {
+    (void)dc;
+    (void)width;
+    (void)height;
+    static char g_compat_bitmap_token = 0;
+    set_last_error(abi::kErrorSuccess);
+    return &g_compat_bitmap_token;
+}
+
+TL_MSABI int tl_BitBlt(const void* dest_dc, const int x, const int y,
+                       const int width, const int height,
+                       const void* src_dc, const int src_x, const int src_y,
+                       const std::uint32_t rop) noexcept {
+    (void)dest_dc;
+    (void)x;
+    (void)y;
+    (void)width;
+    (void)height;
+    (void)src_dc;
+    (void)src_x;
+    (void)src_y;
+    (void)rop;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI void* tl_SelectObject(const void* dc, const void* object) noexcept {
+    (void)dc;
+    set_last_error(abi::kErrorSuccess);
+    return const_cast<void*>(object);
+}
+
+TL_MSABI int tl_SetBkMode(const void* dc, const int mode) noexcept {
+    (void)dc;
+    set_last_error(abi::kErrorSuccess);
+    return mode;
+}
+
+TL_MSABI void* tl_CreateFontIndirectA(const void* log_font) noexcept {
+    (void)log_font;
+    static char g_font_token = 0;
+    set_last_error(abi::kErrorSuccess);
+    return &g_font_token;
+}
+
+TL_MSABI void* tl_CreateFontIndirectW(const void* log_font) noexcept {
+    (void)log_font;
+    static char g_font_w_token = 0;
+    set_last_error(abi::kErrorSuccess);
+    return &g_font_w_token;
+}
+
 }  // extern "C"
 
 }  // namespace tradutorlinux

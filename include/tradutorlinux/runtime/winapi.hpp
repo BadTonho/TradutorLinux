@@ -270,6 +270,46 @@ struct GuestMemoryBasicInformation {
 };
 static_assert(sizeof(GuestMemoryBasicInformation) == 48);
 
+struct GuestSystemInfo {
+    std::uint16_t processor_architecture{};
+    std::uint16_t reserved{};
+    std::uint32_t page_size{};
+    void* minimum_application_address{};
+    void* maximum_application_address{};
+    std::uintptr_t active_processor_mask{};
+    std::uint32_t number_of_processors{};
+    std::uint32_t processor_type{};
+    std::uint32_t allocation_granularity{};
+    std::uint16_t processor_level{};
+    std::uint16_t processor_revision{};
+};
+static_assert(sizeof(GuestSystemInfo) == 48);
+
+struct GuestMemoryStatusEx {
+    std::uint32_t length{};
+    std::uint32_t memory_load{};
+    std::uint64_t total_phys{};
+    std::uint64_t avail_phys{};
+    std::uint64_t total_page_file{};
+    std::uint64_t avail_page_file{};
+    std::uint64_t total_virtual{};
+    std::uint64_t avail_virtual{};
+    std::uint64_t avail_extended_virtual{};
+};
+static_assert(sizeof(GuestMemoryStatusEx) == 64);
+
+struct GuestSystemTime {
+    std::uint16_t year{};
+    std::uint16_t month{};
+    std::uint16_t day_of_week{};
+    std::uint16_t day{};
+    std::uint16_t hour{};
+    std::uint16_t minute{};
+    std::uint16_t second{};
+    std::uint16_t milliseconds{};
+};
+static_assert(sizeof(GuestSystemTime) == 16);
+
 }  // namespace abi
 
 // Fronteira de ABI: funções hospedeiras chamadas por código PE32+ x86-64.
@@ -524,6 +564,109 @@ TL_MSABI std::uint32_t tl_GetCurrentProcessId() noexcept;
 TL_MSABI std::uint32_t tl_TlsAlloc() noexcept;
 TL_MSABI int tl_TlsSetValue(std::uint32_t tls_index, void* tls_value) noexcept;
 TL_MSABI int tl_TlsFree(std::uint32_t tls_index) noexcept;
+
+// Temporização de alta resolução e hardware info (KERNEL32)
+TL_MSABI int tl_QueryPerformanceCounter(std::int64_t* performance_count) noexcept;
+TL_MSABI int tl_QueryPerformanceFrequency(std::int64_t* frequency) noexcept;
+TL_MSABI void tl_GetSystemInfo(void* system_info) noexcept;
+TL_MSABI void tl_GetNativeSystemInfo(void* system_info) noexcept;
+TL_MSABI int tl_GlobalMemoryStatusEx(void* buffer) noexcept;
+
+// File Mapping (KERNEL32)
+TL_MSABI void* tl_CreateFileMappingA(const void* file, const void* file_mapping_attributes,
+                                     std::uint32_t protect, std::uint32_t maximum_size_high,
+                                     std::uint32_t maximum_size_low, const char* name) noexcept;
+TL_MSABI void* tl_CreateFileMappingW(const void* file, const void* file_mapping_attributes,
+                                     std::uint32_t protect, std::uint32_t maximum_size_high,
+                                     std::uint32_t maximum_size_low, const std::uint16_t* name) noexcept;
+TL_MSABI void* tl_MapViewOfFile(const void* file_mapping_object, std::uint32_t desired_access,
+                                std::uint32_t file_offset_high, std::uint32_t file_offset_low,
+                                std::size_t number_of_bytes_to_map) noexcept;
+TL_MSABI int tl_UnmapViewOfFile(const void* base_address) noexcept;
+TL_MSABI int tl_FlushViewOfFile(const void* base_address, std::size_t number_of_bytes_to_flush) noexcept;
+
+// Volumes e Utilitários de Disco (KERNEL32)
+TL_MSABI int tl_GetDiskFreeSpaceExA(const char* directory_name, std::uint64_t* free_bytes_available_to_caller,
+                                    std::uint64_t* total_number_of_bytes, std::uint64_t* total_number_of_free_bytes) noexcept;
+TL_MSABI int tl_GetDiskFreeSpaceExW(const std::uint16_t* directory_name, std::uint64_t* free_bytes_available_to_caller,
+                                    std::uint64_t* total_number_of_bytes, std::uint64_t* total_number_of_free_bytes) noexcept;
+TL_MSABI std::uint32_t tl_GetDriveTypeA(const char* root_path_name) noexcept;
+TL_MSABI std::uint32_t tl_GetDriveTypeW(const std::uint16_t* root_path_name) noexcept;
+TL_MSABI int tl_GetVolumeInformationA(const char* root_path_name, char* volume_name_buffer,
+                                      std::uint32_t volume_name_size, std::uint32_t* volume_serial_number,
+                                      std::uint32_t* maximum_component_length, std::uint32_t* file_system_flags,
+                                      char* file_system_name_buffer, std::uint32_t file_system_name_size) noexcept;
+TL_MSABI int tl_GetVolumeInformationW(const std::uint16_t* root_path_name, std::uint16_t* volume_name_buffer,
+                                      std::uint32_t volume_name_size, std::uint32_t* volume_serial_number,
+                                      std::uint32_t* maximum_component_length, std::uint32_t* file_system_flags,
+                                      std::uint16_t* file_system_name_buffer, std::uint32_t file_system_name_size) noexcept;
+
+// Data, Hora e Strings (KERNEL32)
+TL_MSABI void tl_GetSystemTime(void* system_time) noexcept;
+TL_MSABI void tl_GetLocalTime(void* system_time) noexcept;
+TL_MSABI int tl_FileTimeToSystemTime(const void* file_time, void* system_time) noexcept;
+TL_MSABI int tl_SystemTimeToFileTime(const void* system_time, void* file_time) noexcept;
+TL_MSABI int tl_FlushFileBuffers(const void* handle) noexcept;
+TL_MSABI int tl_SetFilePointerEx(const void* handle, std::int64_t distance_to_move,
+                                 std::int64_t* new_file_pointer, std::uint32_t move_method) noexcept;
+TL_MSABI int tl_GetFileSizeEx(const void* handle, std::int64_t* file_size) noexcept;
+TL_MSABI int tl_CompareStringA(std::uint32_t locale, std::uint32_t flags,
+                               const char* string1, int count1, const char* string2, int count2) noexcept;
+TL_MSABI int tl_CompareStringW(std::uint32_t locale, std::uint32_t flags,
+                               const std::uint16_t* string1, int count1, const std::uint16_t* string2, int count2) noexcept;
+TL_MSABI std::uint32_t tl_GetUserDefaultLCID() noexcept;
+TL_MSABI std::uint32_t tl_GetSystemDefaultLCID() noexcept;
+TL_MSABI int tl_GetComputerNameA(char* buffer, std::uint32_t* size) noexcept;
+TL_MSABI int tl_GetComputerNameW(std::uint16_t* buffer, std::uint32_t* size) noexcept;
+
+// USER32: Métricas, Hierarquia, Mensagens e Input
+TL_MSABI int tl_GetSystemMetrics(int index) noexcept;
+TL_MSABI std::intptr_t tl_GetWindowLongPtrA(const void* window, int index) noexcept;
+TL_MSABI std::intptr_t tl_GetWindowLongPtrW(const void* window, int index) noexcept;
+TL_MSABI std::intptr_t tl_SetWindowLongPtrA(const void* window, int index, std::intptr_t new_long) noexcept;
+TL_MSABI std::intptr_t tl_SetWindowLongPtrW(const void* window, int index, std::intptr_t new_long) noexcept;
+TL_MSABI void* tl_GetParent(const void* window) noexcept;
+TL_MSABI void* tl_SetParent(const void* child_window, const void* new_parent_window) noexcept;
+TL_MSABI int tl_IsWindow(const void* window) noexcept;
+TL_MSABI int tl_MessageBoxW(const void* window, const std::uint16_t* text,
+                            const std::uint16_t* caption, std::uint32_t type) noexcept;
+TL_MSABI void* tl_GetDC(const void* window) noexcept;
+TL_MSABI int tl_ReleaseDC(const void* window, const void* dc) noexcept;
+TL_MSABI void* tl_GetWindowDC(const void* window) noexcept;
+TL_MSABI void* tl_SetCursor(const void* cursor) noexcept;
+TL_MSABI int tl_ShowCursor(int show) noexcept;
+TL_MSABI int tl_SetCursorPos(int x, int y) noexcept;
+TL_MSABI std::int16_t tl_GetKeyState(int virt_key) noexcept;
+TL_MSABI std::int16_t tl_GetAsyncKeyState(int virt_key) noexcept;
+
+// GDI32: Bitmaps, DCs e Fontes
+TL_MSABI int tl_GetDeviceCaps(const void* dc, int index) noexcept;
+TL_MSABI void* tl_CreateCompatibleDC(const void* dc) noexcept;
+TL_MSABI int tl_DeleteDC(const void* dc) noexcept;
+TL_MSABI void* tl_CreateCompatibleBitmap(const void* dc, int width, int height) noexcept;
+TL_MSABI int tl_BitBlt(const void* dest_dc, int x, int y, int width, int height,
+                       const void* src_dc, int src_x, int src_y, std::uint32_t rop) noexcept;
+TL_MSABI void* tl_SelectObject(const void* dc, const void* object) noexcept;
+TL_MSABI int tl_SetBkMode(const void* dc, int mode) noexcept;
+TL_MSABI void* tl_CreateFontIndirectA(const void* log_font) noexcept;
+TL_MSABI void* tl_CreateFontIndirectW(const void* log_font) noexcept;
+
+// ADVAPI32: Criptografia / Random e Registry Wide
+TL_MSABI int tl_CryptAcquireContextA(void** prov_handle, const char* container,
+                                     const char* provider, std::uint32_t prov_type, std::uint32_t flags) noexcept;
+TL_MSABI int tl_CryptAcquireContextW(void** prov_handle, const std::uint16_t* container,
+                                     const std::uint16_t* provider, std::uint32_t prov_type, std::uint32_t flags) noexcept;
+TL_MSABI int tl_CryptGenRandom(void* prov_handle, std::uint32_t length, std::uint8_t* buffer) noexcept;
+TL_MSABI int tl_CryptReleaseContext(void* prov_handle, std::uint32_t flags) noexcept;
+TL_MSABI int tl_RegOpenKeyExW(void* key, const std::uint16_t* sub_key, std::uint32_t options,
+                              std::uint32_t desired, void** result) noexcept;
+TL_MSABI int tl_RegQueryValueExW(void* key, const std::uint16_t* value_name, std::uint32_t* reserved,
+                                 std::uint32_t* type, std::uint8_t* data, std::uint32_t* data_size) noexcept;
+TL_MSABI int tl_RegSetValueExW(void* key, const std::uint16_t* value_name, std::uint32_t reserved,
+                               std::uint32_t type, const std::uint8_t* data, std::uint32_t data_size) noexcept;
+TL_MSABI int tl_RegCreateKeyExW(void* key, const std::uint16_t* sub_key, std::uint32_t reserved,
+                                std::uint16_t* class_name, std::uint32_t options, std::uint32_t desired,
+                                const void* security_attributes, void** result, std::uint32_t* disposition) noexcept;
 
 // SHELL32.dll (Fase 10+): linha de comando no formato wide.
 TL_MSABI std::uint16_t** tl_CommandLineToArgvW(const std::uint16_t* command_line,
