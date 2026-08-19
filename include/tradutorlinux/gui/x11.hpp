@@ -43,9 +43,17 @@ void flush_window(NativeWindow window) noexcept;
 // 1 LTGRAY, 2 GRAY, 3 DKGRAY, 4 BLACK, 5 NULL (sem preenchimento).
 void draw_text(NativeWindow window, const char* text, int x, int y) noexcept;
 void draw_text_len(NativeWindow window, const char* text, int length, int x, int y) noexcept;
+void draw_text_color(NativeWindow window, const char* text, int x, int y, std::uint32_t rgb,
+                     bool bold = false) noexcept;
+void draw_text_len_color(NativeWindow window, const char* text, int length, int x, int y,
+                         std::uint32_t rgb, bool bold = false) noexcept;
 void draw_rectangle(NativeWindow window, int x, int y, int width, int height) noexcept;
+void draw_rectangle_color(NativeWindow window, int x, int y, int width, int height,
+                          std::uint32_t rgb) noexcept;
 void fill_rectangle(NativeWindow window, int x, int y, int width, int height,
                     int brush_index) noexcept;
+void fill_rectangle_color(NativeWindow window, int x, int y, int width, int height,
+                          std::uint32_t rgb) noexcept;
 
 // Retorna o próximo evento pendente da janela, drenando um evento X por chamada.
 // Eventos não relevantes para a janela informada são descartados.

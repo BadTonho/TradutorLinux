@@ -597,7 +597,33 @@ void render_controls(WindowSlot& parent) noexcept {
     if (!parent.used || parent.native == nullptr || !parent.mapped) {
         return;
     }
-    gui::fill_rectangle(parent.native, 0, 0, parent.width, parent.height, 0);
+
+    // Paleta clara e consistente para o renderer X11 mínimo. O aplicativo
+    // continua controlando posições e textos; aqui damos aos controles uma
+    // hierarquia visual legível sem ampliar a ABI convidada.
+    constexpr std::uint32_t kCanvas = 0xF3F6FAU;
+    constexpr std::uint32_t kPanel = 0xE8EEF5U;
+    constexpr std::uint32_t kSurface = 0xFFFFFFU;
+    constexpr std::uint32_t kBorder = 0xB9C5D1U;
+    constexpr std::uint32_t kFocus = 0x2563EBU;
+    constexpr std::uint32_t kText = 0x1F2937U;
+    constexpr std::uint32_t kMuted = 0x657386U;
+    constexpr std::uint32_t kHeader = 0xDDE7F2U;
+    constexpr std::uint32_t kSelection = 0xD8E8FFU;
+    constexpr std::uint32_t kPrimary = 0x2563EBU;
+    constexpr std::uint32_t kPrimaryPressed = 0x1D4ED8U;
+    constexpr std::uint32_t kSuccess = 0x2E9D63U;
+    constexpr std::uint32_t kSuccessPressed = 0x22784BU;
+    constexpr std::uint32_t kDanger = 0xD95757U;
+    constexpr std::uint32_t kDangerPressed = 0xB84141U;
+    constexpr std::uint32_t kNeutral = 0x64748BU;
+
+    gui::fill_rectangle_color(parent.native, 0, 0, parent.width, parent.height, kCanvas);
+    gui::fill_rectangle_color(parent.native, 0, 0, parent.width, 48, kPanel);
+    if (parent.height > 348) {
+        gui::fill_rectangle_color(parent.native, 0, 348, parent.width, parent.height - 348,
+                                  kPanel);
+    }
     for (WindowSlot& control : g_windows) {
         if (!control.used || !control.is_control || control.parent != &parent || !control.visible) {
             continue;
@@ -605,44 +631,65 @@ void render_controls(WindowSlot& parent) noexcept {
         const int x = control.x;
         const int y = control.y;
         if (control.control_kind == ControlKind::Static) {
-            gui::draw_text(parent.native, control.text.c_str(), x, y + 14);
+            gui::draw_text_color(parent.native, control.text.c_str(), x, y + 14, kMuted);
         } else if (control.control_kind == ControlKind::Edit) {
-            gui::fill_rectangle(parent.native, x, y, control.width, control.height, 0);
-            gui::draw_rectangle(parent.native, x, y, control.width, control.height);
-            gui::draw_text(parent.native, control.text.c_str(), x + 5, y + control.height - 8);
+            const std::uint32_t border = control.focused ? kFocus : kBorder;
+            gui::fill_rectangle_color(parent.native, x, y, control.width, control.height, kSurface);
+            gui::draw_rectangle_color(parent.native, x, y, control.width, control.height, border);
+            const bool placeholder = control.control_id == 11U && control.text == "Search todos...";
+            gui::draw_text_color(parent.native, control.text.c_str(), x + 8, y + 19,
+                                 placeholder ? kMuted : kText);
         } else if (control.control_kind == ControlKind::Button) {
-            gui::fill_rectangle(parent.native, x, y, control.width, control.height, 1);
-            gui::draw_rectangle(parent.native, x, y, control.width, control.height);
-            gui::draw_text(parent.native, control.text.c_str(), x + 8, y + control.height - 8);
+            const bool is_delete = control.text == "Delete";
+            const bool is_complete = control.text == "Complete";
+            const bool is_neutral = control.text == "Cancel" || control.text == "Edit";
+            const std::uint32_t normal = is_delete ? kDanger : is_complete ? kSuccess
+                                               : is_neutral ? kNeutral
+                                                            : kPrimary;
+            const std::uint32_t pressed = is_delete ? kDangerPressed
+                                                    : is_complete ? kSuccessPressed
+                                                                   : is_neutral ? 0x475569U
+                                                                                : kPrimaryPressed;
+            const std::uint32_t fill = control.pressed ? pressed : normal;
+            gui::fill_rectangle_color(parent.native, x, y, control.width, control.height, fill);
+            gui::draw_rectangle_color(parent.native, x, y, control.width, control.height, fill);
+            gui::draw_text_color(parent.native, control.text.c_str(), x + 8, y + 19, kSurface,
+                                 true);
         } else if (control.control_kind == ControlKind::ComboBox) {
-            gui::fill_rectangle(parent.native, x, y, control.width, control.height, 0);
-            gui::draw_rectangle(parent.native, x, y, control.width, control.height);
+            gui::fill_rectangle_color(parent.native, x, y, control.width, control.height, kSurface);
+            gui::draw_rectangle_color(parent.native, x, y, control.width, control.height, kBorder);
             if (control.combo_selection >= 0 &&
                 static_cast<std::size_t>(control.combo_selection) < control.combo_items.size()) {
-                gui::draw_text(parent.native,
+                gui::draw_text_color(parent.native,
                                control.combo_items[static_cast<std::size_t>(control.combo_selection)].c_str(),
-                               x + 5, y + control.height - 8);
+                               x + 8, y + 19, kText);
             }
+            gui::draw_text_color(parent.native, "v", x + control.width - 16, y + 19, kMuted, true);
         } else if (control.control_kind == ControlKind::ListView) {
-            gui::draw_rectangle(parent.native, x, y, control.width, control.height);
+            gui::fill_rectangle_color(parent.native, x + 1, y + 1, control.width - 2,
+                                      control.height - 2, kSurface);
+            gui::draw_rectangle_color(parent.native, x, y, control.width, control.height, kBorder);
+            gui::fill_rectangle_color(parent.native, x + 1, y + 1, control.width - 2, 23, kHeader);
             const std::array<int, 6> columns{40, 150, 200, 80, 100, 150};
             const std::array<const char*, 6> headings{"ID", "Title", "Description", "Priority",
                                                       "Status", "Created"};
             int column_x = x + 5;
             for (std::size_t index = 0; index < headings.size(); ++index) {
-                gui::draw_text(parent.native, headings[index], column_x, y + 17);
+                gui::draw_text_color(parent.native, headings[index], column_x, y + 17, kText, true);
                 column_x += columns[index];
             }
             for (std::size_t row = 0; row < control.list_rows.size(); ++row) {
-                const int row_y = y + 24 + static_cast<int>(row) * 20;
+                const int row_y = y + 40 + static_cast<int>(row) * 20;
                 if (static_cast<int>(row) == control.list_selection) {
-                    gui::fill_rectangle(parent.native, x + 1, row_y - 15, control.width - 2, 20, 1);
+                    gui::fill_rectangle_color(parent.native, x + 1, row_y - 16, control.width - 2, 20,
+                                              kSelection);
                 }
                 column_x = x + 5;
                 for (std::size_t column = 0; column < control.list_rows[row].columns.size() &&
                                              column < columns.size(); ++column) {
-                    gui::draw_text(parent.native, control.list_rows[row].columns[column].c_str(),
-                                   column_x, row_y);
+                    gui::draw_text_color(parent.native,
+                                         control.list_rows[row].columns[column].c_str(), column_x,
+                                         row_y, kText);
                     column_x += columns[column];
                 }
             }

@@ -50,6 +50,14 @@ struct FillState {
     bool ready{false};
 };
 
+struct TextState {
+    GC regular_gc{};
+    GC bold_gc{};
+    XFontStruct* regular_font{nullptr};
+    XFontStruct* bold_font{nullptr};
+    bool ready{false};
+};
+
 FillState& fill_state(Display* const dpy, const int screen) {
     static FillState state;
     if (!state.ready) {
@@ -70,6 +78,42 @@ FillState& fill_state(Display* const dpy, const int screen) {
         state.ready = true;
     }
     return state;
+}
+
+TextState& text_state(Display* const dpy, const int screen) {
+    static TextState state;
+    if (!state.ready) {
+        const Window root = RootWindow(dpy, screen);
+        state.regular_gc = XCreateGC(dpy, root, 0, nullptr);
+        state.bold_gc = XCreateGC(dpy, root, 0, nullptr);
+        state.regular_font = XLoadQueryFont(
+            dpy, "-adobe-helvetica-medium-r-normal--14-100-100-100-p-76-iso8859-1");
+        state.bold_font = XLoadQueryFont(
+            dpy, "-adobe-helvetica-bold-r-normal--14-100-100-100-p-82-iso8859-1");
+        if (state.regular_font != nullptr) {
+            XSetFont(dpy, state.regular_gc, state.regular_font->fid);
+        }
+        if (state.bold_font != nullptr) {
+            XSetFont(dpy, state.bold_gc, state.bold_font->fid);
+        } else if (state.regular_font != nullptr) {
+            XSetFont(dpy, state.bold_gc, state.regular_font->fid);
+        }
+        state.ready = true;
+    }
+    return state;
+}
+
+[[nodiscard]] unsigned long pixel_for_rgb(Display* const dpy, const int screen,
+                                           const std::uint32_t rgb) noexcept {
+    XColor color{};
+    color.flags = DoRed | DoGreen | DoBlue;
+    color.red = static_cast<unsigned short>(((rgb >> 16U) & 0xFFU) * 257U);
+    color.green = static_cast<unsigned short>(((rgb >> 8U) & 0xFFU) * 257U);
+    color.blue = static_cast<unsigned short>((rgb & 0xFFU) * 257U);
+    if (XAllocColor(dpy, DefaultColormap(dpy, screen), &color)) {
+        return color.pixel;
+    }
+    return BlackPixel(dpy, screen);
 }
 
 class DisplayCloser {
@@ -301,22 +345,49 @@ void draw_text(const NativeWindow window, const char* const text, const int x, c
 
 void draw_text_len(const NativeWindow window, const char* const text, const int length, const int x,
                    const int y) noexcept {
+    draw_text_len_color(window, text, length, x, y, 0x1F2937U);
+}
+
+void draw_text_color(const NativeWindow window, const char* const text, const int x, const int y,
+                     const std::uint32_t rgb, const bool bold) noexcept {
+    if (text == nullptr) {
+        return;
+    }
+    draw_text_len_color(window, text, static_cast<int>(std::strlen(text)), x, y, rgb, bold);
+}
+
+void draw_text_len_color(const NativeWindow window, const char* const text, const int length,
+                         const int x, const int y, const std::uint32_t rgb,
+                         const bool bold) noexcept {
     Display* const dpy = display();
     WindowState* state = find_state(window);
     if (dpy == nullptr || state == nullptr || text == nullptr || length <= 0) {
         return;
     }
-    XDrawString(dpy, state->window, DefaultGC(dpy, state->screen), x, y, text, length);
+    TextState& text_style = text_state(dpy, state->screen);
+    GC gc = bold ? text_style.bold_gc : text_style.regular_gc;
+    if (gc == nullptr) {
+        gc = DefaultGC(dpy, state->screen);
+    }
+    XSetForeground(dpy, gc, pixel_for_rgb(dpy, state->screen, rgb));
+    XDrawString(dpy, state->window, gc, x, y, text, length);
 }
 
 void draw_rectangle(const NativeWindow window, const int x, const int y, const int width,
                     const int height) noexcept {
+    draw_rectangle_color(window, x, y, width, height, 0x1F2937U);
+}
+
+void draw_rectangle_color(const NativeWindow window, const int x, const int y, const int width,
+                          const int height, const std::uint32_t rgb) noexcept {
     Display* const dpy = display();
     WindowState* state = find_state(window);
     if (dpy == nullptr || state == nullptr) {
         return;
     }
-    XDrawRectangle(dpy, state->window, DefaultGC(dpy, state->screen), x, y,
+    FillState& fill = fill_state(dpy, state->screen);
+    XSetForeground(dpy, fill.gc, pixel_for_rgb(dpy, state->screen, rgb));
+    XDrawRectangle(dpy, state->window, fill.gc, x, y,
                    static_cast<unsigned int>(width), static_cast<unsigned int>(height));
 }
 
@@ -334,6 +405,19 @@ void fill_rectangle(const NativeWindow window, const int x, const int y, const i
     XSetForeground(dpy, fill.gc, fill.pixels[static_cast<std::size_t>(brush_index)]);
     XFillRectangle(dpy, state->window, fill.gc, x, y,
                    static_cast<unsigned int>(width), static_cast<unsigned int>(height));
+}
+
+void fill_rectangle_color(const NativeWindow window, const int x, const int y, const int width,
+                          const int height, const std::uint32_t rgb) noexcept {
+    Display* const dpy = display();
+    WindowState* state = find_state(window);
+    if (dpy == nullptr || state == nullptr || width <= 0 || height <= 0) {
+        return;
+    }
+    FillState& fill = fill_state(dpy, state->screen);
+    XSetForeground(dpy, fill.gc, pixel_for_rgb(dpy, state->screen, rgb));
+    XFillRectangle(dpy, state->window, fill.gc, x, y, static_cast<unsigned int>(width),
+                   static_cast<unsigned int>(height));
 }
 
 WindowEvent next_window_event(const NativeWindow window) noexcept {
