@@ -72,8 +72,10 @@ na classe; como o hospedeiro já executa sobre a pilha convidada quando o
 convidado chama as APIs hospedeiras, essa fronteira host→convidado não precisa
 de trampolim de pilha (`call_wndproc` em `src/runtime/winapi.cpp`).
 
-O texto desenhado no `Expose` é o título da janela, gravado pelo próprio
-runtime. Além disso, o GDI mínimo desenha na janela X11:
+`Expose` não desenha conteúdo diretamente: o driver X11 apenas enfileira o
+evento `Redraw`. O runtime repinta o client area completo antes de entregar o
+`WM_PAINT` equivalente ao convidado. O título permanece somente na decoração
+da janela X11. Além disso, o GDI mínimo desenha na janela X11:
 
 ### GDI mínimo (subconjunto)
 
@@ -172,7 +174,9 @@ verdade) não fazem parte deste protótipo.
 O Simple Todo C usa controles Win32 que não precisam virar janelas X11
 individuais. `CreateWindowExA` cria tokens filhos em uma side-table ligada à
 janela principal; `MoveWindow`, `ShowWindow`, `EnableWindow`, foco e
-`Get/SetWindowTextA` atualizam esse estado. O renderer hospedeiro desenha o
+`Get/SetWindowTextA` atualizam esse estado. O estado e o renderer dos controles
+ficam isolados em `src/runtime/gui_controls.cpp`; `winapi.cpp` mantém apenas a
+ponte das APIs Win32 e o despacho de eventos. O renderer hospedeiro desenha o
 subconjunto exercitado pelo alvo: `EDIT`, `BUTTON`, `COMBOBOX`, `STATIC` e
 `SysListView32`.
 

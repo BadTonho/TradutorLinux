@@ -4,6 +4,7 @@
 #include "tradutorlinux/gui/x11.hpp"
 #include "tradutorlinux/runtime/msvcrt.hpp"
 #include "tradutorlinux/util/basics.hpp"
+#include "gui_controls.hpp"
 
 #include <algorithm>
 #include <array>
@@ -29,7 +30,6 @@
 #include <string>
 #include <thread>
 #include <vector>
-#include <deque>
 #include <fcntl.h>
 #include <dirent.h>
 #include <pthread.h>
@@ -439,51 +439,13 @@ struct ClassSlot {
     std::uintptr_t wndproc{0};
 };
 
-enum class ControlKind { None, Edit, Button, ComboBox, Static, ListView };
-
-struct ListViewRow {
-    std::vector<std::string> columns;
-    std::intptr_t param{};
-};
-
-struct GuestTimer {
-    std::uintptr_t id{0};
-    std::chrono::steady_clock::time_point deadline{};
-    std::chrono::milliseconds interval{};
-};
-
-struct WindowSlot {
-    bool used{false};
-    std::uintptr_t wndproc{0};
-    std::string class_name;
-    std::string window_title;
-    gui::NativeWindow native{nullptr};
-    bool mapped{false};
-    abi::GuestMsg pending{};  // mensagem traduzida (ex.: WM_CHAR) aguardando GetMessageA
-    bool has_pending{false};
-    std::deque<abi::GuestMsg> queued_messages;
-    char last_key{'\0'};  // caractere do WM_KEYDOWN mais recente, para TranslateMessage
-    bool left_button_down{false};  // estado do botão primário, para o wParam do mouse
-    std::vector<GuestTimer> timers;  // timers ativos (WM_TIMER)
-    int width{0};
-    int height{0};
-    bool painting{false};  // BeginPaint sem EndPaint correspondente
-    bool is_control{false};
-    ControlKind control_kind{ControlKind::None};
-    WindowSlot* parent{nullptr};
-    std::uintptr_t control_id{0};
-    int x{0};
-    int y{0};
-    std::string text;
-    bool visible{true};
-    bool enabled{true};
-    bool focused{false};
-    bool pressed{false};
-    std::vector<std::string> combo_items;
-    int combo_selection{-1};
-    std::vector<ListViewRow> list_rows;
-    int list_selection{-1};
-};
+using runtime_gui::ControlKind;
+using runtime_gui::GuestTimer;
+using runtime_gui::ListViewRow;
+using runtime_gui::WindowSlot;
+using runtime_gui::control_kind_for;
+using runtime_gui::is_builtin_control;
+using runtime_gui::queue_window_message;
 
 std::array<ClassSlot, 32> g_classes{};
 std::array<WindowSlot, 32> g_windows{};
@@ -534,269 +496,22 @@ WindowSlot* find_window_slot(const void* const handle) noexcept {
     return nullptr;
 }
 
-[[nodiscard]] bool is_builtin_control(const char* name) noexcept {
-    return name != nullptr && (util::ascii_iequals(name, "EDIT") ||
-                               util::ascii_iequals(name, "BUTTON") ||
-                               util::ascii_iequals(name, "COMBOBOX") ||
-                               util::ascii_iequals(name, "STATIC") ||
-                               util::ascii_iequals(name, "SysListView32"));
-}
-
-[[nodiscard]] ControlKind control_kind_for(const char* name) noexcept {
-    if (util::ascii_iequals(name, "EDIT")) {
-        return ControlKind::Edit;
-    }
-    if (util::ascii_iequals(name, "BUTTON")) {
-        return ControlKind::Button;
-    }
-    if (util::ascii_iequals(name, "COMBOBOX")) {
-        return ControlKind::ComboBox;
-    }
-    if (util::ascii_iequals(name, "STATIC")) {
-        return ControlKind::Static;
-    }
-    return ControlKind::ListView;
-}
-
-void queue_window_message(WindowSlot& slot, const std::uint32_t message,
-                          const abi::Wparam wparam, const abi::Lparam lparam) noexcept {
-    slot.queued_messages.push_back(abi::GuestMsg{.hwnd = &slot,
-                                                 .message = message,
-                                                 .padding = 0,
-                                                 .wparam = wparam,
-                                                 .lparam = lparam});
-}
-
-void queue_command(WindowSlot& control, const std::uint32_t notification) noexcept {
-    if (control.parent == nullptr) {
-        return;
-    }
-    const abi::Wparam value = (static_cast<abi::Wparam>(notification) << 16U) |
-                              (control.control_id & 0xFFFFU);
-    queue_window_message(*control.parent, abi::kWmCommand, value,
-                         reinterpret_cast<abi::Lparam>(&control));
-}
-
-void queue_list_notification(WindowSlot& list, const std::int32_t code, const int item) noexcept {
-    if (list.parent == nullptr) {
-        return;
-    }
-    static thread_local abi::GuestNmListView notification{};
-    notification = {};
-    notification.hwnd_from = &list;
-    notification.id_from = list.control_id;
-    notification.code = code;
-    notification.item = item;
-    notification.new_state = 0x0002U;
-    notification.changed = 0x0001U;
-    queue_window_message(*list.parent, abi::kWmNotify, 0,
-                         reinterpret_cast<abi::Lparam>(&notification));
-}
-
 void render_controls(WindowSlot& parent) noexcept {
-    if (!parent.used || parent.native == nullptr || !parent.mapped) {
-        return;
-    }
-
-    // Paleta clara e consistente para o renderer X11 mínimo. O aplicativo
-    // continua controlando posições e textos; aqui damos aos controles uma
-    // hierarquia visual legível sem ampliar a ABI convidada.
-    constexpr std::uint32_t kCanvas = 0xF3F6FAU;
-    constexpr std::uint32_t kPanel = 0xE8EEF5U;
-    constexpr std::uint32_t kSurface = 0xFFFFFFU;
-    constexpr std::uint32_t kBorder = 0xB9C5D1U;
-    constexpr std::uint32_t kFocus = 0x2563EBU;
-    constexpr std::uint32_t kText = 0x1F2937U;
-    constexpr std::uint32_t kMuted = 0x657386U;
-    constexpr std::uint32_t kHeader = 0xDDE7F2U;
-    constexpr std::uint32_t kSelection = 0xD8E8FFU;
-    constexpr std::uint32_t kPrimary = 0x2563EBU;
-    constexpr std::uint32_t kPrimaryPressed = 0x1D4ED8U;
-    constexpr std::uint32_t kSuccess = 0x2E9D63U;
-    constexpr std::uint32_t kSuccessPressed = 0x22784BU;
-    constexpr std::uint32_t kDanger = 0xD95757U;
-    constexpr std::uint32_t kDangerPressed = 0xB84141U;
-    constexpr std::uint32_t kNeutral = 0x64748BU;
-
-    WindowSlot* list_view = nullptr;
-    for (WindowSlot& control : g_windows) {
-        if (control.used && control.is_control && control.parent == &parent && control.visible &&
-            control.control_kind == ControlKind::ListView) {
-            list_view = &control;
-            break;
-        }
-    }
-    const int form_top = list_view != nullptr ? list_view->y + list_view->height + 16 : 348;
-    gui::fill_rectangle_color(parent.native, 0, 0, parent.width, parent.height, kCanvas);
-    gui::fill_rectangle_color(parent.native, 0, 0, parent.width, 72, kPanel);
-    if (parent.height > form_top) {
-        gui::fill_rectangle_color(parent.native, 0, form_top, parent.width,
-                                  parent.height - form_top, kPanel);
-    }
-    for (WindowSlot& control : g_windows) {
-        if (!control.used || !control.is_control || control.parent != &parent || !control.visible) {
-            continue;
-        }
-        const int x = control.x;
-        const int y = control.y;
-        if (control.control_kind == ControlKind::Static) {
-            const bool section_title = control.text == "My tasks" || control.text == "New task";
-            gui::draw_text_color(parent.native, control.text.c_str(), x, y + 17,
-                                 section_title ? kText : kMuted, section_title);
-        } else if (control.control_kind == ControlKind::Edit) {
-            const std::uint32_t border = control.focused ? kFocus : kBorder;
-            gui::fill_rectangle_color(parent.native, x, y, control.width, control.height, kSurface);
-            gui::draw_rectangle_color(parent.native, x, y, control.width, control.height, border);
-            const bool placeholder = control.control_id == 11U && control.text == "Search todos...";
-            gui::draw_text_color(parent.native, control.text.c_str(), x + 8, y + 19,
-                                 placeholder ? kMuted : kText);
-        } else if (control.control_kind == ControlKind::Button) {
-            const bool is_delete = control.text == "Delete";
-            const bool is_complete = control.text == "Complete";
-            const bool is_neutral = control.text == "Cancel" || control.text == "Edit";
-            const std::uint32_t normal = is_delete ? kDanger : is_complete ? kSuccess
-                                               : is_neutral ? kNeutral
-                                                            : kPrimary;
-            const std::uint32_t pressed = is_delete ? kDangerPressed
-                                                    : is_complete ? kSuccessPressed
-                                                                   : is_neutral ? 0x475569U
-                                                                                : kPrimaryPressed;
-            const std::uint32_t fill = control.pressed ? pressed : normal;
-            gui::fill_rectangle_color(parent.native, x, y, control.width, control.height, fill);
-            gui::draw_rectangle_color(parent.native, x, y, control.width, control.height, fill);
-            gui::draw_text_color(parent.native, control.text.c_str(), x + 8, y + 19, kSurface,
-                                 true);
-        } else if (control.control_kind == ControlKind::ComboBox) {
-            gui::fill_rectangle_color(parent.native, x, y, control.width, control.height, kSurface);
-            gui::draw_rectangle_color(parent.native, x, y, control.width, control.height, kBorder);
-            if (control.combo_selection >= 0 &&
-                static_cast<std::size_t>(control.combo_selection) < control.combo_items.size()) {
-                gui::draw_text_color(parent.native,
-                               control.combo_items[static_cast<std::size_t>(control.combo_selection)].c_str(),
-                               x + 8, y + 19, kText);
-            }
-            gui::draw_text_color(parent.native, "v", x + control.width - 16, y + 19, kMuted, true);
-        } else if (control.control_kind == ControlKind::ListView) {
-            gui::fill_rectangle_color(parent.native, x + 1, y + 1, control.width - 2,
-                                      control.height - 2, kSurface);
-            gui::draw_rectangle_color(parent.native, x, y, control.width, control.height, kBorder);
-            gui::fill_rectangle_color(parent.native, x + 1, y + 1, control.width - 2, 23, kHeader);
-            const std::array<int, 6> columns{40, 150, 200, 80, 100, 150};
-            const std::array<const char*, 6> headings{"ID", "Title", "Description", "Priority",
-                                                      "Status", "Created"};
-            int column_x = x + 5;
-            for (std::size_t index = 0; index < headings.size(); ++index) {
-                gui::draw_text_color(parent.native, headings[index], column_x, y + 17, kText, true);
-                column_x += columns[index];
-            }
-            for (std::size_t row = 0; row < control.list_rows.size(); ++row) {
-                const int row_y = y + 40 + static_cast<int>(row) * 20;
-                if (static_cast<int>(row) == control.list_selection) {
-                    gui::fill_rectangle_color(parent.native, x + 1, row_y - 16, control.width - 2, 20,
-                                              kSelection);
-                }
-                column_x = x + 5;
-                for (std::size_t column = 0; column < control.list_rows[row].columns.size() &&
-                                             column < columns.size(); ++column) {
-                    gui::draw_text_color(parent.native,
-                                         control.list_rows[row].columns[column].c_str(), column_x,
-                                         row_y, kText);
-                    column_x += columns[column];
-                }
-            }
-        }
-    }
-    gui::flush_window(parent.native);
-}
-
-WindowSlot* hit_control(WindowSlot& parent, const int x, const int y) noexcept {
-    for (auto it = g_windows.rbegin(); it != g_windows.rend(); ++it) {
-        WindowSlot& control = *it;
-        if (control.used && control.is_control && control.parent == &parent && control.visible &&
-            x >= control.x && x < control.x + control.width && y >= control.y &&
-            y < control.y + control.height) {
-            return &control;
-        }
-    }
-    return nullptr;
-}
-
-void set_focus_control(WindowSlot* control) noexcept {
-    if (g_focused_control == control) {
-        return;
-    }
-    if (g_focused_control != nullptr) {
-        g_focused_control->focused = false;
-        queue_command(*g_focused_control, abi::kEnKillFocus);
-    }
-    g_focused_control = control;
-    if (g_focused_control != nullptr) {
-        g_focused_control->focused = true;
-        queue_command(*g_focused_control, abi::kEnSetFocus);
-    }
-}
-
-void copy_control_text(const WindowSlot& control, char* output, const int capacity) noexcept {
-    if (output == nullptr || capacity <= 0) {
-        return;
-    }
-    const std::size_t count = std::min<std::size_t>(
-        control.text.size(), static_cast<std::size_t>(capacity - 1));
-    std::memcpy(output, control.text.data(), count);
-    output[count] = '\0';
+    runtime_gui::render_controls(parent, std::span<WindowSlot>{g_windows});
 }
 
 void handle_control_key(WindowSlot& parent, const gui::WindowEvent& event) noexcept {
-    WindowSlot* control = g_focused_control;
-    if (control == nullptr || control->parent != &parent || control->control_kind != ControlKind::Edit ||
-        !control->enabled) {
-        return;
-    }
-    bool changed = false;
-    if (event.keysym == 0xFF08 || event.keysym == 0xFFFF) {
-        if (!control->text.empty()) {
-            control->text.pop_back();
-            changed = true;
-        }
-    } else if (event.character >= 0x20 && event.character != 0x7F) {
-        control->text.push_back(event.character);
-        changed = true;
-    }
-    if (changed) {
-        queue_command(*control, abi::kEnChange);
-        render_controls(parent);
-    }
+    runtime_gui::handle_control_key(parent, std::span<WindowSlot>{g_windows}, g_focused_control,
+                                    event);
 }
 
 void handle_control_mouse(WindowSlot& parent, const gui::WindowEvent& event) noexcept {
-    WindowSlot* control = hit_control(parent, event.x, event.y);
-    if (event.type == gui::WindowEventType::Press) {
-        if (control == nullptr) {
-            return;
-        }
-        set_focus_control(control->control_kind == ControlKind::Edit ? control : nullptr);
-        control->pressed = true;
-        if (control->control_kind == ControlKind::ListView) {
-            const int row = (event.y - control->y - 24) / 20;
-            if (row >= 0 && static_cast<std::size_t>(row) < control->list_rows.size()) {
-                control->list_selection = row;
-                queue_list_notification(*control, abi::kLvnItemChanged, row);
-                render_controls(parent);
-            }
-        }
-    } else if (event.type == gui::WindowEventType::Release) {
-        if (control == nullptr || !control->pressed) {
-            return;
-        }
-        control->pressed = false;
-        if (control->control_kind == ControlKind::Button) {
-            queue_command(*control, abi::kBnClicked);
-        } else if (control->control_kind == ControlKind::ComboBox && !control->combo_items.empty()) {
-            control->combo_selection = (control->combo_selection + 1) %
-                                       static_cast<int>(control->combo_items.size());
-        }
-        render_controls(parent);
-    }
+    runtime_gui::handle_control_mouse(parent, std::span<WindowSlot>{g_windows}, g_focused_control,
+                                      event);
+}
+
+void set_focus_control(WindowSlot* control) noexcept {
+    runtime_gui::set_focus_control(control, g_focused_control);
 }
 
 void write_guest_msg(void* const msg, const abi::HWnd hwnd, const std::uint32_t message,  // NOLINT(bugprone-easily-swappable-parameters)
@@ -1729,6 +1444,11 @@ TL_MSABI int tl_GetMessageA(void* const msg, const void* const window,  // NOLIN
             }
             const gui::WindowEvent event = gui::next_window_event(slot.native);
             if (event.type == gui::WindowEventType::Redraw) {
+                // Expose is o redesenho real do client area. O convidado pode
+                // não implementar WM_PAINT (os controles são desenhados pelo
+                // renderer Linux), então repintamos a composição completa
+                // antes de entregar a mensagem equivalente ao convidado.
+                render_controls(slot);
                 write_guest_msg(msg, &slot, abi::kWmPaint, 0, 0);
                 set_last_error(abi::kErrorSuccess);
                 return 1;
@@ -4207,7 +3927,7 @@ TL_MSABI int tl_GetWindowTextA(const void* window, char* text, int capacity) noe
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
-    copy_control_text(*slot, text, capacity);
+    runtime_gui::copy_control_text(*slot, text, capacity);
     set_last_error(abi::kErrorSuccess);
     return 0;
 }

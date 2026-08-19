@@ -8,6 +8,7 @@ add_library(tradutorlinux_core STATIC
     pe/pe_reader.cpp
     process/isolate.cpp
     runtime/winapi.cpp
+    runtime/gui_controls.cpp
     runtime/msvcrt.cpp
     runtime/advapi.cpp
     runtime/guest_entry.S

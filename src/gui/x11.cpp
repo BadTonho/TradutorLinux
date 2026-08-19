@@ -183,10 +183,6 @@ WindowState* find_state_by_xwindow(const Window window) noexcept {
 
 void push_event_for(Display* const dpy, WindowState* const state, XEvent& event) noexcept {
     if (event.type == Expose) {
-        const char* const caption = state->caption.c_str();
-        XDrawString(dpy, state->window, DefaultGC(dpy, state->screen), 24, 40, caption,
-                    static_cast<int>(state->caption.size()));
-        XFlush(dpy);
         state->pending.push_back({WindowEventType::Redraw, 0, 0});
         return;
     }
