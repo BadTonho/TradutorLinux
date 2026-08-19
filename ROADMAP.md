@@ -35,6 +35,43 @@ Os itens marcados como concluídos devem ter evidência no repositório: código
 - **Marco concluído:** `dos2unix.exe` e `unix2dos.exe` executam o fluxo de conversão validado. O `--report` resolve 91/91 imports em cada binário; regressões e2e cobrem CRLF→LF, LF→CRLF e expansão de `uni_el_*.txt` com nome UTF-8. Os testes `targetapp_dos2unix_eol`, `targetapp_unix2dos_eol` e `targetapp_dos2unix_unicode-glob` passam com exit `0`; os arquivos de entrada CRLF/LF vêm da fonte pinada do dos2unix e o ouro UTF-8 está versionado em `tests/targets/golden/dos2unix/`.
 - **Próximo resultado observável:** ampliar a validação do subconjunto GUI por novos aplicativos-alvo; Wayland/toolkit permanece posterior à existência de uma aplicação GUI real suportada.
 
+### Estudo de caso: `RobloxPlayerInstaller.exe` (somente diagnóstico)
+
+Em 2026-08-19, o instalador encontrado localmente em `Downloads` foi analisado
+estaticamente, sem executar o entry point. O arquivo analisado é um PE32+ x86-64
+com 17 DLLs importadas e 430 imports; o `--report` resolveu 75/430 imports
+(17%), classificou o resultado como `unsupported` e registrou
+`execution: not-attempted`. SHA-256 do arquivo analisado:
+`d156faf0c712d4ce26d95a596ad9b1dfc813021b5c422c93887b2522d8b01a59`.
+
+Este arquivo não é um alvo de suporte nem autoriza implementação específica
+para Roblox. Ele fica registrado apenas como evidência para priorizar
+capacidades reutilizáveis por várias classes de aplicativos. As lacunas
+observadas são:
+
+- [ ] ampliar o núcleo `KERNEL32` para arquivos e caminhos Unicode, recursos,
+  tempo, sincronização, memória mapeada, carregamento dinâmico e processos
+  filhos;
+- [ ] criar uma camada `WS2_32`/rede com sockets, DNS e eventos de rede;
+- [ ] criar o subconjunto necessário de `ADVAPI32`/`CRYPT32` para registro,
+  identidade, segurança, criptografia e certificados;
+- [ ] definir uma camada `OLE32`/COM mínima somente quando houver um alvo e
+  contrato de ABI que a justifiquem;
+- [ ] ampliar a GUI de forma genérica: variantes Unicode de `USER32`, controles
+  comuns, diálogos, recursos, aceleradores e métricas de janela;
+- [ ] ampliar `SHELL32`/`SHLWAPI` para pastas conhecidas, execução de processos
+  e manipulação de caminhos;
+- [ ] avaliar `GDI32`, `gdiplus`, `UxTheme`, `WINMM` e `dbghelp` para desenho,
+  imagens, temas, temporizadores multimídia e diagnóstico;
+- [ ] manter isolamento, timeout, limites de recursos, `--report`, mensagens
+  de falha e testes de integração para qualquer nova família de DLL.
+
+A ordem de implementação continua subordinada à fase atual e ao método do
+projeto: cada item precisa de um aplicativo-alvo ou fixture independente,
+teste de regressão, contrato documentado e registro na matriz de
+compatibilidade. O instalador do Roblox não será executado pelo runtime durante
+este estudo.
+
 ## Fase 0 — Fundação e contrato
 
 - [x] Criar a estrutura CMake, compilação com warnings rigorosos e testes automatizados.
