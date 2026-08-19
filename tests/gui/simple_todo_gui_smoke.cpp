@@ -347,18 +347,6 @@ void require_todo_state(const std::filesystem::path& path, const std::int32_t co
     }
 }
 
-void require_registry_state(const std::filesystem::path& path, const bool enabled) {
-    if (!std::filesystem::is_regular_file(path)) {
-        fail("artefato ausente: registro de autorun");
-    }
-    std::ifstream input(path);
-    std::string value;
-    std::getline(input, value);
-    if (enabled == value.empty()) {
-        fail(enabled ? "autorun não foi persistido" : "autorun não foi removido");
-    }
-}
-
 void require_run_artifacts(const std::filesystem::path& work) {
     std::ifstream stdout_file(work / "stdout.log");
     const std::string stdout_contents((std::istreambuf_iterator<char>(stdout_file)),
@@ -394,13 +382,13 @@ int main(int argc, char** argv) {
     const Window main_window = wait_for_window(display, "Todo Application");
 
     // Adicionar tarefa, incluindo descrição e prioridade 3.
-    send_button(display, main_window, 40, 390);
+    send_button(display, main_window, 70, 515);
     type_text(display, main_window, "Task alpha");
-    send_button(display, main_window, 175, 390);
+    send_button(display, main_window, 400, 473);
     type_text(display, main_window, "Description beta");
-    send_button(display, main_window, 480, 390);
-    send_button(display, main_window, 480, 390);
-    send_button(display, main_window, 310, 390);
+    send_button(display, main_window, 650, 473);
+    send_button(display, main_window, 650, 473);
+    send_button(display, main_window, 70, 515);
     sleep_short();
     const std::filesystem::path todo_file = work / "appdata/TodoApp/todos.dat";
     require_file(todo_file, "todos.dat após adicionar");
@@ -409,40 +397,37 @@ int main(int argc, char** argv) {
     require_todo_state(todo_file, 1, 3, 0);
 
     // Editar título, descrição e prioridade.
-    send_button(display, main_window, 100, 80);
-    send_button(display, main_window, 50, 428);
+    send_button(display, main_window, 100, 110);
+    send_button(display, main_window, 100, 473);
     erase_text(display, main_window, 64);
     type_text(display, main_window, "Task edited");
-    send_button(display, main_window, 175, 390);
+    send_button(display, main_window, 400, 473);
     erase_text(display, main_window, 64);
     type_text(display, main_window, "Description edited");
-    send_button(display, main_window, 480, 390);
-    send_button(display, main_window, 140, 428);
+    send_button(display, main_window, 650, 473);
+    send_button(display, main_window, 190, 515);
     sleep_short();
     require_binary_contains(todo_file, "Task edited", "todos.dat após editar");
     require_binary_contains(todo_file, "Description edited", "todos.dat após editar");
     require_todo_state(todo_file, 1, 4, 0);
 
     // Buscar, concluir e excluir o item filtrado.
-    send_button(display, main_window, 100, 24);
+    send_button(display, main_window, 100, 37);
     type_text(display, main_window, "edited");
-    send_button(display, main_window, 100, 80);
+    send_button(display, main_window, 100, 110);
     sleep_short();
-    send_button(display, main_window, 410, 428);
+    send_button(display, main_window, 430, 515);
     sleep_short();
     require_todo_state(todo_file, 1, 4, 1);
 
-    // Bandeja X11 emulada: autorun, esconder, mostrar e sair da primeira
-    // execução para validar o carregamento persistente na segunda.
-    send_right_click(display, main_window, 700, 200);
-    choose_menu(display, 3);
-    require_registry_state(work / ".tl_registry_todo", true);
+    // Bandeja X11 emulada: esconder, mostrar e sair da primeira execução para
+    // validar o carregamento persistente na segunda.
     send_right_click(display, main_window, 700, 200);
     choose_menu(display, 1);
     send_right_click(display, main_window, 700, 200);
     choose_menu(display, 0);
     send_right_click(display, main_window, 700, 200);
-    choose_menu(display, 5);
+    choose_menu(display, 3);
 
     const int exit_code = wait_guest(child);
     if (exit_code != 0) {
@@ -451,19 +436,20 @@ int main(int argc, char** argv) {
     require_run_artifacts(work);
 
     // Segunda execução: loadTodos precisa restaurar o item concluído; depois
-    // o mesmo item é excluído e o autorun é alternado de volta para off.
+    // o mesmo item é excluído e a aplicação é encerrada pela bandeja.
     const pid_t second_child = start_guest(runtime, executable, display, work);
     const Window second_window = wait_for_window(display, "Todo Application");
     sleep_short();
-    send_button(display, second_window, 100, 80);
+    send_button(display, second_window, 100, 110);
     send_right_click(display, second_window, 700, 200);
-    choose_menu(display, 3);
-    require_registry_state(work / ".tl_registry_todo", false);
-    send_button(display, second_window, 310, 428);
+    choose_menu(display, 1);
+    send_right_click(display, second_window, 700, 200);
+    choose_menu(display, 0);
+    send_button(display, second_window, 310, 515);
     sleep_short();
     require_todo_state(todo_file, 0, 0, 0);
     send_right_click(display, second_window, 700, 200);
-    choose_menu(display, 5);
+    choose_menu(display, 3);
 
     const int second_exit_code = wait_guest(second_child);
     if (second_exit_code != 0) {

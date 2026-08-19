@@ -191,9 +191,8 @@ fica mapeada enquanto sua visibilidade Win32 é falsa para que o surrogate da
 bandeja permaneça acionável. Isso é deliberadamente uma emulação de teste, não
 uma integração com o tray do desktop.
 
-O `ADVAPI32` usado pelo alvo limita o registry a
-`HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run`, valor `TodoApp`.
-O valor é salvo em `.tl_registry_todo` no diretório de trabalho convidado; não
-há promessa de compatibilidade com outras chaves, tipos ou ACLs. O smoke
+O alvo Simple Todo recebe um overlay Linux versionado em
+`tests/targets/patches/`: a opção de inicialização com Windows é removida e o
+fluxo continua usando somente dados relativos em `APPDATA`. O smoke
 `targetapp_simple_todo_gui_smoke` cria um CWD próprio, prepara `appdata` para
-os caminhos relativos e verifica o artefato de todos e o arquivo de autorun.
+os caminhos relativos e verifica o artefato persistente de todos.

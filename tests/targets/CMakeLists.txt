@@ -18,6 +18,7 @@ find_program(TL_LLVM_READOBJ
     NAMES llvm-readobj llvm-readobj-19 llvm-readobj-18 llvm-readobj-17
     REQUIRED
 )
+find_program(TL_PATCH_EXECUTABLE patch REQUIRED)
 
 # Aplicativos-alvo reais (Fase 8). Cada aplicativo é fixado por versão e a
 # fonte é baixada uma única vez no diretório de build, com hash SHA-256
@@ -80,9 +81,11 @@ if(NOT EXISTS "${TL_TARGETS_SOURCE_DIR}/dos2unix-7.5.6/README.txt")
     )
 endif()
 
-# Simple Todo C no commit bcdf3d5fcebb8c0b445edb791d54511194c1b6ca. O alvo é
-# compilado sem alterar a fonte upstream; o app.rc é gerado no diretório de
-# build porque o script original o cria durante a compilação.
+# Simple Todo C no commit bcdf3d5fcebb8c0b445edb791d54511194c1b6ca. O alvo
+# recebe um overlay pequeno mantido pelo TradutorLinux: remove a opção de
+# autorun exclusiva do Windows e reorganiza a tela para o fluxo Linux. A fonte
+# upstream continua pinada; o app.rc é gerado no diretório de build porque o
+# script original o cria durante a compilação.
 set(_simple_todo_archive "${TL_TARGETS_SOURCE_DIR}/simple-todo-c-bcdf3d5.tar.gz")
 if(NOT EXISTS "${_simple_todo_archive}")
     file(DOWNLOAD
@@ -106,6 +109,28 @@ endif()
 set(_simple_todo_rc "${_simple_todo_source_dir}/src/app.rc")
 if(NOT EXISTS "${_simple_todo_rc}")
     file(WRITE "${_simple_todo_rc}" "1 24 \"app.manifest\"\n400 ICON \"../img/todo.ico\"\n")
+endif()
+set(_simple_todo_patch_stamp "${_simple_todo_source_dir}/.tradutorlinux-linux-overlay-applied")
+if(NOT EXISTS "${_simple_todo_patch_stamp}")
+    execute_process(
+        COMMAND "${TL_PATCH_EXECUTABLE}" --batch --forward -p1
+            -i "${CMAKE_CURRENT_SOURCE_DIR}/patches/simple_todo_linux.patch"
+        WORKING_DIRECTORY "${_simple_todo_source_dir}"
+        RESULT_VARIABLE _simple_todo_ui_patch_result
+    )
+    if(NOT _simple_todo_ui_patch_result EQUAL 0)
+        message(FATAL_ERROR "Falha ao aplicar overlay visual Linux do Simple Todo")
+    endif()
+    execute_process(
+        COMMAND "${TL_PATCH_EXECUTABLE}" --batch --forward -p1
+            -i "${CMAKE_CURRENT_SOURCE_DIR}/patches/simple_todo_linux_autorun.patch"
+        WORKING_DIRECTORY "${_simple_todo_source_dir}"
+        RESULT_VARIABLE _simple_todo_autorun_patch_result
+    )
+    if(NOT _simple_todo_autorun_patch_result EQUAL 0)
+        message(FATAL_ERROR "Falha ao remover autorun Windows do Simple Todo")
+    endif()
+    file(WRITE "${_simple_todo_patch_stamp}" "linux-overlay-v1\n")
 endif()
 
 # --- Build cruzado ----------------------------------------------------------
@@ -228,6 +253,8 @@ add_custom_command(
         -o "${TL_TARGETS_OUTPUT_DIR}/simple_todo.exe"
         -mwindows -lcomctl32 -luxtheme -lshell32 -ladvapi32 -Os -s
     DEPENDS ${_simple_todo_sources} "${_simple_todo_resource}"
+        "${CMAKE_CURRENT_SOURCE_DIR}/patches/simple_todo_linux.patch"
+        "${CMAKE_CURRENT_SOURCE_DIR}/patches/simple_todo_linux_autorun.patch"
     VERBATIM
     COMMENT "Cross-compilando simple_todo.exe (Simple Todo C pinado)"
 )

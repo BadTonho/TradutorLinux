@@ -2,13 +2,6 @@
   "format": "PE32+",
   "machine": "IMAGE_FILE_MACHINE_AMD64",
   "imports": {
-    "ADVAPI32.dll": [
-      "RegCloseKey",
-      "RegDeleteValueA",
-      "RegOpenKeyExA",
-      "RegQueryValueExA",
-      "RegSetValueExA"
-    ],
     "GDI32.dll": [
       "CreateFontA",
       "CreateSolidBrush",
@@ -23,7 +16,6 @@
       "DeleteCriticalSection",
       "EnterCriticalSection",
       "GetLastError",
-      "GetModuleFileNameA",
       "GetModuleHandleA",
       "GetProcAddress",
       "GetStartupInfoA",

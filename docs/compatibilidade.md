@@ -21,7 +21,7 @@ Esta matriz declara o comportamento suportado; ela não é uma promessa de compa
 | `tl_crash.exe` | PE32+ AMD64 | Não | Nenhum | Gerado, verificado, mapeado e executado em processo filho isolado: o convidado acessa o endereço `0`, o hospedeiro observa o `SIGSEGV` via `waitpid`, emite `terminated category="guest-signal" signal="SIGSEGV"` e retorna `71` (`GuestFault`) | Diagnóstico de falhas |
 | `tl_hang.exe` | PE32+ AMD64 | Não | Nenhum | Gerado, verificado e executado em processo filho isolado com `--timeout 1`: o convidado entra em loop infinito, o hospedeiro o mata com `SIGKILL`, emite `terminated category="guest-timeout"` e retorna `72` (`GuestTimeout`) | Diagnóstico de falhas |
 | `tl_thread.exe` | PE32+ AMD64 | Não | `KERNEL32.dll!CloseHandle`, `CreateThread`, `ExitProcess`, `ExitThread`, `GetStdHandle`, `WaitForSingleObject`, `WriteFile` | **Suportado no escopo da Fase 11**: cria duas threads sequenciais, cada uma escreve "Thread done" e termina via `ExitThread`; a thread principal aguarda cada handle, escreve "Main done" e encerra. Metadata e execução e2e passam em Debug, Release e Sanitize (`LSAN_OPTIONS=detect_leaks=0`); saída esperada: `Thread done\nThread done\nMain done\n` e exit `0` | Fase 11 |
-| `simple_todo.exe` | PE32+ AMD64 | mingw-w64 CRT | 110 imports em `ADVAPI32`, `GDI32`, `KERNEL32`, `msvcrt`, `SHELL32` e `USER32` | **Suportado no subconjunto da Fase 12**: fonte pinada no commit `bcdf3d5fcebb8c0b445edb791d54511194c1b6ca`; build, metadata e `--report` resolvem 110/110; `targetapp_simple_todo_gui_smoke` passa sob Xvfb e valida o fluxo principal, persistência, menu e encerramento | Fase 12 |
+| `simple_todo.exe` | PE32+ AMD64 | mingw-w64 CRT | 104 imports em `GDI32`, `KERNEL32`, `msvcrt`, `SHELL32` e `USER32` | **Suportado no subconjunto da Fase 12**: fonte pinada no commit `bcdf3d5fcebb8c0b445edb791d54511194c1b6ca` com overlay Linux versionado; build e `--report` resolvem 104/104; `targetapp_simple_todo_gui_smoke` cobre o fluxo principal, persistência, menu da bandeja e encerramento, com coordenadas do layout Linux | Fase 12 |
 
 As fontes e manifestos das fixtures ficam em `tests/samples/`. Os binários são produtos de build e ficam em `build/<preset>/tests/samples/generated/`.
 
@@ -146,17 +146,19 @@ pintura mínima (`BeginPaint`/`TextOut`/`EndPaint`) — ver
 O alvo `Efeckc17/simple-todo-c` é baixado por archive pinado e hash SHA-256 em
 `tests/targets/CMakeLists.txt`. O recurso `app.rc` é gerado no diretório de
 build com o manifesto e o ícone upstream; `tests/targets/manifests/simple_todo.json`
-fixa a lista de 110 imports. O teste `targetapp_simple_todo_gui_smoke` usa um
-Xvfb próprio, `APPDATA=appdata` relativo ao diretório de teste e verifica o
-fluxo de adicionar, editar, buscar, concluir, excluir, autorun, esconder,
-mostrar e sair pelo menu emulado.
+fixa a lista de 104 imports. O build aplica os overlays
+`tests/targets/patches/simple_todo_linux.patch` e
+`simple_todo_linux_autorun.patch`: a tela ganha layout Linux e a opção de
+autorun no Windows é removida. O teste `targetapp_simple_todo_gui_smoke` usa
+um Xvfb próprio, `APPDATA=appdata` relativo ao diretório de teste e verifica o
+fluxo de adicionar, editar, buscar, concluir, excluir, esconder, mostrar e
+sair pelo menu emulado.
 
 | Módulo | APIs adicionais | Estado | Limite publicado |
 |---|---|---|---|
 | `USER32.dll` | `RegisterClassA`, controles lógicos via `CreateWindowExA`, `SendMessageA`, `Get/SetWindowTextA`, foco, geometria, `WM_COMMAND` e `WM_NOTIFY` | Implementado para o alvo | Não são janelas X11 filhas; EDIT, BUTTON, COMBOBOX, STATIC e SysListView32 são desenhados e roteados por uma side-table |
 | `GDI32.dll` | `CreateFontA`, `CreateSolidBrush`, `DeleteObject`, `SetBkColor`, `SetTextColor` | Implementado para o alvo | Tokens de fonte/brush e cores têm efeito limitado; o desenho usa o GC X11 mínimo |
 | `SHELL32.dll` | `Shell_NotifyIconA` | Implementado para o alvo | O ícone de bandeja é apenas um contrato lógico; o menu é uma janela popup X11, sem integração com o tray do desktop |
-| `ADVAPI32.dll` | `RegOpenKeyExA`, `RegQueryValueExA`, `RegSetValueExA`, `RegDeleteValueA`, `RegCloseKey` | Implementado para o alvo | Só a chave `HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run` e o valor `TodoApp` são persistidos em `.tl_registry_todo` no CWD |
 | `msvcrt.dll` | `_acmdln`, `_ismbblead`, `_time64`, `_localtime64`, `strftime`, `_strlwr` | Implementado para o alvo | Locale/DBCS continuam no subconjunto C/ANSI do runtime |
 
 O smoke de integração passa sob Xvfb e promove o Simple Todo ao subconjunto

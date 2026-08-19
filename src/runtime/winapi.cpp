@@ -618,11 +618,20 @@ void render_controls(WindowSlot& parent) noexcept {
     constexpr std::uint32_t kDangerPressed = 0xB84141U;
     constexpr std::uint32_t kNeutral = 0x64748BU;
 
+    WindowSlot* list_view = nullptr;
+    for (WindowSlot& control : g_windows) {
+        if (control.used && control.is_control && control.parent == &parent && control.visible &&
+            control.control_kind == ControlKind::ListView) {
+            list_view = &control;
+            break;
+        }
+    }
+    const int form_top = list_view != nullptr ? list_view->y + list_view->height + 16 : 348;
     gui::fill_rectangle_color(parent.native, 0, 0, parent.width, parent.height, kCanvas);
-    gui::fill_rectangle_color(parent.native, 0, 0, parent.width, 48, kPanel);
-    if (parent.height > 348) {
-        gui::fill_rectangle_color(parent.native, 0, 348, parent.width, parent.height - 348,
-                                  kPanel);
+    gui::fill_rectangle_color(parent.native, 0, 0, parent.width, 72, kPanel);
+    if (parent.height > form_top) {
+        gui::fill_rectangle_color(parent.native, 0, form_top, parent.width,
+                                  parent.height - form_top, kPanel);
     }
     for (WindowSlot& control : g_windows) {
         if (!control.used || !control.is_control || control.parent != &parent || !control.visible) {
@@ -631,7 +640,9 @@ void render_controls(WindowSlot& parent) noexcept {
         const int x = control.x;
         const int y = control.y;
         if (control.control_kind == ControlKind::Static) {
-            gui::draw_text_color(parent.native, control.text.c_str(), x, y + 14, kMuted);
+            const bool section_title = control.text == "My tasks" || control.text == "New task";
+            gui::draw_text_color(parent.native, control.text.c_str(), x, y + 17,
+                                 section_title ? kText : kMuted, section_title);
         } else if (control.control_kind == ControlKind::Edit) {
             const std::uint32_t border = control.focused ? kFocus : kBorder;
             gui::fill_rectangle_color(parent.native, x, y, control.width, control.height, kSurface);

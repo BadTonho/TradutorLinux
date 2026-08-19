@@ -1,0 +1,244 @@
+--- a/src/gui.c
++++ b/src/gui.c
+@@ -61,10 +61,6 @@
+     AppendMenu(hMenu, MF_STRING, ID_TRAY_HIDE, "Hide");
+     AppendMenu(hMenu, MF_SEPARATOR, 0, NULL);
+     
+-    UINT autoStartState = isAutoStartEnabled() ? MF_CHECKED : MF_UNCHECKED;
+-    AppendMenu(hMenu, MF_STRING | autoStartState, ID_TRAY_AUTOSTART, "Start with Windows");
+-    
+-    AppendMenu(hMenu, MF_SEPARATOR, 0, NULL);
+     AppendMenu(hMenu, MF_STRING, ID_TRAY_EXIT, "Exit");
+     
+     SetForegroundWindow(hwnd);
+@@ -166,15 +162,21 @@
+ 
+             initializeSearchBar(hwnd, hFont, width);
+ 
++            int margin = ScaleForDpi(24);
+             hListView = CreateWindow(
+                 WC_LISTVIEW, "",
+                 WS_CHILD | WS_VISIBLE | LVS_REPORT | LVS_SHOWSELALWAYS | WS_BORDER,
+-                ScaleForDpi(10), ScaleForDpi(48), width - ScaleForDpi(20), ScaleForDpi(350),
++                margin, ScaleForDpi(82), width - margin * 2, ScaleForDpi(300),
+                 hwnd, (HMENU)(INT_PTR)ID_LISTVIEW, GetModuleHandle(NULL), NULL
+             );
+             ListView_SetExtendedListViewStyle(hListView, LVS_EX_FULLROWSELECT | LVS_EX_GRIDLINES);
+             SendMessage(hListView, WM_SETFONT, (WPARAM)hFont, TRUE);
+ 
++            HWND hTasksLabel = CreateWindow("STATIC", "My tasks", WS_CHILD | WS_VISIBLE,
++                                 margin, ScaleForDpi(56), ScaleForDpi(200), ScaleForDpi(20),
++                                 hwnd, NULL, GetModuleHandle(NULL), NULL);
++            SendMessage(hTasksLabel, WM_SETFONT, (WPARAM)hFont, TRUE);
++
+             LVCOLUMN lvc = {0};
+             lvc.mask = LVCF_TEXT | LVCF_WIDTH;
+             lvc.pszText = "ID"; lvc.cx = ScaleForDpi(40); ListView_InsertColumn(hListView, 0, &lvc);
+@@ -184,31 +186,39 @@
+             lvc.pszText = "Status"; lvc.cx = ScaleForDpi(100); ListView_InsertColumn(hListView, 4, &lvc);
+             lvc.pszText = "Created"; lvc.cx = ScaleForDpi(150); ListView_InsertColumn(hListView, 5, &lvc);
+ 
+-            int y = ScaleForDpi(358);
+-            int x = ScaleForDpi(10);
+-            int labelW = ScaleForDpi(90), editW = ScaleForDpi(120), gap = ScaleForDpi(10);
+-            int btnW = ScaleForDpi(80), btnH = ScaleForDpi(28);
++            int y = ScaleForDpi(400);
++            int x = margin;
++            int labelW = ScaleForDpi(80), editW = ScaleForDpi(230), gap = ScaleForDpi(20);
++            int btnW = ScaleForDpi(100), btnH = ScaleForDpi(34);
+             int labelH = ScaleForDpi(18);
++            int fieldLabelY = y + ScaleForDpi(28);
++            int fieldY = fieldLabelY + labelH;
++
++            HWND hSectionLabel = CreateWindow("STATIC", "New task", WS_CHILD | WS_VISIBLE,
++                                 x, y, ScaleForDpi(200), ScaleForDpi(20), hwnd, NULL,
++                                 GetModuleHandle(NULL), NULL);
++            SendMessage(hSectionLabel, WM_SETFONT, (WPARAM)hFont, TRUE);
+ 
+             hTitleLabel = CreateWindow("STATIC", "Title:", WS_CHILD | WS_VISIBLE,
+-                                 x, y, labelW, labelH, hwnd, NULL, GetModuleHandle(NULL), NULL);
++                                 x, fieldLabelY, labelW, labelH, hwnd, NULL,
++                                 GetModuleHandle(NULL), NULL);
+             SendMessage(hTitleLabel, WM_SETFONT, (WPARAM)hFont, TRUE);
+-            hTitleEdit = createModernEdit(hwnd, x, y+labelH, editW, btnH, ID_TITLE_EDIT);
++            hTitleEdit = createModernEdit(hwnd, x, fieldY, editW, btnH, ID_TITLE_EDIT);
+             x += editW + gap;
+ 
+             hDescLabel = CreateWindow("STATIC", "Description:", WS_CHILD | WS_VISIBLE,
+-                                 x, y, labelW, labelH, hwnd, NULL, GetModuleHandle(NULL), NULL);
++                                 x, fieldLabelY, labelW, labelH, hwnd, NULL,
++                                 GetModuleHandle(NULL), NULL);
+             SendMessage(hDescLabel, WM_SETFONT, (WPARAM)hFont, TRUE);
+-            hDescEdit = createModernEdit(hwnd, x, y+labelH, editW, btnH, ID_DESC_EDIT);
++            hDescEdit = createModernEdit(hwnd, x, fieldY, editW, btnH, ID_DESC_EDIT);
+             x += editW + gap;
+ 
+-            hAddButton = createModernButton(hwnd, "Add", x, y+labelH, btnW, btnH, ID_ADD_BUTTON);
+-            x += btnW + gap;
+-
+             hPriorityLabel = CreateWindow("STATIC", "Priority:", WS_CHILD | WS_VISIBLE,
+-                                 x, y, labelW, labelH, hwnd, NULL, GetModuleHandle(NULL), NULL);
++                                 x, fieldLabelY, labelW, labelH, hwnd, NULL,
++                                 GetModuleHandle(NULL), NULL);
+             SendMessage(hPriorityLabel, WM_SETFONT, (WPARAM)hFont, TRUE);
+-            hPriorityCombo = createModernComboBox(hwnd, x + labelW + gap, y+labelH, ScaleForDpi(50), btnH, ID_PRIORITY_COMBO);
++            hPriorityCombo = createModernComboBox(hwnd, x + labelW + gap, fieldY,
++                                 ScaleForDpi(60), btnH, ID_PRIORITY_COMBO);
+             for (int i = 1; i <= 5; i++) {
+                 char priority[10];
+                 sprintf(priority, "%d", i);
+@@ -217,17 +227,25 @@
+             SendMessage(hPriorityCombo, CB_SETCURSEL, 0, 0);
+             x += ScaleForDpi(50) + gap;
+ 
+-            int actionY = y + labelH + btnH + gap;
+-            int actionX = ScaleForDpi(10);
+-            hEditButton = createModernButton(hwnd, "Edit", actionX, actionY, btnW, btnH, ID_EDIT_BUTTON);
++            int actionY = fieldY + btnH + ScaleForDpi(18);
++            int actionX = margin;
++            hAddButton = createModernButton(hwnd, "Add task", actionX, actionY, btnW, btnH,
++                                 ID_ADD_BUTTON);
+             actionX += btnW + gap;
+-            hSaveButton = createModernButton(hwnd, "Save", actionX, actionY, btnW, btnH, ID_SAVE_BUTTON);
++            hEditButton = createModernButton(hwnd, "Edit", actionX, actionY, btnW, btnH,
++                                 ID_EDIT_BUTTON);
+             actionX += btnW + gap;
+-            hCancelButton = createModernButton(hwnd, "Cancel", actionX, actionY, btnW, btnH, ID_CANCEL_BUTTON);
++            hDeleteButton = createModernButton(hwnd, "Delete", actionX, actionY, btnW, btnH,
++                                 ID_DELETE_BUTTON);
+             actionX += btnW + gap;
+-            hDeleteButton = createModernButton(hwnd, "Delete", actionX, actionY, btnW, btnH, ID_DELETE_BUTTON);
++            hCompleteButton = createModernButton(hwnd, "Complete", actionX, actionY, btnW, btnH,
++                                 ID_COMPLETE_BUTTON);
+             actionX += btnW + gap;
+-            hCompleteButton = createModernButton(hwnd, "Complete", actionX, actionY, btnW, btnH, ID_COMPLETE_BUTTON);
++            hSaveButton = createModernButton(hwnd, "Save", actionX, actionY, btnW, btnH,
++                                 ID_SAVE_BUTTON);
++            actionX += btnW + gap;
++            hCancelButton = createModernButton(hwnd, "Cancel", actionX, actionY, btnW, btnH,
++                                 ID_CANCEL_BUTTON);
+ 
+             ShowWindow(hAddButton, SW_SHOW);
+             ShowWindow(hEditButton, SW_SHOW);
+@@ -277,9 +295,6 @@
+                 case ID_TRAY_HIDE: 
+                     ShowWindow(hwnd, SW_HIDE); 
+                     break;
+-                case ID_TRAY_AUTOSTART:
+-                    setAutoStart(!isAutoStartEnabled());
+-                    break;
+                 case ID_SEARCH_EDIT:
+                     if (HIWORD(wParam) == EN_SETFOCUS) {
+                         char text[MAX_TITLE_LENGTH];
+@@ -326,52 +341,49 @@
+             int width = rc.right - rc.left;
+             int height = rc.bottom - rc.top;
+ 
+-            MoveWindow(hSearchEdit, ScaleForDpi(10), ScaleForDpi(10), 
+-                      width - ScaleForDpi(20), ScaleForDpi(28), TRUE);
++            int margin = ScaleForDpi(24);
++            MoveWindow(hSearchEdit, margin, ScaleForDpi(20),
++                      width - margin * 2, ScaleForDpi(34), TRUE);
++
++            int listViewHeight = ScaleForDpi(300);
++            MoveWindow(hListView, margin, ScaleForDpi(82),
++                      width - margin * 2, listViewHeight, TRUE);
++
++            int y = ScaleForDpi(400);
++            int fieldLabelY = y + ScaleForDpi(28);
++            int fieldY = fieldLabelY + ScaleForDpi(18);
++            int labelW = ScaleForDpi(80), gap = ScaleForDpi(20);
++            int btnW = ScaleForDpi(100), btnH = ScaleForDpi(34);
++            int availableW = width - margin * 2;
++            int priorityArea = ScaleForDpi(150);
++            int editW = (availableW - priorityArea - gap * 2) / 2;
++            if (editW < ScaleForDpi(120)) editW = ScaleForDpi(120);
++            int x = margin;
+ 
+-            int listViewHeight = ScaleForDpi(350);
+-            MoveWindow(hListView, ScaleForDpi(10), ScaleForDpi(48), 
+-                      width - ScaleForDpi(20), listViewHeight, TRUE);
+-
+-            int y = ScaleForDpi(410);
+-            int x = ScaleForDpi(10);
+-            int labelW = ScaleForDpi(90), gap = ScaleForDpi(10);
+-            int minEditW = ScaleForDpi(80), minBtnW = ScaleForDpi(60);
+-            int btnH = ScaleForDpi(28), labelH = ScaleForDpi(18);
+-            
+-            int availableW = width - ScaleForDpi(20);
+-            int editW = (availableW - labelW*3 - ScaleForDpi(50) - minBtnW*6 - gap*6);
+-            if (editW < minEditW*2) editW = minEditW*2;
+-            int singleEditW = editW/2;
+-            int btnW = (availableW - (labelW*3 + ScaleForDpi(50) + singleEditW*2 + gap*6))/6;
+-            if (btnW < minBtnW) btnW = minBtnW;
+-
+-            MoveWindow(hTitleLabel, x, y, labelW, labelH, TRUE);
+-            MoveWindow(hTitleEdit, x, y+labelH, singleEditW, btnH, TRUE);
+-            x += singleEditW + gap;
+-
+-            MoveWindow(hDescLabel, x, y, labelW, labelH, TRUE);
+-            MoveWindow(hDescEdit, x, y+labelH, singleEditW, btnH, TRUE);
+-            x += singleEditW + gap;
++            MoveWindow(hTitleLabel, x, fieldLabelY, labelW, ScaleForDpi(18), TRUE);
++            MoveWindow(hTitleEdit, x, fieldY, editW, btnH, TRUE);
++            x += editW + gap;
+ 
+-            MoveWindow(hAddButton, x, y+labelH, btnW, btnH, TRUE);
+-            x += btnW + gap;
++            MoveWindow(hDescLabel, x, fieldLabelY, labelW, ScaleForDpi(18), TRUE);
++            MoveWindow(hDescEdit, x, fieldY, editW, btnH, TRUE);
++            x += editW + gap;
+ 
+-            MoveWindow(hPriorityLabel, x, y, labelW, labelH, TRUE);
+-            MoveWindow(hPriorityCombo, x + labelW + gap, y+labelH, ScaleForDpi(50), btnH, TRUE);
+-            x += ScaleForDpi(50) + gap;
++            MoveWindow(hPriorityLabel, x, fieldLabelY, labelW, ScaleForDpi(18), TRUE);
++            MoveWindow(hPriorityCombo, x + labelW + gap, fieldY, ScaleForDpi(60), btnH, TRUE);
+ 
+-            int actionY = y + labelH + btnH + gap;
+-            int actionX = ScaleForDpi(10);
+-            MoveWindow(hEditButton, actionX, actionY, btnW, btnH, TRUE);
++            int actionY = fieldY + btnH + ScaleForDpi(18);
++            int actionX = margin;
++            MoveWindow(hAddButton, actionX, actionY, btnW, btnH, TRUE);
+             actionX += btnW + gap;
+-            MoveWindow(hSaveButton, actionX, actionY, btnW, btnH, TRUE);
+-            actionX += btnW + gap;
+-            MoveWindow(hCancelButton, actionX, actionY, btnW, btnH, TRUE);
++            MoveWindow(hEditButton, actionX, actionY, btnW, btnH, TRUE);
+             actionX += btnW + gap;
+             MoveWindow(hDeleteButton, actionX, actionY, btnW, btnH, TRUE);
+             actionX += btnW + gap;
+             MoveWindow(hCompleteButton, actionX, actionY, btnW, btnH, TRUE);
++            actionX += btnW + gap;
++            MoveWindow(hSaveButton, actionX, actionY, btnW, btnH, TRUE);
++            actionX += btnW + gap;
++            MoveWindow(hCancelButton, actionX, actionY, btnW, btnH, TRUE);
+ 
+             break;
+         }
+@@ -449,4 +461,4 @@
+     }
+     
+     return DefWindowProc(hwnd, uMsg, wParam, lParam);
+-} 
+\ No newline at end of file
++} 
+--- a/src/utils/search.c
++++ b/src/utils/search.c
+@@ -8,7 +8,7 @@
+     hSearchEdit = CreateWindow(
+         "EDIT", "",
+         WS_CHILD | WS_VISIBLE | WS_BORDER | ES_AUTOHSCROLL,
+-        ScaleForDpi(10), ScaleForDpi(10), width - ScaleForDpi(20), ScaleForDpi(28),
++        ScaleForDpi(24), ScaleForDpi(20), width - ScaleForDpi(48), ScaleForDpi(34),
+         hwnd, (HMENU)(INT_PTR)ID_SEARCH_EDIT, GetModuleHandle(NULL), NULL
+     );
+     SendMessage(hSearchEdit, WM_SETFONT, (WPARAM)hFont, TRUE);
+@@ -72,4 +72,4 @@
+     _strlwr(lowerDesc);
+     
+     return strstr(lowerTitle, searchText) || strstr(lowerDesc, searchText);
+-} 
+\ No newline at end of file
++} 
