@@ -76,7 +76,7 @@ TL_COMDLG_MSABI int tl_GetOpenFileNameW(void* open_filename) noexcept {
         if (ofn->file[0] == 0) {
             const std::u16string u16 = util::utf8_to_wide("C:\\document.txt");
             const std::size_t len = std::min<std::size_t>(u16.size(), ofn->max_file - 1);
-            std::copy(u16.begin(), u16.begin() + len, ofn->file);
+            std::copy(u16.begin(), u16.begin() + static_cast<std::ptrdiff_t>(len), ofn->file);
             ofn->file[len] = 0;
         }
         return 1;

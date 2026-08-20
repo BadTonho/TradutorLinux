@@ -12,6 +12,7 @@ add_library(tradutorlinux_core STATIC
     process/isolate.cpp
     runtime/memory_validator.cpp
     runtime/kernel32.cpp
+    runtime/legacy_winapi.cpp
     runtime/user32.cpp
     runtime/gdi32.cpp
     runtime/shell32.cpp

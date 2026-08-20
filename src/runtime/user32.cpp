@@ -98,7 +98,7 @@ TL_MSABI int tl_MessageBoxA(const void* const window, const char* const text,
     }
     const std::uint32_t result = gui::message_box(text, caption);
     set_last_error(result == 0 ? abi::kErrorAccessDenied : abi::kErrorSuccess);
-    return result;
+    return static_cast<int>(result);
 }
 
 TL_MSABI abi::Atom tl_RegisterClassExA(const void* const wnd_class) noexcept {

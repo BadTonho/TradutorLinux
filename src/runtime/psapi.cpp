@@ -98,7 +98,7 @@ TL_PSAPI_MSABI std::uint32_t tl_GetModuleBaseNameW(const void* process, void* mo
     tl_GetModuleBaseNameA(process, module, buf, sizeof(buf));
     const std::u16string u16 = util::utf8_to_wide(buf);
     const std::size_t len = std::min<std::size_t>(u16.size(), size - 1);
-    std::copy(u16.begin(), u16.begin() + len, base_name);
+    std::copy(u16.begin(), u16.begin() + static_cast<std::ptrdiff_t>(len), base_name);
     base_name[len] = 0;
     return static_cast<std::uint32_t>(len);
 }
@@ -118,7 +118,7 @@ TL_PSAPI_MSABI std::uint32_t tl_GetModuleFileNameExW(const void* process, void* 
     tl_GetModuleFileNameA(nullptr, buf, sizeof(buf));
     const std::u16string u16 = util::utf8_to_wide(buf);
     const std::size_t len = std::min<std::size_t>(u16.size(), size - 1);
-    std::copy(u16.begin(), u16.begin() + len, filename);
+    std::copy(u16.begin(), u16.begin() + static_cast<std::ptrdiff_t>(len), filename);
     filename[len] = 0;
     return static_cast<std::uint32_t>(len);
 }

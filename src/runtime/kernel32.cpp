@@ -1,6 +1,10 @@
 #include "tradutorlinux/runtime/winapi.hpp"
 #include "runtime_context.hpp"
 #include "tradutorlinux/loader/import_resolver.hpp"
+#include "tradutorlinux/prefix/prefix.hpp"
+#include "tradutorlinux/runtime/error_map.hpp"
+#include "tradutorlinux/runtime/msvcrt.hpp"
+#include "tradutorlinux/util/basics.hpp"
 #include "tradutorlinux/util/unicode.hpp"
 
 #include <algorithm>
@@ -21,12 +25,15 @@
 #include <fcntl.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
+#include <sys/statvfs.h>
 #include <sys/syscall.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
 namespace tradutorlinux {
+
+using runtime::errno_to_win32;
 
 namespace {
 
@@ -118,24 +125,6 @@ void filetime_from_unix(const std::time_t source, GuestFileTime& target) noexcep
         return !slot.process_running;
     }
     return !slot.owner_valid || slot.owner == std::this_thread::get_id();
-}
-
-void consume_sync_signal(SyncSlot& slot) noexcept {
-    if (slot.kind == SyncKind::Event) {
-        if (!slot.manual_reset) {
-            slot.signaled = false;
-        }
-    } else if (slot.kind == SyncKind::Semaphore) {
-        --slot.count;
-    } else if (slot.kind == SyncKind::Process) {
-        // Process handles remain signaled
-    } else if (slot.owner_valid && slot.owner == std::this_thread::get_id()) {
-        ++slot.recursion;
-    } else {
-        slot.owner_valid = true;
-        slot.owner = std::this_thread::get_id();
-        slot.recursion = 1;
-    }
 }
 
 [[nodiscard]] bool probe_wait_handle(const void* handle) noexcept {
@@ -410,36 +399,6 @@ bool read_guest_file_for_process(const char* path, std::vector<std::byte>& bytes
     ::_exit(0);
 }
 
-[[nodiscard]] bool first_process_argument(const std::uint16_t* command_line,
-                                          std::string& result) noexcept {
-    if (!mapped_guest_wstring(command_line) || command_line == nullptr) {
-        return false;
-    }
-    const std::string utf8 = util::wide_to_utf8(command_line);
-    std::size_t begin = 0;
-    while (begin < utf8.size() && (utf8[begin] == ' ' || utf8[begin] == '\t')) {
-        ++begin;
-    }
-    if (begin == utf8.size()) {
-        return false;
-    }
-    std::size_t end = begin;
-    if (utf8[begin] == '"') {
-        ++begin;
-        end = utf8.find('"', begin);
-        if (end == std::string::npos) {
-            return false;
-        }
-        result = utf8.substr(begin, end - begin);
-    } else {
-        while (end < utf8.size() && utf8[end] != ' ' && utf8[end] != '\t') {
-            ++end;
-        }
-        result = utf8.substr(begin, end - begin);
-    }
-    return !result.empty();
-}
-
 }  // namespace
 
 extern "C" {
@@ -633,7 +592,10 @@ TL_MSABI int tl_CloseHandle(const void* const handle) noexcept {
     if (FileSlot* slot = find_file_slot(handle); slot != nullptr) {
         std::lock_guard<std::mutex> lock(g_files_mutex);
         ::close(slot->fd);
-        *slot = {};
+        slot->used = false;
+        slot->fd = -1;
+        slot->file_size = 0;
+        slot->position = 0;
         set_last_error(abi::kErrorSuccess);
         return 1;
     }
@@ -654,7 +616,15 @@ TL_MSABI int tl_CloseHandle(const void* const handle) noexcept {
         if (slot->stack != nullptr) {
             munmap(slot->stack, 0x100000U);
         }
-        *slot = {};
+        slot->used = false;
+        slot->thread_id = 0;
+        slot->teb = nullptr;
+        slot->stack = nullptr;
+        slot->stack_top = 0;
+        slot->thread_func = {};
+        slot->finished = false;
+        slot->joined = false;
+        slot->exit_code = 0;
         set_last_error(abi::kErrorSuccess);
         return 1;
     }
@@ -975,7 +945,7 @@ TL_MSABI int tl_FindNextFileA(const void* handle, void* find_data) noexcept {
     while ((entry = readdir(slot->dir)) != nullptr) {
         if (slot->pattern == "*" || slot->pattern == "*.*" || slot->pattern == entry->d_name) {
             auto* data = static_cast<Win32FindDataA*>(find_data);
-            std::memset(data, 0, sizeof(*data));
+        *data = {};
             std::strncpy(data->c_file_name, entry->d_name, sizeof(data->c_file_name) - 1);
             std::string full_path = slot->directory + "/" + entry->d_name;
             struct stat st{};
@@ -1345,12 +1315,13 @@ TL_MSABI int tl_TryEnterCriticalSection(void* critical_section) noexcept {
     return rc == 0 ? 1 : 0;
 }
 
-TL_MSABI void* tl_CreateThread(const void* thread_attributes, const std::size_t stack_size,
-                               const void* start_address, const void* parameter,
+TL_MSABI void* tl_CreateThread(const void* thread_attributes, const std::uintptr_t stack_size,
+                               const std::uintptr_t start_address, void* const parameter,
                                const std::uint32_t creation_flags,
                                std::uint32_t* thread_id) noexcept {
     (void)thread_attributes;
-    if (start_address == nullptr || !mapped_guest_range(start_address, 1, false) ||
+    if (start_address == 0 ||
+        !mapped_guest_range(reinterpret_cast<const void*>(start_address), 1, false) ||
         (creation_flags != 0 && creation_flags != 0x00000004)) {
         set_last_error(abi::kErrorInvalidParameter);
         return nullptr;
@@ -1361,7 +1332,7 @@ TL_MSABI void* tl_CreateThread(const void* thread_attributes, const std::size_t 
         set_last_error(abi::kErrorNotEnoughMemory);
         return nullptr;
     }
-    const std::size_t real_stack_size = stack_size > 0 ? stack_size : 0x100000U;
+    const std::size_t real_stack_size = stack_size > 0 ? static_cast<std::size_t>(stack_size) : 0x100000U;
     void* stack = mmap(nullptr, real_stack_size, PROT_READ | PROT_WRITE,
                        MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
     if (stack == MAP_FAILED) {
@@ -1387,14 +1358,14 @@ TL_MSABI void* tl_CreateThread(const void* thread_attributes, const std::size_t 
         *thread_id = it->thread_id;
     }
     using ThreadProc = TL_MSABI std::uint32_t (*)(const void*);
-    auto proc = reinterpret_cast<ThreadProc>(const_cast<void*>(start_address));
+    auto proc = reinterpret_cast<ThreadProc>(start_address);
     it->host_thread = std::thread([slot_ptr = &*it, proc, parameter, teb, stack_top]() {
         g_current_thread_id = slot_ptr->thread_id;
         set_guest_gs_base(teb);
         slot_ptr->exit_code = static_cast<int>(proc(parameter));
         set_guest_gs_base(nullptr);
         {
-            std::lock_guard<std::mutex> lock(slot_ptr->join_mutex);
+            std::lock_guard<std::mutex> join_lock(slot_ptr->join_mutex);
             slot_ptr->finished = true;
         }
         slot_ptr->finish_cv.notify_all();
@@ -1417,12 +1388,12 @@ TL_MSABI std::uint32_t tl_GetCurrentProcessId() noexcept {
 }
 
 TL_MSABI const char* tl_GetCommandLineA() noexcept {
-    return msvcrt_get_guest_command_line();
+    return g_guest_acmdln != nullptr ? g_guest_acmdln : "";
 }
 
 TL_MSABI const std::uint16_t* tl_GetCommandLineW() noexcept {
     static std::vector<std::uint16_t> wide_cmd;
-    const std::string utf8 = msvcrt_get_guest_command_line();
+    const std::string utf8 = g_guest_acmdln != nullptr ? g_guest_acmdln : "";
     const std::u16string u16 = util::utf8_to_wide(utf8);
     wide_cmd.assign(u16.begin(), u16.end());
     wide_cmd.push_back(0);
@@ -1487,7 +1458,7 @@ TL_MSABI std::uint32_t tl_GetCurrentDirectoryA(std::uint32_t buffer_length, char
         set_last_error(errno_to_win32(errno));
         return 0;
     }
-    const std::string win_cwd = prefix::translate_linux_path_to_windows(cwd);
+    const std::string win_cwd = prefix::to_windows_path(cwd);
     const std::size_t len = win_cwd.size();
     if (buffer_length <= len || buffer == nullptr) {
         return static_cast<std::uint32_t>(len + 1);
@@ -1504,7 +1475,7 @@ TL_MSABI std::uint32_t tl_GetCurrentDirectoryW(std::uint32_t buffer_length, std:
         set_last_error(errno_to_win32(errno));
         return 0;
     }
-    const std::string win_cwd = prefix::translate_linux_path_to_windows(cwd);
+    const std::string win_cwd = prefix::to_windows_path(cwd);
     const std::u16string wide_cwd = util::utf8_to_wide(win_cwd);
     const std::size_t len = wide_cwd.size();
     if (buffer_length <= len || buffer == nullptr) {
@@ -1524,7 +1495,7 @@ TL_MSABI std::uint32_t tl_GetModuleFileNameA(const void* module, char* filename,
         return 0;
     }
     const std::string& path = g_module_file_name;
-    const std::string win_path = prefix::translate_linux_path_to_windows(path);
+    const std::string win_path = prefix::to_windows_path(path);
     const std::size_t len = std::min<std::size_t>(win_path.size(), size - 1);
     std::memcpy(filename, win_path.data(), len);
     filename[len] = '\0';
@@ -1540,10 +1511,10 @@ TL_MSABI std::uint32_t tl_GetModuleFileNameW(const void* module, std::uint16_t* 
         return 0;
     }
     const std::string& path = g_module_file_name;
-    const std::string win_path = prefix::translate_linux_path_to_windows(path);
+    const std::string win_path = prefix::to_windows_path(path);
     const std::u16string wide_path = util::utf8_to_wide(win_path);
     const std::size_t len = std::min<std::size_t>(wide_path.size(), size - 1);
-    std::copy(wide_path.begin(), wide_path.begin() + len, filename);
+    std::copy(wide_path.begin(), wide_path.begin() + static_cast<std::ptrdiff_t>(len), filename);
     filename[len] = 0;
     set_last_error(abi::kErrorSuccess);
     return static_cast<std::uint32_t>(len);
@@ -1564,13 +1535,16 @@ TL_MSABI void* tl_GetModuleHandleW(const std::uint16_t* module_name) noexcept {
     return tl_GetModuleHandleA(nullptr);
 }
 
-TL_MSABI void* tl_GetProcAddress(const void* module, const char* proc_name) noexcept {
+TL_MSABI void* tl_GetProcAddress(void* module, const char* proc_name) noexcept {
     (void)module;
     if (proc_name == nullptr || !mapped_guest_cstring(proc_name)) {
         set_last_error(abi::kErrorInvalidParameter);
         return nullptr;
     }
-    return loader::resolve_symbol_address(proc_name);
+    (void)module;
+    // Resolução dinâmica ainda não faz parte do contrato suportado. Imports
+    // estáticos são resolvidos pelo loader antes do entry point.
+    return nullptr;
 }
 
 TL_MSABI std::uint32_t tl_TlsAlloc() noexcept {
@@ -1652,7 +1626,7 @@ TL_MSABI int tl_MulDiv(const int number, const int numerator, const int denomina
 TL_MSABI std::uint32_t tl_FormatMessageW(const std::uint32_t flags, const void* source,
                                           const std::uint32_t message_id, const std::uint32_t language_id,
                                           std::uint16_t* buffer, const std::uint32_t size,
-                                          void* arguments) noexcept {
+                                          const void* arguments) noexcept {
     (void)source;
     (void)language_id;
     (void)arguments;
@@ -1895,7 +1869,7 @@ TL_MSABI void tl_GetSystemInfo(void* system_info) noexcept {
         return;
     }
     auto* si = static_cast<abi::GuestSystemInfo*>(system_info);
-    std::memset(si, 0, sizeof(*si));
+    *si = {};
     si->processor_architecture = 9;  // PROCESSOR_ARCHITECTURE_AMD64
     si->page_size = 4096;
     si->minimum_application_address = reinterpret_cast<void*>(0x10000);
@@ -1931,8 +1905,10 @@ TL_MSABI int tl_GlobalMemoryStatusEx(void* buffer) noexcept {
     if (avail_pages <= 0) avail_pages = 524288;
     if (page_size <= 0) page_size = 4096;
 
-    const std::uint64_t total_phys = static_cast<std::uint64_t>(pages) * page_size;
-    const std::uint64_t avail_phys = static_cast<std::uint64_t>(avail_pages) * page_size;
+    const std::uint64_t total_phys = static_cast<std::uint64_t>(pages) *
+                                     static_cast<std::uint64_t>(page_size);
+    const std::uint64_t avail_phys = static_cast<std::uint64_t>(avail_pages) *
+                                     static_cast<std::uint64_t>(page_size);
     const std::uint64_t used_phys = total_phys > avail_phys ? total_phys - avail_phys : 0;
     const std::uint32_t load = total_phys > 0 ? static_cast<std::uint32_t>((used_phys * 100ULL) / total_phys) : 0;
 
@@ -2012,9 +1988,12 @@ TL_MSABI void* tl_MapViewOfFile(const void* file_mapping_object, const std::uint
         prot |= PROT_WRITE;
     }
     int flags = (slot->fd >= 0) ? MAP_SHARED : (MAP_PRIVATE | MAP_ANONYMOUS);
-    const off_t offset = (static_cast<off_t>(file_offset_high) << 32) | file_offset_low;
+    const std::uint64_t offset_value = (static_cast<std::uint64_t>(file_offset_high) << 32U) |
+                                       file_offset_low;
+    const off_t offset = static_cast<off_t>(offset_value);
     const std::size_t size = number_of_bytes_to_map > 0 ? number_of_bytes_to_map :
-                             (slot->size > static_cast<std::uint64_t>(offset) ? static_cast<std::size_t>(slot->size - offset) : 4096);
+                             (slot->size > offset_value ? static_cast<std::size_t>(slot->size - offset_value)
+                                                        : 4096U);
     void* result = mmap(nullptr, size, prot, flags, slot->fd >= 0 ? slot->fd : -1, slot->fd >= 0 ? offset : 0);
     if (result == MAP_FAILED) {
         set_last_error(errno_to_win32(errno));
@@ -2155,7 +2134,7 @@ TL_MSABI int tl_GetVolumeInformationW(const std::uint16_t*, std::uint16_t* volum
     if (volume_name_buffer != nullptr && volume_name_size > 0 && mapped_guest_range(volume_name_buffer, volume_name_size * sizeof(std::uint16_t), true)) {
         const std::u16string u16 = util::utf8_to_wide("Local Disk");
         const std::size_t len = std::min<std::size_t>(u16.size(), volume_name_size - 1);
-        std::copy(u16.begin(), u16.begin() + len, volume_name_buffer);
+        std::copy(u16.begin(), u16.begin() + static_cast<std::ptrdiff_t>(len), volume_name_buffer);
         volume_name_buffer[len] = 0;
     }
     if (volume_serial_number != nullptr && mapped_guest_range(volume_serial_number, sizeof(std::uint32_t), true)) {
@@ -2170,7 +2149,7 @@ TL_MSABI int tl_GetVolumeInformationW(const std::uint16_t*, std::uint16_t* volum
     if (file_system_name_buffer != nullptr && file_system_name_size > 0 && mapped_guest_range(file_system_name_buffer, file_system_name_size * sizeof(std::uint16_t), true)) {
         const std::u16string u16 = util::utf8_to_wide("NTFS");
         const std::size_t len = std::min<std::size_t>(u16.size(), file_system_name_size - 1);
-        std::copy(u16.begin(), u16.begin() + len, file_system_name_buffer);
+        std::copy(u16.begin(), u16.begin() + static_cast<std::ptrdiff_t>(len), file_system_name_buffer);
         file_system_name_buffer[len] = 0;
     }
     set_last_error(abi::kErrorSuccess);
@@ -2345,8 +2324,10 @@ TL_MSABI int tl_CompareStringA(const std::uint32_t, const std::uint32_t flags,
 TL_MSABI int tl_CompareStringW(const std::uint32_t locale, const std::uint32_t flags,
                                const std::uint16_t* string1, const int count1,
                                const std::uint16_t* string2, const int count2) noexcept {
-    const std::string utf8_1 = (string1 != nullptr) ? util::wide_to_utf8(string1, count1 >= 0 ? count1 : 65535) : "";
-    const std::string utf8_2 = (string2 != nullptr) ? util::wide_to_utf8(string2, count2 >= 0 ? count2 : 65535) : "";
+    const std::size_t length1 = count1 >= 0 ? static_cast<std::size_t>(count1) : 65535U;
+    const std::size_t length2 = count2 >= 0 ? static_cast<std::size_t>(count2) : 65535U;
+    const std::string utf8_1 = (string1 != nullptr) ? util::wide_to_utf8(string1, length1) : "";
+    const std::string utf8_2 = (string2 != nullptr) ? util::wide_to_utf8(string2, length2) : "";
     return tl_CompareStringA(locale, flags, utf8_1.c_str(), -1, utf8_2.c_str(), -1);
 }
 
@@ -2509,7 +2490,8 @@ TL_MSABI void tl_RaiseException(const std::uint32_t exception_code, const std::u
     (void)exception_flags;
     (void)number_of_arguments;
     (void)arguments;
-    trace_guest_failure("RaiseException", "code", std::to_string(exception_code));
+    const std::string detail = std::to_string(exception_code);
+    trace_guest_failure("RaiseException", "code", detail.c_str());
 }
 
 TL_MSABI std::uint32_t tl_GetPrivateProfileStringA(const char* app_name, const char* key_name,
@@ -2590,7 +2572,7 @@ TL_MSABI std::uint32_t tl_GetPrivateProfileStringW(const std::uint16_t* app_name
                                 utf8_file.empty() ? nullptr : utf8_file.c_str());
     const std::u16string u16 = util::utf8_to_wide(buf);
     const std::size_t len = std::min<std::size_t>(u16.size(), size - 1);
-    std::copy(u16.begin(), u16.begin() + len, returned_string);
+    std::copy(u16.begin(), u16.begin() + static_cast<std::ptrdiff_t>(len), returned_string);
     returned_string[len] = 0;
     return static_cast<std::uint32_t>(len);
 }
@@ -2606,7 +2588,9 @@ TL_MSABI std::uint32_t tl_GetPrivateProfileIntW(const std::uint16_t* app_name, c
                                                 const int default_val, const std::uint16_t* file_name) noexcept {
     std::uint16_t buf[64]{};
     std::u16string def_u16 = util::utf8_to_wide(std::to_string(default_val));
-    tl_GetPrivateProfileStringW(app_name, key_name, def_u16.c_str(), buf, 64, file_name);
+    tl_GetPrivateProfileStringW(app_name, key_name,
+                                reinterpret_cast<const std::uint16_t*>(def_u16.c_str()), buf, 64,
+                                file_name);
     return static_cast<std::uint32_t>(std::atoi(util::wide_to_utf8(buf).c_str()));
 }
 

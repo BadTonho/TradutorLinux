@@ -30,21 +30,27 @@ using Atom = std::uint16_t;
 
 constexpr Dword kErrorSuccess = 0;
 constexpr Dword kErrorFileNotFound = 2;
+constexpr Dword kErrorNoMoreFiles = 18;
 constexpr Dword kErrorAccessDenied = 5;
 constexpr Dword kErrorInvalidHandle = 6;
 constexpr Dword kErrorNotEnoughMemory = 8;
 constexpr Dword kErrorAlreadyExists = 183;
 constexpr Dword kErrorInvalidParameter = 87;
+constexpr Dword kErrorEnvvarNotFound = 203;
 constexpr Dword kErrorBrokenPipe = 109;
 constexpr Dword kErrorBadLength = 24;
 constexpr Dword kErrorResourceDataNotFound = 1812;
 constexpr Dword kErrorResourceTypeNotFound = 1813;
 constexpr Dword kErrorResourceNameNotFound = 1814;
+constexpr Dword kErrorResourceNotFound = kErrorResourceNameNotFound;
 
 constexpr Dword kGenericRead = 0x80000000U;
 constexpr Dword kGenericWrite = 0x40000000U;
 constexpr Dword kCreateAlways = 2;
 constexpr Dword kOpenExisting = 3;
+constexpr Dword kCreateNew = 1;
+constexpr Dword kOpenAlways = 4;
+constexpr Dword kTruncateExisting = 5;
 constexpr Dword kMemCommit = 0x1000U;
 constexpr Dword kMemReserve = 0x2000U;
 constexpr Dword kMemRelease = 0x8000U;
@@ -63,6 +69,9 @@ constexpr Dword kErrorInsufficientBuffer = 122;
 constexpr Dword kErrorInvalidAddress = 487;
 constexpr Dword kErrorNoUnicodeTranslation = 1113;
 constexpr Dword kErrorTooManyTlsIndexes = 4323;
+constexpr Dword kFormatMessageAllocateBuffer = 0x00000100U;
+constexpr Dword kFormatMessageIgnoreInserts = 0x00000200U;
+constexpr Dword kFormatMessageFromSystem = 0x00001000U;
 
 // Fase 11: WaitForSingleObject.
 constexpr Dword kWaitObject0 = 0;
@@ -341,15 +350,15 @@ extern "C" {
 
 TL_MSABI void* tl_GetStdHandle(std::uint32_t n_std_handle) noexcept;
 TL_MSABI int tl_WriteFile(const void* file, const void* buffer, std::uint32_t bytes_to_write,
-                          std::uint32_t* bytes_written, const void* overlapped) noexcept;
+                          std::uint32_t* bytes_written, void* overlapped) noexcept;
 TL_MSABI int tl_ReadFile(const void* file, void* buffer, std::uint32_t bytes_to_read,
-                         std::uint32_t* bytes_read, const void* overlapped) noexcept;
+                         std::uint32_t* bytes_read, void* overlapped) noexcept;
 TL_MSABI void tl_ExitProcess(std::uint32_t exit_code) noexcept;
 TL_MSABI std::uint32_t tl_GetLastError() noexcept;
 TL_MSABI void tl_SetLastError(std::uint32_t error) noexcept;
-TL_MSABI void* tl_VirtualAlloc(const void* address, std::uintptr_t size, std::uint32_t allocation_type,
+TL_MSABI void* tl_VirtualAlloc(void* address, std::size_t size, std::uint32_t allocation_type,
                                std::uint32_t protection) noexcept;
-TL_MSABI int tl_VirtualFree(const void* address, std::uintptr_t size,
+TL_MSABI int tl_VirtualFree(void* address, std::size_t size,
                             std::uint32_t free_type) noexcept;
 TL_MSABI void* tl_CreateFileA(const char* path, std::uint32_t desired_access,
                               std::uint32_t share_mode, const void* security_attributes,
@@ -371,6 +380,11 @@ TL_MSABI void* tl_CreateEventW(const void* security_attributes, int manual_reset
 TL_MSABI int tl_SetEvent(const void* event_handle) noexcept;
 TL_MSABI int tl_ResetEvent(const void* event_handle) noexcept;
 TL_MSABI int tl_ReleaseMutex(const void* mutex) noexcept;
+TL_MSABI int tl_CreateProcessA(const char* application_name, char* command_line,
+                               const void* process_attributes, const void* thread_attributes,
+                               int inherit_handles, std::uint32_t creation_flags,
+                               const void* environment, const char* current_directory,
+                               const void* startup_info, void* process_information) noexcept;
 TL_MSABI int tl_CreateProcessW(const std::uint16_t* application_name,
                                std::uint16_t* command_line, const void* process_attributes,
                                const void* thread_attributes, int inherit_handles,
@@ -390,8 +404,8 @@ TL_MSABI std::uint32_t tl_WaitForMultipleObjects(std::uint32_t count,
                                                   std::uint32_t milliseconds) noexcept;
 TL_MSABI void tl_GetStartupInfoA(void* startup_info) noexcept;
 TL_MSABI int tl_MulDiv(int number, int numerator, int denominator) noexcept;
-TL_MSABI std::uint32_t tl_MessageBoxA(const void* owner, const char* text, const char* caption,
-                                      std::uint32_t type) noexcept;
+TL_MSABI int tl_MessageBoxA(const void* owner, const char* text, const char* caption,
+                            std::uint32_t type) noexcept;
 TL_MSABI abi::Atom tl_RegisterClassExA(const void* wnd_class) noexcept;
 TL_MSABI abi::Atom tl_RegisterClassA(const void* wnd_class) noexcept;
 TL_MSABI abi::HWnd tl_CreateWindowExA(std::uint32_t ex_style, const char* class_name,

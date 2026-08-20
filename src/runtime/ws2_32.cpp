@@ -8,6 +8,7 @@
 #include <fstream>
 #include <limits>
 #include <string>
+#include <vector>
 
 #include <arpa/inet.h>
 #include <fcntl.h>

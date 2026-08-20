@@ -42,7 +42,9 @@ struct alignas(8) GuestPeb {
 };
 
 // Estrutura do Thread Environment Block (TEB) do Windows x86-64.
-// Alocada na página apontada pelo registrador de segmento %gs.
+// O TEB começa em uma página alinhada apontada pelo registrador de segmento
+// %gs. Como TlsSlots começa em 0x1480, os 64 slots ocupam parte da segunda
+// página; a alocação precisa, portanto, cobrir duas páginas.
 struct alignas(4096) GuestTeb {
     // NT_TIB (0x00 - 0x38)
     std::uint64_t exception_list{0};             // 0x00
@@ -68,7 +70,7 @@ struct alignas(4096) GuestTeb {
     std::uint8_t padding_to_tls[0x1480 - 0x80]{}; // Preenchimento até 0x1480
     std::array<std::uint64_t, 64> tls_slots{};    // 0x1480: TlsSlots[64] (%gs:[0x1480])
 
-    std::uint8_t reserved_page_tail[4096 - 0x1480 - 64 * 8]{};
+    std::uint8_t reserved_page_tail[0x2000 - 0x1480 - 64 * 8]{};
 };
 
 static_assert(offsetof(GuestTeb, self) == 0x30, "TEB::self deve estar no offset 0x30");
@@ -76,7 +78,7 @@ static_assert(offsetof(GuestTeb, unique_thread_id) == 0x48, "TEB::unique_thread_
 static_assert(offsetof(GuestTeb, peb) == 0x60, "TEB::peb deve estar no offset 0x60");
 static_assert(offsetof(GuestTeb, last_error_value) == 0x68, "TEB::last_error_value deve estar no offset 0x68");
 static_assert(offsetof(GuestTeb, tls_slots) == 0x1480, "TEB::tls_slots deve estar no offset 0x1480");
-static_assert(sizeof(GuestTeb) == 4096, "GuestTeb deve ocupar exatamente 1 página (4096 bytes)");
+static_assert(sizeof(GuestTeb) == 0x2000, "GuestTeb deve ocupar exatamente duas páginas");
 
 // Inicializa a página do TEB com os ponteiros essenciais e IDs.
 inline void initialize_guest_teb(GuestTeb* teb, GuestPeb* peb, std::uint64_t stack_base,

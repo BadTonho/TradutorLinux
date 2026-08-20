@@ -2,6 +2,7 @@
 
 #include <cctype>
 #include <cstdint>
+#include <cstddef>
 #include <string>
 #include <string_view>
 
@@ -51,6 +52,30 @@ namespace tradutorlinux::util {
         }
     }
     return true;
+}
+
+// Compara duas strings ASCII sem diferenciar maiúsculas de minúsculas,
+// usando a convenção de retorno de CompareString/strcmp (-1, 0 ou 1).
+[[nodiscard]] inline int ascii_case_insensitive_compare(const std::string_view a,
+                                                        const std::string_view b) noexcept {
+    const std::size_t common = a.size() < b.size() ? a.size() : b.size();
+    for (std::size_t index = 0; index < common; ++index) {
+        const int left = std::tolower(static_cast<unsigned char>(a[index]));
+        const int right = std::tolower(static_cast<unsigned char>(b[index]));
+        if (left < right) {
+            return -1;
+        }
+        if (left > right) {
+            return 1;
+        }
+    }
+    if (a.size() < b.size()) {
+        return -1;
+    }
+    if (a.size() > b.size()) {
+        return 1;
+    }
+    return 0;
 }
 
 // Tamanho da página do host, com fallback de 4 KiB quando sysconf falha.

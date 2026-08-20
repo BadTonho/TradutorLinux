@@ -1,6 +1,7 @@
 #include "tradutorlinux/runtime/msvcrt.hpp"
 
 #include "tradutorlinux/diagnostics/trace.hpp"
+#include "tradutorlinux/prefix/prefix.hpp"
 #include "tradutorlinux/runtime/error_map.hpp"
 #include "tradutorlinux/runtime/winapi.hpp"
 #include "tradutorlinux/util/unicode.hpp"
@@ -44,8 +45,6 @@ constexpr int kIoError = 0x0020;
 constexpr int kIoBinary = 0x8000;
 
 // Modos de arquivo do msvcrt.
-#include "tradutorlinux/prefix/prefix.hpp"
-
 constexpr int kO_BINARY = 0x8000;
 constexpr int kO_TEXT = 0x4000;
 
