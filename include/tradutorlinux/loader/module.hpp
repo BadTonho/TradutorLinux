@@ -44,6 +44,16 @@ bool is_module_registered(std::string_view dll);
 ExportLookup find_export(const ExportQuery& query);
 ExportLookup find_export_by_ordinal(std::string_view dll, std::uint16_t ordinal);
 
+// Wine: api-ms-win-* e ext-ms-win-* são API Sets que encaminham (forward) para
+// as DLLs reais. Inspirado em dlls/*/ *.spec do Wine, resolvemos o símbolo
+// procurando na DLL exata e, quando for um API Set, nos candidatos reais
+// (KERNEL32, USER32, etc.) e em KERNELBASE -> KERNEL32.
+bool is_api_set_dll(std::string_view dll) noexcept;
+bool is_kernelbase_dll(std::string_view dll) noexcept;
+ExportLookup find_export_forwarded(const ExportQuery& query);
+ExportLookup find_export_by_ordinal_forwarded(std::string_view dll, std::uint16_t ordinal);
+bool is_module_registered_forwarded(std::string_view dll) noexcept;
+
 std::size_t registered_module_count();
 
 }  // namespace tradutorlinux::loader

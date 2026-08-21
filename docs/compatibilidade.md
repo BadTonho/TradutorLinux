@@ -86,6 +86,8 @@ Comportamento de rejeição:
 
 Em qualquer falha o entry point não é executado e todas as entradas são reportadas no trace (ver `docs/diagnostico.md`).
 
+**Forwarders e API Sets (inspirado em Wine `dlls/*/*.spec`):** `KERNELBASE.dll` encaminha para `KERNEL32.dll`; `api-ms-win-*` e `ext-ms-win-*` encaminham para o provedor real (`KERNEL32`, `USER32`, `GDI32`, `ADVAPI32`, `WS2_32`, `SHELL32`, `ole32`, `SHLWAPI`, `version`, `WINMM`, `COMCTL32`, `COMDLG32`, `IMM32`, `PSAPI`, `msvcrt`) — ver `src/loader/module.cpp:52` (`is_api_set_dll`/`is_kernelbase_dll`/`find_export_forwarded`). Falha de símbolo em API Set vira `unknown-symbol`, não `unknown-dll`.
+
 ## APIs de console (Fase 4)
 
 Os exports de `KERNEL32.dll` apontam para funções hospedeiras com a convenção Microsoft x64 (`TL_MSABI`). O runner chama o entry point depois de mapear a imagem e resolver a IAT; `ExitProcess` transfere o controle de volta ao runner e não encerra diretamente o processo Linux.
@@ -308,6 +310,8 @@ que recebem arquivos do host como argumentos.
 | `KERNEL32.dll` | `GetCurrentDirectoryA` | Suportado | `getcwd()` → caminho relativo sem barra inicial; conversão `/` → `\` |
 | `KERNEL32.dll` | `GetCurrentDirectoryW` | Suportado | Delega à versão A e converte resultado para UTF-16 |
 | `KERNEL32.dll` | `GetModuleFileNameA` | Suportado | Retorna caminho definido via `set_guest_module_path()` antes da execução |
+| `KERNEL32.dll` | `GetFullPathNameW` | Suportado | Normalização Windows completa (Wine `dlls/kernel32/path.c`): resolve relativo via `GetCurrentDirectory`, colapsa `.`/`..`, trata `C:`, `\` e `\\` (UNC); `file_part` aponta para após último `\`/`:` |
+| `KERNEL32.dll` | `GetFullPathNameA` | Suportado | Conversão `A` → `W` com mesma normalização; buffer insuficiente retorna `tamanho+1` e `ERROR_INSUFFICIENT_BUFFER` |
 | `SHELL32.dll` | `CommandLineToArgvW` | Suportado | Divide a linha de comando UTF-16 em argumentos, preservando grupos entre aspas; o bloco único retornado é liberado por `LocalFree` |
 
 ### Limitações conhecidas

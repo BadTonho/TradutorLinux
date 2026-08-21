@@ -553,6 +553,8 @@ TL_MSABI std::uint32_t tl_GetTempPathW(std::uint32_t buffer_length,
 TL_MSABI std::uint32_t tl_GetFullPathNameW(const std::uint16_t* path, std::uint32_t buffer_length,
                                            std::uint16_t* buffer,
                                            std::uint16_t** file_part) noexcept;
+TL_MSABI std::uint32_t tl_GetFullPathNameA(const char* path, std::uint32_t buffer_length, char* buffer,
+                                          char** file_part) noexcept;
 TL_MSABI int tl_GetFileTime(const void* handle, void* creation_time, void* access_time,
                             void* write_time) noexcept;
 TL_MSABI int tl_SetFileTime(const void* handle, const void* creation_time,

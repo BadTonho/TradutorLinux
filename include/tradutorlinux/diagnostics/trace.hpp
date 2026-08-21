@@ -4,6 +4,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace tradutorlinux::diagnostics {
 
@@ -17,6 +18,13 @@ enum class TraceComponent {
     Gui,
     Crt,
 };
+
+[[nodiscard]] bool trace_component_from_name(std::string_view name,
+                                            TraceComponent& out) noexcept;
+[[nodiscard]] std::string_view trace_component_name(TraceComponent component) noexcept;
+void configure_trace_filter(const std::vector<TraceComponent>& filter) noexcept;
+void configure_trace_all() noexcept;
+[[nodiscard]] bool is_trace_enabled(TraceComponent component) noexcept;
 
 enum class FailureCategory {
     ExitProcess,

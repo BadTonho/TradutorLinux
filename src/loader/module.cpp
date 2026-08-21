@@ -51,6 +51,93 @@ const OwnedModule* find_module(const std::string_view dll) {
 
 }  // namespace
 
+bool is_api_set_dll(const std::string_view dll) noexcept {
+    if (dll.size() < 10) {
+        return false;
+    }
+    // api-ms-win-* (11 chars) e ext-ms-win-* (11 chars), case-insensitive.
+    std::string_view lower_prefix;
+    // Checagem case-insensitive prefix sem alocar.
+    auto starts_with_ci = [](std::string_view s, std::string_view prefix) {
+        if (s.size() < prefix.size()) return false;
+        for (std::size_t i = 0; i < prefix.size(); ++i) {
+            if (std::tolower(static_cast<unsigned char>(s[i])) != prefix[i]) return false;
+        }
+        return true;
+    };
+    return starts_with_ci(dll, "api-ms-win-") || starts_with_ci(dll, "ext-ms-win-");
+}
+
+bool is_kernelbase_dll(const std::string_view dll) noexcept {
+    return util::ascii_iequals(dll, "kernelbase.dll") ||
+           util::ascii_iequals(dll, "kernelbase");
+}
+
+ExportLookup find_export_forwarded(const ExportQuery& query) {
+    ExportLookup direct = find_export(query);
+    if (direct.found) {
+        return direct;
+    }
+    // KERNELBASE é o host real de grande parte do KERNEL32 em Windows 7+.
+    if (is_kernelbase_dll(query.dll)) {
+        ExportLookup k32 = find_export(ExportQuery{"KERNEL32.dll", query.symbol});
+        if (k32.found) return k32;
+    }
+    if (!is_api_set_dll(query.dll)) {
+        return direct;
+    }
+    // Ordem de tentativa espelha Wine: esgotar os provedores reais mais comuns.
+    // KERNEL32/KERNELBASE cobrem file, memory, process, synch, etc.
+    static constexpr std::string_view kCandidates[] = {
+        "KERNEL32.dll", "USER32.dll",  "GDI32.dll",   "ADVAPI32.dll", "WS2_32.dll",
+        "SHELL32.dll",  "ole32.dll",   "SHLWAPI.dll", "version.dll",  "WINMM.dll",
+        "COMCTL32.dll", "COMDLG32.dll","IMM32.dll",   "PSAPI.dll",    "msvcrt.dll",
+    };
+    for (const auto& cand : kCandidates) {
+        ExportLookup cand_lookup = find_export(ExportQuery{cand, query.symbol});
+        if (cand_lookup.found) {
+            return cand_lookup;
+        }
+    }
+    return direct;
+}
+
+ExportLookup find_export_by_ordinal_forwarded(const std::string_view dll,
+                                              const std::uint16_t ordinal) {
+    ExportLookup direct = find_export_by_ordinal(dll, ordinal);
+    if (direct.found) return direct;
+    if (is_kernelbase_dll(dll)) {
+        ExportLookup k32 = find_export_by_ordinal("KERNEL32.dll", ordinal);
+        if (k32.found) return k32;
+    }
+    if (!is_api_set_dll(dll)) return direct;
+    static constexpr std::string_view kCandidates[] = {
+        "KERNEL32.dll", "USER32.dll",  "GDI32.dll",   "ADVAPI32.dll", "WS2_32.dll",
+        "SHELL32.dll",  "ole32.dll",   "SHLWAPI.dll", "version.dll",  "WINMM.dll",
+        "COMCTL32.dll", "COMDLG32.dll","IMM32.dll",   "PSAPI.dll",    "msvcrt.dll",
+    };
+    for (const auto& cand : kCandidates) {
+        ExportLookup cand_lookup = find_export_by_ordinal(cand, ordinal);
+        if (cand_lookup.found) return cand_lookup;
+    }
+    return direct;
+}
+
+bool is_module_registered_forwarded(const std::string_view dll) noexcept {
+    if (is_module_registered(dll)) return true;
+    if (is_kernelbase_dll(dll)) return is_module_registered("KERNEL32.dll");
+    if (!is_api_set_dll(dll)) return false;
+    static constexpr std::string_view kCandidates[] = {
+        "KERNEL32.dll", "USER32.dll",  "GDI32.dll",   "ADVAPI32.dll", "WS2_32.dll",
+        "SHELL32.dll",  "ole32.dll",   "SHLWAPI.dll", "version.dll",  "WINMM.dll",
+        "COMCTL32.dll", "COMDLG32.dll","IMM32.dll",   "PSAPI.dll",    "msvcrt.dll",
+    };
+    // Considera o API Set “registrado” se ao menos um candidato existir (o resolver
+    // ainda pode falhar por símbolo, mas não por DLL).
+    (void)kCandidates;
+    return true; // API Set sempre encaminha; falha será unknown-symbol, não unknown-dll.
+}
+
 bool register_module(const InternalModule& module) {
     if (find_module(module.name) != nullptr) {
         return false;
@@ -159,6 +246,7 @@ void register_builtin_modules() {
         {"RemoveDirectoryW", 80, reinterpret_cast<std::uintptr_t>(&tl_RemoveDirectoryW)},
         {"GetTempPathW", 81, reinterpret_cast<std::uintptr_t>(&tl_GetTempPathW)},
         {"GetFullPathNameW", 82, reinterpret_cast<std::uintptr_t>(&tl_GetFullPathNameW)},
+        {"GetFullPathNameA", 171, reinterpret_cast<std::uintptr_t>(&tl_GetFullPathNameA)},
         {"GetFileTime", 83, reinterpret_cast<std::uintptr_t>(&tl_GetFileTime)},
         {"SetFileTime", 84, reinterpret_cast<std::uintptr_t>(&tl_SetFileTime)},
         {"GetFileInformationByHandle", 85,

@@ -66,14 +66,15 @@ ResolveResult resolve_imports(MappedImage& image, const pe::PeInfo& info) {
             entry.ordinal = symbol.by_ordinal ? symbol.ordinal : 0;
             entry.iat_rva = symbol.iat_rva;
 
-            if (!is_module_registered(dll.name)) {
+            const bool forwarded_known = is_module_registered_forwarded(dll.name);
+            if (!is_module_registered(dll.name) && !forwarded_known) {
                 fail(result, entry, ImportStatus::UnknownDll, "módulo não registrado");
                 result.imports.push_back(std::move(entry));
                 continue;
             }
             const ExportLookup lookup =
-                symbol.by_ordinal ? find_export_by_ordinal(dll.name, symbol.ordinal)
-                                  : find_export(ExportQuery{dll.name, symbol.name});
+                symbol.by_ordinal ? find_export_by_ordinal_forwarded(dll.name, symbol.ordinal)
+                                  : find_export_forwarded(ExportQuery{dll.name, symbol.name});
             if (!lookup.found) {
                 fail(result, entry,
                      symbol.by_ordinal ? ImportStatus::UnknownOrdinal : ImportStatus::UnknownSymbol,

@@ -31,7 +31,7 @@ namespace {
 
 constexpr std::string_view kUsage =
     "Uso:\n"
-    "  tradutorlinux [--trace] [--report] [--timeout <segundos>] <arquivo.exe> [argumentos...]\n"
+    "  tradutorlinux [--trace[=canais]] [--report] [--timeout <segundos>] <arquivo.exe> [argumentos...]\n"
     "  tradutorlinux install <setup.exe> [--name <Nome>] [--prefix <dir>]\n"
     "  tradutorlinux app list\n"
     "  tradutorlinux app run <id_ou_nome> [argumentos...]\n"
@@ -343,11 +343,12 @@ void print_support_report(std::ostream& stream, const pe::PeInfo& info) {
 
         for (const pe::ImportedSymbol& symbol : dll.symbols) {
             loader::ImportStatus status = loader::ImportStatus::UnknownDll;
-            if (loader::is_module_registered(dll.name)) {
+            const bool forwarded_known = loader::is_module_registered_forwarded(dll.name);
+            if (loader::is_module_registered(dll.name) || forwarded_known) {
                 const loader::ExportLookup lookup =
                     symbol.by_ordinal
-                        ? loader::find_export_by_ordinal(dll.name, symbol.ordinal)
-                        : loader::find_export(loader::ExportQuery{dll.name, symbol.name});
+                        ? loader::find_export_by_ordinal_forwarded(dll.name, symbol.ordinal)
+                        : loader::find_export_forwarded(loader::ExportQuery{dll.name, symbol.name});
                 if (!lookup.found) {
                     status = symbol.by_ordinal ? loader::ImportStatus::UnknownOrdinal
                                                : loader::ImportStatus::UnknownSymbol;
@@ -369,11 +370,12 @@ void print_support_report(std::ostream& stream, const pe::PeInfo& info) {
         for (const pe::ImportedSymbol& symbol : dll.symbols) {
             const std::string label = symbol_label(symbol);
             loader::ImportStatus status = loader::ImportStatus::UnknownDll;
-            if (loader::is_module_registered(dll.name)) {
+            const bool forwarded_known = loader::is_module_registered_forwarded(dll.name);
+            if (loader::is_module_registered(dll.name) || forwarded_known) {
                 const loader::ExportLookup lookup =
                     symbol.by_ordinal
-                        ? loader::find_export_by_ordinal(dll.name, symbol.ordinal)
-                        : loader::find_export(loader::ExportQuery{dll.name, symbol.name});
+                        ? loader::find_export_by_ordinal_forwarded(dll.name, symbol.ordinal)
+                        : loader::find_export_forwarded(loader::ExportQuery{dll.name, symbol.name});
                 if (!lookup.found) {
                     status = symbol.by_ordinal ? loader::ImportStatus::UnknownOrdinal
                                                : loader::ImportStatus::UnknownSymbol;
@@ -415,8 +417,26 @@ ParseResult parse_command_line(const int argc, const char* const argv[]) {
                 command_line.app_name = argv[++i];
             } else if (arg == "--prefix" && i + 1 < argc) {
                 command_line.custom_prefix = std::filesystem::path{argv[++i]};
-            } else if (arg == "--trace") {
+            } else if (arg == "--trace" || arg.starts_with("--trace=")) {
                 command_line.trace_enabled = true;
+                if (arg.size() > 7) {
+                    const std::string_view list = arg.substr(8);
+                    if (!list.empty()) {
+                        std::string_view rem = list;
+                        while (!rem.empty()) {
+                            const std::size_t comma = rem.find(',');
+                            const std::string_view tok = comma == std::string_view::npos ? rem : rem.substr(0, comma);
+                            diagnostics::TraceComponent dummy;
+                            if (!diagnostics::trace_component_from_name(tok, dummy)) {
+                                return {.command_line = std::nullopt,
+                                        .error_message = "canal de trace desconhecido: " + std::string(tok)};
+                            }
+                            command_line.trace_channels_raw.emplace_back(std::string{tok});
+                            if (comma == std::string_view::npos) break;
+                            rem = rem.substr(comma + 1);
+                        }
+                    }
+                }
             } else if (arg == "--report") {
                 command_line.report_only = true;
             } else if (!command_line.executable_path.has_value() && !arg.starts_with('-')) {
@@ -452,8 +472,26 @@ ParseResult parse_command_line(const int argc, const char* const argv[]) {
             command_line.app_id = argv[3];
             for (int i = 4; i < argc; ++i) {
                 const std::string_view arg{argv[i]};
-                if (arg == "--trace") {
+                if (arg == "--trace" || arg.starts_with("--trace=")) {
                     command_line.trace_enabled = true;
+                    if (arg.size() > 7) {
+                        const std::string_view list = arg.substr(8);
+                        if (!list.empty()) {
+                            std::string_view rem = list;
+                            while (!rem.empty()) {
+                                const std::size_t comma = rem.find(',');
+                                const std::string_view tok = comma == std::string_view::npos ? rem : rem.substr(0, comma);
+                                diagnostics::TraceComponent dummy;
+                                if (!diagnostics::trace_component_from_name(tok, dummy)) {
+                                    return {.command_line = std::nullopt,
+                                            .error_message = "canal de trace desconhecido: " + std::string(tok)};
+                                }
+                                command_line.trace_channels_raw.emplace_back(std::string{tok});
+                                if (comma == std::string_view::npos) break;
+                                rem = rem.substr(comma + 1);
+                            }
+                        }
+                    }
                 } else if (arg == "--report") {
                     command_line.report_only = true;
                 } else {
@@ -529,12 +567,37 @@ ParseResult parse_command_line(const int argc, const char* const argv[]) {
             continue;
         }
 
-        if (!options_ended && argument == "--trace") {
+        if (!options_ended && (argument == "--trace" || argument.starts_with("--trace="))) {
             if (command_line.trace_enabled) {
                 return {.command_line = std::nullopt,
                         .error_message = "a opção --trace foi repetida"};
             }
             command_line.trace_enabled = true;
+            if (argument.size() > 7) { // "--trace=" prefix length 8
+                const std::string_view list = argument.substr(8);
+                if (!list.empty()) {
+                    std::string_view remaining = list;
+                    while (!remaining.empty()) {
+                        const std::size_t comma = remaining.find(',');
+                        const std::string_view token = comma == std::string_view::npos
+                                                           ? remaining
+                                                           : remaining.substr(0, comma);
+                        if (token.empty()) {
+                            return {.command_line = std::nullopt,
+                                    .error_message = "valor inválido para --trace: " + std::string(list)};
+                        }
+                        // Valida canal imediatamente (case-insensitive, como Wine)
+                        diagnostics::TraceComponent dummy;
+                        if (!diagnostics::trace_component_from_name(token, dummy)) {
+                            return {.command_line = std::nullopt,
+                                    .error_message = "canal de trace desconhecido: " + std::string(token)};
+                        }
+                        command_line.trace_channels_raw.emplace_back(std::string{token});
+                        if (comma == std::string_view::npos) break;
+                        remaining = remaining.substr(comma + 1);
+                    }
+                }
+            }
             continue;
         }
 
@@ -602,6 +665,26 @@ ParseResult parse_command_line(const int argc, const char* const argv[]) {
 
 ExitCode run_command(const CommandLine& command_line, std::ostream& stdout_stream,
                      std::ostream& stderr_stream) {
+    // Configura filtro de trace (inspirado em WINEDEBUG): --trace sozinho = tudo,
+    // --trace=pe,loader filtra apenas esses componentes.
+    if (command_line.trace_enabled) {
+        if (!command_line.trace_channels_raw.empty()) {
+            std::vector<diagnostics::TraceComponent> filter;
+            filter.reserve(command_line.trace_channels_raw.size());
+            for (const auto& name : command_line.trace_channels_raw) {
+                diagnostics::TraceComponent comp;
+                if (diagnostics::trace_component_from_name(name, comp)) {
+                    filter.push_back(comp);
+                }
+            }
+            diagnostics::configure_trace_filter(filter);
+        } else {
+            diagnostics::configure_trace_all();
+        }
+    } else {
+        diagnostics::configure_trace_all();
+    }
+
     if (command_line.show_help) {
         print_help(stdout_stream);
         return ExitCode::Success;
@@ -805,14 +888,15 @@ ExitCode run_command(const CommandLine& command_line, std::ostream& stdout_strea
         bool all_imports_supported = !has_delay_imports;
         for (const pe::ImportedDll& dll : parse_result.info.imports) {
             for (const pe::ImportedSymbol& symbol : dll.symbols) {
-                if (!loader::is_module_registered(dll.name)) {
+                const bool forwarded_known = loader::is_module_registered_forwarded(dll.name);
+                if (!loader::is_module_registered(dll.name) && !forwarded_known) {
                     all_imports_supported = false;
                     continue;
                 }
                 const loader::ExportLookup lookup =
                     symbol.by_ordinal
-                        ? loader::find_export_by_ordinal(dll.name, symbol.ordinal)
-                        : loader::find_export(loader::ExportQuery{dll.name, symbol.name});
+                        ? loader::find_export_by_ordinal_forwarded(dll.name, symbol.ordinal)
+                        : loader::find_export_forwarded(loader::ExportQuery{dll.name, symbol.name});
                 all_imports_supported = all_imports_supported && lookup.found && lookup.address != 0;
             }
         }
@@ -981,7 +1065,9 @@ void print_help(std::ostream& stream) {
     stream << "  app remove <id>\n";
     stream << "             remove um aplicativo do catálogo da biblioteca\n\n";
     stream << "Opções Gerais de Execução:\n";
-    stream << "  --trace    escreve diagnóstico estruturado em stderr\n";
+    stream << "  --trace[=canais]  escreve diagnóstico estruturado em stderr\n";
+    stream << "                    canais: cli,pe,loader,imports,runtime,process,gui,crt (ex: --trace=pe,loader)\n";
+    stream << "                    sem lista = todos os canais (compatível com WINEDEBUG)\n";
     stream << "  --report   relata imports suportados sem executar o arquivo\n";
     stream << "  --timeout <segundos>\n";
     stream << "             limita a execução do convidado; 0 = sem limite (padrão)\n";

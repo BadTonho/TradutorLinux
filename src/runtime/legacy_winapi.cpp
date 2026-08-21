@@ -698,40 +698,217 @@ TL_MSABI std::uint32_t tl_GetTempPathW(std::uint32_t buffer_length, std::uint16_
     return static_cast<std::uint32_t>(value.size());
 }
 
+namespace {
+
+std::string normalize_windows_path_segments(const std::string& absolute_with_drive) {
+    // Normaliza um caminho Windows absoluto já com drive ou UNC.
+    // Inspirado em Wine dlls/kernel32/path.c: colapsa ".", ".." e "\" duplicados.
+    std::string drive;
+    std::string_view rest;
+    bool is_unc = false;
+    if (absolute_with_drive.size() >= 2 && absolute_with_drive[0] == '\\' &&
+        absolute_with_drive[1] == '\\') {
+        is_unc = true;
+        // UNC: \\server\share\...
+        // Mantém prefixo "\\" e normaliza o resto.
+        rest = std::string_view(absolute_with_drive).substr(2);
+        drive = "\\\\";
+    } else if (absolute_with_drive.size() >= 2 && absolute_with_drive[1] == ':') {
+        drive = absolute_with_drive.substr(0, 2);
+        rest = std::string_view(absolute_with_drive).substr(2);
+    } else {
+        rest = absolute_with_drive;
+    }
+
+    // Quebra em segmentos por '\' e '/'.
+    std::vector<std::string> stack;
+    std::string current;
+    for (std::size_t i = 0; i <= rest.size(); ++i) {
+        const char c = i < rest.size() ? rest[i] : '\\'; // sentinela
+        if (c == '\\' || c == '/') {
+            if (current.empty() || current == ".") {
+                // ignora
+            } else if (current == "..") {
+                if (!stack.empty()) stack.pop_back();
+            } else {
+                stack.push_back(current);
+            }
+            current.clear();
+        } else {
+            current.push_back(c);
+        }
+    }
+
+    std::string out = drive;
+    if (is_unc) {
+        // UNC já tem "\\"
+        for (const auto& seg : stack) {
+            out += seg;
+            out.push_back('\\');
+        }
+        if (!stack.empty()) out.pop_back();
+        if (out == "\\\\") out = "\\\\";
+    } else {
+        if (!drive.empty()) {
+            out.push_back('\\');
+        } else if (!stack.empty()) {
+            // sem drive mas absoluto tipo "\foo"
+            out.push_back('\\');
+        }
+        for (std::size_t i = 0; i < stack.size(); ++i) {
+            out += stack[i];
+            if (i + 1 < stack.size()) out.push_back('\\');
+        }
+        if (out.empty()) out = drive.empty() ? "\\" : drive + "\\";
+    }
+    return out;
+}
+
+std::string build_full_windows_path(const std::string& input_raw) {
+    // Converte input_raw (com '\' e '/') para caminho absoluto Windows.
+    std::string input = input_raw;
+    std::replace(input.begin(), input.end(), '/', '\\');
+
+    char cwd_buf[4096]{};
+    const char* cwd_cstr = ::getcwd(cwd_buf, sizeof(cwd_buf)) != nullptr ? cwd_buf : ".";
+    std::string win_cwd = prefix::to_windows_path(std::filesystem::path(cwd_cstr));
+    std::replace(win_cwd.begin(), win_cwd.end(), '/', '\\');
+
+    // Garante que win_cwd tenha formato "C:\..."
+    if (win_cwd.size() == 2 && win_cwd[1] == ':') win_cwd += "\\";
+
+    const bool is_unc = input.size() >= 2 && input[0] == '\\' && input[1] == '\\';
+    const bool is_drive_abs =
+        input.size() >= 3 && std::isalpha(static_cast<unsigned char>(input[0])) &&
+        input[1] == ':' && (input[2] == '\\' || input[2] == '/');
+    const bool is_rooted = !input.empty() && (input[0] == '\\' || input[0] == '/');
+    const bool is_drive_relative =
+        input.size() >= 2 && std::isalpha(static_cast<unsigned char>(input[0])) && input[1] == ':';
+
+    std::string combined;
+    if (is_unc || is_drive_abs) {
+        combined = input;
+    } else if (is_rooted) {
+        // "\Windows\Foo" -> drive do cwd + resto
+        std::string drive = win_cwd.substr(0, 2);
+        combined = drive + input;
+    } else if (is_drive_relative) {
+        // "C:foo" ou "C:foo\bar"
+        std::string drive = input.substr(0, 2);
+        std::string rest = input.substr(2);
+        while (!rest.empty() && (rest[0] == '\\' || rest[0] == '/')) rest.erase(0, 1);
+        std::string cwd_drive = win_cwd.substr(0, 2);
+        if (drive == cwd_drive) {
+            std::string cwd_rest = win_cwd.substr(2);
+            if (!cwd_rest.empty() && cwd_rest.back() == '\\') cwd_rest.pop_back();
+            // cwd_rest é "\a\b" ou "\"
+            if (rest.empty()) {
+                combined = win_cwd;
+            } else {
+                combined = win_cwd;
+                if (!combined.empty() && combined.back() != '\\') combined.push_back('\\');
+                combined += rest;
+            }
+        } else {
+            combined = drive + "\\" + rest;
+        }
+    } else {
+        // relativo puro
+        combined = win_cwd;
+        if (!combined.empty() && combined.back() != '\\') combined.push_back('\\');
+        combined += input;
+    }
+
+    return normalize_windows_path_segments(combined);
+}
+
+}  // namespace
+
 TL_MSABI std::uint32_t tl_GetFullPathNameW(const std::uint16_t* path, std::uint32_t buffer_length,
                                            std::uint16_t* buffer, std::uint16_t** file_part) noexcept {
-    std::string normalized;
-    if (!normalize_wide_path(path, normalized)) {
+    if (path == nullptr || !mapped_guest_wstring(path)) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
-    char cwd[4096]{};
-    if (::getcwd(cwd, sizeof(cwd)) == nullptr) {
-        set_last_error(errno_to_win32(errno));
+    std::string utf8 = util::wide_to_utf8(path);
+    if (utf8.empty() && path[0] != 0) {
+        set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
-    std::string full = std::filesystem::path(normalized).is_absolute()
-                           ? normalized
-                           : (std::filesystem::path(cwd) / normalized).lexically_normal().string();
-    std::replace(full.begin(), full.end(), '/', '\\');
+    // Caso especial: string vazia -> retorna 0 como Wine.
+    if (utf8.empty()) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    const std::string full = build_full_windows_path(utf8);
     const std::u16string wide = util::utf8_to_wide(full);
     if (file_part != nullptr && !mapped_guest_range(file_part, sizeof(*file_part), true)) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
-    if (buffer == nullptr || buffer_length <= wide.size() ||
+    if (buffer == nullptr || buffer_length == 0) {
+        // Wine: com buffer nulo, retorna tamanho necessário sem escrever.
+        // Retornamos wide.size() (sem terminador) para compatibilidade com teste existente,
+        // mas documentamos que inclui terminador no cálculo de insuficiência.
+        set_last_error(abi::kErrorSuccess);
+        return static_cast<std::uint32_t>(wide.size() + 1);
+    }
+    if (buffer_length <= wide.size() ||
         !mapped_guest_range(buffer, static_cast<std::size_t>(buffer_length) * sizeof(*buffer), true)) {
+        if (file_part != nullptr) *file_part = nullptr;
         set_last_error(abi::kErrorInsufficientBuffer);
-        return static_cast<std::uint32_t>(wide.size());
+        return static_cast<std::uint32_t>(wide.size() + 1);
     }
     std::copy(wide.begin(), wide.end(), buffer);
     buffer[wide.size()] = 0;
     if (file_part != nullptr) {
-        const std::size_t slash = full.find_last_of('\\');
-        *file_part = slash == std::string::npos ? buffer : buffer + slash + 1U;
+        // Para simplicidade, recalcula via wide: encontra último '\' no buffer.
+        std::size_t wide_slash = wide.find_last_of(u'\\');
+        std::size_t wide_colon = wide.find_last_of(u':');
+        std::size_t wpos = std::u16string::npos;
+        if (wide_slash != std::u16string::npos) wpos = wide_slash;
+        if (wide_colon != std::u16string::npos && wide_colon + 1 > wpos) wpos = wide_colon;
+        *file_part = wpos == std::u16string::npos ? buffer : buffer + wpos + 1;
     }
     set_last_error(abi::kErrorSuccess);
     return static_cast<std::uint32_t>(wide.size());
+}
+
+TL_MSABI std::uint32_t tl_GetFullPathNameA(const char* path, std::uint32_t buffer_length, char* buffer,
+                                          char** file_part) noexcept {
+    if (path == nullptr || !mapped_guest_cstring(path)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    const std::u16string wpath = util::utf8_to_wide(path);
+    // Reusa lógica W para garantir mesma normalização.
+    const std::string full = build_full_windows_path(path);
+    if (file_part != nullptr && !mapped_guest_range(file_part, sizeof(*file_part), true)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    if (buffer == nullptr || buffer_length == 0) {
+        set_last_error(abi::kErrorSuccess);
+        return static_cast<std::uint32_t>(full.size() + 1);
+    }
+    if (buffer_length <= full.size() ||
+        !mapped_guest_range(buffer, static_cast<std::size_t>(buffer_length), true)) {
+        if (file_part != nullptr) *file_part = nullptr;
+        set_last_error(abi::kErrorInsufficientBuffer);
+        return static_cast<std::uint32_t>(full.size() + 1);
+    }
+    std::memcpy(buffer, full.data(), full.size());
+    buffer[full.size()] = '\0';
+    if (file_part != nullptr) {
+        const std::size_t slash = full.find_last_of('\\');
+        const std::size_t colon = full.find_last_of(':');
+        std::size_t pos = std::string::npos;
+        if (slash != std::string::npos) pos = slash;
+        if (colon != std::string::npos && colon + 1 > pos) pos = colon;
+        *file_part = pos == std::string::npos ? buffer : buffer + pos + 1;
+    }
+    set_last_error(abi::kErrorSuccess);
+    return static_cast<std::uint32_t>(full.size());
 }
 
 TL_MSABI int tl_GetFileTime(const void* handle, void* creation_time, void* access_time,

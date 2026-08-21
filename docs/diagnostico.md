@@ -2,13 +2,15 @@
 
 ## Saída de trace
 
-O trace é habilitado por `--trace`, vai exclusivamente para `stderr` e ocupa uma linha por evento:
+O trace é habilitado por `--trace` (todos os canais) ou `--trace=canal1,canal2` (filtrado, inspirado em `WINEDEBUG`), vai exclusivamente para `stderr` e ocupa uma linha por evento:
 
 ```text
 [tl][<componente>][<nível>] <evento> chave="valor"
 ```
 
-Componentes iniciais: `cli`, `pe`, `loader`, `imports`, `runtime`, `process` e `gui`.
+Componentes iniciais: `cli`, `pe`, `loader`, `imports`, `runtime`, `process`, `gui` e `crt` (ver `src/diagnostics/trace.cpp:11`).
+
+Filtragem: `--trace=pe,loader` emite apenas `pe` e `loader`; canal desconhecido retorna `canal de trace desconhecido` e exit `2` (`Usage`). Sem filtro, todos os canais são emitidos; a filtragem é feita em `diagnostics::is_trace_enabled` antes de `write_trace`.
 
 Níveis iniciais: `debug`, `info`, `warning` e `error`.
 
