@@ -1174,6 +1174,7 @@ TL_MSABI void* tl_CreateMutexA(const void* security_attributes, const int initia
         set_last_error(abi::kErrorInvalidParameter);
         return nullptr;
     }
+    std::lock_guard<std::mutex> lock(g_sync_mutex);
     auto free_it = std::find_if(g_syncs.begin(), g_syncs.end(),
                                 [](const SyncSlot& slot) { return !slot.used; });
     if (free_it == g_syncs.end()) {
@@ -1207,6 +1208,7 @@ TL_MSABI void* tl_CreateEventA(const void* security_attributes, const int manual
         set_last_error(abi::kErrorInvalidParameter);
         return nullptr;
     }
+    std::lock_guard<std::mutex> lock(g_sync_mutex);
     auto free_it = std::find_if(g_syncs.begin(), g_syncs.end(),
                                 [](const SyncSlot& slot) { return !slot.used; });
     if (free_it == g_syncs.end()) {
@@ -1293,6 +1295,7 @@ TL_MSABI void* tl_CreateSemaphoreA(const void* security_attributes,
         set_last_error(abi::kErrorInvalidParameter);
         return nullptr;
     }
+    std::lock_guard<std::mutex> lock(g_sync_mutex);
     auto free_it = std::find_if(g_syncs.begin(), g_syncs.end(),
                                 [](const SyncSlot& slot) { return !slot.used; });
     if (free_it == g_syncs.end()) {
@@ -1729,6 +1732,7 @@ bool tls_index_allocated(const std::uint32_t tls_index) noexcept {
 }
 
 TL_MSABI std::uint32_t tl_TlsAlloc() noexcept {
+    std::lock_guard<std::mutex> lock(g_tls_mutex);
     for (std::uint32_t i = 0; i < kTlsMinimumAvailable; ++i) {
         if (!g_tls_indices_used[i]) {
             g_tls_indices_used[i] = true;
@@ -1750,9 +1754,12 @@ TL_MSABI void* tl_TlsGetValue(std::uint32_t tls_index) noexcept {
 }
 
 TL_MSABI int tl_TlsSetValue(std::uint32_t tls_index, void* value) noexcept {
-    if (!tls_index_allocated(tls_index)) {
-        set_last_error(abi::kErrorInvalidParameter);
-        return 0;
+    {
+        std::lock_guard<std::mutex> lock(g_tls_mutex);
+        if (!tls_index_allocated(tls_index)) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
+        }
     }
     g_guest_tls_slots[tls_index] = value;
     set_last_error(abi::kErrorSuccess);
@@ -1760,6 +1767,7 @@ TL_MSABI int tl_TlsSetValue(std::uint32_t tls_index, void* value) noexcept {
 }
 
 TL_MSABI int tl_TlsFree(std::uint32_t tls_index) noexcept {
+    std::lock_guard<std::mutex> lock(g_tls_mutex);
     if (!tls_index_allocated(tls_index)) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
@@ -1966,14 +1974,34 @@ TL_MSABI int tl_CreateProcessA(const char* application_name, char* command_line,
             }
         }
     }
-    auto free_it = std::find_if(g_syncs.begin(), g_syncs.end(),
-                                [](const SyncSlot& slot) { return !slot.used; });
-    if (free_it == g_syncs.end()) {
-        set_last_error(abi::kErrorNotEnoughMemory);
-        return 0;
+    SyncSlot* allocated = nullptr;
+    {
+        std::lock_guard<std::mutex> lock(g_sync_mutex);
+        auto it = std::find_if(g_syncs.begin(), g_syncs.end(),
+                               [](const SyncSlot& slot) { return !slot.used; });
+        if (it == g_syncs.end()) {
+            set_last_error(abi::kErrorNotEnoughMemory);
+            return 0;
+        }
+        it->used = true;
+        it->kind = SyncKind::Process;
+        it->child_pid = -1;
+        it->child_result_fd = -1;
+        it->process_running = true;
+        it->process_exit_code = kStillActive;
+        it->signaled = false;
+        it->manual_reset = false;
+        it->owner_valid = false;
+        it->count = 0;
+        it->maximum = 0;
+        allocated = &*it;
     }
     int result_pipe[2] = {-1, -1};
     if (::pipe(result_pipe) != 0) {
+        {
+            std::lock_guard<std::mutex> lock(g_sync_mutex);
+            clear_sync_slot(*allocated);
+        }
         set_last_error(abi::kErrorNotEnoughMemory);
         return 0;
     }
@@ -1981,6 +2009,10 @@ TL_MSABI int tl_CreateProcessA(const char* application_name, char* command_line,
     if (child < 0) {
         ::close(result_pipe[0]);
         ::close(result_pipe[1]);
+        {
+            std::lock_guard<std::mutex> lock(g_sync_mutex);
+            clear_sync_slot(*allocated);
+        }
         set_last_error(abi::kErrorNotEnoughMemory);
         return 0;
     }
@@ -1989,15 +2021,14 @@ TL_MSABI int tl_CreateProcessA(const char* application_name, char* command_line,
         run_created_guest_child(normalized_path, result_pipe[1]);
     }
     ::close(result_pipe[1]);
-    SyncSlot& slot = *free_it;
-    slot.used = true;
-    slot.kind = SyncKind::Process;
-    slot.child_pid = child;
-    slot.child_result_fd = result_pipe[0];
-    slot.process_running = true;
-    slot.process_exit_code = kStillActive;
+    {
+        std::lock_guard<std::mutex> lock(g_sync_mutex);
+        allocated->child_pid = child;
+        allocated->child_result_fd = result_pipe[0];
+        // process_running já true
+    }
     auto* information = static_cast<GuestProcessInformation*>(process_information);
-    *information = {.process_handle = sync_slot_handle(slot),
+    *information = {.process_handle = sync_slot_handle(*allocated),
                     .thread_handle = nullptr,
                     .process_id = static_cast<std::uint32_t>(child),
                     .thread_id = 0};
@@ -2611,19 +2642,27 @@ namespace {
 
 struct InternalSrwLock {
     std::shared_mutex mutex;
+    bool used{false};
 };
 std::array<InternalSrwLock, 128> g_srw_locks{};
 std::mutex g_srw_meta_mutex;
 
 InternalSrwLock* get_or_create_srw(void* ptr) {
     if (ptr == nullptr) return nullptr;
+    if (!mapped_guest_range(ptr, sizeof(void*), true)) return nullptr;
     auto** slot_ptr = reinterpret_cast<InternalSrwLock**>(ptr);
     if (*slot_ptr != nullptr) return *slot_ptr;
     std::lock_guard<std::mutex> lock(g_srw_meta_mutex);
-    for (auto& lock_entry : g_srw_locks) {
-        *slot_ptr = &lock_entry;
-        return &lock_entry;
+    // Double-check após adquirir o lock (outra thread pode ter preenchido).
+    if (*slot_ptr != nullptr) return *slot_ptr;
+    for (auto& entry : g_srw_locks) {
+        if (!entry.used) {
+            entry.used = true;
+            *slot_ptr = &entry;
+            return &entry;
+        }
     }
+    // Sem slots livres - fallback para o primeiro (comportamento degradado mas evita null).
     return &g_srw_locks[0];
 }
 

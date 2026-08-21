@@ -83,9 +83,18 @@ bool validate_mapped_range(const void* address, const std::size_t size, const bo
         rebuild_cache_locked();
     }
 
+    // Permite que o intervalo cruze múltiplas VMAs contíguas com mesma permissão (ex: stack split).
+    std::uintptr_t cur = target_start;
     for (const auto& region : g_map_regions) {
-        if (target_start >= region.start && target_end <= region.end) {
-            return writable ? region.writable : region.readable;
+        if (cur >= region.start && cur < region.end) {
+            if (writable ? !region.writable : !region.readable) {
+                return false;
+            }
+            const std::uintptr_t chunk_end = std::min(target_end, region.end);
+            cur = chunk_end;
+            if (cur == target_end) {
+                return true;
+            }
         }
     }
 

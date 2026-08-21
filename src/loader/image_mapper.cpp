@@ -322,7 +322,7 @@ MapResult map_image(const pe::PeInfo& info, const std::span<const std::byte> fil
 
     const std::uint64_t preferred_base =
         options.preferred_base != 0 ? options.preferred_base : info.image_base;
-    void* mapping = nullptr;
+    void* mapping = MAP_FAILED;
 #if defined(MAP_FIXED_NOREPLACE)
     if (preferred_base != 0) {
         // NOLINTNEXTLINE(performance-no-int-to-ptr): base numérica do PE convertida para endereço do mmap
@@ -468,8 +468,15 @@ PatchStatus write_image_bytes(MappedImage& image, const std::uint32_t rva,
     }
     const std::size_t page = util::host_page_size();
     const std::uint64_t page_start = align_down(rva, page);
-    const std::uint64_t page_end =
+    std::uint64_t page_end =
         align_up(static_cast<std::uint64_t>(rva) + size, page);
+    // Clamp ao tamanho real do mapeamento (evita mprotect além do mapping - M8).
+    if (page_end > static_cast<std::uint64_t>(image.size)) {
+        page_end = align_up(static_cast<std::uint64_t>(image.size), page);
+        if (page_start >= page_end) {
+            return PatchStatus::InvalidAddress;
+        }
+    }
     auto* page_base = image.memory + static_cast<std::ptrdiff_t>(page_start);
     const std::size_t page_size = static_cast<std::size_t>(page_end - page_start);
     if (mprotect(page_base, page_size, PROT_READ | PROT_WRITE) != 0) {
@@ -479,6 +486,8 @@ PatchStatus write_image_bytes(MappedImage& image, const std::uint32_t rva,
     const SectionPermissions page_permissions = permissions_for_page(
         image.regions, page_start, page_end);
     if (mprotect(page_base, page_size, to_prot(page_permissions)) != 0) {
+        // Tenta ao menos voltar para somente leitura para não deixar RWX/RW exposto (M10).
+        (void)mprotect(page_base, page_size, PROT_READ);
         return PatchStatus::MprotectFailed;
     }
     return PatchStatus::Success;

@@ -1,6 +1,7 @@
 #include "tradutorlinux/diagnostics/trace.hpp"
 
 #include <array>
+#include <mutex>
 #include <ostream>
 #include <string>
 #include <vector>
@@ -108,9 +109,11 @@ std::string_view trace_component_name(const TraceComponent component) noexcept {
 namespace {
 std::array<bool, 8> g_trace_enabled{};
 bool g_trace_filter_active = false;
+std::mutex g_trace_mutex;
 }  // namespace
 
 void configure_trace_filter(const std::vector<TraceComponent>& filter) noexcept {
+    std::lock_guard<std::mutex> lock(g_trace_mutex);
     g_trace_enabled.fill(false);
     for (auto c : filter) {
         const auto idx = static_cast<std::size_t>(c);
@@ -120,11 +123,13 @@ void configure_trace_filter(const std::vector<TraceComponent>& filter) noexcept 
 }
 
 void configure_trace_all() noexcept {
+    std::lock_guard<std::mutex> lock(g_trace_mutex);
     g_trace_enabled.fill(true);
     g_trace_filter_active = false;
 }
 
 bool is_trace_enabled(const TraceComponent component) noexcept {
+    std::lock_guard<std::mutex> lock(g_trace_mutex);
     if (!g_trace_filter_active) return true;
     const auto idx = static_cast<std::size_t>(component);
     return idx < g_trace_enabled.size() && g_trace_enabled[idx];
@@ -154,12 +159,21 @@ std::string_view failure_category_name(const FailureCategory category) {
 
 void write_trace(std::ostream& stream, const TraceComponent component, const TraceLevel level,
                  const std::string_view event, const std::span<const TraceField> fields) {
-    if (!is_trace_enabled(component)) return;
-    stream << "[tl][" << component_name(component) << "][" << level_name(level) << "] " << event;
-    for (const TraceField& field : fields) {
-        stream << ' ' << field.key << "=\"" << escape_value(field.value) << '"';
+    {
+        std::lock_guard<std::mutex> lock(g_trace_mutex);
+        if (g_trace_filter_active) {
+            const auto idx = static_cast<std::size_t>(component);
+            if (idx >= g_trace_enabled.size() || !g_trace_enabled[idx]) {
+                return;
+            }
+        }
+        // Mantém o lock durante a escrita para evitar intercalação de linhas de threads concorrentes.
+        stream << "[tl][" << component_name(component) << "][" << level_name(level) << "] " << event;
+        for (const TraceField& field : fields) {
+            stream << ' ' << field.key << "=\"" << escape_value(field.value) << '"';
+        }
+        stream << '\n';
     }
-    stream << '\n';
 }
 
 }  // namespace tradutorlinux::diagnostics

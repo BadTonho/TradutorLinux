@@ -98,6 +98,7 @@ std::mutex g_threads_mutex;
 std::array<ThreadSlot, 256> g_threads{};
 
 std::array<bool, kMaxTlsSlots> g_tls_indices_used{};
+std::mutex g_tls_mutex;
 thread_local std::array<void*, 64> g_guest_tls_slots{};
 std::uintptr_t g_unhandled_exception_filter = 0;
 

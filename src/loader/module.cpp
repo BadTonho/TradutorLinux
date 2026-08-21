@@ -15,6 +15,7 @@
 #include "tradutorlinux/util/basics.hpp"
 
 #include <algorithm>
+#include <mutex>
 #include <string>
 #include <utility>
 #include <vector>
@@ -38,7 +39,13 @@ std::vector<OwnedModule>& modules() {
     return instance;
 }
 
-const OwnedModule* find_module(const std::string_view dll) {
+std::mutex& modules_mutex() {
+    static std::mutex instance;
+    return instance;
+}
+
+// Requer que modules_mutex() esteja bloqueado pelo chamador.
+const OwnedModule* find_module_locked(const std::string_view dll) {
     const std::vector<OwnedModule>& registry = modules();
     const auto found = std::find_if(registry.begin(), registry.end(), [&](const OwnedModule& module) {
         return util::ascii_iequals(module.name, dll);
@@ -52,12 +59,10 @@ const OwnedModule* find_module(const std::string_view dll) {
 }  // namespace
 
 bool is_api_set_dll(const std::string_view dll) noexcept {
-    if (dll.size() < 10) {
+    if (dll.size() < 11) {
         return false;
     }
     // api-ms-win-* (11 chars) e ext-ms-win-* (11 chars), case-insensitive.
-    std::string_view lower_prefix;
-    // Checagem case-insensitive prefix sem alocar.
     auto starts_with_ci = [](std::string_view s, std::string_view prefix) {
         if (s.size() < prefix.size()) return false;
         for (std::size_t i = 0; i < prefix.size(); ++i) {
@@ -127,19 +132,21 @@ bool is_module_registered_forwarded(const std::string_view dll) noexcept {
     if (is_module_registered(dll)) return true;
     if (is_kernelbase_dll(dll)) return is_module_registered("KERNEL32.dll");
     if (!is_api_set_dll(dll)) return false;
-    static constexpr std::string_view kCandidates[] = {
-        "KERNEL32.dll", "USER32.dll",  "GDI32.dll",   "ADVAPI32.dll", "WS2_32.dll",
-        "SHELL32.dll",  "ole32.dll",   "SHLWAPI.dll", "version.dll",  "WINMM.dll",
-        "COMCTL32.dll", "COMDLG32.dll","IMM32.dll",   "PSAPI.dll",    "msvcrt.dll",
-    };
-    // Considera o API Set “registrado” se ao menos um candidato existir (o resolver
-    // ainda pode falhar por símbolo, mas não por DLL).
-    (void)kCandidates;
-    return true; // API Set sempre encaminha; falha será unknown-symbol, não unknown-dll.
+    // API Set só é considerado registrado se ao menos um provedor real existir.
+    // Evita classificar como unknown-symbol quando registry está vazio (ex: testes com clear_modules).
+    return is_module_registered("KERNEL32.dll") || is_module_registered("USER32.dll") ||
+           is_module_registered("GDI32.dll") || is_module_registered("ADVAPI32.dll") ||
+           is_module_registered("WS2_32.dll") || is_module_registered("SHELL32.dll") ||
+           is_module_registered("ole32.dll") || is_module_registered("SHLWAPI.dll") ||
+           is_module_registered("version.dll") || is_module_registered("WINMM.dll") ||
+           is_module_registered("COMCTL32.dll") || is_module_registered("COMDLG32.dll") ||
+           is_module_registered("IMM32.dll") || is_module_registered("PSAPI.dll") ||
+           is_module_registered("msvcrt.dll");
 }
 
 bool register_module(const InternalModule& module) {
-    if (find_module(module.name) != nullptr) {
+    std::lock_guard<std::mutex> lock(modules_mutex());
+    if (find_module_locked(module.name) != nullptr) {
         return false;
     }
     OwnedModule owned;
@@ -157,6 +164,7 @@ bool register_module(const InternalModule& module) {
 }
 
 void clear_modules() {
+    std::lock_guard<std::mutex> lock(modules_mutex());
     modules().clear();
 }
 
@@ -687,12 +695,14 @@ void register_builtin_modules() {
 }
 
 bool is_module_registered(const std::string_view dll) {
-    return find_module(dll) != nullptr;
+    std::lock_guard<std::mutex> lock(modules_mutex());
+    return find_module_locked(dll) != nullptr;
 }
 
 ExportLookup find_export(const ExportQuery& query) {
+    std::lock_guard<std::mutex> lock(modules_mutex());
     ExportLookup lookup;
-    const OwnedModule* module = find_module(query.dll);
+    const OwnedModule* module = find_module_locked(query.dll);
     if (module == nullptr) {
         return lookup;
     }
@@ -709,8 +719,9 @@ ExportLookup find_export(const ExportQuery& query) {
 }
 
 ExportLookup find_export_by_ordinal(const std::string_view dll, const std::uint16_t ordinal) {
+    std::lock_guard<std::mutex> lock(modules_mutex());
     ExportLookup lookup;
-    const OwnedModule* module = find_module(dll);
+    const OwnedModule* module = find_module_locked(dll);
     if (module == nullptr) {
         return lookup;
     }
@@ -727,6 +738,7 @@ ExportLookup find_export_by_ordinal(const std::string_view dll, const std::uint1
 }
 
 std::size_t registered_module_count() {
+    std::lock_guard<std::mutex> lock(modules_mutex());
     return modules().size();
 }
 

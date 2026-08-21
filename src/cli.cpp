@@ -422,10 +422,18 @@ ParseResult parse_command_line(const int argc, const char* const argv[]) {
                 if (arg.size() > 7) {
                     const std::string_view list = arg.substr(8);
                     if (!list.empty()) {
+                        if (list.front() == ',' || list.back() == ',' || list.find(",,") != std::string_view::npos) {
+                            return {.command_line = std::nullopt,
+                                    .error_message = "valor inválido para --trace: " + std::string(list)};
+                        }
                         std::string_view rem = list;
                         while (!rem.empty()) {
                             const std::size_t comma = rem.find(',');
                             const std::string_view tok = comma == std::string_view::npos ? rem : rem.substr(0, comma);
+                            if (tok.empty()) {
+                                return {.command_line = std::nullopt,
+                                        .error_message = "valor inválido para --trace: " + std::string(list)};
+                            }
                             diagnostics::TraceComponent dummy;
                             if (!diagnostics::trace_component_from_name(tok, dummy)) {
                                 return {.command_line = std::nullopt,
@@ -477,10 +485,18 @@ ParseResult parse_command_line(const int argc, const char* const argv[]) {
                     if (arg.size() > 7) {
                         const std::string_view list = arg.substr(8);
                         if (!list.empty()) {
+                            if (list.front() == ',' || list.back() == ',' || list.find(",,") != std::string_view::npos) {
+                                return {.command_line = std::nullopt,
+                                        .error_message = "valor inválido para --trace: " + std::string(list)};
+                            }
                             std::string_view rem = list;
                             while (!rem.empty()) {
                                 const std::size_t comma = rem.find(',');
                                 const std::string_view tok = comma == std::string_view::npos ? rem : rem.substr(0, comma);
+                                if (tok.empty()) {
+                                    return {.command_line = std::nullopt,
+                                            .error_message = "valor inválido para --trace: " + std::string(list)};
+                                }
                                 diagnostics::TraceComponent dummy;
                                 if (!diagnostics::trace_component_from_name(tok, dummy)) {
                                     return {.command_line = std::nullopt,
@@ -576,6 +592,10 @@ ParseResult parse_command_line(const int argc, const char* const argv[]) {
             if (argument.size() > 7) { // "--trace=" prefix length 8
                 const std::string_view list = argument.substr(8);
                 if (!list.empty()) {
+                    if (list.front() == ',' || list.back() == ',' || list.find(",,") != std::string_view::npos) {
+                        return {.command_line = std::nullopt,
+                                .error_message = "valor inválido para --trace: " + std::string(list)};
+                    }
                     std::string_view remaining = list;
                     while (!remaining.empty()) {
                         const std::size_t comma = remaining.find(',');

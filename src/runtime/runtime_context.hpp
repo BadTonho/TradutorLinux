@@ -163,6 +163,7 @@ constexpr std::uintptr_t kThreadHandleBase = 0x0000400000000000ULL;
 
 constexpr std::uint32_t kMaxTlsSlots = 256;
 extern std::array<bool, kMaxTlsSlots> g_tls_indices_used;
+extern std::mutex g_tls_mutex;
 extern thread_local std::array<void*, 64> g_guest_tls_slots;
 extern std::uintptr_t g_unhandled_exception_filter;
 

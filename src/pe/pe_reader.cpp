@@ -310,6 +310,12 @@ public:
 private:
     [[nodiscard]] std::optional<std::size_t> rva_to_file_offset(
         const RvaRange& range) const {
+        // Headers: RVA [0, SizeOfHeaders) mapeia direto para offset de arquivo [0, SizeOfHeaders)
+        // Necessário para diretórios que o linker posiciona nos headers (legal em Windows).
+        if (static_cast<std::uint64_t>(range.rva) + range.length <= parser_state_.size_of_headers &&
+            static_cast<std::uint64_t>(range.rva) + range.length <= reader_.size()) {
+            return static_cast<std::size_t>(range.rva);
+        }
         for (const SectionInfo& section : parser_state_.sections) {
             const std::uint64_t section_span =
                 std::max<std::uint64_t>(section.virtual_size, section.raw_data_size);
