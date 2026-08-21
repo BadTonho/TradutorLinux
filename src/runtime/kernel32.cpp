@@ -4,6 +4,7 @@
 #include "tradutorlinux/prefix/prefix.hpp"
 #include "tradutorlinux/runtime/error_map.hpp"
 #include "tradutorlinux/runtime/msvcrt.hpp"
+#include "tradutorlinux/runtime/ntdll.hpp"
 #include "tradutorlinux/util/basics.hpp"
 #include "tradutorlinux/util/unicode.hpp"
 
@@ -635,47 +636,25 @@ TL_MSABI int tl_CloseHandle(const void* const handle) noexcept {
 TL_MSABI void* tl_VirtualAlloc(void* const address, const std::size_t size,
                                const std::uint32_t allocation_type,
                                const std::uint32_t protect) noexcept {
-    (void)allocation_type;
-    (void)protect;
-    if (size == 0) {
-        set_last_error(abi::kErrorInvalidParameter);
+    void* base = address;
+    std::size_t region = size;
+    const ntdll::NtStatus st = ntdll::NtAllocateVirtualMemory(&base, &region, allocation_type, protect);
+    if (st != ntdll::NtStatus::Success) {
+        set_last_error(ntdll::NtStatusToDosError(st));
         return nullptr;
     }
-    void* result = mmap(address, size, PROT_READ | PROT_WRITE,
-                        MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-    if (result == MAP_FAILED) {
-        set_last_error(abi::kErrorNotEnoughMemory);
-        return nullptr;
-    }
-    std::lock_guard<std::mutex> lock(g_allocations_mutex);
-    auto it = std::find_if(g_allocations.begin(), g_allocations.end(),
-                           [](const AllocationSlot& s) { return s.address == nullptr; });
-    if (it != g_allocations.end()) {
-        it->address = result;
-        it->size = size;
-    }
-    bump_guest_allocation_generation();
     set_last_error(abi::kErrorSuccess);
-    return result;
+    return base;
 }
 
 TL_MSABI int tl_VirtualFree(void* const address, const std::size_t size,
                             const std::uint32_t free_type) noexcept {
-    (void)free_type;
-    if (address == nullptr) {
-        set_last_error(abi::kErrorInvalidParameter);
+    std::size_t region = size;
+    const ntdll::NtStatus st = ntdll::NtFreeVirtualMemory(address, &region, free_type);
+    if (st != ntdll::NtStatus::Success) {
+        set_last_error(ntdll::NtStatusToDosError(st));
         return 0;
     }
-    std::lock_guard<std::mutex> lock(g_allocations_mutex);
-    auto it = std::find_if(g_allocations.begin(), g_allocations.end(),
-                           [address](const AllocationSlot& s) { return s.address == address; });
-    if (it == g_allocations.end()) {
-        set_last_error(abi::kErrorInvalidParameter);
-        return 0;
-    }
-    munmap(address, it->size != 0 ? it->size : size);
-    *it = {};
-    bump_guest_allocation_generation();
     set_last_error(abi::kErrorSuccess);
     return 1;
 }

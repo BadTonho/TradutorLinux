@@ -11,9 +11,8 @@ namespace {
 
 using GetStdHandleFn = TL_MSABI void* (*)(std::uint32_t);
 using WriteFileFn = TL_MSABI int (*)(const void*, const void*, std::uint32_t, std::uint32_t*,
-                                     const void*);
-using ReadFileFn = TL_MSABI int (*)(const void*, void*, std::uint32_t, std::uint32_t*,
-                                    const void*);
+                                     void*);
+using ReadFileFn = TL_MSABI int (*)(const void*, void*, std::uint32_t, std::uint32_t*, void*);
 using ExitProcessFn = TL_MSABI void (*)(std::uint32_t);
 using WndProcFn = TL_MSABI abi::Lresult (*)(abi::HWnd, std::uint32_t, abi::Wparam, abi::Lparam);
 

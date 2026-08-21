@@ -4,6 +4,7 @@
 #include "tradutorlinux/gui/x11.hpp"
 #include "tradutorlinux/prefix/prefix.hpp"
 #include "tradutorlinux/runtime/error_map.hpp"
+#include "tradutorlinux/runtime/ntdll.hpp"
 #include "tradutorlinux/util/unicode.hpp"
 
 #include <algorithm>
@@ -32,14 +33,14 @@ using runtime::errno_to_win32;
 
 namespace {
 
-struct MapsRegion {
+struct [[maybe_unused]] MapsRegion {
     std::uintptr_t start{};
     std::uintptr_t end{};
     char permissions[5]{};
     bool has_path{false};
 };
 
-bool find_maps_region(const void* address, MapsRegion& result) noexcept {
+[[maybe_unused]] bool find_maps_region(const void* address, MapsRegion& result) noexcept {
     const std::uintptr_t target = reinterpret_cast<std::uintptr_t>(address);
     std::ifstream maps("/proc/self/maps");
     std::string line;
@@ -71,7 +72,7 @@ bool find_maps_region(const void* address, MapsRegion& result) noexcept {
     return false;
 }
 
-std::uint32_t win32_protection(const char permissions[4]) noexcept {
+[[maybe_unused]] std::uint32_t win32_protection(const char permissions[4]) noexcept {
     const bool readable = permissions[0] == 'r';
     const bool writable = permissions[1] == 'w';
     const bool executable = permissions[2] == 'x';
@@ -84,7 +85,7 @@ std::uint32_t win32_protection(const char permissions[4]) noexcept {
     return writable ? abi::kPageReadWrite : abi::kPageReadOnly;
 }
 
-int host_protection(const std::uint32_t protection) noexcept {
+[[maybe_unused]] int host_protection(const std::uint32_t protection) noexcept {
     switch (protection & 0xFFU) {
         case abi::kPageNoAccess:
             return PROT_NONE;
@@ -266,42 +267,26 @@ TL_MSABI int tl_IsDBCSLeadByteEx(std::uint32_t /*code_page*/, std::uint8_t /*tes
 TL_MSABI int tl_VirtualProtect(void* address, std::uintptr_t size,
                                std::uint32_t new_protection,
                                std::uint32_t* old_protection) noexcept {
-    if (old_protection == nullptr || !mapped_guest_range(old_protection, sizeof(*old_protection), true) ||
-        address == nullptr || size == 0U) {
+    if (old_protection == nullptr ||
+        !mapped_guest_range(old_protection, sizeof(*old_protection), true)) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
-    const int protection = host_protection(new_protection);
-    MapsRegion region{};
-    if (protection < 0 || !find_maps_region(address, region)) {
-        set_last_error(protection < 0 ? abi::kErrorInvalidParameter : abi::kErrorInvalidAddress);
+    std::size_t region = static_cast<std::size_t>(size);
+    std::uint32_t old = 0;
+    const ntdll::NtStatus st = ntdll::NtProtectVirtualMemory(address, &region, new_protection, &old);
+    if (st != ntdll::NtStatus::Success) {
+        const std::uint32_t err = ntdll::NtStatusToDosError(st);
+        // Wine mapeia InvalidParameter/AccessDenied para ERROR_INVALID_ADDRESS quando fora da VAD.
+        if (st == ntdll::NtStatus::InvalidParameter || st == ntdll::NtStatus::AccessDenied) {
+            // Tenta distinguir: se não achou região, retorna InvalidAddress como antes.
+            set_last_error(abi::kErrorInvalidAddress);
+        } else {
+            set_last_error(err);
+        }
         return 0;
     }
-    const std::uintptr_t start = reinterpret_cast<std::uintptr_t>(address);
-    if (size > std::numeric_limits<std::uintptr_t>::max() - start) {
-        set_last_error(abi::kErrorInvalidParameter);
-        return 0;
-    }
-    const std::uintptr_t end = start + size;
-    if (start < region.start || end > region.end) {
-        set_last_error(abi::kErrorInvalidAddress);
-        return 0;
-    }
-    *old_protection = win32_protection(region.permissions);
-    constexpr std::uintptr_t kPageSize = 0x1000U;
-    const std::uintptr_t rounded_start = start / kPageSize * kPageSize;
-    if (end > std::numeric_limits<std::uintptr_t>::max() - (kPageSize - 1U)) {
-        set_last_error(abi::kErrorInvalidAddress);
-        return 0;
-    }
-    const std::uintptr_t rounded_end = (end + kPageSize - 1U) / kPageSize * kPageSize;
-    if (rounded_start >= rounded_end ||
-        ::mprotect(std::bit_cast<void*>(rounded_start), static_cast<std::size_t>(rounded_end - rounded_start),
-                   protection) != 0) {
-        set_last_error(errno_to_win32(errno));
-        return 0;
-    }
-    bump_guest_allocation_generation();
+    *old_protection = old;
     set_last_error(abi::kErrorSuccess);
     return 1;
 }
@@ -313,31 +298,23 @@ TL_MSABI std::uintptr_t tl_VirtualQuery(const void* address, void* memory_inform
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
-    MapsRegion region{};
-    if (!find_maps_region(address, region)) {
+    ntdll::NtMemoryInformation info{};
+    const ntdll::NtStatus st = ntdll::NtQueryVirtualMemory(address, &info);
+    if (st != ntdll::NtStatus::Success) {
         set_last_error(abi::kErrorInvalidAddress);
         return 0;
     }
-    const std::uintptr_t target = reinterpret_cast<std::uintptr_t>(address);
-    const AllocationSlot* allocation = nullptr;
-    for (const AllocationSlot& candidate : g_allocations) {
-        const std::uintptr_t base = reinterpret_cast<std::uintptr_t>(candidate.address);
-        if (candidate.address != nullptr && target >= base && target - base < candidate.size) {
-            allocation = &candidate;
-            break;
-        }
-    }
-    auto* info = static_cast<abi::GuestMemoryBasicInformation*>(memory_information);
-    *info = {};
-    info->base_address = allocation != nullptr ? allocation->address : std::bit_cast<void*>(region.start);
-    info->allocation_base = info->base_address;
-    info->allocation_protect = win32_protection(region.permissions);
-    info->region_size = allocation != nullptr ? allocation->size : region.end - region.start;
-    info->state = abi::kMemCommit;
-    info->protect = win32_protection(region.permissions);
-    info->type = allocation != nullptr || !region.has_path ? abi::kMemPrivate : abi::kMemImage;
+    auto* out = static_cast<abi::GuestMemoryBasicInformation*>(memory_information);
+    *out = {};
+    out->base_address = info.BaseAddress;
+    out->allocation_base = info.AllocationBase;
+    out->allocation_protect = info.AllocationProtect;
+    out->region_size = info.RegionSize;
+    out->state = info.State;
+    out->protect = info.Protect;
+    out->type = info.Type;
     set_last_error(abi::kErrorSuccess);
-    return sizeof(*info);
+    return sizeof(*out);
 }
 
 TL_MSABI int tl_MultiByteToWideChar(std::uint32_t code_page, std::uint32_t flags,
