@@ -17,6 +17,12 @@ struct GuestOutcome {
     bool exited_explicitly{};
     std::uint32_t exit_code{};
     int signal_number{};
+    // Preenchido apenas quando kind == Signaled e o filho alcançou o handler
+    // de falha antes de morrer: endereço reportado pelo kernel no si_addr
+    // (ex.: endereço acessado num SIGSEGV). O pai converte esse endereço em
+    // contexto PE (RVA, seção, importação mais próxima) para o diagnóstico.
+    bool fault_recorded{};
+    std::uint64_t fault_address{};
 };
 
 struct SignalDescription {

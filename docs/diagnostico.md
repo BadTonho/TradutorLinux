@@ -130,6 +130,37 @@ O guest executa em processo filho isolado. O hospedeiro não instala um handler
 geral de sinais C++; o pai observa o status do filho com `waitpid` e publica
 `guest-signal` quando o entry point termina por sinal.
 
+### Evento `terminated category="guest-signal"`
+
+Quando o convidado morre por sinal fatal, o filho captura o endereço reportado
+pelo kernel (`si_addr`) em um handler mínimo async-signal-safe e o entrega ao
+pai por um pipe dedicado antes de reentregar o sinal com disposição padrão —
+o status observado pelo `waitpid` não muda. O evento ganha então:
+
+| Campo | Condição | Significado |
+|---|---|---|
+| `fault-address` | Sempre que o filho alcançou o handler | Endereço virtual da falta em hex (`si_addr`). Para sinais sem endereço associado (ex.: `SIGABRT`) pode ser `0x0`. |
+| `rva` | Endereço dentro da imagem mapeada | `fault-address − base`, em hex. |
+| `section` | RVA cai dentro de uma região nomeada | Nome da seção PE que contém o RVA. |
+| `nearest-import` | Existe slot de IAT resolvido ≤ RVA | `DLL!símbolo` do slot de IAT mais próximo abaixo da falta — a melhor pista da importação em jogo. |
+
+Campos são omitidos quando a condição não se aplica: desreferência de nulo
+(`fault-address="0x0"`) está fora da imagem e não produz `rva`/`section`;
+término por `SIGKILL` externo (ex.: timeout) não passa pelo handler e não
+produz `fault-address`.
+
+Exemplo com contexto completo (falta dentro de `.text`):
+
+```text
+[tl][process][error] terminated category="guest-signal" signal="SIGSEGV" detail="acesso inválido à memória" fault-address="0x140001050" rva="0x1050" section=".text" nearest-import="KERNEL32.dll!ExitProcess"
+```
+
+Exemplo real da fixture `tl_crash.exe` (desreferência de nulo):
+
+```text
+[tl][process][error] terminated category="guest-signal" signal="SIGSEGV" detail="acesso inválido à memória" fault-address="0x0"
+```
+
 ## Componente `gui`
 
 O protótipo X11 usa um subconjunto de `USER32.dll`: `MessageBoxA` (somente com

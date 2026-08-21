@@ -53,11 +53,21 @@ Compatibilidade ampla é o objetivo de longo prazo, não uma autorização para 
 ## Qualidade, testes e documentação
 
 - Todo código novo deve compilar com os warnings rigorosos configurados pelo projeto e passar em CTest.
-- Antes de declarar uma mudança pronta, execute os presets relevantes, incluindo `sanitize` quando houver código C/C++ novo.
+- Antes de declarar uma mudança pronta, execute os presets relevantes, incluindo `sanitize` quando houver código C/C++ novo — porém respeitando as restrições de build da seção seguinte.
 - Preserve `stdout` para a saída do futuro programa convidado; logs do runtime usam `stderr` e o formato de `docs/diagnostico.md`.
 - Atualize `docs/compatibilidade.md` quando uma fixture, aplicação ou API mudar de estado.
 - Atualize documentos de ABI, API ou diagnóstico sempre que um contrato mudar.
 - Marque itens no `ROADMAP.md` somente depois de haver evidência reproduzível: código, teste e validação no ambiente Linux/CI.
+
+## Custo de build — máquina do usuário limitada
+
+O notebook do usuário não aguenta compilações pesadas. Regras obrigatórias:
+
+- **Evite build sempre que possível.** Só compile quando o usuário pedir ou quando for estritamente necessário para verificar uma mudança já combinada.
+- **Nunca compile em paralelo com outra tarefa pesada** nem dispare vários presets em sequência automática (ex.: `debug` + `release` + `sanitize` de uma vez). Validação completa de múltiplos presets fica para o CI ou depende de autorização explícita.
+- Quando o build for inevitável, use paralelismo baixo (`--parallel 2` no máximo) e prefira construir **apenas os alvos afetados** (`--target`) em vez do projeto inteiro.
+- Prefira validar mudanças pequenas com testes unitários diretos (um binário de teste já construído) antes de qualquer rebuild.
+- Se um preset ainda não existir em `build/`, não o configure por conta própria; pergunte antes.
 
 ## Forma de trabalhar
 

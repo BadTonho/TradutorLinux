@@ -20,6 +20,16 @@ namespace {
 
 constexpr std::size_t kProtocolSize = 5;  // [explicit:1][exit-code:4 LE]
 
+// Registro de falha escrito pelo handler de sinais do filho quando o convidado
+// morre por sinal fatal: [signal:1][si_addr:8 LE]. O pai só o consome depois de
+// waitpid relatar WIFSIGNALED, e o valida contra o sinal observado.
+constexpr std::size_t kFaultRecordSize = 9;
+
+// Descritor do pipe de falha usado pelo handler no filho. Handlers de sinal
+// não podem capturar estado, então o fd é publicado aqui antes da instalação;
+// só existe no processo filho e vale enquanto o convidado executa.
+int g_crash_report_fd = -1;
+
 bool read_exact(const int fd, std::byte* const buffer, const std::size_t size) noexcept {
     std::size_t total = 0;
     while (total < size) {
@@ -50,14 +60,46 @@ bool write_exact(const int fd, const std::byte* const buffer, const std::size_t 
     return true;
 }
 
-// The guest must run with the default disposition for fatal signals so that a
-// crash (ex.: SIGSEGV) reaches waitpid as a real signal. Host runtimes such as
-// AddressSanitizer install their own handlers, which would swallow the signal
-// and hide the guest-signal diagnosis; restore SIG_DFL in the freshly forked
-// child before executing the guest.
-void reset_fatal_signal_handlers() noexcept {
+// O convidado precisa terminar com a disposição padrão dos sinais fatais para
+// que um crash (ex.: SIGSEGV) chegue ao waitpid como sinal real. Runtimes do
+// hospedeiro como o AddressSanitizer instalam handlers próprios, que engoliriam
+// o sinal e esconderiam o diagnóstico guest-signal.
+//
+// Em vez de apenas restaurar SIG_DFL, o filho instala um handler mínimo
+// (async-signal-safe) que captura o si_addr reportado pelo kernel, publica o
+// registro de falha no pipe dedicado e então restaura SIG_DFL e reentrega o
+// mesmo sinal. Assim o processo morre exatamente como antes (mesmo status no
+// waitpid, mesma interação com sanitizers), mas o pai ganha o endereço da
+// falta para converter em contexto PE (RVA, seção, importação mais próxima).
+void install_crash_reporter(const int report_fd) noexcept {
+    g_crash_report_fd = report_fd;
     struct sigaction action {};
-    action.sa_handler = SIG_DFL;
+    action.sa_sigaction = [](const int signal_number, siginfo_t* info, void*) noexcept {
+        // Restaura SIG_DFL ANTES de qualquer outra coisa: se algo falhar aqui
+        // dentro (inclusive uma nova falta durante o write), o segundo
+        // disparo já cai na disposição padrão e mata o processo de vez.
+        struct sigaction default_action {};
+        default_action.sa_handler = SIG_DFL;
+        ::sigemptyset(&default_action.sa_mask);
+        static_cast<void>(::sigaction(signal_number, &default_action, nullptr));
+
+        std::array<std::byte, kFaultRecordSize> record{};
+        record[0] = std::byte{static_cast<unsigned char>(static_cast<unsigned>(signal_number) & 0xFFU)};
+        const auto address = info != nullptr && info->si_addr != nullptr
+                                 ? reinterpret_cast<std::uintptr_t>(info->si_addr)
+                                 : std::uintptr_t{0};
+        for (std::size_t index = 0; index < 8; ++index) {
+            record[1 + index] =
+                std::byte{static_cast<unsigned char>((address >> (8U * index)) & 0xFFU)};
+        }
+        // Uma única escrita: registros de 9 bytes são atômicos em pipes. Falhas
+        // são ignoradas de propósito — o diagnóstico sem endereço ainda vale,
+        // e o handler não pode depender de nada além de syscalls diretas.
+        if (g_crash_report_fd >= 0) {
+            static_cast<void>(::write(g_crash_report_fd, record.data(), record.size()));
+        }
+    };
+    action.sa_flags = SA_SIGINFO;
     ::sigemptyset(&action.sa_mask);
     constexpr std::array<int, 8> kFatalSignals{SIGSEGV, SIGILL, SIGBUS, SIGABRT,
                                                SIGFPE,  SIGTRAP, SIGSYS, SIGQUIT};
@@ -121,17 +163,26 @@ GuestOutcome run_guest_isolated(const std::uintptr_t entry_point,
     if (::pipe(pipe_fds) != 0) {
         return {.kind = GuestOutcomeKind::SpawnFailed};
     }
-
-    const ::pid_t child = ::fork();
-    if (child < 0) {
+    int fault_fds[2] = {-1, -1};
+    if (::pipe(fault_fds) != 0) {
         ::close(pipe_fds[0]);
         ::close(pipe_fds[1]);
         return {.kind = GuestOutcomeKind::SpawnFailed};
     }
 
+    const ::pid_t child = ::fork();
+    if (child < 0) {
+        ::close(pipe_fds[0]);
+        ::close(pipe_fds[1]);
+        ::close(fault_fds[0]);
+        ::close(fault_fds[1]);
+        return {.kind = GuestOutcomeKind::SpawnFailed};
+    }
+
     if (child == 0) {
         ::close(pipe_fds[0]);
-        reset_fatal_signal_handlers();
+        ::close(fault_fds[0]);
+        install_crash_reporter(fault_fds[1]);
         ignore_broken_pipe();
         const GuestExecutionResult result = execute_guest_entry(entry_point, stack_top);
         const std::array<std::byte, kProtocolSize> message{
@@ -147,6 +198,7 @@ GuestOutcome run_guest_isolated(const std::uintptr_t entry_point,
     }
 
     ::close(pipe_fds[1]);
+    ::close(fault_fds[1]);
 
     // Espera o filho com poll no pipe de resultado. O lado de escrita é
     // fechado quando o filho termina (HUP), então o pai não fica preso e pode
@@ -178,6 +230,7 @@ GuestOutcome run_guest_isolated(const std::uintptr_t entry_point,
                 continue;
             }
             ::close(pipe_fds[0]);
+            ::close(fault_fds[0]);
             return {.kind = GuestOutcomeKind::SpawnFailed};
         }
         const ::pid_t waited = ::waitpid(child, &status, WNOHANG);
@@ -186,6 +239,7 @@ GuestOutcome run_guest_isolated(const std::uintptr_t entry_point,
         }
         if (waited < 0 && errno != EINTR) {
             ::close(pipe_fds[0]);
+            ::close(fault_fds[0]);
             return {.kind = GuestOutcomeKind::SpawnFailed};
         }
     }
@@ -195,6 +249,7 @@ GuestOutcome run_guest_isolated(const std::uintptr_t entry_point,
         while (::waitpid(child, &status, 0) < 0 && errno == EINTR) {
         }
         ::close(pipe_fds[0]);
+        ::close(fault_fds[0]);
         return {.kind = GuestOutcomeKind::TimedOut, .signal_number = SIGKILL};
     }
 
@@ -203,10 +258,12 @@ GuestOutcome run_guest_isolated(const std::uintptr_t entry_point,
         std::array<std::byte, kProtocolSize> message{};
         if (!read_exact(pipe_fds[0], message.data(), message.size())) {
             ::close(pipe_fds[0]);
+            ::close(fault_fds[0]);
             return {.kind = GuestOutcomeKind::SpawnFailed};
         }
         if (message[0] != std::byte{0} && message[0] != std::byte{1}) {
             ::close(pipe_fds[0]);
+            ::close(fault_fds[0]);
             return {.kind = GuestOutcomeKind::SpawnFailed};
         }
         outcome.exited_explicitly = message[0] == std::byte{1};
@@ -223,8 +280,30 @@ GuestOutcome run_guest_isolated(const std::uintptr_t entry_point,
         // WIFSIGNALED; qualquer outro caso é término por sinal.
         outcome.kind = GuestOutcomeKind::Signaled;
         outcome.signal_number = WTERMSIG(status);
+
+        // O handler do filho publica o registro antes de reentregar o sinal,
+        // então os dados já estão no buffer do pipe. Se o filho morreu sem
+        // passar pelo handler (ex.: SIGKILL externo), o lado de escrita está
+        // fechado e read_exact retorna falso sem bloquear.
+        std::array<std::byte, kFaultRecordSize> record{};
+        if (read_exact(fault_fds[0], record.data(), record.size())) {
+            const auto recorded_signal =
+                static_cast<unsigned char>(std::to_integer<unsigned>(record[0]));
+            if (recorded_signal == static_cast<unsigned char>(outcome.signal_number)) {
+                std::uint64_t address = 0;
+                for (std::size_t index = 0; index < 8; ++index) {
+                    const std::uint64_t byte =
+                        static_cast<std::uint64_t>(
+                            std::to_integer<unsigned>(record[1 + index]));
+                    address |= byte << (8U * index);
+                }
+                outcome.fault_recorded = true;
+                outcome.fault_address = address;
+            }
+        }
     }
     ::close(pipe_fds[0]);
+    ::close(fault_fds[0]);
     return outcome;
 }
 

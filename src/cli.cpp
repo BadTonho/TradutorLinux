@@ -2,6 +2,7 @@
 
 #include "tradutorlinux/catalog/app_catalog.hpp"
 #include "tradutorlinux/diagnostics/trace.hpp"
+#include "tradutorlinux/diagnostics/crash_context.hpp"
 #include "tradutorlinux/loader/import_resolver.hpp"
 #include "tradutorlinux/loader/module.hpp"
 #include "tradutorlinux/loader/process.hpp"
@@ -997,6 +998,14 @@ ExitCode run_command(const CommandLine& command_line, std::ostream& stdout_strea
     const process::GuestOutcome outcome = process::run_guest_isolated(
         process.thread.entry_point, process.thread.stack_top, effective_cmd.timeout_ms);
 
+    // Contexto de falha calculado antes do destroy_process: o evento
+    // guest-signal usa a imagem mapeada e as importações ainda vivas.
+    const diagnostics::GuestCrashContext crash_context =
+        outcome.kind == process::GuestOutcomeKind::Signaled && outcome.fault_recorded
+            ? diagnostics::describe_guest_crash(process.image, process.imports,
+                                                outcome.fault_address)
+            : diagnostics::GuestCrashContext{};
+
     const std::uint64_t unmap_base = process.image.base;
     loader::destroy_process(process);
     set_guest_image_view(nullptr, 0, 0, 0);
@@ -1017,20 +1026,51 @@ ExitCode run_command(const CommandLine& command_line, std::ostream& stdout_strea
     if (outcome.kind == process::GuestOutcomeKind::Signaled) {
         const process::SignalDescription signal = process::describe_signal(outcome.signal_number);
         if (effective_cmd.trace_enabled) {
-            const std::array fields{
-                diagnostics::TraceField{
-                    "category",
-                    std::string{diagnostics::failure_category_name(
-                        diagnostics::FailureCategory::GuestSignal)}},
-                diagnostics::TraceField{"signal", std::string{signal.name}},
-                diagnostics::TraceField{"detail", std::string{signal.detail}},
-            };
+            std::vector<diagnostics::TraceField> fields;
+            fields.reserve(7);
+            fields.push_back(diagnostics::TraceField{
+                "category",
+                std::string{diagnostics::failure_category_name(
+                    diagnostics::FailureCategory::GuestSignal)}});
+            fields.push_back(diagnostics::TraceField{"signal", std::string{signal.name}});
+            fields.push_back(diagnostics::TraceField{"detail", std::string{signal.detail}});
+            if (outcome.fault_recorded) {
+                fields.push_back(diagnostics::TraceField{
+                    "fault-address", util::format_hex(outcome.fault_address)});
+            }
+            if (crash_context.valid) {
+                fields.push_back(
+                    diagnostics::TraceField{"rva", util::format_hex(crash_context.rva)});
+                if (!crash_context.section.empty()) {
+                    fields.push_back(diagnostics::TraceField{
+                        "section", std::string{crash_context.section}});
+                }
+                if (!crash_context.nearest_import.empty()) {
+                    fields.push_back(diagnostics::TraceField{
+                        "nearest-import", crash_context.nearest_import});
+                }
+            }
             diagnostics::write_trace(stderr_stream, diagnostics::TraceComponent::Process,
                                      diagnostics::TraceLevel::Error, "terminated", fields);
             write_unmap_trace(stderr_stream, unmap_base);
         } else {
             stderr_stream << "erro: o programa convidado terminou por sinal " << signal.name
-                          << " (" << signal.detail << ")\n";
+                          << " (" << signal.detail << ")";
+            if (outcome.fault_recorded) {
+                stderr_stream << " no endereço " << util::format_hex(outcome.fault_address);
+                if (crash_context.valid) {
+                    stderr_stream << " (rva " << util::format_hex(crash_context.rva);
+                    if (!crash_context.section.empty()) {
+                        stderr_stream << ", seção " << crash_context.section;
+                    }
+                    if (!crash_context.nearest_import.empty()) {
+                        stderr_stream << ", importação mais próxima "
+                                      << crash_context.nearest_import;
+                    }
+                    stderr_stream << ")";
+                }
+            }
+            stderr_stream << '\n';
         }
         return ExitCode::GuestFault;
     }

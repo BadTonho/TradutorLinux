@@ -311,6 +311,23 @@ if(TARGET tradutorlinux)
         LABELS "runtime;pe32plus"
     )
 
+    # O crash log enriquecido reporta o si_addr capturado no filho; a fixture
+    # desreferencia o endereço 0, então o campo aparece com valor 0x0 e os
+    # campos de contexto PE (rva/seção/importação) ficam ausentes.
+    add_test(
+        NAME runtime_tl_crash_fault_address
+        COMMAND "${CMAKE_COMMAND}"
+            "-DINPUT=${TL_FIXTURE_OUTPUT_DIRECTORY}/tl_crash.exe"
+            "-DRUNTIME=$<TARGET_FILE:tradutorlinux>"
+            "-DEXPECTED_EXIT=71"
+            "-DREQUIRED_TRACE=fault-address=\"0x0\""
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/verify_runtime_rejection.cmake"
+    )
+    set_tests_properties(runtime_tl_crash_fault_address PROPERTIES
+        DEPENDS fixture_tl_crash_metadata
+        LABELS "runtime;pe32plus"
+    )
+
     add_test(
         NAME runtime_tl_hang_timeout
         COMMAND "${CMAKE_COMMAND}"
