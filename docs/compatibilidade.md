@@ -17,14 +17,14 @@ Esta matriz declara o comportamento suportado; ela não é uma promessa de compa
 | `tl_timer.exe` | PE32+ AMD64 | Não | `KERNEL32.dll!ExitProcess`, `USER32.dll!RegisterClassExA`, `CreateWindowExA`, `ShowWindow`, `GetMessageA`, `DispatchMessageA`, `DefWindowProcA`, `SetTimer`, `KillTimer`, `DestroyWindow`, `PostQuitMessage` | Timer periódico de 200 ms: dois `WM_TIMER`, depois `KillTimer` + `DestroyWindow`; executado sob Xvfb (cenário `timer`, exit-code `7`) | Fase 7 |
 | `tl_gdi.exe` | PE32+ AMD64 | Não | `KERNEL32.dll!ExitProcess`, `USER32.dll!RegisterClassExA`, `CreateWindowExA`, `ShowWindow`, `UpdateWindow`, `GetMessageA`, `DispatchMessageA`, `DefWindowProcA`, `DestroyWindow`, `PostQuitMessage`, `BeginPaint`, `EndPaint`; `GDI32.dll!GetStockObject`, `TextOutA` | Pintura mínima no `WM_PAINT` (`BeginPaint`/`TextOutA`/`EndPaint`) validando `HDC == HWND` e `rcPaint`; executado sob Xvfb (cenário `gdi`, exit-code `3`) | Fase 7 |
 | `tl_reloc.exe` | PE32+ AMD64 | Não | Nenhum | Gerado com `-Wl,--dynamicbase`, verificado, parseado e mapeado na Fase 2; usado para validar base relocations | Fase 4 |
-| `tl_missing_dll.exe` | PE32+ AMD64 | Não | `USER32.dll!MessageBoxW` | Gerado, verificado e rejeitado na Fase 3: `USER32.dll` é conhecida, mas o símbolo diagnostica `unknown-symbol`; retorna `5` sem executar o entry point | Fase 4 |
+| `tl_missing_dll.exe` | PE32+ AMD64 | Não | `USER32.dll!TlUnknownSymbolW` | Gerado, verificado e rejeitado na Fase 3: `USER32.dll` é conhecida, mas o símbolo diagnostica `unknown-symbol`; retorna `5` sem executar o entry point. A import library do fixture é gerada via `dlltool` (`defs/tl_missing_dll.def`) porque o símbolo não existe nas bibliotecas reais do mingw | Fase 4 |
 | `tl_crash.exe` | PE32+ AMD64 | Não | Nenhum | Gerado, verificado, mapeado e executado em processo filho isolado: o convidado acessa o endereço `0`, o hospedeiro observa o `SIGSEGV` via `waitpid`, emite `terminated category="guest-signal" signal="SIGSEGV"` e retorna `71` (`GuestFault`) | Diagnóstico de falhas |
 | `tl_hang.exe` | PE32+ AMD64 | Não | Nenhum | Gerado, verificado e executado em processo filho isolado com `--timeout 1`: o convidado entra em loop infinito, o hospedeiro o mata com `SIGKILL`, emite `terminated category="guest-timeout"` e retorna `72` (`GuestTimeout`) | Diagnóstico de falhas |
 | `tl_thread.exe` | PE32+ AMD64 | Não | `KERNEL32.dll!CloseHandle`, `CreateThread`, `ExitProcess`, `ExitThread`, `GetStdHandle`, `WaitForSingleObject`, `WriteFile` | **Suportado no escopo da Fase 11**: cria duas threads sequenciais, cada uma escreve "Thread done" e termina via `ExitThread`; a thread principal aguarda cada handle, escreve "Main done" e encerra. Metadata e execução e2e passam em Debug, Release e Sanitize (`LSAN_OPTIONS=detect_leaks=0`); saída esperada: `Thread done\nThread done\nMain done\n` e exit `0` | Fase 11 |
 | `tl_files_wide.exe` | PE32+ AMD64 | Não | `KERNEL32.dll` — arquivos, metadados, tempos e caminhos Unicode | Fixture genérica suportada: cria arquivo com `é`, consulta tamanho/atributos/tempos, copia, move e remove; saída `files\n`, exit `0` | Base de arquivos |
 | `tl_resources.exe` | PE32+ AMD64 | Não | `KERNEL32.dll!FindResourceW`, `LoadResource`, `LockResource`, `SizeofResource` | Lê somente o recurso `RCDATA` embutido após validação de limites; saída byte-idêntica ao payload, exit `0`; `--report` não executa | Recursos PE |
 | `tl_sync.exe` | PE32+ AMD64 | Não | eventos, mutex, semáforo e esperas em `KERNEL32.dll` | Cobre evento manual/automático, timeout, semáforo, mutex recursivo e `WaitForMultipleObjects`; saída `sync\n`, exit `0` | Sincronização |
-| `tl_process_parent.exe` / `tl_process_child.exe` | PE32+ AMD64 | Não | `CreateProcessW`, `GetExitCodeProcess`, `TerminateProcess` e `WaitForSingleObject` | Pai cria filhos PE32+ pelo mesmo parser/loader/import resolver; valida código `7` e encerramento controlado `9`; saída `child\nparent\n`, exit `0` | Processos filhos |
+| `tl_process_parent.exe` / `tl_process_child.exe` | PE32+ AMD64 | Não | `CreateProcessW`, `GetExitCodeProcess`, `TerminateProcess` e `WaitForSingleObject` | Pai cria filhos PE32+ pelo mesmo parser/loader/import resolver; o código de saída real do convidado viaja pelo pipe de resultado do filho (protocolo `[flag][exit_code LE32]`) e o cache de `/proc/self/maps` é invalidado pós-fork e a cada mmap/munmap da pilha; valida código `7` e encerramento controlado `9`; saída `child\nparent\n`, exit `0`. `CreateProcessA/W` resolve caminhos relativos primeiro no diretório do executável convidado (ordem de busca do Windows) | Processos filhos |
 | `tl_network_loopback.exe` | PE32+ AMD64 | Não | `WS2_32.dll` TCP/UDP, resolução local e `WSAPoll` | Fixture somente loopback, com TCP, UDP e `localhost`; passa com sockets permitidos e é skip controlado em sandbox que retorna `EACCES/EPERM` | WS2_32 |
 | `tl_registry_unicode.exe` | PE32+ AMD64 | Não | `ADVAPI32.dll` chaves/valores Unicode | Cria, persiste, reabre, consulta e remove chave/valor UTF-16 em armazenamento genérico por escopo; saída `registry\n`, exit `0` | Registro |
 | `simple_todo.exe` | PE32+ AMD64 | mingw-w64 CRT | 105 imports em `GDI32`, `KERNEL32`, `msvcrt`, `SHELL32` e `USER32` | **Suportado no subconjunto da Fase 12**: fonte pinada no commit `bcdf3d5fcebb8c0b445edb791d54511194c1b6ca` com overlay Linux versionado; build e `--report` resolvem 105/105; `targetapp_simple_todo_gui_smoke` cobre o fluxo principal, persistência, menu da bandeja, encerramento pela bandeja e fechamento da janela, com coordenadas do layout Linux | Fase 12 |
@@ -144,7 +144,11 @@ deve ser validada manualmente numa sessão X11. `tl_win.exe`, `tl_win2.exe`,
 `WM_KEYDOWN`/`WM_CHAR`), a demultiplexação entre duas janelas simultâneas, o
 teclado estendido (`KeyPress`+`KeyRelease`, `Shift`, teclas sem caractere →
 `WM_KEYDOWN`/`WM_KEYUP`), os timers (`SetTimer` → `WM_TIMER` → `KillTimer`) e a
-pintura mínima (`BeginPaint`/`TextOut`/`EndPaint`) — ver
+pintura mínima (`BeginPaint`/`TextOut`/`EndPaint`). O driver valida também os
+traces de contrato do message loop: `GetMessageA ... result="quit"`,
+`ExitProcess ... mechanism="guest-transfer"`, `TranslateMessage ...
+status="translated"`, `SetTimer`/`GetMessageA(WM_TIMER)`/`KillTimer`,
+`BeginPaint`, `TextOut`, `Rectangle` e `FillRect` — ver
 [`gui-x11.md`](arquitetura/gui-x11.md).
 
 ## Simple Todo C (Fase 12)
@@ -419,6 +423,10 @@ processo filho; cada thread convidada recebe seu próprio TEB/GS, stack e
 - `CreateThread` não suporta `CREATE_SUSPENDED`; `stack_size == 0` usa o
   tamanho padrão (1 MiB).
 - `ExitThread` termina somente a thread corrente; não limpa destructors C++.
+- O fim de vida de threads convidadas usa trampolim `setjmp`/`longjmp`
+  (`thread_local`): `ExitThread` nunca atravessa `pthread_exit`; o `join` real
+  acontece em `CloseHandle` (com guarda contra fechamento duplo), que também
+  libera a pilha mapeada e invalida o cache de `/proc/self/maps`.
 - O fixture `tl_thread.exe` requer mingw-w64 para cross-build; a regressão e2e
   está coberta por `fixture_tl_thread_metadata` e
   `runtime_tl_thread_matches_readobj`.

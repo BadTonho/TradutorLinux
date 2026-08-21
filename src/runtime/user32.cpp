@@ -301,6 +301,13 @@ TL_MSABI int tl_GetMessageA(void* const msg, const void* const window,
     if (g_quit_requested) {
         g_quit_requested = false;
         write_guest_msg(msg, nullptr, abi::kWmQuit, g_quit_code, 0);
+        const std::array<diagnostics::TraceField, 4> fields{
+            diagnostics::TraceField{"symbol", "GetMessageA"},
+            diagnostics::TraceField{"message", "WM_QUIT"},
+            diagnostics::TraceField{"exit-code", std::to_string(g_quit_code)},
+            diagnostics::TraceField{"result", "quit"},
+        };
+        runtime_trace("GetMessageA", fields, 4);
         set_last_error(abi::kErrorSuccess);
         return 0;
     }
@@ -398,6 +405,13 @@ TL_MSABI int tl_GetMessageA(void* const msg, const void* const window,
                 if (now >= timer.deadline) {
                     write_guest_msg(msg, &slot, abi::kWmTimer, timer.id, 0);
                     timer.deadline = std::chrono::steady_clock::now() + timer.interval;
+                    const std::array<diagnostics::TraceField, 4> fields{
+                        diagnostics::TraceField{"symbol", "GetMessageA"},
+                        diagnostics::TraceField{"message", "WM_TIMER"},
+                        diagnostics::TraceField{"id", std::to_string(timer.id)},
+                        diagnostics::TraceField{"status", "delivered"},
+                    };
+                    runtime_trace("GetMessageA", fields, 4);
                     set_last_error(abi::kErrorSuccess);
                     return 1;
                 }
@@ -423,6 +437,13 @@ TL_MSABI int tl_TranslateMessage(const void* const msg) noexcept {
             slot->pending.lparam = 0;
             slot->last_key = '\0';
             slot->has_pending = true;
+            const std::array<diagnostics::TraceField, 4> fields{
+                diagnostics::TraceField{"symbol", "TranslateMessage"},
+                diagnostics::TraceField{"message", "WM_CHAR"},
+                diagnostics::TraceField{"wparam", std::to_string(slot->pending.wparam)},
+                diagnostics::TraceField{"status", "translated"},
+            };
+            runtime_trace("TranslateMessage", fields, 4);
             set_last_error(abi::kErrorSuccess);
             return 1;
         }
@@ -514,6 +535,13 @@ TL_MSABI std::uintptr_t tl_SetTimer(const void* const window,
     }
     timer->interval = interval;
     timer->deadline = std::chrono::steady_clock::now() + interval;
+    const std::array<diagnostics::TraceField, 4> fields{
+        diagnostics::TraceField{"symbol", "SetTimer"},
+        diagnostics::TraceField{"id", std::to_string(id)},
+        diagnostics::TraceField{"elapsed-ms", std::to_string(elapsed_ms)},
+        diagnostics::TraceField{"status", "success"},
+    };
+    runtime_trace("SetTimer", fields, 4);
     set_last_error(abi::kErrorSuccess);
     return id;
 }
@@ -531,6 +559,12 @@ TL_MSABI int tl_KillTimer(const void* const window, const std::uintptr_t id) noe
         return 0;
     }
     slot->timers.erase(found);
+    const std::array<diagnostics::TraceField, 4> fields{
+        diagnostics::TraceField{"symbol", "KillTimer"},
+        diagnostics::TraceField{"id", std::to_string(id)},
+        diagnostics::TraceField{"status", "success"},
+    };
+    runtime_trace("KillTimer", fields, 3);
     set_last_error(abi::kErrorSuccess);
     return 1;
 }
@@ -552,6 +586,11 @@ TL_MSABI void* tl_BeginPaint(const void* const window, void* const paint_struct)
     ps->f_erase = 1;
     ps->rc_paint = {0, 0, slot->width, slot->height};
     slot->painting = true;
+    const std::array<diagnostics::TraceField, 4> fields{
+        diagnostics::TraceField{"symbol", "BeginPaint"},
+        diagnostics::TraceField{"status", "success"},
+    };
+    runtime_trace("BeginPaint", fields, 2);
     set_last_error(abi::kErrorSuccess);
     return ps->hdc;
 }
@@ -568,6 +607,11 @@ TL_MSABI int tl_EndPaint(const void* const window, const void* const paint_struc
         return 0;
     }
     slot->painting = false;
+    const std::array<diagnostics::TraceField, 4> fields{
+        diagnostics::TraceField{"symbol", "EndPaint"},
+        diagnostics::TraceField{"status", "success"},
+    };
+    runtime_trace("EndPaint", fields, 2);
     set_last_error(abi::kErrorSuccess);
     return 1;
 }

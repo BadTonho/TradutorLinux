@@ -465,6 +465,15 @@ TL_MSABI void tl_ExitProcess(const std::uint32_t exit_code) noexcept {
         set_last_error(abi::kErrorInvalidParameter);
         return;
     }
+    {
+        const std::array<diagnostics::TraceField, 4> fields{
+            diagnostics::TraceField{"symbol", "ExitProcess"},
+            diagnostics::TraceField{"exit-code", std::to_string(exit_code)},
+            diagnostics::TraceField{"status", "success"},
+            diagnostics::TraceField{"mechanism", "guest-transfer"},
+        };
+        runtime_trace("ExitProcess", fields, 4);
+    }
     g_guest_exit_code = exit_code;
     std::longjmp(g_guest_exit_context, 1);
 }

@@ -394,6 +394,7 @@ TL_MSABI int tl_WideCharToMultiByte(std::uint32_t code_page, std::uint32_t flags
     if (wide_str == nullptr || wide_count == 0 || wide_count < -1 || !supported_page ||
         (flags & ~(abi::kWcCompositeCheck | abi::kWcNoBestFitChars)) != 0U ||
         (mb_count != 0 && mb_str == nullptr) ||
+        (default_char != nullptr && !mapped_guest_range(default_char, sizeof(*default_char), false)) ||
         (used_default_char != nullptr &&
          !mapped_guest_range(used_default_char, sizeof(*used_default_char), true))) {
         set_last_error(abi::kErrorInvalidParameter);
@@ -914,6 +915,11 @@ TL_MSABI int tl_Rectangle(const void* dc, int left, int top, int right, int bott
         gui::draw_rectangle(slot->native, left, top, right - left, bottom - top);
         gui::flush_window(slot->native);
     }
+    const std::array<diagnostics::TraceField, 4> fields{
+        diagnostics::TraceField{"symbol", "Rectangle"},
+        diagnostics::TraceField{"status", "success"},
+    };
+    runtime_trace("Rectangle", fields, 2);
     set_last_error(abi::kErrorSuccess);
     return 1;
 }

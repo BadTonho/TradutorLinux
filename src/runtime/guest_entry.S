@@ -17,3 +17,5 @@ tl_call_guest_on_stack:
     popq %r12
     retq
 .size tl_call_guest_on_stack, .-tl_call_guest_on_stack
+
+.section .note.GNU-stack,"",@progbits
