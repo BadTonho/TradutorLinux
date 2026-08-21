@@ -67,4 +67,14 @@ Compatibilidade ampla é o objetivo de longo prazo, não uma autorização para 
 4. Valide no Linux x86-64 e registre limitações honestamente.
 5. Pare e peça direção antes de expandir o escopo além dos documentos do projeto.
 
+## Commits
+
+- **Nunca faça commit automático.** Só crie, altere (amend) ou envie commits
+  quando o usuário pedir explicitamente.
+- Antes de commitar, inspecione `git status` e `git diff` e inclua apenas os
+  arquivos da mudança pretendida; nunca inclua artefatos de execução de testes
+  (arquivos gerados na raiz, bancos locais, diretórios temporários).
+- Se houver qualquer hook, integração ou ferramenta que comita sozinha,
+  avise o usuário em vez de deixar o commit acontecer.
+
 Se uma solicitação conflitar com estas diretrizes, explique o conflito, proponha o menor ajuste que preserve a missão e espere decisão do usuário antes de ampliar o escopo.

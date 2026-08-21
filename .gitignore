@@ -2,6 +2,11 @@
 /compile_commands.json
 /.cache/
 
+# Artefatos gerados por execuções de teste na raiz do repositório
+.tl-registry.db
+_tl_wide_dir/
+*.input
+
 # IDEs and operating systems
 .idea/
 .vscode/*.log
