@@ -19,7 +19,7 @@ set(TL_FIXTURE_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/generated")
 
 function(tl_add_pe_fixture target_name source_file manifest_file)
     set(options LINK_KERNEL32 LINK_USER32 LINK_GDI32 LINK_WS2_32 LINK_ADVAPI32 RELOCATABLE RUNTIME_FAILURE EXPECT_RESOLVED CONSOLE REPORT REPORT_ONLY NO_RUNTIME_CHECK)
-    set(oneValueArgs REPORT_SYMBOL RESOURCE_FILE)
+    set(oneValueArgs REPORT_SYMBOL RESOURCE_FILE IMPORT_DEF)
     cmake_parse_arguments(ARG "${options}" "${oneValueArgs}" "" ${ARGN})
 
     set(output_file "${TL_FIXTURE_OUTPUT_DIRECTORY}/${target_name}.exe")
@@ -54,6 +54,24 @@ function(tl_add_pe_fixture target_name source_file manifest_file)
     if(ARG_LINK_ADVAPI32)
         list(APPEND link_libraries -ladvapi32)
     endif()
+    if(ARG_IMPORT_DEF)
+        find_program(TL_MINGW_DLLTOOL
+            NAMES x86_64-w64-mingw32-dlltool
+            REQUIRED
+        )
+        set(import_lib "${TL_FIXTURE_OUTPUT_DIRECTORY}/${target_name}.imports.a")
+        add_custom_command(
+            OUTPUT "${import_lib}"
+            COMMAND "${CMAKE_COMMAND}" -E make_directory "${TL_FIXTURE_OUTPUT_DIRECTORY}"
+            COMMAND "${TL_MINGW_DLLTOOL}" -m i386:x86-64
+                -d "${CMAKE_CURRENT_SOURCE_DIR}/${ARG_IMPORT_DEF}"
+                -l "${import_lib}"
+            DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/${ARG_IMPORT_DEF}"
+            COMMENT "Generating import library for ${target_name}.exe"
+            VERBATIM
+        )
+        list(APPEND link_libraries "${import_lib}")
+    endif()
     if(ARG_RELOCATABLE)
         list(APPEND link_flags -Wl,--dynamicbase)
     endif()
@@ -80,6 +98,7 @@ function(tl_add_pe_fixture target_name source_file manifest_file)
             "${CMAKE_CURRENT_SOURCE_DIR}/${source_file}"
             "${CMAKE_CURRENT_SOURCE_DIR}/${manifest_file}"
             ${resource_object}
+            ${import_lib}
         VERBATIM
         COMMENT "Generating PE32+ fixture ${target_name}.exe"
     )
@@ -159,6 +178,7 @@ function(tl_add_pe_fixture target_name source_file manifest_file)
         )
         set_tests_properties(runtime_${target_name}_matches_readobj PROPERTIES
             DEPENDS fixture_${target_name}_metadata
+            WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"
             LABELS "runtime;pe32plus"
         )
     endif()
@@ -175,6 +195,7 @@ function(tl_add_pe_fixture target_name source_file manifest_file)
         )
         set_tests_properties(runtime_${target_name}_rejected PROPERTIES
             DEPENDS fixture_${target_name}_metadata
+            WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"
             LABELS "runtime;pe32plus"
         )
     endif()
@@ -213,7 +234,7 @@ tl_add_pe_fixture(tl_file src/tl_file.c manifests/tl_file.json
     LINK_KERNEL32 EXPECT_RESOLVED CONSOLE REPORT RELOCATABLE)
 tl_add_pe_fixture(tl_reloc src/tl_reloc.c manifests/tl_reloc.json RELOCATABLE)
 tl_add_pe_fixture(tl_missing_dll src/tl_missing_dll.c manifests/tl_missing_dll.json
-    LINK_USER32 RUNTIME_FAILURE RELOCATABLE)
+    IMPORT_DEF defs/tl_missing_dll.def RUNTIME_FAILURE RELOCATABLE)
 tl_add_pe_fixture(tl_gui src/tl_gui.c manifests/tl_gui.json
     LINK_KERNEL32 LINK_USER32 EXPECT_RESOLVED REPORT_ONLY RELOCATABLE)
 tl_add_pe_fixture(tl_win src/tl_win.c manifests/tl_win.json

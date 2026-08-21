@@ -268,13 +268,14 @@ TEST(Win32EnvTest, GetEnvironmentVariableAFindsPath) {
     std::vector<char> buffer(needed + 1, '\0');
     const std::uint32_t written = tl_GetEnvironmentVariableA("PATH", buffer.data(),
                                                                needed + 1);
-    EXPECT_EQ(written, needed);
+    // Sucesso retorna o número de caracteres copiados, sem o terminador.
+    EXPECT_EQ(written, needed - 1);
     EXPECT_GT(std::strlen(buffer.data()), 0U);
 }
 
 TEST(Win32EnvTest, GetEnvironmentVariableAMissingReturnsZero) {
     EXPECT_EQ(tl_GetEnvironmentVariableA("TL_NONEXISTENT_VAR_12345", nullptr, 0), 0U);
-    EXPECT_EQ(tl_GetLastError(), abi::kErrorFileNotFound);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorEnvvarNotFound);
 }
 
 TEST(Win32EnvTest, GetEnvironmentVariableAInsufficientBuffer) {

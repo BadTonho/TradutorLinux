@@ -172,8 +172,13 @@ bool translate_windows_path(const char* win_path,
     }
 
     std::string_view view{win_path};
+    // Caminhos absolutos do hospedeiro ("/...") não são caminhos Windows válidos
+    // para o convidado: rejeitar para o chamador reportar ERROR_INVALID_PARAMETER.
+    if (view.starts_with('/')) {
+        return false;
+    }
     if ((view.size() >= 2 && std::isalpha(static_cast<unsigned char>(view[0])) && view[1] == ':') ||
-        view.starts_with('\\') || view.starts_with('/')) {
+        view.starts_with('\\')) {
         const std::filesystem::path resolved = prefix::resolve_windows_path(view);
         const std::string s = resolved.string();
         if (s.size() + 1 > out_size) {
@@ -304,6 +309,31 @@ std::uint32_t wait_process_slot(SyncSlot& slot, const std::uint32_t milliseconds
             slot.process_running = false;
             slot.process_exit_code = WIFEXITED(status) ? static_cast<std::uint32_t>(WEXITSTATUS(status)) : 1U;
             if (slot.child_result_fd >= 0) {
+                // O filho reporta o resultado real do convidado pelo pipe:
+                // [flag explícito][exit_code LE32]. Sem mensagem completa,
+                // mantém o código derivado do waitpid.
+                constexpr std::size_t kChildResultMessageSize = 5;
+                std::array<std::byte, kChildResultMessageSize> message{};
+                std::size_t received = 0;
+                while (received < message.size()) {
+                    const ssize_t count = ::read(slot.child_result_fd,
+                                                 message.data() + received,
+                                                 message.size() - received);
+                    if (count < 0 && errno == EINTR) {
+                        continue;
+                    }
+                    if (count <= 0) {
+                        break;
+                    }
+                    received += static_cast<std::size_t>(count);
+                }
+                if (received == message.size()) {
+                    slot.process_exit_code =
+                        static_cast<std::uint32_t>(message[1]) |
+                        (static_cast<std::uint32_t>(message[2]) << 8U) |
+                        (static_cast<std::uint32_t>(message[3]) << 16U) |
+                        (static_cast<std::uint32_t>(message[4]) << 24U);
+                }
                 ::close(slot.child_result_fd);
                 slot.child_result_fd = -1;
             }

@@ -207,7 +207,9 @@ NtStatus NtFreeVirtualMemory(void* BaseAddress,
     {
         std::lock_guard<std::mutex> lock(g_allocations_mutex);
         auto it = std::find_if(g_allocations.begin(), g_allocations.end(),
-                               [BaseAddress](const AllocationSlot& s) { return s.address == BaseAddress; });
+                               [BaseAddress](const AllocationSlot& s) {
+                                   return !s.view && s.address == BaseAddress;
+                               });
         if (it == g_allocations.end()) {
             trace_nt("NtFreeVirtualMemory", "endereço não alocado por NtAllocateVirtualMemory", NtStatus::MemoryNotAllocated);
             return NtStatus::MemoryNotAllocated;

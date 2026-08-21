@@ -6,7 +6,7 @@
   "uses_crt": false,
   "imports": {
     "USER32.dll": [
-      "MessageBoxW"
+      "TlUnknownSymbolW"
     ]
   }
 }

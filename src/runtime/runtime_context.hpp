@@ -81,6 +81,7 @@ struct FileSlot {
 struct AllocationSlot {
     void* address{nullptr};
     std::size_t size{0};
+    bool view{false};  // true: visão de MapViewOfFile; false: NtAllocateVirtualMemory
 };
 
 extern std::mutex g_files_mutex;
@@ -145,6 +146,7 @@ struct ThreadSlot {
     std::uint32_t thread_id{};
     void* teb{nullptr};
     std::byte* stack{nullptr};
+    std::size_t stack_size{0};
     std::uintptr_t stack_top{};
     std::function<void()> thread_func;
     std::thread host_thread;

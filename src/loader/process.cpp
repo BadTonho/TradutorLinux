@@ -1,6 +1,7 @@
 #include "tradutorlinux/loader/process.hpp"
 
 #include "tradutorlinux/loader/module.hpp"
+#include "tradutorlinux/runtime/memory_validator.hpp"
 #include "tradutorlinux/util/basics.hpp"
 
 #include <algorithm>
@@ -57,6 +58,7 @@ PrepareResult prepare_process(const pe::PeInfo& info, const std::span<const std:
         return fail_prepare(PrepareStatus::OutOfMemory,
                             "não foi possível alocar a pilha do thread inicial");
     }
+    runtime::invalidate_memory_map_cache();
     if (mprotect(stack, guard_size, PROT_NONE) != 0) {
         const int error = errno;
         munmap(stack, total_stack_size);
@@ -89,6 +91,7 @@ PrepareResult prepare_process(const pe::PeInfo& info, const std::span<const std:
 void destroy_process(GuestProcess& process) {
     if (process.stack != nullptr && process.stack_size > 0) {
         munmap(process.stack, process.stack_size);
+        runtime::invalidate_memory_map_cache();
     }
     process.stack = nullptr;
     process.stack_size = 0;

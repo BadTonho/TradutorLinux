@@ -1,6 +1,7 @@
 #include "tradutorlinux/runtime/winapi.hpp"
 #include "runtime_context.hpp"
 #include "tradutorlinux/loader/import_resolver.hpp"
+#include "tradutorlinux/loader/module.hpp"
 #include "tradutorlinux/prefix/prefix.hpp"
 #include "tradutorlinux/runtime/error_map.hpp"
 #include "tradutorlinux/runtime/msvcrt.hpp"
@@ -10,9 +11,11 @@
 
 #include <algorithm>
 #include <array>
+#include <cctype>
 #include <chrono>
 #include <cstdint>
 #include <cstring>
+#include <cstdio>
 #include <ctime>
 #include <fstream>
 #include <limits>
@@ -51,6 +54,14 @@ constexpr std::uint32_t kStillActive = 259U;
 constexpr std::uint32_t kChildProcessFailure = 0xC0000001U;
 constexpr std::size_t kChildProcessProtocolSize = 5;
 
+void* const kInvalidHandleValue = reinterpret_cast<void*>(~static_cast<std::uintptr_t>(0));  // INVALID_HANDLE_VALUE
+
+// Ponto de retorno para ExitThread dentro de threads convidadas. pthread_exit é
+// proibido aqui: dentro de std::thread ele dispara unwinding forçado do
+// libstdc++ e termina o processo com SIGABRT.
+thread_local std::jmp_buf* t_thread_exit_context = nullptr;
+thread_local ThreadSlot* t_thread_exit_slot = nullptr;
+
 struct GuestFileTime {
     std::uint32_t low{};
     std::uint32_t high{};
@@ -80,6 +91,23 @@ struct GuestByHandleFileInformation {
     std::uint32_t file_index_low{};
 };
 static_assert(sizeof(GuestByHandleFileInformation) == 52);
+
+// O "handle" de um objeto de mapeamento é o ponteiro do slot em g_mappings
+// entregue ao convidado. Antes de dereferenciar, provar que o ponteiro está
+// dentro dos limites do array, alinhado e em uso.
+FileMappingSlot* find_file_mapping_slot_locked(const void* handle) noexcept {
+    if (handle == nullptr) {
+        return nullptr;
+    }
+    const auto addr = std::bit_cast<std::uintptr_t>(handle);
+    const auto begin = std::bit_cast<std::uintptr_t>(g_mappings.data());
+    const auto end = begin + g_mappings.size() * sizeof(FileMappingSlot);
+    if (addr < begin || addr >= end || (addr - begin) % sizeof(FileMappingSlot) != 0) {
+        return nullptr;
+    }
+    auto* slot = static_cast<FileMappingSlot*>(const_cast<void*>(handle));
+    return slot->used ? slot : nullptr;
+}
 
 struct GuestProcessInformation {
     void* process_handle{};
@@ -359,6 +387,9 @@ bool read_guest_file_for_process(const char* path, std::vector<std::byte>& bytes
 }
 
 [[noreturn]] void run_created_guest_child(const std::string& path, const int result_fd) noexcept {
+    // O fork copiou o cache de /proc/self/maps do pai: este processo fará
+    // novos mapeamentos (imagem, pilha), então o cache precisa recomeçar.
+    runtime::invalidate_memory_map_cache();
     GuestExecutionResult result{};
     std::vector<std::byte> bytes;
     if (!read_guest_file_for_process(path.c_str(), bytes)) {
@@ -442,13 +473,23 @@ TL_MSABI int tl_WriteFile(const void* const handle, const void* const buffer,
                           const std::uint32_t bytes_to_write,
                           std::uint32_t* const bytes_written,
                           void* const overlapped) noexcept {
-    if (overlapped != nullptr || !mapped_guest_range(buffer, bytes_to_write, false) ||
-        (bytes_written != nullptr && !mapped_guest_range(bytes_written, sizeof(*bytes_written), true))) {
+    if (bytes_written != nullptr &&
+        !mapped_guest_range(bytes_written, sizeof(*bytes_written), true)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    if (overlapped != nullptr || !mapped_guest_range(buffer, bytes_to_write, false)) {
+        if (bytes_written != nullptr) {
+            *bytes_written = 0;
+        }
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
     const int fd = handle_fd(handle);
     if (fd < 0) {
+        if (bytes_written != nullptr) {
+            *bytes_written = 0;
+        }
         set_last_error(abi::kErrorInvalidHandle);
         return 0;
     }
@@ -461,7 +502,12 @@ TL_MSABI int tl_WriteFile(const void* const handle, const void* const buffer,
     }
     const ssize_t written = ::write(fd, buffer, bytes_to_write);
     if (written < 0) {
-        set_last_error(errno_to_win32(errno));
+        const std::uint32_t win32_error = errno_to_win32(errno);
+        trace_linux_failure("WriteFile", "write", errno, win32_error);
+        if (bytes_written != nullptr) {
+            *bytes_written = 0;
+        }
+        set_last_error(win32_error);
         return 0;
     }
     if (bytes_written != nullptr) {
@@ -475,13 +521,23 @@ TL_MSABI int tl_ReadFile(const void* const handle, void* const buffer,
                          const std::uint32_t bytes_to_read,
                          std::uint32_t* const bytes_read,
                          void* const overlapped) noexcept {
-    if (overlapped != nullptr || !mapped_guest_range(buffer, bytes_to_read, true) ||
-        (bytes_read != nullptr && !mapped_guest_range(bytes_read, sizeof(*bytes_read), true))) {
+    if (bytes_read != nullptr &&
+        !mapped_guest_range(bytes_read, sizeof(*bytes_read), true)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    if (overlapped != nullptr || !mapped_guest_range(buffer, bytes_to_read, true)) {
+        if (bytes_read != nullptr) {
+            *bytes_read = 0;
+        }
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
     const int fd = handle_fd(handle);
     if (fd < 0) {
+        if (bytes_read != nullptr) {
+            *bytes_read = 0;
+        }
         set_last_error(abi::kErrorInvalidHandle);
         return 0;
     }
@@ -494,7 +550,12 @@ TL_MSABI int tl_ReadFile(const void* const handle, void* const buffer,
     }
     const ssize_t read_bytes = ::read(fd, buffer, bytes_to_read);
     if (read_bytes < 0) {
-        set_last_error(errno_to_win32(errno));
+        const std::uint32_t win32_error = errno_to_win32(errno);
+        trace_linux_failure("ReadFile", "read", errno, win32_error);
+        if (bytes_read != nullptr) {
+            *bytes_read = 0;
+        }
+        set_last_error(win32_error);
         return 0;
     }
     if (bytes_read != nullptr) {
@@ -606,26 +667,55 @@ TL_MSABI int tl_CloseHandle(const void* const handle) noexcept {
         set_last_error(abi::kErrorSuccess);
         return 1;
     }
+    {
+        std::lock_guard<std::mutex> lock(g_mapping_mutex);
+        if (FileMappingSlot* slot = find_file_mapping_slot_locked(handle); slot != nullptr) {
+            // Fechar o objeto não desmapeia visões existentes (semântica Windows).
+            if (slot->fd >= 0) {
+                ::close(slot->fd);
+            }
+            slot->used = false;
+            slot->fd = -1;
+            slot->size = 0;
+            slot->protect = 0;
+            slot->name.clear();
+            set_last_error(abi::kErrorSuccess);
+            return 1;
+        }
+    }
     if (ThreadSlot* slot = find_thread_slot(handle); slot != nullptr) {
-        std::lock_guard<std::mutex> lock(g_threads_mutex);
-        if (slot->host_thread.joinable()) {
+        bool do_join = false;
+        {
+            std::lock_guard<std::mutex> lock(g_threads_mutex);
+            if (!slot->joined) {
+                slot->joined = true;
+                do_join = true;
+            }
+        }
+        // Join fora de g_threads_mutex: segurar o mutex durante o join
+        // bloquearia outras APIs que consultam slots a partir das próprias
+        // threads convidadas.
+        if (do_join && slot->host_thread.joinable()) {
             slot->host_thread.join();
         }
+        std::lock_guard<std::mutex> lock(g_threads_mutex);
         if (slot->teb != nullptr) {
             free_guest_teb(slot->teb);
         }
-        if (slot->stack != nullptr) {
-            munmap(slot->stack, 0x100000U);
+        if (slot->stack != nullptr && slot->stack_size > 0) {
+            munmap(slot->stack, slot->stack_size);
         }
         slot->used = false;
         slot->thread_id = 0;
         slot->teb = nullptr;
         slot->stack = nullptr;
+        slot->stack_size = 0;
         slot->stack_top = 0;
         slot->thread_func = {};
         slot->finished = false;
         slot->joined = false;
         slot->exit_code = 0;
+        runtime::invalidate_memory_map_cache();
         set_last_error(abi::kErrorSuccess);
         return 1;
     }
@@ -707,6 +797,15 @@ TL_MSABI void tl_GetSystemTimeAsFileTime(void* file_time) noexcept {
     *ft = ticks_100ns + epoch_diff;
 }
 
+// O cache file_size fica stale após WriteFile; o tamanho verdadeiro vem do fd.
+std::uint64_t current_file_size(const FileSlot& slot) noexcept {
+    struct stat st{};
+    if (::fstat(slot.fd, &st) == 0) {
+        return static_cast<std::uint64_t>(st.st_size);
+    }
+    return slot.file_size;
+}
+
 TL_MSABI std::uint32_t tl_GetFileSize(const void* handle, std::uint32_t* high_size) noexcept {
     const FileSlot* slot = find_file_slot(handle);
     if (slot == nullptr) {
@@ -717,11 +816,12 @@ TL_MSABI std::uint32_t tl_GetFileSize(const void* handle, std::uint32_t* high_si
         set_last_error(abi::kErrorInvalidParameter);
         return 0xFFFFFFFFU;
     }
+    const std::uint64_t size = current_file_size(*slot);
     if (high_size != nullptr) {
-        *high_size = static_cast<std::uint32_t>(slot->file_size >> 32);
+        *high_size = static_cast<std::uint32_t>(size >> 32);
     }
     set_last_error(abi::kErrorSuccess);
-    return static_cast<std::uint32_t>(slot->file_size & 0xFFFFFFFFU);
+    return static_cast<std::uint32_t>(size & 0xFFFFFFFFU);
 }
 
 TL_MSABI std::int32_t tl_SetFilePointer(const void* handle, std::int32_t distance,
@@ -748,7 +848,7 @@ TL_MSABI std::int32_t tl_SetFilePointer(const void* handle, std::int32_t distanc
     switch (move_method) {
         case kFileBegin: new_pos = offset; break;
         case kFileCurrent: new_pos = slot->position + offset; break;
-        case kFileEnd: new_pos = static_cast<std::int64_t>(slot->file_size) + offset; break;
+        case kFileEnd: new_pos = static_cast<std::int64_t>(current_file_size(*slot)) + offset; break;
     }
     if (new_pos < 0) {
         set_last_error(abi::kErrorInvalidParameter);
@@ -871,12 +971,12 @@ TL_MSABI void* tl_FindFirstFileA(const char* file_name, void* find_data) noexcep
     if (!mapped_guest_cstring(file_name) || file_name == nullptr || find_data == nullptr ||
         !mapped_guest_range(find_data, sizeof(Win32FindDataA), true)) {
         set_last_error(abi::kErrorInvalidParameter);
-        return nullptr;
+        return kInvalidHandleValue;
     }
     char normalized[4096]{};
     if (!translate_windows_path(file_name, normalized, sizeof(normalized))) {
         set_last_error(abi::kErrorInvalidParameter);
-        return nullptr;
+        return kInvalidHandleValue;
     }
     std::string path_str{normalized};
     std::string directory;
@@ -892,13 +992,13 @@ TL_MSABI void* tl_FindFirstFileA(const char* file_name, void* find_data) noexcep
     DIR* dir = opendir(directory.c_str());
     if (dir == nullptr) {
         set_last_error(errno_to_win32(errno));
-        return nullptr;
+        return kInvalidHandleValue;
     }
     auto it = std::find_if(g_find_slots.begin(), g_find_slots.end(), [](const FindSlot& s) { return !s.used; });
     if (it == g_find_slots.end()) {
         closedir(dir);
         set_last_error(abi::kErrorNotEnoughMemory);
-        return nullptr;
+        return kInvalidHandleValue;
     }
     it->used = true;
     it->dir = dir;
@@ -908,7 +1008,7 @@ TL_MSABI void* tl_FindFirstFileA(const char* file_name, void* find_data) noexcep
         kFindHandleBase + static_cast<std::uintptr_t>(it - g_find_slots.begin()));
     if (tl_FindNextFileA(handle, find_data) == 0) {
         tl_FindClose(handle);
-        return nullptr;
+        return kInvalidHandleValue;
     }
     return const_cast<void*>(handle);
 }
@@ -922,6 +1022,10 @@ TL_MSABI int tl_FindNextFileA(const void* handle, void* find_data) noexcept {
     }
     struct dirent* entry = nullptr;
     while ((entry = readdir(slot->dir)) != nullptr) {
+        // Windows nunca devolve "." nem ".." na enumeração.
+        if (std::strcmp(entry->d_name, ".") == 0 || std::strcmp(entry->d_name, "..") == 0) {
+            continue;
+        }
         if (slot->pattern == "*" || slot->pattern == "*.*" || slot->pattern == entry->d_name) {
             auto* data = static_cast<Win32FindDataA*>(find_data);
         *data = {};
@@ -972,10 +1076,6 @@ TL_MSABI std::uint32_t tl_WaitForSingleObject(const void* const handle,
     }
     if (ThreadSlot* thread = find_thread_slot(handle); thread != nullptr) {
         std::unique_lock<std::mutex> lock(thread->join_mutex);
-        if (thread->joined) {
-            set_last_error(abi::kErrorInvalidHandle);
-            return abi::kWaitFailed;
-        }
         const auto predicate = [&]() { return thread->finished; };
         if (milliseconds == abi::kInfinite) {
             thread->finish_cv.wait(lock, predicate);
@@ -983,7 +1083,6 @@ TL_MSABI std::uint32_t tl_WaitForSingleObject(const void* const handle,
             set_last_error(abi::kErrorSuccess);
             return abi::kWaitTimeout;
         }
-        thread->joined = true;
         set_last_error(abi::kErrorSuccess);
         return abi::kWaitObject0;
     }
@@ -1252,23 +1351,36 @@ TL_MSABI int tl_InitializeCriticalSectionAndSpinCount(void* critical_section,
 }
 
 TL_MSABI void tl_EnterCriticalSection(void* critical_section) noexcept {
+    if (critical_section == nullptr) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return;
+    }
     CriticalSectionEntry* entry = find_cs_entry(critical_section);
     if (entry != nullptr) {
         pthread_mutex_lock(&entry->mutex);
+        set_last_error(abi::kErrorSuccess);
+        return;
     }
-    set_last_error(abi::kErrorSuccess);
+    set_last_error(abi::kErrorInvalidParameter);
 }
 
 TL_MSABI void tl_LeaveCriticalSection(void* critical_section) noexcept {
+    if (critical_section == nullptr) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return;
+    }
     CriticalSectionEntry* entry = find_cs_entry(critical_section);
     if (entry != nullptr) {
         pthread_mutex_unlock(&entry->mutex);
+        set_last_error(abi::kErrorSuccess);
+        return;
     }
-    set_last_error(abi::kErrorSuccess);
+    set_last_error(abi::kErrorInvalidParameter);
 }
 
 TL_MSABI void tl_DeleteCriticalSection(void* critical_section) noexcept {
     if (critical_section == nullptr) {
+        set_last_error(abi::kErrorInvalidParameter);
         return;
     }
     std::lock_guard<std::mutex> lock(g_cs_mutex);
@@ -1329,33 +1441,51 @@ TL_MSABI void* tl_CreateThread(const void* thread_attributes, const std::uintptr
     it->thread_id = g_next_thread_id.fetch_add(1);
     it->teb = teb;
     it->stack = static_cast<std::byte*>(stack);
+    it->stack_size = real_stack_size;
     it->stack_top = stack_top;
     it->finished = false;
     it->joined = false;
     it->exit_code = 0;
+    // A pilha e o TEB novos alteram o mapa de memória visível ao validador.
+    runtime::invalidate_memory_map_cache();
     if (thread_id != nullptr) {
         *thread_id = it->thread_id;
     }
     using ThreadProc = TL_MSABI std::uint32_t (*)(const void*);
     auto proc = reinterpret_cast<ThreadProc>(start_address);
-    it->host_thread = std::thread([slot_ptr = &*it, proc, parameter, teb, stack_top]() {
+    it->host_thread = std::thread([slot_ptr = &*it, proc, parameter, teb]() {
         g_current_thread_id = slot_ptr->thread_id;
         set_guest_gs_base(teb);
-        slot_ptr->exit_code = static_cast<int>(proc(parameter));
+        std::jmp_buf exit_point{};
+        t_thread_exit_context = &exit_point;
+        t_thread_exit_slot = slot_ptr;
+        if (setjmp(exit_point) == 0) {
+            slot_ptr->exit_code = static_cast<int>(proc(parameter));
+        }
+        // Após longjmp, ler o slot pelo TLS (não depender de registradores).
+        ThreadSlot* const finished_slot = t_thread_exit_slot;
+        t_thread_exit_context = nullptr;
+        t_thread_exit_slot = nullptr;
         set_guest_gs_base(nullptr);
         {
-            std::lock_guard<std::mutex> join_lock(slot_ptr->join_mutex);
-            slot_ptr->finished = true;
+            std::lock_guard<std::mutex> join_lock(finished_slot->join_mutex);
+            finished_slot->finished = true;
         }
-        slot_ptr->finish_cv.notify_all();
+        finished_slot->finish_cv.notify_all();
     });
     set_last_error(abi::kErrorSuccess);
     return thread_slot_to_handle(*it);
 }
 
 TL_MSABI void tl_ExitThread(std::uint32_t exit_code) noexcept {
-    (void)exit_code;
-    pthread_exit(nullptr);
+    if (std::jmp_buf* context = t_thread_exit_context; context != nullptr) {
+        if (ThreadSlot* slot = t_thread_exit_slot; slot != nullptr) {
+            slot->exit_code = static_cast<int>(exit_code);
+        }
+        std::longjmp(*context, 1);
+    }
+    // Thread primária: encerrar a última thread encerra o processo.
+    tl_ExitProcess(exit_code);
 }
 
 TL_MSABI std::uint32_t tl_GetCurrentThreadId() noexcept {
@@ -1367,13 +1497,18 @@ TL_MSABI std::uint32_t tl_GetCurrentProcessId() noexcept {
 }
 
 TL_MSABI const char* tl_GetCommandLineA() noexcept {
-    return g_guest_acmdln != nullptr ? g_guest_acmdln : "";
+    if (g_guest_acmdln != nullptr) {
+        return g_guest_acmdln;
+    }
+    // Windows nunca devolve linha de comando vazia; fora de execução de
+    // convidado (ex.: testes), devolve um padrão mínimo.
+    static const char kDefaultCommandLine[] = "guest.exe";
+    return kDefaultCommandLine;
 }
 
 TL_MSABI const std::uint16_t* tl_GetCommandLineW() noexcept {
     static std::vector<std::uint16_t> wide_cmd;
-    const std::string utf8 = g_guest_acmdln != nullptr ? g_guest_acmdln : "";
-    const std::u16string u16 = util::utf8_to_wide(utf8);
+    const std::u16string u16 = util::utf8_to_wide(tl_GetCommandLineA());
     wide_cmd.assign(u16.begin(), u16.end());
     wide_cmd.push_back(0);
     return wide_cmd.data();
@@ -1396,7 +1531,9 @@ TL_MSABI std::uint32_t tl_GetEnvironmentVariableA(const char* name, char* buffer
     }
     if (size <= len) {
         set_last_error(abi::kErrorInsufficientBuffer);
-        return static_cast<std::uint32_t>(len);
+        // MSDN: com buffer insuficiente, devolve o tamanho necessário
+        // incluindo o terminador nulo.
+        return static_cast<std::uint32_t>(len + 1);
     }
     std::memcpy(buffer, value, len);
     buffer[len] = '\0';
@@ -1469,14 +1606,24 @@ TL_MSABI std::uint32_t tl_GetCurrentDirectoryW(std::uint32_t buffer_length, std:
 TL_MSABI std::uint32_t tl_GetModuleFileNameA(const void* module, char* filename,
                                               std::uint32_t size) noexcept {
     (void)module;
-    if (filename == nullptr || size == 0 || !mapped_guest_range(filename, size, true)) {
+    const std::string& path = g_module_file_name;
+    if (filename == nullptr || size == 0) {
+        // MSDN: sem buffer, devolve o tamanho necessário (com terminador).
+        set_last_error(abi::kErrorSuccess);
+        return static_cast<std::uint32_t>(path.size() + 1);
+    }
+    if (!mapped_guest_range(filename, size, true)) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
-    const std::string& path = g_module_file_name;
-    const std::string win_path = prefix::to_windows_path(path);
-    const std::size_t len = std::min<std::size_t>(win_path.size(), size - 1);
-    std::memcpy(filename, win_path.data(), len);
+    const std::size_t len = path.size();
+    if (len + 1 > size) {
+        std::memcpy(filename, path.data(), size - 1);
+        filename[size - 1] = '\0';
+        set_last_error(abi::kErrorInsufficientBuffer);
+        return size;
+    }
+    std::memcpy(filename, path.data(), len);
     filename[len] = '\0';
     set_last_error(abi::kErrorSuccess);
     return static_cast<std::uint32_t>(len);
@@ -1485,15 +1632,23 @@ TL_MSABI std::uint32_t tl_GetModuleFileNameA(const void* module, char* filename,
 TL_MSABI std::uint32_t tl_GetModuleFileNameW(const void* module, std::uint16_t* filename,
                                               std::uint32_t size) noexcept {
     (void)module;
-    if (filename == nullptr || size == 0 || !mapped_guest_range(filename, size * sizeof(std::uint16_t), true)) {
+    if (filename == nullptr || size == 0) {
+        set_last_error(abi::kErrorSuccess);
+        return static_cast<std::uint32_t>(g_module_file_name.size() + 1);
+    }
+    if (!mapped_guest_range(filename, static_cast<std::size_t>(size) * sizeof(std::uint16_t), true)) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
-    const std::string& path = g_module_file_name;
-    const std::string win_path = prefix::to_windows_path(path);
-    const std::u16string wide_path = util::utf8_to_wide(win_path);
-    const std::size_t len = std::min<std::size_t>(wide_path.size(), size - 1);
-    std::copy(wide_path.begin(), wide_path.begin() + static_cast<std::ptrdiff_t>(len), filename);
+    const std::u16string wide_path = util::utf8_to_wide(g_module_file_name);
+    const std::size_t len = wide_path.size();
+    if (len + 1 > size) {
+        std::copy(wide_path.begin(), wide_path.begin() + static_cast<std::ptrdiff_t>(size - 1), filename);
+        filename[size - 1] = 0;
+        set_last_error(abi::kErrorInsufficientBuffer);
+        return size;
+    }
+    std::copy(wide_path.begin(), wide_path.end(), filename);
     filename[len] = 0;
     set_last_error(abi::kErrorSuccess);
     return static_cast<std::uint32_t>(len);
@@ -1501,7 +1656,33 @@ TL_MSABI std::uint32_t tl_GetModuleFileNameW(const void* module, std::uint16_t* 
 
 TL_MSABI void* tl_GetModuleHandleA(const char* module_name) noexcept {
     if (module_name == nullptr) {
-        return const_cast<std::byte*>(g_guest_image_base);
+        // Módulo padrão: base do executável principal; sentinela quando não
+        // há convidado carregado (contexto de teste).
+        if (g_guest_image_base != nullptr) {
+            return const_cast<std::byte*>(g_guest_image_base);
+        }
+        set_last_error(abi::kErrorSuccess);
+        return reinterpret_cast<void*>(0x1000U);
+    }
+    if (!mapped_guest_cstring(module_name)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return nullptr;
+    }
+    std::string normalized;
+    normalized.reserve(std::strlen(module_name) + 4);
+    for (const char c : std::string_view{module_name}) {
+        normalized.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(c))));
+    }
+    if (!normalized.ends_with(".dll")) {
+        normalized += ".dll";
+    }
+    if (loader::registered_module_count() == 0) {
+        // Contexto sem imports resolvidos ainda (ex.: testes unitários).
+        loader::register_builtin_modules();
+    }
+    if (!loader::is_module_registered(normalized)) {
+        set_last_error(abi::kErrorFileNotFound);
+        return nullptr;
     }
     set_last_error(abi::kErrorSuccess);
     return reinterpret_cast<void*>(0x1000U);
@@ -1509,9 +1690,14 @@ TL_MSABI void* tl_GetModuleHandleA(const char* module_name) noexcept {
 
 TL_MSABI void* tl_GetModuleHandleW(const std::uint16_t* module_name) noexcept {
     if (module_name == nullptr) {
-        return const_cast<std::byte*>(g_guest_image_base);
+        return tl_GetModuleHandleA(nullptr);
     }
-    return tl_GetModuleHandleA(nullptr);
+    if (!mapped_guest_wstring(module_name)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return nullptr;
+    }
+    const std::string utf8 = util::wide_to_utf8(module_name);
+    return tl_GetModuleHandleA(utf8.c_str());
 }
 
 TL_MSABI void* tl_GetProcAddress(void* module, const char* proc_name) noexcept {
@@ -1526,12 +1712,19 @@ TL_MSABI void* tl_GetProcAddress(void* module, const char* proc_name) noexcept {
     return nullptr;
 }
 
+// Windows: TLS_MINIMUM_AVAILABLE = 64 índices por thread.
+constexpr std::uint32_t kTlsMinimumAvailable = 64;
+
+bool tls_index_allocated(const std::uint32_t tls_index) noexcept {
+    return tls_index < kTlsMinimumAvailable && g_tls_indices_used[tls_index];
+}
+
 TL_MSABI std::uint32_t tl_TlsAlloc() noexcept {
-    for (std::size_t i = 0; i < g_tls_indices_used.size(); ++i) {
+    for (std::uint32_t i = 0; i < kTlsMinimumAvailable; ++i) {
         if (!g_tls_indices_used[i]) {
             g_tls_indices_used[i] = true;
             set_last_error(abi::kErrorSuccess);
-            return static_cast<std::uint32_t>(i);
+            return i;
         }
     }
     set_last_error(abi::kErrorNotEnoughMemory);
@@ -1539,7 +1732,7 @@ TL_MSABI std::uint32_t tl_TlsAlloc() noexcept {
 }
 
 TL_MSABI void* tl_TlsGetValue(std::uint32_t tls_index) noexcept {
-    if (tls_index >= g_guest_tls_slots.size()) {
+    if (tls_index >= kTlsMinimumAvailable) {
         set_last_error(abi::kErrorInvalidParameter);
         return nullptr;
     }
@@ -1548,7 +1741,7 @@ TL_MSABI void* tl_TlsGetValue(std::uint32_t tls_index) noexcept {
 }
 
 TL_MSABI int tl_TlsSetValue(std::uint32_t tls_index, void* value) noexcept {
-    if (tls_index >= g_guest_tls_slots.size()) {
+    if (!tls_index_allocated(tls_index)) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
@@ -1558,7 +1751,7 @@ TL_MSABI int tl_TlsSetValue(std::uint32_t tls_index, void* value) noexcept {
 }
 
 TL_MSABI int tl_TlsFree(std::uint32_t tls_index) noexcept {
-    if (tls_index >= g_tls_indices_used.size() || !g_tls_indices_used[tls_index]) {
+    if (!tls_index_allocated(tls_index)) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
@@ -1747,6 +1940,22 @@ TL_MSABI int tl_CreateProcessA(const char* application_name, char* command_line,
     if (!translate_windows_path(guest_path.c_str(), normalized_path, sizeof(normalized_path))) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
+    }
+    // Ordem de busca do CreateProcess: o diretório do aplicativo convidado
+    // tem precedência sobre o diretório corrente do hospedeiro.
+    if (normalized_path[0] != '/') {
+        const std::string_view module_file{g_module_file_name};
+        const std::size_t slash = module_file.find_last_of('/');
+        if (slash != std::string_view::npos) {
+            char candidate[4096]{};
+            const int written = std::snprintf(candidate, sizeof(candidate), "%.*s/%s",
+                                              static_cast<int>(slash), module_file.data(),
+                                              normalized_path);
+            if (written > 0 && written < static_cast<int>(sizeof(candidate)) &&
+                ::access(candidate, X_OK) == 0) {
+                std::memcpy(normalized_path, candidate, static_cast<std::size_t>(written) + 1);
+            }
+        }
     }
     auto free_it = std::find_if(g_syncs.begin(), g_syncs.end(),
                                 [](const SyncSlot& slot) { return !slot.used; });
@@ -1953,38 +2162,52 @@ TL_MSABI void* tl_CreateFileMappingW(const void* file, const void* file_mapping_
 TL_MSABI void* tl_MapViewOfFile(const void* file_mapping_object, const std::uint32_t desired_access,
                                 const std::uint32_t file_offset_high, const std::uint32_t file_offset_low,
                                 const std::size_t number_of_bytes_to_map) noexcept {
-    if (file_mapping_object == nullptr) {
-        set_last_error(abi::kErrorInvalidHandle);
-        return nullptr;
-    }
-    const auto* slot = static_cast<const FileMappingSlot*>(file_mapping_object);
-    if (!slot->used) {
-        set_last_error(abi::kErrorInvalidHandle);
-        return nullptr;
+    int mapping_fd = -1;
+    std::uint64_t mapping_size = 0;
+    {
+        std::lock_guard<std::mutex> lock(g_mapping_mutex);
+        const FileMappingSlot* slot = find_file_mapping_slot_locked(file_mapping_object);
+        if (slot == nullptr) {
+            set_last_error(abi::kErrorInvalidHandle);
+            return nullptr;
+        }
+        mapping_fd = slot->fd;
+        mapping_size = slot->size;
     }
     int prot = PROT_READ;
     if ((desired_access & 0x0002) != 0 || (desired_access & 0xF0000) != 0) {
         prot |= PROT_WRITE;
     }
-    int flags = (slot->fd >= 0) ? MAP_SHARED : (MAP_PRIVATE | MAP_ANONYMOUS);
+    int flags = (mapping_fd >= 0) ? MAP_SHARED : (MAP_PRIVATE | MAP_ANONYMOUS);
     const std::uint64_t offset_value = (static_cast<std::uint64_t>(file_offset_high) << 32U) |
                                        file_offset_low;
     const off_t offset = static_cast<off_t>(offset_value);
     const std::size_t size = number_of_bytes_to_map > 0 ? number_of_bytes_to_map :
-                             (slot->size > offset_value ? static_cast<std::size_t>(slot->size - offset_value)
-                                                        : 4096U);
-    void* result = mmap(nullptr, size, prot, flags, slot->fd >= 0 ? slot->fd : -1, slot->fd >= 0 ? offset : 0);
+                             (mapping_size > offset_value ? static_cast<std::size_t>(mapping_size - offset_value)
+                                                          : 4096U);
+    void* result = mmap(nullptr, size, prot, flags, mapping_fd >= 0 ? mapping_fd : -1,
+                        mapping_fd >= 0 ? offset : 0);
     if (result == MAP_FAILED) {
         set_last_error(errno_to_win32(errno));
         return nullptr;
     }
+    bool recorded = false;
     {
         std::lock_guard<std::mutex> lock(g_allocations_mutex);
         auto it = std::find_if(g_allocations.begin(), g_allocations.end(), [](const AllocationSlot& s) { return s.address == nullptr; });
         if (it != g_allocations.end()) {
             it->address = result;
             it->size = size;
+            it->view = true;
+            recorded = true;
         }
+    }
+    if (!recorded) {
+        // Sem rastreio não há como UnmapViewOfFile desfazer em segurança.
+        munmap(result, size);
+        bump_guest_allocation_generation();
+        set_last_error(abi::kErrorNotEnoughMemory);
+        return nullptr;
     }
     bump_guest_allocation_generation();
     set_last_error(abi::kErrorSuccess);
@@ -1996,14 +2219,21 @@ TL_MSABI int tl_UnmapViewOfFile(const void* base_address) noexcept {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
-    std::size_t size = 4096;
+    std::size_t size = 0;
     {
         std::lock_guard<std::mutex> lock(g_allocations_mutex);
-        auto it = std::find_if(g_allocations.begin(), g_allocations.end(), [base_address](const AllocationSlot& s) { return s.address == base_address; });
+        auto it = std::find_if(g_allocations.begin(), g_allocations.end(), [base_address](const AllocationSlot& s) {
+            return s.view && s.address == base_address && s.size > 0;
+        });
         if (it != g_allocations.end()) {
             size = it->size;
             *it = {};
         }
+    }
+    if (size == 0) {
+        // Endereço desconhecido: nunca munmap memória que o runtime não criou.
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
     }
     if (munmap(const_cast<void*>(base_address), size) != 0) {
         set_last_error(errno_to_win32(errno));
@@ -2020,6 +2250,11 @@ TL_MSABI int tl_FlushViewOfFile(const void* base_address, const std::size_t numb
         return 0;
     }
     const std::size_t size = number_of_bytes_to_flush > 0 ? number_of_bytes_to_flush : 4096;
+    const auto address = reinterpret_cast<std::uintptr_t>(base_address);
+    if (address % 4096 != 0 || !mapped_guest_range(base_address, size, false)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
     if (msync(const_cast<void*>(base_address), size, MS_SYNC) != 0) {
         set_last_error(errno_to_win32(errno));
         return 0;
@@ -2250,7 +2485,7 @@ TL_MSABI int tl_SetFilePointerEx(const void* handle, const std::int64_t distance
     switch (move_method) {
         case kFileBegin: new_pos = distance_to_move; break;
         case kFileCurrent: new_pos = slot->position + distance_to_move; break;
-        case kFileEnd: new_pos = static_cast<std::int64_t>(slot->file_size) + distance_to_move; break;
+        case kFileEnd: new_pos = static_cast<std::int64_t>(current_file_size(*slot)) + distance_to_move; break;
     }
     if (new_pos < 0) {
         set_last_error(abi::kErrorInvalidParameter);
@@ -2275,7 +2510,7 @@ TL_MSABI int tl_GetFileSizeEx(const void* handle, std::int64_t* file_size) noexc
         set_last_error(slot == nullptr ? abi::kErrorInvalidHandle : abi::kErrorInvalidParameter);
         return 0;
     }
-    *file_size = static_cast<std::int64_t>(slot->file_size);
+    *file_size = static_cast<std::int64_t>(current_file_size(*slot));
     set_last_error(abi::kErrorSuccess);
     return 1;
 }
@@ -2629,22 +2864,26 @@ TL_MSABI int tl_GetConsoleScreenBufferInfo(const void* console_handle, void* buf
 
 TL_MSABI int tl_SetConsoleTextAttribute(const void* console_handle, const std::uint16_t attributes) noexcept {
     (void)console_handle;
-    const bool red = (attributes & 0x0004) != 0;
-    const bool green = (attributes & 0x0002) != 0;
-    const bool blue = (attributes & 0x0001) != 0;
-    const bool bold = (attributes & 0x0008) != 0;
+    // stdout pertence ao convidado: só emitir códigos ANSI quando ele é um
+    // terminal interativo; em pipe/arquivo a saída capturada permanece limpa.
+    if (::isatty(STDOUT_FILENO)) {
+        const bool red = (attributes & 0x0004) != 0;
+        const bool green = (attributes & 0x0002) != 0;
+        const bool blue = (attributes & 0x0001) != 0;
+        const bool bold = (attributes & 0x0008) != 0;
 
-    int ansi_color = 37;
-    if (red && green && blue) ansi_color = 37;
-    else if (red && green) ansi_color = 33;
-    else if (red && blue) ansi_color = 35;
-    else if (green && blue) ansi_color = 36;
-    else if (red) ansi_color = 31;
-    else if (green) ansi_color = 32;
-    else if (blue) ansi_color = 34;
+        int ansi_color = 37;
+        if (red && green && blue) ansi_color = 37;
+        else if (red && green) ansi_color = 33;
+        else if (red && blue) ansi_color = 35;
+        else if (green && blue) ansi_color = 36;
+        else if (red) ansi_color = 31;
+        else if (green) ansi_color = 32;
+        else if (blue) ansi_color = 34;
 
-    std::fprintf(stdout, "\033[%d;%dm", bold ? 1 : 0, ansi_color);
-    std::fflush(stdout);
+        std::fprintf(stdout, "\033[%d;%dm", bold ? 1 : 0, ansi_color);
+        std::fflush(stdout);
+    }
     set_last_error(abi::kErrorSuccess);
     return 1;
 }

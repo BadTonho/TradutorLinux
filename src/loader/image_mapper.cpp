@@ -274,6 +274,10 @@ MapResult map_image(const pe::PeInfo& info, const std::span<const std::byte> fil
     if (mapping_size_u64 == 0) {
         return fail(MapStatus::InvalidImage, "SizeOfImage inválido (0)");
     }
+    constexpr std::uint64_t kMaxSizeOfImage = 0x80000000ULL;  // limite prático do Windows
+    if (mapping_size_u64 > kMaxSizeOfImage) {
+        return fail(MapStatus::InvalidImage, "SizeOfImage excede o limite suportado (2 GiB)");
+    }
     if (info.size_of_headers == 0 || info.size_of_headers > info.size_of_image) {
         return fail(MapStatus::InvalidImage, "SizeOfHeaders inválido");
     }
@@ -366,6 +370,13 @@ MapResult map_image(const pe::PeInfo& info, const std::span<const std::byte> fil
                     "diretório de relocations com RVA e tamanho inconsistentes");
     }
     const bool has_relocation_directory = info.relocation_directory_size != 0;
+    if (delta != 0 && !has_relocation_directory) {
+        // Sem relocations não há como corrigir endereços absolutos na base
+        // real: executar aqui produziria ponteiros inválidos.
+        munmap(mapping, mapping_size);
+        return fail(MapStatus::InvalidImage,
+                    "imagem carregada fora da base preferencial sem diretório de relocations");
+    }
     std::size_t applied_relocations = 0;
     if (delta != 0 && has_relocation_directory) {
         const RelocationResult relocation =
