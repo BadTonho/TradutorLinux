@@ -433,6 +433,23 @@ void register_builtin_modules() {
         {"MsgWaitForMultipleObjectsEx", 57, reinterpret_cast<std::uintptr_t>(&tl_MsgWaitForMultipleObjectsEx)},
         {"LoadStringA", 58, reinterpret_cast<std::uintptr_t>(&tl_LoadStringA)},
         {"LoadStringW", 59, reinterpret_cast<std::uintptr_t>(&tl_LoadStringW)},
+        {"RegisterClassExW", 60, reinterpret_cast<std::uintptr_t>(&tl_RegisterClassExW)},
+        {"RegisterClassW", 61, reinterpret_cast<std::uintptr_t>(&tl_RegisterClassW)},
+        {"CreateWindowExW", 62, reinterpret_cast<std::uintptr_t>(&tl_CreateWindowExW)},
+        {"GetMessageW", 63, reinterpret_cast<std::uintptr_t>(&tl_GetMessageW)},
+        {"DispatchMessageW", 64, reinterpret_cast<std::uintptr_t>(&tl_DispatchMessageW)},
+        {"DefWindowProcW", 65, reinterpret_cast<std::uintptr_t>(&tl_DefWindowProcW)},
+        {"SetWindowTextW", 66, reinterpret_cast<std::uintptr_t>(&tl_SetWindowTextW)},
+        {"GetWindowTextW", 67, reinterpret_cast<std::uintptr_t>(&tl_GetWindowTextW)},
+        {"GetWindowTextLengthA", 68, reinterpret_cast<std::uintptr_t>(&tl_GetWindowTextLengthA)},
+        {"GetWindowTextLengthW", 69, reinterpret_cast<std::uintptr_t>(&tl_GetWindowTextLengthW)},
+        {"FindWindowW", 70, reinterpret_cast<std::uintptr_t>(&tl_FindWindowW)},
+        {"LoadCursorW", 71, reinterpret_cast<std::uintptr_t>(&tl_LoadCursorW)},
+        {"LoadIconW", 72, reinterpret_cast<std::uintptr_t>(&tl_LoadIconW)},
+        {"SetClassLongPtrW", 73, reinterpret_cast<std::uintptr_t>(&tl_SetClassLongPtrW)},
+        {"SendMessageW", 74, reinterpret_cast<std::uintptr_t>(&tl_SendMessageW)},
+        {"PostMessageW", 75, reinterpret_cast<std::uintptr_t>(&tl_PostMessageW)},
+        {"AppendMenuW", 76, reinterpret_cast<std::uintptr_t>(&tl_AppendMenuW)},
     };
     static const InternalModule kUser32Module{"USER32.dll", kUser32Exports};
     register_module(kUser32Module);

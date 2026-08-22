@@ -266,6 +266,37 @@ struct GuestWndClassExA {
 };
 static_assert(sizeof(GuestWndClassExA) == 80);
 
+struct GuestWndClassW {
+    std::uint32_t style{};
+    std::uint32_t padding{};
+    std::uintptr_t window_proc{};
+    std::int32_t class_extra{};
+    std::int32_t window_extra{};
+    void* instance{};
+    void* icon{};
+    void* cursor{};
+    void* background{};
+    const std::uint16_t* menu_name{};
+    const std::uint16_t* class_name{};
+};
+static_assert(sizeof(GuestWndClassW) == 72);
+
+struct GuestWndClassExW {
+    std::uint32_t cb_size{};
+    std::uint32_t style{};
+    std::uintptr_t window_proc{};
+    std::int32_t class_extra{};
+    std::int32_t window_extra{};
+    void* instance{};
+    void* icon{};
+    void* cursor{};
+    void* background{};
+    const std::uint16_t* menu_name{};
+    const std::uint16_t* class_name{};
+    void* icon_sm{};
+};
+static_assert(sizeof(GuestWndClassExW) == 80);
+
 // RECT com layout Microsoft x64 (16 bytes).
 struct GuestRect {
     std::int32_t left{};
@@ -452,17 +483,28 @@ TL_MSABI int tl_MessageBoxA(const void* owner, const char* text, const char* cap
                             std::uint32_t type) noexcept;
 TL_MSABI abi::Atom tl_RegisterClassExA(const void* wnd_class) noexcept;
 TL_MSABI abi::Atom tl_RegisterClassA(const void* wnd_class) noexcept;
+TL_MSABI abi::Atom tl_RegisterClassExW(const void* wnd_class) noexcept;
+TL_MSABI abi::Atom tl_RegisterClassW(const void* wnd_class) noexcept;
 TL_MSABI abi::HWnd tl_CreateWindowExA(std::uint32_t ex_style, const char* class_name,
                                       const char* window_name, std::uint32_t style, int x, int y,
+                                      int width, int height, const void* parent, const void* menu,
+                                      const void* instance, const void* param) noexcept;
+TL_MSABI abi::HWnd tl_CreateWindowExW(std::uint32_t ex_style, const std::uint16_t* class_name,
+                                      const std::uint16_t* window_name, std::uint32_t style, int x, int y,
                                       int width, int height, const void* parent, const void* menu,
                                       const void* instance, const void* param) noexcept;
 TL_MSABI int tl_ShowWindow(const void* window, int cmd_show) noexcept;
 TL_MSABI int tl_UpdateWindow(const void* window) noexcept;
 TL_MSABI int tl_GetMessageA(void* msg, const void* window, std::uint32_t filter_min,
-                            std::uint32_t filter_max) noexcept;
+                             std::uint32_t filter_max) noexcept;
+TL_MSABI int tl_GetMessageW(void* msg, const void* window, std::uint32_t filter_min,
+                             std::uint32_t filter_max) noexcept;
 TL_MSABI int tl_TranslateMessage(const void* msg) noexcept;
 TL_MSABI abi::Lresult tl_DispatchMessageA(const void* msg) noexcept;
+TL_MSABI abi::Lresult tl_DispatchMessageW(const void* msg) noexcept;
 TL_MSABI abi::Lresult tl_DefWindowProcA(const void* window, std::uint32_t message,
+                                        abi::Wparam wparam, abi::Lparam lparam) noexcept;
+TL_MSABI abi::Lresult tl_DefWindowProcW(const void* window, std::uint32_t message,
                                         abi::Wparam wparam, abi::Lparam lparam) noexcept;
 TL_MSABI int tl_DestroyWindow(const void* window) noexcept;
 TL_MSABI void tl_PostQuitMessage(int exit_code) noexcept;
@@ -494,24 +536,39 @@ TL_MSABI int tl_MoveWindow(const void* window, int x, int y, int width, int heig
 TL_MSABI std::intptr_t tl_SetWindowPos(const void* window, const void* insert_after, int x, int y,
                                        int width, int height, std::uint32_t flags) noexcept;
 TL_MSABI int tl_SetWindowTextA(const void* window, const char* text) noexcept;
+TL_MSABI int tl_SetWindowTextW(const void* window, const std::uint16_t* text) noexcept;
 TL_MSABI int tl_GetWindowTextA(const void* window, char* text, int capacity) noexcept;
+TL_MSABI int tl_GetWindowTextW(const void* window, std::uint16_t* text, int capacity) noexcept;
+TL_MSABI int tl_GetWindowTextLengthA(const void* window) noexcept;
+TL_MSABI int tl_GetWindowTextLengthW(const void* window) noexcept;
 TL_MSABI int tl_EnableWindow(const void* window, int enable) noexcept;
 TL_MSABI const void* tl_SetFocus(const void* window) noexcept;
 TL_MSABI int tl_IsWindowVisible(const void* window) noexcept;
 TL_MSABI int tl_InvalidateRect(const void* window, const void* rect, int erase) noexcept;
 TL_MSABI const void* tl_FindWindowA(const char* class_name, const char* window_name) noexcept;
+TL_MSABI const void* tl_FindWindowW(const std::uint16_t* class_name, const std::uint16_t* window_name) noexcept;
 TL_MSABI std::uintptr_t tl_LoadCursorA(const void* instance, const char* name) noexcept;
+TL_MSABI std::uintptr_t tl_LoadCursorW(const void* instance, const std::uint16_t* name) noexcept;
 TL_MSABI std::uintptr_t tl_LoadIconA(const void* instance, const char* name) noexcept;
+TL_MSABI std::uintptr_t tl_LoadIconW(const void* instance, const std::uint16_t* name) noexcept;
 TL_MSABI std::intptr_t tl_SetClassLongPtrA(const void* window, int index,
-                                            std::intptr_t value) noexcept;
+                                             std::intptr_t value) noexcept;
+TL_MSABI std::intptr_t tl_SetClassLongPtrW(const void* window, int index,
+                                             std::intptr_t value) noexcept;
 TL_MSABI int tl_SetForegroundWindow(const void* window) noexcept;
 TL_MSABI int tl_SendMessageA(const void* window, std::uint32_t message, abi::Wparam wparam,
-                             abi::Lparam lparam) noexcept;
+                              abi::Lparam lparam) noexcept;
+TL_MSABI int tl_SendMessageW(const void* window, std::uint32_t message, abi::Wparam wparam,
+                              abi::Lparam lparam) noexcept;
 TL_MSABI int tl_PostMessageA(const void* window, std::uint32_t message, abi::Wparam wparam,
-                             abi::Lparam lparam) noexcept;
+                              abi::Lparam lparam) noexcept;
+TL_MSABI int tl_PostMessageW(const void* window, std::uint32_t message, abi::Wparam wparam,
+                              abi::Lparam lparam) noexcept;
 TL_MSABI void* tl_CreatePopupMenu() noexcept;
 TL_MSABI int tl_AppendMenuA(const void* menu, std::uint32_t flags, std::uintptr_t command,
-                            const char* text) noexcept;
+                             const char* text) noexcept;
+TL_MSABI int tl_AppendMenuW(const void* menu, std::uint32_t flags, std::uintptr_t command,
+                             const std::uint16_t* text) noexcept;
 TL_MSABI int tl_DestroyMenu(const void* menu) noexcept;
 TL_MSABI int tl_TrackPopupMenu(const void* menu, std::uint32_t flags, int x, int y, int reserved,
                                const void* owner, const void* rect) noexcept;

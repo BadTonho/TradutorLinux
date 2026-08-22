@@ -39,6 +39,7 @@ Os itens marcados como concluídos devem ter evidência no repositório: código
 - **Marco concluído:** espera por endereço `KERNEL32`/`api-ms-win-core-synch-l1-2-0.dll` em `tl_waitaddr.exe` (`WaitOnAddress` 1/2/4/8 alinhado, `ERROR_TIMEOUT` 1460, `ERROR_INVALID_PARAMETER` 87, `WakeByAddressSingle`/`All` com `version`+`cv`). Thread waiter bloqueia 5s e acorda via `Wake`, `waitaddr\n` exit `0`, `--report` 12/12.
 - **Marco concluído:** fibras `KERNEL32` em `tl_fiber.exe` (`ConvertThreadToFiber`/`ConvertThreadToFiberEx` com flags, `CreateFiber`/`CreateFiberEx` commit/reserve, `SwitchToFiber`/`GetFiberData`/`DeleteFiber`/`ConvertFiberToThread` com `g_current_fiber_data`). `--report` 11/11, `fiber\n` exit `0`.
 - **Marco concluído:** enumeração de processos `KERNEL32` em `tl_toolhelp.exe` (`CreateToolhelp32Snapshot` `TH32CS_SNAPPROCESS` via `/proc`, `Process32FirstW`/`NextW` `PROCESSENTRY32W` 568, `OpenProcess` token `kProcessHandleBase+pid`, `CloseHandle` para snapshot/process). `--report` 10/10, `toolhelp\n` exit `0`.
+- **Marco concluído:** GUI Unicode `USER32` em `tl_win_w.exe` (`RegisterClassExW`/`CreateWindowExW`/`DefWindowProcW`/`GetMessageW`/`DispatchMessageW`/`SetWindowTextW`/`GetWindowTextW`/`FindWindowW`/`LoadCursorW`/`SendMessageW` via `wide_to_utf8`). `--report` 12/12, execução `Xvfb` análoga a `tl_win` com `WM_CREATE` e `WM_CLOSE`.
 - **Próximo resultado observável:** ampliar a validação do subconjunto GUI por novos aplicativos-alvo; Wayland/toolkit permanece posterior à existência de uma aplicação GUI real suportada.
 
 ### Estudo de caso: `RobloxPlayerInstaller.exe` (somente diagnóstico)
@@ -65,6 +66,9 @@ Em 2026-08-22, após `Fibers`, o `--report` resolve 210/430 (48%), ainda
 
 Em 2026-08-22, após `Toolhelp`, o `--report` resolve 214/430 (49%), ainda
 `unsupported`, com `execution: not-attempted` (`CreateToolhelp32Snapshot`/`Process32FirstW`/`NextW`/`OpenProcess`).
+
+Em 2026-08-22, após `GUI Unicode`, o `--report` resolve 221/430 (51%), ainda
+`unsupported`, com `execution: not-attempted` (`RegisterClassExW`/`CreateWindowExW`/`DefWindowProcW` etc.).
 
 Este arquivo não é um alvo de suporte nem autoriza implementação específica
 para Roblox. Ele fica registrado apenas como evidência para priorizar
@@ -95,8 +99,7 @@ observadas são:
   `CRYPT32`, identidade, segurança e certificados continuam pendentes;
 - [ ] definir uma camada `OLE32`/COM mínima somente quando houver um alvo e
   contrato de ABI que a justifiquem;
-- [ ] ampliar a GUI de forma genérica: variantes Unicode de `USER32`, controles
-  comuns, diálogos, recursos, aceleradores e métricas de janela;
+- [x] ampliar a GUI de forma genérica: variantes Unicode de `USER32` (`RegisterClassExW`/`CreateWindowExW`/`DefWindowProcW`/`GetMessageW`/`DispatchMessageW`/`SetWindowTextW`/`GetWindowTextW`/`FindWindowW`/`LoadCursorW`/`SendMessageW` etc. via wrappers `wide_to_utf8`), validado por `tl_win_w.exe` sob `Xvfb` análogo a `tl_win`;
 - [ ] ampliar `SHELL32`/`SHLWAPI` para pastas conhecidas, execução de processos
   e manipulação de caminhos;
 - [ ] avaliar `GDI32`, `gdiplus`, `UxTheme`, `WINMM`, `dbghelp`,

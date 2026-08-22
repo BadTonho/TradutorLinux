@@ -258,6 +258,9 @@ tl_add_pe_fixture(tl_win src/tl_win.c manifests/tl_win.json
 tl_add_pe_fixture(tl_win2 src/tl_win2.c manifests/tl_win2.json
     LINK_KERNEL32 LINK_USER32 EXPECT_RESOLVED REPORT_ONLY RELOCATABLE
     REPORT_SYMBOL "RegisterClassExA")
+tl_add_pe_fixture(tl_win_w src/tl_win_w.c manifests/tl_win_w.json
+    LINK_KERNEL32 LINK_USER32 EXPECT_RESOLVED REPORT_ONLY RELOCATABLE
+    REPORT_SYMBOL "RegisterClassExW")
 tl_add_pe_fixture(tl_key src/tl_key.c manifests/tl_key.json
     LINK_KERNEL32 LINK_USER32 EXPECT_RESOLVED REPORT_ONLY RELOCATABLE
     REPORT_SYMBOL "RegisterClassExA")

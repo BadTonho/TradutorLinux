@@ -1,5 +1,6 @@
 #include "tradutorlinux/runtime/winapi.hpp"
 #include "runtime_context.hpp"
+#include "tradutorlinux/util/unicode.hpp"
 
 #include <algorithm>
 #include <array>
@@ -164,6 +165,77 @@ TL_MSABI abi::Atom tl_RegisterClassA(const void* wnd_class) noexcept {
     return tl_RegisterClassExA(&ex);
 }
 
+TL_MSABI abi::Atom tl_RegisterClassExW(const void* const wnd_class) noexcept {
+    if (wnd_class == nullptr ||
+        !mapped_guest_range(wnd_class, sizeof(abi::GuestWndClassExW), false)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        trace_guest_failure("RegisterClassExW", "wnd-class", "estrutura WNDCLASSEXW inválida");
+        return 0;
+    }
+    const auto* const wc = static_cast<const abi::GuestWndClassExW*>(wnd_class);
+    if (wc->cb_size < sizeof(abi::GuestWndClassExW) || wc->window_proc == 0 ||
+        wc->class_name == nullptr || !mapped_guest_wstring(wc->class_name) ||
+        (wc->menu_name != nullptr && !mapped_guest_wstring(wc->menu_name)) ||
+        !mapped_guest_range(std::bit_cast<const void*>(wc->window_proc), 1, false)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        trace_guest_failure("RegisterClassExW", "wnd-class", "cbSize, window_proc ou class_name inválido");
+        return 0;
+    }
+    std::string utf8_class = util::wide_to_utf8(wc->class_name);
+    std::string utf8_menu;
+    const char* menu_cstr = nullptr;
+    if (wc->menu_name != nullptr) {
+        utf8_menu = util::wide_to_utf8(wc->menu_name);
+        menu_cstr = utf8_menu.c_str();
+    }
+    abi::GuestWndClassExA exA{};
+    exA.cb_size = sizeof(exA);
+    exA.style = wc->style;
+    exA.window_proc = wc->window_proc;
+    exA.class_extra = wc->class_extra;
+    exA.window_extra = wc->window_extra;
+    exA.instance = wc->instance;
+    exA.icon = wc->icon;
+    exA.cursor = wc->cursor;
+    exA.background = wc->background;
+    exA.menu_name = menu_cstr;
+    exA.class_name = utf8_class.c_str();
+    exA.icon_sm = wc->icon_sm;
+    return tl_RegisterClassExA(&exA);
+}
+
+TL_MSABI abi::Atom tl_RegisterClassW(const void* wnd_class) noexcept {
+    if (wnd_class == nullptr || !mapped_guest_range(wnd_class, sizeof(abi::GuestWndClassW), false)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    const auto* wc = static_cast<const abi::GuestWndClassW*>(wnd_class);
+    if (wc->window_proc == 0 || wc->class_name == nullptr || !mapped_guest_wstring(wc->class_name) ||
+        (wc->menu_name != nullptr && !mapped_guest_wstring(wc->menu_name))) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    std::string utf8_class = util::wide_to_utf8(wc->class_name);
+    std::string utf8_menu;
+    const char* menu_cstr = nullptr;
+    if (wc->menu_name != nullptr) {
+        utf8_menu = util::wide_to_utf8(wc->menu_name);
+        menu_cstr = utf8_menu.c_str();
+    }
+    abi::GuestWndClassA a{};
+    a.style = wc->style;
+    a.window_proc = wc->window_proc;
+    a.class_extra = wc->class_extra;
+    a.window_extra = wc->window_extra;
+    a.instance = wc->instance;
+    a.icon = wc->icon;
+    a.cursor = wc->cursor;
+    a.background = wc->background;
+    a.menu_name = menu_cstr;
+    a.class_name = utf8_class.c_str();
+    return tl_RegisterClassA(&a);
+}
+
 TL_MSABI abi::HWnd tl_CreateWindowExA(const std::uint32_t,
                                       const char* const class_name, const char* const window_name,
                                       const std::uint32_t, const int x, const int y,
@@ -248,6 +320,31 @@ TL_MSABI abi::HWnd tl_CreateWindowExA(const std::uint32_t,
     };
     runtime_trace("CreateWindowExA", fields, 4);
     return &slot;
+}
+
+TL_MSABI abi::HWnd tl_CreateWindowExW(const std::uint32_t ex_style,
+                                      const std::uint16_t* const class_name,
+                                      const std::uint16_t* const window_name,
+                                      const std::uint32_t style, const int x, const int y,
+                                      const int width, const int height,
+                                      const void* const parent, const void* const menu,
+                                      const void* const instance,
+                                      const void* const param) noexcept {
+    if (class_name == nullptr || !mapped_guest_wstring(class_name) ||
+        (window_name != nullptr && !mapped_guest_wstring(window_name))) {
+        set_last_error(abi::kErrorInvalidParameter);
+        trace_guest_failure("CreateWindowExW", "strings", "nome de classe ou janela inválido");
+        return nullptr;
+    }
+    const std::string utf8_class = util::wide_to_utf8(class_name);
+    std::string utf8_window;
+    const char* win_cstr = nullptr;
+    if (window_name != nullptr) {
+        utf8_window = util::wide_to_utf8(window_name);
+        win_cstr = utf8_window.c_str();
+    }
+    return tl_CreateWindowExA(ex_style, utf8_class.c_str(), win_cstr, style, x, y, width, height, parent,
+                              menu, instance, param);
 }
 
 TL_MSABI int tl_ShowWindow(const void* const window, const int cmd_show) noexcept {
@@ -421,6 +518,12 @@ TL_MSABI int tl_GetMessageA(void* const msg, const void* const window,
     }
 }
 
+TL_MSABI int tl_GetMessageW(void* const msg, const void* const window,
+                            const std::uint32_t filter_min,
+                            const std::uint32_t filter_max) noexcept {
+    return tl_GetMessageA(msg, window, filter_min, filter_max);
+}
+
 TL_MSABI int tl_TranslateMessage(const void* const msg) noexcept {
     if (msg == nullptr || !mapped_guest_range(msg, sizeof(abi::GuestMsg), false)) {
         set_last_error(abi::kErrorInvalidParameter);
@@ -468,6 +571,10 @@ TL_MSABI abi::Lresult tl_DispatchMessageA(const void* const msg) noexcept {
                         message->lparam);
 }
 
+TL_MSABI abi::Lresult tl_DispatchMessageW(const void* const msg) noexcept {
+    return tl_DispatchMessageA(msg);
+}
+
 TL_MSABI abi::Lresult tl_DefWindowProcA(const void* const window,
                                         const std::uint32_t message,
                                         const abi::Wparam wparam, const abi::Lparam lparam) noexcept {
@@ -478,6 +585,12 @@ TL_MSABI abi::Lresult tl_DefWindowProcA(const void* const window,
         return 0;
     }
     return 0;
+}
+
+TL_MSABI abi::Lresult tl_DefWindowProcW(const void* const window,
+                                        const std::uint32_t message,
+                                        const abi::Wparam wparam, const abi::Lparam lparam) noexcept {
+    return tl_DefWindowProcA(window, message, wparam, lparam);
 }
 
 TL_MSABI int tl_DestroyWindow(const void* const window) noexcept {
@@ -692,6 +805,62 @@ TL_MSABI int tl_GetWindowTextA(const void* window, char* text, int capacity) noe
     return 0;
 }
 
+TL_MSABI int tl_SetWindowTextW(const void* window, const std::uint16_t* text) noexcept {
+    if (text == nullptr || !mapped_guest_wstring(text)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    const std::string utf8 = util::wide_to_utf8(text);
+    return tl_SetWindowTextA(window, utf8.c_str());
+}
+
+TL_MSABI int tl_GetWindowTextW(const void* window, std::uint16_t* text, int capacity) noexcept {
+    WindowSlot* slot = find_window_slot(window);
+    if (slot == nullptr || text == nullptr || capacity <= 0 ||
+        !mapped_guest_range(text, static_cast<std::size_t>(capacity) * sizeof(std::uint16_t), true)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    std::string utf8;
+    {
+        // copy_control_text já cuida de truncamento; pegamos utf8 do slot
+        char tmp[512] = {};
+        runtime_gui::copy_control_text(*slot, tmp, sizeof(tmp));
+        utf8 = tmp;
+        if (utf8.empty()) utf8 = slot->text;
+    }
+    const std::u16string wide = util::utf8_to_wide(utf8);
+    const std::size_t to_copy = std::min<std::size_t>(wide.size(), static_cast<std::size_t>(capacity - 1));
+    for (std::size_t i = 0; i < to_copy; ++i) text[i] = wide[i];
+    text[to_copy] = 0;
+    set_last_error(abi::kErrorSuccess);
+    return static_cast<int>(to_copy);
+}
+
+TL_MSABI int tl_GetWindowTextLengthA(const void* window) noexcept {
+    WindowSlot* slot = find_window_slot(window);
+    if (slot == nullptr) {
+        set_last_error(abi::kErrorInvalidHandle);
+        return 0;
+    }
+    // Usa texto do controle ou título
+    const std::string& src = !slot->text.empty() ? slot->text : slot->window_title;
+    set_last_error(abi::kErrorSuccess);
+    return static_cast<int>(src.size());
+}
+
+TL_MSABI int tl_GetWindowTextLengthW(const void* window) noexcept {
+    WindowSlot* slot = find_window_slot(window);
+    if (slot == nullptr) {
+        set_last_error(abi::kErrorInvalidHandle);
+        return 0;
+    }
+    const std::string& src = !slot->text.empty() ? slot->text : slot->window_title;
+    const std::u16string wide = util::utf8_to_wide(src);
+    set_last_error(abi::kErrorSuccess);
+    return static_cast<int>(wide.size());
+}
+
 TL_MSABI int tl_EnableWindow(const void* window, int enable) noexcept {
     WindowSlot* slot = find_window_slot(window);
     if (slot == nullptr) {
@@ -750,9 +919,48 @@ TL_MSABI const void* tl_FindWindowA(const char* class_name, const char* window_n
     return nullptr;
 }
 
+TL_MSABI const void* tl_FindWindowW(const std::uint16_t* class_name, const std::uint16_t* window_name) noexcept {
+    std::string utf8_class, utf8_window;
+    const char* class_cstr = nullptr;
+    const char* window_cstr = nullptr;
+    if (class_name != nullptr) {
+        if (!mapped_guest_wstring(class_name)) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return nullptr;
+        }
+        if (class_name[0] != 0) {
+            utf8_class = util::wide_to_utf8(class_name);
+            class_cstr = utf8_class.c_str();
+        }
+    }
+    if (window_name != nullptr) {
+        if (!mapped_guest_wstring(window_name)) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return nullptr;
+        }
+        if (window_name[0] != 0) {
+            utf8_window = util::wide_to_utf8(window_name);
+            window_cstr = utf8_window.c_str();
+        }
+    }
+    const void* res = tl_FindWindowA(class_cstr, window_cstr);
+    set_last_error(abi::kErrorSuccess);
+    return res;
+}
+
 TL_MSABI std::uintptr_t tl_LoadCursorA(const void* instance, const char* name) noexcept {
     (void)instance;
     (void)name;
+    return 1;
+}
+
+TL_MSABI std::uintptr_t tl_LoadCursorW(const void* instance, const std::uint16_t* name) noexcept {
+    (void)instance;
+    if (name != nullptr && !mapped_guest_wstring(name)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    set_last_error(abi::kErrorSuccess);
     return 1;
 }
 
@@ -762,12 +970,27 @@ TL_MSABI std::uintptr_t tl_LoadIconA(const void* instance, const char* name) noe
     return 1;
 }
 
+TL_MSABI std::uintptr_t tl_LoadIconW(const void* instance, const std::uint16_t* name) noexcept {
+    (void)instance;
+    if (name != nullptr && !mapped_guest_wstring(name)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
 TL_MSABI std::intptr_t tl_SetClassLongPtrA(const void* window, int index,
                                             std::intptr_t value) noexcept {
     (void)window;
     (void)index;
     (void)value;
     return 0;
+}
+
+TL_MSABI std::intptr_t tl_SetClassLongPtrW(const void* window, int index,
+                                            std::intptr_t value) noexcept {
+    return tl_SetClassLongPtrA(window, index, value);
 }
 
 TL_MSABI int tl_SetForegroundWindow(const void* window) noexcept {
@@ -918,6 +1141,21 @@ TL_MSABI int tl_SendMessageA(const void* window, const std::uint32_t message,
     return 0;
 }
 
+TL_MSABI int tl_SendMessageW(const void* window, const std::uint32_t message,
+                              const abi::Wparam wparam, const abi::Lparam lparam) noexcept {
+    if (message == 0x000C && lparam != 0 &&
+        mapped_guest_wstring(reinterpret_cast<const std::uint16_t*>(lparam))) {
+        const std::string utf8 = util::wide_to_utf8(reinterpret_cast<const std::uint16_t*>(lparam));
+        return tl_SendMessageA(window, message, wparam, reinterpret_cast<abi::Lparam>(utf8.c_str()));
+    }
+    if (message == abi::kCbAddString && lparam != 0 &&
+        mapped_guest_wstring(reinterpret_cast<const std::uint16_t*>(lparam))) {
+        const std::string utf8 = util::wide_to_utf8(reinterpret_cast<const std::uint16_t*>(lparam));
+        return tl_SendMessageA(window, message, wparam, reinterpret_cast<abi::Lparam>(utf8.c_str()));
+    }
+    return tl_SendMessageA(window, message, wparam, lparam);
+}
+
 TL_MSABI int tl_PostMessageA(const void* window, const std::uint32_t message,
                              const abi::Wparam wparam, const abi::Lparam lparam) noexcept {
     WindowSlot* slot = find_window_slot(window);
@@ -928,6 +1166,11 @@ TL_MSABI int tl_PostMessageA(const void* window, const std::uint32_t message,
     queue_window_message(*slot, message, wparam, lparam);
     set_last_error(abi::kErrorSuccess);
     return 1;
+}
+
+TL_MSABI int tl_PostMessageW(const void* window, const std::uint32_t message,
+                              const abi::Wparam wparam, const abi::Lparam lparam) noexcept {
+    return tl_PostMessageA(window, message, wparam, lparam);
 }
 
 TL_MSABI void* tl_CreatePopupMenu() noexcept {
@@ -956,6 +1199,17 @@ TL_MSABI int tl_AppendMenuA(const void* menu, std::uint32_t flags, std::uintptr_
                                            .separator = (flags & 0x00000800U) != 0});
     set_last_error(abi::kErrorSuccess);
     return 1;
+}
+
+TL_MSABI int tl_AppendMenuW(const void* menu, std::uint32_t flags, std::uintptr_t command,
+                             const std::uint16_t* text) noexcept {
+    if (text != nullptr && !mapped_guest_wstring(text)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    std::string utf8;
+    if (text != nullptr) utf8 = util::wide_to_utf8(text);
+    return tl_AppendMenuA(menu, flags, command, text != nullptr ? utf8.c_str() : nullptr);
 }
 
 TL_MSABI int tl_DestroyMenu(const void* menu) noexcept {
