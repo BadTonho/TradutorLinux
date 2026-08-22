@@ -718,6 +718,7 @@ TL_MSABI std::uint32_t tl_MsgWaitForMultipleObjectsEx(std::uint32_t count, const
                                                       std::uint32_t flags) noexcept;
 TL_MSABI std::uint32_t tl_GetCurrentThreadId() noexcept;
 TL_MSABI std::uint32_t tl_GetCurrentProcessId() noexcept;
+TL_MSABI void* tl_GetCurrentProcess() noexcept;
 TL_MSABI std::uint32_t tl_TlsAlloc() noexcept;
 TL_MSABI int tl_TlsSetValue(std::uint32_t tls_index, void* tls_value) noexcept;
 TL_MSABI int tl_TlsFree(std::uint32_t tls_index) noexcept;
@@ -807,6 +808,34 @@ TL_MSABI void* tl_SelectObject(const void* dc, const void* object) noexcept;
 TL_MSABI int tl_SetBkMode(const void* dc, int mode) noexcept;
 TL_MSABI void* tl_CreateFontIndirectA(const void* log_font) noexcept;
 TL_MSABI void* tl_CreateFontIndirectW(const void* log_font) noexcept;
+TL_MSABI void* tl_CreateFontW(int height, int width, int escapement, int orientation, int weight,
+                              std::uint32_t italic, std::uint32_t underline, std::uint32_t strikeout,
+                              std::uint32_t charset, std::uint32_t output_precision,
+                              std::uint32_t clip_precision, std::uint32_t quality,
+                              std::uint32_t pitch_and_family, const std::uint16_t* face_name) noexcept;
+TL_MSABI std::uint32_t tl_SetDCBrushColor(const void* dc, std::uint32_t color) noexcept;
+TL_MSABI std::uint32_t tl_SetDCPenColor(const void* dc, std::uint32_t color) noexcept;
+
+// gdiplus.dll
+TL_MSABI int tl_GdiplusStartup(void* token, const void* input, void* output) noexcept;
+TL_MSABI void tl_GdiplusShutdown(void* token) noexcept;
+TL_MSABI void* tl_GdipAlloc(std::size_t size) noexcept;
+TL_MSABI void tl_GdipFree(void* ptr) noexcept;
+TL_MSABI int tl_GdipCreateBitmapFromStream(void* stream, void** bitmap) noexcept;
+TL_MSABI int tl_GdipCloneImage(void* image, void** clone) noexcept;
+TL_MSABI int tl_GdipDisposeImage(void* image) noexcept;
+TL_MSABI int tl_GdipCreateHBITMAPFromBitmap(void* bitmap, void** hbm, std::uint32_t background) noexcept;
+
+// UxTheme.dll
+TL_MSABI int tl_SetWindowTheme(void* hwnd, const std::uint16_t* subAppName, const std::uint16_t* subIdList) noexcept;
+
+// WINMM.dll
+TL_MSABI std::uint32_t tl_timeSetEvent(std::uint32_t delay, std::uint32_t resolution, void* callback,
+                                       std::uintptr_t user, std::uint32_t event) noexcept;
+
+// dbghelp.dll
+TL_MSABI int tl_SymFromAddr(void* process, std::uint64_t address, std::uint64_t* displacement,
+                            void* symbol) noexcept;
 
 // ADVAPI32: Criptografia / Random e Registry Wide
 TL_MSABI int tl_CryptAcquireContextA(void** prov_handle, const char* container,

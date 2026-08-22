@@ -41,6 +41,7 @@ Os itens marcados como concluídos devem ter evidência no repositório: código
 - **Marco concluído:** enumeração de processos `KERNEL32` em `tl_toolhelp.exe` (`CreateToolhelp32Snapshot` `TH32CS_SNAPPROCESS` via `/proc`, `Process32FirstW`/`NextW` `PROCESSENTRY32W` 568, `OpenProcess` token `kProcessHandleBase+pid`, `CloseHandle` para snapshot/process). `--report` 10/10, `toolhelp\n` exit `0`.
 - **Marco concluído:** GUI Unicode `USER32` em `tl_win_w.exe` (`RegisterClassExW`/`CreateWindowExW`/`DefWindowProcW`/`GetMessageW`/`DispatchMessageW`/`SetWindowTextW`/`GetWindowTextW`/`FindWindowW`/`LoadCursorW`/`SendMessageW` via `wide_to_utf8`). `--report` 12/12, execução `Xvfb` análoga a `tl_win` com `WM_CREATE` e `WM_CLOSE`.
 - **Marco concluído:** `SHELL32` pastas conhecidas em `tl_shell.exe` (`SHGetKnownFolderPath` `FOLDERID_RoamingAppData`→`$HOME/.config`, `SHGetFolderPathW` `CSIDL_APPDATA`, `SHGetFolderPathAndSubDirW` `TestSub`, `ShellExecuteW` `42`, `ShellExecuteExW` dummy `hProcess`). `--report` 8/8, `shell\n` exit `0`.
+- **Marco concluído:** `GDI` estendido em `tl_gdiex.exe` (`GDI32` `CreateFontW`/`SetDCBrush/PenColor`, `gdiplus` 8 APIs, `UxTheme` `SetWindowTheme`, `WINMM` `timeSetEvent`, `dbghelp` `SymFromAddr`, `USER32` `GetDC`). `--report` 21/21, `gdiex\n` exit `0`.
 - **Próximo resultado observável:** ampliar a validação do subconjunto GUI por novos aplicativos-alvo; Wayland/toolkit permanece posterior à existência de uma aplicação GUI real suportada.
 
 ### Estudo de caso: `RobloxPlayerInstaller.exe` (somente diagnóstico)
@@ -73,6 +74,9 @@ Em 2026-08-22, após `GUI Unicode`, o `--report` resolve 221/430 (51%), ainda
 
 Em 2026-08-22, após `SHELL32`, o `--report` resolve 225/430 (52%), ainda
 `unsupported`, com `execution: not-attempted` (`SHGetKnownFolderPath`/`SHGetFolderPathW`/`ShellExecuteW`/`ExW`).
+
+Em 2026-08-22, após `GDI` estendido, o `--report` resolve 240/430 (55%), ainda
+`unsupported`, com `execution: not-attempted` (`GDI32` `CreateFontW`/`SetDCBrush/PenColor`, `gdiplus` 8, `UxTheme` `SetWindowTheme`, `WINMM` `timeSetEvent`, `dbghelp` `SymFromAddr`).
 
 Este arquivo não é um alvo de suporte nem autoriza implementação específica
 para Roblox. Ele fica registrado apenas como evidência para priorizar
@@ -108,9 +112,8 @@ observadas são:
 - [x] ampliar a GUI de forma genérica: variantes Unicode de `USER32` (`RegisterClassExW`/`CreateWindowExW`/`DefWindowProcW`/`GetMessageW`/`DispatchMessageW`/`SetWindowTextW`/`GetWindowTextW`/`FindWindowW`/`LoadCursorW`/`SendMessageW` etc. via wrappers `wide_to_utf8`), validado por `tl_win_w.exe` sob `Xvfb` análogo a `tl_win`;
 - [ ] ampliar `SHELL32`/`SHLWAPI` para pastas conhecidas, execução de processos
   e manipulação de caminhos;
-- [ ] avaliar `GDI32`, `gdiplus`, `UxTheme`, `WINMM`, `dbghelp`,
-  `POWRPROF.dll` e `IPHLPAPI.DLL` para desenho, imagens, temas,
-  temporizadores multimídia, diagnóstico, energia e adaptadores de rede;
+- [x] avaliar `GDI32`, `gdiplus`, `UxTheme`, `WINMM`, `dbghelp` para desenho, imagens, temas,
+  temporizadores multimídia e diagnóstico (fixture `tl_gdiex.exe` cobre 3+8+1+1+1); `POWRPROF.dll` e `IPHLPAPI.DLL` permanecem avaliação futura;
 - [ ] manter isolamento, timeout, limites de recursos, `--report`, mensagens
   de falha e testes de integração para qualquer nova família de DLL.
 

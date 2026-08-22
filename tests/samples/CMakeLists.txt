@@ -18,7 +18,7 @@ find_program(TL_MINGW_WINDRES
 set(TL_FIXTURE_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/generated")
 
 function(tl_add_pe_fixture target_name source_file manifest_file)
-    set(options LINK_KERNEL32 LINK_USER32 LINK_GDI32 LINK_WS2_32 LINK_ADVAPI32 RELOCATABLE RUNTIME_FAILURE EXPECT_RESOLVED CONSOLE REPORT REPORT_ONLY NO_RUNTIME_CHECK)
+    set(options LINK_KERNEL32 LINK_USER32 LINK_GDI32 LINK_GDIPLUS LINK_UXTHEME LINK_DBGHELP LINK_WINMM LINK_WS2_32 LINK_ADVAPI32 RELOCATABLE RUNTIME_FAILURE EXPECT_RESOLVED CONSOLE REPORT REPORT_ONLY NO_RUNTIME_CHECK)
     set(oneValueArgs REPORT_SYMBOL RESOURCE_FILE IMPORT_DEF)
     cmake_parse_arguments(ARG "${options}" "${oneValueArgs}" "" ${ARGN})
 
@@ -47,6 +47,18 @@ function(tl_add_pe_fixture target_name source_file manifest_file)
     endif()
     if(ARG_LINK_GDI32)
         list(APPEND link_libraries -lgdi32)
+    endif()
+    if(ARG_LINK_GDIPLUS)
+        list(APPEND link_libraries -lgdiplus)
+    endif()
+    if(ARG_LINK_UXTHEME)
+        list(APPEND link_libraries -luxtheme)
+    endif()
+    if(ARG_LINK_DBGHELP)
+        list(APPEND link_libraries -ldbghelp)
+    endif()
+    if(ARG_LINK_WINMM)
+        list(APPEND link_libraries -lwinmm)
     endif()
     if(ARG_LINK_WS2_32)
         list(APPEND link_libraries -lws2_32)
@@ -182,6 +194,9 @@ function(tl_add_pe_fixture target_name source_file manifest_file)
             elseif(target_name STREQUAL "tl_shell")
                 set(runtime_extra_args
                     "-DEXPECTED_HEX=7368656c6c0a")
+            elseif(target_name STREQUAL "tl_gdiex")
+                set(runtime_extra_args
+                    "-DEXPECTED_HEX=67646965780a")
             endif()
         endif()
         add_test(
@@ -343,6 +358,10 @@ tl_add_pe_fixture(tl_shell src/tl_shell.c manifests/tl_shell.json
     LINK_KERNEL32 EXPECT_RESOLVED CONSOLE REPORT RELOCATABLE
     REPORT_SYMBOL "SHGetKnownFolderPath"
     IMPORT_DEF defs/tl_shell.def)
+
+tl_add_pe_fixture(tl_gdiex src/tl_gdiex.c manifests/tl_gdiex.json
+    LINK_KERNEL32 LINK_USER32 LINK_GDI32 LINK_GDIPLUS LINK_UXTHEME LINK_WINMM LINK_DBGHELP EXPECT_RESOLVED CONSOLE REPORT RELOCATABLE
+    REPORT_SYMBOL "CreateFontW")
 
 if(TARGET tradutorlinux)
     add_test(

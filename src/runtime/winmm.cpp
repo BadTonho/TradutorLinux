@@ -57,6 +57,18 @@ TL_WINMM_MSABI std::uint32_t tl_timeGetDevCaps(void* time_caps, const std::uint3
     return kTimerrNoError;
 }
 
+TL_WINMM_MSABI std::uint32_t tl_timeSetEvent(const std::uint32_t delay, const std::uint32_t resolution,
+                                             void* callback, const std::uintptr_t user,
+                                             const std::uint32_t event) noexcept {
+    (void)delay;
+    (void)resolution;
+    (void)callback;
+    (void)user;
+    (void)event;
+    // Stub: retorna timer ID 1 para indicar sucesso; não agenda callback real
+    return 1;
+}
+
 TL_WINMM_MSABI int tl_PlaySoundA(const char* sound, void* module, const std::uint32_t flags) noexcept {
     (void)sound;
     (void)module;

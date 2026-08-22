@@ -31,6 +31,9 @@ add_library(tradutorlinux_core STATIC
     runtime/comdlg32.cpp
     runtime/imm32.cpp
     runtime/psapi.cpp
+    runtime/gdiplus.cpp
+    runtime/uxtheme.cpp
+    runtime/dbghelp.cpp
     runtime/guest_entry.S
     util/unicode.cpp
     gui/x11.cpp

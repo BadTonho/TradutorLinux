@@ -34,6 +34,7 @@ Esta matriz declara o comportamento suportado; ela não é uma promessa de compa
 | `tl_fiber.exe` | PE32+ AMD64 | Não | `KERNEL32.dll` — `ConvertThreadToFiber`/`ConvertThreadToFiberEx`/`ConvertFiberToThread`/`CreateFiber`/`CreateFiberEx`/`SwitchToFiber`/`DeleteFiber`/`GetFiberData` | Fixture fibras: `ConvertThreadToFiberEx` com flags, `CreateFiberEx` commit/reserve, `SwitchToFiber`/`GetFiberData`/`DeleteFiber`/`ConvertFiberToThread`; saída `fiber\n`, exit `0` | Fibras |
 | `tl_toolhelp.exe` | PE32+ AMD64 | Não | `KERNEL32.dll` — `CreateToolhelp32Snapshot`/`Process32FirstW`/`Process32NextW`/`OpenProcess`/`GetCurrentProcessId` | Fixture Toolhelp: `CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS)` enumera `/proc`, `Process32FirstW`/`NextW` com `PROCESSENTRY32W` 568 bytes valida `dwSize`, `OpenProcess` via `/proc/[pid]` e `CloseHandle` para snapshot/process; saída `toolhelp\n`, exit `0` | Processos |
 | `tl_shell.exe` | PE32+ AMD64 | Não | `SHELL32.dll` — `SHGetKnownFolderPath`/`SHGetFolderPathW`/`SHGetFolderPathAndSubDirW`/`ShellExecuteW`/`ShellExecuteExW` | Fixture SHELL32: `FOLDERID_RoamingAppData`→`en-US` path, `CSIDL_APPDATA`/`TestSub`, `ShellExecuteW` `42`, `ShellExecuteExW` dummy `hProcess`; saída `shell\n`, exit `0` | Pastas conhecidas |
+| `tl_gdiex.exe` | PE32+ AMD64 | Não | `GDI32.dll` — `CreateFontW`/`SetDCBrushColor`/`SetDCPenColor`; `gdiplus.dll` — 8 APIs; `UxTheme.dll` — `SetWindowTheme`; `WINMM.dll` — `timeSetEvent`; `dbghelp.dll` — `SymFromAddr` | Fixture GDI estendido: `CreateFontW` wide, `SetDCBrush/PenColor`, `GdiplusStartup`/`GdipCreateBitmapFromStream`/`Clone`/`HBITMAP`/`Dispose`/`Alloc/Free`, `SetWindowTheme`, `timeSetEvent` `1`, `SymFromAddr` stub; `USER32` `GetDC`; saída `gdiex\n`, exit `0` | GDI estendido |
 | `simple_todo.exe` | PE32+ AMD64 | mingw-w64 CRT | 105 imports em `GDI32`, `KERNEL32`, `msvcrt`, `SHELL32` e `USER32` | **Suportado no subconjunto da Fase 12**: fonte pinada no commit `bcdf3d5fcebb8c0b445edb791d54511194c1b6ca` com overlay Linux versionado; build e `--report` resolvem 105/105; `targetapp_simple_todo_gui_smoke` cobre o fluxo principal, persistência, menu da bandeja, encerramento pela bandeja e fechamento da janela, com coordenadas do layout Linux | Fase 12 |
 
 As fontes e manifestos das fixtures ficam em `tests/samples/`. Os binários são produtos de build e ficam em `build/<preset>/tests/samples/generated/`.
@@ -333,6 +334,12 @@ que recebem arquivos do host como argumentos.
 | `SHELL32.dll` | `SHGetFolderPathW` | Suportado | `CSIDL_APPDATA`/`LOCAL_APPDATA`/`COMMON_APPDATA`/`DESKTOP`/`PERSONAL`→`$HOME/...`; copia para `pszPath[260]` |
 | `SHELL32.dll` | `SHGetFolderPathAndSubDirW` | Suportado | Base `CSIDL` + `pszSubDir` (`\`→`/`) → `base/sub`; garante diretório |
 | `SHELL32.dll` | `ShellExecuteW` / `ShellExecuteExW` | Suportado | `ShellExecuteW` valida `lpFile` wide e retorna `42` (>32); `ShellExecuteExW` valida `cbSize>=60` e preenche `hProcess` dummy, retorna `1` |
+| `GDI32.dll` | `CreateFontW` | Suportado | Wrapper `wide_to_utf8` → `CreateFontA`; valida `face_name` wide, token estático |
+| `GDI32.dll` | `SetDCBrushColor` / `SetDCPenColor` | Suportado | Stub retorna `0`, `ERROR_SUCCESS` |
+| `gdiplus.dll` | `GdiplusStartup` / `GdiplusShutdown` / `GdipAlloc` / `GdipFree` / `GdipCreateBitmapFromStream` / `GdipCloneImage` / `GdipDisposeImage` / `GdipCreateHBITMAPFromBitmap` | Suportado | `GdiplusStartup` aloca token `0x1`, `GdipAlloc` `malloc`, `GdipFree` `free`, `GdipCreateBitmapFromStream`/`Clone`/`HBITMAP` retornam dummy `0` |
+| `UxTheme.dll` | `SetWindowTheme` | Suportado | Valida `hwnd` e wstrings, retorna `S_OK` (0) |
+| `WINMM.dll` | `timeSetEvent` | Suportado | Stub retorna `1` |
+| `dbghelp.dll` | `SymFromAddr` | Suportado | Valida `process`/`displacement`/`symbol`, `displacement=0`, retorna `0` (não encontrado) mas sem crash |
 
 ### Limitações conhecidas
 

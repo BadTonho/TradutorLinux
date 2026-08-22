@@ -370,6 +370,7 @@ void register_builtin_modules() {
         {"WaitOnAddress", 185, reinterpret_cast<std::uintptr_t>(&tl_WaitOnAddress)},
         {"WakeByAddressSingle", 186, reinterpret_cast<std::uintptr_t>(&tl_WakeByAddressSingle)},
         {"WakeByAddressAll", 187, reinterpret_cast<std::uintptr_t>(&tl_WakeByAddressAll)},
+        {"GetCurrentProcess", 194, reinterpret_cast<std::uintptr_t>(&tl_GetCurrentProcess)},
     };
     static const InternalModule kKernel32Module{"KERNEL32.dll", kKernel32Exports};
     register_module(kKernel32Module);
@@ -472,6 +473,9 @@ void register_builtin_modules() {
         {"SetBkMode", 16, reinterpret_cast<std::uintptr_t>(&tl_SetBkMode)},
         {"CreateFontIndirectA", 17, reinterpret_cast<std::uintptr_t>(&tl_CreateFontIndirectA)},
         {"CreateFontIndirectW", 18, reinterpret_cast<std::uintptr_t>(&tl_CreateFontIndirectW)},
+        {"CreateFontW", 19, reinterpret_cast<std::uintptr_t>(&tl_CreateFontW)},
+        {"SetDCBrushColor", 20, reinterpret_cast<std::uintptr_t>(&tl_SetDCBrushColor)},
+        {"SetDCPenColor", 21, reinterpret_cast<std::uintptr_t>(&tl_SetDCPenColor)},
     };
     static const InternalModule kGdi32Module{"GDI32.dll", kGdi32Exports};
     register_module(kGdi32Module);
@@ -690,9 +694,32 @@ void register_builtin_modules() {
         {"timeGetDevCaps", 4, reinterpret_cast<std::uintptr_t>(&tl_timeGetDevCaps)},
         {"PlaySoundA", 5, reinterpret_cast<std::uintptr_t>(&tl_PlaySoundA)},
         {"PlaySoundW", 6, reinterpret_cast<std::uintptr_t>(&tl_PlaySoundW)},
+        {"timeSetEvent", 7, reinterpret_cast<std::uintptr_t>(&tl_timeSetEvent)},
     };
     static const InternalModule kWinmmModule{"WINMM.dll", kWinmmExports};
     register_module(kWinmmModule);
+    static const ExportedFunction kGdiplusExports[] = {
+        {"GdiplusStartup", 1, reinterpret_cast<std::uintptr_t>(&tl_GdiplusStartup)},
+        {"GdiplusShutdown", 2, reinterpret_cast<std::uintptr_t>(&tl_GdiplusShutdown)},
+        {"GdipAlloc", 3, reinterpret_cast<std::uintptr_t>(&tl_GdipAlloc)},
+        {"GdipFree", 4, reinterpret_cast<std::uintptr_t>(&tl_GdipFree)},
+        {"GdipCreateBitmapFromStream", 5, reinterpret_cast<std::uintptr_t>(&tl_GdipCreateBitmapFromStream)},
+        {"GdipCloneImage", 6, reinterpret_cast<std::uintptr_t>(&tl_GdipCloneImage)},
+        {"GdipDisposeImage", 7, reinterpret_cast<std::uintptr_t>(&tl_GdipDisposeImage)},
+        {"GdipCreateHBITMAPFromBitmap", 8, reinterpret_cast<std::uintptr_t>(&tl_GdipCreateHBITMAPFromBitmap)},
+    };
+    static const InternalModule kGdiplusModule{"gdiplus.dll", kGdiplusExports};
+    register_module(kGdiplusModule);
+    static const ExportedFunction kUxThemeExports[] = {
+        {"SetWindowTheme", 1, reinterpret_cast<std::uintptr_t>(&tl_SetWindowTheme)},
+    };
+    static const InternalModule kUxThemeModule{"UxTheme.dll", kUxThemeExports};
+    register_module(kUxThemeModule);
+    static const ExportedFunction kDbghelpExports[] = {
+        {"SymFromAddr", 1, reinterpret_cast<std::uintptr_t>(&tl_SymFromAddr)},
+    };
+    static const InternalModule kDbghelpModule{"dbghelp.dll", kDbghelpExports};
+    register_module(kDbghelpModule);
     static const ExportedFunction kComctl32Exports[] = {
         {"InitCommonControls", 1, reinterpret_cast<std::uintptr_t>(&tl_InitCommonControls)},
         {"InitCommonControlsEx", 2, reinterpret_cast<std::uintptr_t>(&tl_InitCommonControlsEx)},

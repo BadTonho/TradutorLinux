@@ -244,6 +244,49 @@ TL_MSABI void* tl_CreateFontIndirectW(const void* log_font) noexcept {
     return &g_font_w_token;
 }
 
+TL_MSABI void* tl_CreateFontW(int height, int width, int escapement, int orientation, int weight,
+                              std::uint32_t italic, std::uint32_t underline,
+                              std::uint32_t strikeout, std::uint32_t charset,
+                              std::uint32_t output_precision, std::uint32_t clip_precision,
+                              std::uint32_t quality, std::uint32_t pitch_and_family,
+                              const std::uint16_t* face_name) noexcept {
+    (void)height;
+    (void)width;
+    (void)escapement;
+    (void)orientation;
+    (void)weight;
+    (void)italic;
+    (void)underline;
+    (void)strikeout;
+    (void)charset;
+    (void)output_precision;
+    (void)clip_precision;
+    (void)quality;
+    (void)pitch_and_family;
+    (void)face_name;
+    static char g_font_w2_token = 0;
+    if (face_name != nullptr && !mapped_guest_wstring(face_name)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return nullptr;
+    }
+    set_last_error(abi::kErrorSuccess);
+    return &g_font_w2_token;
+}
+
+TL_MSABI std::uint32_t tl_SetDCBrushColor(const void* dc, std::uint32_t color) noexcept {
+    (void)dc;
+    (void)color;
+    set_last_error(abi::kErrorSuccess);
+    return 0x00000000; // previous black
+}
+
+TL_MSABI std::uint32_t tl_SetDCPenColor(const void* dc, std::uint32_t color) noexcept {
+    (void)dc;
+    (void)color;
+    set_last_error(abi::kErrorSuccess);
+    return 0x00000000;
+}
+
 }  // extern "C"
 
 }  // namespace tradutorlinux

@@ -1534,6 +1534,10 @@ TL_MSABI std::uint32_t tl_GetCurrentProcessId() noexcept {
     return static_cast<std::uint32_t>(::getpid());
 }
 
+TL_MSABI void* tl_GetCurrentProcess() noexcept {
+    return reinterpret_cast<void*>(static_cast<std::uintptr_t>(-1));
+}
+
 TL_MSABI const char* tl_GetCommandLineA() noexcept {
     if (g_guest_acmdln != nullptr) {
         return g_guest_acmdln;
