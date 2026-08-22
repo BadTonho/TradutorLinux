@@ -348,6 +348,13 @@ void register_builtin_modules() {
         {"HeapValidate", 168, reinterpret_cast<std::uintptr_t>(&tl_HeapValidate)},
         {"HeapSize", 169, reinterpret_cast<std::uintptr_t>(&tl_HeapSize)},
         {"HeapCompact", 170, reinterpret_cast<std::uintptr_t>(&tl_HeapCompact)},
+        {"LoadLibraryA", 172, reinterpret_cast<std::uintptr_t>(&tl_LoadLibraryA)},
+        {"LoadLibraryW", 173, reinterpret_cast<std::uintptr_t>(&tl_LoadLibraryW)},
+        {"LoadLibraryExA", 174, reinterpret_cast<std::uintptr_t>(&tl_LoadLibraryExA)},
+        {"LoadLibraryExW", 175, reinterpret_cast<std::uintptr_t>(&tl_LoadLibraryExW)},
+        {"FreeLibrary", 176, reinterpret_cast<std::uintptr_t>(&tl_FreeLibrary)},
+        {"GetModuleHandleExA", 177, reinterpret_cast<std::uintptr_t>(&tl_GetModuleHandleExA)},
+        {"GetModuleHandleExW", 178, reinterpret_cast<std::uintptr_t>(&tl_GetModuleHandleExW)},
     };
     static const InternalModule kKernel32Module{"KERNEL32.dll", kKernel32Exports};
     register_module(kKernel32Module);
@@ -735,6 +742,50 @@ ExportLookup find_export_by_ordinal(const std::string_view dll, const std::uint1
         lookup.address = found->address;
     }
     return lookup;
+}
+
+ExportLookup find_export_global(const std::string_view symbol) {
+    std::lock_guard<std::mutex> lock(modules_mutex());
+    ExportLookup lookup;
+    for (const auto& module : modules()) {
+        const auto found = std::find_if(module.exports.begin(), module.exports.end(),
+                                        [&](const OwnedExport& export_) {
+                                            return export_.name == symbol;
+                                        });
+        if (found != module.exports.end()) {
+            lookup.found = true;
+            lookup.ordinal = found->ordinal;
+            lookup.address = found->address;
+            return lookup;
+        }
+    }
+    return lookup;
+}
+
+ExportLookup find_export_by_ordinal_global(const std::uint16_t ordinal) {
+    std::lock_guard<std::mutex> lock(modules_mutex());
+    ExportLookup lookup;
+    for (const auto& module : modules()) {
+        const auto found = std::find_if(module.exports.begin(), module.exports.end(),
+                                        [&](const OwnedExport& export_) {
+                                            return export_.ordinal == ordinal;
+                                        });
+        if (found != module.exports.end()) {
+            lookup.found = true;
+            lookup.ordinal = found->ordinal;
+            lookup.address = found->address;
+            return lookup;
+        }
+    }
+    return lookup;
+}
+
+bool is_valid_module_handle(void* handle) noexcept {
+    if (handle == nullptr) {
+        return false;
+    }
+    const auto value = reinterpret_cast<std::uintptr_t>(handle);
+    return value == 0x1000U;
 }
 
 std::size_t registered_module_count() {

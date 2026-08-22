@@ -164,6 +164,9 @@ function(tl_add_pe_fixture target_name source_file manifest_file)
             elseif(target_name STREQUAL "tl_registry_unicode")
                 set(runtime_extra_args
                     "-DEXPECTED_HEX=72656769737472790a")
+            elseif(target_name STREQUAL "tl_dynload")
+                set(runtime_extra_args
+                    "-DEXPECTED_HEX=64796e6c6f61640a")
             endif()
         endif()
         add_test(
@@ -295,6 +298,10 @@ tl_add_pe_fixture(tl_network_loopback src/tl_network_loopback.c manifests/tl_net
 tl_add_pe_fixture(tl_registry_unicode src/tl_registry_unicode.c manifests/tl_registry_unicode.json
     LINK_KERNEL32 LINK_ADVAPI32 EXPECT_RESOLVED CONSOLE REPORT RELOCATABLE
     REPORT_SYMBOL "RegCreateKeyExW")
+
+tl_add_pe_fixture(tl_dynload src/tl_dynload.c manifests/tl_dynload.json
+    LINK_KERNEL32 EXPECT_RESOLVED CONSOLE REPORT RELOCATABLE
+    REPORT_SYMBOL "LoadLibraryA")
 
 if(TARGET tradutorlinux)
     add_test(

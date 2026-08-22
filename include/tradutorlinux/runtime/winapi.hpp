@@ -67,8 +67,13 @@ constexpr Dword kPageExecuteWriteCopy = 0x80U;
 
 constexpr Dword kErrorInsufficientBuffer = 122;
 constexpr Dword kErrorInvalidAddress = 487;
+constexpr Dword kErrorModNotFound = 126;
+constexpr Dword kErrorProcNotFound = 127;
 constexpr Dword kErrorNoUnicodeTranslation = 1113;
 constexpr Dword kErrorTooManyTlsIndexes = 4323;
+constexpr Dword kGetModuleHandleExFlagPin = 0x01U;
+constexpr Dword kGetModuleHandleExFlagUnchangedRefcount = 0x02U;
+constexpr Dword kGetModuleHandleExFlagFromAddress = 0x04U;
 constexpr Dword kFormatMessageAllocateBuffer = 0x00000100U;
 constexpr Dword kFormatMessageIgnoreInserts = 0x00000200U;
 constexpr Dword kFormatMessageFromSystem = 0x00001000U;
@@ -493,6 +498,13 @@ TL_MSABI int tl_WideCharToMultiByte(std::uint32_t code_page, std::uint32_t flags
                                      int* used_default_char) noexcept;
 TL_MSABI void* tl_GetModuleHandleA(const char* module_name) noexcept;
 TL_MSABI void* tl_GetModuleHandleW(const std::uint16_t* module_name) noexcept;
+TL_MSABI int tl_GetModuleHandleExA(std::uint32_t flags, const char* module_name, void** module) noexcept;
+TL_MSABI int tl_GetModuleHandleExW(std::uint32_t flags, const std::uint16_t* module_name, void** module) noexcept;
+TL_MSABI void* tl_LoadLibraryA(const char* file_name) noexcept;
+TL_MSABI void* tl_LoadLibraryW(const std::uint16_t* file_name) noexcept;
+TL_MSABI void* tl_LoadLibraryExA(const char* file_name, void* file, std::uint32_t flags) noexcept;
+TL_MSABI void* tl_LoadLibraryExW(const std::uint16_t* file_name, void* file, std::uint32_t flags) noexcept;
+TL_MSABI int tl_FreeLibrary(void* module) noexcept;
 TL_MSABI void* tl_GetProcAddress(void* module, const char* name) noexcept;
 TL_MSABI const char* tl_GetCommandLineA() noexcept;
 TL_MSABI const std::uint16_t* tl_GetCommandLineW() noexcept;

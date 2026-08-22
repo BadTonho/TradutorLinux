@@ -43,6 +43,10 @@ bool is_module_registered(std::string_view dll);
 
 ExportLookup find_export(const ExportQuery& query);
 ExportLookup find_export_by_ordinal(std::string_view dll, std::uint16_t ordinal);
+ExportLookup find_export_global(std::string_view symbol);
+ExportLookup find_export_by_ordinal_global(std::uint16_t ordinal);
+
+bool is_valid_module_handle(void* handle) noexcept;
 
 // Wine: api-ms-win-* e ext-ms-win-* são API Sets que encaminham (forward) para
 // as DLLs reais. Inspirado em dlls/*/ *.spec do Wine, resolvemos o símbolo

@@ -1666,10 +1666,55 @@ TL_MSABI std::uint32_t tl_GetModuleFileNameW(const void* module, std::uint16_t* 
     return static_cast<std::uint32_t>(len);
 }
 
+[[nodiscard]] std::string extract_module_filename(const char* input) noexcept {
+    if (input == nullptr) return {};
+    std::string_view view{input};
+    const std::size_t pos = view.find_last_of("/\\:");
+    if (pos != std::string_view::npos) {
+        if (pos + 1 >= view.size()) return {};
+        view = view.substr(pos + 1);
+    }
+    view = std::string_view{view.data(), strnlen(view.data(), view.size())};
+    // Trim leading/trailing spaces (comum em LoadLibrary).
+    std::size_t start = 0;
+    while (start < view.size() && std::isspace(static_cast<unsigned char>(view[start]))) ++start;
+    std::size_t end = view.size();
+    while (end > start && std::isspace(static_cast<unsigned char>(view[end - 1]))) --end;
+    return std::string{view.substr(start, end - start)};
+}
+
+[[nodiscard]] std::string normalize_module_name(const char* input) noexcept {
+    std::string fname = extract_module_filename(input);
+    if (fname.empty()) return {};
+    std::string lower;
+    lower.reserve(fname.size() + 4);
+    for (const char c : fname) lower.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(c))));
+    if (!lower.ends_with(".dll")) lower += ".dll";
+    return lower;
+}
+
+[[nodiscard]] bool is_module_available(const std::string& normalized) noexcept {
+    if (loader::registered_module_count() == 0) {
+        loader::register_builtin_modules();
+    }
+    if (loader::is_module_registered(normalized)) return true;
+    if (loader::is_api_set_dll(normalized) || loader::is_kernelbase_dll(normalized)) {
+        return loader::is_module_registered_forwarded(normalized);
+    }
+    return false;
+}
+
+[[nodiscard]] bool is_valid_handle_for_free(void* handle) noexcept {
+    if (handle == nullptr) return false;
+    const auto value = reinterpret_cast<std::uintptr_t>(handle);
+    if (value == 0x1000U) return true;
+    if (g_guest_image_base != nullptr && value == reinterpret_cast<std::uintptr_t>(g_guest_image_base)) return true;
+    if (loader::is_valid_module_handle(handle)) return true;
+    return false;
+}
+
 TL_MSABI void* tl_GetModuleHandleA(const char* module_name) noexcept {
     if (module_name == nullptr) {
-        // Módulo padrão: base do executável principal; sentinela quando não
-        // há convidado carregado (contexto de teste).
         if (g_guest_image_base != nullptr) {
             return const_cast<std::byte*>(g_guest_image_base);
         }
@@ -1680,19 +1725,16 @@ TL_MSABI void* tl_GetModuleHandleA(const char* module_name) noexcept {
         set_last_error(abi::kErrorInvalidParameter);
         return nullptr;
     }
-    std::string normalized;
-    normalized.reserve(std::strlen(module_name) + 4);
-    for (const char c : std::string_view{module_name}) {
-        normalized.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(c))));
+    if (module_name[0] == '\0') {
+        set_last_error(abi::kErrorInvalidParameter);
+        return nullptr;
     }
-    if (!normalized.ends_with(".dll")) {
-        normalized += ".dll";
+    const std::string normalized = normalize_module_name(module_name);
+    if (normalized.empty()) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return nullptr;
     }
-    if (loader::registered_module_count() == 0) {
-        // Contexto sem imports resolvidos ainda (ex.: testes unitários).
-        loader::register_builtin_modules();
-    }
-    if (!loader::is_module_registered(normalized)) {
+    if (!is_module_available(normalized)) {
         set_last_error(abi::kErrorFileNotFound);
         return nullptr;
     }
@@ -1708,19 +1750,265 @@ TL_MSABI void* tl_GetModuleHandleW(const std::uint16_t* module_name) noexcept {
         set_last_error(abi::kErrorInvalidParameter);
         return nullptr;
     }
-    const std::string utf8 = util::wide_to_utf8(module_name);
-    return tl_GetModuleHandleA(utf8.c_str());
-}
-
-TL_MSABI void* tl_GetProcAddress(void* module, const char* proc_name) noexcept {
-    (void)module;
-    if (proc_name == nullptr || !mapped_guest_cstring(proc_name)) {
+    if (module_name[0] == 0) {
         set_last_error(abi::kErrorInvalidParameter);
         return nullptr;
     }
-    (void)module;
-    // Resolução dinâmica ainda não faz parte do contrato suportado. Imports
-    // estáticos são resolvidos pelo loader antes do entry point.
+    const std::string utf8 = util::wide_to_utf8(module_name);
+    if (utf8.empty()) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return nullptr;
+    }
+    // Delegar sem re-normalizar erro: tl_GetModuleHandleA já define FileNotFound.
+    void* result = tl_GetModuleHandleA(utf8.c_str());
+    // tl_GetModuleHandleA já setou o erro correto; preservar.
+    return result;
+}
+
+TL_MSABI int tl_GetModuleHandleExA(std::uint32_t flags, const char* module_name, void** module) noexcept {
+    constexpr std::uint32_t kValidFlags = abi::kGetModuleHandleExFlagPin |
+                                          abi::kGetModuleHandleExFlagUnchangedRefcount |
+                                          abi::kGetModuleHandleExFlagFromAddress;
+    if ((flags & ~kValidFlags) != 0) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    if (module == nullptr || !mapped_guest_range(module, sizeof(*module), true)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    const bool from_address = (flags & abi::kGetModuleHandleExFlagFromAddress) != 0;
+    if (from_address) {
+        if (module_name == nullptr) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
+        }
+        const auto addr = reinterpret_cast<std::uintptr_t>(module_name);
+        // Se o endereço estiver dentro da imagem do convidado ou for o token de módulo, trata como handle do exe.
+        if (addr == 0x1000U) {
+            *module = reinterpret_cast<void*>(0x1000U);
+            set_last_error(abi::kErrorSuccess);
+            return 1;
+        }
+        if (g_guest_image_base != nullptr && g_guest_image_size > 0) {
+            const auto base = reinterpret_cast<std::uintptr_t>(g_guest_image_base);
+            if (addr >= base && addr < base + g_guest_image_size) {
+                *module = const_cast<std::byte*>(g_guest_image_base);
+                set_last_error(abi::kErrorSuccess);
+                return 1;
+            }
+        }
+        // Tenta interpretar module_name como string se estiver em memória de convidado e falhar o range check acima.
+        // Para manter compatibilidade, se o ponteiro for uma string válida, cai no caminho normal.
+        if (mapped_guest_cstring(module_name)) {
+            // Não é um endereço de código, trata como nome abaixo.
+        } else {
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
+        }
+    }
+    if (!from_address && module_name == nullptr) {
+        void* handle = tl_GetModuleHandleA(nullptr);
+        if (handle == nullptr) return 0;
+        *module = handle;
+        set_last_error(abi::kErrorSuccess);
+        return 1;
+    }
+    // module_name é nome (A). Validar.
+    if (module_name == nullptr || !mapped_guest_cstring(module_name)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    if (module_name[0] == '\0') {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    const std::string normalized = normalize_module_name(module_name);
+    if (normalized.empty() || !is_module_available(normalized)) {
+        set_last_error(abi::kErrorFileNotFound);
+        return 0;
+    }
+    *module = reinterpret_cast<void*>(0x1000U);
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_GetModuleHandleExW(std::uint32_t flags, const std::uint16_t* module_name, void** module) noexcept {
+    constexpr std::uint32_t kValidFlags = abi::kGetModuleHandleExFlagPin |
+                                          abi::kGetModuleHandleExFlagUnchangedRefcount |
+                                          abi::kGetModuleHandleExFlagFromAddress;
+    if ((flags & ~kValidFlags) != 0) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    if (module == nullptr || !mapped_guest_range(module, sizeof(*module), true)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    const bool from_address = (flags & abi::kGetModuleHandleExFlagFromAddress) != 0;
+    if (from_address) {
+        if (module_name == nullptr) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
+        }
+        const auto addr = reinterpret_cast<std::uintptr_t>(module_name);
+        if (addr == 0x1000U) {
+            *module = reinterpret_cast<void*>(0x1000U);
+            set_last_error(abi::kErrorSuccess);
+            return 1;
+        }
+        if (g_guest_image_base != nullptr && g_guest_image_size > 0) {
+            const auto base = reinterpret_cast<std::uintptr_t>(g_guest_image_base);
+            if (addr >= base && addr < base + g_guest_image_size) {
+                *module = const_cast<std::byte*>(g_guest_image_base);
+                set_last_error(abi::kErrorSuccess);
+                return 1;
+            }
+        }
+        if (mapped_guest_wstring(module_name)) {
+            // Trata como nome abaixo.
+        } else {
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
+        }
+    }
+    if (!from_address && module_name == nullptr) {
+        void* handle = tl_GetModuleHandleW(nullptr);
+        if (handle == nullptr) return 0;
+        *module = handle;
+        set_last_error(abi::kErrorSuccess);
+        return 1;
+    }
+    if (module_name == nullptr || !mapped_guest_wstring(module_name)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    if (module_name[0] == 0) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    const std::string utf8 = util::wide_to_utf8(module_name);
+    if (utf8.empty()) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    const std::string normalized = normalize_module_name(utf8.c_str());
+    if (normalized.empty() || !is_module_available(normalized)) {
+        set_last_error(abi::kErrorFileNotFound);
+        return 0;
+    }
+    *module = reinterpret_cast<void*>(0x1000U);
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI void* tl_LoadLibraryA(const char* file_name) noexcept {
+    if (file_name == nullptr || !mapped_guest_cstring(file_name) || file_name[0] == '\0') {
+        set_last_error(abi::kErrorInvalidParameter);
+        return nullptr;
+    }
+    const std::string normalized = normalize_module_name(file_name);
+    if (normalized.empty() || !is_module_available(normalized)) {
+        set_last_error(abi::kErrorModNotFound);
+        return nullptr;
+    }
+    set_last_error(abi::kErrorSuccess);
+    return reinterpret_cast<void*>(0x1000U);
+}
+
+TL_MSABI void* tl_LoadLibraryW(const std::uint16_t* file_name) noexcept {
+    if (file_name == nullptr || !mapped_guest_wstring(file_name) || file_name[0] == 0) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return nullptr;
+    }
+    const std::string utf8 = util::wide_to_utf8(file_name);
+    if (utf8.empty()) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return nullptr;
+    }
+    return tl_LoadLibraryA(utf8.c_str());
+}
+
+TL_MSABI void* tl_LoadLibraryExA(const char* file_name, void* file, std::uint32_t flags) noexcept {
+    (void)file;
+    (void)flags;
+    return tl_LoadLibraryA(file_name);
+}
+
+TL_MSABI void* tl_LoadLibraryExW(const std::uint16_t* file_name, void* file, std::uint32_t flags) noexcept {
+    (void)file;
+    (void)flags;
+    return tl_LoadLibraryW(file_name);
+}
+
+TL_MSABI int tl_FreeLibrary(void* module) noexcept {
+    if (!is_valid_handle_for_free(module)) {
+        set_last_error(abi::kErrorInvalidHandle);
+        return 0;
+    }
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI void* tl_GetProcAddress(void* module, const char* proc_name) noexcept {
+    if (proc_name == nullptr) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return nullptr;
+    }
+    const auto proc_addr = reinterpret_cast<std::uintptr_t>(proc_name);
+    // Ordinal via MAKEINTRESOURCE (HIWORD == 0).
+    if (proc_addr <= 0xFFFFU) {
+        const auto ordinal = static_cast<std::uint16_t>(proc_addr & 0xFFFFU);
+        if (loader::registered_module_count() == 0) loader::register_builtin_modules();
+        loader::ExportLookup found{};
+        if (module != nullptr && is_valid_handle_for_free(module)) {
+            // Tenta ordinal no módulo específico quando possível; para token único, busca global.
+            found = loader::find_export_by_ordinal_global(ordinal);
+        } else if (module == nullptr) {
+            found = loader::find_export_by_ordinal_global(ordinal);
+        } else {
+            // Handle inválido: falha como no Windows.
+            set_last_error(abi::kErrorInvalidHandle);
+            return nullptr;
+        }
+        if (found.found && found.address != 0) {
+            set_last_error(abi::kErrorSuccess);
+            return reinterpret_cast<void*>(found.address);
+        }
+        set_last_error(abi::kErrorProcNotFound);
+        return nullptr;
+    }
+    if (!mapped_guest_cstring(proc_name)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return nullptr;
+    }
+    if (proc_name[0] == '\0') {
+        set_last_error(abi::kErrorProcNotFound);
+        return nullptr;
+    }
+    if (loader::registered_module_count() == 0) loader::register_builtin_modules();
+    // Validação de handle: se não for nullptr e não for handle válido, falha.
+    if (module != nullptr && !is_valid_handle_for_free(module)) {
+        // Permitir handle de imagem do convidado (recursos) como válido, mas GetProcAddress nele não tem exports.
+        const auto value = reinterpret_cast<std::uintptr_t>(module);
+        const bool is_image = g_guest_image_base != nullptr && value == reinterpret_cast<std::uintptr_t>(g_guest_image_base);
+        if (!is_image) {
+            set_last_error(abi::kErrorInvalidHandle);
+            return nullptr;
+        }
+        set_last_error(abi::kErrorProcNotFound);
+        return nullptr;
+    }
+    loader::ExportLookup found{};
+    // Token único 0x1000 representa qualquer DLL registrada; busca global cobre apisets.
+    found = loader::find_export_global(proc_name);
+    if (found.found && found.address != 0) {
+        set_last_error(abi::kErrorSuccess);
+        return reinterpret_cast<void*>(found.address);
+    }
+    // Se não encontrou globalmente, tenta lookup com forwarders para cobrir símbolos que só existem via API Set.
+    // fallback já é global, então direto erro.
+    set_last_error(abi::kErrorProcNotFound);
     return nullptr;
 }
 

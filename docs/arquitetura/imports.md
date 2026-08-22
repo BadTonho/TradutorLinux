@@ -70,7 +70,11 @@ O resolvedor reporta **todas** as entradas: para cada uma, um `ResolvedImport` c
 ## Mecanismos fora de escopo
 
 - Delay imports: a presença do diretório de dados 13 (`IMAGE_DIRECTORY_ENTRY_DELAY_IMPORT`) torna a resolução `unsupported-mechanism`.
-- Forwarders de export ainda não são resolvidos; somente exports diretos de módulos internos registrados são aceitos.
+- Forwarders de export ainda não são resolvidos na resolução estática; somente exports diretos de módulos internos registrados são aceitos. Para carregamento dinâmico, `GetProcAddress` usa busca global (`find_export_global`) e suporta ordinais via `MAKEINTRESOURCE`.
+
+### Carregamento dinâmico (Fase 12+)
+
+`KERNEL32.dll!LoadLibraryA/W`/`LoadLibraryExA/W`, `FreeLibrary`, `GetModuleHandleA/W`/`GetModuleHandleExA/W` e `GetProcAddress` estão implementados sobre o mesmo registro (`loader::register_builtin_modules`). `LoadLibrary` normaliza o nome (filename após `\/:` , case-insensitive, `+ ".dll"`), aceita caminhos `C:\` e API Sets `api-ms-win-*`/`KERNELBASE` via `is_module_registered_forwarded`; `GetProcAddress` valida `proc_name` (string ou ordinal `<=0xFFFF`) e `module` (`0x1000` ou base do exe), retornando `ERROR_PROC_NOT_FOUND` (127) ou `ERROR_INVALID_HANDLE` conforme contrato. A fixture `tl_dynload.exe` protege o fluxo `LoadLibrary→GetProcAddress→call→FreeLibrary→GetModuleHandleEx`.
 
 Antes da execução, o processo valida que o entry point está dentro de uma seção
 `r-x`. A pilha inicial possui uma guard page e é instalada no contexto Microsoft

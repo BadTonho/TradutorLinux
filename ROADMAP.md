@@ -34,6 +34,7 @@ Os itens marcados como concluídos devem ter evidência no repositório: código
 - **Marco concluído:** a primeira entrega genérica do plano foi validada por fixtures próprias. `tl_files_wide.exe` cobre arquivos Unicode, posição, metadados, tempos, cópia e movimentação; `tl_resources.exe` acessa `RCDATA` somente leitura com limites validados; `tl_sync.exe` cobre eventos, mutex recursivo, semáforo, timeouts e `WaitForMultipleObjects`; `tl_process_parent.exe` cria filhos PE32+ pelo mesmo loader e testa código de saída/encerramento; `tl_network_loopback.exe` cobre TCP/UDP local, `localhost` e `WSAPoll`; `tl_registry_unicode.exe` cobre armazenamento genérico persistente Unicode. Cada fixture possui manifesto, metadata, execução e `--report`, sem tratamento específico para Roblox.
 - **Marco concluído:** o alvo pinado `Efeckc17/simple-todo-c` (`bcdf3d5fcebb8c0b445edb791d54511194c1b6ca`) compila como PE32+ x64 com manifesto/ícone, overlay Linux versionado e metadata/`--report` protegidos. O relatório resolve **105/105 imports**; `USER32` possui controles lógicos EDIT/BUTTON/COMBOBOX/STATIC/SysListView32, comandos/notificações, foco, teclado e fechamento nativo; `SHELL32` usa menu X11 como bandeja emulada, sem a opção de autorun exclusiva do Windows. O smoke foi atualizado para o layout Linux e cobre adicionar, editar, buscar, concluir, excluir, esconder, mostrar, persistência e saída pela bandeja ou pela janela.
 - **Marco concluído:** `dos2unix.exe` e `unix2dos.exe` executam o fluxo de conversão validado. O `--report` resolve 91/91 imports em cada binário; regressões e2e cobrem CRLF→LF, LF→CRLF e expansão de `uni_el_*.txt` com nome UTF-8. Os testes `targetapp_dos2unix_eol`, `targetapp_unix2dos_eol` e `targetapp_dos2unix_unicode-glob` passam com exit `0`; os arquivos de entrada CRLF/LF vêm da fonte pinada do dos2unix e o ouro UTF-8 está versionado em `tests/targets/golden/dos2unix/`.
+- **Marco concluído:** carregamento dinâmico `KERNEL32` completo em `tl_dynload.exe` (`LoadLibraryA/W`, `LoadLibraryExA/W`, `FreeLibrary`, `GetModuleHandleExA/W`, `GetProcAddress` por nome e ordinal). A fixture prova `C:\Windows\System32\kernel32.dll` (extração de filename), API Set `api-ms-win-core-file-l1-1-0.dll` via forwarder, `LoadLibraryEx` com flags ignoradas, `GetProcAddress("GetTickCount64")` chamado dinamicamente, `FreeLibrary` e `GetModuleHandleEx` com `PIN`/`FROM_ADDRESS` (token `0x1000` e endereço `tl_entry`). `--report` resolve 14/14 imports, execução `dynload\n` exit `0`.
 - **Próximo resultado observável:** ampliar a validação do subconjunto GUI por novos aplicativos-alvo; Wayland/toolkit permanece posterior à existência de uma aplicação GUI real suportada.
 
 ### Estudo de caso: `RobloxPlayerInstaller.exe` (somente diagnóstico)
@@ -60,8 +61,8 @@ observadas são:
 - [ ] implementar unwinding/SEH x64 de ponta a ponta: `__C_specific_handler`,
   `RtlUnwindEx`, `RtlVirtualUnwind`, `RtlLookupFunctionEntry` e
   `RtlCaptureContext`, percorrendo `.pdata`/`.xdata` da imagem convidada;
-- [ ] implementar carregamento dinâmico real: `LoadLibraryA/W`,
-  `LoadLibraryExW`, `FreeLibrary` e `GetModuleHandleExW`;
+- [x] implementar carregamento dinâmico real: `LoadLibraryA/W`,
+  `LoadLibraryExA/W`, `FreeLibrary` e `GetModuleHandleExA/W` + `GetProcAddress` por nome e ordinal (fixture `tl_dynload.exe` cobre `C:\` path, API Set `api-ms-win-core-file-l1-1-0.dll`, `LoadLibraryEx`, `GetProcAddress`/`FreeLibrary`/`GetModuleHandleEx` `PIN`/`FROM_ADDRESS`); `GetProcAddress` agora resolve via `find_export_global`;
 - [ ] implementar APIs de versão e locale: `GetVersionExA`,
   `VerifyVersionInfoW`/`VerSetConditionMask`, `GetUserDefaultLocaleName` e
   `LocaleNameToLCID`;
