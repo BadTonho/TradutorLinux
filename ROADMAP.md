@@ -35,6 +35,7 @@ Os itens marcados como concluídos devem ter evidência no repositório: código
 - **Marco concluído:** o alvo pinado `Efeckc17/simple-todo-c` (`bcdf3d5fcebb8c0b445edb791d54511194c1b6ca`) compila como PE32+ x64 com manifesto/ícone, overlay Linux versionado e metadata/`--report` protegidos. O relatório resolve **105/105 imports**; `USER32` possui controles lógicos EDIT/BUTTON/COMBOBOX/STATIC/SysListView32, comandos/notificações, foco, teclado e fechamento nativo; `SHELL32` usa menu X11 como bandeja emulada, sem a opção de autorun exclusiva do Windows. O smoke foi atualizado para o layout Linux e cobre adicionar, editar, buscar, concluir, excluir, esconder, mostrar, persistência e saída pela bandeja ou pela janela.
 - **Marco concluído:** `dos2unix.exe` e `unix2dos.exe` executam o fluxo de conversão validado. O `--report` resolve 91/91 imports em cada binário; regressões e2e cobrem CRLF→LF, LF→CRLF e expansão de `uni_el_*.txt` com nome UTF-8. Os testes `targetapp_dos2unix_eol`, `targetapp_unix2dos_eol` e `targetapp_dos2unix_unicode-glob` passam com exit `0`; os arquivos de entrada CRLF/LF vêm da fonte pinada do dos2unix e o ouro UTF-8 está versionado em `tests/targets/golden/dos2unix/`.
 - **Marco concluído:** carregamento dinâmico `KERNEL32` completo em `tl_dynload.exe` (`LoadLibraryA/W`, `LoadLibraryExA/W`, `FreeLibrary`, `GetModuleHandleExA/W`, `GetProcAddress` por nome e ordinal). A fixture prova `C:\Windows\System32\kernel32.dll` (extração de filename), API Set `api-ms-win-core-file-l1-1-0.dll` via forwarder, `LoadLibraryEx` com flags ignoradas, `GetProcAddress("GetTickCount64")` chamado dinamicamente, `FreeLibrary` e `GetModuleHandleEx` com `PIN`/`FROM_ADDRESS` (token `0x1000` e endereço `tl_entry`). `--report` resolve 14/14 imports, execução `dynload\n` exit `0`.
+- **Marco concluído:** versão e locale `KERNEL32` em `tl_version.exe` (`GetVersionExA/W` 10.0.19044 `VER_PLATFORM_WIN32_NT`, `VerifyVersionInfoW`/`VerSetConditionMask` chain `VER_MAJOR|MINOR` `GREATER_EQUAL`, `GetUserDefaultLocaleName` `en-US` com `ERROR_INSUFFICIENT_BUFFER` e `LocaleNameToLCID` `en-US`→`0x0409`/`pt-BR`→`0x0416` case-insensitive). `--report` 10/10, `version\n` exit `0`.
 - **Próximo resultado observável:** ampliar a validação do subconjunto GUI por novos aplicativos-alvo; Wayland/toolkit permanece posterior à existência de uma aplicação GUI real suportada.
 
 ### Estudo de caso: `RobloxPlayerInstaller.exe` (somente diagnóstico)
@@ -50,6 +51,9 @@ Em 2026-08-22, o mesmo arquivo foi reanalisado com o `--report` atual:
 196/430 imports resolvidos (45%), ainda `unsupported`, com `execution:
 not-attempted`; o avanço vem das fases 10–12.
 
+Em 2026-08-22, após `LoadLibrary`/`GetVersionEx`/`Locale`, o `--report` resolve
+206/430 imports (47%), ainda `unsupported`, com `execution: not-attempted`.
+
 Este arquivo não é um alvo de suporte nem autoriza implementação específica
 para Roblox. Ele fica registrado apenas como evidência para priorizar
 capacidades reutilizáveis por várias classes de aplicativos. As lacunas
@@ -63,9 +67,9 @@ observadas são:
   `RtlCaptureContext`, percorrendo `.pdata`/`.xdata` da imagem convidada;
 - [x] implementar carregamento dinâmico real: `LoadLibraryA/W`,
   `LoadLibraryExA/W`, `FreeLibrary` e `GetModuleHandleExA/W` + `GetProcAddress` por nome e ordinal (fixture `tl_dynload.exe` cobre `C:\` path, API Set `api-ms-win-core-file-l1-1-0.dll`, `LoadLibraryEx`, `GetProcAddress`/`FreeLibrary`/`GetModuleHandleEx` `PIN`/`FROM_ADDRESS`); `GetProcAddress` agora resolve via `find_export_global`;
-- [ ] implementar APIs de versão e locale: `GetVersionExA`,
+- [x] implementar APIs de versão e locale: `GetVersionExA`,
   `VerifyVersionInfoW`/`VerSetConditionMask`, `GetUserDefaultLocaleName` e
-  `LocaleNameToLCID`;
+  `LocaleNameToLCID` (fixture `tl_version.exe` cobre 10.0.19044, `Verify`/`VerSetConditionMask` chain, `en-US`→`0x0409`/`pt-BR`→`0x0416`);
 - [ ] implementar espera por endereço (`WaitOnAddress`/
   `WakeByAddressSingle`) exposta pela API Set
   `api-ms-win-core-synch-l1-2-0.dll`;

@@ -74,6 +74,23 @@ constexpr Dword kErrorTooManyTlsIndexes = 4323;
 constexpr Dword kGetModuleHandleExFlagPin = 0x01U;
 constexpr Dword kGetModuleHandleExFlagUnchangedRefcount = 0x02U;
 constexpr Dword kGetModuleHandleExFlagFromAddress = 0x04U;
+
+// Version helpers (VerifyVersionInfo)
+constexpr Dword kVerMinorVersion = 0x00000001U;
+constexpr Dword kVerMajorVersion = 0x00000002U;
+constexpr Dword kVerBuildNumber = 0x00000004U;
+constexpr Dword kVerPlatformId = 0x00000008U;
+constexpr Dword kVerServicePackMinor = 0x00000010U;
+constexpr Dword kVerServicePackMajor = 0x00000020U;
+constexpr Dword kVerSuiteName = 0x00000040U;
+constexpr Dword kVerProductType = 0x00000080U;
+constexpr Dword kVerEqual = 1U;
+constexpr Dword kVerGreater = 2U;
+constexpr Dword kVerGreaterEqual = 3U;
+constexpr Dword kVerLess = 4U;
+constexpr Dword kVerLessEqual = 5U;
+constexpr Dword kVerPlatformWin32Nt = 2U;
+constexpr Dword kVerNtWorkstation = 1U;
 constexpr Dword kFormatMessageAllocateBuffer = 0x00000100U;
 constexpr Dword kFormatMessageIgnoreInserts = 0x00000200U;
 constexpr Dword kFormatMessageFromSystem = 0x00001000U;
@@ -506,6 +523,14 @@ TL_MSABI void* tl_LoadLibraryExA(const char* file_name, void* file, std::uint32_
 TL_MSABI void* tl_LoadLibraryExW(const std::uint16_t* file_name, void* file, std::uint32_t flags) noexcept;
 TL_MSABI int tl_FreeLibrary(void* module) noexcept;
 TL_MSABI void* tl_GetProcAddress(void* module, const char* name) noexcept;
+TL_MSABI int tl_GetVersionExA(void* version_information) noexcept;
+TL_MSABI int tl_GetVersionExW(void* version_information) noexcept;
+TL_MSABI int tl_VerifyVersionInfoW(void* version_information, std::uint32_t type_mask,
+                                   std::uint64_t condition_mask) noexcept;
+TL_MSABI std::uint64_t tl_VerSetConditionMask(std::uint64_t condition_mask, std::uint32_t type_mask,
+                                              std::uint8_t condition) noexcept;
+TL_MSABI int tl_GetUserDefaultLocaleName(std::uint16_t* locale_name, int locale_name_length) noexcept;
+TL_MSABI std::uint32_t tl_LocaleNameToLCID(const std::uint16_t* name, std::uint32_t flags) noexcept;
 TL_MSABI const char* tl_GetCommandLineA() noexcept;
 TL_MSABI const std::uint16_t* tl_GetCommandLineW() noexcept;
 TL_MSABI std::uint32_t tl_GetEnvironmentVariableA(const char* name, char* buffer,

@@ -355,6 +355,12 @@ void register_builtin_modules() {
         {"FreeLibrary", 176, reinterpret_cast<std::uintptr_t>(&tl_FreeLibrary)},
         {"GetModuleHandleExA", 177, reinterpret_cast<std::uintptr_t>(&tl_GetModuleHandleExA)},
         {"GetModuleHandleExW", 178, reinterpret_cast<std::uintptr_t>(&tl_GetModuleHandleExW)},
+        {"GetVersionExA", 179, reinterpret_cast<std::uintptr_t>(&tl_GetVersionExA)},
+        {"GetVersionExW", 180, reinterpret_cast<std::uintptr_t>(&tl_GetVersionExW)},
+        {"VerifyVersionInfoW", 181, reinterpret_cast<std::uintptr_t>(&tl_VerifyVersionInfoW)},
+        {"VerSetConditionMask", 182, reinterpret_cast<std::uintptr_t>(&tl_VerSetConditionMask)},
+        {"GetUserDefaultLocaleName", 183, reinterpret_cast<std::uintptr_t>(&tl_GetUserDefaultLocaleName)},
+        {"LocaleNameToLCID", 184, reinterpret_cast<std::uintptr_t>(&tl_LocaleNameToLCID)},
     };
     static const InternalModule kKernel32Module{"KERNEL32.dll", kKernel32Exports};
     register_module(kKernel32Module);

@@ -2012,6 +2012,219 @@ TL_MSABI void* tl_GetProcAddress(void* module, const char* proc_name) noexcept {
     return nullptr;
 }
 
+// ---------------------------------------------------------------------------
+// Version and Locale (study case RobloxInstaller)
+// ---------------------------------------------------------------------------
+
+TL_MSABI int tl_GetVersionExA(void* version_information) noexcept {
+    if (version_information == nullptr) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    // Ler dwOSVersionInfoSize (primeiro DWORD)
+    if (!mapped_guest_range(version_information, sizeof(std::uint32_t), false)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    std::uint32_t size = 0;
+    std::memcpy(&size, version_information, sizeof(size));
+    if (size < 20U) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    if (!mapped_guest_range(version_information, size, true)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    // Windows 10 19044
+    constexpr std::uint32_t kMajor = 10;
+    constexpr std::uint32_t kMinor = 0;
+    constexpr std::uint32_t kBuild = 19044;
+    constexpr std::uint32_t kPlatform = abi::kVerPlatformWin32Nt; // 2
+    auto* base = static_cast<std::uint8_t*>(version_information);
+    // Preenche campos comuns (offsets fixos Windows)
+    auto write_u32 = [&](std::size_t off, std::uint32_t v) {
+        if (off + 4 <= size) std::memcpy(base + off, &v, 4);
+    };
+    write_u32(4, kMajor);
+    write_u32(8, kMinor);
+    write_u32(12, kBuild);
+    write_u32(16, kPlatform);
+    // szCSDVersion (A): offset 20, 128 bytes char
+    if (size >= 148U) {
+        std::memset(base + 20, 0, 128);
+        if (size >= 156U) {
+            // OSVERSIONINFOEXA
+            std::uint16_t wMajor = 0;
+            std::uint16_t wMinor = 0;
+            std::uint16_t suite = 0;
+            std::uint8_t prod = static_cast<std::uint8_t>(abi::kVerNtWorkstation);
+            std::uint8_t reserved = 0;
+            if (148 + 2 <= size) std::memcpy(base + 148, &wMajor, 2);
+            if (150 + 2 <= size) std::memcpy(base + 150, &wMinor, 2);
+            if (152 + 2 <= size) std::memcpy(base + 152, &suite, 2);
+            if (154 + 1 <= size) std::memcpy(base + 154, &prod, 1);
+            if (155 + 1 <= size) std::memcpy(base + 155, &reserved, 1);
+            // padding já zero se houver
+        }
+    }
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_GetVersionExW(void* version_information) noexcept {
+    if (version_information == nullptr) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    if (!mapped_guest_range(version_information, sizeof(std::uint32_t), false)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    std::uint32_t size = 0;
+    std::memcpy(&size, version_information, sizeof(size));
+    if (size < 20U) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    if (!mapped_guest_range(version_information, size, true)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    constexpr std::uint32_t kMajor = 10;
+    constexpr std::uint32_t kMinor = 0;
+    constexpr std::uint32_t kBuild = 19044;
+    constexpr std::uint32_t kPlatform = abi::kVerPlatformWin32Nt;
+    auto* base = static_cast<std::uint8_t*>(version_information);
+    auto write_u32 = [&](std::size_t off, std::uint32_t v) {
+        if (off + 4 <= size) std::memcpy(base + off, &v, 4);
+    };
+    write_u32(4, kMajor);
+    write_u32(8, kMinor);
+    write_u32(12, kBuild);
+    write_u32(16, kPlatform);
+    if (size >= 276U) {
+        // szCSDVersion W: 128 WCHAR (256 bytes) a partir de 20
+        std::memset(base + 20, 0, 256);
+        if (size >= 284U) {
+            std::uint16_t wMajor = 0;
+            std::uint16_t wMinor = 0;
+            std::uint16_t suite = 0;
+            std::uint8_t prod = static_cast<std::uint8_t>(abi::kVerNtWorkstation);
+            std::uint8_t reserved = 0;
+            if (276 + 2 <= size) std::memcpy(base + 276, &wMajor, 2);
+            if (278 + 2 <= size) std::memcpy(base + 278, &wMinor, 2);
+            if (280 + 2 <= size) std::memcpy(base + 280, &suite, 2);
+            if (282 + 1 <= size) std::memcpy(base + 282, &prod, 1);
+            if (283 + 1 <= size) std::memcpy(base + 283, &reserved, 1);
+        }
+    }
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_VerifyVersionInfoW(void* version_information, std::uint32_t type_mask,
+                                   std::uint64_t condition_mask) noexcept {
+    (void)condition_mask;
+    if (version_information == nullptr || type_mask == 0) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    // Ler size para validar range
+    if (!mapped_guest_range(version_information, sizeof(std::uint32_t), false)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    std::uint32_t size = 0;
+    std::memcpy(&size, version_information, sizeof(size));
+    if (size < 20U || !mapped_guest_range(version_information, size, false)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    // Stub: sempre considera versão compatível (Windows 10). App quer saber se está em Win10+.
+    // Retorna TRUE (1)
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI std::uint64_t tl_VerSetConditionMask(std::uint64_t condition_mask, std::uint32_t type_mask,
+                                              std::uint8_t condition) noexcept {
+    condition &= 0x07U;
+    if (type_mask == 0) return condition_mask;
+    for (int i = 0; i < 32; ++i) {
+        if (type_mask & (1U << i)) {
+            const int shift = i * 3;
+            if (shift < 64) {
+                condition_mask &= ~ (static_cast<std::uint64_t>(0x07ULL) << shift);
+                condition_mask |= (static_cast<std::uint64_t>(condition & 0x07) << shift);
+            }
+        }
+    }
+    return condition_mask;
+}
+
+TL_MSABI int tl_GetUserDefaultLocaleName(std::uint16_t* locale_name, int locale_name_length) noexcept {
+    constexpr std::u16string_view kDefault = u"en-US";
+    constexpr int kNeeded = 6; // inclui NUL: e n - U S \0
+    if (locale_name == nullptr || locale_name_length == 0) {
+        // Retorna tamanho necessário incluindo NUL, como no Windows quando buffer null
+        return kNeeded;
+    }
+    if (locale_name_length < 0) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    if (!mapped_guest_range(locale_name, static_cast<std::size_t>(locale_name_length) * sizeof(std::uint16_t), true)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    if (locale_name_length < kNeeded) {
+        set_last_error(abi::kErrorInsufficientBuffer);
+        return 0;
+    }
+    for (std::size_t i = 0; i < 5; ++i) {
+        locale_name[i] = static_cast<std::uint16_t>(kDefault[i]);
+    }
+    locale_name[5] = 0;
+    set_last_error(abi::kErrorSuccess);
+    return kNeeded;
+}
+
+TL_MSABI std::uint32_t tl_LocaleNameToLCID(const std::uint16_t* name, std::uint32_t flags) noexcept {
+    (void)flags;
+    if (name == nullptr || !mapped_guest_wstring(name)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    if (name[0] == 0) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    std::string utf8 = util::wide_to_utf8(name);
+    std::string lower;
+    lower.reserve(utf8.size());
+    for (char c : utf8) lower.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(c))));
+    // remove trailing spaces?
+    if (lower == "en-us") {
+        set_last_error(abi::kErrorSuccess);
+        return 0x0409U;
+    }
+    if (lower == "pt-br") {
+        set_last_error(abi::kErrorSuccess);
+        return 0x0416U;
+    }
+    if (lower == "en") {
+        set_last_error(abi::kErrorSuccess);
+        return 0x0009U;
+    }
+    if (lower == "pt") {
+        set_last_error(abi::kErrorSuccess);
+        return 0x0016U;
+    }
+    set_last_error(abi::kErrorInvalidParameter);
+    return 0;
+}
+
 // Windows: TLS_MINIMUM_AVAILABLE = 64 índices por thread.
 constexpr std::uint32_t kTlsMinimumAvailable = 64;
 
