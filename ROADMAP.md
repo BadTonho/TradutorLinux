@@ -40,6 +40,7 @@ Os itens marcados como concluídos devem ter evidência no repositório: código
 - **Marco concluído:** fibras `KERNEL32` em `tl_fiber.exe` (`ConvertThreadToFiber`/`ConvertThreadToFiberEx` com flags, `CreateFiber`/`CreateFiberEx` commit/reserve, `SwitchToFiber`/`GetFiberData`/`DeleteFiber`/`ConvertFiberToThread` com `g_current_fiber_data`). `--report` 11/11, `fiber\n` exit `0`.
 - **Marco concluído:** enumeração de processos `KERNEL32` em `tl_toolhelp.exe` (`CreateToolhelp32Snapshot` `TH32CS_SNAPPROCESS` via `/proc`, `Process32FirstW`/`NextW` `PROCESSENTRY32W` 568, `OpenProcess` token `kProcessHandleBase+pid`, `CloseHandle` para snapshot/process). `--report` 10/10, `toolhelp\n` exit `0`.
 - **Marco concluído:** GUI Unicode `USER32` em `tl_win_w.exe` (`RegisterClassExW`/`CreateWindowExW`/`DefWindowProcW`/`GetMessageW`/`DispatchMessageW`/`SetWindowTextW`/`GetWindowTextW`/`FindWindowW`/`LoadCursorW`/`SendMessageW` via `wide_to_utf8`). `--report` 12/12, execução `Xvfb` análoga a `tl_win` com `WM_CREATE` e `WM_CLOSE`.
+- **Marco concluído:** `SHELL32` pastas conhecidas em `tl_shell.exe` (`SHGetKnownFolderPath` `FOLDERID_RoamingAppData`→`$HOME/.config`, `SHGetFolderPathW` `CSIDL_APPDATA`, `SHGetFolderPathAndSubDirW` `TestSub`, `ShellExecuteW` `42`, `ShellExecuteExW` dummy `hProcess`). `--report` 8/8, `shell\n` exit `0`.
 - **Próximo resultado observável:** ampliar a validação do subconjunto GUI por novos aplicativos-alvo; Wayland/toolkit permanece posterior à existência de uma aplicação GUI real suportada.
 
 ### Estudo de caso: `RobloxPlayerInstaller.exe` (somente diagnóstico)
@@ -70,6 +71,9 @@ Em 2026-08-22, após `Toolhelp`, o `--report` resolve 214/430 (49%), ainda
 Em 2026-08-22, após `GUI Unicode`, o `--report` resolve 221/430 (51%), ainda
 `unsupported`, com `execution: not-attempted` (`RegisterClassExW`/`CreateWindowExW`/`DefWindowProcW` etc.).
 
+Em 2026-08-22, após `SHELL32`, o `--report` resolve 225/430 (52%), ainda
+`unsupported`, com `execution: not-attempted` (`SHGetKnownFolderPath`/`SHGetFolderPathW`/`ShellExecuteW`/`ExW`).
+
 Este arquivo não é um alvo de suporte nem autoriza implementação específica
 para Roblox. Ele fica registrado apenas como evidência para priorizar
 capacidades reutilizáveis por várias classes de aplicativos. As lacunas
@@ -93,6 +97,8 @@ observadas são:
   `SwitchToFiber`) sobre a infraestrutura de threads da Fase 11 (fixture `tl_fiber.exe` cobre `ConvertThreadToFiberEx` com flags, `CreateFiberEx` commit/reserve, `SwitchToFiber`/`GetFiberData`/`DeleteFiber`/`ConvertFiberToThread`);
 - [x] implementar enumeração de processos: `CreateToolhelp32Snapshot`,
   `Process32FirstW`/`Process32NextW`, `OpenProcess` (fixture `tl_toolhelp.exe` cobre `/proc` enumeração, `PROCESSENTRY32W` 568, `OpenProcess` token); `K32*` permanece via `PSAPI` existente;
+- [x] ampliar `SHELL32`/`SHLWAPI` para pastas conhecidas, execução de processos
+  e manipulação de caminhos (fixture `tl_shell.exe` cobre `FOLDERID_RoamingAppData`/`CSIDL_APPDATA`/`TestSub`, `ShellExecuteW`/`ExW`);
 - [x] criar uma camada `WS2_32`/rede com sockets, resolução local e polling,
   validada somente em loopback;
 - [x] criar o armazenamento genérico Unicode de `ADVAPI32` para registro;

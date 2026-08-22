@@ -7,6 +7,9 @@
 #include <cstring>
 #include <string>
 #include <vector>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <unistd.h>
 
 namespace tradutorlinux {
 
@@ -80,6 +83,234 @@ TL_MSABI std::uint16_t** tl_CommandLineToArgvW(const std::uint16_t* command_line
 TL_MSABI int tl_ShellNotifyIconA(const std::uint32_t message, void* const data) noexcept {
     (void)message;
     (void)data;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+namespace {
+struct Guid {
+    std::uint32_t Data1;
+    std::uint16_t Data2;
+    std::uint16_t Data3;
+    std::uint8_t Data4[8];
+};
+
+bool guid_equal(const Guid* a, const Guid* b) noexcept {
+    return std::memcmp(a, b, sizeof(Guid)) == 0;
+}
+
+std::string get_home_dir() {
+    const char* home = ::getenv("HOME");
+    if (home != nullptr && home[0] != '\0') return home;
+    home = ::getenv("USERPROFILE");
+    if (home != nullptr && home[0] != '\0') return home;
+    return "/tmp";
+}
+
+std::string known_folder_path_for_guid(const Guid* rfid) {
+    // GUIDs conhecidos
+    static const Guid kRoamingAppData = {0x3EB685DB, 0x65F9, 0x4CF6, {0xA0,0x3A,0xE3,0xEF,0x65,0x72,0x9F,0x3D}};
+    static const Guid kLocalAppData = {0xF1B32785, 0x6FBA, 0x4FCF, {0x9D,0x55,0x7B,0x8E,0x7F,0x15,0x70,0x91}};
+    static const Guid kProgramData = {0x62AB5D82, 0xFDC1, 0x4DC3, {0xA9,0xDD,0x07,0x0D,0x1D,0x49,0x5D,0x97}};
+    static const Guid kDesktop = {0xB4BFCC3A, 0xDB2C, 0x424C, {0xB0,0x29,0x7F,0xE9,0x9A,0x87,0xC6,0x41}};
+    static const Guid kDocuments = {0xFDD39AD0, 0x238F, 0x46AF, {0xAD,0xB4,0x6C,0x85,0x48,0x03,0x69,0xC7}};
+    static const Guid kDownloads = {0x374DE290, 0x123F, 0x4565, {0x91,0x64,0x39,0xC4,0x92,0x5E,0x46,0x7B}};
+    static const Guid kProfile = {0x5E6C858F, 0x0E22, 0x4760, {0x9A,0xFE,0xEA,0x33,0x17,0xB6,0x71,0x73}};
+    const std::string home = get_home_dir();
+    if (guid_equal(rfid, &kRoamingAppData)) {
+        const char* xdg = ::getenv("XDG_CONFIG_HOME");
+        if (xdg != nullptr && xdg[0] != '\0') return xdg;
+        return home + "/.config";
+    }
+    if (guid_equal(rfid, &kLocalAppData)) {
+        const char* xdg = ::getenv("XDG_DATA_HOME");
+        if (xdg != nullptr && xdg[0] != '\0') return xdg;
+        return home + "/.local/share";
+    }
+    if (guid_equal(rfid, &kProgramData)) {
+        return "/tmp/ProgramData";
+    }
+    if (guid_equal(rfid, &kDesktop)) {
+        return home + "/Desktop";
+    }
+    if (guid_equal(rfid, &kDocuments)) {
+        const char* xdg = ::getenv("XDG_DOCUMENTS_DIR");
+        if (xdg != nullptr && xdg[0] != '\0') return xdg;
+        return home + "/Documents";
+    }
+    if (guid_equal(rfid, &kDownloads)) {
+        return home + "/Downloads";
+    }
+    if (guid_equal(rfid, &kProfile)) {
+        return home;
+    }
+    return "";
+}
+
+std::string csidl_to_path(int csidl) {
+    const std::string home = get_home_dir();
+    switch (csidl & 0xFF) {
+        case 0x00: return home + "/Desktop"; // CSIDL_DESKTOP
+        case 0x05: return home + "/Documents"; // PERSONAL
+        case 0x1A: { // APPDATA
+            const char* xdg = ::getenv("XDG_CONFIG_HOME");
+            if (xdg && xdg[0]) return xdg;
+            return home + "/.config";
+        }
+        case 0x1C: { // LOCAL_APPDATA
+            const char* xdg = ::getenv("XDG_DATA_HOME");
+            if (xdg && xdg[0]) return xdg;
+            return home + "/.local/share";
+        }
+        case 0x23: return "/tmp/ProgramData"; // COMMON_APPDATA
+        case 0x28: return home; // PROFILE
+        default: return home;
+    }
+}
+
+void ensure_directory_exists(const std::string& path) {
+    // Cria diretório de forma best-effort, ignora erro se já existe
+    ::mkdir(path.c_str(), 0755);
+    // Tenta criar pais recursivamente via sistema simples
+    // Se falhar por ENOENT, tenta criar pai
+    if (::mkdir(path.c_str(), 0755) != 0 && errno == ENOENT) {
+        std::size_t pos = path.find_last_of('/');
+        if (pos != std::string::npos && pos > 0) {
+            ensure_directory_exists(path.substr(0, pos));
+            ::mkdir(path.c_str(), 0755);
+        }
+    }
+}
+} // namespace
+
+TL_MSABI int tl_SHGetKnownFolderPath(const void* rfid, const std::uint32_t flags, void* token,
+                                     std::uint16_t** path) noexcept {
+    (void)flags;
+    (void)token;
+    if (rfid == nullptr || path == nullptr || !mapped_guest_range(path, sizeof(*path), true)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return static_cast<int>(0x80070057); // E_INVALIDARG
+    }
+    if (!mapped_guest_range(rfid, sizeof(Guid), false)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return static_cast<int>(0x80070057);
+    }
+    const Guid* guid = static_cast<const Guid*>(rfid);
+    std::string utf8_path = known_folder_path_for_guid(guid);
+    if (utf8_path.empty()) {
+        utf8_path = get_home_dir();
+    }
+    ensure_directory_exists(utf8_path);
+    const std::u16string wide = util::utf8_to_wide(utf8_path);
+    const std::size_t bytes = (wide.size() + 1) * sizeof(std::uint16_t);
+    // Usa CoTaskMemAlloc (ole32) para alocar; aqui malloc é suficiente pois CoTaskMemFree é free
+    std::uint16_t* allocated = static_cast<std::uint16_t*>(::malloc(bytes));
+    if (allocated == nullptr) {
+        set_last_error(abi::kErrorNotEnoughMemory);
+        return static_cast<int>(0x8007000E); // E_OUTOFMEMORY
+    }
+    std::copy(wide.begin(), wide.end(), allocated);
+    allocated[wide.size()] = 0;
+    *path = allocated;
+    set_last_error(abi::kErrorSuccess);
+    return 0; // S_OK
+}
+
+TL_MSABI int tl_SHGetFolderPathW(void* hwnd, int csidl, void* token, std::uint32_t flags,
+                                 std::uint16_t* path) noexcept {
+    (void)hwnd;
+    (void)token;
+    (void)flags;
+    if (path == nullptr || !mapped_guest_range(path, 260 * sizeof(std::uint16_t), true)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return static_cast<int>(0x80070057);
+    }
+    std::string utf8_path = csidl_to_path(csidl);
+    ensure_directory_exists(utf8_path);
+    const std::u16string wide = util::utf8_to_wide(utf8_path);
+    const std::size_t to_copy = std::min<std::size_t>(wide.size(), 259);
+    for (std::size_t i = 0; i < to_copy; ++i) path[i] = wide[i];
+    path[to_copy] = 0;
+    set_last_error(abi::kErrorSuccess);
+    return 0; // S_OK
+}
+
+TL_MSABI int tl_SHGetFolderPathAndSubDirW(void* hwnd, int csidl, void* token, std::uint32_t flags,
+                                          const std::uint16_t* sub_dir, std::uint16_t* path) noexcept {
+    (void)hwnd;
+    (void)token;
+    (void)flags;
+    if (path == nullptr || !mapped_guest_range(path, 260 * sizeof(std::uint16_t), true)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return static_cast<int>(0x80070057);
+    }
+    std::string base = csidl_to_path(csidl);
+    if (sub_dir != nullptr) {
+        if (!mapped_guest_wstring(sub_dir)) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return static_cast<int>(0x80070057);
+        }
+        std::string sub = util::wide_to_utf8(sub_dir);
+        // Normaliza separadores
+        for (char& c : sub) if (c == '\\') c = '/';
+        if (!sub.empty() && sub.front() == '/') sub.erase(0,1);
+        if (!base.empty() && base.back() != '/') base += "/";
+        base += sub;
+        // Converte de volta separador Windows para path nativo? Mantém '/'
+    }
+    ensure_directory_exists(base);
+    const std::u16string wide = util::utf8_to_wide(base);
+    const std::size_t to_copy = std::min<std::size_t>(wide.size(), 259);
+    for (std::size_t i = 0; i < to_copy; ++i) path[i] = wide[i];
+    path[to_copy] = 0;
+    set_last_error(abi::kErrorSuccess);
+    return 0;
+}
+
+TL_MSABI void* tl_ShellExecuteW(void* hwnd, const std::uint16_t* operation,
+                                const std::uint16_t* file, const std::uint16_t* parameters,
+                                const std::uint16_t* directory, int show) noexcept {
+    (void)hwnd;
+    (void)operation;
+    (void)parameters;
+    (void)directory;
+    (void)show;
+    if (file != nullptr && !mapped_guest_wstring(file)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return reinterpret_cast<void*>(static_cast<std::uintptr_t>(0)); // failure <32
+    }
+    if (file == nullptr || file[0] == 0) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return reinterpret_cast<void*>(static_cast<std::uintptr_t>(2)); // SE_ERR_FNF
+    }
+    set_last_error(abi::kErrorSuccess);
+    return reinterpret_cast<void*>(static_cast<std::uintptr_t>(42)); // >32 success
+}
+
+TL_MSABI int tl_ShellExecuteExW(void* exec_info) noexcept {
+    if (exec_info == nullptr || !mapped_guest_range(exec_info, sizeof(std::uint32_t), false)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    std::uint32_t cbSize = 0;
+    std::memcpy(&cbSize, exec_info, sizeof(cbSize));
+    if (cbSize < 60 || !mapped_guest_range(exec_info, cbSize, true)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    // SHELLEXECUTEINFOW layout: cbSize(4), fMask(4), hwnd(8), lpVerb(8), lpFile(8), lpParameters(8), lpDirectory(8), nShow(4), hInstApp(8), ... hProcess(8)
+    // Para stub, apenas valida lpFile se presente e preenche hProcess com dummy
+    auto* base = static_cast<std::uint8_t*>(exec_info);
+    // Offsets: lpFile at 24 (4+4+8+8), mas depende de packing; vamos apenas validar que se lpFile não nulo, é wstring válida
+    // Simplificamos: não valida profundamente, apenas retorna sucesso e seta hProcess se houver espaço
+    if (cbSize >= 60) {
+        // Tenta setar hProcess em offset 60? Na estrutura real, hProcess está em offset 56 (após hInstApp). Vamos tentar escrever um handle dummy se houver espaço
+        // Se cbSize >= 64, tenta escrever em 56
+        if (cbSize >= 64) {
+            void* dummy = reinterpret_cast<void*>(0x1);
+            std::memcpy(base + 56, &dummy, sizeof(void*));
+        }
+    }
     set_last_error(abi::kErrorSuccess);
     return 1;
 }

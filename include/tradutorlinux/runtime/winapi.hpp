@@ -819,6 +819,16 @@ TL_MSABI int tl_CryptReleaseContext(void* prov_handle, std::uint32_t flags) noex
 TL_MSABI std::uint16_t** tl_CommandLineToArgvW(const std::uint16_t* command_line,
                                                int* argument_count) noexcept;
 TL_MSABI int tl_ShellNotifyIconA(std::uint32_t message, void* data) noexcept;
+TL_MSABI int tl_SHGetKnownFolderPath(const void* rfid, std::uint32_t flags, void* token,
+                                     std::uint16_t** path) noexcept;
+TL_MSABI int tl_SHGetFolderPathW(void* hwnd, int csidl, void* token, std::uint32_t flags,
+                                 std::uint16_t* path) noexcept;
+TL_MSABI int tl_SHGetFolderPathAndSubDirW(void* hwnd, int csidl, void* token, std::uint32_t flags,
+                                          const std::uint16_t* sub_dir, std::uint16_t* path) noexcept;
+TL_MSABI void* tl_ShellExecuteW(void* hwnd, const std::uint16_t* operation,
+                                const std::uint16_t* file, const std::uint16_t* parameters,
+                                const std::uint16_t* directory, int show) noexcept;
+TL_MSABI int tl_ShellExecuteExW(void* exec_info) noexcept;
 
 // KERNEL32: Slim Reader/Writer (SRW) Locks & Condition Variables
 TL_MSABI void tl_InitializeSRWLock(void* srw_lock) noexcept;

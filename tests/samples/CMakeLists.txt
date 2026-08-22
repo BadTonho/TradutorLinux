@@ -179,6 +179,9 @@ function(tl_add_pe_fixture target_name source_file manifest_file)
             elseif(target_name STREQUAL "tl_toolhelp")
                 set(runtime_extra_args
                     "-DEXPECTED_HEX=746f6f6c68656c700a")
+            elseif(target_name STREQUAL "tl_shell")
+                set(runtime_extra_args
+                    "-DEXPECTED_HEX=7368656c6c0a")
             endif()
         endif()
         add_test(
@@ -335,6 +338,11 @@ tl_add_pe_fixture(tl_fiber src/tl_fiber.c manifests/tl_fiber.json
 tl_add_pe_fixture(tl_toolhelp src/tl_toolhelp.c manifests/tl_toolhelp.json
     LINK_KERNEL32 EXPECT_RESOLVED CONSOLE REPORT RELOCATABLE
     REPORT_SYMBOL "CreateToolhelp32Snapshot")
+
+tl_add_pe_fixture(tl_shell src/tl_shell.c manifests/tl_shell.json
+    LINK_KERNEL32 EXPECT_RESOLVED CONSOLE REPORT RELOCATABLE
+    REPORT_SYMBOL "SHGetKnownFolderPath"
+    IMPORT_DEF defs/tl_shell.def)
 
 if(TARGET tradutorlinux)
     add_test(
