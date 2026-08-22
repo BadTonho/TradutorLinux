@@ -173,6 +173,9 @@ function(tl_add_pe_fixture target_name source_file manifest_file)
             elseif(target_name STREQUAL "tl_waitaddr")
                 set(runtime_extra_args
                     "-DEXPECTED_HEX=77616974616464720a")
+            elseif(target_name STREQUAL "tl_fiber")
+                set(runtime_extra_args
+                    "-DEXPECTED_HEX=66696265720a")
             endif()
         endif()
         add_test(
@@ -317,6 +320,11 @@ tl_add_pe_fixture(tl_waitaddr src/tl_waitaddr.c manifests/tl_waitaddr.json
     EXPECT_RESOLVED CONSOLE REPORT RELOCATABLE
     REPORT_SYMBOL "WaitOnAddress"
     IMPORT_DEF defs/tl_waitaddr.def)
+
+tl_add_pe_fixture(tl_fiber src/tl_fiber.c manifests/tl_fiber.json
+    EXPECT_RESOLVED CONSOLE REPORT RELOCATABLE
+    REPORT_SYMBOL "CreateFiberEx"
+    IMPORT_DEF defs/tl_fiber.def)
 
 if(TARGET tradutorlinux)
     add_test(

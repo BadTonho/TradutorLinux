@@ -1,0 +1,13 @@
+LIBRARY KERNEL32.dll
+EXPORTS
+    ConvertThreadToFiber
+    ConvertThreadToFiberEx
+    ConvertFiberToThread
+    CreateFiber
+    CreateFiberEx
+    DeleteFiber
+    GetFiberData
+    SwitchToFiber
+    ExitProcess
+    GetStdHandle
+    WriteFile

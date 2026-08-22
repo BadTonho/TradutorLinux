@@ -799,8 +799,11 @@ TL_MSABI void tl_CloseThreadpoolTimer(void* timer) noexcept;
 
 // KERNEL32: Fibras e Corrotinas
 TL_MSABI void* tl_ConvertThreadToFiber(void* parameter) noexcept;
+TL_MSABI void* tl_ConvertThreadToFiberEx(void* parameter, std::uint32_t flags) noexcept;
 TL_MSABI int tl_ConvertFiberToThread() noexcept;
 TL_MSABI void* tl_CreateFiber(std::size_t stack_size, void* start_address, void* parameter) noexcept;
+TL_MSABI void* tl_CreateFiberEx(std::size_t stack_commit, std::size_t stack_reserve, std::uint32_t flags,
+                                void* start_address, void* parameter) noexcept;
 TL_MSABI void tl_SwitchToFiber(void* fiber) noexcept;
 TL_MSABI void tl_DeleteFiber(void* fiber) noexcept;
 TL_MSABI void* tl_GetFiberData() noexcept;

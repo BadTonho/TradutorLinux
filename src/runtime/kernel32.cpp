@@ -3616,6 +3616,13 @@ TL_MSABI void* tl_ConvertThreadToFiber(void* parameter) noexcept {
     return &g_fiber_token;
 }
 
+TL_MSABI void* tl_ConvertThreadToFiberEx(void* parameter, std::uint32_t flags) noexcept {
+    (void)flags;
+    g_current_fiber_data = parameter;
+    static char g_fiber_ex_token = 0;
+    return &g_fiber_ex_token;
+}
+
 TL_MSABI int tl_ConvertFiberToThread() noexcept {
     g_current_fiber_data = nullptr;
     return 1;
@@ -3627,6 +3634,17 @@ TL_MSABI void* tl_CreateFiber(const std::size_t stack_size, void* start_address,
     (void)parameter;
     static char g_fiber_created_token = 0;
     return &g_fiber_created_token;
+}
+
+TL_MSABI void* tl_CreateFiberEx(const std::size_t stack_commit, const std::size_t stack_reserve,
+                                const std::uint32_t flags, void* start_address, void* parameter) noexcept {
+    (void)stack_commit;
+    (void)stack_reserve;
+    (void)flags;
+    (void)start_address;
+    (void)parameter;
+    static char g_fiber_ex_created_token = 0;
+    return &g_fiber_ex_created_token;
 }
 
 TL_MSABI void tl_SwitchToFiber(void* fiber) noexcept {
