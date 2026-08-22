@@ -69,6 +69,7 @@ constexpr Dword kErrorInsufficientBuffer = 122;
 constexpr Dword kErrorInvalidAddress = 487;
 constexpr Dword kErrorModNotFound = 126;
 constexpr Dword kErrorProcNotFound = 127;
+constexpr Dword kErrorTimeout = 1460;
 constexpr Dword kErrorNoUnicodeTranslation = 1113;
 constexpr Dword kErrorTooManyTlsIndexes = 4323;
 constexpr Dword kGetModuleHandleExFlagPin = 0x01U;
@@ -531,6 +532,10 @@ TL_MSABI std::uint64_t tl_VerSetConditionMask(std::uint64_t condition_mask, std:
                                               std::uint8_t condition) noexcept;
 TL_MSABI int tl_GetUserDefaultLocaleName(std::uint16_t* locale_name, int locale_name_length) noexcept;
 TL_MSABI std::uint32_t tl_LocaleNameToLCID(const std::uint16_t* name, std::uint32_t flags) noexcept;
+TL_MSABI int tl_WaitOnAddress(void* address, void* compare_address, std::size_t address_size,
+                              std::uint32_t milliseconds) noexcept;
+TL_MSABI void tl_WakeByAddressSingle(void* address) noexcept;
+TL_MSABI void tl_WakeByAddressAll(void* address) noexcept;
 TL_MSABI const char* tl_GetCommandLineA() noexcept;
 TL_MSABI const std::uint16_t* tl_GetCommandLineW() noexcept;
 TL_MSABI std::uint32_t tl_GetEnvironmentVariableA(const char* name, char* buffer,

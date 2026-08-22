@@ -36,6 +36,7 @@ Os itens marcados como concluídos devem ter evidência no repositório: código
 - **Marco concluído:** `dos2unix.exe` e `unix2dos.exe` executam o fluxo de conversão validado. O `--report` resolve 91/91 imports em cada binário; regressões e2e cobrem CRLF→LF, LF→CRLF e expansão de `uni_el_*.txt` com nome UTF-8. Os testes `targetapp_dos2unix_eol`, `targetapp_unix2dos_eol` e `targetapp_dos2unix_unicode-glob` passam com exit `0`; os arquivos de entrada CRLF/LF vêm da fonte pinada do dos2unix e o ouro UTF-8 está versionado em `tests/targets/golden/dos2unix/`.
 - **Marco concluído:** carregamento dinâmico `KERNEL32` completo em `tl_dynload.exe` (`LoadLibraryA/W`, `LoadLibraryExA/W`, `FreeLibrary`, `GetModuleHandleExA/W`, `GetProcAddress` por nome e ordinal). A fixture prova `C:\Windows\System32\kernel32.dll` (extração de filename), API Set `api-ms-win-core-file-l1-1-0.dll` via forwarder, `LoadLibraryEx` com flags ignoradas, `GetProcAddress("GetTickCount64")` chamado dinamicamente, `FreeLibrary` e `GetModuleHandleEx` com `PIN`/`FROM_ADDRESS` (token `0x1000` e endereço `tl_entry`). `--report` resolve 14/14 imports, execução `dynload\n` exit `0`.
 - **Marco concluído:** versão e locale `KERNEL32` em `tl_version.exe` (`GetVersionExA/W` 10.0.19044 `VER_PLATFORM_WIN32_NT`, `VerifyVersionInfoW`/`VerSetConditionMask` chain `VER_MAJOR|MINOR` `GREATER_EQUAL`, `GetUserDefaultLocaleName` `en-US` com `ERROR_INSUFFICIENT_BUFFER` e `LocaleNameToLCID` `en-US`→`0x0409`/`pt-BR`→`0x0416` case-insensitive). `--report` 10/10, `version\n` exit `0`.
+- **Marco concluído:** espera por endereço `KERNEL32`/`api-ms-win-core-synch-l1-2-0.dll` em `tl_waitaddr.exe` (`WaitOnAddress` 1/2/4/8 alinhado, `ERROR_TIMEOUT` 1460, `ERROR_INVALID_PARAMETER` 87, `WakeByAddressSingle`/`All` com `version`+`cv`). Thread waiter bloqueia 5s e acorda via `Wake`, `waitaddr\n` exit `0`, `--report` 12/12.
 - **Próximo resultado observável:** ampliar a validação do subconjunto GUI por novos aplicativos-alvo; Wayland/toolkit permanece posterior à existência de uma aplicação GUI real suportada.
 
 ### Estudo de caso: `RobloxPlayerInstaller.exe` (somente diagnóstico)
@@ -54,6 +55,9 @@ not-attempted`; o avanço vem das fases 10–12.
 Em 2026-08-22, após `LoadLibrary`/`GetVersionEx`/`Locale`, o `--report` resolve
 206/430 imports (47%), ainda `unsupported`, com `execution: not-attempted`.
 
+Em 2026-08-22, após `WaitOnAddress`, o `--report` resolve 208/430 (48%), ainda
+`unsupported`, com `execution: not-attempted` (imports `api-ms-win-core-synch-l1-2-0.dll` agora resolvidos via `KERNEL32`).
+
 Este arquivo não é um alvo de suporte nem autoriza implementação específica
 para Roblox. Ele fica registrado apenas como evidência para priorizar
 capacidades reutilizáveis por várias classes de aplicativos. As lacunas
@@ -70,9 +74,9 @@ observadas são:
 - [x] implementar APIs de versão e locale: `GetVersionExA`,
   `VerifyVersionInfoW`/`VerSetConditionMask`, `GetUserDefaultLocaleName` e
   `LocaleNameToLCID` (fixture `tl_version.exe` cobre 10.0.19044, `Verify`/`VerSetConditionMask` chain, `en-US`→`0x0409`/`pt-BR`→`0x0416`);
-- [ ] implementar espera por endereço (`WaitOnAddress`/
-  `WakeByAddressSingle`) exposta pela API Set
-  `api-ms-win-core-synch-l1-2-0.dll`;
+- [x] implementar espera por endereço (`WaitOnAddress`/
+  `WakeByAddressSingle`/`WakeByAddressAll`) exposta pela API Set
+  `api-ms-win-core-synch-l1-2-0.dll` (fixture `tl_waitaddr.exe` cobre `size` 1/2/4/8, timeout 1460, tamanho inválido 87, `WaitOnAddress` em thread e `WakeByAddressSingle`);
 - [ ] implementar fibers (`CreateFiberEx`, `ConvertThreadToFiberEx` e
   `SwitchToFiber`) sobre a infraestrutura de threads da Fase 11;
 - [ ] implementar enumeração de processos: `CreateToolhelp32Snapshot`,

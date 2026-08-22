@@ -1,0 +1,14 @@
+LIBRARY KERNEL32.dll
+EXPORTS
+    CloseHandle
+    CreateThread
+    ExitProcess
+    ExitThread
+    GetLastError
+    GetStdHandle
+    Sleep
+    WaitForSingleObject
+    WaitOnAddress
+    WakeByAddressAll
+    WakeByAddressSingle
+    WriteFile

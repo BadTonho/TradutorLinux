@@ -361,6 +361,9 @@ void register_builtin_modules() {
         {"VerSetConditionMask", 182, reinterpret_cast<std::uintptr_t>(&tl_VerSetConditionMask)},
         {"GetUserDefaultLocaleName", 183, reinterpret_cast<std::uintptr_t>(&tl_GetUserDefaultLocaleName)},
         {"LocaleNameToLCID", 184, reinterpret_cast<std::uintptr_t>(&tl_LocaleNameToLCID)},
+        {"WaitOnAddress", 185, reinterpret_cast<std::uintptr_t>(&tl_WaitOnAddress)},
+        {"WakeByAddressSingle", 186, reinterpret_cast<std::uintptr_t>(&tl_WakeByAddressSingle)},
+        {"WakeByAddressAll", 187, reinterpret_cast<std::uintptr_t>(&tl_WakeByAddressAll)},
     };
     static const InternalModule kKernel32Module{"KERNEL32.dll", kKernel32Exports};
     register_module(kKernel32Module);

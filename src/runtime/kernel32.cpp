@@ -13,6 +13,7 @@
 #include <array>
 #include <cctype>
 #include <chrono>
+#include <condition_variable>
 #include <cstdint>
 #include <cstring>
 #include <cstdio>
@@ -23,6 +24,7 @@
 #include <shared_mutex>
 #include <string>
 #include <thread>
+#include <unordered_map>
 #include <vector>
 
 #include <dirent.h>
@@ -2223,6 +2225,92 @@ TL_MSABI std::uint32_t tl_LocaleNameToLCID(const std::uint16_t* name, std::uint3
     }
     set_last_error(abi::kErrorInvalidParameter);
     return 0;
+}
+
+namespace {
+std::mutex g_wait_address_mutex;
+std::condition_variable g_wait_address_cv;
+std::unordered_map<void*, int> g_wait_address_versions;
+} // namespace
+
+TL_MSABI int tl_WaitOnAddress(void* address, void* compare_address, std::size_t address_size,
+                              std::uint32_t milliseconds) noexcept {
+    if (address == nullptr || compare_address == nullptr) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    if (address_size != 1 && address_size != 2 && address_size != 4 && address_size != 8) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    if ((reinterpret_cast<std::uintptr_t>(address) % address_size) != 0) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    if (!mapped_guest_range(address, address_size, false) ||
+        !mapped_guest_range(compare_address, address_size, false)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    if (std::memcmp(address, compare_address, address_size) != 0) {
+        set_last_error(abi::kErrorSuccess);
+        return 1;
+    }
+    // Valor igual: precisa esperar
+    std::unique_lock<std::mutex> lock(g_wait_address_mutex);
+    int& version = g_wait_address_versions[address]; // cria se não existe
+    int start_version = version;
+    auto pred = [&]() {
+        if (version != start_version) return true;
+        // Se o valor na memória mudou, também acorda
+        // Memcmp dentro do lock pode ler memória guest que outra thread modifica sem lock;
+        // mas a condição de versão já cobre Wake.
+        return std::memcmp(address, compare_address, address_size) != 0;
+    };
+    // Checa pred antes para evitar wait desnecessário se já mudou entre primeiro memcmp e lock
+    if (pred()) {
+        set_last_error(abi::kErrorSuccess);
+        return 1;
+    }
+    if (milliseconds == abi::kInfinite) {
+        g_wait_address_cv.wait(lock, pred);
+        set_last_error(abi::kErrorSuccess);
+        return 1;
+    }
+    if (!g_wait_address_cv.wait_for(lock, std::chrono::milliseconds(milliseconds), pred)) {
+        set_last_error(abi::kErrorTimeout);
+        return 0;
+    }
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI void tl_WakeByAddressSingle(void* address) noexcept {
+    if (address == nullptr) return;
+    {
+        std::lock_guard<std::mutex> lock(g_wait_address_mutex);
+        auto it = g_wait_address_versions.find(address);
+        if (it != g_wait_address_versions.end()) {
+            it->second++;
+        } else {
+            g_wait_address_versions[address] = 1;
+        }
+    }
+    g_wait_address_cv.notify_one();
+}
+
+TL_MSABI void tl_WakeByAddressAll(void* address) noexcept {
+    if (address == nullptr) return;
+    {
+        std::lock_guard<std::mutex> lock(g_wait_address_mutex);
+        auto it = g_wait_address_versions.find(address);
+        if (it != g_wait_address_versions.end()) {
+            it->second++;
+        } else {
+            g_wait_address_versions[address] = 1;
+        }
+    }
+    g_wait_address_cv.notify_all();
 }
 
 // Windows: TLS_MINIMUM_AVAILABLE = 64 índices por thread.

@@ -1,0 +1,23 @@
+{
+  "name": "tl_waitaddr",
+  "format": "PE32+",
+  "machine": "AMD64",
+  "entry_point": "tl_entry",
+  "uses_crt": false,
+  "imports": {
+    "KERNEL32.dll": [
+      "CloseHandle",
+      "CreateThread",
+      "ExitProcess",
+      "ExitThread",
+      "GetLastError",
+      "GetStdHandle",
+      "Sleep",
+      "WaitForSingleObject",
+      "WaitOnAddress",
+      "WakeByAddressAll",
+      "WakeByAddressSingle",
+      "WriteFile"
+    ]
+  }
+}

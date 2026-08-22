@@ -170,6 +170,9 @@ function(tl_add_pe_fixture target_name source_file manifest_file)
             elseif(target_name STREQUAL "tl_version")
                 set(runtime_extra_args
                     "-DEXPECTED_HEX=76657273696f6e0a")
+            elseif(target_name STREQUAL "tl_waitaddr")
+                set(runtime_extra_args
+                    "-DEXPECTED_HEX=77616974616464720a")
             endif()
         endif()
         add_test(
@@ -309,6 +312,11 @@ tl_add_pe_fixture(tl_dynload src/tl_dynload.c manifests/tl_dynload.json
 tl_add_pe_fixture(tl_version src/tl_version.c manifests/tl_version.json
     LINK_KERNEL32 EXPECT_RESOLVED CONSOLE REPORT RELOCATABLE
     REPORT_SYMBOL "GetVersionExA")
+
+tl_add_pe_fixture(tl_waitaddr src/tl_waitaddr.c manifests/tl_waitaddr.json
+    EXPECT_RESOLVED CONSOLE REPORT RELOCATABLE
+    REPORT_SYMBOL "WaitOnAddress"
+    IMPORT_DEF defs/tl_waitaddr.def)
 
 if(TARGET tradutorlinux)
     add_test(
