@@ -176,6 +176,9 @@ function(tl_add_pe_fixture target_name source_file manifest_file)
             elseif(target_name STREQUAL "tl_fiber")
                 set(runtime_extra_args
                     "-DEXPECTED_HEX=66696265720a")
+            elseif(target_name STREQUAL "tl_toolhelp")
+                set(runtime_extra_args
+                    "-DEXPECTED_HEX=746f6f6c68656c700a")
             endif()
         endif()
         add_test(
@@ -325,6 +328,10 @@ tl_add_pe_fixture(tl_fiber src/tl_fiber.c manifests/tl_fiber.json
     EXPECT_RESOLVED CONSOLE REPORT RELOCATABLE
     REPORT_SYMBOL "CreateFiberEx"
     IMPORT_DEF defs/tl_fiber.def)
+
+tl_add_pe_fixture(tl_toolhelp src/tl_toolhelp.c manifests/tl_toolhelp.json
+    LINK_KERNEL32 EXPECT_RESOLVED CONSOLE REPORT RELOCATABLE
+    REPORT_SYMBOL "CreateToolhelp32Snapshot")
 
 if(TARGET tradutorlinux)
     add_test(

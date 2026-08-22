@@ -730,6 +730,30 @@ TL_MSABI int tl_CloseHandle(const void* const handle) noexcept {
         set_last_error(abi::kErrorSuccess);
         return 1;
     }
+    {
+        std::lock_guard<std::mutex> lock(g_snapshot_mutex);
+        for (auto& slot : g_snapshots) {
+            if (slot.used && handle == static_cast<const void*>(&slot)) {
+                slot.used = false;
+                slot.pids.clear();
+                slot.next_index = 0;
+                slot.flags = 0;
+                set_last_error(abi::kErrorSuccess);
+                return 1;
+            }
+        }
+    }
+    {
+        const auto addr = reinterpret_cast<std::uintptr_t>(handle);
+        if (addr >= kProcessHandleBase && addr < kProcessHandleBase + kProcessHandleRange) {
+            const std::uint32_t pid = static_cast<std::uint32_t>(addr - kProcessHandleBase);
+            // Validar que pid ainda é plausível (não obrigatório, mas mantém contrato)
+            // Aceita qualquer pid dentro do range para CloseHandle
+            (void)pid;
+            set_last_error(abi::kErrorSuccess);
+            return 1;
+        }
+    }
     set_last_error(abi::kErrorInvalidHandle);
     return 0;
 }
@@ -2311,6 +2335,238 @@ TL_MSABI void tl_WakeByAddressAll(void* address) noexcept {
         }
     }
     g_wait_address_cv.notify_all();
+}
+
+// ---------------------------------------------------------------------------
+// Toolhelp (snapshot de processos)
+// ---------------------------------------------------------------------------
+
+namespace {
+bool read_proc_status_field(const std::uint32_t pid, const char* field, std::string& value) {
+    char path[64];
+    std::snprintf(path, sizeof(path), "/proc/%u/status", pid);
+    std::ifstream file(path);
+    if (!file) return false;
+    std::string line;
+    const std::string prefix = std::string(field) + ":";
+    while (std::getline(file, line)) {
+        if (line.rfind(prefix, 0) == 0) {
+            std::size_t pos = prefix.size();
+            while (pos < line.size() && std::isspace(static_cast<unsigned char>(line[pos]))) ++pos;
+            value = line.substr(pos);
+            // trim trailing
+            while (!value.empty() && std::isspace(static_cast<unsigned char>(value.back()))) value.pop_back();
+            return true;
+        }
+    }
+    return false;
+}
+
+bool fill_process_entry(const std::uint32_t pid, abi::GuestProcessEntry32W* out) {
+    if (out == nullptr) return false;
+    // ppid e threads via /proc/[pid]/status
+    std::string ppid_str, threads_str, name_str;
+    std::uint32_t ppid = 0;
+    std::uint32_t threads = 1;
+    if (read_proc_status_field(pid, "PPid", ppid_str)) {
+        try { ppid = static_cast<std::uint32_t>(std::stoul(ppid_str)); } catch (...) { ppid = 0; }
+    }
+    if (read_proc_status_field(pid, "Threads", threads_str)) {
+        try { threads = static_cast<std::uint32_t>(std::stoul(threads_str)); } catch (...) { threads = 1; }
+    }
+    if (!read_proc_status_field(pid, "Name", name_str)) {
+        // fallback para comm
+        char path[64];
+        std::snprintf(path, sizeof(path), "/proc/%u/comm", pid);
+        std::ifstream comm(path);
+        if (comm) std::getline(comm, name_str);
+        if (name_str.empty()) name_str = "unknown";
+    }
+    // Preenche campos (preserva dwSize)
+    std::uint32_t saved_size = out->dwSize;
+    *out = {};
+    out->dwSize = saved_size;
+    out->cntUsage = 0;
+    out->th32ProcessID = pid;
+    out->th32DefaultHeapID = 0;
+    out->th32ModuleID = 0;
+    out->cntThreads = threads;
+    out->th32ParentProcessID = ppid;
+    out->pcPriClassBase = 8; // NORMAL_PRIORITY_CLASS
+    out->dwFlags = 0;
+    // szExeFile wide
+    std::u16string wname = util::utf8_to_wide(name_str);
+    for (std::size_t i = 0; i < wname.size() && i < 259; ++i) {
+        out->szExeFile[i] = static_cast<std::uint16_t>(wname[i]);
+    }
+    out->szExeFile[std::min<std::size_t>(wname.size(), 259)] = 0;
+    out->padding1 = 0;
+    out->padding2 = 0;
+    return true;
+}
+} // namespace
+
+TL_MSABI void* tl_CreateToolhelp32Snapshot(std::uint32_t flags, std::uint32_t process_id) noexcept {
+    (void)process_id;
+    // Suporta apenas SNAPPROCESS; outros flags retornam INVALID_HANDLE_VALUE
+    if ((flags & abi::kTh32csSnapProcess) == 0) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return reinterpret_cast<void*>(static_cast<std::uintptr_t>(-1));
+    }
+    std::vector<std::uint32_t> pids;
+    DIR* dir = ::opendir("/proc");
+    if (dir == nullptr) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return reinterpret_cast<void*>(static_cast<std::uintptr_t>(-1));
+    }
+    struct dirent* entry = nullptr;
+    while ((entry = ::readdir(dir)) != nullptr) {
+        const char* name = entry->d_name;
+        bool numeric = true;
+        for (const char* p = name; *p; ++p) if (!std::isdigit(static_cast<unsigned char>(*p))) { numeric = false; break; }
+        if (!numeric) continue;
+        try {
+            std::uint32_t pid = static_cast<std::uint32_t>(std::stoul(name));
+            // Verifica se ainda existe e temos permissão (access)
+            char path[64];
+            std::snprintf(path, sizeof(path), "/proc/%u", pid);
+            struct stat st;
+            if (::stat(path, &st) == 0) pids.push_back(pid);
+        } catch (...) {}
+    }
+    ::closedir(dir);
+    if (pids.empty()) {
+        // Mesmo sem processos, retorna snapshot vazio (Windows retornaria handle válido com zero processos?)
+        // Para manter contrato, retorna handle válido com lista vazia; Process32First falhará com NO_MORE_FILES
+    }
+    std::sort(pids.begin(), pids.end());
+    std::lock_guard<std::mutex> lock(g_snapshot_mutex);
+    for (auto& slot : g_snapshots) {
+        if (!slot.used) {
+            slot.used = true;
+            slot.pids = std::move(pids);
+            slot.next_index = 0;
+            slot.flags = flags;
+            set_last_error(abi::kErrorSuccess);
+            return static_cast<void*>(&slot);
+        }
+    }
+    set_last_error(abi::kErrorNotEnoughMemory);
+    return reinterpret_cast<void*>(static_cast<std::uintptr_t>(-1));
+}
+
+TL_MSABI int tl_Process32FirstW(void* snapshot, void* entry) noexcept {
+    if (snapshot == nullptr || snapshot == reinterpret_cast<void*>(static_cast<std::uintptr_t>(-1)) ||
+        entry == nullptr) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    SnapshotSlot* slot = nullptr;
+    {
+        std::lock_guard<std::mutex> lock(g_snapshot_mutex);
+        for (auto& s : g_snapshots) if (s.used && snapshot == static_cast<void*>(&s)) { slot = &s; break; }
+    }
+    if (slot == nullptr) {
+        set_last_error(abi::kErrorInvalidHandle);
+        return 0;
+    }
+    if (!mapped_guest_range(entry, sizeof(std::uint32_t), false)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    std::uint32_t dwSize = 0;
+    std::memcpy(&dwSize, entry, sizeof(dwSize));
+    if (dwSize != sizeof(abi::GuestProcessEntry32W)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    if (!mapped_guest_range(entry, dwSize, true)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    std::lock_guard<std::mutex> lock(g_snapshot_mutex);
+    if (slot->pids.empty() || slot->next_index >= slot->pids.size()) {
+        // Tenta repopular se vazio? Já vazio
+        set_last_error(abi::kErrorNoMoreFiles);
+        return 0;
+    }
+    slot->next_index = 0;
+    auto* out = static_cast<abi::GuestProcessEntry32W*>(entry);
+    std::uint32_t saved = out->dwSize;
+    (void)saved;
+    if (!fill_process_entry(slot->pids[0], out)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    out->dwSize = dwSize;
+    slot->next_index = 1;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_Process32NextW(void* snapshot, void* entry) noexcept {
+    if (snapshot == nullptr || snapshot == reinterpret_cast<void*>(static_cast<std::uintptr_t>(-1)) ||
+        entry == nullptr) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    SnapshotSlot* slot = nullptr;
+    {
+        std::lock_guard<std::mutex> lock(g_snapshot_mutex);
+        for (auto& s : g_snapshots) if (s.used && snapshot == static_cast<void*>(&s)) { slot = &s; break; }
+    }
+    if (slot == nullptr) {
+        set_last_error(abi::kErrorInvalidHandle);
+        return 0;
+    }
+    if (!mapped_guest_range(entry, sizeof(std::uint32_t), false)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    std::uint32_t dwSize = 0;
+    std::memcpy(&dwSize, entry, sizeof(dwSize));
+    if (dwSize != sizeof(abi::GuestProcessEntry32W)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    if (!mapped_guest_range(entry, dwSize, true)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    std::lock_guard<std::mutex> lock(g_snapshot_mutex);
+    if (slot->next_index >= slot->pids.size()) {
+        set_last_error(abi::kErrorNoMoreFiles);
+        return 0;
+    }
+    auto* out = static_cast<abi::GuestProcessEntry32W*>(entry);
+    if (!fill_process_entry(slot->pids[slot->next_index], out)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    out->dwSize = dwSize;
+    slot->next_index++;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI void* tl_OpenProcess(std::uint32_t desired_access, int inherit_handle, std::uint32_t process_id) noexcept {
+    (void)desired_access;
+    (void)inherit_handle;
+    if (process_id == 0) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return nullptr;
+    }
+    char path[64];
+    std::snprintf(path, sizeof(path), "/proc/%u", process_id);
+    struct stat st;
+    if (::stat(path, &st) != 0 || !S_ISDIR(st.st_mode)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return nullptr;
+    }
+    // Retorna token opaco base+pid; CloseHandle reconhecerá via range
+    void* handle = reinterpret_cast<void*>(kProcessHandleBase + static_cast<std::uintptr_t>(process_id));
+    set_last_error(abi::kErrorSuccess);
+    return handle;
 }
 
 // Windows: TLS_MINIMUM_AVAILABLE = 64 índices por thread.

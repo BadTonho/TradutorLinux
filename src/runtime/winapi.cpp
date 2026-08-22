@@ -113,6 +113,8 @@ std::uint32_t g_quit_code = 0;
 
 std::array<MenuSlot, 16> g_menus{};
 std::array<FindSlot, 16> g_find_slots{};
+std::array<SnapshotSlot, 16> g_snapshots{};
+std::mutex g_snapshot_mutex;
 
 extern "C" void tl_call_guest_on_stack(std::uintptr_t entry,
                                        std::uintptr_t stack_top) noexcept;

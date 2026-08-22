@@ -363,6 +363,27 @@ struct GuestConsoleScreenBufferInfo {
 };
 static_assert(sizeof(GuestConsoleScreenBufferInfo) == 22);
 
+struct GuestProcessEntry32W {
+    std::uint32_t dwSize{};
+    std::uint32_t cntUsage{};
+    std::uint32_t th32ProcessID{};
+    std::uint32_t padding1{};
+    std::uintptr_t th32DefaultHeapID{};
+    std::uint32_t th32ModuleID{};
+    std::uint32_t cntThreads{};
+    std::uint32_t th32ParentProcessID{};
+    std::int32_t pcPriClassBase{};
+    std::uint32_t dwFlags{};
+    std::uint16_t szExeFile[260]{};
+    std::uint32_t padding2{};
+};
+static_assert(sizeof(GuestProcessEntry32W) == 568);
+
+constexpr Dword kTh32csSnapProcess = 0x00000002U;
+constexpr Dword kTh32csSnapThread = 0x00000004U;
+constexpr Dword kTh32csSnapModule = 0x00000008U;
+constexpr Dword kInvalidHandleValue = 0xFFFFFFFFU;
+
 }  // namespace abi
 
 // Fronteira de ABI: funções hospedeiras chamadas por código PE32+ x86-64.
@@ -814,6 +835,12 @@ TL_MSABI int tl_HeapDestroy(void* heap) noexcept;
 TL_MSABI int tl_HeapValidate(void* heap, std::uint32_t flags, const void* memory) noexcept;
 TL_MSABI std::size_t tl_HeapSize(void* heap, std::uint32_t flags, const void* memory) noexcept;
 TL_MSABI std::size_t tl_HeapCompact(void* heap, std::uint32_t flags) noexcept;
+
+// KERNEL32: Toolhelp
+TL_MSABI void* tl_CreateToolhelp32Snapshot(std::uint32_t flags, std::uint32_t process_id) noexcept;
+TL_MSABI int tl_Process32FirstW(void* snapshot, void* entry) noexcept;
+TL_MSABI int tl_Process32NextW(void* snapshot, void* entry) noexcept;
+TL_MSABI void* tl_OpenProcess(std::uint32_t desired_access, int inherit_handle, std::uint32_t process_id) noexcept;
 
 }  // extern "C"
 

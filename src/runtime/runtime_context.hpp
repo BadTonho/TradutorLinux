@@ -223,6 +223,19 @@ struct FindSlot {
 };
 extern std::array<FindSlot, 16> g_find_slots;
 
+constexpr std::uintptr_t kSnapshotHandleBase = 0x0000D00000000000ULL;
+struct SnapshotSlot {
+    bool used{false};
+    std::vector<std::uint32_t> pids;
+    std::size_t next_index{0};
+    std::uint32_t flags{0};
+};
+extern std::array<SnapshotSlot, 16> g_snapshots;
+extern std::mutex g_snapshot_mutex;
+
+constexpr std::uintptr_t kProcessHandleBase = 0x0000E00000000000ULL;
+constexpr std::uintptr_t kProcessHandleRange = 0x100000ULL; // pid até ~1M
+
 // Helpers compartilhados
 inline void set_last_error(const std::uint32_t error) noexcept {
     g_last_error = error;
