@@ -79,7 +79,7 @@ TEST_F(ModuleTest, ClearModulesResetsRegistry) {
 
 TEST_F(ModuleTest, RegistersBuiltinKernel32Exports) {
     register_builtin_modules();
-    ASSERT_EQ(registered_module_count(), 18U);
+    ASSERT_EQ(registered_module_count(), 20U);
     EXPECT_TRUE(is_module_registered("KERNEL32.dll"));
     EXPECT_TRUE(is_module_registered("USER32.dll"));
     EXPECT_TRUE(is_module_registered("GDI32.dll"));
@@ -162,7 +162,7 @@ TEST_F(ModuleTest, RegistersMsvcrtExports) {
 TEST_F(ModuleTest, RegisterBuiltinModulesIsIdempotent) {
     register_builtin_modules();
     register_builtin_modules();
-    EXPECT_EQ(registered_module_count(), 18U);
+    EXPECT_EQ(registered_module_count(), 20U);
 }
 
 TEST_F(ModuleTest, RegistryOwnsItsStrings) {

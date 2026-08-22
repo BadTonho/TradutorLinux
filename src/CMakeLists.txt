@@ -34,6 +34,8 @@ add_library(tradutorlinux_core STATIC
     runtime/gdiplus.cpp
     runtime/uxtheme.cpp
     runtime/dbghelp.cpp
+    runtime/powrprof.cpp
+    runtime/iphlpapi.cpp
     runtime/guest_entry.S
     util/unicode.cpp
     gui/x11.cpp

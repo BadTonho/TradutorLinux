@@ -18,7 +18,7 @@ find_program(TL_MINGW_WINDRES
 set(TL_FIXTURE_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/generated")
 
 function(tl_add_pe_fixture target_name source_file manifest_file)
-    set(options LINK_KERNEL32 LINK_USER32 LINK_GDI32 LINK_GDIPLUS LINK_UXTHEME LINK_DBGHELP LINK_OLE32 LINK_WINMM LINK_WS2_32 LINK_ADVAPI32 RELOCATABLE RUNTIME_FAILURE EXPECT_RESOLVED CONSOLE REPORT REPORT_ONLY NO_RUNTIME_CHECK)
+    set(options LINK_KERNEL32 LINK_USER32 LINK_GDI32 LINK_GDIPLUS LINK_UXTHEME LINK_DBGHELP LINK_OLE32 LINK_POWRPROF LINK_IPHLPAPI LINK_WINMM LINK_WS2_32 LINK_ADVAPI32 RELOCATABLE RUNTIME_FAILURE EXPECT_RESOLVED CONSOLE REPORT REPORT_ONLY NO_RUNTIME_CHECK)
     set(oneValueArgs REPORT_SYMBOL RESOURCE_FILE IMPORT_DEF)
     cmake_parse_arguments(ARG "${options}" "${oneValueArgs}" "" ${ARGN})
 
@@ -59,6 +59,12 @@ function(tl_add_pe_fixture target_name source_file manifest_file)
     endif()
     if(ARG_LINK_OLE32)
         list(APPEND link_libraries -lole32)
+    endif()
+    if(ARG_LINK_POWRPROF)
+        list(APPEND link_libraries -lpowrprof)
+    endif()
+    if(ARG_LINK_IPHLPAPI)
+        list(APPEND link_libraries -liphlpapi)
     endif()
     if(ARG_LINK_WINMM)
         list(APPEND link_libraries -lwinmm)
@@ -203,6 +209,9 @@ function(tl_add_pe_fixture target_name source_file manifest_file)
             elseif(target_name STREQUAL "tl_com")
                 set(runtime_extra_args
                     "-DEXPECTED_HEX=636f6d0a")
+            elseif(target_name STREQUAL "tl_powr")
+                set(runtime_extra_args
+                    "-DEXPECTED_HEX=706f77720a")
             endif()
         endif()
         add_test(
@@ -355,6 +364,10 @@ tl_add_pe_fixture(tl_fiber src/tl_fiber.c manifests/tl_fiber.json
     EXPECT_RESOLVED CONSOLE REPORT RELOCATABLE
     REPORT_SYMBOL "CreateFiberEx"
     IMPORT_DEF defs/tl_fiber.def)
+
+tl_add_pe_fixture(tl_powr src/tl_powr.c manifests/tl_powr.json
+    LINK_KERNEL32 LINK_POWRPROF LINK_IPHLPAPI EXPECT_RESOLVED CONSOLE REPORT RELOCATABLE
+    REPORT_SYMBOL "PowerGetActiveScheme")
 
 tl_add_pe_fixture(tl_toolhelp src/tl_toolhelp.c manifests/tl_toolhelp.json
     LINK_KERNEL32 EXPECT_RESOLVED CONSOLE REPORT RELOCATABLE

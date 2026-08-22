@@ -724,6 +724,20 @@ void register_builtin_modules() {
     };
     static const InternalModule kDbghelpModule{"dbghelp.dll", kDbghelpExports};
     register_module(kDbghelpModule);
+    static const ExportedFunction kPowrProfExports[] = {
+        {"PowerGetActiveScheme", 1, reinterpret_cast<std::uintptr_t>(&tl_PowerGetActiveScheme)},
+        {"PowerSetActiveScheme", 2, reinterpret_cast<std::uintptr_t>(&tl_PowerSetActiveScheme)},
+        {"CallNtPowerInformation", 3, reinterpret_cast<std::uintptr_t>(&tl_CallNtPowerInformation)},
+    };
+    static const InternalModule kPowrProfModule{"POWRPROF.dll", kPowrProfExports};
+    register_module(kPowrProfModule);
+    static const ExportedFunction kIphlpapiExports[] = {
+        {"GetAdaptersInfo", 1, reinterpret_cast<std::uintptr_t>(&tl_GetAdaptersInfo)},
+        {"GetAdaptersAddresses", 2, reinterpret_cast<std::uintptr_t>(&tl_GetAdaptersAddresses)},
+        {"if_nametoindex", 3, reinterpret_cast<std::uintptr_t>(&tl_if_nametoindex)},
+    };
+    static const InternalModule kIphlpapiModule{"IPHLPAPI.DLL", kIphlpapiExports};
+    register_module(kIphlpapiModule);
     static const ExportedFunction kComctl32Exports[] = {
         {"InitCommonControls", 1, reinterpret_cast<std::uintptr_t>(&tl_InitCommonControls)},
         {"InitCommonControlsEx", 2, reinterpret_cast<std::uintptr_t>(&tl_InitCommonControlsEx)},

@@ -837,6 +837,19 @@ TL_MSABI std::uint32_t tl_timeSetEvent(std::uint32_t delay, std::uint32_t resolu
 TL_MSABI int tl_SymFromAddr(void* process, std::uint64_t address, std::uint64_t* displacement,
                             void* symbol) noexcept;
 
+// POWRPROF.dll
+TL_MSABI std::uint32_t tl_PowerGetActiveScheme(void* UserRootPowerKey, void** ActivePolicyGuid) noexcept;
+TL_MSABI std::uint32_t tl_PowerSetActiveScheme(void* UserRootPowerKey, const void* SchemeGuid) noexcept;
+TL_MSABI std::uint32_t tl_CallNtPowerInformation(int InformationLevel, void* InputBuffer,
+                                                 std::uint32_t InputBufferLength, void* OutputBuffer,
+                                                 std::uint32_t OutputBufferLength) noexcept;
+
+// IPHLPAPI.DLL
+TL_MSABI std::uint32_t tl_GetAdaptersInfo(void* AdapterInfo, std::uint32_t* OutBufLen) noexcept;
+TL_MSABI std::uint32_t tl_GetAdaptersAddresses(std::uint32_t Family, std::uint32_t Flags, void* Reserved,
+                                               void* AdapterAddresses, std::uint32_t* SizePointer) noexcept;
+TL_MSABI std::uint32_t tl_if_nametoindex(const char* ifname) noexcept;
+
 // ADVAPI32: Criptografia / Random e Registry Wide
 TL_MSABI int tl_CryptAcquireContextA(void** prov_handle, const char* container,
                                      const char* provider, std::uint32_t prov_type, std::uint32_t flags) noexcept;
