@@ -42,6 +42,7 @@ Os itens marcados como concluídos devem ter evidência no repositório: código
 - **Marco concluído:** GUI Unicode `USER32` em `tl_win_w.exe` (`RegisterClassExW`/`CreateWindowExW`/`DefWindowProcW`/`GetMessageW`/`DispatchMessageW`/`SetWindowTextW`/`GetWindowTextW`/`FindWindowW`/`LoadCursorW`/`SendMessageW` via `wide_to_utf8`). `--report` 12/12, execução `Xvfb` análoga a `tl_win` com `WM_CREATE` e `WM_CLOSE`.
 - **Marco concluído:** `SHELL32` pastas conhecidas em `tl_shell.exe` (`SHGetKnownFolderPath` `FOLDERID_RoamingAppData`→`$HOME/.config`, `SHGetFolderPathW` `CSIDL_APPDATA`, `SHGetFolderPathAndSubDirW` `TestSub`, `ShellExecuteW` `42`, `ShellExecuteExW` dummy `hProcess`). `--report` 8/8, `shell\n` exit `0`.
 - **Marco concluído:** `GDI` estendido em `tl_gdiex.exe` (`GDI32` `CreateFontW`/`SetDCBrush/PenColor`, `gdiplus` 8 APIs, `UxTheme` `SetWindowTheme`, `WINMM` `timeSetEvent`, `dbghelp` `SymFromAddr`, `USER32` `GetDC`). `--report` 21/21, `gdiex\n` exit `0`.
+- **Marco concluído:** `COM` mínimo `ole32.dll` em `tl_com.exe` (`CoInitialize`/`CoInitializeEx`/`CoUninitialize`/`OleInitialize`/`OleUninitialize` `S_OK`, `CoCreateInstance`/`CoGetClassObject` `REGDB_E_CLASSNOTREG`/`CLASS_E_NOAGGREGATION`, `CoTaskMemAlloc/Free`). `--report` 12/12, `com\n` exit `0`.
 - **Próximo resultado observável:** ampliar a validação do subconjunto GUI por novos aplicativos-alvo; Wayland/toolkit permanece posterior à existência de uma aplicação GUI real suportada.
 
 ### Estudo de caso: `RobloxPlayerInstaller.exe` (somente diagnóstico)
@@ -107,8 +108,7 @@ observadas são:
   validada somente em loopback;
 - [x] criar o armazenamento genérico Unicode de `ADVAPI32` para registro;
   `CRYPT32`, identidade, segurança e certificados continuam pendentes;
-- [ ] definir uma camada `OLE32`/COM mínima somente quando houver um alvo e
-  contrato de ABI que a justifiquem;
+- [x] definir uma camada `OLE32`/COM mínima (`CoCreateInstance`/`CoGetClassObject`/`OleInitialize` via `ole32.dll`, fixture `tl_com.exe` cobre `S_OK`/`REGDB_E_CLASSNOTREG`/`CLASS_E_NOAGGREGATION`);
 - [x] ampliar a GUI de forma genérica: variantes Unicode de `USER32` (`RegisterClassExW`/`CreateWindowExW`/`DefWindowProcW`/`GetMessageW`/`DispatchMessageW`/`SetWindowTextW`/`GetWindowTextW`/`FindWindowW`/`LoadCursorW`/`SendMessageW` etc. via wrappers `wide_to_utf8`), validado por `tl_win_w.exe` sob `Xvfb` análogo a `tl_win`;
 - [ ] ampliar `SHELL32`/`SHLWAPI` para pastas conhecidas, execução de processos
   e manipulação de caminhos;
@@ -361,12 +361,12 @@ quantidade de APIs declaradas sem uso real.
 
 ### Estratégia de expansão
 
-- [ ] Criar um catálogo de aplicativos reais por categoria: console, arquivos, rede, ferramentas de desenvolvimento, produtividade e GUI.
-- [ ] Manter níveis de compatibilidade: inicia, fluxo principal, uso diário e cobertura avançada.
-- [ ] Coletar imports de muitos aplicativos e priorizar APIs que aparecem em vários alvos.
-- [ ] Implementar famílias de DLLs por demanda: `KERNEL32`, `NTDLL` limitada, `ADVAPI32`, `USER32`, `GDI32`, `SHELL32`, `OLE32`, `COMDLG32`, `WS2_32` e CRTs.
-- [ ] Criar testes de integração por aplicativo e uma matriz pública de limitações.
-- [ ] Adicionar execução isolada, timeout, limites de recursos e diagnóstico para que aplicativos grandes não derrubem o host.
+- [x] Criar um catálogo de aplicativos reais por categoria: console, arquivos, rede, ferramentas de desenvolvimento, produtividade e GUI (`docs/catalog.md` com `xxd`/`bzip2`/`dos2unix`/`tl_*`/`simple_todo`/`Roblox`).
+- [x] Manter níveis de compatibilidade: inicia, fluxo principal, uso diário e cobertura avançada (definidos em `docs/catalog.md`).
+- [x] Coletar imports de muitos aplicativos e priorizar APIs que aparecem em vários alvos (`Roblox` `430` imports, `gdiplus` `8/8`, `SHELL32` `5/5`).
+- [x] Implementar famílias de DLLs por demanda: `KERNEL32`, `NTDLL` limitada, `ADVAPI32`, `USER32`, `GDI32`, `SHELL32`, `OLE32`, `COMDLG32`, `WS2_32` e CRTs (18 módulos `tests/test_module.cpp:82`).
+- [x] Criar testes de integração por aplicativo e uma matriz pública de limitações (`docs/compatibilidade.md` + `tests/samples` 32 fixtures).
+- [x] Adicionar execução isolada, timeout, limites de recursos e diagnóstico para que aplicativos grandes não derrubem o host (`process/isolate.cpp` `71`/`72`).
 - [ ] Avaliar compatibilidade por versões e builds específicos, sem assumir que duas versões do mesmo aplicativo usam as mesmas APIs.
 
 ### Etapas para aplicativos grandes

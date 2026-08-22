@@ -87,6 +87,35 @@ TL_OLE_MSABI void* tl_CoTaskMemRealloc(void* ptr, const std::size_t size) noexce
     return std::realloc(ptr, size);
 }
 
+TL_OLE_MSABI std::int32_t tl_CoCreateInstance(const void* rclsid, void* unkOuter, const std::uint32_t clsContext,
+                                              const void* riid, void** ppv) noexcept {
+    (void)clsContext;
+    if (rclsid == nullptr || riid == nullptr || ppv == nullptr ||
+        !mapped_range(rclsid, sizeof(Win32Guid), false) || !mapped_range(riid, sizeof(Win32Guid), false) ||
+        !mapped_range(ppv, sizeof(void*), true)) {
+        return kEInvalidArg;
+    }
+    if (unkOuter != nullptr) {
+        return static_cast<std::int32_t>(0x80040110U); // CLASS_E_NOAGGREGATION
+    }
+    *ppv = nullptr;
+    return static_cast<std::int32_t>(0x80040154U); // REGDB_E_CLASSNOTREG
+}
+
+TL_OLE_MSABI std::int32_t tl_CoGetClassObject(const void* rclsid, const std::uint32_t clsContext,
+                                              void* serverInfo, const void* riid, void** ppv) noexcept {
+    (void)serverInfo;
+    return tl_CoCreateInstance(rclsid, nullptr, clsContext, riid, ppv);
+}
+
+TL_OLE_MSABI std::int32_t tl_OleInitialize(void* reserved) noexcept {
+    (void)reserved;
+    return kSOk;
+}
+
+TL_OLE_MSABI void tl_OleUninitialize() noexcept {
+}
+
 }  // extern "C"
 
 }  // namespace tradutorlinux

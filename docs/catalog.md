@@ -1,0 +1,60 @@
+# Catálogo de aplicativos — TradutorLinux
+
+Este catálogo lista aplicativos reais avaliados, agrupados por categoria e com nível de compatibilidade. Não é promessa de suporte universal; cada entrada é verificada via `tests/samples` ou `tests/targets` com `--report` e execução isolada.
+
+## Níveis
+
+- **inicia** — PE32+ válido, imports resolvidos, entry point não executado (`unsupported` → `supported` no `--report`)
+- **fluxo principal** — executa fluxo principal com saída byte-idêntica ou GUI smoke sob Xvfb
+- **uso diário** — múltiplos fluxos, persistência e erros tratados
+- **cobertura avançada** — múltiplas DLLs, threads, rede, recursos
+
+## Console
+
+| Aplicativo | Versão | Imports | Estado | Fixture/Target |
+|---|---|---|---:|---|
+| `xxd` | vim v9.2.0957 | 73 | **fluxo principal** | `targetapp_xxd` `xxd.exe` 73/73 |
+| `bzip2` | 1.0.8 | 69 | **fluxo principal** | `targetapp_bzip2` |
+| `dos2unix`/`unix2dos` | 7.5.6 | 88 | **fluxo principal** | `targetapp_dos2unix` |
+
+## Arquivos
+
+| Aplicativo | Imports | Estado | Fixture |
+|---|---|---|---|
+| `tl_files_wide.exe` | KERNEL32 W | **fluxo principal** | Unicode, tempos, cópia |
+| `tl_resources.exe` | KERNEL32 RCDATA | **fluxo principal** | recursos PE |
+
+## Rede
+
+| Aplicativo | Imports | Estado | Fixture |
+|---|---|---|---|
+| `tl_network_loopback.exe` | WS2_32 23 | **fluxo principal** | TCP/UDP localhost, `WSAPoll` |
+
+## GUI
+
+| Aplicativo | Imports | Estado | Fixture |
+|---|---|---|---|
+| `tl_win.exe` | USER32 A 10 | **fluxo principal** | janela + message loop X11 |
+| `tl_win_w.exe` | USER32 W 12 | **fluxo principal** | W wrappers via `wide_to_utf8` |
+| `simple_todo` | 105 (GDI32/USER32/SHELL32/msvcrt) | **uso diário** | `targetapp_simple_todo_gui_smoke` `105/105` |
+
+## Sistema
+
+| Aplicativo | Imports | Estado | Fixture |
+|---|---|---|---|
+| `tl_toolhelp.exe` | KERNEL32 Toolhelp 10 | **fluxo principal** | `/proc` enumeração |
+| `tl_shell.exe` | SHELL32 5 | **fluxo principal** | pastas conhecidas |
+| `tl_com.exe` | ole32 9 | **fluxo principal** | `CoCreateInstance` `REGDB_E_CLASSNOTREG` |
+
+## Estudo de caso
+
+`RobloxPlayerInstaller.exe` `13M` `d156faf0c712d4ce26d95a596ad9b1dfc813021b5c422c93887b2522d8b01a59` `430` imports `17` DLLs. Evolução:
+- `75/430 (17%)` inicial
+- `196/430 (45%)` Fase 10–12
+- `206/430 (47%)` LoadLibrary/Version/Locale
+- `214/430 (49%)` Toolhelp
+- `221/430 (51%)` GUI W
+- `225/430 (52%)` SHELL32
+- `240/430 (55%)` GDI estendido
+
+Ainda `unsupported`, `execution: not-attempted`. Lacunas restantes priorizadas em `ROADMAP.md:61-88` por API e categoria.

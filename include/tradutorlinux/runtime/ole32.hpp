@@ -20,6 +20,12 @@ TL_OLE_MSABI std::int32_t tl_CoCreateGuid(void* guid) noexcept;
 TL_OLE_MSABI void* tl_CoTaskMemAlloc(std::size_t size) noexcept;
 TL_OLE_MSABI void tl_CoTaskMemFree(void* ptr) noexcept;
 TL_OLE_MSABI void* tl_CoTaskMemRealloc(void* ptr, std::size_t size) noexcept;
+TL_OLE_MSABI std::int32_t tl_CoCreateInstance(const void* rclsid, void* unkOuter, std::uint32_t clsContext,
+                                              const void* riid, void** ppv) noexcept;
+TL_OLE_MSABI std::int32_t tl_CoGetClassObject(const void* rclsid, std::uint32_t clsContext, void* serverInfo,
+                                              const void* riid, void** ppv) noexcept;
+TL_OLE_MSABI std::int32_t tl_OleInitialize(void* reserved) noexcept;
+TL_OLE_MSABI void tl_OleUninitialize() noexcept;
 
 }  // extern "C"
 

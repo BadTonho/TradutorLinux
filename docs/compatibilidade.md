@@ -35,6 +35,7 @@ Esta matriz declara o comportamento suportado; ela não é uma promessa de compa
 | `tl_toolhelp.exe` | PE32+ AMD64 | Não | `KERNEL32.dll` — `CreateToolhelp32Snapshot`/`Process32FirstW`/`Process32NextW`/`OpenProcess`/`GetCurrentProcessId` | Fixture Toolhelp: `CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS)` enumera `/proc`, `Process32FirstW`/`NextW` com `PROCESSENTRY32W` 568 bytes valida `dwSize`, `OpenProcess` via `/proc/[pid]` e `CloseHandle` para snapshot/process; saída `toolhelp\n`, exit `0` | Processos |
 | `tl_shell.exe` | PE32+ AMD64 | Não | `SHELL32.dll` — `SHGetKnownFolderPath`/`SHGetFolderPathW`/`SHGetFolderPathAndSubDirW`/`ShellExecuteW`/`ShellExecuteExW` | Fixture SHELL32: `FOLDERID_RoamingAppData`→`en-US` path, `CSIDL_APPDATA`/`TestSub`, `ShellExecuteW` `42`, `ShellExecuteExW` dummy `hProcess`; saída `shell\n`, exit `0` | Pastas conhecidas |
 | `tl_gdiex.exe` | PE32+ AMD64 | Não | `GDI32.dll` — `CreateFontW`/`SetDCBrushColor`/`SetDCPenColor`; `gdiplus.dll` — 8 APIs; `UxTheme.dll` — `SetWindowTheme`; `WINMM.dll` — `timeSetEvent`; `dbghelp.dll` — `SymFromAddr` | Fixture GDI estendido: `CreateFontW` wide, `SetDCBrush/PenColor`, `GdiplusStartup`/`GdipCreateBitmapFromStream`/`Clone`/`HBITMAP`/`Dispose`/`Alloc/Free`, `SetWindowTheme`, `timeSetEvent` `1`, `SymFromAddr` stub; `USER32` `GetDC`; saída `gdiex\n`, exit `0` | GDI estendido |
+| `tl_com.exe` | PE32+ AMD64 | Não | `ole32.dll` — `CoInitialize`/`CoInitializeEx`/`CoUninitialize`/`CoCreateInstance`/`CoGetClassObject`/`OleInitialize`/`OleUninitialize`/`CoTaskMemAlloc/Free` | Fixture COM mínimo: `CoInitialize` `S_OK`, `CoCreateInstance` `REGDB_E_CLASSNOTREG`/`CLASS_E_NOAGGREGATION`, `OleInitialize`; saída `com\n`, exit `0` | COM mínimo |
 | `simple_todo.exe` | PE32+ AMD64 | mingw-w64 CRT | 105 imports em `GDI32`, `KERNEL32`, `msvcrt`, `SHELL32` e `USER32` | **Suportado no subconjunto da Fase 12**: fonte pinada no commit `bcdf3d5fcebb8c0b445edb791d54511194c1b6ca` com overlay Linux versionado; build e `--report` resolvem 105/105; `targetapp_simple_todo_gui_smoke` cobre o fluxo principal, persistência, menu da bandeja, encerramento pela bandeja e fechamento da janela, com coordenadas do layout Linux | Fase 12 |
 
 As fontes e manifestos das fixtures ficam em `tests/samples/`. Os binários são produtos de build e ficam em `build/<preset>/tests/samples/generated/`.
@@ -412,6 +413,18 @@ de `RegCreateKeyEx[A/W]`, `RegOpenKeyEx[A/W]`, `RegSetValueEx[A/W]`,
 genéricos e persiste bytes, tipo e nomes UTF-8/UTF-16 em um arquivo por escopo
 (`APPDATA`, ou `TL_REGISTRY_FILE` para testes). Segurança, ACL, hive real,
 COM e `CRYPT32` continuam fora deste contrato.
+
+## COM mínimo (ole32)
+
+`ole32.dll` expõe `CoInitialize`/`CoUninitialize`/`CoTaskMemAlloc` e camada COM mínima para testes de inicialização. `CoCreateInstance`/`CoGetClassObject` validam `rclsid`/`riid`/`ppv` via `mapped_guest_range` e retornam `REGDB_E_CLASSNOTREG` (`0x80040154`) ou `CLASS_E_NOAGGREGATION` (`0x80040110`); `OleInitialize`/`OleUninitialize` são stubs `S_OK`.
+
+| Módulo | API | Estado | Comportamento suportado |
+|---|---|---|---|
+| `ole32.dll` | `CoInitialize` / `CoInitializeEx` | Suportado | Retorna `S_OK` (0), ignora `reserved`/`coInit` |
+| `ole32.dll` | `CoUninitialize` / `OleUninitialize` | Suportado | No-op |
+| `ole32.dll` | `OleInitialize` | Suportado | Retorna `S_OK` |
+| `ole32.dll` | `CoCreateInstance` / `CoGetClassObject` | Suportado | Valida `rclsid`/`riid`/`ppv`, `unkOuter==nullptr` senão `CLASS_E_NOAGGREGATION`, senão `REGDB_E_CLASSNOTREG`, `*ppv=nullptr` |
+| `ole32.dll` | `CoTaskMemAlloc` / `CoTaskMemFree` / `CoTaskMemRealloc` | Suportado | `malloc`/`free`/`realloc` do host |
 
 ## Concorrência (Fase 11)
 
