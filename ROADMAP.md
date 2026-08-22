@@ -45,14 +45,33 @@ com 17 DLLs importadas e 430 imports; o `--report` resolveu 75/430 imports
 `execution: not-attempted`. SHA-256 do arquivo analisado:
 `d156faf0c712d4ce26d95a596ad9b1dfc813021b5c422c93887b2522d8b01a59`.
 
+Em 2026-08-22, o mesmo arquivo foi reanalisado com o `--report` atual:
+196/430 imports resolvidos (45%), ainda `unsupported`, com `execution:
+not-attempted`; o avanço vem das fases 10–12.
+
 Este arquivo não é um alvo de suporte nem autoriza implementação específica
 para Roblox. Ele fica registrado apenas como evidência para priorizar
 capacidades reutilizáveis por várias classes de aplicativos. As lacunas
 observadas são:
 
 - [x] ampliar o núcleo `KERNEL32` para arquivos e caminhos Unicode, recursos,
-  tempo, sincronização e processos filhos, com fixtures próprias; memória
-  mapeada e carregamento dinâmico continuam pendentes;
+  tempo, sincronização e processos filhos, com fixtures próprias; a memória
+  mapeada (`MapViewOfFile`/`CreateFileMappingW`) foi entregue depois;
+- [ ] implementar unwinding/SEH x64 de ponta a ponta: `__C_specific_handler`,
+  `RtlUnwindEx`, `RtlVirtualUnwind`, `RtlLookupFunctionEntry` e
+  `RtlCaptureContext`, percorrendo `.pdata`/`.xdata` da imagem convidada;
+- [ ] implementar carregamento dinâmico real: `LoadLibraryA/W`,
+  `LoadLibraryExW`, `FreeLibrary` e `GetModuleHandleExW`;
+- [ ] implementar APIs de versão e locale: `GetVersionExA`,
+  `VerifyVersionInfoW`/`VerSetConditionMask`, `GetUserDefaultLocaleName` e
+  `LocaleNameToLCID`;
+- [ ] implementar espera por endereço (`WaitOnAddress`/
+  `WakeByAddressSingle`) exposta pela API Set
+  `api-ms-win-core-synch-l1-2-0.dll`;
+- [ ] implementar fibers (`CreateFiberEx`, `ConvertThreadToFiberEx` e
+  `SwitchToFiber`) sobre a infraestrutura de threads da Fase 11;
+- [ ] implementar enumeração de processos: `CreateToolhelp32Snapshot`,
+  `Process32FirstW`/`Process32NextW`, `OpenProcess` e funções `K32*`;
 - [x] criar uma camada `WS2_32`/rede com sockets, resolução local e polling,
   validada somente em loopback;
 - [x] criar o armazenamento genérico Unicode de `ADVAPI32` para registro;
@@ -63,8 +82,9 @@ observadas são:
   comuns, diálogos, recursos, aceleradores e métricas de janela;
 - [ ] ampliar `SHELL32`/`SHLWAPI` para pastas conhecidas, execução de processos
   e manipulação de caminhos;
-- [ ] avaliar `GDI32`, `gdiplus`, `UxTheme`, `WINMM` e `dbghelp` para desenho,
-  imagens, temas, temporizadores multimídia e diagnóstico;
+- [ ] avaliar `GDI32`, `gdiplus`, `UxTheme`, `WINMM`, `dbghelp`,
+  `POWRPROF.dll` e `IPHLPAPI.DLL` para desenho, imagens, temas,
+  temporizadores multimídia, diagnóstico, energia e adaptadores de rede;
 - [ ] manter isolamento, timeout, limites de recursos, `--report`, mensagens
   de falha e testes de integração para qualquer nova família de DLL.
 
