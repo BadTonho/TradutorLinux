@@ -25,6 +25,7 @@ posterior.
 | `RobloxPlayerInstaller.exe` | 244/430 | 186 | — | `unsupported` |
 | `winrar-x64-723.exe` | 97/156 | 59 | `delay-import` | `unsupported` |
 | `Creative_Cloud_Set-Up_7474.exe` | — | — | PE32 x86 (`0x14c`) | arquitetura não suportada |
+| `officedeploymenttool_20228-20124.exe` | — | — | PE32 x86 (`0x14c`) | arquitetura não suportada |
 
 ## `RobloxPlayerInstaller.exe`
 
@@ -443,3 +444,24 @@ PE32/x86, WOW64 e emulação de CPU estão fora do alvo atual, que é exclusivam
 PE32+ x86-64 em Linux x86-64. Qualquer promoção desse requisito exige uma fase
 própria, contrato de ABI e testes de loader; o empacotamento UPX só pode ser
 avaliado depois que a questão de arquitetura estiver resolvida.
+
+## `officedeploymenttool_20228-20124.exe` (Office Deployment Tool)
+
+### Amostra e resultado
+
+| Campo | Valor |
+|---|---|
+| Arquivo | `officedeploymenttool_20228-20124.exe` |
+| Formato | PE32 GUI Intel x86 (`IMAGE_FILE_MACHINE_I386`, `0x14c`), 5 seções |
+| SHA-256 | `92a3cbd56191533e36bde1c6e4640883c900c00d1b5d43a974c870893681e0d4` |
+| Resultado | rejeitado no parser: `unsupported-architecture` (exit code `5`) |
+| Fonte | trace local de 2026-08-23 |
+
+Este executável também foi rejeitado antes da análise de imports. Ele confirma
+que instaladores distribuídos em PE32/x86 são uma categoria recorrente do
+portfólio, não uma lacuna particular do Adobe Creative Cloud.
+
+O requisito continua sendo suporte deliberado a PE32/x86 em Linux x86-64 —
+processo/loader 32-bit com fronteiras de ABI adequadas, ou uma estratégia
+WOW64/emulação definida — antes de qualquer implementação de API específica do
+Office Deployment Tool.
