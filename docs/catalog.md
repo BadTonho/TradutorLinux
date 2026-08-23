@@ -65,4 +65,6 @@ promessa de suporte universal; cada entrada é verificada via `tests/samples` ou
 
 Ainda `unsupported`, `execution: not-attempted`. O instalador é um benchmark de
 cobertura, não um alvo exclusivo: lacunas restantes são priorizadas por API e
-categoria no portfólio da Fase 13.
+categoria no portfólio da Fase 13. A lista completa de imports estáticos que
+faltam para essa amostra, e os próximos aplicativos analisados, ficam no
+[registro unificado de requisitos](requisitos-aplicativos.md).
