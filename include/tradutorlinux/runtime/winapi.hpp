@@ -169,6 +169,20 @@ constexpr Dword kWcNoBestFitChars = 0x400U;
 constexpr Dword kStdInputHandle = 0xFFFFFFF6U;   // STD_INPUT_HANDLE (-10)
 constexpr Dword kStdOutputHandle = 0xFFFFFFF5U;  // STD_OUTPUT_HANDLE (-11)
 constexpr Dword kStdErrorHandle = 0xFFFFFFF4U;   // STD_ERROR_HANDLE (-12)
+constexpr Dword kFileTypeUnknown = 0;
+constexpr Dword kFileTypeDisk = 1;
+constexpr Dword kFileTypeChar = 2;
+constexpr Dword kFileTypePipe = 3;
+constexpr Dword kStartfUseStdHandles = 0x00000100U;
+
+// PROCESSOR_FEATURE_ID cobertos no hospedeiro AMD64.
+constexpr Dword kPfCompareExchangeDouble = 2;
+constexpr Dword kPfMmxInstructionsAvailable = 3;
+constexpr Dword kPfXmmiInstructionsAvailable = 6;
+constexpr Dword kPfRdtscInstructionAvailable = 8;
+constexpr Dword kPfPaeEnabled = 9;
+constexpr Dword kPfXmmi64InstructionsAvailable = 10;
+constexpr Dword kPfNxEnabled = 12;
 
 constexpr Uint kWmPaint = 0x000F;
 constexpr Uint kWmClose = 0x0010;
@@ -424,6 +438,36 @@ struct GuestSystemTime {
 };
 static_assert(sizeof(GuestSystemTime) == 16);
 
+struct GuestStartupInfoW {
+    std::uint32_t cb{};
+    std::uint32_t padding{};
+    std::uint16_t* reserved{};
+    std::uint16_t* desktop{};
+    std::uint16_t* title{};
+    std::uint32_t x{};
+    std::uint32_t y{};
+    std::uint32_t x_size{};
+    std::uint32_t y_size{};
+    std::uint32_t x_count_chars{};
+    std::uint32_t y_count_chars{};
+    std::uint32_t fill_attribute{};
+    std::uint32_t flags{};
+    std::uint16_t show_window{};
+    std::uint16_t reserved2_size{};
+    std::uint8_t* reserved2{};
+    void* std_input{};
+    void* std_output{};
+    void* std_error{};
+};
+static_assert(sizeof(GuestStartupInfoW) == 104);
+
+struct alignas(16) GuestSListHeader {
+    std::uint64_t alignment{};
+    std::uint64_t region{};
+};
+static_assert(sizeof(GuestSListHeader) == 16);
+static_assert(alignof(GuestSListHeader) == 16);
+
 struct GuestCoord {
     std::int16_t x{};
     std::int16_t y{};
@@ -475,6 +519,22 @@ constexpr Dword kInvalidHandleValue = 0xFFFFFFFFU;
 extern "C" {
 
 TL_MSABI void* tl_GetStdHandle(std::uint32_t n_std_handle) noexcept;
+TL_MSABI int tl_SetStdHandle(std::uint32_t n_std_handle, void* handle) noexcept;
+TL_MSABI std::uint32_t tl_GetFileType(const void* handle) noexcept;
+TL_MSABI std::uint32_t tl_GetSystemDirectoryW(std::uint16_t* buffer,
+                                              std::uint32_t size) noexcept;
+TL_MSABI void tl_GetStartupInfoW(abi::GuestStartupInfoW* startup_info) noexcept;
+TL_MSABI int tl_ReadConsoleW(const void* console_input, std::uint16_t* buffer,
+                             std::uint32_t chars_to_read, std::uint32_t* chars_read,
+                             const void* input_control) noexcept;
+TL_MSABI int tl_WriteConsoleW(const void* console_output, const std::uint16_t* buffer,
+                              std::uint32_t chars_to_write, std::uint32_t* chars_written,
+                              const void* reserved) noexcept;
+TL_MSABI int tl_IsDebuggerPresent() noexcept;
+TL_MSABI int tl_IsProcessorFeaturePresent(std::uint32_t processor_feature) noexcept;
+TL_MSABI void* tl_EncodePointer(void* pointer) noexcept;
+TL_MSABI void* tl_DecodePointer(void* pointer) noexcept;
+TL_MSABI void tl_InitializeSListHead(abi::GuestSListHeader* list_head) noexcept;
 TL_MSABI int tl_WriteFile(const void* file, const void* buffer, std::uint32_t bytes_to_write,
                           std::uint32_t* bytes_written, void* overlapped) noexcept;
 TL_MSABI int tl_ReadFile(const void* file, void* buffer, std::uint32_t bytes_to_read,

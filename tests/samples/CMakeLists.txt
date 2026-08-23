@@ -232,6 +232,11 @@ function(tl_add_pe_fixture target_name source_file manifest_file)
                 set(runtime_extra_args
                     "-DEXPECTED_HEX=6c6f63616c652d657874656e6465640a"
                     "-DREQUIRED_TRACE=locale")
+            elseif(target_name STREQUAL "tl_process_console")
+                set(runtime_extra_args
+                    "-DINPUT_TEXT=entrada"
+                    "-DEXPECTED_HEX=70726f636573732d636f6e736f6c652dc3a90a"
+                    "-DREQUIRED_TRACE=process-context,console")
             endif()
         endif()
         add_test(
@@ -511,6 +516,10 @@ tl_add_pe_fixture(tl_locale_env_fls src/tl_locale_env_fls.c manifests/tl_locale_
 tl_add_pe_fixture(tl_locale_extended src/tl_locale_extended.c manifests/tl_locale_extended.json
     LINK_KERNEL32 EXPECT_RESOLVED CONSOLE REPORT RELOCATABLE
     REPORT_SYMBOL "EnumSystemLocalesW")
+
+tl_add_pe_fixture(tl_process_console src/tl_process_console.c manifests/tl_process_console.json
+    LINK_KERNEL32 EXPECT_RESOLVED CONSOLE REPORT RELOCATABLE
+    REPORT_SYMBOL "GetStartupInfoW")
 
 tl_add_pe_fixture(tl_resources src/tl_resources.c manifests/tl_resources.json
     LINK_KERNEL32 EXPECT_RESOLVED CONSOLE REPORT RELOCATABLE

@@ -72,6 +72,13 @@ char kStdInputToken = 0;
 char kStdOutputToken = 0;
 char kStdErrorToken = 0;
 char kStockObjectTokens[24]{};
+std::mutex g_process_context_mutex;
+std::array<void*, 3> g_standard_handles{
+    &kStdInputToken,
+    &kStdOutputToken,
+    &kStdErrorToken,
+};
+std::atomic<std::uintptr_t> g_pointer_cookie{0};
 
 std::mutex g_files_mutex;
 std::array<FileSlot, 256> g_files{};
@@ -565,6 +572,12 @@ void set_guest_image_view(const void* image_base, const std::size_t image_size,
     }
 }
 
+void reset_process_console_state() noexcept {
+    std::lock_guard lock(g_process_context_mutex);
+    g_standard_handles = {&kStdInputToken, &kStdOutputToken, &kStdErrorToken};
+    g_pointer_cookie.store(0, std::memory_order_release);
+}
+
 GuestExecutionResult execute_guest_entry(const std::uintptr_t entry_point,
                                          const std::uintptr_t stack_top) noexcept {
     using EntryPoint = TL_MSABI void (*)();
@@ -575,6 +588,7 @@ GuestExecutionResult execute_guest_entry(const std::uintptr_t entry_point,
     if (!runtime::guest_environment_is_initialized()) {
         runtime::initialize_guest_environment(guest_prefix_root());
     }
+    reset_process_console_state();
     reset_fls_process_state();
     constexpr std::uintptr_t kGuestStackSize = 0x100000U;  // 1 MiB
     void* const teb = allocate_guest_teb(stack_top, kGuestStackSize);
@@ -600,6 +614,7 @@ GuestExecutionResult execute_guest_entry(const std::uintptr_t entry_point,
         static_cast<void>(set_guest_gs_base(nullptr));
         free_guest_teb(teb);
         reset_fls_process_state();
+        reset_process_console_state();
         runtime::clear_guest_environment();
         return {};
     }
@@ -609,6 +624,7 @@ GuestExecutionResult execute_guest_entry(const std::uintptr_t entry_point,
     free_guest_teb(teb);
     const GuestExecutionResult result{.exited_explicitly = true, .exit_code = g_guest_exit_code};
     reset_fls_process_state();
+    reset_process_console_state();
     runtime::clear_guest_environment();
     return result;
 }

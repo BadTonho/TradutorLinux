@@ -13,6 +13,7 @@
 
 #include <algorithm>
 #include <array>
+#include <bit>
 #include <cctype>
 #include <chrono>
 #include <condition_variable>
@@ -488,6 +489,64 @@ void trace_fls(const char* const operation, const std::string& detail) noexcept 
     runtime_trace("fls", fields, 4);
 }
 
+void trace_process_console(const char* const event, const char* const operation,
+                           const std::string& detail) noexcept {
+    const std::array<diagnostics::TraceField, 4> fields{
+        diagnostics::TraceField{"operation", operation},
+        diagnostics::TraceField{"detail", detail},
+        diagnostics::TraceField{"thread", std::to_string(g_current_thread_id)},
+        diagnostics::TraceField{"status", "success"},
+    };
+    runtime_trace(event, fields, 4);
+}
+
+[[nodiscard]] int standard_handle_index(const std::uint32_t standard_handle) noexcept {
+    switch (standard_handle) {
+        case abi::kStdInputHandle: return 0;
+        case abi::kStdOutputHandle: return 1;
+        case abi::kStdErrorHandle: return 2;
+        default: return -1;
+    }
+}
+
+[[nodiscard]] void* current_standard_handle(const std::size_t index) noexcept {
+    std::lock_guard lock(g_process_context_mutex);
+    return g_standard_handles[index];
+}
+
+[[nodiscard]] std::uintptr_t process_pointer_cookie() noexcept {
+    std::uintptr_t cookie = g_pointer_cookie.load(std::memory_order_acquire);
+    if (cookie != 0) {
+        return cookie;
+    }
+    constexpr std::uintptr_t kGoldenRatio = 0x9E3779B97F4A7C15ULL;
+    const std::uintptr_t pid = static_cast<std::uintptr_t>(::getpid());
+    const std::uintptr_t image = reinterpret_cast<std::uintptr_t>(g_guest_image_base);
+    std::uintptr_t candidate = kGoldenRatio ^ (pid * 0x100000001B3ULL) ^ image;
+    candidate |= 1U;
+    std::uintptr_t expected = 0;
+    if (!g_pointer_cookie.compare_exchange_strong(expected, candidate,
+                                                   std::memory_order_acq_rel)) {
+        candidate = expected;
+    }
+    return candidate;
+}
+
+[[nodiscard]] bool write_all(const int fd, const char* data, const std::size_t size) noexcept {
+    std::size_t offset = 0;
+    while (offset < size) {
+        const ssize_t result = ::write(fd, data + offset, size - offset);
+        if (result < 0 && errno == EINTR) {
+            continue;
+        }
+        if (result <= 0) {
+            return false;
+        }
+        offset += static_cast<std::size_t>(result);
+    }
+    return true;
+}
+
 }  // namespace
 
 std::shared_ptr<FlsThreadValues> ensure_fls_thread_values() {
@@ -541,20 +600,232 @@ void reset_fls_process_state() noexcept {
 extern "C" {
 
 TL_MSABI void* tl_GetStdHandle(const std::uint32_t std_handle) noexcept {
-    switch (std_handle) {
-        case abi::kStdInputHandle:
-            set_last_error(abi::kErrorSuccess);
-            return &kStdInputToken;
-        case abi::kStdOutputHandle:
-            set_last_error(abi::kErrorSuccess);
-            return &kStdOutputToken;
-        case abi::kStdErrorHandle:
-            set_last_error(abi::kErrorSuccess);
-            return &kStdErrorToken;
-        default:
-            set_last_error(abi::kErrorInvalidParameter);
-            return nullptr;
+    const int index = standard_handle_index(std_handle);
+    if (index < 0) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return nullptr;
     }
+    set_last_error(abi::kErrorSuccess);
+    return current_standard_handle(static_cast<std::size_t>(index));
+}
+
+TL_MSABI int tl_SetStdHandle(const std::uint32_t std_handle, void* const handle) noexcept {
+    const int index = standard_handle_index(std_handle);
+    if (index < 0) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    if (handle != nullptr && handle_fd(handle) < 0) {
+        set_last_error(abi::kErrorInvalidHandle);
+        return 0;
+    }
+    {
+        std::lock_guard lock(g_process_context_mutex);
+        g_standard_handles[static_cast<std::size_t>(index)] = handle;
+    }
+    set_last_error(abi::kErrorSuccess);
+    trace_process_console("process-context", "set-std-handle", std::to_string(index));
+    return 1;
+}
+
+TL_MSABI std::uint32_t tl_GetFileType(const void* const handle) noexcept {
+    const int fd = handle_fd(handle);
+    if (fd < 0) {
+        set_last_error(abi::kErrorInvalidHandle);
+        return abi::kFileTypeUnknown;
+    }
+    struct stat status{};
+    if (::fstat(fd, &status) != 0) {
+        const std::uint32_t error = errno_to_win32(errno);
+        set_last_error(error);
+        return abi::kFileTypeUnknown;
+    }
+    std::uint32_t type = abi::kFileTypeUnknown;
+    if (S_ISCHR(status.st_mode)) {
+        type = abi::kFileTypeChar;
+    } else if (S_ISFIFO(status.st_mode) || S_ISSOCK(status.st_mode)) {
+        type = abi::kFileTypePipe;
+    } else if (S_ISREG(status.st_mode) || S_ISDIR(status.st_mode)) {
+        type = abi::kFileTypeDisk;
+    }
+    set_last_error(abi::kErrorSuccess);
+    trace_process_console("process-context", "file-type", std::to_string(type));
+    return type;
+}
+
+TL_MSABI std::uint32_t tl_GetSystemDirectoryW(std::uint16_t* const buffer,
+                                              const std::uint32_t size) noexcept {
+    static constexpr std::u16string_view kSystemDirectory = u"C:\\Windows\\System32";
+    const std::uint32_t required = static_cast<std::uint32_t>(kSystemDirectory.size() + 1U);
+    if (buffer == nullptr || size == 0) {
+        set_last_error(abi::kErrorSuccess);
+        return required;
+    }
+    if (size < required ||
+        !mapped_guest_range(buffer, static_cast<std::size_t>(size) * sizeof(*buffer), true)) {
+        set_last_error(abi::kErrorInsufficientBuffer);
+        return required;
+    }
+    std::copy(kSystemDirectory.begin(), kSystemDirectory.end(), buffer);
+    buffer[kSystemDirectory.size()] = 0;
+    set_last_error(abi::kErrorSuccess);
+    trace_process_console("process-context", "system-directory", "C:\\Windows\\System32");
+    return static_cast<std::uint32_t>(kSystemDirectory.size());
+}
+
+TL_MSABI void tl_GetStartupInfoW(abi::GuestStartupInfoW* const startup_info) noexcept {
+    if (startup_info == nullptr ||
+        !mapped_guest_range(startup_info, sizeof(*startup_info), true)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return;
+    }
+    *startup_info = {};
+    startup_info->cb = sizeof(*startup_info);
+    startup_info->flags = abi::kStartfUseStdHandles;
+    {
+        std::lock_guard lock(g_process_context_mutex);
+        startup_info->std_input = g_standard_handles[0];
+        startup_info->std_output = g_standard_handles[1];
+        startup_info->std_error = g_standard_handles[2];
+    }
+    set_last_error(abi::kErrorSuccess);
+    trace_process_console("process-context", "startup-info", "wide");
+}
+
+TL_MSABI int tl_ReadConsoleW(const void* const console_input, std::uint16_t* const buffer,
+                             const std::uint32_t chars_to_read,
+                             std::uint32_t* const chars_read,
+                             const void* const input_control) noexcept {
+    if (chars_read == nullptr ||
+        !mapped_guest_range(chars_read, sizeof(*chars_read), true)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    *chars_read = 0;
+    if (input_control != nullptr || console_input != &kStdInputToken ||
+        console_input != current_standard_handle(0) || chars_to_read > (1U << 20U) ||
+        (chars_to_read != 0 &&
+         !mapped_guest_range(buffer, static_cast<std::size_t>(chars_to_read) * sizeof(*buffer),
+                             true))) {
+        set_last_error(console_input != &kStdInputToken ? abi::kErrorInvalidHandle
+                                                        : abi::kErrorInvalidParameter);
+        return 0;
+    }
+    if (chars_to_read == 0) {
+        set_last_error(abi::kErrorSuccess);
+        return 1;
+    }
+    std::vector<char> bytes(static_cast<std::size_t>(chars_to_read) * 4U);
+    ssize_t byte_count = -1;
+    do {
+        byte_count = ::read(STDIN_FILENO, bytes.data(), bytes.size());
+    } while (byte_count < 0 && errno == EINTR);
+    if (byte_count < 0) {
+        const std::uint32_t error = errno_to_win32(errno);
+        set_last_error(error);
+        return 0;
+    }
+    const std::u16string wide = util::utf8_to_wide(
+        std::string_view{bytes.data(), static_cast<std::size_t>(byte_count)});
+    const std::size_t copied = std::min<std::size_t>(wide.size(), chars_to_read);
+    std::copy_n(wide.begin(), copied, buffer);
+    *chars_read = static_cast<std::uint32_t>(copied);
+    set_last_error(abi::kErrorSuccess);
+    trace_process_console("console", "read-wide", std::to_string(copied));
+    return 1;
+}
+
+TL_MSABI int tl_WriteConsoleW(const void* const console_output,
+                              const std::uint16_t* const buffer,
+                              const std::uint32_t chars_to_write,
+                              std::uint32_t* const chars_written,
+                              const void* const reserved) noexcept {
+    if (chars_written == nullptr ||
+        !mapped_guest_range(chars_written, sizeof(*chars_written), true)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    *chars_written = 0;
+    if (reserved != nullptr ||
+        (console_output != &kStdOutputToken && console_output != &kStdErrorToken) ||
+        chars_to_write > (1U << 20U) ||
+        (chars_to_write != 0 &&
+         !mapped_guest_range(buffer, static_cast<std::size_t>(chars_to_write) * sizeof(*buffer),
+                             false))) {
+        set_last_error((console_output != &kStdOutputToken && console_output != &kStdErrorToken)
+                           ? abi::kErrorInvalidHandle
+                           : abi::kErrorInvalidParameter);
+        return 0;
+    }
+    std::string utf8;
+    utf8.reserve(chars_to_write);
+    std::size_t position = 0;
+    while (position < chars_to_write) {
+        const std::uint32_t codepoint = util::decode_utf16(buffer, chars_to_write, position);
+        char encoded[4]{};
+        const std::size_t encoded_size = util::utf8_bytes_for(
+            codepoint == util::kInvalidCodepoint ? static_cast<std::uint32_t>('?') : codepoint,
+            encoded);
+        utf8.append(encoded, encoded_size);
+    }
+    const int fd = console_output == &kStdErrorToken ? STDERR_FILENO : STDOUT_FILENO;
+    if (!write_all(fd, utf8.data(), utf8.size())) {
+        const std::uint32_t error = errno_to_win32(errno);
+        set_last_error(error);
+        return 0;
+    }
+    *chars_written = chars_to_write;
+    set_last_error(abi::kErrorSuccess);
+    trace_process_console("console", "write-wide", std::to_string(chars_to_write));
+    return 1;
+}
+
+TL_MSABI int tl_IsDebuggerPresent() noexcept {
+    set_last_error(abi::kErrorSuccess);
+    trace_process_console("process-context", "debugger", "absent");
+    return 0;
+}
+
+TL_MSABI int tl_IsProcessorFeaturePresent(const std::uint32_t processor_feature) noexcept {
+    const bool present = processor_feature == abi::kPfCompareExchangeDouble ||
+                         processor_feature == abi::kPfMmxInstructionsAvailable ||
+                         processor_feature == abi::kPfXmmiInstructionsAvailable ||
+                         processor_feature == abi::kPfRdtscInstructionAvailable ||
+                         processor_feature == abi::kPfPaeEnabled ||
+                         processor_feature == abi::kPfXmmi64InstructionsAvailable ||
+                         processor_feature == abi::kPfNxEnabled;
+    set_last_error(abi::kErrorSuccess);
+    trace_process_console("process-context", "processor-feature",
+                          std::to_string(processor_feature));
+    return present ? 1 : 0;
+}
+
+TL_MSABI void* tl_EncodePointer(void* const pointer) noexcept {
+    const std::uintptr_t value = reinterpret_cast<std::uintptr_t>(pointer);
+    const std::uintptr_t encoded = std::rotl(value ^ process_pointer_cookie(), 17);
+    set_last_error(abi::kErrorSuccess);
+    trace_process_console("process-context", "encode-pointer", "opaque");
+    return reinterpret_cast<void*>(encoded);
+}
+
+TL_MSABI void* tl_DecodePointer(void* const pointer) noexcept {
+    const std::uintptr_t value = reinterpret_cast<std::uintptr_t>(pointer);
+    const std::uintptr_t decoded = std::rotr(value, 17) ^ process_pointer_cookie();
+    set_last_error(abi::kErrorSuccess);
+    trace_process_console("process-context", "decode-pointer", "opaque");
+    return reinterpret_cast<void*>(decoded);
+}
+
+TL_MSABI void tl_InitializeSListHead(abi::GuestSListHeader* const list_head) noexcept {
+    if (list_head == nullptr ||
+        reinterpret_cast<std::uintptr_t>(list_head) % alignof(abi::GuestSListHeader) != 0 ||
+        !mapped_guest_range(list_head, sizeof(*list_head), true)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return;
+    }
+    *list_head = {};
+    set_last_error(abi::kErrorSuccess);
+    trace_process_console("process-context", "initialize-slist", "empty");
 }
 
 TL_MSABI std::uint32_t tl_GetLastError() noexcept {

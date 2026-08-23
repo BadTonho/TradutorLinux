@@ -401,6 +401,19 @@ void register_builtin_modules() {
         {"GetStringTypeW", 220, reinterpret_cast<std::uintptr_t>(&tl_GetStringTypeW)},
         {"GetDateFormatW", 221, reinterpret_cast<std::uintptr_t>(&tl_GetDateFormatW)},
         {"GetTimeFormatW", 222, reinterpret_cast<std::uintptr_t>(&tl_GetTimeFormatW)},
+        {"GetStartupInfoW", 223, reinterpret_cast<std::uintptr_t>(&tl_GetStartupInfoW)},
+        {"GetSystemDirectoryW", 224, reinterpret_cast<std::uintptr_t>(&tl_GetSystemDirectoryW)},
+        {"GetFileType", 225, reinterpret_cast<std::uintptr_t>(&tl_GetFileType)},
+        {"SetStdHandle", 226, reinterpret_cast<std::uintptr_t>(&tl_SetStdHandle)},
+        {"ReadConsoleW", 227, reinterpret_cast<std::uintptr_t>(&tl_ReadConsoleW)},
+        {"WriteConsoleW", 228, reinterpret_cast<std::uintptr_t>(&tl_WriteConsoleW)},
+        {"IsDebuggerPresent", 229, reinterpret_cast<std::uintptr_t>(&tl_IsDebuggerPresent)},
+        {"IsProcessorFeaturePresent", 230,
+         reinterpret_cast<std::uintptr_t>(&tl_IsProcessorFeaturePresent)},
+        {"EncodePointer", 231, reinterpret_cast<std::uintptr_t>(&tl_EncodePointer)},
+        {"DecodePointer", 232, reinterpret_cast<std::uintptr_t>(&tl_DecodePointer)},
+        {"InitializeSListHead", 233,
+         reinterpret_cast<std::uintptr_t>(&tl_InitializeSListHead)},
     };
     static const InternalModule kKernel32Module{"KERNEL32.dll", kKernel32Exports};
     register_module(kKernel32Module);

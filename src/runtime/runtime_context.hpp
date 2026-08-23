@@ -71,6 +71,9 @@ extern char kStdInputToken;
 extern char kStdOutputToken;
 extern char kStdErrorToken;
 extern char kStockObjectTokens[24];
+extern std::mutex g_process_context_mutex;
+extern std::array<void*, 3> g_standard_handles;
+extern std::atomic<std::uintptr_t> g_pointer_cookie;
 
 struct FileSlot {
     int fd{-1};
@@ -188,6 +191,7 @@ extern thread_local std::shared_ptr<FlsThreadValues> g_current_fls_values;
 void set_current_fls_thread_values(std::shared_ptr<FlsThreadValues> values);
 void cleanup_current_fls_values() noexcept;
 void reset_fls_process_state() noexcept;
+void reset_process_console_state() noexcept;
 
 struct CriticalSectionEntry {
     void* guest_address{nullptr};

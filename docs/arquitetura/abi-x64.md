@@ -78,3 +78,8 @@ fica em [ambiente-locale-fls.md](ambiente-locale-fls.md).
 chamado quando aponta para memória executável da imagem PE ativa e recebe a
 string UTF-16 estática `0409` na ABI Microsoft x64. Nesta fase a enumeração
 possui um único item e não consulta o locale do Linux.
+
+O contexto da Fase 13.8 usa o layout AMD64 de `STARTUPINFOW` com 104 bytes e
+`SLIST_HEADER` com 16 bytes/alinhamento 16. As APIs de console recebem contagens
+em unidades UTF-16 e convertem no limite hospedado; nenhum ponteiro para as
+estruturas do Linux é exposto ao convidado.

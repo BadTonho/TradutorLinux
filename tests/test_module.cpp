@@ -125,6 +125,12 @@ TEST_F(ModuleTest, RegistersBuiltinKernel32Exports) {
               reinterpret_cast<std::uintptr_t>(&tl_EnumSystemLocalesW));
     EXPECT_EQ(find_export(ExportQuery{"KERNEL32.dll", "GetDateFormatW"}).address,
               reinterpret_cast<std::uintptr_t>(&tl_GetDateFormatW));
+    EXPECT_EQ(find_export(ExportQuery{"KERNEL32.dll", "GetStartupInfoW"}).address,
+              reinterpret_cast<std::uintptr_t>(&tl_GetStartupInfoW));
+    EXPECT_EQ(find_export(ExportQuery{"KERNEL32.dll", "WriteConsoleW"}).address,
+              reinterpret_cast<std::uintptr_t>(&tl_WriteConsoleW));
+    EXPECT_EQ(find_export(ExportQuery{"KERNEL32.dll", "InitializeSListHead"}).address,
+              reinterpret_cast<std::uintptr_t>(&tl_InitializeSListHead));
     EXPECT_EQ(find_export_by_ordinal("KERNEL32.dll", 1).address,
               reinterpret_cast<std::uintptr_t>(&tl_GetStdHandle));
     EXPECT_EQ(find_export_by_ordinal("KERNEL32.dll", 24).address,

@@ -55,6 +55,7 @@ Assinaturas hospedadas:
 | `tl_RtlVirtualUnwind` | `void* (DWORD, DWORD64, DWORD64, RUNTIME_FUNCTION*, CONTEXT*, void**, DWORD64*, void*)` | Desempilha um frame e opcionalmente devolve handler, sem invocá-lo. |
 | `tl_RtlPcToFileHeader` | `void* (void*, void**)` | Devolve a base da imagem PE ativa que contém o PC. |
 | Ambiente/locale/FLS | Assinaturas Win32 `W` e `TL_MSABI` | `Set/GetEnvironment*`, bloco UTF-16, expansão, CP1252/437/UTF-8, FLS por thread e locale `en-US` estático (consulta/validação, enumeração única, `CT_CTYPE1`, data/hora); ver `ambiente-locale-fls.md`. |
+| Processo/console | Assinaturas Win32 `W` e `TL_MSABI` | Handles padrão mutáveis, `STARTUPINFOW` AMD64, console UTF-16, diretório lógico, recursos do processador, ponteiros codificados e SList vazia; ver `console.md`. |
 
 ## Patch da IAT
 

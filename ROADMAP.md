@@ -98,9 +98,16 @@ Os itens marcados como concluídos devem ter evidência no repositório: código
   em CTest. WinRAR (170/251), Logitech G HUB (92/114) e Rockstar (213/338)
   foram reanalisados somente com `--report`, reduziram lacunas e continuam
   `unsupported`; nenhum binário comercial foi executado.
-- **Próximo resultado observável (Fase 13.8):** definir o contexto de processo
-  e console Win32 compartilhado, começando por startup, handles padrão e
-  operações Unicode sem antecipar `AllocConsole`/`AttachConsole`.
+- **Marco concluído (Fase 13.8):** `tl_process_console.exe` valida
+  `STARTUPINFOW`, handles padrão mutáveis, tipo de arquivo, console UTF-16,
+  `C:\Windows\System32`, recursos AMD64, encode/decode de ponteiro e SList
+  alinhada; imprime `process-console-é\n`. Metadata, `--report`, trace e
+  execução passam em Debug e Sanitize. WinRAR (179/251), Logitech G HUB
+  (103/114) e Rockstar (223/338) foram reanalisados somente com `--report`,
+  continuam `unsupported` e não foram executados.
+- **Próximo resultado observável (Fase 13.9):** completar enumeração e
+  metadados de arquivos x64 sobre o prefixo existente, começando pelas lacunas
+  compartilhadas `FindFirstFileExW` e `SetFileAttributesW`.
 
 ### Estudo de caso: `RobloxPlayerInstaller.exe` (benchmark de cobertura)
 
@@ -476,17 +483,17 @@ nem declarar os benchmarks comerciais suportados.
 
 #### Fase 13.8 — contexto de processo e console Win32
 
-- [ ] Implementar o grupo compartilhado `GetStartupInfoW`,
+- [x] Implementar o grupo compartilhado `GetStartupInfoW`,
   `GetSystemDirectoryW`, `GetFileType`, `SetStdHandle`, `ReadConsoleW`,
   `WriteConsoleW`, `IsDebuggerPresent`, `IsProcessorFeaturePresent`,
   `EncodePointer`, `DecodePointer` e `InitializeSListHead`.
-- [ ] Definir o contrato para handles padrão por processo/prefixo e para o
+- [x] Definir o contrato para handles padrão por processo/prefixo e para o
   comportamento sem console, sem criar `AllocConsole`/`AttachConsole` nesta
   etapa.
-- [ ] Criar uma fixture de processo/console que valida dados de startup,
+- [x] Criar uma fixture de processo/console que valida dados de startup,
   redirecionamento, tipo de handle, codificação UTF-16 e operações de lista;
   proteger APIs, trace e execução em CTest.
-- [ ] Reanalisar WinRAR, Logitech G HUB e Rockstar apenas com `--report`.
+- [x] Reanalisar WinRAR, Logitech G HUB e Rockstar apenas com `--report`.
 
 #### Fase 13.9 — enumeração e metadados de arquivos x64
 

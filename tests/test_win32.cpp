@@ -188,6 +188,73 @@ TEST(Win32ConsoleTest, IsDBCSLeadByteExAlwaysReturnsFalse) {
     EXPECT_EQ(tl_GetLastError(), abi::kErrorSuccess);
 }
 
+TEST(Win32ProcessConsoleTest, StandardHandlesStartupAndSystemDirectoryShareContext) {
+    void* const input = tl_GetStdHandle(abi::kStdInputHandle);
+    void* const output = tl_GetStdHandle(abi::kStdOutputHandle);
+    void* const error = tl_GetStdHandle(abi::kStdErrorHandle);
+    ASSERT_NE(input, nullptr);
+    ASSERT_NE(output, nullptr);
+    ASSERT_NE(error, nullptr);
+
+    EXPECT_EQ(tl_SetStdHandle(abi::kStdOutputHandle, error), 1);
+    EXPECT_EQ(tl_GetStdHandle(abi::kStdOutputHandle), error);
+    abi::GuestStartupInfoW startup{};
+    tl_GetStartupInfoW(&startup);
+    EXPECT_EQ(startup.cb, sizeof(startup));
+    EXPECT_EQ(startup.flags, abi::kStartfUseStdHandles);
+    EXPECT_EQ(startup.std_input, input);
+    EXPECT_EQ(startup.std_output, error);
+    EXPECT_EQ(startup.std_error, error);
+    EXPECT_EQ(tl_SetStdHandle(abi::kStdOutputHandle, output), 1);
+
+    std::uint16_t system_directory[32]{};
+    EXPECT_EQ(tl_GetSystemDirectoryW(nullptr, 0), 20U);
+    EXPECT_EQ(tl_GetSystemDirectoryW(system_directory, std::size(system_directory)), 19U);
+    EXPECT_EQ(std::u16string_view(reinterpret_cast<char16_t*>(system_directory)),
+              u"C:\\Windows\\System32");
+    EXPECT_EQ(tl_GetSystemDirectoryW(system_directory, 4), 20U);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInsufficientBuffer);
+}
+
+TEST(Win32ProcessConsoleTest, FileTypeAndWideConsoleRejectInvalidHandles) {
+    void* const output = tl_GetStdHandle(abi::kStdOutputHandle);
+    const std::uint32_t type = tl_GetFileType(output);
+    EXPECT_TRUE(type == abi::kFileTypeDisk || type == abi::kFileTypeChar ||
+                type == abi::kFileTypePipe);
+    EXPECT_EQ(tl_GetFileType(nullptr), abi::kFileTypeUnknown);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidHandle);
+
+    std::uint16_t buffer[4]{};
+    std::uint32_t transferred = 99;
+    EXPECT_EQ(tl_ReadConsoleW(output, buffer, std::size(buffer), &transferred, nullptr), 0);
+    EXPECT_EQ(transferred, 0U);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidHandle);
+    EXPECT_EQ(tl_WriteConsoleW(tl_GetStdHandle(abi::kStdInputHandle), buffer,
+                               std::size(buffer), &transferred, nullptr), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidHandle);
+}
+
+TEST(Win32ProcessConsoleTest, PointerEncodingProcessorFeaturesAndSListAreDeterministic) {
+    void* const original = reinterpret_cast<void*>(0x12345678ULL);
+    void* const encoded = tl_EncodePointer(original);
+    EXPECT_NE(encoded, original);
+    EXPECT_EQ(tl_DecodePointer(encoded), original);
+    EXPECT_EQ(tl_DecodePointer(tl_EncodePointer(nullptr)), nullptr);
+
+    EXPECT_EQ(tl_IsDebuggerPresent(), 0);
+    EXPECT_EQ(tl_IsProcessorFeaturePresent(abi::kPfXmmi64InstructionsAvailable), 1);
+    EXPECT_EQ(tl_IsProcessorFeaturePresent(0xFFFFFFFFU), 0);
+
+    abi::GuestSListHeader header{~0ULL, ~0ULL};
+    tl_InitializeSListHead(&header);
+    EXPECT_EQ(header.alignment, 0U);
+    EXPECT_EQ(header.region, 0U);
+    alignas(16) std::array<std::byte, 32> unaligned_storage{};
+    tl_InitializeSListHead(reinterpret_cast<abi::GuestSListHeader*>(
+        unaligned_storage.data() + 1));
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+}
+
 TEST(Win32CriticalSectionTest, LifecycleWithValidPointerIsTrivial) {
     char critical_section[8]{};
     tl_InitializeCriticalSection(critical_section);

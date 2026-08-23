@@ -127,6 +127,22 @@ enumeração, tipo de caractere, formatação de data/hora e mapeamento. Erros d
 ponteiro, índice, callback, flags ou buffer continuam a usar o retorno Win32 e
 `GetLastError` sem executar código convidado inesperado.
 
+## Eventos de processo e console
+
+A Fase 13.8 acrescenta os eventos `process-context` e `console` no componente
+`runtime`. O primeiro registra startup, handles padrão, tipo de arquivo,
+diretório do sistema, recursos do processador, codificação de ponteiro e
+inicialização de SList; o segundo registra as quantidades UTF-16 lidas ou
+escritas por `ReadConsoleW`/`WriteConsoleW`:
+
+```text
+[tl][runtime][info] process-context operation="startup-info" detail="wide" thread="1" status="success"
+[tl][runtime][info] console operation="write-wide" detail="18" thread="1" status="success"
+```
+
+Erros continuam expressos pelo retorno Win32 e `GetLastError`; a saída do
+convidado permanece em stdout/stderr conforme o handle solicitado.
+
 ## Componente `install`
 
 O comando `install` emite seus eventos neste componente, sempre em `stderr`.
