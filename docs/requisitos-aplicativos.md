@@ -29,6 +29,8 @@ posterior.
 | `Creative_Cloud_Set-Up_7474.exe` | — | — | PE32 x86 (`0x14c`) | arquitetura não suportada |
 | `officedeploymenttool_20228-20124.exe` | — | — | PE32 x86 (`0x14c`) | arquitetura não suportada |
 | `Affinity x64.msix` | — | — | pacote MSIX; executável interno não localizado | formato não suportado |
+| `CapCut_7677236283084898320_installer.exe` | — | — | PE32 x86 (`0x14c`) | arquitetura não suportada |
+| `EpicInstaller-20.1.4-831cc1564f92442abc51fdb4a9854359.exe` | — | — | PE32 x86 (`0x14c`) + Mono/.NET | arquitetura/formato não suportados |
 
 ## `RobloxPlayerInstaller.exe`
 
@@ -502,3 +504,42 @@ distribuição, sem ainda afirmar nada sobre as APIs usadas pelo Affinity.
 Validação estrutural do pacote é indispensável para tratar a entrada como dado
 hostil. Verificação de assinatura, políticas de confiança e sandbox são
 capacidades de segurança separadas e permanecem fora deste marco.
+
+## `CapCut_7677236283084898320_installer.exe` (CapCut installer)
+
+### Amostra e resultado
+
+| Campo | Valor |
+|---|---|
+| Arquivo | `CapCut_7677236283084898320_installer.exe` |
+| Formato | PE32 GUI Intel x86 (`IMAGE_FILE_MACHINE_I386`, `0x14c`), 5 seções |
+| Empacotamento observado | instalador autoextraível Nullsoft/NSIS |
+| SHA-256 | `69dbc6f939bf4ac63a90dc56e1e9600b4d4284848a99c4190423c3f856c5961e` |
+| Resultado | rejeitado no parser: `unsupported-architecture` (exit code `5`) |
+| Fonte | trace local de 2026-08-23 |
+
+Assim como o Creative Cloud e o Office Deployment Tool, este instalador foi
+rejeitado antes de imports, mapeamento ou execução. Ele acrescenta o formato
+NSIS à amostra, mas o requisito primário continua sendo suporte a PE32/x86 em
+Linux x86-64. A interpretação de um instalador NSIS só pode ser investigada
+depois que a arquitetura x86 estiver definida e validada.
+
+## `EpicInstaller-20.1.4-831cc1564f92442abc51fdb4a9854359.exe` (Epic Games Launcher installer)
+
+### Amostra e resultado
+
+| Campo | Valor |
+|---|---|
+| Arquivo | `EpicInstaller-20.1.4-831cc1564f92442abc51fdb4a9854359.exe` |
+| Formato | PE32 GUI Intel x86 (`IMAGE_FILE_MACHINE_I386`, `0x14c`), 3 seções |
+| Runtime observado | assembly Mono/.NET |
+| SHA-256 | `7bda7fbb3eea3ffdced17b5679c057943464a6ecc5e5274968b728feae470b7b` |
+| Resultado | rejeitado no parser: `unsupported-architecture` (exit code `5`) |
+| Fonte | trace e inspeção local de 2026-08-23 |
+
+O parser para na arquitetura x86, logo imports nativos não foram analisados.
+Mesmo após uma futura camada PE32/x86, esta amostra exigirá uma decisão de
+escopo separada para executar assemblies gerenciados: hospedagem de CLR/Mono,
+carregamento de assemblies, interoperabilidade e teste de versão. .NET/Mono
+continuam fora do alvo atual; portanto, este instalador evidencia duas lacunas
+independentes, não uma API Win32 específica faltante.
