@@ -1,0 +1,24 @@
+{
+  "name": "tl_file_metadata",
+  "format": "PE32+",
+  "machine": "AMD64",
+  "entry_point": "tl_entry",
+  "uses_crt": false,
+  "imports": {
+    "KERNEL32.dll": [
+      "CloseHandle",
+      "CreateDirectoryW",
+      "CreateFileW",
+      "DeleteFileW",
+      "ExitProcess",
+      "FindClose",
+      "FindFirstFileExW",
+      "GetFileAttributesW",
+      "GetStdHandle",
+      "RemoveDirectoryW",
+      "SetFileAttributesW",
+      "SetFileInformationByHandle",
+      "WriteFile"
+    ]
+  }
+}

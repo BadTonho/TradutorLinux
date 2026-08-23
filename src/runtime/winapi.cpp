@@ -483,13 +483,44 @@ int stock_object_index(const void* const token) noexcept {
 
 std::uint32_t stat_to_win32_attributes(const char* path, const struct stat& st) noexcept {
     if (S_ISDIR(st.st_mode)) {
-        return 0x00000010 | 0x00000020;  // Directory | Archive
+        return abi::kFileAttributeDirectory | abi::kFileAttributeArchive;
     }
-    std::uint32_t attrs = 0x00000020;    // Archive
-    if (access(path, W_OK) != 0) {
-        attrs |= 0x00000001;             // ReadOnly
+    (void)path;
+    std::uint32_t attrs = abi::kFileAttributeArchive;
+    if ((st.st_mode & (S_IWUSR | S_IWGRP | S_IWOTH)) == 0) {
+        attrs |= abi::kFileAttributeReadOnly;
     }
     return attrs;
+}
+
+std::uint32_t apply_win32_file_attributes(const char* const path,
+                                          const std::uint32_t attributes) noexcept {
+    constexpr std::uint32_t kSupported = abi::kFileAttributeReadOnly |
+                                         abi::kFileAttributeDirectory |
+                                         abi::kFileAttributeArchive |
+                                         abi::kFileAttributeNormal;
+    if (path == nullptr || attributes == 0 || (attributes & ~kSupported) != 0 ||
+        ((attributes & abi::kFileAttributeNormal) != 0 &&
+         attributes != abi::kFileAttributeNormal)) {
+        return abi::kErrorInvalidParameter;
+    }
+    struct stat st{};
+    if (::stat(path, &st) != 0) {
+        return runtime::errno_to_win32(errno);
+    }
+    if ((attributes & abi::kFileAttributeDirectory) != 0 && !S_ISDIR(st.st_mode)) {
+        return abi::kErrorInvalidParameter;
+    }
+    mode_t mode = st.st_mode;
+    if ((attributes & abi::kFileAttributeReadOnly) != 0) {
+        mode &= static_cast<mode_t>(~(S_IWUSR | S_IWGRP | S_IWOTH));
+    } else {
+        mode |= S_IWUSR;
+    }
+    if (::chmod(path, mode) != 0) {
+        return runtime::errno_to_win32(errno);
+    }
+    return abi::kErrorSuccess;
 }
 
 std::uint32_t decode_multibyte(const std::uint32_t code_page,

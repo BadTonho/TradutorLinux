@@ -237,6 +237,11 @@ function(tl_add_pe_fixture target_name source_file manifest_file)
                     "-DINPUT_TEXT=entrada"
                     "-DEXPECTED_HEX=70726f636573732d636f6e736f6c652dc3a90a"
                     "-DREQUIRED_TRACE=process-context,console")
+            elseif(target_name STREQUAL "tl_file_metadata")
+                set(runtime_extra_args
+                    "-DEXPECTED_HEX=66696c652d6d657461646174610a"
+                    "-DREQUIRED_TRACE=filesystem"
+                    "-DPREFIX_DIR=${CMAKE_CURRENT_BINARY_DIR}/file-metadata-prefix")
             endif()
         endif()
         add_test(
@@ -520,6 +525,10 @@ tl_add_pe_fixture(tl_locale_extended src/tl_locale_extended.c manifests/tl_local
 tl_add_pe_fixture(tl_process_console src/tl_process_console.c manifests/tl_process_console.json
     LINK_KERNEL32 EXPECT_RESOLVED CONSOLE REPORT RELOCATABLE
     REPORT_SYMBOL "GetStartupInfoW")
+
+tl_add_pe_fixture(tl_file_metadata src/tl_file_metadata.c manifests/tl_file_metadata.json
+    LINK_KERNEL32 EXPECT_RESOLVED CONSOLE REPORT RELOCATABLE
+    REPORT_SYMBOL "SetFileInformationByHandle")
 
 tl_add_pe_fixture(tl_resources src/tl_resources.c manifests/tl_resources.json
     LINK_KERNEL32 EXPECT_RESOLVED CONSOLE REPORT RELOCATABLE

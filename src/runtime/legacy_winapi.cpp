@@ -281,6 +281,17 @@ void trace_locale_extension(const char* const operation, const std::string& deta
     runtime_trace("locale", fields, 4);
 }
 
+void trace_filesystem(const char* const operation, const char* const status,
+                      const std::string& detail) noexcept {
+    const std::array<diagnostics::TraceField, 4> fields{
+        diagnostics::TraceField{"operation", operation},
+        diagnostics::TraceField{"status", status},
+        diagnostics::TraceField{"detail", detail},
+        diagnostics::TraceField{"scope", "prefix"},
+    };
+    runtime_trace("filesystem", fields, 4);
+}
+
 [[nodiscard]] bool valid_system_time(const abi::GuestSystemTime& value) noexcept {
     if (value.year < 1601U || value.month < 1U || value.month > 12U || value.day < 1U ||
         value.hour > 23U || value.minute > 59U || value.second > 59U ||
@@ -1048,6 +1059,28 @@ TL_MSABI void* tl_FindFirstFileW(const std::uint16_t* path, void* find_data) noe
     return handle;
 }
 
+TL_MSABI void* tl_FindFirstFileExW(const std::uint16_t* const path, const int info_level,
+                                   void* const find_data, const int search_operation,
+                                   const void* const search_filter,
+                                   const std::uint32_t additional_flags) noexcept {
+    if ((info_level != static_cast<int>(abi::kFindExInfoStandard) &&
+         info_level != static_cast<int>(abi::kFindExInfoBasic)) ||
+        search_operation != static_cast<int>(abi::kFindExSearchNameMatch) ||
+        search_filter != nullptr ||
+        (additional_flags & ~abi::kFindFirstExLargeFetch) != 0) {
+        set_last_error(abi::kErrorInvalidParameter);
+        trace_filesystem("find-first-ex", "failed", "unsupported-parameters");
+        return reinterpret_cast<void*>(std::numeric_limits<std::uintptr_t>::max());
+    }
+    void* const handle = tl_FindFirstFileW(path, find_data);
+    trace_filesystem("find-first-ex",
+                     handle == reinterpret_cast<void*>(std::numeric_limits<std::uintptr_t>::max())
+                         ? "failed"
+                         : "success",
+                     info_level == static_cast<int>(abi::kFindExInfoBasic) ? "basic" : "standard");
+    return handle;
+}
+
 TL_MSABI int tl_FindNextFileW(const void* handle, void* find_data) noexcept {
     if (find_data == nullptr || !mapped_guest_range(find_data, sizeof(LegacyFindDataW), true)) {
         set_last_error(abi::kErrorInvalidParameter);
@@ -1566,6 +1599,148 @@ TL_MSABI int tl_GetFileInformationByHandleEx(const void* handle, int info_class,
     *static_cast<LegacyBasicFileInformation*>(buffer) = {
         filetime_ticks(st.st_ctim), filetime_ticks(st.st_atim), filetime_ticks(st.st_mtim),
         filetime_ticks(st.st_ctim), stat_to_win32_attributes(slot->path.c_str(), st), 0};
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_SetFileInformationByHandle(const void* const handle, const int info_class,
+                                           const void* const buffer,
+                                           const std::uint32_t size) noexcept {
+    FileSlot* const slot = find_file_slot(handle);
+    if (slot == nullptr) {
+        set_last_error(abi::kErrorInvalidHandle);
+        trace_filesystem("set-information", "failed", "invalid-handle");
+        return 0;
+    }
+    if (buffer == nullptr) {
+        set_last_error(abi::kErrorInvalidParameter);
+        trace_filesystem("set-information", "failed", "null-buffer");
+        return 0;
+    }
+
+    if (info_class == static_cast<int>(abi::kFileBasicInfo)) {
+        if (size < sizeof(abi::GuestFileBasicInfo) ||
+            !mapped_guest_range(buffer, sizeof(abi::GuestFileBasicInfo), false)) {
+            set_last_error(abi::kErrorInvalidParameter);
+            trace_filesystem("set-information", "failed", "short-basic-info");
+            return 0;
+        }
+        const auto& info = *static_cast<const abi::GuestFileBasicInfo*>(buffer);
+        if (info.reserved != 0) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
+        }
+        struct stat st{};
+        if (::fstat(slot->fd, &st) != 0) {
+            const std::uint32_t error = errno_to_win32(errno);
+            set_last_error(error);
+            return 0;
+        }
+        timespec times[2]{st.st_atim, st.st_mtim};
+        const auto to_file_time = [](const std::int64_t value) noexcept {
+            const std::uint64_t bits = static_cast<std::uint64_t>(value);
+            return LegacyFileTime{static_cast<std::uint32_t>(bits & 0xFFFFFFFFU),
+                                  static_cast<std::uint32_t>(bits >> 32U)};
+        };
+        if ((info.last_access_time != 0 &&
+             !filetime_to_timespec(to_file_time(info.last_access_time), times[0])) ||
+            (info.last_write_time != 0 &&
+             !filetime_to_timespec(to_file_time(info.last_write_time), times[1]))) {
+            set_last_error(abi::kErrorInvalidParameter);
+            trace_filesystem("set-information", "failed", "invalid-time");
+            return 0;
+        }
+        if ((info.last_access_time != 0 || info.last_write_time != 0) &&
+            ::futimens(slot->fd, times) != 0) {
+            const std::uint32_t error = errno_to_win32(errno);
+            set_last_error(error);
+            return 0;
+        }
+        if (info.file_attributes != 0) {
+            const std::uint32_t error = apply_win32_file_attributes(
+                slot->path.c_str(), info.file_attributes);
+            if (error != abi::kErrorSuccess) {
+                set_last_error(error);
+                trace_filesystem("set-information", "failed", "invalid-attributes");
+                return 0;
+            }
+        }
+        set_last_error(abi::kErrorSuccess);
+        trace_filesystem("set-information", "success", "FileBasicInfo");
+        return 1;
+    }
+
+    bool delete_file = false;
+    bool posix_semantics = false;
+    bool ignore_readonly = false;
+    if (info_class == static_cast<int>(abi::kFileDispositionInfo)) {
+        if (size < sizeof(abi::GuestFileDispositionInfo) ||
+            !mapped_guest_range(buffer, sizeof(abi::GuestFileDispositionInfo), false)) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
+        }
+        delete_file = static_cast<const abi::GuestFileDispositionInfo*>(buffer)->delete_file != 0;
+    } else if (info_class == static_cast<int>(abi::kFileDispositionInfoEx)) {
+        if (size < sizeof(abi::GuestFileDispositionInfoEx) ||
+            !mapped_guest_range(buffer, sizeof(abi::GuestFileDispositionInfoEx), false)) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
+        }
+        const std::uint32_t flags =
+            static_cast<const abi::GuestFileDispositionInfoEx*>(buffer)->flags;
+        constexpr std::uint32_t kSupportedFlags = abi::kFileDispositionFlagDelete |
+                                                   abi::kFileDispositionFlagPosixSemantics |
+                                                   abi::kFileDispositionFlagOnClose |
+                                                   abi::kFileDispositionFlagIgnoreReadonlyAttribute;
+        if ((flags & ~kSupportedFlags) != 0 ||
+            ((flags & ~abi::kFileDispositionFlagDelete) != 0 &&
+             (flags & abi::kFileDispositionFlagDelete) == 0)) {
+            set_last_error(abi::kErrorInvalidParameter);
+            trace_filesystem("set-information", "failed", "invalid-disposition-flags");
+            return 0;
+        }
+        delete_file = (flags & abi::kFileDispositionFlagDelete) != 0;
+        posix_semantics = (flags & abi::kFileDispositionFlagPosixSemantics) != 0;
+        ignore_readonly =
+            (flags & abi::kFileDispositionFlagIgnoreReadonlyAttribute) != 0;
+    } else {
+        set_last_error(abi::kErrorInvalidParameter);
+        trace_filesystem("set-information", "failed", "unsupported-class");
+        return 0;
+    }
+
+    if (!delete_file) {
+        slot->delete_pending = false;
+        set_last_error(abi::kErrorSuccess);
+        trace_filesystem("set-information", "success", "delete-cancelled");
+        return 1;
+    }
+    struct stat st{};
+    if (::fstat(slot->fd, &st) != 0) {
+        const std::uint32_t error = errno_to_win32(errno);
+        set_last_error(error);
+        return 0;
+    }
+    if (!ignore_readonly && (stat_to_win32_attributes(slot->path.c_str(), st) &
+                             abi::kFileAttributeReadOnly) != 0) {
+        set_last_error(abi::kErrorAccessDenied);
+        trace_filesystem("set-information", "failed", "read-only");
+        return 0;
+    }
+    if (posix_semantics) {
+        if (!slot->unlinked && ::unlink(slot->path.c_str()) != 0) {
+            const std::uint32_t error = errno_to_win32(errno);
+            set_last_error(error);
+            trace_filesystem("set-information", "failed", "posix-delete");
+            return 0;
+        }
+        slot->unlinked = true;
+        slot->delete_pending = false;
+        trace_filesystem("set-information", "success", "posix-delete");
+    } else {
+        slot->delete_pending = true;
+        trace_filesystem("set-information", "success", "delete-on-close");
+    }
     set_last_error(abi::kErrorSuccess);
     return 1;
 }

@@ -7,6 +7,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <filesystem>
 #include <limits>
 #include <string>
 #include <thread>
@@ -901,6 +902,171 @@ TEST(Win32WideFileTest, UnicodeFileMetadataPositionAndCopyAreConsistent) {
     ASSERT_EQ(tl_MoveFileExW(copy.data(), moved.data(), 1), 1);
     EXPECT_EQ(tl_DeleteFileW(source.data()), 1);
     EXPECT_EQ(tl_DeleteFileW(moved.data()), 1);
+}
+
+TEST(Win32FileMetadataTest, Amd64LayoutsMatchWindows) {
+    EXPECT_EQ(sizeof(abi::GuestFileBasicInfo), 40U);
+    EXPECT_EQ(sizeof(abi::GuestFileDispositionInfo), 1U);
+    EXPECT_EQ(sizeof(abi::GuestFileDispositionInfoEx), 4U);
+}
+
+TEST(Win32FileMetadataTest, FindFirstFileExWMatchesCaseWildcardsAndFillsMetadata) {
+    TempDirFixture ctx;
+    const std::string first = ctx.path("Case_A.TXT");
+    const std::string second = ctx.path("case_b.txt");
+    for (const std::string* path : {&first, &second}) {
+        FILE* file = std::fopen(path->c_str(), "wb");
+        ASSERT_NE(file, nullptr);
+        std::fwrite("data", 1, 4, file);
+        std::fclose(file);
+    }
+    const std::u16string pattern_text = u"_tl_test/case_?.txt";
+    std::vector<std::uint16_t> pattern(pattern_text.begin(), pattern_text.end());
+    pattern.push_back(0);
+    alignas(8) std::array<std::byte, 592> data{};
+    void* find = tl_FindFirstFileExW(pattern.data(), abi::kFindExInfoStandard, data.data(),
+                                     abi::kFindExSearchNameMatch, nullptr, 0);
+    ASSERT_NE(find, reinterpret_cast<void*>(std::numeric_limits<std::uintptr_t>::max()));
+    int count = 0;
+    do {
+        const auto* words = reinterpret_cast<const std::uint32_t*>(data.data());
+        EXPECT_EQ(words[7], 0U);
+        EXPECT_EQ(words[8], 4U);
+        EXPECT_NE(words[6], 0U);
+        ++count;
+    } while (tl_FindNextFileW(find, data.data()) != 0);
+    EXPECT_EQ(count, 2);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorNoMoreFiles);
+    EXPECT_EQ(tl_FindClose(find), 1);
+
+    find = tl_FindFirstFileExW(pattern.data(), abi::kFindExInfoBasic, data.data(),
+                               abi::kFindExSearchNameMatch, nullptr,
+                               abi::kFindFirstExLargeFetch);
+    ASSERT_NE(find, reinterpret_cast<void*>(std::numeric_limits<std::uintptr_t>::max()));
+    EXPECT_EQ(tl_FindClose(find), 1);
+}
+
+TEST(Win32FileMetadataTest, FindFirstFileExWRejectsUnsupportedParameters) {
+    const std::uint16_t pattern[] = {'*', 0};
+    alignas(8) std::array<std::byte, 592> data{};
+    const void* invalid = reinterpret_cast<void*>(std::numeric_limits<std::uintptr_t>::max());
+    EXPECT_EQ(tl_FindFirstFileExW(pattern, 2, data.data(), 0, nullptr, 0), invalid);
+    EXPECT_EQ(tl_FindFirstFileExW(pattern, 0, data.data(), 1, nullptr, 0), invalid);
+    EXPECT_EQ(tl_FindFirstFileExW(pattern, 0, data.data(), 0, data.data(), 0), invalid);
+    EXPECT_EQ(tl_FindFirstFileExW(pattern, 0, data.data(), 0, nullptr, 1), invalid);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+}
+
+TEST(Win32FileMetadataTest, SetFileAttributesWControlsReadonlyAndValidatesBits) {
+    TempDirFixture ctx;
+    const std::string path = ctx.path("attributes.txt");
+    FILE* file = std::fopen(path.c_str(), "wb");
+    ASSERT_NE(file, nullptr);
+    std::fclose(file);
+    const std::uint16_t wide[] = {'_', 't', 'l', '_', 't', 'e', 's', 't', '/',
+                                  'a', 't', 't', 'r', 'i', 'b', 'u', 't', 'e', 's', '.',
+                                  't', 'x', 't', 0};
+    ASSERT_EQ(tl_SetFileAttributesW(
+                  wide, abi::kFileAttributeReadOnly | abi::kFileAttributeArchive),
+              1);
+    EXPECT_NE(tl_GetFileAttributesW(wide) & abi::kFileAttributeReadOnly, 0U);
+    ASSERT_EQ(tl_SetFileAttributesW(wide, abi::kFileAttributeNormal), 1);
+    EXPECT_EQ(tl_GetFileAttributesW(wide) & abi::kFileAttributeReadOnly, 0U);
+    EXPECT_EQ(tl_SetFileAttributesW(wide, 0x2U), 0);
+    EXPECT_EQ(tl_SetFileAttributesW(
+                  wide, abi::kFileAttributeNormal | abi::kFileAttributeArchive),
+              0);
+}
+
+TEST(Win32FileMetadataTest, SetFileInformationSupportsBasicAndDispositionClasses) {
+    TempDirFixture ctx;
+    const std::string basic_path = ctx.path("basic.tmp");
+    const std::string close_path = ctx.path("close.tmp");
+    const std::string posix_path = ctx.path("posix.tmp");
+    auto open_file = [](const std::string& path) {
+        return tl_CreateFileA(path.c_str(), abi::kGenericRead | abi::kGenericWrite, 0,
+                              nullptr, abi::kCreateAlways, 0, nullptr);
+    };
+    void* basic_handle = open_file(basic_path);
+    ASSERT_NE(basic_handle, nullptr);
+    abi::GuestFileBasicInfo basic{};
+    basic.file_attributes = abi::kFileAttributeReadOnly | abi::kFileAttributeArchive;
+    EXPECT_EQ(tl_SetFileInformationByHandle(basic_handle, abi::kFileBasicInfo, &basic,
+                                            sizeof(basic)),
+              1);
+    struct stat st{};
+    ASSERT_EQ(::stat(basic_path.c_str(), &st), 0);
+    EXPECT_EQ(st.st_mode & S_IWUSR, 0U);
+    basic.file_attributes = abi::kFileAttributeNormal;
+    EXPECT_EQ(tl_SetFileInformationByHandle(basic_handle, abi::kFileBasicInfo, &basic,
+                                            sizeof(basic)),
+              1);
+    EXPECT_EQ(tl_SetFileInformationByHandle(basic_handle, 99, &basic, sizeof(basic)), 0);
+    EXPECT_EQ(tl_SetFileInformationByHandle(basic_handle, abi::kFileBasicInfo, &basic, 1), 0);
+    EXPECT_EQ(tl_CloseHandle(basic_handle), 1);
+
+    void* close_handle = open_file(close_path);
+    ASSERT_NE(close_handle, nullptr);
+    abi::GuestFileDispositionInfo disposition{1};
+    ASSERT_EQ(tl_SetFileInformationByHandle(close_handle, abi::kFileDispositionInfo,
+                                            &disposition, sizeof(disposition)),
+              1);
+    disposition.delete_file = 0;
+    ASSERT_EQ(tl_SetFileInformationByHandle(close_handle, abi::kFileDispositionInfo,
+                                            &disposition, sizeof(disposition)),
+              1);
+    disposition.delete_file = 1;
+    ASSERT_EQ(tl_SetFileInformationByHandle(close_handle, abi::kFileDispositionInfo,
+                                            &disposition, sizeof(disposition)),
+              1);
+    EXPECT_EQ(tl_CloseHandle(close_handle), 1);
+    EXPECT_NE(::access(close_path.c_str(), F_OK), 0);
+
+    void* posix_handle = open_file(posix_path);
+    ASSERT_NE(posix_handle, nullptr);
+    abi::GuestFileDispositionInfoEx extended{0x4U};
+    EXPECT_EQ(tl_SetFileInformationByHandle(posix_handle, abi::kFileDispositionInfoEx,
+                                            &extended, sizeof(extended)),
+              0);
+    extended.flags = abi::kFileDispositionFlagDelete |
+                     abi::kFileDispositionFlagPosixSemantics;
+    ASSERT_EQ(tl_SetFileInformationByHandle(posix_handle, abi::kFileDispositionInfoEx,
+                                            &extended, sizeof(extended)),
+              1);
+    EXPECT_NE(::access(posix_path.c_str(), F_OK), 0);
+    EXPECT_EQ(tl_CloseHandle(posix_handle), 1);
+    EXPECT_EQ(tl_SetFileInformationByHandle(nullptr, abi::kFileDispositionInfoEx,
+                                            &extended, sizeof(extended)),
+              0);
+}
+
+TEST(Win32FileMetadataTest, PrefixesKeepIdenticalLogicalPathsIsolated) {
+    const std::filesystem::path root = std::filesystem::temp_directory_path() /
+        ("tl-file-prefix-" + std::to_string(static_cast<unsigned long long>(::getpid())));
+    const std::filesystem::path first = root / "first";
+    const std::filesystem::path second = root / "second";
+    std::filesystem::create_directories(first / "drive_c");
+    std::filesystem::create_directories(second / "drive_c");
+    const std::uint16_t logical[] = {'C', ':', '\\', 's', 'a', 'm', 'e', '.', 't', 'x', 't', 0};
+
+    set_guest_prefix_path(first);
+    void* handle = tl_CreateFileW(logical, abi::kGenericWrite, 0, nullptr,
+                                  abi::kCreateAlways, 0, nullptr);
+    ASSERT_NE(handle, nullptr);
+    ASSERT_EQ(tl_CloseHandle(handle), 1);
+    EXPECT_TRUE(std::filesystem::exists(first / "drive_c" / "same.txt"));
+    EXPECT_FALSE(std::filesystem::exists(second / "drive_c" / "same.txt"));
+
+    set_guest_prefix_path(second);
+    EXPECT_EQ(tl_GetFileAttributesW(logical), 0xFFFFFFFFU);
+    handle = tl_CreateFileW(logical, abi::kGenericWrite, 0, nullptr,
+                            abi::kCreateAlways, 0, nullptr);
+    ASSERT_NE(handle, nullptr);
+    ASSERT_EQ(tl_CloseHandle(handle), 1);
+    EXPECT_TRUE(std::filesystem::exists(second / "drive_c" / "same.txt"));
+
+    set_guest_prefix_path({});
+    std::filesystem::remove_all(root);
 }
 
 TEST(Win32DirTest, GetCurrentDirectoryAReturnsNonEmpty) {

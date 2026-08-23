@@ -131,6 +131,12 @@ TEST_F(ModuleTest, RegistersBuiltinKernel32Exports) {
               reinterpret_cast<std::uintptr_t>(&tl_WriteConsoleW));
     EXPECT_EQ(find_export(ExportQuery{"KERNEL32.dll", "InitializeSListHead"}).address,
               reinterpret_cast<std::uintptr_t>(&tl_InitializeSListHead));
+    EXPECT_EQ(find_export(ExportQuery{"KERNEL32.dll", "FindFirstFileExW"}).address,
+              reinterpret_cast<std::uintptr_t>(&tl_FindFirstFileExW));
+    EXPECT_EQ(find_export(ExportQuery{"KERNEL32.dll", "SetFileAttributesW"}).address,
+              reinterpret_cast<std::uintptr_t>(&tl_SetFileAttributesW));
+    EXPECT_EQ(find_export(ExportQuery{"KERNEL32.dll", "SetFileInformationByHandle"}).address,
+              reinterpret_cast<std::uintptr_t>(&tl_SetFileInformationByHandle));
     EXPECT_EQ(find_export_by_ordinal("KERNEL32.dll", 1).address,
               reinterpret_cast<std::uintptr_t>(&tl_GetStdHandle));
     EXPECT_EQ(find_export_by_ordinal("KERNEL32.dll", 24).address,

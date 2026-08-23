@@ -81,6 +81,8 @@ struct FileSlot {
     std::uint64_t file_size{0};
     std::int64_t position{0};
     std::string path;
+    bool delete_pending{false};
+    bool unlinked{false};
 };
 
 struct AllocationSlot {
@@ -313,6 +315,7 @@ FindSlot* find_slot_for_handle(const void* handle) noexcept;
 
 int stock_object_index(const void* token) noexcept;
 std::uint32_t stat_to_win32_attributes(const char* path, const struct stat& st) noexcept;
+std::uint32_t apply_win32_file_attributes(const char* path, std::uint32_t attributes) noexcept;
 std::uint32_t decode_multibyte(std::uint32_t code_page, const std::uint8_t* bytes, std::size_t length, std::size_t& pos) noexcept;
 
 bool set_guest_gs_base(const void* base) noexcept;

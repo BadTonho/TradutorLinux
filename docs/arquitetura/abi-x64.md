@@ -83,3 +83,8 @@ O contexto da Fase 13.8 usa o layout AMD64 de `STARTUPINFOW` com 104 bytes e
 `SLIST_HEADER` com 16 bytes/alinhamento 16. As APIs de console recebem contagens
 em unidades UTF-16 e convertem no limite hospedado; nenhum ponteiro para as
 estruturas do Linux é exposto ao convidado.
+
+A Fase 13.9 acrescenta `FILE_BASIC_INFO` (40 bytes),
+`FILE_DISPOSITION_INFO` (1 byte) e `FILE_DISPOSITION_INFO_EX` (4 bytes). As
+estruturas de enumeração `WIN32_FIND_DATAW` possuem 592 bytes; todos os
+ponteiros e tamanhos dessas estruturas são validados antes do acesso.

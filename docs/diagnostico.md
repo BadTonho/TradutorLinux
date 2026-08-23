@@ -143,6 +143,17 @@ escritas por `ReadConsoleW`/`WriteConsoleW`:
 Erros continuam expressos pelo retorno Win32 e `GetLastError`; a saída do
 convidado permanece em stdout/stderr conforme o handle solicitado.
 
+## Eventos de arquivos
+
+A Fase 13.9 usa `filesystem` no componente `runtime` para enumeração,
+alteração de atributos, metadados por handle e exclusão. O trace nunca inclui
+o caminho Linux do hospedeiro:
+
+```text
+[tl][runtime][info] filesystem operation="find-first-ex" status="success" detail="basic" scope="prefix"
+[tl][runtime][info] filesystem operation="set-information" status="success" detail="delete-on-close" scope="prefix"
+```
+
 ## Componente `install`
 
 O comando `install` emite seus eventos neste componente, sempre em `stderr`.

@@ -27,6 +27,7 @@ Esta matriz declara o comportamento suportado; ela não é uma promessa de compa
 | `tl_locale_env_fls.exe` | PE32+ AMD64 | Não | `KERNEL32.dll` — ambiente W, CP/locale e FLS; thread, console e `ExitProcess` | **Suportado no núcleo determinístico:** altera/expande o ambiente isolado, valida bloco UTF-16, ACP 1252/OEMCP 437, CP437, `en-US`, `LCMapStringW/Ex` e callbacks FLS na thread filha e em `FlsFree`; imprime `locale-env-fls\n`, exit `0`. Metadata, `--report`, trace e execução são regressões CTest. | Ambiente, locale e FLS |
 | `tl_locale_extended.exe` | PE32+ AMD64 | Não | `KERNEL32.dll` — validação de locale/code page, enumeração, tipo de caractere e formato de data/hora; console e `ExitProcess` | **Suportado no locale estático:** valida `en-US`/`0x0409`, CP1252/437/UTF-8, enumera o único locale por callback Microsoft x64, classifica `CT_CTYPE1` e formata data/hora en-US; imprime `locale-extended\n`, exit `0`. Metadata, `--report`, trace e execução são regressões CTest. | Locale determinístico ampliado |
 | `tl_process_console.exe` | PE32+ AMD64 | Não | `KERNEL32.dll` — startup, handles/tipo, console W, diretório do sistema, recursos do processador, ponteiros e SList | **Suportado no contexto determinístico:** valida `STARTUPINFOW`, troca/restaura stdout, lê UTF-8 como UTF-16, escreve `process-console-é\n`, consulta `C:\Windows\System32`, testa SSE2, encode/decode e SList alinhada; exit `0`. Metadata, `--report`, trace e execução são regressões CTest. | Processo e console Win32 |
+| `tl_file_metadata.exe` | PE32+ AMD64 | Não | `KERNEL32.dll` — enumeração ExW, atributos e metadados por handle | **Suportado no subconjunto de prefixo:** cria dados em `C:\`, enumera com `*`/`?`, alterna `READONLY`, aplica `FileBasicInfo` e testa exclusão no fechamento e POSIX; imprime `file-metadata\n`, exit `0`. Metadata, `--report`, trace e execução são regressões CTest. | Arquivos x64 |
 | `tl_crash.exe` | PE32+ AMD64 | Não | Nenhum | Gerado, verificado, mapeado e executado em processo filho isolado: o convidado acessa o endereço `0`, o hospedeiro observa o `SIGSEGV` via `waitpid`, emite `terminated category="guest-signal" signal="SIGSEGV" fault-address="0x0"` (o crash log captura o `si_addr` no filho e o converte em RVA/seção/importação quando o endereço cai dentro da imagem) e retorna `71` (`GuestFault`) | Diagnóstico de falhas |
 | `tl_hang.exe` | PE32+ AMD64 | Não | Nenhum | Gerado, verificado e executado em processo filho isolado com `--timeout 1`: o convidado entra em loop infinito, o hospedeiro o mata com `SIGKILL`, emite `terminated category="guest-timeout"` e retorna `72` (`GuestTimeout`) | Diagnóstico de falhas |
 | `tl_thread.exe` | PE32+ AMD64 | Não | `KERNEL32.dll!CloseHandle`, `CreateThread`, `ExitProcess`, `ExitThread`, `GetStdHandle`, `WaitForSingleObject`, `WriteFile` | **Suportado no escopo da Fase 11**: cria duas threads sequenciais, cada uma escreve "Thread done" e termina via `ExitThread`; a thread principal aguarda cada handle, escreve "Main done" e encerra. Metadata e execução e2e passam em Debug, Release e Sanitize (`LSAN_OPTIONS=detect_leaks=0`); saída esperada: `Thread done\nThread done\nMain done\n` e exit `0` | Fase 11 |
@@ -298,6 +299,7 @@ Contratos de ABI em `docs/arquitetura/msvcrt.md` e
 | `KERNEL32.dll` | `FlsAlloc`, `FlsFree`, `FlsGetValue`, `FlsSetValue` | Suportado no subconjunto por thread | Índices/callbacks por processo, valores por thread; callback MS x64 validado na imagem, uma vez no fim da thread ou em `FlsFree`; fibras reais continuam fora do escopo |
 | `KERNEL32.dll` | `GetACP`, `GetOEMCP`, `GetCPInfo`, `IsValidCodePage`, `IsValidLocale`, `GetLocaleInfoW/Ex`, `EnumSystemLocalesW`, `GetStringTypeW`, `GetDateFormatW`, `GetTimeFormatW`, `LCMapStringW/Ex` | Suportado no subconjunto determinístico | Locale único `en-US`/`0x0409`, ACP 1252 e OEMCP 437; enumeração de um callback, `CT_CTYPE1`, formatos estáticos de data/hora e case mapping ASCII/Latin-1; sort keys, CJK, formatos customizados e locale do host não entram |
 | `KERNEL32.dll` | `GetStartupInfoW`, `GetSystemDirectoryW`, `GetFileType`, `SetStdHandle`, `ReadConsoleW`, `WriteConsoleW`, `IsDebuggerPresent`, `IsProcessorFeaturePresent`, `EncodePointer`, `DecodePointer`, `InitializeSListHead` | Suportado no subconjunto de processo/console | Estado padrão por processo e compartilhado por threads; `STARTUPINFOW` 104 bytes, `C:\Windows\System32`, console UTF-16↔UTF-8, recursos AMD64 fixos, cookie reversível e SList vazia alinhada; sem alocação de console, herança explícita ou operações interlocked de lista |
+| `KERNEL32.dll` | `FindFirstFileExW`, `SetFileAttributesW`, `SetFileInformationByHandle` | Suportado no subconjunto de metadados | Enumeração W por `FindExInfoStandard/Basic`, `*`/`?` ASCII case-insensitive e `LARGE_FETCH` como hint; atributos `READONLY`/`NORMAL`/`ARCHIVE`/`DIRECTORY`; classes `FileBasicInfo`, `FileDispositionInfo` e `FileDispositionInfoEx` validadas no prefixo |
 | `KERNEL32.dll` | `GetProcessHeap` | Suportado | Retorna token opaco fixo (heap único do processo) |
 | `KERNEL32.dll` | `HeapAlloc` | Suportado | `malloc` do hospedeiro; flag `HEAP_ZERO_MEMORY` (0x0008) → `calloc` |
 | `KERNEL32.dll` | `HeapFree` | Suportado | `free` do hospedeiro |
@@ -347,12 +349,15 @@ que recebem arquivos do host como argumentos.
 | `KERNEL32.dll` | `DeleteFileA` | Suportado | `unlink()` com mapeamento de erros |
 | `KERNEL32.dll` | `MoveFileA` | Suportado | `rename()` com mapeamento de erros |
 | `KERNEL32.dll` | `CreateDirectoryA` | Suportado | `mkdir()` com permissão 0777 |
-| `KERNEL32.dll` | `FindFirstFileA` | Suportado | Abre `opendir()` + `readdir()` com padrão simples (`*` e correspondência exata); preenche `WIN32_FIND_DATAA` simplificado |
+| `KERNEL32.dll` | `FindFirstFileA` | Suportado | Abre `opendir()` + `readdir()` e preenche atributos, tamanho e tempos |
 | `KERNEL32.dll` | `FindNextFileA` | Suportado | Continua iteração com o mesmo padrão |
-| `KERNEL32.dll` | `FindFirstFileW` | Suportado | Converte UTF-16 para UTF-8, enumera com o mesmo padrão simples e preenche `WIN32_FIND_DATAW` simplificado |
+| `KERNEL32.dll` | `FindFirstFileW` | Suportado | Converte UTF-16 para UTF-8 e compartilha a enumeração com a variante A |
+| `KERNEL32.dll` | `FindFirstFileExW` | Suportado no subconjunto | Aceita `FindExInfoStandard`/`Basic`, `FindExSearchNameMatch`, filtro nulo e `FIND_FIRST_EX_LARGE_FETCH` como hint; usa os mesmos handles de `FindNextFileW`/`FindClose` |
 | `KERNEL32.dll` | `FindNextFileW` | Suportado | Continua enumeração wide e converte o nome encontrado para UTF-16 |
 | `KERNEL32.dll` | `FindClose` | Suportado | Fecha `DIR*` e libera slot |
 | `KERNEL32.dll` | `GetFileAttributesW` | Suportado | Converte o caminho UTF-16 e delega ao mesmo `stat()` da variante A |
+| `KERNEL32.dll` | `SetFileAttributesW` | Suportado no subconjunto | `READONLY` altera bits de escrita Linux; `NORMAL`, `ARCHIVE` e `DIRECTORY` são validados contra o tipo; atributos sem representação retornam `ERROR_INVALID_PARAMETER` |
+| `KERNEL32.dll` | `SetFileInformationByHandle` | Suportado no subconjunto | `FileBasicInfo` aplica tempos de acesso/escrita e atributos; `FileDispositionInfo` marca exclusão no fechamento; `FileDispositionInfoEx` cobre `DELETE`, `POSIX_SEMANTICS`, `ON_CLOSE` e `IGNORE_READONLY_ATTRIBUTE` |
 | `KERNEL32.dll` | `GetCurrentDirectoryA/W` | Suportado | Retorna o diretório de execução convertido para caminho Windows lógico: `C:\\...` dentro do prefixo, `Z:\\...` para arquivo/diretório externo |
 | `KERNEL32.dll` | `GetModuleFileNameA/W` | Suportado | Retorna o módulo definido via `set_guest_module_path()` como caminho Windows lógico: aplicação instalada no prefixo usa `C:\\...`; setup externo usa `Z:\\...` |
 | `KERNEL32.dll` | `GetFullPathNameW` | Suportado | Normalização Windows completa (Wine `dlls/kernel32/path.c`): resolve relativo via `GetCurrentDirectory`, colapsa `.`/`..`, trata `C:`, `\` e `\\` (UNC); `file_part` aponta para após último `\`/`:` |
@@ -373,22 +378,26 @@ que recebem arquivos do host como argumentos.
 
 ### Limitações conhecidas
 
-- `WIN32_FIND_DATAA` é 328 bytes (padded), não 336 como no Windows nativo;
-  o convidado não deve depender do tamanho exato da estrutura.
-- `FindFirstFileA` só aceita `*` como curinga; `?` e sequências `[a-z]` não
-  são suportados.
-- `FindFirstFileW`/`FindNextFileW` têm a mesma limitação de curinga e retornam
-  somente a estrutura wide mínima usada pelos alvos atuais.
+- `WIN32_FIND_DATAW` tem layout de 592 bytes; enumeração preenche atributos,
+  tamanho e tempos. A variante A segue o mesmo estado.
+- Enumeração cobre `*`, `?`, `*.*` e correspondência exata case-insensitive
+  em ASCII; classes de caracteres, locale de arquivos e case-fold Unicode amplo
+  ficam fora.
+- `FindFirstFileExW` rejeita níveis, operações, filtros e flags fora do
+  subconjunto publicado. `SetFileAttributesW` não representa `HIDDEN`,
+  `SYSTEM`, `COMPRESSED`, ADS ou atributos de nuvem; `SetFileInformationByHandle`
+  não cobre rename, EOF, allocation, links nem outras classes.
 - `CommandLineToArgvW` cobre aspas e separação por espaço usadas pelos alvos;
   as regras completas de escape com barras invertidas antes de aspas ainda não
   fazem parte do subconjunto publicado.
 - `CreateFileA` continua limitado a caminhos relativos sem letra de drive.
-- As APIs wide de arquivo cobrem o subconjunto exercitado por `tl_files_wide`:
+- As APIs wide de arquivo cobrem o subconjunto exercitado por `tl_files_wide`
+  e `tl_file_metadata`:
   `CreateFileW`, tamanho/posição, atributos, tempos, cópia/movimentação,
   diretórios e nomes finais; não inventam letras de drive nem aceitam caminhos
   absolutos Windows.
-- `FileSlot` agora rastreia `file_size` e `position`; `ReadFile` e `WriteFile`
-  atualizam a posição automaticamente.
+- `FileSlot` rastreia tamanho, posição e exclusão pendente; `ReadFile` e
+  `WriteFile` atualizam a posição automaticamente.
 - `GetFileAttributesA` para arquivos inexistentes retorna `0xFFFFFFFF` com
   `ERROR_FILE_NOT_FOUND`.
 - `GetCurrentDirectoryA/W` reflete apenas o processo convidado isolado. Em

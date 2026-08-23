@@ -414,6 +414,10 @@ void register_builtin_modules() {
         {"DecodePointer", 232, reinterpret_cast<std::uintptr_t>(&tl_DecodePointer)},
         {"InitializeSListHead", 233,
          reinterpret_cast<std::uintptr_t>(&tl_InitializeSListHead)},
+        {"FindFirstFileExW", 234, reinterpret_cast<std::uintptr_t>(&tl_FindFirstFileExW)},
+        {"SetFileAttributesW", 235, reinterpret_cast<std::uintptr_t>(&tl_SetFileAttributesW)},
+        {"SetFileInformationByHandle", 236,
+         reinterpret_cast<std::uintptr_t>(&tl_SetFileInformationByHandle)},
     };
     static const InternalModule kKernel32Module{"KERNEL32.dll", kKernel32Exports};
     register_module(kKernel32Module);

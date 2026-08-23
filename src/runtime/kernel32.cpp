@@ -152,6 +152,52 @@ void filetime_from_unix(const std::time_t source, GuestFileTime& target) noexcep
     target.high = static_cast<std::uint32_t>(raw >> 32U);
 }
 
+void trace_filesystem(const char* const operation, const char* const status,
+                      const std::string& detail) noexcept {
+    const std::array<diagnostics::TraceField, 4> fields{
+        diagnostics::TraceField{"operation", operation},
+        diagnostics::TraceField{"status", status},
+        diagnostics::TraceField{"detail", detail},
+        diagnostics::TraceField{"scope", "prefix"},
+    };
+    runtime_trace("filesystem", fields, 4);
+}
+
+bool ascii_case_equal(const char left, const char right) noexcept {
+    return std::tolower(static_cast<unsigned char>(left)) ==
+           std::tolower(static_cast<unsigned char>(right));
+}
+
+bool win32_wildcard_match(std::string_view pattern, const std::string_view name) noexcept {
+    if (pattern == "*.*") {
+        pattern = "*";
+    }
+    std::size_t pattern_pos = 0;
+    std::size_t name_pos = 0;
+    std::size_t star_pos = std::string_view::npos;
+    std::size_t star_name_pos = 0;
+    while (name_pos < name.size()) {
+        if (pattern_pos < pattern.size() &&
+            (pattern[pattern_pos] == '?' ||
+             ascii_case_equal(pattern[pattern_pos], name[name_pos]))) {
+            ++pattern_pos;
+            ++name_pos;
+        } else if (pattern_pos < pattern.size() && pattern[pattern_pos] == '*') {
+            star_pos = pattern_pos++;
+            star_name_pos = name_pos;
+        } else if (star_pos != std::string_view::npos) {
+            pattern_pos = star_pos + 1;
+            name_pos = ++star_name_pos;
+        } else {
+            return false;
+        }
+    }
+    while (pattern_pos < pattern.size() && pattern[pattern_pos] == '*') {
+        ++pattern_pos;
+    }
+    return pattern_pos == pattern.size();
+}
+
 [[nodiscard]] bool sync_is_signaled(SyncSlot& slot) noexcept {
     if (slot.kind == SyncKind::Event) {
         return slot.signaled;
@@ -1004,6 +1050,8 @@ TL_MSABI void* tl_CreateFileA(const char* const file_name, const std::uint32_t d
     it->used = true;
     it->fd = fd;
     it->path = normalized;
+    it->delete_pending = false;
+    it->unlinked = false;
     struct stat st{};
     if (fstat(fd, &st) == 0) {
         it->file_size = static_cast<std::uint64_t>(st.st_size);
@@ -1023,9 +1071,59 @@ TL_MSABI void* tl_CreateFileW(const std::uint16_t* path, const std::uint32_t des
         set_last_error(abi::kErrorInvalidParameter);
         return nullptr;
     }
-    const std::string utf8 = util::wide_to_utf8(path);
-    return tl_CreateFileA(utf8.c_str(), desired_access, share_mode, security_attributes,
-                          creation_disposition, flags_and_attributes, template_file);
+    (void)share_mode;
+    (void)security_attributes;
+    (void)flags_and_attributes;
+    (void)template_file;
+    char normalized[4096]{};
+    if (!normalized_wide_path(path, normalized)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return nullptr;
+    }
+    int flags = 0;
+    const bool read = (desired_access & abi::kGenericRead) != 0;
+    const bool write = (desired_access & abi::kGenericWrite) != 0;
+    if (read && write) {
+        flags |= O_RDWR;
+    } else if (write) {
+        flags |= O_WRONLY;
+    } else {
+        flags |= O_RDONLY;
+    }
+    switch (creation_disposition) {
+        case abi::kCreateAlways: flags |= O_CREAT | O_TRUNC; break;
+        case abi::kCreateNew: flags |= O_CREAT | O_EXCL; break;
+        case abi::kOpenAlways: flags |= O_CREAT; break;
+        case abi::kOpenExisting: break;
+        case abi::kTruncateExisting: flags |= O_TRUNC; break;
+        default:
+            set_last_error(abi::kErrorInvalidParameter);
+            return nullptr;
+    }
+    const int fd = ::open(normalized, flags, 0644);
+    if (fd < 0) {
+        set_last_error(errno_to_win32(errno));
+        return nullptr;
+    }
+    std::lock_guard<std::mutex> lock(g_files_mutex);
+    auto it = std::find_if(g_files.begin(), g_files.end(), [](const FileSlot& s) { return !s.used; });
+    if (it == g_files.end()) {
+        ::close(fd);
+        set_last_error(abi::kErrorNotEnoughMemory);
+        return nullptr;
+    }
+    it->used = true;
+    it->fd = fd;
+    it->path = normalized;
+    it->delete_pending = false;
+    it->unlinked = false;
+    struct stat st{};
+    if (fstat(fd, &st) == 0) {
+        it->file_size = static_cast<std::uint64_t>(st.st_size);
+    }
+    it->position = lseek(fd, 0, SEEK_CUR);
+    set_last_error(abi::kErrorSuccess);
+    return &*it;
 }
 
 TL_MSABI int tl_CloseHandle(const void* const handle) noexcept {
@@ -1039,12 +1137,21 @@ TL_MSABI int tl_CloseHandle(const void* const handle) noexcept {
     }
     if (FileSlot* slot = find_file_slot(handle); slot != nullptr) {
         std::lock_guard<std::mutex> lock(g_files_mutex);
+        const bool delete_pending = slot->delete_pending && !slot->unlinked;
+        const std::string path = slot->path;
         ::close(slot->fd);
-        slot->used = false;
+        *slot = {};
         slot->fd = -1;
-        slot->file_size = 0;
-        slot->position = 0;
+        if (delete_pending && ::unlink(path.c_str()) != 0 && errno != ENOENT) {
+            const std::uint32_t error = errno_to_win32(errno);
+            set_last_error(error);
+            trace_filesystem("delete-on-close", "failed", std::to_string(error));
+            return 0;
+        }
         set_last_error(abi::kErrorSuccess);
+        if (delete_pending) {
+            trace_filesystem("delete-on-close", "success", "removed");
+        }
         return 1;
     }
     if (SyncSlot* slot = find_sync_slot(handle); slot != nullptr) {
@@ -1311,6 +1418,21 @@ TL_MSABI std::uint32_t tl_GetFileAttributesW(const std::uint16_t* path) noexcept
     return stat_to_win32_attributes(normalized, st);
 }
 
+TL_MSABI int tl_SetFileAttributesW(const std::uint16_t* const path,
+                                   const std::uint32_t attributes) noexcept {
+    char normalized[4096]{};
+    if (!normalized_wide_path(path, normalized)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        trace_filesystem("set-attributes", "failed", "invalid-path");
+        return 0;
+    }
+    const std::uint32_t error = apply_win32_file_attributes(normalized, attributes);
+    set_last_error(error);
+    trace_filesystem("set-attributes", error == abi::kErrorSuccess ? "success" : "failed",
+                     std::to_string(attributes));
+    return error == abi::kErrorSuccess ? 1 : 0;
+}
+
 TL_MSABI int tl_DeleteFileA(const char* path) noexcept {
     if (!mapped_guest_cstring(path) || path == nullptr || path[0] == '\0') {
         set_last_error(abi::kErrorInvalidParameter);
@@ -1436,9 +1558,9 @@ TL_MSABI int tl_FindNextFileA(const void* handle, void* find_data) noexcept {
         if (std::strcmp(entry->d_name, ".") == 0 || std::strcmp(entry->d_name, "..") == 0) {
             continue;
         }
-        if (slot->pattern == "*" || slot->pattern == "*.*" || slot->pattern == entry->d_name) {
+        if (win32_wildcard_match(slot->pattern, entry->d_name)) {
             auto* data = static_cast<Win32FindDataA*>(find_data);
-        *data = {};
+            *data = {};
             std::strncpy(data->c_file_name, entry->d_name, sizeof(data->c_file_name) - 1);
             std::string full_path = slot->directory + "/" + entry->d_name;
             struct stat st{};
@@ -1446,8 +1568,21 @@ TL_MSABI int tl_FindNextFileA(const void* handle, void* find_data) noexcept {
                 data->dw_file_attributes = stat_to_win32_attributes(full_path.c_str(), st);
                 data->n_file_size_low = static_cast<std::uint32_t>(st.st_size & 0xFFFFFFFFU);
                 data->n_file_size_high = static_cast<std::uint32_t>(st.st_size >> 32);
+                GuestFileTime creation{};
+                GuestFileTime access{};
+                GuestFileTime write{};
+                filetime_from_unix(st.st_ctim.tv_sec, creation);
+                filetime_from_unix(st.st_atim.tv_sec, access);
+                filetime_from_unix(st.st_mtim.tv_sec, write);
+                data->ft_creation_time_lo = creation.low;
+                data->ft_creation_time_hi = creation.high;
+                data->ft_last_access_time_lo = access.low;
+                data->ft_last_access_time_hi = access.high;
+                data->ft_last_write_time_lo = write.low;
+                data->ft_last_write_time_hi = write.high;
             }
             set_last_error(abi::kErrorSuccess);
+            trace_filesystem("enumerate", "success", entry->d_name);
             return 1;
         }
     }

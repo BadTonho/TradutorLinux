@@ -10,8 +10,14 @@ if(DEFINED INPUT_TEXT)
     set(input_args INPUT_FILE "${input_file}")
 endif()
 
+set(runtime_command "${RUNTIME}" --trace "${INPUT}")
+if(DEFINED PREFIX_DIR)
+    file(REMOVE_RECURSE "${PREFIX_DIR}")
+    set(runtime_command "${CMAKE_COMMAND}" -E env "TL_PREFIX=${PREFIX_DIR}" "${RUNTIME}" --trace "${INPUT}")
+endif()
+
 execute_process(
-    COMMAND "${RUNTIME}" --trace "${INPUT}"
+    COMMAND ${runtime_command}
     ${input_args}
     RESULT_VARIABLE runtime_result
     OUTPUT_VARIABLE runtime_stdout

@@ -105,9 +105,15 @@ Os itens marcados como concluídos devem ter evidência no repositório: código
   execução passam em Debug e Sanitize. WinRAR (179/251), Logitech G HUB
   (103/114) e Rockstar (223/338) foram reanalisados somente com `--report`,
   continuam `unsupported` e não foram executados.
-- **Próximo resultado observável (Fase 13.9):** completar enumeração e
-  metadados de arquivos x64 sobre o prefixo existente, começando pelas lacunas
-  compartilhadas `FindFirstFileExW` e `SetFileAttributesW`.
+- **Marco concluído (Fase 13.9):** `tl_file_metadata.exe` valida
+  `FindFirstFileExW`, atributos, `FileBasicInfo`, `FileDispositionInfo` e
+  `FileDispositionInfoEx` dentro de `C:\\` no prefixo; cobre exclusão no
+  fechamento, exclusão POSIX e isolamento entre prefixos. Metadata, `--report`,
+  trace e execução passam em Debug e Sanitize. WinRAR (181/251), Logitech G
+  HUB (105/114) e Rockstar (225/338) foram reanalisados somente com `--report`,
+  continuam `unsupported` e não foram executados.
+- **Próximo resultado observável (Fase 13.10):** identidade e ACLs funcionais
+  por prefixo para as lacunas compartilhadas de segurança.
 
 ### Estudo de caso: `RobloxPlayerInstaller.exe` (benchmark de cobertura)
 
@@ -497,13 +503,13 @@ nem declarar os benchmarks comerciais suportados.
 
 #### Fase 13.9 — enumeração e metadados de arquivos x64
 
-- [ ] Completar as operações de arquivos que se repetem no portfólio:
+- [x] Completar as operações de arquivos que se repetem no portfólio:
   `FindFirstFileExW`, `SetFileAttributesW` e a extensão de metadados de handle
   justificada pelas amostras; long/short paths e APIs exclusivas ficam fora
   até aparecerem em outro alvo.
-- [ ] Reutilizar o mapeamento de caminhos e o prefixo existente, validando
+- [x] Reutilizar o mapeamento de caminhos e o prefixo existente, validando
   flags, estruturas, buffers e `GetLastError` sem expor caminhos do host.
-- [ ] Criar fixture de enumeração/metadados no prefixo e testes de isolamento
+- [x] Criar fixture de enumeração/metadados no prefixo e testes de isolamento
   entre prefixos; atualizar os relatórios de pelo menos dois benchmarks x64.
 
 #### Fase 13.10 — identidade e ACLs funcionais por prefixo

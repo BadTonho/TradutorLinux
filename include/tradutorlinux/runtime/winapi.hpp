@@ -52,6 +52,21 @@ constexpr Dword kOpenExisting = 3;
 constexpr Dword kCreateNew = 1;
 constexpr Dword kOpenAlways = 4;
 constexpr Dword kTruncateExisting = 5;
+constexpr Dword kFileAttributeReadOnly = 0x00000001U;
+constexpr Dword kFileAttributeDirectory = 0x00000010U;
+constexpr Dword kFileAttributeArchive = 0x00000020U;
+constexpr Dword kFileAttributeNormal = 0x00000080U;
+constexpr Dword kFindExInfoStandard = 0;
+constexpr Dword kFindExInfoBasic = 1;
+constexpr Dword kFindExSearchNameMatch = 0;
+constexpr Dword kFindFirstExLargeFetch = 0x00000002U;
+constexpr Dword kFileBasicInfo = 0;
+constexpr Dword kFileDispositionInfo = 4;
+constexpr Dword kFileDispositionInfoEx = 21;
+constexpr Dword kFileDispositionFlagDelete = 0x00000001U;
+constexpr Dword kFileDispositionFlagPosixSemantics = 0x00000002U;
+constexpr Dword kFileDispositionFlagOnClose = 0x00000008U;
+constexpr Dword kFileDispositionFlagIgnoreReadonlyAttribute = 0x00000010U;
 constexpr Dword kMemCommit = 0x1000U;
 constexpr Dword kMemReserve = 0x2000U;
 constexpr Dword kMemRelease = 0x8000U;
@@ -461,6 +476,26 @@ struct GuestStartupInfoW {
 };
 static_assert(sizeof(GuestStartupInfoW) == 104);
 
+struct GuestFileBasicInfo {
+    std::int64_t creation_time{};
+    std::int64_t last_access_time{};
+    std::int64_t last_write_time{};
+    std::int64_t change_time{};
+    std::uint32_t file_attributes{};
+    std::uint32_t reserved{};
+};
+static_assert(sizeof(GuestFileBasicInfo) == 40);
+
+struct GuestFileDispositionInfo {
+    std::uint8_t delete_file{};
+};
+static_assert(sizeof(GuestFileDispositionInfo) == 1);
+
+struct GuestFileDispositionInfoEx {
+    std::uint32_t flags{};
+};
+static_assert(sizeof(GuestFileDispositionInfoEx) == 4);
+
 struct alignas(16) GuestSListHeader {
     std::uint64_t alignment{};
     std::uint64_t region{};
@@ -784,6 +819,8 @@ TL_MSABI int tl_SetEndOfFile(const void* handle) noexcept;
 TL_MSABI int tl_FlushFileBuffers(const void* handle) noexcept;
 TL_MSABI std::uint32_t tl_GetFileAttributesA(const char* path) noexcept;
 TL_MSABI std::uint32_t tl_GetFileAttributesW(const std::uint16_t* path) noexcept;
+TL_MSABI int tl_SetFileAttributesW(const std::uint16_t* path,
+                                   std::uint32_t attributes) noexcept;
 TL_MSABI int tl_GetFileAttributesExW(const std::uint16_t* path, int info_level,
                                      void* data) noexcept;
 TL_MSABI int tl_DeleteFileA(const char* path) noexcept;
@@ -800,6 +837,10 @@ TL_MSABI int tl_CreateDirectoryW(const std::uint16_t* path,
 TL_MSABI int tl_RemoveDirectoryW(const std::uint16_t* path) noexcept;
 TL_MSABI void* tl_FindFirstFileA(const char* path, void* find_data) noexcept;
 TL_MSABI void* tl_FindFirstFileW(const std::uint16_t* path, void* find_data) noexcept;
+TL_MSABI void* tl_FindFirstFileExW(const std::uint16_t* path, int info_level,
+                                   void* find_data, int search_operation,
+                                   const void* search_filter,
+                                   std::uint32_t additional_flags) noexcept;
 TL_MSABI int tl_FindNextFileA(const void* handle, void* find_data) noexcept;
 TL_MSABI int tl_FindNextFileW(const void* handle, void* find_data) noexcept;
 TL_MSABI int tl_FindClose(const void* handle) noexcept;
@@ -826,6 +867,8 @@ TL_MSABI int tl_SetFileTime(const void* handle, const void* creation_time,
 TL_MSABI int tl_GetFileInformationByHandle(const void* handle, void* information) noexcept;
 TL_MSABI int tl_GetFileInformationByHandleEx(const void* handle, int info_class,
                                              void* buffer, std::uint32_t size) noexcept;
+TL_MSABI int tl_SetFileInformationByHandle(const void* handle, int info_class,
+                                           const void* buffer, std::uint32_t size) noexcept;
 TL_MSABI std::uint32_t tl_GetFinalPathNameByHandleW(const void* handle, std::uint16_t* buffer,
                                                     std::uint32_t buffer_length,
                                                     std::uint32_t flags) noexcept;
