@@ -6,6 +6,7 @@
 #include "tradutorlinux/runtime/error_map.hpp"
 #include "tradutorlinux/runtime/msvcrt.hpp"
 #include "tradutorlinux/runtime/ntdll.hpp"
+#include "tradutorlinux/runtime/unwind.hpp"
 #include "tradutorlinux/util/basics.hpp"
 #include "tradutorlinux/util/unicode.hpp"
 
@@ -432,7 +433,11 @@ bool read_guest_file_for_process(const char* path, std::vector<std::byte>& bytes
     set_guest_image_view(process.image.memory, process.image.size,
                          parsed.info.resource_directory_rva,
                          parsed.info.resource_directory_size);
+    runtime::set_guest_unwind_view(process.image.memory, process.image.size,
+                                   parsed.info.exception_directory_rva,
+                                   process.info.runtime_functions);
     result = execute_guest_entry(process.thread.entry_point, process.thread.stack_top);
+    runtime::clear_guest_unwind_view();
     set_guest_image_view(nullptr, 0, 0, 0);
     loader::destroy_process(process);
     write_child_process_result(result_fd, result);

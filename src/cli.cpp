@@ -10,6 +10,7 @@
 #include "tradutorlinux/prefix/prefix.hpp"
 #include "tradutorlinux/process/isolate.hpp"
 #include "tradutorlinux/runtime/msvcrt.hpp"
+#include "tradutorlinux/runtime/unwind.hpp"
 #include "tradutorlinux/runtime/winapi.hpp"
 #include "tradutorlinux/util/basics.hpp"
 
@@ -284,6 +285,24 @@ void write_pe_trace(std::ostream& stream, const pe::PeInfo& info) {
                                  diagnostics::TraceLevel::Info, "delay-import", fields);
     }
 
+    std::size_t unwind_handlers = 0;
+    std::size_t unwind_chained = 0;
+    for (const pe::RuntimeFunction& function : info.runtime_functions) {
+        if (function.unwind.handler_rva != 0U) {
+            ++unwind_handlers;
+        }
+        if (function.unwind.has_chained_function) {
+            ++unwind_chained;
+        }
+    }
+    const std::array unwind_fields{
+        diagnostics::TraceField{"functions", std::to_string(info.runtime_functions.size())},
+        diagnostics::TraceField{"handlers", std::to_string(unwind_handlers)},
+        diagnostics::TraceField{"chained", std::to_string(unwind_chained)},
+    };
+    diagnostics::write_trace(stream, diagnostics::TraceComponent::Pe,
+                             diagnostics::TraceLevel::Info, "unwind", unwind_fields);
+
     std::size_t relocation_entries = 0;
     for (const pe::BaseRelocBlock& block : info.relocations) {
         relocation_entries += block.entries.size();
@@ -328,6 +347,7 @@ void print_pe_summary(std::ostream& stream, const pe::PeInfo& info) {
         }
         stream << '\n';
     }
+    stream << "  unwind: " << info.runtime_functions.size() << " funções\n";
     stream << "  relocations: " << info.relocations.size() << " blocos\n";
 }
 
@@ -540,6 +560,19 @@ void print_support_report_group(std::ostream& stream, const loader::ResolveResul
     stream << "TradutorLinux compatibility report\n";
     stream << "format: " << (info.is_pe32_plus ? "PE32+ x86-64" : "unsupported") << '\n';
     stream << "entry-point: " << util::format_hex(info.address_of_entry_point) << '\n';
+    if (!info.runtime_functions.empty()) {
+        const std::size_t handler_count = static_cast<std::size_t>(std::count_if(
+            info.runtime_functions.begin(), info.runtime_functions.end(),
+            [](const pe::RuntimeFunction& function) { return function.unwind.handler_rva != 0U; }));
+        const std::size_t chained_count = static_cast<std::size_t>(std::count_if(
+            info.runtime_functions.begin(), info.runtime_functions.end(),
+            [](const pe::RuntimeFunction& function) {
+                return function.unwind.has_chained_function;
+            }));
+        stream << "mechanism: x64-unwind (" << info.runtime_functions.size()
+               << " functions, " << handler_count << " handlers, " << chained_count
+               << " chained)\n";
+    }
     if (delay_imports != 0) {
         stream << "mechanism: delay-import (" << resolved_delay_imports << '/'
                << delay_imports << " resolved)\n";
@@ -1282,6 +1315,9 @@ ExitCode run_command(const CommandLine& command_line, std::ostream& stdout_strea
     set_guest_image_view(process.image.memory, process.image.size,
                          parse_result.info.resource_directory_rva,
                          parse_result.info.resource_directory_size);
+    runtime::set_guest_unwind_view(process.image.memory, process.image.size,
+                                   parse_result.info.exception_directory_rva,
+                                   process.info.runtime_functions);
 
     const process::GuestOutcome outcome = process::run_guest_isolated(
         process.thread.entry_point, process.thread.stack_top, effective_cmd.timeout_ms,
@@ -1296,8 +1332,9 @@ ExitCode run_command(const CommandLine& command_line, std::ostream& stdout_strea
             : diagnostics::GuestCrashContext{};
 
     const std::uint64_t unmap_base = process.image.base;
-    loader::destroy_process(process);
+    runtime::clear_guest_unwind_view();
     set_guest_image_view(nullptr, 0, 0, 0);
+    loader::destroy_process(process);
     set_guest_prefix_path({});
 
     if (outcome.kind == process::GuestOutcomeKind::Exited) {

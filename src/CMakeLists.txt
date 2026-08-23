@@ -12,6 +12,7 @@ add_library(tradutorlinux_core STATIC
     prefix/prefix.cpp
     process/isolate.cpp
     runtime/memory_validator.cpp
+    runtime/unwind.cpp
     runtime/ntdll.cpp
     runtime/kernel32.cpp
     runtime/legacy_winapi.cpp
@@ -37,6 +38,7 @@ add_library(tradutorlinux_core STATIC
     runtime/powrprof.cpp
     runtime/iphlpapi.cpp
     runtime/guest_entry.S
+    runtime/unwind_capture.S
     util/unicode.cpp
     gui/x11.cpp
 )

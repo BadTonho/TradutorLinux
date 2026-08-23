@@ -58,8 +58,18 @@ Os itens marcados como concluídos devem ter evidência no repositório: código
   com diagnóstico `mechanism="delay-import"`. WinRAR e Rockstar foram
   reanalisados apenas com `--report` e continuam `unsupported` pelas APIs
   restantes.
-- **Próximo resultado observável:** implementar unwinding/SEH x64 reutilizável,
-  começando pela leitura de `.pdata`/`.xdata` e por uma fixture independente.
+- **Marco concluído (Fase 13.3):** o núcleo reutilizável de unwinding AMD64
+  lê e valida `.pdata`/`.xdata` v1, todos os opcodes x64 v1, handlers e
+  cadeias; `RtlCaptureContext`, `RtlLookupFunctionEntry`,
+  `RtlVirtualUnwind` e `RtlPcToFileHeader` são exports `KERNEL32`. A fixture
+  `tl_unwind.exe` captura o contexto, desempilha um frame real e imprime
+  `unwind\n`; CTest protege parser, APIs, trace e `--report`. Não há despacho
+  SEH nem execução de handlers. WinRAR encontra `UNWIND_INFO` v2 e Rockstar
+  um `SET_FPREG` não canônico; ambos permanecem `unsupported` e não foram
+  executados.
+- **Próximo resultado observável:** escolher, pelo portfólio, a próxima lacuna
+  reutilizável entre despacho SEH, locale/FLS/ambiente e contratos restantes
+  de arquivo/processo, com fixture própria antes de ampliar APIs.
 
 ### Estudo de caso: `RobloxPlayerInstaller.exe` (benchmark de cobertura)
 
@@ -106,9 +116,12 @@ reutilizáveis por várias classes de aplicativos. As lacunas observadas são:
 - [x] ampliar o núcleo `KERNEL32` para arquivos e caminhos Unicode, recursos,
   tempo, sincronização e processos filhos, com fixtures próprias; a memória
   mapeada (`MapViewOfFile`/`CreateFileMappingW`) foi entregue depois;
-- [ ] implementar unwinding/SEH x64 de ponta a ponta: `__C_specific_handler`,
-  `RtlUnwindEx`, `RtlVirtualUnwind`, `RtlLookupFunctionEntry` e
-  `RtlCaptureContext`, percorrendo `.pdata`/`.xdata` da imagem convidada;
+- [x] implementar o núcleo de unwinding x64 da imagem convidada:
+  `.pdata`/`.xdata` v1, `RtlCaptureContext`, `RtlLookupFunctionEntry`,
+  `RtlVirtualUnwind` e `RtlPcToFileHeader`, com fixture e regressões;
+- [ ] completar despacho SEH x64: `__C_specific_handler`, `RtlUnwindEx`,
+  transferência de controle e propagação de exceções; o núcleo atual não
+  executa handlers nem declara suporte a `try/catch`;
 - [x] implementar carregamento dinâmico real: `LoadLibraryA/W`,
   `LoadLibraryExA/W`, `FreeLibrary` e `GetModuleHandleExA/W` + `GetProcAddress` por nome e ordinal (fixture `tl_dynload.exe` cobre `C:\` path, API Set `api-ms-win-core-file-l1-1-0.dll`, `LoadLibraryEx`, `GetProcAddress`/`FreeLibrary`/`GetModuleHandleEx` `PIN`/`FROM_ADDRESS`); `GetProcAddress` agora resolve via `find_export_global`;
 - [x] implementar APIs de versão e locale: `GetVersionExA`,
@@ -378,7 +391,7 @@ compatibilidade imediata com qualquer executável, jogo ou mecanismo protegido.
 - [x] Implementar `delay-import` no leitor, relatório e resolvedor, com
   diagnóstico separado para cada símbolo atrasado.
 - [ ] Implementar em blocos reutilizáveis as dependências de instaladores x64
-  reveladas pelo portfólio — primeiro SEH/unwinding, locale/FLS/ambiente e
+  reveladas pelo portfólio — completar despacho SEH, locale/FLS/ambiente e
   operações de arquivo/processo; depois segurança/ACL, rede de alto nível,
   automação e controles conforme os alvos justifiquem.
 - [x] Validar `install -> arquivos no prefixo -> cadastro do executável
@@ -391,8 +404,8 @@ compatibilidade imediata com qualquer executável, jogo ou mecanismo protegido.
 - [ ] Expandir famílias de APIs somente quando a implementação servir a mais de
   um alvo ou completar uma capacidade de sistema bem delimitada; cada API ganha
   fixture independente e regressão de integração.
-- [ ] Priorizar o núcleo comum que falta aos alvos: exceções/unwinding x64,
-  processos e prefixos de instalação, segurança/identidade, certificados,
+- [ ] Priorizar o núcleo comum que falta aos alvos: despacho de exceções x64,
+  locale/FLS/ambiente, segurança/identidade, certificados,
   WinSock assíncrono e controles GUI usuais.
 - [ ] Manter o `--report` como porta de entrada: apresentar imports faltantes
   por DLL e por capacidade, mas considerar carregamentos dinâmicos e o fluxo

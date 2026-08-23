@@ -50,6 +50,10 @@ Assinaturas hospedadas:
 | `tl_WriteFile` | `Bool (Handle, const void*, Dword, Dword*, void*)` | Escreve bytes em stdout/stderr; `overlapped` precisa ser nulo. |
 | `tl_ReadFile` | `Bool (Handle, void*, Dword, Dword*, void*)` | Lê bytes de stdin; `overlapped` precisa ser nulo. |
 | `tl_ExitProcess` | `void (Dword)` | Registra o código e retorna o controle ao runner. |
+| `tl_RtlCaptureContext` | `void (CONTEXT*)` | Captura o contexto AMD64 do chamador para o núcleo de unwinding. |
+| `tl_RtlLookupFunctionEntry` | `RUNTIME_FUNCTION* (DWORD64, DWORD64*, void*)` | Consulta `.pdata` somente na imagem PE ativa. |
+| `tl_RtlVirtualUnwind` | `void* (DWORD, DWORD64, DWORD64, RUNTIME_FUNCTION*, CONTEXT*, void**, DWORD64*, void*)` | Desempilha um frame e opcionalmente devolve handler, sem invocá-lo. |
+| `tl_RtlPcToFileHeader` | `void* (void*, void**)` | Devolve a base da imagem PE ativa que contém o PC. |
 
 ## Patch da IAT
 
@@ -89,6 +93,11 @@ O resolvedor reporta **todas** as entradas: para cada uma, um `ResolvedImport` c
 
 - Delay imports com atributos diferentes de `grAttrs=0x1` continuam `unsupported-mechanism`. O helper de carregamento sob demanda e as semânticas de binding/unload não são executados: a resolução antecipada ignora essas tabelas.
 - Forwarders de export ainda não são resolvidos na resolução estática; somente exports diretos de módulos internos registrados são aceitos. Para carregamento dinâmico, `GetProcAddress` usa busca global (`find_export_global`) e suporta ordinais via `MAKEINTRESOURCE`.
+- `RtlUnwind`, `RtlUnwindEx`, `RaiseException`, VEH, `UnhandledExceptionFilter`
+  e `__C_specific_handler` não são exports funcionais desta promoção. O
+  núcleo de `.pdata`/`.xdata` apenas desempilha; não há despacho SEH nem
+  execução de handler. O contrato completo está em
+  [unwinding-x64.md](unwinding-x64.md).
 
 ### Carregamento dinâmico (Fase 12+)
 

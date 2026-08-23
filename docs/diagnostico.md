@@ -264,9 +264,19 @@ TEB (fixtures sem CRT) não é afetado.
 
 ## Eventos do componente `pe`
 
-O leitor emite um evento `image` com os campos `format`, `arch`, `entry`, `image-base`, `size-of-image` e `sections`, seguido de um evento `section` por seção (`index`, `name`, `virtual-address`, `virtual-size`, `raw-pointer`, `raw-size`, `characteristics`), um evento `import` por DLL estática, um evento `delay-import` por DLL atrasada (ambos com `dll`, `symbols`) e um evento `relocations` (`blocks`, `entries`).
+O leitor emite um evento `image` com os campos `format`, `arch`, `entry`, `image-base`, `size-of-image` e `sections`, seguido de um evento `section` por seção (`index`, `name`, `virtual-address`, `virtual-size`, `raw-pointer`, `raw-size`, `characteristics`), um evento `import` por DLL estática, um evento `delay-import` por DLL atrasada (ambos com `dll`, `symbols`), `unwind` (`functions`, `handlers`, `chained`) e `relocations` (`blocks`, `entries`).
 
 Em nível `debug`, cada bloco de base relocation é registrado com `page-rva` e `entries`.
+
+Exemplo de metadados de desempilhamento aceitos:
+
+```text
+[tl][pe][info] unwind functions="2" handlers="0" chained="0"
+```
+
+Falhas de argumento ou de pilha nas APIs `Rtl*` são registradas no componente
+`runtime` com `symbol`, `category="unwind"` e `detail`; elas nunca provocam a
+execução de um handler SEH.
 
 Quando o arquivo não é um PE32+ aceitável, o leitor emite:
 

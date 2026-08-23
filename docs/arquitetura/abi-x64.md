@@ -51,3 +51,15 @@ Contrato vigente:
 - As chamadas host→guest de `WNDPROC` também usam ponteiros tipados `ms_abi` e são cobertas por testes de layout e execução.
 
 A lista de módulos, exports, ordinais internos e comportamentos suportados está em `docs/arquitetura/imports.md` e `docs/compatibilidade.md`.
+
+## Captura de contexto para unwinding
+
+`RtlCaptureContext` não pode ser expresso como uma chamada C++ comum: ela
+precisa observar RIP/RSP e os registradores no ponto exato da chamada do
+convidado. Por isso `src/runtime/unwind_capture.S` é uma entrada Microsoft x64
+sem prólogo; ela recebe `CONTEXT*` em `RCX`, preserva a fotografia dos
+registradores do chamador e grava RIP/RSP, flags, MXCSR e XMM0–XMM15 no layout
+de `ContextAmd64`. Os offsets e o tamanho (1232 bytes) têm `static_assert` no
+cabeçalho. O restante do núcleo de unwinding volta imediatamente ao C++
+`noexcept`; nenhum mecanismo C++ de exceção atravessa essa fronteira. Ver
+também [unwinding-x64.md](unwinding-x64.md).

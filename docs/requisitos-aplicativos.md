@@ -25,21 +25,27 @@ posterior.
 | Aplicativo | Imports resolvidos | Imports ausentes | Bloqueio adicional | Estado |
 |---|---:|---:|---|---|
 | `RobloxPlayerInstaller.exe` | 244/430 | 186 | — | `unsupported` |
-| `winrar-x64-723.exe` | 147/251 | 104 | SEH/locale/GUI/segurança e APIs pendentes | `unsupported` |
+| `winrar-x64-723.exe` | 147/251† | 104† | `UNWIND_INFO` v2, despacho SEH/locale/GUI/segurança e APIs pendentes | `unsupported` |
 | `Creative_Cloud_Set-Up_7474.exe` | — | — | PE32 x86 (`0x14c`) | arquitetura não suportada |
 | `officedeploymenttool_20228-20124.exe` | — | — | PE32 x86 (`0x14c`) | arquitetura não suportada |
 | `Affinity x64.msix` | — | — | pacote MSIX; executável interno não localizado | formato não suportado |
 | `CapCut_7677236283084898320_installer.exe` | — | — | PE32 x86 (`0x14c`) | arquitetura não suportada |
 | `EpicInstaller-20.1.4-831cc1564f92442abc51fdb4a9854359.exe` | — | — | PE32 x86 (`0x14c`) + Mono/.NET | arquitetura/formato não suportados |
 | `lghub_installer.exe` | 67/114 | 47 | — | `unsupported` |
-| `Rockstar-Games-Launcher.exe` | 187/338 | 151 | SEH/locale/GUI/segurança/rede e APIs pendentes | `unsupported` |
+| `Rockstar-Games-Launcher.exe` | 187/338† | 151† | `UWOP_SET_FPREG` estendido, despacho SEH/locale/GUI/segurança/rede e APIs pendentes | `unsupported` |
+
+† Último total completo do `--report` (Fase 13.2). Na Fase 13.3, os dois
+relatórios foram reexecutados sem executar os binários, mas a leitura de
+unwind interrompeu a classificação de imports antes de um novo total: WinRAR
+usa `UNWIND_INFO` v2; Rockstar usa uma forma estendida de `UWOP_SET_FPREG`.
+Ambos retornam `5` (`UnsupportedMechanism`) de forma controlada.
 
 ## Recorrências observadas
 
 | Capacidade | Amostras que a evidenciam | Situação |
 |---|---|---|
 | PE32/x86 | Creative Cloud, Office Deployment Tool, CapCut, Epic | fora do alvo atual |
-| Unwinding/SEH x64 | Roblox, WinRAR, Logitech G HUB, Rockstar | pendente |
+| Unwinding/SEH x64 | Roblox, WinRAR, Logitech G HUB, Rockstar | núcleo `.pdata`/`.xdata` v1 e `Rtl*` suportado; despacho SEH, v2 e extensões pendentes |
 | Locale, code pages, FLS e ambiente | WinRAR, Logitech G HUB, Rockstar | pendente |
 | Segurança, identidade e ACLs | Roblox, Logitech G HUB | pendente |
 | Pacote MSIX/AppX | Affinity | pendente |
@@ -64,9 +70,12 @@ Ordem de trabalho:
    coberto por CTest, incluindo seleção explícita e ausência de candidatos.
 3. [x] Leitura, relatório e resolução antecipada de `delay-import` RVA, com
    fixture `tl_delay_import.exe` e diagnóstico por símbolo.
-4. SEH/unwinding x64, locale/FLS/ambiente e os contratos de arquivo/processo
+4. [x] Núcleo de unwinding x64 v1 com `tl_unwind.exe`: `.pdata`/`.xdata`,
+   contexto e `RtlCaptureContext`/`RtlLookupFunctionEntry`/
+   `RtlVirtualUnwind`/`RtlPcToFileHeader`; ele não despacha exceções.
+5. Despacho SEH, locale/FLS/ambiente e os contratos de arquivo/processo
    recorrentes nos instaladores x64.
-5. Segurança/ACL, rede HTTP, automação OLE e controles somente quando o
+6. Segurança/ACL, rede HTTP, automação OLE e controles somente quando o
    portfólio mostrar que são necessários para mais de um alvo.
 
 Os instaladores PE32/x86, assemblies .NET/Mono e pacotes MSIX/AppX continuam
@@ -355,15 +364,23 @@ contrato, fixture e regressão antes de ser promovido a suporte.
 | SHA-256 | `f435b24d4c2c5342c4f7c0143ef358f0f425b7b8a0972dd34d9dcf94789e9c4d` |
 | Imports estáticos | 156 em 3 DLLs |
 | Delay imports | 95 em 7 DLLs |
-| Resolvidos pelo runtime | 147/251 (98 estáticos + 49 atrasados) |
-| Ausentes | 104 (58 estáticos + 46 atrasados) |
-| Mecanismo adicional | `delay-import` RVA resolvido antecipadamente; helper/binding/unload não são emulados |
-| Resultado do `--report` | `unsupported`; `execution: not-attempted` |
+| Resolvidos pelo runtime | 147/251 (98 estáticos + 49 atrasados), último total completo na Fase 13.2 |
+| Ausentes | 104 (58 estáticos + 46 atrasados), último total completo na Fase 13.2 |
+| Mecanismo adicional | `delay-import` RVA resolvido antecipadamente; `.pdata` contém ao menos um `UNWIND_INFO` v2, fora do núcleo v1 |
+| Resultado do `--report` | Fase 13.3: `UnsupportedMechanism`/exit `5` em `UNWIND_INFO` v2; imports não foram recontados; execução não tentada |
 | Fonte | análise local de 2026-08-23 |
 
-Após a reanálise somente com `--report`, os 95 símbolos atrasados são
-inventariados por DLL e 49 já são resolvidos. O executável não foi executado
-nesta etapa; ele permanece `unsupported` pelas dependências abaixo.
+Na última análise completa os 95 símbolos atrasados foram inventariados por
+DLL e 49 já eram resolvidos. Na Fase 13.3, o novo `--report` parou em
+`UNWIND_INFO` v2 (RVA `0x51828`, mecanismo válido futuro ainda fora do escopo
+v1) antes de recontar imports. O executável não foi executado nesta etapa; ele
+permanece `unsupported` pelas dependências abaixo.
+
+As listas abaixo preservam o último relatório completo. Os quatro símbolos
+`RtlCaptureContext`, `RtlLookupFunctionEntry`, `RtlVirtualUnwind` e
+`RtlPcToFileHeader` passaram a existir no registro `KERNEL32` na Fase 13.3,
+mas a contagem consolidada só será atualizada quando a leitura do v2 também
+puder terminar.
 
 ### Lacunas por módulo e mecanismo
 
@@ -773,16 +790,24 @@ use, antes de ser considerada suporte ao instalador do Logitech.
 | SHA-256 | `c70131cb0427d146c9489297822e99ad87d4d5e141fd999d19f00975ab1a31f2` |
 | Imports estáticos | 205 em 5 DLLs |
 | Delay imports | 133 em 11 DLLs |
-| Resolvidos pelo runtime | 187/338 (110 estáticos + 77 atrasados) |
-| Ausentes | 151 (95 estáticos + 56 atrasados) |
-| Mecanismo adicional | `delay-import` RVA resolvido antecipadamente; helper/binding/unload não são emulados |
-| Resultado do `--report` | `unsupported`; `execution: not-attempted` |
+| Resolvidos pelo runtime | 187/338 (110 estáticos + 77 atrasados), último total completo na Fase 13.2 |
+| Ausentes | 151 (95 estáticos + 56 atrasados), último total completo na Fase 13.2 |
+| Mecanismo adicional | `delay-import` RVA resolvido antecipadamente; `UWOP_SET_FPREG` estendido fora do núcleo v1 |
+| Resultado do `--report` | Fase 13.3: `UnsupportedMechanism`/exit `5` na forma estendida de `UWOP_SET_FPREG`; imports não foram recontados; execução não tentada |
 | Fonte | análise local de 2026-08-23 |
 
-Após a reanálise somente com `--report`, os 133 símbolos atrasados são
-inventariados por DLL e 77 já são resolvidos. O executável não foi executado
-nesta etapa; além das lacunas em `KERNEL32`, ele requer controles comuns por
-ordinal, automação OLE, diálogo de impressão e uma camada HTTP WinINet.
+Na última análise completa os 133 símbolos atrasados foram inventariados por
+DLL e 77 já eram resolvidos. Na Fase 13.3, o novo `--report` parou na forma
+estendida `UWOP_SET_FPREG` (RVA `0xcead8`, `OpInfo=3`) antes de recontar
+imports. O executável não foi executado nesta etapa; além das lacunas em
+`KERNEL32`, ele requer controles comuns por ordinal, automação OLE, diálogo de
+impressão e uma camada HTTP WinINet.
+
+As listas abaixo preservam o último relatório completo. Os quatro símbolos
+`RtlCaptureContext`, `RtlLookupFunctionEntry`, `RtlVirtualUnwind` e
+`RtlPcToFileHeader` passaram a existir no registro `KERNEL32` na Fase 13.3,
+mas a contagem consolidada só será atualizada quando essa extensão puder ser
+classificada sem reduzir a validação do restante do PE.
 
 ### Lacunas por módulo e mecanismo
 

@@ -1,5 +1,6 @@
 #include "tradutorlinux/loader/module.hpp"
 #include "tradutorlinux/runtime/msvcrt.hpp"
+#include "tradutorlinux/runtime/unwind.hpp"
 #include "tradutorlinux/runtime/winapi.hpp"
 
 #include <cstdint>
@@ -106,6 +107,14 @@ TEST_F(ModuleTest, RegistersBuiltinKernel32Exports) {
               reinterpret_cast<std::uintptr_t>(&tl_SetUnhandledExceptionFilter));
     EXPECT_EQ(find_export(ExportQuery{"KERNEL32.dll", "TlsGetValue"}).address,
               reinterpret_cast<std::uintptr_t>(&tl_TlsGetValue));
+    EXPECT_EQ(find_export(ExportQuery{"KERNEL32.dll", "RtlCaptureContext"}).address,
+              reinterpret_cast<std::uintptr_t>(&tl_RtlCaptureContext));
+    EXPECT_EQ(find_export(ExportQuery{"KERNEL32.dll", "RtlLookupFunctionEntry"}).address,
+              reinterpret_cast<std::uintptr_t>(&tl_RtlLookupFunctionEntry));
+    EXPECT_EQ(find_export(ExportQuery{"KERNEL32.dll", "RtlVirtualUnwind"}).address,
+              reinterpret_cast<std::uintptr_t>(&tl_RtlVirtualUnwind));
+    EXPECT_EQ(find_export(ExportQuery{"KERNEL32.dll", "RtlPcToFileHeader"}).address,
+              reinterpret_cast<std::uintptr_t>(&tl_RtlPcToFileHeader));
     EXPECT_EQ(find_export_by_ordinal("KERNEL32.dll", 1).address,
               reinterpret_cast<std::uintptr_t>(&tl_GetStdHandle));
     EXPECT_EQ(find_export_by_ordinal("KERNEL32.dll", 24).address,

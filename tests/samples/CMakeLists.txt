@@ -18,7 +18,7 @@ find_program(TL_MINGW_WINDRES
 set(TL_FIXTURE_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/generated")
 
 function(tl_add_pe_fixture target_name source_file manifest_file)
-    set(options LINK_KERNEL32 LINK_USER32 LINK_GDI32 LINK_GDIPLUS LINK_UXTHEME LINK_DBGHELP LINK_OLE32 LINK_POWRPROF LINK_IPHLPAPI LINK_WINMM LINK_WS2_32 LINK_ADVAPI32 RELOCATABLE RUNTIME_FAILURE EXPECT_RESOLVED CONSOLE REPORT REPORT_ONLY NO_RUNTIME_CHECK)
+    set(options LINK_KERNEL32 LINK_USER32 LINK_GDI32 LINK_GDIPLUS LINK_UXTHEME LINK_DBGHELP LINK_OLE32 LINK_POWRPROF LINK_IPHLPAPI LINK_WINMM LINK_WS2_32 LINK_ADVAPI32 RELOCATABLE UNWIND EXPECT_RESOLVED CONSOLE REPORT REPORT_ONLY NO_RUNTIME_CHECK RUNTIME_FAILURE)
     set(oneValueArgs REPORT_SYMBOL RESOURCE_FILE IMPORT_DEF)
     cmake_parse_arguments(ARG "${options}" "${oneValueArgs}" "" ${ARGN})
 
@@ -96,6 +96,10 @@ function(tl_add_pe_fixture target_name source_file manifest_file)
     if(ARG_RELOCATABLE)
         list(APPEND link_flags -Wl,--dynamicbase)
     endif()
+    set(unwind_flags -fno-asynchronous-unwind-tables -fno-unwind-tables)
+    if(ARG_UNWIND)
+        set(unwind_flags -funwind-tables)
+    endif()
 
     add_custom_command(
         OUTPUT "${output_file}"
@@ -104,8 +108,7 @@ function(tl_add_pe_fixture target_name source_file manifest_file)
             -std=c17
             -ffreestanding
             -fno-stack-protector
-            -fno-asynchronous-unwind-tables
-            -fno-unwind-tables
+            ${unwind_flags}
             -nostdlib
             -Wl,--entry=tl_entry
             -Wl,--subsystem,console
@@ -209,6 +212,9 @@ function(tl_add_pe_fixture target_name source_file manifest_file)
             elseif(target_name STREQUAL "tl_com")
                 set(runtime_extra_args
                     "-DEXPECTED_HEX=636f6d0a")
+            elseif(target_name STREQUAL "tl_unwind")
+                set(runtime_extra_args
+                    "-DEXPECTED_HEX=756e77696e640a")
             elseif(target_name STREQUAL "tl_powr")
                 set(runtime_extra_args
                     "-DEXPECTED_HEX=706f77720a")
@@ -339,6 +345,24 @@ tl_add_pe_fixture(tl_paint src/tl_paint.c manifests/tl_paint.json
     REPORT_SYMBOL "FillRect")
 
 tl_add_pe_fixture(tl_crash src/tl_crash.c manifests/tl_crash.json RELOCATABLE NO_RUNTIME_CHECK)
+
+tl_add_pe_fixture(tl_unwind src/tl_unwind.c manifests/tl_unwind.json
+    LINK_KERNEL32 UNWIND EXPECT_RESOLVED CONSOLE REPORT RELOCATABLE
+    REPORT_SYMBOL "RtlVirtualUnwind")
+
+if(TARGET tradutorlinux)
+    add_test(
+        NAME unwind_tl_unwind_contract
+        COMMAND "${CMAKE_COMMAND}"
+            "-DINPUT=${TL_FIXTURE_OUTPUT_DIRECTORY}/tl_unwind.exe"
+            "-DRUNTIME=$<TARGET_FILE:tradutorlinux>"
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/verify_unwind_fixture.cmake"
+    )
+    set_tests_properties(unwind_tl_unwind_contract PROPERTIES
+        DEPENDS fixture_tl_unwind_metadata
+        LABELS "fixture;runtime;pe32plus"
+    )
+endif()
 
 tl_add_pe_fixture(tl_hang src/tl_hang.c manifests/tl_hang.json RELOCATABLE NO_RUNTIME_CHECK)
 

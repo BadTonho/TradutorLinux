@@ -6,6 +6,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <optional>
 #include <string>
 #include <utility>
@@ -22,6 +23,9 @@ constexpr std::size_t kDataDirectoryCount = 16;
 constexpr std::size_t kDataDirectoryEntrySize = 8;
 constexpr std::size_t kImportDescriptorSize = 20;
 constexpr std::size_t kDelayImportDescriptorSize = 32;
+constexpr std::size_t kRuntimeFunctionSize = 12;
+constexpr std::size_t kUnwindInfoHeaderSize = 4;
+constexpr std::size_t kUnwindCodeSize = 2;
 constexpr std::size_t kThunkEntrySize = 8;
 constexpr std::size_t kBaseRelocBlockHeaderSize = 8;
 constexpr std::size_t kBaseRelocEntrySize = 2;
@@ -42,13 +46,27 @@ constexpr std::uint32_t kDelayImportAttrRva = 0x1;
 
 constexpr std::size_t kDirImport = 1;
 constexpr std::size_t kDirResource = 2;
+constexpr std::size_t kDirException = 3;
 constexpr std::size_t kDirBaseReloc = 5;
 constexpr std::size_t kDirDelayImport = 13;
 
 constexpr std::size_t kMaxImportDlls = 1024;
 constexpr std::size_t kMaxSymbolsPerDll = 4096;
 constexpr std::size_t kMaxRelocBlocks = 4096;
+constexpr std::size_t kMaxRuntimeFunctions = 65536;
 constexpr std::size_t kMaxCString = 65535;
+
+constexpr std::uint8_t kUnwindVersion1 = 1;
+constexpr std::uint8_t kUnwindFlagEHandler = 0x1;
+constexpr std::uint8_t kUnwindFlagUHandler = 0x2;
+constexpr std::uint8_t kUnwindFlagChainInfo = 0x4;
+constexpr std::uint8_t kUnwindKnownFlags = kUnwindFlagEHandler | kUnwindFlagUHandler |
+                                           kUnwindFlagChainInfo;
+
+[[nodiscard]] constexpr bool is_nonvolatile_register(const std::uint8_t register_number) {
+    return register_number == 3 || register_number == 5 || register_number == 6 ||
+           register_number == 7 || (register_number >= 12 && register_number <= 15);
+}
 
 [[nodiscard]] ParseResult fail(const ParseStatus status, std::string message) {
     return {.status = status, .error_message = std::move(message), .info = {}};
@@ -244,6 +262,12 @@ public:
             reader_.read_u32(directory_offset + kDirResource * kDataDirectoryEntrySize + 4,
                              info.resource_directory_size);
         }
+        if (directory_count > kDirException) {
+            reader_.read_u32(directory_offset + kDirException * kDataDirectoryEntrySize,
+                             info.exception_directory_rva);
+            reader_.read_u32(directory_offset + kDirException * kDataDirectoryEntrySize + 4,
+                             info.exception_directory_size);
+        }
         if (directory_count > kDirBaseReloc) {
             reader_.read_u32(directory_offset + kDirBaseReloc * kDataDirectoryEntrySize,
                              info.relocation_directory_rva);
@@ -304,6 +328,9 @@ public:
             return *error;
         }
         if (auto error = parse_delay_imports()) {
+            return *error;
+        }
+        if (auto error = parse_runtime_functions()) {
             return *error;
         }
         if (auto error = parse_relocations()) {
@@ -629,6 +656,300 @@ private:
         if (!descriptor_terminated) {
             return fail(ParseStatus::Malformed,
                         "diretório de delay imports sem descritor terminador");
+        }
+        return std::nullopt;
+    }
+
+    [[nodiscard]] std::optional<ParseResult> parse_unwind_info(
+        const std::uint32_t unwind_rva, UnwindInfo& unwind) {
+        if ((unwind_rva & 0x3U) != 0U) {
+            return fail(ParseStatus::Malformed,
+                        "UNWIND_INFO sem alinhamento de 4 bytes em RVA " +
+                            util::format_hex(unwind_rva));
+        }
+        const std::optional<std::size_t> header =
+            rva_to_file_offset({unwind_rva, kUnwindInfoHeaderSize});
+        if (!header.has_value()) {
+            return fail(ParseStatus::Malformed,
+                        "UNWIND_INFO fora da imagem em RVA " + util::format_hex(unwind_rva));
+        }
+
+        std::uint32_t header_word{};
+        reader_.read_u32(*header, header_word);
+        unwind.version = static_cast<std::uint8_t>(header_word & 0x7U);
+        unwind.flags = static_cast<std::uint8_t>((header_word >> 3U) & 0x1FU);
+        unwind.prolog_size = static_cast<std::uint8_t>((header_word >> 8U) & 0xFFU);
+        const std::uint8_t code_count = static_cast<std::uint8_t>((header_word >> 16U) & 0xFFU);
+        unwind.frame_register = static_cast<std::uint8_t>((header_word >> 24U) & 0x0FU);
+        unwind.frame_offset = static_cast<std::uint8_t>((header_word >> 28U) & 0x0FU);
+
+        if (unwind.version != kUnwindVersion1) {
+            return fail(ParseStatus::UnsupportedMechanism,
+                        "versão de UNWIND_INFO " + std::to_string(unwind.version) +
+                            " não suportada em RVA " + util::format_hex(unwind_rva) +
+                            " (esperado 1)");
+        }
+        if ((unwind.flags & ~kUnwindKnownFlags) != 0U) {
+            return fail(ParseStatus::UnsupportedMechanism,
+                        "flags de UNWIND_INFO não suportadas: " +
+                            util::format_hex(unwind.flags));
+        }
+
+        const std::uint64_t code_bytes = static_cast<std::uint64_t>(code_count) * kUnwindCodeSize;
+        const std::uint64_t code_end = static_cast<std::uint64_t>(unwind_rva) +
+                                       kUnwindInfoHeaderSize + code_bytes;
+        if (code_end > parser_state_.size_of_image ||
+            code_end > std::numeric_limits<std::uint32_t>::max()) {
+            return fail(ParseStatus::Malformed, "códigos de UNWIND_INFO excedem a imagem");
+        }
+        const std::optional<std::size_t> codes = rva_to_file_offset(
+            {unwind_rva + static_cast<std::uint32_t>(kUnwindInfoHeaderSize),
+             static_cast<std::uint32_t>(code_bytes)});
+        if (!codes.has_value() && code_count != 0U) {
+            return fail(ParseStatus::Malformed, "códigos de UNWIND_INFO truncados");
+        }
+
+        std::uint8_t previous_code_offset = 0;
+        bool has_previous_code = false;
+        for (std::size_t slot = 0; slot < code_count;) {
+            std::uint16_t raw_code{};
+            reader_.read_u16(*codes + slot * kUnwindCodeSize, raw_code);
+            UnwindCode code;
+            code.code_offset = static_cast<std::uint8_t>(raw_code & 0xFFU);
+            const std::uint8_t raw_operation =
+                static_cast<std::uint8_t>((raw_code >> 8U) & 0x0FU);
+            code.operation_info = static_cast<std::uint8_t>((raw_code >> 12U) & 0x0FU);
+            if (has_previous_code && code.code_offset > previous_code_offset) {
+                return fail(ParseStatus::Malformed,
+                            "códigos de UNWIND_INFO fora de ordem decrescente");
+            }
+            previous_code_offset = code.code_offset;
+            has_previous_code = true;
+
+            std::size_t extra_slots = 0;
+            switch (raw_operation) {
+                case 0:
+                    code.operation = UnwindOperation::PushNonVol;
+                    if (!is_nonvolatile_register(code.operation_info)) {
+                        return fail(ParseStatus::Malformed,
+                                    "UWOP_PUSH_NONVOL usa registrador inválido");
+                    }
+                    break;
+                case 1:
+                    code.operation = UnwindOperation::AllocLarge;
+                    if (code.operation_info == 0U) {
+                        extra_slots = 1;
+                    } else if (code.operation_info == 1U) {
+                        extra_slots = 2;
+                    } else {
+                        return fail(ParseStatus::Malformed, "UWOP_ALLOC_LARGE com OpInfo inválido");
+                    }
+                    break;
+                case 2:
+                    code.operation = UnwindOperation::AllocSmall;
+                    code.operand = static_cast<std::uint32_t>(code.operation_info) * 8U + 8U;
+                    break;
+                case 3:
+                    code.operation = UnwindOperation::SetFpReg;
+                    if (code.operation_info != 0U) {
+                        return fail(ParseStatus::UnsupportedMechanism,
+                                    "forma estendida de UWOP_SET_FPREG não suportada em RVA " +
+                                        util::format_hex(unwind_rva) +
+                                        " (OpInfo=" + std::to_string(code.operation_info) + ")");
+                    }
+                    if (!is_nonvolatile_register(unwind.frame_register)) {
+                        return fail(ParseStatus::Malformed,
+                                    "UWOP_SET_FPREG inválido em RVA " +
+                                        util::format_hex(unwind_rva) +
+                                        " (FrameRegister=" +
+                                        std::to_string(unwind.frame_register) + ")");
+                    }
+                    break;
+                case 4:
+                    code.operation = UnwindOperation::SaveNonVol;
+                    if (!is_nonvolatile_register(code.operation_info)) {
+                        return fail(ParseStatus::Malformed,
+                                    "UWOP_SAVE_NONVOL usa registrador inválido");
+                    }
+                    extra_slots = 1;
+                    break;
+                case 5:
+                    code.operation = UnwindOperation::SaveNonVolFar;
+                    if (!is_nonvolatile_register(code.operation_info)) {
+                        return fail(ParseStatus::Malformed,
+                                    "UWOP_SAVE_NONVOL_FAR usa registrador inválido");
+                    }
+                    extra_slots = 2;
+                    break;
+                case 8:
+                    code.operation = UnwindOperation::SaveXmm128;
+                    extra_slots = 1;
+                    break;
+                case 9:
+                    code.operation = UnwindOperation::SaveXmm128Far;
+                    extra_slots = 2;
+                    break;
+                case 10:
+                    code.operation = UnwindOperation::PushMachFrame;
+                    if (code.operation_info > 1U) {
+                        return fail(ParseStatus::Malformed,
+                                    "UWOP_PUSH_MACHFRAME com OpInfo inválido");
+                    }
+                    break;
+                default:
+                    return fail(ParseStatus::UnsupportedMechanism,
+                                "operação de UNWIND_INFO não suportada: " +
+                                    std::to_string(raw_operation) + " em RVA " +
+                                    util::format_hex(unwind_rva));
+            }
+            if (extra_slots > static_cast<std::size_t>(code_count) - slot - 1U) {
+                return fail(ParseStatus::Malformed, "operando de UNWIND_INFO truncado");
+            }
+            if (extra_slots == 1U) {
+                std::uint16_t value{};
+                reader_.read_u16(*codes + (slot + 1U) * kUnwindCodeSize, value);
+                switch (code.operation) {
+                    case UnwindOperation::AllocLarge:
+                    case UnwindOperation::SaveNonVol:
+                        code.operand = static_cast<std::uint32_t>(value) * 8U;
+                        break;
+                    case UnwindOperation::SaveXmm128:
+                        code.operand = static_cast<std::uint32_t>(value) * 16U;
+                        break;
+                    default:
+                        break;
+                }
+            } else if (extra_slots == 2U) {
+                std::uint32_t value{};
+                reader_.read_u32(*codes + (slot + 1U) * kUnwindCodeSize, value);
+                code.operand = value;
+                if (code.operation == UnwindOperation::SaveXmm128Far &&
+                    (code.operand & 0xFU) != 0U) {
+                    return fail(ParseStatus::Malformed,
+                                "UWOP_SAVE_XMM128_FAR com offset não alinhado");
+                }
+            }
+            unwind.codes.push_back(code);
+            slot += extra_slots + 1U;
+        }
+
+        const std::uint64_t aligned_tail = (code_end + 3U) & ~std::uint64_t{3};
+        if (aligned_tail > parser_state_.size_of_image ||
+            aligned_tail > std::numeric_limits<std::uint32_t>::max()) {
+            return fail(ParseStatus::Malformed, "cauda de UNWIND_INFO excede a imagem");
+        }
+        const std::uint32_t tail_rva = static_cast<std::uint32_t>(aligned_tail);
+        if ((unwind.flags & kUnwindFlagChainInfo) != 0U) {
+            if ((unwind.flags & (kUnwindFlagEHandler | kUnwindFlagUHandler)) != 0U) {
+                return fail(ParseStatus::Malformed,
+                            "UNWIND_INFO não pode combinar handler e CHAININFO");
+            }
+            const std::optional<std::size_t> chain = rva_to_file_offset({tail_rva, kRuntimeFunctionSize});
+            if (!chain.has_value()) {
+                return fail(ParseStatus::Malformed, "RUNTIME_FUNCTION encadeada truncada");
+            }
+            reader_.read_u32(*chain, unwind.chained_begin_rva);
+            reader_.read_u32(*chain + 4, unwind.chained_end_rva);
+            reader_.read_u32(*chain + 8, unwind.chained_unwind_info_rva);
+            unwind.has_chained_function = true;
+        } else if ((unwind.flags & (kUnwindFlagEHandler | kUnwindFlagUHandler)) != 0U) {
+            const std::optional<std::size_t> handler = rva_to_file_offset({tail_rva, 4});
+            if (!handler.has_value()) {
+                return fail(ParseStatus::Malformed, "handler de UNWIND_INFO truncado");
+            }
+            reader_.read_u32(*handler, unwind.handler_rva);
+            if (unwind.handler_rva == 0U ||
+                !rva_to_file_offset({unwind.handler_rva, 1}).has_value()) {
+                return fail(ParseStatus::Malformed, "handler de UNWIND_INFO fora da imagem");
+            }
+            const std::uint64_t data_rva = static_cast<std::uint64_t>(tail_rva) + 4U;
+            if (data_rva > parser_state_.size_of_image) {
+                return fail(ParseStatus::Malformed, "dados de handler fora da imagem");
+            }
+            unwind.handler_data_rva = static_cast<std::uint32_t>(data_rva);
+        }
+        return std::nullopt;
+    }
+
+    [[nodiscard]] std::optional<ParseResult> parse_runtime_functions() {
+        if (parser_state_.exception_directory_rva == 0U &&
+            parser_state_.exception_directory_size == 0U) {
+            return std::nullopt;
+        }
+        if (parser_state_.exception_directory_rva == 0U ||
+            parser_state_.exception_directory_size == 0U ||
+            parser_state_.exception_directory_size % kRuntimeFunctionSize != 0U) {
+            return fail(ParseStatus::Malformed,
+                        "diretório de exceções deve conter RUNTIME_FUNCTIONs completos");
+        }
+        const std::optional<std::size_t> directory = rva_to_file_offset(
+            {parser_state_.exception_directory_rva, parser_state_.exception_directory_size});
+        if (!directory.has_value()) {
+            return fail(ParseStatus::Malformed, "diretório de exceções fora da imagem");
+        }
+        const std::size_t count = parser_state_.exception_directory_size / kRuntimeFunctionSize;
+        if (count > kMaxRuntimeFunctions) {
+            return fail(ParseStatus::Malformed, "número excessivo de RUNTIME_FUNCTIONs");
+        }
+        std::uint32_t previous_end = 0;
+        bool has_previous = false;
+        for (std::size_t index = 0; index < count; ++index) {
+            const std::size_t offset = *directory + index * kRuntimeFunctionSize;
+            RuntimeFunction function;
+            reader_.read_u32(offset, function.begin_rva);
+            reader_.read_u32(offset + 4, function.end_rva);
+            reader_.read_u32(offset + 8, function.unwind_info_rva);
+            if (function.begin_rva >= function.end_rva || function.end_rva > parser_state_.size_of_image) {
+                return fail(ParseStatus::Malformed, "RUNTIME_FUNCTION com intervalo inválido");
+            }
+            if (has_previous && function.begin_rva < previous_end) {
+                return fail(ParseStatus::Malformed,
+                            "RUNTIME_FUNCTIONs fora de ordem ou sobrepostos");
+            }
+            if (auto error = parse_unwind_info(function.unwind_info_rva, function.unwind)) {
+                return error;
+            }
+            previous_end = function.end_rva;
+            has_previous = true;
+            parser_state_.runtime_functions.push_back(std::move(function));
+        }
+
+        for (const RuntimeFunction& function : parser_state_.runtime_functions) {
+            if (!function.unwind.has_chained_function) {
+                continue;
+            }
+            const auto chained = std::find_if(
+                parser_state_.runtime_functions.begin(), parser_state_.runtime_functions.end(),
+                [&function](const RuntimeFunction& candidate) {
+                    return candidate.begin_rva == function.unwind.chained_begin_rva &&
+                           candidate.end_rva == function.unwind.chained_end_rva &&
+                           candidate.unwind_info_rva == function.unwind.chained_unwind_info_rva;
+                });
+            if (chained == parser_state_.runtime_functions.end()) {
+                return fail(ParseStatus::Malformed,
+                            "CHAININFO não referencia uma RUNTIME_FUNCTION da tabela");
+            }
+        }
+        for (std::size_t start = 0; start < parser_state_.runtime_functions.size(); ++start) {
+            std::size_t current = start;
+            for (std::size_t depth = 0; depth <= parser_state_.runtime_functions.size(); ++depth) {
+                const RuntimeFunction& function = parser_state_.runtime_functions[current];
+                if (!function.unwind.has_chained_function) {
+                    break;
+                }
+                const auto chained = std::find_if(
+                    parser_state_.runtime_functions.begin(), parser_state_.runtime_functions.end(),
+                    [&function](const RuntimeFunction& candidate) {
+                        return candidate.begin_rva == function.unwind.chained_begin_rva &&
+                               candidate.end_rva == function.unwind.chained_end_rva &&
+                               candidate.unwind_info_rva == function.unwind.chained_unwind_info_rva;
+                    });
+                current = static_cast<std::size_t>(
+                    std::distance(parser_state_.runtime_functions.begin(), chained));
+                if (depth == parser_state_.runtime_functions.size()) {
+                    return fail(ParseStatus::Malformed, "ciclo em CHAININFO de UNWIND_INFO");
+                }
+            }
         }
         return std::nullopt;
     }

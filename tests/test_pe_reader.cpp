@@ -80,6 +80,107 @@ std::vector<std::byte> make_delay_import_pe() {
     return build(spec);
 }
 
+std::vector<std::byte> make_unwind_pe() {
+    constexpr std::uint32_t kPdataRva = 0x2000;
+    std::vector<std::byte> data;
+    // RUNTIME_FUNCTION: [0x1000, 0x1010), UNWIND_INFO em 0x200c.
+    push_u32(data, 0x1000);
+    push_u32(data, 0x1010);
+    push_u32(data, kPdataRva + 12);
+    // Version=1, Prolog=4, duas operações: alloc 40 + push RBX.
+    data.push_back(std::byte{0x01});
+    data.push_back(std::byte{4});
+    data.push_back(std::byte{2});
+    data.push_back(std::byte{0});
+    data.push_back(std::byte{4});
+    data.push_back(std::byte{0x42});  // UWOP_ALLOC_SMALL, OpInfo=4 => 40.
+    data.push_back(std::byte{1});
+    data.push_back(std::byte{0x30});  // UWOP_PUSH_NONVOL RBX.
+
+    BuildSpec spec;
+    spec.section_names = {".text", ".pdata"};
+    spec.section_data = {std::vector<std::byte>(0x20), data};
+    spec.exception_rva = kPdataRva;
+    spec.exception_size = 12;
+    return build(spec);
+}
+
+std::vector<std::byte> make_all_unwind_opcodes_pe() {
+    constexpr std::uint32_t kPdataRva = 0x2000;
+    std::vector<std::byte> data;
+    push_u32(data, 0x1000);
+    push_u32(data, 0x1040);
+    push_u32(data, kPdataRva + 12);
+    // Version=1, prólogo de 24 bytes, 16 slots e RBP como frame register.
+    data.push_back(std::byte{0x01});
+    data.push_back(std::byte{24});
+    data.push_back(std::byte{16});
+    data.push_back(std::byte{0x05});
+    const auto push_code = [&data](const std::uint8_t offset, const std::uint8_t operation,
+                                   const std::uint8_t info) {
+        data.push_back(static_cast<std::byte>(offset));
+        data.push_back(static_cast<std::byte>((info << 4U) | operation));
+    };
+    push_code(24, 0, 3);   // UWOP_PUSH_NONVOL RBX
+    push_code(23, 1, 0);   // UWOP_ALLOC_LARGE, u16 * 8
+    push_u16(data, 16);
+    push_code(22, 2, 4);   // UWOP_ALLOC_SMALL
+    push_code(21, 3, 0);   // UWOP_SET_FPREG
+    push_code(20, 4, 12);  // UWOP_SAVE_NONVOL R12, u16 * 8
+    push_u16(data, 3);
+    push_code(19, 5, 13);  // UWOP_SAVE_NONVOL_FAR R13, u32
+    push_u32(data, 40);
+    push_code(18, 8, 6);   // UWOP_SAVE_XMM128 XMM6, u16 * 16
+    push_u16(data, 2);
+    push_code(17, 9, 7);   // UWOP_SAVE_XMM128_FAR XMM7, u32
+    push_u32(data, 64);
+    push_code(16, 10, 1);  // UWOP_PUSH_MACHFRAME com código de erro
+
+    BuildSpec spec;
+    spec.section_names = {".text", ".pdata"};
+    spec.section_data = {std::vector<std::byte>(0x40), data};
+    spec.exception_rva = kPdataRva;
+    spec.exception_size = 12;
+    return build(spec);
+}
+
+std::vector<std::byte> make_chained_unwind_pe(const bool cycle = false) {
+    constexpr std::uint32_t kPdataRva = 0x2000;
+    std::vector<std::byte> data;
+    // Duas entradas ordenadas. A primeira encadeia na segunda.
+    push_u32(data, 0x1000);
+    push_u32(data, 0x1010);
+    push_u32(data, kPdataRva + 24);
+    push_u32(data, 0x1020);
+    push_u32(data, 0x1030);
+    push_u32(data, kPdataRva + 40);
+    // UNWIND_INFO[0]: Version=1 + CHAININFO, sem códigos.
+    data.push_back(std::byte{0x21});
+    data.push_back(std::byte{0});
+    data.push_back(std::byte{0});
+    data.push_back(std::byte{0});
+    push_u32(data, 0x1020);
+    push_u32(data, 0x1030);
+    push_u32(data, kPdataRva + 40);
+    // UNWIND_INFO[1]. No caso cíclico ele volta para a primeira função.
+    data.push_back(cycle ? std::byte{0x21} : std::byte{0x01});
+    data.push_back(std::byte{0});
+    data.push_back(std::byte{0});
+    data.push_back(std::byte{0});
+    if (cycle) {
+        push_u32(data, 0x1000);
+        push_u32(data, 0x1010);
+        push_u32(data, kPdataRva + 24);
+    }
+
+    BuildSpec spec;
+    spec.section_names = {".text", ".pdata"};
+    spec.section_data = {std::vector<std::byte>(0x40), data};
+    spec.exception_rva = kPdataRva;
+    spec.exception_size = 24;
+    return build(spec);
+}
+
 std::vector<std::byte> read_file(const std::filesystem::path& path) {
     std::ifstream stream{path, std::ios::binary};
     std::vector<std::byte> bytes;
@@ -145,6 +246,98 @@ TEST(PeReaderTest, ParsesDelayImportsByNameAndOrdinal) {
     EXPECT_TRUE(dll.symbols[1].by_ordinal);
     EXPECT_EQ(dll.symbols[1].ordinal, 5);
     EXPECT_NE(dll.symbols[0].iat_rva, 0U);
+}
+
+TEST(PeReaderTest, ParsesRuntimeFunctionAndUnwindCodes) {
+    const ParseResult result = parse_pe(make_unwind_pe());
+
+    ASSERT_EQ(result.status, ParseStatus::Success) << result.error_message;
+    EXPECT_EQ(result.info.exception_directory_rva, 0x2000U);
+    ASSERT_EQ(result.info.runtime_functions.size(), 1U);
+    const RuntimeFunction& function = result.info.runtime_functions[0];
+    EXPECT_EQ(function.begin_rva, 0x1000U);
+    EXPECT_EQ(function.end_rva, 0x1010U);
+    EXPECT_EQ(function.unwind.version, 1U);
+    ASSERT_EQ(function.unwind.codes.size(), 2U);
+    EXPECT_EQ(function.unwind.codes[0].operation, UnwindOperation::AllocSmall);
+    EXPECT_EQ(function.unwind.codes[0].operand, 40U);
+    EXPECT_EQ(function.unwind.codes[1].operation, UnwindOperation::PushNonVol);
+    EXPECT_EQ(function.unwind.codes[1].operation_info, 3U);
+}
+
+TEST(PeReaderTest, ParsesEveryAmd64V1UnwindOpcode) {
+    const ParseResult result = parse_pe(make_all_unwind_opcodes_pe());
+
+    ASSERT_EQ(result.status, ParseStatus::Success) << result.error_message;
+    const std::vector<UnwindCode>& codes = result.info.runtime_functions[0].unwind.codes;
+    ASSERT_EQ(codes.size(), 9U);
+    EXPECT_EQ(codes[0].operation, UnwindOperation::PushNonVol);
+    EXPECT_EQ(codes[1].operation, UnwindOperation::AllocLarge);
+    EXPECT_EQ(codes[1].operand, 128U);
+    EXPECT_EQ(codes[2].operation, UnwindOperation::AllocSmall);
+    EXPECT_EQ(codes[3].operation, UnwindOperation::SetFpReg);
+    EXPECT_EQ(codes[4].operation, UnwindOperation::SaveNonVol);
+    EXPECT_EQ(codes[4].operand, 24U);
+    EXPECT_EQ(codes[5].operation, UnwindOperation::SaveNonVolFar);
+    EXPECT_EQ(codes[5].operand, 40U);
+    EXPECT_EQ(codes[6].operation, UnwindOperation::SaveXmm128);
+    EXPECT_EQ(codes[6].operand, 32U);
+    EXPECT_EQ(codes[7].operation, UnwindOperation::SaveXmm128Far);
+    EXPECT_EQ(codes[7].operand, 64U);
+    EXPECT_EQ(codes[8].operation, UnwindOperation::PushMachFrame);
+    EXPECT_EQ(codes[8].operation_info, 1U);
+}
+
+TEST(PeReaderTest, ParsesUnwindHandlerAndRejectsBadChains) {
+    std::vector<std::byte> handler_bytes = make_unwind_pe();
+    // Flags EHANDLER, handler RVA (0x1000) depois dos dois UNWIND_CODEs.
+    handler_bytes[0x400 + 12] = std::byte{0x09};
+    write_u32(handler_bytes, 0x400 + 20, 0x1000);
+    const ParseResult handler = parse_pe(handler_bytes);
+    ASSERT_EQ(handler.status, ParseStatus::Success) << handler.error_message;
+    EXPECT_EQ(handler.info.runtime_functions[0].unwind.handler_rva, 0x1000U);
+    EXPECT_EQ(handler.info.runtime_functions[0].unwind.handler_data_rva, 0x2018U);
+
+    handler_bytes = make_unwind_pe();
+    handler_bytes[0x400 + 12] = std::byte{0x11};  // Version 1 + UHANDLER.
+    write_u32(handler_bytes, 0x400 + 20, 0x1000);
+    const ParseResult uhandler = parse_pe(handler_bytes);
+    ASSERT_EQ(uhandler.status, ParseStatus::Success) << uhandler.error_message;
+    EXPECT_EQ(uhandler.info.runtime_functions[0].unwind.flags, 2U);
+
+    std::vector<std::byte> chained_bytes = make_unwind_pe();
+    chained_bytes[0x400 + 12] = std::byte{0x21};  // Version 1 + CHAININFO.
+    EXPECT_EQ(parse_pe(chained_bytes).status, ParseStatus::Malformed);
+
+    const ParseResult chained = parse_pe(make_chained_unwind_pe());
+    ASSERT_EQ(chained.status, ParseStatus::Success) << chained.error_message;
+    ASSERT_EQ(chained.info.runtime_functions.size(), 2U);
+    EXPECT_TRUE(chained.info.runtime_functions[0].unwind.has_chained_function);
+    EXPECT_EQ(chained.info.runtime_functions[0].unwind.chained_begin_rva, 0x1020U);
+    EXPECT_EQ(parse_pe(make_chained_unwind_pe(true)).status, ParseStatus::Malformed);
+}
+
+TEST(PeReaderTest, RejectsMalformedAndUnsupportedUnwindMetadata) {
+    std::vector<std::byte> bytes = make_unwind_pe();
+    write_u32(bytes, 0x58 + 112 + 3 * 8 + 4, 11);
+    EXPECT_EQ(parse_pe(bytes).status, ParseStatus::Malformed);
+
+    bytes = make_unwind_pe();
+    write_u32(bytes, 0x400 + 4, 0x1000);
+    EXPECT_EQ(parse_pe(bytes).status, ParseStatus::Malformed);
+
+    bytes = make_unwind_pe();
+    bytes[0x400 + 12] = std::byte{0x02};
+    EXPECT_EQ(parse_pe(bytes).status, ParseStatus::UnsupportedMechanism);
+
+    bytes = make_unwind_pe();
+    bytes[0x400 + 14] = std::byte{0xFF};
+    EXPECT_EQ(parse_pe(bytes).status, ParseStatus::Malformed);
+
+    bytes = make_all_unwind_opcodes_pe();
+    // UWOP_SET_FPREG fica no slot 4 (há um slot extra no ALLOC_LARGE).
+    bytes[0x400 + 12 + 4 + 4 * 2 + 1] = std::byte{0x33};
+    EXPECT_EQ(parse_pe(bytes).status, ParseStatus::UnsupportedMechanism);
 }
 
 TEST(PeReaderTest, RejectsDelayImportDirectoryWithoutTerminator) {

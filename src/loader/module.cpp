@@ -1,6 +1,7 @@
 #include "tradutorlinux/loader/module.hpp"
 
 #include "tradutorlinux/runtime/winapi.hpp"
+#include "tradutorlinux/runtime/unwind.hpp"
 #include "tradutorlinux/runtime/msvcrt.hpp"
 #include "tradutorlinux/runtime/advapi.hpp"
 #include "tradutorlinux/runtime/ws2_32.hpp"
@@ -372,6 +373,10 @@ void register_builtin_modules() {
         {"WakeByAddressSingle", 186, reinterpret_cast<std::uintptr_t>(&tl_WakeByAddressSingle)},
         {"WakeByAddressAll", 187, reinterpret_cast<std::uintptr_t>(&tl_WakeByAddressAll)},
         {"GetCurrentProcess", 194, reinterpret_cast<std::uintptr_t>(&tl_GetCurrentProcess)},
+        {"RtlCaptureContext", 195, reinterpret_cast<std::uintptr_t>(&tl_RtlCaptureContext)},
+        {"RtlLookupFunctionEntry", 196, reinterpret_cast<std::uintptr_t>(&tl_RtlLookupFunctionEntry)},
+        {"RtlVirtualUnwind", 197, reinterpret_cast<std::uintptr_t>(&tl_RtlVirtualUnwind)},
+        {"RtlPcToFileHeader", 198, reinterpret_cast<std::uintptr_t>(&tl_RtlPcToFileHeader)},
     };
     static const InternalModule kKernel32Module{"KERNEL32.dll", kKernel32Exports};
     register_module(kKernel32Module);

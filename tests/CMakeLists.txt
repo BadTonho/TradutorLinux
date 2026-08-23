@@ -26,6 +26,7 @@ add_executable(tradutorlinux_unit_tests
     test_process.cpp
     test_runtime.cpp
     test_trace.cpp
+    test_unwind.cpp
     test_win32.cpp
 )
 target_link_libraries(tradutorlinux_unit_tests

@@ -20,6 +20,7 @@ Esta matriz declara o comportamento suportado; ela não é uma promessa de compa
 | `tl_reloc.exe` | PE32+ AMD64 | Não | Nenhum | Gerado com `-Wl,--dynamicbase`, verificado, parseado e mapeado na Fase 2; usado para validar base relocations | Fase 4 |
 | `tl_missing_dll.exe` | PE32+ AMD64 | Não | `USER32.dll!TlUnknownSymbolW` | Gerado, verificado e rejeitado na Fase 3: `USER32.dll` é conhecida, mas o símbolo diagnostica `unknown-symbol`; retorna `5` sem executar o entry point. A import library do fixture é gerada via `dlltool` (`defs/tl_missing_dll.def`) porque o símbolo não existe nas bibliotecas reais do mingw | Fase 4 |
 | `tl_delay_import.exe` | PE32+ AMD64 | Não | `KERNEL32.dll!ExitProcess` somente no diretório delay-import | **Suportado:** descritor `grAttrs=0x1`, INT/IAT atrasadas e resolução antecipada; `--report` resolve 1/1 e a execução chama `ExitProcess` pela IAT atrasada. A variante com `TlMissingDelayImportW` retorna `5` antes do entry point e identifica `mechanism="delay-import"` | Delay imports RVA |
+| `tl_unwind.exe` | PE32+ AMD64 | Não | `KERNEL32.dll!RtlCaptureContext`, `RtlLookupFunctionEntry`, `RtlVirtualUnwind`, `RtlPcToFileHeader`, console e `ExitProcess` | **Suportado no núcleo de unwinding:** possui `.pdata`/`.xdata`, captura um `CONTEXT`, localiza sua `RUNTIME_FUNCTION`, desempilha um frame real e valida a base da imagem; imprime `unwind\n`, exit `0`. Não prova nem declara despacho SEH/`try/catch`. | Núcleo de unwinding x64 |
 | `tl_crash.exe` | PE32+ AMD64 | Não | Nenhum | Gerado, verificado, mapeado e executado em processo filho isolado: o convidado acessa o endereço `0`, o hospedeiro observa o `SIGSEGV` via `waitpid`, emite `terminated category="guest-signal" signal="SIGSEGV" fault-address="0x0"` (o crash log captura o `si_addr` no filho e o converte em RVA/seção/importação quando o endereço cai dentro da imagem) e retorna `71` (`GuestFault`) | Diagnóstico de falhas |
 | `tl_hang.exe` | PE32+ AMD64 | Não | Nenhum | Gerado, verificado e executado em processo filho isolado com `--timeout 1`: o convidado entra em loop infinito, o hospedeiro o mata com `SIGKILL`, emite `terminated category="guest-timeout"` e retorna `72` (`GuestTimeout`) | Diagnóstico de falhas |
 | `tl_thread.exe` | PE32+ AMD64 | Não | `KERNEL32.dll!CloseHandle`, `CreateThread`, `ExitProcess`, `ExitThread`, `GetStdHandle`, `WaitForSingleObject`, `WriteFile` | **Suportado no escopo da Fase 11**: cria duas threads sequenciais, cada uma escreve "Thread done" e termina via `ExitThread`; a thread principal aguarda cada handle, escreve "Main done" e encerra. Metadata e execução e2e passam em Debug, Release e Sanitize (`LSAN_OPTIONS=detect_leaks=0`); saída esperada: `Thread done\nThread done\nMain done\n` e exit `0` | Fase 11 |
@@ -52,6 +53,8 @@ O leitor de PE (`include/tradutorlinux/pe/pe_reader.hpp`, `src/pe/pe_reader.cpp`
 - Import table por nome (hint) e por ordinal, com limites de DLLs e símbolos.
 - Delay import table (`IMAGE_DIRECTORY_ENTRY_DELAY_IMPORT`) por nome e ordinal,
   quando os descritores usam RVAs (`grAttrs=0x1`).
+- Diretório de exceções x64 (`.pdata`/`.xdata`) com `RUNTIME_FUNCTION`,
+  `UNWIND_INFO` versão 1, handlers reconhecidos e cadeias validadas.
 - Base relocations por bloco e entrada.
 
 Comportamento de rejeição:
@@ -63,8 +66,14 @@ Comportamento de rejeição:
 | Arquitetura diferente de `x86-64` (machine `0x8664`) | `UnsupportedArchitecture` |
 | Optional header PE32 (magic `0x10B`) ou outro formato | `UnsupportedFormat` |
 | Descriptor delay-import com atributos diferentes de `0x1` | `UnsupportedMechanism` |
+| Versão/opcode futuro de `UNWIND_INFO` estruturalmente válido | `UnsupportedMechanism` |
+| Tabela `.pdata`/`.xdata`, RVA, código ou cadeia de unwind inválidos | `Malformed` |
 
 O CLI expõe o leitor via `--trace` (eventos do componente `pe`, ver `docs/diagnostico.md`) e via resumo em `stderr`. A saída do leitor é comparada em teste de integração com `llvm-readobj` para as fixtures geradas.
+
+O contrato de desempilhamento e as quatro APIs `Rtl*` promovidas ficam em
+[`arquitetura/unwinding-x64.md`](arquitetura/unwinding-x64.md). O runtime não
+despacha exceções nem executa handlers nesta fase.
 
 ## Mapeamento de imagem (Fase 2)
 
