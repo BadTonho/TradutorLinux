@@ -14,6 +14,7 @@ enum class ParseStatus {
     Malformed,
     UnsupportedArchitecture,
     UnsupportedFormat,
+    UnsupportedMechanism,
 };
 
 struct SectionInfo {
@@ -67,6 +68,10 @@ struct PeInfo {
     std::uint32_t delay_import_directory_size{};
     std::vector<SectionInfo> sections;
     std::vector<ImportedDll> imports;
+    // Imports descritos por IMAGE_DIRECTORY_ENTRY_DELAY_IMPORT. Eles mantêm
+    // o mesmo contrato de símbolo/IAT dos imports estáticos, mas são
+    // identificados separadamente pelo resolvedor e pelo diagnóstico.
+    std::vector<ImportedDll> delay_imports;
     std::vector<BaseRelocBlock> relocations;
 };
 

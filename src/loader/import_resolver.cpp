@@ -44,23 +44,20 @@ void fail(ResolveResult& result, ResolvedImport& entry, const ImportStatus statu
     entry.detail = std::move(detail);
     if (result.status == ImportStatus::Resolved) {
         result.status = status;
-        result.error_message = entry.dll + "!" + entry.symbol + ": " + entry.detail;
+        const std::string symbol = entry.by_ordinal
+                                       ? "ordinal(" + std::to_string(entry.ordinal) + ")"
+                                       : entry.symbol;
+        result.error_message = entry.dll + "!" + symbol + ": " + entry.detail;
     }
 }
 
-}  // namespace
-
-ResolveResult resolve_imports(MappedImage& image, const pe::PeInfo& info) {
-    ResolveResult result;
-    if (info.delay_import_directory_size != 0) {
-        result.status = ImportStatus::UnsupportedMechanism;
-        result.error_message = "delay import não suportado (diretório presente)";
-        return result;
-    }
-    for (const pe::ImportedDll& dll : info.imports) {
+void inspect_group(ResolveResult& result, const std::vector<pe::ImportedDll>& dlls,
+                   const ImportMechanism mechanism) {
+    for (const pe::ImportedDll& dll : dlls) {
         for (const pe::ImportedSymbol& symbol : dll.symbols) {
             ResolvedImport entry;
             entry.dll = dll.name;
+            entry.mechanism = mechanism;
             entry.by_ordinal = symbol.by_ordinal;
             entry.symbol = symbol.by_ordinal ? std::string{} : symbol.name;
             entry.ordinal = symbol.by_ordinal ? symbol.ordinal : 0;
@@ -91,11 +88,29 @@ ResolveResult resolve_imports(MappedImage& image, const pe::PeInfo& info) {
                 continue;
             }
             entry.address = lookup.address;
-            patch_address(image, entry);
-            if (entry.status != ImportStatus::Resolved) {
-                fail(result, entry, entry.status, entry.detail);
-            }
             result.imports.push_back(std::move(entry));
+        }
+    }
+}
+
+}  // namespace
+
+ResolveResult inspect_imports(const pe::PeInfo& info) {
+    ResolveResult result;
+    inspect_group(result, info.imports, ImportMechanism::Static);
+    inspect_group(result, info.delay_imports, ImportMechanism::Delay);
+    return result;
+}
+
+ResolveResult resolve_imports(MappedImage& image, const pe::PeInfo& info) {
+    ResolveResult result = inspect_imports(info);
+    for (ResolvedImport& entry : result.imports) {
+        if (entry.status != ImportStatus::Resolved) {
+            continue;
+        }
+        patch_address(image, entry);
+        if (entry.status != ImportStatus::Resolved) {
+            fail(result, entry, entry.status, entry.detail);
         }
     }
     return result;

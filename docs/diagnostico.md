@@ -36,10 +36,12 @@ Exemplo atual:
 
 ## Eventos do componente `imports`
 
-O resolvedor da Fase 3 emite um evento `resolved` por importação resolvida (`dll`, `symbol` — nome ou `ordinal(N)` — e `address`):
+O resolvedor emite um evento `resolved` por importação resolvida (`dll`,
+`symbol` — nome ou `ordinal(N)` —, `address` e `mechanism`). O mecanismo é
+`import` para a tabela estática e `delay-import` para a tabela atrasada:
 
 ```text
-[tl][imports][info] resolved dll="KERNEL32.dll" symbol="WriteFile" address="0x..."
+[tl][imports][info] resolved dll="KERNEL32.dll" symbol="WriteFile" address="0x..." mechanism="import"
 ```
 
 As chamadas de console são registradas pelo componente `runtime` com os
@@ -88,10 +90,10 @@ O modo `--report` produz um relatório textual em stdout sem executar o entry
 point. Cada import aparece com seu estado, seguido de `result: supported` ou
 `result: unsupported` e `execution: not-attempted`.
 
-Quando uma importação não pode ser resolvida, emite um evento `unresolved` com os campos `dll`, `symbol`, `status` e `detail`:
+Quando uma importação não pode ser resolvida, emite um evento `unresolved` com os campos `dll`, `symbol`, `status`, `detail` e `mechanism`:
 
 ```text
-[tl][imports][error] unresolved dll="USER32.dll" symbol="MessageBoxA" status="unknown-dll" detail="módulo não registrado"
+[tl][imports][error] unresolved dll="USER32.dll" symbol="MessageBoxA" status="unknown-dll" detail="módulo não registrado" mechanism="delay-import"
 ```
 
 Os valores possíveis de `status` são:
@@ -102,7 +104,7 @@ Os valores possíveis de `status` são:
 | `unknown-symbol` | DLL conhecida, símbolo não exportado. |
 | `unknown-ordinal` | DLL conhecida, ordinal não exportado. |
 | `not-implemented` | Símbolo conhecido, sem implementação no runtime. |
-| `unsupported-mechanism` | Mecanismo ainda não suportado (ex.: delay imports, IAT fora das seções). |
+| `unsupported-mechanism` | Mecanismo ainda não suportado (ex.: slot da IAT fora das seções). |
 
 Quando qualquer importação falha, a resolução inteira falha e o processo não tem entry point executado; o runtime retorna `5` (`Unsupported`). Mesmo na falha, todas as entradas são reportadas para que o diagnóstico seja completo.
 
@@ -262,7 +264,7 @@ TEB (fixtures sem CRT) não é afetado.
 
 ## Eventos do componente `pe`
 
-O leitor da Fase 1 emite um evento `image` com os campos `format`, `arch`, `entry`, `image-base`, `size-of-image` e `sections`, seguido de um evento `section` por seção (`index`, `name`, `virtual-address`, `virtual-size`, `raw-pointer`, `raw-size`, `characteristics`), um evento `import` por DLL (`dll`, `symbols`) e um evento `relocations` (`blocks`, `entries`).
+O leitor emite um evento `image` com os campos `format`, `arch`, `entry`, `image-base`, `size-of-image` e `sections`, seguido de um evento `section` por seção (`index`, `name`, `virtual-address`, `virtual-size`, `raw-pointer`, `raw-size`, `characteristics`), um evento `import` por DLL estática, um evento `delay-import` por DLL atrasada (ambos com `dll`, `symbols`) e um evento `relocations` (`blocks`, `entries`).
 
 Em nível `debug`, cada bloco de base relocation é registrado com `page-rva` e `entries`.
 
@@ -272,7 +274,7 @@ Quando o arquivo não é um PE32+ aceitável, o leitor emite:
 [tl][pe][error] parse-failed status="truncated" detail="arquivo menor que o cabeçalho DOS (64 bytes)"
 ```
 
-Os valores possíveis de `status` são `truncated`, `malformed`, `unsupported-architecture` e `unsupported-format`. O campo `detail` informa a condição específica rejeitada. A partir da Fase 1, um arquivo de entrada regular que não seja PE válido retorna o código `4` (`MalformedPe`); o código `5` (`Unsupported`) fica reservado para arquivos PE válidos mas incompatíveis (arquitetura ou formato).
+Os valores possíveis de `status` são `truncated`, `malformed`, `unsupported-architecture`, `unsupported-format` e `unsupported-mechanism`. O campo `detail` informa a condição específica rejeitada. Um arquivo de entrada regular que não seja PE válido retorna o código `4` (`MalformedPe`); o código `5` (`Unsupported`) fica reservado para PE válido incompatível ou mecanismo válido ainda não suportado, como delay-import fora do formato RVA adotado.
 
 ## Eventos do componente `loader`
 

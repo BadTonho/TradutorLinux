@@ -18,6 +18,11 @@ enum class ImportStatus {
     UnsupportedMechanism,
 };
 
+enum class ImportMechanism {
+    Static,
+    Delay,
+};
+
 struct ResolvedImport {
     std::string dll;
     bool by_ordinal{};
@@ -27,6 +32,7 @@ struct ResolvedImport {
     std::uintptr_t address{};
     ImportStatus status{ImportStatus::Resolved};
     std::string detail;
+    ImportMechanism mechanism{ImportMechanism::Static};
 };
 
 struct ResolveResult {
@@ -34,6 +40,10 @@ struct ResolveResult {
     std::string error_message;
     std::vector<ResolvedImport> imports;
 };
+
+// Inspeciona imports estáticos e atrasados contra o registro de módulos sem
+// alterar a imagem. É a fonte única para o modo --report e para o resolvedor.
+[[nodiscard]] ResolveResult inspect_imports(const pe::PeInfo& info);
 
 // Resolves every import of the image and writes the resolved addresses into the
 // import address table of the mapped memory. The image must already be mapped

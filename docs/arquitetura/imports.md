@@ -4,9 +4,9 @@ Este documento descreve o contrato do resolvedor de imports, o registro de módu
 
 ## Visão geral
 
-1. `pe::parse_pe` lê a import table e entrega `PeInfo::imports` (DLLs com símbolos por nome ou por ordinal) e, para cada símbolo, o RVA do slot correspondente na IAT (`ImportedSymbol::iat_rva`).
+1. `pe::parse_pe` lê a import table em `PeInfo::imports` e a delay import table em `PeInfo::delay_imports`. Ambas entregam DLLs com símbolos por nome ou ordinal e o RVA do slot correspondente na IAT (`ImportedSymbol::iat_rva`).
 2. `loader::prepare_process` mapeia a imagem (`map_image`), resolve os imports (`resolve_imports`) e prepara a pilha do thread inicial.
-3. Para cada símbolo, o resolvedor procura a DLL no registro de módulos internos; quando encontra, grava o endereço do export no slot da IAT (`write_image_bytes`), relaxando e restaurando as permissões das páginas cobertoras.
+3. `inspect_imports` classifica as duas tabelas sem alterar a imagem; `--report` usa esse resultado. Para cada símbolo resolvido, `resolve_imports` grava o endereço do export no slot da IAT (`write_image_bytes`), relaxando e restaurando as permissões das páginas cobertoras.
 4. Se qualquer importação falhar, o status geral da resolução falha, o entry point não é executado e o runtime retorna `5` (`Unsupported`).
 
 O registro de módulos é populado por `loader::register_builtin_modules()` antes do `prepare_process`. O CLI o chama automaticamente; os testes de unidade controlam o registro explicitamente (`register_module`/`clear_modules`).
@@ -59,17 +59,35 @@ Assinaturas hospedadas:
 - `mprotect` das páginas cobertoras para `PROT_READ | PROT_WRITE`, grava, e restaura as permissões da região.
 - Falha de `mprotect` → `MprotectFailed`.
 
-O resolvedor serializa o endereço do export em little-endian de 8 bytes e o grava no slot `iat_rva` de cada símbolo. A IAT nunca fica gravável após a resolução.
+O resolvedor serializa o endereço do export em little-endian de 8 bytes e o grava no slot `iat_rva` de cada símbolo estático ou atrasado. A IAT nunca fica gravável após a resolução.
+
+## Delay imports
+
+O leitor aceita descritores de 32 bytes do diretório 13
+(`IMAGE_DIRECTORY_ENTRY_DELAY_IMPORT`) quando `grAttrs == 0x1` (`dlattrRva`).
+Nome da DLL, INT e IAT são obrigatórios, precisam caber na imagem/arquivo e a
+INT deve terminar em thunk nulo; símbolos por nome e por ordinal usam o mesmo
+formato PE32+ da import table normal. O terminador do diretório precisa ter os
+oito campos nulos.
+
+O runtime resolve a tabela de modo antecipado: antes de executar o entry point,
+substitui cada slot da delay IAT pelo export interno já registrado. Assim, a
+primeira chamada chega diretamente ao export, sem executar o helper de
+delay-load do Windows. `hmod`, binding e unload não são emulados nesta etapa.
+
+`ResolvedImport::mechanism` diferencia `Static` de `Delay`; o trace usa
+`mechanism="import"` ou `mechanism="delay-import"`, e o relatório separa as
+DLLs atrasadas, mas soma ambos os grupos no percentual total.
 
 ## Status e diagnóstico
 
 `ImportStatus` (em `import_resolver.hpp`): `Resolved`, `UnknownDll`, `UnknownSymbol`, `UnknownOrdinal`, `NotImpl`, `UnsupportedMechanism`.
 
-O resolvedor reporta **todas** as entradas: para cada uma, um `ResolvedImport` com `dll`, `symbol`/`ordinal`, `iat_rva`, `address`, `status` e `detail`. O status geral (`ResolveResult::status`) reflete o primeiro problema encontrado e `error_message` resume a primeira falha. O evento `unresolved` no trace informa `status` e `detail` (ver `docs/diagnostico.md`).
+O resolvedor reporta **todas** as entradas: para cada uma, um `ResolvedImport` com `dll`, `mechanism`, `symbol`/`ordinal`, `iat_rva`, `address`, `status` e `detail`. O status geral (`ResolveResult::status`) reflete o primeiro problema encontrado e `error_message` resume a primeira falha. O evento `unresolved` no trace informa `status`, `detail` e `mechanism` (ver `docs/diagnostico.md`).
 
 ## Mecanismos fora de escopo
 
-- Delay imports: a presença do diretório de dados 13 (`IMAGE_DIRECTORY_ENTRY_DELAY_IMPORT`) torna a resolução `unsupported-mechanism`.
+- Delay imports com atributos diferentes de `grAttrs=0x1` continuam `unsupported-mechanism`. O helper de carregamento sob demanda e as semânticas de binding/unload não são executados: a resolução antecipada ignora essas tabelas.
 - Forwarders de export ainda não são resolvidos na resolução estática; somente exports diretos de módulos internos registrados são aceitos. Para carregamento dinâmico, `GetProcAddress` usa busca global (`find_export_global`) e suporta ordinais via `MAKEINTRESOURCE`.
 
 ### Carregamento dinâmico (Fase 12+)

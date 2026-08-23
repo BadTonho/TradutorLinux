@@ -80,6 +80,8 @@ struct BuildSpec {
     std::uint32_t number_of_rva_and_sizes{16};
     std::uint32_t import_rva{};
     std::uint32_t import_size{};
+    std::uint32_t delay_import_rva{};
+    std::uint32_t delay_import_size{};
     std::uint32_t reloc_rva{};
     std::uint32_t reloc_size{};
     std::vector<std::string> section_names{".text", ".rdata"};
@@ -137,6 +139,14 @@ inline std::vector<std::byte> build(const BuildSpec& spec) {
     if (spec.import_rva != 0 || spec.import_size != 0) {
         write_u32(out, opt_start + 112 + 8, spec.import_rva);
         write_u32(out, opt_start + 112 + 8 + 4, spec.import_size);
+    }
+    if (spec.delay_import_rva != 0 || spec.delay_import_size != 0) {
+        constexpr std::size_t kDelayImportDirectory = 13;
+        constexpr std::size_t kDataDirectorySize = 8;
+        write_u32(out, opt_start + 112 + kDelayImportDirectory * kDataDirectorySize,
+                  spec.delay_import_rva);
+        write_u32(out, opt_start + 112 + kDelayImportDirectory * kDataDirectorySize + 4,
+                  spec.delay_import_size);
     }
     if (spec.reloc_rva != 0 || spec.reloc_size != 0) {
         write_u32(out, opt_start + 112 + 40, spec.reloc_rva);
@@ -237,6 +247,69 @@ inline std::vector<std::byte> make_import_data(const std::vector<ImportSpec>& dl
         write_u32(data, descriptor_offset + 0, kImportDataRva + static_cast<std::uint32_t>(oft_offset));
         write_u32(data, descriptor_offset + 12, kImportDataRva + static_cast<std::uint32_t>(name_offset));
         write_u32(data, descriptor_offset + 16, kImportDataRva + static_cast<std::uint32_t>(iat_offset));
+    }
+    return data;
+}
+
+// Builds IMAGE_DELAYLOAD_DESCRIPTOR entries and their INT/IAT/name data. The
+// descriptors use dlattrRva (0x1), the representation emitted by current
+// x64 linkers and supported by the runtime.
+inline std::vector<std::byte> make_delay_import_data(const std::vector<ImportSpec>& dlls) {
+    constexpr std::size_t kDelayDescriptorSize = 32;
+    constexpr std::uint32_t kDelayImportAttrRva = 0x1;
+    constexpr std::uint64_t kOrdinalFlag = 0x8000000000000000ULL;
+
+    std::vector<std::byte> data((dlls.size() + 1) * kDelayDescriptorSize, std::byte{0});
+    for (std::size_t dll_index = 0; dll_index < dlls.size(); ++dll_index) {
+        const ImportSpec& spec = dlls[dll_index];
+        const std::size_t descriptor_offset = dll_index * kDelayDescriptorSize;
+        const std::size_t symbol_count = spec.symbols_by_name.size() + spec.ordinals.size();
+
+        const std::size_t module_handle_offset = data.size();
+        push_u64(data, 0);
+        const std::size_t int_offset = data.size();
+        for (std::size_t index = 0; index < symbol_count + 1; ++index) {
+            push_u64(data, 0);
+        }
+        const std::size_t iat_offset = data.size();
+        for (std::size_t index = 0; index < symbol_count + 1; ++index) {
+            push_u64(data, 0);
+        }
+
+        std::vector<std::size_t> hint_offsets;
+        for (const std::string& name : spec.symbols_by_name) {
+            hint_offsets.push_back(data.size());
+            push_u16(data, 0);
+            push_cstr(data, name.c_str());
+        }
+        const std::size_t name_offset = data.size();
+        push_cstr(data, spec.dll.c_str());
+
+        for (std::size_t symbol_index = 0; symbol_index < spec.symbols_by_name.size();
+             ++symbol_index) {
+            const std::uint64_t value =
+                static_cast<std::uint64_t>(kImportDataRva) + hint_offsets[symbol_index];
+            write_u64(data, int_offset + symbol_index * 8, value);
+            write_u64(data, iat_offset + symbol_index * 8, value);
+        }
+        for (std::size_t ordinal_index = 0; ordinal_index < spec.ordinals.size();
+             ++ordinal_index) {
+            const std::size_t symbol_index = spec.symbols_by_name.size() + ordinal_index;
+            const std::uint64_t value =
+                kOrdinalFlag | static_cast<std::uint64_t>(spec.ordinals[ordinal_index]);
+            write_u64(data, int_offset + symbol_index * 8, value);
+            write_u64(data, iat_offset + symbol_index * 8, value);
+        }
+
+        write_u32(data, descriptor_offset, kDelayImportAttrRva);
+        write_u32(data, descriptor_offset + 4,
+                  kImportDataRva + static_cast<std::uint32_t>(name_offset));
+        write_u32(data, descriptor_offset + 8,
+                  kImportDataRva + static_cast<std::uint32_t>(module_handle_offset));
+        write_u32(data, descriptor_offset + 12,
+                  kImportDataRva + static_cast<std::uint32_t>(iat_offset));
+        write_u32(data, descriptor_offset + 16,
+                  kImportDataRva + static_cast<std::uint32_t>(int_offset));
     }
     return data;
 }

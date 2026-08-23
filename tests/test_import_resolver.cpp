@@ -108,6 +108,24 @@ protected:
         return resolve_imports(mapped, parse_result.info);
     }
 
+    ResolveResult resolve_delay(const std::vector<ImportSpec>& dlls) {
+        const std::vector<std::byte> data = make_delay_import_data(dlls);
+        BuildSpec spec;
+        spec.section_data.push_back({});
+        spec.section_data.push_back(data);
+        spec.delay_import_rva = kImportDataRva;
+        spec.delay_import_size = static_cast<std::uint32_t>((dlls.size() + 1) * 32);
+        add_empty_reloc(spec);
+        const std::vector<std::byte> bytes = build(spec);
+        const pe::ParseResult parse_result = pe::parse_pe(bytes);
+        EXPECT_EQ(parse_result.status, pe::ParseStatus::Success) << parse_result.error_message;
+        MapResult map_result = map_image(parse_result.info, bytes,
+                                         {.preferred_base = kTestPreferredBase});
+        EXPECT_EQ(map_result.status, MapStatus::Success);
+        mapped = std::move(map_result.image);
+        return resolve_imports(mapped, parse_result.info);
+    }
+
     MappedImage mapped;
 };
 
@@ -223,31 +241,29 @@ TEST_F(ImportResolverTest, ReportsEveryFailureAndKeepsFirstAsOverall) {
     EXPECT_EQ(result.imports[1].status, ImportStatus::UnknownSymbol);
 }
 
-TEST_F(ImportResolverTest, RejectsDelayImportDirectory) {
-    const std::vector<std::byte> data = make_import_data({{"FAKE.dll", {"DoWork"}, {}}});
-    BuildSpec spec;
-    spec.section_data.push_back({});
-    spec.section_data.push_back(data);
-    spec.import_rva = kImportDataRva;
-    spec.import_size = 40;
-    add_empty_reloc(spec);
-    std::vector<std::byte> bytes = build(spec);
-    // Diretório de dados 13 (delay import): entrada com RVA não nulo.
-    constexpr std::size_t kOptionalStart = 0x58;
-    constexpr std::size_t kDirectorySize = 8;
-    write_u32(bytes, kOptionalStart + 112 + 13 * kDirectorySize, kImportDataRva);
-    write_u32(bytes, kOptionalStart + 112 + 13 * kDirectorySize + 4, kDirectorySize);
+TEST_F(ImportResolverTest, ResolvesDelayImportsAndWritesIat) {
+    const ResolveResult result = resolve_delay({{"FAKE.dll", {"DoWork"}, {}}});
 
-    const pe::ParseResult parse_result = pe::parse_pe(bytes);
-    ASSERT_EQ(parse_result.status, pe::ParseStatus::Success);
-    MapResult map_result = map_image(parse_result.info, bytes,
-                                     {.preferred_base = kTestPreferredBase});
-    ASSERT_EQ(map_result.status, MapStatus::Success);
-    mapped = std::move(map_result.image);
+    ASSERT_EQ(result.status, ImportStatus::Resolved);
+    ASSERT_EQ(result.imports.size(), 1U);
+    const ResolvedImport& entry = result.imports[0];
+    EXPECT_EQ(entry.mechanism, ImportMechanism::Delay);
+    EXPECT_EQ(entry.dll, "FAKE.dll");
+    EXPECT_EQ(entry.symbol, "DoWork");
+    EXPECT_EQ(entry.status, ImportStatus::Resolved);
+    EXPECT_EQ(read_le_u64(mapped, entry.iat_rva), entry.address);
+}
 
-    const ResolveResult result = resolve_imports(mapped, parse_result.info);
-    EXPECT_EQ(result.status, ImportStatus::UnsupportedMechanism);
-    EXPECT_TRUE(result.imports.empty());
+TEST_F(ImportResolverTest, ReportsEveryUnresolvedDelayImport) {
+    const ResolveResult result = resolve_delay(
+        {{"MISSING.dll", {"Nope"}, {}}, {"FAKE.dll", {"Missing"}, {}}});
+
+    EXPECT_EQ(result.status, ImportStatus::UnknownDll);
+    ASSERT_EQ(result.imports.size(), 2U);
+    EXPECT_EQ(result.imports[0].mechanism, ImportMechanism::Delay);
+    EXPECT_EQ(result.imports[0].status, ImportStatus::UnknownDll);
+    EXPECT_EQ(result.imports[1].mechanism, ImportMechanism::Delay);
+    EXPECT_EQ(result.imports[1].status, ImportStatus::UnknownSymbol);
 }
 
 TEST_F(ImportResolverTest, EmptyImportsResolveCleanly) {
@@ -294,6 +310,22 @@ TEST_F(ImportResolverTest, RestoresIatPagePermissionsAfterPatch) {
     EXPECT_EQ(mapped.regions[1].permissions, SectionPermissions::ReadOnly);
     const std::uintptr_t page_address = static_cast<std::uintptr_t>(
         mapped.base + static_cast<std::uint64_t>(align_page_down(result.imports[0].iat_rva, page)));
+    EXPECT_EQ(maps_permissions_for(page_address), "r--p");
+}
+
+TEST_F(ImportResolverTest, RestoresDelayIatPagePermissionsAfterPatch) {
+    const ResolveResult result = resolve_delay({{"FAKE.dll", {"DoWork"}, {}}});
+
+    ASSERT_EQ(result.status, ImportStatus::Resolved);
+    ASSERT_EQ(result.imports.size(), 1U);
+
+    const long page_value = sysconf(_SC_PAGESIZE);
+    const std::uint32_t page =
+        page_value > 0 ? static_cast<std::uint32_t>(page_value) : 0x1000U;
+    EXPECT_EQ(mapped.regions[1].permissions, SectionPermissions::ReadOnly);
+    const std::uintptr_t page_address = static_cast<std::uintptr_t>(
+        mapped.base + static_cast<std::uint64_t>(
+                          align_page_down(result.imports[0].iat_rva, page)));
     EXPECT_EQ(maps_permissions_for(page_address), "r--p");
 }
 

@@ -19,6 +19,7 @@ Esta matriz declara o comportamento suportado; ela não é uma promessa de compa
 | `tl_gdi.exe` | PE32+ AMD64 | Não | `KERNEL32.dll!ExitProcess`, `USER32.dll!RegisterClassExA`, `CreateWindowExA`, `ShowWindow`, `UpdateWindow`, `GetMessageA`, `DispatchMessageA`, `DefWindowProcA`, `DestroyWindow`, `PostQuitMessage`, `BeginPaint`, `EndPaint`; `GDI32.dll!GetStockObject`, `TextOutA` | Pintura mínima no `WM_PAINT` (`BeginPaint`/`TextOutA`/`EndPaint`) validando `HDC == HWND` e `rcPaint`; executado sob Xvfb (cenário `gdi`, exit-code `3`) | Fase 7 |
 | `tl_reloc.exe` | PE32+ AMD64 | Não | Nenhum | Gerado com `-Wl,--dynamicbase`, verificado, parseado e mapeado na Fase 2; usado para validar base relocations | Fase 4 |
 | `tl_missing_dll.exe` | PE32+ AMD64 | Não | `USER32.dll!TlUnknownSymbolW` | Gerado, verificado e rejeitado na Fase 3: `USER32.dll` é conhecida, mas o símbolo diagnostica `unknown-symbol`; retorna `5` sem executar o entry point. A import library do fixture é gerada via `dlltool` (`defs/tl_missing_dll.def`) porque o símbolo não existe nas bibliotecas reais do mingw | Fase 4 |
+| `tl_delay_import.exe` | PE32+ AMD64 | Não | `KERNEL32.dll!ExitProcess` somente no diretório delay-import | **Suportado:** descritor `grAttrs=0x1`, INT/IAT atrasadas e resolução antecipada; `--report` resolve 1/1 e a execução chama `ExitProcess` pela IAT atrasada. A variante com `TlMissingDelayImportW` retorna `5` antes do entry point e identifica `mechanism="delay-import"` | Delay imports RVA |
 | `tl_crash.exe` | PE32+ AMD64 | Não | Nenhum | Gerado, verificado, mapeado e executado em processo filho isolado: o convidado acessa o endereço `0`, o hospedeiro observa o `SIGSEGV` via `waitpid`, emite `terminated category="guest-signal" signal="SIGSEGV" fault-address="0x0"` (o crash log captura o `si_addr` no filho e o converte em RVA/seção/importação quando o endereço cai dentro da imagem) e retorna `71` (`GuestFault`) | Diagnóstico de falhas |
 | `tl_hang.exe` | PE32+ AMD64 | Não | Nenhum | Gerado, verificado e executado em processo filho isolado com `--timeout 1`: o convidado entra em loop infinito, o hospedeiro o mata com `SIGKILL`, emite `terminated category="guest-timeout"` e retorna `72` (`GuestTimeout`) | Diagnóstico de falhas |
 | `tl_thread.exe` | PE32+ AMD64 | Não | `KERNEL32.dll!CloseHandle`, `CreateThread`, `ExitProcess`, `ExitThread`, `GetStdHandle`, `WaitForSingleObject`, `WriteFile` | **Suportado no escopo da Fase 11**: cria duas threads sequenciais, cada uma escreve "Thread done" e termina via `ExitThread`; a thread principal aguarda cada handle, escreve "Main done" e encerra. Metadata e execução e2e passam em Debug, Release e Sanitize (`LSAN_OPTIONS=detect_leaks=0`); saída esperada: `Thread done\nThread done\nMain done\n` e exit `0` | Fase 11 |
@@ -49,6 +50,8 @@ O leitor de PE (`include/tradutorlinux/pe/pe_reader.hpp`, `src/pe/pe_reader.cpp`
 - DOS header, assinatura PE, COFF header e optional header PE32+ (magic `0x20B`).
 - Tabela de seções, com verificação de que headers e dados crus cabem no arquivo.
 - Import table por nome (hint) e por ordinal, com limites de DLLs e símbolos.
+- Delay import table (`IMAGE_DIRECTORY_ENTRY_DELAY_IMPORT`) por nome e ordinal,
+  quando os descritores usam RVAs (`grAttrs=0x1`).
 - Base relocations por bloco e entrada.
 
 Comportamento de rejeição:
@@ -59,6 +62,7 @@ Comportamento de rejeição:
 | Assinatura DOS/PE ausente, offsets inconsistentes, tamanhos inválidos | `Malformed` |
 | Arquitetura diferente de `x86-64` (machine `0x8664`) | `UnsupportedArchitecture` |
 | Optional header PE32 (magic `0x10B`) ou outro formato | `UnsupportedFormat` |
+| Descriptor delay-import com atributos diferentes de `0x1` | `UnsupportedMechanism` |
 
 O CLI expõe o leitor via `--trace` (eventos do componente `pe`, ver `docs/diagnostico.md`) e via resumo em `stderr`. A saída do leitor é comparada em teste de integração com `llvm-readobj` para as fixtures geradas.
 
@@ -80,7 +84,7 @@ O CLI emite eventos `loader` no trace (ver `docs/diagnostico.md`) ou um resumo e
 
 ## Resolução de imports (Fase 3)
 
-O resolvedor (`include/tradutorlinux/loader/import_resolver.hpp`, `src/loader/import_resolver.cpp`) percorre a import table do PE, procura cada DLL no registro de módulos internos e grava o endereço resolvido no slot correspondente da IAT da imagem mapeada. Os módulos internos registrados embutidos são declarados em `include/tradutorlinux/loader/module.hpp` e `src/loader/module.cpp`; o contrato (registro, tabela de exports, ordinais internos, ABI) está em `docs/arquitetura/imports.md`.
+O resolvedor (`include/tradutorlinux/loader/import_resolver.hpp`, `src/loader/import_resolver.cpp`) percorre as import tables estática e atrasada do PE, procura cada DLL no registro de módulos internos e grava o endereço resolvido no slot correspondente da IAT da imagem mapeada. Os módulos internos registrados embutidos são declarados em `include/tradutorlinux/loader/module.hpp` e `src/loader/module.cpp`; o contrato (registro, tabela de exports, ordinais internos, ABI) está em `docs/arquitetura/imports.md`.
 
 O contexto mínimo de processo (`include/tradutorlinux/loader/process.hpp`, `src/loader/process.cpp`) mapeia a imagem, resolve imports e prepara a pilha do thread inicial com guard page; o entry point nunca é executado nesta fase.
 
@@ -92,7 +96,7 @@ Comportamento de rejeição:
 | Símbolo não exportado pela DLL | `unknown-symbol` | `5` |
 | Ordinal não exportado pela DLL | `unknown-ordinal` | `5` |
 | Símbolo conhecido sem implementação | `not-implemented` | `5` |
-| Delay import directory presente | `unsupported-mechanism` | `5` |
+| Descriptor delay-import com atributos não-RVA | `unsupported-mechanism` | `5` |
 | Slot da IAT fora das seções mapeadas | `unsupported-mechanism` | `5` |
 
 Em qualquer falha o entry point não é executado e todas as entradas são reportadas no trace (ver `docs/diagnostico.md`).

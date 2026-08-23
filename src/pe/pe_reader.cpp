@@ -21,6 +21,7 @@ constexpr std::size_t kOptionalHeader64BaseSize = 112;
 constexpr std::size_t kDataDirectoryCount = 16;
 constexpr std::size_t kDataDirectoryEntrySize = 8;
 constexpr std::size_t kImportDescriptorSize = 20;
+constexpr std::size_t kDelayImportDescriptorSize = 32;
 constexpr std::size_t kThunkEntrySize = 8;
 constexpr std::size_t kBaseRelocBlockHeaderSize = 8;
 constexpr std::size_t kBaseRelocEntrySize = 2;
@@ -37,6 +38,7 @@ struct RvaRange {
 };
 constexpr std::uint16_t kOptionalMagic32 = 0x10B;
 constexpr std::uint64_t kOrdinalFlag64 = 0x8000000000000000ULL;
+constexpr std::uint32_t kDelayImportAttrRva = 0x1;
 
 constexpr std::size_t kDirImport = 1;
 constexpr std::size_t kDirResource = 2;
@@ -301,6 +303,9 @@ public:
         if (auto error = parse_imports()) {
             return *error;
         }
+        if (auto error = parse_delay_imports()) {
+            return *error;
+        }
         if (auto error = parse_relocations()) {
             return *error;
         }
@@ -469,6 +474,161 @@ private:
         if (!descriptor_terminated) {
             return fail(ParseStatus::Malformed,
                         "diretório de imports sem descritor terminador");
+        }
+        return std::nullopt;
+    }
+
+    [[nodiscard]] std::optional<ParseResult> parse_delay_imports() {
+        if (parser_state_.delay_import_directory_rva == 0 &&
+            parser_state_.delay_import_directory_size == 0) {
+            return std::nullopt;
+        }
+        if (parser_state_.delay_import_directory_size < kDelayImportDescriptorSize) {
+            return fail(ParseStatus::Malformed,
+                        "diretório de delay imports menor que um descritor (32 bytes)");
+        }
+        const std::optional<std::size_t> directory = rva_to_file_offset(
+            {parser_state_.delay_import_directory_rva, parser_state_.delay_import_directory_size});
+        if (!directory.has_value()) {
+            return fail(ParseStatus::Malformed,
+                        "diretório de delay imports em RVA " +
+                            util::format_hex(parser_state_.delay_import_directory_rva) +
+                            " fora da imagem");
+        }
+
+        const std::size_t descriptor_limit =
+            std::min<std::size_t>(parser_state_.delay_import_directory_size /
+                                      kDelayImportDescriptorSize,
+                                  kMaxImportDlls);
+        bool descriptor_terminated = false;
+
+        for (std::size_t descriptor_index = 0; descriptor_index < descriptor_limit;
+             ++descriptor_index) {
+            const std::size_t descriptor_offset =
+                *directory + descriptor_index * kDelayImportDescriptorSize;
+            std::uint32_t attributes{};
+            std::uint32_t name_rva{};
+            std::uint32_t module_handle_rva{};
+            std::uint32_t iat_rva{};
+            std::uint32_t int_rva{};
+            std::uint32_t bound_iat_rva{};
+            std::uint32_t unload_iat_rva{};
+            std::uint32_t timestamp{};
+            reader_.read_u32(descriptor_offset, attributes);
+            reader_.read_u32(descriptor_offset + 4, name_rva);
+            reader_.read_u32(descriptor_offset + 8, module_handle_rva);
+            reader_.read_u32(descriptor_offset + 12, iat_rva);
+            reader_.read_u32(descriptor_offset + 16, int_rva);
+            reader_.read_u32(descriptor_offset + 20, bound_iat_rva);
+            reader_.read_u32(descriptor_offset + 24, unload_iat_rva);
+            reader_.read_u32(descriptor_offset + 28, timestamp);
+
+            if (attributes == 0 && name_rva == 0 && module_handle_rva == 0 &&
+                iat_rva == 0 && int_rva == 0 && bound_iat_rva == 0 &&
+                unload_iat_rva == 0 && timestamp == 0) {
+                descriptor_terminated = true;
+                break;
+            }
+            if (attributes != kDelayImportAttrRva) {
+                return fail(ParseStatus::UnsupportedMechanism,
+                            "atributos de delay import não suportados (esperado 0x1, índice " +
+                                std::to_string(descriptor_index) + ")");
+            }
+            if (name_rva == 0 || iat_rva == 0 || int_rva == 0) {
+                return fail(ParseStatus::Malformed,
+                            "descritor de delay import sem nome, INT ou IAT (índice " +
+                                std::to_string(descriptor_index) + ")");
+            }
+
+            const std::optional<std::size_t> name_offset = rva_to_file_offset({name_rva, 1});
+            if (!name_offset.has_value()) {
+                return fail(ParseStatus::Malformed,
+                            "nome de DLL de delay import em RVA " + util::format_hex(name_rva) +
+                                " fora da imagem");
+            }
+            const std::optional<std::string> dll_name = reader_.read_cstring(*name_offset);
+            if (!dll_name.has_value()) {
+                return fail(ParseStatus::Malformed,
+                            "nome de DLL de delay import sem terminação nula (RVA " +
+                                util::format_hex(name_rva) + ")");
+            }
+
+            const std::optional<std::size_t> thunk_table =
+                rva_to_file_offset({int_rva, kThunkEntrySize});
+            if (!thunk_table.has_value()) {
+                return fail(ParseStatus::Malformed,
+                            "tabela INT de delay import em RVA " + util::format_hex(int_rva) +
+                                " fora da imagem");
+            }
+
+            ImportedDll dll{.name = *dll_name, .symbols = {}};
+            bool thunk_terminated = false;
+            for (std::size_t symbol_index = 0; symbol_index < kMaxSymbolsPerDll;
+                 ++symbol_index) {
+                const std::size_t thunk_offset =
+                    *thunk_table + symbol_index * kThunkEntrySize;
+                if (!reader_.has_range(thunk_offset, kThunkEntrySize)) {
+                    break;
+                }
+                std::uint64_t thunk_value{};
+                reader_.read_u64(thunk_offset, thunk_value);
+                if (thunk_value == 0) {
+                    thunk_terminated = true;
+                    break;
+                }
+
+                const std::uint64_t iat_slot_rva =
+                    static_cast<std::uint64_t>(iat_rva) +
+                    static_cast<std::uint64_t>(symbol_index) * kThunkEntrySize;
+                if (iat_slot_rva > parser_state_.size_of_image ||
+                    iat_slot_rva + kThunkEntrySize > parser_state_.size_of_image ||
+                    !rva_to_file_offset({static_cast<std::uint32_t>(iat_slot_rva),
+                                         kThunkEntrySize})
+                         .has_value()) {
+                    return fail(ParseStatus::Malformed,
+                                "IAT de delay import em RVA " + util::format_hex(iat_slot_rva) +
+                                    " fora da imagem (DLL " + dll.name + ")");
+                }
+
+                ImportedSymbol symbol;
+                symbol.iat_rva = static_cast<std::uint32_t>(iat_slot_rva);
+                if ((thunk_value & kOrdinalFlag64) != 0) {
+                    symbol.by_ordinal = true;
+                    symbol.ordinal = static_cast<std::uint16_t>(thunk_value & 0xFFFFULL);
+                } else {
+                    if (thunk_value > UINT32_MAX) {
+                        return fail(ParseStatus::Malformed,
+                                    "nome de símbolo de delay import em RVA " +
+                                        util::format_hex(thunk_value) + " fora da imagem");
+                    }
+                    const std::optional<std::size_t> by_name_offset = rva_to_file_offset(
+                        {static_cast<std::uint32_t>(thunk_value), kImportByNameHintSize});
+                    if (!by_name_offset.has_value()) {
+                        return fail(ParseStatus::Malformed,
+                                    "nome de símbolo de delay import em RVA " +
+                                        util::format_hex(thunk_value) + " fora da imagem");
+                    }
+                    const std::optional<std::string> symbol_name = reader_.read_cstring(
+                        *by_name_offset + kImportByNameHintSize);
+                    if (!symbol_name.has_value()) {
+                        return fail(ParseStatus::Malformed,
+                                    "nome de símbolo de delay import sem terminação nula (RVA " +
+                                        util::format_hex(thunk_value) + ")");
+                    }
+                    symbol.name = *symbol_name;
+                }
+                dll.symbols.push_back(std::move(symbol));
+            }
+            if (!thunk_terminated) {
+                return fail(ParseStatus::Malformed,
+                            "tabela INT de delay import sem terminador nulo (DLL " + dll.name +
+                                ")");
+            }
+            parser_state_.delay_imports.push_back(std::move(dll));
+        }
+        if (!descriptor_terminated) {
+            return fail(ParseStatus::Malformed,
+                        "diretório de delay imports sem descritor terminador");
         }
         return std::nullopt;
     }

@@ -25,14 +25,14 @@ posterior.
 | Aplicativo | Imports resolvidos | Imports ausentes | Bloqueio adicional | Estado |
 |---|---:|---:|---|---|
 | `RobloxPlayerInstaller.exe` | 244/430 | 186 | — | `unsupported` |
-| `winrar-x64-723.exe` | 97/156 | 59 | `delay-import` | `unsupported` |
+| `winrar-x64-723.exe` | 147/251 | 104 | SEH/locale/GUI/segurança e APIs pendentes | `unsupported` |
 | `Creative_Cloud_Set-Up_7474.exe` | — | — | PE32 x86 (`0x14c`) | arquitetura não suportada |
 | `officedeploymenttool_20228-20124.exe` | — | — | PE32 x86 (`0x14c`) | arquitetura não suportada |
 | `Affinity x64.msix` | — | — | pacote MSIX; executável interno não localizado | formato não suportado |
 | `CapCut_7677236283084898320_installer.exe` | — | — | PE32 x86 (`0x14c`) | arquitetura não suportada |
 | `EpicInstaller-20.1.4-831cc1564f92442abc51fdb4a9854359.exe` | — | — | PE32 x86 (`0x14c`) + Mono/.NET | arquitetura/formato não suportados |
 | `lghub_installer.exe` | 67/114 | 47 | — | `unsupported` |
-| `Rockstar-Games-Launcher.exe` | 109/205 | 96 | `delay-import` | `unsupported` |
+| `Rockstar-Games-Launcher.exe` | 187/338 | 151 | SEH/locale/GUI/segurança/rede e APIs pendentes | `unsupported` |
 
 ## Recorrências observadas
 
@@ -43,7 +43,7 @@ posterior.
 | Locale, code pages, FLS e ambiente | WinRAR, Logitech G HUB, Rockstar | pendente |
 | Segurança, identidade e ACLs | Roblox, Logitech G HUB | pendente |
 | Pacote MSIX/AppX | Affinity | pendente |
-| `delay-import` | WinRAR, Rockstar | pendente |
+| `delay-import` | WinRAR, Rockstar | suportado para descritores RVA (`grAttrs=0x1`), com resolução antecipada |
 | Automação OLE | WinRAR, Rockstar | pendente |
 | HTTP WinINet | Rockstar | pendente |
 
@@ -62,7 +62,8 @@ Ordem de trabalho:
    relançamento no mesmo ambiente; o isolamento é funcional, não sandbox.
 2. [x] Um instalador PE32+ x86-64 de referência com fontes reproduzíveis,
    coberto por CTest, incluindo seleção explícita e ausência de candidatos.
-3. Leitura, relatório e resolução de `delay-import`.
+3. [x] Leitura, relatório e resolução antecipada de `delay-import` RVA, com
+   fixture `tl_delay_import.exe` e diagnóstico por símbolo.
 4. SEH/unwinding x64, locale/FLS/ambiente e os contratos de arquivo/processo
    recorrentes nos instaladores x64.
 5. Segurança/ACL, rede HTTP, automação OLE e controles somente quando o
@@ -353,30 +354,34 @@ contrato, fixture e regressão antes de ser promovido a suporte.
 | Formato | PE32+ GUI x86-64, 8 seções |
 | SHA-256 | `f435b24d4c2c5342c4f7c0143ef358f0f425b7b8a0972dd34d9dcf94789e9c4d` |
 | Imports estáticos | 156 em 3 DLLs |
-| Resolvidos pelo runtime | 97 |
-| Ausentes | 59 |
-| Mecanismo adicional | `delay-import` ainda não é suportado pelo loader |
+| Delay imports | 95 em 7 DLLs |
+| Resolvidos pelo runtime | 147/251 (98 estáticos + 49 atrasados) |
+| Ausentes | 104 (58 estáticos + 46 atrasados) |
+| Mecanismo adicional | `delay-import` RVA resolvido antecipadamente; helper/binding/unload não são emulados |
 | Resultado do `--report` | `unsupported`; `execution: not-attempted` |
 | Fonte | análise local de 2026-08-23 |
 
-O primeiro comando **Executar** no launcher terminou com exit code `5`; como o
-loader ainda rejeita `delay-import`, o entry point não foi alcançado. O relatório
-estático identifica a tabela normal de imports, mas a lista de símbolos da
-tabela de delay imports ainda não é exposta pelo runtime e precisa de suporte
-ao parser/relatório antes de poder ser inventariada.
+Após a reanálise somente com `--report`, os 95 símbolos atrasados são
+inventariados por DLL e 49 já são resolvidos. O executável não foi executado
+nesta etapa; ele permanece `unsupported` pelas dependências abaixo.
 
 ### Lacunas por módulo e mecanismo
 
 | DLL/mecanismo | APIs/ordinais ausentes |
 |---|---:|
-| `KERNEL32.dll` | 57 |
+| `KERNEL32.dll` | 56 |
 | `OLEAUT32.dll` | 2 |
 | `gdiplus.dll` | 0/8 |
-| `delay-import` | tabela presente; mecanismo não suportado |
+| delay `SHLWAPI.dll` | 1 |
+| delay `USER32.dll` | 22 |
+| delay `GDI32.dll` | 3 |
+| delay `ADVAPI32.dll` | 12 |
+| delay `SHELL32.dll` | 6 |
+| delay `ole32.dll` | 2 |
 
 ### Imports estáticos ausentes
 
-#### `KERNEL32.dll` (57)
+#### `KERNEL32.dll` (56)
 
 ```text
 CreateHardLinkW
@@ -386,7 +391,6 @@ GetShortPathNameW
 GetFileType
 SetFileAttributesW
 FoldStringW
-GetModuleFileNameW
 SetCurrentDirectoryW
 ExpandEnvironmentStringsW
 SetThreadExecutionState
@@ -448,14 +452,91 @@ ordinal(6)
 Os dois ordinais pertencem a uma DLL ainda não registrada. Eles devem ser
 identificados contra a ABI compatível antes de qualquer implementação.
 
+### Imports atrasados ausentes
+
+#### `SHLWAPI.dll` (1)
+
+```text
+SHAutoComplete
+```
+
+#### `USER32.dll` (22)
+
+```text
+IsDialogMessageW
+DialogBoxParamW
+SendDlgItemMessageW
+DestroyIcon
+EndDialog
+SetUserObjectInformationW
+GetSysColor
+WaitForInputIdle
+CopyImage
+FindWindowExW
+PeekMessageW
+MapWindowPoints
+CopyRect
+CharUpperW
+SetWindowLongW
+GetWindowLongW
+GetWindow
+GetWindowRect
+SetProcessDefaultLayout
+GetClassNameW
+SetDlgItemTextW
+GetDlgItem
+```
+
+#### `GDI32.dll` (3)
+
+```text
+StretchBlt
+GetObjectW
+CreateDIBSection
+```
+
+#### `ADVAPI32.dll` (12)
+
+```text
+FreeSid
+SetFileSecurityW
+InitializeSecurityDescriptor
+OpenProcessToken
+LookupPrivilegeValueW
+AdjustTokenPrivileges
+AllocateAndInitializeSid
+CheckTokenMembership
+SetSecurityDescriptorDacl
+GetTokenInformation
+CopySid
+SetEntriesInAclW
+```
+
+#### `SHELL32.dll` (6)
+
+```text
+SHGetFileInfoW
+SHGetPathFromIDListW
+SHBrowseForFolderW
+SHFileOperationW
+SHGetMalloc
+SHChangeNotify
+```
+
+#### `ole32.dll` (2)
+
+```text
+CreateStreamOnHGlobal
+CLSIDFromString
+```
+
 ### Próxima investigação
 
-Esta amostra reforça três capacidades que podem beneficiar outros aplicativos:
+Esta amostra reforça capacidades que podem beneficiar outros aplicativos:
 
-1. Leitura, resolução e diagnóstico detalhado de `delay-import`.
-2. Unwinding/SEH x64 (`Rtl*`, `UnhandledExceptionFilter`) e o caminho de
+1. Unwinding/SEH x64 (`Rtl*`, `UnhandledExceptionFilter`) e o caminho de
    exceções associado.
-3. Locale/console, FLS e operações de arquivo/ambiente, avaliadas junto com
+2. Locale/console, FLS e operações de arquivo/ambiente, avaliadas junto com
    outros alvos para evitar implementação exclusiva para o WinRAR.
 
 ## `Creative_Cloud_Set-Up_7474.exe` (Adobe Creative Cloud Set-Up 7474)
@@ -691,35 +772,43 @@ use, antes de ser considerada suporte ao instalador do Logitech.
 | Formato | PE32+ GUI x86-64, 6 seções |
 | SHA-256 | `c70131cb0427d146c9489297822e99ad87d4d5e141fd999d19f00975ab1a31f2` |
 | Imports estáticos | 205 em 5 DLLs |
-| Resolvidos pelo runtime | 109 |
-| Ausentes | 96 |
-| Mecanismo adicional | `delay-import` ainda não é suportado pelo loader |
+| Delay imports | 133 em 11 DLLs |
+| Resolvidos pelo runtime | 187/338 (110 estáticos + 77 atrasados) |
+| Ausentes | 151 (95 estáticos + 56 atrasados) |
+| Mecanismo adicional | `delay-import` RVA resolvido antecipadamente; helper/binding/unload não são emulados |
 | Resultado do `--report` | `unsupported`; `execution: not-attempted` |
 | Fonte | análise local de 2026-08-23 |
 
-O comando **Executar** terminou com exit code `5` antes do entry point. Além
-das lacunas em `KERNEL32`, o aplicativo requer controles comuns por ordinal,
-automação OLE, diálogo de impressão e uma camada HTTP WinINet.
+Após a reanálise somente com `--report`, os 133 símbolos atrasados são
+inventariados por DLL e 77 já são resolvidos. O executável não foi executado
+nesta etapa; além das lacunas em `KERNEL32`, ele requer controles comuns por
+ordinal, automação OLE, diálogo de impressão e uma camada HTTP WinINet.
 
 ### Lacunas por módulo e mecanismo
 
 | DLL/mecanismo | APIs/ordinais ausentes |
 |---|---:|
-| `KERNEL32.dll` | 75 |
+| `KERNEL32.dll` | 74 |
 | `COMDLG32.dll` | 1 |
 | `OLEAUT32.dll` | 7 |
 | `COMCTL32.dll` | 2 |
 | `WININET.dll` | 11 |
-| `delay-import` | tabela presente; mecanismo não suportado |
+| delay `USER32.dll` | 28 |
+| delay `GDI32.dll` | 6 |
+| delay `ADVAPI32.dll` | 12 |
+| delay `SHELL32.dll` | 2 |
+| delay `ole32.dll` | 1 |
+| delay `SHLWAPI.dll` | 2 |
+| delay `CRYPT32.dll` | 1 |
+| delay `WINTRUST.dll` | 4 |
 
 ### Imports estáticos ausentes
 
-#### `KERNEL32.dll` (75)
+#### `KERNEL32.dll` (74)
 
 ```text
 DecodePointer
 InitializeCriticalSectionEx
-GetModuleFileNameW
 GlobalAlloc
 GlobalLock
 LocalAlloc
@@ -843,9 +932,107 @@ loopback já existente. Seu suporte exige contratos de URL, proxy, TLS, handles,
 erros e I/O; nenhuma requisição de Internet será considerada suporte sem testes
 determinísticos locais.
 
+### Imports atrasados ausentes
+
+#### `USER32.dll` (28)
+
+```text
+DialogBoxParamW
+GetDesktopWindow
+GetNextDlgTabItem
+DestroyIcon
+DrawTextW
+GetWindowRect
+ReleaseCapture
+SetCapture
+GetCapture
+MessageBoxExW
+RedrawWindow
+GetFocus
+EmptyClipboard
+SetClipboardData
+CloseClipboard
+OpenClipboard
+GetDlgItem
+EndDialog
+BringWindowToTop
+CallWindowProcW
+MonitorFromWindow
+CopyImage
+SetWindowLongW
+GetWindowLongW
+DrawIconEx
+LoadImageW
+PtInRect
+ClientToScreen
+```
+
+#### `GDI32.dll` (6)
+
+```text
+GetTextExtentPoint32W
+AbortDoc
+EndPage
+StartPage
+EndDoc
+StartDocW
+```
+
+#### `ADVAPI32.dll` (12)
+
+```text
+RegDeleteTreeW
+RegEnumValueW
+RegEnumKeyExW
+RegDeleteKeyExW
+CreateWellKnownSid
+FreeSid
+BuildTrusteeWithSidW
+SetEntriesInAclW
+RegDeleteKeyW
+SetSecurityDescriptorDacl
+InitializeSecurityDescriptor
+AllocateAndInitializeSid
+```
+
+#### `SHELL32.dll` (2)
+
+```text
+SHBrowseForFolderW
+SHGetPathFromIDListW
+```
+
+#### `ole32.dll` (1)
+
+```text
+CreateStreamOnHGlobal
+```
+
+#### `SHLWAPI.dll` (2)
+
+```text
+PathStripToRootW
+ordinal(176)
+```
+
+#### `CRYPT32.dll` (1)
+
+```text
+CertGetNameStringW
+```
+
+#### `WINTRUST.dll` (4)
+
+```text
+WinVerifyTrust
+WTHelperGetProvCertFromChain
+WTHelperProvDataFromStateData
+WTHelperGetProvSignerFromChain
+```
+
 ### Próxima investigação
 
-Este caso aumenta a prioridade de `delay-import`, SEH x64 e locale/FLS. Para
-WinINet, OLE automation, controles comuns e impressão, a primeira entrega deve
+Este caso aumenta a prioridade de SEH x64 e locale/FLS. Para WinINet, OLE
+automation, controles comuns e impressão, a primeira entrega deve
 ser uma fixture genérica e reprodutível antes de qualquer tentativa de executar
 o Rockstar Launcher.

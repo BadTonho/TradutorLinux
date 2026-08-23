@@ -218,6 +218,8 @@ void write_install_trace(const bool enabled, std::ostream& stream,
             return "unsupported-architecture";
         case pe::ParseStatus::UnsupportedFormat:
             return "unsupported-format";
+        case pe::ParseStatus::UnsupportedMechanism:
+            return "unsupported-mechanism";
     }
     return "unknown";
 }
@@ -266,6 +268,21 @@ void write_pe_trace(std::ostream& stream, const pe::PeInfo& info) {
         diagnostics::write_trace(stream, diagnostics::TraceComponent::Pe,
                                  diagnostics::TraceLevel::Info, "import", fields);
     }
+    for (const pe::ImportedDll& dll : info.delay_imports) {
+        std::string symbols;
+        for (const pe::ImportedSymbol& symbol : dll.symbols) {
+            if (!symbols.empty()) {
+                symbols += ",";
+            }
+            symbols += symbol_label(symbol);
+        }
+        const std::array fields{
+            diagnostics::TraceField{"dll", dll.name},
+            diagnostics::TraceField{"symbols", symbols},
+        };
+        diagnostics::write_trace(stream, diagnostics::TraceComponent::Pe,
+                                 diagnostics::TraceLevel::Info, "delay-import", fields);
+    }
 
     std::size_t relocation_entries = 0;
     for (const pe::BaseRelocBlock& block : info.relocations) {
@@ -299,6 +316,13 @@ void print_pe_summary(std::ostream& stream, const pe::PeInfo& info) {
     }
     for (const pe::ImportedDll& dll : info.imports) {
         stream << "  imports " << dll.name << ':';
+        for (const pe::ImportedSymbol& symbol : dll.symbols) {
+            stream << ' ' << symbol_label(symbol);
+        }
+        stream << '\n';
+    }
+    for (const pe::ImportedDll& dll : info.delay_imports) {
+        stream << "  delay import " << dll.name << ":";
         for (const pe::ImportedSymbol& symbol : dll.symbols) {
             stream << ' ' << symbol_label(symbol);
         }
@@ -413,6 +437,10 @@ void print_map_summary(std::ostream& stream, const loader::MappedImage& image) {
     return entry.symbol;
 }
 
+[[nodiscard]] const char* import_mechanism_label(const loader::ImportMechanism mechanism) {
+    return mechanism == loader::ImportMechanism::Delay ? "delay-import" : "import";
+}
+
 void write_imports_trace(std::ostream& stream, const loader::ResolveResult& imports) {
     for (const loader::ResolvedImport& entry : imports.imports) {
         if (entry.status == loader::ImportStatus::Resolved) {
@@ -420,6 +448,7 @@ void write_imports_trace(std::ostream& stream, const loader::ResolveResult& impo
                 diagnostics::TraceField{"dll", entry.dll},
                 diagnostics::TraceField{"symbol", resolved_symbol_label(entry)},
                 diagnostics::TraceField{"address", util::format_hex(entry.address)},
+                diagnostics::TraceField{"mechanism", import_mechanism_label(entry.mechanism)},
             };
             diagnostics::write_trace(stream, diagnostics::TraceComponent::Imports,
                                      diagnostics::TraceLevel::Info, "resolved", fields);
@@ -429,6 +458,7 @@ void write_imports_trace(std::ostream& stream, const loader::ResolveResult& impo
                 diagnostics::TraceField{"symbol", resolved_symbol_label(entry)},
                 diagnostics::TraceField{"status", import_status_label(entry.status)},
                 diagnostics::TraceField{"detail", entry.detail},
+                diagnostics::TraceField{"mechanism", import_mechanism_label(entry.mechanism)},
             };
             diagnostics::write_trace(stream, diagnostics::TraceComponent::Imports,
                                      diagnostics::TraceLevel::Error, "unresolved", fields);
@@ -444,6 +474,9 @@ void print_imports_summary(std::ostream& stream, const loader::ResolveResult& im
     stream << "  imports resolvidos: " << resolved << "/" << imports.imports.size() << '\n';
     for (const loader::ResolvedImport& entry : imports.imports) {
         stream << "    " << entry.dll << '!' << resolved_symbol_label(entry);
+        if (entry.mechanism == loader::ImportMechanism::Delay) {
+            stream << " [delay-import]";
+        }
         if (entry.status == loader::ImportStatus::Resolved) {
             stream << " -> " << util::format_hex(entry.address) << '\n';
         } else {
@@ -452,78 +485,77 @@ void print_imports_summary(std::ostream& stream, const loader::ResolveResult& im
     }
 }
 
-void print_support_report(std::ostream& stream, const pe::PeInfo& info) {
-    bool supported = info.delay_import_directory_size == 0;
-    std::size_t total_imports = 0;
-    std::size_t resolved_imports = 0;
+void print_support_report_group(std::ostream& stream, const loader::ResolveResult& result,
+                                const loader::ImportMechanism mechanism) {
+    std::vector<std::string> dll_names;
+    for (const loader::ResolvedImport& entry : result.imports) {
+        if (entry.mechanism != mechanism ||
+            std::find(dll_names.begin(), dll_names.end(), entry.dll) != dll_names.end()) {
+            continue;
+        }
+        dll_names.push_back(entry.dll);
+    }
+    for (const std::string& dll_name : dll_names) {
+        std::size_t total = 0;
+        std::size_t resolved = 0;
+        for (const loader::ResolvedImport& entry : result.imports) {
+            if (entry.mechanism != mechanism || entry.dll != dll_name) {
+                continue;
+            }
+            ++total;
+            if (entry.status == loader::ImportStatus::Resolved) {
+                ++resolved;
+            }
+        }
+        stream << (mechanism == loader::ImportMechanism::Delay ? "delay-import dll: " : "dll: ")
+               << dll_name << " (" << resolved << '/' << total << " resolved)\n";
+        for (const loader::ResolvedImport& entry : result.imports) {
+            if (entry.mechanism != mechanism || entry.dll != dll_name) {
+                continue;
+            }
+            stream << "  import: " << resolved_symbol_label(entry)
+                   << " status=" << import_status_label(entry.status) << '\n';
+        }
+    }
+}
+
+[[nodiscard]] loader::ResolveResult print_support_report(std::ostream& stream,
+                                                          const pe::PeInfo& info) {
+    const loader::ResolveResult result = loader::inspect_imports(info);
+    const std::size_t total_imports = result.imports.size();
+    const std::size_t resolved_imports = static_cast<std::size_t>(std::count_if(
+        result.imports.begin(), result.imports.end(), [](const loader::ResolvedImport& entry) {
+            return entry.status == loader::ImportStatus::Resolved;
+        }));
+    const std::size_t delay_imports = static_cast<std::size_t>(std::count_if(
+        result.imports.begin(), result.imports.end(), [](const loader::ResolvedImport& entry) {
+            return entry.mechanism == loader::ImportMechanism::Delay;
+        }));
+    const std::size_t resolved_delay_imports = static_cast<std::size_t>(std::count_if(
+        result.imports.begin(), result.imports.end(), [](const loader::ResolvedImport& entry) {
+            return entry.mechanism == loader::ImportMechanism::Delay &&
+                   entry.status == loader::ImportStatus::Resolved;
+        }));
 
     stream << "TradutorLinux compatibility report\n";
     stream << "format: " << (info.is_pe32_plus ? "PE32+ x86-64" : "unsupported") << '\n';
     stream << "entry-point: " << util::format_hex(info.address_of_entry_point) << '\n';
-    if (info.delay_import_directory_size != 0) {
-        stream << "mechanism: delay-import status=unsupported\n";
+    if (delay_imports != 0) {
+        stream << "mechanism: delay-import (" << resolved_delay_imports << '/'
+               << delay_imports << " resolved)\n";
     }
-
-    for (const pe::ImportedDll& dll : info.imports) {
-        std::size_t dll_resolved = 0;
-        std::size_t dll_total = dll.symbols.size();
-        total_imports += dll_total;
-
-        for (const pe::ImportedSymbol& symbol : dll.symbols) {
-            loader::ImportStatus status = loader::ImportStatus::UnknownDll;
-            const bool forwarded_known = loader::is_module_registered_forwarded(dll.name);
-            if (loader::is_module_registered(dll.name) || forwarded_known) {
-                const loader::ExportLookup lookup =
-                    symbol.by_ordinal
-                        ? loader::find_export_by_ordinal_forwarded(dll.name, symbol.ordinal)
-                        : loader::find_export_forwarded(loader::ExportQuery{dll.name, symbol.name});
-                if (!lookup.found) {
-                    status = symbol.by_ordinal ? loader::ImportStatus::UnknownOrdinal
-                                               : loader::ImportStatus::UnknownSymbol;
-                } else if (lookup.address == 0) {
-                    status = loader::ImportStatus::NotImpl;
-                } else {
-                    status = loader::ImportStatus::Resolved;
-                }
-            }
-            if (status == loader::ImportStatus::Resolved) {
-                ++dll_resolved;
-                ++resolved_imports;
-            }
-            supported = supported && (status == loader::ImportStatus::Resolved);
-        }
-
-        stream << "dll: " << dll.name << " (" << dll_resolved << '/'
-               << dll_total << " resolved)\n";
-        for (const pe::ImportedSymbol& symbol : dll.symbols) {
-            const std::string label = symbol_label(symbol);
-            loader::ImportStatus status = loader::ImportStatus::UnknownDll;
-            const bool forwarded_known = loader::is_module_registered_forwarded(dll.name);
-            if (loader::is_module_registered(dll.name) || forwarded_known) {
-                const loader::ExportLookup lookup =
-                    symbol.by_ordinal
-                        ? loader::find_export_by_ordinal_forwarded(dll.name, symbol.ordinal)
-                        : loader::find_export_forwarded(loader::ExportQuery{dll.name, symbol.name});
-                if (!lookup.found) {
-                    status = symbol.by_ordinal ? loader::ImportStatus::UnknownOrdinal
-                                               : loader::ImportStatus::UnknownSymbol;
-                } else if (lookup.address == 0) {
-                    status = loader::ImportStatus::NotImpl;
-                } else {
-                    status = loader::ImportStatus::Resolved;
-                }
-            }
-            stream << "  import: " << label << " status=" << import_status_label(status)
-                   << '\n';
-        }
-    }
+    print_support_report_group(stream, result, loader::ImportMechanism::Static);
+    print_support_report_group(stream, result, loader::ImportMechanism::Delay);
 
     const std::size_t pct = total_imports > 0 ? (resolved_imports * 100 / total_imports) : 100;
-    stream << "result: " << (supported ? "supported" : "unsupported") << '\n';
+    stream << "result: "
+           << (result.status == loader::ImportStatus::Resolved ? "supported" : "unsupported")
+           << '\n';
     stream << "compatibility: " << pct << "% (" << resolved_imports << '/'
            << total_imports << " imports resolved)\n";
     stream << "execution: not-attempted\n";
     stream << "execution-result: not-attempted\n";
+    return result;
 }
 
 }  // namespace
@@ -1133,7 +1165,8 @@ ExitCode run_command(const CommandLine& command_line, std::ostream& stdout_strea
                                  {"app-id", installation_id}});
         }
         if (parse_result.status == pe::ParseStatus::UnsupportedArchitecture ||
-            parse_result.status == pe::ParseStatus::UnsupportedFormat) {
+            parse_result.status == pe::ParseStatus::UnsupportedFormat ||
+            parse_result.status == pe::ParseStatus::UnsupportedMechanism) {
             return ExitCode::Unsupported;
         }
         return ExitCode::MalformedPe;
@@ -1148,24 +1181,10 @@ ExitCode run_command(const CommandLine& command_line, std::ostream& stdout_strea
     loader::register_builtin_modules();
 
     if (effective_cmd.report_only) {
-        print_support_report(stdout_stream, parse_result.info);
-        const bool has_delay_imports = parse_result.info.delay_import_directory_size != 0;
-        bool all_imports_supported = !has_delay_imports;
-        for (const pe::ImportedDll& dll : parse_result.info.imports) {
-            for (const pe::ImportedSymbol& symbol : dll.symbols) {
-                const bool forwarded_known = loader::is_module_registered_forwarded(dll.name);
-                if (!loader::is_module_registered(dll.name) && !forwarded_known) {
-                    all_imports_supported = false;
-                    continue;
-                }
-                const loader::ExportLookup lookup =
-                    symbol.by_ordinal
-                        ? loader::find_export_by_ordinal_forwarded(dll.name, symbol.ordinal)
-                        : loader::find_export_forwarded(loader::ExportQuery{dll.name, symbol.name});
-                all_imports_supported = all_imports_supported && lookup.found && lookup.address != 0;
-            }
-        }
-        return all_imports_supported ? ExitCode::Success : ExitCode::Unsupported;
+        const loader::ResolveResult report_result =
+            print_support_report(stdout_stream, parse_result.info);
+        return report_result.status == loader::ImportStatus::Resolved ? ExitCode::Success
+                                                                       : ExitCode::Unsupported;
     }
 
     loader::PrepareResult prepare_result = loader::prepare_process(parse_result.info, *bytes);

@@ -50,8 +50,16 @@ Os itens marcados como concluídos devem ter evidência no repositório: código
   `--app-exe`, múltiplos/nenhum candidato e isolamento; `qt_launcher_smoke`
   cobre o botão **Instalar** e a atualização da biblioteca. O benchmark WinRAR
   permanece `unsupported`.
-- **Próximo resultado observável:** diagnosticar e resolver `delay-import` de
-  forma genérica, primeiro para reduzir a lacuna comum entre WinRAR e Rockstar.
+- **Marco concluído (Fase 13.2):** o leitor, `--report` e o resolvedor tratam
+  `IMAGE_DIRECTORY_ENTRY_DELAY_IMPORT` em descritores RVA (`grAttrs=0x1`),
+  classificam cada símbolo e preenchem a IAT antes do entry point. A fixture
+  reproduzível `tl_delay_import.exe` executa usando somente
+  `KERNEL32.dll!ExitProcess` atrasado; o caso de símbolo ausente retorna `5`
+  com diagnóstico `mechanism="delay-import"`. WinRAR e Rockstar foram
+  reanalisados apenas com `--report` e continuam `unsupported` pelas APIs
+  restantes.
+- **Próximo resultado observável:** implementar unwinding/SEH x64 reutilizável,
+  começando pela leitura de `.pdata`/`.xdata` e por uma fixture independente.
 
 ### Estudo de caso: `RobloxPlayerInstaller.exe` (benchmark de cobertura)
 
@@ -367,7 +375,7 @@ compatibilidade imediata com qualquer executável, jogo ou mecanismo protegido.
 - [x] Criar um prefixo exclusivo para cada instalação e propagá-lo de forma
   explícita ao runtime, ao catálogo e a todos os processos-filhos do
   instalador; o prefixo padrão compartilhado não é suficiente para este fluxo.
-- [ ] Implementar `delay-import` no leitor, relatório e resolvedor, com
+- [x] Implementar `delay-import` no leitor, relatório e resolvedor, com
   diagnóstico separado para cada símbolo atrasado.
 - [ ] Implementar em blocos reutilizáveis as dependências de instaladores x64
   reveladas pelo portfólio — primeiro SEH/unwinding, locale/FLS/ambiente e

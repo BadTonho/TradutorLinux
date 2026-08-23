@@ -69,6 +69,17 @@ std::vector<std::byte> make_reloc_pe() {
     return build(spec);
 }
 
+std::vector<std::byte> make_delay_import_pe() {
+    const std::vector<std::byte> data =
+        make_delay_import_data({{"FAKE.dll", {"PrintA"}, {5}}});
+    BuildSpec spec;
+    spec.section_names = {".text", ".didat"};
+    spec.section_data = {std::vector<std::byte>(0x10), data};
+    spec.delay_import_rva = kImportDataRva;
+    spec.delay_import_size = 64;
+    return build(spec);
+}
+
 std::vector<std::byte> read_file(const std::filesystem::path& path) {
     std::ifstream stream{path, std::ios::binary};
     std::vector<std::byte> bytes;
@@ -116,6 +127,55 @@ TEST(PeReaderTest, ParsesImportsByNameAndOrdinal) {
     EXPECT_EQ(dll.symbols[0].name, "PrintA");
     EXPECT_TRUE(dll.symbols[1].by_ordinal);
     EXPECT_EQ(dll.symbols[1].ordinal, 5);
+}
+
+TEST(PeReaderTest, ParsesDelayImportsByNameAndOrdinal) {
+    const std::vector<std::byte> bytes = make_delay_import_pe();
+
+    const ParseResult result = parse_pe(bytes);
+
+    ASSERT_EQ(result.status, ParseStatus::Success) << result.error_message;
+    EXPECT_TRUE(result.info.imports.empty());
+    ASSERT_EQ(result.info.delay_imports.size(), 1U);
+    const ImportedDll& dll = result.info.delay_imports[0];
+    EXPECT_EQ(dll.name, "FAKE.dll");
+    ASSERT_EQ(dll.symbols.size(), 2U);
+    EXPECT_FALSE(dll.symbols[0].by_ordinal);
+    EXPECT_EQ(dll.symbols[0].name, "PrintA");
+    EXPECT_TRUE(dll.symbols[1].by_ordinal);
+    EXPECT_EQ(dll.symbols[1].ordinal, 5);
+    EXPECT_NE(dll.symbols[0].iat_rva, 0U);
+}
+
+TEST(PeReaderTest, RejectsDelayImportDirectoryWithoutTerminator) {
+    std::vector<std::byte> bytes = make_delay_import_pe();
+    constexpr std::size_t kDelayDirectorySizeOffset = 0x58 + 112 + 13 * 8 + 4;
+    write_u32(bytes, kDelayDirectorySizeOffset, 32);
+
+    EXPECT_EQ(parse_pe(bytes).status, ParseStatus::Malformed);
+}
+
+TEST(PeReaderTest, RejectsDelayImportAttributesOutsideRvaForm) {
+    std::vector<std::byte> bytes = make_delay_import_pe();
+    write_u32(bytes, 0x400, 0);
+
+    EXPECT_EQ(parse_pe(bytes).status, ParseStatus::UnsupportedMechanism);
+}
+
+TEST(PeReaderTest, RejectsDelayImportNameIntAndIatOutsideImage) {
+    for (const std::size_t field_offset : {4U, 12U, 16U}) {
+        std::vector<std::byte> bytes = make_delay_import_pe();
+        write_u32(bytes, 0x400 + field_offset, 0x9000);
+        EXPECT_EQ(parse_pe(bytes).status, ParseStatus::Malformed);
+    }
+}
+
+TEST(PeReaderTest, RejectsDelayImportThunkTableWithoutTerminator) {
+    std::vector<std::byte> bytes = make_delay_import_pe();
+    write_u32(bytes, 0x400 + 16, 0x21F8);
+    write_u64(bytes, 0x400 + 0x1F8, 0x2000);
+
+    EXPECT_EQ(parse_pe(bytes).status, ParseStatus::Malformed);
 }
 
 TEST(PeReaderTest, RejectsImportDirectoryWithoutDescriptorTerminator) {

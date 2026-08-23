@@ -273,6 +273,37 @@ endfunction()
 
 add_custom_target(tradutorlinux_samples ALL)
 
+add_executable(tl_delay_import_generator
+    generate_delay_import_fixture.cpp
+)
+target_include_directories(tl_delay_import_generator PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/..")
+tl_enable_warnings(tl_delay_import_generator)
+
+set(TL_DELAY_IMPORT_FIXTURE "${TL_FIXTURE_OUTPUT_DIRECTORY}/tl_delay_import.exe")
+set(TL_DELAY_IMPORT_MISSING_FIXTURE "${TL_FIXTURE_OUTPUT_DIRECTORY}/tl_delay_import_missing.exe")
+add_custom_command(
+    OUTPUT "${TL_DELAY_IMPORT_FIXTURE}" "${TL_DELAY_IMPORT_MISSING_FIXTURE}"
+    COMMAND "${CMAKE_COMMAND}" -E make_directory "${TL_FIXTURE_OUTPUT_DIRECTORY}"
+    COMMAND "$<TARGET_FILE:tl_delay_import_generator>" "${TL_DELAY_IMPORT_FIXTURE}" ExitProcess
+    COMMAND "$<TARGET_FILE:tl_delay_import_generator>" "${TL_DELAY_IMPORT_MISSING_FIXTURE}" TlMissingDelayImportW
+    DEPENDS tl_delay_import_generator
+    VERBATIM
+    COMMENT "Generating PE32+ delay-import fixture tl_delay_import.exe"
+)
+add_custom_target(tl_delay_import_fixture DEPENDS
+    "${TL_DELAY_IMPORT_FIXTURE}" "${TL_DELAY_IMPORT_MISSING_FIXTURE}")
+add_dependencies(tradutorlinux_samples tl_delay_import_fixture)
+
+add_test(
+    NAME fixture_tl_delay_import_metadata
+    COMMAND "${CMAKE_COMMAND}"
+        "-DINPUT=${TL_DELAY_IMPORT_FIXTURE}"
+        "-DMISSING_INPUT=${TL_DELAY_IMPORT_MISSING_FIXTURE}"
+        "-DRUNTIME=$<TARGET_FILE:tradutorlinux>"
+        -P "${CMAKE_CURRENT_SOURCE_DIR}/verify_delay_import_fixture.cmake"
+)
+set_tests_properties(fixture_tl_delay_import_metadata PROPERTIES LABELS "fixture;pe32plus")
+
 tl_add_pe_fixture(tl_nop src/tl_nop.c manifests/tl_nop.json RELOCATABLE)
 tl_add_pe_fixture(tl_hello src/tl_hello.c manifests/tl_hello.json
     LINK_KERNEL32 EXPECT_RESOLVED CONSOLE RELOCATABLE)
