@@ -63,6 +63,7 @@ extern runtime::GuestPeb g_guest_peb;
 
 // Caminho do executável convidado
 extern std::string g_module_file_name;
+extern std::filesystem::path g_guest_prefix_path;
 
 // Tokens padrão
 extern char kStdInputToken;

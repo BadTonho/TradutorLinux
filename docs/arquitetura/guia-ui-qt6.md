@@ -70,7 +70,8 @@ de trabalho ou de `PATH`.
 - campo de busca e lista filtrável dos aplicativos registrados em
   `library.json`;
 - campo de caminho e `QFileDialog` com filtro para `.exe`;
-- ações **Analisar**, **Executar**, **Cadastrar**, **Limpar** e **Sair**;
+- campo opcional de nome da instalação e ações **Analisar**, **Executar**,
+  **Instalar**, **Cadastrar**, **Limpar** e **Sair**;
 - indicador de quantidade de aplicativos cadastrados;
 - status textual e console somente leitura para logs.
 
@@ -89,18 +90,22 @@ tradutorlinux --trace <arquivo.exe>
 tradutorlinux --trace --report <arquivo.exe>
 ```
 
-O catálogo continua sendo lido e salvo por `catalog::AppCatalog`. O cadastro
-manual deriva o nome e o ID do nome do arquivo, usa o prefixo padrão retornado
-por `prefix::default_prefix_root()` e registra o diretório pai como diretório
-de trabalho. Ao recadastrar um item selecionado, seu ID, prefixo, argumentos e
-demais metadados são preservados.
+O catálogo continua sendo lido e salvo por `catalog::AppCatalog`. Um cadastro
+manual novo recebe `prefix::default_app_prefix(id)` e inicia em seu `drive_c`;
+uma entrada selecionada preserva ID, prefixo, argumentos e demais metadados.
+
+**Instalar** inicia `tradutorlinux install <setup> --trace`. O launcher lê
+somente os eventos estruturados do componente `install` em `stderr`: no evento
+`registered`, recarrega a biblioteca; se o comando retornar `6` com mais de um
+evento `candidate`, mostra uma escolha e chama `app add --id --prefix` para o
+arquivo escolhido. Cancelar preserva o prefixo sem criar entrada no catálogo.
 
 ## Execução assíncrona
 
 O launcher mantém um único `QProcess` ativo. Enquanto ele está iniciando ou
 executando:
 
-- Analisar, Executar, Cadastrar, Limpar, busca e seleção ficam desabilitados;
+- Analisar, Executar, Instalar, Cadastrar, Limpar, busca e seleção ficam desabilitados;
 - stdout e stderr são lidos por sinais independentes;
 - o status informa que a operação está em andamento;
 - fechar a janela tenta terminar o subprocesso e, após um limite curto,
@@ -125,7 +130,11 @@ usa `QT_QPA_PLATFORM=offscreen` e cobre:
 4. relatório assíncrono de `tl_hello.exe`, incluindo stdout e stderr;
 5. execução real de `tl_hello.exe`, incluindo a saída do convidado e o código
    de saída;
-6. falha controlada quando o caminho do runtime não pode ser iniciado.
+6. instalação, cadastro automático e execução posterior de uma fixture em
+   prefixo temporário;
+7. seleção assíncrona do primeiro de dois candidatos, seguida de `app add`
+   sem repetir o setup;
+8. falha controlada quando o caminho do runtime não pode ser iniciado.
 
 O teste usa o runtime e as fixtures produzidos pelo mesmo build. O diretório
 de configuração é temporário, portanto os testes não alteram a biblioteca do
@@ -133,8 +142,6 @@ usuário.
 
 ## Limites desta entrega
 
-- O launcher não implementa instalação visual de setups; o comando CLI
-  `install` continua sendo a interface existente para essa operação.
 - Não há wizard de instalação, gerenciamento de ícones ou integração nativa
   com bandeja nesta versão.
 - Qt6 é usado para a interface host. A GUI Win32 do executável convidado

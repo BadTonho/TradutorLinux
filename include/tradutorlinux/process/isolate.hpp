@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <filesystem>
 #include <string_view>
 
 namespace tradutorlinux::process {
@@ -42,6 +43,7 @@ struct SignalDescription {
 // no limit). Must not be called while the process has other running threads.
 [[nodiscard]] GuestOutcome run_guest_isolated(std::uintptr_t entry_point,
                                               std::uintptr_t stack_top,
-                                              std::uint64_t timeout_ms) noexcept;
+                                              std::uint64_t timeout_ms,
+                                              const std::filesystem::path& working_directory = {}) noexcept;
 
 }  // namespace tradutorlinux::process

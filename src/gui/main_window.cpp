@@ -1,5 +1,6 @@
 #include "main_window.hpp"
 
+#include "tradutorlinux/cli.hpp"
 #include "tradutorlinux/prefix/prefix.hpp"
 
 #include <QCloseEvent>
@@ -10,12 +11,14 @@
 #include <QGridLayout>
 #include <QGroupBox>
 #include <QHBoxLayout>
+#include <QInputDialog>
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
 #include <QAbstractItemView>
 #include <QPlainTextEdit>
 #include <QPushButton>
+#include <QRegularExpression>
 #include <QSignalBlocker>
 #include <QSplitter>
 #include <QStandardPaths>
@@ -24,6 +27,7 @@
 #include <QWidget>
 
 #include <filesystem>
+#include <string>
 #include <utility>
 
 namespace tradutorlinux::gui {
@@ -123,6 +127,12 @@ void MainWindow::setup_ui() {
     path_row->addWidget(choose_button);
     action_layout->addLayout(path_row);
 
+    install_name_input_ = new QLineEdit(action_box);
+    install_name_input_->setObjectName(QStringLiteral("install_name_input"));
+    install_name_input_->setPlaceholderText(
+        QStringLiteral("Nome na biblioteca (opcional para instalar)"));
+    action_layout->addWidget(install_name_input_);
+
     auto* const hint = new QLabel(
         QStringLiteral("Aplicativos cadastrados usam o prefixo e o diretório do catálogo."),
         action_box);
@@ -135,6 +145,8 @@ void MainWindow::setup_ui() {
     analyze_button_->setObjectName(QStringLiteral("analyze_button"));
     run_button_ = new QPushButton(QStringLiteral("Executar"), action_box);
     run_button_->setObjectName(QStringLiteral("run_button"));
+    install_button_ = new QPushButton(QStringLiteral("Instalar"), action_box);
+    install_button_->setObjectName(QStringLiteral("install_button"));
     register_button_ = new QPushButton(QStringLiteral("Cadastrar"), action_box);
     register_button_->setObjectName(QStringLiteral("register_button"));
     clear_button_ = new QPushButton(QStringLiteral("Limpar"), action_box);
@@ -143,9 +155,10 @@ void MainWindow::setup_ui() {
     exit_button_->setObjectName(QStringLiteral("exit_button"));
     buttons_layout->addWidget(analyze_button_, 0, 0);
     buttons_layout->addWidget(run_button_, 0, 1);
-    buttons_layout->addWidget(register_button_, 1, 0);
-    buttons_layout->addWidget(clear_button_, 1, 1);
-    buttons_layout->addWidget(exit_button_, 2, 0, 1, 2);
+    buttons_layout->addWidget(install_button_, 1, 0);
+    buttons_layout->addWidget(register_button_, 1, 1);
+    buttons_layout->addWidget(clear_button_, 2, 0);
+    buttons_layout->addWidget(exit_button_, 2, 1);
     action_layout->addLayout(buttons_layout);
     action_layout->addStretch(1);
 
@@ -190,6 +203,7 @@ void MainWindow::setup_ui() {
     connect(choose_button, &QPushButton::clicked, this, &MainWindow::on_choose_clicked);
     connect(analyze_button_, &QPushButton::clicked, this, &MainWindow::on_analyze_clicked);
     connect(run_button_, &QPushButton::clicked, this, &MainWindow::on_run_clicked);
+    connect(install_button_, &QPushButton::clicked, this, &MainWindow::on_install_clicked);
     connect(register_button_, &QPushButton::clicked, this,
             &MainWindow::on_register_clicked);
     connect(clear_button_, &QPushButton::clicked, this, &MainWindow::on_clear_clicked);
@@ -284,6 +298,10 @@ void MainWindow::on_run_clicked() {
     start_runtime(false);
 }
 
+void MainWindow::on_install_clicked() {
+    start_install();
+}
+
 void MainWindow::on_register_clicked() {
     const QString path_text = path_input_->text().trimmed();
     if (path_text.isEmpty()) {
@@ -301,9 +319,18 @@ void MainWindow::on_register_clicked() {
         const std::filesystem::path executable = path_from_qstring(path_text);
         entry.name = executable.filename().string();
         entry.id = catalog::AppCatalog::generate_id(entry.name);
+        for (unsigned int suffix = 2U; catalog_.find_app(entry.id).has_value(); ++suffix) {
+            entry.id = catalog::AppCatalog::generate_id(entry.name) + "-" +
+                       std::to_string(suffix);
+        }
         entry.executable_path = executable.string();
-        entry.prefix_path = prefix::default_prefix_root().string();
-        entry.working_directory = executable.parent_path().string();
+        entry.prefix_path = prefix::default_app_prefix(entry.id).string();
+        if (!prefix::initialize_prefix(entry.prefix_path)) {
+            set_status(QStringLiteral("Erro ao preparar prefixo"));
+            append_message(QStringLiteral("Não foi possível criar o prefixo do aplicativo."));
+            return;
+        }
+        entry.working_directory = prefix::get_environment_paths(entry.prefix_path).drive_c.string();
     }
 
     if (!catalog_.add_app(entry) || !catalog_.save_to_file()) {
@@ -326,6 +353,7 @@ void MainWindow::on_register_clicked() {
 void MainWindow::on_clear_clicked() {
     selected_app_id_.clear();
     path_input_->clear();
+    install_name_input_->clear();
     search_input_->clear();
     app_list_->clearSelection();
     log_output_->clear();
@@ -341,7 +369,11 @@ void MainWindow::on_process_stdout_ready() {
 }
 
 void MainWindow::on_process_stderr_ready() {
-    append_log(QStringLiteral("stderr"), process_.readAllStandardError());
+    const QByteArray bytes = process_.readAllStandardError();
+    if (install_in_progress_) {
+        install_stderr_.append(QString::fromUtf8(bytes));
+    }
+    append_log(QStringLiteral("stderr"), bytes);
 }
 
 void MainWindow::on_process_error(const QProcess::ProcessError error) {
@@ -359,6 +391,8 @@ void MainWindow::on_process_finished(const int exit_code,
     consume_process_output();
     if (process_start_failed_) {
         process_start_failed_ = false;
+        install_in_progress_ = false;
+        catalog_registration_in_progress_ = false;
         update_action_state();
         return;
     }
@@ -367,8 +401,20 @@ void MainWindow::on_process_finished(const int exit_code,
         set_status(QStringLiteral("Runtime terminou por sinal"));
         append_message(QStringLiteral("[launcher] processo terminou por sinal ou crash."));
     } else {
-        set_status(exit_code == 0 ? QStringLiteral("Operação concluída")
-                                  : QStringLiteral("Operação terminou com erro"));
+        if (install_in_progress_) {
+            finish_install(exit_code);
+        } else if (catalog_registration_in_progress_) {
+            catalog_registration_in_progress_ = false;
+            if (exit_code == 0) {
+                refresh_app_list();
+                set_status(QStringLiteral("Aplicativo cadastrado após a instalação"));
+            } else {
+                set_status(QStringLiteral("Cadastro após instalação falhou"));
+            }
+        } else {
+            set_status(exit_code == 0 ? QStringLiteral("Operação concluída")
+                                      : QStringLiteral("Operação terminou com erro"));
+        }
         append_message(QStringLiteral("[launcher] código de saída: %1").arg(exit_code));
     }
     update_action_state();
@@ -390,11 +436,13 @@ void MainWindow::update_action_state() {
     const bool running = process_is_running();
     analyze_button_->setEnabled(has_path && !running);
     run_button_->setEnabled(has_path && !running);
+    install_button_->setEnabled(has_path && !running);
     register_button_->setEnabled(has_path && !running);
     clear_button_->setEnabled(!running);
     exit_button_->setEnabled(true);
     search_input_->setEnabled(!running);
     app_list_->setEnabled(!running);
+    install_name_input_->setEnabled(!running);
 }
 
 void MainWindow::append_log(const QString& channel, const QByteArray& bytes) {
@@ -438,6 +486,8 @@ void MainWindow::start_runtime(const bool report_only) {
     }
 
     const QString program = runtime_executable();
+    install_in_progress_ = false;
+    catalog_registration_in_progress_ = false;
     const auto selected = catalog_.find_app(selected_app_id_.toStdString());
     const bool use_catalog_entry = !selected_app_id_.isEmpty() && selected.has_value() &&
                                    qstring_from_std_string(selected->executable_path) == path;
@@ -470,6 +520,106 @@ void MainWindow::start_runtime(const bool report_only) {
     append_message(QStringLiteral("Iniciando: %1 %2").arg(program, arguments.join(QChar(' '))));
     process_.start(program, arguments);
     update_action_state();
+}
+
+void MainWindow::start_install() {
+    const QString path = selected_or_direct_path();
+    if (path.isEmpty()) {
+        set_status(QStringLiteral("Informe um instalador antes de continuar."));
+        append_message(QStringLiteral("Erro: nenhum instalador foi informado."));
+        return;
+    }
+    if (process_is_running()) {
+        append_message(QStringLiteral("Aviso: um programa já está em execução."));
+        return;
+    }
+
+    install_stderr_.clear();
+    install_in_progress_ = true;
+    pending_install_name_ = install_name_input_->text().trimmed();
+    if (pending_install_name_.isEmpty()) {
+        pending_install_name_ = QFileInfo(path).completeBaseName();
+    }
+
+    QStringList arguments;
+    arguments << QStringLiteral("install") << path << QStringLiteral("--trace");
+    if (!install_name_input_->text().trimmed().isEmpty()) {
+        arguments << QStringLiteral("--name") << install_name_input_->text().trimmed();
+    }
+    process_.setWorkingDirectory(QFileInfo(path).absolutePath());
+    process_start_failed_ = false;
+    set_status(QStringLiteral("Instalando..."));
+    append_message(QStringLiteral("Iniciando instalação: %1 %2")
+                       .arg(runtime_executable(), arguments.join(QChar(' '))));
+    process_.start(runtime_executable(), arguments);
+    update_action_state();
+}
+
+void MainWindow::start_catalog_registration(const QString& executable, const QString& prefix,
+                                            const QString& app_id, const QString& app_name) {
+    if (process_is_running()) {
+        return;
+    }
+    QStringList arguments;
+    arguments << QStringLiteral("app") << QStringLiteral("add") << executable
+              << QStringLiteral("--name") << app_name
+              << QStringLiteral("--prefix") << prefix
+              << QStringLiteral("--id") << app_id;
+    catalog_registration_in_progress_ = true;
+    process_start_failed_ = false;
+    set_status(QStringLiteral("Cadastrando executável escolhido..."));
+    append_message(QStringLiteral("Cadastrando executável escolhido: %1").arg(executable));
+    process_.start(runtime_executable(), arguments);
+    update_action_state();
+}
+
+void MainWindow::finish_install(const int exit_code) {
+    install_in_progress_ = false;
+    if (exit_code == 0) {
+        const QRegularExpression id_expression(QStringLiteral("app-id=\\\"([^\\\"]+)\\\""));
+        const QRegularExpressionMatch id_match = id_expression.match(install_stderr_);
+        if (id_match.hasMatch()) {
+            selected_app_id_ = id_match.captured(1);
+        }
+        refresh_app_list();
+        set_status(QStringLiteral("Instalação concluída e aplicativo cadastrado"));
+        return;
+    }
+
+    if (exit_code != static_cast<int>(ExitCode::InstallPending)) {
+        set_status(QStringLiteral("Instalação terminou com erro"));
+        return;
+    }
+
+    const QRegularExpression prefix_expression(QStringLiteral("prefix=\\\"([^\\\"]+)\\\""));
+    const QRegularExpression id_expression(QStringLiteral("app-id=\\\"([^\\\"]+)\\\""));
+    const QRegularExpression candidate_expression(QStringLiteral("candidate path=\\\"([^\\\"]+)\\\""));
+    const QRegularExpressionMatch prefix_match = prefix_expression.match(install_stderr_);
+    const QRegularExpressionMatch id_match = id_expression.match(install_stderr_);
+    QRegularExpressionMatchIterator candidate_matches = candidate_expression.globalMatch(install_stderr_);
+    QStringList candidates;
+    while (candidate_matches.hasNext()) {
+        candidates << candidate_matches.next().captured(1);
+    }
+
+    if (!prefix_match.hasMatch() || !id_match.hasMatch() || candidates.isEmpty()) {
+        set_status(QStringLiteral("Instalação concluída; cadastro pendente"));
+        append_message(QStringLiteral("Nenhum executável final foi identificado automaticamente."));
+        return;
+    }
+
+    bool accepted = false;
+    const QString selected = QInputDialog::getItem(
+        this, QStringLiteral("Escolher executável instalado"),
+        QStringLiteral("Mais de um executável PE32+ x64 foi instalado:"), candidates, 0, false,
+        &accepted);
+    if (!accepted || selected.isEmpty()) {
+        set_status(QStringLiteral("Instalação concluída; cadastro pendente"));
+        append_message(QStringLiteral("Nenhum executável foi escolhido para cadastro."));
+        return;
+    }
+    start_catalog_registration(selected, prefix_match.captured(1), id_match.captured(1),
+                               pending_install_name_);
 }
 
 QString MainWindow::runtime_executable() const {

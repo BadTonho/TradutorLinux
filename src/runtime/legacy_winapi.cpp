@@ -230,7 +230,8 @@ bool copy_wide_string(const std::u16string& value, std::uint16_t* buffer,
 }
 
 std::u16string final_windows_path(const std::string& path) {
-    return util::utf8_to_wide(prefix::to_windows_path(std::filesystem::path(path)));
+    return util::utf8_to_wide(
+        prefix::to_windows_path(std::filesystem::path(path), guest_prefix_root()));
 }
 
 }  // namespace
@@ -685,7 +686,7 @@ TL_MSABI int tl_RemoveDirectoryW(const std::uint16_t* path) noexcept {
 }
 
 TL_MSABI std::uint32_t tl_GetTempPathW(std::uint32_t buffer_length, std::uint16_t* buffer) noexcept {
-    const std::u16string value = u".\\";
+    const std::u16string value = u"C:\\windows\\temp\\";
     const std::size_t required = value.size() + 1U;
     if (buffer == nullptr || buffer_length < required ||
         !mapped_guest_range(buffer, static_cast<std::size_t>(buffer_length) * sizeof(*buffer), true)) {
@@ -771,7 +772,8 @@ std::string build_full_windows_path(const std::string& input_raw) {
 
     char cwd_buf[4096]{};
     const char* cwd_cstr = ::getcwd(cwd_buf, sizeof(cwd_buf)) != nullptr ? cwd_buf : ".";
-    std::string win_cwd = prefix::to_windows_path(std::filesystem::path(cwd_cstr));
+    std::string win_cwd =
+        prefix::to_windows_path(std::filesystem::path(cwd_cstr), guest_prefix_root());
     std::replace(win_cwd.begin(), win_cwd.end(), '/', '\\');
 
     // Garante que win_cwd tenha formato "C:\..."
@@ -1067,7 +1069,7 @@ TL_MSABI int tl_CreateProcessW(const std::uint16_t* application_name,
                                std::uint32_t creation_flags, const void* environment,
                                const std::uint16_t* current_directory, void* startup_info,
                                void* process_information) noexcept {
-    if (current_directory != nullptr ||
+    if ((current_directory != nullptr && !mapped_guest_wstring(current_directory)) ||
         (application_name != nullptr && !mapped_guest_wstring(application_name)) ||
         (application_name == nullptr && !mapped_guest_wstring(command_line))) {
         set_last_error(abi::kErrorInvalidParameter);
@@ -1075,10 +1077,13 @@ TL_MSABI int tl_CreateProcessW(const std::uint16_t* application_name,
     }
     const std::string application = application_name != nullptr ? util::wide_to_utf8(application_name) : "";
     std::string command = command_line != nullptr ? util::wide_to_utf8(command_line) : "";
+    const std::string directory =
+        current_directory != nullptr ? util::wide_to_utf8(current_directory) : "";
     char* command_pointer = command.empty() ? nullptr : command.data();
     const char* application_pointer = application.empty() ? nullptr : application.c_str();
+    const char* directory_pointer = directory.empty() ? nullptr : directory.c_str();
     return tl_CreateProcessA(application_pointer, command_pointer, process_attributes, thread_attributes,
-                             inherit_handles, creation_flags, environment, nullptr, startup_info,
+                             inherit_handles, creation_flags, environment, directory_pointer, startup_info,
                              process_information);
 }
 

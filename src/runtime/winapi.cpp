@@ -65,6 +65,7 @@ thread_local runtime::GuestTeb* g_current_teb = nullptr;
 runtime::GuestPeb g_guest_peb{};
 
 std::string g_module_file_name;
+std::filesystem::path g_guest_prefix_path;
 
 char kStdInputToken = 0;
 char kStdOutputToken = 0;
@@ -182,7 +183,8 @@ bool translate_windows_path(const char* win_path,
     }
     if ((view.size() >= 2 && std::isalpha(static_cast<unsigned char>(view[0])) && view[1] == ':') ||
         view.starts_with('\\')) {
-        const std::filesystem::path resolved = prefix::resolve_windows_path(view);
+        const std::filesystem::path resolved =
+            prefix::resolve_windows_path(view, guest_prefix_root());
         const std::string s = resolved.string();
         if (s.size() + 1 > out_size) {
             return false;
@@ -528,6 +530,17 @@ void free_guest_teb(void* const teb) noexcept {
 
 void set_guest_module_path(const char* path) noexcept {
     g_module_file_name = path != nullptr ? path : "";
+}
+
+void set_guest_prefix_path(const std::filesystem::path& path) {
+    g_guest_prefix_path = path;
+}
+
+std::filesystem::path guest_prefix_root() {
+    if (!g_guest_prefix_path.empty()) {
+        return g_guest_prefix_path;
+    }
+    return prefix::default_prefix_root();
 }
 
 void set_guest_image_view(const void* image_base, const std::size_t image_size,

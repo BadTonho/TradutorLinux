@@ -108,7 +108,8 @@ void set_error(int error) {
     std::string_view view{guest_path};
     if ((view.size() >= 2 && (view[0] == 'C' || view[0] == 'c') && view[1] == ':') ||
         view.starts_with('\\')) {
-        const std::filesystem::path resolved = prefix::resolve_windows_path(view);
+        const std::filesystem::path resolved =
+            prefix::resolve_windows_path(view, guest_prefix_root());
         const std::string s = resolved.string();
         if (s.size() + 1 > host_path_size) {
             return false;

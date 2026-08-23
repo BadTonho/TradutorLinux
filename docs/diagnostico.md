@@ -8,7 +8,8 @@ O trace é habilitado por `--trace` (todos os canais) ou `--trace=canal1,canal2`
 [tl][<componente>][<nível>] <evento> chave="valor"
 ```
 
-Componentes iniciais: `cli`, `pe`, `loader`, `imports`, `runtime`, `process`, `gui` e `crt` (ver `src/diagnostics/trace.cpp:11`).
+Componentes iniciais: `cli`, `pe`, `loader`, `imports`, `runtime`, `process`,
+`gui`, `crt` e `install` (ver `src/diagnostics/trace.cpp`).
 
 Filtragem: `--trace=pe,loader` emite apenas `pe` e `loader`; canal desconhecido retorna `canal de trace desconhecido` e exit `2` (`Usage`). Sem filtro, todos os canais são emitidos; a filtragem é feita em `diagnostics::is_trace_enabled` antes de `write_trace`.
 
@@ -104,6 +105,25 @@ Os valores possíveis de `status` são:
 | `unsupported-mechanism` | Mecanismo ainda não suportado (ex.: delay imports, IAT fora das seções). |
 
 Quando qualquer importação falha, a resolução inteira falha e o processo não tem entry point executado; o runtime retorna `5` (`Unsupported`). Mesmo na falha, todas as entradas são reportadas para que o diagnóstico seja completo.
+
+## Componente `install`
+
+O comando `install` emite seus eventos neste componente, sempre em `stderr`.
+Eles são a interface que o launcher usa para acompanhar a instalação; a saída
+em `stdout` pertence exclusivamente ao programa convidado. Os estados são:
+
+| Evento | Campos principais | Significado |
+|---|---|---|
+| `prepared` | `prefix`, `app-id`, `setup` | Prefixo exclusivo preparado antes de iniciar o setup. |
+| `candidate` | `prefix`, `app-id`, `path` | PE32+ AMD64 novo ou alterado em `drive_c` após o setup. |
+| `registered` | `prefix`, `app-id`, `path` | Executável escolhido e entrada salva no catálogo. |
+| `pending` | `reason`, `prefix`, `app-id` | Setup terminou, mas o cadastro precisa de escolha ou não há candidato válido. |
+| `failed` | `stage`, `prefix`, `app-id` | Entrada, parse, imports, preparação, setup, timeout/sinal ou persistência do catálogo falhou; o prefixo é preservado. |
+
+`pending reason="selection-required"`, `pending reason="no-candidate"` e
+`pending reason="invalid-app-exe"` retornam `6` (`InstallPending`). Um setup
+que retorna código diferente de zero não cria entrada no catálogo; seu código
+de saída é preservado e há um evento `failed stage="setup"`.
 
 ## Categorias de falha
 
@@ -281,6 +301,7 @@ Quando a imagem é mapeada fora do endereço preferencial e não possui diretór
 | 3 | `InputUnavailable` | O arquivo informado não existe, não é regular ou não pode ser acessado. |
 | 4 | `MalformedPe` | O arquivo é reconhecido como PE malformado ou truncado. |
 | 5 | `Unsupported` | PE válido de arquitetura ou formato ainda não suportado (ex.: PE32/x86), ou etapa futura do runtime não disponível. |
+| 6 | `InstallPending` | O setup terminou, mas o runtime não pôde escolher com segurança um executável final; o prefixo é preservado e nada é cadastrado. |
 | 70 | `InternalError` | Erro interno inesperado do runtime. |
 | 71 | `GuestFault` | O programa convidado terminou por um sinal Linux (`guest-signal`). |
 | 72 | `GuestTimeout` | O programa convidado não terminou dentro do limite informado em `--timeout` e foi morto pelo hospedeiro (`guest-timeout`). |

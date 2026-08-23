@@ -7,7 +7,9 @@
 #include <QDir>
 #include <QElapsedTimer>
 #include <QEventLoop>
+#include <QFile>
 #include <QFileInfo>
+#include <QInputDialog>
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
@@ -15,6 +17,7 @@
 #include <QPushButton>
 #include <QTemporaryDir>
 #include <QThread>
+#include <QTimer>
 
 #include <functional>
 #include <iostream>
@@ -52,6 +55,12 @@ public:
                 QStringLiteral("o executável tradutorlinux não foi compilado"));
         require(QFileInfo::exists(fixture_path(QStringLiteral("tl_hello.exe"))),
                 QStringLiteral("a fixture tl_hello.exe não foi compilada"));
+        require(QFileInfo::exists(fixture_path(QStringLiteral("tl_install_setup.exe"))),
+                QStringLiteral("a fixture tl_install_setup.exe não foi compilada"));
+        require(QFileInfo::exists(fixture_path(QStringLiteral("tl_install_setup_multi.exe"))),
+                QStringLiteral("a fixture multi-install não foi compilada"));
+        require(QFileInfo::exists(fixture_path(QStringLiteral("tl_install_app.exe"))),
+                QStringLiteral("a fixture tl_install_app.exe não foi compilada"));
     }
 
     int run() {
@@ -63,6 +72,10 @@ public:
         run_case(QStringLiteral("relatório assíncrono"), &QtLauncherSmoke::analyzes_report);
         run_case(QStringLiteral("execução e canais de saída"), &QtLauncherSmoke::runs_fixture);
         run_case(QStringLiteral("execução pelo catálogo"), &QtLauncherSmoke::runs_registered_fixture);
+        run_case(QStringLiteral("instalação e cadastro automático"),
+                 &QtLauncherSmoke::installs_and_registers_fixture);
+        run_case(QStringLiteral("instalação com escolha de executável"),
+                 &QtLauncherSmoke::installs_and_selects_candidate);
         run_case(QStringLiteral("falha ao iniciar runtime"), &QtLauncherSmoke::reports_start_failure);
         return failures_ == 0 ? 0 : 1;
     }
@@ -87,6 +100,7 @@ private:
         require(QDir().mkpath(config_dir_.path()),
                 QStringLiteral("não foi possível recriar a configuração"));
         qputenv("XDG_CONFIG_HOME", config_dir_.path().toUtf8());
+        qputenv("TL_PREFIX", QDir(config_dir_.path()).filePath(QStringLiteral("prefix-root")).toUtf8());
     }
 
     [[nodiscard]] QString runtime_path() const {
@@ -143,6 +157,18 @@ private:
         }
         require(search != nullptr, QStringLiteral("search_input ausente"));
         return search;
+    }
+
+    [[nodiscard]] QLineEdit* install_name_input(tradutorlinux::gui::MainWindow& window) const {
+        QLineEdit* input = nullptr;
+        for (QObject* const child : window.findChildren<QObject*>()) {
+            if (child->objectName() == QStringLiteral("install_name_input")) {
+                input = dynamic_cast<QLineEdit*>(child);
+                break;
+            }
+        }
+        require(input != nullptr, QStringLiteral("install_name_input ausente"));
+        return input;
     }
 
     [[nodiscard]] QListWidget* app_list(tradutorlinux::gui::MainWindow& window) const {
@@ -312,6 +338,82 @@ private:
                 QStringLiteral("execução não usou o ID do catálogo"));
         require(output.contains(QStringLiteral("[stdout] Ola do Windows no Linux!")),
                 QStringLiteral("stdout da fixture cadastrada não foi capturado"));
+    }
+
+    void installs_and_registers_fixture() {
+        const QString prefix = QDir(config_dir_.path()).filePath(
+            QStringLiteral("prefix-root/prefixes/tl_install_fixture"));
+        const QString staging = QDir(prefix).filePath(
+            QStringLiteral("drive_c/windows/temp"));
+        require(QDir().mkpath(staging), QStringLiteral("não foi possível preparar staging do instalador"));
+        const QString staged_app = QDir(staging).filePath(QStringLiteral("tl_install_app.exe"));
+        require(QFile::copy(fixture_path(QStringLiteral("tl_install_app.exe")), staged_app),
+                QStringLiteral("não foi possível preparar aplicativo para instalação"));
+
+        tradutorlinux::gui::MainWindow window(runtime_path());
+        window.show();
+        path_input(window)->setText(fixture_path(QStringLiteral("tl_install_setup.exe")));
+        install_name_input(window)->setText(QStringLiteral("TL Install Fixture"));
+        button(window, "install_button")->click();
+        wait_until([this, &window] {
+            return status_label(window)->text() ==
+                   QStringLiteral("Instalação concluída e aplicativo cadastrado");
+        }, 10000, QStringLiteral("instalação pelo launcher não terminou"));
+
+        tradutorlinux::catalog::AppCatalog catalog;
+        require(catalog.load_from_file(), QStringLiteral("catálogo não foi salvo após instalação"));
+        const auto installed = catalog.find_app("tl_install_fixture");
+        require(installed.has_value(), QStringLiteral("aplicativo instalado não foi cadastrado"));
+        require(installed->prefix_path == prefix.toStdString(),
+                QStringLiteral("prefixo exclusivo não foi salvo"));
+
+        button(window, "run_button")->click();
+        wait_until([this, &window] {
+            return status_label(window)->text() == QStringLiteral("Operação concluída");
+        }, 10000, QStringLiteral("aplicativo instalado não executou pelo launcher"));
+        require(log_output(window)->toPlainText().contains(QStringLiteral("[stdout] installed-app")),
+                QStringLiteral("stdout do aplicativo instalado não apareceu"));
+    }
+
+    void installs_and_selects_candidate() {
+        const QString prefix = QDir(config_dir_.path()).filePath(
+            QStringLiteral("prefix-root/prefixes/tl_multi_fixture"));
+        const QString staging = QDir(prefix).filePath(QStringLiteral("drive_c/windows/temp"));
+        require(QDir().mkpath(staging), QStringLiteral("não foi possível preparar staging múltiplo"));
+        require(QFile::copy(fixture_path(QStringLiteral("tl_install_app.exe")),
+                            QDir(staging).filePath(QStringLiteral("tl_install_app.exe"))),
+                QStringLiteral("não foi possível preparar aplicativo para seleção"));
+
+        tradutorlinux::gui::MainWindow window(runtime_path());
+        window.show();
+        path_input(window)->setText(fixture_path(QStringLiteral("tl_install_setup_multi.exe")));
+        install_name_input(window)->setText(QStringLiteral("TL Multi Fixture"));
+
+        bool accepted_dialog = false;
+        QTimer chooser;
+        chooser.setInterval(10);
+        QObject::connect(&chooser, &QTimer::timeout, [&accepted_dialog] {
+            auto* const dialog = qobject_cast<QInputDialog*>(QApplication::activeModalWidget());
+            if (dialog != nullptr) {
+                accepted_dialog = true;
+                dialog->accept();
+            }
+        });
+        chooser.start();
+        button(window, "install_button")->click();
+        wait_until([this, &window] {
+            return status_label(window)->text() ==
+                   QStringLiteral("Aplicativo cadastrado após a instalação");
+        }, 10000, QStringLiteral("seleção de executável instalado não terminou"));
+        chooser.stop();
+        require(accepted_dialog, QStringLiteral("diálogo de escolha não foi apresentado"));
+
+        tradutorlinux::catalog::AppCatalog catalog;
+        require(catalog.load_from_file(), QStringLiteral("catálogo não foi salvo após escolha"));
+        const auto selected = catalog.find_app("tl_multi_fixture");
+        require(selected.has_value(), QStringLiteral("executável escolhido não foi cadastrado"));
+        require(selected->prefix_path == prefix.toStdString(),
+                QStringLiteral("cadastro escolhido perdeu o prefixo"));
     }
 
     void reports_start_failure() {

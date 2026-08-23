@@ -220,6 +220,7 @@ void register_builtin_modules() {
         {"GetCurrentDirectoryA", 47, reinterpret_cast<std::uintptr_t>(&tl_GetCurrentDirectoryA)},
         {"GetCurrentDirectoryW", 48, reinterpret_cast<std::uintptr_t>(&tl_GetCurrentDirectoryW)},
         {"GetModuleFileNameA", 49, reinterpret_cast<std::uintptr_t>(&tl_GetModuleFileNameA)},
+        {"GetModuleFileNameW", 193, reinterpret_cast<std::uintptr_t>(&tl_GetModuleFileNameW)},
         // Fase 11: Concorrência.
         {"TlsAlloc", 50, reinterpret_cast<std::uintptr_t>(&tl_TlsAlloc)},
         {"TlsSetValue", 51, reinterpret_cast<std::uintptr_t>(&tl_TlsSetValue)},

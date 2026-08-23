@@ -11,9 +11,11 @@ Localização:
 - Implementação: [src/prefix/prefix.cpp](file:///c:/Users/Admin/Desktop/ProjetosCode/Linux/TradutorLinux/src/prefix/prefix.cpp)
 
 ### Estrutura de Diretórios
-Por padrão, o prefixo do TradutorLinux reside em `~/.tradutorlinux/` e contém o drive virtual `drive_c/`:
+Execuções diretas legadas usam `~/.tradutorlinux/`. Cada nova instalação e cada
+novo cadastro persistente usam, por padrão, um prefixo exclusivo em
+`~/.tradutorlinux/prefixes/<id>/`:
 ```text
-~/.tradutorlinux/
+~/.tradutorlinux/prefixes/<id>/
 └── drive_c/
     ├── Program Files/
     ├── Program Files (x86)/
@@ -27,10 +29,20 @@ Por padrão, o prefixo do TradutorLinux reside em `~/.tradutorlinux/` e contém 
         └── temp/
 ```
 
+Entradas antigas cujo `prefix_path` ainda é o prefixo compartilhado preservam
+o `working_directory` externo já salvo. Entradas novas só aceitam diretório de
+trabalho dentro do seu `drive_c`.
+
 ### Resolução de Caminhos Windows
 - `resolve_windows_path("C:\\Program Files\\App\\app.exe")`: Resolve para `<prefix>/drive_c/Program Files/App/app.exe`.
 - Normaliza barras (`\\` → `/`) e drives virtuais (`C:`).
-- `to_windows_path(linux_path)`: Converte caminhos Linux dentro do prefixo de volta para o formato `C:\...`.
+- `to_windows_path(linux_path)`: Converte caminhos dentro do prefixo para
+  `C:\...`; um arquivo externo, como o setup selecionado, é exposto como
+  `Z:\...`.
+- O runtime fixa o prefixo ativo antes de iniciar o convidado. Caminhos Win32,
+  CRT, diretório atual, `TEMP`/`TMP`, `APPDATA`, `LOCALAPPDATA` e
+  `USERPROFILE` usam esse contexto. Isso é isolamento funcional de dados, não
+  uma sandbox: `Z:` ainda representa o sistema de arquivos do hospedeiro.
 
 ---
 
@@ -68,11 +80,26 @@ O catálogo é persistido em formato JSON em `~/.config/tradutorlinux/library.js
 | Comando | Descrição |
 |---|---|
 | `tradutorlinux <app.exe>` | Execução direta de um executável PE32+. |
-| `tradutorlinux install <setup.exe> [--name <Nome>] [--prefix <dir>]` | Inicializa o ambiente de prefixo, cadastra o aplicativo no catálogo e executa o instalador. |
+| `tradutorlinux install <setup.exe> [--name <Nome>] [--prefix <dir>] [--app-exe <caminho>]` | Executa o setup no prefixo exclusivo. Só cadastra após o exit `0`; `--app-exe` escolhe explicitamente o executável final dentro do `drive_c`. |
 | `tradutorlinux app list` | Lista todos os aplicativos cadastrados na biblioteca. |
 | `tradutorlinux app run <id_ou_nome> [args...]` | Executa um aplicativo cadastrado na biblioteca. |
-| `tradutorlinux app add <app.exe> [--name <Nome>] [--prefix <dir>]` | Cadastra manualmente um executável na biblioteca. |
+| `tradutorlinux app add <app.exe> [--name <Nome>] [--prefix <dir>] [--id <id>]` | Cadastra manualmente um executável na biblioteca. Sem `--prefix`, cria prefixo exclusivo. |
 | `tradutorlinux app remove <id>` | Remove o aplicativo do catálogo da biblioteca. |
+
+### Resultado de `install`
+
+Antes de executar o setup, o CLI registra os PE32+ AMD64 já presentes em
+`drive_c`. Após um exit `0`, ele procura candidatos novos ou alterados:
+
+- um candidato é cadastrado automaticamente;
+- `--app-exe` é validado como arquivo PE32+ AMD64 contido no `drive_c`;
+- zero ou mais de um candidato retornam `6` (`InstallPending`), preservam o
+  prefixo e não criam entrada de catálogo;
+- falha, timeout ou import não suportado nunca cadastram o setup nem um
+  executável parcial.
+
+Com `--trace`, os eventos `install` em `stderr` publicam `prepared`,
+`candidate`, `registered`, `pending` ou `failed`, sempre com prefixo e ID.
 
 ---
 
@@ -90,6 +117,9 @@ assíncronas:
 - **Analisar**: executa o relatório estático (`--report`) e captura o
   diagnóstico;
 - **Executar**: inicia o programa com `--trace` sem bloquear a janela;
+- **Instalar**: chama `install` com o nome opcional informado. Ao receber
+  `registered`, atualiza a biblioteca; com vários `candidate`, pede a escolha
+  e finaliza o cadastro sem executar novamente o setup;
 - **Cadastrar**: salva ou atualiza a entrada no `library.json`;
 - **Limpar**: restaura o formulário sem apagar a biblioteca.
 

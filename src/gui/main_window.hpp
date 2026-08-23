@@ -30,6 +30,7 @@ private slots:
     void on_choose_clicked();
     void on_analyze_clicked();
     void on_run_clicked();
+    void on_install_clicked();
     void on_register_clicked();
     void on_clear_clicked();
     void on_process_stdout_ready();
@@ -49,6 +50,10 @@ private:
     void set_status(const QString& status);
     void consume_process_output();
     void start_runtime(bool report_only);
+    void start_install();
+    void start_catalog_registration(const QString& executable, const QString& prefix,
+                                    const QString& app_id, const QString& app_name);
+    void finish_install(int exit_code);
     [[nodiscard]] QString runtime_executable() const;
     [[nodiscard]] QString selected_or_direct_path() const;
     [[nodiscard]] bool process_is_running() const noexcept;
@@ -57,10 +62,12 @@ private:
     QListWidget* app_list_{nullptr};
     QLabel* app_count_label_{nullptr};
     QLineEdit* path_input_{nullptr};
+    QLineEdit* install_name_input_{nullptr};
     QLabel* status_label_{nullptr};
     QPlainTextEdit* log_output_{nullptr};
     QPushButton* analyze_button_{nullptr};
     QPushButton* run_button_{nullptr};
+    QPushButton* install_button_{nullptr};
     QPushButton* register_button_{nullptr};
     QPushButton* clear_button_{nullptr};
     QPushButton* exit_button_{nullptr};
@@ -69,7 +76,11 @@ private:
     QProcess process_;
     QString runtime_path_;
     QString selected_app_id_;
+    QString install_stderr_;
+    QString pending_install_name_;
     bool process_start_failed_{false};
+    bool install_in_progress_{false};
+    bool catalog_registration_in_progress_{false};
 };
 
 }  // namespace tradutorlinux::gui

@@ -327,6 +327,20 @@ tl_add_pe_fixture(tl_files_wide src/tl_files_wide.c manifests/tl_files_wide.json
     LINK_KERNEL32 EXPECT_RESOLVED CONSOLE REPORT RELOCATABLE
     REPORT_SYMBOL "CreateFileW")
 
+tl_add_pe_fixture(tl_install_app src/tl_install_app.c manifests/tl_install_app.json
+    LINK_KERNEL32 EXPECT_RESOLVED CONSOLE RELOCATABLE NO_RUNTIME_CHECK)
+
+tl_add_pe_fixture(tl_install_setup src/tl_install_setup.c manifests/tl_install_setup.json
+    LINK_KERNEL32 EXPECT_RESOLVED CONSOLE RELOCATABLE NO_RUNTIME_CHECK)
+add_dependencies(tl_install_setup_fixture tl_install_app_fixture)
+
+tl_add_pe_fixture(tl_install_setup_multi src/tl_install_setup_multi.c manifests/tl_install_setup_multi.json
+    LINK_KERNEL32 EXPECT_RESOLVED CONSOLE RELOCATABLE NO_RUNTIME_CHECK)
+add_dependencies(tl_install_setup_multi_fixture tl_install_app_fixture)
+
+tl_add_pe_fixture(tl_install_setup_fail src/tl_install_setup_fail.c manifests/tl_install_setup_fail.json
+    LINK_KERNEL32 EXPECT_RESOLVED CONSOLE RELOCATABLE NO_RUNTIME_CHECK)
+
 tl_add_pe_fixture(tl_process_child src/tl_process_child.c manifests/tl_process_child.json
     LINK_KERNEL32 EXPECT_RESOLVED CONSOLE REPORT RELOCATABLE
     REPORT_SYMBOL "ExitProcess")
@@ -387,6 +401,26 @@ tl_add_pe_fixture(tl_com src/tl_com.c manifests/tl_com.json
     REPORT_SYMBOL "CoCreateInstance")
 
 if(TARGET tradutorlinux)
+    add_test(
+        NAME integration_install_prefix_catalog_run
+        COMMAND "${CMAKE_COMMAND}"
+            "-DRUNTIME=$<TARGET_FILE:tradutorlinux>"
+            "-DSETUP=${TL_FIXTURE_OUTPUT_DIRECTORY}/tl_install_setup.exe"
+            "-DMULTI_SETUP=${TL_FIXTURE_OUTPUT_DIRECTORY}/tl_install_setup_multi.exe"
+            "-DFAIL_SETUP=${TL_FIXTURE_OUTPUT_DIRECTORY}/tl_install_setup_fail.exe"
+            "-DMISSING_IMPORTS=${TL_FIXTURE_OUTPUT_DIRECTORY}/tl_missing_dll.exe"
+            "-DHANG=${TL_FIXTURE_OUTPUT_DIRECTORY}/tl_hang.exe"
+            "-DHELLO=${TL_FIXTURE_OUTPUT_DIRECTORY}/tl_hello.exe"
+            "-DLEGACY_APP=${TL_FIXTURE_OUTPUT_DIRECTORY}/tl_file.exe"
+            "-DINSTALLED_APP=${TL_FIXTURE_OUTPUT_DIRECTORY}/tl_install_app.exe"
+            "-DWORK=${CMAKE_CURRENT_BINARY_DIR}/install-prefix-catalog-run"
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/verify_install_flow.cmake"
+    )
+    set_tests_properties(integration_install_prefix_catalog_run PROPERTIES
+        DEPENDS "fixture_tl_install_app_metadata;fixture_tl_install_setup_metadata"
+        LABELS "runtime;pe32plus;install"
+    )
+
     add_test(
         NAME runtime_tl_crash_guest_signal
         COMMAND "${CMAKE_COMMAND}"

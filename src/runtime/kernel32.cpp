@@ -388,11 +388,18 @@ bool read_guest_file_for_process(const char* path, std::vector<std::byte>& bytes
     return !stream.bad();
 }
 
-[[noreturn]] void run_created_guest_child(const std::string& path, const int result_fd) noexcept {
+[[noreturn]] void run_created_guest_child(const std::string& path, const int result_fd,
+                                          const std::string& working_directory) noexcept {
     // O fork copiou o cache de /proc/self/maps do pai: este processo fará
     // novos mapeamentos (imagem, pilha), então o cache precisa recomeçar.
     runtime::invalidate_memory_map_cache();
     GuestExecutionResult result{};
+    if (!working_directory.empty() && ::chdir(working_directory.c_str()) != 0) {
+        result.exit_code = kChildProcessFailure;
+        write_child_process_result(result_fd, result);
+        ::close(result_fd);
+        ::_exit(0);
+    }
     std::vector<std::byte> bytes;
     if (!read_guest_file_for_process(path.c_str(), bytes)) {
         result.exit_code = kChildProcessFailure;
@@ -1556,13 +1563,55 @@ TL_MSABI const std::uint16_t* tl_GetCommandLineW() noexcept {
     return wide_cmd.data();
 }
 
+namespace {
+
+[[nodiscard]] bool environment_name_equals(const char* const lhs,
+                                           const std::string_view rhs) noexcept {
+    if (lhs == nullptr || std::strlen(lhs) != rhs.size()) {
+        return false;
+    }
+    for (std::size_t index = 0; index < rhs.size(); ++index) {
+        if (std::toupper(static_cast<unsigned char>(lhs[index])) != rhs[index]) {
+            return false;
+        }
+    }
+    return true;
+}
+
+[[nodiscard]] std::optional<std::string> prefix_environment_value(const char* const name) {
+    const std::filesystem::path prefix_root = guest_prefix_root();
+    const prefix::EnvironmentPaths paths = prefix::get_environment_paths(prefix_root);
+    if (environment_name_equals(name, "APPDATA")) {
+        return prefix::to_windows_path(paths.app_data_roaming, prefix_root);
+    }
+    if (environment_name_equals(name, "LOCALAPPDATA")) {
+        return prefix::to_windows_path(paths.app_data_local, prefix_root);
+    }
+    if (environment_name_equals(name, "USERPROFILE")) {
+        return "C:\\users\\guest";
+    }
+    if (environment_name_equals(name, "TEMP") || environment_name_equals(name, "TMP")) {
+        return prefix::to_windows_path(paths.temp_dir, prefix_root);
+    }
+    if (environment_name_equals(name, "HOMEDRIVE")) {
+        return "C:";
+    }
+    if (environment_name_equals(name, "HOMEPATH")) {
+        return "\\users\\guest";
+    }
+    return std::nullopt;
+}
+
+}  // namespace
+
 TL_MSABI std::uint32_t tl_GetEnvironmentVariableA(const char* name, char* buffer,
                                                   std::uint32_t size) noexcept {
     if (name == nullptr || !mapped_guest_cstring(name)) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
-    const char* value = std::getenv(name);
+    const std::optional<std::string> prefix_value = prefix_environment_value(name);
+    const char* const value = prefix_value.has_value() ? prefix_value->c_str() : std::getenv(name);
     if (value == nullptr) {
         set_last_error(abi::kErrorEnvvarNotFound);
         return 0;
@@ -1616,7 +1665,7 @@ TL_MSABI std::uint32_t tl_GetCurrentDirectoryA(std::uint32_t buffer_length, char
         set_last_error(errno_to_win32(errno));
         return 0;
     }
-    const std::string win_cwd = prefix::to_windows_path(cwd);
+    const std::string win_cwd = prefix::to_windows_path(cwd, guest_prefix_root());
     const std::size_t len = win_cwd.size();
     if (buffer_length <= len || buffer == nullptr) {
         return static_cast<std::uint32_t>(len + 1);
@@ -1633,7 +1682,7 @@ TL_MSABI std::uint32_t tl_GetCurrentDirectoryW(std::uint32_t buffer_length, std:
         set_last_error(errno_to_win32(errno));
         return 0;
     }
-    const std::string win_cwd = prefix::to_windows_path(cwd);
+    const std::string win_cwd = prefix::to_windows_path(cwd, guest_prefix_root());
     const std::u16string wide_cwd = util::utf8_to_wide(win_cwd);
     const std::size_t len = wide_cwd.size();
     if (buffer_length <= len || buffer == nullptr) {
@@ -1648,7 +1697,12 @@ TL_MSABI std::uint32_t tl_GetCurrentDirectoryW(std::uint32_t buffer_length, std:
 TL_MSABI std::uint32_t tl_GetModuleFileNameA(const void* module, char* filename,
                                               std::uint32_t size) noexcept {
     (void)module;
-    const std::string& path = g_module_file_name;
+    if (g_module_file_name.empty()) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    const std::string path =
+        prefix::to_windows_path(std::filesystem::path(g_module_file_name), guest_prefix_root());
     if (filename == nullptr || size == 0) {
         // MSDN: sem buffer, devolve o tamanho necessário (com terminador).
         set_last_error(abi::kErrorSuccess);
@@ -1674,15 +1728,22 @@ TL_MSABI std::uint32_t tl_GetModuleFileNameA(const void* module, char* filename,
 TL_MSABI std::uint32_t tl_GetModuleFileNameW(const void* module, std::uint16_t* filename,
                                               std::uint32_t size) noexcept {
     (void)module;
+    if (g_module_file_name.empty()) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
     if (filename == nullptr || size == 0) {
         set_last_error(abi::kErrorSuccess);
-        return static_cast<std::uint32_t>(g_module_file_name.size() + 1);
+        const std::string path =
+            prefix::to_windows_path(std::filesystem::path(g_module_file_name), guest_prefix_root());
+        return static_cast<std::uint32_t>(path.size() + 1);
     }
     if (!mapped_guest_range(filename, static_cast<std::size_t>(size) * sizeof(std::uint16_t), true)) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
-    const std::u16string wide_path = util::utf8_to_wide(g_module_file_name);
+    const std::u16string wide_path = util::utf8_to_wide(
+        prefix::to_windows_path(std::filesystem::path(g_module_file_name), guest_prefix_root()));
     const std::size_t len = wide_path.size();
     if (len + 1 > size) {
         std::copy(wide_path.begin(), wide_path.begin() + static_cast<std::ptrdiff_t>(size - 1), filename);
@@ -2788,11 +2849,12 @@ TL_MSABI int tl_CreateProcessA(const char* application_name, char* command_line,
                                const void* startup_info, void* process_information) noexcept {
     (void)startup_info;
     if (process_attributes != nullptr || thread_attributes != nullptr || inherit_handles != 0 ||
-        creation_flags != 0 || environment != nullptr || current_directory != nullptr ||
+        creation_flags != 0 || environment != nullptr ||
         process_information == nullptr ||
         !mapped_guest_range(process_information, sizeof(GuestProcessInformation), true) ||
         (application_name != nullptr && !mapped_guest_cstring(application_name)) ||
-        (application_name == nullptr && (command_line == nullptr || !mapped_guest_cstring(command_line)))) {
+        (application_name == nullptr && (command_line == nullptr || !mapped_guest_cstring(command_line))) ||
+        (current_directory != nullptr && !mapped_guest_cstring(current_directory))) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
@@ -2822,6 +2884,34 @@ TL_MSABI int tl_CreateProcessA(const char* application_name, char* command_line,
                 std::memcpy(normalized_path, candidate, static_cast<std::size_t>(written) + 1);
             }
         }
+    }
+
+    std::string child_working_directory;
+    if (current_directory != nullptr) {
+        char normalized_directory[4096]{};
+        if (!translate_windows_path(current_directory, normalized_directory,
+                                    sizeof(normalized_directory))) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
+        }
+        std::filesystem::path directory{normalized_directory};
+        if (directory.is_relative()) {
+            std::error_code current_path_error;
+            directory = std::filesystem::current_path(current_path_error) / directory;
+            if (current_path_error) {
+                set_last_error(abi::kErrorInvalidParameter);
+                return 0;
+            }
+        }
+        const prefix::EnvironmentPaths paths =
+            prefix::get_environment_paths(guest_prefix_root());
+        std::error_code directory_error;
+        if (!prefix::is_path_within(directory, paths.drive_c) ||
+            !std::filesystem::is_directory(directory, directory_error) || directory_error) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
+        }
+        child_working_directory = directory.string();
     }
     SyncSlot* allocated = nullptr;
     {
@@ -2867,7 +2957,7 @@ TL_MSABI int tl_CreateProcessA(const char* application_name, char* command_line,
     }
     if (child == 0) {
         ::close(result_pipe[0]);
-        run_created_guest_child(normalized_path, result_pipe[1]);
+        run_created_guest_child(normalized_path, result_pipe[1], child_working_directory);
     }
     ::close(result_pipe[1]);
     {

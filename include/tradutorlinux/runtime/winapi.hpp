@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <filesystem>
 
 #if defined(__GNUC__) || defined(__clang__)
 #define TL_MSABI __attribute__((ms_abi))
@@ -699,6 +700,8 @@ TL_MSABI std::uint32_t tl_GetCurrentDirectoryW(std::uint32_t buffer_length,
                                                 std::uint16_t* buffer) noexcept;
 TL_MSABI std::uint32_t tl_GetModuleFileNameA(const void* module_handle, char* buffer,
                                               std::uint32_t size) noexcept;
+TL_MSABI std::uint32_t tl_GetModuleFileNameW(const void* module_handle, std::uint16_t* buffer,
+                                              std::uint32_t size) noexcept;
 
 // Fase 11: Concorrência.
 
@@ -955,6 +958,11 @@ TL_MSABI void* tl_OpenProcess(std::uint32_t desired_access, int inherit_handle, 
 
 // Define o caminho do módulo convidado antes da execução.
 void set_guest_module_path(const char* path) noexcept;
+// Define o prefixo ativo da execução atual. O valor é herdado pelos processos
+// convidados criados via fork e nunca é obtido implicitamente do diretório do
+// launcher.
+void set_guest_prefix_path(const std::filesystem::path& path);
+[[nodiscard]] std::filesystem::path guest_prefix_root();
 void set_guest_image_view(const void* image_base, std::size_t image_size,
                           std::uint32_t resource_rva, std::uint32_t resource_size) noexcept;
 

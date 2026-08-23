@@ -23,6 +23,12 @@ struct EnvironmentPaths {
 // Retorna o caminho padrão do prefixo do TradutorLinux (~/.tradutorlinux)
 [[nodiscard]] std::filesystem::path default_prefix_root();
 
+// Diretório que agrupa os prefixos exclusivos de aplicativos cadastrados.
+[[nodiscard]] std::filesystem::path managed_prefixes_root();
+
+// Prefixo padrão de uma nova instalação ou cadastro persistente.
+[[nodiscard]] std::filesystem::path default_app_prefix(std::string_view app_id);
+
 // Inicializa a árvore de diretórios do prefixo (drive_c, dosdevices, Program Files, AppData, etc.) de forma idempotente.
 [[nodiscard]] bool initialize_prefix(const std::filesystem::path& prefix_root);
 
@@ -39,5 +45,11 @@ struct EnvironmentPaths {
 [[nodiscard]] std::string to_windows_path(
     const std::filesystem::path& linux_path,
     const std::filesystem::path& prefix_root = default_prefix_root());
+
+// Retorna true somente quando candidate está contido em parent após a
+// normalização disponível no sistema de arquivos. Usado para não deixar uma
+// entrada de catálogo apontar para fora do próprio prefixo por engano.
+[[nodiscard]] bool is_path_within(const std::filesystem::path& candidate,
+                                  const std::filesystem::path& parent);
 
 }  // namespace tradutorlinux::prefix

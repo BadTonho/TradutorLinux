@@ -57,12 +57,14 @@ no mesmo ambiente.
 
 Ordem de trabalho:
 
-1. Prefixo por aplicativo, herdado por processos-filhos e salvo no catálogo.
-2. Leitura, relatório e resolução de `delay-import`.
-3. SEH/unwinding x64, locale/FLS/ambiente e os contratos de arquivo/processo
+1. [x] Prefixo por aplicativo, herdado por processos-filhos e salvo no catálogo.
+   A fixture `tl_install_setup.exe` prova instalação, descoberta/cadastro e
+   relançamento no mesmo ambiente; o isolamento é funcional, não sandbox.
+2. [x] Um instalador PE32+ x86-64 de referência com fontes reproduzíveis,
+   coberto por CTest, incluindo seleção explícita e ausência de candidatos.
+3. Leitura, relatório e resolução de `delay-import`.
+4. SEH/unwinding x64, locale/FLS/ambiente e os contratos de arquivo/processo
    recorrentes nos instaladores x64.
-4. Um instalador PE32+ x86-64 de referência com fontes ou distribuição
-   autorizada, compilado/armazenado de forma reproduzível e coberto por CTest.
 5. Segurança/ACL, rede HTTP, automação OLE e controles somente quando o
    portfólio mostrar que são necessários para mais de um alvo.
 

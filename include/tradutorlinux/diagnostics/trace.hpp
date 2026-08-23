@@ -17,6 +17,7 @@ enum class TraceComponent {
     Process,
     Gui,
     Crt,
+    Install,
 };
 
 [[nodiscard]] bool trace_component_from_name(std::string_view name,

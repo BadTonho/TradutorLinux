@@ -716,7 +716,9 @@ TEST(Win32DirTest, GetModuleFileNameAReturnsSetPath) {
     char buf[4096]{};
     const std::uint32_t len = tl_GetModuleFileNameA(nullptr, buf, sizeof(buf));
     EXPECT_GT(len, 0U);
-    EXPECT_STREQ(buf, "test/path/app.exe");
+    const std::string logical_path{buf};
+    EXPECT_TRUE(logical_path.starts_with("Z:\\"));
+    EXPECT_TRUE(logical_path.ends_with("\\test\\path\\app.exe"));
     set_guest_module_path(nullptr);
 }
 
@@ -725,6 +727,17 @@ TEST(Win32DirTest, GetModuleFileNameAReturnsNeededWhenBufferTooSmall) {
     const std::uint32_t needed = tl_GetModuleFileNameA(nullptr, nullptr, 0);
     EXPECT_GT(needed, 0U);
     set_guest_module_path(nullptr);
+}
+
+TEST(Win32DirTest, GetModuleFileNameReturnsErrorWithoutGuestModule) {
+    set_guest_module_path(nullptr);
+    char narrow[8]{};
+    std::uint16_t wide[8]{};
+
+    EXPECT_EQ(tl_GetModuleFileNameA(nullptr, narrow, sizeof(narrow)), 0U);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_GetModuleFileNameW(nullptr, wide, 8), 0U);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
 }
 
 TEST(Win32Utf16Test, MultiByteToWideCharUtf8ConvertsAccentedChar) {

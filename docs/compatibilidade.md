@@ -26,6 +26,7 @@ Esta matriz declara o comportamento suportado; ela não é uma promessa de compa
 | `tl_resources.exe` | PE32+ AMD64 | Não | `KERNEL32.dll!FindResourceW`, `LoadResource`, `LockResource`, `SizeofResource` | Lê somente o recurso `RCDATA` embutido após validação de limites; saída byte-idêntica ao payload, exit `0`; `--report` não executa | Recursos PE |
 | `tl_sync.exe` | PE32+ AMD64 | Não | eventos, mutex, semáforo e esperas em `KERNEL32.dll` | Cobre evento manual/automático, timeout, semáforo, mutex recursivo e `WaitForMultipleObjects`; saída `sync\n`, exit `0` | Sincronização |
 | `tl_process_parent.exe` / `tl_process_child.exe` | PE32+ AMD64 | Não | `CreateProcessW`, `GetExitCodeProcess`, `TerminateProcess` e `WaitForSingleObject` | Pai cria filhos PE32+ pelo mesmo parser/loader/import resolver; o código de saída real do convidado viaja pelo pipe de resultado do filho (protocolo `[flag][exit_code LE32]`) e o cache de `/proc/self/maps` é invalidado pós-fork e a cada mmap/munmap da pilha; valida código `7` e encerramento controlado `9`; saída `child\nparent\n`, exit `0`. `CreateProcessA/W` resolve caminhos relativos primeiro no diretório do executável convidado (ordem de busca do Windows) | Processos filhos |
+| `tl_install_setup.exe` / `tl_install_app.exe` | PE32+ AMD64 | Não | arquivos Unicode, ambiente, `GetModuleFileNameW`, `CreateProcessW`, espera e handles | **Fluxo de instalação suportado:** setup externo observa `Z:\\...`, copia a aplicação de `C:\\windows\\temp` para `C:\\Program Files` e a inicia com `CreateProcessW`; a aplicação observa `C:\\...`, diretório herdado e `%LOCALAPPDATA%` do mesmo prefixo. `install → catálogo → app run` é coberto por `integration_install_prefix_catalog_run`; prefixos distintos não compartilham estado. O setup de múltiplos candidatos confirma `InstallPending` (`6`) e a escolha no launcher | Instalação por prefixo |
 | `tl_network_loopback.exe` | PE32+ AMD64 | Não | `WS2_32.dll` TCP/UDP, resolução local e `WSAPoll` | Fixture somente loopback, com TCP, UDP e `localhost`; passa com sockets permitidos e é skip controlado em sandbox que retorna `EACCES/EPERM` | WS2_32 |
 | `tl_registry_unicode.exe` | PE32+ AMD64 | Não | `ADVAPI32.dll` chaves/valores Unicode | Cria, persiste, reabre, consulta e remove chave/valor UTF-16 em armazenamento genérico por escopo; saída `registry\n`, exit `0` | Registro |
 | `tl_dynload.exe` | PE32+ AMD64 | Não | `KERNEL32.dll` — `LoadLibraryA/W/ExA/ExW`, `FreeLibrary`, `GetModuleHandleA/W/ExA/ExW`, `GetProcAddress`, `GetLastError` | Fixture de carregamento dinâmico: `LoadLibrary` com caminho `C:\...`, API Set `api-ms-win-core-file-l1-1-0.dll`, `LoadLibraryEx`, `GetProcAddress` por nome e ordinal (36=`GetTickCount64`), `FreeLibrary`, `GetModuleHandleEx` `PIN`/`FROM_ADDRESS`; saída `dynload\n`, exit `0` | Carregamento dinâmico |
@@ -326,9 +327,8 @@ que recebem arquivos do host como argumentos.
 | `KERNEL32.dll` | `FindNextFileW` | Suportado | Continua enumeração wide e converte o nome encontrado para UTF-16 |
 | `KERNEL32.dll` | `FindClose` | Suportado | Fecha `DIR*` e libera slot |
 | `KERNEL32.dll` | `GetFileAttributesW` | Suportado | Converte o caminho UTF-16 e delega ao mesmo `stat()` da variante A |
-| `KERNEL32.dll` | `GetCurrentDirectoryA` | Suportado | `getcwd()` → caminho relativo sem barra inicial; conversão `/` → `\` |
-| `KERNEL32.dll` | `GetCurrentDirectoryW` | Suportado | Delega à versão A e converte resultado para UTF-16 |
-| `KERNEL32.dll` | `GetModuleFileNameA` | Suportado | Retorna caminho definido via `set_guest_module_path()` antes da execução |
+| `KERNEL32.dll` | `GetCurrentDirectoryA/W` | Suportado | Retorna o diretório de execução convertido para caminho Windows lógico: `C:\\...` dentro do prefixo, `Z:\\...` para arquivo/diretório externo |
+| `KERNEL32.dll` | `GetModuleFileNameA/W` | Suportado | Retorna o módulo definido via `set_guest_module_path()` como caminho Windows lógico: aplicação instalada no prefixo usa `C:\\...`; setup externo usa `Z:\\...` |
 | `KERNEL32.dll` | `GetFullPathNameW` | Suportado | Normalização Windows completa (Wine `dlls/kernel32/path.c`): resolve relativo via `GetCurrentDirectory`, colapsa `.`/`..`, trata `C:`, `\` e `\\` (UNC); `file_part` aponta para após último `\`/`:` |
 | `KERNEL32.dll` | `GetFullPathNameA` | Suportado | Conversão `A` → `W` com mesma normalização; buffer insuficiente retorna `tamanho+1` e `ERROR_INSUFFICIENT_BUFFER` |
 | `SHELL32.dll` | `CommandLineToArgvW` | Suportado | Divide a linha de comando UTF-16 em argumentos, preservando grupos entre aspas; o bloco único retornado é liberado por `LocalFree` |
@@ -365,10 +365,12 @@ que recebem arquivos do host como argumentos.
   atualizam a posição automaticamente.
 - `GetFileAttributesA` para arquivos inexistentes retorna `0xFFFFFFFF` com
   `ERROR_FILE_NOT_FOUND`.
-- `GetCurrentDirectoryA/W` retorna o CWD do processo host; caminhos são
-  relativos e sem letra de drive.
-- `GetModuleFileNameA` depende de `set_guest_module_path()` chamado antes da
-  execução; sem configuração retorna 0 com `ERROR_INVALID_PARAMETER`.
+- `GetCurrentDirectoryA/W` reflete apenas o processo convidado isolado. Em
+  instalações e entradas de catálogo, o diretório inicial está dentro de
+  `drive_c`; a execução não altera o diretório do launcher.
+- `GetModuleFileNameA/W` depende de `set_guest_module_path()` chamado antes da
+  execução; o loader conserva o caminho Linux internamente, mas a API devolve
+  apenas a representação lógica `C:\\...` ou `Z:\\...`.
 - `MultiByteToWideChar` e `WideCharToMultiByte` suportam CP_UTF8 (65001) para
   conversão UTF-8/UTF-16; surrogates pair são suportados.
 - 15 testes unitários novos em `tests/test_win32.cpp` cobrem `GetFileSize`,
@@ -376,7 +378,7 @@ que recebem arquivos do host como argumentos.
   (file/directory/nonexistent), `DeleteFileA` (existente/inexistente),
   `MoveFileA` (existente/inexistente), `CreateDirectoryA` (novo/duplicado),
   `FindFirstFileA`/`FindClose`, `GetCurrentDirectoryA/W`,
-  `GetModuleFileNameA` e conversão UTF-8/UTF-16 com caracteres acentuados.
+  `GetModuleFileNameA/W` e conversão UTF-8/UTF-16 com caracteres acentuados.
 - Os fluxos dos alvos reais são cobertos por `targetapp_dos2unix_eol`,
   `targetapp_unix2dos_eol` e `targetapp_dos2unix_unicode-glob`; os arquivos de
   entrada CRLF/LF vêm da fonte pinada do dos2unix e o ouro UTF-8 está em

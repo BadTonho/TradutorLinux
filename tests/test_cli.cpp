@@ -35,6 +35,29 @@ TEST(CommandLineTest, AcceptsReportAndExecutable) {
     ASSERT_TRUE(result.command_line->executable_path.has_value());
 }
 
+TEST(CommandLineTest, AcceptsInstallWithExplicitExecutableAndPrefix) {
+    const std::vector<const char*> arguments{
+        "tradutorlinux", "install", "setup.exe", "--name", "Aplicativo de teste", "--prefix",
+        "/tmp/tl-prefix", "--app-exe", "C:\\Program Files\\Teste\\app.exe", "--timeout", "2",
+        "--trace=install"};
+
+    const ParseResult result = parse_arguments(arguments);
+
+    ASSERT_TRUE(result.command_line.has_value());
+    EXPECT_EQ(result.command_line->mode, CommandMode::Install);
+    EXPECT_EQ(result.command_line->app_name, "Aplicativo de teste");
+    ASSERT_TRUE(result.command_line->executable_path.has_value());
+    EXPECT_EQ(result.command_line->executable_path->string(), "setup.exe");
+    ASSERT_TRUE(result.command_line->custom_prefix.has_value());
+    EXPECT_EQ(result.command_line->custom_prefix->string(), "/tmp/tl-prefix");
+    ASSERT_TRUE(result.command_line->installed_executable_path.has_value());
+    EXPECT_EQ(result.command_line->installed_executable_path->string(),
+              "C:\\Program Files\\Teste\\app.exe");
+    EXPECT_EQ(result.command_line->timeout_ms, 2000U);
+    ASSERT_EQ(result.command_line->trace_channels_raw.size(), 1U);
+    EXPECT_EQ(result.command_line->trace_channels_raw.front(), "install");
+}
+
 TEST(CommandLineTest, RejectsUnknownOption) {
     const std::vector<const char*> arguments{"tradutorlinux", "--invalida"};
 
@@ -122,6 +145,21 @@ TEST(CommandRunTest, ReturnsUsageWhenExecutableIsMissing) {
     EXPECT_EQ(exit_code, ExitCode::Usage);
     EXPECT_TRUE(stdout_stream.str().empty());
     EXPECT_NE(stderr_stream.str().find("informe um arquivo .exe"), std::string::npos);
+}
+
+TEST(CommandRunTest, RejectsReportForInstall) {
+    CommandLine command_line;
+    command_line.mode = CommandMode::Install;
+    command_line.report_only = true;
+    command_line.executable_path = "setup.exe";
+    std::ostringstream stdout_stream;
+    std::ostringstream stderr_stream;
+
+    const ExitCode exit_code = run_command(command_line, stdout_stream, stderr_stream);
+
+    EXPECT_EQ(exit_code, ExitCode::Usage);
+    EXPECT_TRUE(stdout_stream.str().empty());
+    EXPECT_NE(stderr_stream.str().find("--report não pode ser usado"), std::string::npos);
 }
 
 TEST(CommandRunTest, ReturnsInputUnavailableForMissingPath) {

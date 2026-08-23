@@ -158,7 +158,8 @@ SignalDescription describe_signal(const int signal_number) noexcept {
 
 GuestOutcome run_guest_isolated(const std::uintptr_t entry_point,
                                 const std::uintptr_t stack_top,
-                                const std::uint64_t timeout_ms) noexcept {
+                                const std::uint64_t timeout_ms,
+                                const std::filesystem::path& working_directory) noexcept {
     int pipe_fds[2] = {-1, -1};
     if (::pipe(pipe_fds) != 0) {
         return {.kind = GuestOutcomeKind::SpawnFailed};
@@ -182,6 +183,11 @@ GuestOutcome run_guest_isolated(const std::uintptr_t entry_point,
     if (child == 0) {
         ::close(pipe_fds[0]);
         ::close(fault_fds[0]);
+        if (!working_directory.empty() && ::chdir(working_directory.c_str()) != 0) {
+            ::close(pipe_fds[1]);
+            ::close(fault_fds[1]);
+            ::_exit(126);
+        }
         install_crash_reporter(fault_fds[1]);
         ignore_broken_pipe();
         const GuestExecutionResult result = execute_guest_entry(entry_point, stack_top);

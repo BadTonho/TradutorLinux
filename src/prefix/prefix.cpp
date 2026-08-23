@@ -23,6 +23,14 @@ std::filesystem::path default_prefix_root() {
     return std::filesystem::current_path() / ".tradutorlinux";
 }
 
+std::filesystem::path managed_prefixes_root() {
+    return default_prefix_root() / "prefixes";
+}
+
+std::filesystem::path default_app_prefix(const std::string_view app_id) {
+    return managed_prefixes_root() / std::filesystem::path(app_id);
+}
+
 EnvironmentPaths get_environment_paths(const std::filesystem::path& prefix_root) {
     EnvironmentPaths paths;
     paths.root_dir = prefix_root;
@@ -170,11 +178,44 @@ std::string to_windows_path(
             result += target_it->string();
         }
     } else {
-        result = linux_path.string();
-        std::replace(result.begin(), result.end(), '/', '\\');
+        const std::filesystem::path external_path =
+            canonical_target.empty() ? linux_path : canonical_target;
+        result = "Z:";
+        for (const std::filesystem::path& part : external_path) {
+            const std::string piece = part.string();
+            if (piece.empty() || piece == "/") {
+                continue;
+            }
+            result += "\\";
+            result += piece;
+        }
     }
 
     return result;
+}
+
+bool is_path_within(const std::filesystem::path& candidate,
+                    const std::filesystem::path& parent) {
+    std::error_code ec;
+    const std::filesystem::path canonical_candidate =
+        std::filesystem::weakly_canonical(candidate, ec);
+    if (ec) {
+        return false;
+    }
+    const std::filesystem::path canonical_parent =
+        std::filesystem::weakly_canonical(parent, ec);
+    if (ec) {
+        return false;
+    }
+
+    auto candidate_it = canonical_candidate.begin();
+    for (auto parent_it = canonical_parent.begin(); parent_it != canonical_parent.end();
+         ++parent_it, ++candidate_it) {
+        if (candidate_it == canonical_candidate.end() || *candidate_it != *parent_it) {
+            return false;
+        }
+    }
+    return true;
 }
 
 }  // namespace tradutorlinux::prefix

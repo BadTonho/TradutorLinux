@@ -15,6 +15,9 @@ enum class ExitCode : int {
     InputUnavailable = 3,
     MalformedPe = 4,
     Unsupported = 5,
+    // O setup terminou, mas nenhum executável final pôde ser registrado sem
+    // escolha do usuário. Não representa falha do setup.
+    InstallPending = 6,
     InternalError = 70,
     GuestFault = 71,
     GuestTimeout = 72,
@@ -40,7 +43,12 @@ struct CommandLine {
     std::uint64_t timeout_ms{0};
     bool timeout_set{false};
     std::optional<std::filesystem::path> executable_path;
+    // Executável final de uma instalação, relativo a C:\\ ou absoluto dentro
+    // do drive_c do prefixo escolhido.
+    std::optional<std::filesystem::path> installed_executable_path;
     std::optional<std::filesystem::path> custom_prefix;
+    // Contexto interno do catálogo; não é uma opção da execução direta.
+    std::optional<std::filesystem::path> guest_working_directory;
     std::string app_id;
     std::string app_name;
     // Argumentos encaminhados ao programa convidado (argv[1..]), na ordem em
