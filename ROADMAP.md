@@ -127,9 +127,13 @@ Em 2026-08-22, após `SHELL32`, o `--report` resolve 225/430 (52%), ainda
 Em 2026-08-22, após `GDI` estendido, o `--report` resolve 240/430 (55%), ainda
 `unsupported`, com `execution: not-attempted` (`GDI32` `CreateFontW`/`SetDCBrush/PenColor`, `gdiplus` 8, `UxTheme` `SetWindowTheme`, `WINMM` `timeSetEvent`, `dbghelp` `SymFromAddr`).
 
-Em 2026-08-23, a análise local mais recente resolveu 244/430 (56%). O arquivo
-continua `unsupported`; os imports que faltam permanecem evidência para
-priorizar trabalho compartilhado por várias classes de aplicações.
+Em uma leitura completa histórica de 2026-08-23, o relatório resolveu 244/430
+(56%). No runtime atual, a mesma amostra para antes dos imports: o
+`UWOP_SET_FPREG` estendido em RVA `0xbdb0b8` traz `OpInfo=10` e
+`FrameOffset=0`, combinação fora do padrão aceito na Fase 13.4. O parser retorna
+controladamente `unsupported-mechanism`/exit `5`; o arquivo continua
+`unsupported` e essa variante de unwind deve ser tratada como dependência de
+portfólio, sem criar uma exceção específica para Roblox.
 
 O Roblox não é o único alvo nem autoriza implementação exclusiva para si. Ele
 fica registrado como um benchmark grande para priorizar capacidades

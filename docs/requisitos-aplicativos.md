@@ -24,14 +24,14 @@ posterior.
 
 | Aplicativo | Imports resolvidos | Imports ausentes | Bloqueio adicional | Estado |
 |---|---:|---:|---|---|
-| `RobloxPlayerInstaller.exe` | 244/430 | 186 | — | `unsupported` |
+| `RobloxPlayerInstaller.exe` | — | — | `UWOP_SET_FPREG` estendido incompatível antes da leitura de imports | `unsupported` |
 | `winrar-x64-723.exe` | 166/251 | 85 | GUI/segurança e APIs pendentes | `unsupported` |
 | `Creative_Cloud_Set-Up_7474.exe` | — | — | PE32 x86 (`0x14c`) | arquitetura não suportada |
 | `officedeploymenttool_20228-20124.exe` | — | — | PE32 x86 (`0x14c`) | arquitetura não suportada |
 | `Affinity x64.msix` | — | — | pacote MSIX; executável interno não localizado | formato não suportado |
 | `CapCut_7677236283084898320_installer.exe` | — | — | PE32 x86 (`0x14c`) | arquitetura não suportada |
 | `EpicInstaller-20.1.4-831cc1564f92442abc51fdb4a9854359.exe` | — | — | PE32 x86 (`0x14c`) + Mono/.NET | arquitetura/formato não suportados |
-| `lghub_installer.exe` | 67/114 | 47 | — | `unsupported` |
+| `lghub_installer.exe` | 87/114 | 27 | segurança, locale/UI e console pendentes | `unsupported` |
 | `Rockstar-Games-Launcher.exe` | 207/338 | 131 | GUI/segurança/rede e APIs pendentes | `unsupported` |
 
 Os totais de WinRAR e Rockstar foram medidos novamente na Fase 13.6 somente
@@ -95,14 +95,21 @@ de base diferente da instalação nativa PE32+ x86-64.
 | Arquivo | `RobloxPlayerInstaller.exe` |
 | Formato | PE32+ GUI x86-64, 7 seções |
 | SHA-256 | `d156faf0c712d4ce26d95a596ad9b1dfc813021b5c422c93887b2522d8b01a59` |
-| Imports estáticos | 430 em 17 DLLs |
-| Resolvidos pelo runtime | 244 |
-| Ausentes | 186 |
-| Resultado observado | `Unsupported` (exit code `5`); o entry point não foi executado |
+| Imports estáticos | 430 em 17 DLLs (última leitura completa histórica) |
+| Resolvidos pelo runtime | 244/430 (última leitura completa histórica) |
+| Ausentes | 186 (última leitura completa histórica) |
+| Resultado observado | relatório atual: `Unsupported`/exit `5` antes de ler imports; o entry point não foi executado |
 | Fonte | análise local de 2026-08-23 |
 
 O Roblox é um benchmark de cobertura do portfólio, não um alvo exclusivo e nem
-uma autorização para stubs específicos para ele.
+uma autorização para stubs específicos para ele. O relatório detalhado anterior
+alcançou a leitura dos imports e produziu os totais históricos acima. No runtime
+atual, a análise para antes dessa etapa: o `UNWIND_INFO` contém em
+`RVA 0xbdb0b8` uma forma estendida de `UWOP_SET_FPREG` com `OpInfo=10` e
+`FrameOffset=0`. Ela não satisfaz o único padrão estendido aceito na Fase 13.4
+(`OpInfo == FrameOffset`), portanto é rejeitada controladamente como
+`unsupported-mechanism`. Não há, neste momento, um total atual de imports para
+este mesmo arquivo.
 
 ### Lacunas por módulo
 
@@ -671,21 +678,24 @@ independentes, não uma API Win32 específica faltante.
 | Formato | PE32+ GUI x86-64, 8 seções |
 | SHA-256 | `4b2f9903b27c8434afcd52fe65845632fcae47cc50432fb6b3b1637144e811e1` |
 | Imports estáticos | 114 em 3 DLLs |
-| Resolvidos pelo runtime | 67 |
-| Ausentes | 47 |
-| Resultado do `--report` | `unsupported`; `execution: not-attempted` |
+| Resolvidos pelo runtime | 87/114, após a Fase 13.6 |
+| Ausentes | 27, após a Fase 13.6 |
+| Metadados adicionais | `.pdata`: 1375 funções (1371 V1, 4 V2), 4 epílogos, 4 `SET_FPREG` estendidos, 233 handlers e 6 cadeias |
+| Resultado do `--report` | `Unsupported`/exit `5`; `execution: not-attempted` |
 | Fonte | análise local de 2026-08-23 |
 
 O primeiro comando **Executar** terminou com exit code `5` durante a resolução
-de imports, antes do entry point. `COMCTL32!InitCommonControlsEx` já resolve;
-as lacunas restantes estão em `ADVAPI32` e `KERNEL32`.
+de imports, antes do entry point. A medição mais recente, feita somente com
+`--report` após a Fase 13.6, confirma 87 imports resolvidos sem executar o
+binário. `COMCTL32!InitCommonControlsEx` já resolve; as lacunas restantes estão
+em `ADVAPI32` e `KERNEL32`.
 
 ### Lacunas por módulo
 
 | DLL | APIs ausentes |
 |---|---:|
 | `ADVAPI32.dll` | 5 |
-| `KERNEL32.dll` | 42 |
+| `KERNEL32.dll` | 22 |
 | `COMCTL32.dll` | 0/1 |
 
 ### Imports estáticos ausentes
@@ -704,39 +714,22 @@ Essas APIs pedem uma camada de descritores de segurança, token de processo e
 ACLs com semântica própria; retornar sucesso sem aplicar a ACL não é suficiente
 para um instalador.
 
-#### `KERNEL32.dll` (42)
+#### `KERNEL32.dll` (22)
 
 ```text
 GetSystemDirectoryW
-RtlCaptureContext
-RtlLookupFunctionEntry
-RtlVirtualUnwind
 IsDebuggerPresent
-UnhandledExceptionFilter
 IsProcessorFeaturePresent
 GetFileType
 GetStartupInfoW
-FlsAlloc
-FlsGetValue
-FlsSetValue
-FlsFree
 InitializeCriticalSectionAndSpinCount
-LCMapStringW
-GetLocaleInfoW
 IsValidLocale
 EnumSystemLocalesW
 IsValidCodePage
-GetACP
-GetOEMCP
-GetCPInfo
 GetStringTypeW
 SetStdHandle
-GetModuleFileNameW
 ReadConsoleW
 WriteConsoleW
-RtlPcToFileHeader
-RtlUnwindEx
-RtlUnwind
 EncodePointer
 InitializeSListHead
 FormatMessageA
@@ -746,9 +739,6 @@ SetFileInformationByHandle
 AreFileApisANSI
 InitializeCriticalSectionEx
 DecodePointer
-LCMapStringEx
-GetEnvironmentStringsW
-FreeEnvironmentStringsW
 ```
 
 ### Próxima investigação
