@@ -350,6 +350,48 @@ tl_add_pe_fixture(tl_unwind src/tl_unwind.c manifests/tl_unwind.json
     LINK_KERNEL32 UNWIND EXPECT_RESOLVED CONSOLE REPORT RELOCATABLE
     REPORT_SYMBOL "RtlVirtualUnwind")
 
+# O compilador local ainda pode emitir somente UNWIND_INFO V1. Geramos uma
+# imagem-semente normal e a promovemos de maneira determinística para V2,
+# preservando os mesmos códigos de prólogo e inserindo um descritor de epílogo
+# no espaço de padding já reservado pelo formato V1.
+tl_add_pe_fixture(tl_unwind_v2_seed src/tl_unwind_v2.c manifests/tl_unwind_v2.json
+    LINK_KERNEL32 UNWIND EXPECT_RESOLVED CONSOLE RELOCATABLE NO_RUNTIME_CHECK)
+add_custom_command(
+    OUTPUT "${TL_FIXTURE_OUTPUT_DIRECTORY}/tl_unwind_v2_seed.exe"
+    APPEND
+    DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/tl_unwind.c"
+)
+
+add_executable(tl_unwind_v2_generator generate_unwind_v2_fixture.cpp)
+tl_enable_warnings(tl_unwind_v2_generator)
+
+set(TL_UNWIND_V2_FIXTURE "${TL_FIXTURE_OUTPUT_DIRECTORY}/tl_unwind_v2.exe")
+add_custom_command(
+    OUTPUT "${TL_UNWIND_V2_FIXTURE}"
+    COMMAND "${CMAKE_COMMAND}" -E make_directory "${TL_FIXTURE_OUTPUT_DIRECTORY}"
+    COMMAND "$<TARGET_FILE:tl_unwind_v2_generator>"
+        "${TL_FIXTURE_OUTPUT_DIRECTORY}/tl_unwind_v2_seed.exe"
+        "${TL_UNWIND_V2_FIXTURE}"
+    DEPENDS
+        "${TL_FIXTURE_OUTPUT_DIRECTORY}/tl_unwind_v2_seed.exe"
+        tl_unwind_v2_seed_fixture
+        tl_unwind_v2_generator
+    VERBATIM
+    COMMENT "Promoting tl_unwind_v2.exe metadata to UNWIND_INFO V2"
+)
+add_custom_target(tl_unwind_v2_fixture DEPENDS "${TL_UNWIND_V2_FIXTURE}")
+add_dependencies(tradutorlinux_samples tl_unwind_v2_fixture)
+
+add_test(
+    NAME fixture_tl_unwind_v2_metadata
+    COMMAND "${CMAKE_COMMAND}"
+        "-DINPUT=${TL_UNWIND_V2_FIXTURE}"
+        "-DMANIFEST=${CMAKE_CURRENT_SOURCE_DIR}/manifests/tl_unwind_v2.json"
+        "-DLLVM_READOBJ=${TL_LLVM_READOBJ}"
+        -P "${CMAKE_CURRENT_SOURCE_DIR}/verify_fixture.cmake"
+)
+set_tests_properties(fixture_tl_unwind_v2_metadata PROPERTIES LABELS "fixture;pe32plus")
+
 if(TARGET tradutorlinux)
     add_test(
         NAME unwind_tl_unwind_contract
@@ -360,6 +402,34 @@ if(TARGET tradutorlinux)
     )
     set_tests_properties(unwind_tl_unwind_contract PROPERTIES
         DEPENDS fixture_tl_unwind_metadata
+        LABELS "fixture;runtime;pe32plus"
+    )
+
+    add_test(
+        NAME runtime_tl_unwind_v2_matches_readobj
+        COMMAND "${CMAKE_COMMAND}"
+            "-DINPUT=${TL_UNWIND_V2_FIXTURE}"
+            "-DRUNTIME=$<TARGET_FILE:tradutorlinux>"
+            "-DLLVM_READOBJ=${TL_LLVM_READOBJ}"
+            "-DMANIFEST=${CMAKE_CURRENT_SOURCE_DIR}/manifests/tl_unwind_v2.json"
+            "-DEXPECTED_HEX=756e77696e642d76320a"
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/verify_console_output.cmake"
+    )
+    set_tests_properties(runtime_tl_unwind_v2_matches_readobj PROPERTIES
+        DEPENDS fixture_tl_unwind_v2_metadata
+        WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"
+        LABELS "runtime;pe32plus"
+    )
+
+    add_test(
+        NAME unwind_tl_unwind_v2_contract
+        COMMAND "${CMAKE_COMMAND}"
+            "-DINPUT=${TL_UNWIND_V2_FIXTURE}"
+            "-DRUNTIME=$<TARGET_FILE:tradutorlinux>"
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/verify_unwind_v2_fixture.cmake"
+    )
+    set_tests_properties(unwind_tl_unwind_v2_contract PROPERTIES
+        DEPENDS fixture_tl_unwind_v2_metadata
         LABELS "fixture;runtime;pe32plus"
     )
 endif()

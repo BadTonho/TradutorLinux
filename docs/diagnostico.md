@@ -264,19 +264,22 @@ TEB (fixtures sem CRT) não é afetado.
 
 ## Eventos do componente `pe`
 
-O leitor emite um evento `image` com os campos `format`, `arch`, `entry`, `image-base`, `size-of-image` e `sections`, seguido de um evento `section` por seção (`index`, `name`, `virtual-address`, `virtual-size`, `raw-pointer`, `raw-size`, `characteristics`), um evento `import` por DLL estática, um evento `delay-import` por DLL atrasada (ambos com `dll`, `symbols`), `unwind` (`functions`, `handlers`, `chained`) e `relocations` (`blocks`, `entries`).
+O leitor emite um evento `image` com os campos `format`, `arch`, `entry`, `image-base`, `size-of-image` e `sections`, seguido de um evento `section` por seção (`index`, `name`, `virtual-address`, `virtual-size`, `raw-pointer`, `raw-size`, `characteristics`), um evento `import` por DLL estática, um evento `delay-import` por DLL atrasada (ambos com `dll`, `symbols`), `unwind` (`functions`, `v1`, `v2`, `epilogs`, `extended-set-fpreg`, `handlers`, `chained`) e `relocations` (`blocks`, `entries`).
 
 Em nível `debug`, cada bloco de base relocation é registrado com `page-rva` e `entries`.
 
 Exemplo de metadados de desempilhamento aceitos:
 
 ```text
-[tl][pe][info] unwind functions="2" handlers="0" chained="0"
+[tl][pe][info] unwind functions="2" v1="1" v2="1" epilogs="1" extended-set-fpreg="0" handlers="0" chained="0"
 ```
 
 Falhas de argumento ou de pilha nas APIs `Rtl*` são registradas no componente
-`runtime` com `symbol`, `category="unwind"` e `detail`; elas nunca provocam a
-execução de um handler SEH.
+`runtime` como `api-failure`, com `symbol`, `operation="unwind"` e `detail`;
+elas nunca provocam a execução de um handler SEH. Se o `ControlPc` cai em um
+epílogo V2, o mesmo diagnóstico é emitido e `RtlVirtualUnwind` preserva o
+contexto e os parâmetros de saída, sem acessar a pilha nem interpretar
+instruções do epílogo.
 
 Quando o arquivo não é um PE32+ aceitável, o leitor emite:
 

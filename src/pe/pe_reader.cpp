@@ -57,11 +57,14 @@ constexpr std::size_t kMaxRuntimeFunctions = 65536;
 constexpr std::size_t kMaxCString = 65535;
 
 constexpr std::uint8_t kUnwindVersion1 = 1;
+constexpr std::uint8_t kUnwindVersion2 = 2;
 constexpr std::uint8_t kUnwindFlagEHandler = 0x1;
 constexpr std::uint8_t kUnwindFlagUHandler = 0x2;
 constexpr std::uint8_t kUnwindFlagChainInfo = 0x4;
 constexpr std::uint8_t kUnwindKnownFlags = kUnwindFlagEHandler | kUnwindFlagUHandler |
                                            kUnwindFlagChainInfo;
+constexpr std::uint8_t kUnwindOpEpilog = 6;
+constexpr std::uint8_t kUnwindV2EpilogAtFunctionEnd = 0x1;
 
 [[nodiscard]] constexpr bool is_nonvolatile_register(const std::uint8_t register_number) {
     return register_number == 3 || register_number == 5 || register_number == 6 ||
@@ -661,7 +664,8 @@ private:
     }
 
     [[nodiscard]] std::optional<ParseResult> parse_unwind_info(
-        const std::uint32_t unwind_rva, UnwindInfo& unwind) {
+        const std::uint32_t unwind_rva, const std::uint32_t function_begin_rva,
+        const std::uint32_t function_end_rva, UnwindInfo& unwind) {
         if ((unwind_rva & 0x3U) != 0U) {
             return fail(ParseStatus::Malformed,
                         "UNWIND_INFO sem alinhamento de 4 bytes em RVA " +
@@ -683,11 +687,11 @@ private:
         unwind.frame_register = static_cast<std::uint8_t>((header_word >> 24U) & 0x0FU);
         unwind.frame_offset = static_cast<std::uint8_t>((header_word >> 28U) & 0x0FU);
 
-        if (unwind.version != kUnwindVersion1) {
+        if (unwind.version != kUnwindVersion1 && unwind.version != kUnwindVersion2) {
             return fail(ParseStatus::UnsupportedMechanism,
                         "versão de UNWIND_INFO " + std::to_string(unwind.version) +
                             " não suportada em RVA " + util::format_hex(unwind_rva) +
-                            " (esperado 1)");
+                            " (esperado 1 ou 2)");
         }
         if ((unwind.flags & ~kUnwindKnownFlags) != 0U) {
             return fail(ParseStatus::UnsupportedMechanism,
@@ -709,16 +713,131 @@ private:
             return fail(ParseStatus::Malformed, "códigos de UNWIND_INFO truncados");
         }
 
+        const auto read_raw_code = [&](const std::size_t slot, std::uint16_t& raw_code) {
+            return reader_.read_u16(*codes + slot * kUnwindCodeSize, raw_code);
+        };
+        const auto raw_operation = [](const std::uint16_t raw_code) {
+            return static_cast<std::uint8_t>((raw_code >> 8U) & 0x0FU);
+        };
+        const auto code_offset = [](const std::uint16_t raw_code) {
+            return static_cast<std::uint8_t>(raw_code & 0xFFU);
+        };
+        const auto operation_info = [](const std::uint16_t raw_code) {
+            return static_cast<std::uint8_t>((raw_code >> 12U) & 0x0FU);
+        };
+
+        std::size_t slot = 0;
+        if (unwind.version == kUnwindVersion2 && code_count != 0U) {
+            std::uint16_t first_descriptor{};
+            read_raw_code(slot, first_descriptor);
+            if (raw_operation(first_descriptor) == kUnwindOpEpilog) {
+                const std::uint8_t epilog_size = code_offset(first_descriptor);
+                const std::uint8_t epilog_flags = operation_info(first_descriptor);
+                if (epilog_size == 0U) {
+                    return fail(ParseStatus::Malformed,
+                                "descritor de epílogo V2 com tamanho zero em RVA " +
+                                    util::format_hex(unwind_rva));
+                }
+                if ((epilog_flags & ~kUnwindV2EpilogAtFunctionEnd) != 0U) {
+                    return fail(ParseStatus::UnsupportedMechanism,
+                                "flags de descritor de epílogo V2 não suportadas em RVA " +
+                                    util::format_hex(unwind_rva));
+                }
+
+                const auto append_epilog = [&](const std::uint32_t distance_from_end)
+                    -> std::optional<ParseResult> {
+                    const std::uint32_t function_size = function_end_rva - function_begin_rva;
+                    if (distance_from_end < epilog_size || distance_from_end > function_size) {
+                        return fail(ParseStatus::Malformed,
+                                    "epílogo V2 fora do intervalo da RUNTIME_FUNCTION em RVA " +
+                                        util::format_hex(unwind_rva));
+                    }
+                    const std::uint32_t begin_rva = function_end_rva - distance_from_end;
+                    const std::uint64_t end_rva = static_cast<std::uint64_t>(begin_rva) + epilog_size;
+                    if (end_rva > function_end_rva) {
+                        return fail(ParseStatus::Malformed,
+                                    "epílogo V2 excede a RUNTIME_FUNCTION em RVA " +
+                                        util::format_hex(unwind_rva));
+                    }
+                    unwind.epilogs.push_back(
+                        {.begin_rva = begin_rva, .end_rva = static_cast<std::uint32_t>(end_rva)});
+                    return std::nullopt;
+                };
+
+                ++slot;
+                if ((epilog_flags & kUnwindV2EpilogAtFunctionEnd) != 0U) {
+                    if (auto error = append_epilog(epilog_size)) {
+                        return error;
+                    }
+                } else {
+                    if (slot == code_count) {
+                        return fail(ParseStatus::Malformed,
+                                    "descritor de epílogo V2 sem offset em RVA " +
+                                        util::format_hex(unwind_rva));
+                    }
+                    std::uint16_t offset_descriptor{};
+                    read_raw_code(slot, offset_descriptor);
+                    if (raw_operation(offset_descriptor) != kUnwindOpEpilog) {
+                        return fail(ParseStatus::Malformed,
+                                    "offset de epílogo V2 sem UOP_Epilog em RVA " +
+                                        util::format_hex(unwind_rva));
+                    }
+                    const std::uint32_t distance_from_end =
+                        (static_cast<std::uint32_t>(operation_info(offset_descriptor)) << 8U) |
+                        code_offset(offset_descriptor);
+                    if (distance_from_end == 0U) {
+                        return fail(ParseStatus::Malformed,
+                                    "offset de epílogo V2 nulo em RVA " +
+                                        util::format_hex(unwind_rva));
+                    }
+                    if (auto error = append_epilog(distance_from_end)) {
+                        return error;
+                    }
+                    ++slot;
+                }
+
+                while (slot < code_count) {
+                    std::uint16_t offset_descriptor{};
+                    read_raw_code(slot, offset_descriptor);
+                    if (raw_operation(offset_descriptor) != kUnwindOpEpilog) {
+                        break;
+                    }
+                    const std::uint32_t distance_from_end =
+                        (static_cast<std::uint32_t>(operation_info(offset_descriptor)) << 8U) |
+                        code_offset(offset_descriptor);
+                    if (distance_from_end == 0U) {
+                        ++slot;
+                        break;
+                    }
+                    if (auto error = append_epilog(distance_from_end)) {
+                        return error;
+                    }
+                    ++slot;
+                }
+
+                std::sort(unwind.epilogs.begin(), unwind.epilogs.end(),
+                          [](const UnwindEpilog& left, const UnwindEpilog& right) {
+                              return left.begin_rva < right.begin_rva;
+                          });
+                for (std::size_t index = 1; index < unwind.epilogs.size(); ++index) {
+                    if (unwind.epilogs[index].begin_rva < unwind.epilogs[index - 1U].end_rva) {
+                        return fail(ParseStatus::Malformed,
+                                    "epílogos V2 sobrepostos em RVA " +
+                                        util::format_hex(unwind_rva));
+                    }
+                }
+            }
+        }
+
         std::uint8_t previous_code_offset = 0;
         bool has_previous_code = false;
-        for (std::size_t slot = 0; slot < code_count;) {
+        for (; slot < code_count;) {
             std::uint16_t raw_code{};
-            reader_.read_u16(*codes + slot * kUnwindCodeSize, raw_code);
+            read_raw_code(slot, raw_code);
             UnwindCode code;
-            code.code_offset = static_cast<std::uint8_t>(raw_code & 0xFFU);
-            const std::uint8_t raw_operation =
-                static_cast<std::uint8_t>((raw_code >> 8U) & 0x0FU);
-            code.operation_info = static_cast<std::uint8_t>((raw_code >> 12U) & 0x0FU);
+            code.code_offset = code_offset(raw_code);
+            const std::uint8_t operation = raw_operation(raw_code);
+            code.operation_info = operation_info(raw_code);
             if (has_previous_code && code.code_offset > previous_code_offset) {
                 return fail(ParseStatus::Malformed,
                             "códigos de UNWIND_INFO fora de ordem decrescente");
@@ -727,7 +846,7 @@ private:
             has_previous_code = true;
 
             std::size_t extra_slots = 0;
-            switch (raw_operation) {
+            switch (operation) {
                 case 0:
                     code.operation = UnwindOperation::PushNonVol;
                     if (!is_nonvolatile_register(code.operation_info)) {
@@ -752,10 +871,15 @@ private:
                 case 3:
                     code.operation = UnwindOperation::SetFpReg;
                     if (code.operation_info != 0U) {
-                        return fail(ParseStatus::UnsupportedMechanism,
-                                    "forma estendida de UWOP_SET_FPREG não suportada em RVA " +
-                                        util::format_hex(unwind_rva) +
-                                        " (OpInfo=" + std::to_string(code.operation_info) + ")");
+                        if (code.operation_info != unwind.frame_offset) {
+                            return fail(ParseStatus::UnsupportedMechanism,
+                                        "forma estendida de UWOP_SET_FPREG incompatível em RVA " +
+                                            util::format_hex(unwind_rva) +
+                                            " (OpInfo=" + std::to_string(code.operation_info) +
+                                            ", FrameOffset=" +
+                                            std::to_string(unwind.frame_offset) + ")");
+                        }
+                        unwind.has_extended_set_fpreg = true;
                     }
                     if (!is_nonvolatile_register(unwind.frame_register)) {
                         return fail(ParseStatus::Malformed,
@@ -799,7 +923,7 @@ private:
                 default:
                     return fail(ParseStatus::UnsupportedMechanism,
                                 "operação de UNWIND_INFO não suportada: " +
-                                    std::to_string(raw_operation) + " em RVA " +
+                                    std::to_string(operation) + " em RVA " +
                                     util::format_hex(unwind_rva));
             }
             if (extra_slots > static_cast<std::size_t>(code_count) - slot - 1U) {
@@ -906,7 +1030,8 @@ private:
                 return fail(ParseStatus::Malformed,
                             "RUNTIME_FUNCTIONs fora de ordem ou sobrepostos");
             }
-            if (auto error = parse_unwind_info(function.unwind_info_rva, function.unwind)) {
+            if (auto error = parse_unwind_info(function.unwind_info_rva, function.begin_rva,
+                                               function.end_rva, function.unwind)) {
                 return error;
             }
             previous_end = function.end_rva;

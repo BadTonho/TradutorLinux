@@ -69,6 +69,13 @@ struct UnwindCode {
     std::uint32_t operand{};
 };
 
+// Intervalo [begin_rva, end_rva) de um epílogo descrito por UNWIND_INFO V2.
+// Os intervalos são normalizados em ordem crescente de RVA pelo leitor.
+struct UnwindEpilog {
+    std::uint32_t begin_rva{};
+    std::uint32_t end_rva{};
+};
+
 struct UnwindInfo {
     std::uint8_t version{};
     std::uint8_t flags{};
@@ -76,6 +83,11 @@ struct UnwindInfo {
     std::uint8_t frame_register{};
     std::uint8_t frame_offset{};
     std::vector<UnwindCode> codes;
+    std::vector<UnwindEpilog> epilogs;
+    // Algumas imagens geradas no ecossistema Windows repetem FrameOffset em
+    // OpInfo de UWOP_SET_FPREG. O leitor só aceita essa forma quando os dois
+    // valores coincidem e a marca para diagnóstico.
+    bool has_extended_set_fpreg{};
     std::uint32_t handler_rva{};
     std::uint32_t handler_data_rva{};
     bool has_chained_function{};

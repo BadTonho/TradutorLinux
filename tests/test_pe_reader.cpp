@@ -105,6 +105,37 @@ std::vector<std::byte> make_unwind_pe() {
     return build(spec);
 }
 
+std::vector<std::byte> make_unwind_v2_pe() {
+    constexpr std::uint32_t kPdataRva = 0x2000;
+    std::vector<std::byte> data;
+    // RUNTIME_FUNCTION: [0x1000, 0x1040), UNWIND_INFO V2 em 0x200c.
+    push_u32(data, 0x1000);
+    push_u32(data, 0x1040);
+    push_u32(data, kPdataRva + 12);
+    // V2, prólogo de 4 bytes, 4 slots. O primeiro descritor informa que
+    // todos os epílogos têm dois bytes; os offsets 4 e 8 são relativos ao
+    // fim da função. O último slot é UWOP_ALLOC_SMALL(40).
+    data.push_back(std::byte{0x02});
+    data.push_back(std::byte{4});
+    data.push_back(std::byte{4});
+    data.push_back(std::byte{0});
+    data.push_back(std::byte{2});
+    data.push_back(std::byte{0x06});
+    data.push_back(std::byte{4});
+    data.push_back(std::byte{0x06});
+    data.push_back(std::byte{8});
+    data.push_back(std::byte{0x06});
+    data.push_back(std::byte{4});
+    data.push_back(std::byte{0x42});
+
+    BuildSpec spec;
+    spec.section_names = {".text", ".pdata"};
+    spec.section_data = {std::vector<std::byte>(0x40), data};
+    spec.exception_rva = kPdataRva;
+    spec.exception_size = 12;
+    return build(spec);
+}
+
 std::vector<std::byte> make_all_unwind_opcodes_pe() {
     constexpr std::uint32_t kPdataRva = 0x2000;
     std::vector<std::byte> data;
@@ -265,6 +296,55 @@ TEST(PeReaderTest, ParsesRuntimeFunctionAndUnwindCodes) {
     EXPECT_EQ(function.unwind.codes[1].operation_info, 3U);
 }
 
+TEST(PeReaderTest, ParsesV2EpilogsAndKeepsUnwindTailAligned) {
+    const ParseResult result = parse_pe(make_unwind_v2_pe());
+
+    ASSERT_EQ(result.status, ParseStatus::Success) << result.error_message;
+    ASSERT_EQ(result.info.runtime_functions.size(), 1U);
+    const RuntimeFunction& function = result.info.runtime_functions[0];
+    EXPECT_EQ(function.unwind.version, 2U);
+    ASSERT_EQ(function.unwind.epilogs.size(), 2U);
+    EXPECT_EQ(function.unwind.epilogs[0].begin_rva, 0x1038U);
+    EXPECT_EQ(function.unwind.epilogs[0].end_rva, 0x103AU);
+    EXPECT_EQ(function.unwind.epilogs[1].begin_rva, 0x103CU);
+    EXPECT_EQ(function.unwind.epilogs[1].end_rva, 0x103EU);
+    ASSERT_EQ(function.unwind.codes.size(), 1U);
+    EXPECT_EQ(function.unwind.codes[0].operation, UnwindOperation::AllocSmall);
+
+    std::vector<std::byte> handler_bytes = make_unwind_v2_pe();
+    // V2 + EHANDLER. A cauda começa após os quatro slots, em 0x2018.
+    handler_bytes[0x400 + 12] = std::byte{0x0A};
+    write_u32(handler_bytes, 0x400 + 24, 0x1000);
+    const ParseResult handler = parse_pe(handler_bytes);
+    ASSERT_EQ(handler.status, ParseStatus::Success) << handler.error_message;
+    EXPECT_EQ(handler.info.runtime_functions[0].unwind.handler_rva, 0x1000U);
+    EXPECT_EQ(handler.info.runtime_functions[0].unwind.handler_data_rva, 0x201CU);
+
+    std::vector<std::byte> chained_bytes = make_chained_unwind_pe();
+    // A cauda de V2 sem códigos continua no mesmo limite alinhado e contém a
+    // RUNTIME_FUNCTION encadeada.
+    chained_bytes[0x400 + 24] = std::byte{0x22};  // Version 2 + CHAININFO.
+    const ParseResult chained = parse_pe(chained_bytes);
+    ASSERT_EQ(chained.status, ParseStatus::Success) << chained.error_message;
+    EXPECT_EQ(chained.info.runtime_functions[0].unwind.version, 2U);
+    EXPECT_TRUE(chained.info.runtime_functions[0].unwind.has_chained_function);
+
+    std::vector<std::byte> at_end_bytes = make_unwind_v2_pe();
+    // Descritor de dois bytes no fim, padding UOP_Epilog e ALLOC_SMALL.
+    at_end_bytes[0x400 + 12 + 2] = std::byte{3};
+    at_end_bytes[0x400 + 12 + 4] = std::byte{2};
+    at_end_bytes[0x400 + 12 + 5] = std::byte{0x16};
+    at_end_bytes[0x400 + 12 + 6] = std::byte{0};
+    at_end_bytes[0x400 + 12 + 7] = std::byte{0x06};
+    at_end_bytes[0x400 + 12 + 8] = std::byte{4};
+    at_end_bytes[0x400 + 12 + 9] = std::byte{0x42};
+    const ParseResult at_end = parse_pe(at_end_bytes);
+    ASSERT_EQ(at_end.status, ParseStatus::Success) << at_end.error_message;
+    ASSERT_EQ(at_end.info.runtime_functions[0].unwind.epilogs.size(), 1U);
+    EXPECT_EQ(at_end.info.runtime_functions[0].unwind.epilogs[0].begin_rva, 0x103EU);
+    EXPECT_EQ(at_end.info.runtime_functions[0].unwind.epilogs[0].end_rva, 0x1040U);
+}
+
 TEST(PeReaderTest, ParsesEveryAmd64V1UnwindOpcode) {
     const ParseResult result = parse_pe(make_all_unwind_opcodes_pe());
 
@@ -327,7 +407,7 @@ TEST(PeReaderTest, RejectsMalformedAndUnsupportedUnwindMetadata) {
     EXPECT_EQ(parse_pe(bytes).status, ParseStatus::Malformed);
 
     bytes = make_unwind_pe();
-    bytes[0x400 + 12] = std::byte{0x02};
+    bytes[0x400 + 12] = std::byte{0x03};
     EXPECT_EQ(parse_pe(bytes).status, ParseStatus::UnsupportedMechanism);
 
     bytes = make_unwind_pe();
@@ -337,6 +417,55 @@ TEST(PeReaderTest, RejectsMalformedAndUnsupportedUnwindMetadata) {
     bytes = make_all_unwind_opcodes_pe();
     // UWOP_SET_FPREG fica no slot 4 (há um slot extra no ALLOC_LARGE).
     bytes[0x400 + 12 + 4 + 4 * 2 + 1] = std::byte{0x33};
+    EXPECT_EQ(parse_pe(bytes).status, ParseStatus::UnsupportedMechanism);
+}
+
+TEST(PeReaderTest, ValidatesV2EpilogDescriptorsAndExtendedSetFpReg) {
+    constexpr std::size_t kUnwindFileOffset = 0x400 + 12;
+
+    std::vector<std::byte> bytes = make_unwind_v2_pe();
+    bytes[kUnwindFileOffset + 2] = std::byte{1};
+    EXPECT_EQ(parse_pe(bytes).status, ParseStatus::Malformed);
+
+    bytes = make_unwind_v2_pe();
+    bytes[kUnwindFileOffset + 5] = std::byte{0x26};
+    EXPECT_EQ(parse_pe(bytes).status, ParseStatus::UnsupportedMechanism);
+
+    bytes = make_unwind_v2_pe();
+    bytes[kUnwindFileOffset + 4] = std::byte{0};
+    EXPECT_EQ(parse_pe(bytes).status, ParseStatus::Malformed);
+
+    bytes = make_unwind_v2_pe();
+    bytes[kUnwindFileOffset + 6] = std::byte{0x50};
+    EXPECT_EQ(parse_pe(bytes).status, ParseStatus::Malformed);
+
+    bytes = make_unwind_v2_pe();
+    bytes[kUnwindFileOffset + 8] = std::byte{5};
+    EXPECT_EQ(parse_pe(bytes).status, ParseStatus::Malformed);
+
+    bytes = make_unwind_v2_pe();
+    // No formato com epílogo ao fim, um UOP_Epilog nulo serve de padding.
+    // Qualquer distância não nula nesse slot passa a ser outro epílogo e
+    // precisa obedecer os limites da função.
+    bytes[kUnwindFileOffset + 2] = std::byte{3};
+    bytes[kUnwindFileOffset + 4] = std::byte{2};
+    bytes[kUnwindFileOffset + 5] = std::byte{0x16};
+    bytes[kUnwindFileOffset + 6] = std::byte{1};
+    bytes[kUnwindFileOffset + 7] = std::byte{0x06};
+    EXPECT_EQ(parse_pe(bytes).status, ParseStatus::Malformed);
+
+    bytes = make_unwind_v2_pe();
+    bytes[kUnwindFileOffset] = std::byte{0x03};
+    EXPECT_EQ(parse_pe(bytes).status, ParseStatus::UnsupportedMechanism);
+
+    bytes = make_all_unwind_opcodes_pe();
+    bytes[kUnwindFileOffset + 3] = std::byte{0x35};
+    bytes[kUnwindFileOffset + 13] = std::byte{0x33};
+    const ParseResult extended = parse_pe(bytes);
+    ASSERT_EQ(extended.status, ParseStatus::Success) << extended.error_message;
+    EXPECT_TRUE(extended.info.runtime_functions[0].unwind.has_extended_set_fpreg);
+
+    bytes[kUnwindFileOffset + 13] = std::byte{0x23};
     EXPECT_EQ(parse_pe(bytes).status, ParseStatus::UnsupportedMechanism);
 }
 

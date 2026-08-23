@@ -67,9 +67,15 @@ Os itens marcados como concluídos devem ter evidência no repositório: código
   SEH nem execução de handlers. WinRAR encontra `UNWIND_INFO` v2 e Rockstar
   um `SET_FPREG` não canônico; ambos permanecem `unsupported` e não foram
   executados.
-- **Próximo resultado observável:** escolher, pelo portfólio, a próxima lacuna
-  reutilizável entre despacho SEH, locale/FLS/ambiente e contratos restantes
-  de arquivo/processo, com fixture própria antes de ampliar APIs.
+- **Marco concluído (Fase 13.4):** o núcleo aceita `UNWIND_INFO` V1/V2,
+  normaliza epílogos V2 e aceita `UWOP_SET_FPREG` estendido somente quando
+  `OpInfo == FrameOffset`. `tl_unwind_v2.exe` prova desempilhamento no corpo,
+  trace e `--report`; em epílogo V2 o contexto é preservado e há diagnóstico
+  controlado, sem decodificação de instruções. WinRAR (151/251) e Rockstar
+  (191/338) foram reanalisados somente com `--report`, continuam
+  `unsupported` pelas APIs e pelo despacho SEH ausentes e não foram executados.
+- **Próximo resultado observável:** despacho SEH x64 sobre os metadados V1/V2
+  já validados, sem antecipar APIs de locale, GUI ou segurança.
 
 ### Estudo de caso: `RobloxPlayerInstaller.exe` (benchmark de cobertura)
 
@@ -117,8 +123,9 @@ reutilizáveis por várias classes de aplicativos. As lacunas observadas são:
   tempo, sincronização e processos filhos, com fixtures próprias; a memória
   mapeada (`MapViewOfFile`/`CreateFileMappingW`) foi entregue depois;
 - [x] implementar o núcleo de unwinding x64 da imagem convidada:
-  `.pdata`/`.xdata` v1, `RtlCaptureContext`, `RtlLookupFunctionEntry`,
-  `RtlVirtualUnwind` e `RtlPcToFileHeader`, com fixture e regressões;
+  `.pdata`/`.xdata` V1/V2, epílogos V2, `RtlCaptureContext`,
+  `RtlLookupFunctionEntry`, `RtlVirtualUnwind` e `RtlPcToFileHeader`, com
+  fixtures e regressões;
 - [ ] completar despacho SEH x64: `__C_specific_handler`, `RtlUnwindEx`,
   transferência de controle e propagação de exceções; o núcleo atual não
   executa handlers nem declara suporte a `try/catch`;
@@ -390,6 +397,9 @@ compatibilidade imediata com qualquer executável, jogo ou mecanismo protegido.
   instalador; o prefixo padrão compartilhado não é suficiente para este fluxo.
 - [x] Implementar `delay-import` no leitor, relatório e resolvedor, com
   diagnóstico separado para cada símbolo atrasado.
+- [x] **Prioridade 13.4 — metadados de unwinding x64 V2:** normalizar
+  `UOP_Epilog`, aceitar a extensão compatível de `UWOP_SET_FPREG` e manter
+  `RtlVirtualUnwind` seguro fora de epílogos, com fixture e regressões.
 - [ ] Implementar em blocos reutilizáveis as dependências de instaladores x64
   reveladas pelo portfólio — completar despacho SEH, locale/FLS/ambiente e
   operações de arquivo/processo; depois segurança/ACL, rede de alto nível,

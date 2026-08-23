@@ -1,5 +1,9 @@
 #include <stdint.h>
 
+#ifndef TL_UNWIND_MESSAGE
+#define TL_UNWIND_MESSAGE "unwind\n"
+#endif
+
 typedef struct __attribute__((aligned(16))) {
     uint64_t low;
     int64_t high;
@@ -86,7 +90,7 @@ void tl_entry(void) {
     if (g_unwound == 0) {
         ExitProcess(2);
     }
-    static const char message[] = "unwind\n";
+    static const char message[] = TL_UNWIND_MESSAGE;
     uint32_t written = 0;
     if (!WriteFile(GetStdHandle((uint32_t)-11), message, sizeof(message) - 1, &written, 0) ||
         written != sizeof(message) - 1) {

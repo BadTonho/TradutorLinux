@@ -287,6 +287,10 @@ void write_pe_trace(std::ostream& stream, const pe::PeInfo& info) {
 
     std::size_t unwind_handlers = 0;
     std::size_t unwind_chained = 0;
+    std::size_t unwind_v1 = 0;
+    std::size_t unwind_v2 = 0;
+    std::size_t unwind_epilogs = 0;
+    std::size_t unwind_extended_set_fpreg = 0;
     for (const pe::RuntimeFunction& function : info.runtime_functions) {
         if (function.unwind.handler_rva != 0U) {
             ++unwind_handlers;
@@ -294,9 +298,22 @@ void write_pe_trace(std::ostream& stream, const pe::PeInfo& info) {
         if (function.unwind.has_chained_function) {
             ++unwind_chained;
         }
+        if (function.unwind.version == 1U) {
+            ++unwind_v1;
+        } else if (function.unwind.version == 2U) {
+            ++unwind_v2;
+        }
+        unwind_epilogs += function.unwind.epilogs.size();
+        if (function.unwind.has_extended_set_fpreg) {
+            ++unwind_extended_set_fpreg;
+        }
     }
     const std::array unwind_fields{
         diagnostics::TraceField{"functions", std::to_string(info.runtime_functions.size())},
+        diagnostics::TraceField{"v1", std::to_string(unwind_v1)},
+        diagnostics::TraceField{"v2", std::to_string(unwind_v2)},
+        diagnostics::TraceField{"epilogs", std::to_string(unwind_epilogs)},
+        diagnostics::TraceField{"extended-set-fpreg", std::to_string(unwind_extended_set_fpreg)},
         diagnostics::TraceField{"handlers", std::to_string(unwind_handlers)},
         diagnostics::TraceField{"chained", std::to_string(unwind_chained)},
     };
@@ -569,9 +586,25 @@ void print_support_report_group(std::ostream& stream, const loader::ResolveResul
             [](const pe::RuntimeFunction& function) {
                 return function.unwind.has_chained_function;
             }));
+        const std::size_t v1_count = static_cast<std::size_t>(std::count_if(
+            info.runtime_functions.begin(), info.runtime_functions.end(),
+            [](const pe::RuntimeFunction& function) { return function.unwind.version == 1U; }));
+        const std::size_t v2_count = static_cast<std::size_t>(std::count_if(
+            info.runtime_functions.begin(), info.runtime_functions.end(),
+            [](const pe::RuntimeFunction& function) { return function.unwind.version == 2U; }));
+        std::size_t epilog_count = 0;
+        std::size_t extended_set_fpreg_count = 0;
+        for (const pe::RuntimeFunction& function : info.runtime_functions) {
+            epilog_count += function.unwind.epilogs.size();
+            if (function.unwind.has_extended_set_fpreg) {
+                ++extended_set_fpreg_count;
+            }
+        }
         stream << "mechanism: x64-unwind (" << info.runtime_functions.size()
-               << " functions, " << handler_count << " handlers, " << chained_count
-               << " chained)\n";
+               << " functions, v1=" << v1_count << ", v2=" << v2_count
+               << ", " << epilog_count << " epilogs, " << extended_set_fpreg_count
+               << " extended-set-fpreg, " << handler_count << " handlers, "
+               << chained_count << " chained)\n";
     }
     if (delay_imports != 0) {
         stream << "mechanism: delay-import (" << resolved_delay_imports << '/'

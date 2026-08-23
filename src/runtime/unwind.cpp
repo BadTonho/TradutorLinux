@@ -75,6 +75,24 @@ thread_local UnwindImageView g_unwind_image{};
     return std::nullopt;
 }
 
+[[nodiscard]] bool is_v2_epilog(const pe::RuntimeFunction& function,
+                                 const std::uint64_t control_pc) noexcept {
+    if (function.unwind.version != 2U || g_unwind_image.base == nullptr) {
+        return false;
+    }
+    const std::uint64_t base = reinterpret_cast<std::uintptr_t>(g_unwind_image.base);
+    if (control_pc < base) {
+        return false;
+    }
+    const std::uint64_t rva = control_pc - base;
+    for (const pe::UnwindEpilog& epilog : function.unwind.epilogs) {
+        if (rva >= epilog.begin_rva && rva < epilog.end_rva) {
+            return true;
+        }
+    }
+    return false;
+}
+
 [[nodiscard]] std::uint64_t& context_register(ContextAmd64& context,
                                                 const std::uint8_t number) noexcept {
     switch (number) {
@@ -246,6 +264,11 @@ extern "C" TL_MSABI void* tl_RtlVirtualUnwind(
     if (image_base != expected_base || !first.has_value() || !control_function.has_value() ||
         *first != *control_function) {
         runtime::trace_unwind_failure("RtlVirtualUnwind", "RUNTIME_FUNCTION fora da imagem ativa");
+        return nullptr;
+    }
+    if (runtime::is_v2_epilog(runtime::g_unwind_image.functions[*first], control_pc)) {
+        runtime::trace_unwind_failure("RtlVirtualUnwind",
+                                      "epílogo UNWIND_INFO V2 não é interpretado");
         return nullptr;
     }
 

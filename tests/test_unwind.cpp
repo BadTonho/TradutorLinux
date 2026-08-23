@@ -126,6 +126,46 @@ TEST_F(UnwindTest, UnwindsStackAllocationAndPushedNonvolatileRegister) {
     EXPECT_EQ(frame, reinterpret_cast<std::uintptr_t>(stack.data() + 6));
 }
 
+TEST_F(UnwindTest, UnwindsV2BodyAndLeavesContextUntouchedInV2Epilog) {
+    UnwindInfo unwind;
+    unwind.version = 2;
+    unwind.codes = {code(UnwindOperation::AllocSmall, 0, 8)};
+    unwind.epilogs = {{.begin_rva = 0x180, .end_rva = 0x190}};
+    set_functions({function(0x100, 0x200, unwind)});
+    const std::uintptr_t base = reinterpret_cast<std::uintptr_t>(image.data());
+    std::array<std::uint64_t, 4> stack{};
+    stack[1] = 0xC0FFEEU;
+
+    ContextAmd64 context{};
+    context.rsp = reinterpret_cast<std::uintptr_t>(stack.data());
+    EXPECT_EQ(tl_RtlVirtualUnwind(0, base, base + 0x150, raw_entry(), &context,
+                                  nullptr, nullptr, nullptr), nullptr);
+    EXPECT_EQ(context.rip, 0xC0FFEEU);
+    EXPECT_EQ(context.rsp, reinterpret_cast<std::uintptr_t>(stack.data() + 2));
+
+    // No prólogo, a alocação ainda não aconteceu e, portanto, o código de
+    // unwind não pode tocá-la.
+    stack[0] = 0xF00DU;
+    context = {};
+    context.rsp = reinterpret_cast<std::uintptr_t>(stack.data());
+    EXPECT_EQ(tl_RtlVirtualUnwind(0, base, base + 0x102, raw_entry(), &context,
+                                  nullptr, nullptr, nullptr), nullptr);
+    EXPECT_EQ(context.rip, 0xF00DU);
+    EXPECT_EQ(context.rsp, reinterpret_cast<std::uintptr_t>(stack.data() + 1));
+
+    context = {};
+    context.rsp = reinterpret_cast<std::uintptr_t>(stack.data());
+    context.rip = base + 0x185;
+    const ContextAmd64 before = context;
+    void* handler_data = reinterpret_cast<void*>(0x1234U);
+    std::uint64_t frame = 0x9876U;
+    EXPECT_EQ(tl_RtlVirtualUnwind(0, base, base + 0x185, raw_entry(), &context,
+                                  &handler_data, &frame, nullptr), nullptr);
+    EXPECT_EQ(std::memcmp(&context, &before, sizeof(context)), 0);
+    EXPECT_EQ(handler_data, reinterpret_cast<void*>(0x1234U));
+    EXPECT_EQ(frame, 0x9876U);
+}
+
 TEST_F(UnwindTest, UnwindsLargeSavedRegistersAndXmm) {
     UnwindInfo unwind;
     unwind.codes = {code(UnwindOperation::SaveXmm128, 6, 0, 9),
