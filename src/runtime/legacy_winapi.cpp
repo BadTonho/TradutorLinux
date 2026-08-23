@@ -12,6 +12,7 @@
 #include <bit>
 #include <charconv>
 #include <cerrno>
+#include <cstdio>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -238,6 +239,116 @@ std::u16string final_windows_path(const std::string& path) {
 [[nodiscard]] bool supported_locale_lcid(const std::uint32_t locale) noexcept {
     return locale == abi::kLocaleEnglishUnitedStates || locale == abi::kLocaleUserDefault ||
            locale == abi::kLocaleSystemDefault;
+}
+
+[[nodiscard]] bool supported_code_page(const std::uint32_t code_page) noexcept {
+    return code_page == abi::kCpAcp || code_page == abi::kCp1252 ||
+           code_page == abi::kCpOem || code_page == abi::kCp437 ||
+           code_page == abi::kCpUtf8;
+}
+
+[[nodiscard]] bool guest_executable_callback(const std::uintptr_t address) noexcept {
+    if (g_guest_image_base == nullptr || address == 0) {
+        return false;
+    }
+    const std::uintptr_t base = reinterpret_cast<std::uintptr_t>(g_guest_image_base);
+    if (address < base || address - base >= g_guest_image_size) {
+        return false;
+    }
+    std::ifstream maps{"/proc/self/maps"};
+    std::string line;
+    while (std::getline(maps, line)) {
+        unsigned long long start = 0;
+        unsigned long long end = 0;
+        char permissions[5]{};
+        if (std::sscanf(line.c_str(), "%llx-%llx %4s", &start, &end, permissions) != 3) {
+            continue;
+        }
+        if (address >= start && address < end) {
+            return permissions[2] == 'x';
+        }
+    }
+    return false;
+}
+
+void trace_locale_extension(const char* const operation, const std::string& detail) noexcept {
+    const std::array<diagnostics::TraceField, 4> fields{
+        diagnostics::TraceField{"operation", operation},
+        diagnostics::TraceField{"locale", "en-US"},
+        diagnostics::TraceField{"detail", detail},
+        diagnostics::TraceField{"status", "success"},
+    };
+    runtime_trace("locale", fields, 4);
+}
+
+[[nodiscard]] bool valid_system_time(const abi::GuestSystemTime& value) noexcept {
+    if (value.year < 1601U || value.month < 1U || value.month > 12U || value.day < 1U ||
+        value.hour > 23U || value.minute > 59U || value.second > 59U ||
+        value.milliseconds > 999U || value.day_of_week > 6U) {
+        return false;
+    }
+    static constexpr std::uint16_t kDaysByMonth[]{31, 28, 31, 30, 31, 30,
+                                                   31, 31, 30, 31, 30, 31};
+    std::uint16_t max_day = kDaysByMonth[value.month - 1U];
+    const bool leap = value.year % 4U == 0U &&
+                      (value.year % 100U != 0U || value.year % 400U == 0U);
+    if (value.month == 2U && leap) {
+        ++max_day;
+    }
+    return value.day <= max_day;
+}
+
+void append_decimal(std::u16string& target, const std::uint16_t value,
+                    const std::size_t minimum_digits) {
+    char narrow[8]{};
+    const auto converted = std::to_chars(narrow, narrow + sizeof(narrow), value);
+    const std::size_t digits = static_cast<std::size_t>(converted.ptr - narrow);
+    for (std::size_t index = digits; index < minimum_digits; ++index) {
+        target.push_back(u'0');
+    }
+    for (std::size_t index = 0; index < digits; ++index) {
+        target.push_back(static_cast<char16_t>(narrow[index]));
+    }
+}
+
+[[nodiscard]] std::uint16_t ctype1(const std::uint16_t unit) noexcept {
+    std::uint16_t result = 0;
+    const bool upper = (unit >= 'A' && unit <= 'Z') ||
+                       (unit >= 0x00C0U && unit <= 0x00D6U && unit != 0x00D7U) ||
+                       (unit >= 0x00D8U && unit <= 0x00DEU);
+    const bool lower = (unit >= 'a' && unit <= 'z') ||
+                       (unit >= 0x00E0U && unit <= 0x00F6U && unit != 0x00F7U) ||
+                       (unit >= 0x00F8U && unit <= 0x00FFU);
+    if (upper) result |= abi::kC1Upper | abi::kC1Alpha;
+    if (lower) result |= abi::kC1Lower | abi::kC1Alpha;
+    if (unit >= '0' && unit <= '9') result |= abi::kC1Digit;
+    if ((unit >= '0' && unit <= '9') || (unit >= 'A' && unit <= 'F') ||
+        (unit >= 'a' && unit <= 'f')) result |= abi::kC1Xdigit;
+    if (unit == ' ') result |= abi::kC1Space | abi::kC1Blank;
+    if (unit == '\t' || unit == '\n' || unit == '\r' || unit == '\v' || unit == '\f') {
+        result |= abi::kC1Space;
+    }
+    if (unit < 0x20U || unit == 0x7FU) result |= abi::kC1Cntrl;
+    if (result == 0 && unit >= 0x21U && unit <= 0x00BFU) result |= abi::kC1Punct;
+    return result;
+}
+
+int write_locale_value(const std::u16string& value, std::uint16_t* const data,
+                       const int data_count) noexcept {
+    const int needed = static_cast<int>(value.size() + 1U);
+    if (data == nullptr || data_count == 0) {
+        set_last_error(abi::kErrorSuccess);
+        return needed;
+    }
+    if (data_count < needed ||
+        !mapped_guest_range(data, static_cast<std::size_t>(data_count) * sizeof(*data), true)) {
+        set_last_error(abi::kErrorInsufficientBuffer);
+        return 0;
+    }
+    std::copy(value.begin(), value.end(), data);
+    data[value.size()] = 0;
+    set_last_error(abi::kErrorSuccess);
+    return needed;
 }
 
 [[nodiscard]] std::optional<std::u16string> locale_string(const std::uint32_t locale_type) {
@@ -691,6 +802,179 @@ TL_MSABI int tl_GetLocaleInfoW(const std::uint32_t locale, const std::uint32_t l
     runtime_trace("locale", fields, 4);
     set_last_error(abi::kErrorSuccess);
     return needed;
+}
+
+TL_MSABI int tl_GetLocaleInfoEx(const std::uint16_t* const locale_name,
+                                const std::uint32_t locale_type,
+                                std::uint16_t* const data,
+                                const int data_count) noexcept {
+    if (locale_name != nullptr && !locale_name_is_en_us(locale_name)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    const int result = tl_GetLocaleInfoW(abi::kLocaleEnglishUnitedStates, locale_type,
+                                         data, data_count);
+    if (result != 0) {
+        trace_locale_extension("info-ex", "GetLocaleInfoEx");
+    }
+    return result;
+}
+
+TL_MSABI int tl_IsValidLocale(const std::uint32_t locale, const std::uint32_t flags) noexcept {
+    if ((flags & ~(abi::kLcidInstalled | abi::kLcidSupported)) != 0U || flags == 0U) {
+        set_last_error(abi::kErrorInvalidFlags);
+        return 0;
+    }
+    const int result = supported_locale_lcid(locale) ? 1 : 0;
+    set_last_error(result != 0 ? abi::kErrorSuccess : abi::kErrorInvalidParameter);
+    if (result != 0) {
+        trace_locale_extension("valid-locale", "0409");
+    }
+    return result;
+}
+
+TL_MSABI int tl_IsValidCodePage(const std::uint32_t code_page) noexcept {
+    const int result = supported_code_page(code_page) ? 1 : 0;
+    set_last_error(result != 0 ? abi::kErrorSuccess : abi::kErrorInvalidParameter);
+    if (result != 0) {
+        trace_locale_extension("valid-code-page", std::to_string(code_page));
+    }
+    return result;
+}
+
+TL_MSABI int tl_EnumSystemLocalesW(const std::uintptr_t callback,
+                                   const std::uint32_t flags) noexcept {
+    if (flags == 0U || (flags & ~(abi::kLcidInstalled | abi::kLcidSupported)) != 0U) {
+        set_last_error(abi::kErrorInvalidFlags);
+        return 0;
+    }
+    if (callback == 0 || !guest_executable_callback(callback)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    static std::uint16_t kEnglishUnitedStates[] = {'0', '4', '0', '9', 0};
+    using LocaleEnumProc = int (TL_MSABI *)(std::uint16_t*);
+    const auto procedure = reinterpret_cast<LocaleEnumProc>(callback);
+    if (procedure(kEnglishUnitedStates) == 0) {
+        set_last_error(abi::kErrorSuccess);
+        return 0;
+    }
+    trace_locale_extension("enumerate", "1");
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_GetStringTypeW(const std::uint32_t info_type,
+                               const std::uint16_t* const source,
+                               const int source_count,
+                               std::uint16_t* const char_type) noexcept {
+    if (info_type != abi::kCType1 || source == nullptr || source_count == 0 || source_count < -1 ||
+        char_type == nullptr) {
+        set_last_error(info_type == abi::kCType1 ? abi::kErrorInvalidParameter
+                                                  : abi::kErrorInvalidFlags);
+        return 0;
+    }
+    std::size_t units = 0;
+    if (source_count == -1) {
+        if (!mapped_guest_wstring(source)) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
+        }
+        do {
+            ++units;
+        } while (source[units - 1U] != 0);
+    } else {
+        units = static_cast<std::size_t>(source_count);
+        if (!mapped_guest_range(source, units * sizeof(*source), false)) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
+        }
+    }
+    if (!mapped_guest_range(char_type, units * sizeof(*char_type), true)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    for (std::size_t index = 0; index < units; ++index) {
+        char_type[index] = ctype1(source[index]);
+    }
+    trace_locale_extension("string-type", std::to_string(units));
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_GetDateFormatW(const std::uint32_t locale, const std::uint32_t flags,
+                               const abi::GuestSystemTime* const date,
+                               const std::uint16_t* const format,
+                               std::uint16_t* const data, const int data_count) noexcept {
+    if (!supported_locale_lcid(locale) || date == nullptr ||
+        !mapped_guest_range(date, sizeof(*date), false) || format != nullptr || data_count < 0 ||
+        (flags != 0U && flags != abi::kDateShortDate && flags != abi::kDateLongDate) ||
+        !valid_system_time(*date)) {
+        set_last_error(flags != 0U && flags != abi::kDateShortDate && flags != abi::kDateLongDate
+                           ? abi::kErrorInvalidFlags
+                           : abi::kErrorInvalidParameter);
+        return 0;
+    }
+    std::u16string value;
+    if (flags == abi::kDateLongDate) {
+        static constexpr std::u16string_view kWeekdays[]{u"Sunday", u"Monday", u"Tuesday", u"Wednesday",
+                                                          u"Thursday", u"Friday", u"Saturday"};
+        static constexpr std::u16string_view kMonths[]{u"January", u"February", u"March", u"April",
+                                                        u"May", u"June", u"July", u"August", u"September",
+                                                        u"October", u"November", u"December"};
+        value.append(kWeekdays[date->day_of_week]);
+        value.append(u", ");
+        value.append(kMonths[date->month - 1U]);
+        value.push_back(u' ');
+        append_decimal(value, date->day, 1);
+        value.append(u", ");
+        append_decimal(value, date->year, 4);
+    } else {
+        append_decimal(value, date->month, 1);
+        value.push_back(u'/');
+        append_decimal(value, date->day, 1);
+        value.push_back(u'/');
+        append_decimal(value, date->year, 4);
+    }
+    const int result = write_locale_value(value, data, data_count);
+    if (result != 0) trace_locale_extension("date-format", flags == abi::kDateLongDate ? "long" : "short");
+    return result;
+}
+
+TL_MSABI int tl_GetTimeFormatW(const std::uint32_t locale, const std::uint32_t flags,
+                               const abi::GuestSystemTime* const time,
+                               const std::uint16_t* const format,
+                               std::uint16_t* const data, const int data_count) noexcept {
+    const std::uint32_t allowed_flags = abi::kTimeNoSeconds | abi::kTimeNoTimeMarker |
+                                        abi::kTimeForce24HourFormat;
+    if (!supported_locale_lcid(locale) || time == nullptr ||
+        !mapped_guest_range(time, sizeof(*time), false) || format != nullptr || data_count < 0 ||
+        (flags & ~allowed_flags) != 0U || !valid_system_time(*time)) {
+        set_last_error((flags & ~allowed_flags) != 0U ? abi::kErrorInvalidFlags
+                                                       : abi::kErrorInvalidParameter);
+        return 0;
+    }
+    const bool use_24_hour = (flags & (abi::kTimeNoTimeMarker | abi::kTimeForce24HourFormat)) != 0U;
+    const bool show_seconds = (flags & abi::kTimeNoSeconds) == 0U;
+    std::u16string value;
+    if (use_24_hour) {
+        append_decimal(value, time->hour, 2);
+    } else {
+        const std::uint16_t hour = static_cast<std::uint16_t>(time->hour % 12U == 0U ? 12U : time->hour % 12U);
+        append_decimal(value, hour, 1);
+    }
+    value.push_back(u':');
+    append_decimal(value, time->minute, 2);
+    if (show_seconds) {
+        value.push_back(u':');
+        append_decimal(value, time->second, 2);
+    }
+    if (!use_24_hour) {
+        value.append(time->hour < 12U ? u" AM" : u" PM");
+    }
+    const int result = write_locale_value(value, data, data_count);
+    if (result != 0) trace_locale_extension("time-format", use_24_hour ? "24h" : "12h");
+    return result;
 }
 
 TL_MSABI int tl_LCMapStringW(const std::uint32_t locale, const std::uint32_t flags,

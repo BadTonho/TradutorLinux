@@ -73,3 +73,8 @@ Callbacks FLS também são ponteiros Microsoft x64: o runtime aceita apenas um
 endereço executável da imagem ativa, limpa o valor FLS antes da invocação e não
 permite que uma exceção C++ atravesse a chamada. O contrato de ciclo de vida
 fica em [ambiente-locale-fls.md](ambiente-locale-fls.md).
+
+`EnumSystemLocalesW` segue a mesma regra: o callback `LocaleEnumProcW` só é
+chamado quando aponta para memória executável da imagem PE ativa e recebe a
+string UTF-16 estática `0409` na ABI Microsoft x64. Nesta fase a enumeração
+possui um único item e não consulta o locale do Linux.

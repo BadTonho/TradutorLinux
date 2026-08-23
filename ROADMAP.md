@@ -90,8 +90,17 @@ Os itens marcados como concluídos devem ter evidência no repositório: código
   trace e execução são protegidos por CTest. WinRAR (166/251) e Rockstar
   (207/338) foram reanalisados somente com `--report`, continuam
   `unsupported` e não foram executados.
-- **Próximo resultado observável:** escolher, pelo portfólio atualizado, a
-  próxima dependência compartilhada sem antecipar GUI, segurança ou rede.
+- **Marco concluído (Fase 13.7):** `tl_locale_extended.exe` valida o locale
+  estático `en-US` por `IsValidCodePage`, `IsValidLocale`, `GetLocaleInfoEx`,
+  `EnumSystemLocalesW`, `GetStringTypeW`, `GetDateFormatW` e
+  `GetTimeFormatW`; enumera somente `0409` por callback Microsoft x64 e
+  imprime `locale-extended\n`. Metadata, `--report`, trace e execução passam
+  em CTest. WinRAR (170/251), Logitech G HUB (92/114) e Rockstar (213/338)
+  foram reanalisados somente com `--report`, reduziram lacunas e continuam
+  `unsupported`; nenhum binário comercial foi executado.
+- **Próximo resultado observável (Fase 13.8):** definir o contexto de processo
+  e console Win32 compartilhado, começando por startup, handles padrão e
+  operações Unicode sem antecipar `AllocConsole`/`AttachConsole`.
 
 ### Estudo de caso: `RobloxPlayerInstaller.exe` (benchmark de cobertura)
 
@@ -424,10 +433,6 @@ compatibilidade imediata com qualquer executável, jogo ou mecanismo protegido.
 - [x] Implementar o despacho SEH explícito e o núcleo reutilizável de
   ambiente/locale/FLS: `tl_seh*.exe` e `tl_locale_env_fls.exe` cobrem os
   contratos sem declarar suporte aos benchmarks comerciais.
-- [ ] Implementar em blocos reutilizáveis as próximas dependências de
-  instaladores x64 reveladas pelo portfólio — operações de arquivo/processo
-  restantes, depois segurança/ACL, rede de alto nível, automação e controles
-  conforme os alvos justifiquem.
 - [x] Validar `install -> arquivos no prefixo -> cadastro do executável
   instalado -> app run` com teste de integração e artefatos reproduzíveis.
 - [ ] Adicionar descoberta de formatos de distribuição ao portfólio: distinguir
@@ -438,14 +443,108 @@ compatibilidade imediata com qualquer executável, jogo ou mecanismo protegido.
 - [ ] Expandir famílias de APIs somente quando a implementação servir a mais de
   um alvo ou completar uma capacidade de sistema bem delimitada; cada API ganha
   fixture independente e regressão de integração.
-- [ ] Priorizar o núcleo comum que falta aos alvos: despacho de exceções x64,
-  locale/FLS/ambiente, segurança/identidade, certificados,
-  WinSock assíncrono e controles GUI usuais.
+- [ ] Priorizar o núcleo comum na ordem publicada abaixo: locale ampliado,
+  contexto de processo/console, enumeração de arquivos, identidade/ACL,
+  controles GUI e, somente depois, automação, HTTP e confiança.
 - [ ] Manter o `--report` como porta de entrada: apresentar imports faltantes
   por DLL e por capacidade, mas considerar carregamentos dinâmicos e o fluxo
   de execução antes de declarar suporte.
 - [ ] Avaliar o `RobloxPlayerInstaller.exe` como benchmark do portfólio, sem
   criar stubs específicos para Roblox e sem declarar suporte ao cliente/jogo.
+
+### Sequência planejada a partir do portfólio local
+
+Esta ordem usa somente as lacunas já registradas em
+`docs/requisitos-aplicativos.md`. Cada item ainda precisa de um plano técnico
+aprovado antes de começar; não autoriza implementar APIs extras por antecipação
+nem declarar os benchmarks comerciais suportados.
+
+#### Fase 13.7 — locale determinístico ampliado
+
+- [x] Implementar `IsValidCodePage`, `IsValidLocale`, `GetLocaleInfoEx`,
+  `EnumSystemLocalesW`, `GetStringTypeW`, `GetDateFormatW` e `GetTimeFormatW`
+  sobre a mesma tabela estática `en-US` da Fase 13.6.
+- [x] Manter a enumeração limitada a locales estáticos documentados, validar
+  callbacks e flags e retornar erro controlado para sort keys, host locale,
+  normalização, CJK e mutação de locale por thread.
+- [x] Criar `tl_locale_extended.exe`, sem CRT implícito, para provar consulta,
+  enumeração por callback, tipo de caractere e formatação; cobrir buffers,
+  flags e callbacks inválidos em CTest.
+- [x] Atualizar `--report` de WinRAR, Logitech G HUB e Rockstar somente depois
+  dos testes. A fase só é concluída se reduzir lacunas nos três, sem executar
+  binários comerciais.
+
+#### Fase 13.8 — contexto de processo e console Win32
+
+- [ ] Implementar o grupo compartilhado `GetStartupInfoW`,
+  `GetSystemDirectoryW`, `GetFileType`, `SetStdHandle`, `ReadConsoleW`,
+  `WriteConsoleW`, `IsDebuggerPresent`, `IsProcessorFeaturePresent`,
+  `EncodePointer`, `DecodePointer` e `InitializeSListHead`.
+- [ ] Definir o contrato para handles padrão por processo/prefixo e para o
+  comportamento sem console, sem criar `AllocConsole`/`AttachConsole` nesta
+  etapa.
+- [ ] Criar uma fixture de processo/console que valida dados de startup,
+  redirecionamento, tipo de handle, codificação UTF-16 e operações de lista;
+  proteger APIs, trace e execução em CTest.
+- [ ] Reanalisar WinRAR, Logitech G HUB e Rockstar apenas com `--report`.
+
+#### Fase 13.9 — enumeração e metadados de arquivos x64
+
+- [ ] Completar as operações de arquivos que se repetem no portfólio:
+  `FindFirstFileExW`, `SetFileAttributesW` e a extensão de metadados de handle
+  justificada pelas amostras; long/short paths e APIs exclusivas ficam fora
+  até aparecerem em outro alvo.
+- [ ] Reutilizar o mapeamento de caminhos e o prefixo existente, validando
+  flags, estruturas, buffers e `GetLastError` sem expor caminhos do host.
+- [ ] Criar fixture de enumeração/metadados no prefixo e testes de isolamento
+  entre prefixos; atualizar os relatórios de pelo menos dois benchmarks x64.
+
+#### Fase 13.10 — identidade e ACLs funcionais por prefixo
+
+- [ ] Implementar uma representação coerente, limitada e persistente de SID,
+  token, descritor de segurança e DACL para os arquivos do prefixo, cobrindo
+  as operações comuns exigidas por Logitech G HUB, WinRAR e Rockstar.
+- [ ] Incluir somente APIs validadas pelo fluxo: consulta de token/SID,
+  `Get/SetNamedSecurityInfoW`, `SetEntriesInAclW`,
+  `InitializeSecurityDescriptor` e operações de SID/ACL associadas.
+- [ ] Criar fixture de segurança que consulta identidade e grava/lê uma DACL
+  dentro do prefixo; provar que isso é compatibilidade funcional, **não**
+  sandbox, autenticação do host ou aplicação real de permissões Linux.
+- [ ] Manter certificados, WinTrust, privilégios elevados, ACLs de rede e
+  herança complexa fora desta fase.
+
+#### Fase 13.11 — diálogos e controles GUI reutilizáveis
+
+- [ ] Promover somente o subconjunto compartilhado de `USER32`/`COMCTL32`
+  necessário para diálogos modais, tabulação, textos/ícones e controles comuns
+  observados em WinRAR e Rockstar.
+- [ ] Criar fixture X11 determinística com interação automatizada; não incluir
+  GDI completo, impressão, shell de arquivos ou todos os controles Windows.
+- [ ] Reanalisar os dois benchmarks e só iniciar execução manual quando todos
+  os imports estáticos e atrasados correspondentes estiverem resolvidos.
+
+#### Fase 13.12 — automação, rede e confiança, em entregas separadas
+
+- [ ] Separar OLE Automation/streams, HTTP WinINet e
+  certificados/WinTrust em subfases independentes, cada qual exigindo ao menos
+  duas evidências do portfólio ou uma fixture de protocolo reproduzível.
+- [ ] Para HTTP, limitar a primeira entrega a cliente HTTPS previsível por
+  prefixo, sem cookies globais ou credenciais do host; para confiança, não
+  afirmar validação de certificado até existir uma cadeia e política testadas.
+- [ ] Não usar esses componentes para declarar compatibilidade do Rockstar
+  antes de validar um fluxo de instalação/atualização inteiro.
+
+#### Backlog condicionado — formatos, arquitetura e unwind adicional
+
+- [ ] MSIX/AppX: primeiro detectar pacote, ler `AppxManifest.xml` e localizar
+  estruturalmente o executável interno; instalação/executar pacote exige fase
+  própria e não é coberta pelo prefixo atual.
+- [ ] PE32/x86, .NET/Mono, ARM e WOW64 continuam fora do alvo. Não há plano de
+  executar esses binários sem uma decisão explícita de arquitetura/emulação.
+- [ ] A forma de `UWOP_SET_FPREG` do Roblox (`OpInfo=10`, `FrameOffset=0`)
+  permanece diagnóstico de portfólio. Só será promovida a uma fase de unwind
+  genérica se outra amostra confirmar a mesma semântica e houver fixture
+  determinística; não será criada uma exceção exclusiva para Roblox.
 
 PE32/x86, .NET/Mono e MSIX/AppX continuam requisitos separados nesta primeira
 subetapa. Eles ficam registrados no portfólio para a expansão posterior, mas

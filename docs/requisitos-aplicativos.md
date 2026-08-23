@@ -25,20 +25,22 @@ posterior.
 | Aplicativo | Imports resolvidos | Imports ausentes | Bloqueio adicional | Estado |
 |---|---:|---:|---|---|
 | `RobloxPlayerInstaller.exe` | — | — | `UWOP_SET_FPREG` estendido incompatível antes da leitura de imports | `unsupported` |
-| `winrar-x64-723.exe` | 166/251 | 85 | GUI/segurança e APIs pendentes | `unsupported` |
+| `winrar-x64-723.exe` | 170/251 | 81 | GUI/segurança e APIs pendentes | `unsupported` |
 | `Creative_Cloud_Set-Up_7474.exe` | — | — | PE32 x86 (`0x14c`) | arquitetura não suportada |
 | `officedeploymenttool_20228-20124.exe` | — | — | PE32 x86 (`0x14c`) | arquitetura não suportada |
 | `Affinity x64.msix` | — | — | pacote MSIX; executável interno não localizado | formato não suportado |
 | `CapCut_7677236283084898320_installer.exe` | — | — | PE32 x86 (`0x14c`) | arquitetura não suportada |
 | `EpicInstaller-20.1.4-831cc1564f92442abc51fdb4a9854359.exe` | — | — | PE32 x86 (`0x14c`) + Mono/.NET | arquitetura/formato não suportados |
-| `lghub_installer.exe` | 87/114 | 27 | segurança, locale/UI e console pendentes | `unsupported` |
-| `Rockstar-Games-Launcher.exe` | 207/338 | 131 | GUI/segurança/rede e APIs pendentes | `unsupported` |
+| `lghub_installer.exe` | 92/114 | 22 | segurança, UI e console pendentes | `unsupported` |
+| `Rockstar-Games-Launcher.exe` | 213/338 | 125 | GUI/segurança/rede e APIs pendentes | `unsupported` |
 
-Os totais de WinRAR e Rockstar foram medidos novamente na Fase 13.6 somente
-com `--report`; os binários não foram executados. Ambos têm V2 e a forma
-aceita de `UWOP_SET_FPREG` classificados, dispatcher SEH explícito e o núcleo
-determinístico de ambiente/locale/FLS, mas retornam `5` (`Unsupported`) pelas
-APIs de GUI, segurança e demais dependências ausentes.
+Os totais de WinRAR, Logitech G HUB e Rockstar foram medidos novamente na Fase
+13.7 somente com `--report`; os binários não foram executados. A extensão de
+locale estático resolveu quatro imports no WinRAR, cinco no Logitech G HUB e
+seis no Rockstar. Eles têm V2 e a forma aceita de `UWOP_SET_FPREG`
+classificados, dispatcher SEH explícito e ambiente/locale/FLS determinísticos,
+mas retornam `5` (`Unsupported`) pelas APIs de GUI, segurança e demais
+dependências ausentes.
 
 ## Recorrências observadas
 
@@ -46,7 +48,7 @@ APIs de GUI, segurança e demais dependências ausentes.
 |---|---|---|
 | PE32/x86 | Creative Cloud, Office Deployment Tool, CapCut, Epic | fora do alvo atual |
 | Unwinding/SEH x64 | Roblox, WinRAR, Logitech G HUB, Rockstar | núcleo `.pdata`/`.xdata` V1/V2, `Rtl*` e SEH explícito suportados; exceções C++, `__finally` e epílogo V2 pendentes |
-| Locale, code pages, FLS e ambiente | WinRAR, Logitech G HUB, Rockstar | núcleo determinístico `en-US`/1252/437, ambiente por processo e FLS por thread suportados; enumeração/UI locale e fibras reais pendentes |
+| Locale, code pages, FLS e ambiente | WinRAR, Logitech G HUB, Rockstar | núcleo determinístico `en-US`/1252/437, ambiente por processo e FLS por thread; validação, enumeração estática, `CT_CTYPE1` e data/hora en-US suportados; UI locale, mutação por thread e fibras reais pendentes |
 | Segurança, identidade e ACLs | Roblox, Logitech G HUB | pendente |
 | Pacote MSIX/AppX | Affinity | pendente |
 | `delay-import` | WinRAR, Rockstar | suportado para descritores RVA (`grAttrs=0x1`), com resolução antecipada |
@@ -79,8 +81,15 @@ Ordem de trabalho:
    `tl_seh_v2.exe`.
 6. [x] Locale/FLS/ambiente determinísticos, comprovados por
    `tl_locale_env_fls.exe`.
-7. Segurança/ACL, rede HTTP, automação OLE e controles somente quando o
-   portfólio mostrar que são necessários para mais de um alvo.
+7. [x] **Fase 13.7 — locale determinístico ampliado:** `IsValidCodePage`,
+   `IsValidLocale`, `GetLocaleInfoEx`, `EnumSystemLocalesW`,
+   `GetStringTypeW`, `GetDateFormatW` e `GetTimeFormatW`, primeiro núcleo a
+   reduzir lacunas de WinRAR, Logitech G HUB e Rockstar simultaneamente,
+   comprovado por `tl_locale_extended.exe`.
+8. [ ] **Fase 13.8 — contexto de processo e console Win32.**
+9. [ ] Enumeração de arquivos, identidade/ACL,
+   controles GUI e, em subfases independentes, automação, HTTP e confiança,
+   na ordem e com os critérios registrados em `ROADMAP.md`.
 
 Os instaladores PE32/x86, assemblies .NET/Mono e pacotes MSIX/AppX continuam
 catalogados, mas pertencem a trilhas posteriores: cada um exige uma capacidade
@@ -375,15 +384,15 @@ contrato, fixture e regressão antes de ser promovido a suporte.
 | SHA-256 | `f435b24d4c2c5342c4f7c0143ef358f0f425b7b8a0972dd34d9dcf94789e9c4d` |
 | Imports estáticos | 156 em 3 DLLs |
 | Delay imports | 95 em 7 DLLs |
-| Resolvidos pelo runtime | 166/251 (117 estáticos + 49 atrasados), Fase 13.6 |
-| Ausentes | 85 (39 estáticos + 46 atrasados), Fase 13.6 |
+| Resolvidos pelo runtime | 170/251 (121 estáticos + 49 atrasados), Fase 13.7 |
+| Ausentes | 81 (35 estáticos + 46 atrasados), Fase 13.7 |
 | Mecanismo adicional | `delay-import` RVA resolvido antecipadamente; `.pdata`: 1316 funções (1313 V1, 3 V2), 3 epílogos, 2 `SET_FPREG` estendidos, 263 handlers e 14 cadeias |
-| Resultado do `--report` | Fase 13.6: `Unsupported`/exit `5` por imports ausentes; execução não tentada |
+| Resultado do `--report` | Fase 13.7: `Unsupported`/exit `5` por imports ausentes; execução não tentada |
 | Fonte | análise local de 2026-08-23 |
 
-Na Fase 13.6, o `--report` leu V2 e classificou todos os 251 imports sem
+Na Fase 13.7, o `--report` leu V2 e classificou todos os 251 imports sem
 executar o binário. Os 95 símbolos atrasados continuam inventariados por DLL,
-com 49 já resolvidos. O núcleo de ambiente, locale e FLS elevou o total em 13
+com 49 já resolvidos. A extensão de locale estático elevou o total em quatro
 imports; WinRAR permanece `unsupported` sobretudo por GUI, segurança e APIs
 de sistema restantes.
 
@@ -391,7 +400,7 @@ de sistema restantes.
 
 | DLL/mecanismo | APIs/ordinais ausentes |
 |---|---:|
-| `KERNEL32.dll` | 37 |
+| `KERNEL32.dll` | 33 |
 | `OLEAUT32.dll` | 2 |
 | `gdiplus.dll` | 0/8 |
 | delay `SHLWAPI.dll` | 1 |
@@ -403,7 +412,7 @@ de sistema restantes.
 
 ### Imports estáticos ausentes
 
-#### `KERNEL32.dll` (37)
+#### `KERNEL32.dll` (33)
 
 ```text
 CreateHardLinkW
@@ -428,11 +437,8 @@ GlobalAlloc
 GlobalLock
 GlobalUnlock
 GlobalFree
-GetDateFormatW
-GetTimeFormatW
 GetNumberFormatW
 GetTickCount
-GetStringTypeW
 SetStdHandle
 InitializeCriticalSectionEx
 IsProcessorFeaturePresent
@@ -442,7 +448,6 @@ InitializeSListHead
 EncodePointer
 InitializeCriticalSectionAndSpinCount
 FindFirstFileExW
-IsValidCodePage
 ```
 
 #### `OLEAUT32.dll` (2)
@@ -537,9 +542,9 @@ CLSIDFromString
 
 Esta amostra reforça capacidades que podem beneficiar outros aplicativos:
 
-1. Unwinding/SEH x64 (`Rtl*`, `UnhandledExceptionFilter`) e o caminho de
-   exceções associado.
-2. Locale/console, FLS e operações de arquivo/ambiente, avaliadas junto com
+1. Contexto de processo/console, sobretudo `GetStartupInfoW`, handles padrão
+   e as operações de console ainda ausentes.
+2. Enumeração/metadados de arquivo e identidade/ACL, avaliados junto com
    outros alvos para evitar implementação exclusiva para o WinRAR.
 
 ## `Creative_Cloud_Set-Up_7474.exe` (Adobe Creative Cloud Set-Up 7474)
@@ -678,15 +683,15 @@ independentes, não uma API Win32 específica faltante.
 | Formato | PE32+ GUI x86-64, 8 seções |
 | SHA-256 | `4b2f9903b27c8434afcd52fe65845632fcae47cc50432fb6b3b1637144e811e1` |
 | Imports estáticos | 114 em 3 DLLs |
-| Resolvidos pelo runtime | 87/114, após a Fase 13.6 |
-| Ausentes | 27, após a Fase 13.6 |
+| Resolvidos pelo runtime | 92/114, após a Fase 13.7 |
+| Ausentes | 22, após a Fase 13.7 |
 | Metadados adicionais | `.pdata`: 1375 funções (1371 V1, 4 V2), 4 epílogos, 4 `SET_FPREG` estendidos, 233 handlers e 6 cadeias |
 | Resultado do `--report` | `Unsupported`/exit `5`; `execution: not-attempted` |
 | Fonte | análise local de 2026-08-23 |
 
 O primeiro comando **Executar** terminou com exit code `5` durante a resolução
 de imports, antes do entry point. A medição mais recente, feita somente com
-`--report` após a Fase 13.6, confirma 87 imports resolvidos sem executar o
+`--report` após a Fase 13.7, confirma 92 imports resolvidos sem executar o
 binário. `COMCTL32!InitCommonControlsEx` já resolve; as lacunas restantes estão
 em `ADVAPI32` e `KERNEL32`.
 
@@ -695,7 +700,7 @@ em `ADVAPI32` e `KERNEL32`.
 | DLL | APIs ausentes |
 |---|---:|
 | `ADVAPI32.dll` | 5 |
-| `KERNEL32.dll` | 22 |
+| `KERNEL32.dll` | 17 |
 | `COMCTL32.dll` | 0/1 |
 
 ### Imports estáticos ausentes
@@ -714,7 +719,7 @@ Essas APIs pedem uma camada de descritores de segurança, token de processo e
 ACLs com semântica própria; retornar sucesso sem aplicar a ACL não é suficiente
 para um instalador.
 
-#### `KERNEL32.dll` (22)
+#### `KERNEL32.dll` (17)
 
 ```text
 GetSystemDirectoryW
@@ -723,17 +728,12 @@ IsProcessorFeaturePresent
 GetFileType
 GetStartupInfoW
 InitializeCriticalSectionAndSpinCount
-IsValidLocale
-EnumSystemLocalesW
-IsValidCodePage
-GetStringTypeW
 SetStdHandle
 ReadConsoleW
 WriteConsoleW
 EncodePointer
 InitializeSListHead
 FormatMessageA
-GetLocaleInfoEx
 FindFirstFileExW
 SetFileInformationByHandle
 AreFileApisANSI
@@ -744,10 +744,10 @@ DecodePointer
 ### Próxima investigação
 
 Este caso confirmou que unwinding/SEH x64 e locale/FLS/ambiente eram
-capacidades compartilhadas; o núcleo determinístico destes últimos foi
-promovido na Fase 13.6. A camada de ACLs continua a exigir uma fixture de
-segurança genérica e outro alvo que também a use, antes de ser considerada
-suporte ao instalador do Logitech.
+capacidades compartilhadas; a extensão de locale foi promovida na Fase 13.7.
+A próxima lacuna compartilhada é contexto de processo/console; ACLs continuam
+a exigir uma fixture de segurança genérica e outro alvo que também a use antes
+de serem consideradas suporte ao instalador do Logitech.
 
 ## `Rockstar-Games-Launcher.exe` (Rockstar Games Launcher)
 
@@ -760,16 +760,16 @@ suporte ao instalador do Logitech.
 | SHA-256 | `c70131cb0427d146c9489297822e99ad87d4d5e141fd999d19f00975ab1a31f2` |
 | Imports estáticos | 205 em 5 DLLs |
 | Delay imports | 133 em 11 DLLs |
-| Resolvidos pelo runtime | 207/338 (130 estáticos + 77 atrasados), Fase 13.6 |
-| Ausentes | 131 (75 estáticos + 56 atrasados), Fase 13.6 |
+| Resolvidos pelo runtime | 213/338 (136 estáticos + 77 atrasados), Fase 13.7 |
+| Ausentes | 125 (69 estáticos + 56 atrasados), Fase 13.7 |
 | Mecanismo adicional | `delay-import` RVA resolvido antecipadamente; `.pdata`: 2663 funções (2661 V1, 2 V2), 2 epílogos, 6 `SET_FPREG` estendidos, 356 handlers e 584 cadeias |
-| Resultado do `--report` | Fase 13.6: `Unsupported`/exit `5` por imports ausentes; execução não tentada |
+| Resultado do `--report` | Fase 13.7: `Unsupported`/exit `5` por imports ausentes; execução não tentada |
 | Fonte | análise local de 2026-08-23 |
 
-Na Fase 13.6, o `--report` aceitou a extensão observada em
+Na Fase 13.7, o `--report` aceitou a extensão observada em
 `UWOP_SET_FPREG` (RVA `0xcead8`, `OpInfo=3` igual ao `FrameOffset`) e
 classificou os 338 imports sem executar o binário. Ambiente, locale e FLS
-resolveram 13 imports compartilhados; além das lacunas em
+e a extensão de locale resolveram 19 imports compartilhados; além das lacunas em
 `KERNEL32`, ele requer controles comuns por ordinal, automação OLE, diálogo de
 impressão e uma camada HTTP WinINet.
 
@@ -777,7 +777,7 @@ impressão e uma camada HTTP WinINet.
 
 | DLL/mecanismo | APIs/ordinais ausentes |
 |---|---:|
-| `KERNEL32.dll` | 54 |
+| `KERNEL32.dll` | 48 |
 | `COMDLG32.dll` | 1 |
 | `OLEAUT32.dll` | 7 |
 | `COMCTL32.dll` | 2 |
@@ -793,7 +793,7 @@ impressão e uma camada HTTP WinINet.
 
 ### Imports estáticos ausentes
 
-#### `KERNEL32.dll` (54)
+#### `KERNEL32.dll` (48)
 
 ```text
 DecodePointer
@@ -811,7 +811,6 @@ RegisterWaitForSingleObject
 SetSearchPathMode
 GetUserDefaultUILanguage
 GlobalUnlock
-IsValidCodePage
 FindFirstFileExW
 GetTimeZoneInformation
 SetStdHandle
@@ -832,7 +831,6 @@ WaitNamedPipeW
 GetStartupInfoW
 IsProcessorFeaturePresent
 InitializeSListHead
-GetStringTypeW
 WaitForSingleObjectEx
 GetExitCodeThread
 TryAcquireSRWLockExclusive
@@ -845,10 +843,6 @@ PeekNamedPipe
 SystemTimeToTzSpecificLocalTime
 TzSpecificLocalTimeToSystemTime
 WriteConsoleW
-GetDateFormatW
-GetTimeFormatW
-IsValidLocale
-EnumSystemLocalesW
 ReadConsoleW
 ```
 
@@ -1001,8 +995,8 @@ WTHelperGetProvSignerFromChain
 
 ### Próxima investigação
 
-SEH x64 e o núcleo determinístico de locale/FLS já foram entregues, mas não
-resolvem as dependências restantes deste aplicativo. Para WinINet, OLE
-automation, controles comuns e impressão, a primeira entrega deve
-ser uma fixture genérica e reprodutível antes de qualquer tentativa de executar
-o Rockstar Launcher.
+SEH x64 e o locale determinístico ampliado já foram entregues, mas não
+resolvem as dependências restantes deste aplicativo. O próximo núcleo comum é
+contexto de processo/console; para WinINet, OLE automation, controles comuns e
+impressão, a primeira entrega deve ser uma fixture genérica e reprodutível
+antes de qualquer tentativa de executar o Rockstar Launcher.

@@ -429,6 +429,57 @@ TEST(Win32LocaleTest, LocaleInfoAndCaseMappingValidateBuffersAndFlags) {
     EXPECT_EQ(tl_GetLastError(), abi::kErrorInsufficientBuffer);
 }
 
+TEST(Win32LocaleTest, ExtendedLocaleValidatesNamesCodePagesAndCharacterTypes) {
+    const std::uint16_t en_us[] = {'e', 'n', '-', 'U', 'S', 0};
+    std::uint16_t country[32]{};
+    EXPECT_EQ(tl_IsValidCodePage(abi::kCp1252), 1);
+    EXPECT_EQ(tl_IsValidCodePage(932), 0);
+    EXPECT_EQ(tl_IsValidLocale(abi::kLocaleEnglishUnitedStates, abi::kLcidSupported), 1);
+    EXPECT_EQ(tl_IsValidLocale(0x0416U, abi::kLcidSupported), 0);
+    EXPECT_EQ(tl_IsValidLocale(abi::kLocaleEnglishUnitedStates, 0), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidFlags);
+    ASSERT_EQ(tl_GetLocaleInfoEx(en_us, abi::kLocaleSCountry, country, std::size(country)), 14);
+    EXPECT_EQ(std::u16string_view(reinterpret_cast<char16_t*>(country)), u"United States");
+
+    const std::uint16_t source[] = {'A', '7', ' ', 0x00E9U, 0};
+    std::uint16_t types[5]{};
+    ASSERT_EQ(tl_GetStringTypeW(abi::kCType1, source, -1, types), 1);
+    EXPECT_EQ(types[0], abi::kC1Upper | abi::kC1Alpha | abi::kC1Xdigit);
+    EXPECT_EQ(types[1], abi::kC1Digit | abi::kC1Xdigit);
+    EXPECT_EQ(types[2], abi::kC1Space | abi::kC1Blank);
+    EXPECT_EQ(types[3], abi::kC1Lower | abi::kC1Alpha);
+    EXPECT_EQ(tl_GetStringTypeW(2, source, -1, types), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidFlags);
+    EXPECT_EQ(tl_EnumSystemLocalesW(0, abi::kLcidSupported), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_EnumSystemLocalesW(0, 0), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidFlags);
+}
+
+TEST(Win32LocaleTest, ExtendedLocaleFormatsStaticEnUsDateAndTime) {
+    const abi::GuestSystemTime date{2024, 1, 2, 2, 15, 4, 5, 0};
+    std::uint16_t formatted[64]{};
+    ASSERT_EQ(tl_GetDateFormatW(abi::kLocaleEnglishUnitedStates, 0, &date, nullptr,
+                                formatted, std::size(formatted)), 9);
+    EXPECT_EQ(std::u16string_view(reinterpret_cast<char16_t*>(formatted)), u"1/2/2024");
+    ASSERT_EQ(tl_GetDateFormatW(abi::kLocaleEnglishUnitedStates, abi::kDateLongDate, &date,
+                                nullptr, formatted, std::size(formatted)), 25);
+    EXPECT_EQ(std::u16string_view(reinterpret_cast<char16_t*>(formatted)), u"Tuesday, January 2, 2024");
+    ASSERT_EQ(tl_GetTimeFormatW(abi::kLocaleEnglishUnitedStates, 0, &date, nullptr,
+                                formatted, std::size(formatted)), 11);
+    EXPECT_EQ(std::u16string_view(reinterpret_cast<char16_t*>(formatted)), u"3:04:05 PM");
+    ASSERT_EQ(tl_GetTimeFormatW(abi::kLocaleEnglishUnitedStates,
+                                abi::kTimeNoSeconds | abi::kTimeNoTimeMarker,
+                                &date, nullptr, formatted, std::size(formatted)), 6);
+    EXPECT_EQ(std::u16string_view(reinterpret_cast<char16_t*>(formatted)), u"15:04");
+    EXPECT_EQ(tl_GetDateFormatW(abi::kLocaleEnglishUnitedStates, 0x100U, &date, nullptr,
+                                formatted, std::size(formatted)), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidFlags);
+    EXPECT_EQ(tl_GetTimeFormatW(abi::kLocaleEnglishUnitedStates, 0, &date, nullptr,
+                                formatted, 2), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInsufficientBuffer);
+}
+
 TEST(Win32HeapTest, GetProcessHeapReturnsNonNull) {
     EXPECT_NE(tl_GetProcessHeap(), nullptr);
 }

@@ -111,8 +111,8 @@ Quando qualquer importação falha, a resolução inteira falha e o processo nã
 ## Eventos de ambiente, FLS e locale
 
 O componente `runtime` registra `environment`, `fls` e `locale` para o núcleo
-determinístico da Fase 13.6. Eles ficam em `stderr` e nunca misturam a saída
-do convidado:
+determinístico das Fases 13.6 e 13.7. Eles ficam em `stderr` e nunca misturam a
+saída do convidado:
 
 ```text
 [tl][runtime][info] environment operation="set" name="APPDATA" action="define" status="success"
@@ -122,9 +122,10 @@ do convidado:
 
 `environment` identifica alteração, expansão ou criação de bloco UTF-16;
 `fls` identifica alocação, valor, callback e liberação; `locale` identifica
-ACP/OEMCP, `CPINFO`, informação e mapeamento. Erros de ponteiro, índice,
-callback, flags ou buffer continuam a usar o retorno Win32 e `GetLastError`
-sem executar código convidado inesperado.
+ACP/OEMCP, `CPINFO`, consulta de informação (inclusive `info-ex`), validação,
+enumeração, tipo de caractere, formatação de data/hora e mapeamento. Erros de
+ponteiro, índice, callback, flags ou buffer continuam a usar o retorno Win32 e
+`GetLastError` sem executar código convidado inesperado.
 
 ## Componente `install`
 

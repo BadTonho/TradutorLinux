@@ -394,6 +394,13 @@ void register_builtin_modules() {
         {"GetLocaleInfoW", 213, reinterpret_cast<std::uintptr_t>(&tl_GetLocaleInfoW)},
         {"LCMapStringW", 214, reinterpret_cast<std::uintptr_t>(&tl_LCMapStringW)},
         {"LCMapStringEx", 215, reinterpret_cast<std::uintptr_t>(&tl_LCMapStringEx)},
+        {"GetLocaleInfoEx", 216, reinterpret_cast<std::uintptr_t>(&tl_GetLocaleInfoEx)},
+        {"IsValidLocale", 217, reinterpret_cast<std::uintptr_t>(&tl_IsValidLocale)},
+        {"IsValidCodePage", 218, reinterpret_cast<std::uintptr_t>(&tl_IsValidCodePage)},
+        {"EnumSystemLocalesW", 219, reinterpret_cast<std::uintptr_t>(&tl_EnumSystemLocalesW)},
+        {"GetStringTypeW", 220, reinterpret_cast<std::uintptr_t>(&tl_GetStringTypeW)},
+        {"GetDateFormatW", 221, reinterpret_cast<std::uintptr_t>(&tl_GetDateFormatW)},
+        {"GetTimeFormatW", 222, reinterpret_cast<std::uintptr_t>(&tl_GetTimeFormatW)},
     };
     static const InternalModule kKernel32Module{"KERNEL32.dll", kKernel32Exports};
     register_module(kKernel32Module);

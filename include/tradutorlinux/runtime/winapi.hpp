@@ -133,6 +133,23 @@ constexpr Dword kLocaleSCurrency = 0x00000014U;
 constexpr Dword kLocaleS1159 = 0x00000028U;
 constexpr Dword kLocaleS2359 = 0x00000029U;
 constexpr Dword kLocaleIDefaultCodePage = 0x0000000BU;
+constexpr Dword kLcidInstalled = 0x00000001U;
+constexpr Dword kLcidSupported = 0x00000002U;
+constexpr Dword kCType1 = 0x00000001U;
+constexpr std::uint16_t kC1Upper = 0x0001U;
+constexpr std::uint16_t kC1Lower = 0x0002U;
+constexpr std::uint16_t kC1Digit = 0x0004U;
+constexpr std::uint16_t kC1Space = 0x0008U;
+constexpr std::uint16_t kC1Punct = 0x0010U;
+constexpr std::uint16_t kC1Cntrl = 0x0020U;
+constexpr std::uint16_t kC1Blank = 0x0040U;
+constexpr std::uint16_t kC1Xdigit = 0x0080U;
+constexpr std::uint16_t kC1Alpha = 0x0100U;
+constexpr Dword kDateShortDate = 0x00000001U;
+constexpr Dword kDateLongDate = 0x00000002U;
+constexpr Dword kTimeNoSeconds = 0x00000002U;
+constexpr Dword kTimeNoTimeMarker = 0x00000004U;
+constexpr Dword kTimeForce24HourFormat = 0x00000008U;
 constexpr Dword kLcmapsLowercase = 0x00000100U;
 constexpr Dword kLcmapsUppercase = 0x00000200U;
 
@@ -665,6 +682,19 @@ TL_MSABI std::uint32_t tl_GetACP() noexcept;
 TL_MSABI std::uint32_t tl_GetOEMCP() noexcept;
 TL_MSABI int tl_GetCPInfo(std::uint32_t code_page, abi::GuestCpInfo* info) noexcept;
 TL_MSABI int tl_GetLocaleInfoW(std::uint32_t locale, std::uint32_t locale_type,
+                               std::uint16_t* data, int data_count) noexcept;
+TL_MSABI int tl_GetLocaleInfoEx(const std::uint16_t* locale_name, std::uint32_t locale_type,
+                                std::uint16_t* data, int data_count) noexcept;
+TL_MSABI int tl_IsValidLocale(std::uint32_t locale, std::uint32_t flags) noexcept;
+TL_MSABI int tl_IsValidCodePage(std::uint32_t code_page) noexcept;
+TL_MSABI int tl_EnumSystemLocalesW(std::uintptr_t callback, std::uint32_t flags) noexcept;
+TL_MSABI int tl_GetStringTypeW(std::uint32_t info_type, const std::uint16_t* source,
+                               int source_count, std::uint16_t* char_type) noexcept;
+TL_MSABI int tl_GetDateFormatW(std::uint32_t locale, std::uint32_t flags,
+                               const abi::GuestSystemTime* date, const std::uint16_t* format,
+                               std::uint16_t* data, int data_count) noexcept;
+TL_MSABI int tl_GetTimeFormatW(std::uint32_t locale, std::uint32_t flags,
+                               const abi::GuestSystemTime* time, const std::uint16_t* format,
                                std::uint16_t* data, int data_count) noexcept;
 TL_MSABI int tl_LCMapStringW(std::uint32_t locale, std::uint32_t flags,
                              const std::uint16_t* source, int source_count,

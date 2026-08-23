@@ -228,6 +228,10 @@ function(tl_add_pe_fixture target_name source_file manifest_file)
                 set(runtime_extra_args
                     "-DEXPECTED_HEX=6c6f63616c652d656e762d666c730a"
                     "-DREQUIRED_TRACE=environment,fls,locale")
+            elseif(target_name STREQUAL "tl_locale_extended")
+                set(runtime_extra_args
+                    "-DEXPECTED_HEX=6c6f63616c652d657874656e6465640a"
+                    "-DREQUIRED_TRACE=locale")
             endif()
         endif()
         add_test(
@@ -503,6 +507,10 @@ tl_add_pe_fixture(tl_thread src/tl_thread.c manifests/tl_thread.json
 tl_add_pe_fixture(tl_locale_env_fls src/tl_locale_env_fls.c manifests/tl_locale_env_fls.json
     LINK_KERNEL32 UNWIND EXPECT_RESOLVED CONSOLE REPORT RELOCATABLE
     REPORT_SYMBOL "FlsAlloc")
+
+tl_add_pe_fixture(tl_locale_extended src/tl_locale_extended.c manifests/tl_locale_extended.json
+    LINK_KERNEL32 EXPECT_RESOLVED CONSOLE REPORT RELOCATABLE
+    REPORT_SYMBOL "EnumSystemLocalesW")
 
 tl_add_pe_fixture(tl_resources src/tl_resources.c manifests/tl_resources.json
     LINK_KERNEL32 EXPECT_RESOLVED CONSOLE REPORT RELOCATABLE

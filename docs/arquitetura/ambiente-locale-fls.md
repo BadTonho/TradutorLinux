@@ -1,8 +1,8 @@
 # Ambiente, locale e FLS por processo
 
-Este contrato define o subconjunto determinístico da Fase 13.6. Ele vale para
-uma execução PE32+ AMD64 no Linux AMD64 e não consulta nem altera o locale do
-Linux durante a execução do convidado.
+Este contrato define o subconjunto determinístico das Fases 13.6 e 13.7. Ele
+vale para uma execução PE32+ AMD64 no Linux AMD64 e não consulta nem altera o
+locale do Linux durante a execução do convidado.
 
 ## Ambiente Win32
 
@@ -49,17 +49,33 @@ UTF-8; `MultiByteToWideChar` e `WideCharToMultiByte` implementam CP1252,
 CP437 completa e UTF-8.
 
 `GetLocaleInfoW` aceita `0x0409`, `LOCALE_USER_DEFAULT` e
-`LOCALE_SYSTEM_DEFAULT`; fornece idioma, país, ISO, decimal, milhar, moeda,
-AM/PM e code page, inclusive `LOCALE_RETURN_NUMBER` para os tipos numéricos
-cobertos. `LCMapStringW` e `LCMapStringEx` aceitam somente `en-US` e a
-transformação upper ou lower de ASCII/Latin-1. Sort keys, normalização,
-largura, CJK, locale do host e flags restantes falham controladamente.
+`LOCALE_SYSTEM_DEFAULT`; `GetLocaleInfoEx` aceita também `en-US`
+case-insensitive (ou o nome nulo para o padrão). Ambos fornecem idioma, país,
+ISO, decimal, milhar, moeda, AM/PM e code page, inclusive
+`LOCALE_RETURN_NUMBER` para os tipos numéricos cobertos.
+
+`IsValidCodePage` aceita somente ACP/1252, OEM/437 e UTF-8. `IsValidLocale`
+aceita o locale fixo para as flags `LCID_INSTALLED` e `LCID_SUPPORTED`.
+`EnumSystemLocalesW` chama uma única vez um callback Microsoft x64 validado da
+imagem convidada, com a string `0409`, para essas mesmas flags; callback
+ausente, flags não cobertas ou endereço não executável falham de forma
+controlada.
+
+`GetStringTypeW` cobre `CT_CTYPE1` para caracteres ASCII e Latin-1.
+`GetDateFormatW` e `GetTimeFormatW` aceitam um `SYSTEMTIME` explícito válido e
+os formatos estáticos en-US `M/d/yyyy`, `Weekday, Month d, yyyy` e
+`h:mm:ss AM/PM` (ou 24 h/sem segundos pelas flags documentadas). Todas seguem
+consulta de tamanho, NUL e `ERROR_INSUFFICIENT_BUFFER`.
+
+`LCMapStringW` e `LCMapStringEx` aceitam somente `en-US` e a transformação
+upper ou lower de ASCII/Latin-1. Sort keys, formatação customizada,
+normalização, largura, CJK, locale do host e flags restantes falham
+controladamente.
 
 ## Diagnóstico e limites
 
 As operações bem-sucedidas relevantes emitem eventos `runtime` `environment`,
 `fls` e `locale` em `stderr`; a saída padrão continua pertencendo ao
 convidado. O contrato não inclui `SetThreadLocale`,
-`GetUserDefaultUILanguage`, `IsValidLocale`, `EnumSystemLocalesW`,
-`GetLocaleInfoEx`, locale configurável por prefixo, fibras reais, GUI, ACL ou
-rede.
+`GetUserDefaultUILanguage`, locale configurável por prefixo, fibras reais, GUI,
+ACL ou rede.
