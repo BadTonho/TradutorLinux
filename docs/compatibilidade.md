@@ -22,6 +22,8 @@ Esta matriz declara o comportamento suportado; ela não é uma promessa de compa
 | `tl_delay_import.exe` | PE32+ AMD64 | Não | `KERNEL32.dll!ExitProcess` somente no diretório delay-import | **Suportado:** descritor `grAttrs=0x1`, INT/IAT atrasadas e resolução antecipada; `--report` resolve 1/1 e a execução chama `ExitProcess` pela IAT atrasada. A variante com `TlMissingDelayImportW` retorna `5` antes do entry point e identifica `mechanism="delay-import"` | Delay imports RVA |
 | `tl_unwind.exe` | PE32+ AMD64 | Não | `KERNEL32.dll!RtlCaptureContext`, `RtlLookupFunctionEntry`, `RtlVirtualUnwind`, `RtlPcToFileHeader`, console e `ExitProcess` | **Suportado no núcleo de unwinding:** possui `.pdata`/`.xdata`, captura um `CONTEXT`, localiza sua `RUNTIME_FUNCTION`, desempilha um frame real e valida a base da imagem; imprime `unwind\n`, exit `0`. Não prova nem declara despacho SEH/`try/catch`. | Núcleo de unwinding x64 |
 | `tl_unwind_v2.exe` | PE32+ AMD64 | Não | Mesmo subconjunto `KERNEL32.dll!Rtl*` de `tl_unwind.exe` | **Suportado para metadado V2 fora de epílogo:** fixture determinística com `UOP_Epilog` V2, normalização no relatório/trace e desempilhamento real no corpo; imprime `unwind-v2\n`, exit `0`. Em epílogo V2, o runtime preserva o contexto e retorna controladamente; não há interpretação de instruções nem despacho SEH. | Unwind V2 / despacho SEH |
+| `tl_seh.exe` | PE32+ AMD64 | Não | `KERNEL32.dll!RaiseException`, VEH, `RtlCaptureContext`, `RtlUnwindEx`, `CreateThread`, console; `msvcrt.dll!__C_specific_handler` | **Suportado para exceção explícita:** valida transferência de `RtlUnwindEx`/RAX, registra/remove VEH, lança em thread convidada e seleciona um `__except` por `SCOPE_TABLE_AMD64`; imprime `seh\n`, exit `0`. Não cobre C++, `__finally` nem sinais Linux. | Despacho SEH x64 |
+| `tl_seh_v2.exe` | PE32+ AMD64 | Não | Mesmo subconjunto de `tl_seh.exe` | **Suportado fora de epílogo V2:** a mesma busca e transferência SEH usa metadado V2 promovido deterministicamente; imprime `seh\n`, exit `0`. | Despacho SEH x64 |
 | `tl_crash.exe` | PE32+ AMD64 | Não | Nenhum | Gerado, verificado, mapeado e executado em processo filho isolado: o convidado acessa o endereço `0`, o hospedeiro observa o `SIGSEGV` via `waitpid`, emite `terminated category="guest-signal" signal="SIGSEGV" fault-address="0x0"` (o crash log captura o `si_addr` no filho e o converte em RVA/seção/importação quando o endereço cai dentro da imagem) e retorna `71` (`GuestFault`) | Diagnóstico de falhas |
 | `tl_hang.exe` | PE32+ AMD64 | Não | Nenhum | Gerado, verificado e executado em processo filho isolado com `--timeout 1`: o convidado entra em loop infinito, o hospedeiro o mata com `SIGKILL`, emite `terminated category="guest-timeout"` e retorna `72` (`GuestTimeout`) | Diagnóstico de falhas |
 | `tl_thread.exe` | PE32+ AMD64 | Não | `KERNEL32.dll!CloseHandle`, `CreateThread`, `ExitProcess`, `ExitThread`, `GetStdHandle`, `WaitForSingleObject`, `WriteFile` | **Suportado no escopo da Fase 11**: cria duas threads sequenciais, cada uma escreve "Thread done" e termina via `ExitThread`; a thread principal aguarda cada handle, escreve "Main done" e encerra. Metadata e execução e2e passam em Debug, Release e Sanitize (`LSAN_OPTIONS=detect_leaks=0`); saída esperada: `Thread done\nThread done\nMain done\n` e exit `0` | Fase 11 |
@@ -73,9 +75,10 @@ Comportamento de rejeição:
 
 O CLI expõe o leitor via `--trace` (eventos do componente `pe`, ver `docs/diagnostico.md`) e via resumo em `stderr`. A saída do leitor é comparada em teste de integração com `llvm-readobj` para as fixtures geradas.
 
-O contrato de desempilhamento e as quatro APIs `Rtl*` promovidas ficam em
-[`arquitetura/unwinding-x64.md`](arquitetura/unwinding-x64.md). O runtime não
-despacha exceções nem executa handlers nesta fase.
+O contrato de desempilhamento e despacho SEH fica em
+[`arquitetura/unwinding-x64.md`](arquitetura/unwinding-x64.md). O runtime
+suporta apenas exceções explícitas V1/V2 fora de epílogos, não C++/`__finally`
+nem sinais Linux.
 
 ## Mapeamento de imagem (Fase 2)
 
@@ -255,7 +258,7 @@ Contratos de ABI em `docs/arquitetura/msvcrt.md` e
 | Módulo | API | Estado | Comportamento suportado |
 |---|---|---|---|
 | `msvcrt.dll` | `__getmainargs` | Suportado | Constrói `argc`/`argv`/`envp` a partir da linha de comando do convidado (definida pelo CLI via `msvcrt_set_guest_command_line`); `argv[0]` é o caminho do executável; o final da lista é `NULL` |
-| `msvcrt.dll` | `__initterm`, `__set_app_type`, `__setusermatherr`, `_cexit`, `_lock`, `_unlock`, `__C_specific_handler` | Suportado | `__initterm` executa a lista de callbacks (TLS/CTOR); demais são no-ops ou terminam o convidado (`__C_specific_handler` → exit `3`) |
+| `msvcrt.dll` | `__initterm`, `__set_app_type`, `__setusermatherr`, `_cexit`, `_lock`, `_unlock`, `__C_specific_handler` | Suportado | `__initterm` executa a lista de callbacks (TLS/CTOR); os demais são no-ops. `__C_specific_handler` segue a ABI Microsoft de quatro argumentos e interpreta somente `SCOPE_TABLE_AMD64` de `__try/__except`. |
 | `msvcrt.dll` | `_amsg_exit`, `abort`, `exit`, `atexit`, `_onexit` | Suportado | Terminam via `ExitProcess`; `atexit` e `_onexit` acumulam handlers executados no encerramento |
 | `msvcrt.dll` | `_errno`, `getenv`, `strerror` | Suportado | Célula `errno` global do hospedeiro; `getenv` lê o ambiente do host |
 | `msvcrt.dll` | `fopen`/`fclose`/`fflush`/`ferror`/`fseek`/`ftell`/`rewind`/`fgetc`/`fputc`/`fputs`/`fprintf`/`vfprintf`/`fwrite` | Suportado | I/O em `GuestFile` (layout `_iobuf` de 48 bytes), unbuffered via `::write` com loop `EINTR` |
@@ -274,7 +277,9 @@ Contratos de ABI em `docs/arquitetura/msvcrt.md` e
 | `KERNEL32.dll` | `GetConsoleMode` / `SetConsoleMode` | Suportado | `GetConsoleMode` devolve `0x3` e `TRUE` só para fd com `isatty`; caso contrário `ERROR_INVALID_HANDLE` |
 | `KERNEL32.dll` | `IsDBCSLeadByteEx` | Suportado | Sempre `FALSE` (sem DBCS) |
 | `KERNEL32.dll` | `Sleep` | Suportado | `nanosleep` com loop `EINTR` |
-| `KERNEL32.dll` | `SetUnhandledExceptionFilter` | Suportado | Registra o handler em célula global (nunca invoca); retorna o anterior |
+| `KERNEL32.dll` | `SetUnhandledExceptionFilter` / `UnhandledExceptionFilter` | Suportado no SEH explícito | Registra/retorna o filtro anterior; o filtro é chamado somente quando VEH e busca por frame não resolvem `RaiseException`. |
+| `KERNEL32.dll` | `AddVectoredExceptionHandler` / `RemoveVectoredExceptionHandler` | Suportado no SEH explícito | Tokens opacos; prioridade `first` e remoção apenas do token correspondente. |
+| `KERNEL32.dll` | `RaiseException` / `RtlUnwind` / `RtlUnwindEx` | Suportado no SEH explícito | Captura contexto, busca `.pdata/.xdata` V1/V2 fora de epílogo, chama handlers estáticos e transfere sem retorno ao contexto convidado selecionado. |
 | `KERNEL32.dll` | `GetModuleHandleA/W` | Suportado | Retorna handle `0x1000` para módulos registrados (inclui `api-ms-win-*`/`KERNELBASE` via forwarders, extração de filename de caminhos `C:\...`), `NULL` + `ERROR_FILE_NOT_FOUND` caso contrário; `W` converte via `wide_to_utf8` |
 | `KERNEL32.dll` | `GetModuleHandleExA/W` | Suportado | Flags `PIN`/`UNCHANGED_REFCOUNT`/`FROM_ADDRESS`; `FROM_ADDRESS` aceita `0x1000` ou endereço dentro da imagem (`g_guest_image_base/size`); valida `phModule` via `mapped_guest_range`; erro `ERROR_INVALID_PARAMETER`/`FILE_NOT_FOUND` |
 | `KERNEL32.dll` | `LoadLibraryA/W` / `LoadLibraryExA/W` | Suportado | Normaliza caminho (filename após `\/:`), case-insensitive, adiciona `.dll`; verifica `is_module_registered_forwarded`; retorna `0x1000` ou `NULL` + `ERROR_MOD_NOT_FOUND` (126); `Ex` ignora `hFile`/`flags` |

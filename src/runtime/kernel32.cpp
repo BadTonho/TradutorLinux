@@ -42,6 +42,10 @@ namespace tradutorlinux {
 
 using runtime::errno_to_win32;
 
+extern "C" std::uint32_t tl_call_guest_thread_on_stack(std::uintptr_t entry,
+                                                         const void* parameter,
+                                                         std::uintptr_t stack_top) noexcept;
+
 namespace {
 
 // Definições auxiliares
@@ -1493,6 +1497,7 @@ TL_MSABI void* tl_CreateThread(const void* thread_attributes, const std::uintptr
     it->stack = static_cast<std::byte*>(stack);
     it->stack_size = real_stack_size;
     it->stack_top = stack_top;
+    it->unwind_view = runtime::current_guest_unwind_view();
     it->finished = false;
     it->joined = false;
     it->exit_code = 0;
@@ -1503,19 +1508,23 @@ TL_MSABI void* tl_CreateThread(const void* thread_attributes, const std::uintptr
     }
     using ThreadProc = TL_MSABI std::uint32_t (*)(const void*);
     auto proc = reinterpret_cast<ThreadProc>(start_address);
-    it->host_thread = std::thread([slot_ptr = &*it, proc, parameter, teb]() {
+    it->host_thread = std::thread([slot_ptr = &*it, proc, parameter, teb,
+                                   unwind_view = it->unwind_view]() {
         g_current_thread_id = slot_ptr->thread_id;
         set_guest_gs_base(teb);
+        runtime::restore_guest_unwind_view(unwind_view);
         std::jmp_buf exit_point{};
         t_thread_exit_context = &exit_point;
         t_thread_exit_slot = slot_ptr;
         if (setjmp(exit_point) == 0) {
-            slot_ptr->exit_code = static_cast<int>(proc(parameter));
+            slot_ptr->exit_code = static_cast<int>(tl_call_guest_thread_on_stack(
+                reinterpret_cast<std::uintptr_t>(proc), parameter, slot_ptr->stack_top));
         }
         // Após longjmp, ler o slot pelo TLS (não depender de registradores).
         ThreadSlot* const finished_slot = t_thread_exit_slot;
         t_thread_exit_context = nullptr;
         t_thread_exit_slot = nullptr;
+        runtime::clear_guest_unwind_view();
         set_guest_gs_base(nullptr);
         {
             std::lock_guard<std::mutex> join_lock(finished_slot->join_mutex);
@@ -2693,8 +2702,8 @@ TL_MSABI int tl_TlsFree(std::uint32_t tls_index) noexcept {
 }
 
 TL_MSABI std::uintptr_t tl_SetUnhandledExceptionFilter(std::uintptr_t top_level_filter) noexcept {
-    const std::uintptr_t previous = g_unhandled_exception_filter;
-    g_unhandled_exception_filter = top_level_filter;
+    const std::uintptr_t previous =
+        g_unhandled_exception_filter.exchange(top_level_filter, std::memory_order_acq_rel);
     set_last_error(abi::kErrorSuccess);
     return previous;
 }
@@ -3610,9 +3619,6 @@ InternalSrwLock* get_or_create_srw(void* ptr) {
     return &g_srw_locks[0];
 }
 
-std::vector<void*> g_veh_handlers;
-std::mutex g_veh_mutex;
-
 }  // namespace
 
 TL_MSABI void tl_InitializeSRWLock(void* srw_lock) noexcept {
@@ -3660,44 +3666,11 @@ TL_MSABI void tl_WakeConditionVariable(void*) noexcept {}
 TL_MSABI void tl_WakeAllConditionVariable(void*) noexcept {}
 
 TL_MSABI void* tl_AddVectoredExceptionHandler(const std::uint32_t first, void* handler) noexcept {
-    if (handler == nullptr) {
-        set_last_error(abi::kErrorInvalidParameter);
-        return nullptr;
-    }
-    std::lock_guard<std::mutex> lock(g_veh_mutex);
-    if (first != 0) {
-        g_veh_handlers.insert(g_veh_handlers.begin(), handler);
-    } else {
-        g_veh_handlers.push_back(handler);
-    }
-    set_last_error(abi::kErrorSuccess);
-    return handler;
+    return runtime::add_vectored_exception_handler(first, handler);
 }
 
 TL_MSABI std::uint32_t tl_RemoveVectoredExceptionHandler(void* handle) noexcept {
-    if (handle == nullptr) {
-        set_last_error(abi::kErrorInvalidParameter);
-        return 0;
-    }
-    std::lock_guard<std::mutex> lock(g_veh_mutex);
-    auto it = std::find(g_veh_handlers.begin(), g_veh_handlers.end(), handle);
-    if (it != g_veh_handlers.end()) {
-        g_veh_handlers.erase(it);
-        set_last_error(abi::kErrorSuccess);
-        return 1;
-    }
-    set_last_error(abi::kErrorInvalidParameter);
-    return 0;
-}
-
-TL_MSABI void tl_RaiseException(const std::uint32_t exception_code, const std::uint32_t exception_flags,
-                                const std::uint32_t number_of_arguments, const std::uint64_t* arguments) noexcept {
-    (void)exception_code;
-    (void)exception_flags;
-    (void)number_of_arguments;
-    (void)arguments;
-    const std::string detail = std::to_string(exception_code);
-    trace_guest_failure("RaiseException", "code", detail.c_str());
+    return runtime::remove_vectored_exception_handler(handle);
 }
 
 TL_MSABI std::uint32_t tl_GetPrivateProfileStringA(const char* app_name, const char* key_name,

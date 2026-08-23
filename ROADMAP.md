@@ -74,8 +74,17 @@ Os itens marcados como concluídos devem ter evidência no repositório: código
   controlado, sem decodificação de instruções. WinRAR (151/251) e Rockstar
   (191/338) foram reanalisados somente com `--report`, continuam
   `unsupported` pelas APIs e pelo despacho SEH ausentes e não foram executados.
-- **Próximo resultado observável:** despacho SEH x64 sobre os metadados V1/V2
-  já validados, sem antecipar APIs de locale, GUI ou segurança.
+- **Marco concluído (Fase 13.5):** o despacho SEH explícito usa
+  `RaiseException`, VEH, `__C_specific_handler`, `RtlUnwind`/`RtlUnwindEx` e
+  filtro não tratado sobre `.pdata/.xdata` V1/V2 fora de epílogos. As fixtures
+  `tl_seh.exe` e `tl_seh_v2.exe` executam `__try/__except` dentro de
+  `CreateThread`, imprimem `seh\n` e são protegidas por metadata, trace,
+  relatório e execução. WinRAR (153/251) e Rockstar (194/338) foram
+  reanalisados apenas com `--report`, continuam `unsupported` e não foram
+  executados.
+- **Próximo resultado observável:** locale/FLS/ambiente e os contratos de
+  arquivo/processo compartilhados pelos instaladores x64, sem antecipar GUI ou
+  segurança.
 
 ### Estudo de caso: `RobloxPlayerInstaller.exe` (benchmark de cobertura)
 
@@ -126,9 +135,10 @@ reutilizáveis por várias classes de aplicativos. As lacunas observadas são:
   `.pdata`/`.xdata` V1/V2, epílogos V2, `RtlCaptureContext`,
   `RtlLookupFunctionEntry`, `RtlVirtualUnwind` e `RtlPcToFileHeader`, com
   fixtures e regressões;
-- [ ] completar despacho SEH x64: `__C_specific_handler`, `RtlUnwindEx`,
-  transferência de controle e propagação de exceções; o núcleo atual não
-  executa handlers nem declara suporte a `try/catch`;
+- [x] completar o despacho SEH explícito x64: `__C_specific_handler`,
+  `RtlUnwind`/`RtlUnwindEx`, transferência de contexto, VEH, filtro não
+  tratado e `__try/__except` V1/V2 fora de epílogos; C++/`__finally` e sinais
+  Linux continuam fora do escopo;
 - [x] implementar carregamento dinâmico real: `LoadLibraryA/W`,
   `LoadLibraryExA/W`, `FreeLibrary` e `GetModuleHandleExA/W` + `GetProcAddress` por nome e ordinal (fixture `tl_dynload.exe` cobre `C:\` path, API Set `api-ms-win-core-file-l1-1-0.dll`, `LoadLibraryEx`, `GetProcAddress`/`FreeLibrary`/`GetModuleHandleEx` `PIN`/`FROM_ADDRESS`); `GetProcAddress` agora resolve via `find_export_global`;
 - [x] implementar APIs de versão e locale: `GetVersionExA`,

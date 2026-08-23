@@ -1,7 +1,9 @@
-# Núcleo de unwinding x64
+# Unwinding e despacho SEH x64
 
-Este contrato cobre somente o desempilhamento AMD64 de uma imagem PE32+ já
-mapeada. Ele não implementa despacho de exceções nem executa handlers.
+Este contrato cobre o desempilhamento AMD64 e o despacho SEH explícito de uma
+imagem PE32+ já mapeada. O subconjunto executa `__try/__except` com
+`__C_specific_handler`; não implementa exceções C++, `__finally`, sinais Linux
+nem epílogos V2.
 
 ## Metadados PE
 
@@ -47,20 +49,36 @@ Microsoft x64, ligação C e `noexcept`:
 | `RtlCaptureContext` | Trecho assembly sem prólogo captura RIP/RSP, registradores gerais, flags, MXCSR e XMM0–XMM15 do chamador. |
 | `RtlLookupFunctionEntry` | Pesquisa somente a tabela `.pdata` da imagem PE ativa; devolve o ponteiro para a entrada mapeada e a base da imagem. |
 | `RtlPcToFileHeader` | Devolve a base somente se o PC pertencer à imagem PE ativa. |
-| `RtlVirtualUnwind` | Aplica os códigos do prólogo/corpo e suas cadeias a um `CONTEXT`, restaura RIP/RSP e registradores/XMM e informa handler/dados quando solicitados. Nunca chama o handler. Em epílogo V2, preserva todos os argumentos de saída e o `CONTEXT`, retorna sem handler e emite diagnóstico controlado, pois não interpreta ainda as instruções do epílogo. |
+| `RtlVirtualUnwind` | Aplica os códigos do prólogo/corpo e suas cadeias a um `CONTEXT`, restaura RIP/RSP e registradores/XMM e informa handler/dados quando solicitados. No prólogo não expõe handler; em epílogo V2 preserva contexto e parâmetros de saída, retorna sem handler e emite diagnóstico controlado. |
+| `RaiseException` | Entrada assembly Microsoft x64: fotografa o chamador antes de prólogo do hospedeiro, valida até 15 parâmetros e inicia a busca SEH. Não retorna: continua o contexto convidado, entra no bloco selecionado ou encerra controladamente. |
+| `RtlUnwind` / `RtlUnwindEx` | Percorrem `UHANDLER` até o frame alvo e usam um trampolim sem retorno para restaurar `CONTEXT`, incluindo GPRs, XMM, RSP, RIP e RAX. `RtlUnwind` captura o chamador e delega ao núcleo de `RtlUnwindEx`. |
+| `UnhandledExceptionFilter` | Chama o filtro instalado por `SetUnhandledExceptionFilter` somente após a busca falhar; sem continuação válida, a exceção termina o convidado com seu código. |
 
 O contexto de metadados é local à thread de execução e é instalado antes do
 entry point tanto no processo principal quanto em filhos de `CreateProcess`.
-Ele é removido antes de destruir a imagem mapeada.
+`CreateThread` copia essa visão e chama o início convidado em uma pilha
+convidada real. O contexto é removido antes de destruir a imagem mapeada.
+
+## Despacho SEH
+
+`EXCEPTION_RECORD` (152 bytes), `EXCEPTION_POINTERS` (16 bytes) e
+`DISPATCHER_CONTEXT` (80 bytes) seguem o layout Windows AMD64 e são validados
+antes do uso. A busca percorre frames `.pdata`, usa `RtlVirtualUnwind` e chama
+somente handlers `EHANDLER`; o unwind de término percorre `UHANDLER`.
+
+VEH usa tokens opacos removíveis. Handlers registrados com prioridade `first`
+são chamados antes dos demais. Depois deles, `__C_specific_handler` interpreta
+apenas `SCOPE_TABLE_AMD64`: um filtro pode continuar a execução, continuar a
+busca ou selecionar o bloco `__except`. Ponteiros, tabelas, destinos, frames e
+disposições inválidos encerram o convidado com trace `seh`, sem tentar executar
+código fora da imagem ativa.
 
 ## Limites explícitos
 
-Esta etapa não fornece `RtlUnwind`, `RtlUnwindEx`, `RaiseException`, VEH,
-`UnhandledExceptionFilter`, `__C_specific_handler`, transferência de controle
-para handler, nem `try/catch` do convidado. Também não decodifica as
-instruções de um epílogo V2. Uma aplicação que precise de despacho SEH continua
-sem suporte, mesmo que seu `.pdata` possa ser lido e um frame isolado possa
-ser desempilhado.
+Não há tradução de `SIGSEGV`/`SIGFPE`, exceções C++ (`__CxxFrameHandler*`),
+`__finally`/destrutores C++, function tables dinâmicas, VEH em DLLs externas,
+nem interpretação de instruções de epílogo V2. Se o PC estiver num epílogo V2,
+o despacho falha como mecanismo ainda não interpretado, preservando o contexto.
 
 ## Diagnóstico e validação
 
@@ -75,3 +93,8 @@ por possuir `.pdata`. A fixture `tl_unwind.exe` cobre V1. A fixture
 `tl_unwind_v2.exe` é promovida deterministicamente de uma imagem-semente e
 contém um descritor V2 real; ela chama `RtlVirtualUnwind` fora do epílogo,
 imprime `unwind-v2\n` e verifica trace e relatório.
+
+As fixtures `tl_seh.exe` e `tl_seh_v2.exe` registram/removem VEH, lançam uma
+exceção explícita numa thread convidada, selecionam um `__except` por
+`__C_specific_handler` e imprimem `seh\n`. A segunda promove
+deterministicamente o frame que lança para `UNWIND_INFO` V2.

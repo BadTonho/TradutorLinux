@@ -75,8 +75,8 @@ public:
         return true;
     }
 
-    [[nodiscard]] bool promote_calling_function() {
-        const auto iat_rva = find_iat_rva("RtlVirtualUnwind");
+    [[nodiscard]] bool promote_calling_function(const std::string_view symbol) {
+        const auto iat_rva = find_iat_rva(symbol);
         if (!iat_rva) {
             return false;
         }
@@ -85,8 +85,7 @@ public:
             return false;
         }
         const auto function = find_runtime_function(*call_rva);
-        if (!function || function->end_rva - function->begin_rva < 1U ||
-            !has_terminal_ret(function->end_rva)) {
+        if (!function || function->end_rva - function->begin_rva < 1U) {
             return false;
         }
         return promote_unwind_info(function->unwind_rva);
@@ -278,6 +277,39 @@ private:
                     return static_cast<std::uint32_t>(instruction_rva + 7U);
                 }
             }
+            // Com certos modos de ligação do MinGW, a chamada é relativa a
+            // um thunk local que, por sua vez, salta indiretamente pela IAT.
+            // O call ainda pertence à função que queremos promover.
+            for (std::size_t offset = 0; offset + 5U <= section.raw_size; ++offset) {
+                const std::size_t file_offset = static_cast<std::size_t>(section.raw_address) + offset;
+                if (bytes_[file_offset] != std::byte{0xE8}) {
+                    continue;
+                }
+                const auto displacement = read<std::int32_t>(file_offset + 1U);
+                if (!displacement) {
+                    return std::nullopt;
+                }
+                const std::uint64_t instruction_rva =
+                    static_cast<std::uint64_t>(section.virtual_address) + offset;
+                const std::int64_t thunk_rva = static_cast<std::int64_t>(instruction_rva + 5U) +
+                                               *displacement;
+                if (thunk_rva < 0 || thunk_rva > std::numeric_limits<std::uint32_t>::max()) {
+                    continue;
+                }
+                const auto thunk_file = rva_to_file(static_cast<std::uint32_t>(thunk_rva), 6U);
+                if (!thunk_file || bytes_[*thunk_file] != std::byte{0xFF} ||
+                    bytes_[*thunk_file + 1U] != std::byte{0x25}) {
+                    continue;
+                }
+                const auto thunk_displacement = read<std::int32_t>(*thunk_file + 2U);
+                if (!thunk_displacement) {
+                    return std::nullopt;
+                }
+                const std::int64_t resolved_rva = thunk_rva + 6U + *thunk_displacement;
+                if (resolved_rva == static_cast<std::int64_t>(target_rva)) {
+                    return static_cast<std::uint32_t>(instruction_rva);
+                }
+            }
         }
         return std::nullopt;
     }
@@ -316,11 +348,6 @@ private:
         return result;
     }
 
-    [[nodiscard]] bool has_terminal_ret(const std::uint32_t end_rva) const {
-        const auto end_file = rva_to_file(end_rva - 1U, 1U);
-        return end_file && bytes_[*end_file] == std::byte{0xC3};
-    }
-
     [[nodiscard]] bool promote_unwind_info(const std::uint32_t unwind_rva) {
         const auto unwind_file = rva_to_file(unwind_rva, 4U);
         if (!unwind_file) {
@@ -328,7 +355,8 @@ private:
         }
         const auto header = read<std::uint8_t>(*unwind_file);
         const auto code_count = read<std::uint8_t>(*unwind_file + 2U);
-        if (!header || !code_count || (*header & 7U) != kUnwindVersion1 || (*header >> 3U) != 0U ||
+        if (!header || !code_count || (*header & 7U) != kUnwindVersion1 ||
+            ((*header >> 3U) != 0U && (*header >> 3U) != 1U) ||
             *code_count == 0U || (*code_count & 1U) == 0U) {
             return false;
         }
@@ -343,7 +371,8 @@ private:
         }
         std::memmove(bytes_.data() + static_cast<std::ptrdiff_t>(*unwind_file + 6U),
                      bytes_.data() + static_cast<std::ptrdiff_t>(*unwind_file + 4U), old_codes_size);
-        if (!write<std::uint8_t>(*unwind_file, kUnwindVersion2) ||
+        const std::uint8_t flags = static_cast<std::uint8_t>(*header & 0xF8U);
+        if (!write<std::uint8_t>(*unwind_file, static_cast<std::uint8_t>(flags | kUnwindVersion2)) ||
             !write<std::uint8_t>(*unwind_file + 2U, static_cast<std::uint8_t>(*code_count + 1U)) ||
             !write<std::uint8_t>(*unwind_file + 4U, 1U) ||
             !write<std::uint8_t>(*unwind_file + 5U,
@@ -381,7 +410,7 @@ private:
 }  // namespace
 
 int main(const int argc, char* const argv[]) {
-    if (argc != 3) {
+    if (argc != 3 && argc != 4) {
         return 2;
     }
     const auto input = read_file(argv[1]);
@@ -389,7 +418,8 @@ int main(const int argc, char* const argv[]) {
         return 3;
     }
     PeImage image(*input);
-    if (!image.parse() || !image.promote_calling_function()) {
+    const std::string_view symbol = argc == 4 ? argv[3] : "RtlVirtualUnwind";
+    if (!image.parse() || !image.promote_calling_function(symbol)) {
         return 4;
     }
     std::ofstream output(argv[2], std::ios::binary | std::ios::trunc);

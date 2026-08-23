@@ -39,6 +39,7 @@ add_library(tradutorlinux_core STATIC
     runtime/iphlpapi.cpp
     runtime/guest_entry.S
     runtime/unwind_capture.S
+    runtime/seh.S
     util/unicode.cpp
     gui/x11.cpp
 )

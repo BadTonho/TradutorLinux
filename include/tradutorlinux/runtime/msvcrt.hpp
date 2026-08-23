@@ -5,6 +5,8 @@
 #include <string>
 #include <vector>
 
+#include "tradutorlinux/runtime/unwind.hpp"
+
 #if defined(__GNUC__) || defined(__clang__)
 #define TL_CRT_MSABI __attribute__((ms_abi))
 #else
@@ -94,7 +96,10 @@ TL_CRT_MSABI int tl__setmode(int file_descriptor, int mode) noexcept;
 TL_CRT_MSABI unsigned int tl___lc_codepage_func() noexcept;
 TL_CRT_MSABI int tl___mb_cur_max_func() noexcept;
 TL_CRT_MSABI int tl__ismbblead(unsigned int character) noexcept;
-TL_CRT_MSABI std::int64_t tl___C_specific_handler() noexcept;
+TL_CRT_MSABI std::int32_t tl___C_specific_handler(
+    runtime::ExceptionRecordAmd64* exception_record, void* establisher_frame,
+    runtime::ContextAmd64* context_record,
+    runtime::DispatcherContextAmd64* dispatcher_context) noexcept;
 TL_CRT_MSABI int tl_fgetc(GuestFile* file) noexcept;
 TL_CRT_MSABI std::size_t tl_fread(void* buffer, std::size_t size, std::size_t count,
                                    GuestFile* file) noexcept;

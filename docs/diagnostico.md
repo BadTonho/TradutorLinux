@@ -231,7 +231,7 @@ falhas que encerram o convidado:
 [tl][crt][info] getmainargs argc="2" argv0="xxd.exe"
 [tl][crt][error] amsg-exit code="1"
 [tl][crt][error] abort
-[tl][crt][error] seh-stub
+[tl][crt][info] seh-handler disposition="4"
 [tl][crt][info] exit code="0"
 ```
 
@@ -242,12 +242,10 @@ do executável.
 
 As APIs de `KERNEL32.dll` do subconjunto de console/CRT (por exemplo
 `VirtualQuery`, `VirtualProtect`, `MultiByteToWideChar`, `GetConsoleMode`,
-`SetUnhandledExceptionFilter`, `Sleep`) emitem eventos do componente `runtime`
-com os parâmetros relevantes:
+`Sleep`) emitem eventos do componente `runtime` com os parâmetros relevantes:
 
 ```text
 [tl][runtime][info] VirtualQuery symbol="VirtualQuery" address="1400080000" region-size="4096" status="success"
-[tl][runtime][info] SetUnhandledExceptionFilter symbol="SetUnhandledExceptionFilter" handler="5368718352" previous="0" mechanism="registrado-sem-invocacao"
 ```
 
 ## Processo convidado: TEB e segmento GS
@@ -275,11 +273,26 @@ Exemplo de metadados de desempilhamento aceitos:
 ```
 
 Falhas de argumento ou de pilha nas APIs `Rtl*` são registradas no componente
-`runtime` como `api-failure`, com `symbol`, `operation="unwind"` e `detail`;
-elas nunca provocam a execução de um handler SEH. Se o `ControlPc` cai em um
-epílogo V2, o mesmo diagnóstico é emitido e `RtlVirtualUnwind` preserva o
-contexto e os parâmetros de saída, sem acessar a pilha nem interpretar
-instruções do epílogo.
+`runtime` como `api-failure`, com `symbol`, `operation="unwind"` e `detail`.
+Se o `ControlPc` cai em um epílogo V2, o mesmo diagnóstico é emitido e
+`RtlVirtualUnwind` preserva contexto e parâmetros de saída, sem acessar a
+pilha nem interpretar instruções do epílogo.
+
+## Eventos SEH
+
+O despachante de exceções explícitas usa eventos `runtime` com
+`mechanism="x64-seh"`. Os estados são `raised`, `veh`, `frame`, `handler`,
+`unwind`, `continued` e `failed`; o campo `code` traz o código da exceção e
+`detail` identifica a etapa. Por exemplo:
+
+```text
+[tl][runtime][info] seh state="raised" code="3762438722" detail="RaiseException" mechanism="x64-seh"
+[tl][runtime][info] seh state="unwind" code="3762438722" detail="target" mechanism="x64-seh"
+```
+
+Uma falha SEH controlada não executa o entry point seguinte nem código fora da
+imagem; o convidado termina com o código da exceção. Exceções C++, `__finally`,
+sinais Linux e epílogos V2 não são traduzidos por esse mecanismo.
 
 Quando o arquivo não é um PE32+ aceitável, o leitor emite:
 

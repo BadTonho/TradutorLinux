@@ -650,10 +650,15 @@ TL_CRT_MSABI void tl_exit(int exit_code) noexcept {
     tl_ExitProcess(static_cast<std::uint32_t>(exit_code));
 }
 
-TL_CRT_MSABI std::int64_t tl___C_specific_handler() noexcept {
-    trace_crt(TraceLevel::Error, "seh-stub", {});
-    tl_ExitProcess(3);
-    return 0;
+TL_CRT_MSABI std::int32_t tl___C_specific_handler(
+    runtime::ExceptionRecordAmd64* const exception_record, void* const establisher_frame,
+    runtime::ContextAmd64* const context_record,
+    runtime::DispatcherContextAmd64* const dispatcher_context) noexcept {
+    const std::int32_t result = runtime::c_specific_handler(
+        exception_record, establisher_frame, context_record, dispatcher_context);
+    trace_crt(TraceLevel::Info, "seh-handler",
+              {TraceField{"disposition", std::to_string(result)}});
+    return result;
 }
 
 // ---------------------------------------------------------------------------

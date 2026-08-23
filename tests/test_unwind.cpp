@@ -105,6 +105,45 @@ TEST_F(UnwindTest, CapturesAmd64ControlAndFloatingContext) {
     EXPECT_EQ(context.floating[16].high, xmm6.high);
 }
 
+TEST_F(UnwindTest, SehLayoutsAndVectoredTokensAreValidated) {
+    set_functions({});
+    EXPECT_EQ(sizeof(runtime::ExceptionRecordAmd64), 152U);
+    EXPECT_EQ(sizeof(runtime::ExceptionPointersAmd64), 16U);
+    EXPECT_EQ(sizeof(runtime::DispatcherContextAmd64), 80U);
+
+    EXPECT_EQ(runtime::add_vectored_exception_handler(1, nullptr), nullptr);
+    void* const first = runtime::add_vectored_exception_handler(1, image.data() + 0x100U);
+    void* const last = runtime::add_vectored_exception_handler(0, image.data() + 0x110U);
+    ASSERT_NE(first, nullptr);
+    ASSERT_NE(last, nullptr);
+    EXPECT_NE(first, last);
+    EXPECT_EQ(runtime::remove_vectored_exception_handler(first), 1U);
+    EXPECT_EQ(runtime::remove_vectored_exception_handler(first), 0U);
+    EXPECT_EQ(runtime::remove_vectored_exception_handler(last), 1U);
+    EXPECT_EQ(runtime::remove_vectored_exception_handler(nullptr), 0U);
+}
+
+TEST_F(UnwindTest, DoesNotExposeExceptionHandlerWhileInProlog) {
+    UnwindInfo unwind;
+    unwind.prolog_size = 8;
+    unwind.flags = 1;
+    unwind.handler_rva = kHandlerRva;
+    unwind.handler_data_rva = kHandlerRva + 4U;
+    unwind.codes = {code(UnwindOperation::AllocSmall, 0, 8, 8)};
+    set_functions({function(0x100, 0x200, unwind)});
+    std::array<std::uint64_t, 4> stack{};
+    stack[0] = 0xD00DU;
+    ContextAmd64 context{};
+    context.rsp = reinterpret_cast<std::uintptr_t>(stack.data());
+    void* handler_data = reinterpret_cast<void*>(0x1U);
+
+    EXPECT_EQ(tl_RtlVirtualUnwind(1, reinterpret_cast<std::uintptr_t>(image.data()),
+                                  reinterpret_cast<std::uintptr_t>(image.data()) + 0x104U,
+                                  raw_entry(), &context, &handler_data, nullptr, nullptr), nullptr);
+    EXPECT_EQ(handler_data, nullptr);
+    EXPECT_EQ(context.rip, 0xD00DU);
+}
+
 TEST_F(UnwindTest, UnwindsStackAllocationAndPushedNonvolatileRegister) {
     UnwindInfo unwind;
     unwind.codes = {code(UnwindOperation::PushNonVol, 3, 0, 8),

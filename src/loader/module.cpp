@@ -377,6 +377,9 @@ void register_builtin_modules() {
         {"RtlLookupFunctionEntry", 196, reinterpret_cast<std::uintptr_t>(&tl_RtlLookupFunctionEntry)},
         {"RtlVirtualUnwind", 197, reinterpret_cast<std::uintptr_t>(&tl_RtlVirtualUnwind)},
         {"RtlPcToFileHeader", 198, reinterpret_cast<std::uintptr_t>(&tl_RtlPcToFileHeader)},
+        {"RtlUnwind", 199, reinterpret_cast<std::uintptr_t>(&tl_RtlUnwind)},
+        {"RtlUnwindEx", 200, reinterpret_cast<std::uintptr_t>(&tl_RtlUnwindEx)},
+        {"UnhandledExceptionFilter", 201, reinterpret_cast<std::uintptr_t>(&tl_UnhandledExceptionFilter)},
     };
     static const InternalModule kKernel32Module{"KERNEL32.dll", kKernel32Exports};
     register_module(kKernel32Module);

@@ -18,4 +18,21 @@ tl_call_guest_on_stack:
     retq
 .size tl_call_guest_on_stack, .-tl_call_guest_on_stack
 
+.globl tl_call_guest_thread_on_stack
+.type tl_call_guest_thread_on_stack, @function
+tl_call_guest_thread_on_stack:
+    # SysV: RDI = início Microsoft x64, RSI = parâmetro, RDX = topo da pilha.
+    # O retorno em EAX é o código DWORD da thread convidada.
+    pushq %r12
+    movq %rsp, %r12
+    movq %rdx, %rsp
+    andq $-16, %rsp
+    subq $32, %rsp
+    movq %rsi, %rcx
+    callq *%rdi
+    movq %r12, %rsp
+    popq %r12
+    retq
+.size tl_call_guest_thread_on_stack, .-tl_call_guest_thread_on_stack
+
 .section .note.GNU-stack,"",@progbits

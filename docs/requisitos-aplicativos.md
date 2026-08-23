@@ -25,26 +25,27 @@ posterior.
 | Aplicativo | Imports resolvidos | Imports ausentes | Bloqueio adicional | Estado |
 |---|---:|---:|---|---|
 | `RobloxPlayerInstaller.exe` | 244/430 | 186 | — | `unsupported` |
-| `winrar-x64-723.exe` | 151/251 | 100 | despacho SEH/locale/GUI/segurança e APIs pendentes | `unsupported` |
+| `winrar-x64-723.exe` | 153/251 | 98 | locale/GUI/segurança e APIs pendentes | `unsupported` |
 | `Creative_Cloud_Set-Up_7474.exe` | — | — | PE32 x86 (`0x14c`) | arquitetura não suportada |
 | `officedeploymenttool_20228-20124.exe` | — | — | PE32 x86 (`0x14c`) | arquitetura não suportada |
 | `Affinity x64.msix` | — | — | pacote MSIX; executável interno não localizado | formato não suportado |
 | `CapCut_7677236283084898320_installer.exe` | — | — | PE32 x86 (`0x14c`) | arquitetura não suportada |
 | `EpicInstaller-20.1.4-831cc1564f92442abc51fdb4a9854359.exe` | — | — | PE32 x86 (`0x14c`) + Mono/.NET | arquitetura/formato não suportados |
 | `lghub_installer.exe` | 67/114 | 47 | — | `unsupported` |
-| `Rockstar-Games-Launcher.exe` | 191/338 | 147 | despacho SEH/locale/GUI/segurança/rede e APIs pendentes | `unsupported` |
+| `Rockstar-Games-Launcher.exe` | 194/338 | 144 | locale/GUI/segurança/rede e APIs pendentes | `unsupported` |
 
-Os totais de WinRAR e Rockstar foram medidos novamente na Fase 13.4 somente
-com `--report`; os binários não foram executados. Ambos agora têm V2 e a forma
-aceita de `UWOP_SET_FPREG` classificados, mas retornam `5` (`Unsupported`)
-pelas APIs e pelo despacho SEH ainda ausentes.
+Os totais de WinRAR e Rockstar foram medidos novamente na Fase 13.5 somente
+com `--report`; os binários não foram executados. Ambos têm V2 e a forma
+aceita de `UWOP_SET_FPREG` classificados, e o dispatcher SEH explícito foi
+promovido, mas retornam `5` (`Unsupported`) pelas APIs, locale, GUI, segurança
+e demais dependências ausentes.
 
 ## Recorrências observadas
 
 | Capacidade | Amostras que a evidenciam | Situação |
 |---|---|---|
 | PE32/x86 | Creative Cloud, Office Deployment Tool, CapCut, Epic | fora do alvo atual |
-| Unwinding/SEH x64 | Roblox, WinRAR, Logitech G HUB, Rockstar | núcleo `.pdata`/`.xdata` V1/V2 e `Rtl*` suportado; despacho SEH e interpretação de epílogo V2 pendentes |
+| Unwinding/SEH x64 | Roblox, WinRAR, Logitech G HUB, Rockstar | núcleo `.pdata`/`.xdata` V1/V2, `Rtl*` e SEH explícito suportados; exceções C++, `__finally` e epílogo V2 pendentes |
 | Locale, code pages, FLS e ambiente | WinRAR, Logitech G HUB, Rockstar | pendente |
 | Segurança, identidade e ACLs | Roblox, Logitech G HUB | pendente |
 | Pacote MSIX/AppX | Affinity | pendente |
@@ -72,10 +73,13 @@ Ordem de trabalho:
 4. [x] Núcleo de unwinding x64 V1/V2 com `tl_unwind.exe` e
    `tl_unwind_v2.exe`: `.pdata`/`.xdata`, contexto, epílogos normalizados e
    `RtlCaptureContext`/`RtlLookupFunctionEntry`/`RtlVirtualUnwind`/
-   `RtlPcToFileHeader`; ele não despacha exceções nem interpreta epílogos V2.
-5. Despacho SEH, locale/FLS/ambiente e os contratos de arquivo/processo
-   recorrentes nos instaladores x64.
-6. Segurança/ACL, rede HTTP, automação OLE e controles somente quando o
+   `RtlPcToFileHeader`; a etapa seguinte promoveu o despacho explícito, mas
+   não interpreta epílogos V2.
+5. [x] Despacho SEH explícito V1/V2 fora de epílogos, com `tl_seh.exe` e
+   `tl_seh_v2.exe`.
+6. Locale/FLS/ambiente e os contratos de arquivo/processo recorrentes nos
+   instaladores x64.
+7. Segurança/ACL, rede HTTP, automação OLE e controles somente quando o
    portfólio mostrar que são necessários para mais de um alvo.
 
 Os instaladores PE32/x86, assemblies .NET/Mono e pacotes MSIX/AppX continuam
@@ -364,16 +368,16 @@ contrato, fixture e regressão antes de ser promovido a suporte.
 | SHA-256 | `f435b24d4c2c5342c4f7c0143ef358f0f425b7b8a0972dd34d9dcf94789e9c4d` |
 | Imports estáticos | 156 em 3 DLLs |
 | Delay imports | 95 em 7 DLLs |
-| Resolvidos pelo runtime | 151/251 (102 estáticos + 49 atrasados), Fase 13.4 |
-| Ausentes | 100 (52 estáticos + 46 atrasados), Fase 13.4 |
+| Resolvidos pelo runtime | 153/251 (104 estáticos + 49 atrasados), Fase 13.5 |
+| Ausentes | 98 (52 estáticos + 46 atrasados), Fase 13.5 |
 | Mecanismo adicional | `delay-import` RVA resolvido antecipadamente; `.pdata`: 1316 funções (1313 V1, 3 V2), 3 epílogos, 2 `SET_FPREG` estendidos, 263 handlers e 14 cadeias |
-| Resultado do `--report` | Fase 13.4: `Unsupported`/exit `5` por imports ausentes; execução não tentada |
+| Resultado do `--report` | Fase 13.5: `Unsupported`/exit `5` por imports ausentes; execução não tentada |
 | Fonte | análise local de 2026-08-23 |
 
-Na Fase 13.4, o `--report` leu V2 e classificou todos os 251 imports sem
+Na Fase 13.5, o `--report` leu V2 e classificou todos os 251 imports sem
 executar o binário. Os 95 símbolos atrasados continuam inventariados por DLL,
 com 49 já resolvidos. WinRAR permanece `unsupported` pelas dependências
-abaixo, sobretudo despacho SEH, locale/FLS, GUI e segurança.
+abaixo, sobretudo locale/FLS, GUI e segurança.
 
 ### Lacunas por módulo e mecanismo
 
@@ -428,12 +432,10 @@ GetStringTypeW
 SetStdHandle
 LCMapStringW
 InitializeCriticalSectionEx
-UnhandledExceptionFilter
 IsProcessorFeaturePresent
 IsDebuggerPresent
 GetStartupInfoW
 InitializeSListHead
-RtlUnwindEx
 EncodePointer
 InitializeCriticalSectionAndSpinCount
 FindFirstFileExW
@@ -779,17 +781,17 @@ use, antes de ser considerada suporte ao instalador do Logitech.
 | SHA-256 | `c70131cb0427d146c9489297822e99ad87d4d5e141fd999d19f00975ab1a31f2` |
 | Imports estáticos | 205 em 5 DLLs |
 | Delay imports | 133 em 11 DLLs |
-| Resolvidos pelo runtime | 191/338 (114 estáticos + 77 atrasados), Fase 13.4 |
-| Ausentes | 147 (91 estáticos + 56 atrasados), Fase 13.4 |
+| Resolvidos pelo runtime | 194/338 (117 estáticos + 77 atrasados), Fase 13.5 |
+| Ausentes | 144 (88 estáticos + 56 atrasados), Fase 13.5 |
 | Mecanismo adicional | `delay-import` RVA resolvido antecipadamente; `.pdata`: 2663 funções (2661 V1, 2 V2), 2 epílogos, 6 `SET_FPREG` estendidos, 356 handlers e 584 cadeias |
-| Resultado do `--report` | Fase 13.4: `Unsupported`/exit `5` por imports ausentes; execução não tentada |
+| Resultado do `--report` | Fase 13.5: `Unsupported`/exit `5` por imports ausentes; execução não tentada |
 | Fonte | análise local de 2026-08-23 |
 
-Na Fase 13.4, o `--report` aceitou a extensão observada em
+Na Fase 13.5, o `--report` aceitou a extensão observada em
 `UWOP_SET_FPREG` (RVA `0xcead8`, `OpInfo=3` igual ao `FrameOffset`) e
 classificou os 338 imports sem executar o binário. Além das lacunas em
-`KERNEL32`, ele requer despacho SEH, controles comuns por ordinal, automação
-OLE, diálogo de impressão e uma camada HTTP WinINet.
+`KERNEL32`, ele requer controles comuns por ordinal, automação OLE, diálogo de
+impressão e uma camada HTTP WinINet.
 
 ### Lacunas por módulo e mecanismo
 
@@ -829,7 +831,6 @@ RegisterWaitForSingleObject
 SetSearchPathMode
 GetUserDefaultUILanguage
 GlobalUnlock
-RtlUnwind
 SetEnvironmentVariableW
 FreeEnvironmentStringsW
 GetEnvironmentStringsW
@@ -853,7 +854,6 @@ OutputDebugStringW
 SetNamedPipeHandleState
 TransactNamedPipe
 WaitNamedPipeW
-UnhandledExceptionFilter
 GetStartupInfoW
 IsProcessorFeaturePresent
 InitializeSListHead
@@ -864,7 +864,6 @@ TryAcquireSRWLockExclusive
 EncodePointer
 LCMapStringEx
 GetCPInfo
-RtlUnwindEx
 InterlockedPushEntrySList
 InitializeCriticalSectionAndSpinCount
 FreeLibraryAndExitThread

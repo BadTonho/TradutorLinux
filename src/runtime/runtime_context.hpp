@@ -11,6 +11,7 @@
 #include "tradutorlinux/runtime/memory_validator.hpp"
 #include "tradutorlinux/runtime/msvcrt.hpp"
 #include "tradutorlinux/runtime/teb.hpp"
+#include "tradutorlinux/runtime/unwind.hpp"
 #include "tradutorlinux/util/basics.hpp"
 #include "tradutorlinux/util/unicode.hpp"
 #include "gui_controls.hpp"
@@ -149,6 +150,7 @@ struct ThreadSlot {
     std::byte* stack{nullptr};
     std::size_t stack_size{0};
     std::uintptr_t stack_top{};
+    runtime::GuestUnwindView unwind_view{};
     std::function<void()> thread_func;
     std::thread host_thread;
     std::mutex join_mutex;
@@ -166,7 +168,7 @@ constexpr std::uint32_t kMaxTlsSlots = 256;
 extern std::array<bool, kMaxTlsSlots> g_tls_indices_used;
 extern std::mutex g_tls_mutex;
 extern thread_local std::array<void*, 64> g_guest_tls_slots;
-extern std::uintptr_t g_unhandled_exception_filter;
+extern std::atomic<std::uintptr_t> g_unhandled_exception_filter;
 
 struct CriticalSectionEntry {
     void* guest_address{nullptr};

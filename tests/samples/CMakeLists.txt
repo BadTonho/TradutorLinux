@@ -91,7 +91,10 @@ function(tl_add_pe_fixture target_name source_file manifest_file)
             COMMENT "Generating import library for ${target_name}.exe"
             VERBATIM
         )
-        list(APPEND link_libraries "${import_lib}")
+        # A biblioteca de imports declarada pela fixture deve preceder as
+        # bibliotecas padrão: alguns símbolos (como __C_specific_handler)
+        # também aparecem em import libs de KERNEL32 no toolchain mingw.
+        list(PREPEND link_libraries "${import_lib}")
     endif()
     if(ARG_RELOCATABLE)
         list(APPEND link_flags -Wl,--dynamicbase)
@@ -215,6 +218,9 @@ function(tl_add_pe_fixture target_name source_file manifest_file)
             elseif(target_name STREQUAL "tl_unwind")
                 set(runtime_extra_args
                     "-DEXPECTED_HEX=756e77696e640a")
+            elseif(target_name STREQUAL "tl_seh")
+                set(runtime_extra_args
+                    "-DEXPECTED_HEX=7365680a")
             elseif(target_name STREQUAL "tl_powr")
                 set(runtime_extra_args
                     "-DEXPECTED_HEX=706f77720a")
@@ -350,6 +356,13 @@ tl_add_pe_fixture(tl_unwind src/tl_unwind.c manifests/tl_unwind.json
     LINK_KERNEL32 UNWIND EXPECT_RESOLVED CONSOLE REPORT RELOCATABLE
     REPORT_SYMBOL "RtlVirtualUnwind")
 
+tl_add_pe_fixture(tl_seh src/tl_seh.c manifests/tl_seh.json
+    LINK_KERNEL32 IMPORT_DEF defs/tl_seh.def UNWIND EXPECT_RESOLVED CONSOLE REPORT RELOCATABLE
+    REPORT_SYMBOL "RaiseException")
+
+tl_add_pe_fixture(tl_seh_v2_seed src/tl_seh.c manifests/tl_seh.json
+    LINK_KERNEL32 IMPORT_DEF defs/tl_seh.def UNWIND EXPECT_RESOLVED CONSOLE RELOCATABLE NO_RUNTIME_CHECK)
+
 # O compilador local ainda pode emitir somente UNWIND_INFO V1. Geramos uma
 # imagem-semente normal e a promovemos de maneira determinística para V2,
 # preservando os mesmos códigos de prólogo e inserindo um descritor de epílogo
@@ -381,6 +394,34 @@ add_custom_command(
 )
 add_custom_target(tl_unwind_v2_fixture DEPENDS "${TL_UNWIND_V2_FIXTURE}")
 add_dependencies(tradutorlinux_samples tl_unwind_v2_fixture)
+
+set(TL_SEH_V2_FIXTURE "${TL_FIXTURE_OUTPUT_DIRECTORY}/tl_seh_v2.exe")
+add_custom_command(
+    OUTPUT "${TL_SEH_V2_FIXTURE}"
+    COMMAND "${CMAKE_COMMAND}" -E make_directory "${TL_FIXTURE_OUTPUT_DIRECTORY}"
+    COMMAND "$<TARGET_FILE:tl_unwind_v2_generator>"
+        "${TL_FIXTURE_OUTPUT_DIRECTORY}/tl_seh_v2_seed.exe"
+        "${TL_SEH_V2_FIXTURE}"
+        "RaiseException"
+    DEPENDS
+        "${TL_FIXTURE_OUTPUT_DIRECTORY}/tl_seh_v2_seed.exe"
+        tl_seh_v2_seed_fixture
+        tl_unwind_v2_generator
+    VERBATIM
+    COMMENT "Promoting tl_seh_v2.exe metadata to UNWIND_INFO V2"
+)
+add_custom_target(tl_seh_v2_fixture DEPENDS "${TL_SEH_V2_FIXTURE}")
+add_dependencies(tradutorlinux_samples tl_seh_v2_fixture)
+
+add_test(
+    NAME fixture_tl_seh_v2_metadata
+    COMMAND "${CMAKE_COMMAND}"
+        "-DINPUT=${TL_SEH_V2_FIXTURE}"
+        "-DMANIFEST=${CMAKE_CURRENT_SOURCE_DIR}/manifests/tl_seh.json"
+        "-DLLVM_READOBJ=${TL_LLVM_READOBJ}"
+        -P "${CMAKE_CURRENT_SOURCE_DIR}/verify_fixture.cmake"
+)
+set_tests_properties(fixture_tl_seh_v2_metadata PROPERTIES LABELS "fixture;pe32plus")
 
 add_test(
     NAME fixture_tl_unwind_v2_metadata
@@ -431,6 +472,22 @@ if(TARGET tradutorlinux)
     set_tests_properties(unwind_tl_unwind_v2_contract PROPERTIES
         DEPENDS fixture_tl_unwind_v2_metadata
         LABELS "fixture;runtime;pe32plus"
+    )
+
+    add_test(
+        NAME runtime_tl_seh_v2_matches_readobj
+        COMMAND "${CMAKE_COMMAND}"
+            "-DINPUT=${TL_SEH_V2_FIXTURE}"
+            "-DRUNTIME=$<TARGET_FILE:tradutorlinux>"
+            "-DLLVM_READOBJ=${TL_LLVM_READOBJ}"
+            "-DMANIFEST=${CMAKE_CURRENT_SOURCE_DIR}/manifests/tl_seh.json"
+            "-DEXPECTED_HEX=7365680a"
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/verify_console_output.cmake"
+    )
+    set_tests_properties(runtime_tl_seh_v2_matches_readobj PROPERTIES
+        DEPENDS fixture_tl_seh_v2_metadata
+        WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"
+        LABELS "runtime;pe32plus"
     )
 endif()
 

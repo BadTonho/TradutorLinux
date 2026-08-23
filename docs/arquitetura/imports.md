@@ -93,11 +93,12 @@ O resolvedor reporta **todas** as entradas: para cada uma, um `ResolvedImport` c
 
 - Delay imports com atributos diferentes de `grAttrs=0x1` continuam `unsupported-mechanism`. O helper de carregamento sob demanda e as semânticas de binding/unload não são executados: a resolução antecipada ignora essas tabelas.
 - Forwarders de export ainda não são resolvidos na resolução estática; somente exports diretos de módulos internos registrados são aceitos. Para carregamento dinâmico, `GetProcAddress` usa busca global (`find_export_global`) e suporta ordinais via `MAKEINTRESOURCE`.
-- `RtlUnwind`, `RtlUnwindEx`, `RaiseException`, VEH, `UnhandledExceptionFilter`
-  e `__C_specific_handler` não são exports funcionais desta promoção. O
-  núcleo de `.pdata`/`.xdata` apenas desempilha; não há despacho SEH nem
-  execução de handler. O contrato completo está em
-  [unwinding-x64.md](unwinding-x64.md).
+- `RtlUnwind`, `RtlUnwindEx`, `RaiseException`, VEH,
+  `UnhandledExceptionFilter` e `__C_specific_handler` são exports funcionais
+  somente para despacho SEH explícito da imagem ativa: `__try/__except`, V1/V2
+  fora de epílogos e tabelas estáticas `.pdata`. Exceções C++, `__finally`,
+  sinais Linux, tabelas dinâmicas e epílogos V2 continuam fora do contrato;
+  veja [unwinding-x64.md](unwinding-x64.md).
 
 ### Carregamento dinâmico (Fase 12+)
 
