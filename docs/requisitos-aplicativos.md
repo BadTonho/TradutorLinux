@@ -47,6 +47,29 @@ posterior.
 | Automação OLE | WinRAR, Rockstar | pendente |
 | HTTP WinINet | Rockstar | pendente |
 
+## Prioridade ativa — instaladores PE32+ x86-64
+
+Os relatórios já são suficientes para priorizar instaladores como a primeira
+classe da Fase 13. O objetivo inicial não é abrir todos os instaladores atuais;
+é provar de ponta a ponta, com uma amostra reproduzível, que o runtime instala
+em um prefixo exclusivo, localiza/cadastra o executável instalado e o relança
+no mesmo ambiente.
+
+Ordem de trabalho:
+
+1. Prefixo por aplicativo, herdado por processos-filhos e salvo no catálogo.
+2. Leitura, relatório e resolução de `delay-import`.
+3. SEH/unwinding x64, locale/FLS/ambiente e os contratos de arquivo/processo
+   recorrentes nos instaladores x64.
+4. Um instalador PE32+ x86-64 de referência com fontes ou distribuição
+   autorizada, compilado/armazenado de forma reproduzível e coberto por CTest.
+5. Segurança/ACL, rede HTTP, automação OLE e controles somente quando o
+   portfólio mostrar que são necessários para mais de um alvo.
+
+Os instaladores PE32/x86, assemblies .NET/Mono e pacotes MSIX/AppX continuam
+catalogados, mas pertencem a trilhas posteriores: cada um exige uma capacidade
+de base diferente da instalação nativa PE32+ x86-64.
+
 ## `RobloxPlayerInstaller.exe`
 
 ### Amostra e resultado

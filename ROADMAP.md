@@ -43,9 +43,9 @@ Os itens marcados como concluídos devem ter evidência no repositório: código
 - **Marco concluído:** `SHELL32` pastas conhecidas em `tl_shell.exe` (`SHGetKnownFolderPath` `FOLDERID_RoamingAppData`→`$HOME/.config`, `SHGetFolderPathW` `CSIDL_APPDATA`, `SHGetFolderPathAndSubDirW` `TestSub`, `ShellExecuteW` `42`, `ShellExecuteExW` dummy `hProcess`). `--report` 8/8, `shell\n` exit `0`.
 - **Marco concluído:** `GDI` estendido em `tl_gdiex.exe` (`GDI32` `CreateFontW`/`SetDCBrush/PenColor`, `gdiplus` 8 APIs, `UxTheme` `SetWindowTheme`, `WINMM` `timeSetEvent`, `dbghelp` `SymFromAddr`, `USER32` `GetDC`). `--report` 21/21, `gdiex\n` exit `0`.
 - **Marco concluído:** `COM` mínimo `ole32.dll` em `tl_com.exe` (`CoInitialize`/`CoInitializeEx`/`CoUninitialize`/`OleInitialize`/`OleUninitialize` `S_OK`, `CoCreateInstance`/`CoGetClassObject` `REGDB_E_CLASSNOTREG`/`CLASS_E_NOAGGREGATION`, `CoTaskMemAlloc/Free`). `--report` 12/12, `com\n` exit `0`.
-- **Próximo resultado observável:** definir e validar o primeiro portfólio de
-  aplicativos-alvo da Fase 13; cada novo alvo deve medir uma capacidade
-  reutilizável por uma classe de aplicativos, não uma adaptação exclusiva.
+- **Próximo resultado observável:** executar o fluxo principal de instalação
+  de um instalador PE32+ x86-64 de referência, em prefixo próprio, sem tratar
+  um produto comercial específico como exceção.
 
 ### Estudo de caso: `RobloxPlayerInstaller.exe` (benchmark de cobertura)
 
@@ -355,6 +355,20 @@ compatibilidade imediata com qualquer executável, jogo ou mecanismo protegido.
 - [ ] Fixar um portfólio versionado de aplicativos-alvo de código aberto ou
   redistribuição autorizada, com pelo menos um representante de instalador,
   aplicativo GUI de produtividade e ferramenta de rede.
+- [ ] **Prioridade 13.1 — instaladores x64 nativos:** usar as amostras WinRAR,
+  Logitech G HUB, Rockstar e Roblox como evidência de cobertura, mas escolher
+  um instalador PE32+ x86-64 reproduzível como alvo de regressão inicial.
+- [ ] Criar um prefixo exclusivo para cada instalação e propagá-lo de forma
+  explícita ao runtime, ao catálogo e a todos os processos-filhos do
+  instalador; o prefixo padrão compartilhado não é suficiente para este fluxo.
+- [ ] Implementar `delay-import` no leitor, relatório e resolvedor, com
+  diagnóstico separado para cada símbolo atrasado.
+- [ ] Implementar em blocos reutilizáveis as dependências de instaladores x64
+  reveladas pelo portfólio — primeiro SEH/unwinding, locale/FLS/ambiente e
+  operações de arquivo/processo; depois segurança/ACL, rede de alto nível,
+  automação e controles conforme os alvos justifiquem.
+- [ ] Validar `install -> arquivos no prefixo -> cadastro do executável
+  instalado -> app run` com teste de integração e artefatos reproduzíveis.
 - [ ] Adicionar descoberta de formatos de distribuição ao portfólio: distinguir
   PE direto de pacotes MSIX/AppX, extrair de forma estruturalmente validada para
   um prefixo próprio, ler `AppxManifest.xml` e só então analisar o PE interno.
@@ -371,6 +385,10 @@ compatibilidade imediata com qualquer executável, jogo ou mecanismo protegido.
   de execução antes de declarar suporte.
 - [ ] Avaliar o `RobloxPlayerInstaller.exe` como benchmark do portfólio, sem
   criar stubs específicos para Roblox e sem declarar suporte ao cliente/jogo.
+
+PE32/x86, .NET/Mono e MSIX/AppX continuam requisitos separados nesta primeira
+subetapa. Eles ficam registrados no portfólio para a expansão posterior, mas
+não bloqueiam a base de instalação PE32+ x86-64.
 
 ### Critério de saída
 
