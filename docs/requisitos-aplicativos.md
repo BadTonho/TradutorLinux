@@ -32,17 +32,20 @@ posterior.
 | `CapCut_7677236283084898320_installer.exe` | — | — | PE32 x86 (`0x14c`) | arquitetura não suportada |
 | `EpicInstaller-20.1.4-831cc1564f92442abc51fdb4a9854359.exe` | — | — | PE32 x86 (`0x14c`) + Mono/.NET | arquitetura/formato não suportados |
 | `lghub_installer.exe` | 67/114 | 47 | — | `unsupported` |
+| `Rockstar-Games-Launcher.exe` | 109/205 | 96 | `delay-import` | `unsupported` |
 
 ## Recorrências observadas
 
 | Capacidade | Amostras que a evidenciam | Situação |
 |---|---|---|
 | PE32/x86 | Creative Cloud, Office Deployment Tool, CapCut, Epic | fora do alvo atual |
-| Unwinding/SEH x64 | Roblox, WinRAR, Logitech G HUB | pendente |
-| Locale, code pages, FLS e ambiente | WinRAR, Logitech G HUB | pendente |
+| Unwinding/SEH x64 | Roblox, WinRAR, Logitech G HUB, Rockstar | pendente |
+| Locale, code pages, FLS e ambiente | WinRAR, Logitech G HUB, Rockstar | pendente |
 | Segurança, identidade e ACLs | Roblox, Logitech G HUB | pendente |
 | Pacote MSIX/AppX | Affinity | pendente |
-| `delay-import` | WinRAR | pendente |
+| `delay-import` | WinRAR, Rockstar | pendente |
+| Automação OLE | WinRAR, Rockstar | pendente |
+| HTTP WinINet | Rockstar | pendente |
 
 ## `RobloxPlayerInstaller.exe`
 
@@ -652,3 +655,172 @@ Este caso confirma que unwinding/SEH x64 e o grupo locale/FLS/ambiente são
 capacidades compartilhadas por aplicativos x64 grandes. A camada de ACLs deve
 ser validada com uma fixture de segurança genérica e outro alvo que também a
 use, antes de ser considerada suporte ao instalador do Logitech.
+
+## `Rockstar-Games-Launcher.exe` (Rockstar Games Launcher)
+
+### Amostra e resultado
+
+| Campo | Valor |
+|---|---|
+| Arquivo | `Rockstar-Games-Launcher.exe` |
+| Formato | PE32+ GUI x86-64, 6 seções |
+| SHA-256 | `c70131cb0427d146c9489297822e99ad87d4d5e141fd999d19f00975ab1a31f2` |
+| Imports estáticos | 205 em 5 DLLs |
+| Resolvidos pelo runtime | 109 |
+| Ausentes | 96 |
+| Mecanismo adicional | `delay-import` ainda não é suportado pelo loader |
+| Resultado do `--report` | `unsupported`; `execution: not-attempted` |
+| Fonte | análise local de 2026-08-23 |
+
+O comando **Executar** terminou com exit code `5` antes do entry point. Além
+das lacunas em `KERNEL32`, o aplicativo requer controles comuns por ordinal,
+automação OLE, diálogo de impressão e uma camada HTTP WinINet.
+
+### Lacunas por módulo e mecanismo
+
+| DLL/mecanismo | APIs/ordinais ausentes |
+|---|---:|
+| `KERNEL32.dll` | 75 |
+| `COMDLG32.dll` | 1 |
+| `OLEAUT32.dll` | 7 |
+| `COMCTL32.dll` | 2 |
+| `WININET.dll` | 11 |
+| `delay-import` | tabela presente; mecanismo não suportado |
+
+### Imports estáticos ausentes
+
+#### `KERNEL32.dll` (75)
+
+```text
+DecodePointer
+InitializeCriticalSectionEx
+GetModuleFileNameW
+GlobalAlloc
+GlobalLock
+LocalAlloc
+SetDllDirectoryW
+K32GetModuleFileNameExW
+SetThreadLocale
+SetThreadUILanguage
+UnregisterWaitEx
+FormatMessageA
+RegisterWaitForSingleObject
+SetSearchPathMode
+GetUserDefaultUILanguage
+GlobalUnlock
+RtlUnwind
+SetEnvironmentVariableW
+FreeEnvironmentStringsW
+GetEnvironmentStringsW
+GetOEMCP
+GetACP
+IsValidCodePage
+FindFirstFileExW
+GetTimeZoneInformation
+SetStdHandle
+GetLogicalDrives
+GetPhysicallyInstalledSystemMemory
+GetVolumePathNameA
+QueryFullProcessImageNameW
+SetFileAttributesW
+RtlCaptureContext
+GetProcessId
+VirtualQueryEx
+FileTimeToLocalFileTime
+IsDebuggerPresent
+OutputDebugStringA
+OutputDebugStringW
+SetNamedPipeHandleState
+TransactNamedPipe
+WaitNamedPipeW
+RtlLookupFunctionEntry
+RtlVirtualUnwind
+UnhandledExceptionFilter
+GetStartupInfoW
+IsProcessorFeaturePresent
+InitializeSListHead
+GetStringTypeW
+WaitForSingleObjectEx
+GetExitCodeThread
+TryAcquireSRWLockExclusive
+EncodePointer
+LCMapStringEx
+GetCPInfo
+RtlUnwindEx
+RtlPcToFileHeader
+InterlockedPushEntrySList
+InitializeCriticalSectionAndSpinCount
+FreeLibraryAndExitThread
+GetFileType
+PeekNamedPipe
+SystemTimeToTzSpecificLocalTime
+TzSpecificLocalTimeToSystemTime
+WriteConsoleW
+FlsAlloc
+FlsGetValue
+FlsSetValue
+FlsFree
+GetDateFormatW
+GetTimeFormatW
+LCMapStringW
+GetLocaleInfoW
+IsValidLocale
+EnumSystemLocalesW
+ReadConsoleW
+```
+
+#### `COMDLG32.dll` (1)
+
+```text
+PrintDlgW
+```
+
+#### `OLEAUT32.dll` (7)
+
+```text
+ordinal(201)
+ordinal(7)
+ordinal(2)
+ordinal(6)
+ordinal(8)
+ordinal(9)
+ordinal(200)
+```
+
+#### `COMCTL32.dll` (2)
+
+```text
+ordinal(410)
+ordinal(413)
+```
+
+Os ordinais de `OLEAUT32` e `COMCTL32` precisam ser identificados contra uma
+ABI/versão definida antes de se declararem exportações compatíveis.
+
+#### `WININET.dll` (11)
+
+```text
+InternetReadFile
+InternetCrackUrlW
+InternetCloseHandle
+InternetConnectW
+InternetQueryDataAvailable
+InternetSetOptionW
+HttpOpenRequestW
+HttpAddRequestHeadersW
+HttpSendRequestW
+HttpQueryInfoW
+InternetOpenW
+```
+
+WinINet é uma camada HTTP de alto nível, diferente do subconjunto WS2_32 de
+loopback já existente. Seu suporte exige contratos de URL, proxy, TLS, handles,
+erros e I/O; nenhuma requisição de Internet será considerada suporte sem testes
+determinísticos locais.
+
+### Próxima investigação
+
+Este caso aumenta a prioridade de `delay-import`, SEH x64 e locale/FLS. Para
+WinINet, OLE automation, controles comuns e impressão, a primeira entrega deve
+ser uma fixture genérica e reprodutível antes de qualquer tentativa de executar
+o Rockstar Launcher.
