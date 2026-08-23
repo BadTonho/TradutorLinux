@@ -82,9 +82,16 @@ Os itens marcados como concluídos devem ter evidência no repositório: código
   relatório e execução. WinRAR (153/251) e Rockstar (194/338) foram
   reanalisados apenas com `--report`, continuam `unsupported` e não foram
   executados.
-- **Próximo resultado observável:** locale/FLS/ambiente e os contratos de
-  arquivo/processo compartilhados pelos instaladores x64, sem antecipar GUI ou
-  segurança.
+- **Marco concluído (Fase 13.6):** `tl_locale_env_fls.exe` valida ambiente
+  Win32 por processo (incluindo bloco UTF-16, expansão e `msvcrt!getenv`),
+  ACP `1252`/OEMCP `437`, CP437, locale determinístico `en-US`,
+  `GetLocaleInfoW`, `LCMapStringW/Ex` e FLS por thread com callbacks no fim
+  da thread e em `FlsFree`; imprime `locale-env-fls\n`. Metadata, `--report`,
+  trace e execução são protegidos por CTest. WinRAR (166/251) e Rockstar
+  (207/338) foram reanalisados somente com `--report`, continuam
+  `unsupported` e não foram executados.
+- **Próximo resultado observável:** escolher, pelo portfólio atualizado, a
+  próxima dependência compartilhada sem antecipar GUI, segurança ou rede.
 
 ### Estudo de caso: `RobloxPlayerInstaller.exe` (benchmark de cobertura)
 
@@ -410,10 +417,13 @@ compatibilidade imediata com qualquer executável, jogo ou mecanismo protegido.
 - [x] **Prioridade 13.4 — metadados de unwinding x64 V2:** normalizar
   `UOP_Epilog`, aceitar a extensão compatível de `UWOP_SET_FPREG` e manter
   `RtlVirtualUnwind` seguro fora de epílogos, com fixture e regressões.
-- [ ] Implementar em blocos reutilizáveis as dependências de instaladores x64
-  reveladas pelo portfólio — completar despacho SEH, locale/FLS/ambiente e
-  operações de arquivo/processo; depois segurança/ACL, rede de alto nível,
-  automação e controles conforme os alvos justifiquem.
+- [x] Implementar o despacho SEH explícito e o núcleo reutilizável de
+  ambiente/locale/FLS: `tl_seh*.exe` e `tl_locale_env_fls.exe` cobrem os
+  contratos sem declarar suporte aos benchmarks comerciais.
+- [ ] Implementar em blocos reutilizáveis as próximas dependências de
+  instaladores x64 reveladas pelo portfólio — operações de arquivo/processo
+  restantes, depois segurança/ACL, rede de alto nível, automação e controles
+  conforme os alvos justifiquem.
 - [x] Validar `install -> arquivos no prefixo -> cadastro do executável
   instalado -> app run` com teste de integração e artefatos reproduzíveis.
 - [ ] Adicionar descoberta de formatos de distribuição ao portfólio: distinguir

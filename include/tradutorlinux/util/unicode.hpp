@@ -13,6 +13,8 @@ constexpr std::uint32_t kInvalidCodepoint = 0x110000U;
 // Conversão entre CP1252 (Windows ANSI padrão) e Unicode
 [[nodiscard]] std::uint32_t cp1252_to_unicode(std::uint8_t byte) noexcept;
 [[nodiscard]] bool unicode_to_cp1252(std::uint32_t codepoint, std::uint8_t& byte) noexcept;
+[[nodiscard]] std::uint32_t cp437_to_unicode(std::uint8_t byte) noexcept;
+[[nodiscard]] bool unicode_to_cp437(std::uint32_t codepoint, std::uint8_t& byte) noexcept;
 
 // Decodificação e contagem de unidades UTF-8
 [[nodiscard]] std::uint32_t decode_utf8(const char* bytes, std::size_t length, std::size_t& pos) noexcept;

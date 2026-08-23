@@ -18,6 +18,7 @@
 #include <filesystem>
 #include <fstream>
 #include <limits>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -234,6 +235,113 @@ std::u16string final_windows_path(const std::string& path) {
         prefix::to_windows_path(std::filesystem::path(path), guest_prefix_root()));
 }
 
+[[nodiscard]] bool supported_locale_lcid(const std::uint32_t locale) noexcept {
+    return locale == abi::kLocaleEnglishUnitedStates || locale == abi::kLocaleUserDefault ||
+           locale == abi::kLocaleSystemDefault;
+}
+
+[[nodiscard]] std::optional<std::u16string> locale_string(const std::uint32_t locale_type) {
+    switch (locale_type & ~abi::kLocaleReturnNumber) {
+        case abi::kLocaleILanguage: return u"0409";
+        case abi::kLocaleSLanguage: return u"English (United States)";
+        case abi::kLocaleSEngLanguage: return u"English";
+        case abi::kLocaleSISO639LangName: return u"en";
+        case abi::kLocaleSCountry: return u"United States";
+        case abi::kLocaleSEngCountry: return u"United States";
+        case abi::kLocaleSISO3166CtryName: return u"US";
+        case abi::kLocaleSDecimal: return u".";
+        case abi::kLocaleSThousand: return u",";
+        case abi::kLocaleSCurrency: return u"$";
+        case abi::kLocaleS1159: return u"AM";
+        case abi::kLocaleS2359: return u"PM";
+        case abi::kLocaleIDefaultCodePage: return u"1252";
+        default: return std::nullopt;
+    }
+}
+
+[[nodiscard]] std::optional<std::uint32_t> locale_number(const std::uint32_t locale_type) noexcept {
+    switch (locale_type & ~abi::kLocaleReturnNumber) {
+        case abi::kLocaleILanguage: return abi::kLocaleEnglishUnitedStates;
+        case abi::kLocaleIDefaultCodePage: return abi::kCp1252;
+        default: return std::nullopt;
+    }
+}
+
+[[nodiscard]] bool locale_name_is_en_us(const std::uint16_t* const name) noexcept {
+    if (name == nullptr || !mapped_guest_wstring(name)) {
+        return false;
+    }
+    static constexpr std::uint16_t kEnUs[] = {'e', 'n', '-', 'U', 'S', 0};
+    for (std::size_t index = 0; index < std::size(kEnUs); ++index) {
+        const std::uint16_t left = name[index];
+        const std::uint16_t right = kEnUs[index];
+        const std::uint16_t normalized =
+            left >= 'A' && left <= 'Z' ? static_cast<std::uint16_t>(left + ('a' - 'A')) : left;
+        const std::uint16_t expected =
+            right >= 'A' && right <= 'Z' ? static_cast<std::uint16_t>(right + ('a' - 'A')) : right;
+        if (normalized != expected) {
+            return false;
+        }
+    }
+    return true;
+}
+
+[[nodiscard]] std::uint16_t locale_case_map(const std::uint16_t unit,
+                                             const std::uint32_t flags) noexcept {
+    if ((flags & abi::kLcmapsUppercase) != 0U) {
+        if (unit >= 'a' && unit <= 'z') return static_cast<std::uint16_t>(unit - ('a' - 'A'));
+        if (unit >= 0x00E0U && unit <= 0x00F6U && unit != 0x00F7U) return static_cast<std::uint16_t>(unit - 0x20U);
+        if (unit >= 0x00F8U && unit <= 0x00FEU) return static_cast<std::uint16_t>(unit - 0x20U);
+        return unit;
+    }
+    if (unit >= 'A' && unit <= 'Z') return static_cast<std::uint16_t>(unit + ('a' - 'A'));
+    if (unit >= 0x00C0U && unit <= 0x00D6U && unit != 0x00D7U) return static_cast<std::uint16_t>(unit + 0x20U);
+    if (unit >= 0x00D8U && unit <= 0x00DEU) return static_cast<std::uint16_t>(unit + 0x20U);
+    return unit;
+}
+
+int map_locale_string(const std::uint32_t flags, const std::uint16_t* const source,
+                      const int source_count, std::uint16_t* const destination,
+                      const int destination_count) noexcept {
+    if ((flags != abi::kLcmapsUppercase && flags != abi::kLcmapsLowercase) || source == nullptr ||
+        source_count == 0 || source_count < -1 ||
+        (destination_count != 0 && destination == nullptr)) {
+        set_last_error(flags == abi::kLcmapsUppercase || flags == abi::kLcmapsLowercase
+                           ? abi::kErrorInvalidParameter : abi::kErrorInvalidFlags);
+        return 0;
+    }
+    std::size_t units = 0;
+    if (source_count == -1) {
+        if (!mapped_guest_wstring(source)) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
+        }
+        do {
+            ++units;
+        } while (source[units - 1U] != 0);
+    } else {
+        units = static_cast<std::size_t>(source_count);
+        if (!mapped_guest_range(source, units * sizeof(*source), false)) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
+        }
+    }
+    if (destination == nullptr || destination_count == 0) {
+        set_last_error(abi::kErrorSuccess);
+        return static_cast<int>(units);
+    }
+    if (destination_count < 0 || static_cast<std::size_t>(destination_count) < units ||
+        !mapped_guest_range(destination, units * sizeof(*destination), true)) {
+        set_last_error(abi::kErrorInsufficientBuffer);
+        return 0;
+    }
+    for (std::size_t index = 0; index < units; ++index) {
+        destination[index] = locale_case_map(source[index], flags);
+    }
+    set_last_error(abi::kErrorSuccess);
+    return static_cast<int>(units);
+}
+
 }  // namespace
 
 TL_MSABI int tl_GetConsoleMode(const void* handle, std::uint32_t* mode) noexcept {
@@ -322,6 +430,7 @@ TL_MSABI int tl_MultiByteToWideChar(std::uint32_t code_page, std::uint32_t flags
                                     const char* mb_str, int mb_count,
                                     std::uint16_t* wide_str, int wide_count) noexcept {
     const bool supported_page = code_page == abi::kCpAcp || code_page == abi::kCp1252 ||
+                                code_page == abi::kCpOem || code_page == abi::kCp437 ||
                                 code_page == abi::kCpUtf8;
     if (mb_str == nullptr || mb_count == 0 || mb_count < -1 || !supported_page ||
         (flags & ~(abi::kMbPrecomposed | abi::kMbErrInvalidChars)) != 0U ||
@@ -391,6 +500,7 @@ TL_MSABI int tl_WideCharToMultiByte(std::uint32_t code_page, std::uint32_t flags
                                     char* mb_str, int mb_count, const char* default_char,
                                     int* used_default_char) noexcept {
     const bool supported_page = code_page == abi::kCpAcp || code_page == abi::kCp1252 ||
+                                code_page == abi::kCpOem || code_page == abi::kCp437 ||
                                 code_page == abi::kCpUtf8;
     if (wide_str == nullptr || wide_count == 0 || wide_count < -1 || !supported_page ||
         (flags & ~(abi::kWcCompositeCheck | abi::kWcNoBestFitChars)) != 0U ||
@@ -419,6 +529,7 @@ TL_MSABI int tl_WideCharToMultiByte(std::uint32_t code_page, std::uint32_t flags
         }
     }
     const bool utf8 = code_page == abi::kCpUtf8;
+    const bool cp437 = code_page == abi::kCpOem || code_page == abi::kCp437;
     std::size_t index = 0;
     std::size_t needed = null_terminated ? 1U : 0U;
     while (index < unit_count) {
@@ -459,7 +570,8 @@ TL_MSABI int tl_WideCharToMultiByte(std::uint32_t code_page, std::uint32_t flags
             written += count;
         } else {
             std::uint8_t byte = 0;
-            if (util::unicode_to_cp1252(codepoint, byte)) {
+            if ((cp437 ? util::unicode_to_cp437(codepoint, byte)
+                       : util::unicode_to_cp1252(codepoint, byte))) {
                 mb_str[written++] = static_cast<char>(byte);
             } else {
                 mb_str[written++] = fallback;
@@ -475,6 +587,144 @@ TL_MSABI int tl_WideCharToMultiByte(std::uint32_t code_page, std::uint32_t flags
     }
     set_last_error(abi::kErrorSuccess);
     return static_cast<int>(written);
+}
+
+TL_MSABI std::uint32_t tl_GetACP() noexcept {
+    const std::array<diagnostics::TraceField, 4> fields{
+        diagnostics::TraceField{"operation", "acp"},
+        diagnostics::TraceField{"code-page", "1252"},
+        diagnostics::TraceField{"locale", "en-US"},
+        diagnostics::TraceField{"status", "success"},
+    };
+    runtime_trace("locale", fields, 4);
+    set_last_error(abi::kErrorSuccess);
+    return abi::kCp1252;
+}
+
+TL_MSABI std::uint32_t tl_GetOEMCP() noexcept {
+    const std::array<diagnostics::TraceField, 4> fields{
+        diagnostics::TraceField{"operation", "oemcp"},
+        diagnostics::TraceField{"code-page", "437"},
+        diagnostics::TraceField{"locale", "en-US"},
+        diagnostics::TraceField{"status", "success"},
+    };
+    runtime_trace("locale", fields, 4);
+    set_last_error(abi::kErrorSuccess);
+    return abi::kCp437;
+}
+
+TL_MSABI int tl_GetCPInfo(const std::uint32_t code_page, abi::GuestCpInfo* const info) noexcept {
+    if (info == nullptr || !mapped_guest_range(info, sizeof(*info), true)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    const bool single_byte = code_page == abi::kCpAcp || code_page == abi::kCp1252 ||
+                             code_page == abi::kCpOem || code_page == abi::kCp437;
+    if (!single_byte && code_page != abi::kCpUtf8) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    *info = {};
+    info->max_char_size = code_page == abi::kCpUtf8 ? 4U : 1U;
+    info->default_char[0] = '?';
+    const std::array<diagnostics::TraceField, 4> fields{
+        diagnostics::TraceField{"operation", "cpinfo"},
+        diagnostics::TraceField{"code-page", std::to_string(code_page)},
+        diagnostics::TraceField{"status", "success"},
+        diagnostics::TraceField{"max-char-size", std::to_string(info->max_char_size)},
+    };
+    runtime_trace("locale", fields, 4);
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_GetLocaleInfoW(const std::uint32_t locale, const std::uint32_t locale_type,
+                               std::uint16_t* const data, const int data_count) noexcept {
+    if (!supported_locale_lcid(locale) || data_count < 0 ||
+        (data_count != 0 && data == nullptr)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    if ((locale_type & abi::kLocaleReturnNumber) != 0U) {
+        const std::optional<std::uint32_t> value = locale_number(locale_type);
+        if (!value.has_value()) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
+        }
+        constexpr int kNumberUnits = static_cast<int>(sizeof(std::uint32_t) / sizeof(std::uint16_t));
+        if (data == nullptr || data_count == 0) {
+            set_last_error(abi::kErrorSuccess);
+            return kNumberUnits;
+        }
+        if (data_count < kNumberUnits ||
+            !mapped_guest_range(data, sizeof(std::uint32_t), true)) {
+            set_last_error(abi::kErrorInsufficientBuffer);
+            return 0;
+        }
+        std::memcpy(data, &*value, sizeof(*value));
+        set_last_error(abi::kErrorSuccess);
+        return kNumberUnits;
+    }
+    const std::optional<std::u16string> value = locale_string(locale_type);
+    if (!value.has_value()) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    const int needed = static_cast<int>(value->size() + 1U);
+    if (data == nullptr || data_count == 0) {
+        set_last_error(abi::kErrorSuccess);
+        return needed;
+    }
+    if (data_count < needed ||
+        !mapped_guest_range(data, static_cast<std::size_t>(data_count) * sizeof(*data), true)) {
+        set_last_error(abi::kErrorInsufficientBuffer);
+        return 0;
+    }
+    std::copy(value->begin(), value->end(), data);
+    data[value->size()] = 0;
+    const std::array<diagnostics::TraceField, 4> fields{
+        diagnostics::TraceField{"operation", "info"},
+        diagnostics::TraceField{"locale", "en-US"},
+        diagnostics::TraceField{"type", std::to_string(locale_type)},
+        diagnostics::TraceField{"status", "success"},
+    };
+    runtime_trace("locale", fields, 4);
+    set_last_error(abi::kErrorSuccess);
+    return needed;
+}
+
+TL_MSABI int tl_LCMapStringW(const std::uint32_t locale, const std::uint32_t flags,
+                             const std::uint16_t* const source, const int source_count,
+                             std::uint16_t* const destination, const int destination_count) noexcept {
+    if (!supported_locale_lcid(locale)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    const int result = map_locale_string(flags, source, source_count, destination, destination_count);
+    if (result != 0) {
+        const std::array<diagnostics::TraceField, 4> fields{
+            diagnostics::TraceField{"operation", "map"},
+            diagnostics::TraceField{"locale", "en-US"},
+            diagnostics::TraceField{"status", "success"},
+            diagnostics::TraceField{"units", std::to_string(result)},
+        };
+        runtime_trace("locale", fields, 4);
+    }
+    return result;
+}
+
+TL_MSABI int tl_LCMapStringEx(const std::uint16_t* const locale_name, const std::uint32_t flags,
+                              const std::uint16_t* const source, const int source_count,
+                              std::uint16_t* const destination, const int destination_count,
+                              const void* const version_information, void* const reserved,
+                              const std::uintptr_t sort_handle) noexcept {
+    if (!locale_name_is_en_us(locale_name) || version_information != nullptr || reserved != nullptr ||
+        sort_handle != 0) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    return tl_LCMapStringW(abi::kLocaleEnglishUnitedStates, flags, source, source_count,
+                           destination, destination_count);
 }
 
 TL_MSABI int tl_MoveFileA(const char* from, const char* to) noexcept {

@@ -72,6 +72,7 @@ constexpr Dword kErrorModNotFound = 126;
 constexpr Dword kErrorProcNotFound = 127;
 constexpr Dword kErrorTimeout = 1460;
 constexpr Dword kErrorNoUnicodeTranslation = 1113;
+constexpr Dword kErrorInvalidFlags = 1004;
 constexpr Dword kErrorTooManyTlsIndexes = 4323;
 constexpr Dword kGetModuleHandleExFlagPin = 0x01U;
 constexpr Dword kGetModuleHandleExFlagUnchangedRefcount = 0x02U;
@@ -107,8 +108,40 @@ constexpr Dword kRtRsrcData = 10;
 
 // Code pages suportadas pela conversão de strings.
 constexpr Dword kCpAcp = 0;          // CP_ACP -> CP1252 (locale C do runtime)
+constexpr Dword kCpOem = 1;          // CP_OEMCP -> CP437
+constexpr Dword kCp437 = 437;
 constexpr Dword kCp1252 = 1252;
 constexpr Dword kCpUtf8 = 65001;
+
+constexpr Dword kFlsOutOfIndexes = 0xFFFFFFFFU;
+
+// Locale deliberadamente fixo do processo convidado.
+constexpr Dword kLocaleUserDefault = 0x0400U;
+constexpr Dword kLocaleSystemDefault = 0x0800U;
+constexpr Dword kLocaleEnglishUnitedStates = 0x0409U;
+constexpr Dword kLocaleReturnNumber = 0x20000000U;
+constexpr Dword kLocaleILanguage = 0x00000001U;
+constexpr Dword kLocaleSLanguage = 0x00000002U;
+constexpr Dword kLocaleSEngLanguage = 0x00001001U;
+constexpr Dword kLocaleSISO639LangName = 0x00000059U;
+constexpr Dword kLocaleSCountry = 0x00000006U;
+constexpr Dword kLocaleSEngCountry = 0x00001002U;
+constexpr Dword kLocaleSISO3166CtryName = 0x0000005AU;
+constexpr Dword kLocaleSDecimal = 0x0000000EU;
+constexpr Dword kLocaleSThousand = 0x0000000FU;
+constexpr Dword kLocaleSCurrency = 0x00000014U;
+constexpr Dword kLocaleS1159 = 0x00000028U;
+constexpr Dword kLocaleS2359 = 0x00000029U;
+constexpr Dword kLocaleIDefaultCodePage = 0x0000000BU;
+constexpr Dword kLcmapsLowercase = 0x00000100U;
+constexpr Dword kLcmapsUppercase = 0x00000200U;
+
+struct GuestCpInfo {
+    Dword max_char_size{};
+    std::uint8_t default_char[2]{};
+    std::uint8_t lead_byte[12]{};
+};
+static_assert(sizeof(GuestCpInfo) == 20);
 
 // Flags aceitas por MultiByteToWideChar / WideCharToMultiByte.
 constexpr Dword kMbPrecomposed = 0x01U;
@@ -621,6 +654,26 @@ TL_MSABI std::uint32_t tl_GetEnvironmentVariableA(const char* name, char* buffer
                                                    std::uint32_t size) noexcept;
 TL_MSABI std::uint32_t tl_GetEnvironmentVariableW(const std::uint16_t* name, std::uint16_t* buffer,
                                                    std::uint32_t size) noexcept;
+TL_MSABI int tl_SetEnvironmentVariableW(const std::uint16_t* name,
+                                        const std::uint16_t* value) noexcept;
+TL_MSABI std::uint16_t* tl_GetEnvironmentStringsW() noexcept;
+TL_MSABI int tl_FreeEnvironmentStringsW(std::uint16_t* block) noexcept;
+TL_MSABI std::uint32_t tl_ExpandEnvironmentStringsW(const std::uint16_t* source,
+                                                     std::uint16_t* destination,
+                                                     std::uint32_t size) noexcept;
+TL_MSABI std::uint32_t tl_GetACP() noexcept;
+TL_MSABI std::uint32_t tl_GetOEMCP() noexcept;
+TL_MSABI int tl_GetCPInfo(std::uint32_t code_page, abi::GuestCpInfo* info) noexcept;
+TL_MSABI int tl_GetLocaleInfoW(std::uint32_t locale, std::uint32_t locale_type,
+                               std::uint16_t* data, int data_count) noexcept;
+TL_MSABI int tl_LCMapStringW(std::uint32_t locale, std::uint32_t flags,
+                             const std::uint16_t* source, int source_count,
+                             std::uint16_t* destination, int destination_count) noexcept;
+TL_MSABI int tl_LCMapStringEx(const std::uint16_t* locale_name, std::uint32_t flags,
+                              const std::uint16_t* source, int source_count,
+                              std::uint16_t* destination, int destination_count,
+                              const void* version_information, void* reserved,
+                              std::uintptr_t sort_handle) noexcept;
 TL_MSABI void* tl_GetProcessHeap() noexcept;
 TL_MSABI void* tl_HeapAlloc(void* heap, std::uint32_t flags, std::uintptr_t size) noexcept;
 TL_MSABI int tl_HeapFree(void* heap, std::uint32_t flags, void* memory) noexcept;
@@ -725,6 +778,10 @@ TL_MSABI void* tl_GetCurrentProcess() noexcept;
 TL_MSABI std::uint32_t tl_TlsAlloc() noexcept;
 TL_MSABI int tl_TlsSetValue(std::uint32_t tls_index, void* tls_value) noexcept;
 TL_MSABI int tl_TlsFree(std::uint32_t tls_index) noexcept;
+TL_MSABI std::uint32_t tl_FlsAlloc(std::uintptr_t callback) noexcept;
+TL_MSABI int tl_FlsFree(std::uint32_t fls_index) noexcept;
+TL_MSABI void* tl_FlsGetValue(std::uint32_t fls_index) noexcept;
+TL_MSABI int tl_FlsSetValue(std::uint32_t fls_index, void* value) noexcept;
 
 // Temporização de alta resolução e hardware info (KERNEL32)
 TL_MSABI int tl_QueryPerformanceCounter(std::int64_t* performance_count) noexcept;

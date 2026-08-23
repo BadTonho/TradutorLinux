@@ -1,0 +1,35 @@
+{
+  "name": "tl_locale_env_fls",
+  "format": "PE32+",
+  "machine": "AMD64",
+  "entry_point": "tl_entry",
+  "uses_crt": false,
+  "imports": {
+    "KERNEL32.dll": [
+      "CloseHandle",
+      "CreateThread",
+      "ExitProcess",
+      "ExitThread",
+      "ExpandEnvironmentStringsW",
+      "FlsAlloc",
+      "FlsFree",
+      "FlsGetValue",
+      "FlsSetValue",
+      "FreeEnvironmentStringsW",
+      "GetACP",
+      "GetCPInfo",
+      "GetEnvironmentStringsW",
+      "GetEnvironmentVariableW",
+      "GetLocaleInfoW",
+      "GetOEMCP",
+      "GetStdHandle",
+      "LCMapStringEx",
+      "LCMapStringW",
+      "MultiByteToWideChar",
+      "SetEnvironmentVariableW",
+      "WaitForSingleObject",
+      "WideCharToMultiByte",
+      "WriteFile"
+    ]
+  }
+}

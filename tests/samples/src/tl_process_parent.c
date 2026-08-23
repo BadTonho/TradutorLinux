@@ -17,6 +17,8 @@ __attribute__((dllimport)) int CreateProcessW(const unsigned short* application_
 __attribute__((dllimport)) dword_t WaitForSingleObject(const void* handle, dword_t milliseconds);
 __attribute__((dllimport)) int GetExitCodeProcess(const void* process, dword_t* exit_code);
 __attribute__((dllimport)) int TerminateProcess(const void* process, dword_t exit_code);
+__attribute__((dllimport)) int SetEnvironmentVariableW(const unsigned short* name,
+                                                        const unsigned short* value);
 
 void tl_entry(void);
 __attribute__((used, section(".rdata"))) void (*const tl_relocation_anchor)(void) = &tl_entry;
@@ -40,6 +42,13 @@ void tl_entry(void) {
         '.', 'e', 'x', 'e', 0};
     unsigned char startup_info[104] = {0};
     unsigned char process_info[24] = {0};
+    static const unsigned short environment_name[] = {
+        'T','L','_','P','R','O','C','E','S','S','_','E','N','V',0};
+    static const unsigned short environment_value[] = {'c','h','i','l','d',0};
+
+    if (!SetEnvironmentVariableW(environment_name, environment_value)) {
+        fail(output, &written, 6U);
+    }
 
     if (!CreateProcessW(child_path, (unsigned short*)0, (void*)0, (void*)0, 0, 0, (void*)0,
                         (const unsigned short*)0, startup_info, process_info)) {

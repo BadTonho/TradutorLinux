@@ -151,6 +151,7 @@ struct ThreadSlot {
     std::size_t stack_size{0};
     std::uintptr_t stack_top{};
     runtime::GuestUnwindView unwind_view{};
+    std::shared_ptr<struct FlsThreadValues> fls_values;
     std::function<void()> thread_func;
     std::thread host_thread;
     std::mutex join_mutex;
@@ -169,6 +170,24 @@ extern std::array<bool, kMaxTlsSlots> g_tls_indices_used;
 extern std::mutex g_tls_mutex;
 extern thread_local std::array<void*, 64> g_guest_tls_slots;
 extern std::atomic<std::uintptr_t> g_unhandled_exception_filter;
+
+constexpr std::uint32_t kMaxFlsSlots = 128;
+struct FlsSlot {
+    bool used{false};
+    std::uintptr_t callback{};
+};
+struct FlsThreadValues {
+    std::array<void*, kMaxFlsSlots> values{};
+};
+extern std::array<FlsSlot, kMaxFlsSlots> g_fls_slots;
+extern std::mutex g_fls_mutex;
+extern std::vector<std::weak_ptr<FlsThreadValues>> g_fls_threads;
+extern thread_local std::shared_ptr<FlsThreadValues> g_current_fls_values;
+
+[[nodiscard]] std::shared_ptr<FlsThreadValues> ensure_fls_thread_values();
+void set_current_fls_thread_values(std::shared_ptr<FlsThreadValues> values);
+void cleanup_current_fls_values() noexcept;
+void reset_fls_process_state() noexcept;
 
 struct CriticalSectionEntry {
     void* guest_address{nullptr};

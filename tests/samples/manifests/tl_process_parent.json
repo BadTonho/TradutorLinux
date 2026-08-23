@@ -11,6 +11,7 @@
       "ExitProcess",
       "GetExitCodeProcess",
       "GetStdHandle",
+      "SetEnvironmentVariableW",
       "TerminateProcess",
       "WaitForSingleObject",
       "WriteFile"

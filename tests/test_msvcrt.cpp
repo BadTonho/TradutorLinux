@@ -1,4 +1,5 @@
 #include "tradutorlinux/runtime/msvcrt.hpp"
+#include "tradutorlinux/runtime/winapi.hpp"
 
 #include <array>
 #include <cstdio>
@@ -172,6 +173,19 @@ TEST(MsvcrtEnvTest, GetenvFindsPath) {
     char* path = tl_getenv("PATH");
     ASSERT_NE(path, nullptr);
     EXPECT_GT(std::strlen(path), 0U);
+}
+
+TEST(MsvcrtEnvTest, GetenvUsesMutableGuestEnvironment) {
+    constexpr std::uint16_t name[] = {
+        'T', 'L', '_', 'M', 'S', 'V', 'C', 'R', 'T', '_', 'E', 'N', 'V', 0};
+    constexpr std::uint16_t value[] = {'g', 'u', 'e', 's', 't', 0};
+
+    ASSERT_EQ(tl_SetEnvironmentVariableW(name, value), 1);
+    ASSERT_NE(tl_getenv("TL_MSVCRT_ENV"), nullptr);
+    EXPECT_STREQ(tl_getenv("TL_MSVCRT_ENV"), "guest");
+
+    ASSERT_EQ(tl_SetEnvironmentVariableW(name, nullptr), 1);
+    EXPECT_EQ(tl_getenv("TL_MSVCRT_ENV"), nullptr);
 }
 
 TEST(MsvcrtErrnoTest, ErrnoCellIsReadWrite) {

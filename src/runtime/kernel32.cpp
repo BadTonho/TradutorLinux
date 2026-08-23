@@ -4,6 +4,7 @@
 #include "tradutorlinux/loader/module.hpp"
 #include "tradutorlinux/prefix/prefix.hpp"
 #include "tradutorlinux/runtime/error_map.hpp"
+#include "tradutorlinux/runtime/environment.hpp"
 #include "tradutorlinux/runtime/msvcrt.hpp"
 #include "tradutorlinux/runtime/ntdll.hpp"
 #include "tradutorlinux/runtime/unwind.hpp"
@@ -451,6 +452,92 @@ bool read_guest_file_for_process(const char* path, std::vector<std::byte>& bytes
 
 }  // namespace
 
+namespace {
+
+[[nodiscard]] bool is_guest_executable_address(const std::uintptr_t address) noexcept {
+    if (g_guest_image_base == nullptr || address == 0) {
+        return false;
+    }
+    const std::uintptr_t base = reinterpret_cast<std::uintptr_t>(g_guest_image_base);
+    if (address < base || address - base >= g_guest_image_size) {
+        return false;
+    }
+    std::ifstream maps{"/proc/self/maps"};
+    std::string line;
+    while (std::getline(maps, line)) {
+        unsigned long long start = 0;
+        unsigned long long end = 0;
+        char permissions[5]{};
+        if (std::sscanf(line.c_str(), "%llx-%llx %4s", &start, &end, permissions) != 3) {
+            continue;
+        }
+        if (address >= start && address < end) {
+            return permissions[2] == 'x';
+        }
+    }
+    return false;
+}
+
+void trace_fls(const char* const operation, const std::string& detail) noexcept {
+    const std::array<diagnostics::TraceField, 4> fields{
+        diagnostics::TraceField{"operation", operation},
+        diagnostics::TraceField{"detail", detail},
+        diagnostics::TraceField{"thread", std::to_string(g_current_thread_id)},
+        diagnostics::TraceField{"status", "success"},
+    };
+    runtime_trace("fls", fields, 4);
+}
+
+}  // namespace
+
+std::shared_ptr<FlsThreadValues> ensure_fls_thread_values() {
+    std::lock_guard lock(g_fls_mutex);
+    if (g_current_fls_values == nullptr) {
+        g_current_fls_values = std::make_shared<FlsThreadValues>();
+        g_fls_threads.push_back(g_current_fls_values);
+    }
+    return g_current_fls_values;
+}
+
+void set_current_fls_thread_values(std::shared_ptr<FlsThreadValues> values) {
+    std::lock_guard lock(g_fls_mutex);
+    g_current_fls_values = std::move(values);
+    if (g_current_fls_values != nullptr) {
+        g_fls_threads.push_back(g_current_fls_values);
+    }
+}
+
+void cleanup_current_fls_values() noexcept {
+    std::vector<std::pair<std::uintptr_t, void*>> callbacks;
+    {
+        std::lock_guard lock(g_fls_mutex);
+        if (g_current_fls_values == nullptr) {
+            return;
+        }
+        for (std::size_t index = 0; index < g_fls_slots.size(); ++index) {
+            const FlsSlot& slot = g_fls_slots[index];
+            void*& value = g_current_fls_values->values[index];
+            if (slot.used && slot.callback != 0 && value != nullptr) {
+                callbacks.emplace_back(slot.callback, value);
+                value = nullptr;
+            }
+        }
+    }
+    using FlsCallback = void (TL_MSABI *)(void*);
+    for (const auto& [callback_address, value] : callbacks) {
+        const auto callback = reinterpret_cast<FlsCallback>(callback_address);
+        callback(value);
+        trace_fls("callback", "thread-exit");
+    }
+}
+
+void reset_fls_process_state() noexcept {
+    std::lock_guard lock(g_fls_mutex);
+    g_fls_slots = {};
+    g_fls_threads.clear();
+    g_current_fls_values.reset();
+}
+
 extern "C" {
 
 TL_MSABI void* tl_GetStdHandle(const std::uint32_t std_handle) noexcept {
@@ -493,6 +580,7 @@ TL_MSABI void tl_ExitProcess(const std::uint32_t exit_code) noexcept {
         runtime_trace("ExitProcess", fields, 4);
     }
     g_guest_exit_code = exit_code;
+    cleanup_current_fls_values();
     std::longjmp(g_guest_exit_context, 1);
 }
 
@@ -1498,6 +1586,7 @@ TL_MSABI void* tl_CreateThread(const void* thread_attributes, const std::uintptr
     it->stack_size = real_stack_size;
     it->stack_top = stack_top;
     it->unwind_view = runtime::current_guest_unwind_view();
+    it->fls_values = std::make_shared<FlsThreadValues>();
     it->finished = false;
     it->joined = false;
     it->exit_code = 0;
@@ -1512,6 +1601,7 @@ TL_MSABI void* tl_CreateThread(const void* thread_attributes, const std::uintptr
                                    unwind_view = it->unwind_view]() {
         g_current_thread_id = slot_ptr->thread_id;
         set_guest_gs_base(teb);
+        set_current_fls_thread_values(slot_ptr->fls_values);
         runtime::restore_guest_unwind_view(unwind_view);
         std::jmp_buf exit_point{};
         t_thread_exit_context = &exit_point;
@@ -1524,6 +1614,8 @@ TL_MSABI void* tl_CreateThread(const void* thread_attributes, const std::uintptr
         ThreadSlot* const finished_slot = t_thread_exit_slot;
         t_thread_exit_context = nullptr;
         t_thread_exit_slot = nullptr;
+        cleanup_current_fls_values();
+        set_current_fls_thread_values({});
         runtime::clear_guest_unwind_view();
         set_guest_gs_base(nullptr);
         {
@@ -1541,6 +1633,7 @@ TL_MSABI void tl_ExitThread(std::uint32_t exit_code) noexcept {
         if (ThreadSlot* slot = t_thread_exit_slot; slot != nullptr) {
             slot->exit_code = static_cast<int>(exit_code);
         }
+        cleanup_current_fls_values();
         std::longjmp(*context, 1);
     }
     // Thread primária: encerrar a última thread encerra o processo.
@@ -1577,62 +1670,24 @@ TL_MSABI const std::uint16_t* tl_GetCommandLineW() noexcept {
     return wide_cmd.data();
 }
 
-namespace {
-
-[[nodiscard]] bool environment_name_equals(const char* const lhs,
-                                           const std::string_view rhs) noexcept {
-    if (lhs == nullptr || std::strlen(lhs) != rhs.size()) {
-        return false;
-    }
-    for (std::size_t index = 0; index < rhs.size(); ++index) {
-        if (std::toupper(static_cast<unsigned char>(lhs[index])) != rhs[index]) {
-            return false;
-        }
-    }
-    return true;
-}
-
-[[nodiscard]] std::optional<std::string> prefix_environment_value(const char* const name) {
-    const std::filesystem::path prefix_root = guest_prefix_root();
-    const prefix::EnvironmentPaths paths = prefix::get_environment_paths(prefix_root);
-    if (environment_name_equals(name, "APPDATA")) {
-        return prefix::to_windows_path(paths.app_data_roaming, prefix_root);
-    }
-    if (environment_name_equals(name, "LOCALAPPDATA")) {
-        return prefix::to_windows_path(paths.app_data_local, prefix_root);
-    }
-    if (environment_name_equals(name, "USERPROFILE")) {
-        return "C:\\users\\guest";
-    }
-    if (environment_name_equals(name, "TEMP") || environment_name_equals(name, "TMP")) {
-        return prefix::to_windows_path(paths.temp_dir, prefix_root);
-    }
-    if (environment_name_equals(name, "HOMEDRIVE")) {
-        return "C:";
-    }
-    if (environment_name_equals(name, "HOMEPATH")) {
-        return "\\users\\guest";
-    }
-    return std::nullopt;
-}
-
-}  // namespace
-
 TL_MSABI std::uint32_t tl_GetEnvironmentVariableA(const char* name, char* buffer,
                                                   std::uint32_t size) noexcept {
     if (name == nullptr || !mapped_guest_cstring(name)) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
-    const std::optional<std::string> prefix_value = prefix_environment_value(name);
-    const char* const value = prefix_value.has_value() ? prefix_value->c_str() : std::getenv(name);
-    if (value == nullptr) {
+    const std::optional<std::string> value = runtime::guest_environment_value(name);
+    if (!value.has_value()) {
         set_last_error(abi::kErrorEnvvarNotFound);
         return 0;
     }
-    const std::size_t len = std::strlen(value);
+    const std::size_t len = value->size();
     if (buffer == nullptr || size == 0) {
         return static_cast<std::uint32_t>(len + 1);
+    }
+    if (!mapped_guest_range(buffer, size, true)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
     }
     if (size <= len) {
         set_last_error(abi::kErrorInsufficientBuffer);
@@ -1640,7 +1695,7 @@ TL_MSABI std::uint32_t tl_GetEnvironmentVariableA(const char* name, char* buffer
         // incluindo o terminador nulo.
         return static_cast<std::uint32_t>(len + 1);
     }
-    std::memcpy(buffer, value, len);
+    std::memcpy(buffer, value->data(), len);
     buffer[len] = '\0';
     set_last_error(abi::kErrorSuccess);
     return static_cast<std::uint32_t>(len);
@@ -1648,29 +1703,142 @@ TL_MSABI std::uint32_t tl_GetEnvironmentVariableA(const char* name, char* buffer
 
 TL_MSABI std::uint32_t tl_GetEnvironmentVariableW(const std::uint16_t* name, std::uint16_t* buffer,
                                                    std::uint32_t size) noexcept {
-    if (name == nullptr) {
+    if (name == nullptr || !mapped_guest_wstring(name)) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
     const std::string narrow_name = util::wide_to_utf8(name);
-    const std::uint32_t result = tl_GetEnvironmentVariableA(narrow_name.c_str(), nullptr, 0);
-    if (result == 0) {
+    const std::optional<std::string> value = runtime::guest_environment_value(narrow_name);
+    if (!value.has_value()) {
+        set_last_error(abi::kErrorEnvvarNotFound);
         return 0;
     }
+    const std::u16string wide_value = util::utf8_to_wide(*value);
+    const std::uint32_t result = static_cast<std::uint32_t>(wide_value.size() + 1U);
     if (buffer == nullptr || size == 0) {
         return result;
     }
-    if (size <= result) {
+    if (!mapped_guest_range(buffer, static_cast<std::size_t>(size) * sizeof(*buffer), true)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    if (size <= wide_value.size()) {
         set_last_error(abi::kErrorInsufficientBuffer);
         return result;
     }
-    std::vector<char> narrow_buf(result + 1, 0);
-    tl_GetEnvironmentVariableA(narrow_name.c_str(), narrow_buf.data(), static_cast<std::uint32_t>(narrow_buf.size()));
-    const std::u16string wide_res = util::utf8_to_wide(narrow_buf.data());
-    std::copy(wide_res.begin(), wide_res.end(), buffer);
-    buffer[wide_res.size()] = 0;
+    std::copy(wide_value.begin(), wide_value.end(), buffer);
+    buffer[wide_value.size()] = 0;
     set_last_error(abi::kErrorSuccess);
-    return static_cast<std::uint32_t>(wide_res.size());
+    return static_cast<std::uint32_t>(wide_value.size());
+}
+
+TL_MSABI int tl_SetEnvironmentVariableW(const std::uint16_t* const name,
+                                        const std::uint16_t* const value) noexcept {
+    if (name == nullptr || !mapped_guest_wstring(name) ||
+        (value != nullptr && !mapped_guest_wstring(value))) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    const std::string narrow_name = util::wide_to_utf8(name);
+    std::optional<std::string> narrow_value;
+    if (value != nullptr) {
+        narrow_value = util::wide_to_utf8(value);
+    }
+    if (!runtime::set_guest_environment_value(narrow_name, narrow_value)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    const std::array<diagnostics::TraceField, 4> fields{
+        diagnostics::TraceField{"operation", "set"},
+        diagnostics::TraceField{"name", narrow_name},
+        diagnostics::TraceField{"action", value == nullptr ? "remove" : "define"},
+        diagnostics::TraceField{"status", "success"},
+    };
+    runtime_trace("environment", fields, 4);
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI std::uint16_t* tl_GetEnvironmentStringsW() noexcept {
+    std::uint16_t* const block = runtime::allocate_environment_block_w();
+    if (block == nullptr) {
+        set_last_error(abi::kErrorNotEnoughMemory);
+        return nullptr;
+    }
+    const std::array<diagnostics::TraceField, 4> fields{
+        diagnostics::TraceField{"operation", "block"},
+        diagnostics::TraceField{"status", "success"},
+        diagnostics::TraceField{"encoding", "utf-16"},
+        diagnostics::TraceField{"ownership", "runtime"},
+    };
+    runtime_trace("environment", fields, 4);
+    set_last_error(abi::kErrorSuccess);
+    return block;
+}
+
+TL_MSABI int tl_FreeEnvironmentStringsW(std::uint16_t* const block) noexcept {
+    if (!runtime::free_environment_block_w(block)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI std::uint32_t tl_ExpandEnvironmentStringsW(const std::uint16_t* const source,
+                                                     std::uint16_t* const destination,
+                                                     const std::uint32_t size) noexcept {
+    if (source == nullptr || !mapped_guest_wstring(source) ||
+        (destination != nullptr && size != 0 &&
+         !mapped_guest_range(destination, static_cast<std::size_t>(size) * sizeof(*destination), true))) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    std::u16string input;
+    for (std::size_t index = 0; source[index] != 0; ++index) {
+        input.push_back(static_cast<char16_t>(source[index]));
+    }
+    std::u16string expanded;
+    for (std::size_t index = 0; index < input.size();) {
+        if (input[index] != u'%') {
+            expanded.push_back(input[index++]);
+            continue;
+        }
+        const std::size_t closing = input.find(u'%', index + 1U);
+        if (closing == std::u16string::npos || closing == index + 1U) {
+            expanded.push_back(input[index++]);
+            continue;
+        }
+        const std::u16string variable = input.substr(index + 1U, closing - index - 1U);
+        const std::optional<std::string> value =
+            runtime::guest_environment_value(util::wide_to_utf8(reinterpret_cast<const std::uint16_t*>(variable.c_str())));
+        if (value.has_value()) {
+            const std::u16string replacement = util::utf8_to_wide(*value);
+            expanded.append(replacement);
+        } else {
+            expanded.append(input, index, closing - index + 1U);
+        }
+        index = closing + 1U;
+    }
+    const std::uint32_t needed = static_cast<std::uint32_t>(expanded.size() + 1U);
+    if (destination == nullptr || size == 0) {
+        return needed;
+    }
+    if (size < needed) {
+        set_last_error(abi::kErrorInsufficientBuffer);
+        return needed;
+    }
+    std::copy(expanded.begin(), expanded.end(), destination);
+    destination[expanded.size()] = 0;
+    const std::array<diagnostics::TraceField, 4> fields{
+        diagnostics::TraceField{"operation", "expand"},
+        diagnostics::TraceField{"status", "success"},
+        diagnostics::TraceField{"required", std::to_string(needed)},
+        diagnostics::TraceField{"encoding", "utf-16"},
+    };
+    runtime_trace("environment", fields, 4);
+    set_last_error(abi::kErrorSuccess);
+    return needed;
 }
 
 TL_MSABI std::uint32_t tl_GetCurrentDirectoryA(std::uint32_t buffer_length, char* buffer) noexcept {
@@ -2698,6 +2866,89 @@ TL_MSABI int tl_TlsFree(std::uint32_t tls_index) noexcept {
     }
     g_tls_indices_used[tls_index] = false;
     set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI std::uint32_t tl_FlsAlloc(const std::uintptr_t callback) noexcept {
+    if (callback != 0 && !is_guest_executable_address(callback)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return abi::kFlsOutOfIndexes;
+    }
+    std::lock_guard lock(g_fls_mutex);
+    for (std::uint32_t index = 0; index < kMaxFlsSlots; ++index) {
+        if (!g_fls_slots[index].used) {
+            g_fls_slots[index] = {.used = true, .callback = callback};
+            set_last_error(abi::kErrorSuccess);
+            trace_fls("alloc", std::to_string(index));
+            return index;
+        }
+    }
+    set_last_error(abi::kErrorNotEnoughMemory);
+    return abi::kFlsOutOfIndexes;
+}
+
+TL_MSABI void* tl_FlsGetValue(const std::uint32_t fls_index) noexcept {
+    std::lock_guard lock(g_fls_mutex);
+    if (fls_index >= kMaxFlsSlots || !g_fls_slots[fls_index].used) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return nullptr;
+    }
+    if (g_current_fls_values == nullptr) {
+        g_current_fls_values = std::make_shared<FlsThreadValues>();
+        g_fls_threads.push_back(g_current_fls_values);
+    }
+    set_last_error(abi::kErrorSuccess);
+    return g_current_fls_values->values[fls_index];
+}
+
+TL_MSABI int tl_FlsSetValue(const std::uint32_t fls_index, void* const value) noexcept {
+    std::lock_guard lock(g_fls_mutex);
+    if (fls_index >= kMaxFlsSlots || !g_fls_slots[fls_index].used) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    if (g_current_fls_values == nullptr) {
+        g_current_fls_values = std::make_shared<FlsThreadValues>();
+        g_fls_threads.push_back(g_current_fls_values);
+    }
+    g_current_fls_values->values[fls_index] = value;
+    set_last_error(abi::kErrorSuccess);
+    trace_fls("set", std::to_string(fls_index));
+    return 1;
+}
+
+TL_MSABI int tl_FlsFree(const std::uint32_t fls_index) noexcept {
+    std::vector<std::pair<std::uintptr_t, void*>> callbacks;
+    {
+        std::lock_guard lock(g_fls_mutex);
+        if (fls_index >= kMaxFlsSlots || !g_fls_slots[fls_index].used) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
+        }
+        const std::uintptr_t callback = g_fls_slots[fls_index].callback;
+        g_fls_slots[fls_index] = {};
+        std::vector<std::weak_ptr<FlsThreadValues>> live_threads;
+        live_threads.reserve(g_fls_threads.size());
+        for (const std::weak_ptr<FlsThreadValues>& weak_values : g_fls_threads) {
+            const std::shared_ptr<FlsThreadValues> values = weak_values.lock();
+            if (values == nullptr) {
+                continue;
+            }
+            live_threads.push_back(values);
+            if (callback != 0 && values->values[fls_index] != nullptr) {
+                callbacks.emplace_back(callback, values->values[fls_index]);
+                values->values[fls_index] = nullptr;
+            }
+        }
+        g_fls_threads = std::move(live_threads);
+    }
+    using FlsCallback = void (TL_MSABI *)(void*);
+    for (const auto& [callback_address, value] : callbacks) {
+        reinterpret_cast<FlsCallback>(callback_address)(value);
+        trace_fls("callback", "free");
+    }
+    set_last_error(abi::kErrorSuccess);
+    trace_fls("free", std::to_string(fls_index));
     return 1;
 }
 

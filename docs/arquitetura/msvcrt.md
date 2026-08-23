@@ -55,7 +55,8 @@ exceção C++ atravessar.
 
 Três células graváveis são exportadas e seus endereços gravados nos slots de
 imports-dados: `__initenv` (`char**`), `_commode` (`int`) e `_fmode` (`int`).
-`__initenv` é preenchido por `__getmainargs` com o ambiente do processo.
+`__initenv` é preenchido por `__getmainargs` com uma visão ANSI do ambiente
+Win32 isolado do processo convidado; não aponta para `environ` do Linux.
 
 ## Linha de comando do convidado
 
@@ -79,6 +80,8 @@ stdio é unbuffered e usa `write`/`read` diretos com loop `EINTR`.
   implementados; `_stat64` preenche o `struct _stat64` do MinGW (pack 8,
   `st_mode` em `0x06`) a partir do `stat()` do host.
 - Locale fixo C: code page `1252`, `mb_cur_max == 1`, `lconv` estático.
+- `getenv` consulta o mesmo ambiente Win32 mutável de `GetEnvironmentVariable`;
+  as regras completas ficam em [ambiente-locale-fls.md](ambiente-locale-fls.md).
 - `signal` apenas registra; nenhuma entrega real ao convidado.
 - O subconjunto wide usado por `dos2unix`/`unix2dos` inclui `_wfopen`,
   `_wstat64`, `_wrename`, `_wunlink`, `_wcsdup`, `wcschr`, `wcsrchr`,

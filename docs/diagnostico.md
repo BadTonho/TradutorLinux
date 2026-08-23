@@ -108,6 +108,24 @@ Os valores possíveis de `status` são:
 
 Quando qualquer importação falha, a resolução inteira falha e o processo não tem entry point executado; o runtime retorna `5` (`Unsupported`). Mesmo na falha, todas as entradas são reportadas para que o diagnóstico seja completo.
 
+## Eventos de ambiente, FLS e locale
+
+O componente `runtime` registra `environment`, `fls` e `locale` para o núcleo
+determinístico da Fase 13.6. Eles ficam em `stderr` e nunca misturam a saída
+do convidado:
+
+```text
+[tl][runtime][info] environment operation="set" name="APPDATA" action="define" status="success"
+[tl][runtime][info] fls operation="callback" detail="thread-exit" thread="2" status="success"
+[tl][runtime][info] locale operation="cpinfo" code-page="437" status="success" max-char-size="1"
+```
+
+`environment` identifica alteração, expansão ou criação de bloco UTF-16;
+`fls` identifica alocação, valor, callback e liberação; `locale` identifica
+ACP/OEMCP, `CPINFO`, informação e mapeamento. Erros de ponteiro, índice,
+callback, flags ou buffer continuam a usar o retorno Win32 e `GetLastError`
+sem executar código convidado inesperado.
+
 ## Componente `install`
 
 O comando `install` emite seus eventos neste componente, sempre em `stderr`.

@@ -12,6 +12,7 @@ add_library(tradutorlinux_core STATIC
     prefix/prefix.cpp
     process/isolate.cpp
     runtime/memory_validator.cpp
+    runtime/environment.cpp
     runtime/unwind.cpp
     runtime/ntdll.cpp
     runtime/kernel32.cpp

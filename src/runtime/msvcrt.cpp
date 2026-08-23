@@ -4,6 +4,7 @@
 #include "tradutorlinux/prefix/prefix.hpp"
 #include "tradutorlinux/runtime/error_map.hpp"
 #include "tradutorlinux/runtime/winapi.hpp"
+#include "tradutorlinux/runtime/environment.hpp"
 #include "tradutorlinux/util/unicode.hpp"
 
 #include <algorithm>
@@ -69,8 +70,6 @@ std::array<GuestFile, kFileSlotCount> g_file_pool;
 std::array<bool, kFileSlotCount> g_slot_used;
 std::array<int, kFdModeCount> g_fd_modes;
 bool g_std_ready = false;
-
-char* g_empty_env[1] = {nullptr};
 
 void ensure_standard_files() {
     if (g_std_ready) {
@@ -583,7 +582,7 @@ TL_CRT_MSABI int tl___getmainargs(int* argc, char*** argv, char*** envp, int* gl
         }
     }
     argv_storage[argument_count] = nullptr;
-    g_guest_initenv = (environ != nullptr) ? environ : g_empty_env;
+    g_guest_initenv = runtime::guest_environment_block_a();
     if (argc != nullptr) {
         *argc = static_cast<int>(argument_count);
     }
@@ -682,7 +681,7 @@ TL_CRT_MSABI char* tl_getenv(const char* name) noexcept {
         set_error(EINVAL);
         return nullptr;
     }
-    return ::getenv(name);
+    return const_cast<char*>(runtime::guest_environment_cstring(name));
 }
 
 TL_CRT_MSABI unsigned int tl___lc_codepage_func() noexcept {

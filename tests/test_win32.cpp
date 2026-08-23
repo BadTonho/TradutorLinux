@@ -262,12 +262,13 @@ TEST(Win32CommandLineTest, GetCommandLineWReturnsNonEmpty) {
 }
 
 TEST(Win32EnvTest, GetEnvironmentVariableAFindsPath) {
+    std::array<char, 4096> buffer{};
     const std::uint32_t needed = tl_GetEnvironmentVariableA("PATH", nullptr, 0);
     EXPECT_GT(needed, 0U);
+    ASSERT_LT(needed, buffer.size());
 
-    std::vector<char> buffer(needed + 1, '\0');
     const std::uint32_t written = tl_GetEnvironmentVariableA("PATH", buffer.data(),
-                                                               needed + 1);
+                                                               static_cast<std::uint32_t>(buffer.size()));
     // Sucesso retorna o número de caracteres copiados, sem o terminador.
     EXPECT_EQ(written, needed - 1);
     EXPECT_GT(std::strlen(buffer.data()), 0U);
@@ -279,9 +280,9 @@ TEST(Win32EnvTest, GetEnvironmentVariableAMissingReturnsZero) {
 }
 
 TEST(Win32EnvTest, GetEnvironmentVariableAInsufficientBuffer) {
+    std::array<char, 2> tiny{};
     const std::uint32_t needed = tl_GetEnvironmentVariableA("PATH", nullptr, 0);
     if (needed > 0) {
-        std::vector<char> tiny(2, '\0');
         const std::uint32_t result = tl_GetEnvironmentVariableA("PATH", tiny.data(), 2);
         EXPECT_EQ(result, needed);
         EXPECT_EQ(tl_GetLastError(), abi::kErrorInsufficientBuffer);
@@ -339,6 +340,93 @@ TEST(Win32EnvTest, GetEnvironmentVariableWConvertsResult) {
     const std::uint16_t name[] = {'P', 'A', 'T', 'H', 0};
     const std::uint32_t needed = tl_GetEnvironmentVariableW(name, nullptr, 0);
     EXPECT_GT(needed, 0U);
+}
+
+TEST(Win32EnvTest, MutableWideEnvironmentDoesNotMutateHostAndExpandsCaseInsensitively) {
+    const std::uint16_t name[] = {'t', 'l', '_', 'e', 'n', 'v', '_', 'u', 'n', 'i', 't', 0};
+    const std::uint16_t upper_name[] = {'T', 'L', '_', 'E', 'N', 'V', '_', 'U', 'N', 'I', 'T', 0};
+    const std::uint16_t value[] = {'v', 'a', 'l', 'u', 'e', 0};
+    const std::uint16_t expansion[] = {'%', 'T', 'L', '_', 'E', 'N', 'V', '_', 'U', 'N', 'I', 'T', '%', '!', 0};
+    const char* const host_before = std::getenv("TL_ENV_UNIT");
+    const std::string saved_host = host_before != nullptr ? host_before : "";
+    const bool host_was_defined = host_before != nullptr;
+
+    ASSERT_EQ(tl_SetEnvironmentVariableW(name, value), 1);
+    std::uint16_t result[32]{};
+    EXPECT_EQ(tl_GetEnvironmentVariableW(upper_name, result, std::size(result)), 5U);
+    EXPECT_EQ(result[0], 'v');
+    EXPECT_EQ(result[4], 'e');
+    EXPECT_EQ(result[5], 0);
+    EXPECT_EQ(tl_ExpandEnvironmentStringsW(expansion, result, std::size(result)), 7U);
+    EXPECT_EQ(result[0], 'v');
+    EXPECT_EQ(result[5], '!');
+    EXPECT_EQ(result[6], 0);
+    const char* const host_after = std::getenv("TL_ENV_UNIT");
+    EXPECT_EQ(host_after != nullptr, host_was_defined);
+    if (host_was_defined) {
+        EXPECT_STREQ(host_after, saved_host.c_str());
+    }
+
+    EXPECT_EQ(tl_SetEnvironmentVariableW(name, nullptr), 1);
+    EXPECT_EQ(tl_GetEnvironmentVariableW(name, nullptr, 0), 0U);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorEnvvarNotFound);
+}
+
+TEST(Win32EnvTest, EnvironmentBlockIsSortedAndCanOnlyBeFreedOnce) {
+    const std::uint16_t name[] = {'T', 'L', '_', 'B', 'L', 'O', 'C', 'K', 0};
+    const std::uint16_t value[] = {'x', 0};
+    ASSERT_EQ(tl_SetEnvironmentVariableW(name, value), 1);
+    std::uint16_t* const block = tl_GetEnvironmentStringsW();
+    ASSERT_NE(block, nullptr);
+    bool found = false;
+    for (const std::uint16_t* entry = block; *entry != 0;) {
+        if (entry[0] == 'T' && entry[1] == 'L' && entry[2] == '_' && entry[3] == 'B') {
+            found = true;
+        }
+        while (*entry++ != 0) {}
+    }
+    EXPECT_TRUE(found);
+    EXPECT_EQ(tl_FreeEnvironmentStringsW(block), 1);
+    EXPECT_EQ(tl_FreeEnvironmentStringsW(block), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_SetEnvironmentVariableW(name, nullptr), 1);
+}
+
+TEST(Win32LocaleTest, FixedCodePagesAndCp437RoundTrip) {
+    EXPECT_EQ(tl_GetACP(), abi::kCp1252);
+    EXPECT_EQ(tl_GetOEMCP(), abi::kCp437);
+    abi::GuestCpInfo cpinfo{};
+    ASSERT_EQ(tl_GetCPInfo(abi::kCp437, &cpinfo), 1);
+    EXPECT_EQ(cpinfo.max_char_size, 1U);
+    ASSERT_EQ(tl_GetCPInfo(abi::kCpUtf8, &cpinfo), 1);
+    EXPECT_EQ(cpinfo.max_char_size, 4U);
+    const char cp437[] = {static_cast<char>(0x82), 0};
+    std::uint16_t wide[2]{};
+    ASSERT_EQ(tl_MultiByteToWideChar(abi::kCp437, 0, cp437, -1, wide, 2), 2);
+    EXPECT_EQ(wide[0], 0x00E9U);
+    char back[2]{};
+    ASSERT_EQ(tl_WideCharToMultiByte(abi::kCp437, 0, wide, -1, back, 2, nullptr, nullptr), 2);
+    EXPECT_EQ(static_cast<unsigned char>(back[0]), 0x82U);
+}
+
+TEST(Win32LocaleTest, LocaleInfoAndCaseMappingValidateBuffersAndFlags) {
+    std::uint16_t value[32]{};
+    EXPECT_EQ(tl_GetLocaleInfoW(abi::kLocaleEnglishUnitedStates, abi::kLocaleIDefaultCodePage,
+                                value, std::size(value)), 5);
+    EXPECT_EQ(value[0], '1');
+    EXPECT_EQ(value[3], '2');
+    const std::uint16_t source[] = {'A', 0x00C9, 0};
+    std::uint16_t mapped[3]{};
+    EXPECT_EQ(tl_LCMapStringW(abi::kLocaleEnglishUnitedStates, abi::kLcmapsLowercase,
+                               source, -1, mapped, 3), 3);
+    EXPECT_EQ(mapped[0], 'a');
+    EXPECT_EQ(mapped[1], 0x00E9U);
+    EXPECT_EQ(tl_LCMapStringW(abi::kLocaleEnglishUnitedStates, 0x10U,
+                               source, -1, mapped, 3), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidFlags);
+    EXPECT_EQ(tl_LCMapStringW(abi::kLocaleEnglishUnitedStates, abi::kLcmapsUppercase,
+                               source, -1, mapped, 2), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInsufficientBuffer);
 }
 
 TEST(Win32HeapTest, GetProcessHeapReturnsNonNull) {
@@ -799,6 +887,45 @@ TEST(Win32ConcurrencyTest, TlsSetValueAndGetValueRoundTrip) {
     EXPECT_EQ(tl_TlsGetValue(idx), sentinel);
 
     EXPECT_NE(tl_TlsFree(idx), 0);
+}
+
+TEST(Win32FlsTest, ValuesAreIndependentPerHostThreadAndFreeClearsTheIndex) {
+    const std::uint32_t index = tl_FlsAlloc(0);
+    ASSERT_NE(index, abi::kFlsOutOfIndexes);
+    void* const main_value = reinterpret_cast<void*>(static_cast<std::uintptr_t>(0x1010));
+    void* const thread_value = reinterpret_cast<void*>(static_cast<std::uintptr_t>(0x2020));
+    ASSERT_EQ(tl_FlsSetValue(index, main_value), 1);
+    EXPECT_EQ(tl_FlsGetValue(index), main_value);
+    void* observed_before = main_value;
+    void* observed_after = nullptr;
+    std::thread worker([&] {
+        observed_before = tl_FlsGetValue(index);
+        EXPECT_EQ(tl_FlsSetValue(index, thread_value), 1);
+        observed_after = tl_FlsGetValue(index);
+    });
+    worker.join();
+    EXPECT_EQ(observed_before, nullptr);
+    EXPECT_EQ(observed_after, thread_value);
+    EXPECT_EQ(tl_FlsGetValue(index), main_value);
+    EXPECT_EQ(tl_FlsFree(index), 1);
+    EXPECT_EQ(tl_FlsGetValue(index), nullptr);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+}
+
+TEST(Win32FlsTest, RejectsInvalidCallbackAndReportsExhaustion) {
+    const auto invalid_callback = reinterpret_cast<std::uintptr_t>(&tl_GetACP);
+    EXPECT_EQ(tl_FlsAlloc(invalid_callback), abi::kFlsOutOfIndexes);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    std::array<std::uint32_t, 128> indices{};
+    for (std::uint32_t& index : indices) {
+        index = tl_FlsAlloc(0);
+        ASSERT_NE(index, abi::kFlsOutOfIndexes);
+    }
+    EXPECT_EQ(tl_FlsAlloc(0), abi::kFlsOutOfIndexes);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorNotEnoughMemory);
+    for (const std::uint32_t index : indices) {
+        EXPECT_EQ(tl_FlsFree(index), 1);
+    }
 }
 
 TEST(Win32ConcurrencyTest, TlsSetValueRejectsInvalidIndex) {

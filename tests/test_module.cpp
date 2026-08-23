@@ -115,6 +115,12 @@ TEST_F(ModuleTest, RegistersBuiltinKernel32Exports) {
               reinterpret_cast<std::uintptr_t>(&tl_RtlVirtualUnwind));
     EXPECT_EQ(find_export(ExportQuery{"KERNEL32.dll", "RtlPcToFileHeader"}).address,
               reinterpret_cast<std::uintptr_t>(&tl_RtlPcToFileHeader));
+    EXPECT_EQ(find_export(ExportQuery{"KERNEL32.dll", "SetEnvironmentVariableW"}).address,
+              reinterpret_cast<std::uintptr_t>(&tl_SetEnvironmentVariableW));
+    EXPECT_EQ(find_export(ExportQuery{"KERNEL32.dll", "FlsAlloc"}).address,
+              reinterpret_cast<std::uintptr_t>(&tl_FlsAlloc));
+    EXPECT_EQ(find_export(ExportQuery{"KERNEL32.dll", "GetLocaleInfoW"}).address,
+              reinterpret_cast<std::uintptr_t>(&tl_GetLocaleInfoW));
     EXPECT_EQ(find_export_by_ordinal("KERNEL32.dll", 1).address,
               reinterpret_cast<std::uintptr_t>(&tl_GetStdHandle));
     EXPECT_EQ(find_export_by_ordinal("KERNEL32.dll", 24).address,

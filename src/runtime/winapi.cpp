@@ -8,6 +8,7 @@
 #include "tradutorlinux/pe/pe_reader.hpp"
 #include "tradutorlinux/prefix/prefix.hpp"
 #include "tradutorlinux/runtime/error_map.hpp"
+#include "tradutorlinux/runtime/environment.hpp"
 #include "tradutorlinux/runtime/memory_validator.hpp"
 #include "tradutorlinux/runtime/msvcrt.hpp"
 #include "tradutorlinux/runtime/teb.hpp"
@@ -102,6 +103,11 @@ std::array<bool, kMaxTlsSlots> g_tls_indices_used{};
 std::mutex g_tls_mutex;
 thread_local std::array<void*, 64> g_guest_tls_slots{};
 std::atomic<std::uintptr_t> g_unhandled_exception_filter{0};
+
+std::array<FlsSlot, kMaxFlsSlots> g_fls_slots{};
+std::mutex g_fls_mutex;
+std::vector<std::weak_ptr<FlsThreadValues>> g_fls_threads{};
+thread_local std::shared_ptr<FlsThreadValues> g_current_fls_values{};
 
 std::mutex g_cs_mutex;
 std::array<CriticalSectionEntry, 256> g_critical_sections{};
@@ -492,6 +498,10 @@ std::uint32_t decode_multibyte(const std::uint32_t code_page,
         pos += 1;
         return util::cp1252_to_unicode(first);
     }
+    if (code_page == abi::kCpOem || code_page == abi::kCp437) {
+        pos += 1;
+        return util::cp437_to_unicode(first);
+    }
     return util::decode_utf8(reinterpret_cast<const char*>(bytes), length, pos);
 }
 
@@ -562,31 +572,45 @@ GuestExecutionResult execute_guest_entry(const std::uintptr_t entry_point,
     if (entry == nullptr || stack_top == 0) {
         return {};
     }
+    if (!runtime::guest_environment_is_initialized()) {
+        runtime::initialize_guest_environment(guest_prefix_root());
+    }
+    reset_fls_process_state();
     constexpr std::uintptr_t kGuestStackSize = 0x100000U;  // 1 MiB
     void* const teb = allocate_guest_teb(stack_top, kGuestStackSize);
     if (teb == nullptr) {
+        runtime::clear_guest_environment();
         return {};
     }
     const bool gs_configured = set_guest_gs_base(teb);
     if (!gs_configured) {
         free_guest_teb(teb);
+        runtime::clear_guest_environment();
         return {};
     }
     g_quit_requested = false;
     g_quit_code = 0;
     g_guest_execution_active = true;
     g_current_thread_id = kMainThreadId;
+    static_cast<void>(ensure_fls_thread_values());
     if (setjmp(g_guest_exit_context) == 0) {
         tl_call_guest_on_stack(std::bit_cast<std::uintptr_t>(entry), stack_top);
+        cleanup_current_fls_values();
         g_guest_execution_active = false;
         static_cast<void>(set_guest_gs_base(nullptr));
         free_guest_teb(teb);
+        reset_fls_process_state();
+        runtime::clear_guest_environment();
         return {};
     }
+    cleanup_current_fls_values();
     g_guest_execution_active = false;
     static_cast<void>(set_guest_gs_base(nullptr));
     free_guest_teb(teb);
-    return {.exited_explicitly = true, .exit_code = g_guest_exit_code};
+    const GuestExecutionResult result{.exited_explicitly = true, .exit_code = g_guest_exit_code};
+    reset_fls_process_state();
+    runtime::clear_guest_environment();
+    return result;
 }
 
 }  // namespace tradutorlinux

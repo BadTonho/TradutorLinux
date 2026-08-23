@@ -224,6 +224,10 @@ function(tl_add_pe_fixture target_name source_file manifest_file)
             elseif(target_name STREQUAL "tl_powr")
                 set(runtime_extra_args
                     "-DEXPECTED_HEX=706f77720a")
+            elseif(target_name STREQUAL "tl_locale_env_fls")
+                set(runtime_extra_args
+                    "-DEXPECTED_HEX=6c6f63616c652d656e762d666c730a"
+                    "-DREQUIRED_TRACE=environment,fls,locale")
             endif()
         endif()
         add_test(
@@ -496,6 +500,10 @@ tl_add_pe_fixture(tl_hang src/tl_hang.c manifests/tl_hang.json RELOCATABLE NO_RU
 tl_add_pe_fixture(tl_thread src/tl_thread.c manifests/tl_thread.json
     LINK_KERNEL32 EXPECT_RESOLVED CONSOLE RELOCATABLE)
 
+tl_add_pe_fixture(tl_locale_env_fls src/tl_locale_env_fls.c manifests/tl_locale_env_fls.json
+    LINK_KERNEL32 UNWIND EXPECT_RESOLVED CONSOLE REPORT RELOCATABLE
+    REPORT_SYMBOL "FlsAlloc")
+
 tl_add_pe_fixture(tl_resources src/tl_resources.c manifests/tl_resources.json
     LINK_KERNEL32 EXPECT_RESOLVED CONSOLE REPORT RELOCATABLE
     REPORT_SYMBOL "FindResourceW"
@@ -524,7 +532,7 @@ tl_add_pe_fixture(tl_install_setup_fail src/tl_install_setup_fail.c manifests/tl
     LINK_KERNEL32 EXPECT_RESOLVED CONSOLE RELOCATABLE NO_RUNTIME_CHECK)
 
 tl_add_pe_fixture(tl_process_child src/tl_process_child.c manifests/tl_process_child.json
-    LINK_KERNEL32 EXPECT_RESOLVED CONSOLE REPORT RELOCATABLE
+    LINK_KERNEL32 EXPECT_RESOLVED CONSOLE REPORT RELOCATABLE NO_RUNTIME_CHECK
     REPORT_SYMBOL "ExitProcess")
 
 tl_add_pe_fixture(tl_process_hang src/tl_process_hang.c manifests/tl_process_hang.json

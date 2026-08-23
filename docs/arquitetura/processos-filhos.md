@@ -8,8 +8,9 @@ O runtime cria um processo Linux filho, que lê o arquivo, executa `parse_pe`,
 point. O pai recebe um handle opaco e um pipe com o código de saída.
 
 `WaitForSingleObject`, `GetExitCodeProcess` e `TerminateProcess` operam sobre
-esse handle. O filho herda o prefixo ativo e, se informado, inicia no
-`current_directory`; os demais parâmetros de ambiente, herança de handles,
-flags de criação e thread de inicialização separada permanecem fora do
-subconjunto e falham com `ERROR_INVALID_PARAMETER`. Falha de parse/import não
-executa o entry point e vira código de falha do processo filho.
+esse handle. O filho herda o prefixo ativo, a cópia atual do ambiente Win32 do
+pai e, se informado, inicia no `current_directory`; os demais parâmetros de
+ambiente explícito, herança de handles, flags de criação e thread de
+inicialização separada permanecem fora do subconjunto e falham com
+`ERROR_INVALID_PARAMETER`. Falha de parse/import não executa o entry point e
+vira código de falha do processo filho.

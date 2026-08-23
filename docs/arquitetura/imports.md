@@ -54,6 +54,7 @@ Assinaturas hospedadas:
 | `tl_RtlLookupFunctionEntry` | `RUNTIME_FUNCTION* (DWORD64, DWORD64*, void*)` | Consulta `.pdata` somente na imagem PE ativa. |
 | `tl_RtlVirtualUnwind` | `void* (DWORD, DWORD64, DWORD64, RUNTIME_FUNCTION*, CONTEXT*, void**, DWORD64*, void*)` | Desempilha um frame e opcionalmente devolve handler, sem invocá-lo. |
 | `tl_RtlPcToFileHeader` | `void* (void*, void**)` | Devolve a base da imagem PE ativa que contém o PC. |
+| Ambiente/locale/FLS | Assinaturas Win32 `W` e `TL_MSABI` | `Set/GetEnvironment*`, bloco UTF-16, expansão, CP1252/437/UTF-8, locale `en-US` e FLS por thread; ver `ambiente-locale-fls.md`. |
 
 ## Patch da IAT
 

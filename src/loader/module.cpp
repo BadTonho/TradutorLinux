@@ -380,6 +380,20 @@ void register_builtin_modules() {
         {"RtlUnwind", 199, reinterpret_cast<std::uintptr_t>(&tl_RtlUnwind)},
         {"RtlUnwindEx", 200, reinterpret_cast<std::uintptr_t>(&tl_RtlUnwindEx)},
         {"UnhandledExceptionFilter", 201, reinterpret_cast<std::uintptr_t>(&tl_UnhandledExceptionFilter)},
+        {"SetEnvironmentVariableW", 202, reinterpret_cast<std::uintptr_t>(&tl_SetEnvironmentVariableW)},
+        {"GetEnvironmentStringsW", 203, reinterpret_cast<std::uintptr_t>(&tl_GetEnvironmentStringsW)},
+        {"FreeEnvironmentStringsW", 204, reinterpret_cast<std::uintptr_t>(&tl_FreeEnvironmentStringsW)},
+        {"ExpandEnvironmentStringsW", 205, reinterpret_cast<std::uintptr_t>(&tl_ExpandEnvironmentStringsW)},
+        {"FlsAlloc", 206, reinterpret_cast<std::uintptr_t>(&tl_FlsAlloc)},
+        {"FlsFree", 207, reinterpret_cast<std::uintptr_t>(&tl_FlsFree)},
+        {"FlsGetValue", 208, reinterpret_cast<std::uintptr_t>(&tl_FlsGetValue)},
+        {"FlsSetValue", 209, reinterpret_cast<std::uintptr_t>(&tl_FlsSetValue)},
+        {"GetACP", 210, reinterpret_cast<std::uintptr_t>(&tl_GetACP)},
+        {"GetOEMCP", 211, reinterpret_cast<std::uintptr_t>(&tl_GetOEMCP)},
+        {"GetCPInfo", 212, reinterpret_cast<std::uintptr_t>(&tl_GetCPInfo)},
+        {"GetLocaleInfoW", 213, reinterpret_cast<std::uintptr_t>(&tl_GetLocaleInfoW)},
+        {"LCMapStringW", 214, reinterpret_cast<std::uintptr_t>(&tl_LCMapStringW)},
+        {"LCMapStringEx", 215, reinterpret_cast<std::uintptr_t>(&tl_LCMapStringEx)},
     };
     static const InternalModule kKernel32Module{"KERNEL32.dll", kKernel32Exports};
     register_module(kKernel32Module);
