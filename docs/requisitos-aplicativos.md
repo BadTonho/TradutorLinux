@@ -24,6 +24,7 @@ posterior.
 |---|---:|---:|---|---|
 | `RobloxPlayerInstaller.exe` | 244/430 | 186 | — | `unsupported` |
 | `winrar-x64-723.exe` | 97/156 | 59 | `delay-import` | `unsupported` |
+| `Creative_Cloud_Set-Up_7474.exe` | — | — | PE32 x86 (`0x14c`) | arquitetura não suportada |
 
 ## `RobloxPlayerInstaller.exe`
 
@@ -410,3 +411,35 @@ Esta amostra reforça três capacidades que podem beneficiar outros aplicativos:
    exceções associado.
 3. Locale/console, FLS e operações de arquivo/ambiente, avaliadas junto com
    outros alvos para evitar implementação exclusiva para o WinRAR.
+
+## `Creative_Cloud_Set-Up_7474.exe` (Adobe Creative Cloud Set-Up 7474)
+
+### Amostra e resultado
+
+| Campo | Valor |
+|---|---|
+| Arquivo | `Creative_Cloud_Set-Up_7474.exe` |
+| Formato | PE32 GUI Intel x86 (`IMAGE_FILE_MACHINE_I386`, `0x14c`), 3 seções |
+| Empacotamento observado | UPX |
+| SHA-256 | `8f994e20bea58bbf8498d1c866b35dd9d6a6bea5ea31c9155fe70396dd0b7ed5` |
+| Resultado | rejeitado no parser: `unsupported-architecture` (exit code `5`) |
+| Fonte | trace local de 2026-08-23 |
+
+Este arquivo foi rejeitado antes do parsing de imports, mapeamento ou execução;
+portanto não há lista de APIs faltantes para ele ainda.
+
+### Requisito bloqueador
+
+O suporte a esta amostra requer uma nova capacidade arquitetural, e não apenas
+novas APIs Win32:
+
+```text
+executar PE32 x86 em hospedeiro Linux x86-64
+→ processo/loader 32-bit compatível e fronteiras de ABI x86
+   ou uma camada WOW64/emulação de CPU definida e testada
+```
+
+PE32/x86, WOW64 e emulação de CPU estão fora do alvo atual, que é exclusivamente
+PE32+ x86-64 em Linux x86-64. Qualquer promoção desse requisito exige uma fase
+própria, contrato de ABI e testes de loader; o empacotamento UPX só pode ser
+avaliado depois que a questão de arquitetura estiver resolvida.
