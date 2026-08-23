@@ -4,7 +4,12 @@
 
 O TradutorLinux é um projeto educativo e funcional de sistemas: um runtime capaz de executar, de forma progressiva, **classes cada vez mais amplas de executáveis Windows no Linux**, sem máquina virtual e sem emular a CPU.
 
-O objetivo estratégico é tornar o runtime útil para aplicativos Windows em geral, avançando por classes de uso e por aplicativos-alvo reais. O projeto não promete compatibilidade universal imediata: cada capacidade precisa ser implementada, testada e publicada antes de ser considerada suportada.
+O objetivo estratégico é tornar o runtime útil para a maior variedade prática de
+aplicativos Windows de espaço de usuário dentro do alvo suportado, avançando por
+classes de uso e por um portfólio de aplicativos reais. Isso é uma meta de
+produto de longo prazo, não uma alegação de compatibilidade universal imediata:
+cada capacidade precisa ser implementada, testada e publicada antes de ser
+considerada suportada.
 
 O alvo inicial é deliberadamente restrito:
 
@@ -53,8 +58,12 @@ Linux / POSIX
 
 ### 3.1. Objetivos de produto
 
-- Executar bem um conjunto pequeno e publicado de utilitários Win32 de console.
-- Expandir progressivamente o conjunto de aplicativos suportados para incluir arquivos, ferramentas, bibliotecas comuns e GUI, conforme os aplicativos-alvo justifiquem suas dependências.
+- Manter os alvos já suportados e ampliar progressivamente um portfólio de
+  console, arquivos, rede, instaladores e GUI, priorizando capacidades úteis a
+  várias aplicações em vez de ajustes exclusivos para um programa.
+- Buscar cobertura prática de classes comuns de aplicativos Win32 PE32+ x86-64
+  de espaço de usuário, sem declarar que todo `.exe` dessas classes funciona
+  antes de haver evidência reproduzível.
 - Informar com clareza quando um executável ou API ainda não é suportado.
 - Produzir rastros de execução que expliquem imports, chamadas e falhas.
 - Manter uma matriz de compatibilidade e testes automatizados para cada função implementada.

@@ -19,7 +19,7 @@ Os itens marcados como concluídos devem ter evidência no repositório: código
 
 ## Estado atual
 
-- **Fase atual:** Fase 12 — GUI útil por aplicativo.
+- **Fase atual:** Fase 13 — compatibilidade ampla por portfólio.
 - **Marco concluído:** a Fase 7 foi validada de ponta a ponta e a decisão de produto foi tomada: **seguir com a GUI Win32 mínima como objetivo experimental**. `tl_gui.exe` abriu a janela X11, recebeu o clique em OK e encerrou com código `0`; `tl_win.exe` criou uma janela real e executou um message loop completo (`RegisterClassExA`, `CreateWindowExA`, `ShowWindow`, `GetMessageA`, `DispatchMessageA`, `DefWindowProcA`, `PostQuitMessage`), encerrando via `WM_CLOSE`/autoclose com código `0`; o modo `--report` lista imports suportados sem executar o PE; `tl_hello`, `tl_echo` e `tl_file` têm regressões e limitações publicadas na matriz.
 - **Marco concluído:** o smoke test de GUI passou a ter cobertura automática em CI. O teste `runtime_gui_smoke` sobe um `Xvfb` próprio e executa `tl_win.exe` de ponta a ponta em dois cenários: autoclose (message loop encerra sozinho via `WM_QUIT`) e fechamento real por `WM_DELETE_WINDOW` (mesmo `ClientMessage` do botão de fechar do WM), exigindo exit-code `1`, stdout vazio e os eventos esperados no trace. A conexão X11 do runtime é fechada no teardown (`DisplayCloser`), validado sob ASAN com `detect_leaks=1`.
 - **Marco concluído:** `CreateWindowExA` agora despacha `WM_CREATE` ao `WNDPROC` do convidado antes de devolver o `HWND` (retorno `-1` aborta a criação e devolve `NULL`). A fixture `tl_win.c` marca uma flag no `WM_CREATE` e propaga no exit code via `PostQuitMessage`, então o `runtime_gui_smoke` prova o despacho exigindo exit-code `1`.
@@ -43,9 +43,11 @@ Os itens marcados como concluídos devem ter evidência no repositório: código
 - **Marco concluído:** `SHELL32` pastas conhecidas em `tl_shell.exe` (`SHGetKnownFolderPath` `FOLDERID_RoamingAppData`→`$HOME/.config`, `SHGetFolderPathW` `CSIDL_APPDATA`, `SHGetFolderPathAndSubDirW` `TestSub`, `ShellExecuteW` `42`, `ShellExecuteExW` dummy `hProcess`). `--report` 8/8, `shell\n` exit `0`.
 - **Marco concluído:** `GDI` estendido em `tl_gdiex.exe` (`GDI32` `CreateFontW`/`SetDCBrush/PenColor`, `gdiplus` 8 APIs, `UxTheme` `SetWindowTheme`, `WINMM` `timeSetEvent`, `dbghelp` `SymFromAddr`, `USER32` `GetDC`). `--report` 21/21, `gdiex\n` exit `0`.
 - **Marco concluído:** `COM` mínimo `ole32.dll` em `tl_com.exe` (`CoInitialize`/`CoInitializeEx`/`CoUninitialize`/`OleInitialize`/`OleUninitialize` `S_OK`, `CoCreateInstance`/`CoGetClassObject` `REGDB_E_CLASSNOTREG`/`CLASS_E_NOAGGREGATION`, `CoTaskMemAlloc/Free`). `--report` 12/12, `com\n` exit `0`.
-- **Próximo resultado observável:** ampliar a validação do subconjunto GUI por novos aplicativos-alvo; Wayland/toolkit permanece posterior à existência de uma aplicação GUI real suportada.
+- **Próximo resultado observável:** definir e validar o primeiro portfólio de
+  aplicativos-alvo da Fase 13; cada novo alvo deve medir uma capacidade
+  reutilizável por uma classe de aplicativos, não uma adaptação exclusiva.
 
-### Estudo de caso: `RobloxPlayerInstaller.exe` (somente diagnóstico)
+### Estudo de caso: `RobloxPlayerInstaller.exe` (benchmark de cobertura)
 
 Em 2026-08-19, o instalador encontrado localmente em `Downloads` foi analisado
 estaticamente, sem executar o entry point. O arquivo analisado é um PE32+ x86-64
@@ -79,10 +81,13 @@ Em 2026-08-22, após `SHELL32`, o `--report` resolve 225/430 (52%), ainda
 Em 2026-08-22, após `GDI` estendido, o `--report` resolve 240/430 (55%), ainda
 `unsupported`, com `execution: not-attempted` (`GDI32` `CreateFontW`/`SetDCBrush/PenColor`, `gdiplus` 8, `UxTheme` `SetWindowTheme`, `WINMM` `timeSetEvent`, `dbghelp` `SymFromAddr`).
 
-Este arquivo não é um alvo de suporte nem autoriza implementação específica
-para Roblox. Ele fica registrado apenas como evidência para priorizar
-capacidades reutilizáveis por várias classes de aplicativos. As lacunas
-observadas são:
+Em 2026-08-23, a análise local mais recente resolveu 244/430 (56%). O arquivo
+continua `unsupported`; os imports que faltam permanecem evidência para
+priorizar trabalho compartilhado por várias classes de aplicações.
+
+O Roblox não é o único alvo nem autoriza implementação exclusiva para si. Ele
+fica registrado como um benchmark grande para priorizar capacidades
+reutilizáveis por várias classes de aplicativos. As lacunas observadas são:
 
 - [x] ampliar o núcleo `KERNEL32` para arquivos e caminhos Unicode, recursos,
   tempo, sincronização e processos filhos, com fixtures próprias; a memória
@@ -120,8 +125,9 @@ observadas são:
 A ordem de implementação continua subordinada à fase atual e ao método do
 projeto: cada item precisa de um aplicativo-alvo ou fixture independente,
 teste de regressão, contrato documentado e registro na matriz de
-compatibilidade. O instalador do Roblox não será executado pelo runtime durante
-este estudo.
+compatibilidade. O instalador do Roblox só será executado quando o portfólio
+da Fase 13 tiver entregado as famílias de dependências necessárias; ele não
+substitui os demais alvos do portfólio.
 
 ## Fase 0 — Fundação e contrato
 
@@ -338,6 +344,38 @@ APIs.
 
 Um aplicativo GUI real abre, recebe interação, renderiza seu fluxo principal e
 encerra corretamente em uma sessão X11 de teste, com limitações publicadas.
+
+## Fase 13 — Compatibilidade ampla por portfólio
+
+Esta fase transforma a expansão por um único aplicativo GUI em cobertura por
+classes de uso. A meta de longo prazo é maximizar a cobertura prática de
+aplicativos Win32 PE32+ x86-64 de espaço de usuário; ela não equivale a prometer
+compatibilidade imediata com qualquer executável, jogo ou mecanismo protegido.
+
+- [ ] Fixar um portfólio versionado de aplicativos-alvo de código aberto ou
+  redistribuição autorizada, com pelo menos um representante de instalador,
+  aplicativo GUI de produtividade e ferramenta de rede.
+- [ ] Registrar imports, versão, hash e fluxo principal de cada alvo, e usar a
+  interseção e a frequência dessas dependências para ordenar o trabalho.
+- [ ] Expandir famílias de APIs somente quando a implementação servir a mais de
+  um alvo ou completar uma capacidade de sistema bem delimitada; cada API ganha
+  fixture independente e regressão de integração.
+- [ ] Priorizar o núcleo comum que falta aos alvos: exceções/unwinding x64,
+  processos e prefixos de instalação, segurança/identidade, certificados,
+  WinSock assíncrono e controles GUI usuais.
+- [ ] Manter o `--report` como porta de entrada: apresentar imports faltantes
+  por DLL e por capacidade, mas considerar carregamentos dinâmicos e o fluxo
+  de execução antes de declarar suporte.
+- [ ] Avaliar o `RobloxPlayerInstaller.exe` como benchmark do portfólio, sem
+  criar stubs específicos para Roblox e sem declarar suporte ao cliente/jogo.
+
+### Critério de saída
+
+O portfólio contém alvos de pelo menos três classes de uso, cada um com fluxo
+principal automatizado e limitações publicadas. O runtime demonstra que novas
+famílias de APIs atendem mais de um alvo ou uma capacidade reutilizável, e o
+catálogo distingue honestamente o que inicia, o que executa o fluxo principal e
+o que ainda não é suportado.
 
 ## O que fica explicitamente fora do estágio atual
 

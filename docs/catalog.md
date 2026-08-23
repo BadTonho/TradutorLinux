@@ -1,6 +1,11 @@
 # Catálogo de aplicativos — TradutorLinux
 
-Este catálogo lista aplicativos reais avaliados, agrupados por categoria e com nível de compatibilidade. Não é promessa de suporte universal; cada entrada é verificada via `tests/samples` ou `tests/targets` com `--report` e execução isolada.
+Este catálogo orienta a expansão para uma cobertura prática ampla: lista
+aplicativos reais avaliados, agrupados por categoria e com nível de
+compatibilidade. Nenhuma entrada isolada define a direção do runtime; o
+portfólio prioriza capacidades compartilhadas por várias classes de uso. Não é
+promessa de suporte universal; cada entrada é verificada via `tests/samples` ou
+`tests/targets` com `--report` e execução isolada.
 
 ## Níveis
 
@@ -46,7 +51,7 @@ Este catálogo lista aplicativos reais avaliados, agrupados por categoria e com 
 | `tl_shell.exe` | SHELL32 5 | **fluxo principal** | pastas conhecidas |
 | `tl_com.exe` | ole32 9 | **fluxo principal** | `CoCreateInstance` `REGDB_E_CLASSNOTREG` |
 
-## Estudo de caso
+## Benchmark de cobertura
 
 `RobloxPlayerInstaller.exe` `13M` `d156faf0c712d4ce26d95a596ad9b1dfc813021b5c422c93887b2522d8b01a59` `430` imports `17` DLLs. Evolução:
 - `75/430 (17%)` inicial
@@ -56,5 +61,8 @@ Este catálogo lista aplicativos reais avaliados, agrupados por categoria e com 
 - `221/430 (51%)` GUI W
 - `225/430 (52%)` SHELL32
 - `240/430 (55%)` GDI estendido
+- `244/430 (56%)` análise local de 2026-08-23
 
-Ainda `unsupported`, `execution: not-attempted`. Lacunas restantes priorizadas em `ROADMAP.md:61-88` por API e categoria.
+Ainda `unsupported`, `execution: not-attempted`. O instalador é um benchmark de
+cobertura, não um alvo exclusivo: lacunas restantes são priorizadas por API e
+categoria no portfólio da Fase 13.
