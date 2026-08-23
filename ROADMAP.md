@@ -355,6 +355,9 @@ compatibilidade imediata com qualquer executável, jogo ou mecanismo protegido.
 - [ ] Fixar um portfólio versionado de aplicativos-alvo de código aberto ou
   redistribuição autorizada, com pelo menos um representante de instalador,
   aplicativo GUI de produtividade e ferramenta de rede.
+- [ ] Adicionar descoberta de formatos de distribuição ao portfólio: distinguir
+  PE direto de pacotes MSIX/AppX, extrair de forma estruturalmente validada para
+  um prefixo próprio, ler `AppxManifest.xml` e só então analisar o PE interno.
 - [ ] Registrar imports, versão, hash e fluxo principal de cada alvo, e usar a
   interseção e a frequência dessas dependências para ordenar o trabalho.
 - [ ] Expandir famílias de APIs somente quando a implementação servir a mais de

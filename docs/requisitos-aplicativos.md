@@ -10,6 +10,8 @@ Um registro deve conter, no mínimo:
 - nome, versão quando conhecida, formato/arquitetura e SHA-256 da amostra;
 - total de imports, resolvidos e ausentes no momento da análise;
 - lista dos imports estáticos ausentes, agrupada por DLL;
+- tipo de pacote e requisito de descoberta/extração, quando a amostra não for
+  um executável PE direto;
 - resultado de `--report` e, quando houver, do primeiro teste de execução;
 - observações sobre carregamento dinâmico, fluxo testado e limitações.
 
@@ -26,6 +28,7 @@ posterior.
 | `winrar-x64-723.exe` | 97/156 | 59 | `delay-import` | `unsupported` |
 | `Creative_Cloud_Set-Up_7474.exe` | — | — | PE32 x86 (`0x14c`) | arquitetura não suportada |
 | `officedeploymenttool_20228-20124.exe` | — | — | PE32 x86 (`0x14c`) | arquitetura não suportada |
+| `Affinity x64.msix` | — | — | pacote MSIX; executável interno não localizado | formato não suportado |
 
 ## `RobloxPlayerInstaller.exe`
 
@@ -465,3 +468,37 @@ O requisito continua sendo suporte deliberado a PE32/x86 em Linux x86-64 —
 processo/loader 32-bit com fronteiras de ABI adequadas, ou uma estratégia
 WOW64/emulação definida — antes de qualquer implementação de API específica do
 Office Deployment Tool.
+
+## `Affinity x64.msix` (pacote MSIX)
+
+### Amostra e resultado
+
+| Campo | Valor |
+|---|---|
+| Arquivo | `Affinity x64.msix` |
+| Contêiner observado | arquivo ZIP (deflate; requer extração compatível com ZIP 4.5+) |
+| SHA-256 | `d3baa74d30b7b41655651e6ea58a505a1bafeb33ec7576d52e625c147bae164c` |
+| Resultado atual | não selecionável como executável e não analisável pelo loader PE direto |
+| Fonte | inspeção local de 2026-08-23 |
+
+MSIX/AppX é um pacote de aplicativo, não um PE. Antes de o `--report` poder
+listar imports, o runtime precisa localizar o executável definido pelo manifesto
+do pacote. Portanto esta amostra amplia o portfólio para um formato de
+distribuição, sem ainda afirmar nada sobre as APIs usadas pelo Affinity.
+
+### Capacidade necessária: descoberta e preparação de pacotes MSIX
+
+1. Reconhecer `.msix` e `.appx` no launcher/CLI como pacotes, diferenciando-os
+   de um `.exe` PE direto.
+2. Validar a estrutura do ZIP e limitar tamanho, número de entradas e caminhos
+   antes da extração; nenhuma entrada pode escapar do diretório de destino.
+3. Ler `AppxManifest.xml`, enumerar as aplicações declaradas e resolver o
+   executável de cada uma dentro do pacote.
+4. Extrair para o prefixo próprio do aplicativo e registrar o executável,
+   diretório de trabalho e metadados no catálogo.
+5. Só então executar `--report` no PE interno e registrar imports, arquitetura,
+   dependências de framework e resultado de execução.
+
+Validação estrutural do pacote é indispensável para tratar a entrada como dado
+hostil. Verificação de assinatura, políticas de confiança e sandbox são
+capacidades de segurança separadas e permanecem fora deste marco.
