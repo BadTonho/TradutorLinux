@@ -31,6 +31,18 @@ posterior.
 | `Affinity x64.msix` | — | — | pacote MSIX; executável interno não localizado | formato não suportado |
 | `CapCut_7677236283084898320_installer.exe` | — | — | PE32 x86 (`0x14c`) | arquitetura não suportada |
 | `EpicInstaller-20.1.4-831cc1564f92442abc51fdb4a9854359.exe` | — | — | PE32 x86 (`0x14c`) + Mono/.NET | arquitetura/formato não suportados |
+| `lghub_installer.exe` | 67/114 | 47 | — | `unsupported` |
+
+## Recorrências observadas
+
+| Capacidade | Amostras que a evidenciam | Situação |
+|---|---|---|
+| PE32/x86 | Creative Cloud, Office Deployment Tool, CapCut, Epic | fora do alvo atual |
+| Unwinding/SEH x64 | Roblox, WinRAR, Logitech G HUB | pendente |
+| Locale, code pages, FLS e ambiente | WinRAR, Logitech G HUB | pendente |
+| Segurança, identidade e ACLs | Roblox, Logitech G HUB | pendente |
+| Pacote MSIX/AppX | Affinity | pendente |
+| `delay-import` | WinRAR | pendente |
 
 ## `RobloxPlayerInstaller.exe`
 
@@ -543,3 +555,100 @@ escopo separada para executar assemblies gerenciados: hospedagem de CLR/Mono,
 carregamento de assemblies, interoperabilidade e teste de versão. .NET/Mono
 continuam fora do alvo atual; portanto, este instalador evidencia duas lacunas
 independentes, não uma API Win32 específica faltante.
+
+## `lghub_installer.exe` (Logitech G HUB installer)
+
+### Amostra e resultado
+
+| Campo | Valor |
+|---|---|
+| Arquivo | `lghub_installer.exe` |
+| Formato | PE32+ GUI x86-64, 8 seções |
+| SHA-256 | `4b2f9903b27c8434afcd52fe65845632fcae47cc50432fb6b3b1637144e811e1` |
+| Imports estáticos | 114 em 3 DLLs |
+| Resolvidos pelo runtime | 67 |
+| Ausentes | 47 |
+| Resultado do `--report` | `unsupported`; `execution: not-attempted` |
+| Fonte | análise local de 2026-08-23 |
+
+O primeiro comando **Executar** terminou com exit code `5` durante a resolução
+de imports, antes do entry point. `COMCTL32!InitCommonControlsEx` já resolve;
+as lacunas restantes estão em `ADVAPI32` e `KERNEL32`.
+
+### Lacunas por módulo
+
+| DLL | APIs ausentes |
+|---|---:|
+| `ADVAPI32.dll` | 5 |
+| `KERNEL32.dll` | 42 |
+| `COMCTL32.dll` | 0/1 |
+
+### Imports estáticos ausentes
+
+#### `ADVAPI32.dll` (5)
+
+```text
+GetNamedSecurityInfoW
+OpenProcessToken
+GetTokenInformation
+SetEntriesInAclW
+SetNamedSecurityInfoW
+```
+
+Essas APIs pedem uma camada de descritores de segurança, token de processo e
+ACLs com semântica própria; retornar sucesso sem aplicar a ACL não é suficiente
+para um instalador.
+
+#### `KERNEL32.dll` (42)
+
+```text
+GetSystemDirectoryW
+RtlCaptureContext
+RtlLookupFunctionEntry
+RtlVirtualUnwind
+IsDebuggerPresent
+UnhandledExceptionFilter
+IsProcessorFeaturePresent
+GetFileType
+GetStartupInfoW
+FlsAlloc
+FlsGetValue
+FlsSetValue
+FlsFree
+InitializeCriticalSectionAndSpinCount
+LCMapStringW
+GetLocaleInfoW
+IsValidLocale
+EnumSystemLocalesW
+IsValidCodePage
+GetACP
+GetOEMCP
+GetCPInfo
+GetStringTypeW
+SetStdHandle
+GetModuleFileNameW
+ReadConsoleW
+WriteConsoleW
+RtlPcToFileHeader
+RtlUnwindEx
+RtlUnwind
+EncodePointer
+InitializeSListHead
+FormatMessageA
+GetLocaleInfoEx
+FindFirstFileExW
+SetFileInformationByHandle
+AreFileApisANSI
+InitializeCriticalSectionEx
+DecodePointer
+LCMapStringEx
+GetEnvironmentStringsW
+FreeEnvironmentStringsW
+```
+
+### Próxima investigação
+
+Este caso confirma que unwinding/SEH x64 e o grupo locale/FLS/ambiente são
+capacidades compartilhadas por aplicativos x64 grandes. A camada de ACLs deve
+ser validada com uma fixture de segurança genérica e outro alvo que também a
+use, antes de ser considerada suporte ao instalador do Logitech.
