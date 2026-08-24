@@ -57,6 +57,10 @@ struct WindowSlot {
     std::vector<ListViewRow> list_rows;
     int list_selection{-1};
     void* user_data{nullptr};
+    std::uint32_t style{0};
+    std::uint32_t extended_style{0};
+    bool is_dialog{false};
+    std::vector<WindowSlot*> dialog_children;
 };
 
 [[nodiscard]] bool is_builtin_control(const char* name) noexcept;

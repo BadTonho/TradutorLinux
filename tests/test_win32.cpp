@@ -1,6 +1,9 @@
 #include "tradutorlinux/runtime/winapi.hpp"
 #include "tradutorlinux/runtime/advapi.hpp"
+#include "tradutorlinux/runtime/comctl32.hpp"
+#include "tradutorlinux/runtime/dialog_template.hpp"
 #include "tradutorlinux/prefix/prefix.hpp"
+#include "../src/runtime/runtime_context.hpp"
 
 #include <array>
 #include <chrono>
@@ -20,6 +23,46 @@
 
 namespace tradutorlinux {
 namespace {
+
+void append_u16(std::vector<std::byte>& bytes, const std::uint16_t value) {
+    bytes.push_back(static_cast<std::byte>(value & 0xFFU));
+    bytes.push_back(static_cast<std::byte>((value >> 8U) & 0xFFU));
+}
+
+void append_u32(std::vector<std::byte>& bytes, const std::uint32_t value) {
+    append_u16(bytes, static_cast<std::uint16_t>(value & 0xFFFFU));
+    append_u16(bytes, static_cast<std::uint16_t>(value >> 16U));
+}
+
+std::vector<std::byte> valid_dialog_template() {
+    std::vector<std::byte> bytes;
+    append_u32(bytes, 0);
+    append_u32(bytes, 0);
+    append_u16(bytes, 1);
+    append_u16(bytes, 0);
+    append_u16(bytes, 0);
+    append_u16(bytes, 100);
+    append_u16(bytes, 40);
+    append_u16(bytes, 0);  // menu
+    append_u16(bytes, 0);  // class
+    append_u16(bytes, 'D');
+    append_u16(bytes, 0);
+    while ((bytes.size() & 3U) != 0U) bytes.push_back(std::byte{0});
+    append_u32(bytes, 0x00010000U);
+    append_u32(bytes, 0);
+    append_u16(bytes, 1);
+    append_u16(bytes, 1);
+    append_u16(bytes, 80);
+    append_u16(bytes, 18);
+    append_u16(bytes, 7);
+    append_u16(bytes, 0xFFFFU);
+    append_u16(bytes, 0x0080U);
+    append_u16(bytes, 'O');
+    append_u16(bytes, 'K');
+    append_u16(bytes, 0);
+    append_u16(bytes, 0);  // creation data
+    return bytes;
+}
 
 using abi::GuestMemoryBasicInformation;
 
@@ -1563,6 +1606,138 @@ TEST(Win32WideTest, CommandLineToArgvWParsesQuotedArguments) {
 
 TEST(Win32WideTest, CommandLineToArgvWFailsOnNullArguments) {
     EXPECT_EQ(tl_CommandLineToArgvW(nullptr, nullptr), nullptr);
+}
+
+TEST(Win32DialogTemplateTest, ParsesAlignedStandardTemplateAndRejectsBounds) {
+    EXPECT_EQ(sizeof(runtime::GuestDialogTemplate), 18U);
+    EXPECT_EQ(sizeof(runtime::GuestDialogItemTemplate), 18U);
+    EXPECT_EQ(sizeof(abi::GuestInitCommonControlsEx), 8U);
+    runtime::DialogTemplate parsed{};
+    const std::vector<std::byte> bytes = valid_dialog_template();
+    EXPECT_EQ(runtime::parse_dialog_template(bytes, parsed),
+              runtime::DialogTemplateStatus::Success);
+    ASSERT_EQ(parsed.controls.size(), 1U);
+    EXPECT_EQ(parsed.controls[0].id, 7U);
+    EXPECT_EQ(parsed.controls[0].title, u"OK");
+
+    std::vector<std::byte> truncated = bytes;
+    truncated.pop_back();
+    EXPECT_EQ(runtime::parse_dialog_template(truncated, parsed),
+              runtime::DialogTemplateStatus::Malformed);
+
+    std::vector<std::byte> dialog_ex = bytes;
+    dialog_ex[0] = std::byte{1};
+    dialog_ex[1] = std::byte{0};
+    dialog_ex[2] = std::byte{0xFF};
+    dialog_ex[3] = std::byte{0xFF};
+    EXPECT_EQ(runtime::parse_dialog_template(dialog_ex, parsed),
+              runtime::DialogTemplateStatus::DialogEx);
+}
+
+TEST(Win32DialogTemplateTest, RejectsUnsupportedMenuClassFontAndControl) {
+    runtime::DialogTemplate parsed{};
+    std::vector<std::byte> custom_menu = valid_dialog_template();
+    custom_menu[18] = std::byte{1};
+    EXPECT_EQ(runtime::parse_dialog_template(custom_menu, parsed),
+              runtime::DialogTemplateStatus::Unsupported);
+
+    std::vector<std::byte> font = valid_dialog_template();
+    font[0] = std::byte{0x40};
+    EXPECT_EQ(runtime::parse_dialog_template(font, parsed),
+              runtime::DialogTemplateStatus::Unsupported);
+
+    std::vector<std::byte> custom_control = valid_dialog_template();
+    custom_control[48] = std::byte{0x83};
+    EXPECT_EQ(runtime::parse_dialog_template(custom_control, parsed),
+              runtime::DialogTemplateStatus::Unsupported);
+}
+
+TEST(Win32DialogTest, LogicalChildrenTabTextGeometryAndWindowLongWrappers) {
+    g_windows = {};
+    g_focused_control = nullptr;
+    WindowSlot& dialog = g_windows[0];
+    dialog.used = true;
+    dialog.is_dialog = true;
+    dialog.x = 10;
+    dialog.y = 20;
+    dialog.width = 200;
+    dialog.height = 100;
+    WindowSlot& edit = g_windows[1];
+    edit.used = true;
+    edit.is_control = true;
+    edit.parent = &dialog;
+    edit.control_id = 100;
+    edit.control_kind = ControlKind::Edit;
+    edit.style = 0x00010000U;
+    edit.x = 4;
+    edit.y = 5;
+    edit.width = 80;
+    edit.height = 18;
+    edit.text = "old";
+    WindowSlot& button = g_windows[2];
+    button.used = true;
+    button.is_control = true;
+    button.parent = &dialog;
+    button.control_id = 1;
+    button.control_kind = ControlKind::Button;
+    button.style = 0x00010000U;
+    button.x = 5;
+    button.y = 70;
+    button.width = 60;
+    button.height = 20;
+    dialog.dialog_children = {&edit, &button};
+
+    EXPECT_EQ(tl_GetDlgItem(&dialog, 100), &edit);
+    const std::uint16_t text[] = {'n', 'e', 'w', 0};
+    EXPECT_EQ(tl_SetDlgItemTextW(&dialog, 100, text), 1);
+    EXPECT_EQ(edit.text, "new");
+    EXPECT_EQ(tl_GetNextDlgTabItem(&dialog, nullptr, 0), &edit);
+    EXPECT_EQ(tl_GetNextDlgTabItem(&dialog, &edit, 0), &button);
+    EXPECT_EQ(tl_GetWindowLongW(&edit, -12), 100);
+    EXPECT_EQ(tl_SetWindowLongW(&edit, -21, 0x1234), 0);
+    EXPECT_EQ(tl_GetWindowLongW(&edit, -21), 0x1234);
+    abi::GuestRect rect{};
+    EXPECT_EQ(tl_GetWindowRect(&edit, &rect), 1);
+    EXPECT_EQ(rect.left, 14);
+    EXPECT_EQ(rect.top, 25);
+    EXPECT_EQ(rect.right, 94);
+    EXPECT_EQ(rect.bottom, 43);
+
+    abi::GuestMsg message{};
+    message.hwnd = &dialog;
+    message.message = abi::kWmKeyDown;
+    message.wparam = abi::kVkTab;
+    EXPECT_EQ(tl_IsDialogMessageW(&dialog, &message), 1);
+    EXPECT_EQ(g_focused_control, &edit);
+    EXPECT_EQ(tl_EndDialog(&dialog, 1), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidHandle);
+    g_windows = {};
+    g_focused_control = nullptr;
+}
+
+TEST(Win32DialogTest, InitCommonControlsAndIconCopiesValidateInputs) {
+    abi::GuestInitCommonControlsEx common{sizeof(abi::GuestInitCommonControlsEx), 0x4000U};
+    EXPECT_EQ(tl_InitCommonControlsEx(&common), 1);
+    common.size = 4;
+    EXPECT_EQ(tl_InitCommonControlsEx(&common), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_InitCommonControlsEx(reinterpret_cast<const void*>(0x1)), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+
+    void* const copy = tl_CopyImage(reinterpret_cast<const void*>(1U), 1U, 0, 0, 0);
+    ASSERT_NE(copy, nullptr);
+    EXPECT_EQ(tl_DestroyIcon(copy), 1);
+    EXPECT_EQ(tl_DestroyIcon(reinterpret_cast<const void*>(0x1234U)), 0);
+}
+
+TEST(Win32DialogTest, RejectsInvalidModalInputsAndUnknownTemplates) {
+    const auto* const numeric_template = reinterpret_cast<const std::uint16_t*>(101U);
+    EXPECT_EQ(tl_DialogBoxParamW(nullptr, numeric_template, nullptr, 0, 0), -1);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+
+    const std::uint16_t invalid_template[] = {0};
+    EXPECT_EQ(tl_DialogBoxParamW(nullptr, invalid_template, nullptr, 1, 0), -1);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
 }
 
 class SecurityPrefixFixture {

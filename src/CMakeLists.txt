@@ -18,6 +18,7 @@ add_library(tradutorlinux_core STATIC
     runtime/kernel32.cpp
     runtime/legacy_winapi.cpp
     runtime/user32.cpp
+    runtime/dialog_template.cpp
     runtime/gdi32.cpp
     runtime/shell32.cpp
     runtime/winapi.cpp

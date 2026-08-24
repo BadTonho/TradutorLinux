@@ -9,6 +9,8 @@
 //      com WNDPROC próprio; o driver envia 'q' à janela A e 'k' à janela B.
 //   5. mouse      (opcional, com <input6>): envia MotionNotify, ButtonPress e
 //      ButtonRelease sintéticos e depois 'q'; a fixture acumula flags de mouse.
+//   6. dialog     (opcional, com <input7>): localiza o diálogo, envia Tab e
+//      Enter e valida o retorno modal sem WM_QUIT.
 // Exit codes: tl_win: 1 = WM_CREATE; 3 = WM_CREATE + WM_CHAR('q').
 // tl_win2: 15 = create A + 'q' A + create B + 'k' B (flags 1+2+4+8).
 // tl_paint: 127 = create+paint+down+up+move+click+q (flags 1+2+4+8+16+32+64).
@@ -42,6 +44,7 @@ constexpr const char* kWindowCaption = "Ola do Windows no Linux!";
 constexpr const char* kCaptionA = "Janela A";
 constexpr const char* kCaptionB = "Janela B";
 constexpr const char* kPaintCaption = "Pinte e Clique";
+constexpr const char* kDialogCaption = "TL Dialog";
 constexpr int kReadyTimeoutMs = 15000;
 constexpr unsigned int kPollDelayUs = 100000;
 
@@ -309,6 +312,7 @@ enum class Trigger : unsigned char {
     TwoKeys,
     KeyPairs,
     Mouse,
+    Dialog,
 };
 
 struct RunOptions {
@@ -378,6 +382,12 @@ void run_runtime(const std::string& runtime, const std::string& input,
                 } else {
                     done = send_key(display, kPaintCaption, "q");
                 }
+            } else if (options.trigger == Trigger::Dialog) {
+                if (!sent_a) {
+                    sent_a = send_key(display, kDialogCaption, "Tab");
+                } else {
+                    done = send_key(display, kDialogCaption, "Return");
+                }
             } else {
                 if (!sent_a) {
                     sent_a = send_key(display, kCaptionA, "q");
@@ -434,8 +444,10 @@ void verify_run(const std::string& work_dir, const std::string& scenario,
                 const RunExpectations& expected) {
     const std::string trace = read_file(work_dir + "/trace_" + scenario + ".log");
     const std::string output = read_file(work_dir + "/stdout_" + scenario + ".log");
-    if (!output.empty()) {
-        fail("stdout não vazio (deve ir tudo para stderr) no cenário " + scenario);
+    const bool dialog_scenario = scenario == "dialog";
+    const std::string expected_stdout = dialog_scenario ? "dialog\n" : std::string{};
+    if (output != expected_stdout) {
+        fail("stdout inesperado no cenário " + scenario + ": '" + output + "'");
     }
     const std::string exit_code = std::to_string(expected.expected_exit);
     const std::array<std::string, 3> base = {
@@ -445,13 +457,15 @@ void verify_run(const std::string& work_dir, const std::string& scenario,
             "\" status=\"success\" mechanism=\"guest-transfer\"",
         "exit exit-code=\"" + exit_code + "\" explicit=\"sim\"",
     };
+    if (!dialog_scenario) {
+        for (const std::string& needle : base) {
+            require_trace_contains(trace, needle, scenario);
+        }
+    }
     for (const std::string& needle : expected.registers) {
         require_trace_contains(trace, needle, scenario);
     }
     for (const std::string& needle : expected.creates) {
-        require_trace_contains(trace, needle, scenario);
-    }
-    for (const std::string& needle : base) {
         require_trace_contains(trace, needle, scenario);
     }
     for (const std::string& needle : expected.chars) {
@@ -476,10 +490,10 @@ const std::string kWinKeyChar = "TranslateMessage symbol=\"TranslateMessage\" me
 }  // namespace
 
 int main(const int argc, char** argv) {
-    if (argc < 4 || argc > 9) {
+    if (argc < 4 || argc > 10) {
         std::fprintf(stderr,
                      "uso: runtime_gui_smoke <runtime> <input> <work-dir> [input2] [input3] "
-                     "[input4] [input5] [input6]\n");
+                     "[input4] [input5] [input6] [input7]\n");
         return 2;
     }
     const std::string runtime = argv[1];
@@ -490,6 +504,7 @@ int main(const int argc, char** argv) {
     const std::string input4 = argc >= 7 ? argv[6] : std::string{};
     const std::string input5 = argc >= 8 ? argv[7] : std::string{};
     const std::string input6 = argc >= 9 ? argv[8] : std::string{};
+    const std::string input7 = argc >= 10 ? argv[9] : std::string{};
 
     std::error_code error;
     std::filesystem::create_directories(work_dir, error);
@@ -657,6 +672,24 @@ int main(const int argc, char** argv) {
                  "BeginPaint symbol=\"BeginPaint\" status=\"success\"",
                  "EndPaint symbol=\"EndPaint\" status=\"success\""},
             });
+    }
+
+    if (!input7.empty()) {
+        const RunOptions dialog_options{
+            .autoclose = false,
+            .trigger = Trigger::Dialog,
+            .expected_exit = 0,
+            .trace_path = work_dir + "/trace_dialog.log",
+            .stdout_path = work_dir + "/stdout_dialog.log",
+        };
+        run_runtime(runtime, input7, display, dialog_options);
+        verify_run(work_dir, "dialog",
+                   RunExpectations{0, {}, {}, {},
+                                   {"DialogBoxParamW symbol=\"DialogBoxParamW\" template=\"101\"",
+                                    "IsDialogMessageW symbol=\"IsDialogMessageW\" action=\"tab\"",
+                                    "IsDialogMessageW symbol=\"IsDialogMessageW\" action=\"enter\"",
+                                    "EndDialog symbol=\"EndDialog\" result=\"42\" status=\"success\"",
+                                    "DialogBoxParamW symbol=\"DialogBoxParamW\" result=\"42\" status=\"returned\""}});
     }
 
     if (g_xvfb_pid > 0) {

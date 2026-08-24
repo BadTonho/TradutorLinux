@@ -217,6 +217,11 @@ using runtime_gui::WindowSlot;
 extern std::array<ClassSlot, 32> g_classes;
 extern std::array<WindowSlot, 32> g_windows;
 extern WindowSlot* g_focused_control;
+extern WindowSlot* g_active_dialog;
+extern bool g_modal_done;
+extern std::intptr_t g_modal_result;
+extern WindowSlot* g_modal_parent;
+extern bool g_modal_parent_was_enabled;
 extern bool g_quit_requested;
 extern std::uint32_t g_quit_code;
 

@@ -18,7 +18,7 @@ find_program(TL_MINGW_WINDRES
 set(TL_FIXTURE_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/generated")
 
 function(tl_add_pe_fixture target_name source_file manifest_file)
-    set(options LINK_KERNEL32 LINK_USER32 LINK_GDI32 LINK_GDIPLUS LINK_UXTHEME LINK_DBGHELP LINK_OLE32 LINK_POWRPROF LINK_IPHLPAPI LINK_WINMM LINK_WS2_32 LINK_ADVAPI32 RELOCATABLE UNWIND EXPECT_RESOLVED CONSOLE REPORT REPORT_ONLY NO_RUNTIME_CHECK RUNTIME_FAILURE)
+    set(options LINK_KERNEL32 LINK_USER32 LINK_GDI32 LINK_COMCTL32 LINK_GDIPLUS LINK_UXTHEME LINK_DBGHELP LINK_OLE32 LINK_POWRPROF LINK_IPHLPAPI LINK_WINMM LINK_WS2_32 LINK_ADVAPI32 RELOCATABLE UNWIND EXPECT_RESOLVED CONSOLE REPORT REPORT_ONLY NO_RUNTIME_CHECK RUNTIME_FAILURE)
     set(oneValueArgs REPORT_SYMBOL RESOURCE_FILE IMPORT_DEF)
     cmake_parse_arguments(ARG "${options}" "${oneValueArgs}" "" ${ARGN})
 
@@ -47,6 +47,9 @@ function(tl_add_pe_fixture target_name source_file manifest_file)
     endif()
     if(ARG_LINK_GDI32)
         list(APPEND link_libraries -lgdi32)
+    endif()
+    if(ARG_LINK_COMCTL32)
+        list(APPEND link_libraries -lcomctl32)
     endif()
     if(ARG_LINK_GDIPLUS)
         list(APPEND link_libraries -lgdiplus)
@@ -355,6 +358,9 @@ tl_add_pe_fixture(tl_win2 src/tl_win2.c manifests/tl_win2.json
 tl_add_pe_fixture(tl_win_w src/tl_win_w.c manifests/tl_win_w.json
     LINK_KERNEL32 LINK_USER32 EXPECT_RESOLVED REPORT_ONLY RELOCATABLE
     REPORT_SYMBOL "RegisterClassExW")
+tl_add_pe_fixture(tl_dialog src/tl_dialog.c manifests/tl_dialog.json
+    LINK_KERNEL32 LINK_USER32 LINK_COMCTL32 EXPECT_RESOLVED REPORT_ONLY RELOCATABLE
+    REPORT_SYMBOL "DialogBoxParamW" RESOURCE_FILE src/tl_dialog.rc)
 tl_add_pe_fixture(tl_key src/tl_key.c manifests/tl_key.json
     LINK_KERNEL32 LINK_USER32 EXPECT_RESOLVED REPORT_ONLY RELOCATABLE
     REPORT_SYMBOL "RegisterClassExA")

@@ -121,8 +121,17 @@ Os itens marcados como concluídos devem ter evidência no repositório: código
   reanalisados somente com `--report`, continuam `unsupported` e não foram
   executados; Logitech G HUB (105/114) não foi alterado porque o binário não
   está disponível localmente.
-- **Próximo resultado observável (Fase 13.11):** diálogos e controles GUI
-  reutilizáveis para o subconjunto compartilhado do portfólio.
+- **Marco concluído (Fase 13.11):** `tl_dialog.exe` valida template `DIALOG`
+  padrão, `WM_INITDIALOG`, filhos lógicos, texto por ID, tabulação, ícone
+  copiado e retorno modal 42. O cenário Xvfb envia Tab/Enter e protege o trace
+  de `DialogBoxParamW`, `IsDialogMessageW` e `EndDialog`; o CTest registra 417
+  casos sem falhas em Debug e em Sanitize (`LSAN_OPTIONS=detect_leaks=0`),
+  com 416 executados e o smoke marcado `Skipped` quando o socket X11 não está
+  disponível. WinRAR
+  (202/251) e Rockstar (241/338) foram reanalisados somente com `--report`,
+  continuam `unsupported` e `execution: not-attempted`.
+- **Próximo resultado observável (Fase 13.12):** automação, rede e confiança
+  em entregas separadas, com evidência reproduzível por protocolo.
 
 ### Estudo de caso: `RobloxPlayerInstaller.exe` (benchmark de cobertura)
 
@@ -537,12 +546,12 @@ nem declarar os benchmarks comerciais suportados.
 
 #### Fase 13.11 — diálogos e controles GUI reutilizáveis
 
-- [ ] Promover somente o subconjunto compartilhado de `USER32`/`COMCTL32`
+- [x] Promover somente o subconjunto compartilhado de `USER32`/`COMCTL32`
   necessário para diálogos modais, tabulação, textos/ícones e controles comuns
   observados em WinRAR e Rockstar.
-- [ ] Criar fixture X11 determinística com interação automatizada; não incluir
+- [x] Criar fixture X11 determinística com interação automatizada; não incluir
   GDI completo, impressão, shell de arquivos ou todos os controles Windows.
-- [ ] Reanalisar os dois benchmarks e só iniciar execução manual quando todos
+- [x] Reanalisar os dois benchmarks e só iniciar execução manual quando todos
   os imports estáticos e atrasados correspondentes estiverem resolvidos.
 
 #### Fase 13.12 — automação, rede e confiança, em entregas separadas

@@ -201,3 +201,31 @@ fechamento da janela destrói o alvo em vez de apenas ocultá-lo; o fluxo contin
 usando somente dados relativos em `APPDATA`. O smoke
 `targetapp_simple_todo_gui_smoke` cria um CWD próprio, prepara `appdata` para
 os caminhos relativos e verifica o artefato persistente de todos.
+
+## Diálogos modais e controles reutilizáveis (Fase 13.11)
+
+`USER32!DialogBoxParamW` aceita um template numérico `RT_DIALOG` do módulo
+atual, no formato padrão documentado em [abi-x64.md](abi-x64.md). O runtime
+cria a janela modal X11 e reutiliza o renderer de controles lógicos para os
+itens `STATIC`, `EDIT`, `BUTTON` e `COMBOBOX`. O `DLGPROC` recebe
+`WM_INITDIALOG`; o loop interno usa `GetMessageW` e `IsDialogMessageW` até que
+`EndDialog` defina o resultado. Há no máximo um diálogo ativo: chamadas
+aninhadas retornam `ERROR_NOT_SUPPORTED`. Fechar a decoração X11 equivale a
+`IDCANCEL`, e `EndDialog` destrói controles/janela, restaura o pai e nunca gera
+`WM_QUIT`.
+
+O subconjunto inclui `GetDlgItem`, `SetDlgItemTextW`, `SendDlgItemMessageW`,
+`GetNextDlgTabItem` e `IsDialogMessageW`. A tabulação percorre, na ordem do
+template, controles visíveis/habilitados com `WS_TABSTOP`; Enter e Escape
+enfileiram `WM_COMMAND` para `IDOK`/`IDCANCEL`. `GetWindowRect` usa a geometria
+lógica armazenada, e `GetWindowLongW`/`SetWindowLongW` são wrappers de 32 bits
+dos `*Ptr` limitados a índices documentados. `CopyImage` e `DestroyIcon`
+gerenciam somente tokens de ícone copiados; `LoadImageW`, `DrawIconEx`, captura,
+clipboard, redraw amplo e controles COMCTL32 desconhecidos continuam fora do
+escopo.
+
+`tl_dialog.exe` é a fixture reproduzível: consulta filhos/texto/geometria,
+envia mensagem ao `EDIT`, percorre tabulação, copia um ícone e retorna 42 pelo
+modal. O cenário `dialog` de `runtime_gui_smoke` envia Tab e Enter e verifica
+stdout `dialog\n`, o retorno, a destruição e os eventos do trace. Em ambientes
+sem socket X11 o CTest mantém o cenário como `Skipped`, como os demais smokes.

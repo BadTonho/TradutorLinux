@@ -1,5 +1,6 @@
 #include "tradutorlinux/runtime/winapi.hpp"
 #include "runtime_context.hpp"
+#include "tradutorlinux/runtime/dialog_template.hpp"
 #include "tradutorlinux/util/unicode.hpp"
 
 #include <algorithm>
@@ -64,6 +65,70 @@ constexpr unsigned long kKeysymUp = 0xFF52;
 constexpr unsigned long kKeysymRight = 0xFF53;
 constexpr unsigned long kKeysymDown = 0xFF54;
 constexpr unsigned long kKeysymDelete = 0xFFFF;
+
+constexpr std::uint32_t kWsVisible = 0x10000000U;
+constexpr std::uint32_t kWsDisabled = 0x08000000U;
+constexpr std::uint32_t kWsTabStop = 0x00010000U;
+constexpr std::uint32_t kImageIcon = 1U;
+constexpr int kIdOk = 1;
+constexpr int kIdCancel = 2;
+
+struct ImageSlot {
+    bool used{false};
+    const void* source{nullptr};
+};
+
+std::array<ImageSlot, 32> g_image_slots{};
+
+[[nodiscard]] bool guest_callback_address_valid(const std::uintptr_t address) noexcept {
+    if (address == 0 || g_guest_image_base == nullptr ||
+        address < reinterpret_cast<std::uintptr_t>(g_guest_image_base) ||
+        address - reinterpret_cast<std::uintptr_t>(g_guest_image_base) >= g_guest_image_size) {
+        return false;
+    }
+    return runtime::validate_mapped_range(reinterpret_cast<const void*>(address), 1, false);
+}
+
+[[nodiscard]] WindowSlot* dialog_control_by_id(WindowSlot& dialog, const int identifier) noexcept {
+    for (WindowSlot* const child : dialog.dialog_children) {
+        if (child != nullptr && child->used &&
+            child->parent == &dialog &&
+            child->control_id == static_cast<std::uint16_t>(identifier)) {
+            return child;
+        }
+    }
+    return nullptr;
+}
+
+[[nodiscard]] bool dialog_control_eligible(const WindowSlot& control) noexcept {
+    return control.used && control.is_control && control.visible && control.enabled &&
+           (control.style & kWsTabStop) != 0U;
+}
+
+[[nodiscard]] WindowSlot* next_dialog_tab_item(WindowSlot& dialog, WindowSlot* current,
+                                                const bool previous) noexcept {
+    std::vector<WindowSlot*> eligible;
+    for (WindowSlot* const child : dialog.dialog_children) {
+        if (child != nullptr && child->parent == &dialog && dialog_control_eligible(*child)) {
+            eligible.push_back(child);
+        }
+    }
+    if (eligible.empty()) {
+        return nullptr;
+    }
+    if (current == nullptr) {
+        return previous ? eligible.back() : eligible.front();
+    }
+    const auto found = std::find(eligible.begin(), eligible.end(), current);
+    if (found == eligible.end()) {
+        return previous ? eligible.back() : eligible.front();
+    }
+    const std::size_t index = static_cast<std::size_t>(found - eligible.begin());
+    if (previous) {
+        return eligible[(index + eligible.size() - 1U) % eligible.size()];
+    }
+    return eligible[(index + 1U) % eligible.size()];
+}
 
 [[nodiscard]] abi::Wparam keydown_vkey(const unsigned long keysym,
                                        const char character) noexcept {
@@ -238,7 +303,7 @@ TL_MSABI abi::Atom tl_RegisterClassW(const void* wnd_class) noexcept {
 
 TL_MSABI abi::HWnd tl_CreateWindowExA(const std::uint32_t,
                                       const char* const class_name, const char* const window_name,
-                                      const std::uint32_t, const int x, const int y,
+                                      const std::uint32_t style, const int x, const int y,
                                       const int width, const int height, const void* const parent,
                                       const void* const menu, const void* const,
                                       const void* const) noexcept {
@@ -274,13 +339,14 @@ TL_MSABI abi::HWnd tl_CreateWindowExA(const std::uint32_t,
         slot.control_kind = runtime_gui::control_kind_for(class_name);
         slot.parent = parent_slot;
         slot.control_id = reinterpret_cast<std::uintptr_t>(menu);
+        slot.style = style;
         slot.x = x;
         slot.y = y;
         slot.width = width > 0 ? width : 1;
         slot.height = height > 0 ? height : 1;
         slot.text = window_name != nullptr ? window_name : "";
-        slot.visible = true;
-        slot.enabled = true;
+        slot.visible = (style & kWsVisible) != 0U || style == 0U;
+        slot.enabled = (style & kWsDisabled) == 0U;
         slot.combo_selection = -1;
         set_last_error(abi::kErrorSuccess);
         return &slot;
@@ -599,6 +665,16 @@ TL_MSABI int tl_DestroyWindow(const void* const window) noexcept {
         set_last_error(abi::kErrorInvalidHandle);
         return 0;
     }
+    // Child controls are logical side-table entries.  Destroy them with the
+    // parent so a modal dialog cannot leave stale HWND tokens behind.
+    for (WindowSlot& child : g_windows) {
+        if (child.used && child.parent == slot) {
+            if (g_focused_control == &child) {
+                g_focused_control = nullptr;
+            }
+            child = {};
+        }
+    }
     if (slot->native != nullptr) {
         gui::destroy_window(slot->native);
     }
@@ -737,6 +813,25 @@ TL_MSABI int tl_GetClientRect(const void* window, void* rect) noexcept {
     }
     auto* out = static_cast<abi::GuestRect*>(rect);
     *out = {0, 0, slot->width, slot->height};
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_GetWindowRect(const void* window, void* rect) noexcept {
+    const WindowSlot* slot = find_window_slot(window);
+    if (slot == nullptr || rect == nullptr ||
+        !mapped_guest_range(rect, sizeof(abi::GuestRect), true)) {
+        set_last_error(slot == nullptr ? abi::kErrorInvalidHandle : abi::kErrorInvalidParameter);
+        return 0;
+    }
+    std::int32_t left = slot->x;
+    std::int32_t top = slot->y;
+    for (const WindowSlot* parent = slot->parent; parent != nullptr; parent = parent->parent) {
+        left += parent->x;
+        top += parent->y;
+    }
+    auto* const output = static_cast<abi::GuestRect*>(rect);
+    *output = {left, top, left + slot->width, top + slot->height};
     set_last_error(abi::kErrorSuccess);
     return 1;
 }
@@ -1156,6 +1251,367 @@ TL_MSABI int tl_SendMessageW(const void* window, const std::uint32_t message,
     return tl_SendMessageA(window, message, wparam, lparam);
 }
 
+TL_MSABI void* tl_GetDlgItem(const void* dialog, const int identifier) noexcept {
+    WindowSlot* const slot = find_window_slot(dialog);
+    if (slot == nullptr || !slot->is_dialog) {
+        set_last_error(abi::kErrorInvalidHandle);
+        return nullptr;
+    }
+    WindowSlot* const child = dialog_control_by_id(*slot, identifier);
+    set_last_error(child == nullptr ? abi::kErrorFileNotFound : abi::kErrorSuccess);
+    return child;
+}
+
+TL_MSABI int tl_SetDlgItemTextW(const void* dialog, const int identifier,
+                                const std::uint16_t* const text) noexcept {
+    if (text == nullptr || !mapped_guest_wstring(text)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    void* const child = tl_GetDlgItem(dialog, identifier);
+    if (child == nullptr) {
+        return 0;
+    }
+    return tl_SetWindowTextW(child, text);
+}
+
+TL_MSABI abi::Lresult tl_SendDlgItemMessageW(const void* dialog, const int identifier,
+                                             const std::uint32_t message,
+                                             const abi::Wparam wparam,
+                                             const abi::Lparam lparam) noexcept {
+    void* const child = tl_GetDlgItem(dialog, identifier);
+    if (child == nullptr) {
+        return 0;
+    }
+    return static_cast<abi::Lresult>(tl_SendMessageW(child, message, wparam, lparam));
+}
+
+TL_MSABI void* tl_GetNextDlgTabItem(const void* dialog, const void* control,
+                                    const int previous) noexcept {
+    WindowSlot* const slot = find_window_slot(dialog);
+    WindowSlot* current = nullptr;
+    if (control != nullptr) {
+        current = find_window_slot(control);
+        if (current == nullptr || current->parent != slot) {
+            set_last_error(abi::kErrorInvalidHandle);
+            return nullptr;
+        }
+    }
+    if (slot == nullptr || !slot->is_dialog) {
+        set_last_error(abi::kErrorInvalidHandle);
+        return nullptr;
+    }
+    WindowSlot* const next = next_dialog_tab_item(*slot, current, previous != 0);
+    set_last_error(next == nullptr ? abi::kErrorFileNotFound : abi::kErrorSuccess);
+    return next;
+}
+
+TL_MSABI int tl_IsDialogMessageW(const void* dialog, const void* message) noexcept {
+    WindowSlot* const slot = find_window_slot(dialog);
+    if (slot == nullptr || !slot->is_dialog || message == nullptr ||
+        !mapped_guest_range(message, sizeof(abi::GuestMsg), false)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    const auto* const input = static_cast<const abi::GuestMsg*>(message);
+    if (input->message != abi::kWmKeyDown || input->hwnd != slot) {
+        set_last_error(abi::kErrorSuccess);
+        return 0;
+    }
+    if (input->wparam == abi::kVkTab) {
+        WindowSlot* const next = next_dialog_tab_item(*slot, g_focused_control, false);
+        if (next == nullptr) {
+            set_last_error(abi::kErrorSuccess);
+            return 0;
+        }
+        set_focus_control(next);
+        const std::array<diagnostics::TraceField, 4> fields{
+            diagnostics::TraceField{"symbol", "IsDialogMessageW"},
+            diagnostics::TraceField{"action", "tab"},
+            diagnostics::TraceField{"status", "handled"},
+            diagnostics::TraceField{"control", std::to_string(next->control_id)},
+        };
+        runtime_trace("IsDialogMessageW", fields, 4);
+        set_last_error(abi::kErrorSuccess);
+        return 1;
+    }
+    int command_id = 0;
+    const char* action = nullptr;
+    if (input->wparam == abi::kVkReturn) {
+        command_id = kIdOk;
+        action = "enter";
+    } else if (input->wparam == abi::kVkEscape) {
+        command_id = kIdCancel;
+        action = "escape";
+    }
+    if (command_id != 0 && dialog_control_by_id(*slot, command_id) != nullptr) {
+        queue_window_message(*slot, abi::kWmCommand, static_cast<abi::Wparam>(command_id),
+                             reinterpret_cast<abi::Lparam>(dialog_control_by_id(*slot, command_id)));
+        const std::array<diagnostics::TraceField, 4> fields{
+            diagnostics::TraceField{"symbol", "IsDialogMessageW"},
+            diagnostics::TraceField{"action", action},
+            diagnostics::TraceField{"status", "handled"},
+            diagnostics::TraceField{"control", std::to_string(command_id)},
+        };
+        runtime_trace("IsDialogMessageW", fields, 4);
+        set_last_error(abi::kErrorSuccess);
+        return 1;
+    }
+    set_last_error(abi::kErrorSuccess);
+    return 0;
+}
+
+TL_MSABI int tl_EndDialog(const void* dialog, const std::intptr_t result) noexcept {
+    WindowSlot* const slot = find_window_slot(dialog);
+    if (slot == nullptr || !slot->is_dialog || slot != g_active_dialog || g_modal_done) {
+        set_last_error(abi::kErrorInvalidHandle);
+        return 0;
+    }
+    g_modal_result = result;
+    g_modal_done = true;
+    const abi::HWnd hwnd = slot;
+    tl_DestroyWindow(hwnd);
+    if (g_modal_parent != nullptr) {
+        WindowSlot* const parent = find_window_slot(g_modal_parent);
+        if (parent != nullptr) {
+            parent->enabled = g_modal_parent_was_enabled;
+            render_controls(*parent);
+        }
+    }
+    const std::array<diagnostics::TraceField, 4> fields{
+        diagnostics::TraceField{"symbol", "EndDialog"},
+        diagnostics::TraceField{"result", std::to_string(result)},
+        diagnostics::TraceField{"status", "success"},
+        diagnostics::TraceField{"modal", "closed"},
+    };
+    runtime_trace("EndDialog", fields, 4);
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI std::intptr_t tl_DialogBoxParamW(const void* const instance,
+                                           const std::uint16_t* const template_name,
+                                           const void* const parent,
+                                           const std::uintptr_t dialog_proc,
+                                           const abi::Lparam init_param) noexcept {
+    if (g_active_dialog != nullptr) {
+        set_last_error(abi::kErrorNotSupported);
+        return -1;
+    }
+    if ((instance != nullptr && reinterpret_cast<std::uintptr_t>(instance) != 0x1000U &&
+         reinterpret_cast<std::uintptr_t>(instance) !=
+             reinterpret_cast<std::uintptr_t>(g_guest_image_base)) ||
+        template_name == nullptr || reinterpret_cast<std::uintptr_t>(template_name) > 0xFFFFU ||
+        reinterpret_cast<std::uintptr_t>(template_name) == 0 ||
+        !guest_callback_address_valid(dialog_proc)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return -1;
+    }
+    WindowSlot* parent_slot = nullptr;
+    if (parent != nullptr) {
+        parent_slot = find_window_slot(parent);
+        if (parent_slot == nullptr || parent_slot->is_control) {
+            set_last_error(abi::kErrorInvalidHandle);
+            return -1;
+        }
+    }
+    const auto* const resource_name = template_name;
+    const auto* const resource_type = reinterpret_cast<const std::uint16_t*>(5U);
+    void* const resource = tl_FindResourceW(nullptr, resource_name, resource_type);
+    void* const loaded = resource == nullptr ? nullptr : tl_LoadResource(nullptr, resource);
+    const std::uint32_t resource_size = loaded == nullptr ? 0 : tl_SizeofResource(nullptr, resource);
+    const void* const resource_data = loaded == nullptr ? nullptr : tl_LockResource(loaded);
+    if (resource_data == nullptr || resource_size == 0) {
+        set_last_error(abi::kErrorResourceNotFound);
+        return -1;
+    }
+    runtime::DialogTemplate parsed{};
+    const auto status = runtime::parse_dialog_template(
+        std::span<const std::byte>{static_cast<const std::byte*>(resource_data), resource_size}, parsed);
+    if (status != runtime::DialogTemplateStatus::Success) {
+        set_last_error(status == runtime::DialogTemplateStatus::DialogEx
+                           ? abi::kErrorNotSupported
+                           : abi::kErrorInvalidParameter);
+        return -1;
+    }
+    if (parent_slot != nullptr) {
+        g_modal_parent = parent_slot;
+        g_modal_parent_was_enabled = parent_slot->enabled;
+        parent_slot->enabled = false;
+        render_controls(*parent_slot);
+    } else {
+        g_modal_parent = nullptr;
+        g_modal_parent_was_enabled = true;
+    }
+
+    const std::string title = util::wide_to_utf8(
+        reinterpret_cast<const std::uint16_t*>(parsed.title.c_str()));
+    gui::NativeWindow native = gui::create_window(title.c_str(), parsed.width, parsed.height);
+    if (native == nullptr) {
+        if (parent_slot != nullptr) {
+            parent_slot->enabled = g_modal_parent_was_enabled;
+            render_controls(*parent_slot);
+        }
+        set_last_error(abi::kErrorAccessDenied);
+        return -1;
+    }
+    const auto free_it = std::find_if(g_windows.begin(), g_windows.end(),
+                                      [](const WindowSlot& slot) { return !slot.used; });
+    if (free_it == g_windows.end()) {
+        gui::destroy_window(native);
+        if (parent_slot != nullptr) {
+            parent_slot->enabled = g_modal_parent_was_enabled;
+            render_controls(*parent_slot);
+        }
+        set_last_error(abi::kErrorNotEnoughMemory);
+        return -1;
+    }
+    WindowSlot& dialog = *free_it;
+    dialog = {};
+    dialog.used = true;
+    dialog.wndproc = dialog_proc;
+    dialog.class_name = "#32770";
+    dialog.window_title = title;
+    dialog.text = title;
+    dialog.native = native;
+    dialog.mapped = gui::map_window(native);
+    dialog.width = parsed.width > 0 ? parsed.width : 1;
+    dialog.height = parsed.height > 0 ? parsed.height : 1;
+    dialog.x = parsed.x;
+    dialog.y = parsed.y;
+    dialog.style = parsed.style;
+    dialog.extended_style = parsed.extended_style;
+    dialog.is_dialog = true;
+    dialog.parent = parent_slot;
+    for (const runtime::DialogControl& item : parsed.controls) {
+        const auto child_it = std::find_if(g_windows.begin(), g_windows.end(),
+                                           [](const WindowSlot& slot) { return !slot.used; });
+        if (child_it == g_windows.end()) {
+            tl_DestroyWindow(&dialog);
+            if (parent_slot != nullptr) {
+                parent_slot->enabled = g_modal_parent_was_enabled;
+                render_controls(*parent_slot);
+            }
+            set_last_error(abi::kErrorNotEnoughMemory);
+            return -1;
+        }
+        WindowSlot& child = *child_it;
+        child = {};
+        child.used = true;
+        child.is_control = true;
+        child.parent = &dialog;
+        child.control_id = item.id;
+        child.x = item.x;
+        child.y = item.y;
+        child.width = item.width > 0 ? item.width : 1;
+        child.height = item.height > 0 ? item.height : 1;
+        child.style = item.style;
+        child.extended_style = item.extended_style;
+        child.visible = (item.style & kWsVisible) != 0U || item.style == 0U;
+        child.enabled = (item.style & kWsDisabled) == 0U;
+        child.combo_selection = -1;
+        child.text = util::wide_to_utf8(reinterpret_cast<const std::uint16_t*>(item.title.c_str()));
+        switch (item.control_class) {
+            case runtime::DialogControlClass::Button: child.class_name = "BUTTON"; child.control_kind = ControlKind::Button; break;
+            case runtime::DialogControlClass::Edit: child.class_name = "EDIT"; child.control_kind = ControlKind::Edit; break;
+            case runtime::DialogControlClass::Static: child.class_name = "STATIC"; child.control_kind = ControlKind::Static; break;
+            case runtime::DialogControlClass::ComboBox: child.class_name = "COMBOBOX"; child.control_kind = ControlKind::ComboBox; break;
+        }
+        dialog.dialog_children.push_back(&child);
+    }
+    g_active_dialog = &dialog;
+    g_modal_done = false;
+    g_modal_result = 0;
+    render_controls(dialog);
+    if (next_dialog_tab_item(dialog, nullptr, false) != nullptr) {
+        set_focus_control(next_dialog_tab_item(dialog, nullptr, false));
+    }
+    static_cast<void>(call_wndproc(dialog.wndproc, &dialog, 0x0110U, 0, init_param)); // WM_INITDIALOG
+    const std::array<diagnostics::TraceField, 4> created_fields{
+        diagnostics::TraceField{"symbol", "DialogBoxParamW"},
+        diagnostics::TraceField{"template", std::to_string(reinterpret_cast<std::uintptr_t>(template_name))},
+        diagnostics::TraceField{"controls", std::to_string(parsed.controls.size())},
+        diagnostics::TraceField{"status", "created"},
+    };
+    runtime_trace("DialogBoxParamW", created_fields, 4);
+
+    while (!g_modal_done) {
+        abi::GuestMsg message{};
+        const int received = tl_GetMessageW(&message, &dialog, 0, 0);
+        if (received <= 0) {
+            static_cast<void>(tl_EndDialog(&dialog, kIdCancel));
+            break;
+        }
+        if (tl_IsDialogMessageW(&dialog, &message) != 0) {
+            continue;
+        }
+        const abi::Lresult handled = call_wndproc(dialog.wndproc, &dialog, message.message,
+                                                  message.wparam, message.lparam);
+        if (g_modal_done) {
+            continue;
+        }
+        if (handled == 0 && message.message == abi::kWmClose) {
+            static_cast<void>(tl_EndDialog(&dialog, kIdCancel));
+        } else if (handled == 0 && message.message == abi::kWmCommand) {
+            const int identifier = static_cast<int>(message.wparam & 0xFFFFU);
+            if (identifier == kIdOk || identifier == kIdCancel) {
+                static_cast<void>(tl_EndDialog(&dialog, identifier));
+            }
+        }
+    }
+    const std::intptr_t result = g_modal_result;
+    g_active_dialog = nullptr;
+    g_modal_parent = nullptr;
+    g_modal_done = false;
+    const std::array<diagnostics::TraceField, 4> returned_fields{
+        diagnostics::TraceField{"symbol", "DialogBoxParamW"},
+        diagnostics::TraceField{"result", std::to_string(result)},
+        diagnostics::TraceField{"status", "returned"},
+        diagnostics::TraceField{"modal", "complete"},
+    };
+    runtime_trace("DialogBoxParamW", returned_fields, 4);
+    set_last_error(abi::kErrorSuccess);
+    return result;
+}
+
+TL_MSABI void* tl_CopyImage(const void* image, const std::uint32_t image_type, const int width,
+                            const int height, const std::uint32_t flags) noexcept {
+    (void)flags;
+    if (image == nullptr || image_type != kImageIcon || width < 0 || height < 0 ||
+        (image != reinterpret_cast<const void*>(1U) &&
+         std::none_of(g_image_slots.begin(), g_image_slots.end(),
+                      [image](const ImageSlot& slot) { return slot.used && &slot == image; }))) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return nullptr;
+    }
+    const auto free_it = std::find_if(g_image_slots.begin(), g_image_slots.end(),
+                                      [](const ImageSlot& slot) { return !slot.used; });
+    if (free_it == g_image_slots.end()) {
+        set_last_error(abi::kErrorNotEnoughMemory);
+        return nullptr;
+    }
+    free_it->used = true;
+    free_it->source = image;
+    set_last_error(abi::kErrorSuccess);
+    return &*free_it;
+}
+
+TL_MSABI int tl_DestroyIcon(const void* icon) noexcept {
+    if (icon == reinterpret_cast<const void*>(1U)) {
+        set_last_error(abi::kErrorSuccess);
+        return 1;
+    }
+    const auto it = std::find_if(g_image_slots.begin(), g_image_slots.end(),
+                                 [icon](const ImageSlot& slot) { return slot.used && &slot == icon; });
+    if (it == g_image_slots.end()) {
+        set_last_error(abi::kErrorInvalidHandle);
+        return 0;
+    }
+    *it = {};
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
 TL_MSABI int tl_PostMessageA(const void* window, const std::uint32_t message,
                              const abi::Wparam wparam, const abi::Lparam lparam) noexcept {
     WindowSlot* slot = find_window_slot(window);
@@ -1338,8 +1794,8 @@ TL_MSABI std::intptr_t tl_GetWindowLongPtrA(const void* window, const int index)
         case -6: return 0; // GWLP_HINSTANCE
         case -8: return reinterpret_cast<std::intptr_t>(slot->parent); // GWLP_HWNDPARENT
         case -12: return static_cast<std::intptr_t>(slot->control_id); // GWLP_ID
-        case -16: return 0x10000000 | 0x00C00000; // GWL_STYLE (WS_VISIBLE | WS_CAPTION)
-        case -20: return 0; // GWL_EXSTYLE
+        case -16: return slot->style != 0 ? slot->style : 0x10000000 | 0x00C00000; // GWL_STYLE
+        case -20: return static_cast<std::intptr_t>(slot->extended_style); // GWL_EXSTYLE
         case -21: return reinterpret_cast<std::intptr_t>(slot->user_data); // GWLP_USERDATA
         default: return 0;
     }
@@ -1372,6 +1828,22 @@ TL_MSABI std::intptr_t tl_SetWindowLongPtrA(const void* window, const int index,
             slot->control_id = static_cast<std::uintptr_t>(new_long);
             return prev;
         }
+        case -16: {
+            const std::intptr_t prev = slot->style != 0 ? static_cast<std::intptr_t>(slot->style)
+                                                        : 0x10000000 | 0x00C00000;
+            slot->style = static_cast<std::uint32_t>(new_long);
+            slot->visible = (slot->style & kWsVisible) != 0U || slot->style == 0U;
+            slot->enabled = (slot->style & kWsDisabled) == 0U;
+            if (slot->is_control && slot->parent != nullptr) {
+                render_controls(*slot->parent);
+            }
+            return prev;
+        }
+        case -20: {
+            const std::intptr_t prev = static_cast<std::intptr_t>(slot->extended_style);
+            slot->extended_style = static_cast<std::uint32_t>(new_long);
+            return prev;
+        }
         default:
             return 0;
     }
@@ -1379,6 +1851,16 @@ TL_MSABI std::intptr_t tl_SetWindowLongPtrA(const void* window, const int index,
 
 TL_MSABI std::intptr_t tl_SetWindowLongPtrW(const void* window, const int index, const std::intptr_t new_long) noexcept {
     return tl_SetWindowLongPtrA(window, index, new_long);
+}
+
+TL_MSABI std::int32_t tl_GetWindowLongW(const void* window, const int index) noexcept {
+    return static_cast<std::int32_t>(tl_GetWindowLongPtrW(window, index));
+}
+
+TL_MSABI std::int32_t tl_SetWindowLongW(const void* window, const int index,
+                                        const std::int32_t new_long) noexcept {
+    return static_cast<std::int32_t>(
+        tl_SetWindowLongPtrW(window, index, static_cast<std::intptr_t>(new_long)));
 }
 
 TL_MSABI void* tl_GetParent(const void* window) noexcept {

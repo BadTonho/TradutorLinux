@@ -365,6 +365,21 @@ Quando o arquivo não é um PE32+ aceitável, o leitor emite:
 
 Os valores possíveis de `status` são `truncated`, `malformed`, `unsupported-architecture`, `unsupported-format` e `unsupported-mechanism`. O campo `detail` informa a condição específica rejeitada. Um arquivo de entrada regular que não seja PE válido retorna o código `4` (`MalformedPe`); o código `5` (`Unsupported`) fica reservado para PE válido incompatível ou mecanismo válido ainda não suportado, como delay-import fora do formato RVA adotado.
 
+O subsistema de diálogos acrescenta eventos sem caminhos do hospedeiro:
+
+```text
+[tl][runtime][info] DialogBoxParamW symbol="DialogBoxParamW" template="101" controls="4" status="created"
+[tl][runtime][info] IsDialogMessageW symbol="IsDialogMessageW" action="tab" status="handled" control="100"
+[tl][runtime][info] IsDialogMessageW symbol="IsDialogMessageW" action="enter" status="handled" control="1"
+[tl][runtime][info] EndDialog symbol="EndDialog" result="42" status="success" modal="closed"
+[tl][runtime][info] DialogBoxParamW symbol="DialogBoxParamW" result="42" status="returned" modal="complete"
+```
+
+Os campos identificam somente o ordinal do template, a contagem lógica, o
+comando e o resultado modal. Templates rejeitados, ponteiros inválidos,
+callbacks fora da imagem convidada e tentativas aninhadas retornam erro Win32
+controlado e não expõem a identidade ou os caminhos Linux.
+
 ## Eventos do componente `loader`
 
 O mapeador da Fase 2 emite um evento `mapped` com os campos `preferred-base`, `base`, `delta`, `size`, `at-preferred` (`sim` ou `não`) e `relocations-applied`, seguido de um evento `region` por região mapeada (`name`, `rva`, `size`, `permissions` em `r-x`, `r--`, `rw-` ou `---`) e um evento `unmap` (`base`) ao liberar a imagem.

@@ -29,6 +29,7 @@ Esta matriz declara o comportamento suportado; ela não é uma promessa de compa
 | `tl_process_console.exe` | PE32+ AMD64 | Não | `KERNEL32.dll` — startup, handles/tipo, console W, diretório do sistema, recursos do processador, ponteiros e SList | **Suportado no contexto determinístico:** valida `STARTUPINFOW`, troca/restaura stdout, lê UTF-8 como UTF-16, escreve `process-console-é\n`, consulta `C:\Windows\System32`, testa SSE2, encode/decode e SList alinhada; exit `0`. Metadata, `--report`, trace e execução são regressões CTest. | Processo e console Win32 |
 | `tl_file_metadata.exe` | PE32+ AMD64 | Não | `KERNEL32.dll` — enumeração ExW, atributos e metadados por handle | **Suportado no subconjunto de prefixo:** cria dados em `C:\`, enumera com `*`/`?`, alterna `READONLY`, aplica `FileBasicInfo` e testa exclusão no fechamento e POSIX; imprime `file-metadata\n`, exit `0`. Metadata, `--report`, trace e execução são regressões CTest. | Arquivos x64 |
 | `tl_security.exe` | PE32+ AMD64 | Não | `ADVAPI32.dll` — token/SID, descritor, DACL e `SetEntriesInAclW`; `KERNEL32.dll` — arquivo/console | **Suportado no subconjunto virtual por prefixo:** cria `C:\tl_security\acl.bin`, consulta `TokenUser` pelo protocolo de tamanho, verifica usuário não elevado, mescla/grava DACL e a lê numa segunda execução; imprime `security-write\n` e depois `security-read\n`. `runtime_tl_security_prefix` prova persistência e isolamento entre prefixos. | Identidade/DACL virtual |
+| `tl_dialog.exe` | PE32+ AMD64 | Não | `COMCTL32.dll!InitCommonControlsEx`; `KERNEL32.dll!ExitProcess`, `GetModuleHandleW`, `GetStdHandle`, `WriteFile`; `USER32.dll!DialogBoxParamW`, `EndDialog`, `GetDlgItem`, `SetDlgItemTextW`, `SendDlgItemMessageW`, `GetNextDlgTabItem`, `GetWindowRect`, `Get/SetWindowLongW`, `CopyImage`, `DestroyIcon`, `LoadIconW` | **Suportado no subconjunto modal:** recurso `DIALOG` padrão, `WM_INITDIALOG`, controles lógicos, texto por ID, tabulação, ícone copiado e retorno 42; o cenário `dialog` do `runtime_gui_smoke` envia Tab/Enter e espera `dialog\n`, sem `WM_QUIT` modal | Fase 13.11 |
 | `tl_crash.exe` | PE32+ AMD64 | Não | Nenhum | Gerado, verificado, mapeado e executado em processo filho isolado: o convidado acessa o endereço `0`, o hospedeiro observa o `SIGSEGV` via `waitpid`, emite `terminated category="guest-signal" signal="SIGSEGV" fault-address="0x0"` (o crash log captura o `si_addr` no filho e o converte em RVA/seção/importação quando o endereço cai dentro da imagem) e retorna `71` (`GuestFault`) | Diagnóstico de falhas |
 | `tl_hang.exe` | PE32+ AMD64 | Não | Nenhum | Gerado, verificado e executado em processo filho isolado com `--timeout 1`: o convidado entra em loop infinito, o hospedeiro o mata com `SIGKILL`, emite `terminated category="guest-timeout"` e retorna `72` (`GuestTimeout`) | Diagnóstico de falhas |
 | `tl_thread.exe` | PE32+ AMD64 | Não | `KERNEL32.dll!CloseHandle`, `CreateThread`, `ExitProcess`, `ExitThread`, `GetStdHandle`, `WaitForSingleObject`, `WriteFile` | **Suportado no escopo da Fase 11**: cria duas threads sequenciais, cada uma escreve "Thread done" e termina via `ExitThread`; a thread principal aguarda cada handle, escreve "Main done" e encerra. Metadata e execução e2e passam em Debug, Release e Sanitize (`LSAN_OPTIONS=detect_leaks=0`); saída esperada: `Thread done\nThread done\nMain done\n` e exit `0` | Fase 11 |
@@ -171,6 +172,20 @@ diretamente. Ele é experimental, não altera o subsistema de console e só acei
 | `USER32.dll` | `BeginPaint` / `EndPaint` | Suportado | Preenchem o `PAINTSTRUCT` (layout Microsoft x64, 72 bytes) com o tamanho da janela e marcam/desmarcam o estado de pintura; `HDC == HWND` |
 | `GDI32.dll` | `GetStockObject` | Suportado | Token opaco por stock object (tabela estática, `object` em `0..23`); stock objects não são liberados |
 | `GDI32.dll` | `TextOutA` / `TextOut` | Suportado | Desenha texto ANSI com comprimento explícito via `XDrawString` no `HDC`/janela |
+
+### Diálogos e controles (Fase 13.11)
+
+| Módulo | APIs | Estado | Limite publicado |
+|---|---|---|---|
+| `USER32.dll` | `DialogBoxParamW`, `EndDialog`, `GetDlgItem`, `SetDlgItemTextW`, `SendDlgItemMessageW`, `GetNextDlgTabItem`, `IsDialogMessageW` | Suportado no subconjunto | Somente template numérico `RT_DIALOG` padrão do módulo atual; modal único; controles lógicos `BUTTON`/`EDIT`/`STATIC`/`COMBOBOX`; sem `DIALOGEX`, fontes, menus ou classes customizados |
+| `USER32.dll` | `GetWindowRect`, `GetWindowLongW`, `SetWindowLongW` | Suportado no subconjunto | Geometria side-table e wrappers limitados de 32 bits sobre `*Ptr` |
+| `USER32.dll` | `CopyImage`, `DestroyIcon` | Suportado no subconjunto | Tokens de ícone copiados; não há `LoadImageW` nem desenho de ícones |
+| `COMCTL32.dll` | `InitCommonControlsEx` | Suportado no layout de 8 bytes | Valida `cbSize`/classes; ordinais 410/413 continuam `unknown-ordinal` |
+
+`tl_dialog.exe` valida o ciclo mínimo sob Xvfb quando o ambiente fornece o
+socket X11. O smoke confirma Tab/Enter, `WM_COMMAND`, retorno 42, saída
+`dialog\n`, destruição modal e trace; sem X11, o teste é explicitamente
+`Skipped`.
 
 `tl_gui.exe` é validado automaticamente quanto a formato e imports; a janela
 deve ser validada manualmente numa sessão X11. `tl_win.exe`, `tl_win2.exe`,

@@ -378,6 +378,13 @@ struct GuestWndClassExW {
 };
 static_assert(sizeof(GuestWndClassExW) == 80);
 
+// INITCOMMONCONTROLSEX no ABI AMD64: cbSize e dwICC são DWORDs.
+struct GuestInitCommonControlsEx {
+    std::uint32_t size{};
+    std::uint32_t classes{};
+};
+static_assert(sizeof(GuestInitCommonControlsEx) == 8);
+
 // RECT com layout Microsoft x64 (16 bytes).
 struct GuestRect {
     std::int32_t left{};
@@ -767,6 +774,7 @@ TL_MSABI int tl_DeleteObject(const void* object) noexcept;
 TL_MSABI std::uint32_t tl_SetBkColor(const void* dc, std::uint32_t color) noexcept;
 TL_MSABI std::uint32_t tl_SetTextColor(const void* dc, std::uint32_t color) noexcept;
 TL_MSABI int tl_GetClientRect(const void* window, void* rect) noexcept;
+TL_MSABI int tl_GetWindowRect(const void* window, void* rect) noexcept;
 TL_MSABI int tl_GetCursorPos(void* point) noexcept;
 TL_MSABI int tl_MoveWindow(const void* window, int x, int y, int width, int height,
                            int repaint) noexcept;
@@ -797,6 +805,25 @@ TL_MSABI int tl_SendMessageA(const void* window, std::uint32_t message, abi::Wpa
                               abi::Lparam lparam) noexcept;
 TL_MSABI int tl_SendMessageW(const void* window, std::uint32_t message, abi::Wparam wparam,
                               abi::Lparam lparam) noexcept;
+TL_MSABI std::intptr_t tl_DialogBoxParamW(const void* instance, const std::uint16_t* template_name,
+                                           const void* parent, std::uintptr_t dialog_proc,
+                                           abi::Lparam init_param) noexcept;
+TL_MSABI int tl_EndDialog(const void* dialog, std::intptr_t result) noexcept;
+TL_MSABI void* tl_GetDlgItem(const void* dialog, int identifier) noexcept;
+TL_MSABI int tl_SetDlgItemTextW(const void* dialog, int identifier,
+                                const std::uint16_t* text) noexcept;
+TL_MSABI abi::Lresult tl_SendDlgItemMessageW(const void* dialog, int identifier,
+                                             std::uint32_t message, abi::Wparam wparam,
+                                             abi::Lparam lparam) noexcept;
+TL_MSABI void* tl_GetNextDlgTabItem(const void* dialog, const void* control,
+                                    int previous) noexcept;
+TL_MSABI int tl_IsDialogMessageW(const void* dialog, const void* message) noexcept;
+TL_MSABI std::int32_t tl_GetWindowLongW(const void* window, int index) noexcept;
+TL_MSABI std::int32_t tl_SetWindowLongW(const void* window, int index,
+                                        std::int32_t new_long) noexcept;
+TL_MSABI void* tl_CopyImage(const void* image, std::uint32_t image_type, int width, int height,
+                            std::uint32_t flags) noexcept;
+TL_MSABI int tl_DestroyIcon(const void* icon) noexcept;
 TL_MSABI int tl_PostMessageA(const void* window, std::uint32_t message, abi::Wparam wparam,
                               abi::Lparam lparam) noexcept;
 TL_MSABI int tl_PostMessageW(const void* window, std::uint32_t message, abi::Wparam wparam,

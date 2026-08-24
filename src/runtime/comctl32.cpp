@@ -1,9 +1,10 @@
 #include "tradutorlinux/runtime/comctl32.hpp"
+#include "tradutorlinux/runtime/winapi.hpp"
 
 #include <array>
 #include <cstdint>
 
-#include "tradutorlinux/runtime/memory_validator.hpp"
+#include "runtime_context.hpp"
 
 namespace tradutorlinux {
 
@@ -30,7 +31,24 @@ TL_COMCTL_MSABI void tl_InitCommonControls() noexcept {
 }
 
 TL_COMCTL_MSABI int tl_InitCommonControlsEx(const void* init_controls) noexcept {
-    (void)init_controls;
+    if (init_controls == nullptr ||
+        !mapped_range(init_controls, sizeof(abi::GuestInitCommonControlsEx), false)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    const auto* const value = static_cast<const abi::GuestInitCommonControlsEx*>(init_controls);
+    if (value->size != sizeof(abi::GuestInitCommonControlsEx)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    // ICC_* values currently defined by the SDK occupy the low 16 bits.  The
+    // runtime accepts initialization of those logical classes, while actual
+    // child controls remain limited to the USER32 renderer.
+    if ((value->classes & 0xFFFF0000U) != 0U || value->classes == 0U) {
+        set_last_error(abi::kErrorNotSupported);
+        return 0;
+    }
+    set_last_error(abi::kErrorSuccess);
     return 1;
 }
 

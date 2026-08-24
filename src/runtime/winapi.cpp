@@ -123,6 +123,11 @@ std::array<CriticalSectionEntry, 256> g_critical_sections{};
 std::array<ClassSlot, 32> g_classes{};
 std::array<WindowSlot, 32> g_windows{};
 WindowSlot* g_focused_control = nullptr;
+WindowSlot* g_active_dialog = nullptr;
+bool g_modal_done = false;
+std::intptr_t g_modal_result = 0;
+WindowSlot* g_modal_parent = nullptr;
+bool g_modal_parent_was_enabled = true;
 bool g_quit_requested = false;
 std::uint32_t g_quit_code = 0;
 

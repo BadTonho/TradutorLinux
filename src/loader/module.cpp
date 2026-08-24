@@ -498,6 +498,18 @@ void register_builtin_modules() {
         {"SendMessageW", 74, reinterpret_cast<std::uintptr_t>(&tl_SendMessageW)},
         {"PostMessageW", 75, reinterpret_cast<std::uintptr_t>(&tl_PostMessageW)},
         {"AppendMenuW", 76, reinterpret_cast<std::uintptr_t>(&tl_AppendMenuW)},
+        {"DialogBoxParamW", 77, reinterpret_cast<std::uintptr_t>(&tl_DialogBoxParamW)},
+        {"EndDialog", 78, reinterpret_cast<std::uintptr_t>(&tl_EndDialog)},
+        {"GetDlgItem", 79, reinterpret_cast<std::uintptr_t>(&tl_GetDlgItem)},
+        {"SetDlgItemTextW", 80, reinterpret_cast<std::uintptr_t>(&tl_SetDlgItemTextW)},
+        {"SendDlgItemMessageW", 81, reinterpret_cast<std::uintptr_t>(&tl_SendDlgItemMessageW)},
+        {"GetNextDlgTabItem", 82, reinterpret_cast<std::uintptr_t>(&tl_GetNextDlgTabItem)},
+        {"IsDialogMessageW", 83, reinterpret_cast<std::uintptr_t>(&tl_IsDialogMessageW)},
+        {"GetWindowRect", 84, reinterpret_cast<std::uintptr_t>(&tl_GetWindowRect)},
+        {"GetWindowLongW", 85, reinterpret_cast<std::uintptr_t>(&tl_GetWindowLongW)},
+        {"SetWindowLongW", 86, reinterpret_cast<std::uintptr_t>(&tl_SetWindowLongW)},
+        {"CopyImage", 87, reinterpret_cast<std::uintptr_t>(&tl_CopyImage)},
+        {"DestroyIcon", 88, reinterpret_cast<std::uintptr_t>(&tl_DestroyIcon)},
     };
     static const InternalModule kUser32Module{"USER32.dll", kUser32Exports};
     register_module(kUser32Module);

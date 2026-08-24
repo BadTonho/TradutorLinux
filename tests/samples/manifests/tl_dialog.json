@@ -1,0 +1,32 @@
+{
+  "name": "tl_dialog",
+  "format": "PE32+",
+  "machine": "AMD64",
+  "entry_point": "tl_entry",
+  "uses_crt": false,
+  "imports": {
+    "COMCTL32.dll": [
+      "InitCommonControlsEx"
+    ],
+    "KERNEL32.dll": [
+      "ExitProcess",
+      "GetModuleHandleW",
+      "GetStdHandle",
+      "WriteFile"
+    ],
+    "USER32.dll": [
+      "CopyImage",
+      "DestroyIcon",
+      "DialogBoxParamW",
+      "EndDialog",
+      "GetDlgItem",
+      "GetNextDlgTabItem",
+      "GetWindowLongW",
+      "GetWindowRect",
+      "LoadIconW",
+      "SendDlgItemMessageW",
+      "SetDlgItemTextW",
+      "SetWindowLongW"
+    ]
+  }
+}

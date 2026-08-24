@@ -103,3 +103,18 @@ o cabeçalho, o tamanho total, a quantidade de ACEs, cada `AceSize`, o tipo,
 flags e o SID embutido. Antes de escrever `TOKEN_USER`, descritor ou saída de
 ponteiro, valida a faixa completa da memória convidada. Os detalhes funcionais
 e os limites de ACL ficam em [seguranca-acl.md](seguranca-acl.md).
+
+## Diálogos padrão (Fase 13.11)
+
+O recurso `RT_DIALOG` aceito por `DialogBoxParamW` usa somente o layout padrão:
+`GuestDialogTemplate` e `GuestDialogItemTemplate` têm 18 bytes cada, com campos
+de 32 bits seguidos por palavras/coordenadas de 16 bits. Cada item começa em
+offset alinhado a DWORD; o parser copia os campos com validação de tamanho e
+nunca desreferencia uma estrutura não alinhada. `DIALOGEX`, fontes, menus ou
+classes customizados e classes de controle fora de `BUTTON`, `EDIT`, `STATIC` e
+`COMBOBOX` são rejeitados de forma controlada.
+
+`INITCOMMONCONTROLSEX` é validado como dois `DWORD` (8 bytes): `cbSize` precisa
+ser 8 e `dwICC` deve conter apenas classes comuns no conjunto de 16 bits. A
+validação não cria janelas X11 filhas e não torna os ordinais desconhecidos 410
+e 413 de `COMCTL32` resolvíveis.

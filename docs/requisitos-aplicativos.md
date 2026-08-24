@@ -25,19 +25,20 @@ posterior.
 | Aplicativo | Imports resolvidos | Imports ausentes | Bloqueio adicional | Estado |
 |---|---:|---:|---|---|
 | `RobloxPlayerInstaller.exe` | — | — | `UWOP_SET_FPREG` estendido incompatível antes da leitura de imports | `unsupported` |
-| `winrar-x64-723.exe` | 191/251 | 60 | GUI e APIs de sistema pendentes | `unsupported` |
+| `winrar-x64-723.exe` | 202/251 | 49 | GUI e APIs de sistema pendentes | `unsupported` |
 | `Creative_Cloud_Set-Up_7474.exe` | — | — | PE32 x86 (`0x14c`) | arquitetura não suportada |
 | `officedeploymenttool_20228-20124.exe` | — | — | PE32 x86 (`0x14c`) | arquitetura não suportada |
 | `Affinity x64.msix` | — | — | pacote MSIX; executável interno não localizado | formato não suportado |
 | `CapCut_7677236283084898320_installer.exe` | — | — | PE32 x86 (`0x14c`) | arquitetura não suportada |
 | `EpicInstaller-20.1.4-831cc1564f92442abc51fdb4a9854359.exe` | — | — | PE32 x86 (`0x14c`) + Mono/.NET | arquitetura/formato não suportados |
 | `lghub_installer.exe` | 105/114 | 9 | segurança e APIs pendentes | `unsupported` |
-| `Rockstar-Games-Launcher.exe` | 232/338 | 106 | GUI/rede e APIs pendentes | `unsupported` |
+| `Rockstar-Games-Launcher.exe` | 241/338 | 97 | GUI/rede e APIs pendentes | `unsupported` |
 
-Na Fase 13.10, WinRAR e Rockstar foram medidos novamente somente com
+Na Fase 13.11, WinRAR e Rockstar foram medidos novamente somente com
 `--report`; ambos continuam `unsupported`, retornam `5` e não foram executados.
-O SID/token/DACL virtual resolveu 10 imports no WinRAR e 7 no Rockstar. O
-binário Logitech não está disponível localmente, portanto permanece com a
+O subsistema de diálogos e controles resolveu mais 11 imports no WinRAR e 9 no
+Rockstar, sobre os resultados da Fase 13.10. O binário Logitech não está
+disponível localmente, portanto permanece com a
 medição anterior de 105/114. Os três ainda têm V2 e a forma aceita de
 `UWOP_SET_FPREG` classificados, dispatcher SEH explícito, ambiente/locale/FLS
 determinísticos e console W, mas dependem de GUI, rede e demais APIs ausentes.
@@ -389,15 +390,16 @@ contrato, fixture e regressão antes de ser promovido a suporte.
 | SHA-256 | `f435b24d4c2c5342c4f7c0143ef358f0f425b7b8a0972dd34d9dcf94789e9c4d` |
 | Imports estáticos | 156 em 3 DLLs |
 | Delay imports | 95 em 7 DLLs |
-| Resolvidos pelo runtime | 191/251 (132 estáticos + 59 atrasados), Fase 13.10 |
-| Ausentes | 60 (24 estáticos + 36 atrasados), Fase 13.10 |
+| Resolvidos pelo runtime | 202/251 (132 estáticos + 70 atrasados), Fase 13.11 |
+| Ausentes | 49 (24 estáticos + 25 atrasados), Fase 13.11 |
 | Mecanismo adicional | `delay-import` RVA resolvido antecipadamente; `.pdata`: 1316 funções (1313 V1, 3 V2), 3 epílogos, 2 `SET_FPREG` estendidos, 263 handlers e 14 cadeias |
-| Resultado do `--report` | Fase 13.10: `Unsupported`/exit `5` por imports ausentes; execução não tentada |
+| Resultado do `--report` | Fase 13.11: `Unsupported`/exit `5` por imports ausentes; execução não tentada |
 | Fonte | análise local de 2026-08-24 |
 
-Na Fase 13.10, o `--report` leu V2 e classificou todos os 251 imports sem
-executar o binário. Dos 95 símbolos atrasados, 59 foram resolvidos; o token/SID
-virtual e as DACLs acrescentaram dez imports. WinRAR permanece `unsupported`
+Na Fase 13.11, o `--report` leu V2 e classificou todos os 251 imports sem
+executar o binário. Dos 95 símbolos atrasados, 70 foram resolvidos; o token/SID
+virtual, as DACLs e o subconjunto modal acrescentaram 21 imports desde a Fase
+13.10. WinRAR permanece `unsupported`
 sobretudo por GUI e APIs de sistema restantes.
 
 ### Lacunas por módulo e mecanismo
@@ -408,7 +410,7 @@ sobretudo por GUI e APIs de sistema restantes.
 | `OLEAUT32.dll` | 2 |
 | `gdiplus.dll` | 0/8 |
 | delay `SHLWAPI.dll` | 1 |
-| delay `USER32.dll` | 22 |
+| delay `USER32.dll` | 11 |
 | delay `GDI32.dll` | 3 |
 | delay `ADVAPI32.dll` | 2 |
 | delay `SHELL32.dll` | 6 |
@@ -461,31 +463,20 @@ identificados contra a ABI compatível antes de qualquer implementação.
 SHAutoComplete
 ```
 
-#### `USER32.dll` (22)
+#### `USER32.dll` (11)
 
 ```text
-IsDialogMessageW
-DialogBoxParamW
-SendDlgItemMessageW
-DestroyIcon
-EndDialog
 SetUserObjectInformationW
 GetSysColor
 WaitForInputIdle
-CopyImage
 FindWindowExW
 PeekMessageW
 MapWindowPoints
 CopyRect
 CharUpperW
-SetWindowLongW
-GetWindowLongW
 GetWindow
-GetWindowRect
 SetProcessDefaultLayout
 GetClassNameW
-SetDlgItemTextW
-GetDlgItem
 ```
 
 #### `GDI32.dll` (3)
@@ -730,17 +721,17 @@ de segurança não declara suporte ao fluxo Logitech.
 | SHA-256 | `c70131cb0427d146c9489297822e99ad87d4d5e141fd999d19f00975ab1a31f2` |
 | Imports estáticos | 205 em 5 DLLs |
 | Delay imports | 133 em 11 DLLs |
-| Resolvidos pelo runtime | 232/338 (148 estáticos + 84 atrasados), Fase 13.10 |
-| Ausentes | 106 (57 estáticos + 49 atrasados), Fase 13.10 |
+| Resolvidos pelo runtime | 241/338 (148 estáticos + 93 atrasados), Fase 13.11 |
+| Ausentes | 97 (57 estáticos + 40 atrasados), Fase 13.11 |
 | Mecanismo adicional | `delay-import` RVA resolvido antecipadamente; `.pdata`: 2663 funções (2661 V1, 2 V2), 2 epílogos, 6 `SET_FPREG` estendidos, 356 handlers e 584 cadeias |
-| Resultado do `--report` | Fase 13.10: `Unsupported`/exit `5` por imports ausentes; execução não tentada |
+| Resultado do `--report` | Fase 13.11: `Unsupported`/exit `5` por imports ausentes; execução não tentada |
 | Fonte | análise local de 2026-08-24 |
 
-Na Fase 13.10, o `--report` aceitou a extensão observada em
+Na Fase 13.11, o `--report` aceitou a extensão observada em
 `UWOP_SET_FPREG` (RVA `0xcead8`, `OpInfo=3` igual ao `FrameOffset`) e
 classificou os 338 imports sem executar o binário. Ambiente, locale, FLS e o
 contexto de processo/console, enumeração de arquivos e segurança virtual
-resolveram 38 imports compartilhados; além das
+resolveram 47 imports compartilhados; além das
 lacunas em `KERNEL32`, ele requer controles comuns por ordinal, automação OLE,
 diálogo de impressão e uma camada HTTP WinINet.
 
@@ -753,7 +744,7 @@ diálogo de impressão e uma camada HTTP WinINet.
 | `OLEAUT32.dll` | 7 |
 | `COMCTL32.dll` | 2 |
 | `WININET.dll` | 11 |
-| delay `USER32.dll` | 28 |
+| delay `USER32.dll` | 19 |
 | delay `GDI32.dll` | 6 |
 | delay `ADVAPI32.dll` | 5 |
 | delay `SHELL32.dll` | 2 |
@@ -856,15 +847,11 @@ determinísticos locais.
 
 ### Imports atrasados ausentes
 
-#### `USER32.dll` (28)
+#### `USER32.dll` (19)
 
 ```text
-DialogBoxParamW
 GetDesktopWindow
-GetNextDlgTabItem
-DestroyIcon
 DrawTextW
-GetWindowRect
 ReleaseCapture
 SetCapture
 GetCapture
@@ -875,14 +862,9 @@ EmptyClipboard
 SetClipboardData
 CloseClipboard
 OpenClipboard
-GetDlgItem
-EndDialog
 BringWindowToTop
 CallWindowProcW
 MonitorFromWindow
-CopyImage
-SetWindowLongW
-GetWindowLongW
 DrawIconEx
 LoadImageW
 PtInRect
