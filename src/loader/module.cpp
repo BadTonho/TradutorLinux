@@ -686,6 +686,23 @@ void register_builtin_modules() {
         {"CryptAcquireContextW", 13, reinterpret_cast<std::uintptr_t>(&tl_CryptAcquireContextW)},
         {"CryptGenRandom", 14, reinterpret_cast<std::uintptr_t>(&tl_CryptGenRandom)},
         {"CryptReleaseContext", 15, reinterpret_cast<std::uintptr_t>(&tl_CryptReleaseContext)},
+        {"OpenProcessToken", 16, reinterpret_cast<std::uintptr_t>(&tl_OpenProcessToken)},
+        {"GetTokenInformation", 17, reinterpret_cast<std::uintptr_t>(&tl_GetTokenInformation)},
+        {"AllocateAndInitializeSid", 18, reinterpret_cast<std::uintptr_t>(&tl_AllocateAndInitializeSid)},
+        {"FreeSid", 19, reinterpret_cast<std::uintptr_t>(&tl_FreeSid)},
+        {"GetLengthSid", 20, reinterpret_cast<std::uintptr_t>(&tl_GetLengthSid)},
+        {"CopySid", 21, reinterpret_cast<std::uintptr_t>(&tl_CopySid)},
+        {"EqualSid", 22, reinterpret_cast<std::uintptr_t>(&tl_EqualSid)},
+        {"IsValidSid", 23, reinterpret_cast<std::uintptr_t>(&tl_IsValidSid)},
+        {"CreateWellKnownSid", 24, reinterpret_cast<std::uintptr_t>(&tl_CreateWellKnownSid)},
+        {"CheckTokenMembership", 25, reinterpret_cast<std::uintptr_t>(&tl_CheckTokenMembership)},
+        {"BuildTrusteeWithSidW", 26, reinterpret_cast<std::uintptr_t>(&tl_BuildTrusteeWithSidW)},
+        {"InitializeSecurityDescriptor", 27, reinterpret_cast<std::uintptr_t>(&tl_InitializeSecurityDescriptor)},
+        {"SetSecurityDescriptorDacl", 28, reinterpret_cast<std::uintptr_t>(&tl_SetSecurityDescriptorDacl)},
+        {"SetEntriesInAclW", 29, reinterpret_cast<std::uintptr_t>(&tl_SetEntriesInAclW)},
+        {"GetNamedSecurityInfoW", 30, reinterpret_cast<std::uintptr_t>(&tl_GetNamedSecurityInfoW)},
+        {"SetNamedSecurityInfoW", 31, reinterpret_cast<std::uintptr_t>(&tl_SetNamedSecurityInfoW)},
+        {"SetFileSecurityW", 32, reinterpret_cast<std::uintptr_t>(&tl_SetFileSecurityW)},
     };
     static const InternalModule kAdvapi32Module{"ADVAPI32.dll", kAdvapi32Exports};
     register_module(kAdvapi32Module);

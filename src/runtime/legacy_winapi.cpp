@@ -5,6 +5,7 @@
 #include "tradutorlinux/prefix/prefix.hpp"
 #include "tradutorlinux/runtime/error_map.hpp"
 #include "tradutorlinux/runtime/ntdll.hpp"
+#include "tradutorlinux/runtime/security.hpp"
 #include "tradutorlinux/util/unicode.hpp"
 
 #include <algorithm>
@@ -1035,6 +1036,7 @@ TL_MSABI int tl_MoveFileA(const char* from, const char* to) noexcept {
         set_last_error(errno_to_win32(errno));
         return 0;
     }
+    runtime::security::rename_path(std::filesystem::path{from_path}, std::filesystem::path{to_path});
     set_last_error(abi::kErrorSuccess);
     return 1;
 }
@@ -1238,6 +1240,9 @@ TL_MSABI int tl_CopyFileW(const std::uint16_t* from, const std::uint16_t* to,
         set_last_error(errno_to_win32(failure));
         return 0;
     }
+    // CopyFile cria um objeto novo com descritor padrão; uma eventual DACL
+    // virtual do destino substituído não pode acompanhar os bytes copiados.
+    runtime::security::remove_path(std::filesystem::path{target_path});
     set_last_error(abi::kErrorSuccess);
     return 1;
 }
@@ -1248,6 +1253,7 @@ TL_MSABI int tl_RemoveDirectoryW(const std::uint16_t* path) noexcept {
         set_last_error(errno_to_win32(errno));
         return 0;
     }
+    runtime::security::remove_path(std::filesystem::path{normalized});
     set_last_error(abi::kErrorSuccess);
     return 1;
 }
@@ -1736,6 +1742,7 @@ TL_MSABI int tl_SetFileInformationByHandle(const void* const handle, const int i
         }
         slot->unlinked = true;
         slot->delete_pending = false;
+        runtime::security::remove_path(std::filesystem::path{slot->path});
         trace_filesystem("set-information", "success", "posix-delete");
     } else {
         slot->delete_pending = true;

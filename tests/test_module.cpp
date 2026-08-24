@@ -1,4 +1,5 @@
 #include "tradutorlinux/loader/module.hpp"
+#include "tradutorlinux/runtime/advapi.hpp"
 #include "tradutorlinux/runtime/msvcrt.hpp"
 #include "tradutorlinux/runtime/unwind.hpp"
 #include "tradutorlinux/runtime/winapi.hpp"
@@ -164,6 +165,10 @@ TEST_F(ModuleTest, RegistersBuiltinKernel32Exports) {
     EXPECT_EQ(find_export_by_ordinal("SHELL32.dll", 1).address,
               reinterpret_cast<std::uintptr_t>(&tl_CommandLineToArgvW));
     EXPECT_EQ(find_export(ExportQuery{"ADVAPI32.dll", "RegOpenKeyExA"}).found, true);
+    EXPECT_EQ(find_export(ExportQuery{"ADVAPI32.dll", "GetNamedSecurityInfoW"}).address,
+              reinterpret_cast<std::uintptr_t>(&tl_GetNamedSecurityInfoW));
+    EXPECT_EQ(find_export(ExportQuery{"ADVAPI32.dll", "SetEntriesInAclW"}).address,
+              reinterpret_cast<std::uintptr_t>(&tl_SetEntriesInAclW));
 }
 
 TEST_F(ModuleTest, RegistersMsvcrtExports) {

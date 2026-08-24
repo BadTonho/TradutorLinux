@@ -62,6 +62,56 @@ TL_ADVAPI_MSABI int tl_CryptGenRandom(void* prov_handle, std::uint32_t length,
                                       std::uint8_t* buffer) noexcept;
 TL_ADVAPI_MSABI int tl_CryptReleaseContext(void* prov_handle, std::uint32_t flags) noexcept;
 
+TL_ADVAPI_MSABI int tl_OpenProcessToken(const void* process, std::uint32_t desired_access,
+                                        void** token) noexcept;
+TL_ADVAPI_MSABI int tl_GetTokenInformation(const void* token, std::uint32_t information_class,
+                                           void* information, std::uint32_t information_length,
+                                           std::uint32_t* return_length) noexcept;
+TL_ADVAPI_MSABI int tl_AllocateAndInitializeSid(const void* identifier_authority,
+                                                std::uint8_t sub_authority_count,
+                                                std::uint32_t sub_authority0,
+                                                std::uint32_t sub_authority1,
+                                                std::uint32_t sub_authority2,
+                                                std::uint32_t sub_authority3,
+                                                std::uint32_t sub_authority4,
+                                                std::uint32_t sub_authority5,
+                                                std::uint32_t sub_authority6,
+                                                std::uint32_t sub_authority7,
+                                                void** sid) noexcept;
+TL_ADVAPI_MSABI void* tl_FreeSid(void* sid) noexcept;
+TL_ADVAPI_MSABI std::uint32_t tl_GetLengthSid(const void* sid) noexcept;
+TL_ADVAPI_MSABI int tl_CopySid(std::uint32_t destination_length, void* destination,
+                               const void* source) noexcept;
+TL_ADVAPI_MSABI int tl_EqualSid(const void* first, const void* second) noexcept;
+TL_ADVAPI_MSABI int tl_IsValidSid(const void* sid) noexcept;
+TL_ADVAPI_MSABI int tl_CreateWellKnownSid(std::uint32_t well_known_sid_type,
+                                          const void* domain_sid, void* sid,
+                                          std::uint32_t* sid_size) noexcept;
+TL_ADVAPI_MSABI int tl_CheckTokenMembership(const void* token, const void* sid,
+                                            int* is_member) noexcept;
+TL_ADVAPI_MSABI void tl_BuildTrusteeWithSidW(void* trustee, void* sid) noexcept;
+TL_ADVAPI_MSABI int tl_InitializeSecurityDescriptor(void* descriptor,
+                                                     std::uint32_t revision) noexcept;
+TL_ADVAPI_MSABI int tl_SetSecurityDescriptorDacl(void* descriptor, int dacl_present,
+                                                 void* dacl, int dacl_defaulted) noexcept;
+TL_ADVAPI_MSABI std::uint32_t tl_SetEntriesInAclW(std::uint32_t entry_count,
+                                                  const void* entries, const void* old_acl,
+                                                  void** new_acl) noexcept;
+TL_ADVAPI_MSABI std::uint32_t tl_GetNamedSecurityInfoW(const std::uint16_t* object_name,
+                                                       std::uint32_t object_type,
+                                                       std::uint32_t security_information,
+                                                       void** owner, void** group, void** dacl,
+                                                       void** sacl, void** descriptor) noexcept;
+TL_ADVAPI_MSABI std::uint32_t tl_SetNamedSecurityInfoW(std::uint16_t* object_name,
+                                                       std::uint32_t object_type,
+                                                       std::uint32_t security_information,
+                                                       void* owner, void* group, void* dacl,
+                                                       void* sacl,
+                                                       std::uint32_t inheritance) noexcept;
+TL_ADVAPI_MSABI int tl_SetFileSecurityW(const std::uint16_t* file_name,
+                                        std::uint32_t security_information,
+                                        const void* security_descriptor) noexcept;
+
 }  // extern "C"
 
 }  // namespace tradutorlinux

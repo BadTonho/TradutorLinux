@@ -11,6 +11,7 @@
 #include "tradutorlinux/runtime/environment.hpp"
 #include "tradutorlinux/runtime/memory_validator.hpp"
 #include "tradutorlinux/runtime/msvcrt.hpp"
+#include "tradutorlinux/runtime/security.hpp"
 #include "tradutorlinux/runtime/teb.hpp"
 #include "tradutorlinux/util/basics.hpp"
 #include "tradutorlinux/util/unicode.hpp"
@@ -582,6 +583,7 @@ void set_guest_module_path(const char* path) noexcept {
 
 void set_guest_prefix_path(const std::filesystem::path& path) {
     g_guest_prefix_path = path;
+    runtime::security::reset_prefix_cache();
 }
 
 std::filesystem::path guest_prefix_root() {

@@ -25,22 +25,22 @@ posterior.
 | Aplicativo | Imports resolvidos | Imports ausentes | Bloqueio adicional | Estado |
 |---|---:|---:|---|---|
 | `RobloxPlayerInstaller.exe` | — | — | `UWOP_SET_FPREG` estendido incompatível antes da leitura de imports | `unsupported` |
-| `winrar-x64-723.exe` | 181/251 | 70 | GUI/segurança e APIs pendentes | `unsupported` |
+| `winrar-x64-723.exe` | 191/251 | 60 | GUI e APIs de sistema pendentes | `unsupported` |
 | `Creative_Cloud_Set-Up_7474.exe` | — | — | PE32 x86 (`0x14c`) | arquitetura não suportada |
 | `officedeploymenttool_20228-20124.exe` | — | — | PE32 x86 (`0x14c`) | arquitetura não suportada |
 | `Affinity x64.msix` | — | — | pacote MSIX; executável interno não localizado | formato não suportado |
 | `CapCut_7677236283084898320_installer.exe` | — | — | PE32 x86 (`0x14c`) | arquitetura não suportada |
 | `EpicInstaller-20.1.4-831cc1564f92442abc51fdb4a9854359.exe` | — | — | PE32 x86 (`0x14c`) + Mono/.NET | arquitetura/formato não suportados |
 | `lghub_installer.exe` | 105/114 | 9 | segurança e APIs pendentes | `unsupported` |
-| `Rockstar-Games-Launcher.exe` | 225/338 | 113 | GUI/segurança/rede e APIs pendentes | `unsupported` |
+| `Rockstar-Games-Launcher.exe` | 232/338 | 106 | GUI/rede e APIs pendentes | `unsupported` |
 
-Os totais de WinRAR, Logitech G HUB e Rockstar foram medidos novamente na Fase
-13.9 somente com `--report`; os binários não foram executados. A enumeração e
-os metadados de arquivo resolveram mais dois imports no WinRAR, Logitech G HUB
-e Rockstar. Eles têm V2 e a forma aceita de `UWOP_SET_FPREG` classificados,
-dispatcher SEH explícito, ambiente/locale/FLS determinísticos e console W, mas
-retornam `5` (`Unsupported`) pelas APIs de GUI, segurança e demais
-dependências ausentes.
+Na Fase 13.10, WinRAR e Rockstar foram medidos novamente somente com
+`--report`; ambos continuam `unsupported`, retornam `5` e não foram executados.
+O SID/token/DACL virtual resolveu 10 imports no WinRAR e 7 no Rockstar. O
+binário Logitech não está disponível localmente, portanto permanece com a
+medição anterior de 105/114. Os três ainda têm V2 e a forma aceita de
+`UWOP_SET_FPREG` classificados, dispatcher SEH explícito, ambiente/locale/FLS
+determinísticos e console W, mas dependem de GUI, rede e demais APIs ausentes.
 
 ## Recorrências observadas
 
@@ -50,7 +50,7 @@ dependências ausentes.
 | Unwinding/SEH x64 | Roblox, WinRAR, Logitech G HUB, Rockstar | núcleo `.pdata`/`.xdata` V1/V2, `Rtl*` e SEH explícito suportados; exceções C++, `__finally` e epílogo V2 pendentes |
 | Locale, code pages, FLS e ambiente | WinRAR, Logitech G HUB, Rockstar | núcleo determinístico `en-US`/1252/437, ambiente por processo e FLS por thread; validação, enumeração estática, `CT_CTYPE1` e data/hora en-US suportados; UI locale, mutação por thread e fibras reais pendentes |
 | Contexto de processo e console | WinRAR, Logitech G HUB, Rockstar | startup W, handles padrão, console UTF-16, diretório lógico, recursos AMD64, encode/decode e SList vazia suportados; alocação de console, herança explícita e operações interlocked pendentes |
-| Segurança, identidade e ACLs | Roblox, Logitech G HUB | pendente |
+| Segurança, identidade e ACLs | WinRAR, Logitech G HUB, Rockstar | token/SID virtual e DACL persistente para arquivos existentes em `C:\` por prefixo; sem SACL, privilégios, `AccessCheck` ou permissões Linux |
 | Pacote MSIX/AppX | Affinity | pendente |
 | `delay-import` | WinRAR, Rockstar | suportado para descritores RVA (`grAttrs=0x1`), com resolução antecipada |
 | Automação OLE | WinRAR, Rockstar | pendente |
@@ -90,9 +90,11 @@ Ordem de trabalho:
 8. [x] **Fase 13.8 — contexto de processo e console Win32**, comprovada por
    `tl_process_console.exe`.
 9. [x] **Fase 13.9 — enumeração e metadados de arquivos x64**, comprovada
-   por `tl_file_metadata.exe`. Depois, identidade/ACL,
-   controles GUI e, em subfases independentes, automação, HTTP e confiança,
-   na ordem e com os critérios registrados em `ROADMAP.md`.
+   por `tl_file_metadata.exe`.
+10. [x] **Fase 13.10 — identidade e DACL virtual por prefixo**, comprovada
+    por `tl_security.exe`. Controles GUI e, em subfases independentes,
+    automação, HTTP e confiança seguem na ordem e com os critérios registrados
+    em `ROADMAP.md`.
 
 Os instaladores PE32/x86, assemblies .NET/Mono e pacotes MSIX/AppX continuam
 catalogados, mas pertencem a trilhas posteriores: cada um exige uma capacidade
@@ -387,17 +389,16 @@ contrato, fixture e regressão antes de ser promovido a suporte.
 | SHA-256 | `f435b24d4c2c5342c4f7c0143ef358f0f425b7b8a0972dd34d9dcf94789e9c4d` |
 | Imports estáticos | 156 em 3 DLLs |
 | Delay imports | 95 em 7 DLLs |
-| Resolvidos pelo runtime | 181/251 (132 estáticos + 49 atrasados), Fase 13.9 |
-| Ausentes | 70 (24 estáticos + 46 atrasados), Fase 13.9 |
+| Resolvidos pelo runtime | 191/251 (132 estáticos + 59 atrasados), Fase 13.10 |
+| Ausentes | 60 (24 estáticos + 36 atrasados), Fase 13.10 |
 | Mecanismo adicional | `delay-import` RVA resolvido antecipadamente; `.pdata`: 1316 funções (1313 V1, 3 V2), 3 epílogos, 2 `SET_FPREG` estendidos, 263 handlers e 14 cadeias |
-| Resultado do `--report` | Fase 13.9: `Unsupported`/exit `5` por imports ausentes; execução não tentada |
-| Fonte | análise local de 2026-08-23 |
+| Resultado do `--report` | Fase 13.10: `Unsupported`/exit `5` por imports ausentes; execução não tentada |
+| Fonte | análise local de 2026-08-24 |
 
-Na Fase 13.9, o `--report` leu V2 e classificou todos os 251 imports sem
-executar o binário. Os 95 símbolos atrasados continuam inventariados por DLL,
-com 49 já resolvidos. A enumeração/metadados de arquivos elevou o total em dois
-imports; WinRAR permanece `unsupported` sobretudo por GUI, segurança e APIs de
-sistema restantes.
+Na Fase 13.10, o `--report` leu V2 e classificou todos os 251 imports sem
+executar o binário. Dos 95 símbolos atrasados, 59 foram resolvidos; o token/SID
+virtual e as DACLs acrescentaram dez imports. WinRAR permanece `unsupported`
+sobretudo por GUI e APIs de sistema restantes.
 
 ### Lacunas por módulo e mecanismo
 
@@ -409,7 +410,7 @@ sistema restantes.
 | delay `SHLWAPI.dll` | 1 |
 | delay `USER32.dll` | 22 |
 | delay `GDI32.dll` | 3 |
-| delay `ADVAPI32.dll` | 12 |
+| delay `ADVAPI32.dll` | 2 |
 | delay `SHELL32.dll` | 6 |
 | delay `ole32.dll` | 2 |
 
@@ -495,21 +496,11 @@ GetObjectW
 CreateDIBSection
 ```
 
-#### `ADVAPI32.dll` (12)
+#### `ADVAPI32.dll` (2)
 
 ```text
-FreeSid
-SetFileSecurityW
-InitializeSecurityDescriptor
-OpenProcessToken
 LookupPrivilegeValueW
 AdjustTokenPrivileges
-AllocateAndInitializeSid
-CheckTokenMembership
-SetSecurityDescriptorDacl
-GetTokenInformation
-CopySid
-SetEntriesInAclW
 ```
 
 #### `SHELL32.dll` (6)
@@ -536,8 +527,8 @@ Esta amostra reforça capacidades que podem beneficiar outros aplicativos:
 
 1. Contexto de processo/console, sobretudo `GetStartupInfoW`, handles padrão
    e as operações de console ainda ausentes.
-2. Enumeração/metadados de arquivo e identidade/ACL, avaliados junto com
-   outros alvos para evitar implementação exclusiva para o WinRAR.
+2. Diálogos/controles e APIs de sistema, após o núcleo de identidade/ACL
+   compartilhado já validado por fixture.
 
 ## `Creative_Cloud_Set-Up_7474.exe` (Adobe Creative Cloud Set-Up 7474)
 
@@ -707,9 +698,10 @@ SetEntriesInAclW
 SetNamedSecurityInfoW
 ```
 
-Essas APIs pedem uma camada de descritores de segurança, token de processo e
-ACLs com semântica própria; retornar sucesso sem aplicar a ACL não é suficiente
-para um instalador.
+Essas APIs motivaram a camada genérica de descritores, token de processo e
+DACL virtual entregue na Fase 13.10. Como o binário Logitech não está
+disponível nesta fase, essa evidência não altera sua contagem nem declara o
+fluxo do instalador suportado.
 
 #### `KERNEL32.dll` (4)
 
@@ -722,9 +714,10 @@ InitializeCriticalSectionEx
 
 ### Próxima investigação
 
-Este caso confirmou que enumeração/metadados de arquivos é uma capacidade
-compartilhada e foi promovida na Fase 13.9. ACLs continuam a exigir uma fixture
-de segurança genérica antes de serem consideradas suporte ao instalador.
+Este caso confirmou que enumeração/metadados de arquivos e identidade/DACL são
+capacidades compartilhadas, promovidas respectivamente nas Fases 13.9 e 13.10.
+A contagem e o estado deste instalador aguardam nova evidência local; a fixture
+de segurança não declara suporte ao fluxo Logitech.
 
 ## `Rockstar-Games-Launcher.exe` (Rockstar Games Launcher)
 
@@ -737,17 +730,17 @@ de segurança genérica antes de serem consideradas suporte ao instalador.
 | SHA-256 | `c70131cb0427d146c9489297822e99ad87d4d5e141fd999d19f00975ab1a31f2` |
 | Imports estáticos | 205 em 5 DLLs |
 | Delay imports | 133 em 11 DLLs |
-| Resolvidos pelo runtime | 225/338 (148 estáticos + 77 atrasados), Fase 13.9 |
-| Ausentes | 113 (57 estáticos + 56 atrasados), Fase 13.9 |
+| Resolvidos pelo runtime | 232/338 (148 estáticos + 84 atrasados), Fase 13.10 |
+| Ausentes | 106 (57 estáticos + 49 atrasados), Fase 13.10 |
 | Mecanismo adicional | `delay-import` RVA resolvido antecipadamente; `.pdata`: 2663 funções (2661 V1, 2 V2), 2 epílogos, 6 `SET_FPREG` estendidos, 356 handlers e 584 cadeias |
-| Resultado do `--report` | Fase 13.9: `Unsupported`/exit `5` por imports ausentes; execução não tentada |
-| Fonte | análise local de 2026-08-23 |
+| Resultado do `--report` | Fase 13.10: `Unsupported`/exit `5` por imports ausentes; execução não tentada |
+| Fonte | análise local de 2026-08-24 |
 
-Na Fase 13.9, o `--report` aceitou a extensão observada em
+Na Fase 13.10, o `--report` aceitou a extensão observada em
 `UWOP_SET_FPREG` (RVA `0xcead8`, `OpInfo=3` igual ao `FrameOffset`) e
 classificou os 338 imports sem executar o binário. Ambiente, locale, FLS e o
-contexto de processo/console e enumeração de arquivos resolveram 31 imports
-compartilhados; além das
+contexto de processo/console, enumeração de arquivos e segurança virtual
+resolveram 38 imports compartilhados; além das
 lacunas em `KERNEL32`, ele requer controles comuns por ordinal, automação OLE,
 diálogo de impressão e uma camada HTTP WinINet.
 
@@ -762,7 +755,7 @@ diálogo de impressão e uma camada HTTP WinINet.
 | `WININET.dll` | 11 |
 | delay `USER32.dll` | 28 |
 | delay `GDI32.dll` | 6 |
-| delay `ADVAPI32.dll` | 12 |
+| delay `ADVAPI32.dll` | 5 |
 | delay `SHELL32.dll` | 2 |
 | delay `ole32.dll` | 1 |
 | delay `SHLWAPI.dll` | 2 |
@@ -907,21 +900,14 @@ EndDoc
 StartDocW
 ```
 
-#### `ADVAPI32.dll` (12)
+#### `ADVAPI32.dll` (5)
 
 ```text
 RegDeleteTreeW
 RegEnumValueW
 RegEnumKeyExW
 RegDeleteKeyExW
-CreateWellKnownSid
-FreeSid
-BuildTrusteeWithSidW
-SetEntriesInAclW
 RegDeleteKeyW
-SetSecurityDescriptorDacl
-InitializeSecurityDescriptor
-AllocateAndInitializeSid
 ```
 
 #### `SHELL32.dll` (2)
@@ -961,8 +947,8 @@ WTHelperGetProvSignerFromChain
 
 ### Próxima investigação
 
-SEH x64, locale e contexto de processo/console já foram entregues, mas não
-resolvem as dependências restantes deste aplicativo. O próximo núcleo comum é
-enumeração/metadados de arquivos; para WinINet, OLE automation, controles
-comuns e impressão, a primeira entrega deve ser uma fixture genérica e
-reprodutível antes de qualquer tentativa de executar o Rockstar Launcher.
+SEH x64, locale, contexto de processo/console, enumeração de arquivos e
+identidade/DACL virtual já foram entregues, mas não resolvem as dependências
+restantes deste aplicativo. Para WinINet, OLE automation, controles comuns e
+impressão, a primeira entrega deve ser uma fixture genérica e reproduzível
+antes de qualquer tentativa de executar o Rockstar Launcher.

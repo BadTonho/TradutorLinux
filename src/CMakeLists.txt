@@ -24,6 +24,7 @@ add_library(tradutorlinux_core STATIC
     runtime/gui_controls.cpp
     runtime/msvcrt.cpp
     runtime/advapi.cpp
+    runtime/security.cpp
     runtime/ws2_32.cpp
     runtime/ole32.cpp
     runtime/shlwapi.cpp

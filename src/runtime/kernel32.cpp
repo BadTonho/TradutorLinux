@@ -7,6 +7,7 @@
 #include "tradutorlinux/runtime/environment.hpp"
 #include "tradutorlinux/runtime/msvcrt.hpp"
 #include "tradutorlinux/runtime/ntdll.hpp"
+#include "tradutorlinux/runtime/security.hpp"
 #include "tradutorlinux/runtime/unwind.hpp"
 #include "tradutorlinux/util/basics.hpp"
 #include "tradutorlinux/util/unicode.hpp"
@@ -1135,6 +1136,10 @@ TL_MSABI int tl_CloseHandle(const void* const handle) noexcept {
         set_last_error(abi::kErrorSuccess);
         return 1;
     }
+    if (runtime::security::close_token_handle(handle)) {
+        set_last_error(abi::kErrorSuccess);
+        return 1;
+    }
     if (FileSlot* slot = find_file_slot(handle); slot != nullptr) {
         std::lock_guard<std::mutex> lock(g_files_mutex);
         const bool delete_pending = slot->delete_pending && !slot->unlinked;
@@ -1150,6 +1155,7 @@ TL_MSABI int tl_CloseHandle(const void* const handle) noexcept {
         }
         set_last_error(abi::kErrorSuccess);
         if (delete_pending) {
+            runtime::security::remove_path(path);
             trace_filesystem("delete-on-close", "success", "removed");
         }
         return 1;
@@ -1447,6 +1453,7 @@ TL_MSABI int tl_DeleteFileA(const char* path) noexcept {
         set_last_error(errno_to_win32(errno));
         return 0;
     }
+    runtime::security::remove_path(std::filesystem::path{normalized});
     set_last_error(abi::kErrorSuccess);
     return 1;
 }
@@ -1461,6 +1468,7 @@ TL_MSABI int tl_DeleteFileW(const std::uint16_t* path) noexcept {
         set_last_error(errno_to_win32(errno));
         return 0;
     }
+    runtime::security::remove_path(std::filesystem::path{normalized});
     set_last_error(abi::kErrorSuccess);
     return 1;
 }

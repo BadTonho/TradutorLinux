@@ -88,3 +88,18 @@ A Fase 13.9 acrescenta `FILE_BASIC_INFO` (40 bytes),
 `FILE_DISPOSITION_INFO` (1 byte) e `FILE_DISPOSITION_INFO_EX` (4 bytes). As
 estruturas de enumeração `WIN32_FIND_DATAW` possuem 592 bytes; todos os
 ponteiros e tamanhos dessas estruturas são validados antes do acesso.
+
+## Identidade e descritores de segurança (Fase 13.10)
+
+Os layouts de segurança publicados usam ponteiros de 64 bits e o alinhamento
+Microsoft x64: `SID` começa com `GuestSidHeader` de 8 bytes e contém de 0 a 15
+subautoridades de 32 bits; `SID_AND_ATTRIBUTES` e `TOKEN_USER` têm 16 bytes;
+`TOKEN_ELEVATION`, 4; `SECURITY_DESCRIPTOR` absoluto, 40; `ACL`, 8;
+`TRUSTEE_W`, 32; e `EXPLICIT_ACCESS_W`, 48 bytes. O descritor é absoluto: os
+campos de owner, group, SACL e DACL são ponteiros, nunca offsets relativos.
+
+`ACL` e `SID` têm tamanho variável. Antes de usar uma ACE, o runtime valida
+o cabeçalho, o tamanho total, a quantidade de ACEs, cada `AceSize`, o tipo,
+flags e o SID embutido. Antes de escrever `TOKEN_USER`, descritor ou saída de
+ponteiro, valida a faixa completa da memória convidada. Os detalhes funcionais
+e os limites de ACL ficam em [seguranca-acl.md](seguranca-acl.md).

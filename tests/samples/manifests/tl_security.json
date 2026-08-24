@@ -1,0 +1,39 @@
+{
+  "name": "tl_security",
+  "format": "PE32+",
+  "machine": "AMD64",
+  "entry_point": "tl_entry",
+  "uses_crt": false,
+  "imports": {
+    "ADVAPI32.dll": [
+      "AllocateAndInitializeSid",
+      "BuildTrusteeWithSidW",
+      "CheckTokenMembership",
+      "CopySid",
+      "CreateWellKnownSid",
+      "EqualSid",
+      "FreeSid",
+      "GetLengthSid",
+      "GetNamedSecurityInfoW",
+      "GetTokenInformation",
+      "InitializeSecurityDescriptor",
+      "IsValidSid",
+      "OpenProcessToken",
+      "SetEntriesInAclW",
+      "SetFileSecurityW",
+      "SetNamedSecurityInfoW",
+      "SetSecurityDescriptorDacl"
+    ],
+    "KERNEL32.dll": [
+      "CloseHandle",
+      "CreateDirectoryW",
+      "CreateFileW",
+      "ExitProcess",
+      "GetCurrentProcess",
+      "GetLastError",
+      "GetStdHandle",
+      "LocalFree",
+      "WriteFile"
+    ]
+  }
+}

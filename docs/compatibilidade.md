@@ -28,6 +28,7 @@ Esta matriz declara o comportamento suportado; ela não é uma promessa de compa
 | `tl_locale_extended.exe` | PE32+ AMD64 | Não | `KERNEL32.dll` — validação de locale/code page, enumeração, tipo de caractere e formato de data/hora; console e `ExitProcess` | **Suportado no locale estático:** valida `en-US`/`0x0409`, CP1252/437/UTF-8, enumera o único locale por callback Microsoft x64, classifica `CT_CTYPE1` e formata data/hora en-US; imprime `locale-extended\n`, exit `0`. Metadata, `--report`, trace e execução são regressões CTest. | Locale determinístico ampliado |
 | `tl_process_console.exe` | PE32+ AMD64 | Não | `KERNEL32.dll` — startup, handles/tipo, console W, diretório do sistema, recursos do processador, ponteiros e SList | **Suportado no contexto determinístico:** valida `STARTUPINFOW`, troca/restaura stdout, lê UTF-8 como UTF-16, escreve `process-console-é\n`, consulta `C:\Windows\System32`, testa SSE2, encode/decode e SList alinhada; exit `0`. Metadata, `--report`, trace e execução são regressões CTest. | Processo e console Win32 |
 | `tl_file_metadata.exe` | PE32+ AMD64 | Não | `KERNEL32.dll` — enumeração ExW, atributos e metadados por handle | **Suportado no subconjunto de prefixo:** cria dados em `C:\`, enumera com `*`/`?`, alterna `READONLY`, aplica `FileBasicInfo` e testa exclusão no fechamento e POSIX; imprime `file-metadata\n`, exit `0`. Metadata, `--report`, trace e execução são regressões CTest. | Arquivos x64 |
+| `tl_security.exe` | PE32+ AMD64 | Não | `ADVAPI32.dll` — token/SID, descritor, DACL e `SetEntriesInAclW`; `KERNEL32.dll` — arquivo/console | **Suportado no subconjunto virtual por prefixo:** cria `C:\tl_security\acl.bin`, consulta `TokenUser` pelo protocolo de tamanho, verifica usuário não elevado, mescla/grava DACL e a lê numa segunda execução; imprime `security-write\n` e depois `security-read\n`. `runtime_tl_security_prefix` prova persistência e isolamento entre prefixos. | Identidade/DACL virtual |
 | `tl_crash.exe` | PE32+ AMD64 | Não | Nenhum | Gerado, verificado, mapeado e executado em processo filho isolado: o convidado acessa o endereço `0`, o hospedeiro observa o `SIGSEGV` via `waitpid`, emite `terminated category="guest-signal" signal="SIGSEGV" fault-address="0x0"` (o crash log captura o `si_addr` no filho e o converte em RVA/seção/importação quando o endereço cai dentro da imagem) e retorna `71` (`GuestFault`) | Diagnóstico de falhas |
 | `tl_hang.exe` | PE32+ AMD64 | Não | Nenhum | Gerado, verificado e executado em processo filho isolado com `--timeout 1`: o convidado entra em loop infinito, o hospedeiro o mata com `SIGKILL`, emite `terminated category="guest-timeout"` e retorna `72` (`GuestTimeout`) | Diagnóstico de falhas |
 | `tl_thread.exe` | PE32+ AMD64 | Não | `KERNEL32.dll!CloseHandle`, `CreateThread`, `ExitProcess`, `ExitThread`, `GetStdHandle`, `WaitForSingleObject`, `WriteFile` | **Suportado no escopo da Fase 11**: cria duas threads sequenciais, cada uma escreve "Thread done" e termina via `ExitThread`; a thread principal aguarda cada handle, escreve "Main done" e encerra. Metadata e execução e2e passam em Debug, Release e Sanitize (`LSAN_OPTIONS=detect_leaks=0`); saída esperada: `Thread done\nThread done\nMain done\n` e exit `0` | Fase 11 |
@@ -451,8 +452,30 @@ passa de ponta a ponta.
 de `RegCreateKeyEx[A/W]`, `RegOpenKeyEx[A/W]`, `RegSetValueEx[A/W]`,
 `RegQueryValueEx[A/W]`, `RegDeleteValue[A/W]` e `RegCloseKey` usa chaves/valores
 genéricos e persiste bytes, tipo e nomes UTF-8/UTF-16 em um arquivo por escopo
-(`APPDATA`, ou `TL_REGISTRY_FILE` para testes). Segurança, ACL, hive real,
-COM e `CRYPT32` continuam fora deste contrato.
+(`APPDATA`, ou `TL_REGISTRY_FILE` para testes). Hive real, COM e `CRYPT32`
+continuam fora deste contrato.
+
+## Segurança virtual por prefixo
+
+`ADVAPI32.dll` expõe token não elevado do processo atual, SID virtual
+persistente e DACLs para objetos existentes em `C:\` do prefixo. O owner/group
+fixo é o SID artificial `S-1-5-21-<a>-<b>-<c>-1000`; um objeto sem metadado
+recebe uma ACE allow `GENERIC_ALL` para ele. `GetNamedSecurityInfoW` retorna um
+bloco liberável por `LocalFree`; `SetNamedSecurityInfoW` e `SetFileSecurityW`
+persistem a DACL. Renomear preserva a DACL, excluir remove o metadado e copiar
+restaura o padrão.
+
+| Módulo | API | Estado | Comportamento suportado |
+|---|---|---|---|
+| `ADVAPI32.dll` | `OpenProcessToken`, `GetTokenInformation` | Suportado no subconjunto | Só `GetCurrentProcess()` + `TOKEN_QUERY`; `TokenUser` usa protocolo de buffer e `TokenElevation` é `0` |
+| `ADVAPI32.dll` | Operações de SID e `CheckTokenMembership` | Suportado no subconjunto | SID variável validado; World/Admin conhecidos; usuário virtual pertence apenas ao seu próprio SID |
+| `ADVAPI32.dll` | `InitializeSecurityDescriptor`, `SetSecurityDescriptorDacl`, `SetEntriesInAclW` | Suportado no subconjunto | Descritor absoluto e ACE allow/deny; `GRANT`, `SET`, `DENY`, `REVOKE`; somente trustee SID |
+| `ADVAPI32.dll` | `GetNamedSecurityInfoW`, `SetNamedSecurityInfoW`, `SetFileSecurityW` | Suportado no subconjunto | Arquivo existente em `C:\` do prefixo; owner/group imutáveis e DACL persistente |
+
+SACL, auditoria, herança complexa, trustees por nome, certificados, privilégios,
+elevação, `AccessCheck`, permissões POSIX e a identidade Linux não fazem parte
+do contrato. As DACLs não bloqueiam `CreateFile` e não constituem sandbox. Ver
+[seguranca-acl.md](arquitetura/seguranca-acl.md).
 
 ## COM mínimo (ole32)
 

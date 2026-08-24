@@ -154,6 +154,23 @@ o caminho Linux do hospedeiro:
 [tl][runtime][info] filesystem operation="set-information" status="success" detail="delete-on-close" scope="prefix"
 ```
 
+## Eventos de segurança
+
+A Fase 13.10 usa o evento `security` no componente `runtime` para token,
+descritor e merge de ACL. Ele nunca inclui caminho Linux, SID do host ou outra
+identidade do hospedeiro:
+
+```text
+[tl][runtime][info] security operation="token-information" status="success" detail="user" scope="prefix"
+[tl][runtime][info] security operation="set-entries" status="success" detail="dacl" scope="prefix"
+[tl][runtime][info] security operation="named-set" status="success" detail="dacl" scope="prefix"
+```
+
+Falhas de ponteiro, SID, ACL, objeto fora de `C:\` ou recurso fora do
+subconjunto seguem o retorno/`GetLastError` Win32. SACL, herança complexa e
+trustee não-SID retornam `ERROR_NOT_SUPPORTED`; nenhum desses eventos aplica
+permissões Linux.
+
 ## Componente `install`
 
 O comando `install` emite seus eventos neste componente, sempre em `stderr`.

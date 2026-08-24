@@ -530,6 +530,25 @@ tl_add_pe_fixture(tl_file_metadata src/tl_file_metadata.c manifests/tl_file_meta
     LINK_KERNEL32 EXPECT_RESOLVED CONSOLE REPORT RELOCATABLE
     REPORT_SYMBOL "SetFileInformationByHandle")
 
+tl_add_pe_fixture(tl_security src/tl_security.c manifests/tl_security.json
+    LINK_KERNEL32 LINK_ADVAPI32 EXPECT_RESOLVED CONSOLE REPORT RELOCATABLE NO_RUNTIME_CHECK
+    REPORT_SYMBOL "GetNamedSecurityInfoW")
+
+if(TARGET tradutorlinux)
+    add_test(
+        NAME runtime_tl_security_prefix
+        COMMAND "${CMAKE_COMMAND}"
+            "-DINPUT=${TL_FIXTURE_OUTPUT_DIRECTORY}/tl_security.exe"
+            "-DRUNTIME=$<TARGET_FILE:tradutorlinux>"
+            "-DWORK=${CMAKE_CURRENT_BINARY_DIR}/security-prefix-work"
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/verify_security_prefix.cmake"
+    )
+    set_tests_properties(runtime_tl_security_prefix PROPERTIES
+        DEPENDS fixture_tl_security_metadata
+        LABELS "runtime;pe32plus;security"
+    )
+endif()
+
 tl_add_pe_fixture(tl_resources src/tl_resources.c manifests/tl_resources.json
     LINK_KERNEL32 EXPECT_RESOLVED CONSOLE REPORT RELOCATABLE
     REPORT_SYMBOL "FindResourceW"

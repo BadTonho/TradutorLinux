@@ -32,6 +32,7 @@ using Atom = std::uint16_t;
 constexpr Dword kErrorSuccess = 0;
 constexpr Dword kErrorFileNotFound = 2;
 constexpr Dword kErrorNoMoreFiles = 18;
+constexpr Dword kErrorNotSupported = 50;
 constexpr Dword kErrorAccessDenied = 5;
 constexpr Dword kErrorInvalidHandle = 6;
 constexpr Dword kErrorNotEnoughMemory = 8;
@@ -495,6 +496,96 @@ struct GuestFileDispositionInfoEx {
     std::uint32_t flags{};
 };
 static_assert(sizeof(GuestFileDispositionInfoEx) == 4);
+
+// Estruturas de segurança no layout Microsoft x64. SID é variável: começa
+// com este cabeçalho de 8 bytes e contém N subautoridades de 32 bits.
+struct GuestSidHeader {
+    std::uint8_t revision{};
+    std::uint8_t sub_authority_count{};
+    std::uint8_t identifier_authority[6]{};
+};
+static_assert(sizeof(GuestSidHeader) == 8);
+
+struct GuestSidAndAttributes {
+    void* sid{};
+    std::uint32_t attributes{};
+    std::uint32_t padding{};
+};
+static_assert(sizeof(GuestSidAndAttributes) == 16);
+
+struct GuestTokenUser {
+    GuestSidAndAttributes user{};
+};
+static_assert(sizeof(GuestTokenUser) == 16);
+
+struct GuestTokenElevation {
+    std::uint32_t token_is_elevated{};
+};
+static_assert(sizeof(GuestTokenElevation) == 4);
+
+struct GuestSecurityDescriptor {
+    std::uint8_t revision{};
+    std::uint8_t sbz1{};
+    std::uint16_t control{};
+    std::uint32_t padding{};
+    void* owner{};
+    void* group{};
+    void* sacl{};
+    void* dacl{};
+};
+static_assert(sizeof(GuestSecurityDescriptor) == 40);
+
+struct GuestAcl {
+    std::uint8_t revision{};
+    std::uint8_t sbz1{};
+    std::uint16_t acl_size{};
+    std::uint16_t ace_count{};
+    std::uint16_t sbz2{};
+};
+static_assert(sizeof(GuestAcl) == 8);
+
+struct GuestTrusteeW {
+    void* multiple_trustee{};
+    std::uint32_t multiple_trustee_operation{};
+    std::uint32_t trustee_form{};
+    std::uint32_t trustee_type{};
+    std::uint32_t padding{};
+    void* name{};
+};
+static_assert(sizeof(GuestTrusteeW) == 32);
+
+struct GuestExplicitAccessW {
+    std::uint32_t access_permissions{};
+    std::uint32_t access_mode{};
+    std::uint32_t inheritance{};
+    std::uint32_t padding{};
+    GuestTrusteeW trustee{};
+};
+static_assert(sizeof(GuestExplicitAccessW) == 48);
+
+constexpr Dword kTokenUser = 1;
+constexpr Dword kTokenElevation = 20;
+constexpr Dword kTokenQuery = 0x0008U;
+constexpr Dword kOwnerSecurityInformation = 0x00000001U;
+constexpr Dword kGroupSecurityInformation = 0x00000002U;
+constexpr Dword kDaclSecurityInformation = 0x00000004U;
+constexpr Dword kSaclSecurityInformation = 0x00000008U;
+constexpr Dword kSeFileObject = 1;
+constexpr Dword kSecurityDescriptorRevision = 1;
+constexpr Dword kSeDaclPresent = 0x0004U;
+constexpr Dword kAclRevision = 2;
+constexpr Dword kAccessAllowedAceType = 0;
+constexpr Dword kAccessDeniedAceType = 1;
+constexpr Dword kGrantAccess = 1;
+constexpr Dword kSetAccess = 2;
+constexpr Dword kDenyAccess = 3;
+constexpr Dword kRevokeAccess = 4;
+constexpr Dword kTrusteeIsSid = 0;
+constexpr Dword kTrusteeIsUnknown = 0;
+constexpr Dword kNoMultipleTrustee = 0;
+constexpr Dword kWinWorldSid = 1;
+constexpr Dword kWinBuiltinAdministratorsSid = 26;
+constexpr Dword kGenericAll = 0x10000000U;
 
 struct alignas(16) GuestSListHeader {
     std::uint64_t alignment{};

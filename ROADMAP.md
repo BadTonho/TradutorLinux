@@ -112,8 +112,17 @@ Os itens marcados como concluídos devem ter evidência no repositório: código
   trace e execução passam em Debug e Sanitize. WinRAR (181/251), Logitech G
   HUB (105/114) e Rockstar (225/338) foram reanalisados somente com `--report`,
   continuam `unsupported` e não foram executados.
-- **Próximo resultado observável (Fase 13.10):** identidade e ACLs funcionais
-  por prefixo para as lacunas compartilhadas de segurança.
+- **Marco concluído (Fase 13.10):** `tl_security.exe` cria um arquivo em
+  `C:\\`, obtém `TokenUser` pelo protocolo de tamanho, confirma
+  `TokenElevation=0`, mescla/grava uma DACL e a relê na próxima execução. O
+  armazenamento versionado mantém SID artificial e DACL por prefixo; CTest
+  prova persistência em A, isolamento em B, metadata, `--report`, saída, exit
+  code e trace em Debug e Sanitize. WinRAR (191/251) e Rockstar (232/338) foram
+  reanalisados somente com `--report`, continuam `unsupported` e não foram
+  executados; Logitech G HUB (105/114) não foi alterado porque o binário não
+  está disponível localmente.
+- **Próximo resultado observável (Fase 13.11):** diálogos e controles GUI
+  reutilizáveis para o subconjunto compartilhado do portfólio.
 
 ### Estudo de caso: `RobloxPlayerInstaller.exe` (benchmark de cobertura)
 
@@ -514,16 +523,16 @@ nem declarar os benchmarks comerciais suportados.
 
 #### Fase 13.10 — identidade e ACLs funcionais por prefixo
 
-- [ ] Implementar uma representação coerente, limitada e persistente de SID,
+- [x] Implementar uma representação coerente, limitada e persistente de SID,
   token, descritor de segurança e DACL para os arquivos do prefixo, cobrindo
   as operações comuns exigidas por Logitech G HUB, WinRAR e Rockstar.
-- [ ] Incluir somente APIs validadas pelo fluxo: consulta de token/SID,
+- [x] Incluir somente APIs validadas pelo fluxo: consulta de token/SID,
   `Get/SetNamedSecurityInfoW`, `SetEntriesInAclW`,
   `InitializeSecurityDescriptor` e operações de SID/ACL associadas.
-- [ ] Criar fixture de segurança que consulta identidade e grava/lê uma DACL
+- [x] Criar fixture de segurança que consulta identidade e grava/lê uma DACL
   dentro do prefixo; provar que isso é compatibilidade funcional, **não**
   sandbox, autenticação do host ou aplicação real de permissões Linux.
-- [ ] Manter certificados, WinTrust, privilégios elevados, ACLs de rede e
+- [x] Manter certificados, WinTrust, privilégios elevados, ACLs de rede e
   herança complexa fora desta fase.
 
 #### Fase 13.11 — diálogos e controles GUI reutilizáveis
