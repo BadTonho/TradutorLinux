@@ -143,9 +143,14 @@ Os itens marcados como concluídos devem ter evidência no repositório: código
   `IStream`, referências, `Read`/`Write`, `Seek`, `SetSize`, `Stat`,
   `Commit`/`Revert` e liberação. Cópia, clone, regiões bloqueadas, `OLEAUT32`
   e `IDispatch` continuam fora do contrato; o Rockstar não foi executado.
-- **Próximo resultado observável (Fase 13.12):** cadeia de confiança/WinTrust
-  com política e certificados reproduzíveis, separada das entregas de OLE e
-  WinINet.
+- **Marco concluído (Fase 13.12 — cadeia WinTrust explícita):** `tl_trust.exe`
+  valida uma cadeia X.509 DER de dois certificados com raiz fornecida pela
+  fixture, rejeita política com UI e raiz incorreta e registra o mecanismo
+  `libcrypto`. Não há loja Windows, revogação, Authenticode ou suporte ao
+  Rockstar.
+- **Próximo resultado observável (Fase 13.12):** ampliar somente se surgir
+  uma fixture que justifique `CRYPT32`, `WTHelper*` ou Authenticode; os limites
+  atuais permanecem publicados.
 
 ### Estudo de caso: `RobloxPlayerInstaller.exe` (benchmark de cobertura)
 
@@ -221,7 +226,8 @@ reutilizáveis por várias classes de aplicativos. As lacunas observadas são:
 - [x] criar uma camada `WS2_32`/rede com sockets, resolução local e polling,
   validada somente em loopback;
 - [x] criar o armazenamento genérico Unicode de `ADVAPI32` para registro;
-  `CRYPT32`, identidade, segurança e certificados continuam pendentes;
+  `CRYPT32`, loja Windows, Authenticode e confiança fora do envelope `TLTC`
+  continuam pendentes;
 - [x] definir uma camada `OLE32`/COM mínima (`CoCreateInstance`/`CoGetClassObject`/`OleInitialize` via `ole32.dll`, fixture `tl_com.exe` cobre `S_OK`/`REGDB_E_CLASSNOTREG`/`CLASS_E_NOAGGREGATION`);
 - [x] ampliar a GUI de forma genérica: variantes Unicode de `USER32` (`RegisterClassExW`/`CreateWindowExW`/`DefWindowProcW`/`GetMessageW`/`DispatchMessageW`/`SetWindowTextW`/`GetWindowTextW`/`FindWindowW`/`LoadCursorW`/`SendMessageW` etc. via wrappers `wide_to_utf8`), validado por `tl_win_w.exe` sob `Xvfb` análogo a `tl_win`;
 - [ ] ampliar `SHELL32`/`SHLWAPI` para pastas conhecidas, execução de processos
@@ -582,8 +588,11 @@ nem declarar os benchmarks comerciais suportados.
   cobre HTTPS em loopback com CA TLS efêmera, CA não confiável, protocolo,
   handles e leitura; proxy, DNS externo, Internet e redirecionamento são
   rejeitados ou inexistentes.
-- [ ] Para confiança, não
-  afirmar validação de certificado até existir uma cadeia e política testadas.
+- [x] Para confiança, limitar a primeira entrega a `WinVerifyTrust` com
+  `WTD_CHOICE_BLOB`, política sem UI/revogação e cadeia DER explícita
+  folha→raiz; `tl_trust.exe` cobre metadados, `--report`, trace, sucesso,
+  política incompatível e raiz incorreta. `WTD_CHOICE_FILE`, Authenticode,
+  loja Windows, revogação e `WTHelper*` continuam fora do contrato.
 - [ ] Não usar esses componentes para declarar compatibilidade do Rockstar
   antes de validar um fluxo de instalação/atualização inteiro.
 
@@ -636,7 +645,7 @@ quantidade de APIs declaradas sem uso real.
 - [x] Criar um catálogo de aplicativos reais por categoria: console, arquivos, rede, ferramentas de desenvolvimento, produtividade e GUI (`docs/catalog.md` com `xxd`/`bzip2`/`dos2unix`/`tl_*`/`simple_todo`/`Roblox`).
 - [x] Manter níveis de compatibilidade: inicia, fluxo principal, uso diário e cobertura avançada (definidos em `docs/catalog.md`).
 - [x] Coletar imports de muitos aplicativos e priorizar APIs que aparecem em vários alvos (`Roblox` `430` imports, `gdiplus` `8/8`, `SHELL32` `5/5`).
-- [x] Implementar famílias de DLLs por demanda: `KERNEL32`, `NTDLL` limitada, `ADVAPI32`, `USER32`, `GDI32`, `SHELL32`, `OLE32`, `COMDLG32`, `WS2_32` e CRTs (18 módulos `tests/test_module.cpp:82`).
+- [x] Implementar famílias de DLLs por demanda: `KERNEL32`, `NTDLL` limitada, `ADVAPI32`, `USER32`, `GDI32`, `SHELL32`, `OLE32`, `COMDLG32`, `WS2_32`, `WININET`, `WINTRUST` e CRTs (22 módulos `tests/test_module.cpp:87`).
 - [x] Criar testes de integração por aplicativo e uma matriz pública de limitações (`docs/compatibilidade.md` + `tests/samples` 32 fixtures).
 - [x] Adicionar execução isolada, timeout, limites de recursos e diagnóstico para que aplicativos grandes não derrubem o host (`process/isolate.cpp` `71`/`72`).
 - [ ] Avaliar compatibilidade por versões e builds específicos, sem assumir que duas versões do mesmo aplicativo usam as mesmas APIs.

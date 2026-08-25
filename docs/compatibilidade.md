@@ -41,6 +41,7 @@ Esta matriz declara o comportamento suportado; ela não é uma promessa de compa
 | `tl_network_loopback.exe` | PE32+ AMD64 | Não | `WS2_32.dll` TCP/UDP, resolução local e `WSAPoll` | Fixture somente loopback, com TCP, UDP e `localhost`; passa com sockets permitidos e é skip controlado em sandbox que retorna `EACCES/EPERM` | WS2_32 |
 | `tl_wininet.exe` | PE32+ AMD64 | Não | `WININET.dll` — abertura, conexão HTTPS, requisição, cabeçalhos, resposta, leitura, consulta e fechamento; `KERNEL32.dll` — ambiente/console | **Suportado somente para protocolo HTTPS loopback:** o smoke cria servidor TLS e CA efêmeros em `127.0.0.1`, valida URL, cabeçalho, status `200`, leitura parcial e CA confiável; uma CA diferente falha de forma controlada. Sem Internet, proxy, cookies, credenciais, redirecionamento ou WinTrust. | WinINet HTTPS local |
 | `tl_stream.exe` | PE32+ AMD64 | Não | `ole32.dll!CreateStreamOnHGlobal`; vtable `IStream` | **Suportado no subconjunto de stream em memória:** `QueryInterface`, referências, `Read`/`Write`, `Seek`, `SetSize`, `Stat`, `Commit`/`Revert`; saída `ole-stream\n`, exit `0` | OLE stream em memória |
+| `tl_trust.exe` | PE32+ AMD64 | Não | `WINTRUST.dll!WinVerifyTrust`; `KERNEL32.dll` — console | **Suportado somente na política de blob TLTC:** cadeia DER explícita folha→raiz, UI desabilitada e sem revogação; rejeita raiz incorreta e política incompatível; saída `trust\n`, exit `0` | Cadeia WinTrust local |
 | `tl_registry_unicode.exe` | PE32+ AMD64 | Não | `ADVAPI32.dll` chaves/valores Unicode | Cria, persiste, reabre, consulta e remove chave/valor UTF-16 em armazenamento genérico por escopo; saída `registry\n`, exit `0` | Registro |
 | `tl_dynload.exe` | PE32+ AMD64 | Não | `KERNEL32.dll` — `LoadLibraryA/W/ExA/ExW`, `FreeLibrary`, `GetModuleHandleA/W/ExA/ExW`, `GetProcAddress`, `GetLastError` | Fixture de carregamento dinâmico: `LoadLibrary` com caminho `C:\...`, API Set `api-ms-win-core-file-l1-1-0.dll`, `LoadLibraryEx`, `GetProcAddress` por nome e ordinal (36=`GetTickCount64`), `FreeLibrary`, `GetModuleHandleEx` `PIN`/`FROM_ADDRESS`; saída `dynload\n`, exit `0` | Carregamento dinâmico |
 | `tl_version.exe` | PE32+ AMD64 | Não | `KERNEL32.dll` — `GetVersionExA/W`, `VerifyVersionInfoW`, `VerSetConditionMask`, `GetUserDefaultLocaleName`, `LocaleNameToLCID` | Fixture versão/locale: `GetVersionExA/W` 10.0.19044, `VerifyVersionInfoW`/`VerSetConditionMask` cadeia `VER_MAJOR|MINOR`, `GetUserDefaultLocaleName` → `en-US` (6 com NUL, `122` em buffer curto), `LocaleNameToLCID` `en-US`/`pt-BR`; saída `version\n`, exit `0` | Versão/locale |
@@ -471,6 +472,19 @@ redirecionamento. A CA é fornecida somente pelo host via
 um teste TLS local; não há loja de certificados, validação de cadeia Windows
 nem WinTrust. O contrato completo está em
 [`wininet.md`](arquitetura/wininet.md).
+
+## Cadeia WinTrust explícita
+
+`WINTRUST.dll` expõe apenas `WinVerifyTrust` no contrato de blob descrito em
+[`wintrust.md`](arquitetura/wintrust.md). A fixture `tl_trust.exe` usa dois
+certificados DER reais (folha e raiz) e uma política sem UI ou revogação; a
+verificação usa `libcrypto` carregada dinamicamente e uma loja formada somente
+pela raiz fornecida. Não há loja de certificados do sistema, Authenticode,
+`WTD_CHOICE_FILE`, catálogo, revogação ou resolução dos quatro `WTHelper*`.
+
+| Módulo | API | Estado | Comportamento suportado |
+|---|---|---|---|
+| `WINTRUST.dll` | `WinVerifyTrust` | Suportado no subconjunto | Valida `WINTRUST_ACTION_GENERIC_VERIFY_V2` + `WTD_CHOICE_BLOB` com envelope `TLTC`, cadeia de dois DER, assinatura/validade X.509 e raiz explícita; HRESULT não nulo para política ou cadeia inválida |
 
 ## Registro genérico
 

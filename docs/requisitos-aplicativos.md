@@ -56,6 +56,7 @@ determinísticos e console W, mas dependem de GUI, rede e demais APIs ausentes.
 | `delay-import` | WinRAR, Rockstar | suportado para descritores RVA (`grAttrs=0x1`), com resolução antecipada |
 | Automação OLE | WinRAR, Rockstar | `CreateStreamOnHGlobal` entregue como stream em memória em `tl_stream.exe`; `OLEAUT32`/`IDispatch` pendentes |
 | HTTP WinINet | Rockstar + fixture de protocolo | subconjunto HTTPS direto de loopback entregue em `tl_wininet.exe`; sem execução do Rockstar |
+| Certificados/WinTrust | Rockstar + fixture de protocolo | cadeia DER explícita em `tl_trust.exe` com política sem UI/revogação; Authenticode, loja Windows e `WTHelper*` pendentes |
 
 ## Prioridade ativa — instaladores PE32+ x86-64
 
@@ -939,6 +940,7 @@ WTHelperGetProvSignerFromChain
 SEH x64, locale, contexto de processo/console, enumeração de arquivos e
 identidade/DACL virtual já foram entregues, mas não resolvem as dependências
 restantes deste aplicativo. WinINet e o stream OLE têm fixtures genéricas
-reproduzíveis; a automação `OLEAUT32`/`IDispatch`, controles comuns restantes e
-impressão ainda exigem contratos próprios antes de qualquer tentativa de
-executar o Rockstar Launcher.
+reproduzíveis; a primeira cadeia WinTrust também é coberta por `tl_trust.exe`.
+A automação `OLEAUT32`/`IDispatch`, Authenticode/loja Windows, controles comuns
+restantes e impressão ainda exigem contratos próprios antes de qualquer
+tentativa de executar o Rockstar Launcher.

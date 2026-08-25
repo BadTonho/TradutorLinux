@@ -1,0 +1,214 @@
+#include "tradutorlinux/runtime/wintrust.hpp"
+
+#include "tradutorlinux/diagnostics/trace.hpp"
+#include "tradutorlinux/runtime/memory_validator.hpp"
+
+#include <algorithm>
+#include <array>
+#include <cstddef>
+#include <cstdint>
+#include <cstring>
+#include <dlfcn.h>
+#include <iostream>
+#include <limits>
+#include <mutex>
+#include <utility>
+#include <vector>
+
+namespace tradutorlinux {
+namespace {
+
+using OpenSslX509 = void;
+using OpenSslStore = void;
+using OpenSslStoreContext = void;
+
+constexpr std::size_t kMaxCertificateSize = 1024U * 1024U;
+constexpr std::size_t kMaxPayloadSize = 2U * kMaxCertificateSize + 32U;
+constexpr std::array<std::uint8_t, 16> kGenericVerifyV2{
+    0x6B, 0xC5, 0xAA, 0x00, 0x44, 0xCD, 0xD0, 0x11,
+    0x8C, 0xC2, 0x00, 0xC0, 0x4F, 0xC2, 0x95, 0xEE,
+};
+constexpr std::array<std::uint8_t, 4> kPayloadMagic{'T', 'L', 'T', 'C'};
+
+void trace_trust(const char* const operation, const char* const status,
+                 const char* const policy, const char* const mechanism) noexcept {
+    const std::array<diagnostics::TraceField, 4> fields{
+        diagnostics::TraceField{"operation", operation},
+        diagnostics::TraceField{"status", status},
+        diagnostics::TraceField{"policy", policy},
+        diagnostics::TraceField{"mechanism", mechanism},
+    };
+    diagnostics::write_trace(std::cerr, diagnostics::TraceComponent::Runtime,
+                             diagnostics::TraceLevel::Info, "wintrust", fields);
+}
+
+bool mapped_range(const void* const address, const std::size_t size,
+                  const bool writable) noexcept {
+    return runtime::validate_mapped_range(address, size, writable);
+}
+
+struct OpenSslApi {
+    using D2iX509 = OpenSslX509* (*)(OpenSslX509**, const unsigned char**, long);
+    using X509Free = void (*)(OpenSslX509*);
+    using StoreNew = OpenSslStore* (*)();
+    using StoreFree = void (*)(OpenSslStore*);
+    using StoreAddCert = int (*)(OpenSslStore*, OpenSslX509*);
+    using StoreContextNew = OpenSslStoreContext* (*)();
+    using StoreContextFree = void (*)(OpenSslStoreContext*);
+    using StoreContextInit = int (*)(OpenSslStoreContext*, OpenSslStore*, OpenSslX509*, void*);
+    using VerifyCertificate = int (*)(OpenSslStoreContext*);
+
+    void* library{nullptr};
+    D2iX509 d2i_x509{nullptr};
+    X509Free x509_free{nullptr};
+    StoreNew store_new{nullptr};
+    StoreFree store_free{nullptr};
+    StoreAddCert store_add_cert{nullptr};
+    StoreContextNew store_context_new{nullptr};
+    StoreContextFree store_context_free{nullptr};
+    StoreContextInit store_context_init{nullptr};
+    VerifyCertificate verify_certificate{nullptr};
+    bool initialized{false};
+    std::mutex mutex;
+
+    ~OpenSslApi() {
+        if (library != nullptr) dlclose(library);
+    }
+
+    template <typename T>
+    bool resolve(T& destination, const char* const name) noexcept {
+        void* symbol = dlsym(library, name);
+        if (symbol == nullptr) return false;
+        destination = reinterpret_cast<T>(symbol);
+        return true;
+    }
+
+    bool ensure() noexcept {
+        std::lock_guard<std::mutex> lock(mutex);
+        if (initialized) return true;
+        library = dlopen("libcrypto.so.3", RTLD_NOW | RTLD_LOCAL);
+        if (library == nullptr) library = dlopen("libcrypto.so", RTLD_NOW | RTLD_LOCAL);
+        if (library == nullptr ||
+            !resolve(d2i_x509, "d2i_X509") ||
+            !resolve(x509_free, "X509_free") ||
+            !resolve(store_new, "X509_STORE_new") ||
+            !resolve(store_free, "X509_STORE_free") ||
+            !resolve(store_add_cert, "X509_STORE_add_cert") ||
+            !resolve(store_context_new, "X509_STORE_CTX_new") ||
+            !resolve(store_context_free, "X509_STORE_CTX_free") ||
+            !resolve(store_context_init, "X509_STORE_CTX_init") ||
+            !resolve(verify_certificate, "X509_verify_cert")) {
+            return false;
+        }
+        initialized = true;
+        return true;
+    }
+};
+
+OpenSslApi g_openssl;
+
+bool read_u32(const std::vector<std::uint8_t>& payload, std::size_t& offset,
+              std::uint32_t& value) noexcept {
+    if (offset > payload.size() || payload.size() - offset < sizeof(value)) return false;
+    std::memcpy(&value, payload.data() + offset, sizeof(value));
+    offset += sizeof(value);
+    return true;
+}
+
+bool parse_payload(const std::uint8_t* const source, const std::uint32_t size,
+                   std::vector<std::vector<std::uint8_t>>& certificates) noexcept {
+    certificates.clear();
+    if (source == nullptr || size < 12U || size > kMaxPayloadSize ||
+        !mapped_range(source, size, false)) return false;
+    std::vector<std::uint8_t> payload(size);
+    std::memcpy(payload.data(), source, size);
+    if (!std::equal(kPayloadMagic.begin(), kPayloadMagic.end(), payload.begin())) return false;
+    std::size_t offset = kPayloadMagic.size();
+    std::uint32_t version = 0;
+    std::uint32_t count = 0;
+    if (!read_u32(payload, offset, version) || !read_u32(payload, offset, count) ||
+        version != 1U || count != 2U) return false;
+    for (std::uint32_t index = 0; index < count; ++index) {
+        std::uint32_t length = 0;
+        if (!read_u32(payload, offset, length) || length == 0U || length > kMaxCertificateSize ||
+            offset > payload.size() || payload.size() - offset < length) return false;
+        certificates.emplace_back(payload.begin() + static_cast<std::ptrdiff_t>(offset),
+                                  payload.begin() + static_cast<std::ptrdiff_t>(offset + length));
+        offset += length;
+    }
+    return offset == payload.size();
+}
+
+std::int32_t verify_payload(const std::vector<std::vector<std::uint8_t>>& certificates) noexcept {
+    if (certificates.size() != 2U || !g_openssl.ensure()) return kTrustProviderUnknown;
+
+    const auto parse_certificate = [](const std::vector<std::uint8_t>& der,
+                                      OpenSslX509*& certificate) noexcept {
+        const unsigned char* cursor = der.data();
+        certificate = g_openssl.d2i_x509(nullptr, &cursor, static_cast<long>(der.size()));
+        return certificate != nullptr && cursor == der.data() + der.size();
+    };
+
+    OpenSslX509* leaf = nullptr;
+    OpenSslX509* root = nullptr;
+    if (!parse_certificate(certificates[0], leaf) || !parse_certificate(certificates[1], root)) {
+        if (leaf != nullptr) g_openssl.x509_free(leaf);
+        if (root != nullptr) g_openssl.x509_free(root);
+        return kTrustInvalidParameter;
+    }
+
+    OpenSslStore* store = g_openssl.store_new();
+    OpenSslStoreContext* context = store == nullptr ? nullptr : g_openssl.store_context_new();
+    const bool ready = store != nullptr && context != nullptr &&
+                       g_openssl.store_add_cert(store, root) == 1 &&
+                       g_openssl.store_context_init(context, store, leaf, nullptr) == 1;
+    const int verified = ready ? g_openssl.verify_certificate(context) : 0;
+    if (context != nullptr) g_openssl.store_context_free(context);
+    if (store != nullptr) g_openssl.store_free(store);
+    g_openssl.x509_free(leaf);
+    g_openssl.x509_free(root);
+    return ready && verified == 1 ? kTrustSuccess : kTrustUntrustedRoot;
+}
+
+}  // namespace
+
+extern "C" {
+
+TL_WINTRUST_MSABI std::int32_t tl_WinVerifyTrust(void* const hwnd, const void* const action,
+                                                  GuestWintrustData* const data) noexcept {
+    (void)hwnd;
+    if (action == nullptr || data == nullptr || !mapped_range(action, kGenericVerifyV2.size(), false) ||
+        !mapped_range(data, sizeof(*data), true) ||
+        std::memcmp(action, kGenericVerifyV2.data(), kGenericVerifyV2.size()) != 0 ||
+        data->cb_struct != sizeof(GuestWintrustData) || data->policy_callback_data != nullptr ||
+        data->sip_client_data != nullptr || data->ui_choice != kWtdUiNone ||
+        data->revocation_checks != kWtdRevokeNone || data->union_choice != kWtdChoiceBlob ||
+        data->state_action != kWtdStateActionIgnore || data->state_data != nullptr ||
+        data->url_reference != nullptr || data->provider_flags != 0U || data->ui_context != 0U ||
+        data->signature_settings != nullptr || data->union_data == nullptr ||
+        !mapped_range(data->union_data, sizeof(GuestWintrustBlobInfo), true)) {
+        trace_trust("verify", "invalid", "explicit-chain", "openssl");
+        return kTrustInvalidParameter;
+    }
+    auto* const blob = static_cast<GuestWintrustBlobInfo*>(data->union_data);
+    if (blob->cb_struct != sizeof(GuestWintrustBlobInfo) || blob->cb_mem_object == 0U ||
+        blob->pb_mem_object == nullptr || !mapped_range(blob->pb_mem_object, blob->cb_mem_object, false)) {
+        trace_trust("verify", "invalid", "explicit-chain", "openssl");
+        return kTrustInvalidParameter;
+    }
+    std::vector<std::vector<std::uint8_t>> certificates;
+    if (!parse_payload(blob->pb_mem_object, blob->cb_mem_object, certificates)) {
+        trace_trust("verify", "invalid", "explicit-chain", "openssl");
+        return kTrustInvalidParameter;
+    }
+    const std::int32_t result = verify_payload(certificates);
+    const char* const status = result == kTrustSuccess ? "success" :
+                               result == kTrustInvalidParameter ? "invalid" : "untrusted";
+    trace_trust("verify", status,
+                "explicit-chain", result == kTrustProviderUnknown ? "unavailable" : "openssl");
+    return result;
+}
+
+}  // extern "C"
+
+}  // namespace tradutorlinux

@@ -4,6 +4,7 @@
 #include "tradutorlinux/runtime/dialog_template.hpp"
 #include "tradutorlinux/runtime/ole32.hpp"
 #include "tradutorlinux/runtime/wininet.hpp"
+#include "tradutorlinux/runtime/wintrust.hpp"
 #include "tradutorlinux/prefix/prefix.hpp"
 #include "../src/runtime/runtime_context.hpp"
 
@@ -160,6 +161,15 @@ TEST(OleStreamTest, RejectsExternalHGlobalAndUnknownInterface) {
     EXPECT_EQ(stream->vtable->query_interface(stream, unknown_iid, &queried), kENoInterface);
     EXPECT_EQ(queried, nullptr);
     EXPECT_EQ(stream->vtable->release(stream), 0U);
+}
+
+TEST(WintrustTest, RejectsUnsupportedPolicyBeforeCertificateProvider) {
+    GuestWintrustData data{};
+    EXPECT_EQ(tl_WinVerifyTrust(nullptr, nullptr, &data), kTrustInvalidParameter);
+
+    constexpr std::uint8_t wrong_action[16]{};
+    data.cb_struct = sizeof(data);
+    EXPECT_EQ(tl_WinVerifyTrust(nullptr, wrong_action, &data), kTrustInvalidParameter);
 }
 
 TEST(Win32CodePageTest, Cp1252ConvertsByte80ToEuroSign) {

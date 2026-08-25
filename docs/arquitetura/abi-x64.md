@@ -118,3 +118,16 @@ classes customizados e classes de controle fora de `BUTTON`, `EDIT`, `STATIC` e
 ser 8 e `dwICC` deve conter apenas classes comuns no conjunto de 16 bits. A
 validação não cria janelas X11 filhas e não torna os ordinais desconhecidos 410
 e 413 de `COMCTL32` resolvíveis.
+
+## WinTrust e cadeia de certificados (Fase 13.12)
+
+`WinVerifyTrust` recebe `HWND` em `RCX`, a ação em `RDX` e `WINTRUST_DATA*`
+em `R8`, todos pela fronteira `ms_abi`. O layout publicado em
+`include/tradutorlinux/runtime/wintrust.hpp` mantém `GuestWintrustBlobInfo` em
+40 bytes e `GuestWintrustData` em 88 bytes; os campos de ponteiro seguem o
+alinhamento Microsoft x64 e são validados antes da leitura.
+
+O contrato de confiança usa somente `WTD_CHOICE_BLOB` com a ação
+`WINTRUST_ACTION_GENERIC_VERIFY_V2` e o envelope DER `TLTC` documentado em
+[`wintrust.md`](wintrust.md). A saída é um HRESULT explícito; nenhuma exceção,
+ponteiro OpenSSL ou estrutura Linux atravessa a fronteira do convidado.

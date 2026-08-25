@@ -52,6 +52,7 @@ promessa de suporte universal; cada entrada é verificada via `tests/samples` ou
 | `tl_shell.exe` | SHELL32 5 | **fluxo principal** | pastas conhecidas |
 | `tl_com.exe` | ole32 9 | **fluxo principal** | `CoCreateInstance` `REGDB_E_CLASSNOTREG` |
 | `tl_stream.exe` | ole32 1 + `IStream` | **fluxo principal restrito** | stream em memória, referências e round-trip |
+| `tl_trust.exe` | WINTRUST 1 | **fluxo principal restrito** | cadeia DER explícita folha→raiz, raiz incorreta rejeitada |
 
 ## Benchmark de cobertura
 

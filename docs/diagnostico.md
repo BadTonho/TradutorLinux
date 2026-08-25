@@ -201,6 +201,19 @@ O subconjunto não inclui conteúdo, endereços ou caminhos do host. Operações
 fora do contrato (`clone`, `CopyTo` e lock de região) retornam HRESULT
 controlado e não são apresentadas como compatíveis.
 
+## Eventos WinTrust
+
+`WinVerifyTrust` emite o evento `wintrust` no componente `runtime`, registrando
+somente a operação, o resultado, a política e o mecanismo:
+
+```text
+[tl][runtime][info] wintrust operation="verify" status="success" policy="explicit-chain" mechanism="openssl"
+```
+
+Falhas de política ou de cadeia usam `status="invalid"` ou
+`status="untrusted"`. O trace não inclui certificados, DER, nomes ou caminhos;
+`WTD_CHOICE_FILE`, revogação e a loja do sistema não são aceitos.
+
 ## Componente `install`
 
 O comando `install` emite seus eventos neste componente, sempre em `stderr`.

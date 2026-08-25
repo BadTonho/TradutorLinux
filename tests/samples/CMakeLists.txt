@@ -18,7 +18,7 @@ find_program(TL_MINGW_WINDRES
 set(TL_FIXTURE_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/generated")
 
 function(tl_add_pe_fixture target_name source_file manifest_file)
-    set(options LINK_KERNEL32 LINK_USER32 LINK_GDI32 LINK_COMCTL32 LINK_GDIPLUS LINK_UXTHEME LINK_DBGHELP LINK_OLE32 LINK_POWRPROF LINK_IPHLPAPI LINK_WINMM LINK_WS2_32 LINK_WININET LINK_ADVAPI32 RELOCATABLE UNWIND EXPECT_RESOLVED CONSOLE REPORT REPORT_ONLY NO_RUNTIME_CHECK RUNTIME_FAILURE)
+    set(options LINK_KERNEL32 LINK_USER32 LINK_GDI32 LINK_COMCTL32 LINK_GDIPLUS LINK_UXTHEME LINK_DBGHELP LINK_OLE32 LINK_POWRPROF LINK_IPHLPAPI LINK_WINMM LINK_WS2_32 LINK_WININET LINK_WINTRUST LINK_ADVAPI32 RELOCATABLE UNWIND EXPECT_RESOLVED CONSOLE REPORT REPORT_ONLY NO_RUNTIME_CHECK RUNTIME_FAILURE)
     set(oneValueArgs REPORT_SYMBOL RESOURCE_FILE IMPORT_DEF)
     cmake_parse_arguments(ARG "${options}" "${oneValueArgs}" "" ${ARGN})
 
@@ -77,6 +77,9 @@ function(tl_add_pe_fixture target_name source_file manifest_file)
     endif()
     if(ARG_LINK_WININET)
         list(APPEND link_libraries -lwininet)
+    endif()
+    if(ARG_LINK_WINTRUST)
+        list(APPEND link_libraries -lwintrust)
     endif()
     if(ARG_LINK_ADVAPI32)
         list(APPEND link_libraries -ladvapi32)
@@ -225,6 +228,10 @@ function(tl_add_pe_fixture target_name source_file manifest_file)
                 set(runtime_extra_args
                     "-DEXPECTED_HEX=6f6c652d73747265616d0a"
                     "-DREQUIRED_TRACE=ole-stream")
+            elseif(target_name STREQUAL "tl_trust")
+                set(runtime_extra_args
+                    "-DEXPECTED_HEX=74727573740a"
+                    "-DREQUIRED_TRACE=wintrust")
             elseif(target_name STREQUAL "tl_unwind")
                 set(runtime_extra_args
                     "-DEXPECTED_HEX=756e77696e640a")
@@ -676,6 +683,10 @@ tl_add_pe_fixture(tl_com src/tl_com.c manifests/tl_com.json
 tl_add_pe_fixture(tl_stream src/tl_stream.c manifests/tl_stream.json
     LINK_KERNEL32 LINK_OLE32 EXPECT_RESOLVED CONSOLE REPORT RELOCATABLE
     REPORT_SYMBOL "CreateStreamOnHGlobal")
+
+tl_add_pe_fixture(tl_trust src/tl_trust.c manifests/tl_trust.json
+    LINK_KERNEL32 LINK_WINTRUST EXPECT_RESOLVED CONSOLE REPORT RELOCATABLE
+    REPORT_SYMBOL "WinVerifyTrust")
 
 if(TARGET tradutorlinux)
     add_test(

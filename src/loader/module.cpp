@@ -6,6 +6,7 @@
 #include "tradutorlinux/runtime/advapi.hpp"
 #include "tradutorlinux/runtime/ws2_32.hpp"
 #include "tradutorlinux/runtime/wininet.hpp"
+#include "tradutorlinux/runtime/wintrust.hpp"
 #include "tradutorlinux/runtime/ole32.hpp"
 #include "tradutorlinux/runtime/shlwapi.hpp"
 #include "tradutorlinux/runtime/version.hpp"
@@ -750,6 +751,11 @@ void register_builtin_modules() {
     };
     static const InternalModule kOle32Module{"ole32.dll", kOle32Exports};
     register_module(kOle32Module);
+    static const ExportedFunction kWintrustExports[] = {
+        {"WinVerifyTrust", 1, reinterpret_cast<std::uintptr_t>(&tl_WinVerifyTrust)},
+    };
+    static const InternalModule kWintrustModule{"WINTRUST.dll", kWintrustExports};
+    register_module(kWintrustModule);
     static const ExportedFunction kShlwapiExports[] = {
         {"PathFileExistsA", 1, reinterpret_cast<std::uintptr_t>(&tl_PathFileExistsA)},
         {"PathFileExistsW", 2, reinterpret_cast<std::uintptr_t>(&tl_PathFileExistsW)},
