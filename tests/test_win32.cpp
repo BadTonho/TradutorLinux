@@ -425,6 +425,36 @@ TEST(Win32CriticalSectionTest, NullPointerIsRejected) {
     EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
 }
 
+TEST(Win32CriticalSectionTest, ExtendedInitializersHonorFlagsAndLifecycle) {
+    alignas(8) std::array<std::byte, 64> first{};
+    alignas(8) std::array<std::byte, 64> second{};
+    EXPECT_EQ(tl_InitializeCriticalSectionAndSpinCount(first.data(), 4000), 1);
+    tl_EnterCriticalSection(first.data());
+    tl_LeaveCriticalSection(first.data());
+    tl_DeleteCriticalSection(first.data());
+
+    EXPECT_EQ(tl_InitializeCriticalSectionEx(second.data(), 4000,
+                                              abi::kCriticalSectionNoDebugInfo), 1);
+    tl_EnterCriticalSection(second.data());
+    tl_LeaveCriticalSection(second.data());
+    tl_DeleteCriticalSection(second.data());
+}
+
+TEST(Win32CriticalSectionTest, ExtendedInitializersRejectInvalidArguments) {
+    EXPECT_EQ(tl_InitializeCriticalSectionAndSpinCount(nullptr, 0), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_InitializeCriticalSectionEx(nullptr, 0, 0), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    alignas(8) std::array<std::byte, 64> storage{};
+    EXPECT_EQ(tl_InitializeCriticalSectionEx(storage.data(), 0, 1), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+}
+
+TEST(Win32CodePageTest, AreFileApisANSIUsesTheFixedAnsiCodePage) {
+    EXPECT_EQ(tl_AreFileApisANSI(), 1);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorSuccess);
+}
+
 TEST(Win32UnhandledExceptionFilterTest, ReturnsPreviousHandler) {
     const std::uintptr_t first = tl_SetUnhandledExceptionFilter(0x1234);
     EXPECT_EQ(first, 0U);
@@ -1652,6 +1682,35 @@ TEST(Win32WideTest, FormatMessageWWithGuestBufferHonorsSize) {
                           sizeof(big) / sizeof(big[0]), nullptr);
     ASSERT_GT(written, 0U);
     EXPECT_EQ(std::u16string(reinterpret_cast<const char16_t*>(big)), u"Access is denied.");
+}
+
+TEST(Win32AnsiTest, FormatMessageAWithGuestBufferHonorsSize) {
+    constexpr std::uint32_t kFormatMessageFromSystem = 0x1000U;
+    char small[4]{};
+    EXPECT_EQ(tl_FormatMessageA(kFormatMessageFromSystem, nullptr, abi::kErrorFileNotFound, 0,
+                                small, sizeof(small), nullptr), 0U);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInsufficientBuffer);
+
+    char big[128]{};
+    const std::uint32_t written =
+        tl_FormatMessageA(kFormatMessageFromSystem, nullptr, abi::kErrorAccessDenied, 0,
+                          big, sizeof(big), nullptr);
+    ASSERT_GT(written, 0U);
+    EXPECT_STREQ(big, "Access is denied.");
+}
+
+TEST(Win32AnsiTest, FormatMessageAAllocateBufferUsesLocalFree) {
+    constexpr std::uint32_t kFormatMessageAllocateBuffer = 0x100U;
+    constexpr std::uint32_t kFormatMessageFromSystem = 0x1000U;
+    char* buffer = nullptr;
+    const std::uint32_t written =
+        tl_FormatMessageA(kFormatMessageAllocateBuffer | kFormatMessageFromSystem, nullptr,
+                          abi::kErrorFileNotFound, 0, reinterpret_cast<char*>(&buffer), 0,
+                          nullptr);
+    ASSERT_GT(written, 0U);
+    ASSERT_NE(buffer, nullptr);
+    EXPECT_STREQ(buffer, "The system cannot find the file specified.");
+    EXPECT_EQ(tl_LocalFree(buffer), nullptr);
 }
 
 TEST(Win32WideTest, GetConsoleOutputCPReturnsUtf8) {

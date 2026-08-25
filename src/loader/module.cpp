@@ -238,6 +238,8 @@ void register_builtin_modules() {
         {"FindFirstFileW", 59, reinterpret_cast<std::uintptr_t>(&tl_FindFirstFileW)},
         {"FindNextFileW", 60, reinterpret_cast<std::uintptr_t>(&tl_FindNextFileW)},
         {"FormatMessageW", 61, reinterpret_cast<std::uintptr_t>(&tl_FormatMessageW)},
+        {"FormatMessageA", 237, reinterpret_cast<std::uintptr_t>(&tl_FormatMessageA)},
+        {"AreFileApisANSI", 238, reinterpret_cast<std::uintptr_t>(&tl_AreFileApisANSI)},
         {"GetConsoleOutputCP", 62, reinterpret_cast<std::uintptr_t>(&tl_GetConsoleOutputCP)},
         {"GetTempFileNameW", 63, reinterpret_cast<std::uintptr_t>(&tl_GetTempFileNameW)},
         {"LocalFree", 64, reinterpret_cast<std::uintptr_t>(&tl_LocalFree)},
@@ -420,6 +422,10 @@ void register_builtin_modules() {
         {"SetFileAttributesW", 235, reinterpret_cast<std::uintptr_t>(&tl_SetFileAttributesW)},
         {"SetFileInformationByHandle", 236,
          reinterpret_cast<std::uintptr_t>(&tl_SetFileInformationByHandle)},
+        {"InitializeCriticalSectionAndSpinCount", 239,
+         reinterpret_cast<std::uintptr_t>(&tl_InitializeCriticalSectionAndSpinCount)},
+        {"InitializeCriticalSectionEx", 240,
+         reinterpret_cast<std::uintptr_t>(&tl_InitializeCriticalSectionEx)},
     };
     static const InternalModule kKernel32Module{"KERNEL32.dll", kKernel32Exports};
     register_module(kKernel32Module);

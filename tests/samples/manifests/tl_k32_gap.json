@@ -1,0 +1,22 @@
+{
+  "name": "tl_k32_gap",
+  "format": "PE32+",
+  "machine": "AMD64",
+  "entry_point": "tl_entry",
+  "uses_crt": false,
+  "imports": {
+    "KERNEL32.dll": [
+      "AreFileApisANSI",
+      "DeleteCriticalSection",
+      "EnterCriticalSection",
+      "ExitProcess",
+      "FormatMessageA",
+      "GetLastError",
+      "GetStdHandle",
+      "InitializeCriticalSectionAndSpinCount",
+      "InitializeCriticalSectionEx",
+      "LeaveCriticalSection",
+      "WriteFile"
+    ]
+  }
+}

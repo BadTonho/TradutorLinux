@@ -1902,6 +1902,23 @@ TL_MSABI void tl_InitializeCriticalSection(void* critical_section) noexcept {
 TL_MSABI int tl_InitializeCriticalSectionAndSpinCount(void* critical_section,
                                                       std::uint32_t spin_count) noexcept {
     (void)spin_count;
+    if (critical_section == nullptr) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    tl_InitializeCriticalSection(critical_section);
+    return 1;
+}
+
+TL_MSABI int tl_InitializeCriticalSectionEx(void* critical_section,
+                                             std::uint32_t spin_count,
+                                             std::uint32_t flags) noexcept {
+    (void)spin_count;
+    if (critical_section == nullptr ||
+        (flags & ~abi::kCriticalSectionNoDebugInfo) != 0U) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
     tl_InitializeCriticalSection(critical_section);
     return 1;
 }
@@ -3401,6 +3418,29 @@ TL_MSABI int tl_MulDiv(const int number, const int numerator, const int denomina
     return static_cast<int>((product + adjustment) / divisor);
 }
 
+namespace {
+
+std::string format_message_text(const std::uint32_t flags,
+                                const std::uint32_t message_id) {
+    if ((flags & abi::kFormatMessageFromSystem) == 0U) {
+        return "Unknown error " + std::to_string(message_id) + ".";
+    }
+    switch (message_id) {
+        case abi::kErrorSuccess: return "The operation completed successfully.";
+        case abi::kErrorFileNotFound: return "The system cannot find the file specified.";
+        case abi::kErrorAccessDenied: return "Access is denied.";
+        case abi::kErrorInvalidHandle: return "The handle is invalid.";
+        case abi::kErrorNotEnoughMemory: return "Not enough memory resources are available.";
+        case abi::kErrorInvalidParameter: return "The parameter is incorrect.";
+        case abi::kErrorInsufficientBuffer: return "The data area passed to a system call is too small.";
+        case abi::kErrorNoUnicodeTranslation:
+            return "No mapping for the Unicode character exists in the target multi-byte code page.";
+        default: return "Unknown error " + std::to_string(message_id) + ".";
+    }
+}
+
+}  // namespace
+
 TL_MSABI std::uint32_t tl_FormatMessageW(const std::uint32_t flags, const void* source,
                                           const std::uint32_t message_id, const std::uint32_t language_id,
                                           std::uint16_t* buffer, const std::uint32_t size,
@@ -3409,25 +3449,14 @@ TL_MSABI std::uint32_t tl_FormatMessageW(const std::uint32_t flags, const void* 
     (void)language_id;
     (void)arguments;
     const bool allocate = (flags & abi::kFormatMessageAllocateBuffer) != 0;
-    std::string text;
-    if ((flags & abi::kFormatMessageFromSystem) != 0) {
-        switch (message_id) {
-            case abi::kErrorSuccess: text = "The operation completed successfully."; break;
-            case abi::kErrorFileNotFound: text = "The system cannot find the file specified."; break;
-            case abi::kErrorAccessDenied: text = "Access is denied."; break;
-            case abi::kErrorInvalidHandle: text = "The handle is invalid."; break;
-            case abi::kErrorNotEnoughMemory: text = "Not enough memory resources are available."; break;
-            case abi::kErrorInvalidParameter: text = "The parameter is incorrect."; break;
-            case abi::kErrorInsufficientBuffer: text = "The data area passed to a system call is too small."; break;
-            case abi::kErrorNoUnicodeTranslation: text = "No mapping for the Unicode character exists in the target multi-byte code page."; break;
-            default: text = "Unknown error " + std::to_string(message_id) + "."; break;
-        }
-    } else {
-        text = "Unknown error " + std::to_string(message_id) + ".";
-    }
+    const std::string text = format_message_text(flags, message_id);
     const std::u16string wide_text = util::utf8_to_wide(text);
     const std::size_t required = wide_text.size() + 1;
     if (allocate) {
+        if (buffer == nullptr || !mapped_guest_range(buffer, sizeof(std::uint16_t*), true)) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
+        }
         auto* storage = static_cast<std::uint16_t*>(std::malloc(required * sizeof(std::uint16_t)));
         if (storage == nullptr) {
             set_last_error(abi::kErrorNotEnoughMemory);
@@ -3440,7 +3469,8 @@ TL_MSABI std::uint32_t tl_FormatMessageW(const std::uint32_t flags, const void* 
         set_last_error(abi::kErrorSuccess);
         return static_cast<std::uint32_t>(wide_text.size());
     }
-    if (required > size) {
+    if (buffer == nullptr || size == 0U || required > size ||
+        !mapped_guest_range(buffer, static_cast<std::size_t>(size) * sizeof(*buffer), true)) {
         set_last_error(abi::kErrorInsufficientBuffer);
         return 0;
     }
@@ -3448,6 +3478,48 @@ TL_MSABI std::uint32_t tl_FormatMessageW(const std::uint32_t flags, const void* 
     buffer[wide_text.size()] = 0;
     set_last_error(abi::kErrorSuccess);
     return static_cast<std::uint32_t>(wide_text.size());
+}
+
+TL_MSABI std::uint32_t tl_FormatMessageA(const std::uint32_t flags, const void* source,
+                                          const std::uint32_t message_id, const std::uint32_t language_id,
+                                          char* buffer, const std::uint32_t size,
+                                          const void* arguments) noexcept {
+    (void)source;
+    (void)language_id;
+    (void)arguments;
+    const bool allocate = (flags & abi::kFormatMessageAllocateBuffer) != 0;
+    const std::string text = format_message_text(flags, message_id);
+    const std::size_t required = text.size() + 1;
+    if (allocate) {
+        if (buffer == nullptr || !mapped_guest_range(buffer, sizeof(char*), true)) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
+        }
+        auto* storage = static_cast<char*>(std::malloc(required));
+        if (storage == nullptr) {
+            set_last_error(abi::kErrorNotEnoughMemory);
+            return 0;
+        }
+        std::copy(text.begin(), text.end(), storage);
+        storage[text.size()] = '\0';
+        *reinterpret_cast<char**>(buffer) = storage;
+        set_last_error(abi::kErrorSuccess);
+        return static_cast<std::uint32_t>(text.size());
+    }
+    if (buffer == nullptr || size == 0U || required > size ||
+        !mapped_guest_range(buffer, static_cast<std::size_t>(size), true)) {
+        set_last_error(abi::kErrorInsufficientBuffer);
+        return 0;
+    }
+    std::copy(text.begin(), text.end(), buffer);
+    buffer[text.size()] = '\0';
+    set_last_error(abi::kErrorSuccess);
+    return static_cast<std::uint32_t>(text.size());
+}
+
+TL_MSABI int tl_AreFileApisANSI() noexcept {
+    set_last_error(abi::kErrorSuccess);
+    return 1;
 }
 
 TL_MSABI void* tl_FindResourceW(const void* module, const std::uint16_t* name,

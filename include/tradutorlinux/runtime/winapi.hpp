@@ -113,6 +113,7 @@ constexpr Dword kVerNtWorkstation = 1U;
 constexpr Dword kFormatMessageAllocateBuffer = 0x00000100U;
 constexpr Dword kFormatMessageIgnoreInserts = 0x00000200U;
 constexpr Dword kFormatMessageFromSystem = 0x00001000U;
+constexpr Dword kCriticalSectionNoDebugInfo = 0x01000000U;
 
 // Fase 11: WaitForSingleObject.
 constexpr Dword kWaitObject0 = 0;
@@ -840,6 +841,10 @@ TL_MSABI void tl_DeleteCriticalSection(void* critical_section) noexcept;
 TL_MSABI void tl_EnterCriticalSection(void* critical_section) noexcept;
 TL_MSABI int tl_GetConsoleMode(const void* handle, std::uint32_t* mode) noexcept;
 TL_MSABI void tl_InitializeCriticalSection(void* critical_section) noexcept;
+TL_MSABI int tl_InitializeCriticalSectionAndSpinCount(void* critical_section,
+                                                       std::uint32_t spin_count) noexcept;
+TL_MSABI int tl_InitializeCriticalSectionEx(void* critical_section, std::uint32_t spin_count,
+                                             std::uint32_t flags) noexcept;
 TL_MSABI int tl_IsDBCSLeadByteEx(std::uint32_t code_page, std::uint8_t test_char) noexcept;
 TL_MSABI void tl_LeaveCriticalSection(void* critical_section) noexcept;
 TL_MSABI int tl_MultiByteToWideChar(std::uint32_t code_page, std::uint32_t flags, const char* mb_str,
@@ -962,9 +967,14 @@ TL_MSABI void* tl_FindFirstFileExW(const std::uint16_t* path, int info_level,
 TL_MSABI int tl_FindNextFileA(const void* handle, void* find_data) noexcept;
 TL_MSABI int tl_FindNextFileW(const void* handle, void* find_data) noexcept;
 TL_MSABI int tl_FindClose(const void* handle) noexcept;
+TL_MSABI int tl_AreFileApisANSI() noexcept;
 TL_MSABI std::uint32_t tl_FormatMessageW(std::uint32_t flags, const void* source,
                                          std::uint32_t message_id, std::uint32_t language_id,
                                          std::uint16_t* buffer, std::uint32_t size,
+                                         const void* arguments) noexcept;
+TL_MSABI std::uint32_t tl_FormatMessageA(std::uint32_t flags, const void* source,
+                                         std::uint32_t message_id, std::uint32_t language_id,
+                                         char* buffer, std::uint32_t size,
                                          const void* arguments) noexcept;
 TL_MSABI std::uint32_t tl_GetConsoleOutputCP() noexcept;
 TL_MSABI int tl_SetConsoleOutputCP(std::uint32_t code_page) noexcept;

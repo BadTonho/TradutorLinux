@@ -224,6 +224,9 @@ function(tl_add_pe_fixture target_name source_file manifest_file)
             elseif(target_name STREQUAL "tl_com")
                 set(runtime_extra_args
                     "-DEXPECTED_HEX=636f6d0a")
+            elseif(target_name STREQUAL "tl_k32_gap")
+                set(runtime_extra_args
+                    "-DEXPECTED_HEX=6b33322d6761700a")
             elseif(target_name STREQUAL "tl_stream")
                 set(runtime_extra_args
                     "-DEXPECTED_HEX=6f6c652d73747265616d0a"
@@ -577,6 +580,10 @@ tl_add_pe_fixture(tl_resources src/tl_resources.c manifests/tl_resources.json
 tl_add_pe_fixture(tl_sync src/tl_sync.c manifests/tl_sync.json
     LINK_KERNEL32 EXPECT_RESOLVED CONSOLE REPORT RELOCATABLE
     REPORT_SYMBOL "CreateEventA")
+
+tl_add_pe_fixture(tl_k32_gap src/tl_k32_gap.c manifests/tl_k32_gap.json
+    LINK_KERNEL32 EXPECT_RESOLVED CONSOLE REPORT RELOCATABLE
+    REPORT_SYMBOL "InitializeCriticalSectionEx")
 
 tl_add_pe_fixture(tl_files_wide src/tl_files_wide.c manifests/tl_files_wide.json
     LINK_KERNEL32 EXPECT_RESOLVED CONSOLE REPORT RELOCATABLE

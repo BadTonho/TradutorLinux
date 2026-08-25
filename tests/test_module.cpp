@@ -159,6 +159,14 @@ TEST_F(ModuleTest, RegistersBuiltinKernel32Exports) {
               reinterpret_cast<std::uintptr_t>(&tl_GetFileAttributesW));
     EXPECT_EQ(find_export(ExportQuery{"KERNEL32.dll", "FormatMessageW"}).address,
               reinterpret_cast<std::uintptr_t>(&tl_FormatMessageW));
+    EXPECT_EQ(find_export(ExportQuery{"KERNEL32.dll", "FormatMessageA"}).address,
+              reinterpret_cast<std::uintptr_t>(&tl_FormatMessageA));
+    EXPECT_EQ(find_export(ExportQuery{"KERNEL32.dll", "AreFileApisANSI"}).address,
+              reinterpret_cast<std::uintptr_t>(&tl_AreFileApisANSI));
+    EXPECT_EQ(find_export(ExportQuery{"KERNEL32.dll", "InitializeCriticalSectionAndSpinCount"}).address,
+              reinterpret_cast<std::uintptr_t>(&tl_InitializeCriticalSectionAndSpinCount));
+    EXPECT_EQ(find_export(ExportQuery{"KERNEL32.dll", "InitializeCriticalSectionEx"}).address,
+              reinterpret_cast<std::uintptr_t>(&tl_InitializeCriticalSectionEx));
     EXPECT_EQ(find_export(ExportQuery{"KERNEL32.dll", "GetTempFileNameW"}).address,
               reinterpret_cast<std::uintptr_t>(&tl_GetTempFileNameW));
     EXPECT_EQ(find_export(ExportQuery{"KERNEL32.dll", "LocalFree"}).address,

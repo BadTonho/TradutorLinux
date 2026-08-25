@@ -148,6 +148,13 @@ Os itens marcados como concluídos devem ter evidência no repositório: código
   fixture, rejeita política com UI e raiz incorreta e registra o mecanismo
   `libcrypto`. Não há loja Windows, revogação, Authenticode ou suporte ao
   Rockstar.
+- **Marco concluído (Fase 13.12 — lacunas KERNEL32 do LGHub):** `tl_k32_gap.exe`
+  cobre `InitializeCriticalSectionAndSpinCount`, `InitializeCriticalSectionEx`,
+  `FormatMessageA` e `AreFileApisANSI` com buffers, flags e erros controlados.
+  O `--report` de `lghub_installer.exe` passou a resolver 114/114 imports; a
+  execução em prefixo temporário entrou na fase de execução, mas expirou em 20 s
+  (`GuestTimeout`) sem produzir arquivos, portanto o fluxo do instalador não é
+  declarado compatível.
 - **Próximo resultado observável (Fase 13.12):** ampliar somente se surgir
   uma fixture que justifique `CRYPT32`, `WTHelper*` ou Authenticode; os limites
   atuais permanecem publicados.
@@ -646,7 +653,7 @@ quantidade de APIs declaradas sem uso real.
 - [x] Manter níveis de compatibilidade: inicia, fluxo principal, uso diário e cobertura avançada (definidos em `docs/catalog.md`).
 - [x] Coletar imports de muitos aplicativos e priorizar APIs que aparecem em vários alvos (`Roblox` `430` imports, `gdiplus` `8/8`, `SHELL32` `5/5`).
 - [x] Implementar famílias de DLLs por demanda: `KERNEL32`, `NTDLL` limitada, `ADVAPI32`, `USER32`, `GDI32`, `SHELL32`, `OLE32`, `COMDLG32`, `WS2_32`, `WININET`, `WINTRUST` e CRTs (22 módulos `tests/test_module.cpp:87`).
-- [x] Criar testes de integração por aplicativo e uma matriz pública de limitações (`docs/compatibilidade.md` + `tests/samples` 32 fixtures).
+- [x] Criar testes de integração por aplicativo e uma matriz pública de limitações (`docs/compatibilidade.md` + `tests/samples` 33 fixtures).
 - [x] Adicionar execução isolada, timeout, limites de recursos e diagnóstico para que aplicativos grandes não derrubem o host (`process/isolate.cpp` `71`/`72`).
 - [ ] Avaliar compatibilidade por versões e builds específicos, sem assumir que duas versões do mesmo aplicativo usam as mesmas APIs.
 

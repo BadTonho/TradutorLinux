@@ -52,6 +52,23 @@ Contrato vigente:
 
 A lista de módulos, exports, ordinais internos e comportamentos suportados está em `docs/arquitetura/imports.md` e `docs/compatibilidade.md`.
 
+## Subconjunto KERNEL32 para inicialização de instaladores
+
+As APIs `InitializeCriticalSectionAndSpinCount`, `InitializeCriticalSectionEx`,
+`AreFileApisANSI` e `FormatMessageA` usam a mesma fronteira Microsoft x64:
+ponteiros e escalares entram em `RCX`, `RDX` e `R8`, e o retorno `BOOL`/`DWORD`
+volta em `RAX`. A `CRITICAL_SECTION` é uma estrutura opaca para o convidado;
+o runtime valida somente o endereço e mantém a exclusão em uma tabela lateral.
+
+O spin count é aceito como hint e não altera a implementação single-thread. A
+variante `Ex` aceita `dwFlags == 0` ou `CRITICAL_SECTION_NO_DEBUG_INFO`
+(`0x01000000`); outras flags retornam `ERROR_INVALID_PARAMETER`. `AreFileApisANSI`
+retorna `TRUE` para o ACP determinístico `1252`. `FormatMessageA/W` cobre as
+mensagens de sistema fixas do runtime, buffer fornecido e
+`FORMAT_MESSAGE_ALLOCATE_BUFFER`; inserts, tabelas externas e recursos de
+mensagem permanecem fora do contrato. A fixture `tl_k32_gap.exe` cobre os
+retornos, buffers e falhas de argumento.
+
 ## Captura de contexto para unwinding
 
 `RtlCaptureContext` não pode ser expresso como uma chamada C++ comum: ela

@@ -31,17 +31,20 @@ posterior.
 | `Affinity x64.msix` | — | — | pacote MSIX; executável interno não localizado | formato não suportado |
 | `CapCut_7677236283084898320_installer.exe` | — | — | PE32 x86 (`0x14c`) | arquitetura não suportada |
 | `EpicInstaller-20.1.4-831cc1564f92442abc51fdb4a9854359.exe` | — | — | PE32 x86 (`0x14c`) + Mono/.NET | arquitetura/formato não suportados |
-| `lghub_installer.exe` | 105/114 | 9 | segurança e APIs pendentes | `unsupported` |
+| `lghub_installer.exe` | 114/114 | 0 | execução expira em prefixo temporário | `supported` no `--report`; fluxo não validado |
 | `Rockstar-Games-Launcher.exe` | 241/338 | 97 | GUI/rede e APIs pendentes | `unsupported` |
 
 Na Fase 13.11, WinRAR e Rockstar foram medidos novamente somente com
 `--report`; ambos continuam `unsupported`, retornam `5` e não foram executados.
 O subsistema de diálogos e controles resolveu mais 11 imports no WinRAR e 9 no
-Rockstar, sobre os resultados da Fase 13.10. O binário Logitech não está
-disponível localmente, portanto permanece com a
-medição anterior de 105/114. Os três ainda têm V2 e a forma aceita de
+Rockstar, sobre os resultados da Fase 13.10. O binário Logitech está disponível
+localmente e foi reanalisado em 2026-08-25: a fixture `tl_k32_gap.exe` cobriu as
+quatro lacunas de `KERNEL32`, o `--report` passou a resolver 114/114 e o primeiro
+teste de execução em prefixo temporário retornou `72` por timeout de 20 segundos,
+sem stdout ou arquivos criados. As três amostras têm V2 e a forma aceita de
 `UWOP_SET_FPREG` classificados, dispatcher SEH explícito, ambiente/locale/FLS
-determinísticos e console W, mas dependem de GUI, rede e demais APIs ausentes.
+determinísticos e console W; WinRAR e Rockstar ainda dependem de GUI, rede e
+demais APIs ausentes, enquanto o LGHub agora bloqueia durante a inicialização.
 
 ## Recorrências observadas
 
@@ -658,44 +661,31 @@ independentes, não uma API Win32 específica faltante.
 | Formato | PE32+ GUI x86-64, 8 seções |
 | SHA-256 | `4b2f9903b27c8434afcd52fe65845632fcae47cc50432fb6b3b1637144e811e1` |
 | Imports estáticos | 114 em 3 DLLs |
-| Resolvidos pelo runtime | 105/114, após a Fase 13.9 |
-| Ausentes | 9, após a Fase 13.9 |
+| Resolvidos pelo runtime | 114/114, após a fixture `tl_k32_gap.exe` |
+| Ausentes | 0 |
 | Metadados adicionais | `.pdata`: 1375 funções (1371 V1, 4 V2), 4 epílogos, 4 `SET_FPREG` estendidos, 233 handlers e 6 cadeias |
-| Resultado do `--report` | `Unsupported`/exit `5`; `execution: not-attempted` |
-| Fonte | análise local de 2026-08-23 |
+| Resultado do `--report` | `supported`, `114/114`; `execution: not-attempted` |
+| Primeiro teste de execução | Prefixo temporário, timeout de 20 s, exit `72`; stdout vazio e nenhum arquivo criado |
+| Fonte | análise local de 2026-08-25 |
 
-O primeiro comando **Executar** terminou com exit code `5` durante a resolução
-de imports, antes do entry point. A medição mais recente, feita somente com
-`--report` após a Fase 13.9, confirma 105 imports resolvidos sem executar o
-binário. `COMCTL32!InitCommonControlsEx` já resolve; as lacunas restantes estão
-em `ADVAPI32` e `KERNEL32`.
+O `--report` atual resolve todos os imports estáticos e atrasados (`114/114`),
+incluindo `InitializeCriticalSectionAndSpinCount`, `FormatMessageA`,
+`AreFileApisANSI` e `InitializeCriticalSectionEx`. A execução entrou na fase de
+execução do convidado, ficou bloqueada durante a inicialização e expirou pelo
+limite do runner; isso não declara o instalador compatível nem prova o fluxo de
+instalação.
 
-### Lacunas por módulo
+### Lacunas cobertas no incremento KERNEL32
 
-| DLL | APIs ausentes |
+| DLL | Lacuna histórica |
 |---|---:|
-| `ADVAPI32.dll` | 5 |
-| `KERNEL32.dll` | 4 |
-| `COMCTL32.dll` | 0/1 |
+| `ADVAPI32.dll` | 5, entregues na Fase 13.10 |
+| `KERNEL32.dll` | 4, entregues nesta etapa |
 
-### Imports estáticos ausentes
-
-#### `ADVAPI32.dll` (5)
-
-```text
-GetNamedSecurityInfoW
-OpenProcessToken
-GetTokenInformation
-SetEntriesInAclW
-SetNamedSecurityInfoW
-```
-
-Essas APIs motivaram a camada genérica de descritores, token de processo e
-DACL virtual entregue na Fase 13.10. Como o binário Logitech não está
-disponível nesta fase, essa evidência não altera sua contagem nem declara o
-fluxo do instalador suportado.
-
-#### `KERNEL32.dll` (4)
+As quatro APIs de `KERNEL32` são protegidas pela fixture `tl_k32_gap.exe`, que
+valida inicialização/uso de seções críticas, flags inválidas, retorno fixo de
+`AreFileApisANSI` e `FormatMessageA` com buffer insuficiente e mensagem do
+sistema.
 
 ```text
 InitializeCriticalSectionAndSpinCount
@@ -706,10 +696,10 @@ InitializeCriticalSectionEx
 
 ### Próxima investigação
 
-Este caso confirmou que enumeração/metadados de arquivos e identidade/DACL são
-capacidades compartilhadas, promovidas respectivamente nas Fases 13.9 e 13.10.
-A contagem e o estado deste instalador aguardam nova evidência local; a fixture
-de segurança não declara suporte ao fluxo Logitech.
+O bloqueio deixou de ser resolução de imports e passou a ser comportamento do
+entry point. A próxima análise deve localizar a espera durante a inicialização
+com diagnóstico adicional ou uma fixture de instalação equivalente; não se
+deve declarar suporte ao fluxo Logitech apenas porque o `--report` passou.
 
 ## `Rockstar-Games-Launcher.exe` (Rockstar Games Launcher)
 
