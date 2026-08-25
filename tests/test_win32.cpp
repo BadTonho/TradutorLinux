@@ -2,6 +2,7 @@
 #include "tradutorlinux/runtime/advapi.hpp"
 #include "tradutorlinux/runtime/comctl32.hpp"
 #include "tradutorlinux/runtime/dialog_template.hpp"
+#include "tradutorlinux/runtime/wininet.hpp"
 #include "tradutorlinux/prefix/prefix.hpp"
 #include "../src/runtime/runtime_context.hpp"
 
@@ -65,6 +66,62 @@ std::vector<std::byte> valid_dialog_template() {
 }
 
 using abi::GuestMemoryBasicInformation;
+
+TEST(WininetTest, RejectsExternalHostBeforeTransport) {
+    constexpr std::uint16_t kAgent[] = {'t', 'e', 's', 't', 0};
+    constexpr std::uint16_t kExternalHost[] = {'e', 'x', 'a', 'm', 'p', 'l', 'e', '.', 'c', 'o', 'm', 0};
+
+    const HInternet session = tl_InternetOpenW(kAgent, kInternetOpenTypeDirect,
+                                                nullptr, nullptr, 0);
+    ASSERT_NE(session, 0U);
+    EXPECT_EQ(tl_InternetConnectW(session, kExternalHost, 443, nullptr, nullptr,
+                                  kInternetServiceHttp, 0, 0),
+              0U);
+    EXPECT_EQ(tl_GetLastError(), kErrorInternetNameNotResolved);
+    EXPECT_NE(tl_InternetCloseHandle(session), 0);
+}
+
+TEST(WininetTest, CrackUrlSplitsLoopbackHttpsComponents) {
+    constexpr std::uint16_t kUrl[] = {
+        'h', 't', 't', 'p', 's', ':', '/', '/', 'l', 'o', 'c', 'a', 'l', 'h', 'o', 's', 't',
+        ':', '4', '4', '4', '3', '/', 'f', 'i', 'x', 't', 'u', 'r', 'e', '?', 'x', '=', '1', 0,
+    };
+    std::uint16_t scheme[8]{};
+    std::uint16_t host[16]{};
+    std::uint16_t path[16]{};
+    std::uint16_t extra[16]{};
+    GuestUrlComponentsW components{};
+    components.dw_struct_size = sizeof(components);
+    components.lpsz_scheme = scheme;
+    components.dw_scheme_length = std::size(scheme);
+    components.lpsz_host_name = host;
+    components.dw_host_name_length = std::size(host);
+    components.lpsz_url_path = path;
+    components.dw_url_path_length = std::size(path);
+    components.lpsz_extra_info = extra;
+    components.dw_extra_info_length = std::size(extra);
+
+    ASSERT_NE(tl_InternetCrackUrlW(kUrl, 0, 0, &components), 0);
+    EXPECT_EQ(components.n_scheme, 2U);
+    EXPECT_EQ(components.n_port, 4443U);
+    EXPECT_EQ(components.dw_scheme_length, 5U);
+    EXPECT_EQ(components.dw_host_name_length, 9U);
+    EXPECT_EQ(components.dw_url_path_length, 8U);
+    EXPECT_EQ(components.dw_extra_info_length, 4U);
+    EXPECT_EQ(scheme[0], 'h');
+    EXPECT_EQ(host[0], 'l');
+    EXPECT_EQ(path[0], '/');
+    EXPECT_EQ(extra[0], '?');
+}
+
+TEST(WininetTest, CrackUrlRejectsPlainHttp) {
+    constexpr std::uint16_t kUrl[] = {'h', 't', 't', 'p', ':', '/', '/', 'l', 'o', 'c', 'a', 'l', 'h', 'o', 's', 't', '/', 0};
+    GuestUrlComponentsW components{};
+    components.dw_struct_size = sizeof(components);
+
+    EXPECT_EQ(tl_InternetCrackUrlW(kUrl, 0, 0, &components), 0);
+    EXPECT_EQ(tl_GetLastError(), kErrorInternetInvalidUrl);
+}
 
 TEST(Win32CodePageTest, Cp1252ConvertsByte80ToEuroSign) {
     const char input[] = {'c', 'a', 'f', static_cast<char>(0xE9), static_cast<char>(0x80), '\0'};

@@ -34,6 +34,7 @@ promessa de suporte universal; cada entrada é verificada via `tests/samples` ou
 | Aplicativo | Imports | Estado | Fixture |
 |---|---|---|---|
 | `tl_network_loopback.exe` | WS2_32 23 | **fluxo principal** | TCP/UDP localhost, `WSAPoll` |
+| `tl_wininet.exe` | WININET 11 | **fluxo principal restrito** | HTTPS `localhost` com CA TLS efêmera; sem Internet ou proxy |
 
 ## GUI
 

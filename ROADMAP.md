@@ -130,8 +130,17 @@ Os itens marcados como concluídos devem ter evidência no repositório: código
   disponível. WinRAR
   (202/251) e Rockstar (241/338) foram reanalisados somente com `--report`,
   continuam `unsupported` e `execution: not-attempted`.
-- **Próximo resultado observável (Fase 13.12):** automação, rede e confiança
-  em entregas separadas, com evidência reproduzível por protocolo.
+- **Marco concluído (Fase 13.12 — WinINet HTTPS local):** `tl_wininet.exe`
+  valida `InternetOpenW`, `InternetConnectW`, `HttpOpenRequestW`,
+  cabeçalhos, envio, status, disponibilidade, leitura parcial, fechamento e
+  `InternetCrackUrlW` contra um servidor TLS efêmero em `127.0.0.1`.
+  O smoke usa uma CA local confiável no fluxo positivo e outra CA no fluxo
+  negativo; hosts externos e HTTP simples têm rejeições unitárias. Não há
+  proxy, cookies, credenciais, redirecionamento, Internet ou afirmação de
+  WinTrust, e o Rockstar não foi executado.
+- **Próximo resultado observável (Fase 13.12):** automação OLE/streams e
+  confiança/WinTrust continuam entregas separadas, com evidência reproduzível
+  por protocolo.
 
 ### Estudo de caso: `RobloxPlayerInstaller.exe` (benchmark de cobertura)
 
@@ -559,8 +568,12 @@ nem declarar os benchmarks comerciais suportados.
 - [ ] Separar OLE Automation/streams, HTTP WinINet e
   certificados/WinTrust em subfases independentes, cada qual exigindo ao menos
   duas evidências do portfólio ou uma fixture de protocolo reproduzível.
-- [ ] Para HTTP, limitar a primeira entrega a cliente HTTPS previsível por
-  prefixo, sem cookies globais ou credenciais do host; para confiança, não
+- [x] Para HTTP, limitar a primeira entrega a cliente HTTPS previsível por
+  prefixo, sem cookies globais ou credenciais do host: `tl_wininet.exe`
+  cobre HTTPS em loopback com CA TLS efêmera, CA não confiável, protocolo,
+  handles e leitura; proxy, DNS externo, Internet e redirecionamento são
+  rejeitados ou inexistentes.
+- [ ] Para confiança, não
   afirmar validação de certificado até existir uma cadeia e política testadas.
 - [ ] Não usar esses componentes para declarar compatibilidade do Rockstar
   antes de validar um fluxo de instalação/atualização inteiro.

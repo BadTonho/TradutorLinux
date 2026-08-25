@@ -55,7 +55,7 @@ determinísticos e console W, mas dependem de GUI, rede e demais APIs ausentes.
 | Pacote MSIX/AppX | Affinity | pendente |
 | `delay-import` | WinRAR, Rockstar | suportado para descritores RVA (`grAttrs=0x1`), com resolução antecipada |
 | Automação OLE | WinRAR, Rockstar | pendente |
-| HTTP WinINet | Rockstar | pendente |
+| HTTP WinINet | Rockstar + fixture de protocolo | subconjunto HTTPS direto de loopback entregue em `tl_wininet.exe`; sem execução do Rockstar |
 
 ## Prioridade ativa — instaladores PE32+ x86-64
 
@@ -824,7 +824,7 @@ ordinal(413)
 Os ordinais de `OLEAUT32` e `COMCTL32` precisam ser identificados contra uma
 ABI/versão definida antes de se declararem exportações compatíveis.
 
-#### `WININET.dll` (11)
+#### `WININET.dll` (11, lacuna observada na Fase 13.11)
 
 ```text
 InternetReadFile
@@ -840,10 +840,12 @@ HttpQueryInfoW
 InternetOpenW
 ```
 
-WinINet é uma camada HTTP de alto nível, diferente do subconjunto WS2_32 de
-loopback já existente. Seu suporte exige contratos de URL, proxy, TLS, handles,
-erros e I/O; nenhuma requisição de Internet será considerada suporte sem testes
-determinísticos locais.
+Os 11 símbolos acima agora são registrados pelo subconjunto `WININET.dll`
+validado pela fixture `tl_wininet.exe`: HTTPS direto para `localhost`/
+`127.0.0.1`, CA TLS fornecida pelo host, URL, cabeçalho, status, leitura e
+falha para CA não confiável. Isso não altera a contagem histórica nem declara
+o Rockstar suportado: o binário comercial não foi reexecutado e permanecem
+automação, GUI, confiança e demais lacunas.
 
 ### Imports atrasados ausentes
 

@@ -5,6 +5,7 @@
 #include "tradutorlinux/runtime/msvcrt.hpp"
 #include "tradutorlinux/runtime/advapi.hpp"
 #include "tradutorlinux/runtime/ws2_32.hpp"
+#include "tradutorlinux/runtime/wininet.hpp"
 #include "tradutorlinux/runtime/ole32.hpp"
 #include "tradutorlinux/runtime/shlwapi.hpp"
 #include "tradutorlinux/runtime/version.hpp"
@@ -570,6 +571,21 @@ void register_builtin_modules() {
     };
     static const InternalModule kWs2_32Module{"WS2_32.dll", kWs2_32Exports};
     register_module(kWs2_32Module);
+    static const ExportedFunction kWininetExports[] = {
+        {"InternetReadFile", 1, reinterpret_cast<std::uintptr_t>(&tl_InternetReadFile)},
+        {"InternetCrackUrlW", 2, reinterpret_cast<std::uintptr_t>(&tl_InternetCrackUrlW)},
+        {"InternetCloseHandle", 3, reinterpret_cast<std::uintptr_t>(&tl_InternetCloseHandle)},
+        {"InternetConnectW", 4, reinterpret_cast<std::uintptr_t>(&tl_InternetConnectW)},
+        {"InternetQueryDataAvailable", 5, reinterpret_cast<std::uintptr_t>(&tl_InternetQueryDataAvailable)},
+        {"InternetSetOptionW", 6, reinterpret_cast<std::uintptr_t>(&tl_InternetSetOptionW)},
+        {"HttpOpenRequestW", 7, reinterpret_cast<std::uintptr_t>(&tl_HttpOpenRequestW)},
+        {"HttpAddRequestHeadersW", 8, reinterpret_cast<std::uintptr_t>(&tl_HttpAddRequestHeadersW)},
+        {"HttpSendRequestW", 9, reinterpret_cast<std::uintptr_t>(&tl_HttpSendRequestW)},
+        {"HttpQueryInfoW", 10, reinterpret_cast<std::uintptr_t>(&tl_HttpQueryInfoW)},
+        {"InternetOpenW", 11, reinterpret_cast<std::uintptr_t>(&tl_InternetOpenW)},
+    };
+    static const InternalModule kWininetModule{"WININET.dll", kWininetExports};
+    register_module(kWininetModule);
     static const ExportedFunction kMsvcrtExports[] = {
         {"__C_specific_handler", 1, reinterpret_cast<std::uintptr_t>(&tl___C_specific_handler)},
         {"__getmainargs", 2, reinterpret_cast<std::uintptr_t>(&tl___getmainargs)},

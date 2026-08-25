@@ -171,6 +171,22 @@ subconjunto seguem o retorno/`GetLastError` Win32. SACL, herança complexa e
 trustee não-SID retornam `ERROR_NOT_SUPPORTED`; nenhum desses eventos aplica
 permissões Linux.
 
+## Eventos WinINet
+
+O subconjunto HTTPS de loopback da Fase 13.12 usa o evento `wininet` no
+componente `runtime`. Ele registra somente operação, estado, porta, bytes
+quando aplicável, esquema, destino e escopo:
+
+```text
+[tl][runtime][info] wininet operation="open" status="success" scheme="https" scope="prefix" destination="loopback" port="0"
+[tl][runtime][info] wininet operation="send" status="success" scheme="https" scope="prefix" destination="loopback" bytes="17"
+```
+
+O trace nunca inclui URL completa, cabeçalhos, corpo, certificado ou caminho do
+CA. Falha de biblioteca, CA, certificado ou transporte usa o mesmo evento com
+estado controlado; o resultado detalhado continua em retorno WinINet e
+`GetLastError`.
+
 ## Componente `install`
 
 O comando `install` emite seus eventos neste componente, sempre em `stderr`.

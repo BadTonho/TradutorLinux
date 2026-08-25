@@ -82,6 +82,11 @@ void initialize_locked(const std::filesystem::path& prefix_root) {
             continue;
         }
         const std::string_view name{*current, static_cast<std::size_t>(equal - *current)};
+        // Configuração exclusiva do backend WinINet de testes. O caminho da
+        // CA é consumido pelo host e nunca deve ser observável pelo convidado.
+        if (normalized_name(name) == "TL_WININET_CA_FILE") {
+            continue;
+        }
         set_entry(entries, name, equal + 1);
     }
 

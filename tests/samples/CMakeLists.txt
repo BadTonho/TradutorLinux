@@ -18,7 +18,7 @@ find_program(TL_MINGW_WINDRES
 set(TL_FIXTURE_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/generated")
 
 function(tl_add_pe_fixture target_name source_file manifest_file)
-    set(options LINK_KERNEL32 LINK_USER32 LINK_GDI32 LINK_COMCTL32 LINK_GDIPLUS LINK_UXTHEME LINK_DBGHELP LINK_OLE32 LINK_POWRPROF LINK_IPHLPAPI LINK_WINMM LINK_WS2_32 LINK_ADVAPI32 RELOCATABLE UNWIND EXPECT_RESOLVED CONSOLE REPORT REPORT_ONLY NO_RUNTIME_CHECK RUNTIME_FAILURE)
+    set(options LINK_KERNEL32 LINK_USER32 LINK_GDI32 LINK_COMCTL32 LINK_GDIPLUS LINK_UXTHEME LINK_DBGHELP LINK_OLE32 LINK_POWRPROF LINK_IPHLPAPI LINK_WINMM LINK_WS2_32 LINK_WININET LINK_ADVAPI32 RELOCATABLE UNWIND EXPECT_RESOLVED CONSOLE REPORT REPORT_ONLY NO_RUNTIME_CHECK RUNTIME_FAILURE)
     set(oneValueArgs REPORT_SYMBOL RESOURCE_FILE IMPORT_DEF)
     cmake_parse_arguments(ARG "${options}" "${oneValueArgs}" "" ${ARGN})
 
@@ -74,6 +74,9 @@ function(tl_add_pe_fixture target_name source_file manifest_file)
     endif()
     if(ARG_LINK_WS2_32)
         list(APPEND link_libraries -lws2_32)
+    endif()
+    if(ARG_LINK_WININET)
+        list(APPEND link_libraries -lwininet)
     endif()
     if(ARG_LINK_ADVAPI32)
         list(APPEND link_libraries -ladvapi32)
@@ -597,6 +600,31 @@ add_dependencies(tl_process_parent_fixture tl_process_child_fixture tl_process_h
 tl_add_pe_fixture(tl_network_loopback src/tl_network_loopback.c manifests/tl_network_loopback.json
     LINK_KERNEL32 LINK_WS2_32 EXPECT_RESOLVED CONSOLE REPORT RELOCATABLE
     REPORT_SYMBOL "socket")
+
+tl_add_pe_fixture(tl_wininet src/tl_wininet.c manifests/tl_wininet.json
+    LINK_KERNEL32 LINK_WININET EXPECT_RESOLVED CONSOLE REPORT RELOCATABLE NO_RUNTIME_CHECK
+    REPORT_SYMBOL "InternetOpenW")
+
+if(TARGET tradutorlinux)
+    find_program(TL_OPENSSL_EXECUTABLE NAMES openssl REQUIRED)
+    find_program(TL_PYTHON_EXECUTABLE NAMES python3 REQUIRED)
+    add_test(
+        NAME runtime_tl_wininet_https_loopback
+        COMMAND "${CMAKE_COMMAND}"
+            "-DINPUT=${TL_FIXTURE_OUTPUT_DIRECTORY}/tl_wininet.exe"
+            "-DRUNTIME=$<TARGET_FILE:tradutorlinux>"
+            "-DOPENSSL=${TL_OPENSSL_EXECUTABLE}"
+            "-DPYTHON=${TL_PYTHON_EXECUTABLE}"
+            "-DWORK=${CMAKE_CURRENT_BINARY_DIR}/wininet-tls-work"
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/verify_wininet_tls.cmake"
+    )
+    set_tests_properties(runtime_tl_wininet_https_loopback PROPERTIES
+        DEPENDS fixture_tl_wininet_metadata
+        LABELS "runtime;pe32plus;wininet"
+        SKIP_REGULAR_EXPRESSION "Skipping WinINet TLS fixture"
+        TIMEOUT 30
+    )
+endif()
 
 tl_add_pe_fixture(tl_registry_unicode src/tl_registry_unicode.c manifests/tl_registry_unicode.json
     LINK_KERNEL32 LINK_ADVAPI32 EXPECT_RESOLVED CONSOLE REPORT RELOCATABLE

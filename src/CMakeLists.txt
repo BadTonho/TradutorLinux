@@ -27,6 +27,7 @@ add_library(tradutorlinux_core STATIC
     runtime/advapi.cpp
     runtime/security.cpp
     runtime/ws2_32.cpp
+    runtime/wininet.cpp
     runtime/ole32.cpp
     runtime/shlwapi.cpp
     runtime/version.cpp
@@ -58,6 +59,9 @@ find_path(TL_X11_INCLUDE_DIR X11/Xlib.h REQUIRED)
 find_library(TL_X11_LIBRARY X11 REQUIRED)
 target_include_directories(tradutorlinux_core PRIVATE "${TL_X11_INCLUDE_DIR}")
 target_link_libraries(tradutorlinux_core PUBLIC "${TL_X11_LIBRARY}")
+if(CMAKE_DL_LIBS)
+    target_link_libraries(tradutorlinux_core PUBLIC "${CMAKE_DL_LIBS}")
+endif()
 tl_enable_warnings(tradutorlinux_core)
 tl_enable_sanitizers(tradutorlinux_core)
 

@@ -1,0 +1,28 @@
+{
+  "name": "tl_wininet",
+  "format": "PE32+",
+  "machine": "AMD64",
+  "entry_point": "tl_entry",
+  "uses_crt": false,
+  "imports": {
+    "KERNEL32.dll": [
+      "ExitProcess",
+      "GetEnvironmentVariableW",
+      "GetStdHandle",
+      "WriteFile"
+    ],
+    "WININET.dll": [
+      "HttpAddRequestHeadersW",
+      "HttpOpenRequestW",
+      "HttpQueryInfoW",
+      "HttpSendRequestW",
+      "InternetCloseHandle",
+      "InternetConnectW",
+      "InternetCrackUrlW",
+      "InternetOpenW",
+      "InternetQueryDataAvailable",
+      "InternetReadFile",
+      "InternetSetOptionW"
+    ]
+  }
+}
