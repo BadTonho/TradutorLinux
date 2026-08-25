@@ -1,18 +1,23 @@
 #include "tradutorlinux/runtime/ole32.hpp"
 
+#include <algorithm>
+#include <array>
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
+#include <iostream>
+#include <limits>
+#include <mutex>
 
+#include "tradutorlinux/diagnostics/trace.hpp"
 #include "tradutorlinux/runtime/memory_validator.hpp"
 
 namespace tradutorlinux {
 
 namespace {
 
-constexpr std::int32_t kSOk = 0;
-constexpr std::int32_t kEInvalidArg = static_cast<std::int32_t>(0x80070057U);
-constexpr std::int32_t kEUnexpected = static_cast<std::int32_t>(0x8000FFFFU);
+constexpr std::int32_t kStgENotImplemented = static_cast<std::int32_t>(0x80004001U);
+constexpr std::size_t kMaxStreams = 64;
 
 struct Win32Guid {
     std::uint32_t data1;
@@ -20,6 +25,312 @@ struct Win32Guid {
     std::uint16_t data3;
     std::uint8_t data4[8];
 };
+
+struct StreamState {
+    GuestIStream interface{};
+    std::uint8_t* data{nullptr};
+    std::size_t size{0};
+    std::size_t capacity{0};
+    std::size_t position{0};
+    std::uint32_t references{1};
+};
+
+std::array<StreamState*, kMaxStreams> g_streams{};
+std::mutex g_streams_mutex;
+
+void trace_stream(const char* operation, const char* status) noexcept {
+    const std::array<diagnostics::TraceField, 3> fields{
+        diagnostics::TraceField{"operation", operation},
+        diagnostics::TraceField{"status", status},
+        diagnostics::TraceField{"mechanism", "memory"},
+    };
+    diagnostics::write_trace(std::cerr, diagnostics::TraceComponent::Runtime,
+                             diagnostics::TraceLevel::Info, "ole-stream", fields);
+}
+
+StreamState* find_stream(GuestIStream* const stream) noexcept {
+    if (stream == nullptr) return nullptr;
+    std::lock_guard<std::mutex> lock(g_streams_mutex);
+    for (StreamState* candidate : g_streams) {
+        if (candidate != nullptr && &candidate->interface == stream) return candidate;
+    }
+    return nullptr;
+}
+
+bool register_stream(StreamState* const stream) noexcept {
+    std::lock_guard<std::mutex> lock(g_streams_mutex);
+    for (StreamState*& candidate : g_streams) {
+        if (candidate == nullptr) {
+            candidate = stream;
+            return true;
+        }
+    }
+    return false;
+}
+
+bool resize_stream(StreamState& stream, const std::size_t size) noexcept {
+    if (size > std::numeric_limits<std::size_t>::max() - 4095U) return false;
+    if (size > stream.capacity) {
+        const std::size_t capacity = (size + 4095U) & ~static_cast<std::size_t>(4095U);
+        void* resized = std::realloc(stream.data, capacity);
+        if (resized == nullptr) return false;
+        stream.data = static_cast<std::uint8_t*>(resized);
+        stream.capacity = capacity;
+    }
+    if (size > stream.size) {
+        std::memset(stream.data + stream.size, 0, size - stream.size);
+    }
+    stream.size = size;
+    if (stream.position > size) stream.position = size;
+    return true;
+}
+
+TL_OLE_MSABI std::int32_t stream_query_interface(GuestIStream* self, const void* riid,
+                                                  GuestIStream** object) noexcept;
+TL_OLE_MSABI std::uint32_t stream_add_ref(GuestIStream* self) noexcept;
+TL_OLE_MSABI std::uint32_t stream_release(GuestIStream* self) noexcept;
+TL_OLE_MSABI std::int32_t stream_read(GuestIStream* self, void* buffer, std::uint32_t bytes,
+                                       std::uint32_t* read) noexcept;
+TL_OLE_MSABI std::int32_t stream_write(GuestIStream* self, const void* buffer, std::uint32_t bytes,
+                                        std::uint32_t* written) noexcept;
+TL_OLE_MSABI std::int32_t stream_seek(GuestIStream* self, std::int64_t move, std::uint32_t origin,
+                                       std::uint64_t* position) noexcept;
+TL_OLE_MSABI std::int32_t stream_set_size(GuestIStream* self, std::uint64_t size) noexcept;
+TL_OLE_MSABI std::int32_t stream_copy_to(GuestIStream* self, GuestIStream* destination,
+                                          std::uint64_t bytes, std::uint64_t* read,
+                                          std::uint64_t* written) noexcept;
+TL_OLE_MSABI std::int32_t stream_commit(GuestIStream* self, std::uint32_t flags) noexcept;
+TL_OLE_MSABI std::int32_t stream_revert(GuestIStream* self) noexcept;
+TL_OLE_MSABI std::int32_t stream_lock_region(GuestIStream* self, std::uint64_t offset,
+                                               std::uint64_t bytes, std::uint32_t type) noexcept;
+TL_OLE_MSABI std::int32_t stream_unlock_region(GuestIStream* self, std::uint64_t offset,
+                                                 std::uint64_t bytes, std::uint32_t type) noexcept;
+TL_OLE_MSABI std::int32_t stream_stat(GuestIStream* self, GuestStatStg* stat,
+                                       std::uint32_t flags) noexcept;
+TL_OLE_MSABI std::int32_t stream_clone(GuestIStream* self, GuestIStream** clone) noexcept;
+
+const GuestIStreamVtable kStreamVtable{
+    &stream_query_interface,
+    &stream_add_ref,
+    &stream_release,
+    &stream_read,
+    &stream_write,
+    &stream_seek,
+    &stream_set_size,
+    &stream_copy_to,
+    &stream_commit,
+    &stream_revert,
+    &stream_lock_region,
+    &stream_unlock_region,
+    &stream_stat,
+    &stream_clone,
+};
+
+inline bool mapped_range(const void* address, std::size_t size, bool writable) noexcept;
+
+constexpr std::array<std::uint8_t, 16> kIidIUnknown{
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46,
+};
+constexpr std::array<std::uint8_t, 16> kIidIStream{
+    0x0C, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46,
+};
+
+TL_OLE_MSABI std::int32_t stream_query_interface(GuestIStream* const self, const void* const riid,
+                                                  GuestIStream** const object) noexcept {
+    if (find_stream(self) == nullptr || riid == nullptr || object == nullptr ||
+        !mapped_range(riid, kIidIUnknown.size(), false) ||
+        !mapped_range(object, sizeof(*object), true)) {
+        trace_stream("query-interface", "invalid");
+        return kEInvalidArg;
+    }
+    *object = nullptr;
+    const auto* id = static_cast<const std::uint8_t*>(riid);
+    const bool supported = std::memcmp(id, kIidIUnknown.data(), kIidIUnknown.size()) == 0 ||
+                           std::memcmp(id, kIidIStream.data(), kIidIStream.size()) == 0;
+    if (!supported) {
+        trace_stream("query-interface", "no-interface");
+        return kENoInterface;
+    }
+    (void)stream_add_ref(self);
+    *object = self;
+    trace_stream("query-interface", "success");
+    return kSOk;
+}
+
+TL_OLE_MSABI std::uint32_t stream_add_ref(GuestIStream* const self) noexcept {
+    StreamState* const stream = find_stream(self);
+    if (stream == nullptr) return 0;
+    std::lock_guard<std::mutex> lock(g_streams_mutex);
+    if (stream->references == std::numeric_limits<std::uint32_t>::max()) return stream->references;
+    return ++stream->references;
+}
+
+TL_OLE_MSABI std::uint32_t stream_release(GuestIStream* const self) noexcept {
+    StreamState* const stream = find_stream(self);
+    if (stream == nullptr) return 0;
+    std::uint32_t references = 0;
+    {
+        std::lock_guard<std::mutex> lock(g_streams_mutex);
+        if (stream->references == 0) return 0;
+        references = --stream->references;
+        if (references != 0) return references;
+        for (StreamState*& candidate : g_streams) {
+            if (candidate == stream) {
+                candidate = nullptr;
+                break;
+            }
+        }
+    }
+    std::free(stream->data);
+    std::free(stream);
+    trace_stream("release", "destroyed");
+    return 0;
+}
+
+TL_OLE_MSABI std::int32_t stream_read(GuestIStream* const self, void* const buffer,
+                                       const std::uint32_t bytes, std::uint32_t* const read) noexcept {
+    StreamState* const stream = find_stream(self);
+    if (stream == nullptr || (read != nullptr && !mapped_range(read, sizeof(*read), true)) ||
+        (bytes != 0 && (buffer == nullptr || !mapped_range(buffer, bytes, true)))) {
+        trace_stream("read", "invalid");
+        return kEInvalidArg;
+    }
+    const std::size_t available = stream->size - stream->position;
+    const std::size_t count = std::min<std::size_t>(available, bytes);
+    if (count != 0) std::memcpy(buffer, stream->data + stream->position, count);
+    stream->position += count;
+    if (read != nullptr) *read = static_cast<std::uint32_t>(count);
+    trace_stream("read", count == bytes ? "success" : "eof");
+    return count == bytes ? kSOk : kSFalse;
+}
+
+TL_OLE_MSABI std::int32_t stream_write(GuestIStream* const self, const void* const buffer,
+                                        const std::uint32_t bytes, std::uint32_t* const written) noexcept {
+    StreamState* const stream = find_stream(self);
+    if (stream == nullptr || (written != nullptr && !mapped_range(written, sizeof(*written), true)) ||
+        (bytes != 0 && (buffer == nullptr || !mapped_range(buffer, bytes, false)))) {
+        trace_stream("write", "invalid");
+        return kEInvalidArg;
+    }
+    if (static_cast<std::uint64_t>(bytes) > std::numeric_limits<std::size_t>::max() - stream->position) {
+        trace_stream("write", "too-large");
+        return static_cast<std::int32_t>(0x8007000EU);
+    }
+    const std::size_t end = stream->position + bytes;
+    if (!resize_stream(*stream, end)) {
+        trace_stream("write", "out-of-memory");
+        return static_cast<std::int32_t>(0x8007000EU);
+    }
+    if (bytes != 0) std::memcpy(stream->data + stream->position, buffer, bytes);
+    stream->position = end;
+    if (written != nullptr) *written = bytes;
+    trace_stream("write", "success");
+    return kSOk;
+}
+
+TL_OLE_MSABI std::int32_t stream_seek(GuestIStream* const self, const std::int64_t move,
+                                       const std::uint32_t origin, std::uint64_t* const position) noexcept {
+    StreamState* const stream = find_stream(self);
+    if (stream == nullptr || (position != nullptr && !mapped_range(position, sizeof(*position), true))) {
+        trace_stream("seek", "invalid");
+        return kEInvalidArg;
+    }
+    if (origin > 2U) {
+        trace_stream("seek", "invalid-origin");
+        return kEInvalidArg;
+    }
+    const std::int64_t base = origin == 0U ? 0 :
+                              origin == 1U ? static_cast<std::int64_t>(stream->position) :
+                                             static_cast<std::int64_t>(stream->size);
+    if ((move < 0 && (move == std::numeric_limits<std::int64_t>::min() || base < -move)) ||
+        (move > 0 && base > std::numeric_limits<std::int64_t>::max() - move)) {
+        trace_stream("seek", "range-error");
+        return kStgESeekError;
+    }
+    const std::int64_t target = base + move;
+    if (target < 0) {
+        trace_stream("seek", "range-error");
+        return kStgESeekError;
+    }
+    stream->position = static_cast<std::size_t>(target);
+    if (position != nullptr) *position = static_cast<std::uint64_t>(stream->position);
+    trace_stream("seek", "success");
+    return kSOk;
+}
+
+TL_OLE_MSABI std::int32_t stream_set_size(GuestIStream* const self, const std::uint64_t size) noexcept {
+    StreamState* const stream = find_stream(self);
+    if (stream == nullptr || size > std::numeric_limits<std::size_t>::max()) {
+        trace_stream("set-size", "invalid");
+        return kEInvalidArg;
+    }
+    if (!resize_stream(*stream, static_cast<std::size_t>(size))) {
+        trace_stream("set-size", "out-of-memory");
+        return static_cast<std::int32_t>(0x8007000EU);
+    }
+    trace_stream("set-size", "success");
+    return kSOk;
+}
+
+TL_OLE_MSABI std::int32_t stream_copy_to(GuestIStream* const self, GuestIStream* const destination,
+                                          const std::uint64_t bytes, std::uint64_t* const read,
+                                          std::uint64_t* const written) noexcept {
+    (void)destination;
+    (void)bytes;
+    (void)read;
+    (void)written;
+    if (find_stream(self) == nullptr) return kEInvalidArg;
+    return kStgENotImplemented;
+}
+
+TL_OLE_MSABI std::int32_t stream_commit(GuestIStream* const self, const std::uint32_t flags) noexcept {
+    if (find_stream(self) == nullptr || flags != 0U) return kEInvalidArg;
+    return kSOk;
+}
+
+TL_OLE_MSABI std::int32_t stream_revert(GuestIStream* const self) noexcept {
+    return find_stream(self) == nullptr ? kEInvalidArg : kSOk;
+}
+
+TL_OLE_MSABI std::int32_t stream_lock_region(GuestIStream* const self, const std::uint64_t offset,
+                                               const std::uint64_t bytes, const std::uint32_t type) noexcept {
+    (void)offset;
+    (void)bytes;
+    (void)type;
+    return find_stream(self) == nullptr ? kEInvalidArg : kStgEInvalidFunction;
+}
+
+TL_OLE_MSABI std::int32_t stream_unlock_region(GuestIStream* const self, const std::uint64_t offset,
+                                                 const std::uint64_t bytes, const std::uint32_t type) noexcept {
+    (void)offset;
+    (void)bytes;
+    (void)type;
+    return find_stream(self) == nullptr ? kEInvalidArg : kStgEInvalidFunction;
+}
+
+TL_OLE_MSABI std::int32_t stream_stat(GuestIStream* const self, GuestStatStg* const stat,
+                                       const std::uint32_t flags) noexcept {
+    StreamState* const stream = find_stream(self);
+    if (stream == nullptr || stat == nullptr || !mapped_range(stat, sizeof(*stat), true) || flags != 0U) {
+        trace_stream("stat", "invalid");
+        return kEInvalidArg;
+    }
+    *stat = GuestStatStg{};
+    stat->type = 2U;
+    stat->cb_size = static_cast<std::uint64_t>(stream->size);
+    trace_stream("stat", "success");
+    return kSOk;
+}
+
+TL_OLE_MSABI std::int32_t stream_clone(GuestIStream* const self, GuestIStream** const clone) noexcept {
+    if (find_stream(self) == nullptr || clone == nullptr || !mapped_range(clone, sizeof(*clone), true)) {
+        return kEInvalidArg;
+    }
+    *clone = nullptr;
+    return kStgENotImplemented;
+}
 
 inline bool mapped_range(const void* address, const std::size_t size, const bool writable) noexcept {
     return runtime::validate_mapped_range(address, size, writable);
@@ -85,6 +396,28 @@ TL_OLE_MSABI void* tl_CoTaskMemRealloc(void* ptr, const std::size_t size) noexce
         return nullptr;
     }
     return std::realloc(ptr, size);
+}
+
+TL_OLE_MSABI std::int32_t tl_CreateStreamOnHGlobal(const OleHGlobal hglobal,
+                                                   const std::int32_t delete_on_release,
+                                                   GuestIStream** stream) noexcept {
+    (void)delete_on_release;
+    if (hglobal != nullptr || stream == nullptr ||
+        !mapped_range(stream, sizeof(*stream), true)) {
+        trace_stream("create", "invalid");
+        return kEInvalidArg;
+    }
+    auto* state = static_cast<StreamState*>(std::calloc(1, sizeof(StreamState)));
+    if (state == nullptr || !register_stream(state)) {
+        std::free(state);
+        trace_stream("create", "failed");
+        return static_cast<std::int32_t>(0x8007000EU);
+    }
+    state->references = 1;
+    state->interface.vtable = const_cast<GuestIStreamVtable*>(&kStreamVtable);
+    *stream = &state->interface;
+    trace_stream("create", "success");
+    return kSOk;
 }
 
 TL_OLE_MSABI std::int32_t tl_CoCreateInstance(const void* rclsid, void* unkOuter, const std::uint32_t clsContext,

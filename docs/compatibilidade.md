@@ -40,6 +40,7 @@ Esta matriz declara o comportamento suportado; ela não é uma promessa de compa
 | `tl_install_setup.exe` / `tl_install_app.exe` | PE32+ AMD64 | Não | arquivos Unicode, ambiente, `GetModuleFileNameW`, `CreateProcessW`, espera e handles | **Fluxo de instalação suportado:** setup externo observa `Z:\\...`, copia a aplicação de `C:\\windows\\temp` para `C:\\Program Files` e a inicia com `CreateProcessW`; a aplicação observa `C:\\...`, diretório herdado e `%LOCALAPPDATA%` do mesmo prefixo. `install → catálogo → app run` é coberto por `integration_install_prefix_catalog_run`; prefixos distintos não compartilham estado. O setup de múltiplos candidatos confirma `InstallPending` (`6`) e a escolha no launcher | Instalação por prefixo |
 | `tl_network_loopback.exe` | PE32+ AMD64 | Não | `WS2_32.dll` TCP/UDP, resolução local e `WSAPoll` | Fixture somente loopback, com TCP, UDP e `localhost`; passa com sockets permitidos e é skip controlado em sandbox que retorna `EACCES/EPERM` | WS2_32 |
 | `tl_wininet.exe` | PE32+ AMD64 | Não | `WININET.dll` — abertura, conexão HTTPS, requisição, cabeçalhos, resposta, leitura, consulta e fechamento; `KERNEL32.dll` — ambiente/console | **Suportado somente para protocolo HTTPS loopback:** o smoke cria servidor TLS e CA efêmeros em `127.0.0.1`, valida URL, cabeçalho, status `200`, leitura parcial e CA confiável; uma CA diferente falha de forma controlada. Sem Internet, proxy, cookies, credenciais, redirecionamento ou WinTrust. | WinINet HTTPS local |
+| `tl_stream.exe` | PE32+ AMD64 | Não | `ole32.dll!CreateStreamOnHGlobal`; vtable `IStream` | **Suportado no subconjunto de stream em memória:** `QueryInterface`, referências, `Read`/`Write`, `Seek`, `SetSize`, `Stat`, `Commit`/`Revert`; saída `ole-stream\n`, exit `0` | OLE stream em memória |
 | `tl_registry_unicode.exe` | PE32+ AMD64 | Não | `ADVAPI32.dll` chaves/valores Unicode | Cria, persiste, reabre, consulta e remove chave/valor UTF-16 em armazenamento genérico por escopo; saída `registry\n`, exit `0` | Registro |
 | `tl_dynload.exe` | PE32+ AMD64 | Não | `KERNEL32.dll` — `LoadLibraryA/W/ExA/ExW`, `FreeLibrary`, `GetModuleHandleA/W/ExA/ExW`, `GetProcAddress`, `GetLastError` | Fixture de carregamento dinâmico: `LoadLibrary` com caminho `C:\...`, API Set `api-ms-win-core-file-l1-1-0.dll`, `LoadLibraryEx`, `GetProcAddress` por nome e ordinal (36=`GetTickCount64`), `FreeLibrary`, `GetModuleHandleEx` `PIN`/`FROM_ADDRESS`; saída `dynload\n`, exit `0` | Carregamento dinâmico |
 | `tl_version.exe` | PE32+ AMD64 | Não | `KERNEL32.dll` — `GetVersionExA/W`, `VerifyVersionInfoW`, `VerSetConditionMask`, `GetUserDefaultLocaleName`, `LocaleNameToLCID` | Fixture versão/locale: `GetVersionExA/W` 10.0.19044, `VerifyVersionInfoW`/`VerSetConditionMask` cadeia `VER_MAJOR|MINOR`, `GetUserDefaultLocaleName` → `en-US` (6 com NUL, `122` em buffer curto), `LocaleNameToLCID` `en-US`/`pt-BR`; saída `version\n`, exit `0` | Versão/locale |
@@ -502,9 +503,9 @@ elevação, `AccessCheck`, permissões POSIX e a identidade Linux não fazem par
 do contrato. As DACLs não bloqueiam `CreateFile` e não constituem sandbox. Ver
 [seguranca-acl.md](arquitetura/seguranca-acl.md).
 
-## COM mínimo (ole32)
+## COM mínimo e streams em memória (ole32)
 
-`ole32.dll` expõe `CoInitialize`/`CoUninitialize`/`CoTaskMemAlloc` e camada COM mínima para testes de inicialização. `CoCreateInstance`/`CoGetClassObject` validam `rclsid`/`riid`/`ppv` via `mapped_guest_range` e retornam `REGDB_E_CLASSNOTREG` (`0x80040154`) ou `CLASS_E_NOAGGREGATION` (`0x80040110`); `OleInitialize`/`OleUninitialize` são stubs `S_OK`.
+`ole32.dll` expõe `CoInitialize`/`CoUninitialize`/`CoTaskMemAlloc` e camada COM mínima para testes de inicialização. `CoCreateInstance`/`CoGetClassObject` validam `rclsid`/`riid`/`ppv` via `mapped_guest_range` e retornam `REGDB_E_CLASSNOTREG` (`0x80040154`) ou `CLASS_E_NOAGGREGATION` (`0x80040110`); `OleInitialize`/`OleUninitialize` são stubs `S_OK`. `CreateStreamOnHGlobal` acrescenta um `IStream` volátil, com vtable Microsoft x64 explícita e somente backing store anônimo do runtime. O contrato detalhado está em [`ole-streams.md`](arquitetura/ole-streams.md).
 
 | Módulo | API | Estado | Comportamento suportado |
 |---|---|---|---|
@@ -513,6 +514,7 @@ do contrato. As DACLs não bloqueiam `CreateFile` e não constituem sandbox. Ver
 | `ole32.dll` | `OleInitialize` | Suportado | Retorna `S_OK` |
 | `ole32.dll` | `CoCreateInstance` / `CoGetClassObject` | Suportado | Valida `rclsid`/`riid`/`ppv`, `unkOuter==nullptr` senão `CLASS_E_NOAGGREGATION`, senão `REGDB_E_CLASSNOTREG`, `*ppv=nullptr` |
 | `ole32.dll` | `CoTaskMemAlloc` / `CoTaskMemFree` / `CoTaskMemRealloc` | Suportado | `malloc`/`free`/`realloc` do host |
+| `ole32.dll` | `CreateStreamOnHGlobal` | Suportado no subconjunto | Aceita somente `hGlobal=NULL`; cria `IStream` em memória. `Read`/`Write`/`Seek`/`SetSize`/`Stat`, `QueryInterface` e referência são cobertos por `tl_stream.exe`; cópia, clone e lock de região permanecem fora do contrato |
 
 ## Concorrência (Fase 11)
 

@@ -742,6 +742,7 @@ void register_builtin_modules() {
         {"CoTaskMemAlloc", 5, reinterpret_cast<std::uintptr_t>(&tl_CoTaskMemAlloc)},
         {"CoTaskMemFree", 6, reinterpret_cast<std::uintptr_t>(&tl_CoTaskMemFree)},
         {"CoTaskMemRealloc", 7, reinterpret_cast<std::uintptr_t>(&tl_CoTaskMemRealloc)},
+        {"CreateStreamOnHGlobal", 12, reinterpret_cast<std::uintptr_t>(&tl_CreateStreamOnHGlobal)},
         {"CoCreateInstance", 8, reinterpret_cast<std::uintptr_t>(&tl_CoCreateInstance)},
         {"CoGetClassObject", 9, reinterpret_cast<std::uintptr_t>(&tl_CoGetClassObject)},
         {"OleInitialize", 10, reinterpret_cast<std::uintptr_t>(&tl_OleInitialize)},

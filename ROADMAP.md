@@ -138,9 +138,14 @@ Os itens marcados como concluídos devem ter evidência no repositório: código
   negativo; hosts externos e HTTP simples têm rejeições unitárias. Não há
   proxy, cookies, credenciais, redirecionamento, Internet ou afirmação de
   WinTrust, e o Rockstar não foi executado.
-- **Próximo resultado observável (Fase 13.12):** automação OLE/streams e
-  confiança/WinTrust continuam entregas separadas, com evidência reproduzível
-  por protocolo.
+- **Marco concluído (Fase 13.12 — OLE stream em memória):** `tl_stream.exe`
+  resolve `ole32.dll!CreateStreamOnHGlobal` e valida a vtable Microsoft x64 de
+  `IStream`, referências, `Read`/`Write`, `Seek`, `SetSize`, `Stat`,
+  `Commit`/`Revert` e liberação. Cópia, clone, regiões bloqueadas, `OLEAUT32`
+  e `IDispatch` continuam fora do contrato; o Rockstar não foi executado.
+- **Próximo resultado observável (Fase 13.12):** cadeia de confiança/WinTrust
+  com política e certificados reproduzíveis, separada das entregas de OLE e
+  WinINet.
 
 ### Estudo de caso: `RobloxPlayerInstaller.exe` (benchmark de cobertura)
 
@@ -565,9 +570,13 @@ nem declarar os benchmarks comerciais suportados.
 
 #### Fase 13.12 — automação, rede e confiança, em entregas separadas
 
-- [ ] Separar OLE Automation/streams, HTTP WinINet e
+- [x] Separar OLE Automation/streams, HTTP WinINet e
   certificados/WinTrust em subfases independentes, cada qual exigindo ao menos
   duas evidências do portfólio ou uma fixture de protocolo reproduzível.
+- [x] Para OLE streams, limitar a primeira entrega a `CreateStreamOnHGlobal`
+  com `IStream` em memória e ABI Microsoft x64 explícita: referências,
+  `Read`/`Write`, `Seek`, `SetSize`, `Stat`, `Commit`/`Revert`; `tl_stream.exe`
+  cobre metadados, `--report`, trace e execução.
 - [x] Para HTTP, limitar a primeira entrega a cliente HTTPS previsível por
   prefixo, sem cookies globais ou credenciais do host: `tl_wininet.exe`
   cobre HTTPS em loopback com CA TLS efêmera, CA não confiável, protocolo,

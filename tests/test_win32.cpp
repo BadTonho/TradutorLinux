@@ -2,6 +2,7 @@
 #include "tradutorlinux/runtime/advapi.hpp"
 #include "tradutorlinux/runtime/comctl32.hpp"
 #include "tradutorlinux/runtime/dialog_template.hpp"
+#include "tradutorlinux/runtime/ole32.hpp"
 #include "tradutorlinux/runtime/wininet.hpp"
 #include "tradutorlinux/prefix/prefix.hpp"
 #include "../src/runtime/runtime_context.hpp"
@@ -121,6 +122,44 @@ TEST(WininetTest, CrackUrlRejectsPlainHttp) {
 
     EXPECT_EQ(tl_InternetCrackUrlW(kUrl, 0, 0, &components), 0);
     EXPECT_EQ(tl_GetLastError(), kErrorInternetInvalidUrl);
+}
+
+TEST(OleStreamTest, InMemoryStreamRoundTripsAndReportsSize) {
+    GuestIStream* stream = nullptr;
+    ASSERT_EQ(tl_CreateStreamOnHGlobal(nullptr, 1, &stream), kSOk);
+    ASSERT_NE(stream, nullptr);
+
+    constexpr char payload[] = "ole-stream-data";
+    std::uint32_t written = 0;
+    ASSERT_EQ(stream->vtable->write(stream, payload, sizeof(payload) - 1, &written), kSOk);
+    EXPECT_EQ(written, sizeof(payload) - 1);
+
+    GuestStatStg stat{};
+    ASSERT_EQ(stream->vtable->stat(stream, &stat, 0), kSOk);
+    EXPECT_EQ(stat.type, 2U);
+    EXPECT_EQ(stat.cb_size, sizeof(payload) - 1);
+
+    std::uint64_t position = 0;
+    ASSERT_EQ(stream->vtable->seek(stream, 0, 0, &position), kSOk);
+    EXPECT_EQ(position, 0U);
+    char round_trip[sizeof(payload)]{};
+    std::uint32_t read = 0;
+    ASSERT_EQ(stream->vtable->read(stream, round_trip, sizeof(payload) - 1, &read), kSOk);
+    EXPECT_EQ(read, sizeof(payload) - 1);
+    EXPECT_STREQ(round_trip, payload);
+    EXPECT_EQ(stream->vtable->release(stream), 0U);
+}
+
+TEST(OleStreamTest, RejectsExternalHGlobalAndUnknownInterface) {
+    GuestIStream* stream = nullptr;
+    EXPECT_EQ(tl_CreateStreamOnHGlobal(reinterpret_cast<OleHGlobal>(1), 1, &stream), kEInvalidArg);
+    ASSERT_EQ(tl_CreateStreamOnHGlobal(nullptr, 1, &stream), kSOk);
+
+    constexpr std::uint8_t unknown_iid[16]{};
+    GuestIStream* queried = nullptr;
+    EXPECT_EQ(stream->vtable->query_interface(stream, unknown_iid, &queried), kENoInterface);
+    EXPECT_EQ(queried, nullptr);
+    EXPECT_EQ(stream->vtable->release(stream), 0U);
 }
 
 TEST(Win32CodePageTest, Cp1252ConvertsByte80ToEuroSign) {

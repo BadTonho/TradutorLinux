@@ -187,6 +187,20 @@ CA. Falha de biblioteca, CA, certificado ou transporte usa o mesmo evento com
 estado controlado; o resultado detalhado continua em retorno WinINet e
 `GetLastError`.
 
+## Eventos OLE streams
+
+`CreateStreamOnHGlobal` e os métodos do `IStream` em memória usam o componente
+`runtime` e o evento `ole-stream`. O trace registra somente a operação, o
+estado e o mecanismo de armazenamento:
+
+```text
+[tl][runtime][info] ole-stream operation="write" status="success" mechanism="memory"
+```
+
+O subconjunto não inclui conteúdo, endereços ou caminhos do host. Operações
+fora do contrato (`clone`, `CopyTo` e lock de região) retornam HRESULT
+controlado e não são apresentadas como compatíveis.
+
 ## Componente `install`
 
 O comando `install` emite seus eventos neste componente, sempre em `stderr`.

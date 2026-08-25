@@ -1,6 +1,7 @@
 #include "tradutorlinux/loader/module.hpp"
 #include "tradutorlinux/runtime/advapi.hpp"
 #include "tradutorlinux/runtime/msvcrt.hpp"
+#include "tradutorlinux/runtime/ole32.hpp"
 #include "tradutorlinux/runtime/unwind.hpp"
 #include "tradutorlinux/runtime/winapi.hpp"
 #include "tradutorlinux/runtime/wininet.hpp"
@@ -175,6 +176,8 @@ TEST_F(ModuleTest, RegistersBuiltinKernel32Exports) {
               reinterpret_cast<std::uintptr_t>(&tl_InternetOpenW));
     EXPECT_EQ(find_export(ExportQuery{"WININET.dll", "HttpSendRequestW"}).address,
               reinterpret_cast<std::uintptr_t>(&tl_HttpSendRequestW));
+    EXPECT_EQ(find_export(ExportQuery{"ole32.dll", "CreateStreamOnHGlobal"}).address,
+              reinterpret_cast<std::uintptr_t>(&tl_CreateStreamOnHGlobal));
 }
 
 TEST_F(ModuleTest, RegistersMsvcrtExports) {

@@ -51,6 +51,7 @@ promessa de suporte universal; cada entrada é verificada via `tests/samples` ou
 | `tl_toolhelp.exe` | KERNEL32 Toolhelp 10 | **fluxo principal** | `/proc` enumeração |
 | `tl_shell.exe` | SHELL32 5 | **fluxo principal** | pastas conhecidas |
 | `tl_com.exe` | ole32 9 | **fluxo principal** | `CoCreateInstance` `REGDB_E_CLASSNOTREG` |
+| `tl_stream.exe` | ole32 1 + `IStream` | **fluxo principal restrito** | stream em memória, referências e round-trip |
 
 ## Benchmark de cobertura
 

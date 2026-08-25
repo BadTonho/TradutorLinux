@@ -221,6 +221,10 @@ function(tl_add_pe_fixture target_name source_file manifest_file)
             elseif(target_name STREQUAL "tl_com")
                 set(runtime_extra_args
                     "-DEXPECTED_HEX=636f6d0a")
+            elseif(target_name STREQUAL "tl_stream")
+                set(runtime_extra_args
+                    "-DEXPECTED_HEX=6f6c652d73747265616d0a"
+                    "-DREQUIRED_TRACE=ole-stream")
             elseif(target_name STREQUAL "tl_unwind")
                 set(runtime_extra_args
                     "-DEXPECTED_HEX=756e77696e640a")
@@ -668,6 +672,10 @@ tl_add_pe_fixture(tl_gdiex src/tl_gdiex.c manifests/tl_gdiex.json
 tl_add_pe_fixture(tl_com src/tl_com.c manifests/tl_com.json
     LINK_KERNEL32 LINK_OLE32 EXPECT_RESOLVED CONSOLE REPORT RELOCATABLE
     REPORT_SYMBOL "CoCreateInstance")
+
+tl_add_pe_fixture(tl_stream src/tl_stream.c manifests/tl_stream.json
+    LINK_KERNEL32 LINK_OLE32 EXPECT_RESOLVED CONSOLE REPORT RELOCATABLE
+    REPORT_SYMBOL "CreateStreamOnHGlobal")
 
 if(TARGET tradutorlinux)
     add_test(

@@ -54,7 +54,7 @@ determinísticos e console W, mas dependem de GUI, rede e demais APIs ausentes.
 | Segurança, identidade e ACLs | WinRAR, Logitech G HUB, Rockstar | token/SID virtual e DACL persistente para arquivos existentes em `C:\` por prefixo; sem SACL, privilégios, `AccessCheck` ou permissões Linux |
 | Pacote MSIX/AppX | Affinity | pendente |
 | `delay-import` | WinRAR, Rockstar | suportado para descritores RVA (`grAttrs=0x1`), com resolução antecipada |
-| Automação OLE | WinRAR, Rockstar | pendente |
+| Automação OLE | WinRAR, Rockstar | `CreateStreamOnHGlobal` entregue como stream em memória em `tl_stream.exe`; `OLEAUT32`/`IDispatch` pendentes |
 | HTTP WinINet | Rockstar + fixture de protocolo | subconjunto HTTPS direto de loopback entregue em `tl_wininet.exe`; sem execução do Rockstar |
 
 ## Prioridade ativa — instaladores PE32+ x86-64
@@ -847,6 +847,11 @@ falha para CA não confiável. Isso não altera a contagem histórica nem declar
 o Rockstar suportado: o binário comercial não foi reexecutado e permanecem
 automação, GUI, confiança e demais lacunas.
 
+O único import atrasado de `ole32.dll`, `CreateStreamOnHGlobal`, também possui
+uma evidência isolada em `tl_stream.exe`. A fixture cobre o contrato de
+`IStream` em memória e não implica suporte aos sete ordinais de `OLEAUT32` nem
+execução do Rockstar.
+
 ### Imports atrasados ausentes
 
 #### `USER32.dll` (19)
@@ -933,6 +938,7 @@ WTHelperGetProvSignerFromChain
 
 SEH x64, locale, contexto de processo/console, enumeração de arquivos e
 identidade/DACL virtual já foram entregues, mas não resolvem as dependências
-restantes deste aplicativo. Para WinINet, OLE automation, controles comuns e
-impressão, a primeira entrega deve ser uma fixture genérica e reproduzível
-antes de qualquer tentativa de executar o Rockstar Launcher.
+restantes deste aplicativo. WinINet e o stream OLE têm fixtures genéricas
+reproduzíveis; a automação `OLEAUT32`/`IDispatch`, controles comuns restantes e
+impressão ainda exigem contratos próprios antes de qualquer tentativa de
+executar o Rockstar Launcher.
