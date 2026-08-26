@@ -453,6 +453,10 @@ enum class PathStatus { Success, InvalidParameter, AccessDenied, FileNotFound, I
     if (block == nullptr) {
         return nullptr;
     }
+    if (!register_local_free_block(block)) {
+        std::free(block);
+        return nullptr;
+    }
     std::memset(block, 0, size);
     auto* const descriptor = reinterpret_cast<abi::GuestSecurityDescriptor*>(block);
     descriptor->revision = static_cast<std::uint8_t>(abi::kSecurityDescriptorRevision);
@@ -931,6 +935,10 @@ TL_ADVAPI_MSABI std::uint32_t tl_SetEntriesInAclW(const std::uint32_t entry_coun
             return abi::kErrorNotEnoughMemory;
         }
         std::memcpy(allocation, encoded.data(), encoded.size());
+        if (!register_local_free_block(allocation)) {
+            std::free(allocation);
+            return abi::kErrorNotEnoughMemory;
+        }
         *new_acl = allocation;
         trace_security("set-entries", "success", "dacl");
         return abi::kErrorSuccess;

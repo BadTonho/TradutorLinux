@@ -91,6 +91,18 @@ struct AllocationSlot {
     bool view{false};  // true: visão de MapViewOfFile; false: NtAllocateVirtualMemory
 };
 
+// Blocos devolvidos por Global/LocalAlloc. O endereço do bloco é usado como
+// handle no subconjunto atual; a tabela permite validar GlobalLock/Unlock/Free
+// sem liberar um ponteiro arbitrário do convidado.
+struct GlobalMemorySlot {
+    bool used{false};
+    void* address{nullptr};
+    std::size_t size{0};
+    std::uint32_t flags{0};
+    std::uint32_t lock_count{0};
+    bool global{false};
+};
+
 extern std::mutex g_files_mutex;
 extern std::array<FileSlot, 256> g_files;
 
@@ -106,6 +118,13 @@ extern std::array<FileMappingSlot, 64> g_mappings;
 
 extern std::mutex g_allocations_mutex;
 extern std::array<AllocationSlot, 256> g_allocations;
+extern std::mutex g_global_memory_mutex;
+extern std::array<GlobalMemorySlot, 256> g_global_memory;
+extern std::mutex g_local_free_mutex;
+extern std::array<void*, 512> g_local_free_blocks;
+
+[[nodiscard]] bool register_local_free_block(void* address) noexcept;
+[[nodiscard]] bool take_local_free_block(void* address) noexcept;
 
 // Imagem do convidado
 extern const std::byte* g_guest_image_base;

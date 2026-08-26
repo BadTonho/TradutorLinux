@@ -54,6 +54,7 @@ promessa de suporte universal; cada entrada é verificada via `tests/samples` ou
 | `tl_stream.exe` | ole32 1 + `IStream` | **fluxo principal restrito** | stream em memória, referências e round-trip |
 | `tl_trust.exe` | WINTRUST 1 | **fluxo principal restrito** | cadeia DER explícita folha→raiz, raiz incorreta rejeitada |
 | `tl_k32_gap.exe` | KERNEL32 11 | **fluxo principal** | seções críticas estendidas, ANSI e `FormatMessageA` |
+| `tl_globalmem.exe` | KERNEL32 10 | **fluxo principal** | `GlobalAlloc`/lock e `LocalAlloc` com `ZEROINIT` |
 
 ## Benchmark de cobertura
 

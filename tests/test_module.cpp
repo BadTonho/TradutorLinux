@@ -167,6 +167,16 @@ TEST_F(ModuleTest, RegistersBuiltinKernel32Exports) {
               reinterpret_cast<std::uintptr_t>(&tl_InitializeCriticalSectionAndSpinCount));
     EXPECT_EQ(find_export(ExportQuery{"KERNEL32.dll", "InitializeCriticalSectionEx"}).address,
               reinterpret_cast<std::uintptr_t>(&tl_InitializeCriticalSectionEx));
+    EXPECT_EQ(find_export(ExportQuery{"KERNEL32.dll", "GlobalAlloc"}).address,
+              reinterpret_cast<std::uintptr_t>(&tl_GlobalAlloc));
+    EXPECT_EQ(find_export(ExportQuery{"KERNEL32.dll", "GlobalLock"}).address,
+              reinterpret_cast<std::uintptr_t>(&tl_GlobalLock));
+    EXPECT_EQ(find_export(ExportQuery{"KERNEL32.dll", "GlobalUnlock"}).address,
+              reinterpret_cast<std::uintptr_t>(&tl_GlobalUnlock));
+    EXPECT_EQ(find_export(ExportQuery{"KERNEL32.dll", "GlobalFree"}).address,
+              reinterpret_cast<std::uintptr_t>(&tl_GlobalFree));
+    EXPECT_EQ(find_export(ExportQuery{"KERNEL32.dll", "LocalAlloc"}).address,
+              reinterpret_cast<std::uintptr_t>(&tl_LocalAlloc));
     EXPECT_EQ(find_export(ExportQuery{"KERNEL32.dll", "GetTempFileNameW"}).address,
               reinterpret_cast<std::uintptr_t>(&tl_GetTempFileNameW));
     EXPECT_EQ(find_export(ExportQuery{"KERNEL32.dll", "LocalFree"}).address,

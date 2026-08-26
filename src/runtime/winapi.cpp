@@ -89,6 +89,10 @@ std::array<FileMappingSlot, 64> g_mappings{};
 
 std::mutex g_allocations_mutex;
 std::array<AllocationSlot, 256> g_allocations{};
+std::mutex g_global_memory_mutex;
+std::array<GlobalMemorySlot, 256> g_global_memory{};
+std::mutex g_local_free_mutex;
+std::array<void*, 512> g_local_free_blocks{};
 
 const std::byte* g_guest_image_base{nullptr};
 std::size_t g_guest_image_size{0};
@@ -142,6 +146,34 @@ extern "C" void tl_call_guest_on_stack(std::uintptr_t entry,
 // ---------------------------------------------------------------------------
 // Helpers compartilhados do runtime
 // ---------------------------------------------------------------------------
+
+bool register_local_free_block(void* const address) noexcept {
+    if (address == nullptr) {
+        return false;
+    }
+    std::lock_guard lock(g_local_free_mutex);
+    for (void*& slot : g_local_free_blocks) {
+        if (slot == nullptr) {
+            slot = address;
+            return true;
+        }
+    }
+    return false;
+}
+
+bool take_local_free_block(void* const address) noexcept {
+    if (address == nullptr) {
+        return false;
+    }
+    std::lock_guard lock(g_local_free_mutex);
+    for (void*& slot : g_local_free_blocks) {
+        if (slot == address) {
+            slot = nullptr;
+            return true;
+        }
+    }
+    return false;
+}
 
 void bump_guest_allocation_generation() noexcept {
     runtime::invalidate_memory_map_cache();

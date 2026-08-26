@@ -155,9 +155,15 @@ Os itens marcados como concluídos devem ter evidência no repositório: código
   execução em prefixo temporário entrou na fase de execução, mas expirou em 20 s
   (`GuestTimeout`) sem produzir arquivos, portanto o fluxo do instalador não é
   declarado compatível.
+- **Marco concluído (Fase 13.12 — memória Global/Local compartilhada):**
+  `tl_globalmem.exe` cobre `GlobalAlloc`, `GlobalLock`, `GlobalUnlock`,
+  `GlobalFree`, `LocalAlloc` e `LocalFree`, incluindo `GMEM_MOVEABLE`,
+  `GMEM_ZEROINIT`, contagem de locks e handles inválidos. A reanálise de
+  2026-08-26 passou a resolver 209/251 imports do WinRAR e 261/338 do Rockstar;
+  ambos continuam `unsupported` e não foram executados.
 - **Próximo resultado observável (Fase 13.12):** ampliar somente se surgir
-  uma fixture que justifique `CRYPT32`, `WTHelper*` ou Authenticode; os limites
-  atuais permanecem publicados.
+  uma fixture que justifique outra família recorrente, como `CRYPT32`,
+  `WTHelper*` ou Authenticode; os limites atuais permanecem publicados.
 
 ### Estudo de caso: `RobloxPlayerInstaller.exe` (benchmark de cobertura)
 
@@ -653,7 +659,7 @@ quantidade de APIs declaradas sem uso real.
 - [x] Manter níveis de compatibilidade: inicia, fluxo principal, uso diário e cobertura avançada (definidos em `docs/catalog.md`).
 - [x] Coletar imports de muitos aplicativos e priorizar APIs que aparecem em vários alvos (`Roblox` `430` imports, `gdiplus` `8/8`, `SHELL32` `5/5`).
 - [x] Implementar famílias de DLLs por demanda: `KERNEL32`, `NTDLL` limitada, `ADVAPI32`, `USER32`, `GDI32`, `SHELL32`, `OLE32`, `COMDLG32`, `WS2_32`, `WININET`, `WINTRUST` e CRTs (22 módulos `tests/test_module.cpp:87`).
-- [x] Criar testes de integração por aplicativo e uma matriz pública de limitações (`docs/compatibilidade.md` + `tests/samples` 33 fixtures).
+- [x] Criar testes de integração por aplicativo e uma matriz pública de limitações (`docs/compatibilidade.md` + `tests/samples` 34 fixtures).
 - [x] Adicionar execução isolada, timeout, limites de recursos e diagnóstico para que aplicativos grandes não derrubem o host (`process/isolate.cpp` `71`/`72`).
 - [ ] Avaliar compatibilidade por versões e builds específicos, sem assumir que duas versões do mesmo aplicativo usam as mesmas APIs.
 

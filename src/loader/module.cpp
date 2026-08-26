@@ -426,6 +426,11 @@ void register_builtin_modules() {
          reinterpret_cast<std::uintptr_t>(&tl_InitializeCriticalSectionAndSpinCount)},
         {"InitializeCriticalSectionEx", 240,
          reinterpret_cast<std::uintptr_t>(&tl_InitializeCriticalSectionEx)},
+        {"GlobalAlloc", 241, reinterpret_cast<std::uintptr_t>(&tl_GlobalAlloc)},
+        {"GlobalLock", 242, reinterpret_cast<std::uintptr_t>(&tl_GlobalLock)},
+        {"GlobalUnlock", 243, reinterpret_cast<std::uintptr_t>(&tl_GlobalUnlock)},
+        {"GlobalFree", 244, reinterpret_cast<std::uintptr_t>(&tl_GlobalFree)},
+        {"LocalAlloc", 245, reinterpret_cast<std::uintptr_t>(&tl_LocalAlloc)},
     };
     static const InternalModule kKernel32Module{"KERNEL32.dll", kKernel32Exports};
     register_module(kKernel32Module);

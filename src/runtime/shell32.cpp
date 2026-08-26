@@ -65,6 +65,10 @@ TL_MSABI std::uint16_t** tl_CommandLineToArgvW(const std::uint16_t* command_line
     if (block == nullptr) {
         return nullptr;
     }
+    if (!register_local_free_block(block)) {
+        std::free(block);
+        return nullptr;
+    }
     auto** argv = reinterpret_cast<std::uint16_t**>(block);
     auto* strings = reinterpret_cast<std::uint16_t*>(block + (count + 1) * sizeof(std::uint16_t*));
     for (std::size_t i = 0; i < count; ++i) {

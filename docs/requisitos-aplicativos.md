@@ -25,26 +25,27 @@ posterior.
 | Aplicativo | Imports resolvidos | Imports ausentes | Bloqueio adicional | Estado |
 |---|---:|---:|---|---|
 | `RobloxPlayerInstaller.exe` | — | — | `UWOP_SET_FPREG` estendido incompatível antes da leitura de imports | `unsupported` |
-| `winrar-x64-723.exe` | 202/251 | 49 | GUI e APIs de sistema pendentes | `unsupported` |
+| `winrar-x64-723.exe` | 209/251 | 42 | GUI e APIs de sistema pendentes | `unsupported` |
 | `Creative_Cloud_Set-Up_7474.exe` | — | — | PE32 x86 (`0x14c`) | arquitetura não suportada |
 | `officedeploymenttool_20228-20124.exe` | — | — | PE32 x86 (`0x14c`) | arquitetura não suportada |
 | `Affinity x64.msix` | — | — | pacote MSIX; executável interno não localizado | formato não suportado |
 | `CapCut_7677236283084898320_installer.exe` | — | — | PE32 x86 (`0x14c`) | arquitetura não suportada |
 | `EpicInstaller-20.1.4-831cc1564f92442abc51fdb4a9854359.exe` | — | — | PE32 x86 (`0x14c`) + Mono/.NET | arquitetura/formato não suportados |
 | `lghub_installer.exe` | 114/114 | 0 | execução expira em prefixo temporário | `supported` no `--report`; fluxo não validado |
-| `Rockstar-Games-Launcher.exe` | 241/338 | 97 | GUI/rede e APIs pendentes | `unsupported` |
+| `Rockstar-Games-Launcher.exe` | 261/338 | 77 | GUI/rede e APIs pendentes | `unsupported` |
 
 Na Fase 13.11, WinRAR e Rockstar foram medidos novamente somente com
 `--report`; ambos continuam `unsupported`, retornam `5` e não foram executados.
-O subsistema de diálogos e controles resolveu mais 11 imports no WinRAR e 9 no
-Rockstar, sobre os resultados da Fase 13.10. O binário Logitech está disponível
-localmente e foi reanalisado em 2026-08-25: a fixture `tl_k32_gap.exe` cobriu as
-quatro lacunas de `KERNEL32`, o `--report` passou a resolver 114/114 e o primeiro
-teste de execução em prefixo temporário retornou `72` por timeout de 20 segundos,
-sem stdout ou arquivos criados. As três amostras têm V2 e a forma aceita de
-`UWOP_SET_FPREG` classificados, dispatcher SEH explícito, ambiente/locale/FLS
-determinísticos e console W; WinRAR e Rockstar ainda dependem de GUI, rede e
-demais APIs ausentes, enquanto o LGHub agora bloqueia durante a inicialização.
+Em 2026-08-26, o mesmo relatório atual resolveu mais cinco imports de memória
+global/local: WinRAR passou a 209/251 e Rockstar a 261/338. A fixture
+`tl_globalmem.exe` cobre `GlobalAlloc`/`GlobalLock`/`GlobalUnlock`/`GlobalFree`
+e `LocalAlloc`/`LocalFree`; isso reduz lacunas compartilhadas, mas não altera a
+declaração de compatibilidade. O binário Logitech foi reanalisado em
+2026-08-25: `tl_k32_gap.exe` cobriu as quatro lacunas de `KERNEL32`, o
+`--report` resolveu 114/114 e o primeiro teste de execução em prefixo temporário
+retornou `72` por timeout de 20 segundos, sem stdout ou arquivos criados.
+WinRAR e Rockstar ainda dependem de GUI, rede e demais APIs ausentes, enquanto
+o LGHub bloqueia durante a inicialização.
 
 ## Recorrências observadas
 
@@ -55,6 +56,7 @@ demais APIs ausentes, enquanto o LGHub agora bloqueia durante a inicialização.
 | Locale, code pages, FLS e ambiente | WinRAR, Logitech G HUB, Rockstar | núcleo determinístico `en-US`/1252/437, ambiente por processo e FLS por thread; validação, enumeração estática, `CT_CTYPE1` e data/hora en-US suportados; UI locale, mutação por thread e fibras reais pendentes |
 | Contexto de processo e console | WinRAR, Logitech G HUB, Rockstar | startup W, handles padrão, console UTF-16, diretório lógico, recursos AMD64, encode/decode e SList vazia suportados; alocação de console, herança explícita e operações interlocked pendentes |
 | Segurança, identidade e ACLs | WinRAR, Logitech G HUB, Rockstar | token/SID virtual e DACL persistente para arquivos existentes em `C:\` por prefixo; sem SACL, privilégios, `AccessCheck` ou permissões Linux |
+| Alocação Global/Local | WinRAR, Rockstar + fixture de protocolo | `GlobalAlloc`/`GlobalLock`/`GlobalUnlock`/`GlobalFree` e `LocalAlloc`/`LocalFree` com flags `MOVEABLE`/`ZEROINIT`, tabela lateral e rejeição de handles arbitrários |
 | Pacote MSIX/AppX | Affinity | pendente |
 | `delay-import` | WinRAR, Rockstar | suportado para descritores RVA (`grAttrs=0x1`), com resolução antecipada |
 | Automação OLE | WinRAR, Rockstar | `CreateStreamOnHGlobal` entregue como stream em memória em `tl_stream.exe`; `OLEAUT32`/`IDispatch` pendentes |
@@ -394,11 +396,11 @@ contrato, fixture e regressão antes de ser promovido a suporte.
 | SHA-256 | `f435b24d4c2c5342c4f7c0143ef358f0f425b7b8a0972dd34d9dcf94789e9c4d` |
 | Imports estáticos | 156 em 3 DLLs |
 | Delay imports | 95 em 7 DLLs |
-| Resolvidos pelo runtime | 202/251 (132 estáticos + 70 atrasados), Fase 13.11 |
-| Ausentes | 49 (24 estáticos + 25 atrasados), Fase 13.11 |
+| Resolvidos pelo runtime | 209/251 (138 estáticos + 71 atrasados), reanálise 2026-08-26 |
+| Ausentes | 42 (18 estáticos + 24 atrasados), reanálise 2026-08-26 |
 | Mecanismo adicional | `delay-import` RVA resolvido antecipadamente; `.pdata`: 1316 funções (1313 V1, 3 V2), 3 epílogos, 2 `SET_FPREG` estendidos, 263 handlers e 14 cadeias |
-| Resultado do `--report` | Fase 13.11: `Unsupported`/exit `5` por imports ausentes; execução não tentada |
-| Fonte | análise local de 2026-08-24 |
+| Resultado do `--report` | Reanálise 2026-08-26: `Unsupported`/exit `5` por imports ausentes; execução não tentada |
+| Fonte | análise local de 2026-08-26 |
 
 Na Fase 13.11, o `--report` leu V2 e classificou todos os 251 imports sem
 executar o binário. Dos 95 símbolos atrasados, 70 foram resolvidos; o token/SID
@@ -406,11 +408,15 @@ virtual, as DACLs e o subconjunto modal acrescentaram 21 imports desde a Fase
 13.10. WinRAR permanece `unsupported`
 sobretudo por GUI e APIs de sistema restantes.
 
+Na reanálise de 2026-08-26, a fixture `tl_globalmem.exe` justificou e cobriu
+as quatro APIs Global de `KERNEL32` usadas pelo WinRAR; o relatório atual é
+209/251. O entry point comercial continua não executado.
+
 ### Lacunas por módulo e mecanismo
 
 | DLL/mecanismo | APIs/ordinais ausentes |
 |---|---:|
-| `KERNEL32.dll` | 22 |
+| `KERNEL32.dll` | 16 |
 | `OLEAUT32.dll` | 2 |
 | `gdiplus.dll` | 0/8 |
 | delay `SHLWAPI.dll` | 1 |
@@ -418,11 +424,11 @@ sobretudo por GUI e APIs de sistema restantes.
 | delay `GDI32.dll` | 3 |
 | delay `ADVAPI32.dll` | 2 |
 | delay `SHELL32.dll` | 6 |
-| delay `ole32.dll` | 2 |
+| delay `ole32.dll` | 1 |
 
 ### Imports estáticos ausentes
 
-#### `KERNEL32.dll` (22)
+#### `KERNEL32.dll` (16)
 
 ```text
 CreateHardLinkW
@@ -439,14 +445,8 @@ GetProcessAffinityMask
 SetThreadPriority
 SystemTimeToTzSpecificLocalTime
 IsDBCSLeadByte
-GlobalAlloc
-GlobalLock
-GlobalUnlock
-GlobalFree
 GetNumberFormatW
 GetTickCount
-InitializeCriticalSectionEx
-InitializeCriticalSectionAndSpinCount
 ```
 
 #### `OLEAUT32.dll` (2)
@@ -712,11 +712,11 @@ deve declarar suporte ao fluxo Logitech apenas porque o `--report` passou.
 | SHA-256 | `c70131cb0427d146c9489297822e99ad87d4d5e141fd999d19f00975ab1a31f2` |
 | Imports estáticos | 205 em 5 DLLs |
 | Delay imports | 133 em 11 DLLs |
-| Resolvidos pelo runtime | 241/338 (148 estáticos + 93 atrasados), Fase 13.11 |
-| Ausentes | 97 (57 estáticos + 40 atrasados), Fase 13.11 |
+| Resolvidos pelo runtime | 261/338 (166 estáticos + 95 atrasados), reanálise 2026-08-26 |
+| Ausentes | 77 (35 estáticos + 42 atrasados), reanálise 2026-08-26 |
 | Mecanismo adicional | `delay-import` RVA resolvido antecipadamente; `.pdata`: 2663 funções (2661 V1, 2 V2), 2 epílogos, 6 `SET_FPREG` estendidos, 356 handlers e 584 cadeias |
-| Resultado do `--report` | Fase 13.11: `Unsupported`/exit `5` por imports ausentes; execução não tentada |
-| Fonte | análise local de 2026-08-24 |
+| Resultado do `--report` | Reanálise 2026-08-26: `Unsupported`/exit `5` por imports ausentes; execução não tentada |
+| Fonte | análise local de 2026-08-26 |
 
 Na Fase 13.11, o `--report` aceitou a extensão observada em
 `UWOP_SET_FPREG` (RVA `0xcead8`, `OpInfo=3` igual ao `FrameOffset`) e
@@ -726,11 +726,17 @@ resolveram 47 imports compartilhados; além das
 lacunas em `KERNEL32`, ele requer controles comuns por ordinal, automação OLE,
 diálogo de impressão e uma camada HTTP WinINet.
 
+Na reanálise de 2026-08-26, `tl_globalmem.exe` cobriu quatro das lacunas de
+memória compartilhadas pelo Rockstar (`GlobalAlloc`, `GlobalLock`,
+`GlobalUnlock` e `LocalAlloc`); o relatório atual é 261/338. A presença de
+imports resolvidos não autoriza executar o Launcher: GUI, automação, impressão,
+rede e confiança ainda precisam de contratos/fixtures próprios.
+
 ### Lacunas por módulo e mecanismo
 
 | DLL/mecanismo | APIs/ordinais ausentes |
 |---|---:|
-| `KERNEL32.dll` | 36 |
+| `KERNEL32.dll` | 29 |
 | `COMDLG32.dll` | 1 |
 | `OLEAUT32.dll` | 7 |
 | `COMCTL32.dll` | 2 |
@@ -739,30 +745,24 @@ diálogo de impressão e uma camada HTTP WinINet.
 | delay `GDI32.dll` | 6 |
 | delay `ADVAPI32.dll` | 5 |
 | delay `SHELL32.dll` | 2 |
-| delay `ole32.dll` | 1 |
+| delay `ole32.dll` | 0 |
 | delay `SHLWAPI.dll` | 2 |
 | delay `CRYPT32.dll` | 1 |
-| delay `WINTRUST.dll` | 4 |
+| delay `WINTRUST.dll` | 3 |
 
 ### Imports estáticos ausentes
 
-#### `KERNEL32.dll` (36)
+#### `KERNEL32.dll` (29)
 
 ```text
-InitializeCriticalSectionEx
-GlobalAlloc
-GlobalLock
-LocalAlloc
 SetDllDirectoryW
 K32GetModuleFileNameExW
 SetThreadLocale
 SetThreadUILanguage
 UnregisterWaitEx
-FormatMessageA
 RegisterWaitForSingleObject
 SetSearchPathMode
 GetUserDefaultUILanguage
-GlobalUnlock
 GetTimeZoneInformation
 GetLogicalDrives
 GetPhysicallyInstalledSystemMemory
@@ -780,7 +780,6 @@ WaitForSingleObjectEx
 GetExitCodeThread
 TryAcquireSRWLockExclusive
 InterlockedPushEntrySList
-InitializeCriticalSectionAndSpinCount
 FreeLibraryAndExitThread
 PeekNamedPipe
 SystemTimeToTzSpecificLocalTime
@@ -916,10 +915,9 @@ ordinal(176)
 CertGetNameStringW
 ```
 
-#### `WINTRUST.dll` (4)
+#### `WINTRUST.dll` (3)
 
 ```text
-WinVerifyTrust
 WTHelperGetProvCertFromChain
 WTHelperProvDataFromStateData
 WTHelperGetProvSignerFromChain

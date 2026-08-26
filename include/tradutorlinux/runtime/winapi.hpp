@@ -32,6 +32,7 @@ using Atom = std::uint16_t;
 constexpr Dword kErrorSuccess = 0;
 constexpr Dword kErrorFileNotFound = 2;
 constexpr Dword kErrorNoMoreFiles = 18;
+constexpr Dword kErrorNotLocked = 158;
 constexpr Dword kErrorNotSupported = 50;
 constexpr Dword kErrorAccessDenied = 5;
 constexpr Dword kErrorInvalidHandle = 6;
@@ -73,6 +74,8 @@ constexpr Dword kMemReserve = 0x2000U;
 constexpr Dword kMemRelease = 0x8000U;
 constexpr Dword kMemImage = 0x1000000U;
 constexpr Dword kMemPrivate = 0x20000U;
+constexpr Dword kGmemMoveable = 0x0002U;
+constexpr Dword kGmemZeroinit = 0x0040U;
 constexpr Dword kPageNoAccess = 0x01U;
 constexpr Dword kPageReadOnly = 0x02U;
 constexpr Dword kPageReadWrite = 0x04U;
@@ -1005,6 +1008,11 @@ TL_MSABI void* tl_FindResourceW(const void* module, const std::uint16_t* name,
 TL_MSABI void* tl_LoadResource(const void* module, const void* resource) noexcept;
 TL_MSABI void* tl_LockResource(const void* resource) noexcept;
 TL_MSABI std::uint32_t tl_SizeofResource(const void* module, const void* resource) noexcept;
+TL_MSABI void* tl_GlobalAlloc(std::uint32_t flags, std::size_t bytes) noexcept;
+TL_MSABI void* tl_GlobalLock(void* memory) noexcept;
+TL_MSABI int tl_GlobalUnlock(void* memory) noexcept;
+TL_MSABI void* tl_GlobalFree(void* memory) noexcept;
+TL_MSABI void* tl_LocalAlloc(std::uint32_t flags, std::size_t bytes) noexcept;
 TL_MSABI void* tl_LocalFree(void* memory) noexcept;
 
 // Diretório atual e módulo.

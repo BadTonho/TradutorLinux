@@ -104,3 +104,6 @@ programas Windows arbitrários. Diagnóstico de erros controlados pode evoluir
 junto do runtime atual; isolamento por processo filho deve ser um marco futuro;
 a política de linguagens já é compatível com o contrato atual; e a GUI continua
 limitada ao protótipo documentado na Fase 7.
+
+colocar uma limitação de cpu e ram pro aplicativo
+conseguir locar o aplicativo como path

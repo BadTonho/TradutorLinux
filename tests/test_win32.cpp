@@ -765,6 +765,42 @@ TEST(Win32HeapTest, HeapReAllocGrowsBlock) {
     tl_HeapFree(heap, 0, grown);
 }
 
+TEST(Win32GlobalMemoryTest, MoveableZeroInitializedBlockLocksAndFrees) {
+    void* const handle = tl_GlobalAlloc(abi::kGmemMoveable | abi::kGmemZeroinit, 32);
+    ASSERT_NE(handle, nullptr);
+    auto* const block = static_cast<unsigned char*>(tl_GlobalLock(handle));
+    ASSERT_NE(block, nullptr);
+    for (std::size_t index = 0; index < 32; ++index) {
+        EXPECT_EQ(block[index], 0U);
+    }
+    block[0] = 0x5A;
+    EXPECT_EQ(tl_GlobalLock(handle), block);
+    EXPECT_EQ(tl_GlobalUnlock(handle), 1);
+    EXPECT_EQ(tl_GlobalUnlock(handle), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorSuccess);
+    EXPECT_EQ(tl_GlobalFree(handle), nullptr);
+}
+
+TEST(Win32GlobalMemoryTest, RejectsInvalidHandleAndFlags) {
+    EXPECT_EQ(tl_GlobalAlloc(0x8000U, 8), nullptr);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_GlobalLock(reinterpret_cast<void*>(0x1234)), nullptr);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidHandle);
+    EXPECT_EQ(tl_GlobalFree(reinterpret_cast<void*>(0x1234)), reinterpret_cast<void*>(0x1234));
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidHandle);
+}
+
+TEST(Win32GlobalMemoryTest, LocalAllocUsesLocalFree) {
+    void* const memory = tl_LocalAlloc(abi::kGmemZeroinit, 16);
+    ASSERT_NE(memory, nullptr);
+    const auto* const bytes = static_cast<const unsigned char*>(memory);
+    for (std::size_t index = 0; index < 16; ++index) {
+        EXPECT_EQ(bytes[index], 0U);
+    }
+    EXPECT_EQ(tl_LocalFree(memory), nullptr);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorSuccess);
+}
+
 TEST(Win32TimeTest, GetTickCount64ReturnsIncreasingValue) {
     const std::uint64_t t1 = tl_GetTickCount64();
     tl_Sleep(1);
@@ -1719,9 +1755,15 @@ TEST(Win32WideTest, GetConsoleOutputCPReturnsUtf8) {
 }
 
 TEST(Win32WideTest, LocalFreeReturnsNull) {
-    void* memory = std::malloc(16);
+    void* memory = tl_LocalAlloc(0, 16);
     ASSERT_NE(memory, nullptr);
     EXPECT_EQ(tl_LocalFree(memory), nullptr);
+}
+
+TEST(Win32WideTest, LocalFreeRejectsUnknownHandle) {
+    void* const invalid = reinterpret_cast<void*>(0x1234);
+    EXPECT_EQ(tl_LocalFree(invalid), invalid);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidHandle);
 }
 
 TEST(Win32WideTest, GetTempFileNameWCreatesFileAndReturnsName) {

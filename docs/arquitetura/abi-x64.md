@@ -69,6 +69,14 @@ mensagens de sistema fixas do runtime, buffer fornecido e
 mensagem permanecem fora do contrato. A fixture `tl_k32_gap.exe` cobre os
 retornos, buffers e falhas de argumento.
 
+`GlobalAlloc`/`GlobalLock`/`GlobalUnlock`/`GlobalFree` e
+`LocalAlloc`/`LocalFree` usam `RCX`/`RDX` e retornam o handle ou ponteiro em
+`RAX`. O subconjunto aceita `GMEM_MOVEABLE` e `GMEM_ZEROINIT`; os blocos são
+`malloc`/`calloc` rastreados por uma tabela lateral, e o endereço do bloco é o
+handle usado por `GlobalLock`. A contagem de locks é validada, ponteiros
+arbitrários não são liberados e a fixture `tl_globalmem.exe` cobre memória
+móvel, fixa, inicialização zero, unlock final e `LocalFree`.
+
 ## Captura de contexto para unwinding
 
 `RtlCaptureContext` não pode ser expresso como uma chamada C++ comum: ela

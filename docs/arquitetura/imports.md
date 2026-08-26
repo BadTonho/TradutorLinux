@@ -26,7 +26,7 @@ Os módulos internos registram exports com ordinais internos definidos pelo proj
 
 | Módulo | Conteúdo |
 |---|---|---|
-| `KERNEL32.dll` | Console, erros, memória, arquivos, seções críticas, locale e mensagens ANSI/W; lista detalhada em `include/tradutorlinux/loader/module.hpp` |
+| `KERNEL32.dll` | Console, erros, memória, arquivos, alocações Global/Local, seções críticas, locale e mensagens ANSI/W; lista detalhada em `include/tradutorlinux/loader/module.hpp` |
 | `USER32.dll` | MessageBox, janelas, message loop, teclado, timers e pintura |
 | `GDI32.dll` | Stock objects e saída de texto |
 | `msvcrt.dll` | CRT mínimo, stdio, conversões e strings wide guiados pelos aplicativos-alvo |
@@ -59,6 +59,7 @@ Assinaturas hospedadas:
 | `tl_RtlPcToFileHeader` | `void* (void*, void**)` | Devolve a base da imagem PE ativa que contém o PC. |
 | Ambiente/locale/FLS | Assinaturas Win32 `W` e `TL_MSABI` | `Set/GetEnvironment*`, bloco UTF-16, expansão, CP1252/437/UTF-8, FLS por thread e locale `en-US` estático (consulta/validação, enumeração única, `CT_CTYPE1`, data/hora); ver `ambiente-locale-fls.md`. |
 | Processo/console | Assinaturas Win32 `W` e `TL_MSABI` | Handles padrão mutáveis, `STARTUPINFOW` AMD64, console UTF-16, diretório lógico, recursos do processador, ponteiros codificados e SList vazia; ver `console.md`. |
+| Alocação Global/Local | `void* (Dword, size_t)` e `void* (void*)` / `int (void*)` | `GlobalAlloc`/`LocalAlloc` aceitam `GMEM_MOVEABLE`/`GMEM_ZEROINIT`; `GlobalLock`/`Unlock` controlam contagem de locks e `GlobalFree`/`LocalFree` rejeitam handles arbitrários. |
 
 O subconjunto adicional usado pelo instalador Logitech é protegido pela
 fixture `tl_k32_gap.exe`: `InitializeCriticalSectionAndSpinCount` e
@@ -67,6 +68,12 @@ fixture `tl_k32_gap.exe`: `InitializeCriticalSectionAndSpinCount` e
 limitado de mensagens de `FormatMessageW`. Essas APIs são exports diretos de
 `KERNEL32.dll`, e imports ausentes continuam impedindo o entry point antes de
 qualquer execução.
+
+`GlobalAlloc`/`GlobalLock`/`GlobalUnlock`/`GlobalFree` e `LocalAlloc`/`LocalFree`
+formam o subconjunto de alocação compartilhado observado em WinRAR e Rockstar.
+Flags desconhecidas e handles arbitrários são rejeitados; `GMEM_MOVEABLE` e
+`GMEM_ZEROINIT` usam blocos `malloc`/`calloc` registrados por processo. A
+fixture `tl_globalmem.exe` protege o contrato e a resolução estática.
 
 ## Patch da IAT
 

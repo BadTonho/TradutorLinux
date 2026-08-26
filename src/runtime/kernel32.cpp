@@ -594,6 +594,19 @@ void trace_process_console(const char* const event, const char* const operation,
     return true;
 }
 
+[[nodiscard]] GlobalMemorySlot* find_global_memory_slot_locked(const void* memory,
+                                                                const bool global_only) noexcept {
+    if (memory == nullptr) {
+        return nullptr;
+    }
+    for (auto& slot : g_global_memory) {
+        if (slot.address == memory && (!global_only || slot.global)) {
+            return slot.used ? &slot : nullptr;
+        }
+    }
+    return nullptr;
+}
+
 }  // namespace
 
 std::shared_ptr<FlsThreadValues> ensure_fls_thread_values() {
@@ -1299,9 +1312,135 @@ TL_MSABI void* tl_HeapReAlloc(void* heap, std::uint32_t flags, void* memory,
     return std::realloc(memory, new_size);
 }
 
-TL_MSABI void* tl_LocalFree(void* memory) noexcept {
-    std::free(memory);
+TL_MSABI void* tl_GlobalAlloc(const std::uint32_t flags, const std::size_t bytes) noexcept {
+    constexpr std::uint32_t kAllowedFlags = abi::kGmemMoveable | abi::kGmemZeroinit;
+    if ((flags & ~kAllowedFlags) != 0U) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return nullptr;
+    }
+    const std::size_t allocation_size = bytes == 0 ? 1 : bytes;
+    void* const memory = (flags & abi::kGmemZeroinit) != 0
+                             ? std::calloc(1, allocation_size)
+                             : std::malloc(allocation_size);
+    if (memory == nullptr) {
+        set_last_error(abi::kErrorNotEnoughMemory);
+        return nullptr;
+    }
+    {
+        std::lock_guard lock(g_global_memory_mutex);
+        auto it = std::find_if(g_global_memory.begin(), g_global_memory.end(),
+                               [](const GlobalMemorySlot& slot) { return !slot.used; });
+        if (it == g_global_memory.end()) {
+            std::free(memory);
+            set_last_error(abi::kErrorNotEnoughMemory);
+            return nullptr;
+        }
+        *it = GlobalMemorySlot{true, memory, allocation_size, flags, 0, true};
+    }
+    set_last_error(abi::kErrorSuccess);
+    return memory;
+}
+
+TL_MSABI void* tl_GlobalLock(void* const memory) noexcept {
+    std::lock_guard lock(g_global_memory_mutex);
+    GlobalMemorySlot* const slot = find_global_memory_slot_locked(memory, true);
+    if (slot == nullptr) {
+        set_last_error(abi::kErrorInvalidHandle);
+        return nullptr;
+    }
+    ++slot->lock_count;
+    set_last_error(abi::kErrorSuccess);
+    return slot->address;
+}
+
+TL_MSABI int tl_GlobalUnlock(void* const memory) noexcept {
+    std::lock_guard lock(g_global_memory_mutex);
+    GlobalMemorySlot* const slot = find_global_memory_slot_locked(memory, true);
+    if (slot == nullptr) {
+        set_last_error(abi::kErrorInvalidHandle);
+        return 0;
+    }
+    if (slot->lock_count == 0) {
+        set_last_error(abi::kErrorNotLocked);
+        return 0;
+    }
+    --slot->lock_count;
+    set_last_error(abi::kErrorSuccess);
+    return slot->lock_count == 0 ? 0 : 1;
+}
+
+TL_MSABI void* tl_GlobalFree(void* const memory) noexcept {
+    if (memory == nullptr) {
+        set_last_error(abi::kErrorSuccess);
+        return nullptr;
+    }
+    std::lock_guard lock(g_global_memory_mutex);
+    GlobalMemorySlot* const slot = find_global_memory_slot_locked(memory, true);
+    if (slot == nullptr) {
+        set_last_error(abi::kErrorInvalidHandle);
+        return memory;
+    }
+    std::free(slot->address);
+    *slot = GlobalMemorySlot{};
+    set_last_error(abi::kErrorSuccess);
     return nullptr;
+}
+
+TL_MSABI void* tl_LocalAlloc(const std::uint32_t flags, const std::size_t bytes) noexcept {
+    constexpr std::uint32_t kAllowedFlags = abi::kGmemMoveable | abi::kGmemZeroinit;
+    if ((flags & ~kAllowedFlags) != 0U) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return nullptr;
+    }
+    const std::size_t allocation_size = bytes == 0 ? 1 : bytes;
+    void* const memory = (flags & abi::kGmemZeroinit) != 0
+                             ? std::calloc(1, allocation_size)
+                             : std::malloc(allocation_size);
+    if (memory == nullptr) {
+        set_last_error(abi::kErrorNotEnoughMemory);
+        return nullptr;
+    }
+    {
+        std::lock_guard lock(g_global_memory_mutex);
+        auto it = std::find_if(g_global_memory.begin(), g_global_memory.end(),
+                               [](const GlobalMemorySlot& slot) { return !slot.used; });
+        if (it == g_global_memory.end()) {
+            std::free(memory);
+            set_last_error(abi::kErrorNotEnoughMemory);
+            return nullptr;
+        }
+        *it = GlobalMemorySlot{true, memory, allocation_size, flags, 0, false};
+    }
+    set_last_error(abi::kErrorSuccess);
+    return memory;
+}
+
+TL_MSABI void* tl_LocalFree(void* memory) noexcept {
+    if (memory == nullptr) {
+        set_last_error(abi::kErrorSuccess);
+        return nullptr;
+    }
+    {
+        std::lock_guard lock(g_global_memory_mutex);
+        if (GlobalMemorySlot* const slot = find_global_memory_slot_locked(memory, false);
+            slot != nullptr) {
+            if (slot->global) {
+                set_last_error(abi::kErrorInvalidHandle);
+                return memory;
+            }
+            std::free(slot->address);
+            *slot = GlobalMemorySlot{};
+            set_last_error(abi::kErrorSuccess);
+            return nullptr;
+        }
+    }
+    if (take_local_free_block(memory)) {
+        std::free(memory);
+        set_last_error(abi::kErrorSuccess);
+        return nullptr;
+    }
+    set_last_error(abi::kErrorInvalidHandle);
+    return memory;
 }
 
 TL_MSABI std::uint64_t tl_GetTickCount64() noexcept {
@@ -3464,6 +3603,11 @@ TL_MSABI std::uint32_t tl_FormatMessageW(const std::uint32_t flags, const void* 
         }
         std::copy(wide_text.begin(), wide_text.end(), storage);
         storage[wide_text.size()] = 0;
+        if (!register_local_free_block(storage)) {
+            std::free(storage);
+            set_last_error(abi::kErrorNotEnoughMemory);
+            return 0;
+        }
         auto** output = reinterpret_cast<std::uint16_t**>(buffer);
         *output = storage;
         set_last_error(abi::kErrorSuccess);
@@ -3502,6 +3646,11 @@ TL_MSABI std::uint32_t tl_FormatMessageA(const std::uint32_t flags, const void* 
         }
         std::copy(text.begin(), text.end(), storage);
         storage[text.size()] = '\0';
+        if (!register_local_free_block(storage)) {
+            std::free(storage);
+            set_last_error(abi::kErrorNotEnoughMemory);
+            return 0;
+        }
         *reinterpret_cast<char**>(buffer) = storage;
         set_last_error(abi::kErrorSuccess);
         return static_cast<std::uint32_t>(text.size());
