@@ -173,6 +173,12 @@ TEST(WintrustTest, RejectsUnsupportedPolicyBeforeCertificateProvider) {
     EXPECT_EQ(tl_WinVerifyTrust(nullptr, wrong_action, &data), kTrustInvalidParameter);
 }
 
+TEST(WintrustTest, HelpersRejectUnknownStateAndChainPointers) {
+    EXPECT_EQ(tl_WTHelperProvDataFromStateData(reinterpret_cast<void*>(1)), nullptr);
+    EXPECT_EQ(tl_WTHelperGetProvSignerFromChain(nullptr, 0, 0, 0), nullptr);
+    EXPECT_EQ(tl_WTHelperGetProvCertFromChain(nullptr, 0), nullptr);
+}
+
 TEST(Crypt32Test, CertGetNameStringReadsSubjectIssuerAndValidatesBuffers) {
     const std::array<std::uint8_t, 61> certificate{
         0x30, 0x3B, 0x30, 0x34, 0x02, 0x01, 0x01, 0x30, 0x00,

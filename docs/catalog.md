@@ -53,6 +53,7 @@ promessa de suporte universal; cada entrada é verificada via `tests/samples` ou
 | `tl_com.exe` | ole32 9 | **fluxo principal** | `CoCreateInstance` `REGDB_E_CLASSNOTREG` |
 | `tl_stream.exe` | ole32 1 + `IStream` | **fluxo principal restrito** | stream em memória, referências e round-trip |
 | `tl_trust.exe` | WINTRUST 1 | **fluxo principal restrito** | cadeia DER explícita folha→raiz, raiz incorreta rejeitada |
+| `tl_wthelper.exe` | WINTRUST 4 + CRYPT32 1 | **fluxo principal restrito** | estado WinTrust, signer e certificados folha/raiz, CN DER e fechamento |
 | `tl_k32_gap.exe` | KERNEL32 11 | **fluxo principal** | seções críticas estendidas, ANSI e `FormatMessageA` |
 | `tl_globalmem.exe` | KERNEL32 10 | **fluxo principal** | `GlobalAlloc`/lock e `LocalAlloc` com `ZEROINIT` |
 | `tl_crypt32.exe` | CRYPT32 1 + KERNEL32 4 | **fluxo principal restrito** | nome subject/issuer de blob X.509 DER |

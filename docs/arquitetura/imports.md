@@ -33,7 +33,7 @@ Os módulos internos registram exports com ordinais internos definidos pelo proj
 | `SHELL32.dll` | `CommandLineToArgvW` no subconjunto usado por `dos2unix`/`unix2dos` |
 | `ole32.dll` | COM mínimo e `CreateStreamOnHGlobal`/`IStream` em memória |
 | `WININET.dll` | HTTPS direto de loopback com CA fornecida pelo host |
-| `WINTRUST.dll` | `WinVerifyTrust` com cadeia DER explícita `TLTC` |
+| `WINTRUST.dll` | `WinVerifyTrust` com cadeia DER explícita `TLTC` e `WTHelper*` para consultar o estado criado pela verificação |
 | `CRYPT32.dll` | `CertGetNameStringW` para nomes em blob X.509 DER |
 
 ## Fronteira de ABI (`ms_abi`)
@@ -83,6 +83,13 @@ e converte atributos de nome para UTF-16. Somente `X509_ASN_ENCODING` e os tipos
 de nome documentados na fixture `tl_crypt32.exe` são aceitos; SAN, propriedades
 friendly, loja de certificados, cadeia e Authenticode permanecem fora do
 contrato. O export é registrado separadamente de `WINTRUST.dll`.
+
+Os três helpers `WTHelperProvDataFromStateData`,
+`WTHelperGetProvSignerFromChain` e `WTHelperGetProvCertFromChain` aceitam
+somente ponteiros retornados pela mesma chamada `WinVerifyTrust` em estado
+`VERIFY`; a tabela transitória contém signer `0` e certificados `0..1` e é
+invalidada no `CLOSE`. O contrato não expõe loja, contra-assinaturas ou
+Authenticode.
 
 ## Patch da IAT
 

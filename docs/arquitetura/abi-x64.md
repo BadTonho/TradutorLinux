@@ -165,3 +165,9 @@ O contrato de confiança usa somente `WTD_CHOICE_BLOB` com a ação
 `WINTRUST_ACTION_GENERIC_VERIFY_V2` e o envelope DER `TLTC` documentado em
 [`wintrust.md`](wintrust.md). A saída é um HRESULT explícito; nenhuma exceção,
 ponteiro OpenSSL ou estrutura Linux atravessa a fronteira do convidado.
+`WTD_STATEACTION_VERIFY` devolve um estado opaco validado pelo runtime, e os
+três `WTHelper*` atravessam somente os registros Microsoft x64 publicados no
+header: um signer e dois certificados (`GuestWintrustProviderData` 224 bytes,
+`GuestWintrustSigner` 64 bytes e `GuestWintrustProviderCert` 88 bytes). O
+estado permanece válido até `WTD_STATEACTION_CLOSE`; índices externos ou
+contra-assinantes retornam nulo.

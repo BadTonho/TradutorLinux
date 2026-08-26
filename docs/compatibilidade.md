@@ -45,6 +45,7 @@ Esta matriz declara o comportamento suportado; ela não é uma promessa de compa
 | `tl_wininet.exe` | PE32+ AMD64 | Não | `WININET.dll` — abertura, conexão HTTPS, requisição, cabeçalhos, resposta, leitura, consulta e fechamento; `KERNEL32.dll` — ambiente/console | **Suportado somente para protocolo HTTPS loopback:** o smoke cria servidor TLS e CA efêmeros em `127.0.0.1`, valida URL, cabeçalho, status `200`, leitura parcial e CA confiável; uma CA diferente falha de forma controlada. Sem Internet, proxy, cookies, credenciais, redirecionamento ou WinTrust. | WinINet HTTPS local |
 | `tl_stream.exe` | PE32+ AMD64 | Não | `ole32.dll!CreateStreamOnHGlobal`; vtable `IStream` | **Suportado no subconjunto de stream em memória:** `QueryInterface`, referências, `Read`/`Write`, `Seek`, `SetSize`, `Stat`, `Commit`/`Revert`; saída `ole-stream\n`, exit `0` | OLE stream em memória |
 | `tl_trust.exe` | PE32+ AMD64 | Não | `WINTRUST.dll!WinVerifyTrust`; `KERNEL32.dll` — console | **Suportado somente na política de blob TLTC:** cadeia DER explícita folha→raiz, UI desabilitada e sem revogação; rejeita raiz incorreta e política incompatível; saída `trust\n`, exit `0` | Cadeia WinTrust local |
+| `tl_wthelper.exe` | PE32+ AMD64 | Não | `WINTRUST.dll!WinVerifyTrust`, `WTHelperProvDataFromStateData`, `WTHelperGetProvSignerFromChain`, `WTHelperGetProvCertFromChain`; `CRYPT32.dll!CertGetNameStringW`; `KERNEL32.dll` — console | **Suportado no subconjunto de estado:** cria/fecha estado WinTrust para cadeia TLTC, percorre signer e folha/raiz, extrai o CN DER e rejeita índices inválidos ou uso após `CLOSE`; saída `wthelper\n`, exit `0` | Travessia WTHelper |
 | `tl_registry_unicode.exe` | PE32+ AMD64 | Não | `ADVAPI32.dll` chaves/valores Unicode | Cria, persiste, reabre, consulta e remove chave/valor UTF-16 em armazenamento genérico por escopo; saída `registry\n`, exit `0` | Registro |
 | `tl_dynload.exe` | PE32+ AMD64 | Não | `KERNEL32.dll` — `LoadLibraryA/W/ExA/ExW`, `FreeLibrary`, `GetModuleHandleA/W/ExA/ExW`, `GetProcAddress`, `GetLastError` | Fixture de carregamento dinâmico: `LoadLibrary` com caminho `C:\...`, API Set `api-ms-win-core-file-l1-1-0.dll`, `LoadLibraryEx`, `GetProcAddress` por nome e ordinal (36=`GetTickCount64`), `FreeLibrary`, `GetModuleHandleEx` `PIN`/`FROM_ADDRESS`; saída `dynload\n`, exit `0` | Carregamento dinâmico |
 | `tl_version.exe` | PE32+ AMD64 | Não | `KERNEL32.dll` — `GetVersionExA/W`, `VerifyVersionInfoW`, `VerSetConditionMask`, `GetUserDefaultLocaleName`, `LocaleNameToLCID` | Fixture versão/locale: `GetVersionExA/W` 10.0.19044, `VerifyVersionInfoW`/`VerSetConditionMask` cadeia `VER_MAJOR|MINOR`, `GetUserDefaultLocaleName` → `en-US` (6 com NUL, `122` em buffer curto), `LocaleNameToLCID` `en-US`/`pt-BR`; saída `version\n`, exit `0` | Versão/locale |
@@ -482,16 +483,17 @@ nem WinTrust. O contrato completo está em
 
 ## Cadeia WinTrust explícita
 
-`WINTRUST.dll` expõe apenas `WinVerifyTrust` no contrato de blob descrito em
-[`wintrust.md`](arquitetura/wintrust.md). A fixture `tl_trust.exe` usa dois
-certificados DER reais (folha e raiz) e uma política sem UI ou revogação; a
-verificação usa `libcrypto` carregada dinamicamente e uma loja formada somente
-pela raiz fornecida. Não há loja de certificados do sistema, Authenticode,
-`WTD_CHOICE_FILE`, catálogo, revogação ou resolução dos quatro `WTHelper*`.
+`WINTRUST.dll` expõe `WinVerifyTrust` e os três `WTHelper*` no contrato de blob
+descrito em [`wintrust.md`](arquitetura/wintrust.md). As fixtures `tl_trust.exe`
+e `tl_wthelper.exe` usam dois certificados DER reais (folha e raiz): a primeira
+verifica a cadeia e a segunda consulta/fecha o estado. Não há loja de
+certificados do sistema, Authenticode, `WTD_CHOICE_FILE`, catálogo ou
+revogação.
 
 | Módulo | API | Estado | Comportamento suportado |
 |---|---|---|---|
 | `WINTRUST.dll` | `WinVerifyTrust` | Suportado no subconjunto | Valida `WINTRUST_ACTION_GENERIC_VERIFY_V2` + `WTD_CHOICE_BLOB` com envelope `TLTC`, cadeia de dois DER, assinatura/validade X.509 e raiz explícita; HRESULT não nulo para política ou cadeia inválida |
+| `WINTRUST.dll` | `WTHelperProvDataFromStateData`, `WTHelperGetProvSignerFromChain`, `WTHelperGetProvCertFromChain` | Suportado no subconjunto | Consulta o estado criado por `WTD_STATEACTION_VERIFY`, signer `0` e certificados folha/raiz `0..1`; rejeita contra-assinantes, índices inválidos e ponteiros externos; estado encerra em `CLOSE` |
 | `CRYPT32.dll` | `CertGetNameStringW` | Suportado no subconjunto | Valida `CERT_CONTEXT`/estrutura DER e extrai `CERT_NAME_SIMPLE_DISPLAY_TYPE`, `CERT_NAME_FRIENDLY_DISPLAY_TYPE`, `CERT_NAME_DNS_TYPE`, `CERT_NAME_EMAIL_TYPE` ou `CERT_NAME_ATTR_TYPE`; sem verificação criptográfica, loja, SAN, Authenticode ou `Cert*` de cadeia |
 
 ## Registro genérico

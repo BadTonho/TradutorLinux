@@ -244,6 +244,10 @@ function(tl_add_pe_fixture target_name source_file manifest_file)
                 set(runtime_extra_args
                     "-DEXPECTED_HEX=74727573740a"
                     "-DREQUIRED_TRACE=wintrust")
+            elseif(target_name STREQUAL "tl_wthelper")
+                set(runtime_extra_args
+                    "-DEXPECTED_HEX=777468656c7065720a"
+                    "-DREQUIRED_TRACE=wintrust")
             elseif(target_name STREQUAL "tl_unwind")
                 set(runtime_extra_args
                     "-DEXPECTED_HEX=756e77696e640a")
@@ -711,6 +715,10 @@ tl_add_pe_fixture(tl_stream src/tl_stream.c manifests/tl_stream.json
 tl_add_pe_fixture(tl_trust src/tl_trust.c manifests/tl_trust.json
     LINK_KERNEL32 LINK_WINTRUST EXPECT_RESOLVED CONSOLE REPORT RELOCATABLE
     REPORT_SYMBOL "WinVerifyTrust")
+
+tl_add_pe_fixture(tl_wthelper src/tl_wthelper.c manifests/tl_wthelper.json
+    LINK_KERNEL32 LINK_WINTRUST LINK_CRYPT32 EXPECT_RESOLVED CONSOLE REPORT RELOCATABLE
+    REPORT_SYMBOL "WTHelperGetProvCertFromChain")
 
 if(TARGET tradutorlinux)
     add_test(

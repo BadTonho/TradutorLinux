@@ -765,6 +765,12 @@ void register_builtin_modules() {
     register_module(kOle32Module);
     static const ExportedFunction kWintrustExports[] = {
         {"WinVerifyTrust", 1, reinterpret_cast<std::uintptr_t>(&tl_WinVerifyTrust)},
+        {"WTHelperProvDataFromStateData", 2,
+         reinterpret_cast<std::uintptr_t>(&tl_WTHelperProvDataFromStateData)},
+        {"WTHelperGetProvSignerFromChain", 3,
+         reinterpret_cast<std::uintptr_t>(&tl_WTHelperGetProvSignerFromChain)},
+        {"WTHelperGetProvCertFromChain", 4,
+         reinterpret_cast<std::uintptr_t>(&tl_WTHelperGetProvCertFromChain)},
     };
     static const InternalModule kWintrustModule{"WINTRUST.dll", kWintrustExports};
     register_module(kWintrustModule);

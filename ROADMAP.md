@@ -167,9 +167,16 @@ Os itens marcados como concluídos devem ter evidência no repositório: código
   buffers insuficientes. O subconjunto não consulta SAN, loja Windows,
   Authenticode ou cadeia; a reanálise passou a resolver 262/338 imports do
   Rockstar, que continua `unsupported` e não foi executado.
-- **Próximo resultado observável (Fase 13.12):** ampliar somente se surgir
-  uma fixture que justifique `WTHelper*` ou Authenticode; os limites atuais
-  permanecem publicados.
+- **Marco concluído (Fase 13.12 — travessia WTHelper):**
+  `tl_wthelper.exe` cria e fecha estado com `WTD_STATEACTION_VERIFY/CLOSE`,
+  percorre signer e certificados folha/raiz pelos três `WTHelper*`, extrai o
+  CN pela `CertGetNameStringW` e rejeita índices inválidos/ponteiros após o
+  fechamento. A reanálise passou a resolver 265/338 imports do Rockstar, que
+  continua `unsupported` e não foi executado; Authenticode e loja Windows
+  permanecem fora do contrato.
+- **Próximo resultado observável (Fase 13.12):** avaliar somente uma lacuna
+  com fixture que justifique Authenticode, loja Windows ou outra API de
+  certificado; os limites atuais permanecem publicados.
 
 ### Estudo de caso: `RobloxPlayerInstaller.exe` (benchmark de cobertura)
 
@@ -611,10 +618,11 @@ nem declarar os benchmarks comerciais suportados.
 - [x] Para confiança, limitar a primeira entrega a `WinVerifyTrust` com
   `WTD_CHOICE_BLOB`, política sem UI/revogação e cadeia DER explícita
   folha→raiz; `tl_trust.exe` cobre metadados, `--report`, trace, sucesso,
-  política incompatível e raiz incorreta. `WTD_CHOICE_FILE`, Authenticode,
-  loja Windows, revogação e `WTHelper*` continuam fora do contrato. A API
+  política incompatível e raiz incorreta. `WTD_CHOICE_FILE`, loja Windows,
+  revogação e Authenticode continuam fora do contrato. A API
   separada `CRYPT32!CertGetNameStringW` é coberta por `tl_crypt32.exe` apenas
-  para `CERT_CONTEXT`/DER explícito e extração de nomes.
+  para `CERT_CONTEXT`/DER explícito; `tl_wthelper.exe` cobre a travessia
+  limitada de estado, signer e certificados folha/raiz.
 - [ ] Não usar esses componentes para declarar compatibilidade do Rockstar
   antes de validar um fluxo de instalação/atualização inteiro.
 
@@ -668,7 +676,7 @@ quantidade de APIs declaradas sem uso real.
 - [x] Manter níveis de compatibilidade: inicia, fluxo principal, uso diário e cobertura avançada (definidos em `docs/catalog.md`).
 - [x] Coletar imports de muitos aplicativos e priorizar APIs que aparecem em vários alvos (`Roblox` `430` imports, `gdiplus` `8/8`, `SHELL32` `5/5`).
 - [x] Implementar famílias de DLLs por demanda: `KERNEL32`, `NTDLL` limitada, `ADVAPI32`, `USER32`, `GDI32`, `SHELL32`, `OLE32`, `COMDLG32`, `WS2_32`, `WININET`, `WINTRUST`, `CRYPT32` e CRTs (23 módulos `tests/test_module.cpp:87`).
-- [x] Criar testes de integração por aplicativo e uma matriz pública de limitações (`docs/compatibilidade.md` + `tests/samples` 35 fixtures).
+- [x] Criar testes de integração por aplicativo e uma matriz pública de limitações (`docs/compatibilidade.md` + `tests/samples` 36 fixtures).
 - [x] Adicionar execução isolada, timeout, limites de recursos e diagnóstico para que aplicativos grandes não derrubem o host (`process/isolate.cpp` `71`/`72`).
 - [ ] Avaliar compatibilidade por versões e builds específicos, sem assumir que duas versões do mesmo aplicativo usam as mesmas APIs.
 

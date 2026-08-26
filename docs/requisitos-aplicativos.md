@@ -32,12 +32,14 @@ posterior.
 | `CapCut_7677236283084898320_installer.exe` | — | — | PE32 x86 (`0x14c`) | arquitetura não suportada |
 | `EpicInstaller-20.1.4-831cc1564f92442abc51fdb4a9854359.exe` | — | — | PE32 x86 (`0x14c`) + Mono/.NET | arquitetura/formato não suportados |
 | `lghub_installer.exe` | 114/114 | 0 | execução expira em prefixo temporário | `supported` no `--report`; fluxo não validado |
-| `Rockstar-Games-Launcher.exe` | 262/338 | 76 | GUI/rede e APIs pendentes | `unsupported` |
+| `Rockstar-Games-Launcher.exe` | 265/338 | 73 | GUI/rede e APIs pendentes | `unsupported` |
 
 Na Fase 13.11, WinRAR e Rockstar foram medidos novamente somente com
 `--report`; ambos continuam `unsupported`, retornam `5` e não foram executados.
 Em 2026-08-26, o mesmo relatório atual resolveu mais cinco imports de memória
-global/local: WinRAR passou a 209/251 e Rockstar a 262/338. As fixtures
+global/local: WinRAR passou a 209/251 e Rockstar a 262/338. Em seguida, a
+fixture `tl_wthelper.exe` cobriu os três imports de travessia `WINTRUST`, e o
+Rockstar passou a 265/338. As fixtures
 `tl_globalmem.exe` e `tl_crypt32.exe` cobrem, respectivamente,
 `GlobalAlloc`/`GlobalLock`/`GlobalUnlock`/`GlobalFree`/`LocalAlloc`/`LocalFree` e
 `CertGetNameStringW`; isso reduz lacunas compartilhadas, mas não altera a
@@ -62,7 +64,7 @@ o LGHub bloqueia durante a inicialização.
 | `delay-import` | WinRAR, Rockstar | suportado para descritores RVA (`grAttrs=0x1`), com resolução antecipada |
 | Automação OLE | WinRAR, Rockstar | `CreateStreamOnHGlobal` entregue como stream em memória em `tl_stream.exe`; `OLEAUT32`/`IDispatch` pendentes |
 | HTTP WinINet | Rockstar + fixture de protocolo | subconjunto HTTPS direto de loopback entregue em `tl_wininet.exe`; sem execução do Rockstar |
-| Certificados/WinTrust | Rockstar + fixtures de protocolo | `CertGetNameStringW` extrai nomes de blob DER em `tl_crypt32.exe`; cadeia explícita em `tl_trust.exe`; Authenticode, loja Windows e `WTHelper*` pendentes |
+| Certificados/WinTrust | Rockstar + fixtures de protocolo | `CertGetNameStringW` extrai nomes de blob DER em `tl_crypt32.exe`; cadeia explícita em `tl_trust.exe`; `WTHelper*` percorre estado/signer/folha-raiz em `tl_wthelper.exe`; Authenticode e loja Windows pendentes |
 
 ## Prioridade ativa — instaladores PE32+ x86-64
 
@@ -713,8 +715,8 @@ deve declarar suporte ao fluxo Logitech apenas porque o `--report` passou.
 | SHA-256 | `c70131cb0427d146c9489297822e99ad87d4d5e141fd999d19f00975ab1a31f2` |
 | Imports estáticos | 205 em 5 DLLs |
 | Delay imports | 133 em 11 DLLs |
-| Resolvidos pelo runtime | 262/338 (166 estáticos + 96 atrasados), reanálise 2026-08-26 |
-| Ausentes | 76 (39 estáticos + 37 atrasados), reanálise 2026-08-26 |
+| Resolvidos pelo runtime | 265/338 (166 estáticos + 99 atrasados), reanálise 2026-08-26 |
+| Ausentes | 73 (39 estáticos + 34 atrasados), reanálise 2026-08-26 |
 | Mecanismo adicional | `delay-import` RVA resolvido antecipadamente; `.pdata`: 2663 funções (2661 V1, 2 V2), 2 epílogos, 6 `SET_FPREG` estendidos, 356 handlers e 584 cadeias |
 | Resultado do `--report` | Reanálise 2026-08-26: `Unsupported`/exit `5` por imports ausentes; execução não tentada |
 | Fonte | análise local de 2026-08-26 |
@@ -730,7 +732,8 @@ diálogo de impressão e uma camada HTTP WinINet.
 Na reanálise de 2026-08-26, `tl_globalmem.exe` cobriu quatro das lacunas de
 memória compartilhadas pelo Rockstar (`GlobalAlloc`, `GlobalLock`,
 `GlobalUnlock` e `LocalAlloc`) e `tl_crypt32.exe` cobriu
-`CertGetNameStringW`; o relatório atual é 262/338. A presença de
+`CertGetNameStringW`; em seguida `tl_wthelper.exe` cobriu os três
+`WTHelper*`, e o relatório atual é 265/338. A presença de
 imports resolvidos não autoriza executar o Launcher: GUI, automação, impressão,
 rede e confiança ainda precisam de contratos/fixtures próprios.
 
@@ -747,7 +750,6 @@ rede e confiança ainda precisam de contratos/fixtures próprios.
 | delay `ADVAPI32.dll` | 5 |
 | delay `SHELL32.dll` | 2 |
 | delay `SHLWAPI.dll` | 2 |
-| delay `WINTRUST.dll` | 3 |
 
 ### Imports estáticos ausentes
 
@@ -884,21 +886,14 @@ PathStripToRootW
 ordinal(176)
 ```
 
-#### `WINTRUST.dll` (3)
-
-```text
-WTHelperGetProvCertFromChain
-WTHelperProvDataFromStateData
-WTHelperGetProvSignerFromChain
-```
-
 ### Próxima investigação
 
 SEH x64, locale, contexto de processo/console, enumeração de arquivos e
 identidade/DACL virtual já foram entregues, mas não resolvem as dependências
 restantes deste aplicativo. WinINet e o stream OLE têm fixtures genéricas
 reproduzíveis; a primeira cadeia WinTrust também é coberta por `tl_trust.exe`,
-e `tl_crypt32.exe` cobre somente a leitura de nomes DER. A automação
-`OLEAUT32`/`IDispatch`, `WTHelper*`, Authenticode/loja Windows, controles comuns
+e `tl_crypt32.exe` cobre somente a leitura de nomes DER. A fixture
+`tl_wthelper.exe` cobre a travessia limitada de estado WinTrust. A automação
+`OLEAUT32`/`IDispatch`, Authenticode/loja Windows, controles comuns
 restantes e impressão ainda exigem contratos próprios antes de qualquer
 tentativa de executar o Rockstar Launcher.

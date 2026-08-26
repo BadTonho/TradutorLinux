@@ -107,6 +107,18 @@ struct OpenSslApi {
 
 OpenSslApi g_openssl;
 
+struct TrustStateSlot {
+    bool used{false};
+    std::vector<std::vector<std::uint8_t>> certificates;
+    GuestCertContext certificate_contexts[2]{};
+    GuestWintrustProviderCert provider_certificates[2]{};
+    GuestWintrustSigner signer{};
+    GuestWintrustProviderData provider_data{};
+};
+
+std::mutex g_trust_state_mutex;
+std::array<TrustStateSlot, 32> g_trust_states{};
+
 bool read_u32(const std::vector<std::uint8_t>& payload, std::size_t& offset,
               std::uint32_t& value) noexcept {
     if (offset > payload.size() || payload.size() - offset < sizeof(value)) return false;
@@ -170,6 +182,108 @@ std::int32_t verify_payload(const std::vector<std::vector<std::uint8_t>>& certif
     return ready && verified == 1 ? kTrustSuccess : kTrustUntrustedRoot;
 }
 
+TrustStateSlot* find_state_locked(void* const state_data) noexcept {
+    if (state_data == nullptr) return nullptr;
+    for (TrustStateSlot& state : g_trust_states) {
+        if (state.used && state_data == static_cast<void*>(&state)) return &state;
+    }
+    return nullptr;
+}
+
+TrustStateSlot* find_state_from_provider_locked(
+    const GuestWintrustProviderData* const provider_data) noexcept {
+    if (provider_data == nullptr) return nullptr;
+    for (TrustStateSlot& state : g_trust_states) {
+        if (state.used && provider_data == &state.provider_data) return &state;
+    }
+    return nullptr;
+}
+
+TrustStateSlot* find_state_from_signer_locked(
+    const GuestWintrustSigner* const signer) noexcept {
+    if (signer == nullptr) return nullptr;
+    for (TrustStateSlot& state : g_trust_states) {
+        if (state.used && signer == &state.signer) return &state;
+    }
+    return nullptr;
+}
+
+TrustStateSlot* create_trust_state(
+    const std::vector<std::vector<std::uint8_t>>& certificates,
+    GuestWintrustData* const data) noexcept {
+    if (certificates.size() != 2U || data == nullptr) return nullptr;
+    std::lock_guard<std::mutex> lock(g_trust_state_mutex);
+    TrustStateSlot* free_state = nullptr;
+    for (TrustStateSlot& state : g_trust_states) {
+        if (!state.used) {
+            free_state = &state;
+            break;
+        }
+    }
+    if (free_state == nullptr) return nullptr;
+    try {
+        free_state->certificates = certificates;
+        free_state->certificate_contexts[0] = GuestCertContext{
+            .encoding_type = 1U,
+            .encoded = free_state->certificates[0].data(),
+            .encoded_size = static_cast<std::uint32_t>(free_state->certificates[0].size()),
+            .cert_info = nullptr,
+            .cert_store = nullptr,
+        };
+        free_state->certificate_contexts[1] = GuestCertContext{
+            .encoding_type = 1U,
+            .encoded = free_state->certificates[1].data(),
+            .encoded_size = static_cast<std::uint32_t>(free_state->certificates[1].size()),
+            .cert_info = nullptr,
+            .cert_store = nullptr,
+        };
+        free_state->provider_certificates[0] = GuestWintrustProviderCert{
+            .cb_struct = sizeof(GuestWintrustProviderCert),
+            .cert_context = &free_state->certificate_contexts[0],
+        };
+        free_state->provider_certificates[1] = GuestWintrustProviderCert{
+            .cb_struct = sizeof(GuestWintrustProviderCert),
+            .cert_context = &free_state->certificate_contexts[1],
+            .trusted_root = 1U,
+            .self_signed = 1U,
+        };
+        free_state->signer = GuestWintrustSigner{
+            .cb_struct = sizeof(GuestWintrustSigner),
+            .cert_count = 2U,
+            .cert_chain = free_state->provider_certificates,
+        };
+        free_state->provider_data = GuestWintrustProviderData{
+            .cb_struct = sizeof(GuestWintrustProviderData),
+            .wintrust_data = data,
+            .signer_count = 1U,
+            .signers = &free_state->signer,
+        };
+    } catch (...) {
+        free_state->certificates.clear();
+        return nullptr;
+    }
+    runtime::invalidate_memory_map_cache();
+    free_state->used = true;
+    data->state_data = free_state;
+    return free_state;
+}
+
+bool close_trust_state(void* const state_data) noexcept {
+    std::lock_guard<std::mutex> lock(g_trust_state_mutex);
+    TrustStateSlot* const state = find_state_locked(state_data);
+    if (state == nullptr) return false;
+    state->used = false;
+    state->certificates.clear();
+    state->certificate_contexts[0] = GuestCertContext{};
+    state->certificate_contexts[1] = GuestCertContext{};
+    state->provider_certificates[0] = GuestWintrustProviderCert{};
+    state->provider_certificates[1] = GuestWintrustProviderCert{};
+    state->signer = GuestWintrustSigner{};
+    state->provider_data = GuestWintrustProviderData{};
+    runtime::invalidate_memory_map_cache();
+    return true;
+}
+
 }  // namespace
 
 extern "C" {
@@ -183,9 +297,25 @@ TL_WINTRUST_MSABI std::int32_t tl_WinVerifyTrust(void* const hwnd, const void* c
         data->cb_struct != sizeof(GuestWintrustData) || data->policy_callback_data != nullptr ||
         data->sip_client_data != nullptr || data->ui_choice != kWtdUiNone ||
         data->revocation_checks != kWtdRevokeNone || data->union_choice != kWtdChoiceBlob ||
-        data->state_action != kWtdStateActionIgnore || data->state_data != nullptr ||
         data->url_reference != nullptr || data->provider_flags != 0U || data->ui_context != 0U ||
-        data->signature_settings != nullptr || data->union_data == nullptr ||
+        data->signature_settings != nullptr ||
+        (data->state_action != kWtdStateActionIgnore &&
+         data->state_action != kWtdStateActionVerify &&
+         data->state_action != kWtdStateActionClose)) {
+        trace_trust("verify", "invalid", "explicit-chain", "openssl");
+        return kTrustInvalidParameter;
+    }
+
+    if (data->state_action == kWtdStateActionClose) {
+        if (data->state_data == nullptr || !close_trust_state(data->state_data)) {
+            trace_trust("close", "invalid", "explicit-chain", "state-table");
+            return kTrustInvalidParameter;
+        }
+        data->state_data = nullptr;
+        trace_trust("close", "success", "explicit-chain", "state-table");
+        return kTrustSuccess;
+    }
+    if (data->state_data != nullptr || data->union_data == nullptr ||
         !mapped_range(data->union_data, sizeof(GuestWintrustBlobInfo), true)) {
         trace_trust("verify", "invalid", "explicit-chain", "openssl");
         return kTrustInvalidParameter;
@@ -202,11 +332,43 @@ TL_WINTRUST_MSABI std::int32_t tl_WinVerifyTrust(void* const hwnd, const void* c
         return kTrustInvalidParameter;
     }
     const std::int32_t result = verify_payload(certificates);
+    if (result == kTrustSuccess && data->state_action == kWtdStateActionVerify &&
+        create_trust_state(certificates, data) == nullptr) {
+        trace_trust("verify", "unavailable", "explicit-chain", "state-table");
+        return kTrustProviderUnknown;
+    }
     const char* const status = result == kTrustSuccess ? "success" :
                                result == kTrustInvalidParameter ? "invalid" : "untrusted";
     trace_trust("verify", status,
                 "explicit-chain", result == kTrustProviderUnknown ? "unavailable" : "openssl");
     return result;
+}
+
+TL_WINTRUST_MSABI GuestWintrustProviderData* tl_WTHelperProvDataFromStateData(
+    void* const state_data) noexcept {
+    std::lock_guard<std::mutex> lock(g_trust_state_mutex);
+    TrustStateSlot* const state = find_state_locked(state_data);
+    return state == nullptr ? nullptr : &state->provider_data;
+}
+
+TL_WINTRUST_MSABI GuestWintrustSigner* tl_WTHelperGetProvSignerFromChain(
+    GuestWintrustProviderData* const provider_data, const std::uint32_t signer_index,
+    const std::int32_t counter_signer, const std::uint32_t counter_signer_index) noexcept {
+    std::lock_guard<std::mutex> lock(g_trust_state_mutex);
+    TrustStateSlot* const state = find_state_from_provider_locked(provider_data);
+    if (state == nullptr || signer_index != 0U || counter_signer != 0 ||
+        counter_signer_index != 0U) {
+        return nullptr;
+    }
+    return &state->signer;
+}
+
+TL_WINTRUST_MSABI GuestWintrustProviderCert* tl_WTHelperGetProvCertFromChain(
+    GuestWintrustSigner* const signer, const std::uint32_t cert_index) noexcept {
+    std::lock_guard<std::mutex> lock(g_trust_state_mutex);
+    TrustStateSlot* const state = find_state_from_signer_locked(signer);
+    if (state == nullptr || cert_index >= 2U) return nullptr;
+    return &state->provider_certificates[cert_index];
 }
 
 }  // extern "C"

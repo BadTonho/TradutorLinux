@@ -107,6 +107,12 @@ TEST_F(ModuleTest, RegistersBuiltinKernel32Exports) {
               reinterpret_cast<std::uintptr_t>(&tl_ExitProcess));
     EXPECT_EQ(find_export(ExportQuery{"CRYPT32.dll", "CertGetNameStringW"}).address,
               reinterpret_cast<std::uintptr_t>(&tl_CertGetNameStringW));
+    EXPECT_EQ(find_export(ExportQuery{"WINTRUST.dll", "WTHelperProvDataFromStateData"}).address,
+              reinterpret_cast<std::uintptr_t>(&tl_WTHelperProvDataFromStateData));
+    EXPECT_EQ(find_export(ExportQuery{"WINTRUST.dll", "WTHelperGetProvSignerFromChain"}).address,
+              reinterpret_cast<std::uintptr_t>(&tl_WTHelperGetProvSignerFromChain));
+    EXPECT_EQ(find_export(ExportQuery{"WINTRUST.dll", "WTHelperGetProvCertFromChain"}).address,
+              reinterpret_cast<std::uintptr_t>(&tl_WTHelperGetProvCertFromChain));
     EXPECT_EQ(find_export(ExportQuery{"KERNEL32.dll", "ReadFile"}).address,
               reinterpret_cast<std::uintptr_t>(&tl_ReadFile));
     EXPECT_EQ(find_export(ExportQuery{"KERNEL32.dll", "VirtualQuery"}).address,
