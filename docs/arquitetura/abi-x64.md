@@ -77,6 +77,15 @@ handle usado por `GlobalLock`. A contagem de locks é validada, ponteiros
 arbitrários não são liberados e a fixture `tl_globalmem.exe` cobre memória
 móvel, fixa, inicialização zero, unlock final e `LocalFree`.
 
+`CRYPT32.dll!CertGetNameStringW` recebe `PCCERT_CONTEXT` em `RCX`, tipo em
+`RDX`, flags em `R8`, parâmetro opcional em `R9`, buffer e capacidade na pilha
+Microsoft x64. O layout convidado de `GuestCertContext` tem 40 bytes; somente
+`X509_ASN_ENCODING` e um blob DER estruturalmente validado são aceitos. O subconjunto extrai
+atributos de subject/issuer para os tipos simple, friendly, DNS, email e OID,
+retornando a capacidade necessária quando o buffer é nulo ou zero. Loja de
+certificados, SAN, Authenticode e cadeia permanecem fora do contrato; a fixture
+`tl_crypt32.exe` cobre a consulta, o nome do emissor e buffer insuficiente.
+
 ## Captura de contexto para unwinding
 
 `RtlCaptureContext` não pode ser expresso como uma chamada C++ comum: ela

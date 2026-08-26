@@ -18,7 +18,7 @@ find_program(TL_MINGW_WINDRES
 set(TL_FIXTURE_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/generated")
 
 function(tl_add_pe_fixture target_name source_file manifest_file)
-    set(options LINK_KERNEL32 LINK_USER32 LINK_GDI32 LINK_COMCTL32 LINK_GDIPLUS LINK_UXTHEME LINK_DBGHELP LINK_OLE32 LINK_POWRPROF LINK_IPHLPAPI LINK_WINMM LINK_WS2_32 LINK_WININET LINK_WINTRUST LINK_ADVAPI32 RELOCATABLE UNWIND EXPECT_RESOLVED CONSOLE REPORT REPORT_ONLY NO_RUNTIME_CHECK RUNTIME_FAILURE)
+    set(options LINK_KERNEL32 LINK_USER32 LINK_GDI32 LINK_COMCTL32 LINK_GDIPLUS LINK_UXTHEME LINK_DBGHELP LINK_OLE32 LINK_POWRPROF LINK_IPHLPAPI LINK_WINMM LINK_WS2_32 LINK_WININET LINK_WINTRUST LINK_CRYPT32 LINK_ADVAPI32 RELOCATABLE UNWIND EXPECT_RESOLVED CONSOLE REPORT REPORT_ONLY NO_RUNTIME_CHECK RUNTIME_FAILURE)
     set(oneValueArgs REPORT_SYMBOL RESOURCE_FILE IMPORT_DEF)
     cmake_parse_arguments(ARG "${options}" "${oneValueArgs}" "" ${ARGN})
 
@@ -80,6 +80,9 @@ function(tl_add_pe_fixture target_name source_file manifest_file)
     endif()
     if(ARG_LINK_WINTRUST)
         list(APPEND link_libraries -lwintrust)
+    endif()
+    if(ARG_LINK_CRYPT32)
+        list(APPEND link_libraries -lcrypt32)
     endif()
     if(ARG_LINK_ADVAPI32)
         list(APPEND link_libraries -ladvapi32)
@@ -230,6 +233,9 @@ function(tl_add_pe_fixture target_name source_file manifest_file)
             elseif(target_name STREQUAL "tl_globalmem")
                 set(runtime_extra_args
                     "-DEXPECTED_HEX=676c6f62616c6d656d0a")
+            elseif(target_name STREQUAL "tl_crypt32")
+                set(runtime_extra_args
+                    "-DEXPECTED_HEX=637279707433320a")
             elseif(target_name STREQUAL "tl_stream")
                 set(runtime_extra_args
                     "-DEXPECTED_HEX=6f6c652d73747265616d0a"
@@ -591,6 +597,10 @@ tl_add_pe_fixture(tl_k32_gap src/tl_k32_gap.c manifests/tl_k32_gap.json
 tl_add_pe_fixture(tl_globalmem src/tl_globalmem.c manifests/tl_globalmem.json
     LINK_KERNEL32 EXPECT_RESOLVED CONSOLE REPORT RELOCATABLE
     REPORT_SYMBOL "GlobalAlloc")
+
+tl_add_pe_fixture(tl_crypt32 src/tl_crypt32.c manifests/tl_crypt32.json
+    LINK_KERNEL32 LINK_CRYPT32 EXPECT_RESOLVED CONSOLE REPORT RELOCATABLE
+    REPORT_SYMBOL "CertGetNameStringW")
 
 tl_add_pe_fixture(tl_files_wide src/tl_files_wide.c manifests/tl_files_wide.json
     LINK_KERNEL32 EXPECT_RESOLVED CONSOLE REPORT RELOCATABLE

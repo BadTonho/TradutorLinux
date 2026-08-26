@@ -161,9 +161,15 @@ Os itens marcados como concluídos devem ter evidência no repositório: código
   `GMEM_ZEROINIT`, contagem de locks e handles inválidos. A reanálise de
   2026-08-26 passou a resolver 209/251 imports do WinRAR e 261/338 do Rockstar;
   ambos continuam `unsupported` e não foram executados.
+- **Marco concluído (Fase 13.12 — nome de certificado DER):**
+  `tl_crypt32.exe` cobre `CRYPT32.dll!CertGetNameStringW` com
+  `CERT_CONTEXT` explícito, nomes subject/issuer, consulta de capacidade e
+  buffers insuficientes. O subconjunto não consulta SAN, loja Windows,
+  Authenticode ou cadeia; a reanálise passou a resolver 262/338 imports do
+  Rockstar, que continua `unsupported` e não foi executado.
 - **Próximo resultado observável (Fase 13.12):** ampliar somente se surgir
-  uma fixture que justifique outra família recorrente, como `CRYPT32`,
-  `WTHelper*` ou Authenticode; os limites atuais permanecem publicados.
+  uma fixture que justifique `WTHelper*` ou Authenticode; os limites atuais
+  permanecem publicados.
 
 ### Estudo de caso: `RobloxPlayerInstaller.exe` (benchmark de cobertura)
 
@@ -239,8 +245,9 @@ reutilizáveis por várias classes de aplicativos. As lacunas observadas são:
 - [x] criar uma camada `WS2_32`/rede com sockets, resolução local e polling,
   validada somente em loopback;
 - [x] criar o armazenamento genérico Unicode de `ADVAPI32` para registro;
-  `CRYPT32`, loja Windows, Authenticode e confiança fora do envelope `TLTC`
-  continuam pendentes;
+  demais APIs `CRYPT32`, loja Windows e Authenticode continuam pendentes fora
+  do envelope `TLTC` (a extração restrita de nomes DER é coberta por
+  `tl_crypt32.exe`);
 - [x] definir uma camada `OLE32`/COM mínima (`CoCreateInstance`/`CoGetClassObject`/`OleInitialize` via `ole32.dll`, fixture `tl_com.exe` cobre `S_OK`/`REGDB_E_CLASSNOTREG`/`CLASS_E_NOAGGREGATION`);
 - [x] ampliar a GUI de forma genérica: variantes Unicode de `USER32` (`RegisterClassExW`/`CreateWindowExW`/`DefWindowProcW`/`GetMessageW`/`DispatchMessageW`/`SetWindowTextW`/`GetWindowTextW`/`FindWindowW`/`LoadCursorW`/`SendMessageW` etc. via wrappers `wide_to_utf8`), validado por `tl_win_w.exe` sob `Xvfb` análogo a `tl_win`;
 - [ ] ampliar `SHELL32`/`SHLWAPI` para pastas conhecidas, execução de processos
@@ -605,7 +612,9 @@ nem declarar os benchmarks comerciais suportados.
   `WTD_CHOICE_BLOB`, política sem UI/revogação e cadeia DER explícita
   folha→raiz; `tl_trust.exe` cobre metadados, `--report`, trace, sucesso,
   política incompatível e raiz incorreta. `WTD_CHOICE_FILE`, Authenticode,
-  loja Windows, revogação e `WTHelper*` continuam fora do contrato.
+  loja Windows, revogação e `WTHelper*` continuam fora do contrato. A API
+  separada `CRYPT32!CertGetNameStringW` é coberta por `tl_crypt32.exe` apenas
+  para `CERT_CONTEXT`/DER explícito e extração de nomes.
 - [ ] Não usar esses componentes para declarar compatibilidade do Rockstar
   antes de validar um fluxo de instalação/atualização inteiro.
 
@@ -658,8 +667,8 @@ quantidade de APIs declaradas sem uso real.
 - [x] Criar um catálogo de aplicativos reais por categoria: console, arquivos, rede, ferramentas de desenvolvimento, produtividade e GUI (`docs/catalog.md` com `xxd`/`bzip2`/`dos2unix`/`tl_*`/`simple_todo`/`Roblox`).
 - [x] Manter níveis de compatibilidade: inicia, fluxo principal, uso diário e cobertura avançada (definidos em `docs/catalog.md`).
 - [x] Coletar imports de muitos aplicativos e priorizar APIs que aparecem em vários alvos (`Roblox` `430` imports, `gdiplus` `8/8`, `SHELL32` `5/5`).
-- [x] Implementar famílias de DLLs por demanda: `KERNEL32`, `NTDLL` limitada, `ADVAPI32`, `USER32`, `GDI32`, `SHELL32`, `OLE32`, `COMDLG32`, `WS2_32`, `WININET`, `WINTRUST` e CRTs (22 módulos `tests/test_module.cpp:87`).
-- [x] Criar testes de integração por aplicativo e uma matriz pública de limitações (`docs/compatibilidade.md` + `tests/samples` 34 fixtures).
+- [x] Implementar famílias de DLLs por demanda: `KERNEL32`, `NTDLL` limitada, `ADVAPI32`, `USER32`, `GDI32`, `SHELL32`, `OLE32`, `COMDLG32`, `WS2_32`, `WININET`, `WINTRUST`, `CRYPT32` e CRTs (23 módulos `tests/test_module.cpp:87`).
+- [x] Criar testes de integração por aplicativo e uma matriz pública de limitações (`docs/compatibilidade.md` + `tests/samples` 35 fixtures).
 - [x] Adicionar execução isolada, timeout, limites de recursos e diagnóstico para que aplicativos grandes não derrubem o host (`process/isolate.cpp` `71`/`72`).
 - [ ] Avaliar compatibilidade por versões e builds específicos, sem assumir que duas versões do mesmo aplicativo usam as mesmas APIs.
 

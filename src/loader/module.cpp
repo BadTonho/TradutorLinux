@@ -7,6 +7,7 @@
 #include "tradutorlinux/runtime/ws2_32.hpp"
 #include "tradutorlinux/runtime/wininet.hpp"
 #include "tradutorlinux/runtime/wintrust.hpp"
+#include "tradutorlinux/runtime/crypt32.hpp"
 #include "tradutorlinux/runtime/ole32.hpp"
 #include "tradutorlinux/runtime/shlwapi.hpp"
 #include "tradutorlinux/runtime/version.hpp"
@@ -767,6 +768,11 @@ void register_builtin_modules() {
     };
     static const InternalModule kWintrustModule{"WINTRUST.dll", kWintrustExports};
     register_module(kWintrustModule);
+    static const ExportedFunction kCrypt32Exports[] = {
+        {"CertGetNameStringW", 1, reinterpret_cast<std::uintptr_t>(&tl_CertGetNameStringW)},
+    };
+    static const InternalModule kCrypt32Module{"CRYPT32.dll", kCrypt32Exports};
+    register_module(kCrypt32Module);
     static const ExportedFunction kShlwapiExports[] = {
         {"PathFileExistsA", 1, reinterpret_cast<std::uintptr_t>(&tl_PathFileExistsA)},
         {"PathFileExistsW", 2, reinterpret_cast<std::uintptr_t>(&tl_PathFileExistsW)},

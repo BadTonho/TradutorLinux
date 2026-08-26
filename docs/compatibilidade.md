@@ -38,6 +38,7 @@ Esta matriz declara o comportamento suportado; ela não é uma promessa de compa
 | `tl_sync.exe` | PE32+ AMD64 | Não | eventos, mutex, semáforo e esperas em `KERNEL32.dll` | Cobre evento manual/automático, timeout, semáforo, mutex recursivo e `WaitForMultipleObjects`; saída `sync\n`, exit `0` | Sincronização |
 | `tl_k32_gap.exe` | PE32+ AMD64 | Não | `KERNEL32.dll!InitializeCriticalSectionAndSpinCount`, `InitializeCriticalSectionEx`, `FormatMessageA`, `AreFileApisANSI` e console | **Suportado no subconjunto:** valida seções críticas, flags inválidas, ACP ANSI fixo e `FormatMessageA` com buffer curto/mensagem de sistema; saída `k32-gap\n`, exit `0`; `--report` resolve 11/11 | Lacunas KERNEL32 do LGHub |
 | `tl_globalmem.exe` | PE32+ AMD64 | Não | `KERNEL32.dll!GlobalAlloc`, `GlobalLock`, `GlobalUnlock`, `GlobalFree`, `LocalAlloc`, `LocalFree` e console | **Suportado no subconjunto:** memória móvel/fixa e `ZEROINIT`, lock count e handles inválidos validados; saída `globalmem\n`, exit `0`; `--report` resolve 10/10 | Memória global/local compartilhada |
+| `tl_crypt32.exe` | PE32+ AMD64 | Não | `CRYPT32.dll!CertGetNameStringW`; `KERNEL32.dll` — console | **Suportado no subconjunto:** lê `CERT_CONTEXT` com blob DER de certificado, nomes simples/issuer/DNS por CN e atributo OID, consulta de tamanho e erro de buffer; saída `crypt32\n`, exit `0`; `--report` resolve 5/5 | Nome de certificado DER |
 | `tl_process_parent.exe` / `tl_process_child.exe` | PE32+ AMD64 | Não | `CreateProcessW`, ambiente W, `GetExitCodeProcess`, `TerminateProcess` e `WaitForSingleObject` | Pai cria filhos PE32+ pelo mesmo parser/loader/import resolver e define uma variável que o filho precisa ler, provando a cópia do ambiente Win32; o código de saída real viaja pelo pipe `[flag][exit_code LE32]`. Valida código `7`, encerramento `9` e saída `child\nparent\n`, exit `0`. | Processos filhos |
 | `tl_install_setup.exe` / `tl_install_app.exe` | PE32+ AMD64 | Não | arquivos Unicode, ambiente, `GetModuleFileNameW`, `CreateProcessW`, espera e handles | **Fluxo de instalação suportado:** setup externo observa `Z:\\...`, copia a aplicação de `C:\\windows\\temp` para `C:\\Program Files` e a inicia com `CreateProcessW`; a aplicação observa `C:\\...`, diretório herdado e `%LOCALAPPDATA%` do mesmo prefixo. `install → catálogo → app run` é coberto por `integration_install_prefix_catalog_run`; prefixos distintos não compartilham estado. O setup de múltiplos candidatos confirma `InstallPending` (`6`) e a escolha no launcher | Instalação por prefixo |
 | `tl_network_loopback.exe` | PE32+ AMD64 | Não | `WS2_32.dll` TCP/UDP, resolução local e `WSAPoll` | Fixture somente loopback, com TCP, UDP e `localhost`; passa com sockets permitidos e é skip controlado em sandbox que retorna `EACCES/EPERM` | WS2_32 |
@@ -491,6 +492,7 @@ pela raiz fornecida. Não há loja de certificados do sistema, Authenticode,
 | Módulo | API | Estado | Comportamento suportado |
 |---|---|---|---|
 | `WINTRUST.dll` | `WinVerifyTrust` | Suportado no subconjunto | Valida `WINTRUST_ACTION_GENERIC_VERIFY_V2` + `WTD_CHOICE_BLOB` com envelope `TLTC`, cadeia de dois DER, assinatura/validade X.509 e raiz explícita; HRESULT não nulo para política ou cadeia inválida |
+| `CRYPT32.dll` | `CertGetNameStringW` | Suportado no subconjunto | Valida `CERT_CONTEXT`/estrutura DER e extrai `CERT_NAME_SIMPLE_DISPLAY_TYPE`, `CERT_NAME_FRIENDLY_DISPLAY_TYPE`, `CERT_NAME_DNS_TYPE`, `CERT_NAME_EMAIL_TYPE` ou `CERT_NAME_ATTR_TYPE`; sem verificação criptográfica, loja, SAN, Authenticode ou `Cert*` de cadeia |
 
 ## Registro genérico
 
@@ -498,8 +500,8 @@ pela raiz fornecida. Não há loja de certificados do sistema, Authenticode,
 de `RegCreateKeyEx[A/W]`, `RegOpenKeyEx[A/W]`, `RegSetValueEx[A/W]`,
 `RegQueryValueEx[A/W]`, `RegDeleteValue[A/W]` e `RegCloseKey` usa chaves/valores
 genéricos e persiste bytes, tipo e nomes UTF-8/UTF-16 em um arquivo por escopo
-(`APPDATA`, ou `TL_REGISTRY_FILE` para testes). Hive real, COM e `CRYPT32`
-continuam fora deste contrato.
+(`APPDATA`, ou `TL_REGISTRY_FILE` para testes). Hive real, COM e as demais
+APIs `CRYPT32` continuam fora deste contrato.
 
 ## Segurança virtual por prefixo
 

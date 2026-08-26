@@ -5,6 +5,7 @@
 #include "tradutorlinux/runtime/ole32.hpp"
 #include "tradutorlinux/runtime/wininet.hpp"
 #include "tradutorlinux/runtime/wintrust.hpp"
+#include "tradutorlinux/runtime/crypt32.hpp"
 #include "tradutorlinux/prefix/prefix.hpp"
 #include "../src/runtime/runtime_context.hpp"
 
@@ -170,6 +171,43 @@ TEST(WintrustTest, RejectsUnsupportedPolicyBeforeCertificateProvider) {
     constexpr std::uint8_t wrong_action[16]{};
     data.cb_struct = sizeof(data);
     EXPECT_EQ(tl_WinVerifyTrust(nullptr, wrong_action, &data), kTrustInvalidParameter);
+}
+
+TEST(Crypt32Test, CertGetNameStringReadsSubjectIssuerAndValidatesBuffers) {
+    const std::array<std::uint8_t, 61> certificate{
+        0x30, 0x3B, 0x30, 0x34, 0x02, 0x01, 0x01, 0x30, 0x00,
+        0x30, 0x12, 0x31, 0x10, 0x30, 0x0E, 0x06, 0x03, 0x55, 0x04, 0x03,
+        0x0C, 0x07, 'T', 'L', ' ', 'R', 'o', 'o', 't',
+        0x30, 0x00,
+        0x30, 0x15, 0x31, 0x13, 0x30, 0x11, 0x06, 0x03, 0x55, 0x04, 0x03,
+        0x0C, 0x0A, 'T', 'L', ' ', 'F', 'i', 'x', 't', 'u', 'r', 'e',
+        0x30, 0x00, 0x30, 0x00, 0x03, 0x01, 0x00,
+    };
+    GuestCertContext context{};
+    context.encoding_type = 1;
+    context.encoded = const_cast<std::uint8_t*>(certificate.data());
+    context.encoded_size = static_cast<std::uint32_t>(certificate.size());
+    std::uint16_t name[32]{};
+    constexpr std::uint16_t kSubject[] = {'T', 'L', ' ', 'F', 'i', 'x', 't', 'u', 'r', 'e', 0};
+    constexpr std::uint16_t kIssuer[] = {'T', 'L', ' ', 'R', 'o', 'o', 't', 0};
+    const char common_name[] = "2.5.4.3";
+
+    EXPECT_EQ(tl_CertGetNameStringW(&context, kCertNameSimpleDisplayType, 0, nullptr, nullptr, 0),
+              11U);
+    EXPECT_EQ(tl_CertGetNameStringW(&context, kCertNameSimpleDisplayType, 0, nullptr, name, 32),
+              11U);
+    EXPECT_TRUE(std::equal(std::begin(kSubject), std::end(kSubject), name));
+    EXPECT_EQ(tl_CertGetNameStringW(&context, kCertNameSimpleDisplayType, kCertNameIssuerFlag,
+                                    nullptr, name, 32),
+              8U);
+    EXPECT_TRUE(std::equal(std::begin(kIssuer), std::end(kIssuer), name));
+    EXPECT_EQ(tl_CertGetNameStringW(&context, kCertNameAttrType, 0, common_name, name, 32),
+              11U);
+    EXPECT_EQ(tl_CertGetNameStringW(&context, kCertNameSimpleDisplayType, 0, nullptr, name, 2),
+              0U);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInsufficientBuffer);
+    EXPECT_EQ(tl_CertGetNameStringW(&context, 7, 0, nullptr, name, 32), 0U);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
 }
 
 TEST(Win32CodePageTest, Cp1252ConvertsByte80ToEuroSign) {

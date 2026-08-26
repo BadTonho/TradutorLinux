@@ -29,6 +29,7 @@ add_library(tradutorlinux_core STATIC
     runtime/ws2_32.cpp
     runtime/wininet.cpp
     runtime/wintrust.cpp
+    runtime/crypt32.cpp
     runtime/ole32.cpp
     runtime/shlwapi.cpp
     runtime/version.cpp

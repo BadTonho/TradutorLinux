@@ -34,6 +34,7 @@ Os módulos internos registram exports com ordinais internos definidos pelo proj
 | `ole32.dll` | COM mínimo e `CreateStreamOnHGlobal`/`IStream` em memória |
 | `WININET.dll` | HTTPS direto de loopback com CA fornecida pelo host |
 | `WINTRUST.dll` | `WinVerifyTrust` com cadeia DER explícita `TLTC` |
+| `CRYPT32.dll` | `CertGetNameStringW` para nomes em blob X.509 DER |
 
 ## Fronteira de ABI (`ms_abi`)
 
@@ -60,6 +61,7 @@ Assinaturas hospedadas:
 | Ambiente/locale/FLS | Assinaturas Win32 `W` e `TL_MSABI` | `Set/GetEnvironment*`, bloco UTF-16, expansão, CP1252/437/UTF-8, FLS por thread e locale `en-US` estático (consulta/validação, enumeração única, `CT_CTYPE1`, data/hora); ver `ambiente-locale-fls.md`. |
 | Processo/console | Assinaturas Win32 `W` e `TL_MSABI` | Handles padrão mutáveis, `STARTUPINFOW` AMD64, console UTF-16, diretório lógico, recursos do processador, ponteiros codificados e SList vazia; ver `console.md`. |
 | Alocação Global/Local | `void* (Dword, size_t)` e `void* (void*)` / `int (void*)` | `GlobalAlloc`/`LocalAlloc` aceitam `GMEM_MOVEABLE`/`GMEM_ZEROINIT`; `GlobalLock`/`Unlock` controlam contagem de locks e `GlobalFree`/`LocalFree` rejeitam handles arbitrários. |
+| Certificados DER | `Dword (PCCERT_CONTEXT, Dword, Dword, void*, LPWSTR, Dword)` | `CertGetNameStringW` extrai nomes subject/issuer nos tipos simple, friendly, DNS, email e atributo OID; consulta de capacidade e `ERROR_INSUFFICIENT_BUFFER` são validadas. |
 
 O subconjunto adicional usado pelo instalador Logitech é protegido pela
 fixture `tl_k32_gap.exe`: `InitializeCriticalSectionAndSpinCount` e
@@ -74,6 +76,13 @@ formam o subconjunto de alocação compartilhado observado em WinRAR e Rockstar.
 Flags desconhecidas e handles arbitrários são rejeitados; `GMEM_MOVEABLE` e
 `GMEM_ZEROINIT` usam blocos `malloc`/`calloc` registrados por processo. A
 fixture `tl_globalmem.exe` protege o contrato e a resolução estática.
+
+`CRYPT32.dll!CertGetNameStringW` é um subconjunto independente de confiança:
+valida um `GuestCertContext` de 40 bytes, percorre a estrutura DER do certificado
+e converte atributos de nome para UTF-16. Somente `X509_ASN_ENCODING` e os tipos
+de nome documentados na fixture `tl_crypt32.exe` são aceitos; SAN, propriedades
+friendly, loja de certificados, cadeia e Authenticode permanecem fora do
+contrato. O export é registrado separadamente de `WINTRUST.dll`.
 
 ## Patch da IAT
 

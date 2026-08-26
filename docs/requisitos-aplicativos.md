@@ -32,14 +32,15 @@ posterior.
 | `CapCut_7677236283084898320_installer.exe` | — | — | PE32 x86 (`0x14c`) | arquitetura não suportada |
 | `EpicInstaller-20.1.4-831cc1564f92442abc51fdb4a9854359.exe` | — | — | PE32 x86 (`0x14c`) + Mono/.NET | arquitetura/formato não suportados |
 | `lghub_installer.exe` | 114/114 | 0 | execução expira em prefixo temporário | `supported` no `--report`; fluxo não validado |
-| `Rockstar-Games-Launcher.exe` | 261/338 | 77 | GUI/rede e APIs pendentes | `unsupported` |
+| `Rockstar-Games-Launcher.exe` | 262/338 | 76 | GUI/rede e APIs pendentes | `unsupported` |
 
 Na Fase 13.11, WinRAR e Rockstar foram medidos novamente somente com
 `--report`; ambos continuam `unsupported`, retornam `5` e não foram executados.
 Em 2026-08-26, o mesmo relatório atual resolveu mais cinco imports de memória
-global/local: WinRAR passou a 209/251 e Rockstar a 261/338. A fixture
-`tl_globalmem.exe` cobre `GlobalAlloc`/`GlobalLock`/`GlobalUnlock`/`GlobalFree`
-e `LocalAlloc`/`LocalFree`; isso reduz lacunas compartilhadas, mas não altera a
+global/local: WinRAR passou a 209/251 e Rockstar a 262/338. As fixtures
+`tl_globalmem.exe` e `tl_crypt32.exe` cobrem, respectivamente,
+`GlobalAlloc`/`GlobalLock`/`GlobalUnlock`/`GlobalFree`/`LocalAlloc`/`LocalFree` e
+`CertGetNameStringW`; isso reduz lacunas compartilhadas, mas não altera a
 declaração de compatibilidade. O binário Logitech foi reanalisado em
 2026-08-25: `tl_k32_gap.exe` cobriu as quatro lacunas de `KERNEL32`, o
 `--report` resolveu 114/114 e o primeiro teste de execução em prefixo temporário
@@ -61,7 +62,7 @@ o LGHub bloqueia durante a inicialização.
 | `delay-import` | WinRAR, Rockstar | suportado para descritores RVA (`grAttrs=0x1`), com resolução antecipada |
 | Automação OLE | WinRAR, Rockstar | `CreateStreamOnHGlobal` entregue como stream em memória em `tl_stream.exe`; `OLEAUT32`/`IDispatch` pendentes |
 | HTTP WinINet | Rockstar + fixture de protocolo | subconjunto HTTPS direto de loopback entregue em `tl_wininet.exe`; sem execução do Rockstar |
-| Certificados/WinTrust | Rockstar + fixture de protocolo | cadeia DER explícita em `tl_trust.exe` com política sem UI/revogação; Authenticode, loja Windows e `WTHelper*` pendentes |
+| Certificados/WinTrust | Rockstar + fixtures de protocolo | `CertGetNameStringW` extrai nomes de blob DER em `tl_crypt32.exe`; cadeia explícita em `tl_trust.exe`; Authenticode, loja Windows e `WTHelper*` pendentes |
 
 ## Prioridade ativa — instaladores PE32+ x86-64
 
@@ -712,8 +713,8 @@ deve declarar suporte ao fluxo Logitech apenas porque o `--report` passou.
 | SHA-256 | `c70131cb0427d146c9489297822e99ad87d4d5e141fd999d19f00975ab1a31f2` |
 | Imports estáticos | 205 em 5 DLLs |
 | Delay imports | 133 em 11 DLLs |
-| Resolvidos pelo runtime | 261/338 (166 estáticos + 95 atrasados), reanálise 2026-08-26 |
-| Ausentes | 77 (35 estáticos + 42 atrasados), reanálise 2026-08-26 |
+| Resolvidos pelo runtime | 262/338 (166 estáticos + 96 atrasados), reanálise 2026-08-26 |
+| Ausentes | 76 (39 estáticos + 37 atrasados), reanálise 2026-08-26 |
 | Mecanismo adicional | `delay-import` RVA resolvido antecipadamente; `.pdata`: 2663 funções (2661 V1, 2 V2), 2 epílogos, 6 `SET_FPREG` estendidos, 356 handlers e 584 cadeias |
 | Resultado do `--report` | Reanálise 2026-08-26: `Unsupported`/exit `5` por imports ausentes; execução não tentada |
 | Fonte | análise local de 2026-08-26 |
@@ -728,7 +729,8 @@ diálogo de impressão e uma camada HTTP WinINet.
 
 Na reanálise de 2026-08-26, `tl_globalmem.exe` cobriu quatro das lacunas de
 memória compartilhadas pelo Rockstar (`GlobalAlloc`, `GlobalLock`,
-`GlobalUnlock` e `LocalAlloc`); o relatório atual é 261/338. A presença de
+`GlobalUnlock` e `LocalAlloc`) e `tl_crypt32.exe` cobriu
+`CertGetNameStringW`; o relatório atual é 262/338. A presença de
 imports resolvidos não autoriza executar o Launcher: GUI, automação, impressão,
 rede e confiança ainda precisam de contratos/fixtures próprios.
 
@@ -740,14 +742,11 @@ rede e confiança ainda precisam de contratos/fixtures próprios.
 | `COMDLG32.dll` | 1 |
 | `OLEAUT32.dll` | 7 |
 | `COMCTL32.dll` | 2 |
-| `WININET.dll` | 11 |
 | delay `USER32.dll` | 19 |
 | delay `GDI32.dll` | 6 |
 | delay `ADVAPI32.dll` | 5 |
 | delay `SHELL32.dll` | 2 |
-| delay `ole32.dll` | 0 |
 | delay `SHLWAPI.dll` | 2 |
-| delay `CRYPT32.dll` | 1 |
 | delay `WINTRUST.dll` | 3 |
 
 ### Imports estáticos ausentes
@@ -814,33 +813,15 @@ ordinal(413)
 Os ordinais de `OLEAUT32` e `COMCTL32` precisam ser identificados contra uma
 ABI/versão definida antes de se declararem exportações compatíveis.
 
-#### `WININET.dll` (11, lacuna observada na Fase 13.11)
+Os 11 imports de `WININET.dll` estão resolvidos pelo subconjunto validado em
+`tl_wininet.exe`: HTTPS direto para `localhost`/`127.0.0.1`, CA TLS fornecida
+pelo host, URL, cabeçalho, status, leitura e falha para CA não confiável. Isso
+não declara o Rockstar suportado: o binário comercial não foi reexecutado e
+permanecem automação, GUI, confiança e demais lacunas.
 
-```text
-InternetReadFile
-InternetCrackUrlW
-InternetCloseHandle
-InternetConnectW
-InternetQueryDataAvailable
-InternetSetOptionW
-HttpOpenRequestW
-HttpAddRequestHeadersW
-HttpSendRequestW
-HttpQueryInfoW
-InternetOpenW
-```
-
-Os 11 símbolos acima agora são registrados pelo subconjunto `WININET.dll`
-validado pela fixture `tl_wininet.exe`: HTTPS direto para `localhost`/
-`127.0.0.1`, CA TLS fornecida pelo host, URL, cabeçalho, status, leitura e
-falha para CA não confiável. Isso não altera a contagem histórica nem declara
-o Rockstar suportado: o binário comercial não foi reexecutado e permanecem
-automação, GUI, confiança e demais lacunas.
-
-O único import atrasado de `ole32.dll`, `CreateStreamOnHGlobal`, também possui
-uma evidência isolada em `tl_stream.exe`. A fixture cobre o contrato de
-`IStream` em memória e não implica suporte aos sete ordinais de `OLEAUT32` nem
-execução do Rockstar.
+Os cinco imports atrasados de `ole32.dll`, incluindo `CreateStreamOnHGlobal`,
+estão resolvidos pelas fixtures `tl_stream.exe` e `tl_com.exe`; isso não implica
+suporte aos sete ordinais de `OLEAUT32` nem execução do Rockstar.
 
 ### Imports atrasados ausentes
 
@@ -896,23 +877,11 @@ SHBrowseForFolderW
 SHGetPathFromIDListW
 ```
 
-#### `ole32.dll` (1)
-
-```text
-CreateStreamOnHGlobal
-```
-
 #### `SHLWAPI.dll` (2)
 
 ```text
 PathStripToRootW
 ordinal(176)
-```
-
-#### `CRYPT32.dll` (1)
-
-```text
-CertGetNameStringW
 ```
 
 #### `WINTRUST.dll` (3)
@@ -928,7 +897,8 @@ WTHelperGetProvSignerFromChain
 SEH x64, locale, contexto de processo/console, enumeração de arquivos e
 identidade/DACL virtual já foram entregues, mas não resolvem as dependências
 restantes deste aplicativo. WinINet e o stream OLE têm fixtures genéricas
-reproduzíveis; a primeira cadeia WinTrust também é coberta por `tl_trust.exe`.
-A automação `OLEAUT32`/`IDispatch`, Authenticode/loja Windows, controles comuns
+reproduzíveis; a primeira cadeia WinTrust também é coberta por `tl_trust.exe`,
+e `tl_crypt32.exe` cobre somente a leitura de nomes DER. A automação
+`OLEAUT32`/`IDispatch`, `WTHelper*`, Authenticode/loja Windows, controles comuns
 restantes e impressão ainda exigem contratos próprios antes de qualquer
 tentativa de executar o Rockstar Launcher.

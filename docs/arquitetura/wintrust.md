@@ -31,6 +31,9 @@ PE, política de hostname ou loja do sistema.
 
 `tl_trust.exe` valida uma cadeia real folha→raiz, rejeita uma política com UI e
 rejeita a cadeia com raiz incorreta. O teste de runtime também exige o evento
-`wintrust` no `stderr`. `WTHelper*`, `CRYPT32.dll`, `WinVerifyTrust` para
-`WTD_CHOICE_FILE` e a verificação Authenticode permanecem fora do contrato;
-essa fixture não torna o Rockstar suportado.
+`wintrust` no `stderr`. O export separado `CRYPT32.dll!CertGetNameStringW`
+agora aceita somente um `CERT_CONTEXT` explícito com estrutura DER e os tipos de nome
+cobertos por `tl_crypt32.exe`; ele não consulta a loja nem as extensões SAN.
+`WTHelper*`, demais APIs `CRYPT32.dll`, `WinVerifyTrust` para `WTD_CHOICE_FILE`
+e a verificação Authenticode permanecem fora do contrato; essas fixtures não
+tornam o Rockstar suportado.

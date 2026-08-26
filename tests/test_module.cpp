@@ -6,6 +6,7 @@
 #include "tradutorlinux/runtime/winapi.hpp"
 #include "tradutorlinux/runtime/wininet.hpp"
 #include "tradutorlinux/runtime/wintrust.hpp"
+#include "tradutorlinux/runtime/crypt32.hpp"
 
 #include <cstdint>
 #include <string_view>
@@ -84,7 +85,7 @@ TEST_F(ModuleTest, ClearModulesResetsRegistry) {
 
 TEST_F(ModuleTest, RegistersBuiltinKernel32Exports) {
     register_builtin_modules();
-    ASSERT_EQ(registered_module_count(), 22U);
+    ASSERT_EQ(registered_module_count(), 23U);
     EXPECT_TRUE(is_module_registered("KERNEL32.dll"));
     EXPECT_TRUE(is_module_registered("USER32.dll"));
     EXPECT_TRUE(is_module_registered("GDI32.dll"));
@@ -94,6 +95,7 @@ TEST_F(ModuleTest, RegistersBuiltinKernel32Exports) {
     EXPECT_TRUE(is_module_registered("WS2_32.dll"));
     EXPECT_TRUE(is_module_registered("WININET.dll"));
     EXPECT_TRUE(is_module_registered("WINTRUST.dll"));
+    EXPECT_TRUE(is_module_registered("CRYPT32.dll"));
 
     const ExportLookup std_handle = find_export(ExportQuery{"KERNEL32.dll", "GetStdHandle"});
     ASSERT_TRUE(std_handle.found);
@@ -103,6 +105,8 @@ TEST_F(ModuleTest, RegistersBuiltinKernel32Exports) {
               reinterpret_cast<std::uintptr_t>(&tl_WriteFile));
     EXPECT_EQ(find_export(ExportQuery{"KERNEL32.dll", "ExitProcess"}).address,
               reinterpret_cast<std::uintptr_t>(&tl_ExitProcess));
+    EXPECT_EQ(find_export(ExportQuery{"CRYPT32.dll", "CertGetNameStringW"}).address,
+              reinterpret_cast<std::uintptr_t>(&tl_CertGetNameStringW));
     EXPECT_EQ(find_export(ExportQuery{"KERNEL32.dll", "ReadFile"}).address,
               reinterpret_cast<std::uintptr_t>(&tl_ReadFile));
     EXPECT_EQ(find_export(ExportQuery{"KERNEL32.dll", "VirtualQuery"}).address,
@@ -227,7 +231,7 @@ TEST_F(ModuleTest, RegistersMsvcrtExports) {
 TEST_F(ModuleTest, RegisterBuiltinModulesIsIdempotent) {
     register_builtin_modules();
     register_builtin_modules();
-    EXPECT_EQ(registered_module_count(), 22U);
+    EXPECT_EQ(registered_module_count(), 23U);
 }
 
 TEST_F(ModuleTest, RegistryOwnsItsStrings) {
