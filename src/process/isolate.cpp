@@ -1,3 +1,7 @@
+#ifndef _GNU_SOURCE
+#define _GNU_SOURCE
+#endif
+
 #include "tradutorlinux/process/isolate.hpp"
 
 #include "tradutorlinux/runtime/winapi.hpp"
@@ -15,6 +19,8 @@
 #include <time.h>
 #include <unistd.h>
 
+#include <fcntl.h>
+
 namespace tradutorlinux::process {
 namespace {
 
@@ -27,8 +33,15 @@ constexpr std::size_t kFaultRecordSize = 9;
 
 // Descritor do pipe de falha usado pelo handler no filho. Handlers de sinal
 // não podem capturar estado, então o fd é publicado aqui antes da instalação;
-// só existe no processo filho e vale enquanto o convidado executa.
-int g_crash_report_fd = -1;
+// só existe no processo filho e vale enquanto o convidado executa. Deve ser
+// volátil e sig_atomic_t para acesso async-signal-safe dentro do handler.
+volatile std::sig_atomic_t g_crash_report_fd = -1;
+
+// Sinais fatais tratados pelo reporter. Precisa estar no escopo do arquivo
+// (não local da função) para o handler restaurar TODOS de uma vez num segundo
+// fault, evitando recursão por um sinal diferente do que disparou.
+constexpr std::array<int, 8> kFatalSignals{SIGSEGV, SIGILL, SIGBUS, SIGABRT,
+                                           SIGFPE,  SIGTRAP, SIGSYS, SIGQUIT};
 
 bool read_exact(const int fd, std::byte* const buffer, const std::size_t size) noexcept {
     std::size_t total = 0;
@@ -75,13 +88,17 @@ void install_crash_reporter(const int report_fd) noexcept {
     g_crash_report_fd = report_fd;
     struct sigaction action {};
     action.sa_sigaction = [](const int signal_number, siginfo_t* info, void*) noexcept {
-        // Restaura SIG_DFL ANTES de qualquer outra coisa: se algo falhar aqui
-        // dentro (inclusive uma nova falta durante o write), o segundo
-        // disparo já cai na disposição padrão e mata o processo de vez.
+        // Restaura SIG_DFL para TODOS os sinais fatais ANTES de qualquer outra
+        // coisa: se algo falhar aqui dentro (inclusive uma nova falta durante o
+        // write), o segundo disparo de qualquer um dos sinais já cai na
+        // disposição padrão e mata o processo de vez — sem recursão por um
+        // sinal diferente do que disparou.
         struct sigaction default_action {};
         default_action.sa_handler = SIG_DFL;
         ::sigemptyset(&default_action.sa_mask);
-        static_cast<void>(::sigaction(signal_number, &default_action, nullptr));
+        for (const int fatal_signal : kFatalSignals) {
+            static_cast<void>(::sigaction(fatal_signal, &default_action, nullptr));
+        }
 
         std::array<std::byte, kFaultRecordSize> record{};
         record[0] = std::byte{static_cast<unsigned char>(static_cast<unsigned>(signal_number) & 0xFFU)};
@@ -101,8 +118,6 @@ void install_crash_reporter(const int report_fd) noexcept {
     };
     action.sa_flags = SA_SIGINFO;
     ::sigemptyset(&action.sa_mask);
-    constexpr std::array<int, 8> kFatalSignals{SIGSEGV, SIGILL, SIGBUS, SIGABRT,
-                                               SIGFPE,  SIGTRAP, SIGSYS, SIGQUIT};
     for (const int signal_number : kFatalSignals) {
         static_cast<void>(::sigaction(signal_number, &action, nullptr));
     }
@@ -161,11 +176,11 @@ GuestOutcome run_guest_isolated(const std::uintptr_t entry_point,
                                 const std::uint64_t timeout_ms,
                                 const std::filesystem::path& working_directory) noexcept {
     int pipe_fds[2] = {-1, -1};
-    if (::pipe(pipe_fds) != 0) {
+    if (::pipe2(pipe_fds, O_CLOEXEC) != 0) {
         return {.kind = GuestOutcomeKind::SpawnFailed};
     }
     int fault_fds[2] = {-1, -1};
-    if (::pipe(fault_fds) != 0) {
+    if (::pipe2(fault_fds, O_CLOEXEC) != 0) {
         ::close(pipe_fds[0]);
         ::close(pipe_fds[1]);
         return {.kind = GuestOutcomeKind::SpawnFailed};
@@ -228,7 +243,7 @@ GuestOutcome run_guest_isolated(const std::uintptr_t entry_point,
         }
         struct ::pollfd descriptor {};
         descriptor.fd = pipe_fds[0];
-        descriptor.events = POLLIN;
+        descriptor.events = POLLIN | POLLHUP;
         const int poll_result =
             ::poll(&descriptor, 1, timeout_ms == 0 ? -1 : static_cast<int>(remaining));
         if (poll_result < 0) {

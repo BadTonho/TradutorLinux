@@ -686,6 +686,10 @@ ParseResult parse_command_line(const int argc, const char* const argv[]) {
                 command_line.timeout_ms = seconds * 1000U;
                 command_line.timeout_set = true;
             } else if (arg == "--trace" || arg.starts_with("--trace=")) {
+                if (command_line.trace_enabled) {
+                    return {.command_line = std::nullopt,
+                            .error_message = "a opção --trace foi repetida"};
+                }
                 command_line.trace_enabled = true;
                 if (arg.size() > 7) {
                     const std::string_view list = arg.substr(8);
@@ -750,6 +754,10 @@ ParseResult parse_command_line(const int argc, const char* const argv[]) {
             for (int i = 4; i < argc; ++i) {
                 const std::string_view arg{argv[i]};
                 if (arg == "--trace" || arg.starts_with("--trace=")) {
+                    if (command_line.trace_enabled) {
+                        return {.command_line = std::nullopt,
+                                .error_message = "a opção --trace foi repetida"};
+                    }
                     command_line.trace_enabled = true;
                     if (arg.size() > 7) {
                         const std::string_view list = arg.substr(8);

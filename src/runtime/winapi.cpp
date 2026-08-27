@@ -45,6 +45,7 @@
 
 #include <dirent.h>
 #include <fcntl.h>
+#include <poll.h>
 #include <pthread.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
@@ -272,6 +273,7 @@ bool normalized_wide_path(const std::uint16_t* path,
 }
 
 FileSlot* find_file_slot(const void* handle) noexcept {
+    std::lock_guard<std::mutex> lock(g_files_mutex);
     const auto found = std::find_if(g_files.begin(), g_files.end(), [handle](const FileSlot& slot) {
         return slot.used && handle == &slot;
     });
@@ -303,6 +305,7 @@ ThreadSlot* find_thread_slot(const void* handle) noexcept {
     }
     const auto addr = std::bit_cast<std::uintptr_t>(handle);
     if (addr >= kThreadHandleBase && addr < kThreadHandleBase + g_threads.size()) {
+        std::lock_guard<std::mutex> lock(g_threads_mutex);
         const auto index = static_cast<std::size_t>(addr - kThreadHandleBase);
         ThreadSlot& slot = g_threads[index];
         return slot.used ? &slot : nullptr;
@@ -323,6 +326,7 @@ SyncSlot* find_sync_slot(const void* handle) noexcept {
     if (value < kSyncHandleBase || value >= kSyncHandleBase + g_syncs.size()) {
         return nullptr;
     }
+    std::lock_guard<std::mutex> lock(g_sync_mutex);
     SyncSlot& slot = g_syncs[value - kSyncHandleBase];
     return slot.used ? &slot : nullptr;
 }
@@ -398,14 +402,36 @@ std::uint32_t wait_process_slot(SyncSlot& slot, const std::uint32_t milliseconds
         if (milliseconds == 0) {
             return abi::kWaitTimeout;
         }
+        int remaining = -1;
         if (milliseconds != abi::kInfinite) {
             const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
                 std::chrono::steady_clock::now() - started).count();
             if (elapsed >= milliseconds) {
                 return abi::kWaitTimeout;
             }
+            remaining = static_cast<int>(milliseconds - elapsed);
         }
-        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        if (slot.child_result_fd >= 0) {
+            // Aguarda de forma bloqueante o filho no pipe de resultado, em vez
+            // de poll/sleep de 1ms que queimaria CPU num timeout longo. O write
+            // do filho (POLLIN) e o fechamento do write-end (POLLHUP) despertam
+            // o poll; o waitpid na próxima iteração coleta o status.
+            struct ::pollfd descriptor {};
+            descriptor.fd = slot.child_result_fd;
+            descriptor.events = POLLIN | POLLHUP;
+            const int poll_result = ::poll(&descriptor, 1, remaining);
+            if (poll_result < 0) {
+                if (errno == EINTR) {
+                    continue;
+                }
+                // Erro persistente no fd (ex.: EBADF): evitar busy-spin.
+                std::this_thread::yield();
+            }
+        } else {
+            // Sem pipe de resultado (ex.: terminado antes de associar o fd),
+            // não há como bloquear; cede a execução em vez de busy-spin.
+            std::this_thread::yield();
+        }
     }
     return abi::kWaitObject0;
 }

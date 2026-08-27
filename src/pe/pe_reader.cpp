@@ -477,6 +477,11 @@ private:
                         symbol.ordinal =
                             static_cast<std::uint16_t>(thunk_value & 0xFFFFULL);
                     } else {
+                        if (thunk_value > UINT32_MAX) {
+                            return fail(ParseStatus::Malformed,
+                                        "nome de símbolo de import em RVA " +
+                                            util::format_hex(thunk_value) + " fora da imagem");
+                        }
                         const std::optional<std::size_t> by_name_offset = rva_to_file_offset(
                             {static_cast<std::uint32_t>(thunk_value), kImportByNameHintSize});
                         if (!by_name_offset.has_value()) {

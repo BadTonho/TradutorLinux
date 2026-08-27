@@ -430,16 +430,41 @@ void write_child_process_result(const int fd, const GuestExecutionResult result)
 }
 
 bool read_guest_file_for_process(const char* path, std::vector<std::byte>& bytes) noexcept {
-    std::ifstream stream{path, std::ios::binary};
-    if (!stream) {
+    // Limite de PE documentado também em cli.cpp; evita DoS ao ler arquivos de
+    // GiB ou fontes infinitas (ex.: /dev/zero) no processo filho de CreateProcess.
+    constexpr std::size_t kMaxPeFileSize = 512ULL * 1024 * 1024;
+    // O_NOFOLLOW: não seguir o symlink final, para que um convidado hostil não
+    // aponte o filho para um dispositivo de bloco ou outro alvo do host.
+    const int fd = ::open(path, O_RDONLY | O_NOFOLLOW);
+    if (fd < 0) {
         return false;
     }
-    std::istreambuf_iterator<char> iterator{stream};
-    const std::istreambuf_iterator<char> end;
-    for (; iterator != end; ++iterator) {
-        bytes.push_back(static_cast<std::byte>(static_cast<unsigned char>(*iterator)));
+    bytes.clear();
+    bytes.reserve(4096);
+    std::array<std::byte, 8192> buffer{};
+    std::size_t total = 0;
+    while (true) {
+        const ::ssize_t count = ::read(fd, buffer.data(), buffer.size());
+        if (count < 0) {
+            if (errno == EINTR) {
+                continue;
+            }
+            ::close(fd);
+            return false;
+        }
+        if (count == 0) {
+            break;
+        }
+        const std::size_t added = static_cast<std::size_t>(count);
+        if (total > kMaxPeFileSize - added) {
+            ::close(fd);
+            return false;
+        }
+        total += added;
+        bytes.insert(bytes.end(), buffer.begin(), buffer.begin() + static_cast<std::ptrdiff_t>(added));
     }
-    return !stream.bad();
+    ::close(fd);
+    return true;
 }
 
 [[noreturn]] void run_created_guest_child(const std::string& path, const int result_fd,

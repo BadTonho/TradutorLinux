@@ -96,6 +96,7 @@ void destroy_process(GuestProcess& process) {
     process.stack = nullptr;
     process.stack_size = 0;
     loader::unmap_image(process.image);
+    runtime::invalidate_memory_map_cache();
     process.thread = {};
     process.imports.imports.clear();
     process.imports.error_message.clear();

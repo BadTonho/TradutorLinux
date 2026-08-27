@@ -391,16 +391,6 @@ MapResult map_image(const pe::PeInfo& info, const std::span<const std::byte> fil
         applied_relocations = relocation.applied;
     }
 
-    const std::uint64_t header_protect_size = align_up(
-        std::min<std::uint64_t>(static_cast<std::uint64_t>(info.size_of_headers), mapping_size_u64),
-        page);
-    if (header_protect_size > 0 && mprotect(mapping, header_protect_size, PROT_READ) != 0) {
-        const int error = errno;
-        munmap(mapping, mapping_size);
-        return fail(MapStatus::OutOfMemory,
-                    "não foi possível proteger os headers da imagem (errno=" +
-                        std::to_string(error) + ")");
-    }
     for (const MapRegion& region : regions) {
         const std::uint64_t page_start = align_down(region.rva, page);
         const std::uint64_t page_end = align_up(static_cast<std::uint64_t>(region.rva) + region.size, page);
@@ -419,6 +409,21 @@ MapResult map_image(const pe::PeInfo& info, const std::span<const std::byte> fil
                         "não foi possível proteger a seção " + region.name + " (errno=" +
                             std::to_string(error) + ")");
         }
+    }
+
+    // Protege os headers por último: se um header compartilhar a página com a
+    // primeira seção (SizeOfHeaders não múltiplo da página), aplicar antes do
+    // loop deixaria a seção re-proteger a página com RW/RX, tornando os headers
+    // graváveis/executáveis. Por último, os headers permanecem somente leitura.
+    const std::uint64_t header_protect_size = align_up(
+        std::min<std::uint64_t>(static_cast<std::uint64_t>(info.size_of_headers), mapping_size_u64),
+        page);
+    if (header_protect_size > 0 && mprotect(mapping, header_protect_size, PROT_READ) != 0) {
+        const int error = errno;
+        munmap(mapping, mapping_size);
+        return fail(MapStatus::OutOfMemory,
+                    "não foi possível proteger os headers da imagem (errno=" +
+                        std::to_string(error) + ")");
     }
 
     MappedImage image{

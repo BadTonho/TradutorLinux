@@ -68,16 +68,18 @@ bool initialize_prefix(const std::filesystem::path& prefix_root) {
     if (ec) return false;
 
     // Criar symlinks no dosdevices: c: -> ../drive_c e z: -> /
+    // Não limpar cegamente o ec: um EACCES real (sem permissão para criar o
+    // symlink) deve falhar o prefixo em vez de retornar "ok" meio-inicializado.
     const auto symlink_c = paths.dosdevices_dir / "c:";
     if (!std::filesystem::exists(symlink_c, ec) && !std::filesystem::is_symlink(symlink_c, ec)) {
         std::filesystem::create_directory_symlink("../drive_c", symlink_c, ec);
-        ec.clear();
+        if (ec) return false;
     }
 
     const auto symlink_z = paths.dosdevices_dir / "z:";
     if (!std::filesystem::exists(symlink_z, ec) && !std::filesystem::is_symlink(symlink_z, ec)) {
         std::filesystem::create_directory_symlink("/", symlink_z, ec);
-        ec.clear();
+        if (ec) return false;
     }
 
     return true;
