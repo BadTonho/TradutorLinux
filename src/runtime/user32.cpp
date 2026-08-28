@@ -2424,6 +2424,254 @@ TL_MSABI int tl_ClientToScreen(void* const hwnd, void* const point) noexcept {
     return 1;
 }
 
+TL_MSABI void* tl_GetMenu(void* const hwnd) noexcept {
+    (void)hwnd;
+    return reinterpret_cast<void*>(0x4D454E55ULL); // 'MENU'
+}
+
+TL_MSABI int tl_SetMenu(void* const hwnd, void* const menu) noexcept {
+    (void)hwnd;
+    (void)menu;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI void* tl_GetSubMenu(void* const menu, const int pos) noexcept {
+    (void)menu;
+    (void)pos;
+    return reinterpret_cast<void*>(0x5355424DULL); // 'SUBM'
+}
+
+TL_MSABI int tl_GetMenuItemCount(void* const menu) noexcept {
+    (void)menu;
+    return 5;
+}
+
+TL_MSABI int tl_GetMenuItemInfoW(void* const menu, const std::uint32_t item, const int f_by_position,
+                                void* const mii) noexcept {
+    (void)menu;
+    (void)item;
+    (void)f_by_position;
+    (void)mii;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_SetMenuItemInfoW(void* const menu, const std::uint32_t item, const int f_by_position,
+                                const void* const mii) noexcept {
+    (void)menu;
+    (void)item;
+    (void)f_by_position;
+    (void)mii;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_InsertMenuItemW(void* const menu, const std::uint32_t item, const int f_by_position,
+                               const void* const mii) noexcept {
+    (void)menu;
+    (void)item;
+    (void)f_by_position;
+    (void)mii;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_RemoveMenu(void* const menu, const std::uint32_t position, const std::uint32_t flags) noexcept {
+    (void)menu;
+    (void)position;
+    (void)flags;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_EnableMenuItem(void* const menu, const std::uint32_t item, const std::uint32_t enable) noexcept {
+    (void)menu;
+    (void)item;
+    (void)enable;
+    return 0;
+}
+
+TL_MSABI std::uint32_t tl_CheckMenuItem(void* const menu, const std::uint32_t item, const std::uint32_t check) noexcept {
+    (void)menu;
+    (void)item;
+    (void)check;
+    return 0;
+}
+
+TL_MSABI int tl_CheckMenuRadioItem(void* const menu, const std::uint32_t first, const std::uint32_t last,
+                                  const std::uint32_t check, const std::uint32_t flags) noexcept {
+    (void)menu;
+    (void)first;
+    (void)last;
+    (void)check;
+    (void)flags;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_DrawMenuBar(void* const hwnd) noexcept {
+    (void)hwnd;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_TrackPopupMenuEx(void* const menu, const std::uint32_t flags, const int x, const int y,
+                                void* const hwnd, void* const params) noexcept {
+    (void)menu;
+    (void)flags;
+    (void)x;
+    (void)y;
+    (void)hwnd;
+    (void)params;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI void* tl_LoadMenuW(void* const instance, const std::uint16_t* const menu_name) noexcept {
+    (void)instance;
+    (void)menu_name;
+    set_last_error(abi::kErrorSuccess);
+    return reinterpret_cast<void*>(0x4D454E55ULL);
+}
+
+TL_MSABI int tl_CheckDlgButton(void* const hdlg, const int id_button, const std::uint32_t check) noexcept {
+    (void)hdlg;
+    (void)id_button;
+    (void)check;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI std::uint32_t tl_IsDlgButtonChecked(void* const hdlg, const int id_button) noexcept {
+    (void)hdlg;
+    (void)id_button;
+    return 0;
+}
+
+TL_MSABI int tl_CheckRadioButton(void* const hdlg, const int first_button, const int last_button,
+                                 const int check_button) noexcept {
+    (void)hdlg;
+    (void)first_button;
+    (void)last_button;
+    (void)check_button;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_MapDialogRect(void* const hdlg, void* const rect) noexcept {
+    (void)hdlg;
+    (void)rect;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI std::uint32_t tl_GetDialogBaseUnits() noexcept {
+    return 0x00080004; // 8 high, 4 low
+}
+
+TL_MSABI void* tl_WindowFromPoint(const std::int64_t point_coord) noexcept {
+    (void)point_coord;
+    return reinterpret_cast<void*>(0x1000);
+}
+
+TL_MSABI void* tl_ChildWindowFromPointEx(void* const hwnd, const std::int64_t point_coord,
+                                         const std::uint32_t flags) noexcept {
+    (void)hwnd;
+    (void)point_coord;
+    (void)flags;
+    return reinterpret_cast<void*>(0x1000);
+}
+
+TL_MSABI int tl_GetWindowPlacement(void* const hwnd, void* const placement) noexcept {
+    (void)hwnd;
+    (void)placement;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_SetWindowPlacement(void* const hwnd, const void* const placement) noexcept {
+    (void)hwnd;
+    (void)placement;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_IsWindowEnabled(void* const hwnd) noexcept {
+    (void)hwnd;
+    return 1;
+}
+
+TL_MSABI int tl_IsZoomed(void* const hwnd) noexcept {
+    (void)hwnd;
+    return 0;
+}
+
+TL_MSABI int tl_GetClassInfoW(void* const instance, const std::uint16_t* const class_name,
+                              void* const wnd_class) noexcept {
+    (void)instance;
+    (void)class_name;
+    (void)wnd_class;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_GetMonitorInfoA(void* const monitor, void* const mi) noexcept {
+    (void)monitor;
+    (void)mi;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_SystemParametersInfoW(const std::uint32_t action, const std::uint32_t param1,
+                                      void* const param2, const std::uint32_t win_ini) noexcept {
+    (void)action;
+    (void)param1;
+    (void)param2;
+    (void)win_ini;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI void* tl_LoadAcceleratorsW(void* const instance, const std::uint16_t* const table_name) noexcept {
+    (void)instance;
+    (void)table_name;
+    set_last_error(abi::kErrorSuccess);
+    return reinterpret_cast<void*>(0x41434345ULL); // 'ACCE'
+}
+
+TL_MSABI int tl_TranslateAcceleratorW(void* const hwnd, void* const accel_table, void* const msg) noexcept {
+    (void)hwnd;
+    (void)accel_table;
+    (void)msg;
+    return 0;
+}
+
+TL_MSABI void* tl_LoadBitmapW(void* const instance, const std::uint16_t* const bitmap_name) noexcept {
+    (void)instance;
+    (void)bitmap_name;
+    set_last_error(abi::kErrorSuccess);
+    return reinterpret_cast<void*>(0x424D50ULL); // 'BMP'
+}
+
+TL_MSABI std::uint32_t tl_MapVirtualKeyW(const std::uint32_t code, const std::uint32_t map_type) noexcept {
+    (void)map_type;
+    return code;
+}
+
+TL_MSABI std::uint32_t tl_RegisterClipboardFormatW(const std::uint16_t* const format_name) noexcept {
+    (void)format_name;
+    set_last_error(abi::kErrorSuccess);
+    return 0xC001; // Custom format ID
+}
+
+TL_MSABI int tl_ScreenToClient(void* const hwnd, void* const point) noexcept {
+    (void)hwnd;
+    (void)point;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
 }  // extern "C"
 
 }  // namespace tradutorlinux

@@ -460,6 +460,32 @@ TL_OLE_MSABI std::int32_t tl_CLSIDFromString(const std::uint16_t* lpsz, void* pc
     return kSOk;
 }
 
+TL_OLE_MSABI std::int32_t tl_RegisterDragDrop(void* const hwnd, void* const drop_target) noexcept {
+    (void)hwnd;
+    (void)drop_target;
+    return kSOk;
+}
+
+TL_OLE_MSABI std::int32_t tl_RevokeDragDrop(void* const hwnd) noexcept {
+    (void)hwnd;
+    return kSOk;
+}
+
+TL_OLE_MSABI std::int32_t tl_DoDragDrop(void* const data_obj, void* const drop_source,
+                                       const std::uint32_t ok_effects, std::uint32_t* const effect) noexcept {
+    (void)data_obj;
+    (void)drop_source;
+    (void)ok_effects;
+    if (effect != nullptr) {
+        *effect = 0; // DROPEFFECT_NONE
+    }
+    return 0x00040100; // DRAGDROP_S_CANCEL
+}
+
+TL_OLE_MSABI void tl_ReleaseStgMedium(void* const medium) noexcept {
+    (void)medium;
+}
+
 }  // extern "C"
 
 }  // namespace tradutorlinux

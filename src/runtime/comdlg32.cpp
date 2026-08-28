@@ -102,6 +102,10 @@ TL_COMDLG_MSABI int tl_ChooseColorW(void* choose_color) noexcept {
     return 1;
 }
 
+TL_COMDLG_MSABI std::uint32_t tl_CommDlgExtendedError() noexcept {
+    return 0; // CDERR_GENERALCODES / No error
+}
+
 }  // extern "C"
 
 }  // namespace tradutorlinux

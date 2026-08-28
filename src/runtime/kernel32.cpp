@@ -5629,6 +5629,102 @@ TL_MSABI void* tl_InterlockedPushEntrySList(void* const list_head, void* const l
     return old_head;
 }
 
+TL_MSABI int tl_CopyFileExW(const std::uint16_t* const existing_file, const std::uint16_t* const new_file,
+                            void* const progress_routine, void* const data, int* const cancel,
+                            const std::uint32_t flags) noexcept {
+    (void)progress_routine;
+    (void)data;
+    (void)cancel;
+    const int fail_if_exists = (flags & 1) ? 1 : 0;
+    return tl_CopyFileW(existing_file, new_file, fail_if_exists);
+}
+
+TL_MSABI int tl_MoveFileWithProgressW(const std::uint16_t* const existing_file, const std::uint16_t* const new_file,
+                                     void* const progress_routine, void* const data,
+                                     const std::uint32_t flags) noexcept {
+    (void)progress_routine;
+    (void)data;
+    return tl_MoveFileExW(existing_file, new_file, flags);
+}
+
+TL_MSABI std::uint32_t tl_GetCompressedFileSizeW(const std::uint16_t* const file_name,
+                                                 std::uint32_t* const high) noexcept {
+    if (high != nullptr && mapped_guest_range(high, sizeof(std::uint32_t), true)) {
+        *high = 0;
+    }
+    return tl_GetFileSize(file_name != nullptr ? reinterpret_cast<void*>(0x1) : nullptr, high);
+}
+
+TL_MSABI void* tl_FindFirstChangeNotificationW(const std::uint16_t* const path, const int watch_subtree,
+                                              const std::uint32_t notify_filter) noexcept {
+    (void)path;
+    (void)watch_subtree;
+    (void)notify_filter;
+    set_last_error(abi::kErrorSuccess);
+    return reinterpret_cast<void*>(0x57415443ULL); // 'WATC'
+}
+
+TL_MSABI int tl_FindNextChangeNotification(void* const handle) noexcept {
+    (void)handle;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_FindCloseChangeNotification(void* const handle) noexcept {
+    (void)handle;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI std::uint16_t tl_GetSystemDefaultLangID() noexcept {
+    return 0x0409; // en-US
+}
+
+TL_MSABI std::uint16_t tl_GetUserDefaultLangID() noexcept {
+    return 0x0409; // en-US
+}
+
+TL_MSABI std::uint32_t tl_GetWindowsDirectoryW(std::uint16_t* const buffer, const std::uint32_t size) noexcept {
+    static const std::uint16_t kWinDir[] = {'C', ':', '\\', 'W', 'i', 'n', 'd', 'o', 'w', 's', 0};
+    constexpr std::uint32_t kLen = 10;
+    if (buffer == nullptr || size <= kLen) {
+        return kLen + 1;
+    }
+    if (!mapped_guest_range(buffer, (kLen + 1) * sizeof(std::uint16_t), true)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    std::memcpy(buffer, kWinDir, (kLen + 1) * sizeof(std::uint16_t));
+    set_last_error(abi::kErrorSuccess);
+    return kLen;
+}
+
+TL_MSABI std::size_t tl_GlobalSize(void* const mem) noexcept {
+    if (mem == nullptr) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    return 4096;
+}
+
+TL_MSABI int tl_SetPriorityClass(void* const process, const std::uint32_t priority_class) noexcept {
+    (void)process;
+    (void)priority_class;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_lstrlenW(const std::uint16_t* const str) noexcept {
+    if (str == nullptr) {
+        return 0;
+    }
+    int len = 0;
+    while (str[len] != 0) {
+        ++len;
+    }
+    return len;
+}
+
 }  // extern "C"
 
 }  // namespace tradutorlinux

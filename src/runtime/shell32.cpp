@@ -398,6 +398,44 @@ TL_MSABI void tl_SHChangeNotify(const std::int32_t event_id, const std::uint32_t
     (void)item2;
 }
 
+TL_MSABI std::uint32_t tl_ExtractIconExW(const std::uint16_t* const file, const int index,
+                                         void** const icon_large, void** const icon_small,
+                                         const std::uint32_t icons) noexcept {
+    (void)file;
+    (void)index;
+    (void)icons;
+    if (icon_large != nullptr && mapped_guest_range(icon_large, sizeof(void*), true)) {
+        *icon_large = reinterpret_cast<void*>(0x1000);
+    }
+    if (icon_small != nullptr && mapped_guest_range(icon_small, sizeof(void*), true)) {
+        *icon_small = reinterpret_cast<void*>(0x1000);
+    }
+    return 1;
+}
+
+TL_MSABI int tl_SHGetDesktopFolder(void** const ppshf) noexcept {
+    if (ppshf != nullptr && mapped_guest_range(ppshf, sizeof(void*), true)) {
+        *ppshf = reinterpret_cast<void*>(0x4445534BULL); // 'DESK'
+    }
+    return 0; // S_OK
+}
+
+TL_MSABI int tl_SHGetSpecialFolderLocation(void* const hwnd, const int folder, void** const ppidl) noexcept {
+    (void)hwnd;
+    (void)folder;
+    if (ppidl != nullptr && mapped_guest_range(ppidl, sizeof(void*), true)) {
+        *ppidl = reinterpret_cast<void*>(0x5049444CULL); // 'PIDL'
+    }
+    return 0; // S_OK
+}
+
+TL_MSABI int tl_SHGetSpecialFolderPathW(void* const hwnd, std::uint16_t* const path,
+                                       const int folder, const int create) noexcept {
+    (void)hwnd;
+    (void)create;
+    return tl_SHGetFolderPathW(hwnd, folder, nullptr, 0, path) == 0 ? 1 : 0;
+}
+
 }  // extern "C"
 
 }  // namespace tradutorlinux

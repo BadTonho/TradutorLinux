@@ -18,7 +18,7 @@ find_program(TL_MINGW_WINDRES
 set(TL_FIXTURE_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/generated")
 
 function(tl_add_pe_fixture target_name source_file manifest_file)
-    set(options LINK_KERNEL32 LINK_USER32 LINK_GDI32 LINK_COMCTL32 LINK_GDIPLUS LINK_UXTHEME LINK_DBGHELP LINK_OLE32 LINK_OLEAUT32 LINK_POWRPROF LINK_IPHLPAPI LINK_WINMM LINK_WS2_32 LINK_WININET LINK_WINTRUST LINK_CRYPT32 LINK_ADVAPI32 LINK_SHELL32 LINK_SHLWAPI LINK_MSVCRT RELOCATABLE UNWIND EXPECT_RESOLVED CONSOLE REPORT REPORT_ONLY NO_RUNTIME_CHECK RUNTIME_FAILURE)
+    set(options LINK_KERNEL32 LINK_USER32 LINK_GDI32 LINK_COMCTL32 LINK_GDIPLUS LINK_UXTHEME LINK_DBGHELP LINK_OLE32 LINK_OLEAUT32 LINK_POWRPROF LINK_IPHLPAPI LINK_WINMM LINK_WS2_32 LINK_WININET LINK_WINTRUST LINK_CRYPT32 LINK_ADVAPI32 LINK_SHELL32 LINK_SHLWAPI LINK_MSVCRT LINK_MPR RELOCATABLE UNWIND EXPECT_RESOLVED CONSOLE REPORT REPORT_ONLY NO_RUNTIME_CHECK RUNTIME_FAILURE)
     set(oneValueArgs REPORT_SYMBOL RESOURCE_FILE IMPORT_DEF)
     cmake_parse_arguments(ARG "${options}" "${oneValueArgs}" "" ${ARGN})
 
@@ -98,6 +98,9 @@ function(tl_add_pe_fixture target_name source_file manifest_file)
     endif()
     if(ARG_LINK_MSVCRT)
         list(APPEND link_libraries -lmsvcrt)
+    endif()
+    if(ARG_LINK_MPR)
+        list(APPEND link_libraries -lmpr)
     endif()
     if(ARG_IMPORT_DEF)
         find_program(TL_MINGW_DLLTOOL
@@ -275,6 +278,9 @@ function(tl_add_pe_fixture target_name source_file manifest_file)
             elseif(target_name STREQUAL "tl_rockstar_pipes_reg")
                 set(runtime_extra_args
                     "-DEXPECTED_HEX=726f636b7374617270697065730a")
+            elseif(target_name STREQUAL "tl_7zfm_gui")
+                set(runtime_extra_args
+                    "-DEXPECTED_HEX=375a464d204755492041504953204f4b0a")
             elseif(target_name STREQUAL "tl_stream")
                 set(runtime_extra_args
                     "-DEXPECTED_HEX=6f6c652d73747265616d0a"
@@ -680,6 +686,10 @@ tl_add_pe_fixture(tl_7z_cli_crt src/tl_7z_cli_crt.c manifests/tl_7z_cli_crt.json
 tl_add_pe_fixture(tl_rockstar_pipes_reg src/tl_rockstar_pipes_reg.c manifests/tl_rockstar_pipes_reg.json
     LINK_KERNEL32 LINK_ADVAPI32 LINK_USER32 LINK_GDI32 LINK_SHLWAPI LINK_COMCTL32 EXPECT_RESOLVED CONSOLE REPORT RELOCATABLE
     REPORT_SYMBOL "WaitNamedPipeW")
+
+tl_add_pe_fixture(tl_7zfm_gui src/tl_7zfm_gui.c manifests/tl_7zfm_gui.json
+    LINK_KERNEL32 LINK_ADVAPI32 LINK_USER32 LINK_COMCTL32 LINK_SHELL32 LINK_MSVCRT LINK_MPR EXPECT_RESOLVED CONSOLE REPORT RELOCATABLE
+    REPORT_SYMBOL "FindFirstChangeNotificationW")
 
 tl_add_pe_fixture(tl_files_wide src/tl_files_wide.c manifests/tl_files_wide.json
     LINK_KERNEL32 EXPECT_RESOLVED CONSOLE REPORT RELOCATABLE

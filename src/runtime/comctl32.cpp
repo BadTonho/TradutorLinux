@@ -150,6 +150,53 @@ TL_COMCTL_MSABI std::intptr_t tl_DefSubclassProc(void* const hwnd, const std::ui
     return 0;
 }
 
+TL_COMCTL_MSABI void* tl_CreateStatusWindowW(const std::int32_t style, const std::uint16_t* const text,
+                                             void* const parent, const std::uint32_t id) noexcept {
+    (void)style;
+    (void)text;
+    (void)parent;
+    (void)id;
+    set_last_error(abi::kErrorSuccess);
+    return reinterpret_cast<void*>(0x53544154ULL); // 'STAT'
+}
+
+TL_COMCTL_MSABI void* tl_CreateToolbarEx(void* const hwnd, const std::uint32_t style, const std::uint32_t id,
+                                         const int num_bitmaps, void* const instance,
+                                         const std::uintptr_t bitmap_id, const void* const buttons,
+                                         const int num_buttons, const int cx_button, const int cy_button,
+                                         const int cx_bitmap, const int cy_bitmap,
+                                         const std::uint32_t struct_size) noexcept {
+    (void)hwnd;
+    (void)style;
+    (void)id;
+    (void)num_bitmaps;
+    (void)instance;
+    (void)bitmap_id;
+    (void)buttons;
+    (void)num_buttons;
+    (void)cx_button;
+    (void)cy_button;
+    (void)cx_bitmap;
+    (void)cy_bitmap;
+    (void)struct_size;
+    set_last_error(abi::kErrorSuccess);
+    return reinterpret_cast<void*>(0x544F4F4CULL); // 'TOOL'
+}
+
+TL_COMCTL_MSABI int tl_ImageList_GetImageCount(void* const image_list) noexcept {
+    if (image_list == nullptr) {
+        return 0;
+    }
+    const auto* const list = static_cast<const InternalImageList*>(image_list);
+    return list->used ? list->count : 0;
+}
+
+TL_COMCTL_MSABI std::intptr_t tl_PropertySheetW(const void* const header) noexcept {
+    (void)header;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
 }  // extern "C"
 
 }  // namespace tradutorlinux

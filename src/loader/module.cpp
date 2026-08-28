@@ -17,6 +17,7 @@
 #include "tradutorlinux/runtime/comdlg32.hpp"
 #include "tradutorlinux/runtime/imm32.hpp"
 #include "tradutorlinux/runtime/psapi.hpp"
+#include "tradutorlinux/runtime/mpr.hpp"
 #include "tradutorlinux/util/basics.hpp"
 
 #include <algorithm>
@@ -503,6 +504,21 @@ void register_builtin_modules() {
         {"SetSearchPathMode", 305, reinterpret_cast<std::uintptr_t>(&tl_SetSearchPathMode)},
         {"InterlockedPushEntrySList", 306,
          reinterpret_cast<std::uintptr_t>(&tl_InterlockedPushEntrySList)},
+        {"CopyFileExW", 307, reinterpret_cast<std::uintptr_t>(&tl_CopyFileExW)},
+        {"MoveFileWithProgressW", 308, reinterpret_cast<std::uintptr_t>(&tl_MoveFileWithProgressW)},
+        {"GetCompressedFileSizeW", 309, reinterpret_cast<std::uintptr_t>(&tl_GetCompressedFileSizeW)},
+        {"FindFirstChangeNotificationW", 310,
+         reinterpret_cast<std::uintptr_t>(&tl_FindFirstChangeNotificationW)},
+        {"FindNextChangeNotification", 311,
+         reinterpret_cast<std::uintptr_t>(&tl_FindNextChangeNotification)},
+        {"FindCloseChangeNotification", 312,
+         reinterpret_cast<std::uintptr_t>(&tl_FindCloseChangeNotification)},
+        {"GetSystemDefaultLangID", 313, reinterpret_cast<std::uintptr_t>(&tl_GetSystemDefaultLangID)},
+        {"GetUserDefaultLangID", 314, reinterpret_cast<std::uintptr_t>(&tl_GetUserDefaultLangID)},
+        {"GetWindowsDirectoryW", 315, reinterpret_cast<std::uintptr_t>(&tl_GetWindowsDirectoryW)},
+        {"GlobalSize", 316, reinterpret_cast<std::uintptr_t>(&tl_GlobalSize)},
+        {"SetPriorityClass", 317, reinterpret_cast<std::uintptr_t>(&tl_SetPriorityClass)},
+        {"lstrlenW", 318, reinterpret_cast<std::uintptr_t>(&tl_lstrlenW)},
     };
     static const InternalModule kKernel32Module{"KERNEL32.dll", kKernel32Exports};
     register_module(kKernel32Module);
@@ -634,6 +650,41 @@ void register_builtin_modules() {
         {"DrawIconEx", 122, reinterpret_cast<std::uintptr_t>(&tl_DrawIconEx)},
         {"LoadImageW", 123, reinterpret_cast<std::uintptr_t>(&tl_LoadImageW)},
         {"ClientToScreen", 124, reinterpret_cast<std::uintptr_t>(&tl_ClientToScreen)},
+        {"GetMenu", 125, reinterpret_cast<std::uintptr_t>(&tl_GetMenu)},
+        {"SetMenu", 126, reinterpret_cast<std::uintptr_t>(&tl_SetMenu)},
+        {"GetSubMenu", 127, reinterpret_cast<std::uintptr_t>(&tl_GetSubMenu)},
+        {"GetMenuItemCount", 128, reinterpret_cast<std::uintptr_t>(&tl_GetMenuItemCount)},
+        {"GetMenuItemInfoW", 129, reinterpret_cast<std::uintptr_t>(&tl_GetMenuItemInfoW)},
+        {"SetMenuItemInfoW", 130, reinterpret_cast<std::uintptr_t>(&tl_SetMenuItemInfoW)},
+        {"InsertMenuItemW", 131, reinterpret_cast<std::uintptr_t>(&tl_InsertMenuItemW)},
+        {"RemoveMenu", 132, reinterpret_cast<std::uintptr_t>(&tl_RemoveMenu)},
+        {"EnableMenuItem", 133, reinterpret_cast<std::uintptr_t>(&tl_EnableMenuItem)},
+        {"CheckMenuItem", 134, reinterpret_cast<std::uintptr_t>(&tl_CheckMenuItem)},
+        {"CheckMenuRadioItem", 135, reinterpret_cast<std::uintptr_t>(&tl_CheckMenuRadioItem)},
+        {"DrawMenuBar", 136, reinterpret_cast<std::uintptr_t>(&tl_DrawMenuBar)},
+        {"TrackPopupMenuEx", 137, reinterpret_cast<std::uintptr_t>(&tl_TrackPopupMenuEx)},
+        {"LoadMenuW", 138, reinterpret_cast<std::uintptr_t>(&tl_LoadMenuW)},
+        {"CheckDlgButton", 139, reinterpret_cast<std::uintptr_t>(&tl_CheckDlgButton)},
+        {"IsDlgButtonChecked", 140, reinterpret_cast<std::uintptr_t>(&tl_IsDlgButtonChecked)},
+        {"CheckRadioButton", 141, reinterpret_cast<std::uintptr_t>(&tl_CheckRadioButton)},
+        {"MapDialogRect", 142, reinterpret_cast<std::uintptr_t>(&tl_MapDialogRect)},
+        {"GetDialogBaseUnits", 143, reinterpret_cast<std::uintptr_t>(&tl_GetDialogBaseUnits)},
+        {"WindowFromPoint", 144, reinterpret_cast<std::uintptr_t>(&tl_WindowFromPoint)},
+        {"ChildWindowFromPointEx", 145, reinterpret_cast<std::uintptr_t>(&tl_ChildWindowFromPointEx)},
+        {"GetWindowPlacement", 146, reinterpret_cast<std::uintptr_t>(&tl_GetWindowPlacement)},
+        {"SetWindowPlacement", 147, reinterpret_cast<std::uintptr_t>(&tl_SetWindowPlacement)},
+        {"IsWindowEnabled", 148, reinterpret_cast<std::uintptr_t>(&tl_IsWindowEnabled)},
+        {"IsZoomed", 149, reinterpret_cast<std::uintptr_t>(&tl_IsZoomed)},
+        {"GetClassInfoW", 150, reinterpret_cast<std::uintptr_t>(&tl_GetClassInfoW)},
+        {"GetMonitorInfoA", 151, reinterpret_cast<std::uintptr_t>(&tl_GetMonitorInfoA)},
+        {"SystemParametersInfoW", 152, reinterpret_cast<std::uintptr_t>(&tl_SystemParametersInfoW)},
+        {"LoadAcceleratorsW", 153, reinterpret_cast<std::uintptr_t>(&tl_LoadAcceleratorsW)},
+        {"TranslateAcceleratorW", 154, reinterpret_cast<std::uintptr_t>(&tl_TranslateAcceleratorW)},
+        {"LoadBitmapW", 155, reinterpret_cast<std::uintptr_t>(&tl_LoadBitmapW)},
+        {"MapVirtualKeyW", 156, reinterpret_cast<std::uintptr_t>(&tl_MapVirtualKeyW)},
+        {"RegisterClipboardFormatW", 157,
+         reinterpret_cast<std::uintptr_t>(&tl_RegisterClipboardFormatW)},
+        {"ScreenToClient", 158, reinterpret_cast<std::uintptr_t>(&tl_ScreenToClient)},
     };
     static const InternalModule kUser32Module{"USER32.dll", kUser32Exports};
     register_module(kUser32Module);
@@ -831,6 +882,8 @@ void register_builtin_modules() {
         {"?terminate@@YAXXZ", 108, reinterpret_cast<std::uintptr_t>(&tl_terminate)},
         {"??1type_info@@UEAA@XZ", 109, reinterpret_cast<std::uintptr_t>(&tl__c_exit)},
         {"_iob", 110, reinterpret_cast<std::uintptr_t>(g_guest_iob)},
+        {"rand", 111, reinterpret_cast<std::uintptr_t>(&tl_rand)},
+        {"srand", 112, reinterpret_cast<std::uintptr_t>(&tl_srand)},
     };
     static const InternalModule kMsvcrtModule{"msvcrt.dll", kMsvcrtExports};
     register_module(kMsvcrtModule);
@@ -848,6 +901,10 @@ void register_builtin_modules() {
         {"SHBrowseForFolderW", 11, reinterpret_cast<std::uintptr_t>(&tl_SHBrowseForFolderW)},
         {"SHGetMalloc", 12, reinterpret_cast<std::uintptr_t>(&tl_SHGetMalloc)},
         {"SHChangeNotify", 13, reinterpret_cast<std::uintptr_t>(&tl_SHChangeNotify)},
+        {"ExtractIconExW", 14, reinterpret_cast<std::uintptr_t>(&tl_ExtractIconExW)},
+        {"SHGetDesktopFolder", 15, reinterpret_cast<std::uintptr_t>(&tl_SHGetDesktopFolder)},
+        {"SHGetSpecialFolderLocation", 16, reinterpret_cast<std::uintptr_t>(&tl_SHGetSpecialFolderLocation)},
+        {"SHGetSpecialFolderPathW", 17, reinterpret_cast<std::uintptr_t>(&tl_SHGetSpecialFolderPathW)},
     };
     static const InternalModule kShell32Module{"SHELL32.dll", kShell32Exports};
     register_module(kShell32Module);
@@ -892,6 +949,11 @@ void register_builtin_modules() {
         {"RegEnumKeyExW", 38, reinterpret_cast<std::uintptr_t>(&tl_RegEnumKeyExW)},
         {"RegDeleteKeyExW", 39, reinterpret_cast<std::uintptr_t>(&tl_RegDeleteKeyExW)},
         {"RegDeleteKeyW", 40, reinterpret_cast<std::uintptr_t>(&tl_RegDeleteKeyW)},
+        {"GetUserNameW", 41, reinterpret_cast<std::uintptr_t>(&tl_GetUserNameW)},
+        {"LookupAccountNameW", 42, reinterpret_cast<std::uintptr_t>(&tl_LookupAccountNameW)},
+        {"LsaOpenPolicy", 43, reinterpret_cast<std::uintptr_t>(&tl_LsaOpenPolicy)},
+        {"LsaClose", 44, reinterpret_cast<std::uintptr_t>(&tl_LsaClose)},
+        {"LsaAddAccountRights", 45, reinterpret_cast<std::uintptr_t>(&tl_LsaAddAccountRights)},
     };
     static const InternalModule kAdvapi32Module{"ADVAPI32.dll", kAdvapi32Exports};
     register_module(kAdvapi32Module);
@@ -909,6 +971,10 @@ void register_builtin_modules() {
         {"OleInitialize", 10, reinterpret_cast<std::uintptr_t>(&tl_OleInitialize)},
         {"OleUninitialize", 11, reinterpret_cast<std::uintptr_t>(&tl_OleUninitialize)},
         {"CLSIDFromString", 13, reinterpret_cast<std::uintptr_t>(&tl_CLSIDFromString)},
+        {"RegisterDragDrop", 14, reinterpret_cast<std::uintptr_t>(&tl_RegisterDragDrop)},
+        {"RevokeDragDrop", 15, reinterpret_cast<std::uintptr_t>(&tl_RevokeDragDrop)},
+        {"DoDragDrop", 16, reinterpret_cast<std::uintptr_t>(&tl_DoDragDrop)},
+        {"ReleaseStgMedium", 17, reinterpret_cast<std::uintptr_t>(&tl_ReleaseStgMedium)},
     };
     static const InternalModule kOle32Module{"ole32.dll", kOle32Exports};
     register_module(kOle32Module);
@@ -1069,9 +1135,14 @@ void register_builtin_modules() {
         {"ImageList_Add", 5, reinterpret_cast<std::uintptr_t>(&tl_ImageList_Add)},
         {"ImageList_AddMasked", 6, reinterpret_cast<std::uintptr_t>(&tl_ImageList_AddMasked)},
         {"ImageList_ReplaceIcon", 7, reinterpret_cast<std::uintptr_t>(&tl_ImageList_ReplaceIcon)},
+        {"CreateStatusWindowW", 8, reinterpret_cast<std::uintptr_t>(&tl_CreateStatusWindowW)},
+        {"CreateToolbarEx", 9, reinterpret_cast<std::uintptr_t>(&tl_CreateToolbarEx)},
+        {"ImageList_GetImageCount", 10, reinterpret_cast<std::uintptr_t>(&tl_ImageList_GetImageCount)},
+        {"PropertySheetW", 11, reinterpret_cast<std::uintptr_t>(&tl_PropertySheetW)},
         {"SetWindowSubclass", 410, reinterpret_cast<std::uintptr_t>(&tl_SetWindowSubclass)},
         {"RemoveWindowSubclass", 412, reinterpret_cast<std::uintptr_t>(&tl_RemoveWindowSubclass)},
         {"DefSubclassProc", 413, reinterpret_cast<std::uintptr_t>(&tl_DefSubclassProc)},
+        {"", 17, reinterpret_cast<std::uintptr_t>(&tl_InitCommonControls)},
         {"", 410, reinterpret_cast<std::uintptr_t>(&tl_SetWindowSubclass)},
         {"", 412, reinterpret_cast<std::uintptr_t>(&tl_RemoveWindowSubclass)},
         {"", 413, reinterpret_cast<std::uintptr_t>(&tl_DefSubclassProc)},
@@ -1086,6 +1157,7 @@ void register_builtin_modules() {
         {"ChooseColorA", 5, reinterpret_cast<std::uintptr_t>(&tl_ChooseColorA)},
         {"ChooseColorW", 6, reinterpret_cast<std::uintptr_t>(&tl_ChooseColorW)},
         {"PrintDlgW", 7, reinterpret_cast<std::uintptr_t>(&tl_PrintDlgW)},
+        {"CommDlgExtendedError", 8, reinterpret_cast<std::uintptr_t>(&tl_CommDlgExtendedError)},
     };
     static const InternalModule kComdlg32Module{"COMDLG32.dll", kComdlg32Exports};
     register_module(kComdlg32Module);
@@ -1111,6 +1183,18 @@ void register_builtin_modules() {
     };
     static const InternalModule kPsapiModule{"PSAPI.dll", kPsapiExports};
     register_module(kPsapiModule);
+    static const ExportedFunction kMprExports[] = {
+        {"WNetAddConnection2W", 1, reinterpret_cast<std::uintptr_t>(&tl_WNetAddConnection2W)},
+        {"WNetOpenEnumW", 2, reinterpret_cast<std::uintptr_t>(&tl_WNetOpenEnumW)},
+        {"WNetEnumResourceW", 3, reinterpret_cast<std::uintptr_t>(&tl_WNetEnumResourceW)},
+        {"WNetCloseEnum", 4, reinterpret_cast<std::uintptr_t>(&tl_WNetCloseEnum)},
+        {"WNetGetResourceInformationW", 5,
+         reinterpret_cast<std::uintptr_t>(&tl_WNetGetResourceInformationW)},
+        {"WNetGetResourceParentW", 6,
+         reinterpret_cast<std::uintptr_t>(&tl_WNetGetResourceParentW)},
+    };
+    static const InternalModule kMprModule{"MPR.dll", kMprExports};
+    register_module(kMprModule);
 }
 
 bool is_module_registered(const std::string_view dll) {
