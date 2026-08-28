@@ -278,6 +278,55 @@ TEST(Crypt32Test, CertContextAndStoreManagement) {
     EXPECT_EQ(tl_CertCloseStore(sys_w, 0), 1U);
 }
 
+TEST(User32ExtTest, DesktopCaptureAndRectOperations) {
+    EXPECT_NE(tl_GetDesktopWindow(), nullptr);
+    EXPECT_NE(tl_MonitorFromWindow(nullptr, 0), nullptr);
+
+    std::uint32_t pid = 0;
+    std::uint32_t tid = tl_GetWindowThreadProcessId(tl_GetDesktopWindow(), &pid);
+    EXPECT_NE(tid, 0U);
+    EXPECT_NE(pid, 0U);
+
+    EXPECT_EQ(tl_SetCapture(nullptr), nullptr);
+    EXPECT_EQ(tl_GetCapture(), nullptr);
+    EXPECT_EQ(tl_ReleaseCapture(), 1);
+
+    abi::GuestRect r{10, 20, 100, 200};
+    EXPECT_EQ(tl_PtInRect(&r, 50, 50), 1);
+    EXPECT_EQ(tl_PtInRect(&r, 5, 50), 0);
+    EXPECT_EQ(tl_PtInRect(&r, 150, 50), 0);
+    EXPECT_EQ(tl_PtInRect(nullptr, 50, 50), 0);
+
+    abi::GuestRect dst{0, 0, 0, 0};
+    EXPECT_EQ(tl_CopyRect(&dst, &r), 1);
+    EXPECT_EQ(dst.left, 10);
+    EXPECT_EQ(dst.bottom, 200);
+
+    std::int32_t pt[2] = {5, 10};
+    EXPECT_EQ(tl_MapWindowPoints(nullptr, nullptr, pt, 1), 0);
+    EXPECT_EQ(pt[0], 5);
+    EXPECT_EQ(pt[1], 10);
+
+    EXPECT_EQ(tl_GetSysColor(kColorWindow), 0x00FFFFFFU);
+    EXPECT_EQ(tl_GetSysColor(kColorWindowText), 0x00000000U);
+
+    std::uint16_t upper_char = static_cast<std::uint16_t>(
+        reinterpret_cast<std::uintptr_t>(tl_CharUpperW(reinterpret_cast<std::uint16_t*>(u'a'))));
+    EXPECT_EQ(upper_char, u'A');
+
+    std::uint16_t str[] = {u'a', u'b', u'c', 0};
+    tl_CharUpperW(str);
+    EXPECT_EQ(str[0], u'A');
+    EXPECT_EQ(str[1], u'B');
+    EXPECT_EQ(str[2], u'C');
+
+    abi::GuestRect calc_r{0, 0, 0, 0};
+    int height = tl_DrawTextW(nullptr, str, 3, &calc_r, kDtCalcRect);
+    EXPECT_GT(height, 0);
+    EXPECT_GT(calc_r.right, 0);
+    EXPECT_GT(calc_r.bottom, 0);
+}
+
 TEST(Win32CodePageTest, Cp1252ConvertsByte80ToEuroSign) {
     const char input[] = {'c', 'a', 'f', static_cast<char>(0xE9), static_cast<char>(0x80), '\0'};
     std::uint16_t output[8]{};

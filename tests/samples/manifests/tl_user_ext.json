@@ -1,0 +1,30 @@
+{
+  "name": "tl_user_ext",
+  "format": "PE32+",
+  "machine": "AMD64",
+  "entry_point": "tl_entry",
+  "uses_crt": false,
+  "imports": {
+    "KERNEL32.dll": [
+      "ExitProcess",
+      "GetLastError",
+      "GetStdHandle",
+      "WriteFile"
+    ],
+    "USER32.dll": [
+      "CharUpperW",
+      "CopyRect",
+      "DrawTextW",
+      "GetCapture",
+      "GetDesktopWindow",
+      "GetFocus",
+      "GetSysColor",
+      "GetWindowThreadProcessId",
+      "MapWindowPoints",
+      "PtInRect",
+      "ReleaseCapture",
+      "SetCapture"
+    ]
+  }
+}
+

@@ -1976,6 +1976,356 @@ TL_MSABI int tl_LoadStringW(void* instance, const std::uint32_t id, std::uint16_
     return 0;
 }
 
+static WindowSlot* g_captured_window = nullptr;
+
+TL_MSABI void* tl_GetDesktopWindow() noexcept {
+    return kDesktopHwndToken;
+}
+
+TL_MSABI void* tl_GetFocus() noexcept {
+    return g_focused_control != nullptr ? g_focused_control : nullptr;
+}
+
+TL_MSABI void* tl_SetCapture(const void* const window) noexcept {
+    void* const prev = g_captured_window;
+    if (window == nullptr) {
+        g_captured_window = nullptr;
+    } else if (WindowSlot* const slot = find_window_slot(window); slot != nullptr) {
+        g_captured_window = slot;
+    }
+    return prev;
+}
+
+TL_MSABI int tl_ReleaseCapture() noexcept {
+    g_captured_window = nullptr;
+    return 1;
+}
+
+TL_MSABI void* tl_GetCapture() noexcept {
+    return g_captured_window;
+}
+
+TL_MSABI int tl_BringWindowToTop(const void* const window) noexcept {
+    if (window == nullptr) {
+        set_last_error(abi::kErrorInvalidHandle);
+        return 0;
+    }
+    const WindowSlot* const slot = find_window_slot(window);
+    if (slot == nullptr) {
+        set_last_error(abi::kErrorInvalidHandle);
+        return 0;
+    }
+    return 1;
+}
+
+TL_MSABI void* tl_GetWindow(const void* const window, const std::uint32_t cmd) noexcept {
+    WindowSlot* const slot = find_window_slot(window);
+    if (slot == nullptr) {
+        set_last_error(abi::kErrorInvalidHandle);
+        return nullptr;
+    }
+    if (cmd == kGwChild) {
+        for (auto& w : g_windows) {
+            if (w.used && w.parent == slot) return &w;
+        }
+        return nullptr;
+    }
+    if (cmd == kGwOwner) {
+        return slot->parent;
+    }
+    if (cmd == kGwHwndFirst) {
+        for (auto& w : g_windows) {
+            if (w.used && w.parent == slot->parent) return &w;
+        }
+        return nullptr;
+    }
+    if (cmd == kGwHwndLast) {
+        WindowSlot* last = nullptr;
+        for (auto& w : g_windows) {
+            if (w.used && w.parent == slot->parent) last = &w;
+        }
+        return last;
+    }
+    if (cmd == kGwHwndNext) {
+        bool found_current = false;
+        for (auto& w : g_windows) {
+            if (!w.used || w.parent != slot->parent) continue;
+            if (found_current) return &w;
+            if (&w == slot) found_current = true;
+        }
+        return nullptr;
+    }
+    if (cmd == kGwHwndPrev) {
+        WindowSlot* prev = nullptr;
+        for (auto& w : g_windows) {
+            if (!w.used || w.parent != slot->parent) continue;
+            if (&w == slot) return prev;
+            prev = &w;
+        }
+        return nullptr;
+    }
+    set_last_error(abi::kErrorInvalidParameter);
+    return nullptr;
+}
+
+TL_MSABI int tl_GetClassNameA(const void* const window, char* const class_name,
+                              const int max_count) noexcept {
+    const WindowSlot* const slot = find_window_slot(window);
+    if (slot == nullptr || class_name == nullptr || max_count <= 0 ||
+        !mapped_guest_range(class_name, static_cast<std::size_t>(max_count), true)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    const std::string& name = slot->class_name;
+    const std::size_t len = std::min(name.size(), static_cast<std::size_t>(max_count - 1));
+    std::copy_n(name.data(), len, class_name);
+    class_name[len] = '\0';
+    set_last_error(abi::kErrorSuccess);
+    return static_cast<int>(len);
+}
+
+TL_MSABI int tl_GetClassNameW(const void* const window, std::uint16_t* const class_name,
+                              const int max_count) noexcept {
+    const WindowSlot* const slot = find_window_slot(window);
+    if (slot == nullptr || class_name == nullptr || max_count <= 0 ||
+        !mapped_guest_range(class_name, static_cast<std::size_t>(max_count) * sizeof(std::uint16_t), true)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    const std::u16string wide = util::utf8_to_wide(slot->class_name);
+    const std::size_t len = std::min(wide.size(), static_cast<std::size_t>(max_count - 1));
+    std::copy_n(wide.data(), len, class_name);
+    class_name[len] = 0;
+    set_last_error(abi::kErrorSuccess);
+    return static_cast<int>(len);
+}
+
+TL_MSABI std::uint32_t tl_GetWindowThreadProcessId(const void* const window,
+                                                   std::uint32_t* const process_id) noexcept {
+    (void)window;
+    if (process_id != nullptr && mapped_guest_range(process_id, sizeof(*process_id), true)) {
+        *process_id = static_cast<std::uint32_t>(getpid());
+    }
+    return g_current_thread_id != 0 ? g_current_thread_id : kMainThreadId;
+}
+
+TL_MSABI abi::Lresult tl_CallWindowProcA(const std::uintptr_t prev_wnd_func, const void* const window,
+                                        const std::uint32_t message, const abi::Wparam wparam,
+                                        const abi::Lparam lparam) noexcept {
+    if (prev_wnd_func == 0) return 0;
+    return call_wndproc(prev_wnd_func, const_cast<void*>(window), message, wparam, lparam);
+}
+
+TL_MSABI abi::Lresult tl_CallWindowProcW(const std::uintptr_t prev_wnd_func, const void* const window,
+                                        const std::uint32_t message, const abi::Wparam wparam,
+                                        const abi::Lparam lparam) noexcept {
+    if (prev_wnd_func == 0) return 0;
+    return call_wndproc(prev_wnd_func, const_cast<void*>(window), message, wparam, lparam);
+}
+
+TL_MSABI int tl_PeekMessageA(void* const msg, const void* const window,
+                             const std::uint32_t filter_min, const std::uint32_t filter_max,
+                             const std::uint32_t remove_msg) noexcept {
+    (void)filter_min;
+    (void)filter_max;
+    if (msg == nullptr || !mapped_guest_range(msg, sizeof(abi::GuestMsg), true)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    WindowSlot* slot = find_window_slot(window);
+    if (slot == nullptr && window == nullptr) {
+        for (auto& w : g_windows) {
+            if (w.used) { slot = &w; break; }
+        }
+    }
+    if (slot == nullptr) return 0;
+    if (slot->has_pending) {
+        *static_cast<abi::GuestMsg*>(msg) = slot->pending;
+        if ((remove_msg & kPmRemove) != 0) slot->has_pending = false;
+        return 1;
+    }
+    if (!slot->queued_messages.empty()) {
+        *static_cast<abi::GuestMsg*>(msg) = slot->queued_messages.front();
+        if ((remove_msg & kPmRemove) != 0) slot->queued_messages.pop_front();
+        return 1;
+    }
+    return 0;
+}
+
+TL_MSABI int tl_PeekMessageW(void* const msg, const void* const window,
+                             const std::uint32_t filter_min, const std::uint32_t filter_max,
+                             const std::uint32_t remove_msg) noexcept {
+    return tl_PeekMessageA(msg, window, filter_min, filter_max, remove_msg);
+}
+
+TL_MSABI int tl_RedrawWindow(const void* const window, const void* const update_rect,
+                             const void* const update_rgn, const std::uint32_t flags) noexcept {
+    (void)update_rect;
+    (void)update_rgn;
+    (void)flags;
+    if (window == nullptr) return 1;
+    WindowSlot* const slot = find_window_slot(window);
+    if (slot == nullptr) {
+        set_last_error(abi::kErrorInvalidHandle);
+        return 0;
+    }
+    queue_window_message(*slot, 0x000FU /* WM_PAINT */, 0, 0);
+    return 1;
+}
+
+TL_MSABI int tl_PtInRect(const void* const rect, const std::int32_t x, const std::int32_t y) noexcept {
+    if (rect == nullptr || !mapped_guest_range(rect, sizeof(abi::GuestRect), false)) {
+        return 0;
+    }
+    const auto* const r = static_cast<const abi::GuestRect*>(rect);
+    return (x >= r->left && x < r->right && y >= r->top && y < r->bottom) ? 1 : 0;
+}
+
+TL_MSABI int tl_CopyRect(void* const dest_rect, const void* const src_rect) noexcept {
+    if (dest_rect == nullptr || src_rect == nullptr ||
+        !mapped_guest_range(dest_rect, sizeof(abi::GuestRect), true) ||
+        !mapped_guest_range(src_rect, sizeof(abi::GuestRect), false)) {
+        return 0;
+    }
+    *static_cast<abi::GuestRect*>(dest_rect) = *static_cast<const abi::GuestRect*>(src_rect);
+    return 1;
+}
+
+struct GuestPoint {
+    std::int32_t x{};
+    std::int32_t y{};
+};
+
+TL_MSABI int tl_MapWindowPoints(const void* const from_window, const void* const to_window,
+                                void* const points, const std::uint32_t count) noexcept {
+    if (points == nullptr || count == 0 ||
+        !mapped_guest_range(points, sizeof(GuestPoint) * count, true)) {
+        return 0;
+    }
+    int dx = 0;
+    int dy = 0;
+    if (from_window != nullptr && from_window != kDesktopHwndToken) {
+        if (const WindowSlot* const from_slot = find_window_slot(from_window); from_slot != nullptr) {
+            dx += from_slot->x;
+            dy += from_slot->y;
+        }
+    }
+    if (to_window != nullptr && to_window != kDesktopHwndToken) {
+        if (const WindowSlot* const to_slot = find_window_slot(to_window); to_slot != nullptr) {
+            dx -= to_slot->x;
+            dy -= to_slot->y;
+        }
+    }
+    auto* const pts = static_cast<GuestPoint*>(points);
+    for (std::uint32_t i = 0; i < count; ++i) {
+        pts[i].x += dx;
+        pts[i].y += dy;
+    }
+    return (dy << 16) | (dx & 0xFFFF);
+}
+
+TL_MSABI void* tl_MonitorFromWindow(const void* const window, const std::uint32_t flags) noexcept {
+    (void)window;
+    (void)flags;
+    return kDefaultMonitorToken;
+}
+
+TL_MSABI std::uint32_t tl_GetSysColor(const int index) noexcept {
+    switch (index) {
+        case kColorWindow: return 0x00FFFFFFU;
+        case kColorWindowText:
+        case kColorBtnText:
+        case kColorCaptionText:
+        case kColorMenuText:
+        case kColorInfoText: return 0x00000000U;
+        case kColorBtnFace:
+        case kColor3dLight:
+        case kColorMenu: return 0x00F0F0F0U;
+        case kColorHighlight: return 0x00D77800U;
+        case kColorHighlightText: return 0x00FFFFFFU;
+        case kColorBtnShadow:
+        case kColorGrayText: return 0x00A0A0A0U;
+        case kColor3dDkShadow:
+        case kColorWindowFrame: return 0x00696969U;
+        case kColorInfoBk: return 0x00E1FFFFU;
+        default: return 0x00FFFFFFU;
+    }
+}
+
+TL_MSABI std::uint16_t* tl_CharUpperW(std::uint16_t* const str) noexcept {
+    if (reinterpret_cast<std::uintptr_t>(str) <= 0xFFFFU) {
+        auto ch = static_cast<char16_t>(reinterpret_cast<std::uintptr_t>(str));
+        if (ch >= u'a' && ch <= u'z') ch = ch - u'a' + u'A';
+        return reinterpret_cast<std::uint16_t*>(static_cast<std::uintptr_t>(ch));
+    }
+    if (!mapped_guest_wstring(str)) return str;
+    for (std::uint16_t* p = str; *p != 0; ++p) {
+        if (*p >= u'a' && *p <= u'z') *p = *p - u'a' + u'A';
+    }
+    return str;
+}
+
+TL_MSABI std::uint16_t* tl_CharLowerW(std::uint16_t* const str) noexcept {
+    if (reinterpret_cast<std::uintptr_t>(str) <= 0xFFFFU) {
+        auto ch = static_cast<char16_t>(reinterpret_cast<std::uintptr_t>(str));
+        if (ch >= u'A' && ch <= u'Z') ch = ch - u'A' + u'a';
+        return reinterpret_cast<std::uint16_t*>(static_cast<std::uintptr_t>(ch));
+    }
+    if (!mapped_guest_wstring(str)) return str;
+    for (std::uint16_t* p = str; *p != 0; ++p) {
+        if (*p >= u'A' && *p <= u'Z') *p = *p - u'A' + u'a';
+    }
+    return str;
+}
+
+TL_MSABI int tl_DrawTextA(const void* const dc, const char* const text, const int count,
+                          void* const rect, const std::uint32_t format) noexcept {
+    if (text == nullptr || rect == nullptr || !mapped_guest_range(rect, sizeof(abi::GuestRect), true)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    const std::size_t len = (count < 0) ? std::strlen(text) : static_cast<std::size_t>(count);
+    auto* const r = static_cast<abi::GuestRect*>(rect);
+    constexpr int kLineHeight = 16;
+    constexpr int kCharWidth = 8;
+    if ((format & kDtCalcRect) != 0) {
+        r->right = r->left + static_cast<std::int32_t>(len * kCharWidth);
+        r->bottom = r->top + kLineHeight;
+        return kLineHeight;
+    }
+    if (dc != nullptr) {
+        (void)tl_TextOut(dc, r->left, r->top, text, static_cast<int>(len));
+    }
+    return kLineHeight;
+}
+
+TL_MSABI int tl_DrawTextW(const void* const dc, const std::uint16_t* const text, const int count,
+                          void* const rect, const std::uint32_t format) noexcept {
+    if (text == nullptr || rect == nullptr || !mapped_guest_range(rect, sizeof(abi::GuestRect), true)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    std::size_t len = 0;
+    if (count < 0) {
+        while (text[len] != 0) ++len;
+    } else {
+        len = static_cast<std::size_t>(count);
+    }
+    auto* const r = static_cast<abi::GuestRect*>(rect);
+    constexpr int kLineHeight = 16;
+    constexpr int kCharWidth = 8;
+    if ((format & kDtCalcRect) != 0) {
+        r->right = r->left + static_cast<std::int32_t>(len * kCharWidth);
+        r->bottom = r->top + kLineHeight;
+        return kLineHeight;
+    }
+    if (dc != nullptr) {
+        const std::string utf8 = util::wide_to_utf8(text, len);
+        (void)tl_TextOut(dc, r->left, r->top, utf8.c_str(), static_cast<int>(utf8.size()));
+    }
+    return kLineHeight;
+}
+
 }  // extern "C"
 
 }  // namespace tradutorlinux

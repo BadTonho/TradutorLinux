@@ -840,6 +840,96 @@ TL_MSABI int tl_AppendMenuW(const void* menu, std::uint32_t flags, std::uintptr_
 TL_MSABI int tl_DestroyMenu(const void* menu) noexcept;
 TL_MSABI int tl_TrackPopupMenu(const void* menu, std::uint32_t flags, int x, int y, int reserved,
                                const void* owner, const void* rect) noexcept;
+constexpr std::uint32_t kGwHwndFirst = 0;
+constexpr std::uint32_t kGwHwndLast = 1;
+constexpr std::uint32_t kGwHwndNext = 2;
+constexpr std::uint32_t kGwHwndPrev = 3;
+constexpr std::uint32_t kGwOwner = 4;
+constexpr std::uint32_t kGwChild = 5;
+
+constexpr std::uint32_t kPmNoRemove = 0x0000;
+constexpr std::uint32_t kPmRemove = 0x0001;
+constexpr std::uint32_t kPmNoYield = 0x0002;
+
+constexpr int kColorScrollbar = 0;
+constexpr int kColorBackground = 1;
+constexpr int kColorActiveCaption = 2;
+constexpr int kColorInactiveCaption = 3;
+constexpr int kColorMenu = 4;
+constexpr int kColorWindow = 5;
+constexpr int kColorWindowFrame = 6;
+constexpr int kColorMenuText = 7;
+constexpr int kColorWindowText = 8;
+constexpr int kColorCaptionText = 9;
+constexpr int kColorActiveBorder = 10;
+constexpr int kColorInactiveBorder = 11;
+constexpr int kColorAppWorkspace = 12;
+constexpr int kColorHighlight = 13;
+constexpr int kColorHighlightText = 14;
+constexpr int kColorBtnFace = 15;
+constexpr int kColorBtnShadow = 16;
+constexpr int kColorGrayText = 17;
+constexpr int kColorBtnText = 18;
+constexpr int kColorInactiveCaptionText = 19;
+constexpr int kColorBtnHighlight = 20;
+constexpr int kColor3dDkShadow = 21;
+constexpr int kColor3dLight = 22;
+constexpr int kColorInfoText = 23;
+constexpr int kColorInfoBk = 24;
+
+constexpr std::uint32_t kDtTop = 0x00000000;
+constexpr std::uint32_t kDtLeft = 0x00000000;
+constexpr std::uint32_t kDtCenter = 0x00000001;
+constexpr std::uint32_t kDtRight = 0x00000002;
+constexpr std::uint32_t kDtVCenter = 0x00000004;
+constexpr std::uint32_t kDtBottom = 0x00000008;
+constexpr std::uint32_t kDtWordBreak = 0x00000010;
+constexpr std::uint32_t kDtSingleLine = 0x00000020;
+constexpr std::uint32_t kDtExpandTabs = 0x00000040;
+constexpr std::uint32_t kDtTabStop = 0x00000080;
+constexpr std::uint32_t kDtNoClip = 0x00000100;
+constexpr std::uint32_t kDtExternalLeading = 0x00000200;
+constexpr std::uint32_t kDtCalcRect = 0x00000400;
+constexpr std::uint32_t kDtNoPrefix = 0x00000800;
+constexpr std::uint32_t kDtInternal = 0x00001000;
+
+inline void* const kDesktopHwndToken = reinterpret_cast<void*>(0x00010000ULL);
+inline void* const kDefaultMonitorToken = reinterpret_cast<void*>(0x00010001ULL);
+
+TL_MSABI void* tl_GetDesktopWindow() noexcept;
+TL_MSABI void* tl_GetFocus() noexcept;
+TL_MSABI void* tl_SetCapture(const void* window) noexcept;
+TL_MSABI int tl_ReleaseCapture() noexcept;
+TL_MSABI void* tl_GetCapture() noexcept;
+TL_MSABI int tl_BringWindowToTop(const void* window) noexcept;
+TL_MSABI void* tl_GetWindow(const void* window, std::uint32_t cmd) noexcept;
+TL_MSABI int tl_GetClassNameA(const void* window, char* class_name, int max_count) noexcept;
+TL_MSABI int tl_GetClassNameW(const void* window, std::uint16_t* class_name, int max_count) noexcept;
+TL_MSABI std::uint32_t tl_GetWindowThreadProcessId(const void* window, std::uint32_t* process_id) noexcept;
+TL_MSABI abi::Lresult tl_CallWindowProcA(std::uintptr_t prev_wnd_func, const void* window,
+                                        std::uint32_t message, abi::Wparam wparam,
+                                        abi::Lparam lparam) noexcept;
+TL_MSABI abi::Lresult tl_CallWindowProcW(std::uintptr_t prev_wnd_func, const void* window,
+                                        std::uint32_t message, abi::Wparam wparam,
+                                        abi::Lparam lparam) noexcept;
+TL_MSABI int tl_PeekMessageA(void* msg, const void* window, std::uint32_t filter_min,
+                             std::uint32_t filter_max, std::uint32_t remove_msg) noexcept;
+TL_MSABI int tl_PeekMessageW(void* msg, const void* window, std::uint32_t filter_min,
+                             std::uint32_t filter_max, std::uint32_t remove_msg) noexcept;
+TL_MSABI int tl_RedrawWindow(const void* window, const void* update_rect, const void* update_rgn,
+                             std::uint32_t flags) noexcept;
+TL_MSABI int tl_PtInRect(const void* rect, std::int32_t x, std::int32_t y) noexcept;
+TL_MSABI int tl_CopyRect(void* dest_rect, const void* src_rect) noexcept;
+TL_MSABI int tl_MapWindowPoints(const void* from_window, const void* to_window, void* points,
+                                std::uint32_t count) noexcept;
+TL_MSABI void* tl_MonitorFromWindow(const void* window, std::uint32_t flags) noexcept;
+TL_MSABI std::uint32_t tl_GetSysColor(int index) noexcept;
+TL_MSABI std::uint16_t* tl_CharUpperW(std::uint16_t* str) noexcept;
+TL_MSABI std::uint16_t* tl_CharLowerW(std::uint16_t* str) noexcept;
+TL_MSABI int tl_DrawTextA(const void* dc, const char* text, int count, void* rect,
+                          std::uint32_t format) noexcept;
+TL_MSABI int tl_DrawTextW(const void* dc, const std::uint16_t* text, int count, void* rect,
+                          std::uint32_t format) noexcept;
 TL_MSABI void tl_DeleteCriticalSection(void* critical_section) noexcept;
 TL_MSABI void tl_EnterCriticalSection(void* critical_section) noexcept;
 TL_MSABI int tl_GetConsoleMode(const void* handle, std::uint32_t* mode) noexcept;
