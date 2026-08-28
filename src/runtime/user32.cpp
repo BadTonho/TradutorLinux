@@ -1449,8 +1449,7 @@ TL_MSABI std::intptr_t tl_DialogBoxParamW(const void* const instance,
     if ((instance != nullptr && reinterpret_cast<std::uintptr_t>(instance) != 0x1000U &&
          reinterpret_cast<std::uintptr_t>(instance) !=
              reinterpret_cast<std::uintptr_t>(g_guest_image_base)) ||
-        template_name == nullptr || reinterpret_cast<std::uintptr_t>(template_name) > 0xFFFFU ||
-        reinterpret_cast<std::uintptr_t>(template_name) == 0 ||
+        template_name == nullptr ||
         !guest_callback_address_valid(dialog_proc)) {
         set_last_error(abi::kErrorInvalidParameter);
         return -1;

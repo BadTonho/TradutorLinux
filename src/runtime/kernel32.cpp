@@ -313,8 +313,23 @@ bool win32_wildcard_match(std::string_view pattern, const std::string_view name)
 
 [[nodiscard]] bool resource_keys_equal(const ResourceKey& left,
                                        const ResourceKey& right) noexcept {
-    return left.named == right.named &&
-           (left.named ? left.name == right.name : left.id == right.id);
+    if (left.named != right.named) {
+        return false;
+    }
+    if (!left.named) {
+        return left.id == right.id;
+    }
+    if (left.name.size() != right.name.size()) {
+        return false;
+    }
+    for (std::size_t i = 0; i < left.name.size(); ++i) {
+        const auto c1 = std::tolower(static_cast<unsigned char>(left.name[i]));
+        const auto c2 = std::tolower(static_cast<unsigned char>(right.name[i]));
+        if (c1 != c2) {
+            return false;
+        }
+    }
+    return true;
 }
 
 [[nodiscard]] bool find_resource_entry(const std::uint32_t directory_offset,
