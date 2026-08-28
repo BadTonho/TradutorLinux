@@ -758,6 +758,203 @@ TL_MSABI int tl_InvertRgn(void* const hdc, void* const rgn) noexcept {
     return 1;
 }
 
+TL_MSABI void* tl_CreatePalette(const void* const logpalette) noexcept {
+    (void)logpalette;
+    set_last_error(abi::kErrorSuccess);
+    return reinterpret_cast<void*>(0x50414C45ULL); // 'PALE'
+}
+
+TL_MSABI int tl_ExcludeClipRect(void* const hdc, const int left, const int top, const int right, const int bottom) noexcept {
+    (void)hdc;
+    (void)left;
+    (void)top;
+    (void)right;
+    (void)bottom;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_GetBkMode(void* const hdc) noexcept {
+    (void)hdc;
+    set_last_error(abi::kErrorSuccess);
+    return 1; // TRANSPARENT = 1, OPAQUE = 2
+}
+
+TL_MSABI int tl_GetCharABCWidthsFloatA(void* const hdc, const std::uint32_t first, const std::uint32_t last, void* const abc) noexcept {
+    (void)hdc;
+    if (abc != nullptr && last >= first) {
+        const std::size_t count = static_cast<std::size_t>(last - first + 1);
+        struct ABCFloat { float a; float b; float c; };
+        if (mapped_guest_range(abc, count * sizeof(ABCFloat), true)) {
+            auto* const out = static_cast<ABCFloat*>(abc);
+            for (std::size_t i = 0; i < count; ++i) {
+                out[i] = {0.0f, 8.0f, 0.0f};
+            }
+        }
+    }
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_GetCharWidth32A(void* const hdc, const std::uint32_t first, const std::uint32_t last, int* const buffer) noexcept {
+    (void)hdc;
+    if (buffer != nullptr && last >= first) {
+        const std::size_t count = static_cast<std::size_t>(last - first + 1);
+        if (mapped_guest_range(buffer, count * sizeof(int), true)) {
+            for (std::size_t i = 0; i < count; ++i) {
+                buffer[i] = 8;
+            }
+        }
+    }
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_GetCharWidthA(void* const hdc, const std::uint32_t first, const std::uint32_t last, int* const buffer) noexcept {
+    return tl_GetCharWidth32A(hdc, first, last, buffer);
+}
+
+TL_MSABI std::uint32_t tl_GetCharacterPlacementW(void* const hdc, const wchar_t* const str, const int count, const int max, void* const results, const std::uint32_t flags) noexcept {
+    (void)hdc;
+    (void)str;
+    (void)max;
+    (void)results;
+    (void)flags;
+    set_last_error(abi::kErrorSuccess);
+    return static_cast<std::uint32_t>(count > 0 ? (count * 8) : 0);
+}
+
+TL_MSABI void* tl_GetCurrentObject(void* const hdc, const std::uint32_t type) noexcept {
+    (void)hdc;
+    (void)type;
+    set_last_error(abi::kErrorSuccess);
+    return reinterpret_cast<void*>(0x4744494FUL); // 'GDIO'
+}
+
+TL_MSABI int tl_GetDIBits(void* const hdc, void* const hbm, const std::uint32_t start, const std::uint32_t lines, void* const bits, void* const bi, const std::uint32_t usage) noexcept {
+    (void)hdc;
+    (void)hbm;
+    (void)start;
+    (void)bits;
+    (void)bi;
+    (void)usage;
+    set_last_error(abi::kErrorSuccess);
+    return static_cast<int>(lines);
+}
+
+TL_MSABI int tl_GetObjectA(void* const hgdiobj, const int cb_buffer, void* const lpv_object) noexcept {
+    return tl_GetObjectW(hgdiobj, cb_buffer, lpv_object);
+}
+
+TL_MSABI std::uint32_t tl_GetOutlineTextMetricsA(void* const hdc, const std::uint32_t cb_data, void* const otm) noexcept {
+    (void)hdc;
+    (void)cb_data;
+    (void)otm;
+    set_last_error(abi::kErrorSuccess);
+    return 0; // Not a TrueType font
+}
+
+TL_MSABI std::uint32_t tl_GetPixel(void* const hdc, const int x, const int y) noexcept {
+    (void)hdc;
+    (void)x;
+    (void)y;
+    set_last_error(abi::kErrorSuccess);
+    return 0x00000000U; // Black
+}
+
+TL_MSABI int tl_GetTextExtentExPointA(void* const hdc, const char* const str, const int count, const int max_extent, int* const fit, int* const dx, void* const size) noexcept {
+    (void)hdc;
+    (void)str;
+    (void)max_extent;
+    if (fit != nullptr && mapped_guest_range(fit, sizeof(int), true)) {
+        *fit = count;
+    }
+    if (dx != nullptr && count > 0 && mapped_guest_range(dx, static_cast<std::size_t>(count) * sizeof(int), true)) {
+        for (int i = 0; i < count; ++i) {
+            dx[i] = (i + 1) * 8;
+        }
+    }
+    if (size != nullptr && mapped_guest_range(size, 8, true)) {
+        *reinterpret_cast<std::int32_t*>(size) = count * 8;
+        *reinterpret_cast<std::int32_t*>(static_cast<char*>(size) + 4) = 16;
+    }
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_GetTextExtentPointA(void* const hdc, const char* const str, const int count, void* const size) noexcept {
+    return tl_GetTextExtentExPointA(hdc, str, count, 0, nullptr, nullptr, size);
+}
+
+TL_MSABI int tl_IntersectClipRect(void* const hdc, const int left, const int top, const int right, const int bottom) noexcept {
+    (void)hdc;
+    (void)left;
+    (void)top;
+    (void)right;
+    (void)bottom;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI std::uint32_t tl_RealizePalette(void* const hdc) noexcept {
+    (void)hdc;
+    set_last_error(abi::kErrorSuccess);
+    return 0;
+}
+
+TL_MSABI void* tl_SelectPalette(void* const hdc, void* const hpal, const int b_force_background) noexcept {
+    (void)hdc;
+    (void)b_force_background;
+    set_last_error(abi::kErrorSuccess);
+    return hpal;
+}
+
+TL_MSABI int tl_SetMapMode(void* const hdc, const int mode) noexcept {
+    (void)hdc;
+    (void)mode;
+    set_last_error(abi::kErrorSuccess);
+    return 1; // MM_TEXT
+}
+
+TL_MSABI std::uint32_t tl_SetPaletteEntries(void* const hpal, const std::uint32_t start, const std::uint32_t count, const void* const entries) noexcept {
+    (void)hpal;
+    (void)start;
+    (void)entries;
+    set_last_error(abi::kErrorSuccess);
+    return count;
+}
+
+TL_MSABI std::uint32_t tl_SetPixel(void* const hdc, const int x, const int y, const std::uint32_t color) noexcept {
+    (void)hdc;
+    (void)x;
+    (void)y;
+    set_last_error(abi::kErrorSuccess);
+    return color;
+}
+
+TL_MSABI int tl_TranslateCharsetInfo(std::uint32_t* const src, void* const cs, const std::uint32_t flags) noexcept {
+    (void)src;
+    (void)flags;
+    if (cs != nullptr && mapped_guest_range(cs, 32, true)) {
+        std::memset(cs, 0, 32);
+        *reinterpret_cast<std::uint32_t*>(static_cast<char*>(cs) + 4) = 1252; // cp
+    }
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_UnrealizeObject(void* const hgdiobj) noexcept {
+    (void)hgdiobj;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_UpdateColors(void* const hdc) noexcept {
+    (void)hdc;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
 }  // extern "C"
 
 }  // namespace tradutorlinux

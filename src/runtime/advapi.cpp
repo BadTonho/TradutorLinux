@@ -1015,4 +1015,32 @@ TL_ADVAPI_MSABI int tl_SystemFunction036(void* const buffer, const std::uint32_t
     return 1;
 }
 
+TL_ADVAPI_MSABI int tl_GetUserNameA(char* const buffer, std::uint32_t* const size) noexcept {
+    static const char kUser[] = "Tonho";
+    constexpr std::uint32_t kLen = 6;
+    if (size == nullptr) {
+        tl_SetLastError(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    if (*size < kLen) {
+        *size = kLen;
+        tl_SetLastError(122); // ERROR_INSUFFICIENT_BUFFER
+        return 0;
+    }
+    if (buffer != nullptr && mapped_range(buffer, kLen, true)) {
+        std::memcpy(buffer, kUser, kLen);
+    }
+    *size = kLen;
+    tl_SetLastError(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_ADVAPI_MSABI int tl_SetSecurityDescriptorOwner(void* const sec_desc, void* const owner, const int owner_defaulted) noexcept {
+    (void)sec_desc;
+    (void)owner;
+    (void)owner_defaulted;
+    tl_SetLastError(abi::kErrorSuccess);
+    return 1;
+}
+
 }  // namespace tradutorlinux

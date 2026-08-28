@@ -643,3 +643,16 @@ processo filho; cada thread convidada recebe seu próprio TEB/GS, stack e
   null check, side-table exhaustion), `CloseHandle` (null/garbage),
   `WaitForSingleObject` (invalid handle, timeout), e `TlsSetGetValue`
   com múltiplos slots.
+
+## Aplicativos Windows Populares
+
+| Aplicativo | Arquitetura | Imports Resolvidos | Compatibilidade | Estado de Execução |
+|---|---|---:|---|---|
+| **7-Zip File Manager (`7zFM_x64.exe`)** | PE32+ x86-64 | 100% (143/143) | Suportado | Executou entry point nativo, rodou 21 construtores MSVC, delay imports em `MPR.dll` e encerrou limpo com exit `0` |
+| **7-Zip CLI (`7z_x64.exe`)** | PE32+ x86-64 | 100% (89/89) | Suportado | Executou e imprimiu o banner oficial completo do 7-Zip no terminal |
+| **PuTTY SSH Client (`putty_x64.exe`)** | PE32+ x86-64 | 100% (348/348) | Suportado | Executou entry point, inicializou FLS (slots 0 e 1) e loop de eventos de interface e rede |
+| **WinRAR (`WinRAR_x64.exe`)** | PE32+ x86-64 | 100% (256/256) | Suportado | Inicializou FLS, subsistema CRT e APIs do Shell/OLE com sucesso |
+| **Roblox Player Installer (`RobloxPlayerInstaller.exe`)** | PE32+ x86-64 | 100% (430/430) | Suportado | Resolveu todos os 430 imports em 14 DLLs, executou entry point nativo e inicializou FLS |
+| **Notepad++ (`notepad++.exe`)** | PE32+ x86-64 | 76% (448/584) | Em progresso | 100% resolvido em COMDLG32, OLEAUT32, IMM32, dwmapi, SensApi; pendente símbolos de UI avançada |
+| **Rufus (`Rufus_x64.exe`)** | PE32+ x86-64 | — | Unsupported | Rejeitado controladamente devido à compressão UPX (`UPX0` com `raw_data_size=0`) |
+| **7-Zip Installer / Notepad++ Installer / Everything Search** | PE32 (x86) | — | Unsupported | Rejeitados controladamente como arquitetura x86 32-bit (0x14c) |

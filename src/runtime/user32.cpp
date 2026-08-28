@@ -3101,6 +3101,195 @@ TL_MSABI int tl_EnumDisplayDevicesA(const char* const device, const std::uint32_
     return 1;
 }
 
+TL_MSABI void* tl_CreateDialogParamA(void* const instance, const char* const template_name, void* const wnd_parent, void* const dialog_func, const std::intptr_t init_param) noexcept {
+    (void)instance;
+    (void)template_name;
+    (void)wnd_parent;
+    (void)dialog_func;
+    (void)init_param;
+    set_last_error(abi::kErrorSuccess);
+    return reinterpret_cast<void*>(0x444C4731ULL); // 'DLG1'
+}
+
+TL_MSABI void* tl_CreateMenu() noexcept {
+    set_last_error(abi::kErrorSuccess);
+    return reinterpret_cast<void*>(0x4D454E55ULL); // 'MENU'
+}
+
+TL_MSABI std::intptr_t tl_DefDlgProcA(void* const hwnd, const std::uint32_t msg, const std::uintptr_t wparam, const std::intptr_t lparam) noexcept {
+    return tl_DefWindowProcA(hwnd, msg, wparam, lparam);
+}
+
+TL_MSABI int tl_DeleteMenu(void* const menu, const std::uint32_t position, const std::uint32_t flags) noexcept {
+    (void)menu;
+    (void)position;
+    (void)flags;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI std::intptr_t tl_DialogBoxParamA(void* const instance, const char* const template_name, void* const wnd_parent, void* const dialog_func, const std::intptr_t init_param) noexcept {
+    (void)instance;
+    (void)template_name;
+    (void)wnd_parent;
+    (void)dialog_func;
+    (void)init_param;
+    set_last_error(abi::kErrorSuccess);
+    return 1; // IDOK
+}
+
+TL_MSABI std::uint32_t tl_GetCaretBlinkTime() noexcept {
+    return 530; // standard 530 ms
+}
+
+TL_MSABI void* tl_GetClipboardOwner() noexcept {
+    return nullptr;
+}
+
+TL_MSABI std::uint32_t tl_GetDoubleClickTime() noexcept {
+    return 500; // standard 500 ms
+}
+
+TL_MSABI void* tl_GetForegroundWindow() noexcept {
+    set_last_error(abi::kErrorSuccess);
+    return reinterpret_cast<void*>(0x57494E31ULL);
+}
+
+TL_MSABI void* tl_GetKeyboardLayout(const std::uint32_t thread_id) noexcept {
+    (void)thread_id;
+    return reinterpret_cast<void*>(0x04090409ULL); // US English
+}
+
+TL_MSABI int tl_GetKeyboardState(std::uint8_t* const key_states) noexcept {
+    if (key_states != nullptr && mapped_guest_range(key_states, 256, true)) {
+        std::memset(key_states, 0, 256);
+    }
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI std::uint32_t tl_GetMessageTime() noexcept {
+    return static_cast<std::uint32_t>(tl_GetTickCount());
+}
+
+TL_MSABI std::uint32_t tl_GetQueueStatus(const std::uint32_t flags) noexcept {
+    (void)flags;
+    return 0;
+}
+
+TL_MSABI void* tl_GetSysColorBrush(const int index) noexcept {
+    (void)index;
+    return tl_GetStockObject(0); // WHITE_BRUSH
+}
+
+TL_MSABI void* tl_GetSystemMenu(void* const hwnd, const int b_revert) noexcept {
+    (void)hwnd;
+    (void)b_revert;
+    set_last_error(abi::kErrorSuccess);
+    return reinterpret_cast<void*>(0x5359534DULL); // 'SYSM'
+}
+
+TL_MSABI int tl_InsertMenuA(void* const menu, const std::uint32_t position, const std::uint32_t flags, const std::uintptr_t id_new_item, const char* const new_item) noexcept {
+    (void)menu;
+    (void)position;
+    (void)flags;
+    (void)id_new_item;
+    (void)new_item;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_IsDialogMessageA(void* const hwnd, void* const msg) noexcept {
+    return tl_IsDialogMessageW(hwnd, msg);
+}
+
+TL_MSABI int tl_IsIconic(void* const hwnd) noexcept {
+    (void)hwnd;
+    return 0;
+}
+
+TL_MSABI void* tl_LoadImageA(void* const instance, const char* const name, const std::uint32_t type, const int cx, const int cy, const std::uint32_t load) noexcept {
+    (void)instance;
+    (void)name;
+    (void)type;
+    (void)cx;
+    (void)cy;
+    (void)load;
+    set_last_error(abi::kErrorSuccess);
+    return reinterpret_cast<void*>(0x494D4147ULL); // 'IMAG'
+}
+
+TL_MSABI int tl_MessageBoxIndirectW(const void* const msg_box_params) noexcept {
+    (void)msg_box_params;
+    set_last_error(abi::kErrorSuccess);
+    return 1; // IDOK
+}
+
+TL_MSABI int tl_OffsetRect(void* const rect, const int dx, const int dy) noexcept {
+    if (rect != nullptr && mapped_guest_range(rect, 16, true)) {
+        auto* const r = reinterpret_cast<std::int32_t*>(rect);
+        r[0] += dx; // left
+        r[1] += dy; // top
+        r[2] += dx; // right
+        r[3] += dy; // bottom
+        set_last_error(abi::kErrorSuccess);
+        return 1;
+    }
+    set_last_error(abi::kErrorInvalidParameter);
+    return 0;
+}
+
+TL_MSABI std::uint32_t tl_RegisterWindowMessageA(const char* const string) noexcept {
+    (void)string;
+    set_last_error(abi::kErrorSuccess);
+    return 0xC001U;
+}
+
+TL_MSABI std::intptr_t tl_SendDlgItemMessageA(void* const hwnd, const int id_dlg_item, const std::uint32_t msg, const std::uintptr_t wparam, const std::intptr_t lparam) noexcept {
+    (void)hwnd;
+    (void)id_dlg_item;
+    (void)msg;
+    (void)wparam;
+    (void)lparam;
+    set_last_error(abi::kErrorSuccess);
+    return 0;
+}
+
+TL_MSABI void* tl_SetActiveWindow(void* const hwnd) noexcept {
+    set_last_error(abi::kErrorSuccess);
+    return hwnd;
+}
+
+TL_MSABI int tl_SetDlgItemTextA(void* const hwnd, const int id_dlg_item, const char* const text) noexcept {
+    (void)hwnd;
+    (void)id_dlg_item;
+    (void)text;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_SetKeyboardState(const std::uint8_t* const key_states) noexcept {
+    (void)key_states;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_SystemParametersInfoA(const std::uint32_t action, const std::uint32_t param1, void* const param2, const std::uint32_t winini) noexcept {
+    return tl_SystemParametersInfoW(action, param1, param2, winini);
+}
+
+TL_MSABI int tl_ToAsciiEx(const std::uint32_t vk, const std::uint32_t scan_code, const std::uint8_t* const key_state, std::uint16_t* const char_out, const std::uint32_t flags, void* const dwhkl) noexcept {
+    (void)scan_code;
+    (void)key_state;
+    (void)flags;
+    (void)dwhkl;
+    if (char_out != nullptr && mapped_guest_range(char_out, sizeof(std::uint16_t), true)) {
+        *char_out = static_cast<std::uint16_t>(vk & 0xFF);
+        return 1;
+    }
+    return 0;
+}
+
 }  // extern "C"
 
 }  // namespace tradutorlinux

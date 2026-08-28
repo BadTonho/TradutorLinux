@@ -562,6 +562,26 @@ void register_builtin_modules() {
         {"SwitchToThread", 358, reinterpret_cast<std::uintptr_t>(&tl_SwitchToThread)},
         {"GetSystemFirmwareTable", 359, reinterpret_cast<std::uintptr_t>(&tl_GetSystemFirmwareTable)},
         {"__C_specific_handler", 360, reinterpret_cast<std::uintptr_t>(&tl___C_specific_handler)},
+        {"Beep", 361, reinterpret_cast<std::uintptr_t>(&tl_Beep)},
+        {"ClearCommBreak", 362, reinterpret_cast<std::uintptr_t>(&tl_ClearCommBreak)},
+        {"ConnectNamedPipe", 363, reinterpret_cast<std::uintptr_t>(&tl_ConnectNamedPipe)},
+        {"CreateNamedPipeA", 364, reinterpret_cast<std::uintptr_t>(&tl_CreateNamedPipeA)},
+        {"CreatePipe", 365, reinterpret_cast<std::uintptr_t>(&tl_CreatePipe)},
+        {"FindResourceA", 366, reinterpret_cast<std::uintptr_t>(&tl_FindResourceA)},
+        {"GetCommState", 367, reinterpret_cast<std::uintptr_t>(&tl_GetCommState)},
+        {"GetLocaleInfoA", 368, reinterpret_cast<std::uintptr_t>(&tl_GetLocaleInfoA)},
+        {"GetOverlappedResult", 369, reinterpret_cast<std::uintptr_t>(&tl_GetOverlappedResult)},
+        {"GetThreadTimes", 370, reinterpret_cast<std::uintptr_t>(&tl_GetThreadTimes)},
+        {"GetWindowsDirectoryA", 371, reinterpret_cast<std::uintptr_t>(&tl_GetWindowsDirectoryA)},
+        {"GlobalMemoryStatus", 372, reinterpret_cast<std::uintptr_t>(&tl_GlobalMemoryStatus)},
+        {"LocalFileTimeToFileTime", 373, reinterpret_cast<std::uintptr_t>(&tl_LocalFileTimeToFileTime)},
+        {"SetCommBreak", 374, reinterpret_cast<std::uintptr_t>(&tl_SetCommBreak)},
+        {"SetCommState", 375, reinterpret_cast<std::uintptr_t>(&tl_SetCommState)},
+        {"SetCommTimeouts", 376, reinterpret_cast<std::uintptr_t>(&tl_SetCommTimeouts)},
+        {"SetCurrentDirectoryA", 377, reinterpret_cast<std::uintptr_t>(&tl_SetCurrentDirectoryA)},
+        {"SetHandleInformation", 378, reinterpret_cast<std::uintptr_t>(&tl_SetHandleInformation)},
+        {"WaitNamedPipeA", 379, reinterpret_cast<std::uintptr_t>(&tl_WaitNamedPipeA)},
+        {"CreateProcessA", 380, reinterpret_cast<std::uintptr_t>(&tl_CreateProcessA)},
     };
     static const InternalModule kKernel32Module{"KERNEL32.dll", kKernel32Exports};
     register_module(kKernel32Module);
@@ -790,6 +810,34 @@ void register_builtin_modules() {
         {"GetUserObjectInformationW", 218, reinterpret_cast<std::uintptr_t>(&tl_GetUserObjectInformationW)},
         {"GetShellWindow", 219, reinterpret_cast<std::uintptr_t>(&tl_GetShellWindow)},
         {"EnumDisplayDevicesA", 220, reinterpret_cast<std::uintptr_t>(&tl_EnumDisplayDevicesA)},
+        {"CreateDialogParamA", 221, reinterpret_cast<std::uintptr_t>(&tl_CreateDialogParamA)},
+        {"CreateMenu", 222, reinterpret_cast<std::uintptr_t>(&tl_CreateMenu)},
+        {"DefDlgProcA", 223, reinterpret_cast<std::uintptr_t>(&tl_DefDlgProcA)},
+        {"DeleteMenu", 224, reinterpret_cast<std::uintptr_t>(&tl_DeleteMenu)},
+        {"DialogBoxParamA", 225, reinterpret_cast<std::uintptr_t>(&tl_DialogBoxParamA)},
+        {"GetCaretBlinkTime", 226, reinterpret_cast<std::uintptr_t>(&tl_GetCaretBlinkTime)},
+        {"GetClipboardOwner", 227, reinterpret_cast<std::uintptr_t>(&tl_GetClipboardOwner)},
+        {"GetDoubleClickTime", 228, reinterpret_cast<std::uintptr_t>(&tl_GetDoubleClickTime)},
+        {"GetForegroundWindow", 229, reinterpret_cast<std::uintptr_t>(&tl_GetForegroundWindow)},
+        {"GetKeyboardLayout", 230, reinterpret_cast<std::uintptr_t>(&tl_GetKeyboardLayout)},
+        {"GetKeyboardState", 231, reinterpret_cast<std::uintptr_t>(&tl_GetKeyboardState)},
+        {"GetMessageTime", 232, reinterpret_cast<std::uintptr_t>(&tl_GetMessageTime)},
+        {"GetQueueStatus", 233, reinterpret_cast<std::uintptr_t>(&tl_GetQueueStatus)},
+        {"GetSysColorBrush", 234, reinterpret_cast<std::uintptr_t>(&tl_GetSysColorBrush)},
+        {"GetSystemMenu", 235, reinterpret_cast<std::uintptr_t>(&tl_GetSystemMenu)},
+        {"InsertMenuA", 236, reinterpret_cast<std::uintptr_t>(&tl_InsertMenuA)},
+        {"IsDialogMessageA", 237, reinterpret_cast<std::uintptr_t>(&tl_IsDialogMessageA)},
+        {"IsIconic", 238, reinterpret_cast<std::uintptr_t>(&tl_IsIconic)},
+        {"LoadImageA", 239, reinterpret_cast<std::uintptr_t>(&tl_LoadImageA)},
+        {"MessageBoxIndirectW", 240, reinterpret_cast<std::uintptr_t>(&tl_MessageBoxIndirectW)},
+        {"OffsetRect", 241, reinterpret_cast<std::uintptr_t>(&tl_OffsetRect)},
+        {"RegisterWindowMessageA", 242, reinterpret_cast<std::uintptr_t>(&tl_RegisterWindowMessageA)},
+        {"SendDlgItemMessageA", 243, reinterpret_cast<std::uintptr_t>(&tl_SendDlgItemMessageA)},
+        {"SetActiveWindow", 244, reinterpret_cast<std::uintptr_t>(&tl_SetActiveWindow)},
+        {"SetDlgItemTextA", 245, reinterpret_cast<std::uintptr_t>(&tl_SetDlgItemTextA)},
+        {"SetKeyboardState", 246, reinterpret_cast<std::uintptr_t>(&tl_SetKeyboardState)},
+        {"SystemParametersInfoA", 247, reinterpret_cast<std::uintptr_t>(&tl_SystemParametersInfoA)},
+        {"ToAsciiEx", 248, reinterpret_cast<std::uintptr_t>(&tl_ToAsciiEx)},
     };
     static const InternalModule kUser32Module{"USER32.dll", kUser32Exports};
     register_module(kUser32Module);
@@ -859,6 +907,29 @@ void register_builtin_modules() {
         {"FillRgn", 63, reinterpret_cast<std::uintptr_t>(&tl_FillRgn)},
         {"PaintRgn", 64, reinterpret_cast<std::uintptr_t>(&tl_PaintRgn)},
         {"InvertRgn", 65, reinterpret_cast<std::uintptr_t>(&tl_InvertRgn)},
+        {"CreatePalette", 66, reinterpret_cast<std::uintptr_t>(&tl_CreatePalette)},
+        {"ExcludeClipRect", 67, reinterpret_cast<std::uintptr_t>(&tl_ExcludeClipRect)},
+        {"GetBkMode", 68, reinterpret_cast<std::uintptr_t>(&tl_GetBkMode)},
+        {"GetCharABCWidthsFloatA", 69, reinterpret_cast<std::uintptr_t>(&tl_GetCharABCWidthsFloatA)},
+        {"GetCharWidth32A", 70, reinterpret_cast<std::uintptr_t>(&tl_GetCharWidth32A)},
+        {"GetCharWidthA", 71, reinterpret_cast<std::uintptr_t>(&tl_GetCharWidthA)},
+        {"GetCharacterPlacementW", 72, reinterpret_cast<std::uintptr_t>(&tl_GetCharacterPlacementW)},
+        {"GetCurrentObject", 73, reinterpret_cast<std::uintptr_t>(&tl_GetCurrentObject)},
+        {"GetDIBits", 74, reinterpret_cast<std::uintptr_t>(&tl_GetDIBits)},
+        {"GetObjectA", 75, reinterpret_cast<std::uintptr_t>(&tl_GetObjectA)},
+        {"GetOutlineTextMetricsA", 76, reinterpret_cast<std::uintptr_t>(&tl_GetOutlineTextMetricsA)},
+        {"GetPixel", 77, reinterpret_cast<std::uintptr_t>(&tl_GetPixel)},
+        {"GetTextExtentExPointA", 78, reinterpret_cast<std::uintptr_t>(&tl_GetTextExtentExPointA)},
+        {"GetTextExtentPointA", 79, reinterpret_cast<std::uintptr_t>(&tl_GetTextExtentPointA)},
+        {"IntersectClipRect", 80, reinterpret_cast<std::uintptr_t>(&tl_IntersectClipRect)},
+        {"RealizePalette", 81, reinterpret_cast<std::uintptr_t>(&tl_RealizePalette)},
+        {"SelectPalette", 82, reinterpret_cast<std::uintptr_t>(&tl_SelectPalette)},
+        {"SetMapMode", 83, reinterpret_cast<std::uintptr_t>(&tl_SetMapMode)},
+        {"SetPaletteEntries", 84, reinterpret_cast<std::uintptr_t>(&tl_SetPaletteEntries)},
+        {"SetPixel", 85, reinterpret_cast<std::uintptr_t>(&tl_SetPixel)},
+        {"TranslateCharsetInfo", 86, reinterpret_cast<std::uintptr_t>(&tl_TranslateCharsetInfo)},
+        {"UnrealizeObject", 87, reinterpret_cast<std::uintptr_t>(&tl_UnrealizeObject)},
+        {"UpdateColors", 88, reinterpret_cast<std::uintptr_t>(&tl_UpdateColors)},
     };
     static const InternalModule kGdi32Module{"GDI32.dll", kGdi32Exports};
     register_module(kGdi32Module);
@@ -1067,6 +1138,7 @@ void register_builtin_modules() {
         {"SHGetSpecialFolderLocation", 16, reinterpret_cast<std::uintptr_t>(&tl_SHGetSpecialFolderLocation)},
         {"SHGetSpecialFolderPathW", 17, reinterpret_cast<std::uintptr_t>(&tl_SHGetSpecialFolderPathW)},
         {"Shell_NotifyIconW", 18, reinterpret_cast<std::uintptr_t>(&tl_ShellNotifyIconW)},
+        {"ShellExecuteA", 19, reinterpret_cast<std::uintptr_t>(&tl_ShellExecuteA)},
     };
     static const InternalModule kShell32Module{"SHELL32.dll", kShell32Exports};
     register_module(kShell32Module);
@@ -1138,6 +1210,8 @@ void register_builtin_modules() {
         {"CryptDestroyKey", 65, reinterpret_cast<std::uintptr_t>(&tl_CryptDestroyKey)},
         {"CryptEnumProvidersW", 66, reinterpret_cast<std::uintptr_t>(&tl_CryptEnumProvidersW)},
         {"SystemFunction036", 67, reinterpret_cast<std::uintptr_t>(&tl_SystemFunction036)},
+        {"GetUserNameA", 68, reinterpret_cast<std::uintptr_t>(&tl_GetUserNameA)},
+        {"SetSecurityDescriptorOwner", 69, reinterpret_cast<std::uintptr_t>(&tl_SetSecurityDescriptorOwner)},
     };
     static const InternalModule kAdvapi32Module{"ADVAPI32.dll", kAdvapi32Exports};
     register_module(kAdvapi32Module);
@@ -1391,6 +1465,12 @@ void register_builtin_modules() {
         {"ImmGetCompositionStringW", 5, reinterpret_cast<std::uintptr_t>(&tl_ImmGetCompositionStringW)},
         {"ImmAssociateContext", 6, reinterpret_cast<std::uintptr_t>(&tl_ImmAssociateContext)},
         {"ImmGetVirtualKey", 7, reinterpret_cast<std::uintptr_t>(&tl_ImmGetVirtualKey)},
+        {"ImmSetCompositionFontA", 8, reinterpret_cast<std::uintptr_t>(&tl_ImmSetCompositionFontA)},
+        {"ImmSetCompositionFontW", 9, reinterpret_cast<std::uintptr_t>(&tl_ImmSetCompositionFontW)},
+        {"ImmSetCandidateWindow", 10, reinterpret_cast<std::uintptr_t>(&tl_ImmSetCandidateWindow)},
+        {"ImmSetCompositionStringW", 11, reinterpret_cast<std::uintptr_t>(&tl_ImmSetCompositionStringW)},
+        {"ImmEscapeW", 12, reinterpret_cast<std::uintptr_t>(&tl_ImmEscapeW)},
+        {"ImmNotifyIME", 13, reinterpret_cast<std::uintptr_t>(&tl_ImmNotifyIME)},
     };
     static const InternalModule kImm32Module{"IMM32.dll", kImm32Exports};
     register_module(kImm32Module);

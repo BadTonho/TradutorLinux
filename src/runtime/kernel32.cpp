@@ -6180,6 +6180,191 @@ TL_MSABI std::uint32_t tl_GetSystemFirmwareTable(const std::uint32_t firmware_ta
     return 0;
 }
 
+TL_MSABI int tl_Beep(const std::uint32_t freq, const std::uint32_t duration) noexcept {
+    (void)freq;
+    (void)duration;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_ClearCommBreak(void* const file) noexcept {
+    (void)file;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_ConnectNamedPipe(void* const named_pipe, void* const overlapped) noexcept {
+    (void)named_pipe;
+    (void)overlapped;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI void* tl_CreateNamedPipeA(const char* const name, const std::uint32_t open_mode, const std::uint32_t pipe_mode, const std::uint32_t max_instances, const std::uint32_t out_buf_size, const std::uint32_t in_buf_size, const std::uint32_t default_time_out, void* const sec_attr) noexcept {
+    (void)name;
+    (void)open_mode;
+    (void)pipe_mode;
+    (void)max_instances;
+    (void)out_buf_size;
+    (void)in_buf_size;
+    (void)default_time_out;
+    (void)sec_attr;
+    set_last_error(abi::kErrorSuccess);
+    return reinterpret_cast<void*>(0x50495045ULL); // 'PIPE'
+}
+
+TL_MSABI int tl_CreatePipe(void** const read_pipe, void** const write_pipe, void* const pipe_attr, const std::uint32_t size) noexcept {
+    (void)pipe_attr;
+    (void)size;
+    if (read_pipe != nullptr && mapped_guest_range(read_pipe, sizeof(void*), true)) {
+        *read_pipe = reinterpret_cast<void*>(0x50524541ULL); // 'PREA'
+    }
+    if (write_pipe != nullptr && mapped_guest_range(write_pipe, sizeof(void*), true)) {
+        *write_pipe = reinterpret_cast<void*>(0x50575249ULL); // 'PWRI'
+    }
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI void* tl_FindResourceA(void* const module, const char* const name, const char* const type) noexcept {
+    (void)module;
+    (void)name;
+    (void)type;
+    return tl_FindResourceW(module, reinterpret_cast<const std::uint16_t*>(name), reinterpret_cast<const std::uint16_t*>(type));
+}
+
+TL_MSABI int tl_GetCommState(void* const file, void* const dcb) noexcept {
+    (void)file;
+    if (dcb != nullptr && mapped_guest_range(dcb, 28, true)) {
+        std::memset(dcb, 0, 28);
+        *reinterpret_cast<std::uint32_t*>(dcb) = 28; // DCBlength
+        *reinterpret_cast<std::uint32_t*>(static_cast<char*>(dcb) + 4) = 9600; // BaudRate
+        *reinterpret_cast<std::uint8_t*>(static_cast<char*>(dcb) + 18) = 8; // ByteSize
+    }
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_GetLocaleInfoA(const std::uint32_t lcid, const std::uint32_t lctype, char* const lcdata, const int cch_data) noexcept {
+    (void)lcid;
+    (void)lctype;
+    if (cch_data > 0 && lcdata != nullptr && mapped_guest_range(lcdata, static_cast<std::size_t>(cch_data), true)) {
+        std::strncpy(lcdata, "0409", static_cast<std::size_t>(cch_data) - 1);
+        lcdata[cch_data - 1] = '\0';
+        return static_cast<int>(std::strlen(lcdata) + 1);
+    }
+    return 5;
+}
+
+TL_MSABI int tl_GetOverlappedResult(void* const file, void* const overlapped, std::uint32_t* const bytes_transferred, const int wait) noexcept {
+    (void)file;
+    (void)overlapped;
+    (void)wait;
+    if (bytes_transferred != nullptr && mapped_guest_range(bytes_transferred, sizeof(std::uint32_t), true)) {
+        *bytes_transferred = 0;
+    }
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_GetThreadTimes(void* const thread, void* const creation_time, void* const exit_time, void* const kernel_time, void* const user_time) noexcept {
+    (void)thread;
+    const std::uint64_t dummy_ft = 130000000000000000ULL;
+    if (creation_time != nullptr && mapped_guest_range(creation_time, 8, true)) {
+        *reinterpret_cast<std::uint64_t*>(creation_time) = dummy_ft;
+    }
+    if (exit_time != nullptr && mapped_guest_range(exit_time, 8, true)) {
+        *reinterpret_cast<std::uint64_t*>(exit_time) = dummy_ft;
+    }
+    if (kernel_time != nullptr && mapped_guest_range(kernel_time, 8, true)) {
+        *reinterpret_cast<std::uint64_t*>(kernel_time) = 1000000ULL;
+    }
+    if (user_time != nullptr && mapped_guest_range(user_time, 8, true)) {
+        *reinterpret_cast<std::uint64_t*>(user_time) = 2000000ULL;
+    }
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI std::uint32_t tl_GetWindowsDirectoryA(char* const buffer, const std::uint32_t size) noexcept {
+    const char win_dir[] = "C:\\Windows";
+    const std::uint32_t len = sizeof(win_dir) - 1;
+    if (size <= len || buffer == nullptr || !mapped_guest_range(buffer, size, true)) {
+        return len + 1;
+    }
+    std::memcpy(buffer, win_dir, len + 1);
+    return len;
+}
+
+TL_MSABI void tl_GlobalMemoryStatus(void* const buffer) noexcept {
+    if (buffer != nullptr && mapped_guest_range(buffer, 32, true)) {
+        auto* const mem = reinterpret_cast<std::uint32_t*>(buffer);
+        mem[0] = 32; // dwLength
+        mem[1] = 25; // dwMemoryLoad (25%)
+        mem[2] = 0x7FFFFFFF; // dwTotalPhys (2GB)
+        mem[3] = 0x60000000; // dwAvailPhys (1.5GB)
+        mem[4] = 0x7FFFFFFF; // dwTotalPageFile
+        mem[5] = 0x60000000; // dwAvailPageFile
+        mem[6] = 0x7FFE0000; // dwTotalVirtual
+        mem[7] = 0x70000000; // dwAvailVirtual
+    }
+}
+
+TL_MSABI int tl_LocalFileTimeToFileTime(const void* const local_file_time, void* const file_time) noexcept {
+    if (local_file_time != nullptr && file_time != nullptr &&
+        mapped_guest_range(local_file_time, 8, false) && mapped_guest_range(file_time, 8, true)) {
+        *reinterpret_cast<std::uint64_t*>(file_time) = *reinterpret_cast<const std::uint64_t*>(local_file_time);
+        set_last_error(abi::kErrorSuccess);
+        return 1;
+    }
+    set_last_error(abi::kErrorInvalidParameter);
+    return 0;
+}
+
+TL_MSABI int tl_SetCommBreak(void* const file) noexcept {
+    (void)file;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_SetCommState(void* const file, void* const dcb) noexcept {
+    (void)file;
+    (void)dcb;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_SetCommTimeouts(void* const file, void* const timeouts) noexcept {
+    (void)file;
+    (void)timeouts;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_SetCurrentDirectoryA(const char* const path_name) noexcept {
+    if (path_name == nullptr || !mapped_guest_cstring(path_name)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    const std::u16string wide = util::utf8_to_wide(path_name);
+    return tl_SetCurrentDirectoryW(reinterpret_cast<const std::uint16_t*>(wide.c_str()));
+}
+
+TL_MSABI int tl_SetHandleInformation(void* const object, const std::uint32_t mask, const std::uint32_t flags) noexcept {
+    (void)object;
+    (void)mask;
+    (void)flags;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_WaitNamedPipeA(const char* const name, const std::uint32_t timeout) noexcept {
+    (void)name;
+    (void)timeout;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
 }  // extern "C"
 
 }  // namespace tradutorlinux

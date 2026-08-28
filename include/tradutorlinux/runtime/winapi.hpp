@@ -1881,6 +1881,90 @@ TL_MSABI int tl_StringFromGUID2(const void* rguid, wchar_t* lpsz, int cchMax) no
 TL_MSABI void* tl_CertGetEnhancedKeyUsage(void* cert_context, std::uint32_t flags, void* usage, std::uint32_t* usage_size) noexcept;
 TL_MSABI int tl_CertGetIntendedKeyUsage(std::uint32_t cert_encoding_type, void* cert_info, std::uint8_t* key_usage, std::uint32_t byte_count) noexcept;
 
+// PuTTY APIs: GDI32
+TL_MSABI void* tl_CreatePalette(const void* logpalette) noexcept;
+TL_MSABI int tl_ExcludeClipRect(void* hdc, int left, int top, int right, int bottom) noexcept;
+TL_MSABI int tl_GetBkMode(void* hdc) noexcept;
+TL_MSABI int tl_GetCharABCWidthsFloatA(void* hdc, std::uint32_t first, std::uint32_t last, void* abc) noexcept;
+TL_MSABI int tl_GetCharWidth32A(void* hdc, std::uint32_t first, std::uint32_t last, int* buffer) noexcept;
+TL_MSABI int tl_GetCharWidthA(void* hdc, std::uint32_t first, std::uint32_t last, int* buffer) noexcept;
+TL_MSABI std::uint32_t tl_GetCharacterPlacementW(void* hdc, const wchar_t* str, int count, int max, void* results, std::uint32_t flags) noexcept;
+TL_MSABI void* tl_GetCurrentObject(void* hdc, std::uint32_t type) noexcept;
+TL_MSABI int tl_GetDIBits(void* hdc, void* hbm, std::uint32_t start, std::uint32_t lines, void* bits, void* bi, std::uint32_t usage) noexcept;
+TL_MSABI int tl_GetObjectA(void* hgdiobj, int cb_buffer, void* lpv_object) noexcept;
+TL_MSABI std::uint32_t tl_GetOutlineTextMetricsA(void* hdc, std::uint32_t cb_data, void* otm) noexcept;
+TL_MSABI std::uint32_t tl_GetPixel(void* hdc, int x, int y) noexcept;
+TL_MSABI int tl_GetTextExtentExPointA(void* hdc, const char* str, int count, int max_extent, int* fit, int* dx, void* size) noexcept;
+TL_MSABI int tl_GetTextExtentPointA(void* hdc, const char* str, int count, void* size) noexcept;
+TL_MSABI int tl_IntersectClipRect(void* hdc, int left, int top, int right, int bottom) noexcept;
+TL_MSABI std::uint32_t tl_RealizePalette(void* hdc) noexcept;
+TL_MSABI void* tl_SelectPalette(void* hdc, void* hpal, int b_force_background) noexcept;
+TL_MSABI int tl_SetMapMode(void* hdc, int mode) noexcept;
+TL_MSABI std::uint32_t tl_SetPaletteEntries(void* hpal, std::uint32_t start, std::uint32_t count, const void* entries) noexcept;
+TL_MSABI std::uint32_t tl_SetPixel(void* hdc, int x, int y, std::uint32_t color) noexcept;
+TL_MSABI int tl_TranslateCharsetInfo(std::uint32_t* src, void* cs, std::uint32_t flags) noexcept;
+TL_MSABI int tl_UnrealizeObject(void* hgdiobj) noexcept;
+TL_MSABI int tl_UpdateColors(void* hdc) noexcept;
+
+// PuTTY APIs: IMM32
+TL_MSABI int tl_ImmSetCompositionFontA(void* himc, void* logfont) noexcept;
+
+// PuTTY APIs: USER32
+TL_MSABI void* tl_CreateDialogParamA(void* instance, const char* template_name, void* wnd_parent, void* dialog_func, std::intptr_t init_param) noexcept;
+TL_MSABI void* tl_CreateMenu() noexcept;
+TL_MSABI std::intptr_t tl_DefDlgProcA(void* hwnd, std::uint32_t msg, std::uintptr_t wparam, std::intptr_t lparam) noexcept;
+TL_MSABI int tl_DeleteMenu(void* menu, std::uint32_t position, std::uint32_t flags) noexcept;
+TL_MSABI std::intptr_t tl_DialogBoxParamA(void* instance, const char* template_name, void* wnd_parent, void* dialog_func, std::intptr_t init_param) noexcept;
+TL_MSABI std::uint32_t tl_GetCaretBlinkTime() noexcept;
+TL_MSABI void* tl_GetClipboardOwner() noexcept;
+TL_MSABI std::uint32_t tl_GetDoubleClickTime() noexcept;
+TL_MSABI void* tl_GetForegroundWindow() noexcept;
+TL_MSABI void* tl_GetKeyboardLayout(std::uint32_t thread_id) noexcept;
+TL_MSABI int tl_GetKeyboardState(std::uint8_t* key_states) noexcept;
+TL_MSABI std::uint32_t tl_GetMessageTime() noexcept;
+TL_MSABI std::uint32_t tl_GetQueueStatus(std::uint32_t flags) noexcept;
+TL_MSABI void* tl_GetSysColorBrush(int index) noexcept;
+TL_MSABI void* tl_GetSystemMenu(void* hwnd, int b_revert) noexcept;
+TL_MSABI int tl_InsertMenuA(void* menu, std::uint32_t position, std::uint32_t flags, std::uintptr_t id_new_item, const char* new_item) noexcept;
+TL_MSABI int tl_IsDialogMessageA(void* hwnd, void* msg) noexcept;
+TL_MSABI int tl_IsIconic(void* hwnd) noexcept;
+TL_MSABI void* tl_LoadImageA(void* instance, const char* name, std::uint32_t type, int cx, int cy, std::uint32_t load) noexcept;
+TL_MSABI int tl_MessageBoxIndirectW(const void* msg_box_params) noexcept;
+TL_MSABI int tl_OffsetRect(void* rect, int dx, int dy) noexcept;
+TL_MSABI std::uint32_t tl_RegisterWindowMessageA(const char* string) noexcept;
+TL_MSABI std::intptr_t tl_SendDlgItemMessageA(void* hwnd, int id_dlg_item, std::uint32_t msg, std::uintptr_t wparam, std::intptr_t lparam) noexcept;
+TL_MSABI void* tl_SetActiveWindow(void* hwnd) noexcept;
+TL_MSABI int tl_SetDlgItemTextA(void* hwnd, int id_dlg_item, const char* text) noexcept;
+TL_MSABI int tl_SetKeyboardState(const std::uint8_t* key_states) noexcept;
+TL_MSABI int tl_SystemParametersInfoA(std::uint32_t action, std::uint32_t param1, void* param2, std::uint32_t winini) noexcept;
+TL_MSABI int tl_ToAsciiEx(std::uint32_t vk, std::uint32_t scan_code, const std::uint8_t* key_state, std::uint16_t* char_out, std::uint32_t flags, void* dwhkl) noexcept;
+
+// PuTTY APIs: KERNEL32
+TL_MSABI int tl_Beep(std::uint32_t freq, std::uint32_t duration) noexcept;
+TL_MSABI int tl_ClearCommBreak(void* file) noexcept;
+TL_MSABI int tl_ConnectNamedPipe(void* named_pipe, void* overlapped) noexcept;
+TL_MSABI void* tl_CreateNamedPipeA(const char* name, std::uint32_t open_mode, std::uint32_t pipe_mode, std::uint32_t max_instances, std::uint32_t out_buf_size, std::uint32_t in_buf_size, std::uint32_t default_time_out, void* sec_attr) noexcept;
+TL_MSABI int tl_CreatePipe(void** read_pipe, void** write_pipe, void* pipe_attr, std::uint32_t size) noexcept;
+TL_MSABI void* tl_FindResourceA(void* module, const char* name, const char* type) noexcept;
+TL_MSABI int tl_GetCommState(void* file, void* dcb) noexcept;
+TL_MSABI int tl_GetLocaleInfoA(std::uint32_t lcid, std::uint32_t lctype, char* lcdata, int cch_data) noexcept;
+TL_MSABI int tl_GetOverlappedResult(void* file, void* overlapped, std::uint32_t* bytes_transferred, int wait) noexcept;
+TL_MSABI int tl_GetThreadTimes(void* thread, void* creation_time, void* exit_time, void* kernel_time, void* user_time) noexcept;
+TL_MSABI std::uint32_t tl_GetWindowsDirectoryA(char* buffer, std::uint32_t size) noexcept;
+TL_MSABI void tl_GlobalMemoryStatus(void* buffer) noexcept;
+TL_MSABI int tl_LocalFileTimeToFileTime(const void* local_file_time, void* file_time) noexcept;
+TL_MSABI int tl_SetCommBreak(void* file) noexcept;
+TL_MSABI int tl_SetCommState(void* file, void* dcb) noexcept;
+TL_MSABI int tl_SetCommTimeouts(void* file, void* timeouts) noexcept;
+TL_MSABI int tl_SetCurrentDirectoryA(const char* path_name) noexcept;
+TL_MSABI int tl_SetHandleInformation(void* object, std::uint32_t mask, std::uint32_t flags) noexcept;
+TL_MSABI int tl_WaitNamedPipeA(const char* name, std::uint32_t timeout) noexcept;
+
+// PuTTY APIs: SHELL32 & ADVAPI32
+TL_MSABI void* tl_ShellExecuteA(void* hwnd, const char* operation, const char* file, const char* parameters, const char* directory, int show_cmd) noexcept;
+TL_MSABI int tl_GetUserNameA(char* buffer, std::uint32_t* size) noexcept;
+TL_MSABI int tl_SetSecurityDescriptorOwner(void* sec_desc, void* owner, int owner_defaulted) noexcept;
+
 }  // extern "C"
 
 // Define o caminho do módulo convidado antes da execução.

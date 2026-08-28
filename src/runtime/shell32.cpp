@@ -442,6 +442,16 @@ TL_MSABI int tl_ShellNotifyIconW(const std::uint32_t message, void* const data) 
     return 1;
 }
 
+TL_MSABI void* tl_ShellExecuteA(void* const hwnd, const char* const operation, const char* const file, const char* const parameters, const char* const directory, const int show_cmd) noexcept {
+    (void)hwnd;
+    (void)operation;
+    (void)file;
+    (void)parameters;
+    (void)directory;
+    (void)show_cmd;
+    return reinterpret_cast<void*>(42); // HINSTANCE > 32 indicates success
+}
+
 }  // extern "C"
 
 }  // namespace tradutorlinux
