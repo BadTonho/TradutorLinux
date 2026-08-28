@@ -107,3 +107,4 @@ limitada ao protótipo documentado na Fase 7.
 
 colocar uma limitação de cpu e ram pro aplicativo
 conseguir locar o aplicativo como path
+quebrar o aplicativo, ser possivel colocar aquivos de tradução pra programas que eu nao fiz, entao assim eu posso focar em um aplicativo pra tradução, sem comprometer o resto do aplicativo

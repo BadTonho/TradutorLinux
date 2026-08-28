@@ -302,6 +302,9 @@ function(tl_add_pe_fixture target_name source_file manifest_file)
             elseif(target_name STREQUAL "tl_notepadpp")
                 set(runtime_extra_args
                     "-DEXPECTED_HEX=4e4f54455041442b2b2041504953204f4b0a")
+            elseif(target_name STREQUAL "tl_roblox")
+                set(runtime_extra_args
+                    "-DEXPECTED_HEX=524f424c4f582041504953204f4b0a")
             elseif(target_name STREQUAL "tl_stream")
                 set(runtime_extra_args
                     "-DEXPECTED_HEX=6f6c652d73747265616d0a"
@@ -719,6 +722,10 @@ tl_add_pe_fixture(tl_putty src/tl_putty.c manifests/tl_putty.json
 tl_add_pe_fixture(tl_notepadpp src/tl_notepadpp.c manifests/tl_notepadpp.json
     LINK_KERNEL32 LINK_USER32 LINK_GDI32 LINK_COMCTL32 LINK_UXTHEME LINK_DWMAPI EXPECT_RESOLVED CONSOLE REPORT RELOCATABLE
     REPORT_SYMBOL "DwmIsCompositionEnabled")
+
+tl_add_pe_fixture(tl_roblox src/tl_roblox.c manifests/tl_roblox.json
+    LINK_KERNEL32 LINK_ADVAPI32 LINK_WS2_32 LINK_USER32 EXPECT_RESOLVED CONSOLE REPORT RELOCATABLE
+    REPORT_SYMBOL "CryptAcquireContextW")
 
 tl_add_pe_fixture(tl_files_wide src/tl_files_wide.c manifests/tl_files_wide.json
     LINK_KERNEL32 EXPECT_RESOLVED CONSOLE REPORT RELOCATABLE

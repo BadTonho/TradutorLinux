@@ -1796,6 +1796,91 @@ TL_MSABI int tl_ScrollWindowEx(void* hwnd, int dx, int dy, const void* scroll_re
 TL_MSABI int tl_RegisterHotKey(void* hwnd, int id, std::uint32_t modifiers, std::uint32_t vk) noexcept;
 TL_MSABI int tl_UnregisterHotKey(void* hwnd, int id) noexcept;
 
+// Roblox APIs: KERNEL32
+TL_MSABI int tl_K32GetProcessMemoryInfo(void* process, void* counters, std::uint32_t cb) noexcept;
+TL_MSABI std::uint32_t tl_K32GetProcessImageFileNameA(void* process, char* image_file_name, std::uint32_t size) noexcept;
+TL_MSABI int tl_Process32First(void* snapshot, void* entry) noexcept;
+TL_MSABI int tl_Process32Next(void* snapshot, void* entry) noexcept;
+TL_MSABI int tl_DuplicateHandle(void* src_process, void* src_handle, void* target_process, void** target_handle, std::uint32_t desired_access, int inherit_handle, std::uint32_t options) noexcept;
+TL_MSABI int tl_LockFile(void* file, std::uint32_t offset_low, std::uint32_t offset_high, std::uint32_t count_low, std::uint32_t count_high) noexcept;
+TL_MSABI int tl_LockFileEx(void* file, std::uint32_t flags, std::uint32_t reserved, std::uint32_t count_low, std::uint32_t count_high, void* overlapped) noexcept;
+TL_MSABI int tl_UnlockFile(void* file, std::uint32_t offset_low, std::uint32_t offset_high, std::uint32_t count_low, std::uint32_t count_high) noexcept;
+TL_MSABI int tl_UnlockFileEx(void* file, std::uint32_t reserved, std::uint32_t count_low, std::uint32_t count_high, void* overlapped) noexcept;
+TL_MSABI int tl_GetDiskFreeSpaceA(const char* root_path_name, std::uint32_t* sectors_per_cluster, std::uint32_t* bytes_per_sector, std::uint32_t* number_of_free_clusters, std::uint32_t* total_number_of_clusters) noexcept;
+TL_MSABI std::uint32_t tl_GetTempPathA(std::uint32_t buffer_length, char* buffer) noexcept;
+TL_MSABI int tl_MoveFileExA(const char* existing_file, const char* new_file, std::uint32_t flags) noexcept;
+TL_MSABI std::uint32_t tl_SleepEx(std::uint32_t milliseconds, int alertable) noexcept;
+TL_MSABI std::uint32_t tl_WaitForMultipleObjectsEx(std::uint32_t count, const void* const* handles, int wait_all, std::uint32_t milliseconds, int alertable) noexcept;
+TL_MSABI int tl_TryEnterCriticalSection(void* critical_section) noexcept;
+TL_MSABI void tl_InitializeConditionVariable(void* condition_variable) noexcept;
+TL_MSABI int tl_SleepConditionVariableCS(void* condition_variable, void* critical_section, std::uint32_t milliseconds) noexcept;
+TL_MSABI void* tl_FindResourceExW(void* module, const wchar_t* type, const wchar_t* name, std::uint16_t language) noexcept;
+TL_MSABI int tl_CompareStringEx(const wchar_t* locale_name, std::uint32_t flags, const wchar_t* string1, int count1, const wchar_t* string2, int count2, void* version_information, void* reserved, std::intptr_t param) noexcept;
+TL_MSABI void* tl_CreateFile2(const wchar_t* file_name, std::uint32_t desired_access, std::uint32_t share_mode, std::uint32_t creation_disposition, void* create_parameters) noexcept;
+TL_MSABI std::uint32_t tl_GetCurrentProcessorNumber() noexcept;
+TL_MSABI int tl_InitializeProcThreadAttributeList(void* attribute_list, std::uint32_t attribute_count, std::uint32_t flags, std::size_t* size) noexcept;
+TL_MSABI int tl_UpdateProcThreadAttribute(void* attribute_list, std::uint32_t flags, std::uintptr_t attribute, void* value, std::size_t size, void* previous_value, std::size_t* return_size) noexcept;
+TL_MSABI std::uint32_t tl_GetSystemDirectoryA(char* buffer, std::uint32_t size) noexcept;
+TL_MSABI int tl_ReadConsoleA(void* console_input, void* buffer, std::uint32_t number_of_chars_to_read, std::uint32_t* number_of_chars_read, void* input_control) noexcept;
+TL_MSABI void* tl_CreateWaitableTimerA(void* timer_attributes, int manual_reset, const char* timer_name) noexcept;
+TL_MSABI void* tl_CreateWaitableTimerW(void* timer_attributes, int manual_reset, const wchar_t* timer_name) noexcept;
+TL_MSABI int tl_SetWaitableTimer(void* timer, const std::int64_t* due_time, std::int32_t period, void* completion_routine, void* arg_to_completion_routine, int resume) noexcept;
+TL_MSABI int tl_CancelWaitableTimer(void* timer) noexcept;
+TL_MSABI int tl_GetLogicalProcessorInformation(void* buffer, std::uint32_t* returned_length) noexcept;
+TL_MSABI int tl_GetVolumePathNameW(const wchar_t* file_name, wchar_t* volume_path_name, std::uint32_t buffer_length) noexcept;
+TL_MSABI std::int32_t tl_SetThreadDescription(void* thread, const wchar_t* description) noexcept;
+TL_MSABI void* tl_GetCurrentThread() noexcept;
+TL_MSABI void* tl_CreateSemaphoreExW(void* semaphore_attributes, std::int32_t initial_count, std::int32_t maximum_count, const wchar_t* name, std::uint32_t flags, std::uint32_t desired_access) noexcept;
+TL_MSABI void* tl_OpenSemaphoreW(std::uint32_t desired_access, int inherit_handle, const wchar_t* name) noexcept;
+TL_MSABI void* tl_CreateMutexExW(void* mutex_attributes, const wchar_t* name, std::uint32_t flags, std::uint32_t desired_access) noexcept;
+TL_MSABI void tl_DebugBreak() noexcept;
+TL_MSABI int tl_InitOnceBeginInitialize(void* init_once, std::uint32_t flags, int* pending, void** context) noexcept;
+TL_MSABI int tl_InitOnceComplete(void* init_once, std::uint32_t flags, void* context) noexcept;
+TL_MSABI int tl_SwitchToThread() noexcept;
+TL_MSABI std::uint32_t tl_GetSystemFirmwareTable(std::uint32_t firmware_table_provider_signature, std::uint32_t firmware_table_id, void* firmware_table_buffer, std::uint32_t buffer_size) noexcept;
+
+// Roblox APIs: ADVAPI32
+TL_MSABI std::int32_t tl_RegGetValueW(void* key, const wchar_t* sub_key, const wchar_t* value, std::uint32_t flags, std::uint32_t* type, void* data, std::uint32_t* data_len) noexcept;
+TL_MSABI void* tl_RegisterEventSourceW(const wchar_t* server_name, const wchar_t* source_name) noexcept;
+TL_MSABI int tl_DeregisterEventSource(void* event_log) noexcept;
+TL_MSABI int tl_ReportEventW(void* event_log, std::uint16_t type, std::uint16_t category, std::uint32_t event_id, void* user_sid, std::uint16_t num_strings, std::uint32_t data_size, const wchar_t** strings, void* raw_data) noexcept;
+TL_MSABI int tl_CryptCreateHash(std::uintptr_t prov, std::uint32_t algid, std::uintptr_t key, std::uint32_t flags, std::uintptr_t* hash) noexcept;
+TL_MSABI int tl_CryptHashData(std::uintptr_t hash, const std::uint8_t* data, std::uint32_t data_len, std::uint32_t flags) noexcept;
+TL_MSABI int tl_CryptGetHashParam(std::uintptr_t hash, std::uint32_t param, std::uint8_t* data, std::uint32_t* data_len, std::uint32_t flags) noexcept;
+TL_MSABI int tl_CryptSetHashParam(std::uintptr_t hash, std::uint32_t param, const std::uint8_t* data, std::uint32_t flags) noexcept;
+TL_MSABI int tl_CryptDestroyHash(std::uintptr_t hash) noexcept;
+TL_MSABI int tl_CryptSignHashW(std::uintptr_t hash, std::uint32_t key_spec, const wchar_t* description, std::uint32_t flags, std::uint8_t* signature, std::uint32_t* sig_len) noexcept;
+TL_MSABI int tl_CryptDecrypt(std::uintptr_t key, std::uintptr_t hash, int final_chunk, std::uint32_t flags, std::uint8_t* data, std::uint32_t* data_len) noexcept;
+TL_MSABI int tl_CryptExportKey(std::uintptr_t key, std::uintptr_t exp_key, std::uint32_t blob_type, std::uint32_t flags, std::uint8_t* data, std::uint32_t* data_len) noexcept;
+TL_MSABI int tl_CryptGetUserKey(std::uintptr_t prov, std::uint32_t key_spec, std::uintptr_t* user_key) noexcept;
+TL_MSABI int tl_CryptGetProvParam(std::uintptr_t prov, std::uint32_t param, std::uint8_t* data, std::uint32_t* data_len, std::uint32_t flags) noexcept;
+TL_MSABI int tl_CryptDestroyKey(std::uintptr_t key) noexcept;
+TL_MSABI int tl_CryptEnumProvidersW(std::uint32_t index, std::uint32_t* reserved, std::uint32_t flags, std::uint32_t* prov_type, wchar_t* prov_name, std::uint32_t* name_len) noexcept;
+TL_MSABI int tl_SystemFunction036(void* buffer, std::uint32_t length) noexcept;
+
+// Roblox APIs: WS2_32
+TL_MSABI int tl_WSAIoctl(std::uintptr_t socket, std::uint32_t io_control_code, void* in_buffer, std::uint32_t in_buffer_size, void* out_buffer, std::uint32_t out_buffer_size, std::uint32_t* bytes_returned, void* overlapped, void* completion_routine) noexcept;
+TL_MSABI int tl_getnameinfo(const void* sa, int salen, char* host, std::uint32_t hostlen, char* serv, std::uint32_t servlen, int flags) noexcept;
+TL_MSABI std::uintptr_t tl_WSASocketA(int af, int type, int protocol, void* protocol_info, std::uint32_t group, std::uint32_t flags) noexcept;
+TL_MSABI int tl_gethostname(char* name, int namelen) noexcept;
+TL_MSABI std::uint16_t tl_htons(std::uint16_t hostshort) noexcept;
+TL_MSABI std::uint16_t tl_ntohs(std::uint16_t netshort) noexcept;
+TL_MSABI std::uint32_t tl_htonl(std::uint32_t hostlong) noexcept;
+TL_MSABI std::uint32_t tl_ntohl(std::uint32_t netlong) noexcept;
+TL_MSABI void* tl_gethostbyaddr(const char* addr, int len, int type) noexcept;
+TL_MSABI char* tl_inet_ntoa(std::uint32_t in) noexcept;
+TL_MSABI int tl_WSAGetLastError() noexcept;
+
+// Roblox APIs: USER32, COMCTL32, ole32, CRYPT32
+TL_MSABI void* tl_GetProcessWindowStation() noexcept;
+TL_MSABI int tl_GetUserObjectInformationW(void* handle, int index, void* info, std::uint32_t length, std::uint32_t* length_needed) noexcept;
+TL_MSABI void* tl_GetShellWindow() noexcept;
+TL_MSABI int tl_EnumDisplayDevicesA(const char* device, std::uint32_t dev_num, void* display_device, std::uint32_t flags) noexcept;
+TL_MSABI int tl_TrackMouseEvent_alias(void* event_track) noexcept;
+TL_MSABI int tl_StringFromGUID2(const void* rguid, wchar_t* lpsz, int cchMax) noexcept;
+TL_MSABI void* tl_CertGetEnhancedKeyUsage(void* cert_context, std::uint32_t flags, void* usage, std::uint32_t* usage_size) noexcept;
+TL_MSABI int tl_CertGetIntendedKeyUsage(std::uint32_t cert_encoding_type, void* cert_info, std::uint8_t* key_usage, std::uint32_t byte_count) noexcept;
+
 }  // extern "C"
 
 // Define o caminho do módulo convidado antes da execução.

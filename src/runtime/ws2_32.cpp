@@ -865,5 +865,65 @@ TL_MSABI int tl___WSAFDIsSet(const std::uintptr_t socket, void* const set) noexc
     return 0;
 }
 
+TL_MSABI int tl_WSAIoctl(const std::uintptr_t socket, const std::uint32_t io_control_code,
+                         void* const in_buffer, const std::uint32_t in_buffer_size,
+                         void* const out_buffer, const std::uint32_t out_buffer_size,
+                         std::uint32_t* const bytes_returned, void* const overlapped,
+                         void* const completion_routine) noexcept {
+    (void)socket;
+    (void)io_control_code;
+    (void)in_buffer;
+    (void)in_buffer_size;
+    (void)out_buffer;
+    (void)out_buffer_size;
+    (void)overlapped;
+    (void)completion_routine;
+    if (bytes_returned != nullptr && mapped_range(bytes_returned, sizeof(std::uint32_t), true)) {
+        *bytes_returned = 0;
+    }
+    g_wsa_last_error = 0;
+    return 0;
+}
+
+TL_MSABI int tl_getnameinfo(const void* const sa, const int salen, char* const host,
+                            const std::uint32_t hostlen, char* const serv,
+                            const std::uint32_t servlen, const int flags) noexcept {
+    (void)sa;
+    (void)salen;
+    (void)flags;
+    if (host != nullptr && hostlen > 0 && mapped_range(host, hostlen, true)) {
+        std::strncpy(host, "127.0.0.1", hostlen - 1);
+        host[hostlen - 1] = '\0';
+    }
+    if (serv != nullptr && servlen > 0 && mapped_range(serv, servlen, true)) {
+        std::strncpy(serv, "80", servlen - 1);
+        serv[servlen - 1] = '\0';
+    }
+    g_wsa_last_error = 0;
+    return 0;
+}
+
+TL_MSABI std::uintptr_t tl_WSASocketA(const int af, const int type, const int protocol,
+                                      void* const protocol_info, const std::uint32_t group,
+                                      const std::uint32_t flags) noexcept {
+    (void)protocol_info;
+    (void)group;
+    (void)flags;
+    return tl_socket(af, type, protocol);
+}
+
+TL_MSABI void* tl_gethostbyaddr(const char* const addr, const int len, const int type) noexcept {
+    (void)addr;
+    (void)len;
+    (void)type;
+    return tl_gethostbyname("127.0.0.1");
+}
+
+TL_MSABI char* tl_inet_ntoa(const std::uint32_t in) noexcept {
+    in_addr addr{};
+    addr.s_addr = in;
+    return ::inet_ntoa(addr);
+}
+
 }  // extern "C"
 }  // namespace tradutorlinux

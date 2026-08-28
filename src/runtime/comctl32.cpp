@@ -291,6 +291,11 @@ TL_COMCTL_MSABI int tl_ImageList_GetIconSize(void* const himl, int* const cx, in
     return 1;
 }
 
+TL_COMCTL_MSABI int tl_TrackMouseEvent_alias(void* const event_track) noexcept {
+    (void)event_track;
+    return 1;
+}
+
 }  // extern "C"
 
 }  // namespace tradutorlinux

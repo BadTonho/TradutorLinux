@@ -794,6 +794,37 @@ TL_CRYPT32_MSABI void* tl_CertOpenSystemStoreW(
                             0U, system_store_name);
 }
 
+TL_CRYPT32_MSABI void* tl_CertGetEnhancedKeyUsage(void* const cert_context, const std::uint32_t flags,
+                                                  void* const usage, std::uint32_t* const usage_size) noexcept {
+    (void)cert_context;
+    (void)flags;
+    if (usage_size == nullptr) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return nullptr;
+    }
+    constexpr std::uint32_t req_size = 32;
+    if (usage == nullptr || *usage_size < req_size) {
+        *usage_size = req_size;
+        set_last_error(abi::kErrorSuccess);
+        return nullptr;
+    }
+    std::memset(usage, 0, req_size);
+    *usage_size = req_size;
+    set_last_error(abi::kErrorSuccess);
+    return usage;
+}
+
+TL_CRYPT32_MSABI int tl_CertGetIntendedKeyUsage(const std::uint32_t cert_encoding_type, void* const cert_info,
+                                                std::uint8_t* const key_usage, const std::uint32_t byte_count) noexcept {
+    (void)cert_encoding_type;
+    (void)cert_info;
+    if (key_usage != nullptr && byte_count > 0) {
+        std::memset(key_usage, 0xFF, byte_count);
+    }
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
 }  // extern "C"
 
 }  // namespace tradutorlinux

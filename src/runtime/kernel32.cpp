@@ -5725,6 +5725,461 @@ TL_MSABI int tl_lstrlenW(const std::uint16_t* const str) noexcept {
     return len;
 }
 
+TL_MSABI int tl_K32GetProcessMemoryInfo(void* const process, void* const counters, const std::uint32_t cb) noexcept {
+    (void)process;
+    if (counters == nullptr || cb < 32 || !mapped_guest_range(counters, cb, true)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    std::memset(counters, 0, cb);
+    struct DummyCounters {
+        std::uint32_t cb;
+        std::uint32_t page_fault_count;
+        std::size_t peak_working_set;
+        std::size_t working_set;
+        std::size_t quota_peak_paged;
+        std::size_t quota_paged;
+        std::size_t quota_peak_nonpaged;
+        std::size_t quota_nonpaged;
+        std::size_t pagefile_usage;
+        std::size_t peak_pagefile_usage;
+    } dummy{};
+    dummy.cb = cb;
+    dummy.working_set = 64 * 1024 * 1024;
+    dummy.peak_working_set = 128 * 1024 * 1024;
+    dummy.pagefile_usage = 64 * 1024 * 1024;
+    std::memcpy(counters, &dummy, std::min<std::size_t>(cb, sizeof(dummy)));
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI std::uint32_t tl_K32GetProcessImageFileNameA(void* const process, char* const image_file_name, const std::uint32_t size) noexcept {
+    (void)process;
+    if (image_file_name == nullptr || size == 0 || !mapped_guest_range(image_file_name, size, true)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    const char dummy[] = "\\Device\\HarddiskVolume1\\Windows\\System32\\RobloxPlayerInstaller.exe";
+    const std::uint32_t len = static_cast<std::uint32_t>(std::strlen(dummy));
+    if (size <= len) {
+        set_last_error(abi::kErrorInsufficientBuffer);
+        return 0;
+    }
+    std::memcpy(image_file_name, dummy, len + 1);
+    set_last_error(abi::kErrorSuccess);
+    return len;
+}
+
+TL_MSABI int tl_Process32First(void* const snapshot, void* const entry) noexcept {
+    (void)snapshot;
+    if (entry == nullptr || !mapped_guest_range(entry, 36, true)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    // PROCESSENTRY32 ANSI: dwSize (4), cntUsage(4), th32ProcessID(4), th32DefaultHeapID(8), th32ModuleID(4), cntThreads(4), th32ParentProcessID(4), pcPriClassBase(4), dwFlags(4), szExeFile[260]
+    struct DummyEntryA {
+        std::uint32_t dwSize;
+        std::uint32_t cntUsage;
+        std::uint32_t th32ProcessID;
+        std::uintptr_t th32DefaultHeapID;
+        std::uint32_t th32ModuleID;
+        std::uint32_t cntThreads;
+        std::uint32_t th32ParentProcessID;
+        std::int32_t pcPriClassBase;
+        std::uint32_t dwFlags;
+        char szExeFile[260];
+    }* e = reinterpret_cast<DummyEntryA*>(entry);
+    const std::uint32_t in_size = e->dwSize;
+    std::memset(entry, 0, std::min<std::size_t>(in_size, sizeof(DummyEntryA)));
+    e->dwSize = in_size;
+    e->th32ProcessID = 1000;
+    e->cntThreads = 4;
+    std::strncpy(e->szExeFile, "process.exe", sizeof(e->szExeFile) - 1);
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_Process32Next(void* const snapshot, void* const entry) noexcept {
+    (void)snapshot;
+    (void)entry;
+    set_last_error(18); // ERROR_NO_MORE_FILES
+    return 0;
+}
+
+TL_MSABI int tl_DuplicateHandle(void* const src_process, void* const src_handle, void* const target_process, void** const target_handle,
+                                const std::uint32_t desired_access, const int inherit_handle, const std::uint32_t options) noexcept {
+    (void)src_process;
+    (void)target_process;
+    (void)desired_access;
+    (void)inherit_handle;
+    (void)options;
+    if (target_handle == nullptr || !mapped_guest_range(target_handle, sizeof(void*), true)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    *target_handle = src_handle;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_LockFile(void* const file, const std::uint32_t offset_low, const std::uint32_t offset_high,
+                         const std::uint32_t count_low, const std::uint32_t count_high) noexcept {
+    (void)file;
+    (void)offset_low;
+    (void)offset_high;
+    (void)count_low;
+    (void)count_high;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_LockFileEx(void* const file, const std::uint32_t flags, const std::uint32_t reserved,
+                           const std::uint32_t count_low, const std::uint32_t count_high, void* const overlapped) noexcept {
+    (void)file;
+    (void)flags;
+    (void)reserved;
+    (void)count_low;
+    (void)count_high;
+    (void)overlapped;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_UnlockFile(void* const file, const std::uint32_t offset_low, const std::uint32_t offset_high,
+                           const std::uint32_t count_low, const std::uint32_t count_high) noexcept {
+    (void)file;
+    (void)offset_low;
+    (void)offset_high;
+    (void)count_low;
+    (void)count_high;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_UnlockFileEx(void* const file, const std::uint32_t reserved,
+                             const std::uint32_t count_low, const std::uint32_t count_high, void* const overlapped) noexcept {
+    (void)file;
+    (void)reserved;
+    (void)count_low;
+    (void)count_high;
+    (void)overlapped;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_GetDiskFreeSpaceA(const char* const root_path_name, std::uint32_t* const sectors_per_cluster,
+                                  std::uint32_t* const bytes_per_sector, std::uint32_t* const number_of_free_clusters,
+                                  std::uint32_t* const total_number_of_clusters) noexcept {
+    (void)root_path_name;
+    if (sectors_per_cluster != nullptr && mapped_guest_range(sectors_per_cluster, sizeof(std::uint32_t), true)) {
+        *sectors_per_cluster = 8;
+    }
+    if (bytes_per_sector != nullptr && mapped_guest_range(bytes_per_sector, sizeof(std::uint32_t), true)) {
+        *bytes_per_sector = 512;
+    }
+    if (number_of_free_clusters != nullptr && mapped_guest_range(number_of_free_clusters, sizeof(std::uint32_t), true)) {
+        *number_of_free_clusters = 50000000;
+    }
+    if (total_number_of_clusters != nullptr && mapped_guest_range(total_number_of_clusters, sizeof(std::uint32_t), true)) {
+        *total_number_of_clusters = 100000000;
+    }
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI std::uint32_t tl_GetTempPathA(const std::uint32_t buffer_length, char* const buffer) noexcept {
+    if (buffer == nullptr || buffer_length == 0 || !mapped_guest_range(buffer, buffer_length, true)) {
+        return 0;
+    }
+    const char temp[] = "C:\\Temp\\";
+    const std::uint32_t len = static_cast<std::uint32_t>(std::strlen(temp));
+    if (buffer_length <= len) {
+        return len + 1;
+    }
+    std::memcpy(buffer, temp, len + 1);
+    set_last_error(abi::kErrorSuccess);
+    return len;
+}
+
+TL_MSABI int tl_MoveFileExA(const char* const existing_file, const char* const new_file, const std::uint32_t flags) noexcept {
+    (void)flags;
+    if (existing_file == nullptr || new_file == nullptr) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI std::uint32_t tl_SleepEx(const std::uint32_t milliseconds, const int alertable) noexcept {
+    (void)alertable;
+    tl_Sleep(milliseconds);
+    return 0;
+}
+
+TL_MSABI std::uint32_t tl_WaitForMultipleObjectsEx(const std::uint32_t count, const void* const* const handles,
+                                                  const int wait_all, const std::uint32_t milliseconds, const int alertable) noexcept {
+    (void)alertable;
+    return tl_WaitForMultipleObjects(count, handles, wait_all, milliseconds);
+}
+
+TL_MSABI void tl_InitializeConditionVariable(void* const condition_variable) noexcept {
+    if (condition_variable != nullptr && mapped_guest_range(condition_variable, sizeof(void*), true)) {
+        *reinterpret_cast<void**>(condition_variable) = nullptr;
+    }
+}
+
+TL_MSABI int tl_SleepConditionVariableCS(void* const condition_variable, void* const critical_section, const std::uint32_t milliseconds) noexcept {
+    (void)condition_variable;
+    if (critical_section != nullptr) {
+        tl_LeaveCriticalSection(critical_section);
+        if (milliseconds != 0 && milliseconds != abi::kInfinite) {
+            tl_Sleep(std::min<std::uint32_t>(milliseconds, 10));
+        }
+        tl_EnterCriticalSection(critical_section);
+    }
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI void* tl_FindResourceExW(void* const module, const wchar_t* const type, const wchar_t* const name, const std::uint16_t language) noexcept {
+    (void)language;
+    return tl_FindResourceW(module, reinterpret_cast<const std::uint16_t*>(name), reinterpret_cast<const std::uint16_t*>(type));
+}
+
+TL_MSABI int tl_CompareStringEx(const wchar_t* const locale_name, const std::uint32_t flags,
+                                const wchar_t* const string1, const int count1,
+                                const wchar_t* const string2, const int count2,
+                                void* const version_information, void* const reserved, const std::intptr_t param) noexcept {
+    (void)locale_name;
+    (void)flags;
+    (void)version_information;
+    (void)reserved;
+    (void)param;
+    if (string1 == nullptr || string2 == nullptr) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    int cmp = 0;
+    if (count1 < 0 || count2 < 0) {
+        cmp = std::wcscmp(string1, string2);
+    } else {
+        cmp = std::wcsncmp(string1, string2, static_cast<std::size_t>(std::min(count1, count2)));
+        if (cmp == 0 && count1 != count2) {
+            cmp = count1 < count2 ? -1 : 1;
+        }
+    }
+    return cmp < 0 ? 1 : (cmp == 0 ? 2 : 3); // 1 = CSTR_LESS_THAN, 2 = CSTR_EQUAL, 3 = CSTR_GREATER_THAN
+}
+
+TL_MSABI void* tl_CreateFile2(const wchar_t* const file_name, const std::uint32_t desired_access,
+                              const std::uint32_t share_mode, const std::uint32_t creation_disposition,
+                              void* const create_parameters) noexcept {
+    (void)create_parameters;
+    return tl_CreateFileW(reinterpret_cast<const std::uint16_t*>(file_name), desired_access, share_mode, nullptr, creation_disposition, 0x80, nullptr);
+}
+
+TL_MSABI std::uint32_t tl_GetCurrentProcessorNumber() noexcept {
+    return 0;
+}
+
+TL_MSABI int tl_InitializeProcThreadAttributeList(void* const attribute_list, const std::uint32_t attribute_count,
+                                                  const std::uint32_t flags, std::size_t* const size) noexcept {
+    (void)attribute_count;
+    (void)flags;
+    if (size == nullptr) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    if (attribute_list == nullptr) {
+        *size = 64;
+        set_last_error(abi::kErrorInsufficientBuffer);
+        return 0;
+    }
+    std::memset(attribute_list, 0, *size);
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_UpdateProcThreadAttribute(void* const attribute_list, const std::uint32_t flags,
+                                          const std::uintptr_t attribute, void* const value,
+                                          const std::size_t size, void* const previous_value,
+                                          std::size_t* const return_size) noexcept {
+    (void)attribute_list;
+    (void)flags;
+    (void)attribute;
+    (void)value;
+    (void)size;
+    (void)previous_value;
+    (void)return_size;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI std::uint32_t tl_GetSystemDirectoryA(char* const buffer, const std::uint32_t size) noexcept {
+    if (buffer == nullptr || size == 0 || !mapped_guest_range(buffer, size, true)) {
+        return 0;
+    }
+    const char sys[] = "C:\\Windows\\System32";
+    const std::uint32_t len = static_cast<std::uint32_t>(std::strlen(sys));
+    if (size <= len) {
+        return len + 1;
+    }
+    std::memcpy(buffer, sys, len + 1);
+    set_last_error(abi::kErrorSuccess);
+    return len;
+}
+
+TL_MSABI int tl_ReadConsoleA(void* const console_input, void* const buffer,
+                             const std::uint32_t number_of_chars_to_read,
+                             std::uint32_t* const number_of_chars_read,
+                             void* const input_control) noexcept {
+    (void)console_input;
+    (void)buffer;
+    (void)number_of_chars_to_read;
+    (void)input_control;
+    if (number_of_chars_read != nullptr && mapped_guest_range(number_of_chars_read, sizeof(std::uint32_t), true)) {
+        *number_of_chars_read = 0;
+    }
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI void* tl_CreateWaitableTimerA(void* const timer_attributes, const int manual_reset, const char* const timer_name) noexcept {
+    (void)timer_attributes;
+    (void)manual_reset;
+    (void)timer_name;
+    return tl_CreateEventW(nullptr, manual_reset, 0, nullptr);
+}
+
+TL_MSABI void* tl_CreateWaitableTimerW(void* const timer_attributes, const int manual_reset, const wchar_t* const timer_name) noexcept {
+    (void)timer_attributes;
+    (void)manual_reset;
+    (void)timer_name;
+    return tl_CreateEventW(nullptr, manual_reset, 0, nullptr);
+}
+
+TL_MSABI int tl_SetWaitableTimer(void* const timer, const std::int64_t* const due_time, const std::int32_t period,
+                                 void* const completion_routine, void* const arg_to_completion_routine, const int resume) noexcept {
+    (void)timer;
+    (void)due_time;
+    (void)period;
+    (void)completion_routine;
+    (void)arg_to_completion_routine;
+    (void)resume;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_CancelWaitableTimer(void* const timer) noexcept {
+    (void)timer;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_GetLogicalProcessorInformation(void* const buffer, std::uint32_t* const returned_length) noexcept {
+    if (returned_length == nullptr) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    constexpr std::uint32_t req_size = 64;
+    if (buffer == nullptr || *returned_length < req_size) {
+        *returned_length = req_size;
+        set_last_error(abi::kErrorInsufficientBuffer);
+        return 0;
+    }
+    std::memset(buffer, 0, req_size);
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_GetVolumePathNameW(const wchar_t* const file_name, wchar_t* const volume_path_name, const std::uint32_t buffer_length) noexcept {
+    (void)file_name;
+    if (volume_path_name == nullptr || buffer_length < 4 || !mapped_guest_range(volume_path_name, buffer_length * sizeof(wchar_t), true)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    volume_path_name[0] = L'C';
+    volume_path_name[1] = L':';
+    volume_path_name[2] = L'\\';
+    volume_path_name[3] = L'\0';
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI std::int32_t tl_SetThreadDescription(void* const thread, const wchar_t* const description) noexcept {
+    (void)thread;
+    (void)description;
+    return 0; // S_OK
+}
+
+TL_MSABI void* tl_GetCurrentThread() noexcept {
+    return reinterpret_cast<void*>(~static_cast<std::uintptr_t>(1)); // (HANDLE)-2
+}
+
+TL_MSABI void* tl_CreateSemaphoreExW(void* const semaphore_attributes, const std::int32_t initial_count,
+                                     const std::int32_t maximum_count, const wchar_t* const name,
+                                     const std::uint32_t flags, const std::uint32_t desired_access) noexcept {
+    (void)flags;
+    (void)desired_access;
+    return tl_CreateSemaphoreW(semaphore_attributes, initial_count, maximum_count, reinterpret_cast<const std::uint16_t*>(name));
+}
+
+TL_MSABI void* tl_OpenSemaphoreW(const std::uint32_t desired_access, const int inherit_handle, const wchar_t* const name) noexcept {
+    (void)desired_access;
+    (void)inherit_handle;
+    return tl_CreateSemaphoreW(nullptr, 1, 1, reinterpret_cast<const std::uint16_t*>(name));
+}
+
+TL_MSABI void* tl_CreateMutexExW(void* const mutex_attributes, const wchar_t* const name,
+                                 const std::uint32_t flags, const std::uint32_t desired_access) noexcept {
+    (void)flags;
+    (void)desired_access;
+    return tl_CreateMutexW(mutex_attributes, 0, reinterpret_cast<const std::uint16_t*>(name));
+}
+
+TL_MSABI void tl_DebugBreak() noexcept {
+    // No-op in TradutorLinux runtime
+}
+
+TL_MSABI int tl_InitOnceBeginInitialize(void* const init_once, const std::uint32_t flags, int* const pending, void** const context) noexcept {
+    (void)init_once;
+    (void)flags;
+    if (pending != nullptr && mapped_guest_range(pending, sizeof(int), true)) {
+        *pending = 0; // already initialized
+    }
+    if (context != nullptr && mapped_guest_range(context, sizeof(void*), true)) {
+        *context = nullptr;
+    }
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_InitOnceComplete(void* const init_once, const std::uint32_t flags, void* const context) noexcept {
+    (void)init_once;
+    (void)flags;
+    (void)context;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_SwitchToThread() noexcept {
+    sched_yield();
+    return 1;
+}
+
+TL_MSABI std::uint32_t tl_GetSystemFirmwareTable(const std::uint32_t firmware_table_provider_signature,
+                                                 const std::uint32_t firmware_table_id,
+                                                 void* const firmware_table_buffer,
+                                                 const std::uint32_t buffer_size) noexcept {
+    (void)firmware_table_provider_signature;
+    (void)firmware_table_id;
+    (void)firmware_table_buffer;
+    (void)buffer_size;
+    set_last_error(abi::kErrorSuccess);
+    return 0;
+}
+
 }  // extern "C"
 
 }  // namespace tradutorlinux

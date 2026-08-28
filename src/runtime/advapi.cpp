@@ -778,4 +778,241 @@ TL_ADVAPI_MSABI std::int32_t tl_RegDeleteKeyA(void* const key, const char* const
     return static_cast<std::int32_t>(abi::kErrorSuccess);
 }
 
+TL_ADVAPI_MSABI std::int32_t tl_RegGetValueW(void* const key, const wchar_t* const sub_key, const wchar_t* const value,
+                                             const std::uint32_t flags, std::uint32_t* const type,
+                                             void* const data, std::uint32_t* const data_len) noexcept {
+    (void)flags;
+    return static_cast<std::int32_t>(tl_RegQueryValueExW(key, reinterpret_cast<const std::uint16_t*>(value != nullptr ? value : sub_key),
+                                                         nullptr, type, reinterpret_cast<unsigned char*>(data), data_len));
+}
+
+TL_ADVAPI_MSABI void* tl_RegisterEventSourceW(const wchar_t* const server_name, const wchar_t* const source_name) noexcept {
+    (void)server_name;
+    (void)source_name;
+    return reinterpret_cast<void*>(0x45564E54ULL); // 'EVNT'
+}
+
+TL_ADVAPI_MSABI int tl_DeregisterEventSource(void* const event_log) noexcept {
+    (void)event_log;
+    return 1;
+}
+
+TL_ADVAPI_MSABI int tl_ReportEventW(void* const event_log, const std::uint16_t type, const std::uint16_t category,
+                                    const std::uint32_t event_id, void* const user_sid,
+                                    const std::uint16_t num_strings, const std::uint32_t data_size,
+                                    const wchar_t** const strings, void* const raw_data) noexcept {
+    (void)event_log;
+    (void)type;
+    (void)category;
+    (void)event_id;
+    (void)user_sid;
+    (void)num_strings;
+    (void)data_size;
+    (void)strings;
+    (void)raw_data;
+    return 1;
+}
+
+TL_ADVAPI_MSABI int tl_CryptCreateHash(const std::uintptr_t prov, const std::uint32_t algid,
+                                       const std::uintptr_t key, const std::uint32_t flags,
+                                       std::uintptr_t* const hash) noexcept {
+    (void)prov;
+    (void)algid;
+    (void)key;
+    (void)flags;
+    if (hash == nullptr) {
+        tl_SetLastError(kErrorInvalidParameter);
+        return 0;
+    }
+    *hash = 0x48415348ULL; // 'HASH'
+    tl_SetLastError(static_cast<std::uint32_t>(abi::kErrorSuccess));
+    return 1;
+}
+
+TL_ADVAPI_MSABI int tl_CryptHashData(const std::uintptr_t hash, const std::uint8_t* const data,
+                                     const std::uint32_t data_len, const std::uint32_t flags) noexcept {
+    (void)hash;
+    (void)data;
+    (void)data_len;
+    (void)flags;
+    tl_SetLastError(static_cast<std::uint32_t>(abi::kErrorSuccess));
+    return 1;
+}
+
+TL_ADVAPI_MSABI int tl_CryptGetHashParam(const std::uintptr_t hash, const std::uint32_t param,
+                                         std::uint8_t* const data, std::uint32_t* const data_len,
+                                         const std::uint32_t flags) noexcept {
+    (void)hash;
+    (void)param;
+    (void)flags;
+    if (data_len == nullptr) {
+        tl_SetLastError(kErrorInvalidParameter);
+        return 0;
+    }
+    constexpr std::uint32_t hash_size = 32; // SHA-256 size
+    if (data == nullptr || *data_len < hash_size) {
+        *data_len = hash_size;
+        tl_SetLastError(static_cast<std::uint32_t>(abi::kErrorSuccess));
+        return 1;
+    }
+    std::memset(data, 0xAA, hash_size);
+    *data_len = hash_size;
+    tl_SetLastError(static_cast<std::uint32_t>(abi::kErrorSuccess));
+    return 1;
+}
+
+TL_ADVAPI_MSABI int tl_CryptSetHashParam(const std::uintptr_t hash, const std::uint32_t param,
+                                         const std::uint8_t* const data, const std::uint32_t flags) noexcept {
+    (void)hash;
+    (void)param;
+    (void)data;
+    (void)flags;
+    tl_SetLastError(static_cast<std::uint32_t>(abi::kErrorSuccess));
+    return 1;
+}
+
+TL_ADVAPI_MSABI int tl_CryptDestroyHash(const std::uintptr_t hash) noexcept {
+    (void)hash;
+    tl_SetLastError(static_cast<std::uint32_t>(abi::kErrorSuccess));
+    return 1;
+}
+
+TL_ADVAPI_MSABI int tl_CryptSignHashW(const std::uintptr_t hash, const std::uint32_t key_spec,
+                                      const wchar_t* const description, const std::uint32_t flags,
+                                      std::uint8_t* const signature, std::uint32_t* const sig_len) noexcept {
+    (void)hash;
+    (void)key_spec;
+    (void)description;
+    (void)flags;
+    if (sig_len == nullptr) {
+        tl_SetLastError(kErrorInvalidParameter);
+        return 0;
+    }
+    constexpr std::uint32_t dummy_sig_len = 256;
+    if (signature == nullptr || *sig_len < dummy_sig_len) {
+        *sig_len = dummy_sig_len;
+        return 1;
+    }
+    std::memset(signature, 0x55, dummy_sig_len);
+    *sig_len = dummy_sig_len;
+    tl_SetLastError(static_cast<std::uint32_t>(abi::kErrorSuccess));
+    return 1;
+}
+
+TL_ADVAPI_MSABI int tl_CryptDecrypt(const std::uintptr_t key, const std::uintptr_t hash,
+                                    const int final_chunk, const std::uint32_t flags,
+                                    std::uint8_t* const data, std::uint32_t* const data_len) noexcept {
+    (void)key;
+    (void)hash;
+    (void)final_chunk;
+    (void)flags;
+    (void)data;
+    (void)data_len;
+    tl_SetLastError(static_cast<std::uint32_t>(abi::kErrorSuccess));
+    return 1;
+}
+
+TL_ADVAPI_MSABI int tl_CryptExportKey(const std::uintptr_t key, const std::uintptr_t exp_key,
+                                      const std::uint32_t blob_type, const std::uint32_t flags,
+                                      std::uint8_t* const data, std::uint32_t* const data_len) noexcept {
+    (void)key;
+    (void)exp_key;
+    (void)blob_type;
+    (void)flags;
+    if (data_len == nullptr) {
+        tl_SetLastError(kErrorInvalidParameter);
+        return 0;
+    }
+    constexpr std::uint32_t key_blob_size = 64;
+    if (data == nullptr || *data_len < key_blob_size) {
+        *data_len = key_blob_size;
+        return 1;
+    }
+    std::memset(data, 0x11, key_blob_size);
+    *data_len = key_blob_size;
+    tl_SetLastError(static_cast<std::uint32_t>(abi::kErrorSuccess));
+    return 1;
+}
+
+TL_ADVAPI_MSABI int tl_CryptGetUserKey(const std::uintptr_t prov, const std::uint32_t key_spec,
+                                       std::uintptr_t* const user_key) noexcept {
+    (void)prov;
+    (void)key_spec;
+    if (user_key == nullptr) {
+        tl_SetLastError(kErrorInvalidParameter);
+        return 0;
+    }
+    *user_key = 0x4B455931ULL; // 'KEY1'
+    tl_SetLastError(static_cast<std::uint32_t>(abi::kErrorSuccess));
+    return 1;
+}
+
+TL_ADVAPI_MSABI int tl_CryptGetProvParam(const std::uintptr_t prov, const std::uint32_t param,
+                                         std::uint8_t* const data, std::uint32_t* const data_len,
+                                         const std::uint32_t flags) noexcept {
+    (void)prov;
+    (void)param;
+    (void)flags;
+    if (data_len == nullptr) {
+        tl_SetLastError(kErrorInvalidParameter);
+        return 0;
+    }
+    constexpr std::uint32_t param_size = 16;
+    if (data == nullptr || *data_len < param_size) {
+        *data_len = param_size;
+        return 1;
+    }
+    std::memset(data, 0, param_size);
+    *data_len = param_size;
+    tl_SetLastError(static_cast<std::uint32_t>(abi::kErrorSuccess));
+    return 1;
+}
+
+TL_ADVAPI_MSABI int tl_CryptDestroyKey(const std::uintptr_t key) noexcept {
+    (void)key;
+    tl_SetLastError(static_cast<std::uint32_t>(abi::kErrorSuccess));
+    return 1;
+}
+
+TL_ADVAPI_MSABI int tl_CryptEnumProvidersW(const std::uint32_t index, std::uint32_t* const reserved,
+                                           const std::uint32_t flags, std::uint32_t* const prov_type,
+                                           wchar_t* const prov_name, std::uint32_t* const name_len) noexcept {
+    (void)reserved;
+    (void)flags;
+    if (index > 0 || name_len == nullptr) {
+        tl_SetLastError(259); // ERROR_NO_MORE_ITEMS
+        return 0;
+    }
+    const wchar_t dummy_name[] = L"Microsoft Enhanced RSA and AES Cryptographic Provider";
+    const std::uint32_t len = static_cast<std::uint32_t>(std::wcslen(dummy_name)) + 1;
+    if (prov_type != nullptr) {
+        *prov_type = 24; // PROV_RSA_AES
+    }
+    if (prov_name == nullptr || *name_len < len) {
+        *name_len = len;
+        return 1;
+    }
+    std::memcpy(prov_name, dummy_name, len * sizeof(wchar_t));
+    *name_len = len;
+    tl_SetLastError(static_cast<std::uint32_t>(abi::kErrorSuccess));
+    return 1;
+}
+
+TL_ADVAPI_MSABI int tl_SystemFunction036(void* const buffer, const std::uint32_t length) noexcept {
+    if (buffer == nullptr || length == 0 || !mapped_range(buffer, length, true)) {
+        return 0;
+    }
+    std::ifstream urandom{"/dev/urandom", std::ios::binary};
+    if (urandom) {
+        urandom.read(reinterpret_cast<char*>(buffer), length);
+        if (urandom.gcount() == static_cast<std::streamsize>(length)) {
+            return 1;
+        }
+    }
+    for (std::uint32_t i = 0; i < length; ++i) {
+        static_cast<std::uint8_t*>(buffer)[i] = static_cast<std::uint8_t>(std::rand() & 0xFF);
+    }
+    return 1;
+}
+
 }  // namespace tradutorlinux

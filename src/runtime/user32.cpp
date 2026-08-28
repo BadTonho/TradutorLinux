@@ -3051,6 +3051,56 @@ TL_MSABI int tl_UnregisterHotKey(void* const hwnd, const int id) noexcept {
     return 1;
 }
 
+TL_MSABI void* tl_GetProcessWindowStation() noexcept {
+    return reinterpret_cast<void*>(0x57535441ULL); // 'WSTA'
+}
+
+TL_MSABI int tl_GetUserObjectInformationW(void* const handle, const int index,
+                                          void* const info, const std::uint32_t length,
+                                          std::uint32_t* const length_needed) noexcept {
+    (void)handle;
+    (void)index;
+    if (length_needed != nullptr && mapped_guest_range(length_needed, sizeof(std::uint32_t), true)) {
+        *length_needed = sizeof(std::uint32_t);
+    }
+    if (info != nullptr && length >= sizeof(std::uint32_t) && mapped_guest_range(info, sizeof(std::uint32_t), true)) {
+        *reinterpret_cast<std::uint32_t*>(info) = 1; // WSF_VISIBLE
+    }
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI void* tl_GetShellWindow() noexcept {
+    return reinterpret_cast<void*>(0x53484C4CULL); // 'SHLL'
+}
+
+TL_MSABI int tl_EnumDisplayDevicesA(const char* const device, const std::uint32_t dev_num,
+                                    void* const display_device, const std::uint32_t flags) noexcept {
+    (void)device;
+    (void)flags;
+    if (dev_num > 0 || display_device == nullptr || !mapped_guest_range(display_device, 40, true)) {
+        set_last_error(abi::kErrorSuccess);
+        return 0;
+    }
+    // DISPLAY_DEVICEA: cb(4), DeviceName[32], DeviceString[128], StateFlags(4), DeviceID[128], DeviceKey[128]
+    struct DummyDisplayDeviceA {
+        std::uint32_t cb;
+        char DeviceName[32];
+        char DeviceString[128];
+        std::uint32_t StateFlags;
+        char DeviceID[128];
+        char DeviceKey[128];
+    }* dd = reinterpret_cast<DummyDisplayDeviceA*>(display_device);
+    const std::uint32_t cb = dd->cb;
+    std::memset(display_device, 0, std::min<std::size_t>(cb, sizeof(DummyDisplayDeviceA)));
+    dd->cb = cb;
+    std::strncpy(dd->DeviceName, "\\\\.\\DISPLAY1", sizeof(dd->DeviceName) - 1);
+    std::strncpy(dd->DeviceString, "Generic PnP Monitor", sizeof(dd->DeviceString) - 1);
+    dd->StateFlags = 1 | 4; // DISPLAY_DEVICE_ATTACHED_TO_DESKTOP | DISPLAY_DEVICE_PRIMARY_DEVICE
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
 }  // extern "C"
 
 }  // namespace tradutorlinux

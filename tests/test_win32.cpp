@@ -2815,5 +2815,65 @@ TEST(NotepadPlusPlusCoverageTest, AllApisAndModules) {
     EXPECT_EQ(tl_UnregisterHotKey(nullptr, 1), 1);
 }
 
+TEST(RobloxCoverageTest, AllApisAndModules) {
+    // KERNEL32
+    std::array<std::uint8_t, 128> mem_counters{};
+    EXPECT_EQ(tl_K32GetProcessMemoryInfo(nullptr, mem_counters.data(), static_cast<std::uint32_t>(mem_counters.size())), 1);
+    char img_name[256]{};
+    EXPECT_GT(tl_K32GetProcessImageFileNameA(nullptr, img_name, sizeof(img_name)), 0U);
+    EXPECT_EQ(tl_GetCurrentProcessorNumber(), 0U);
+    EXPECT_NE(tl_GetCurrentThread(), nullptr);
+    EXPECT_EQ(tl_SwitchToThread(), 1);
+    EXPECT_EQ(tl_TryEnterCriticalSection(nullptr), 0);
+    EXPECT_EQ(tl_SleepEx(1, 0), 0U);
+    EXPECT_EQ(tl_GetDiskFreeSpaceA(nullptr, nullptr, nullptr, nullptr, nullptr), 1);
+    char temp_a[64]{};
+    EXPECT_GT(tl_GetTempPathA(sizeof(temp_a), temp_a), 0U);
+    EXPECT_EQ(tl_MoveFileExA("a", "b", 0), 1);
+    EXPECT_EQ(tl_LockFile(nullptr, 0, 0, 0, 0), 1);
+    EXPECT_EQ(tl_UnlockFile(nullptr, 0, 0, 0, 0), 1);
+    int pending = 0;
+    EXPECT_EQ(tl_InitOnceBeginInitialize(nullptr, 0, &pending, nullptr), 1);
+    EXPECT_EQ(tl_InitOnceComplete(nullptr, 0, nullptr), 1);
+    void* timer = tl_CreateWaitableTimerA(nullptr, 0, nullptr);
+    EXPECT_NE(timer, nullptr);
+    EXPECT_EQ(tl_SetWaitableTimer(timer, nullptr, 0, nullptr, nullptr, 0), 1);
+    EXPECT_EQ(tl_CancelWaitableTimer(timer), 1);
+
+    // ADVAPI32
+    std::uintptr_t hash = 0;
+    EXPECT_EQ(tl_CryptCreateHash(0, 0x8004, 0, 0, &hash), 1);
+    EXPECT_EQ(tl_CryptHashData(hash, nullptr, 0, 0), 1);
+    std::uint32_t hash_len = 0;
+    EXPECT_EQ(tl_CryptGetHashParam(hash, 2, nullptr, &hash_len, 0), 1);
+    EXPECT_EQ(tl_CryptDestroyHash(hash), 1);
+    std::uint8_t rnd[16]{};
+    EXPECT_EQ(tl_SystemFunction036(rnd, sizeof(rnd)), 1);
+    EXPECT_NE(tl_RegisterEventSourceW(nullptr, L"Roblox"), nullptr);
+    EXPECT_EQ(tl_DeregisterEventSource(nullptr), 1);
+    EXPECT_EQ(tl_ReportEventW(nullptr, 1, 0, 100, nullptr, 0, 0, nullptr, nullptr), 1);
+
+    // WS2_32
+    EXPECT_EQ(tl_htons(80), 80U << 8);
+    EXPECT_EQ(tl_ntohs(80U << 8), 80);
+    EXPECT_EQ(tl_htonl(0x12345678), 0x78563412U);
+    EXPECT_EQ(tl_ntohl(0x78563412), 0x12345678U);
+    char hostname[64]{};
+    EXPECT_EQ(tl_gethostname(hostname, sizeof(hostname)), 0);
+    EXPECT_EQ(tl_WSAIoctl(0, 0, nullptr, 0, nullptr, 0, nullptr, nullptr, nullptr), 0);
+    EXPECT_EQ(tl_getnameinfo(nullptr, 0, hostname, sizeof(hostname), nullptr, 0, 0), 0);
+
+    // USER32, ole32, CRYPT32
+    EXPECT_NE(tl_GetProcessWindowStation(), nullptr);
+    EXPECT_NE(tl_GetShellWindow(), nullptr);
+    std::uint32_t uo_len = 0;
+    EXPECT_EQ(tl_GetUserObjectInformationW(nullptr, 1, nullptr, 0, &uo_len), 1);
+    wchar_t guid_str[64]{};
+    std::uint8_t guid_bytes[16]{};
+    EXPECT_EQ(tl_StringFromGUID2(guid_bytes, guid_str, sizeof(guid_str) / sizeof(wchar_t)), 39);
+    EXPECT_EQ(tl_CertGetIntendedKeyUsage(0, nullptr, nullptr, 0), 1);
+    EXPECT_EQ(tl_TrackMouseEvent_alias(nullptr), 1);
+}
+
 }  // namespace
 }  // namespace tradutorlinux

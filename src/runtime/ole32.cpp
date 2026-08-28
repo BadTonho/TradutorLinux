@@ -486,6 +486,15 @@ TL_OLE_MSABI void tl_ReleaseStgMedium(void* const medium) noexcept {
     (void)medium;
 }
 
+TL_OLE_MSABI int tl_StringFromGUID2(const void* const rguid, wchar_t* const lpsz, const int cchMax) noexcept {
+    if (rguid == nullptr || lpsz == nullptr || cchMax < 39 || !mapped_range(lpsz, static_cast<std::size_t>(cchMax) * sizeof(wchar_t), true)) {
+        return 0;
+    }
+    const wchar_t dummy_guid[] = L"{00000000-0000-0000-0000-000000000000}";
+    std::memcpy(lpsz, dummy_guid, sizeof(dummy_guid));
+    return 39;
+}
+
 }  // extern "C"
 
 }  // namespace tradutorlinux

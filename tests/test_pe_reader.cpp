@@ -415,8 +415,8 @@ TEST(PeReaderTest, RejectsMalformedAndUnsupportedUnwindMetadata) {
     EXPECT_EQ(parse_pe(bytes).status, ParseStatus::Malformed);
 
     bytes = make_all_unwind_opcodes_pe();
-    // UWOP_SET_FPREG fica no slot 4 (há um slot extra no ALLOC_LARGE).
-    bytes[0x400 + 12 + 4 + 4 * 2 + 1] = std::byte{0x33};
+    // UWOP_SET_FPREG fica no slot 4 (há um slot extra no ALLOC_LARGE). OpInfo 4 (RSP) é inválido.
+    bytes[0x400 + 12 + 4 + 4 * 2 + 1] = std::byte{0x43};
     EXPECT_EQ(parse_pe(bytes).status, ParseStatus::UnsupportedMechanism);
 }
 
