@@ -319,6 +319,26 @@ TL_MSABI int tl_ShellExecuteExW(void* exec_info) noexcept {
     return 1;
 }
 
+struct GuestShFileOpStructW {
+    void* hwnd;
+    std::uint32_t func;
+    const std::uint16_t* from;
+    const std::uint16_t* to;
+    std::uint16_t flags;
+    int any_operations_aborted;
+    void* name_mappings;
+    const std::uint16_t* progress_title;
+};
+
+TL_MSABI int tl_SHFileOperationW(void* const file_op) noexcept {
+    if (file_op == nullptr || !mapped_guest_range(file_op, sizeof(GuestShFileOpStructW), true)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 1;
+    }
+    set_last_error(abi::kErrorSuccess);
+    return 0; // 0 = S_OK / success in SHFileOperation
+}
+
 }  // extern "C"
 
 }  // namespace tradutorlinux

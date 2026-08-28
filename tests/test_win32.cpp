@@ -362,6 +362,22 @@ TEST(Kernel32SystemTest, TimeZoneProcessAndAffinity) {
     EXPECT_NE(sys_mask, 0U);
 }
 
+TEST(ShellPathTest, PathIsRelativeAndAutoComplete) {
+    EXPECT_EQ(tl_PathIsRelativeA("foo/bar"), 1);
+    EXPECT_EQ(tl_PathIsRelativeA("/foo/bar"), 0);
+    EXPECT_EQ(tl_PathIsRelativeA("C:\\foo\\bar"), 0);
+
+    std::uint16_t rel_w[] = {u'f', u'o', u'o', u'\\', u'b', u'a', u'r', 0};
+    std::uint16_t abs_w[] = {u'C', u':', u'\\', u'f', u'o', u'o', 0};
+    EXPECT_EQ(tl_PathIsRelativeW(rel_w), 1);
+    EXPECT_EQ(tl_PathIsRelativeW(abs_w), 0);
+
+    EXPECT_EQ(tl_SHAutoComplete(nullptr, 0), 0);
+
+    std::uint8_t op_buf[100]{};
+    EXPECT_EQ(tl_SHFileOperationW(op_buf), 0);
+}
+
 TEST(Win32CodePageTest, Cp1252ConvertsByte80ToEuroSign) {
     const char input[] = {'c', 'a', 'f', static_cast<char>(0xE9), static_cast<char>(0x80), '\0'};
     std::uint16_t output[8]{};

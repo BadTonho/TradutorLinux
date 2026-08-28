@@ -8,6 +8,7 @@
 #include <unistd.h>
 
 #include "tradutorlinux/runtime/memory_validator.hpp"
+#include "runtime_context.hpp"
 #include "tradutorlinux/util/basics.hpp"
 #include "tradutorlinux/util/unicode.hpp"
 
@@ -309,6 +310,39 @@ TL_SHLWAPI_MSABI int tl_StrCmpIW(const std::uint16_t* string1, const std::uint16
     const std::string utf8_1 = (string1 != nullptr && mapped_wstring(string1)) ? util::wide_to_utf8(string1) : "";
     const std::string utf8_2 = (string2 != nullptr && mapped_wstring(string2)) ? util::wide_to_utf8(string2) : "";
     return tl_StrCmpIA(utf8_1.c_str(), utf8_2.c_str());
+}
+
+TL_SHLWAPI_MSABI int tl_PathIsRelativeA(const char* const path) noexcept {
+    if (path == nullptr || !mapped_cstring(path) || path[0] == '\0') {
+        return 1;
+    }
+    if (path[0] == '\\' || path[0] == '/') {
+        return 0;
+    }
+    if (std::isalpha(static_cast<unsigned char>(path[0])) && path[1] == ':') {
+        return 0;
+    }
+    return 1;
+}
+
+TL_SHLWAPI_MSABI int tl_PathIsRelativeW(const std::uint16_t* const path) noexcept {
+    if (path == nullptr || !mapped_wstring(path) || path[0] == 0) {
+        return 1;
+    }
+    if (path[0] == u'\\' || path[0] == u'/') {
+        return 0;
+    }
+    if (((path[0] >= u'a' && path[0] <= u'z') || (path[0] >= u'A' && path[0] <= u'Z')) && path[1] == u':') {
+        return 0;
+    }
+    return 1;
+}
+
+TL_SHLWAPI_MSABI int tl_SHAutoComplete(const void* const hwnd_edit, const std::uint32_t flags) noexcept {
+    (void)hwnd_edit;
+    (void)flags;
+    set_last_error(abi::kErrorSuccess);
+    return 0;
 }
 
 }  // extern "C"

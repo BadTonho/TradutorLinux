@@ -750,6 +750,7 @@ void register_builtin_modules() {
         {"SHGetFolderPathAndSubDirW", 5, reinterpret_cast<std::uintptr_t>(&tl_SHGetFolderPathAndSubDirW)},
         {"ShellExecuteW", 6, reinterpret_cast<std::uintptr_t>(&tl_ShellExecuteW)},
         {"ShellExecuteExW", 7, reinterpret_cast<std::uintptr_t>(&tl_ShellExecuteExW)},
+        {"SHFileOperationW", 8, reinterpret_cast<std::uintptr_t>(&tl_SHFileOperationW)},
     };
     static const InternalModule kShell32Module{"SHELL32.dll", kShell32Exports};
     register_module(kShell32Module);
@@ -856,6 +857,9 @@ void register_builtin_modules() {
         {"StrStrIW", 18, reinterpret_cast<std::uintptr_t>(&tl_StrStrIW)},
         {"StrCmpIA", 19, reinterpret_cast<std::uintptr_t>(&tl_StrCmpIA)},
         {"StrCmpIW", 20, reinterpret_cast<std::uintptr_t>(&tl_StrCmpIW)},
+        {"PathIsRelativeA", 21, reinterpret_cast<std::uintptr_t>(&tl_PathIsRelativeA)},
+        {"PathIsRelativeW", 22, reinterpret_cast<std::uintptr_t>(&tl_PathIsRelativeW)},
+        {"SHAutoComplete", 23, reinterpret_cast<std::uintptr_t>(&tl_SHAutoComplete)},
     };
     static const InternalModule kShlwapiModule{"SHLWAPI.dll", kShlwapiExports};
     register_module(kShlwapiModule);

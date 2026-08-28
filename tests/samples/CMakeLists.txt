@@ -245,6 +245,9 @@ function(tl_add_pe_fixture target_name source_file manifest_file)
             elseif(target_name STREQUAL "tl_k32_system")
                 set(runtime_extra_args
                     "-DEXPECTED_HEX=6b333273797374656d0a")
+            elseif(target_name STREQUAL "tl_shell_path")
+                set(runtime_extra_args
+                    "-DEXPECTED_HEX=7368656c6c706174680a")
             elseif(target_name STREQUAL "tl_stream")
                 set(runtime_extra_args
                     "-DEXPECTED_HEX=6f6c652d73747265616d0a"
@@ -626,6 +629,10 @@ tl_add_pe_fixture(tl_user_ext src/tl_user_ext.c manifests/tl_user_ext.json
 tl_add_pe_fixture(tl_k32_system src/tl_k32_system.c manifests/tl_k32_system.json
     LINK_KERNEL32 EXPECT_RESOLVED CONSOLE REPORT RELOCATABLE
     REPORT_SYMBOL "GetTimeZoneInformation")
+
+tl_add_pe_fixture(tl_shell_path src/tl_shell_path.c manifests/tl_shell_path.json
+    LINK_KERNEL32 LINK_SHELL32 LINK_SHLWAPI EXPECT_RESOLVED CONSOLE REPORT RELOCATABLE
+    REPORT_SYMBOL "SHAutoComplete")
 
 tl_add_pe_fixture(tl_files_wide src/tl_files_wide.c manifests/tl_files_wide.json
     LINK_KERNEL32 EXPECT_RESOLVED CONSOLE REPORT RELOCATABLE

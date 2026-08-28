@@ -1394,6 +1394,7 @@ TL_MSABI int tl_SHAutoComplete(const void* hwnd_edit, std::uint32_t flags) noexc
 TL_MSABI int tl_PathRemoveFileSpecW(std::uint16_t* path) noexcept;
 TL_MSABI std::uint16_t* tl_PathCombineW(std::uint16_t* dest, const std::uint16_t* dir,
                                         const std::uint16_t* file) noexcept;
+TL_MSABI int tl_PathIsRelativeA(const char* path) noexcept;
 TL_MSABI int tl_PathIsRelativeW(const std::uint16_t* path) noexcept;
 TL_MSABI int tl_SHFileOperationW(void* file_op) noexcept;
 
