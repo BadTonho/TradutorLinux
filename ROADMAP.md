@@ -197,8 +197,23 @@ Os itens marcados como concluídos devem ter evidência no repositório: código
   parser de manifesto `AppxManifest.xml` e extração de metadados/executável
   principal para suporte ao benchmark `Affinity x64.msix`. Protegido por
   `MsixParserTest.ParseManifestXml`.
-- **Próximo resultado observável (Fase 13.13):** expandir suporte a instaladores e
-  APIs de registro/criptografia de acordo com os alvos do catálogo.
+- **Marco concluído (Fase 13.13 — Análise e Bateria de Testes do Portfólio Popular):**
+  Bateria automatizada de `--report` e execução controlada no conjunto de aplicativos
+  Windows x64 mais demandados pela comunidade:
+  - `Logitech_GHUB_x64.exe`: **100% (114/114)** de imports resolvidos, execução
+    completa do bootstrap CRT/FLS sem falhas de memória (código 72 por timeout controlado).
+  - `WinRAR_x64.exe`: **88% (222/251)** de imports resolvidos (+13 pendências eliminadas).
+  - `Rockstar-Games-Launcher.exe`: **84% (284/338)** de imports resolvidos (+19 pendências eliminadas).
+  - `7z_x64.exe` (7-Zip CLI): **67% (90/133)** de imports resolvidos.
+  - `putty_x64.exe` (PuTTY SSH): **64% (225/348)** de imports resolvidos.
+  - `7zFM_x64.exe` (7-Zip GUI): **60% (179/298)** de imports resolvidos.
+  - `notepad++.exe` (Notepad++ x64): **50% (294/584)** de imports resolvidos.
+  - `Affinity x64.msix`: Reconhecido como pacote de aplicativo válido pelo parser de manifesto.
+  - `HWiNFO64.exe` e `Rufus_x64.exe`: Validados com segurança pelo parser PE contra cabeçalhos corrompidos/fora da imagem.
+  - Instaladores com wrappers 32-bit (NSIS/Inno): Rejeitados com segurança pelo filtro de arquitetura x64.
+- **Próximo resultado observável (Fase 13.13):** implementar o próximo incremento de APIs
+  compartilhadas mapeadas pelo portfólio (`KERNEL32!CreateHardLinkW`, `KERNEL32!K32GetModuleFileNameExW`,
+  `OLEAUT32!ordinais`, `GDI32!CreateBitmap` e `COMCTL32!CreateToolbarEx`), protegido por fixtures PE32+ reproduzíveis.
 
 ### Estudo de caso: `RobloxPlayerInstaller.exe` (benchmark de cobertura)
 
