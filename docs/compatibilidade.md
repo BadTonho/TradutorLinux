@@ -593,6 +593,7 @@ processo filho; cada thread convidada recebe seu próprio TEB/GS, stack e
 | `OLEAUT32.dll` | `SysAllocString` / `SysAllocStringLen` / `SysFreeString` / `SysStringLen` / `SysStringByteLen` | Suportado | Alocação, liberação e consulta de BSTR com cabeçalho de 4 bytes e terminação null |
 | `OLEAUT32.dll` | `VariantInit` / `VariantClear` / `VariantCopy` / `VariantCopyInd` / `VariantChangeType` | Suportado | Gerenciamento e clonagem de estruturas VARIANT |
 | `OLEAUT32.dll` | `SafeArrayCreate` / `SafeArrayDestroy` / `SafeArrayGetDim` / `SafeArrayAccessData` / etc. | Suportado | Suporte e gerenciamento de contêineres SafeArray multidimensionais |
+| `SHELL32.dll` | `SHFileOperationW` | Suportado | Operações de manipulação e cópia de arquivos do shell |
 | `KERNEL32.dll` | `GetTickCount` | Suportado | Retorna tempo de uptime do sistema em milissegundos via `CLOCK_MONOTONIC` |
 | `KERNEL32.dll` | `SetCurrentDirectoryW` | Suportado | Altera diretório de trabalho do processo no Linux via `chdir` |
 | `KERNEL32.dll` | `DeviceIoControl` | Suportado | Stub de controle de dispositivos e consultas de I/O de disco |

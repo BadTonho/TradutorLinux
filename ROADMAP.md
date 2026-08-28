@@ -225,6 +225,8 @@ Os itens marcados como concluídos devem ter evidência no repositório: código
   - Reanálise do portfólio: WinRAR atingiu **90% (228/251)**, Rockstar subiu para
     **86% (292/338)**, 7-Zip CLI subiu para **73% (98/133)**, Notepad++ para
     **51% (300/584)** e PuTTY para **64% (226/348)**.
+- **Próximo resultado observável (Fase 13.13):** implementar controles comuns de `COMCTL32.dll`
+  (`CreateToolbarEx`, `ImageList_GetImageInfo`) e rotinas restantes de I/O de disco/threads.
 - **Marco concluído (Fase 13.13 — WinRAR x64 100% de Resolução de Imports):**
   Implementado lote completo de 23 APIs restantes em `KERNEL32.dll` (`GetTickCount`, `SetCurrentDirectoryW`,
   `DeviceIoControl`, `FoldStringW`, `SetThreadExecutionState`, `AllocConsole`, `FreeConsole`, `SystemTimeToTzSpecificLocalTime`,
