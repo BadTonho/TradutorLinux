@@ -538,6 +538,11 @@ char** g_guest_initenv = nullptr;
 int g_guest_commode = 0;
 int g_guest_fmode = 0;
 char* g_guest_acmdln = nullptr;
+GuestFile g_guest_iob[3] = {
+    {nullptr, 0, nullptr, 0x0001, 0, -1, 0, nullptr},
+    {nullptr, 0, nullptr, 0x0002, 1, -1, 0, nullptr},
+    {nullptr, 0, nullptr, 0x0002, 2, -1, 0, nullptr},
+};
 
 void msvcrt_set_guest_command_line(std::vector<std::string> arguments) {
     g_guest_arguments = std::move(arguments);

@@ -824,6 +824,7 @@ void register_builtin_modules() {
         {"_purecall", 107, reinterpret_cast<std::uintptr_t>(&tl__purecall)},
         {"?terminate@@YAXXZ", 108, reinterpret_cast<std::uintptr_t>(&tl_terminate)},
         {"??1type_info@@UEAA@XZ", 109, reinterpret_cast<std::uintptr_t>(&tl__c_exit)},
+        {"_iob", 110, reinterpret_cast<std::uintptr_t>(g_guest_iob)},
     };
     static const InternalModule kMsvcrtModule{"msvcrt.dll", kMsvcrtExports};
     register_module(kMsvcrtModule);

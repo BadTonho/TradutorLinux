@@ -164,6 +164,7 @@ extern char** g_guest_initenv;
 extern int g_guest_commode;
 extern int g_guest_fmode;
 extern char* g_guest_acmdln;
+extern GuestFile g_guest_iob[3];
 
 }  // extern "C"
 
