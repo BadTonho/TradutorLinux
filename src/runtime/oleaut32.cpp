@@ -183,6 +183,7 @@ TL_OLEAUT_MSABI std::int32_t tl_VariantCopyInd(GuestVariant* pvargDest, const Gu
 TL_OLEAUT_MSABI std::int32_t tl_VariantChangeType(GuestVariant* pvargDest, const GuestVariant* pvarSrc,
                                                  const std::uint16_t wFlags, const std::uint16_t vt) noexcept {
     (void)wFlags;
+    (void)vt;
     if (pvargDest == nullptr || pvarSrc == nullptr) {
         return static_cast<std::int32_t>(0x80070057U);
     }

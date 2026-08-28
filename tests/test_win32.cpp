@@ -2404,8 +2404,8 @@ TEST(Gdi32Test, BitmapAndHardLinkOperations) {
     void* bmp = tl_CreateBitmap(64, 64, 1, 32, nullptr);
     ASSERT_NE(bmp, nullptr);
 
-    GuestBitmap bmp_info{};
-    EXPECT_GT(tl_GetObjectW(bmp, sizeof(bmp_info), &bmp_info), 0);
+    char bmp_info[64]{};
+    EXPECT_GT(tl_GetObjectW(bmp, sizeof(bmp_info), bmp_info), 0);
 
     EXPECT_EQ(tl_StretchBlt(nullptr, 0, 0, 10, 10, nullptr, 0, 0, 10, 10, 0), 1);
 
