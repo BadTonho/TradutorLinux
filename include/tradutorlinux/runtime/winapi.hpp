@@ -1965,6 +1965,156 @@ TL_MSABI void* tl_ShellExecuteA(void* hwnd, const char* operation, const char* f
 TL_MSABI int tl_GetUserNameA(char* buffer, std::uint32_t* size) noexcept;
 TL_MSABI int tl_SetSecurityDescriptorOwner(void* sec_desc, void* owner, int owner_defaulted) noexcept;
 
+// Notepad++ APIs: SensApi.dll
+TL_MSABI int tl_IsDestinationReachableW(const wchar_t* lpszDestination, void* lpQOCInfo) noexcept;
+TL_MSABI int tl_IsNetworkAlive(std::uint32_t* lpdwFlags) noexcept;
+
+// Notepad++ APIs: dbghelp.dll, ole32.dll, ADVAPI32.dll, CRYPT32.dll, SHELL32.dll
+TL_MSABI void* tl_ImageNtHeader(void* base) noexcept;
+TL_MSABI int tl_CLSIDFromProgID(const wchar_t* lpszProgID, void* lpclsid) noexcept;
+TL_MSABI int tl_IsTextUnicode(const void* lpv, int iSize, int* lpiResult) noexcept;
+TL_MSABI int tl_CryptMsgClose(void* hCryptMsg) noexcept;
+TL_MSABI int tl_CryptMsgGetParam(void* hCryptMsg, std::uint32_t dwParamType, std::uint32_t dwIndex, void* pvData, std::uint32_t* pcbData) noexcept;
+TL_MSABI int tl_CryptQueryObject(std::uint32_t dwObjectType, const void* pvObject, std::uint32_t dwExpectedContentTypeFlags, std::uint32_t dwExpectedFormatTypeFlags, std::uint32_t dwFlags, std::uint32_t* pdwMsgAndCertEncodingType, std::uint32_t* pdwContentType, std::uint32_t* pdwFormatType, void** phCertStore, void** phMsg, const void** ppvContext) noexcept;
+TL_MSABI std::uint32_t tl_CertNameToStrW(std::uint32_t dwCertEncodingType, void* pName, std::uint32_t dwStrType, wchar_t* psz, std::uint32_t cchName) noexcept;
+TL_MSABI int tl_SHCreateItemFromParsingName(const wchar_t* pszPath, void* pbc, const void* riid, void** ppv) noexcept;
+TL_MSABI std::uint32_t tl_DragQueryFileW(void* hDrop, std::uint32_t iFile, wchar_t* lpszFile, std::uint32_t cch) noexcept;
+TL_MSABI int tl_DragQueryPoint(void* hDrop, void* lppt) noexcept;
+TL_MSABI void tl_DragFinish(void* hDrop) noexcept;
+
+// Notepad++ APIs: COMCTL32.dll
+TL_MSABI int tl_ImageList_GetImageInfo(void* himl, int i, void* pImageInfo) noexcept;
+TL_MSABI int tl_ImageList_EndDrag() noexcept;
+TL_MSABI int tl_ImageList_DragShowNolock(int fShow) noexcept;
+TL_MSABI int tl_ImageList_DragEnter(void* hwndLock, int x, int y) noexcept;
+TL_MSABI int tl_ImageList_DragMove(int x, int y) noexcept;
+TL_MSABI int tl_ImageList_BeginDrag(void* himlTrack, int iTrack, int dxHotspot, int dyHotspot) noexcept;
+TL_MSABI int tl_ImageList_Remove(void* himl, int i) noexcept;
+TL_MSABI int tl_ImageList_SetIconSize(void* himl, int cx, int cy) noexcept;
+TL_MSABI int tl_LoadIconWithScaleDown(void* hinst, const wchar_t* pszName, int cx, int cy, void** phico) noexcept;
+
+// Notepad++ APIs: SHLWAPI.dll
+TL_MSABI int tl_AssocQueryStringW(std::uint32_t flags, std::uint32_t str, const wchar_t* pszAssoc, const wchar_t* pszExtra, wchar_t* pszOut, std::uint32_t* pcchOut) noexcept;
+TL_MSABI void tl_ColorRGBToHLS(std::uint32_t clrRGB, std::uint16_t* pwHue, std::uint16_t* pwLuminance, std::uint16_t* pwSaturation) noexcept;
+TL_MSABI std::uint32_t tl_ColorHLSToRGB(std::uint16_t wHue, std::uint16_t wLuminance, std::uint16_t wSaturation) noexcept;
+TL_MSABI std::uint32_t tl_ColorAdjustLuma(std::uint32_t clrRGB, int n, int fBorder) noexcept;
+TL_MSABI void tl_PathStripPathW(wchar_t* pszPath) noexcept;
+TL_MSABI int tl_PathAddExtensionW(wchar_t* pszPath, const wchar_t* pszExt) noexcept;
+TL_MSABI int tl_PathAppendW(wchar_t* pszPath, const wchar_t* pszMore) noexcept;
+TL_MSABI void tl_PathRemoveExtensionW(wchar_t* pszPath) noexcept;
+TL_MSABI int tl_PathCompactPathExW(wchar_t* pszOut, const wchar_t* pszSrc, std::uint32_t cchMax, std::uint32_t dwFlags) noexcept;
+TL_MSABI int tl_PathGetDriveNumberW(const wchar_t* pszPath) noexcept;
+TL_MSABI int tl_PathMatchSpecW(const wchar_t* pszFile, const wchar_t* pszSpec) noexcept;
+
+// Notepad++ APIs: UxTheme.dll
+TL_MSABI int tl_EndBufferedAnimation(void* hbpAnimation, int fUpdateTarget) noexcept;
+TL_MSABI int tl_GetThemeTransitionDuration(void* hTheme, int iPartId, int iStateIdFrom, int iStateIdTo, int iPropId, int* pdwDuration) noexcept;
+TL_MSABI int tl_GetThemeBackgroundContentRect(void* hTheme, void* hdc, int iPartId, int iStateId, const void* pBoundingRect, void* pContentRect) noexcept;
+TL_MSABI int tl_EnableThemeDialogTexture(void* hwnd, std::uint32_t dwFlags) noexcept;
+TL_MSABI void tl_BufferedPaintStopAllAnimations(void* hwnd) noexcept;
+TL_MSABI void* tl_BeginBufferedAnimation(void* hwnd, void* hdcTarget, const void* rcTarget, int dwFormat, void* pPaintParams, void* pAnimationParams, void** phdcFrom, void** phdcTo) noexcept;
+TL_MSABI int tl_BufferedPaintRenderAnimation(void* hwnd, void* hdcTarget) noexcept;
+
+// Notepad++ APIs: GDI32.dll
+TL_MSABI int tl_SetWindowOrgEx(void* hdc, int x, int y, void* lppt) noexcept;
+TL_MSABI int tl_SaveDC(void* hdc) noexcept;
+TL_MSABI int tl_RestoreDC(void* hdc, int nSavedDC) noexcept;
+TL_MSABI int tl_OffsetWindowOrgEx(void* hdc, int x, int y, void* lppt) noexcept;
+TL_MSABI int tl_SetBrushOrgEx(void* hdc, int x, int y, void* lppt) noexcept;
+TL_MSABI int tl_SetDIBits(void* hdc, void* hbm, std::uint32_t start, std::uint32_t lines, const void* lpBits, const void* lpbmi, std::uint32_t fuColorUse) noexcept;
+TL_MSABI int tl_DPtoLP(void* hdc, void* lpPoints, int nCount) noexcept;
+TL_MSABI int tl_GetTextExtentPointW(void* hdc, const wchar_t* lpString, int c, void* lpSize) noexcept;
+TL_MSABI int tl_Ellipse(void* hdc, int left, int top, int right, int bottom) noexcept;
+TL_MSABI void* tl_ExtCreatePen(std::uint32_t iPenStyle, std::uint32_t cWidth, const void* plbrush, std::uint32_t cStyle, const std::uint32_t* pstyle) noexcept;
+TL_MSABI int tl_GdiAlphaBlend(void* hdcDest, int xoriginDest, int yoriginDest, int wDest, int hDest, void* hdcSrc, int xoriginSrc, int yoriginSrc, int wSrc, int hSrc, std::uint32_t ftn) noexcept;
+TL_MSABI int tl_GetTextExtentExPointW(void* hdc, const wchar_t* lpszStr, int cchString, int nMaxExtent, int* lpnFit, int* alpDx, void* lpSize) noexcept;
+TL_MSABI int tl_GetROP2(void* hdc) noexcept;
+TL_MSABI int tl_GetClipRgn(void* hdc, void* hrgn) noexcept;
+TL_MSABI void* tl_CreateRectRgnIndirect(const void* lprect) noexcept;
+TL_MSABI int tl_RoundRect(void* hdc, int left, int top, int right, int bottom, int width, int height) noexcept;
+
+// Notepad++ APIs: KERNEL32.dll
+TL_MSABI int tl_GetTimeFormatEx(const wchar_t* lpLocaleName, std::uint32_t dwFlags, const void* lpTime, const wchar_t* lpFormat, wchar_t* lpTimeStr, int cchTime) noexcept;
+TL_MSABI int tl_GetDateFormatEx(const wchar_t* lpLocaleName, std::uint32_t dwFlags, const void* lpDate, const wchar_t* lpFormat, wchar_t* lpDateStr, int cchDate, const wchar_t* lpCalendar) noexcept;
+TL_MSABI wchar_t* tl_lstrcpynW(wchar_t* lpString1, const wchar_t* lpString2, int iMaxLength) noexcept;
+TL_MSABI int tl_GetApplicationRestartSettings(void* hProcess, wchar_t* pwzCommandLine, std::uint32_t* pcchSize, std::uint32_t* pdwFlags) noexcept;
+TL_MSABI int tl_UnregisterApplicationRestart() noexcept;
+TL_MSABI int tl_lstrcmpiA(const char* lpString1, const char* lpString2) noexcept;
+TL_MSABI int tl_RegisterApplicationRestart(const wchar_t* pwzCommandLine, std::uint32_t dwFlags) noexcept;
+TL_MSABI char* tl_lstrcpynA(char* lpString1, const char* lpString2, int iMaxLength) noexcept;
+TL_MSABI int tl_CancelIo(void* hFile) noexcept;
+TL_MSABI int tl_ReadDirectoryChangesW(void* hDirectory, void* lpBuffer, std::uint32_t nBufferLength, int bWatchSubtree, std::uint32_t dwNotifyFilter, std::uint32_t* lpBytesReturned, void* lpOverlapped, void* lpCompletionRoutine) noexcept;
+TL_MSABI int tl_GetStringTypeExW(std::uint32_t Locale, std::uint32_t dwInfoType, const wchar_t* lpSrcStr, int cchSrc, std::uint16_t* lpCharType) noexcept;
+TL_MSABI int tl_LCMapStringA(std::uint32_t Locale, std::uint32_t dwMapFlags, const char* lpSrcStr, int cchSrc, char* lpDestStr, int cchDest) noexcept;
+TL_MSABI int tl_GetStringTypeExA(std::uint32_t Locale, std::uint32_t dwInfoType, const char* lpSrcStr, int cchSrc, std::uint16_t* lpCharType) noexcept;
+TL_MSABI void tl_FreeLibraryWhenCallbackReturns(void* pci, void* module) noexcept;
+TL_MSABI wchar_t* tl_lstrcpyW(wchar_t* lpString1, const wchar_t* lpString2) noexcept;
+TL_MSABI int tl_ReplaceFileW(const wchar_t* lpReplacedFileName, const wchar_t* lpReplacementFileName, const wchar_t* lpBackupFileName, std::uint32_t dwReplaceFlags, void* lpExclude, void* lpReserved) noexcept;
+TL_MSABI std::uint32_t tl_QueueUserAPC(void* pfnAPC, void* hThread, std::uintptr_t dwData) noexcept;
+TL_MSABI int tl_lstrcmpW(const wchar_t* lpString1, const wchar_t* lpString2) noexcept;
+TL_MSABI int tl_lstrcmpiW(const wchar_t* lpString1, const wchar_t* lpString2) noexcept;
+
+// Notepad++ APIs: USER32.dll
+TL_MSABI std::uint32_t tl_RegisterWindowMessageW(const wchar_t* lpString) noexcept;
+TL_MSABI void* tl_RemovePropW(void* hWnd, const wchar_t* lpString) noexcept;
+TL_MSABI void* tl_GetPropW(void* hWnd, const wchar_t* lpString) noexcept;
+TL_MSABI int tl_SetPropW(void* hWnd, const wchar_t* lpString, void* hData) noexcept;
+TL_MSABI int tl_ValidateRect(void* hWnd, const void* lpRect) noexcept;
+TL_MSABI int tl_DestroyCursor(void* hCursor) noexcept;
+TL_MSABI void tl_NotifyWinEvent(std::uint32_t event, void* hwnd, std::int32_t idObject, std::int32_t idChild) noexcept;
+TL_MSABI void* tl_MonitorFromPoint(int x, int y, std::uint32_t dwFlags) noexcept;
+TL_MSABI void* tl_MonitorFromRect(const void* lprc, std::uint32_t dwFlags) noexcept;
+TL_MSABI int tl_GetMonitorInfoW(void* hMonitor, void* lpmi) noexcept;
+TL_MSABI int tl_AdjustWindowRectEx(void* lpRect, std::uint32_t dwStyle, int bMenu, std::uint32_t dwExStyle) noexcept;
+TL_MSABI std::uint32_t tl_GetDlgItemTextA(void* hDlg, int nIDDlgItem, char* lpString, int cchMax) noexcept;
+TL_MSABI std::uint32_t tl_GetDlgItemTextW(void* hDlg, int nIDDlgItem, wchar_t* lpString, int cchMax) noexcept;
+TL_MSABI void* tl_BeginDeferWindowPos(int nNumWindows) noexcept;
+TL_MSABI void* tl_DeferWindowPos(void* hWinPosInfo, void* hWnd, void* hWndInsertAfter, int x, int y, int cx, int cy, std::uint32_t uFlags) noexcept;
+TL_MSABI int tl_EndDeferWindowPos(void* hWinPosInfo) noexcept;
+TL_MSABI int tl_UnregisterClassW(const wchar_t* lpClassName, void* hInstance) noexcept;
+TL_MSABI void* tl_GetActiveWindow() noexcept;
+TL_MSABI std::intptr_t tl_CallNextHookEx(void* hhk, int nCode, std::uintptr_t wParam, std::intptr_t lParam) noexcept;
+TL_MSABI int tl_UnhookWindowsHookEx(void* hhk) noexcept;
+TL_MSABI void* tl_SetWindowsHookExW(int idHook, void* lpfn, void* hmod, std::uint32_t dwThreadId) noexcept;
+TL_MSABI std::uint32_t tl_GetMenuState(void* hMenu, std::uint32_t uId, std::uint32_t uFlags) noexcept;
+TL_MSABI int tl_InsertMenuW(void* hMenu, std::uint32_t uPosition, std::uint32_t uFlags, std::uintptr_t uIDNewItem, const wchar_t* lpNewItem) noexcept;
+TL_MSABI std::uint32_t tl_GetDlgItemInt(void* hDlg, int nIDDlgItem, int* lpTranslated, int bSigned) noexcept;
+TL_MSABI int tl_SetDlgItemInt(void* hDlg, int nIDDlgItem, std::uint32_t uValue, int bSigned) noexcept;
+TL_MSABI void* tl_CreateDialogParamW(void* hInstance, const wchar_t* lpTemplateName, void* hWndParent, void* lpDialogFunc, std::intptr_t dwInitParam) noexcept;
+TL_MSABI void* tl_CreateDialogIndirectParamW(void* hInstance, const void* lpTemplate, void* hWndParent, void* lpDialogFunc, std::intptr_t dwInitParam) noexcept;
+TL_MSABI std::intptr_t tl_DialogBoxIndirectParamW(void* hInstance, const void* hDialogTemplate, void* hWndParent, void* lpDialogFunc, std::intptr_t dwInitParam) noexcept;
+TL_MSABI void* tl_SetClipboardViewer(void* hWndNewViewer) noexcept;
+TL_MSABI int tl_ChangeClipboardChain(void* hWndRemove, void* hWndNewNext) noexcept;
+TL_MSABI int tl_DrawTextExW(void* hdc, wchar_t* lpchText, int cchText, void* lprc, std::uint32_t format, void* lpdtp) noexcept;
+TL_MSABI int tl_ToAscii(std::uint32_t uVirtKey, std::uint32_t uScanCode, const std::uint8_t* lpKeyState, std::uint16_t* lpChar, std::uint32_t uFlags) noexcept;
+TL_MSABI void* tl_CreateAcceleratorTableW(void* paccel, int cAccel) noexcept;
+TL_MSABI int tl_DestroyAcceleratorTable(void* hAccel) noexcept;
+TL_MSABI int tl_IsCharLowerW(wchar_t ch) noexcept;
+TL_MSABI int tl_IsCharAlphaNumericW(wchar_t ch) noexcept;
+TL_MSABI int tl_IsCharAlphaW(wchar_t ch) noexcept;
+TL_MSABI int tl_ModifyMenuW(void* hMnu, std::uint32_t uPosition, std::uint32_t uFlags, std::uintptr_t uIDNewItem, const wchar_t* lpNewItem) noexcept;
+TL_MSABI int tl_InflateRect(void* lprc, int dx, int dy) noexcept;
+TL_MSABI int tl_IntersectRect(void* lprcDst, const void* lprcSrc1, const void* lprcSrc2) noexcept;
+TL_MSABI int tl_SetRectEmpty(void* lprc) noexcept;
+TL_MSABI int tl_EnumChildWindows(void* hWndParent, void* lpEnumFunc, std::intptr_t lParam) noexcept;
+TL_MSABI int tl_EnumThreadWindows(std::uint32_t dwThreadId, void* lpfn, std::intptr_t lParam) noexcept;
+TL_MSABI int tl_GetMenuBarInfo(void* hwnd, std::int32_t idObject, std::int32_t idItem, void* pmbi) noexcept;
+TL_MSABI int tl_TrackMouseEvent(void* lpEventTrack) noexcept;
+TL_MSABI int tl_GetComboBoxInfo(void* hwndCombo, void* pcbi) noexcept;
+TL_MSABI void* tl_ChildWindowFromPoint(void* hWndParent, int x, int y) noexcept;
+TL_MSABI int tl_GetDlgCtrlID(void* hWnd) noexcept;
+TL_MSABI int tl_wsprintfW(wchar_t* lpOut, const wchar_t* lpFmt, ...) noexcept;
+TL_MSABI void* tl_GetAncestor(void* hwnd, std::uint32_t gaFlags) noexcept;
+TL_MSABI std::uint32_t tl_GetMenuItemID(void* hMenu, int nPos) noexcept;
+TL_MSABI int tl_SetLayeredWindowAttributes(void* hwnd, std::uint32_t crKey, std::uint8_t bAlpha, std::uint32_t dwFlags) noexcept;
+TL_MSABI void* tl_GetLastActivePopup(void* hWnd) noexcept;
+TL_MSABI int tl_GetMenuStringW(void* hMenu, std::uint32_t uIDItem, wchar_t* lpString, int cchMax, std::uint32_t flags) noexcept;
+TL_MSABI int tl_LockWindowUpdate(void* hWndLock) noexcept;
+TL_MSABI void tl_mouse_event(std::uint32_t dwFlags, std::uint32_t dx, std::uint32_t dy, std::uint32_t dwData, std::uintptr_t dwExtraInfo) noexcept;
+TL_MSABI int tl_SetMenuItemBitmaps(void* hMenu, std::uint32_t uPosition, std::uint32_t uFlags, void* hBitmapUnchecked, void* hBitmapChecked) noexcept;
+TL_MSABI void* tl_GetDCEx(void* hWnd, void* hrgnClip, std::uint32_t flags) noexcept;
+TL_MSABI int tl_IsChild(void* hWndParent, void* hWnd) noexcept;
+
 }  // extern "C"
 
 // Define o caminho do módulo convidado antes da execução.

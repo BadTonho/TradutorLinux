@@ -26,6 +26,24 @@ TL_MSABI int tl_SymFromAddr(void* process, std::uint64_t address, std::uint64_t*
     return 0;
 }
 
+TL_MSABI void* tl_ImageNtHeader(void* const base) noexcept {
+    if (base == nullptr || !mapped_guest_range(base, 0x40, false)) {
+        return nullptr;
+    }
+    const auto* const dos = static_cast<const std::uint8_t*>(base);
+    if (dos[0] != 'M' || dos[1] != 'Z') {
+        return nullptr;
+    }
+    const std::uint32_t e_lfanew = *reinterpret_cast<const std::uint32_t*>(dos + 0x3C);
+    if (!mapped_guest_range(dos + e_lfanew, 4, false)) {
+        return nullptr;
+    }
+    if (*reinterpret_cast<const std::uint32_t*>(dos + e_lfanew) != 0x00004550U) { // 'PE\0\0'
+        return nullptr;
+    }
+    return const_cast<void*>(static_cast<const void*>(dos + e_lfanew));
+}
+
 } // extern "C"
 
 } // namespace tradutorlinux

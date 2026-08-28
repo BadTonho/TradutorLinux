@@ -452,6 +452,37 @@ TL_MSABI void* tl_ShellExecuteA(void* const hwnd, const char* const operation, c
     return reinterpret_cast<void*>(42); // HINSTANCE > 32 indicates success
 }
 
+TL_MSABI int tl_SHCreateItemFromParsingName(const wchar_t* const pszPath, void* const pbc, const void* const riid, void** const ppv) noexcept {
+    (void)pszPath;
+    (void)pbc;
+    (void)riid;
+    if (ppv != nullptr && mapped_guest_range(ppv, sizeof(void*), true)) {
+        *ppv = reinterpret_cast<void*>(0x4954454DULL); // 'ITEM'
+    }
+    return 0; // S_OK
+}
+
+TL_MSABI std::uint32_t tl_DragQueryFileW(void* const hDrop, const std::uint32_t iFile, wchar_t* const lpszFile, const std::uint32_t cch) noexcept {
+    (void)hDrop;
+    (void)iFile;
+    (void)lpszFile;
+    (void)cch;
+    return 0;
+}
+
+TL_MSABI int tl_DragQueryPoint(void* const hDrop, void* const lppt) noexcept {
+    (void)hDrop;
+    if (lppt != nullptr && mapped_guest_range(lppt, 8, true)) {
+        *reinterpret_cast<std::int32_t*>(lppt) = 0;
+        *reinterpret_cast<std::int32_t*>(static_cast<char*>(lppt) + 4) = 0;
+    }
+    return 1;
+}
+
+TL_MSABI void tl_DragFinish(void* const hDrop) noexcept {
+    (void)hDrop;
+}
+
 }  // extern "C"
 
 }  // namespace tradutorlinux

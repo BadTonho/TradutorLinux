@@ -1043,4 +1043,24 @@ TL_ADVAPI_MSABI int tl_SetSecurityDescriptorOwner(void* const sec_desc, void* co
     return 1;
 }
 
+TL_ADVAPI_MSABI int tl_IsTextUnicode(const void* const lpv, const int iSize, int* const lpiResult) noexcept {
+    if (lpv == nullptr || iSize < 2 || !mapped_range(lpv, static_cast<std::size_t>(iSize), false)) {
+        if (lpiResult != nullptr && mapped_range(lpiResult, sizeof(int), true)) {
+            *lpiResult = 0;
+        }
+        return 0;
+    }
+    const auto* const bytes = static_cast<const std::uint8_t*>(lpv);
+    bool is_unicode = false;
+    if (iSize >= 2 && bytes[0] == 0xFF && bytes[1] == 0xFE) {
+        is_unicode = true;
+    } else if (iSize >= 2 && bytes[1] == 0x00 && bytes[0] != 0x00) {
+        is_unicode = true;
+    }
+    if (lpiResult != nullptr && mapped_range(lpiResult, sizeof(int), true)) {
+        *lpiResult = is_unicode ? 1 : 0;
+    }
+    return is_unicode ? 1 : 0;
+}
+
 }  // namespace tradutorlinux

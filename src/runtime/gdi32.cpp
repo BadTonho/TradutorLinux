@@ -955,6 +955,169 @@ TL_MSABI int tl_UpdateColors(void* const hdc) noexcept {
     return 1;
 }
 
+TL_MSABI int tl_SetWindowOrgEx(void* const hdc, const int x, const int y, void* const lppt) noexcept {
+    (void)hdc;
+    (void)x;
+    (void)y;
+    if (lppt != nullptr && mapped_guest_range(lppt, 8, true)) {
+        *reinterpret_cast<std::int32_t*>(lppt) = 0;
+        *reinterpret_cast<std::int32_t*>(static_cast<char*>(lppt) + 4) = 0;
+    }
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_SaveDC(void* const hdc) noexcept {
+    (void)hdc;
+    return 1;
+}
+
+TL_MSABI int tl_RestoreDC(void* const hdc, const int nSavedDC) noexcept {
+    (void)hdc;
+    (void)nSavedDC;
+    return 1;
+}
+
+TL_MSABI int tl_OffsetWindowOrgEx(void* const hdc, const int x, const int y, void* const lppt) noexcept {
+    (void)hdc;
+    (void)x;
+    (void)y;
+    if (lppt != nullptr && mapped_guest_range(lppt, 8, true)) {
+        *reinterpret_cast<std::int32_t*>(lppt) = 0;
+        *reinterpret_cast<std::int32_t*>(static_cast<char*>(lppt) + 4) = 0;
+    }
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_SetBrushOrgEx(void* const hdc, const int x, const int y, void* const lppt) noexcept {
+    (void)hdc;
+    (void)x;
+    (void)y;
+    if (lppt != nullptr && mapped_guest_range(lppt, 8, true)) {
+        *reinterpret_cast<std::int32_t*>(lppt) = 0;
+        *reinterpret_cast<std::int32_t*>(static_cast<char*>(lppt) + 4) = 0;
+    }
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_SetDIBits(void* const hdc, void* const hbm, const std::uint32_t start, const std::uint32_t lines, const void* const lpBits, const void* const lpbmi, const std::uint32_t fuColorUse) noexcept {
+    (void)hdc;
+    (void)hbm;
+    (void)start;
+    (void)lpBits;
+    (void)lpbmi;
+    (void)fuColorUse;
+    set_last_error(abi::kErrorSuccess);
+    return static_cast<int>(lines);
+}
+
+TL_MSABI int tl_DPtoLP(void* const hdc, void* const lpPoints, const int nCount) noexcept {
+    (void)hdc;
+    (void)lpPoints;
+    (void)nCount;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_GetTextExtentPointW(void* const hdc, const wchar_t* const lpString, const int c, void* const lpSize) noexcept {
+    (void)hdc;
+    (void)lpString;
+    if (lpSize != nullptr && mapped_guest_range(lpSize, 8, true)) {
+        const int len = c >= 0 ? c : 0;
+        *reinterpret_cast<std::int32_t*>(lpSize) = len * 8;
+        *reinterpret_cast<std::int32_t*>(static_cast<char*>(lpSize) + 4) = 16;
+    }
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_Ellipse(void* const hdc, const int left, const int top, const int right, const int bottom) noexcept {
+    (void)hdc;
+    (void)left;
+    (void)top;
+    (void)right;
+    (void)bottom;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI void* tl_ExtCreatePen(const std::uint32_t iPenStyle, const std::uint32_t cWidth, const void* const plbrush, const std::uint32_t cStyle, const std::uint32_t* const pstyle) noexcept {
+    (void)iPenStyle;
+    (void)cWidth;
+    (void)plbrush;
+    (void)cStyle;
+    (void)pstyle;
+    set_last_error(abi::kErrorSuccess);
+    return reinterpret_cast<void*>(0x50454E32ULL); // 'PEN2'
+}
+
+TL_MSABI int tl_GdiAlphaBlend(void* const hdcDest, const int xoriginDest, const int yoriginDest, const int wDest, const int hDest, void* const hdcSrc, const int xoriginSrc, const int yoriginSrc, const int wSrc, const int hSrc, const std::uint32_t ftn) noexcept {
+    (void)hdcDest;
+    (void)xoriginDest;
+    (void)yoriginDest;
+    (void)wDest;
+    (void)hDest;
+    (void)hdcSrc;
+    (void)xoriginSrc;
+    (void)yoriginSrc;
+    (void)wSrc;
+    (void)hSrc;
+    (void)ftn;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_GetTextExtentExPointW(void* const hdc, const wchar_t* const lpszStr, const int cchString, const int nMaxExtent, int* const lpnFit, int* const alpDx, void* const lpSize) noexcept {
+    (void)hdc;
+    (void)lpszStr;
+    (void)nMaxExtent;
+    if (lpnFit != nullptr && mapped_guest_range(lpnFit, sizeof(int), true)) {
+        *lpnFit = cchString;
+    }
+    if (alpDx != nullptr && cchString > 0 && mapped_guest_range(alpDx, static_cast<std::size_t>(cchString) * sizeof(int), true)) {
+        for (int i = 0; i < cchString; ++i) {
+            alpDx[i] = (i + 1) * 8;
+        }
+    }
+    if (lpSize != nullptr && mapped_guest_range(lpSize, 8, true)) {
+        *reinterpret_cast<std::int32_t*>(lpSize) = cchString * 8;
+        *reinterpret_cast<std::int32_t*>(static_cast<char*>(lpSize) + 4) = 16;
+    }
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_GetROP2(void* const hdc) noexcept {
+    (void)hdc;
+    return 13; // R2_COPYPEN
+}
+
+TL_MSABI int tl_GetClipRgn(void* const hdc, void* const hrgn) noexcept {
+    (void)hdc;
+    (void)hrgn;
+    return 0; // No initial clip region
+}
+
+TL_MSABI void* tl_CreateRectRgnIndirect(const void* const lprect) noexcept {
+    (void)lprect;
+    set_last_error(abi::kErrorSuccess);
+    return reinterpret_cast<void*>(0x52474E49ULL); // 'RGNI'
+}
+
+TL_MSABI int tl_RoundRect(void* const hdc, const int left, const int top, const int right, const int bottom, const int width, const int height) noexcept {
+    (void)hdc;
+    (void)left;
+    (void)top;
+    (void)right;
+    (void)bottom;
+    (void)width;
+    (void)height;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
 }  // extern "C"
 
 }  // namespace tradutorlinux

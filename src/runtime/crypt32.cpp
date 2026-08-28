@@ -825,6 +825,53 @@ TL_CRYPT32_MSABI int tl_CertGetIntendedKeyUsage(const std::uint32_t cert_encodin
     return 1;
 }
 
+TL_CRYPT32_MSABI int tl_CryptMsgClose(void* const hCryptMsg) noexcept {
+    (void)hCryptMsg;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_CRYPT32_MSABI int tl_CryptMsgGetParam(void* const hCryptMsg, const std::uint32_t dwParamType, const std::uint32_t dwIndex, void* const pvData, std::uint32_t* const pcbData) noexcept {
+    (void)hCryptMsg;
+    (void)dwParamType;
+    (void)dwIndex;
+    (void)pvData;
+    if (pcbData != nullptr) {
+        *pcbData = 0;
+    }
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_CRYPT32_MSABI int tl_CryptQueryObject(const std::uint32_t dwObjectType, const void* const pvObject, const std::uint32_t dwExpectedContentTypeFlags, const std::uint32_t dwExpectedFormatTypeFlags, const std::uint32_t dwFlags, std::uint32_t* const pdwMsgAndCertEncodingType, std::uint32_t* const pdwContentType, std::uint32_t* const pdwFormatType, void** const phCertStore, void** const phMsg, const void** const ppvContext) noexcept {
+    (void)dwObjectType;
+    (void)pvObject;
+    (void)dwExpectedContentTypeFlags;
+    (void)dwExpectedFormatTypeFlags;
+    (void)dwFlags;
+    if (pdwMsgAndCertEncodingType != nullptr) *pdwMsgAndCertEncodingType = 1;
+    if (pdwContentType != nullptr) *pdwContentType = 1;
+    if (pdwFormatType != nullptr) *pdwFormatType = 1;
+    if (phCertStore != nullptr) *phCertStore = reinterpret_cast<void*>(0x43455254ULL);
+    if (phMsg != nullptr) *phMsg = reinterpret_cast<void*>(0x4D534731ULL);
+    if (ppvContext != nullptr) *ppvContext = nullptr;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_CRYPT32_MSABI std::uint32_t tl_CertNameToStrW(const std::uint32_t dwCertEncodingType, void* const pName, const std::uint32_t dwStrType, wchar_t* const psz, const std::uint32_t cchName) noexcept {
+    (void)dwCertEncodingType;
+    (void)pName;
+    (void)dwStrType;
+    const wchar_t dummy_name[] = L"CN=Notepad++";
+    const std::uint32_t len = sizeof(dummy_name) / sizeof(wchar_t);
+    if (psz == nullptr || cchName < len) {
+        return len;
+    }
+    std::memcpy(psz, dummy_name, sizeof(dummy_name));
+    return len;
+}
+
 }  // extern "C"
 
 }  // namespace tradutorlinux

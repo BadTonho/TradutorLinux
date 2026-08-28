@@ -189,6 +189,67 @@ TL_MSABI std::int32_t tl_DrawThemeParentBackground(void* const hwnd, void* const
     return 0; // S_OK
 }
 
+TL_MSABI int tl_EndBufferedAnimation(void* const hbpAnimation, const int fUpdateTarget) noexcept {
+    (void)hbpAnimation;
+    (void)fUpdateTarget;
+    return 0; // S_OK
+}
+
+TL_MSABI int tl_GetThemeTransitionDuration(void* const hTheme, const int iPartId, const int iStateIdFrom, const int iStateIdTo, const int iPropId, int* const pdwDuration) noexcept {
+    (void)hTheme;
+    (void)iPartId;
+    (void)iStateIdFrom;
+    (void)iStateIdTo;
+    (void)iPropId;
+    if (pdwDuration != nullptr && mapped_guest_range(pdwDuration, sizeof(int), true)) {
+        *pdwDuration = 0;
+    }
+    return 0; // S_OK
+}
+
+TL_MSABI int tl_GetThemeBackgroundContentRect(void* const hTheme, void* const hdc, const int iPartId, const int iStateId, const void* const pBoundingRect, void* const pContentRect) noexcept {
+    (void)hTheme;
+    (void)hdc;
+    (void)iPartId;
+    (void)iStateId;
+    if (pBoundingRect != nullptr && pContentRect != nullptr &&
+        mapped_guest_range(pBoundingRect, 16, false) && mapped_guest_range(pContentRect, 16, true)) {
+        std::memcpy(pContentRect, pBoundingRect, 16);
+    }
+    return 0; // S_OK
+}
+
+TL_MSABI int tl_EnableThemeDialogTexture(void* const hwnd, const std::uint32_t dwFlags) noexcept {
+    (void)hwnd;
+    (void)dwFlags;
+    return 0; // S_OK
+}
+
+TL_MSABI void tl_BufferedPaintStopAllAnimations(void* const hwnd) noexcept {
+    (void)hwnd;
+}
+
+TL_MSABI void* tl_BeginBufferedAnimation(void* const hwnd, void* const hdcTarget, const void* const rcTarget, const int dwFormat, void* const pPaintParams, void* const pAnimationParams, void** const phdcFrom, void** const phdcTo) noexcept {
+    (void)hwnd;
+    (void)rcTarget;
+    (void)dwFormat;
+    (void)pPaintParams;
+    (void)pAnimationParams;
+    if (phdcFrom != nullptr && mapped_guest_range(phdcFrom, sizeof(void*), true)) {
+        *phdcFrom = hdcTarget;
+    }
+    if (phdcTo != nullptr && mapped_guest_range(phdcTo, sizeof(void*), true)) {
+        *phdcTo = hdcTarget;
+    }
+    return reinterpret_cast<void*>(0x414E494DULL); // 'ANIM'
+}
+
+TL_MSABI int tl_BufferedPaintRenderAnimation(void* const hwnd, void* const hdcTarget) noexcept {
+    (void)hwnd;
+    (void)hdcTarget;
+    return 1;
+}
+
 } // extern "C"
 
 } // namespace tradutorlinux

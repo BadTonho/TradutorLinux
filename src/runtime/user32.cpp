@@ -3290,6 +3290,429 @@ TL_MSABI int tl_ToAsciiEx(const std::uint32_t vk, const std::uint32_t scan_code,
     return 0;
 }
 
+TL_MSABI std::uint32_t tl_RegisterWindowMessageW(const wchar_t* const lpString) noexcept {
+    (void)lpString;
+    return 0xC001;
+}
+
+TL_MSABI void* tl_RemovePropW(void* const hWnd, const wchar_t* const lpString) noexcept {
+    (void)hWnd;
+    (void)lpString;
+    return nullptr;
+}
+
+TL_MSABI void* tl_GetPropW(void* const hWnd, const wchar_t* const lpString) noexcept {
+    (void)hWnd;
+    (void)lpString;
+    return nullptr;
+}
+
+TL_MSABI int tl_SetPropW(void* const hWnd, const wchar_t* const lpString, void* const hData) noexcept {
+    (void)hWnd;
+    (void)lpString;
+    (void)hData;
+    return 1;
+}
+
+TL_MSABI int tl_ValidateRect(void* const hWnd, const void* const lpRect) noexcept {
+    (void)hWnd;
+    (void)lpRect;
+    return 1;
+}
+
+TL_MSABI int tl_DestroyCursor(void* const hCursor) noexcept {
+    (void)hCursor;
+    return 1;
+}
+
+TL_MSABI void tl_NotifyWinEvent(const std::uint32_t event, void* const hwnd, const std::int32_t idObject, const std::int32_t idChild) noexcept {
+    (void)event;
+    (void)hwnd;
+    (void)idObject;
+    (void)idChild;
+}
+
+TL_MSABI void* tl_MonitorFromPoint(const int x, const int y, const std::uint32_t dwFlags) noexcept {
+    (void)x;
+    (void)y;
+    (void)dwFlags;
+    return reinterpret_cast<void*>(0x10001);
+}
+
+TL_MSABI void* tl_MonitorFromRect(const void* const lprc, const std::uint32_t dwFlags) noexcept {
+    (void)lprc;
+    (void)dwFlags;
+    return reinterpret_cast<void*>(0x10001);
+}
+
+TL_MSABI int tl_GetMonitorInfoW(void* const hMonitor, void* const lpmi) noexcept {
+    (void)hMonitor;
+    if (lpmi != nullptr && mapped_guest_range(lpmi, 40, true)) {
+        std::memset(lpmi, 0, 40);
+        *reinterpret_cast<std::uint32_t*>(lpmi) = 40;
+        auto* rects = reinterpret_cast<std::int32_t*>(static_cast<char*>(lpmi) + 4);
+        rects[0] = 0; rects[1] = 0; rects[2] = 1920; rects[3] = 1080;
+        rects[4] = 0; rects[5] = 0; rects[6] = 1920; rects[7] = 1080;
+        rects[8] = 1;
+    }
+    return 1;
+}
+
+TL_MSABI int tl_AdjustWindowRectEx(void* const lpRect, const std::uint32_t dwStyle, const int bMenu, const std::uint32_t dwExStyle) noexcept {
+    (void)lpRect;
+    (void)dwStyle;
+    (void)bMenu;
+    (void)dwExStyle;
+    return 1;
+}
+
+TL_MSABI std::uint32_t tl_GetDlgItemTextA(void* const hDlg, const int nIDDlgItem, char* const lpString, const int cchMax) noexcept {
+    (void)hDlg;
+    (void)nIDDlgItem;
+    if (lpString != nullptr && cchMax > 0 && mapped_guest_range(lpString, static_cast<std::size_t>(cchMax), true)) {
+        lpString[0] = 0;
+    }
+    return 0;
+}
+
+TL_MSABI std::uint32_t tl_GetDlgItemTextW(void* const hDlg, const int nIDDlgItem, wchar_t* const lpString, const int cchMax) noexcept {
+    (void)hDlg;
+    (void)nIDDlgItem;
+    if (lpString != nullptr && cchMax > 0 && mapped_guest_range(lpString, static_cast<std::size_t>(cchMax) * sizeof(wchar_t), true)) {
+        lpString[0] = 0;
+    }
+    return 0;
+}
+
+TL_MSABI void* tl_BeginDeferWindowPos(const int nNumWindows) noexcept {
+    (void)nNumWindows;
+    return reinterpret_cast<void*>(0x44454650ULL);
+}
+
+TL_MSABI void* tl_DeferWindowPos(void* const hWinPosInfo, void* const hWnd, void* const hWndInsertAfter, const int x, const int y, const int cx, const int cy, const std::uint32_t uFlags) noexcept {
+    (void)hWnd;
+    (void)hWndInsertAfter;
+    (void)x;
+    (void)y;
+    (void)cx;
+    (void)cy;
+    (void)uFlags;
+    return hWinPosInfo;
+}
+
+TL_MSABI int tl_EndDeferWindowPos(void* const hWinPosInfo) noexcept {
+    (void)hWinPosInfo;
+    return 1;
+}
+
+TL_MSABI int tl_UnregisterClassW(const wchar_t* const lpClassName, void* const hInstance) noexcept {
+    (void)lpClassName;
+    (void)hInstance;
+    return 1;
+}
+
+TL_MSABI void* tl_GetActiveWindow() noexcept {
+    return tl_GetForegroundWindow();
+}
+
+TL_MSABI std::intptr_t tl_CallNextHookEx(void* const hhk, const int nCode, const std::uintptr_t wParam, const std::intptr_t lParam) noexcept {
+    (void)hhk;
+    (void)nCode;
+    (void)wParam;
+    (void)lParam;
+    return 0;
+}
+
+TL_MSABI int tl_UnhookWindowsHookEx(void* const hhk) noexcept {
+    (void)hhk;
+    return 1;
+}
+
+TL_MSABI void* tl_SetWindowsHookExW(const int idHook, void* const lpfn, void* const hmod, const std::uint32_t dwThreadId) noexcept {
+    (void)idHook;
+    (void)lpfn;
+    (void)hmod;
+    (void)dwThreadId;
+    return reinterpret_cast<void*>(0x484F4F4BULL);
+}
+
+TL_MSABI std::uint32_t tl_GetMenuState(void* const hMenu, const std::uint32_t uId, const std::uint32_t uFlags) noexcept {
+    (void)hMenu;
+    (void)uId;
+    (void)uFlags;
+    return 0;
+}
+
+TL_MSABI int tl_InsertMenuW(void* const hMenu, const std::uint32_t uPosition, const std::uint32_t uFlags, const std::uintptr_t uIDNewItem, const wchar_t* const lpNewItem) noexcept {
+    (void)hMenu;
+    (void)uPosition;
+    (void)uFlags;
+    (void)uIDNewItem;
+    (void)lpNewItem;
+    return 1;
+}
+
+TL_MSABI std::uint32_t tl_GetDlgItemInt(void* const hDlg, const int nIDDlgItem, int* const lpTranslated, const int bSigned) noexcept {
+    (void)hDlg;
+    (void)nIDDlgItem;
+    (void)bSigned;
+    if (lpTranslated != nullptr && mapped_guest_range(lpTranslated, sizeof(int), true)) {
+        *lpTranslated = 1;
+    }
+    return 0;
+}
+
+TL_MSABI int tl_SetDlgItemInt(void* const hDlg, const int nIDDlgItem, const std::uint32_t uValue, const int bSigned) noexcept {
+    (void)hDlg;
+    (void)nIDDlgItem;
+    (void)uValue;
+    (void)bSigned;
+    return 1;
+}
+
+TL_MSABI void* tl_CreateDialogParamW(void* const hInstance, const wchar_t* const lpTemplateName, void* const hWndParent, void* const lpDialogFunc, const std::intptr_t dwInitParam) noexcept {
+    (void)hInstance;
+    (void)lpTemplateName;
+    (void)hWndParent;
+    (void)lpDialogFunc;
+    (void)dwInitParam;
+    return reinterpret_cast<void*>(0x444C4757ULL);
+}
+
+TL_MSABI void* tl_CreateDialogIndirectParamW(void* const hInstance, const void* const lpTemplate, void* const hWndParent, void* const lpDialogFunc, const std::intptr_t dwInitParam) noexcept {
+    (void)hInstance;
+    (void)lpTemplate;
+    (void)hWndParent;
+    (void)lpDialogFunc;
+    (void)dwInitParam;
+    return reinterpret_cast<void*>(0x444C4749ULL);
+}
+
+TL_MSABI std::intptr_t tl_DialogBoxIndirectParamW(void* const hInstance, const void* const hDialogTemplate, void* const hWndParent, void* const lpDialogFunc, const std::intptr_t dwInitParam) noexcept {
+    (void)hInstance;
+    (void)hDialogTemplate;
+    (void)hWndParent;
+    (void)lpDialogFunc;
+    (void)dwInitParam;
+    return 1;
+}
+
+TL_MSABI void* tl_SetClipboardViewer(void* const hWndNewViewer) noexcept {
+    (void)hWndNewViewer;
+    return nullptr;
+}
+
+TL_MSABI int tl_ChangeClipboardChain(void* const hWndRemove, void* const hWndNewNext) noexcept {
+    (void)hWndRemove;
+    (void)hWndNewNext;
+    return 1;
+}
+
+TL_MSABI int tl_DrawTextExW(void* const hdc, wchar_t* const lpchText, const int cchText, void* const lprc, const std::uint32_t format, void* const lpdtp) noexcept {
+    (void)format;
+    (void)lpdtp;
+    return tl_DrawTextW(hdc, reinterpret_cast<const std::uint16_t*>(lpchText), cchText, lprc, format);
+}
+
+TL_MSABI int tl_ToAscii(const std::uint32_t uVirtKey, const std::uint32_t uScanCode, const std::uint8_t* const lpKeyState, std::uint16_t* const lpChar, const std::uint32_t uFlags) noexcept {
+    return tl_ToAsciiEx(uVirtKey, uScanCode, lpKeyState, lpChar, uFlags, nullptr);
+}
+
+TL_MSABI void* tl_CreateAcceleratorTableW(void* const paccel, const int cAccel) noexcept {
+    (void)paccel;
+    (void)cAccel;
+    return reinterpret_cast<void*>(0x4143434CULL);
+}
+
+TL_MSABI int tl_DestroyAcceleratorTable(void* const hAccel) noexcept {
+    (void)hAccel;
+    return 1;
+}
+
+TL_MSABI int tl_IsCharLowerW(const wchar_t ch) noexcept {
+    return std::iswlower(static_cast<wint_t>(ch)) != 0 ? 1 : 0;
+}
+
+TL_MSABI int tl_IsCharAlphaNumericW(const wchar_t ch) noexcept {
+    return std::iswalnum(static_cast<wint_t>(ch)) != 0 ? 1 : 0;
+}
+
+TL_MSABI int tl_IsCharAlphaW(const wchar_t ch) noexcept {
+    return std::iswalpha(static_cast<wint_t>(ch)) != 0 ? 1 : 0;
+}
+
+TL_MSABI int tl_ModifyMenuW(void* const hMnu, const std::uint32_t uPosition, const std::uint32_t uFlags, const std::uintptr_t uIDNewItem, const wchar_t* const lpNewItem) noexcept {
+    (void)hMnu;
+    (void)uPosition;
+    (void)uFlags;
+    (void)uIDNewItem;
+    (void)lpNewItem;
+    return 1;
+}
+
+TL_MSABI int tl_InflateRect(void* const lprc, const int dx, const int dy) noexcept {
+    if (lprc == nullptr || !mapped_guest_range(lprc, 16, true)) return 0;
+    auto* const r = reinterpret_cast<std::int32_t*>(lprc);
+    r[0] -= dx;
+    r[1] -= dy;
+    r[2] += dx;
+    r[3] += dy;
+    return 1;
+}
+
+TL_MSABI int tl_IntersectRect(void* const lprcDst, const void* const lprcSrc1, const void* const lprcSrc2) noexcept {
+    if (lprcDst == nullptr || lprcSrc1 == nullptr || lprcSrc2 == nullptr ||
+        !mapped_guest_range(lprcDst, 16, true) ||
+        !mapped_guest_range(lprcSrc1, 16, false) ||
+        !mapped_guest_range(lprcSrc2, 16, false)) return 0;
+    const auto* const s1 = reinterpret_cast<const std::int32_t*>(lprcSrc1);
+    const auto* const s2 = reinterpret_cast<const std::int32_t*>(lprcSrc2);
+    auto* const d = reinterpret_cast<std::int32_t*>(lprcDst);
+    d[0] = std::max(s1[0], s2[0]);
+    d[1] = std::max(s1[1], s2[1]);
+    d[2] = std::min(s1[2], s2[2]);
+    d[3] = std::min(s1[3], s2[3]);
+    if (d[0] >= d[2] || d[1] >= d[3]) {
+        std::memset(lprcDst, 0, 16);
+        return 0;
+    }
+    return 1;
+}
+
+TL_MSABI int tl_SetRectEmpty(void* const lprc) noexcept {
+    if (lprc == nullptr || !mapped_guest_range(lprc, 16, true)) return 0;
+    std::memset(lprc, 0, 16);
+    return 1;
+}
+
+TL_MSABI int tl_EnumChildWindows(void* const hWndParent, void* const lpEnumFunc, const std::intptr_t lParam) noexcept {
+    (void)hWndParent;
+    (void)lpEnumFunc;
+    (void)lParam;
+    return 1;
+}
+
+TL_MSABI int tl_EnumThreadWindows(const std::uint32_t dwThreadId, void* const lpfn, const std::intptr_t lParam) noexcept {
+    (void)dwThreadId;
+    (void)lpfn;
+    (void)lParam;
+    return 1;
+}
+
+TL_MSABI int tl_GetMenuBarInfo(void* const hwnd, const std::int32_t idObject, const std::int32_t idItem, void* const pmbi) noexcept {
+    (void)hwnd;
+    (void)idObject;
+    (void)idItem;
+    if (pmbi != nullptr && mapped_guest_range(pmbi, 32, true)) {
+        std::memset(pmbi, 0, 32);
+        *reinterpret_cast<std::uint32_t*>(pmbi) = 32;
+    }
+    return 1;
+}
+
+TL_MSABI int tl_TrackMouseEvent(void* const lpEventTrack) noexcept {
+    (void)lpEventTrack;
+    return 1;
+}
+
+TL_MSABI int tl_GetComboBoxInfo(void* const hwndCombo, void* const pcbi) noexcept {
+    (void)hwndCombo;
+    if (pcbi != nullptr && mapped_guest_range(pcbi, 64, true)) {
+        std::memset(pcbi, 0, 64);
+        *reinterpret_cast<std::uint32_t*>(pcbi) = 64;
+    }
+    return 1;
+}
+
+TL_MSABI void* tl_ChildWindowFromPoint(void* const hWndParent, const int x, const int y) noexcept {
+    (void)x;
+    (void)y;
+    return hWndParent;
+}
+
+TL_MSABI int tl_GetDlgCtrlID(void* const hWnd) noexcept {
+    (void)hWnd;
+    return 0;
+}
+
+TL_MSABI int tl_wsprintfW(wchar_t* const lpOut, const wchar_t* const lpFmt, ...) noexcept {
+    if (lpOut == nullptr || lpFmt == nullptr) return 0;
+    std::size_t i = 0;
+    while (lpFmt[i] != 0) {
+        lpOut[i] = lpFmt[i];
+        ++i;
+    }
+    lpOut[i] = 0;
+    return static_cast<int>(i);
+}
+
+TL_MSABI void* tl_GetAncestor(void* const hwnd, const std::uint32_t gaFlags) noexcept {
+    (void)gaFlags;
+    return hwnd;
+}
+
+TL_MSABI std::uint32_t tl_GetMenuItemID(void* const hMenu, const int nPos) noexcept {
+    (void)hMenu;
+    (void)nPos;
+    return 0;
+}
+
+TL_MSABI int tl_SetLayeredWindowAttributes(void* const hwnd, const std::uint32_t crKey, const std::uint8_t bAlpha, const std::uint32_t dwFlags) noexcept {
+    (void)hwnd;
+    (void)crKey;
+    (void)bAlpha;
+    (void)dwFlags;
+    return 1;
+}
+
+TL_MSABI void* tl_GetLastActivePopup(void* const hWnd) noexcept {
+    return hWnd;
+}
+
+TL_MSABI int tl_GetMenuStringW(void* const hMenu, const std::uint32_t uIDItem, wchar_t* const lpString, const int cchMax, const std::uint32_t flags) noexcept {
+    (void)hMenu;
+    (void)uIDItem;
+    (void)flags;
+    if (lpString != nullptr && cchMax > 0 && mapped_guest_range(lpString, static_cast<std::size_t>(cchMax) * sizeof(wchar_t), true)) {
+        lpString[0] = 0;
+    }
+    return 0;
+}
+
+TL_MSABI int tl_LockWindowUpdate(void* const hWndLock) noexcept {
+    (void)hWndLock;
+    return 1;
+}
+
+TL_MSABI void tl_mouse_event(const std::uint32_t dwFlags, const std::uint32_t dx, const std::uint32_t dy, const std::uint32_t dwData, const std::uintptr_t dwExtraInfo) noexcept {
+    (void)dwFlags;
+    (void)dx;
+    (void)dy;
+    (void)dwData;
+    (void)dwExtraInfo;
+}
+
+TL_MSABI int tl_SetMenuItemBitmaps(void* const hMenu, const std::uint32_t uPosition, const std::uint32_t uFlags, void* const hBitmapUnchecked, void* const hBitmapChecked) noexcept {
+    (void)hMenu;
+    (void)uPosition;
+    (void)uFlags;
+    (void)hBitmapUnchecked;
+    (void)hBitmapChecked;
+    return 1;
+}
+
+TL_MSABI void* tl_GetDCEx(void* const hWnd, void* const hrgnClip, const std::uint32_t flags) noexcept {
+    (void)hrgnClip;
+    (void)flags;
+    return tl_GetDC(hWnd);
+}
+
+TL_MSABI int tl_IsChild(void* const hWndParent, void* const hWnd) noexcept {
+    (void)hWndParent;
+    (void)hWnd;
+    return 0;
+}
+
 }  // extern "C"
 
 }  // namespace tradutorlinux

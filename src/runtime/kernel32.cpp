@@ -6365,6 +6365,232 @@ TL_MSABI int tl_WaitNamedPipeA(const char* const name, const std::uint32_t timeo
     return 1;
 }
 
+// SensApi.dll functions
+TL_MSABI int tl_IsDestinationReachableW(const wchar_t* const lpszDestination, void* const lpQOCInfo) noexcept {
+    (void)lpszDestination;
+    (void)lpQOCInfo;
+    return 1;
+}
+
+TL_MSABI int tl_IsNetworkAlive(std::uint32_t* const lpdwFlags) noexcept {
+    if (lpdwFlags != nullptr && mapped_guest_range(lpdwFlags, sizeof(std::uint32_t), true)) {
+        *lpdwFlags = 1; // NETWORK_ALIVE_LAN
+    }
+    return 1;
+}
+
+// Notepad++ KERNEL32 functions
+TL_MSABI int tl_GetTimeFormatEx(const wchar_t* const lpLocaleName, const std::uint32_t dwFlags, const void* const lpTime, const wchar_t* const lpFormat, wchar_t* const lpTimeStr, const int cchTime) noexcept {
+    (void)lpLocaleName;
+    (void)dwFlags;
+    (void)lpTime;
+    (void)lpFormat;
+    const wchar_t dummy[] = L"12:00:00";
+    const int len = sizeof(dummy) / sizeof(wchar_t);
+    if (lpTimeStr == nullptr || cchTime == 0) return len;
+    if (cchTime < len) {
+        set_last_error(122);
+        return 0;
+    }
+    std::memcpy(lpTimeStr, dummy, sizeof(dummy));
+    return len;
+}
+
+TL_MSABI int tl_GetDateFormatEx(const wchar_t* const lpLocaleName, const std::uint32_t dwFlags, const void* const lpDate, const wchar_t* const lpFormat, wchar_t* const lpDateStr, const int cchDate, const wchar_t* const lpCalendar) noexcept {
+    (void)lpLocaleName;
+    (void)dwFlags;
+    (void)lpDate;
+    (void)lpFormat;
+    (void)lpCalendar;
+    const wchar_t dummy[] = L"2026-08-28";
+    const int len = sizeof(dummy) / sizeof(wchar_t);
+    if (lpDateStr == nullptr || cchDate == 0) return len;
+    if (cchDate < len) {
+        set_last_error(122);
+        return 0;
+    }
+    std::memcpy(lpDateStr, dummy, sizeof(dummy));
+    return len;
+}
+
+TL_MSABI wchar_t* tl_lstrcpynW(wchar_t* const lpString1, const wchar_t* const lpString2, const int iMaxLength) noexcept {
+    if (lpString1 == nullptr || iMaxLength <= 0) return lpString1;
+    if (lpString2 == nullptr) {
+        lpString1[0] = 0;
+        return lpString1;
+    }
+    int i = 0;
+    while (i < iMaxLength - 1 && lpString2[i] != 0) {
+        lpString1[i] = lpString2[i];
+        ++i;
+    }
+    lpString1[i] = 0;
+    return lpString1;
+}
+
+TL_MSABI int tl_GetApplicationRestartSettings(void* const hProcess, wchar_t* const pwzCommandLine, std::uint32_t* const pcchSize, std::uint32_t* const pdwFlags) noexcept {
+    (void)hProcess;
+    (void)pwzCommandLine;
+    (void)pcchSize;
+    (void)pdwFlags;
+    return static_cast<int>(0x80070490); // ERROR_NOT_FOUND
+}
+
+TL_MSABI int tl_UnregisterApplicationRestart() noexcept {
+    return 0; // S_OK
+}
+
+TL_MSABI int tl_lstrcmpiA(const char* const lpString1, const char* const lpString2) noexcept {
+    if (lpString1 == lpString2) return 0;
+    if (lpString1 == nullptr) return -1;
+    if (lpString2 == nullptr) return 1;
+    return strcasecmp(lpString1, lpString2);
+}
+
+TL_MSABI int tl_RegisterApplicationRestart(const wchar_t* const pwzCommandLine, const std::uint32_t dwFlags) noexcept {
+    (void)pwzCommandLine;
+    (void)dwFlags;
+    return 0; // S_OK
+}
+
+TL_MSABI char* tl_lstrcpynA(char* const lpString1, const char* const lpString2, const int iMaxLength) noexcept {
+    if (lpString1 == nullptr || iMaxLength <= 0) return lpString1;
+    if (lpString2 == nullptr) {
+        lpString1[0] = 0;
+        return lpString1;
+    }
+    int i = 0;
+    while (i < iMaxLength - 1 && lpString2[i] != 0) {
+        lpString1[i] = lpString2[i];
+        ++i;
+    }
+    lpString1[i] = 0;
+    return lpString1;
+}
+
+TL_MSABI int tl_CancelIo(void* const hFile) noexcept {
+    (void)hFile;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_ReadDirectoryChangesW(void* const hDirectory, void* const lpBuffer, const std::uint32_t nBufferLength, const int bWatchSubtree, const std::uint32_t dwNotifyFilter, std::uint32_t* const lpBytesReturned, void* const lpOverlapped, void* const lpCompletionRoutine) noexcept {
+    (void)hDirectory;
+    (void)lpBuffer;
+    (void)nBufferLength;
+    (void)bWatchSubtree;
+    (void)dwNotifyFilter;
+    (void)lpOverlapped;
+    (void)lpCompletionRoutine;
+    if (lpBytesReturned != nullptr && mapped_guest_range(lpBytesReturned, sizeof(std::uint32_t), true)) {
+        *lpBytesReturned = 0;
+    }
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_GetStringTypeExW(const std::uint32_t Locale, const std::uint32_t dwInfoType, const wchar_t* const lpSrcStr, const int cchSrc, std::uint16_t* const lpCharType) noexcept {
+    (void)Locale;
+    (void)dwInfoType;
+    (void)lpSrcStr;
+    if (lpCharType == nullptr) return 0;
+    const int count = cchSrc > 0 ? cchSrc : 1;
+    for (int i = 0; i < count; ++i) {
+        lpCharType[i] = 0x0001; // C1_UPPER/ALPHA
+    }
+    return 1;
+}
+
+TL_MSABI int tl_LCMapStringA(const std::uint32_t Locale, const std::uint32_t dwMapFlags, const char* const lpSrcStr, const int cchSrc, char* const lpDestStr, const int cchDest) noexcept {
+    (void)Locale;
+    (void)dwMapFlags;
+    if (lpSrcStr == nullptr) return 0;
+    const int len = cchSrc > 0 ? cchSrc : static_cast<int>(std::strlen(lpSrcStr) + 1);
+    if (lpDestStr == nullptr || cchDest == 0) return len;
+    const int copy_len = std::min(len, cchDest);
+    std::memcpy(lpDestStr, lpSrcStr, static_cast<std::size_t>(copy_len));
+    return copy_len;
+}
+
+TL_MSABI int tl_GetStringTypeExA(const std::uint32_t Locale, const std::uint32_t dwInfoType, const char* const lpSrcStr, const int cchSrc, std::uint16_t* const lpCharType) noexcept {
+    (void)Locale;
+    (void)dwInfoType;
+    (void)lpSrcStr;
+    if (lpCharType == nullptr) return 0;
+    const int count = cchSrc > 0 ? cchSrc : 1;
+    for (int i = 0; i < count; ++i) {
+        lpCharType[i] = 0x0001;
+    }
+    return 1;
+}
+
+TL_MSABI void tl_FreeLibraryWhenCallbackReturns(void* const pci, void* const module) noexcept {
+    (void)pci;
+    (void)module;
+}
+
+TL_MSABI wchar_t* tl_lstrcpyW(wchar_t* const lpString1, const wchar_t* const lpString2) noexcept {
+    if (lpString1 == nullptr) return nullptr;
+    if (lpString2 == nullptr) {
+        lpString1[0] = 0;
+        return lpString1;
+    }
+    std::size_t i = 0;
+    while (lpString2[i] != 0) {
+        lpString1[i] = lpString2[i];
+        ++i;
+    }
+    lpString1[i] = 0;
+    return lpString1;
+}
+
+TL_MSABI int tl_ReplaceFileW(const wchar_t* const lpReplacedFileName, const wchar_t* const lpReplacementFileName, const wchar_t* const lpBackupFileName, const std::uint32_t dwReplaceFlags, void* const lpExclude, void* const lpReserved) noexcept {
+    (void)lpBackupFileName;
+    (void)dwReplaceFlags;
+    (void)lpExclude;
+    (void)lpReserved;
+    return tl_CopyFileW(reinterpret_cast<const std::uint16_t*>(lpReplacementFileName), reinterpret_cast<const std::uint16_t*>(lpReplacedFileName), 0);
+}
+
+TL_MSABI std::uint32_t tl_QueueUserAPC(void* const pfnAPC, void* const hThread, const std::uintptr_t dwData) noexcept {
+    (void)pfnAPC;
+    (void)hThread;
+    (void)dwData;
+    return 1;
+}
+
+TL_MSABI int tl_lstrcmpW(const wchar_t* const lpString1, const wchar_t* const lpString2) noexcept {
+    if (lpString1 == lpString2) return 0;
+    if (lpString1 == nullptr) return -1;
+    if (lpString2 == nullptr) return 1;
+    std::size_t i = 0;
+    while (lpString1[i] != 0 && lpString2[i] != 0) {
+        if (lpString1[i] != lpString2[i]) {
+            return lpString1[i] < lpString2[i] ? -1 : 1;
+        }
+        ++i;
+    }
+    if (lpString1[i] == lpString2[i]) return 0;
+    return lpString1[i] < lpString2[i] ? -1 : 1;
+}
+
+TL_MSABI int tl_lstrcmpiW(const wchar_t* const lpString1, const wchar_t* const lpString2) noexcept {
+    if (lpString1 == lpString2) return 0;
+    if (lpString1 == nullptr) return -1;
+    if (lpString2 == nullptr) return 1;
+    std::size_t i = 0;
+    while (lpString1[i] != 0 && lpString2[i] != 0) {
+        const auto c1 = static_cast<wchar_t>(std::towlower(static_cast<wint_t>(lpString1[i])));
+        const auto c2 = static_cast<wchar_t>(std::towlower(static_cast<wint_t>(lpString2[i])));
+        if (c1 != c2) {
+            return c1 < c2 ? -1 : 1;
+        }
+        ++i;
+    }
+    if (lpString1[i] == lpString2[i]) return 0;
+    return lpString1[i] < lpString2[i] ? -1 : 1;
+}
+
 }  // extern "C"
 
 }  // namespace tradutorlinux

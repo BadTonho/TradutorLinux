@@ -296,6 +296,68 @@ TL_COMCTL_MSABI int tl_TrackMouseEvent_alias(void* const event_track) noexcept {
     return 1;
 }
 
+TL_COMCTL_MSABI int tl_ImageList_GetImageInfo(void* const himl, const int i, void* const pImageInfo) noexcept {
+    (void)himl;
+    (void)i;
+    if (pImageInfo != nullptr && mapped_guest_range(pImageInfo, 40, true)) {
+        std::memset(pImageInfo, 0, 40);
+    }
+    return 1;
+}
+
+TL_COMCTL_MSABI int tl_ImageList_EndDrag() noexcept {
+    return 1;
+}
+
+TL_COMCTL_MSABI int tl_ImageList_DragShowNolock(const int fShow) noexcept {
+    (void)fShow;
+    return 1;
+}
+
+TL_COMCTL_MSABI int tl_ImageList_DragEnter(void* const hwndLock, const int x, const int y) noexcept {
+    (void)hwndLock;
+    (void)x;
+    (void)y;
+    return 1;
+}
+
+TL_COMCTL_MSABI int tl_ImageList_DragMove(const int x, const int y) noexcept {
+    (void)x;
+    (void)y;
+    return 1;
+}
+
+TL_COMCTL_MSABI int tl_ImageList_BeginDrag(void* const himlTrack, const int iTrack, const int dxHotspot, const int dyHotspot) noexcept {
+    (void)himlTrack;
+    (void)iTrack;
+    (void)dxHotspot;
+    (void)dyHotspot;
+    return 1;
+}
+
+TL_COMCTL_MSABI int tl_ImageList_Remove(void* const himl, const int i) noexcept {
+    (void)himl;
+    (void)i;
+    return 1;
+}
+
+TL_COMCTL_MSABI int tl_ImageList_SetIconSize(void* const himl, const int cx, const int cy) noexcept {
+    (void)himl;
+    (void)cx;
+    (void)cy;
+    return 1;
+}
+
+TL_COMCTL_MSABI int tl_LoadIconWithScaleDown(void* const hinst, const wchar_t* const pszName, const int cx, const int cy, void** const phico) noexcept {
+    (void)cx;
+    (void)cy;
+    if (phico != nullptr && mapped_guest_range(phico, sizeof(void*), true)) {
+        *phico = reinterpret_cast<void*>(tl_LoadIconW(hinst, reinterpret_cast<const std::uint16_t*>(pszName)));
+        return *phico != nullptr ? 0 : static_cast<int>(0x80004005U);
+    }
+    return static_cast<int>(0x80070057U); // E_INVALIDARG
+}
+
 }  // extern "C"
 
 }  // namespace tradutorlinux

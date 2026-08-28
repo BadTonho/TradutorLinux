@@ -361,6 +361,131 @@ TL_SHLWAPI_MSABI int tl_PathStripToRootW(std::uint16_t* const path) noexcept {
     return 0;
 }
 
+TL_SHLWAPI_MSABI int tl_AssocQueryStringW(const std::uint32_t flags, const std::uint32_t str, const wchar_t* const pszAssoc, const wchar_t* const pszExtra, wchar_t* const pszOut, std::uint32_t* const pcchOut) noexcept {
+    (void)flags;
+    (void)str;
+    (void)pszAssoc;
+    (void)pszExtra;
+    if (pcchOut != nullptr) {
+        *pcchOut = 0;
+    }
+    if (pszOut != nullptr) {
+        *pszOut = 0;
+    }
+    return static_cast<int>(0x80004005U); // E_FAIL
+}
+
+TL_SHLWAPI_MSABI void tl_ColorRGBToHLS(const std::uint32_t clrRGB, std::uint16_t* const pwHue, std::uint16_t* const pwLuminance, std::uint16_t* const pwSaturation) noexcept {
+    (void)clrRGB;
+    if (pwHue != nullptr) *pwHue = 0;
+    if (pwLuminance != nullptr) *pwLuminance = 120;
+    if (pwSaturation != nullptr) *pwSaturation = 120;
+}
+
+TL_SHLWAPI_MSABI std::uint32_t tl_ColorHLSToRGB(const std::uint16_t wHue, const std::uint16_t wLuminance, const std::uint16_t wSaturation) noexcept {
+    (void)wHue;
+    (void)wSaturation;
+    const std::uint32_t lum = static_cast<std::uint32_t>(wLuminance & 0xFF);
+    return lum | (lum << 8) | (lum << 16);
+}
+
+TL_SHLWAPI_MSABI std::uint32_t tl_ColorAdjustLuma(const std::uint32_t clrRGB, const int n, const int fBorder) noexcept {
+    (void)n;
+    (void)fBorder;
+    return clrRGB;
+}
+
+TL_SHLWAPI_MSABI void tl_PathStripPathW(wchar_t* const pszPath) noexcept {
+    if (pszPath == nullptr) return;
+    std::size_t len = 0;
+    while (pszPath[len] != 0) ++len;
+    std::size_t last_slash = len;
+    for (std::size_t i = 0; i < len; ++i) {
+        if (pszPath[i] == L'\\' || pszPath[i] == L'/') {
+            last_slash = i;
+        }
+    }
+    if (last_slash < len) {
+        std::memmove(pszPath, pszPath + last_slash + 1, (len - last_slash) * sizeof(wchar_t));
+    }
+}
+
+TL_SHLWAPI_MSABI int tl_PathAddExtensionW(wchar_t* const pszPath, const wchar_t* const pszExt) noexcept {
+    if (pszPath == nullptr) return 0;
+    std::size_t len = 0;
+    bool has_dot = false;
+    while (pszPath[len] != 0) {
+        if (pszPath[len] == L'.') has_dot = true;
+        if (pszPath[len] == L'\\' || pszPath[len] == L'/') has_dot = false;
+        ++len;
+    }
+    if (has_dot) return 0;
+    const wchar_t* ext = pszExt != nullptr ? pszExt : L".";
+    std::size_t ext_len = 0;
+    while (ext[ext_len] != 0) ++ext_len;
+    std::memcpy(pszPath + len, ext, (ext_len + 1) * sizeof(wchar_t));
+    return 1;
+}
+
+TL_SHLWAPI_MSABI int tl_PathAppendW(wchar_t* const pszPath, const wchar_t* const pszMore) noexcept {
+    if (pszPath == nullptr || pszMore == nullptr) return 0;
+    std::size_t len = 0;
+    while (pszPath[len] != 0) ++len;
+    if (len > 0 && pszPath[len - 1] != L'\\' && pszPath[len - 1] != L'/') {
+        pszPath[len++] = L'\\';
+    }
+    std::size_t more_len = 0;
+    while (pszMore[more_len] != 0) ++more_len;
+    std::memcpy(pszPath + len, pszMore, (more_len + 1) * sizeof(wchar_t));
+    return 1;
+}
+
+TL_SHLWAPI_MSABI void tl_PathRemoveExtensionW(wchar_t* const pszPath) noexcept {
+    if (pszPath == nullptr) return;
+    std::size_t len = 0;
+    std::size_t dot_pos = (std::size_t)-1;
+    while (pszPath[len] != 0) {
+        if (pszPath[len] == L'.') dot_pos = len;
+        if (pszPath[len] == L'\\' || pszPath[len] == L'/') dot_pos = (std::size_t)-1;
+        ++len;
+    }
+    if (dot_pos != (std::size_t)-1) {
+        pszPath[dot_pos] = 0;
+    }
+}
+
+TL_SHLWAPI_MSABI int tl_PathCompactPathExW(wchar_t* const pszOut, const wchar_t* const pszSrc, const std::uint32_t cchMax, const std::uint32_t dwFlags) noexcept {
+    (void)dwFlags;
+    if (pszOut == nullptr || cchMax == 0) return 0;
+    if (pszSrc == nullptr) {
+        pszOut[0] = 0;
+        return 1;
+    }
+    std::size_t len = 0;
+    while (pszSrc[len] != 0) ++len;
+    if (len < cchMax) {
+        std::memcpy(pszOut, pszSrc, (len + 1) * sizeof(wchar_t));
+    } else {
+        std::memcpy(pszOut, pszSrc, (cchMax - 1) * sizeof(wchar_t));
+        pszOut[cchMax - 1] = 0;
+    }
+    return 1;
+}
+
+TL_SHLWAPI_MSABI int tl_PathGetDriveNumberW(const wchar_t* const pszPath) noexcept {
+    if (pszPath == nullptr || pszPath[0] == 0 || pszPath[1] != L':') return -1;
+    const wchar_t ch = pszPath[0];
+    if (ch >= L'A' && ch <= L'Z') return ch - L'A';
+    if (ch >= L'a' && ch <= L'z') return ch - L'a';
+    return -1;
+}
+
+TL_SHLWAPI_MSABI int tl_PathMatchSpecW(const wchar_t* const pszFile, const wchar_t* const pszSpec) noexcept {
+    (void)pszFile;
+    (void)pszSpec;
+    return 1;
+}
+
 }  // extern "C"
 
 }  // namespace tradutorlinux

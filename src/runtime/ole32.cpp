@@ -495,6 +495,14 @@ TL_OLE_MSABI int tl_StringFromGUID2(const void* const rguid, wchar_t* const lpsz
     return 39;
 }
 
+TL_OLE_MSABI int tl_CLSIDFromProgID(const wchar_t* const lpszProgID, void* const lpclsid) noexcept {
+    (void)lpszProgID;
+    if (lpclsid != nullptr && mapped_range(lpclsid, 16, true)) {
+        std::memset(lpclsid, 0, 16);
+    }
+    return 0; // S_OK
+}
+
 }  // extern "C"
 
 }  // namespace tradutorlinux

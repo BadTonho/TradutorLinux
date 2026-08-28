@@ -582,6 +582,25 @@ void register_builtin_modules() {
         {"SetHandleInformation", 378, reinterpret_cast<std::uintptr_t>(&tl_SetHandleInformation)},
         {"WaitNamedPipeA", 379, reinterpret_cast<std::uintptr_t>(&tl_WaitNamedPipeA)},
         {"CreateProcessA", 380, reinterpret_cast<std::uintptr_t>(&tl_CreateProcessA)},
+        {"GetTimeFormatEx", 381, reinterpret_cast<std::uintptr_t>(&tl_GetTimeFormatEx)},
+        {"GetDateFormatEx", 382, reinterpret_cast<std::uintptr_t>(&tl_GetDateFormatEx)},
+        {"lstrcpynW", 383, reinterpret_cast<std::uintptr_t>(&tl_lstrcpynW)},
+        {"GetApplicationRestartSettings", 384, reinterpret_cast<std::uintptr_t>(&tl_GetApplicationRestartSettings)},
+        {"UnregisterApplicationRestart", 385, reinterpret_cast<std::uintptr_t>(&tl_UnregisterApplicationRestart)},
+        {"lstrcmpiA", 386, reinterpret_cast<std::uintptr_t>(&tl_lstrcmpiA)},
+        {"RegisterApplicationRestart", 387, reinterpret_cast<std::uintptr_t>(&tl_RegisterApplicationRestart)},
+        {"lstrcpynA", 388, reinterpret_cast<std::uintptr_t>(&tl_lstrcpynA)},
+        {"CancelIo", 389, reinterpret_cast<std::uintptr_t>(&tl_CancelIo)},
+        {"ReadDirectoryChangesW", 390, reinterpret_cast<std::uintptr_t>(&tl_ReadDirectoryChangesW)},
+        {"GetStringTypeExW", 391, reinterpret_cast<std::uintptr_t>(&tl_GetStringTypeExW)},
+        {"LCMapStringA", 392, reinterpret_cast<std::uintptr_t>(&tl_LCMapStringA)},
+        {"GetStringTypeExA", 393, reinterpret_cast<std::uintptr_t>(&tl_GetStringTypeExA)},
+        {"FreeLibraryWhenCallbackReturns", 394, reinterpret_cast<std::uintptr_t>(&tl_FreeLibraryWhenCallbackReturns)},
+        {"lstrcpyW", 395, reinterpret_cast<std::uintptr_t>(&tl_lstrcpyW)},
+        {"ReplaceFileW", 396, reinterpret_cast<std::uintptr_t>(&tl_ReplaceFileW)},
+        {"QueueUserAPC", 397, reinterpret_cast<std::uintptr_t>(&tl_QueueUserAPC)},
+        {"lstrcmpW", 398, reinterpret_cast<std::uintptr_t>(&tl_lstrcmpW)},
+        {"lstrcmpiW", 399, reinterpret_cast<std::uintptr_t>(&tl_lstrcmpiW)},
     };
     static const InternalModule kKernel32Module{"KERNEL32.dll", kKernel32Exports};
     register_module(kKernel32Module);
@@ -838,6 +857,65 @@ void register_builtin_modules() {
         {"SetKeyboardState", 246, reinterpret_cast<std::uintptr_t>(&tl_SetKeyboardState)},
         {"SystemParametersInfoA", 247, reinterpret_cast<std::uintptr_t>(&tl_SystemParametersInfoA)},
         {"ToAsciiEx", 248, reinterpret_cast<std::uintptr_t>(&tl_ToAsciiEx)},
+        {"RegisterWindowMessageW", 249, reinterpret_cast<std::uintptr_t>(&tl_RegisterWindowMessageW)},
+        {"RemovePropW", 250, reinterpret_cast<std::uintptr_t>(&tl_RemovePropW)},
+        {"GetPropW", 251, reinterpret_cast<std::uintptr_t>(&tl_GetPropW)},
+        {"SetPropW", 252, reinterpret_cast<std::uintptr_t>(&tl_SetPropW)},
+        {"ValidateRect", 253, reinterpret_cast<std::uintptr_t>(&tl_ValidateRect)},
+        {"DestroyCursor", 254, reinterpret_cast<std::uintptr_t>(&tl_DestroyCursor)},
+        {"NotifyWinEvent", 255, reinterpret_cast<std::uintptr_t>(&tl_NotifyWinEvent)},
+        {"MonitorFromPoint", 256, reinterpret_cast<std::uintptr_t>(&tl_MonitorFromPoint)},
+        {"MonitorFromRect", 257, reinterpret_cast<std::uintptr_t>(&tl_MonitorFromRect)},
+        {"GetMonitorInfoW", 258, reinterpret_cast<std::uintptr_t>(&tl_GetMonitorInfoW)},
+        {"AdjustWindowRectEx", 259, reinterpret_cast<std::uintptr_t>(&tl_AdjustWindowRectEx)},
+        {"GetDlgItemTextA", 260, reinterpret_cast<std::uintptr_t>(&tl_GetDlgItemTextA)},
+        {"GetDlgItemTextW", 261, reinterpret_cast<std::uintptr_t>(&tl_GetDlgItemTextW)},
+        {"BeginDeferWindowPos", 262, reinterpret_cast<std::uintptr_t>(&tl_BeginDeferWindowPos)},
+        {"DeferWindowPos", 263, reinterpret_cast<std::uintptr_t>(&tl_DeferWindowPos)},
+        {"EndDeferWindowPos", 264, reinterpret_cast<std::uintptr_t>(&tl_EndDeferWindowPos)},
+        {"UnregisterClassW", 265, reinterpret_cast<std::uintptr_t>(&tl_UnregisterClassW)},
+        {"GetActiveWindow", 266, reinterpret_cast<std::uintptr_t>(&tl_GetActiveWindow)},
+        {"CallNextHookEx", 267, reinterpret_cast<std::uintptr_t>(&tl_CallNextHookEx)},
+        {"UnhookWindowsHookEx", 268, reinterpret_cast<std::uintptr_t>(&tl_UnhookWindowsHookEx)},
+        {"SetWindowsHookExW", 269, reinterpret_cast<std::uintptr_t>(&tl_SetWindowsHookExW)},
+        {"GetMenuState", 270, reinterpret_cast<std::uintptr_t>(&tl_GetMenuState)},
+        {"InsertMenuW", 271, reinterpret_cast<std::uintptr_t>(&tl_InsertMenuW)},
+        {"GetDlgItemInt", 272, reinterpret_cast<std::uintptr_t>(&tl_GetDlgItemInt)},
+        {"SetDlgItemInt", 273, reinterpret_cast<std::uintptr_t>(&tl_SetDlgItemInt)},
+        {"CreateDialogParamW", 274, reinterpret_cast<std::uintptr_t>(&tl_CreateDialogParamW)},
+        {"CreateDialogIndirectParamW", 275, reinterpret_cast<std::uintptr_t>(&tl_CreateDialogIndirectParamW)},
+        {"DialogBoxIndirectParamW", 276, reinterpret_cast<std::uintptr_t>(&tl_DialogBoxIndirectParamW)},
+        {"SetClipboardViewer", 277, reinterpret_cast<std::uintptr_t>(&tl_SetClipboardViewer)},
+        {"ChangeClipboardChain", 278, reinterpret_cast<std::uintptr_t>(&tl_ChangeClipboardChain)},
+        {"DrawTextExW", 279, reinterpret_cast<std::uintptr_t>(&tl_DrawTextExW)},
+        {"ToAscii", 280, reinterpret_cast<std::uintptr_t>(&tl_ToAscii)},
+        {"CreateAcceleratorTableW", 281, reinterpret_cast<std::uintptr_t>(&tl_CreateAcceleratorTableW)},
+        {"DestroyAcceleratorTable", 282, reinterpret_cast<std::uintptr_t>(&tl_DestroyAcceleratorTable)},
+        {"IsCharLowerW", 283, reinterpret_cast<std::uintptr_t>(&tl_IsCharLowerW)},
+        {"IsCharAlphaNumericW", 284, reinterpret_cast<std::uintptr_t>(&tl_IsCharAlphaNumericW)},
+        {"IsCharAlphaW", 285, reinterpret_cast<std::uintptr_t>(&tl_IsCharAlphaW)},
+        {"ModifyMenuW", 286, reinterpret_cast<std::uintptr_t>(&tl_ModifyMenuW)},
+        {"InflateRect", 287, reinterpret_cast<std::uintptr_t>(&tl_InflateRect)},
+        {"IntersectRect", 288, reinterpret_cast<std::uintptr_t>(&tl_IntersectRect)},
+        {"SetRectEmpty", 289, reinterpret_cast<std::uintptr_t>(&tl_SetRectEmpty)},
+        {"EnumChildWindows", 290, reinterpret_cast<std::uintptr_t>(&tl_EnumChildWindows)},
+        {"EnumThreadWindows", 291, reinterpret_cast<std::uintptr_t>(&tl_EnumThreadWindows)},
+        {"GetMenuBarInfo", 292, reinterpret_cast<std::uintptr_t>(&tl_GetMenuBarInfo)},
+        {"TrackMouseEvent", 293, reinterpret_cast<std::uintptr_t>(&tl_TrackMouseEvent)},
+        {"GetComboBoxInfo", 294, reinterpret_cast<std::uintptr_t>(&tl_GetComboBoxInfo)},
+        {"ChildWindowFromPoint", 295, reinterpret_cast<std::uintptr_t>(&tl_ChildWindowFromPoint)},
+        {"GetDlgCtrlID", 296, reinterpret_cast<std::uintptr_t>(&tl_GetDlgCtrlID)},
+        {"wsprintfW", 297, reinterpret_cast<std::uintptr_t>(&tl_wsprintfW)},
+        {"GetAncestor", 298, reinterpret_cast<std::uintptr_t>(&tl_GetAncestor)},
+        {"GetMenuItemID", 299, reinterpret_cast<std::uintptr_t>(&tl_GetMenuItemID)},
+        {"SetLayeredWindowAttributes", 300, reinterpret_cast<std::uintptr_t>(&tl_SetLayeredWindowAttributes)},
+        {"GetLastActivePopup", 301, reinterpret_cast<std::uintptr_t>(&tl_GetLastActivePopup)},
+        {"GetMenuStringW", 302, reinterpret_cast<std::uintptr_t>(&tl_GetMenuStringW)},
+        {"LockWindowUpdate", 303, reinterpret_cast<std::uintptr_t>(&tl_LockWindowUpdate)},
+        {"mouse_event", 304, reinterpret_cast<std::uintptr_t>(&tl_mouse_event)},
+        {"SetMenuItemBitmaps", 305, reinterpret_cast<std::uintptr_t>(&tl_SetMenuItemBitmaps)},
+        {"GetDCEx", 306, reinterpret_cast<std::uintptr_t>(&tl_GetDCEx)},
+        {"IsChild", 307, reinterpret_cast<std::uintptr_t>(&tl_IsChild)},
     };
     static const InternalModule kUser32Module{"USER32.dll", kUser32Exports};
     register_module(kUser32Module);
@@ -930,6 +1008,22 @@ void register_builtin_modules() {
         {"TranslateCharsetInfo", 86, reinterpret_cast<std::uintptr_t>(&tl_TranslateCharsetInfo)},
         {"UnrealizeObject", 87, reinterpret_cast<std::uintptr_t>(&tl_UnrealizeObject)},
         {"UpdateColors", 88, reinterpret_cast<std::uintptr_t>(&tl_UpdateColors)},
+        {"SetWindowOrgEx", 89, reinterpret_cast<std::uintptr_t>(&tl_SetWindowOrgEx)},
+        {"SaveDC", 90, reinterpret_cast<std::uintptr_t>(&tl_SaveDC)},
+        {"RestoreDC", 91, reinterpret_cast<std::uintptr_t>(&tl_RestoreDC)},
+        {"OffsetWindowOrgEx", 92, reinterpret_cast<std::uintptr_t>(&tl_OffsetWindowOrgEx)},
+        {"SetBrushOrgEx", 93, reinterpret_cast<std::uintptr_t>(&tl_SetBrushOrgEx)},
+        {"SetDIBits", 94, reinterpret_cast<std::uintptr_t>(&tl_SetDIBits)},
+        {"DPtoLP", 95, reinterpret_cast<std::uintptr_t>(&tl_DPtoLP)},
+        {"GetTextExtentPointW", 96, reinterpret_cast<std::uintptr_t>(&tl_GetTextExtentPointW)},
+        {"Ellipse", 97, reinterpret_cast<std::uintptr_t>(&tl_Ellipse)},
+        {"ExtCreatePen", 98, reinterpret_cast<std::uintptr_t>(&tl_ExtCreatePen)},
+        {"GdiAlphaBlend", 99, reinterpret_cast<std::uintptr_t>(&tl_GdiAlphaBlend)},
+        {"GetTextExtentExPointW", 100, reinterpret_cast<std::uintptr_t>(&tl_GetTextExtentExPointW)},
+        {"GetROP2", 101, reinterpret_cast<std::uintptr_t>(&tl_GetROP2)},
+        {"GetClipRgn", 102, reinterpret_cast<std::uintptr_t>(&tl_GetClipRgn)},
+        {"CreateRectRgnIndirect", 103, reinterpret_cast<std::uintptr_t>(&tl_CreateRectRgnIndirect)},
+        {"RoundRect", 104, reinterpret_cast<std::uintptr_t>(&tl_RoundRect)},
     };
     static const InternalModule kGdi32Module{"GDI32.dll", kGdi32Exports};
     register_module(kGdi32Module);
@@ -1139,6 +1233,11 @@ void register_builtin_modules() {
         {"SHGetSpecialFolderPathW", 17, reinterpret_cast<std::uintptr_t>(&tl_SHGetSpecialFolderPathW)},
         {"Shell_NotifyIconW", 18, reinterpret_cast<std::uintptr_t>(&tl_ShellNotifyIconW)},
         {"ShellExecuteA", 19, reinterpret_cast<std::uintptr_t>(&tl_ShellExecuteA)},
+        {"SHCreateItemFromParsingName", 20, reinterpret_cast<std::uintptr_t>(&tl_SHCreateItemFromParsingName)},
+        {"DragQueryFileW", 21, reinterpret_cast<std::uintptr_t>(&tl_DragQueryFileW)},
+        {"DragQueryPoint", 22, reinterpret_cast<std::uintptr_t>(&tl_DragQueryPoint)},
+        {"DragFinish", 23, reinterpret_cast<std::uintptr_t>(&tl_DragFinish)},
+        {"", 165, reinterpret_cast<std::uintptr_t>(&tl_SHCreateItemFromParsingName)},
     };
     static const InternalModule kShell32Module{"SHELL32.dll", kShell32Exports};
     register_module(kShell32Module);
@@ -1212,6 +1311,7 @@ void register_builtin_modules() {
         {"SystemFunction036", 67, reinterpret_cast<std::uintptr_t>(&tl_SystemFunction036)},
         {"GetUserNameA", 68, reinterpret_cast<std::uintptr_t>(&tl_GetUserNameA)},
         {"SetSecurityDescriptorOwner", 69, reinterpret_cast<std::uintptr_t>(&tl_SetSecurityDescriptorOwner)},
+        {"IsTextUnicode", 70, reinterpret_cast<std::uintptr_t>(&tl_IsTextUnicode)},
     };
     static const InternalModule kAdvapi32Module{"ADVAPI32.dll", kAdvapi32Exports};
     register_module(kAdvapi32Module);
@@ -1234,6 +1334,7 @@ void register_builtin_modules() {
         {"DoDragDrop", 16, reinterpret_cast<std::uintptr_t>(&tl_DoDragDrop)},
         {"ReleaseStgMedium", 17, reinterpret_cast<std::uintptr_t>(&tl_ReleaseStgMedium)},
         {"StringFromGUID2", 18, reinterpret_cast<std::uintptr_t>(&tl_StringFromGUID2)},
+        {"CLSIDFromProgID", 19, reinterpret_cast<std::uintptr_t>(&tl_CLSIDFromProgID)},
     };
     static const InternalModule kOle32Module{"ole32.dll", kOle32Exports};
     register_module(kOle32Module);
@@ -1297,6 +1398,10 @@ void register_builtin_modules() {
         {"CertOpenSystemStoreW", 10, reinterpret_cast<std::uintptr_t>(&tl_CertOpenSystemStoreW)},
         {"CertGetEnhancedKeyUsage", 11, reinterpret_cast<std::uintptr_t>(&tl_CertGetEnhancedKeyUsage)},
         {"CertGetIntendedKeyUsage", 12, reinterpret_cast<std::uintptr_t>(&tl_CertGetIntendedKeyUsage)},
+        {"CryptMsgClose", 13, reinterpret_cast<std::uintptr_t>(&tl_CryptMsgClose)},
+        {"CryptMsgGetParam", 14, reinterpret_cast<std::uintptr_t>(&tl_CryptMsgGetParam)},
+        {"CryptQueryObject", 15, reinterpret_cast<std::uintptr_t>(&tl_CryptQueryObject)},
+        {"CertNameToStrW", 16, reinterpret_cast<std::uintptr_t>(&tl_CertNameToStrW)},
     };
     static const InternalModule kCrypt32Module{"CRYPT32.dll", kCrypt32Exports};
     register_module(kCrypt32Module);
@@ -1325,6 +1430,17 @@ void register_builtin_modules() {
         {"PathIsRelativeW", 22, reinterpret_cast<std::uintptr_t>(&tl_PathIsRelativeW)},
         {"SHAutoComplete", 23, reinterpret_cast<std::uintptr_t>(&tl_SHAutoComplete)},
         {"PathStripToRootW", 24, reinterpret_cast<std::uintptr_t>(&tl_PathStripToRootW)},
+        {"AssocQueryStringW", 25, reinterpret_cast<std::uintptr_t>(&tl_AssocQueryStringW)},
+        {"ColorRGBToHLS", 26, reinterpret_cast<std::uintptr_t>(&tl_ColorRGBToHLS)},
+        {"ColorHLSToRGB", 27, reinterpret_cast<std::uintptr_t>(&tl_ColorHLSToRGB)},
+        {"ColorAdjustLuma", 28, reinterpret_cast<std::uintptr_t>(&tl_ColorAdjustLuma)},
+        {"PathStripPathW", 29, reinterpret_cast<std::uintptr_t>(&tl_PathStripPathW)},
+        {"PathAddExtensionW", 30, reinterpret_cast<std::uintptr_t>(&tl_PathAddExtensionW)},
+        {"PathAppendW", 31, reinterpret_cast<std::uintptr_t>(&tl_PathAppendW)},
+        {"PathRemoveExtensionW", 32, reinterpret_cast<std::uintptr_t>(&tl_PathRemoveExtensionW)},
+        {"PathCompactPathExW", 33, reinterpret_cast<std::uintptr_t>(&tl_PathCompactPathExW)},
+        {"PathGetDriveNumberW", 34, reinterpret_cast<std::uintptr_t>(&tl_PathGetDriveNumberW)},
+        {"PathMatchSpecW", 35, reinterpret_cast<std::uintptr_t>(&tl_PathMatchSpecW)},
         {"", 176, reinterpret_cast<std::uintptr_t>(&tl_PathStripToRootW)},
         {"", 410, reinterpret_cast<std::uintptr_t>(&tl_PathStripToRootW)},
         {"", 413, reinterpret_cast<std::uintptr_t>(&tl_PathStripToRootW)},
@@ -1389,11 +1505,19 @@ void register_builtin_modules() {
         {"BeginBufferedPaint", 18, reinterpret_cast<std::uintptr_t>(&tl_BeginBufferedPaint)},
         {"EndBufferedPaint", 19, reinterpret_cast<std::uintptr_t>(&tl_EndBufferedPaint)},
         {"DrawThemeParentBackground", 20, reinterpret_cast<std::uintptr_t>(&tl_DrawThemeParentBackground)},
+        {"EndBufferedAnimation", 21, reinterpret_cast<std::uintptr_t>(&tl_EndBufferedAnimation)},
+        {"GetThemeTransitionDuration", 22, reinterpret_cast<std::uintptr_t>(&tl_GetThemeTransitionDuration)},
+        {"GetThemeBackgroundContentRect", 23, reinterpret_cast<std::uintptr_t>(&tl_GetThemeBackgroundContentRect)},
+        {"EnableThemeDialogTexture", 24, reinterpret_cast<std::uintptr_t>(&tl_EnableThemeDialogTexture)},
+        {"BufferedPaintStopAllAnimations", 25, reinterpret_cast<std::uintptr_t>(&tl_BufferedPaintStopAllAnimations)},
+        {"BeginBufferedAnimation", 26, reinterpret_cast<std::uintptr_t>(&tl_BeginBufferedAnimation)},
+        {"BufferedPaintRenderAnimation", 27, reinterpret_cast<std::uintptr_t>(&tl_BufferedPaintRenderAnimation)},
     };
     static const InternalModule kUxThemeModule{"UxTheme.dll", kUxThemeExports};
     register_module(kUxThemeModule);
     static const ExportedFunction kDbghelpExports[] = {
         {"SymFromAddr", 1, reinterpret_cast<std::uintptr_t>(&tl_SymFromAddr)},
+        {"ImageNtHeader", 2, reinterpret_cast<std::uintptr_t>(&tl_ImageNtHeader)},
     };
     static const InternalModule kDbghelpModule{"dbghelp.dll", kDbghelpExports};
     register_module(kDbghelpModule);
@@ -1433,11 +1557,22 @@ void register_builtin_modules() {
         {"ImageList_GetBkColor", 19, reinterpret_cast<std::uintptr_t>(&tl_ImageList_GetBkColor)},
         {"ImageList_GetIconSize", 20, reinterpret_cast<std::uintptr_t>(&tl_ImageList_GetIconSize)},
         {"_TrackMouseEvent", 21, reinterpret_cast<std::uintptr_t>(&tl_TrackMouseEvent_alias)},
+        {"ImageList_GetImageInfo", 22, reinterpret_cast<std::uintptr_t>(&tl_ImageList_GetImageInfo)},
+        {"ImageList_EndDrag", 23, reinterpret_cast<std::uintptr_t>(&tl_ImageList_EndDrag)},
+        {"ImageList_DragShowNolock", 24, reinterpret_cast<std::uintptr_t>(&tl_ImageList_DragShowNolock)},
+        {"ImageList_DragEnter", 25, reinterpret_cast<std::uintptr_t>(&tl_ImageList_DragEnter)},
+        {"ImageList_DragMove", 26, reinterpret_cast<std::uintptr_t>(&tl_ImageList_DragMove)},
+        {"ImageList_BeginDrag", 27, reinterpret_cast<std::uintptr_t>(&tl_ImageList_BeginDrag)},
+        {"ImageList_Remove", 28, reinterpret_cast<std::uintptr_t>(&tl_ImageList_Remove)},
+        {"ImageList_SetIconSize", 29, reinterpret_cast<std::uintptr_t>(&tl_ImageList_SetIconSize)},
+        {"LoadIconWithScaleDown", 381, reinterpret_cast<std::uintptr_t>(&tl_LoadIconWithScaleDown)},
         {"SetWindowSubclass", 410, reinterpret_cast<std::uintptr_t>(&tl_SetWindowSubclass)},
         {"RemoveWindowSubclass", 412, reinterpret_cast<std::uintptr_t>(&tl_RemoveWindowSubclass)},
         {"DefSubclassProc", 413, reinterpret_cast<std::uintptr_t>(&tl_DefSubclassProc)},
         {"", 17, reinterpret_cast<std::uintptr_t>(&tl_InitCommonControls)},
+        {"", 381, reinterpret_cast<std::uintptr_t>(&tl_LoadIconWithScaleDown)},
         {"", 410, reinterpret_cast<std::uintptr_t>(&tl_SetWindowSubclass)},
+        {"", 411, reinterpret_cast<std::uintptr_t>(&tl_TaskDialogIndirect)},
         {"", 412, reinterpret_cast<std::uintptr_t>(&tl_RemoveWindowSubclass)},
         {"", 413, reinterpret_cast<std::uintptr_t>(&tl_DefSubclassProc)},
     };
@@ -1510,6 +1645,12 @@ void register_builtin_modules() {
     };
     static const InternalModule kDwmApiModule{"DWMAPI.dll", kDwmApiExports};
     register_module(kDwmApiModule);
+    static const ExportedFunction kSensApiExports[] = {
+        {"IsDestinationReachableW", 1, reinterpret_cast<std::uintptr_t>(&tl_IsDestinationReachableW)},
+        {"IsNetworkAlive", 2, reinterpret_cast<std::uintptr_t>(&tl_IsNetworkAlive)},
+    };
+    static const InternalModule kSensApiModule{"SensApi.dll", kSensApiExports};
+    register_module(kSensApiModule);
 }
 
 bool is_module_registered(const std::string_view dll) {
