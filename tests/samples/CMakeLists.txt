@@ -18,7 +18,7 @@ find_program(TL_MINGW_WINDRES
 set(TL_FIXTURE_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/generated")
 
 function(tl_add_pe_fixture target_name source_file manifest_file)
-    set(options LINK_KERNEL32 LINK_USER32 LINK_GDI32 LINK_COMCTL32 LINK_GDIPLUS LINK_UXTHEME LINK_DBGHELP LINK_OLE32 LINK_POWRPROF LINK_IPHLPAPI LINK_WINMM LINK_WS2_32 LINK_WININET LINK_WINTRUST LINK_CRYPT32 LINK_ADVAPI32 LINK_SHELL32 LINK_SHLWAPI RELOCATABLE UNWIND EXPECT_RESOLVED CONSOLE REPORT REPORT_ONLY NO_RUNTIME_CHECK RUNTIME_FAILURE)
+    set(options LINK_KERNEL32 LINK_USER32 LINK_GDI32 LINK_COMCTL32 LINK_GDIPLUS LINK_UXTHEME LINK_DBGHELP LINK_OLE32 LINK_OLEAUT32 LINK_POWRPROF LINK_IPHLPAPI LINK_WINMM LINK_WS2_32 LINK_WININET LINK_WINTRUST LINK_CRYPT32 LINK_ADVAPI32 LINK_SHELL32 LINK_SHLWAPI RELOCATABLE UNWIND EXPECT_RESOLVED CONSOLE REPORT REPORT_ONLY NO_RUNTIME_CHECK RUNTIME_FAILURE)
     set(oneValueArgs REPORT_SYMBOL RESOURCE_FILE IMPORT_DEF)
     cmake_parse_arguments(ARG "${options}" "${oneValueArgs}" "" ${ARGN})
 
@@ -62,6 +62,9 @@ function(tl_add_pe_fixture target_name source_file manifest_file)
     endif()
     if(ARG_LINK_OLE32)
         list(APPEND link_libraries -lole32)
+    endif()
+    if(ARG_LINK_OLEAUT32)
+        list(APPEND link_libraries -loleaut32)
     endif()
     if(ARG_LINK_POWRPROF)
         list(APPEND link_libraries -lpowrprof)
@@ -254,6 +257,12 @@ function(tl_add_pe_fixture target_name source_file manifest_file)
             elseif(target_name STREQUAL "tl_shell_path")
                 set(runtime_extra_args
                     "-DEXPECTED_HEX=7368656c6c706174680a")
+            elseif(target_name STREQUAL "tl_oleaut_bstr")
+                set(runtime_extra_args
+                    "-DEXPECTED_HEX=6f6c65617574627374720a")
+            elseif(target_name STREQUAL "tl_k32_gdi_link")
+                set(runtime_extra_args
+                    "-DEXPECTED_HEX=6b33326764696c696e6b0a")
             elseif(target_name STREQUAL "tl_stream")
                 set(runtime_extra_args
                     "-DEXPECTED_HEX=6f6c652d73747265616d0a"
@@ -639,6 +648,14 @@ tl_add_pe_fixture(tl_k32_system src/tl_k32_system.c manifests/tl_k32_system.json
 tl_add_pe_fixture(tl_shell_path src/tl_shell_path.c manifests/tl_shell_path.json
     LINK_KERNEL32 LINK_SHELL32 LINK_SHLWAPI EXPECT_RESOLVED CONSOLE REPORT RELOCATABLE
     REPORT_SYMBOL "SHAutoComplete")
+
+tl_add_pe_fixture(tl_oleaut_bstr src/tl_oleaut_bstr.c manifests/tl_oleaut_bstr.json
+    LINK_KERNEL32 LINK_OLEAUT32 EXPECT_RESOLVED CONSOLE REPORT RELOCATABLE
+    REPORT_SYMBOL "SysAllocString")
+
+tl_add_pe_fixture(tl_k32_gdi_link src/tl_k32_gdi_link.c manifests/tl_k32_gdi_link.json
+    LINK_KERNEL32 LINK_GDI32 EXPECT_RESOLVED CONSOLE REPORT RELOCATABLE
+    REPORT_SYMBOL "CreateHardLinkW")
 
 tl_add_pe_fixture(tl_files_wide src/tl_files_wide.c manifests/tl_files_wide.json
     LINK_KERNEL32 EXPECT_RESOLVED CONSOLE REPORT RELOCATABLE

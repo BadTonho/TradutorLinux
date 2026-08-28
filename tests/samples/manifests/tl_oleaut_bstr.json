@@ -1,0 +1,24 @@
+{
+  "image": "tl_oleaut_bstr.exe",
+  "expected_imports": [
+    {
+      "dll": "KERNEL32.dll",
+      "symbols": [
+        "ExitProcess",
+        "GetStdHandle",
+        "WriteFile"
+      ]
+    },
+    {
+      "dll": "OLEAUT32.dll",
+      "symbols": [
+        "SysAllocString",
+        "SysFreeString",
+        "SysStringLen",
+        "VariantClear",
+        "VariantInit"
+      ]
+    }
+  ]
+}
+

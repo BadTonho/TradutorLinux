@@ -1398,6 +1398,23 @@ TL_MSABI int tl_PathIsRelativeA(const char* path) noexcept;
 TL_MSABI int tl_PathIsRelativeW(const std::uint16_t* path) noexcept;
 TL_MSABI int tl_SHFileOperationW(void* file_op) noexcept;
 
+// KERNEL32 / GDI32 extensões
+TL_MSABI int tl_CreateHardLinkW(const std::uint16_t* new_file_name,
+                                const std::uint16_t* existing_file_name,
+                                void* security_attributes) noexcept;
+TL_MSABI std::uint32_t tl_K32GetModuleFileNameExW(const void* process,
+                                                  const void* module_handle,
+                                                  std::uint16_t* filename,
+                                                  std::uint32_t size) noexcept;
+TL_MSABI void* tl_CreateBitmap(int width, int height, std::uint32_t planes,
+                               std::uint32_t bit_count, const void* bits) noexcept;
+TL_MSABI int tl_StretchBlt(void* dest_dc, int x_dest, int y_dest, int w_dest, int h_dest,
+                           const void* src_dc, int x_src, int y_src, int w_src, int h_src,
+                           std::uint32_t rop) noexcept;
+TL_MSABI int tl_GetObjectW(const void* hgdiobj, int buffer_size, void* object_buffer) noexcept;
+TL_MSABI void* tl_CreateDIBSection(const void* dc, const void* pbmi, std::uint32_t usage,
+                                   void** ppv_bits, void* section, std::uint32_t offset) noexcept;
+
 }  // extern "C"
 
 // Define o caminho do módulo convidado antes da execução.

@@ -1,0 +1,25 @@
+{
+  "image": "tl_k32_gdi_link.exe",
+  "expected_imports": [
+    {
+      "dll": "GDI32.dll",
+      "symbols": [
+        "CreateBitmap",
+        "GetObjectW",
+        "StretchBlt"
+      ]
+    },
+    {
+      "dll": "KERNEL32.dll",
+      "symbols": [
+        "CreateHardLinkW",
+        "ExitProcess",
+        "GetCurrentProcess",
+        "GetStdHandle",
+        "K32GetModuleFileNameExW",
+        "WriteFile"
+      ]
+    }
+  ]
+}
+

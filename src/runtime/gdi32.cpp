@@ -287,6 +287,91 @@ TL_MSABI std::uint32_t tl_SetDCPenColor(const void* dc, std::uint32_t color) noe
     return 0x00000000;
 }
 
+TL_MSABI void* tl_CreateBitmap(const int width, const int height, const std::uint32_t planes,
+                               const std::uint32_t bit_count, const void* bits) noexcept {
+    (void)width;
+    (void)height;
+    (void)planes;
+    (void)bit_count;
+    (void)bits;
+    static char g_bitmap_token = 0;
+    set_last_error(abi::kErrorSuccess);
+    return &g_bitmap_token;
+}
+
+TL_MSABI int tl_StretchBlt(void* dest_dc, const int x_dest, const int y_dest, const int w_dest, const int h_dest,
+                           const void* src_dc, const int x_src, const int y_src, const int w_src, const int h_src,
+                           const std::uint32_t rop) noexcept {
+    (void)dest_dc;
+    (void)x_dest;
+    (void)y_dest;
+    (void)w_dest;
+    (void)h_dest;
+    (void)src_dc;
+    (void)x_src;
+    (void)y_src;
+    (void)w_src;
+    (void)h_src;
+    (void)rop;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+struct GuestBitmap {
+    std::int32_t bmType{0};
+    std::int32_t bmWidth{100};
+    std::int32_t bmHeight{100};
+    std::int32_t bmWidthBytes{400};
+    std::uint16_t bmPlanes{1};
+    std::uint16_t bmBitsPixel{32};
+    void* bmBits{nullptr};
+};
+
+TL_MSABI int tl_GetObjectW(const void* hgdiobj, const int buffer_size, void* object_buffer) noexcept {
+    if (hgdiobj == nullptr) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    if (object_buffer == nullptr) {
+        return static_cast<int>(sizeof(GuestBitmap));
+    }
+    if (buffer_size <= 0) {
+        return 0;
+    }
+    if (buffer_size >= static_cast<int>(sizeof(GuestBitmap))) {
+        GuestBitmap bmp{};
+        bmp.bmType = 0;
+        bmp.bmWidth = 100;
+        bmp.bmHeight = 100;
+        bmp.bmWidthBytes = 400;
+        bmp.bmPlanes = 1;
+        bmp.bmBitsPixel = 32;
+        bmp.bmBits = nullptr;
+        std::memcpy(object_buffer, &bmp, sizeof(GuestBitmap));
+        set_last_error(abi::kErrorSuccess);
+        return static_cast<int>(sizeof(GuestBitmap));
+    }
+    std::memset(object_buffer, 0, static_cast<std::size_t>(buffer_size));
+    set_last_error(abi::kErrorSuccess);
+    return buffer_size;
+}
+
+TL_MSABI void* tl_CreateDIBSection(const void* dc, const void* pbmi, const std::uint32_t usage,
+                                   void** ppv_bits, void* section, const std::uint32_t offset) noexcept {
+    (void)dc;
+    (void)pbmi;
+    (void)usage;
+    (void)section;
+    (void)offset;
+    static char g_dib_buffer[4096]{};
+    if (ppv_bits != nullptr) {
+        *ppv_bits = g_dib_buffer;
+    }
+    static char g_dib_token = 0;
+    set_last_error(abi::kErrorSuccess);
+    return &g_dib_token;
+}
+
 }  // extern "C"
 
 }  // namespace tradutorlinux

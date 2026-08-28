@@ -5112,6 +5112,33 @@ TL_MSABI int tl_GetProcessAffinityMask(const void* const process_handle,
     return 1;
 }
 
+TL_MSABI int tl_CreateHardLinkW(const std::uint16_t* const new_file_name,
+                                const std::uint16_t* const existing_file_name,
+                                void* const security_attributes) noexcept {
+    (void)security_attributes;
+    char normalized_new[4096]{};
+    char normalized_exist[4096]{};
+    if (!normalized_wide_path(new_file_name, normalized_new) ||
+        !normalized_wide_path(existing_file_name, normalized_exist)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    if (::link(normalized_exist, normalized_new) != 0) {
+        set_last_error(errno_to_win32(errno));
+        return 0;
+    }
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI std::uint32_t tl_K32GetModuleFileNameExW(const void* const process,
+                                                  const void* const module_handle,
+                                                  std::uint16_t* const filename,
+                                                  const std::uint32_t size) noexcept {
+    (void)process;
+    return tl_GetModuleFileNameW(module_handle, filename, size);
+}
+
 }  // extern "C"
 
 }  // namespace tradutorlinux

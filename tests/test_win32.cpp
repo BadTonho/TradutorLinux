@@ -3,6 +3,7 @@
 #include "tradutorlinux/runtime/comctl32.hpp"
 #include "tradutorlinux/runtime/dialog_template.hpp"
 #include "tradutorlinux/runtime/ole32.hpp"
+#include "tradutorlinux/runtime/oleaut32.hpp"
 #include "tradutorlinux/runtime/wininet.hpp"
 #include "tradutorlinux/runtime/wintrust.hpp"
 #include "tradutorlinux/runtime/crypt32.hpp"
@@ -2371,6 +2372,51 @@ TEST(Win32SecurityTest, RejectsUnsupportedAclInputsAndExternalPaths) {
                                        abi::kDaclSecurityInformation, nullptr, nullptr, nullptr,
                                        nullptr, &descriptor),
               abi::kErrorInvalidParameter);
+}
+
+TEST(OleAut32Test, BstrAndVariantOperations) {
+    constexpr std::uint16_t sample[] = {'T', 'e', 's', 't', 'B', 'S', 'T', 'R', 0};
+    GuestBstr bstr = tl_SysAllocString(sample);
+    ASSERT_NE(bstr, nullptr);
+    EXPECT_EQ(tl_SysStringLen(bstr), 8U);
+    EXPECT_EQ(tl_SysStringByteLen(bstr), 16U);
+
+    GuestVariant var{};
+    tl_VariantInit(&var);
+    EXPECT_EQ(var.vt, kGuestVtEmpty);
+
+    var.vt = kGuestVtBstr;
+    var.data.bstrVal = bstr;
+
+    GuestVariant var_copy{};
+    EXPECT_EQ(tl_VariantCopy(&var_copy, &var), 0);
+    EXPECT_EQ(var_copy.vt, kGuestVtBstr);
+    EXPECT_NE(var_copy.data.bstrVal, nullptr);
+    EXPECT_EQ(tl_SysStringLen(var_copy.data.bstrVal), 8U);
+
+    EXPECT_EQ(tl_VariantClear(&var_copy), 0);
+    EXPECT_EQ(var_copy.vt, kGuestVtEmpty);
+
+    EXPECT_EQ(tl_VariantClear(&var), 0);
+}
+
+TEST(Gdi32Test, BitmapAndHardLinkOperations) {
+    void* bmp = tl_CreateBitmap(64, 64, 1, 32, nullptr);
+    ASSERT_NE(bmp, nullptr);
+
+    GuestBitmap bmp_info{};
+    EXPECT_GT(tl_GetObjectW(bmp, sizeof(bmp_info), &bmp_info), 0);
+
+    EXPECT_EQ(tl_StretchBlt(nullptr, 0, 0, 10, 10, nullptr, 0, 0, 10, 10, 0), 1);
+
+    void* dib_bits = nullptr;
+    void* dib = tl_CreateDIBSection(nullptr, nullptr, 0, &dib_bits, nullptr, 0);
+    ASSERT_NE(dib, nullptr);
+    EXPECT_NE(dib_bits, nullptr);
+
+    constexpr std::uint16_t non_exist1[] = {'n', 'o', 'n', 'e', 'x', 'i', 's', 't', '1', 0};
+    constexpr std::uint16_t non_exist2[] = {'n', 'o', 'n', 'e', 'x', 'i', 's', 't', '2', 0};
+    EXPECT_EQ(tl_CreateHardLinkW(non_exist2, non_exist1, nullptr), 0);
 }
 
 }  // namespace

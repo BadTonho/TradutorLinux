@@ -32,6 +32,7 @@ add_library(tradutorlinux_core STATIC
     runtime/wintrust.cpp
     runtime/crypt32.cpp
     runtime/ole32.cpp
+    runtime/oleaut32.cpp
     runtime/shlwapi.cpp
     runtime/version.cpp
     runtime/winmm.cpp
