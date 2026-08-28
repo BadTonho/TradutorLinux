@@ -593,7 +593,27 @@ processo filho; cada thread convidada recebe seu próprio TEB/GS, stack e
 | `OLEAUT32.dll` | `SysAllocString` / `SysAllocStringLen` / `SysFreeString` / `SysStringLen` / `SysStringByteLen` | Suportado | Alocação, liberação e consulta de BSTR com cabeçalho de 4 bytes e terminação null |
 | `OLEAUT32.dll` | `VariantInit` / `VariantClear` / `VariantCopy` / `VariantCopyInd` / `VariantChangeType` | Suportado | Gerenciamento e clonagem de estruturas VARIANT |
 | `OLEAUT32.dll` | `SafeArrayCreate` / `SafeArrayDestroy` / `SafeArrayGetDim` / `SafeArrayAccessData` / etc. | Suportado | Suporte e gerenciamento de contêineres SafeArray multidimensionais |
-| `SHELL32.dll` | `SHFileOperationW` | Suportado | Operações de manipulação e cópia de arquivos do shell |
+| `KERNEL32.dll` | `GetTickCount` | Suportado | Retorna tempo de uptime do sistema em milissegundos via `CLOCK_MONOTONIC` |
+| `KERNEL32.dll` | `SetCurrentDirectoryW` | Suportado | Altera diretório de trabalho do processo no Linux via `chdir` |
+| `KERNEL32.dll` | `DeviceIoControl` | Suportado | Stub de controle de dispositivos e consultas de I/O de disco |
+| `KERNEL32.dll` | `FoldStringW` | Suportado | Mapeamento e normalização de strings wide |
+| `KERNEL32.dll` | `SetThreadExecutionState` | Suportado | Gerenciamento de energia e estado de suspensão de thread |
+| `KERNEL32.dll` | `AllocConsole` / `AttachConsole` / `FreeConsole` | Suportado | Ciclo de vida e alocação de console Win32 |
+| `KERNEL32.dll` | `SystemTimeToTzSpecificLocalTime` | Suportado | Conversão de estrutura `SYSTEMTIME` para fuso horário local |
+| `KERNEL32.dll` | `IsDBCSLeadByte` | Suportado | Detecção de lead bytes para páginas de código multibyte |
+| `KERNEL32.dll` | `GetNumberFormatW` | Suportado | Formatação numérica em buffers wide |
+| `USER32.dll` | `SetUserObjectInformationW` | Suportado | Configuração de atributos em objetos de usuário |
+| `USER32.dll` | `WaitForInputIdle` | Suportado | Sincronização de prontidão de entrada de processo |
+| `USER32.dll` | `FindWindowExW` | Suportado | Busca hierárquica de janelas filhas |
+| `USER32.dll` | `SetProcessDefaultLayout` | Suportado | Configuração de layout de renderização de janelas (LTR/RTL) |
+| `ADVAPI32.dll` | `LookupPrivilegeValueW` | Suportado | Resolução de LUID para identificadores de privilégios de segurança |
+| `ADVAPI32.dll` | `AdjustTokenPrivileges` | Suportado | Ajuste e concessão de privilégios em tokens de processo |
+| `SHELL32.dll` | `SHGetFileInfoW` | Suportado | Consulta de atributos, extensões e ícones de arquivos do shell |
+| `SHELL32.dll` | `SHGetPathFromIDListW` | Suportado | Conversão de lista de IDs de shell para caminho no sistema de arquivos |
+| `SHELL32.dll` | `SHBrowseForFolderW` | Suportado | Diálogo de navegação e seleção de diretórios |
+| `SHELL32.dll` | `SHGetMalloc` | Suportado | Obtenção do alocador de memória padrão do Shell |
+| `SHELL32.dll` | `SHChangeNotify` | Suportado | Emissão e notificação de eventos do sistema de arquivos para o shell |
+| `ole32.dll` | `CLSIDFromString` | Suportado | Conversão de strings de GUID/CLSID para estrutura binária `GUID` |
 | `SHLWAPI.dll` | `SHAutoComplete` | Suportado | Retorna `S_OK` para autocompletar em caixas de texto |
 | `SHLWAPI.dll` | `PathIsRelativeA` / `PathIsRelativeW` | Suportado | Identifica se um caminho é relativo ou absoluto |
 

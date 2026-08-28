@@ -5140,11 +5140,13 @@ TL_MSABI std::uint32_t tl_K32GetModuleFileNameExW(const void* const process,
 }
 
 TL_MSABI std::uint32_t tl_GetTickCount(void) noexcept {
-    static const auto start_time = std::chrono::steady_clock::now();
-    const auto now = std::chrono::steady_clock::now();
-    return static_cast<std::uint32_t>(
-        std::chrono::duration_cast<std::chrono::milliseconds>(now - start_time).count()
-    );
+    struct timespec ts{};
+    if (::clock_gettime(CLOCK_MONOTONIC, &ts) == 0) {
+        const std::uint64_t ms = static_cast<std::uint64_t>(ts.tv_sec) * 1000U +
+                                 static_cast<std::uint64_t>(ts.tv_nsec) / 1000000U;
+        return static_cast<std::uint32_t>(ms & 0xFFFFFFFFU);
+    }
+    return 1000U;
 }
 
 TL_MSABI int tl_SetCurrentDirectoryW(const std::uint16_t* const path_name) noexcept {

@@ -225,8 +225,19 @@ Os itens marcados como concluídos devem ter evidência no repositório: código
   - Reanálise do portfólio: WinRAR atingiu **90% (228/251)**, Rockstar subiu para
     **86% (292/338)**, 7-Zip CLI subiu para **73% (98/133)**, Notepad++ para
     **51% (300/584)** e PuTTY para **64% (226/348)**.
-- **Próximo resultado observável (Fase 13.13):** implementar controles comuns de `COMCTL32.dll`
-  (`CreateToolbarEx`, `ImageList_GetImageInfo`) e rotinas restantes de I/O de disco/threads.
+- **Marco concluído (Fase 13.13 — WinRAR x64 100% de Resolução de Imports):**
+  Implementado lote completo de 23 APIs restantes em `KERNEL32.dll` (`GetTickCount`, `SetCurrentDirectoryW`,
+  `DeviceIoControl`, `FoldStringW`, `SetThreadExecutionState`, `AllocConsole`, `FreeConsole`, `SystemTimeToTzSpecificLocalTime`,
+  `IsDBCSLeadByte`, `GetNumberFormatW`), `USER32.dll` (`SetUserObjectInformationW`, `WaitForInputIdle`, `FindWindowExW`,
+  `SetProcessDefaultLayout`), `ADVAPI32.dll` (`LookupPrivilegeValueW`, `AdjustTokenPrivileges`), `SHELL32.dll`
+  (`SHGetFileInfoW`, `SHGetPathFromIDListW`, `SHBrowseForFolderW`, `SHGetMalloc`, `SHChangeNotify`) e `ole32.dll`
+  (`CLSIDFromString`).
+  - `tl_winrar_kernel_shell.exe`: `--report` resolve 19/19 imports, saída `winrarkernelshell\n`, exit `0`.
+  - **`WinRAR_x64.exe`**: atingiu **100% (251/251 imports resolvidos)** e entra em execução no bootstrap CRT/FLS.
+  - Reanálise do portfólio: Rockstar Launcher subiu para **87% (295/338)**, 7-Zip CLI subiu para **77% (103/133)**,
+    PuTTY subiu para **65% (228/348)** e Notepad++ para **52% (304/584)**.
+- **Próximo resultado observável (Fase 13.13):** implementar rotinas CRT para o 7-Zip CLI (`7z_x64.exe`)
+  e controles comuns de `COMCTL32.dll` (`CreateToolbarEx`, `ImageList_GetImageInfo`), protegido por fixtures PE32+ reproduzíveis.
 
 ### Estudo de caso: `RobloxPlayerInstaller.exe` (benchmark de cobertura)
 
