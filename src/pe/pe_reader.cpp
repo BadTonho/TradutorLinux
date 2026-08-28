@@ -1010,7 +1010,9 @@ private:
         const std::optional<std::size_t> directory = rva_to_file_offset(
             {parser_state_.exception_directory_rva, parser_state_.exception_directory_size});
         if (!directory.has_value()) {
-            return fail(ParseStatus::Malformed, "diretório de exceções fora da imagem");
+            return fail(ParseStatus::Malformed, "diretório de exceções fora da imagem (RVA " +
+                        util::format_hex(parser_state_.exception_directory_rva) + " size " +
+                        util::format_hex(parser_state_.exception_directory_size) + ")");
         }
         const std::size_t count = parser_state_.exception_directory_size / kRuntimeFunctionSize;
         if (count > kMaxRuntimeFunctions) {
