@@ -174,9 +174,31 @@ Os itens marcados como concluídos devem ter evidência no repositório: código
   fechamento. A reanálise passou a resolver 265/338 imports do Rockstar, que
   continua `unsupported` e não foi executado; Authenticode e loja Windows
   permanecem fora do contrato.
-- **Próximo resultado observável (Fase 13.12):** avaliar somente uma lacuna
-  com fixture que justifique Authenticode, loja Windows ou outra API de
-  certificado; os limites atuais permanecem publicados.
+- **Marco concluído (Fase 13.12 — APIs estendidas de UI e Retângulos):**
+  `tl_user_ext.exe` cobre 17 APIs de `USER32.dll` (`GetDesktopWindow`,
+  `GetFocus`, `SetCapture`, `ReleaseCapture`, `GetCapture`, `BringWindowToTop`,
+  `GetWindow`, `GetClassNameA/W`, `GetWindowThreadProcessId`, `CallWindowProcA/W`,
+  `PeekMessageA/W`, `RedrawWindow`, `PtInRect`, `CopyRect`, `MapWindowPoints`,
+  `MonitorFromWindow`, `GetSysColor`, `CharUpperW`, `CharLowerW`, `DrawTextA/W`).
+  WinRAR avançou para 216/251 imports e Rockstar para 276/338 imports.
+- **Marco concluído (Fase 13.13 — Sistema KERNEL32, Processos e Tempo):**
+  `tl_k32_system.exe` cobre `OutputDebugStringA/W`, `SetDllDirectoryW`,
+  `VirtualQueryEx`, `GetTimeZoneInformation`, `GetProcessId`,
+  `QueryFullProcessImageNameW`, `FileTimeToLocalFileTime`,
+  `GetLongPathNameW`, `GetShortPathNameW`, `SetThreadPriority` e
+  `GetProcessAffinityMask`. `--report` resolve 14/14 imports, saída `k32system\n`,
+  exit `0`.
+- **Marco concluído (Fase 13.13 — Caminhos SHLWAPI e Shell SHFileOperation):**
+  `tl_shell_path.exe` cobre `SHAutoComplete`, `PathIsRelativeA/W`,
+  `PathCombineW`, `PathRemoveFileSpecW` e `SHELL32.dll!SHFileOperationW`.
+  `--report` resolve 9/9 imports, saída `shellpath\n`, exit `0`.
+- **Marco concluído (Fase 13.13 — Suporte Estrutural e Parser de Pacotes MSIX/AppX):**
+  Adicionado módulo `tradutorlinux::package` com validação de contêiner ZIP/MSIX,
+  parser de manifesto `AppxManifest.xml` e extração de metadados/executável
+  principal para suporte ao benchmark `Affinity x64.msix`. Protegido por
+  `MsixParserTest.ParseManifestXml`.
+- **Próximo resultado observável (Fase 13.13):** expandir suporte a instaladores e
+  APIs de registro/criptografia de acordo com os alvos do catálogo.
 
 ### Estudo de caso: `RobloxPlayerInstaller.exe` (benchmark de cobertura)
 

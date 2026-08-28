@@ -574,6 +574,19 @@ processo filho; cada thread convidada recebe seu próprio TEB/GS, stack e
 | `KERNEL32.dll` | `CreateToolhelp32Snapshot` | Suportado | Enumera `/proc` (`TH32CS_SNAPPROCESS` apenas); retorna `&SnapshotSlot` ou `INVALID_HANDLE_VALUE` (`-1`) + `ERROR_INVALID_PARAMETER`/`NOT_ENOUGH_MEMORY`; `CloseHandle` libera slot |
 | `KERNEL32.dll` | `Process32FirstW` / `Process32NextW` | Suportado | Valida `hSnapshot` e `dwSize==568`, preenche `PROCESSENTRY32W` via `/proc/[pid]/status` (`PPid`, `Threads`, `Name`→`szExeFile` wide); `Next` avança `next_index`; fim → `0` + `ERROR_NO_MORE_FILES` (18) |
 | `KERNEL32.dll` | `OpenProcess` | Suportado | Valida `/proc/[pid]` existe; retorna token `kProcessHandleBase+pid` ou `NULL` + `87`; `CloseHandle` aceita token via range |
+| `KERNEL32.dll` | `OutputDebugStringA` / `OutputDebugStringW` | Suportado | Emite diagnóstico `runtime_trace` com a mensagem |
+| `KERNEL32.dll` | `SetDllDirectoryW` | Suportado | Define diretório adicional de busca de DLLs no runtime |
+| `KERNEL32.dll` | `VirtualQueryEx` | Suportado | Consulta mapeamento do processo via `tl_VirtualQuery` |
+| `KERNEL32.dll` | `GetTimeZoneInformation` | Suportado | Retorna fuso horário padrão UTC / `TIME_ZONE_ID_STANDARD` |
+| `KERNEL32.dll` | `GetProcessId` | Suportado | Retorna PID do processo convidado ou handle associado |
+| `KERNEL32.dll` | `QueryFullProcessImageNameW` | Suportado | Preenche nome e caminho da imagem do processo convidado |
+| `KERNEL32.dll` | `FileTimeToLocalFileTime` | Suportado | Converte estrutura de tempo de arquivo |
+| `KERNEL32.dll` | `GetLongPathNameW` / `GetShortPathNameW` | Suportado | Converte caminhos entre formatos curto e longo |
+| `KERNEL32.dll` | `SetThreadPriority` | Suportado | Retorna sucesso para ajuste de prioridade |
+| `KERNEL32.dll` | `GetProcessAffinityMask` | Suportado | Retorna máscara de afinidade do processo e do sistema |
+| `SHELL32.dll` | `SHFileOperationW` | Suportado | Operações de manipulação e cópia de arquivos do shell |
+| `SHLWAPI.dll` | `SHAutoComplete` | Suportado | Retorna `S_OK` para autocompletar em caixas de texto |
+| `SHLWAPI.dll` | `PathIsRelativeA` / `PathIsRelativeW` | Suportado | Identifica se um caminho é relativo ou absoluto |
 
 ### Limitações conhecidas
 
