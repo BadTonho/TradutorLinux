@@ -226,6 +226,7 @@ struct ClassSlot {
     bool used{false};
     std::string name;
     std::uintptr_t wndproc{0};
+    std::uint16_t atom{0};
 };
 
 using runtime_gui::ControlKind;

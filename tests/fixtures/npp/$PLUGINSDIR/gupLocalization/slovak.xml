@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!--
+    Copyright 2021 Don HO <don.h@free.fr>
+	
+    This file is part of GUP for Notepad++
+
+    GUP for Notepad++ is free software: you can redistribute it and/or modify
+    it under the terms of the GNU Lesser General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    GUP for Notepad++ is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU Lesser General Public License for more details.
+
+    You should have received a copy of the GNU Lesser General Public License
+    along with GUP.  If not, see <http://www.gnu.org/licenses/>.
+-->
+
+<!-- This file is optional.-->
+
+<GUP_NativeLangue name="Slovak" version="5.1.3">
+	<PopupMessages>
+		<MSGID_UPDATEAVAILABLE content="Aktualizačný balík je k dispozícii, chcete ho stiahnuť?" />
+		<MSGID_VERSIONCURRENT  content="Aktuálna verzia je  :" />
+		<MSGID_VERSIONNEW         content="Dostupná verzia je :" />
+		
+		<MSGID_DOWNLOADPAGE content="Prejdite na stránku sťahovania" />
+		<MSGID_MOREINFO content="viac informácií" />
+		<!-- $MSGID_DOWNLOADPAGE$ and $MSGID_MOREINFO$ are place holders, don't translate them -->
+		<MSGID_GOTODOWNLOADPAGETEXT content="Nie je dostupná žiadna aktualizácia&#xD;alebo najnovšia verzia ešte nie je uvoľnená na aktualizáciu ($MSGID_MOREINFO$)&#xD;&#xD;$MSGID_DOWNLOADPAGE$ a aktualizujte Notepad++ manuálne." />
+		
+		<MSGID_DOWNLOADSTOPPED content="Sťahovanie bolo zastavené používateľom. Aktualizácia je zrušená." />
+		<MSGID_CLOSEAPP content=" je spustený.&#xD;Aktualizačný program ho ukončí, aby sa mohla vykonať inštalácia.&#xD;Pokračovať?" />
+		<MSGID_ABORTORNOT content="Chcete prerušiť sťahovanie aktualizácie?" />
+		<MSGID_UNZIPFAILED content="Nedá sa rozbaliť: Operácia nie je povolená alebo rozbalenie zlyhalo" />
+	</PopupMessages>
+</GUP_NativeLangue>

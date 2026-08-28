@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!--
+    Copyright 2021 Don HO <don.h@free.fr>
+	
+    This file is part of GUP for Notepad++
+
+    GUP for Notepad++ is free software: you can redistribute it and/or modify
+    it under the terms of the GNU Lesser General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    GUP for Notepad++ is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU Lesser General Public License for more details.
+
+    You should have received a copy of the GNU Lesser General Public License
+    along with GUP.  If not, see <http://www.gnu.org/licenses/>.
+-->
+
+<!-- This file is optional.-->
+
+<GUP_NativeLangue name="Indonesian" version="5.1.3">
+	<PopupMessages>
+		<MSGID_UPDATEAVAILABLE content="Sebuah paket pembaruan tersedia, apakah Anda ingin mengunduhnya?" />
+		<MSGID_VERSIONCURRENT  content="Versi saat ini		:" />
+		<MSGID_VERSIONNEW      content="Versi yang tersedia	:" />
+		
+		<MSGID_DOWNLOADPAGE content="Kunjungi laman unduhan" />
+		<MSGID_MOREINFO content="info selengkapnya" />
+		<!-- $MSGID_DOWNLOADPAGE$ and $MSGID_MOREINFO$ are place holders, don't translate them -->
+		<MSGID_GOTODOWNLOADPAGETEXT content="Tidak ada pembaruan yang tersedia&#xD;atau versi terbaru belum dirilis untuk pembaruan ($MSGID_MOREINFO$)&#xD;&#xD;$MSGID_DOWNLOADPAGE$ untuk memperbarui Notepad++ secara manual." />
+		
+		<MSGID_DOWNLOADSTOPPED content="Pengunduhan dihentikan oleh pengguna. Pembaruan dibatalkan." />
+		<MSGID_CLOSEAPP content=" terbuka.&#xD;Pembaru akan menutupnya untuk memproses pemasangan.&#xD;Lanjutkan?" />
+		<MSGID_ABORTORNOT content="Apakah Anda ingin membatalkan pengunduhan pembaruan?" />
+		<MSGID_UNZIPFAILED content="Tidak dapat mengekstrak zip: Operasi tidak diizinkan atau dekompresi gagal" />
+	</PopupMessages>
+</GUP_NativeLangue>

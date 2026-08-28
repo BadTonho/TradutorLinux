@@ -70,10 +70,13 @@ struct alignas(4096) GuestTeb {
     std::uint8_t padding_to_tls[0x1480 - 0x80]{}; // Preenchimento até 0x1480
     std::array<std::uint64_t, 64> tls_slots{};    // 0x1480: TlsSlots[64] (%gs:[0x1480])
 
-    std::uint8_t reserved_page_tail[0x2000 - 0x1480 - 64 * 8]{};
+    std::array<std::uint64_t, 16> tls_pointers_array{}; // Array apontado por ThreadLocalStoragePointer (%gs:[0x58])
+    std::array<std::uint8_t, 1024> tls_module0_data{};  // Buffer TLS para o módulo principal (índice 0)
+    std::uint8_t reserved_page_tail[0x2000 - 0x1480 - 64 * 8 - 16 * 8 - 1024]{};
 };
 
 static_assert(offsetof(GuestTeb, self) == 0x30, "TEB::self deve estar no offset 0x30");
+static_assert(offsetof(GuestTeb, thread_local_storage_ptr) == 0x58, "TEB::thread_local_storage_ptr deve estar no offset 0x58");
 static_assert(offsetof(GuestTeb, unique_thread_id) == 0x48, "TEB::unique_thread_id deve estar no offset 0x48");
 static_assert(offsetof(GuestTeb, peb) == 0x60, "TEB::peb deve estar no offset 0x60");
 static_assert(offsetof(GuestTeb, last_error_value) == 0x68, "TEB::last_error_value deve estar no offset 0x68");
@@ -95,6 +98,10 @@ inline void initialize_guest_teb(GuestTeb* teb, GuestPeb* peb, std::uint64_t sta
     teb->peb = reinterpret_cast<std::uint64_t>(peb);
     teb->last_error_value = 0;
     teb->tls_slots.fill(0);
+    teb->tls_pointers_array.fill(0);
+    teb->tls_module0_data.fill(0xFF);
+    teb->tls_pointers_array[0] = reinterpret_cast<std::uint64_t>(teb->tls_module0_data.data());
+    teb->thread_local_storage_ptr = reinterpret_cast<std::uint64_t>(teb->tls_pointers_array.data());
 }
 
 }  // namespace tradutorlinux::runtime

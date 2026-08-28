@@ -61,6 +61,7 @@ struct WindowSlot {
     std::uint32_t extended_style{0};
     bool is_dialog{false};
     std::vector<WindowSlot*> dialog_children;
+    std::array<std::uint8_t, 256> extra_bytes{};
 };
 
 [[nodiscard]] bool is_builtin_control(const char* name) noexcept;

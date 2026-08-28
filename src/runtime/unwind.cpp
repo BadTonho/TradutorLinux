@@ -538,7 +538,48 @@ std::int32_t c_specific_handler(ExceptionRecordAmd64* const exception_record,
         std::memcpy(record.parameters.data(), parameters, parameter_count * sizeof(*parameters));
     }
     ExceptionPointersAmd64 pointers{&record, &context};
-    trace_seh("raised", code, "RaiseException");
+    std::string exc_desc = "RaiseException";
+    if (code == 0xE06D7363 && parameter_count >= 3 && parameters != nullptr) {
+        const auto image_base = reinterpret_cast<std::uintptr_t>(g_unwind_image.base);
+        const auto* const throw_info = reinterpret_cast<const std::uint32_t*>(parameters[2]);
+        if (throw_info != nullptr && validate_mapped_range(throw_info, 16, false)) {
+            const std::uint32_t cta_rva = throw_info[3];
+            const auto* const cta = reinterpret_cast<const std::int32_t*>(image_base + cta_rva);
+            if (cta_rva != 0 && validate_mapped_range(cta, 8, false) && cta[0] > 0) {
+                const std::uint32_t ct_rva = static_cast<std::uint32_t>(cta[1]);
+                const auto* const ct = reinterpret_cast<const std::uint32_t*>(image_base + ct_rva);
+                if (ct_rva != 0 && validate_mapped_range(ct, 8, false)) {
+                    const std::uint32_t td_rva = ct[1];
+                    const auto* const td = reinterpret_cast<const char*>(image_base + td_rva + 16);
+                    if (td_rva != 0 && validate_mapped_range(td, 8, false)) {
+                        exc_desc = std::string("cxx-throw: ") + td;
+                        if (std::strstr(td, "basic_string") != nullptr && parameters[1] != 0) {
+                            const auto* const str_obj = reinterpret_cast<const char*>(parameters[1]);
+                            if (validate_mapped_range(str_obj, 32, false)) {
+                                const auto my_res = *reinterpret_cast<const std::size_t*>(str_obj + 24);
+                                const auto my_size = *reinterpret_cast<const std::size_t*>(str_obj + 16);
+                                (void)my_size;
+                                const char* str_data = nullptr;
+                                if (my_res < 16) {
+                                    str_data = str_obj;
+                                } else {
+                                    str_data = *reinterpret_cast<const char* const*>(str_obj);
+                                }
+                                if (str_data != nullptr && validate_mapped_range(str_data, 1, false)) {
+                                    exc_desc += " [msg: \"";
+                                    for (std::size_t i = 0; i < 64 && str_data[i] != '\0'; ++i) {
+                                        exc_desc += str_data[i];
+                                    }
+                                    exc_desc += "\"]";
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    trace_seh("raised", code, exc_desc.c_str());
 
     struct Callback {
         void* routine{};

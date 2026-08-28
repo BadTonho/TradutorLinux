@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!--
+    Copyright 2021 Don HO <don.h@free.fr>
+	
+    This file is part of GUP for Notepad++
+
+    GUP for Notepad++ is free software: you can redistribute it and/or modify
+    it under the terms of the GNU Lesser General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    GUP for Notepad++ is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU Lesser General Public License for more details.
+
+    You should have received a copy of the GNU Lesser General Public License
+    along with GUP.  If not, see <http://www.gnu.org/licenses/>.
+-->
+
+<!-- This file is optional.-->
+
+<GUP_NativeLangue name="Galician" version="5.2.4">
+	<PopupMessages>
+		<MSGID_UPDATEAVAILABLE content="Hai unha actualización dispoñible. ¿Quere descargala?" />
+		<MSGID_VERSIONCURRENT  content="Versión actual     :" />
+		<MSGID_VERSIONNEW      content="Versión dispoñible :" />
+		
+		<MSGID_DOWNLOADPAGE content="Ir á páxina de descarga" />
+		<MSGID_MOREINFO content="máis info" />
+		<!-- $MSGID_DOWNLOADPAGE$ and $MSGID_MOREINFO$ are place holders, don't translate them -->
+		<MSGID_GOTODOWNLOADPAGETEXT content="Non hai ningunha actualización dispoñible&#xD;ou a versión máis recente aínda non está activada ($MSGID_MOREINFO$)&#xD;&#xD;$MSGID_DOWNLOADPAGE$ para actualizar Notepad++ manualmente." />
+		
+		<MSGID_DOWNLOADSTOPPED content="A descarga foi detida polo usuario. Actualización cancelada." />
+		<MSGID_CLOSEAPP content=" está aberto.&#xD;Updater cerrárao para procesar a instalación.&#xD;Continuar?" />
+		<MSGID_ABORTORNOT content="¿Desexa cancelar a descarga da actualización?" />
+		<MSGID_UNZIPFAILED content="Non se pode descomprimir: operación non permitida ou descompresión fallida" />
+	</PopupMessages>
+</GUP_NativeLangue>

@@ -6154,15 +6154,35 @@ TL_MSABI int tl_InitOnceBeginInitialize(void* const init_once, const std::uint32
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
+    auto* const ptr = static_cast<std::uintptr_t*>(init_once);
+    if ((flags & 1U) != 0U) { // INIT_ONCE_CHECK_ONLY
+        if (*ptr == 2U) {
+            if (pending != nullptr && mapped_guest_range(pending, sizeof(int), true)) *pending = 0;
+            if (context != nullptr && mapped_guest_range(context, sizeof(void*), true)) *context = nullptr;
+            set_last_error(abi::kErrorSuccess);
+            return 1;
+        }
+        set_last_error(1067 /* ERROR_GEN_FAILURE */);
+        return 0;
+    }
+    if (*ptr == 2U) {
+        if (pending != nullptr && mapped_guest_range(pending, sizeof(int), true)) *pending = 0;
+        if (context != nullptr && mapped_guest_range(context, sizeof(void*), true)) *context = nullptr;
+    } else {
+        if (pending != nullptr && mapped_guest_range(pending, sizeof(int), true)) *pending = 1;
+        if (context != nullptr && mapped_guest_range(context, sizeof(void*), true)) *context = nullptr;
+        *ptr = 1U;
     }
     set_last_error(abi::kErrorSuccess);
     return 1;
 }
 
 TL_MSABI int tl_InitOnceComplete(void* const init_once, const std::uint32_t flags, void* const context) noexcept {
-    (void)init_once;
     (void)flags;
     (void)context;
+    if (init_once != nullptr && mapped_guest_range(init_once, sizeof(void*), true)) {
+        *static_cast<std::uintptr_t*>(init_once) = 2U;
+    }
     set_last_error(abi::kErrorSuccess);
     return 1;
 }

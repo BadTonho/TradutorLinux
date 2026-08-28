@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!--
+    Copyright 2021 Don HO <don.h@free.fr>
+
+    This file is part of GUP for Notepad++
+
+    GUP for Notepad++ is free software: you can redistribute it and/or modify
+    it under the terms of the GNU Lesser General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    GUP for Notepad++ is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU Lesser General Public License for more details.
+
+    You should have received a copy of the GNU Lesser General Public License
+    along with GUP.  If not, see <http://www.gnu.org/licenses/>.
+-->
+
+<!-- This file is optional.-->
+
+<GUP_NativeLangue name = "Deutsch">
+	<PopupMessages>
+
+		<!-- <MSGID_UPDATEAVAILABLE content="An update package is available, do you want to download and install it?" /> -->
+		<MSGID_UPDATEAVAILABLE content="Ein Update ist verfügbar. Möchten Sie es herunterladen und installieren?" />
+
+		<!-- <MSGID_VERSIONCURRENT content="Current version is   :" /> -->
+		<MSGID_VERSIONCURRENT content="Aktuelle Version:" />
+
+		<!-- <MSGID_VERSIONNEW content="Available version is :" /> -->
+		<MSGID_VERSIONNEW content="Verfügbare Version:" />
+
+		<!-- <MSGID_UPDATEYES content="Yes" /> -->
+		<MSGID_UPDATEYES content="Ja" />
+
+		<!-- <MSGID_UPDATEYESSILENT content="Yes (Silent)" /> -->
+		<MSGID_UPDATEYESSILENT content="Ja (ohne Rückfrage)" />
+
+		<!-- <MSGID_UPDATENo content="No" /> -->
+		<MSGID_UPDATENo content="Nein" />
+
+		<!-- <MSGID_UPDATENEVER content="Never" /> -->
+		<MSGID_UPDATENEVER content="Niemals" />
+
+		<!-- <MSGID_DOWNLOADPAGE content="Go to the download page" /> -->
+		<MSGID_DOWNLOADPAGE content="Die Download-Seite öffnen" />
+
+		<!-- <MSGID_MOREINFO content="more info" /> -->
+		<MSGID_MOREINFO content="mehr Informationen" />
+
+		<!-- $MSGID_DOWNLOADPAGE$ and $MSGID_MOREINFO$ are place holders, don't translate them -->
+		<!-- <MSGID_GOTODOWNLOADPAGETEXT content="No update is available&#xD;or the newest version is not triggered yet for updating ($MSGID_MOREINFO$)&#xD;&#xD;$MSGID_DOWNLOADPAGE$ to update Notepad++ manually." /> -->
+		<MSGID_GOTODOWNLOADPAGETEXT content="Es ist kein Update verfügbar&#xD;oder die neueste Version wurde noch nicht für die Allgemeinheit freigegeben ($MSGID_MOREINFO$)&#xD;&#xD;$MSGID_DOWNLOADPAGE$ um Notepad++ manuell zu aktualisieren." />
+
+		<!-- <MSGID_DOWNLOADSTOPPED content="Download is stopped by user. Update is aborted." /> -->
+		<MSGID_DOWNLOADSTOPPED  content="Das Herunterladen wurde durch den Benutzer gestoppt. Das Update wurde abgebrochen." />
+
+		<!-- <MSGID_CLOSEAPP content=" is opened.&#xD;Updater will close it in order to process the installation.&#xD;Continue?" /> -->
+		<MSGID_CLOSEAPP  content=" wird ausgeführt.&#xD;Der Updater wird die Anwendung beenden um die Installation vorzunehmen.&#xD;Fortfahren?" />
+
+		<!-- <MSGID_ABORTORNOT content="Do you want to abort update download?" /> -->
+		<MSGID_ABORTORNOT  content="Möchten Sie das Herunterladen des Updates wirklich abbrechen?" />
+
+		<!-- <MSGID_UNZIPFAILED content="Can't unzip: Operation not permitted or decompression failed" /> -->
+		<MSGID_UNZIPFAILED content="Entpacken fehlgeschlagen: Fehlende Benutzerrechte oder Archiv defekt" />
+
+	</PopupMessages>
+</GUP_NativeLangue>

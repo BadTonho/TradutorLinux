@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!--
+	- last change:  24/Feb/2023  by Ondřej Müller (mullero@email.cz)
+	- translation contributors:  Ondřej Müller (mullero@email.cz), 
+-->
+<!--
+    Copyright 2021 Don HO <don.h@free.fr>
+	
+    This file is part of GUP for Notepad++
+
+    GUP for Notepad++ is free software: you can redistribute it and/or modify
+    it under the terms of the GNU Lesser General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    GUP for Notepad++ is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU Lesser General Public License for more details.
+
+    You should have received a copy of the GNU Lesser General Public License
+    along with GUP.  If not, see <http://www.gnu.org/licenses/>.
+-->
+
+<!-- This file is optional.-->
+
+<GUP_NativeLangue name="Čeština" version="5.2.9">
+	<PopupMessages>
+		<MSGID_UPDATETITLE content="Notepad++: dostupná aktualizace" />
+		<MSGID_UPDATEAVAILABLE content="Je dostupná aktualizace, chcete si jí stáhnout a nainstalovat?" />
+		<MSGID_VERSIONCURRENT content="Aktuální verze je:" />
+		<MSGID_VERSIONNEW content="Dostupná verze je:" />
+		<MSGID_UPDATEYES content="Ano" />
+		<MSGID_UPDATEYESSILENT content="Ano (tichá)" />
+		<MSGID_UPDATENo content="Ne" />
+		<MSGID_UPDATENEVER content="Nikdy" />
+		
+		<MSGID_DOWNLOADPAGE content="Přejděte na stránku stahování" />
+		<MSGID_MOREINFO content="více informací" />
+		<!-- $MSGID_DOWNLOADPAGE$ and $MSGID_MOREINFO$ are place holders, don't translate them -->
+		<MSGID_GOTODOWNLOADPAGETEXT content="Není k dispozici žádná aktualizace&#xD;nebo nejnovější verze ještě nebyla uvolněna pro aktualizace ($MSGID_MOREINFO$)&#xD;&#xD;$MSGID_DOWNLOADPAGE$ pro ruční aktualizaci aplikace." />
+		
+		<MSGID_DOWNLOADSTOPPED content="Stahování je zastaveno uživatelem. Aktualizace je přerušena." />
+		<MSGID_CLOSEAPP content=" je otevřen.&#xD;Aktualizační program jej zavře, aby mohl pokračovat v aktualizaci.&#xD;Pokračovat?" />
+		<MSGID_ABORTORNOT content="Chcete přerušit stahování aktualizace?" />
+		<MSGID_UNZIPFAILED content="Nelze rozbalit: Operace není povolena nebo dekomprese selhala." />
+	</PopupMessages>
+</GUP_NativeLangue>

@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!--
+    Updated 30 June 2024 by Elvis Gambiraža (el.gambo@gmail.com)
+-->
+<!--
+    Copyright 2021 Don HO <don.h@free.fr>
+	
+    This file is part of GUP for Notepad++
+
+    GUP for Notepad++ is free software: you can redistribute it and/or modify
+    it under the terms of the GNU Lesser General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    GUP for Notepad++ is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU Lesser General Public License for more details.
+
+    You should have received a copy of the GNU Lesser General Public License
+    along with GUP.  If not, see <http://www.gnu.org/licenses/>.
+-->
+
+<!-- This file is optional.-->
+
+<GUP_NativeLangue name="Hrvatski" version="5.2.9">
+	<PopupMessages>
+		<MSGID_UPDATETITLE content="Notepad++ ažuriranje je dostupno" />
+		<MSGID_UPDATEAVAILABLE content="Dostupan je paket ažuriranja, želite li ga preuzeti i instalirati?" />
+		<MSGID_VERSIONCURRENT content="Trenutna verzija je:" />
+		<MSGID_VERSIONNEW content="Dostupna verzija je:" />
+		<MSGID_UPDATEYES content="Da" />
+		<MSGID_UPDATEYESSILENT content="Da (tiho)" />
+		<MSGID_UPDATENo content="Ne" />
+		<MSGID_UPDATENEVER content="Nikad" />
+		
+		<MSGID_DOWNLOADPAGE content="idite na stranicu za preuzimanje" />
+		<MSGID_MOREINFO content="više informacija" />
+		<!-- $MSGID_DOWNLOADPAGE$ and $MSGID_MOREINFO$ are place holders, don't translate them -->
+		<MSGID_GOTODOWNLOADPAGETEXT content="Nije dostupno ažuriranje&#xD;ili najnovija verzija još nije puštena&#xD;za ažuriranje. ($MSGID_MOREINFO$)&#xD;&#xD;Za ručno ažuriranje Notepada++&#xD;$MSGID_DOWNLOADPAGE$." />
+		
+		<MSGID_DOWNLOADSTOPPED content="Korisnik je zaustavio preuzimanje. Ažuriranje je prekinuto." />
+		<MSGID_CLOSEAPP content=" je otvoren.&#xD;Program za ažuriranje će ga zatvoriti kako bi se provela instalacija.&#xD;Nastaviti?" />
+		<MSGID_ABORTORNOT content="Želite li prekinuti preuzimanje ažuriranja?" />
+		<MSGID_UNZIPFAILED content="Nije moguće raspakirati: radnja nije dopuštena ili raspakiravanje nije uspjelo" />
+	</PopupMessages>
+</GUP_NativeLangue>

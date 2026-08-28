@@ -492,7 +492,11 @@ CriticalSectionEntry* alloc_cs_entry(void* cs) noexcept {
     }
     it->guest_address = cs;
     it->used = true;
-    pthread_mutex_init(&it->mutex, nullptr);
+    pthread_mutexattr_t attr;
+    pthread_mutexattr_init(&attr);
+    pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE);
+    pthread_mutex_init(&it->mutex, &attr);
+    pthread_mutexattr_destroy(&attr);
     return &*it;
 }
 
@@ -686,7 +690,7 @@ GuestExecutionResult execute_guest_entry(const std::uintptr_t entry_point,
     }
     reset_process_console_state();
     g_guest_peb.image_base_address = reinterpret_cast<std::uint64_t>(g_guest_image_base);
-    g_guest_peb.process_heap = 0x10000;
+    g_guest_peb.process_heap = reinterpret_cast<std::uint64_t>(tl_GetProcessHeap());
     g_guest_peb.number_of_processors = 4;
     g_guest_peb.being_debugged = 0;
     constexpr std::uintptr_t kGuestStackSize = 0x100000U;  // 1 MiB

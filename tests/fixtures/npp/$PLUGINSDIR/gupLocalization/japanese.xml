@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!--
+    Copyright 2021 Don HO <don.h@free.fr>
+    Copyright 2023 MISE Yasuhiro
+
+    This file is part of GUP for Notepad++
+
+    GUP for Notepad++ is free software: you can redistribute it and/or modify
+    it under the terms of the GNU Lesser General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    GUP for Notepad++ is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU Lesser General Public License for more details.
+
+    You should have received a copy of the GNU Lesser General Public License
+    along with GUP.  If not, see <http://www.gnu.org/licenses/>.
+-->
+
+<!-- This file is optional.-->
+
+<GUP_NativeLangue name="Japanese" version="5.2.9">
+	<PopupMessages>
+		<MSGID_UPDATETITLE content="Notepad++ をアップデートできます" />
+		<MSGID_UPDATEAVAILABLE content="新しいバージョンが利用できます。ダウンロードし、インストールを行いますか？" />
+		<MSGID_VERSIONCURRENT content="現在のバージョン：" />
+		<MSGID_VERSIONNEW content="新しいバージョン：" />
+		<MSGID_UPDATEYES content="はい" />
+		<MSGID_UPDATEYESSILENT content="はい（ｻｲﾚﾝﾄ）" />
+		<MSGID_UPDATENo content="いいえ" />
+		<MSGID_UPDATENEVER content="自動更新ｵﾌ" />
+		
+		<MSGID_DOWNLOADPAGE content="ダウンロードページ" />
+		<MSGID_MOREINFO content="より詳しく" />
+		<!-- $MSGID_DOWNLOADPAGE$ and $MSGID_MOREINFO$ are place holders, don't translate them -->
+		<MSGID_GOTODOWNLOADPAGETEXT content="新しいバージョンがないか、&#xD;まだ配信されていません（$MSGID_MOREINFO$）&#xD;&#xD;$MSGID_DOWNLOADPAGE$から、Notepad++を手動でダウンロードできます。" />
+		
+		<MSGID_DOWNLOADSTOPPED content="ユーザー操作によりダウンロードが中断されました。更新処理を中止します。" />
+		<MSGID_CLOSEAPP content=" が開いています。&#xD;更新処理を続けるために同ソフトを閉じようとしています。&#xD;よろしいですか？" />
+		<MSGID_ABORTORNOT content="新しいバージョンのダウンロードを中断しますか？" />
+		<MSGID_UNZIPFAILED content="zipを展開できません：操作が許可されなかったか、展開処理に失敗しました。" />
+	</PopupMessages>
+</GUP_NativeLangue>

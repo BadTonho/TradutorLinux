@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!-- ========================================== [ Bulgarian localization ] ===\
+|
+|   Translators:.....: 2023–yyyy – Rusi Dimitrov;
+|   Last revision:...: 01.07.2024 by Rusi Dimitrov <npp[at]rdd.anonaddy.com>
+|
+\========================================================================== -->
+<!--
+    Copyright 2021 Don HO <don.h@free.fr>
+	
+    This file is part of GUP for Notepad++
+
+    GUP for Notepad++ is free software: you can redistribute it and/or modify
+    it under the terms of the GNU Lesser General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    GUP for Notepad++ is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU Lesser General Public License for more details.
+
+    You should have received a copy of the GNU Lesser General Public License
+    along with GUP.  If not, see <http://www.gnu.org/licenses/>.
+-->
+
+<!-- Този файл не е задължителен.-->
+
+<GUP_NativeLangue name="Български">
+	<PopupMessages>
+		<MSGID_UPDATETITLE content="Налична актуализация на Notepad++"/>
+		<MSGID_UPDATEAVAILABLE content="Наличен е пакет за актуализация, искате ли да го изтеглите и инсталирате?"/>
+		<MSGID_VERSIONCURRENT content="Текущата версия е  :"/>
+		<MSGID_VERSIONNEW content="Наличната версия е :"/>
+		<MSGID_UPDATEYES content="Да"/>
+		<MSGID_UPDATEYESSILENT content="Да (тихо)" />
+		<MSGID_UPDATENo content="Не"/>
+		<MSGID_UPDATENEVER content="Никога"/>
+		
+		<MSGID_DOWNLOADPAGE content="Отидете на страницата за изтегляне"/>
+		<MSGID_MOREINFO content="още инфо"/>
+		<!-- $MSGID_DOWNLOADPAGE$ и $MSGID_MOREINFO$ не се превеждат -->
+		<MSGID_GOTODOWNLOADPAGETEXT content="Няма налична актуализация или най-новата версия все още не е задействана за актуализация ($MSGID_MOREINFO$).
+
+$MSGID_DOWNLOADPAGE$ за да актуализирате Notepad++ ръчно."/>
+
+		<MSGID_DOWNLOADSTOPPED content="Изтеглянето е спряно от потребителя. Актуализацията е прекъсната." />
+		<MSGID_CLOSEAPP content=" стартиран.
+Актуализаторът ще го затвори, за да извърши инсталацията.
+
+Продължаване?"/>
+		<MSGID_ABORTORNOT content="Искате ли да прекъснете изтеглянето на актуализация?"/>
+		<MSGID_UNZIPFAILED content="Не може да се разархивира: Действието не е разрешено или декомпресирането е неуспешно"/>
+	</PopupMessages>
+</GUP_NativeLangue>
