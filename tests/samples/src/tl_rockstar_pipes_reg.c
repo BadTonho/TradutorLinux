@@ -57,6 +57,7 @@ void tl_entry(void) {
         ExitProcess(1);
     }
 
+    (void)GetCurrentProcess();
     (void)SetNamedPipeHandleState((void*)0, (void*)0, (void*)0, (void*)0);
     static const uint16_t kPipeName[] = {'\\', '\\', '.', '\\', 'p', 'i', 'p', 'e', 0};
     (void)WaitNamedPipeW(kPipeName, 0);
