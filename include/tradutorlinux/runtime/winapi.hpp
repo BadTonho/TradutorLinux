@@ -1370,6 +1370,33 @@ TL_MSABI int tl_Process32FirstW(void* snapshot, void* entry) noexcept;
 TL_MSABI int tl_Process32NextW(void* snapshot, void* entry) noexcept;
 TL_MSABI void* tl_OpenProcess(std::uint32_t desired_access, int inherit_handle, std::uint32_t process_id) noexcept;
 
+// KERNEL32: Sistema, Processos e Tempo
+TL_MSABI void tl_OutputDebugStringA(const char* output_string) noexcept;
+TL_MSABI void tl_OutputDebugStringW(const std::uint16_t* output_string) noexcept;
+TL_MSABI int tl_SetDllDirectoryW(const std::uint16_t* path_name) noexcept;
+TL_MSABI std::size_t tl_VirtualQueryEx(const void* process_handle, const void* address,
+                                       void* buffer, std::size_t length) noexcept;
+TL_MSABI std::uint32_t tl_GetTimeZoneInformation(void* tz_info) noexcept;
+TL_MSABI std::uint32_t tl_GetProcessId(const void* process) noexcept;
+TL_MSABI int tl_QueryFullProcessImageNameW(const void* process, std::uint32_t flags,
+                                           std::uint16_t* exe_name, std::uint32_t* size) noexcept;
+TL_MSABI int tl_FileTimeToLocalFileTime(const void* file_time, void* local_file_time) noexcept;
+TL_MSABI std::uint32_t tl_GetLongPathNameW(const std::uint16_t* short_path,
+                                           std::uint16_t* long_path, std::uint32_t buffer_length) noexcept;
+TL_MSABI std::uint32_t tl_GetShortPathNameW(const std::uint16_t* long_path,
+                                            std::uint16_t* short_path, std::uint32_t buffer_length) noexcept;
+TL_MSABI int tl_SetThreadPriority(const void* thread_handle, int priority) noexcept;
+TL_MSABI int tl_GetProcessAffinityMask(const void* process_handle, std::uintptr_t* process_affinity_mask,
+                                       std::uintptr_t* system_affinity_mask) noexcept;
+
+// SHELL32 / SHLWAPI: Utilitários de Caminhos e Shell
+TL_MSABI int tl_SHAutoComplete(const void* hwnd_edit, std::uint32_t flags) noexcept;
+TL_MSABI int tl_PathRemoveFileSpecW(std::uint16_t* path) noexcept;
+TL_MSABI std::uint16_t* tl_PathCombineW(std::uint16_t* dest, const std::uint16_t* dir,
+                                        const std::uint16_t* file) noexcept;
+TL_MSABI int tl_PathIsRelativeW(const std::uint16_t* path) noexcept;
+TL_MSABI int tl_SHFileOperationW(void* file_op) noexcept;
+
 }  // extern "C"
 
 // Define o caminho do módulo convidado antes da execução.

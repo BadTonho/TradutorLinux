@@ -327,6 +327,41 @@ TEST(User32ExtTest, DesktopCaptureAndRectOperations) {
     EXPECT_GT(calc_r.bottom, 0);
 }
 
+TEST(Kernel32SystemTest, TimeZoneProcessAndAffinity) {
+    tl_OutputDebugStringA("test A");
+    std::uint16_t wstr[] = {u't', u'e', u's', u't', 0};
+    tl_OutputDebugStringW(wstr);
+
+    EXPECT_EQ(tl_SetDllDirectoryW(wstr), 1);
+    EXPECT_EQ(tl_SetDllDirectoryW(nullptr), 1);
+
+    std::uint8_t tzi[200]{};
+    EXPECT_EQ(tl_GetTimeZoneInformation(tzi), 1U);
+
+    EXPECT_NE(tl_GetProcessId(nullptr), 0U);
+
+    std::uint16_t img_name[260]{};
+    std::uint32_t size = 260;
+    // QueryFullProcessImageNameW returns success or handles capacity correctly
+    tl_QueryFullProcessImageNameW(nullptr, 0, img_name, &size);
+
+    std::uint64_t ft = 0x01D9E00000000000ULL;
+    std::uint64_t lft = 0;
+    EXPECT_EQ(tl_FileTimeToLocalFileTime(&ft, &lft), 1);
+    EXPECT_EQ(lft, ft);
+
+    std::uint16_t path_out[260]{};
+    EXPECT_GT(tl_GetLongPathNameW(wstr, path_out, 260), 0U);
+    EXPECT_GT(tl_GetShortPathNameW(wstr, path_out, 260), 0U);
+
+    EXPECT_EQ(tl_SetThreadPriority(nullptr, 0), 1);
+
+    std::uintptr_t proc_mask = 0, sys_mask = 0;
+    EXPECT_EQ(tl_GetProcessAffinityMask(nullptr, &proc_mask, &sys_mask), 1);
+    EXPECT_NE(proc_mask, 0U);
+    EXPECT_NE(sys_mask, 0U);
+}
+
 TEST(Win32CodePageTest, Cp1252ConvertsByte80ToEuroSign) {
     const char input[] = {'c', 'a', 'f', static_cast<char>(0xE9), static_cast<char>(0x80), '\0'};
     std::uint16_t output[8]{};

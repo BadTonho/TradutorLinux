@@ -432,6 +432,23 @@ void register_builtin_modules() {
         {"GlobalUnlock", 243, reinterpret_cast<std::uintptr_t>(&tl_GlobalUnlock)},
         {"GlobalFree", 244, reinterpret_cast<std::uintptr_t>(&tl_GlobalFree)},
         {"LocalAlloc", 245, reinterpret_cast<std::uintptr_t>(&tl_LocalAlloc)},
+        {"LocalFree", 246, reinterpret_cast<std::uintptr_t>(&tl_LocalFree)},
+        {"OutputDebugStringA", 247, reinterpret_cast<std::uintptr_t>(&tl_OutputDebugStringA)},
+        {"OutputDebugStringW", 248, reinterpret_cast<std::uintptr_t>(&tl_OutputDebugStringW)},
+        {"SetDllDirectoryW", 249, reinterpret_cast<std::uintptr_t>(&tl_SetDllDirectoryW)},
+        {"VirtualQueryEx", 250, reinterpret_cast<std::uintptr_t>(&tl_VirtualQueryEx)},
+        {"GetTimeZoneInformation", 251,
+         reinterpret_cast<std::uintptr_t>(&tl_GetTimeZoneInformation)},
+        {"GetProcessId", 252, reinterpret_cast<std::uintptr_t>(&tl_GetProcessId)},
+        {"QueryFullProcessImageNameW", 253,
+         reinterpret_cast<std::uintptr_t>(&tl_QueryFullProcessImageNameW)},
+        {"FileTimeToLocalFileTime", 254,
+         reinterpret_cast<std::uintptr_t>(&tl_FileTimeToLocalFileTime)},
+        {"GetLongPathNameW", 255, reinterpret_cast<std::uintptr_t>(&tl_GetLongPathNameW)},
+        {"GetShortPathNameW", 256, reinterpret_cast<std::uintptr_t>(&tl_GetShortPathNameW)},
+        {"SetThreadPriority", 257, reinterpret_cast<std::uintptr_t>(&tl_SetThreadPriority)},
+        {"GetProcessAffinityMask", 258,
+         reinterpret_cast<std::uintptr_t>(&tl_GetProcessAffinityMask)},
     };
     static const InternalModule kKernel32Module{"KERNEL32.dll", kKernel32Exports};
     register_module(kKernel32Module);

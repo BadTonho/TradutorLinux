@@ -4931,6 +4931,187 @@ TL_MSABI std::size_t tl_HeapCompact(void* heap, const std::uint32_t flags) noexc
     return 0;
 }
 
+TL_MSABI void tl_OutputDebugStringA(const char* const output_string) noexcept {
+    if (output_string == nullptr || !mapped_guest_cstring(output_string)) {
+        return;
+    }
+    const std::array<diagnostics::TraceField, 4> fields{
+        diagnostics::TraceField{"symbol", "OutputDebugStringA"},
+        diagnostics::TraceField{"message", output_string},
+    };
+    runtime_trace("OutputDebugStringA", fields, 2);
+}
+
+TL_MSABI void tl_OutputDebugStringW(const std::uint16_t* const output_string) noexcept {
+    if (output_string == nullptr || !mapped_guest_wstring(output_string)) {
+        return;
+    }
+    const std::string utf8 = util::wide_to_utf8(output_string);
+    const std::array<diagnostics::TraceField, 4> fields{
+        diagnostics::TraceField{"symbol", "OutputDebugStringW"},
+        diagnostics::TraceField{"message", utf8.c_str()},
+    };
+    runtime_trace("OutputDebugStringW", fields, 2);
+}
+
+static std::string g_custom_dll_directory;
+
+TL_MSABI int tl_SetDllDirectoryW(const std::uint16_t* const path_name) noexcept {
+    if (path_name == nullptr) {
+        g_custom_dll_directory.clear();
+        set_last_error(abi::kErrorSuccess);
+        return 1;
+    }
+    if (!mapped_guest_wstring(path_name)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    g_custom_dll_directory = util::wide_to_utf8(path_name);
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI std::size_t tl_VirtualQueryEx(const void* const process_handle, const void* const address,
+                                       void* const buffer, const std::size_t length) noexcept {
+    (void)process_handle;
+    if (buffer == nullptr || length < sizeof(abi::GuestMemoryBasicInformation) ||
+        !mapped_guest_range(buffer, sizeof(abi::GuestMemoryBasicInformation), true)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    return tl_VirtualQuery(address, buffer, length);
+}
+
+struct GuestTimeZoneInformation {
+    std::int32_t bias{0};
+    std::uint16_t standard_name[32]{};
+    std::uint16_t standard_date[8]{};
+    std::int32_t standard_bias{0};
+    std::uint16_t daylight_name[32]{};
+    std::uint16_t daylight_date[8]{};
+    std::int32_t daylight_bias{0};
+};
+
+TL_MSABI std::uint32_t tl_GetTimeZoneInformation(void* const tz_info) noexcept {
+    if (tz_info == nullptr || !mapped_guest_range(tz_info, sizeof(GuestTimeZoneInformation), true)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0xFFFFFFFFU;
+    }
+    auto* const tzi = static_cast<GuestTimeZoneInformation*>(tz_info);
+    *tzi = GuestTimeZoneInformation{};
+    tzi->bias = 0;
+    const std::u16string std_name = util::utf8_to_wide("UTC");
+    std::copy(std_name.begin(), std_name.end(), tzi->standard_name);
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI std::uint32_t tl_GetProcessId(const void* const process) noexcept {
+    if (process == nullptr || process == reinterpret_cast<const void*>(~0ULL)) {
+        return static_cast<std::uint32_t>(getpid());
+    }
+    const std::uintptr_t addr = reinterpret_cast<std::uintptr_t>(process);
+    if (addr >= kProcessHandleBase && addr < kProcessHandleBase + kProcessHandleRange) {
+        return static_cast<std::uint32_t>(addr - kProcessHandleBase);
+    }
+    const SyncSlot* const slot = find_sync_slot(process);
+    if (slot != nullptr && slot->kind == SyncKind::Process) {
+        return static_cast<std::uint32_t>(slot->child_pid);
+    }
+    set_last_error(abi::kErrorInvalidHandle);
+    return 0;
+}
+
+TL_MSABI int tl_QueryFullProcessImageNameW(const void* const process, const std::uint32_t flags,
+                                           std::uint16_t* const exe_name, std::uint32_t* const size) noexcept {
+    (void)process;
+    (void)flags;
+    if (exe_name == nullptr || size == nullptr || !mapped_guest_range(size, sizeof(*size), true)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    const std::string path =
+        prefix::to_windows_path(std::filesystem::path(g_module_file_name), guest_prefix_root());
+    const std::u16string wide_path = util::utf8_to_wide(path);
+    const std::uint32_t capacity = *size;
+    if (capacity <= wide_path.size()) {
+        *size = static_cast<std::uint32_t>(wide_path.size() + 1);
+        set_last_error(abi::kErrorInsufficientBuffer);
+        return 0;
+    }
+    if (!mapped_guest_range(exe_name, sizeof(std::uint16_t) * (wide_path.size() + 1), true)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    std::copy(wide_path.begin(), wide_path.end(), exe_name);
+    exe_name[wide_path.size()] = 0;
+    *size = static_cast<std::uint32_t>(wide_path.size());
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_FileTimeToLocalFileTime(const void* const file_time, void* const local_file_time) noexcept {
+    if (file_time == nullptr || local_file_time == nullptr ||
+        !mapped_guest_range(file_time, sizeof(std::uint64_t), false) ||
+        !mapped_guest_range(local_file_time, sizeof(std::uint64_t), true)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    *static_cast<std::uint64_t*>(local_file_time) = *static_cast<const std::uint64_t*>(file_time);
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI std::uint32_t tl_GetLongPathNameW(const std::uint16_t* const short_path,
+                                           std::uint16_t* const long_path,
+                                           const std::uint32_t buffer_length) noexcept {
+    if (short_path == nullptr || !mapped_guest_wstring(short_path)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    const std::string path = util::wide_to_utf8(short_path);
+    const std::u16string wide_path = util::utf8_to_wide(path);
+    const std::size_t len = wide_path.size();
+    if (buffer_length <= len || long_path == nullptr) {
+        return static_cast<std::uint32_t>(len + 1);
+    }
+    if (!mapped_guest_range(long_path, sizeof(std::uint16_t) * (len + 1), true)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    std::copy(wide_path.begin(), wide_path.end(), long_path);
+    long_path[len] = 0;
+    set_last_error(abi::kErrorSuccess);
+    return static_cast<std::uint32_t>(len);
+}
+
+TL_MSABI std::uint32_t tl_GetShortPathNameW(const std::uint16_t* const long_path,
+                                            std::uint16_t* const short_path,
+                                            const std::uint32_t buffer_length) noexcept {
+    return tl_GetLongPathNameW(long_path, short_path, buffer_length);
+}
+
+TL_MSABI int tl_SetThreadPriority(const void* const thread_handle, const int priority) noexcept {
+    (void)thread_handle;
+    (void)priority;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_GetProcessAffinityMask(const void* const process_handle,
+                                       std::uintptr_t* const process_affinity_mask,
+                                       std::uintptr_t* const system_affinity_mask) noexcept {
+    (void)process_handle;
+    if (process_affinity_mask != nullptr && mapped_guest_range(process_affinity_mask, sizeof(*process_affinity_mask), true)) {
+        *process_affinity_mask = 0x0000000FULL;
+    }
+    if (system_affinity_mask != nullptr && mapped_guest_range(system_affinity_mask, sizeof(*system_affinity_mask), true)) {
+        *system_affinity_mask = 0x0000000FULL;
+    }
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
 }  // extern "C"
 
 }  // namespace tradutorlinux
