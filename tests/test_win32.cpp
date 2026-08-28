@@ -6,6 +6,7 @@
 #include "tradutorlinux/runtime/wininet.hpp"
 #include "tradutorlinux/runtime/wintrust.hpp"
 #include "tradutorlinux/runtime/crypt32.hpp"
+#include "tradutorlinux/package/msix.hpp"
 #include "tradutorlinux/prefix/prefix.hpp"
 #include "../src/runtime/runtime_context.hpp"
 
@@ -376,6 +377,29 @@ TEST(ShellPathTest, PathIsRelativeAndAutoComplete) {
 
     std::uint8_t op_buf[100]{};
     EXPECT_EQ(tl_SHFileOperationW(op_buf), 0);
+}
+
+TEST(MsixParserTest, ParseManifestXml) {
+    const std::string_view sample_manifest = R"(<?xml version="1.0" encoding="utf-8"?>
+<Package xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10">
+  <Identity Name="SerifEuropeLtd.AffinityPhoto2" Publisher="CN=Serif (Europe) Ltd" Version="2.5.5.0" ProcessorArchitecture="x64" />
+  <Applications>
+    <Application Id="App" Executable="App\Photo.exe" EntryPoint="Windows.FullTrustApplication">
+      <uap:VisualElements DisplayName="Affinity Photo 2" Description="Affinity Photo 2" />
+    </Application>
+  </Applications>
+</Package>)";
+
+    const auto info = package::parse_appx_manifest_xml(sample_manifest);
+    ASSERT_TRUE(info.has_value());
+    EXPECT_EQ(info->package_name, "SerifEuropeLtd.AffinityPhoto2");
+    EXPECT_EQ(info->publisher, "CN=Serif (Europe) Ltd");
+    EXPECT_EQ(info->version, "2.5.5.0");
+    ASSERT_EQ(info->applications.size(), 1U);
+    EXPECT_EQ(info->applications[0].id, "App");
+    EXPECT_EQ(info->applications[0].executable, "App\\Photo.exe");
+    EXPECT_EQ(info->applications[0].display_name, "Affinity Photo 2");
+    EXPECT_EQ(info->main_executable.value_or(""), "App\\Photo.exe");
 }
 
 TEST(Win32CodePageTest, Cp1252ConvertsByte80ToEuroSign) {

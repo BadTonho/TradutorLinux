@@ -8,6 +8,7 @@ add_library(tradutorlinux_core STATIC
     loader/import_resolver.cpp
     loader/module.cpp
     loader/process.cpp
+    package/msix.cpp
     pe/pe_reader.cpp
     prefix/prefix.cpp
     process/isolate.cpp
