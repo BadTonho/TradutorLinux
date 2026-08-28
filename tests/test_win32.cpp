@@ -216,6 +216,68 @@ TEST(Crypt32Test, CertGetNameStringReadsSubjectIssuerAndValidatesBuffers) {
     EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
 }
 
+TEST(Crypt32Test, CertContextAndStoreManagement) {
+    const std::array<std::uint8_t, 61> certificate{
+        0x30, 0x3B, 0x30, 0x34, 0x02, 0x01, 0x01, 0x30, 0x00,
+        0x30, 0x12, 0x31, 0x10, 0x30, 0x0E, 0x06, 0x03, 0x55, 0x04, 0x03,
+        0x0C, 0x07, 'T', 'L', ' ', 'R', 'o', 'o', 't',
+        0x30, 0x00,
+        0x30, 0x15, 0x31, 0x13, 0x30, 0x11, 0x06, 0x03, 0x55, 0x04, 0x03,
+        0x0C, 0x0A, 'T', 'L', ' ', 'F', 'i', 'x', 't', 'u', 'r', 'e',
+        0x30, 0x00, 0x30, 0x00, 0x03, 0x01, 0x00,
+    };
+    GuestCertContext context{};
+    context.encoding_type = 1;
+    context.encoded = const_cast<std::uint8_t*>(certificate.data());
+    context.encoded_size = static_cast<std::uint32_t>(certificate.size());
+
+    // Duplicate context
+    EXPECT_EQ(tl_CertDuplicateCertificateContext(nullptr), nullptr);
+    const GuestCertContext* dup = tl_CertDuplicateCertificateContext(&context);
+    ASSERT_NE(dup, nullptr);
+    EXPECT_EQ(dup->encoded_size, context.encoded_size);
+
+    // SHA-1 property
+    std::uint32_t hash_size = 0;
+    EXPECT_EQ(tl_CertGetCertificateContextProperty(dup, kCertSha1HashPropId, nullptr, &hash_size), 1U);
+    EXPECT_EQ(hash_size, 20U);
+
+    std::uint8_t small_hash[10]{};
+    hash_size = sizeof(small_hash);
+    EXPECT_EQ(tl_CertGetCertificateContextProperty(dup, kCertSha1HashPropId, small_hash, &hash_size), 0U);
+    EXPECT_EQ(tl_GetLastError(), kErrorMoreData);
+    EXPECT_EQ(hash_size, 20U);
+
+    std::uint8_t full_hash[20]{};
+    EXPECT_EQ(tl_CertGetCertificateContextProperty(dup, kCertSha1HashPropId, full_hash, &hash_size), 1U);
+    EXPECT_EQ(hash_size, 20U);
+
+    // Free context
+    EXPECT_EQ(tl_CertFreeCertificateContext(nullptr), 1U);
+    EXPECT_EQ(tl_CertFreeCertificateContext(dup), 1U);
+
+    // Store operations
+    EXPECT_EQ(tl_CertOpenStore(nullptr, 0, nullptr, 0, nullptr), nullptr);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+
+    void* mem_store = tl_CertOpenStore(reinterpret_cast<const char*>(kCertStoreProvMemory), 0,
+                                       nullptr, 0, nullptr);
+    ASSERT_NE(mem_store, nullptr);
+    EXPECT_EQ(tl_CertCloseStore(nullptr, 0), 0U);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidHandle);
+    EXPECT_EQ(tl_CertCloseStore(mem_store, kCertCloseStoreCheckFlag), 1U);
+
+    // System store wrappers
+    void* sys_a = tl_CertOpenSystemStoreA(nullptr, "ROOT");
+    ASSERT_NE(sys_a, nullptr);
+    EXPECT_EQ(tl_CertCloseStore(sys_a, 0), 1U);
+
+    constexpr std::uint16_t kStoreW[] = {'M', 'Y', 0};
+    void* sys_w = tl_CertOpenSystemStoreW(nullptr, kStoreW);
+    ASSERT_NE(sys_w, nullptr);
+    EXPECT_EQ(tl_CertCloseStore(sys_w, 0), 1U);
+}
+
 TEST(Win32CodePageTest, Cp1252ConvertsByte80ToEuroSign) {
     const char input[] = {'c', 'a', 'f', static_cast<char>(0xE9), static_cast<char>(0x80), '\0'};
     std::uint16_t output[8]{};

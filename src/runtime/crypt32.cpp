@@ -256,6 +256,122 @@ std::u16string select_name(const std::vector<NameAttribute>& attributes,
     return {};
 }
 
+struct Sha1Context {
+    std::uint64_t count{0};
+    std::array<std::uint32_t, 5> state{0x67452301U, 0xEFCDAB89U, 0x98BADCFEU, 0x10325476U, 0xC3D2E1F0U};
+    std::array<std::uint8_t, 64> buffer{};
+};
+
+inline std::uint32_t rol(const std::uint32_t value, const std::size_t bits) noexcept {
+    return (value << bits) | (value >> (32U - bits));
+}
+
+void sha1_transform(std::array<std::uint32_t, 5>& state, const std::uint8_t buffer[64]) noexcept {
+    std::array<std::uint32_t, 80> block{};
+    for (std::size_t i = 0; i < 16; ++i) {
+        block[i] = (static_cast<std::uint32_t>(buffer[i * 4U]) << 24U) |
+                   (static_cast<std::uint32_t>(buffer[i * 4U + 1U]) << 16U) |
+                   (static_cast<std::uint32_t>(buffer[i * 4U + 2U]) << 8U) |
+                   static_cast<std::uint32_t>(buffer[i * 4U + 3U]);
+    }
+    for (std::size_t i = 16; i < 80; ++i) {
+        block[i] = rol(block[i - 3U] ^ block[i - 8U] ^ block[i - 14U] ^ block[i - 16U], 1U);
+    }
+    std::uint32_t a = state[0];
+    std::uint32_t b = state[1];
+    std::uint32_t c = state[2];
+    std::uint32_t d = state[3];
+    std::uint32_t e = state[4];
+
+    for (std::size_t i = 0; i < 80; ++i) {
+        std::uint32_t f = 0;
+        std::uint32_t k = 0;
+        if (i < 20U) {
+            f = (b & c) | ((~b) & d);
+            k = 0x5A827999U;
+        } else if (i < 40U) {
+            f = b ^ c ^ d;
+            k = 0x6ED9EBA1U;
+        } else if (i < 60U) {
+            f = (b & c) | (b & d) | (c & d);
+            k = 0x8F1BBCDCU;
+        } else {
+            f = b ^ c ^ d;
+            k = 0xCA62C1D6U;
+        }
+        const std::uint32_t temp = rol(a, 5U) + f + e + k + block[i];
+        e = d;
+        d = c;
+        c = rol(b, 30U);
+        b = a;
+        a = temp;
+    }
+    state[0] += a;
+    state[1] += b;
+    state[2] += c;
+    state[3] += d;
+    state[4] += e;
+}
+
+void sha1_update(Sha1Context& ctx, const std::uint8_t* const data, const std::size_t len) noexcept {
+    std::size_t buffer_len = static_cast<std::size_t>((ctx.count >> 3U) & 63U);
+    ctx.count += static_cast<std::uint64_t>(len) << 3U;
+    const std::size_t part_len = 64U - buffer_len;
+    std::size_t i = 0;
+    if (len >= part_len) {
+        std::copy_n(data, part_len, &ctx.buffer[buffer_len]);
+        sha1_transform(ctx.state, ctx.buffer.data());
+        for (i = part_len; i + 63U < len; i += 64U) {
+            sha1_transform(ctx.state, &data[i]);
+        }
+        buffer_len = 0;
+    }
+    if (i < len) {
+        std::copy_n(&data[i], len - i, &ctx.buffer[buffer_len]);
+    }
+}
+
+void sha1_final(Sha1Context& ctx, std::array<std::uint8_t, 20>& digest) noexcept {
+    std::array<std::uint8_t, 8> final_count{};
+    for (std::size_t i = 0; i < 8; ++i) {
+        final_count[i] = static_cast<std::uint8_t>((ctx.count >> ((7U - i) * 8U)) & 0xFFU);
+    }
+    const std::uint8_t pad = 0x80U;
+    sha1_update(ctx, &pad, 1U);
+    while ((ctx.count & (63U << 3U)) != (56U << 3U)) {
+        const std::uint8_t zero = 0;
+        sha1_update(ctx, &zero, 1U);
+    }
+    sha1_update(ctx, final_count.data(), 8U);
+    for (std::size_t i = 0; i < 20; ++i) {
+        digest[i] = static_cast<std::uint8_t>((ctx.state[i / 4U] >> ((3U - (i % 4U)) * 8U)) & 0xFFU);
+    }
+}
+
+std::array<std::uint8_t, 20> compute_sha1(const Bytes data) noexcept {
+    Sha1Context ctx{};
+    sha1_update(ctx, data.data(), data.size());
+    std::array<std::uint8_t, 20> digest{};
+    sha1_final(ctx, digest);
+    return digest;
+}
+
+struct TrackedContext {
+    GuestCertContext guest_context{};
+    std::vector<std::uint8_t> encoded_storage;
+    std::atomic<std::uint32_t> refcount{1};
+};
+
+struct TrackedStore {
+    std::uint32_t encoding_type{0};
+    std::uint32_t flags{0};
+    std::vector<const GuestCertContext*> certs;
+};
+
+std::mutex g_crypto_mutex;
+std::vector<std::unique_ptr<TrackedContext>> g_tracked_contexts;
+std::vector<std::unique_ptr<TrackedStore>> g_tracked_stores;
+
 }  // namespace
 
 extern "C" {
@@ -319,6 +435,363 @@ TL_CRYPT32_MSABI std::uint32_t tl_CertGetNameStringW(
     name_string[selected.size()] = 0;
     set_last_error(abi::kErrorSuccess);
     return static_cast<std::uint32_t>(required);
+}
+
+TL_CRYPT32_MSABI const GuestCertContext* tl_CertDuplicateCertificateContext(
+    const GuestCertContext* const cert_context) noexcept {
+    if (cert_context == nullptr) {
+        return nullptr;
+    }
+    if (!runtime::validate_mapped_range(cert_context, sizeof(*cert_context), false)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return nullptr;
+    }
+
+    std::lock_guard<std::mutex> lock(g_crypto_mutex);
+    for (const auto& tracked : g_tracked_contexts) {
+        if (&tracked->guest_context == cert_context) {
+            tracked->refcount++;
+            return &tracked->guest_context;
+        }
+    }
+
+    if (cert_context->encoded == nullptr || cert_context->encoded_size == 0U ||
+        cert_context->encoded_size > kMaxCertificateSize ||
+        !runtime::validate_mapped_range(cert_context->encoded, cert_context->encoded_size, false)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return nullptr;
+    }
+
+    auto tracked = std::make_unique<TrackedContext>();
+    tracked->encoded_storage.assign(cert_context->encoded,
+                                   cert_context->encoded + cert_context->encoded_size);
+    tracked->guest_context.encoding_type = cert_context->encoding_type;
+    tracked->guest_context.encoded = tracked->encoded_storage.data();
+    tracked->guest_context.encoded_size = cert_context->encoded_size;
+    tracked->guest_context.cert_info = cert_context->cert_info;
+    tracked->guest_context.cert_store = cert_context->cert_store;
+    tracked->refcount = 1U;
+
+    const GuestCertContext* result = &tracked->guest_context;
+    g_tracked_contexts.push_back(std::move(tracked));
+    return result;
+}
+
+TL_CRYPT32_MSABI std::uint32_t tl_CertFreeCertificateContext(
+    const GuestCertContext* const cert_context) noexcept {
+    if (cert_context == nullptr) {
+        return 1U;
+    }
+
+    std::lock_guard<std::mutex> lock(g_crypto_mutex);
+    for (auto it = g_tracked_contexts.begin(); it != g_tracked_contexts.end(); ++it) {
+        if (&(*it)->guest_context == cert_context) {
+            if (--(*it)->refcount == 0U) {
+                g_tracked_contexts.erase(it);
+            }
+            return 1U;
+        }
+    }
+
+    if (!runtime::validate_mapped_range(cert_context, sizeof(*cert_context), false)) {
+        return 0U;
+    }
+    return 1U;
+}
+
+TL_CRYPT32_MSABI void* tl_CertOpenStore(
+    const char* const store_provider, const std::uint32_t encoding_type,
+    void* const crypt_prov, const std::uint32_t flags, const void* const para) noexcept {
+    (void)crypt_prov;
+    (void)para;
+    if (store_provider == nullptr) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return nullptr;
+    }
+
+    std::lock_guard<std::mutex> lock(g_crypto_mutex);
+    auto store = std::make_unique<TrackedStore>();
+    store->encoding_type = encoding_type;
+    store->flags = flags;
+    void* const handle = store.get();
+    g_tracked_stores.push_back(std::move(store));
+    set_last_error(abi::kErrorSuccess);
+    return handle;
+}
+
+TL_CRYPT32_MSABI std::uint32_t tl_CertCloseStore(
+    void* const cert_store, const std::uint32_t flags) noexcept {
+    (void)flags;
+    if (cert_store == nullptr) {
+        set_last_error(abi::kErrorInvalidHandle);
+        return 0U;
+    }
+
+    std::lock_guard<std::mutex> lock(g_crypto_mutex);
+    for (auto it = g_tracked_stores.begin(); it != g_tracked_stores.end(); ++it) {
+        if (it->get() == cert_store) {
+            for (const auto* const cert : (*it)->certs) {
+                for (auto ctx_it = g_tracked_contexts.begin(); ctx_it != g_tracked_contexts.end(); ++ctx_it) {
+                    if (&(*ctx_it)->guest_context == cert) {
+                        if (--(*ctx_it)->refcount == 0U) {
+                            g_tracked_contexts.erase(ctx_it);
+                        }
+                        break;
+                    }
+                }
+            }
+            g_tracked_stores.erase(it);
+            set_last_error(abi::kErrorSuccess);
+            return 1U;
+        }
+    }
+
+    set_last_error(abi::kErrorInvalidHandle);
+    return 0U;
+}
+
+TL_CRYPT32_MSABI const GuestCertContext* tl_CertEnumCertificatesInStore(
+    void* const cert_store, const GuestCertContext* const prev_cert_context) noexcept {
+    if (cert_store == nullptr) {
+        set_last_error(abi::kErrorInvalidHandle);
+        return nullptr;
+    }
+
+    std::lock_guard<std::mutex> lock(g_crypto_mutex);
+    TrackedStore* target_store = nullptr;
+    for (const auto& store : g_tracked_stores) {
+        if (store.get() == cert_store) {
+            target_store = store.get();
+            break;
+        }
+    }
+    if (target_store == nullptr) {
+        set_last_error(abi::kErrorInvalidHandle);
+        return nullptr;
+    }
+
+    std::size_t next_index = 0;
+    if (prev_cert_context != nullptr) {
+        bool found = false;
+        for (std::size_t i = 0; i < target_store->certs.size(); ++i) {
+            if (target_store->certs[i] == prev_cert_context) {
+                next_index = i + 1U;
+                found = true;
+                break;
+            }
+        }
+        for (auto it = g_tracked_contexts.begin(); it != g_tracked_contexts.end(); ++it) {
+            if (&(*it)->guest_context == prev_cert_context) {
+                if (--(*it)->refcount == 0U) {
+                    g_tracked_contexts.erase(it);
+                }
+                break;
+            }
+        }
+        if (!found) {
+            set_last_error(kCryptENotFound);
+            return nullptr;
+        }
+    }
+
+    if (next_index < target_store->certs.size()) {
+        const auto* const cert = target_store->certs[next_index];
+        for (const auto& tracked : g_tracked_contexts) {
+            if (&tracked->guest_context == cert) {
+                tracked->refcount++;
+                set_last_error(abi::kErrorSuccess);
+                return &tracked->guest_context;
+            }
+        }
+    }
+
+    set_last_error(kCryptENotFound);
+    return nullptr;
+}
+
+TL_CRYPT32_MSABI const GuestCertContext* tl_CertFindCertificateInStore(
+    void* const cert_store, const std::uint32_t encoding_type, const std::uint32_t find_flags,
+    const std::uint32_t find_type, const void* const find_para,
+    const GuestCertContext* const prev_cert_context) noexcept {
+    (void)encoding_type;
+    (void)find_flags;
+    if (cert_store == nullptr) {
+        set_last_error(abi::kErrorInvalidHandle);
+        return nullptr;
+    }
+
+    std::lock_guard<std::mutex> lock(g_crypto_mutex);
+    TrackedStore* target_store = nullptr;
+    for (const auto& store : g_tracked_stores) {
+        if (store.get() == cert_store) {
+            target_store = store.get();
+            break;
+        }
+    }
+    if (target_store == nullptr) {
+        set_last_error(abi::kErrorInvalidHandle);
+        return nullptr;
+    }
+
+    std::size_t start_index = 0;
+    if (prev_cert_context != nullptr) {
+        for (std::size_t i = 0; i < target_store->certs.size(); ++i) {
+            if (target_store->certs[i] == prev_cert_context) {
+                start_index = i + 1U;
+                break;
+            }
+        }
+        for (auto it = g_tracked_contexts.begin(); it != g_tracked_contexts.end(); ++it) {
+            if (&(*it)->guest_context == prev_cert_context) {
+                if (--(*it)->refcount == 0U) {
+                    g_tracked_contexts.erase(it);
+                }
+                break;
+            }
+        }
+    }
+
+    for (std::size_t i = start_index; i < target_store->certs.size(); ++i) {
+        const auto* const candidate = target_store->certs[i];
+        bool matches = false;
+        if (find_type == kCertFindAny) {
+            matches = true;
+        } else if (find_type == kCertFindSha1Hash && find_para != nullptr &&
+                   runtime::validate_mapped_range(find_para, sizeof(GuestDataBlob), false)) {
+            const auto* const blob = static_cast<const GuestDataBlob*>(find_para);
+            if (blob->size == 20U && blob->data != nullptr &&
+                runtime::validate_mapped_range(blob->data, 20U, false)) {
+                const auto hash = compute_sha1(Bytes(candidate->encoded, candidate->encoded_size));
+                matches = (std::memcmp(hash.data(), blob->data, 20U) == 0);
+            }
+        } else if (find_type == kCertFindSubjectStrW && find_para != nullptr &&
+                   runtime::validate_mapped_wstring(static_cast<const std::uint16_t*>(find_para))) {
+            Bytes issuer{};
+            Bytes subject{};
+            if (extract_certificate_names(Bytes(candidate->encoded, candidate->encoded_size),
+                                          issuer, subject)) {
+                std::vector<NameAttribute> attrs;
+                if (parse_name(subject, attrs)) {
+                    bool found = false;
+                    const std::u16string name =
+                        select_name(attrs, kCertNameSimpleDisplayType, nullptr, found);
+                    if (found) {
+                        const std::u16string target(static_cast<const char16_t*>(
+                            static_cast<const void*>(find_para)));
+                        matches = (name.find(target) != std::u16string::npos);
+                    }
+                }
+            }
+        }
+
+        if (matches) {
+            for (const auto& tracked : g_tracked_contexts) {
+                if (&tracked->guest_context == candidate) {
+                    tracked->refcount++;
+                    set_last_error(abi::kErrorSuccess);
+                    return &tracked->guest_context;
+                }
+            }
+        }
+    }
+
+    set_last_error(kCryptENotFound);
+    return nullptr;
+}
+
+TL_CRYPT32_MSABI std::uint32_t tl_CertGetCertificateContextProperty(
+    const GuestCertContext* const cert_context, const std::uint32_t prop_id, void* const data,
+    std::uint32_t* const data_size) noexcept {
+    if (cert_context == nullptr || data_size == nullptr ||
+        !runtime::validate_mapped_range(cert_context, sizeof(*cert_context), false) ||
+        !runtime::validate_mapped_range(data_size, sizeof(*data_size), true)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0U;
+    }
+    if (cert_context->encoded == nullptr || cert_context->encoded_size == 0U ||
+        cert_context->encoded_size > kMaxCertificateSize ||
+        !runtime::validate_mapped_range(cert_context->encoded, cert_context->encoded_size, false)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0U;
+    }
+
+    if (prop_id == kCertSha1HashPropId) {
+        const auto hash = compute_sha1(Bytes(cert_context->encoded, cert_context->encoded_size));
+        if (data == nullptr) {
+            *data_size = 20U;
+            set_last_error(abi::kErrorSuccess);
+            return 1U;
+        }
+        if (*data_size < 20U) {
+            *data_size = 20U;
+            set_last_error(kErrorMoreData);
+            return 0U;
+        }
+        if (!runtime::validate_mapped_range(data, 20U, true)) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0U;
+        }
+        std::copy(hash.begin(), hash.end(), static_cast<std::uint8_t*>(data));
+        *data_size = 20U;
+        set_last_error(abi::kErrorSuccess);
+        return 1U;
+    }
+
+    if (prop_id == kCertFriendlyNamePropId) {
+        Bytes issuer{};
+        Bytes subject{};
+        if (!extract_certificate_names(Bytes(cert_context->encoded, cert_context->encoded_size),
+                                      issuer, subject)) {
+            set_last_error(kCryptENotFound);
+            return 0U;
+        }
+        std::vector<NameAttribute> attributes;
+        if (!parse_name(subject, attributes)) {
+            set_last_error(kCryptENotFound);
+            return 0U;
+        }
+        bool found = false;
+        const std::u16string selected = select_name(attributes, kCertNameSimpleDisplayType, nullptr, found);
+        if (!found) {
+            set_last_error(kCryptENotFound);
+            return 0U;
+        }
+        const std::size_t required = (selected.size() + 1U) * sizeof(std::uint16_t);
+        if (data == nullptr) {
+            *data_size = static_cast<std::uint32_t>(required);
+            set_last_error(abi::kErrorSuccess);
+            return 1U;
+        }
+        if (static_cast<std::size_t>(*data_size) < required) {
+            *data_size = static_cast<std::uint32_t>(required);
+            set_last_error(kErrorMoreData);
+            return 0U;
+        }
+        if (!runtime::validate_mapped_range(data, required, true)) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0U;
+        }
+        std::copy(selected.begin(), selected.end(), static_cast<std::uint16_t*>(data));
+        static_cast<std::uint16_t*>(data)[selected.size()] = 0;
+        *data_size = static_cast<std::uint32_t>(required);
+        set_last_error(abi::kErrorSuccess);
+        return 1U;
+    }
+
+    set_last_error(kCryptENotFound);
+    return 0U;
+}
+
+TL_CRYPT32_MSABI void* tl_CertOpenSystemStoreA(
+    void* const crypt_prov, const char* const system_store_name) noexcept {
+    return tl_CertOpenStore(reinterpret_cast<const char*>(kCertStoreProvSystemA), 0U, crypt_prov,
+                            0U, system_store_name);
+}
+
+TL_CRYPT32_MSABI void* tl_CertOpenSystemStoreW(
+    void* const crypt_prov, const std::uint16_t* const system_store_name) noexcept {
+    return tl_CertOpenStore(reinterpret_cast<const char*>(kCertStoreProvSystemW), 0U, crypt_prov,
+                            0U, system_store_name);
 }
 
 }  // extern "C"

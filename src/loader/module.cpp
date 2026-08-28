@@ -776,6 +776,20 @@ void register_builtin_modules() {
     register_module(kWintrustModule);
     static const ExportedFunction kCrypt32Exports[] = {
         {"CertGetNameStringW", 1, reinterpret_cast<std::uintptr_t>(&tl_CertGetNameStringW)},
+        {"CertDuplicateCertificateContext", 2,
+         reinterpret_cast<std::uintptr_t>(&tl_CertDuplicateCertificateContext)},
+        {"CertFreeCertificateContext", 3,
+         reinterpret_cast<std::uintptr_t>(&tl_CertFreeCertificateContext)},
+        {"CertOpenStore", 4, reinterpret_cast<std::uintptr_t>(&tl_CertOpenStore)},
+        {"CertCloseStore", 5, reinterpret_cast<std::uintptr_t>(&tl_CertCloseStore)},
+        {"CertEnumCertificatesInStore", 6,
+         reinterpret_cast<std::uintptr_t>(&tl_CertEnumCertificatesInStore)},
+        {"CertFindCertificateInStore", 7,
+         reinterpret_cast<std::uintptr_t>(&tl_CertFindCertificateInStore)},
+        {"CertGetCertificateContextProperty", 8,
+         reinterpret_cast<std::uintptr_t>(&tl_CertGetCertificateContextProperty)},
+        {"CertOpenSystemStoreA", 9, reinterpret_cast<std::uintptr_t>(&tl_CertOpenSystemStoreA)},
+        {"CertOpenSystemStoreW", 10, reinterpret_cast<std::uintptr_t>(&tl_CertOpenSystemStoreW)},
     };
     static const InternalModule kCrypt32Module{"CRYPT32.dll", kCrypt32Exports};
     register_module(kCrypt32Module);

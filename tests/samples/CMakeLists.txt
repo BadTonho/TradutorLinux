@@ -236,6 +236,9 @@ function(tl_add_pe_fixture target_name source_file manifest_file)
             elseif(target_name STREQUAL "tl_crypt32")
                 set(runtime_extra_args
                     "-DEXPECTED_HEX=637279707433320a")
+            elseif(target_name STREQUAL "tl_certcontext")
+                set(runtime_extra_args
+                    "-DEXPECTED_HEX=63657274636f6e746578740a")
             elseif(target_name STREQUAL "tl_stream")
                 set(runtime_extra_args
                     "-DEXPECTED_HEX=6f6c652d73747265616d0a"
@@ -605,6 +608,10 @@ tl_add_pe_fixture(tl_globalmem src/tl_globalmem.c manifests/tl_globalmem.json
 tl_add_pe_fixture(tl_crypt32 src/tl_crypt32.c manifests/tl_crypt32.json
     LINK_KERNEL32 LINK_CRYPT32 EXPECT_RESOLVED CONSOLE REPORT RELOCATABLE
     REPORT_SYMBOL "CertGetNameStringW")
+
+tl_add_pe_fixture(tl_certcontext src/tl_certcontext.c manifests/tl_certcontext.json
+    LINK_KERNEL32 LINK_CRYPT32 EXPECT_RESOLVED CONSOLE REPORT RELOCATABLE
+    REPORT_SYMBOL "CertDuplicateCertificateContext")
 
 tl_add_pe_fixture(tl_files_wide src/tl_files_wide.c manifests/tl_files_wide.json
     LINK_KERNEL32 EXPECT_RESOLVED CONSOLE REPORT RELOCATABLE
