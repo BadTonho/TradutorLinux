@@ -497,6 +497,12 @@ void register_builtin_modules() {
         {"GetVolumePathNameA", 301, reinterpret_cast<std::uintptr_t>(&tl_GetVolumePathNameA)},
         {"TzSpecificLocalTimeToSystemTime", 302,
          reinterpret_cast<std::uintptr_t>(&tl_TzSpecificLocalTimeToSystemTime)},
+        {"UnregisterWaitEx", 303, reinterpret_cast<std::uintptr_t>(&tl_UnregisterWaitEx)},
+        {"RegisterWaitForSingleObject", 304,
+         reinterpret_cast<std::uintptr_t>(&tl_RegisterWaitForSingleObject)},
+        {"SetSearchPathMode", 305, reinterpret_cast<std::uintptr_t>(&tl_SetSearchPathMode)},
+        {"InterlockedPushEntrySList", 306,
+         reinterpret_cast<std::uintptr_t>(&tl_InterlockedPushEntrySList)},
     };
     static const InternalModule kKernel32Module{"KERNEL32.dll", kKernel32Exports};
     register_module(kKernel32Module);
@@ -1063,6 +1069,12 @@ void register_builtin_modules() {
         {"ImageList_Add", 5, reinterpret_cast<std::uintptr_t>(&tl_ImageList_Add)},
         {"ImageList_AddMasked", 6, reinterpret_cast<std::uintptr_t>(&tl_ImageList_AddMasked)},
         {"ImageList_ReplaceIcon", 7, reinterpret_cast<std::uintptr_t>(&tl_ImageList_ReplaceIcon)},
+        {"SetWindowSubclass", 410, reinterpret_cast<std::uintptr_t>(&tl_SetWindowSubclass)},
+        {"RemoveWindowSubclass", 412, reinterpret_cast<std::uintptr_t>(&tl_RemoveWindowSubclass)},
+        {"DefSubclassProc", 413, reinterpret_cast<std::uintptr_t>(&tl_DefSubclassProc)},
+        {"", 410, reinterpret_cast<std::uintptr_t>(&tl_SetWindowSubclass)},
+        {"", 412, reinterpret_cast<std::uintptr_t>(&tl_RemoveWindowSubclass)},
+        {"", 413, reinterpret_cast<std::uintptr_t>(&tl_DefSubclassProc)},
     };
     static const InternalModule kComctl32Module{"COMCTL32.dll", kComctl32Exports};
     register_module(kComctl32Module);

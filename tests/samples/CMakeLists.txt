@@ -678,7 +678,7 @@ tl_add_pe_fixture(tl_7z_cli_crt src/tl_7z_cli_crt.c manifests/tl_7z_cli_crt.json
     REPORT_SYMBOL "GetVersion")
 
 tl_add_pe_fixture(tl_rockstar_pipes_reg src/tl_rockstar_pipes_reg.c manifests/tl_rockstar_pipes_reg.json
-    LINK_KERNEL32 LINK_ADVAPI32 LINK_USER32 LINK_GDI32 LINK_SHLWAPI EXPECT_RESOLVED CONSOLE REPORT RELOCATABLE
+    LINK_KERNEL32 LINK_ADVAPI32 LINK_USER32 LINK_GDI32 LINK_SHLWAPI LINK_COMCTL32 EXPECT_RESOLVED CONSOLE REPORT RELOCATABLE
     REPORT_SYMBOL "WaitNamedPipeW")
 
 tl_add_pe_fixture(tl_files_wide src/tl_files_wide.c manifests/tl_files_wide.json

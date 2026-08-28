@@ -3,6 +3,7 @@ typedef unsigned int dword_t;
 typedef int bool_t;
 typedef short int16_t;
 typedef int int32_t;
+typedef long long int64_t;
 typedef unsigned short uint16_t;
 typedef unsigned long long uint64_t;
 
@@ -26,6 +27,14 @@ __attribute__((dllimport)) uint16_t GetUserDefaultUILanguage(void);
 __attribute__((dllimport)) dword_t GetLogicalDrives(void);
 __attribute__((dllimport)) bool_t GetPhysicallyInstalledSystemMemory(uint64_t* total_kb);
 __attribute__((dllimport)) bool_t GetVolumePathNameA(const char* file, char* path, dword_t len);
+__attribute__((dllimport)) bool_t UnregisterWaitEx(void* handle, void* event);
+__attribute__((dllimport)) bool_t RegisterWaitForSingleObject(void** obj, void* handle, void* cb, void* ctx, dword_t ms, dword_t flags);
+__attribute__((dllimport)) bool_t SetSearchPathMode(dword_t flags);
+__attribute__((dllimport)) void* InterlockedPushEntrySList(void* list, void* entry);
+
+// COMCTL32
+__attribute__((dllimport)) bool_t SetWindowSubclass(void* hwnd, void* cb, uint64_t id, uint64_t ref);
+__attribute__((dllimport)) uint64_t DefSubclassProc(void* hwnd, dword_t msg, uint64_t wp, int64_t lp);
 
 // ADVAPI32
 __attribute__((dllimport)) int32_t RegDeleteTreeW(void* key, const uint16_t* subkey);
@@ -96,6 +105,17 @@ void tl_entry(void) {
 
     uint16_t path[16] = {'C', ':', '\\', 'a', 0};
     (void)PathStripToRootW(path);
+
+    (void)UnregisterWaitEx((void*)0, (void*)0);
+    void* wobj = (void*)0;
+    (void)RegisterWaitForSingleObject(&wobj, (void*)0, (void*)0, (void*)0, 0, 0);
+    (void)SetSearchPathMode(1);
+    void* lhead = (void*)0;
+    void* lentry = (void*)0;
+    (void)InterlockedPushEntrySList(&lhead, &lentry);
+
+    (void)SetWindowSubclass((void*)0, (void*)0, 1, 0);
+    (void)DefSubclassProc((void*)0, 0, 0, 0);
 
     static const char success[] = "rockstarpipes\n";
     if (!WriteFile(output, success, sizeof(success) - 1, &bytes_written, (void*)0)) {

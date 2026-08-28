@@ -1559,6 +1559,14 @@ TL_MSABI int tl_PrintDlgW(void* print_dlg) noexcept;
 // SHLWAPI: Rockstar APIs
 TL_MSABI int tl_PathStripToRootW(std::uint16_t* path) noexcept;
 
+// KERNEL32: Rockstar 100% APIs
+TL_MSABI int tl_UnregisterWaitEx(void* wait_handle, void* completion_event) noexcept;
+TL_MSABI int tl_RegisterWaitForSingleObject(void** ph_new_wait_object, void* h_object,
+                                            void* callback, void* context,
+                                            std::uint32_t ms, std::uint32_t flags) noexcept;
+TL_MSABI int tl_SetSearchPathMode(std::uint32_t flags) noexcept;
+TL_MSABI void* tl_InterlockedPushEntrySList(void* list_head, void* list_entry) noexcept;
+
 }  // extern "C"
 
 // Define o caminho do módulo convidado antes da execução.

@@ -2519,6 +2519,21 @@ TEST(RockstarCoverageTest, NamedPipesClipboardAndRegistry) {
 
     std::uint16_t path[16] = {'C', ':', '\\', 'a', 0};
     EXPECT_EQ(tl_PathStripToRootW(path), 1);
+
+    EXPECT_EQ(tl_UnregisterWaitEx(nullptr, nullptr), 1);
+    void* wait_obj = nullptr;
+    EXPECT_EQ(tl_RegisterWaitForSingleObject(&wait_obj, nullptr, nullptr, nullptr, 0, 0), 1);
+    EXPECT_NE(wait_obj, nullptr);
+    EXPECT_EQ(tl_SetSearchPathMode(1), 1);
+
+    void* list_head = nullptr;
+    void* entry1 = nullptr;
+    EXPECT_EQ(tl_InterlockedPushEntrySList(&list_head, &entry1), nullptr);
+    EXPECT_EQ(list_head, &entry1);
+
+    EXPECT_EQ(tl_SetWindowSubclass(nullptr, nullptr, 1, 0), 1);
+    EXPECT_EQ(tl_RemoveWindowSubclass(nullptr, nullptr, 1), 1);
+    EXPECT_EQ(tl_DefSubclassProc(nullptr, 0, 0, 0), 0);
 }
 
 }  // namespace

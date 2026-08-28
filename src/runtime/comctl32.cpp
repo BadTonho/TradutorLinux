@@ -120,6 +120,36 @@ TL_COMCTL_MSABI int tl_ImageList_ReplaceIcon(void* image_list, const int index, 
     return index;
 }
 
+TL_COMCTL_MSABI int tl_SetWindowSubclass(void* const hwnd, void* const subclass_proc,
+                                         const std::uintptr_t subclass_id,
+                                         const std::uintptr_t ref_data) noexcept {
+    (void)hwnd;
+    (void)subclass_proc;
+    (void)subclass_id;
+    (void)ref_data;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_COMCTL_MSABI int tl_RemoveWindowSubclass(void* const hwnd, void* const subclass_proc,
+                                            const std::uintptr_t subclass_id) noexcept {
+    (void)hwnd;
+    (void)subclass_proc;
+    (void)subclass_id;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_COMCTL_MSABI std::intptr_t tl_DefSubclassProc(void* const hwnd, const std::uint32_t msg,
+                                                 const std::uintptr_t wparam,
+                                                 const std::intptr_t lparam) noexcept {
+    (void)hwnd;
+    (void)msg;
+    (void)wparam;
+    (void)lparam;
+    return 0;
+}
+
 }  // extern "C"
 
 }  // namespace tradutorlinux

@@ -5588,6 +5588,47 @@ TL_MSABI int tl_TzSpecificLocalTimeToSystemTime(const void* const tz_info, const
     return 1;
 }
 
+TL_MSABI int tl_UnregisterWaitEx(void* const wait_handle, void* const completion_event) noexcept {
+    (void)wait_handle;
+    (void)completion_event;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_RegisterWaitForSingleObject(void** const ph_new_wait_object, void* const h_object,
+                                            void* const callback, void* const context,
+                                            const std::uint32_t ms, const std::uint32_t flags) noexcept {
+    (void)h_object;
+    (void)callback;
+    (void)context;
+    (void)ms;
+    (void)flags;
+    if (ph_new_wait_object != nullptr && mapped_guest_range(ph_new_wait_object, sizeof(void*), true)) {
+        *ph_new_wait_object = reinterpret_cast<void*>(0x12340001ULL);
+    }
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_SetSearchPathMode(const std::uint32_t flags) noexcept {
+    (void)flags;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI void* tl_InterlockedPushEntrySList(void* const list_head, void* const list_entry) noexcept {
+    if (list_head == nullptr || list_entry == nullptr) {
+        return nullptr;
+    }
+    // Minimal atomic-compatible SLIST emulation for single guest context
+    void** entry_next = static_cast<void**>(list_entry);
+    void** head_ptr = static_cast<void**>(list_head);
+    void* old_head = *head_ptr;
+    *entry_next = old_head;
+    *head_ptr = list_entry;
+    return old_head;
+}
+
 }  // extern "C"
 
 }  // namespace tradutorlinux
