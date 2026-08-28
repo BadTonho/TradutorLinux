@@ -421,10 +421,183 @@ TL_MSABI int tl_AbortDoc(void* const hdc) noexcept {
     return 1;
 }
 
-TL_MSABI int tl_PrintDlgW(void* const print_dlg) noexcept {
-    (void)print_dlg;
+TL_MSABI int tl_GetTextMetricsW(void* const hdc, void* const tm) noexcept {
+    (void)hdc;
+    if (tm != nullptr && mapped_guest_range(tm, 56, true)) {
+        std::memset(tm, 0, 56);
+        // Default reasonable character metrics: height 16, width 8
+        *reinterpret_cast<std::int32_t*>(static_cast<char*>(tm) + 0) = 16; // tmHeight
+        *reinterpret_cast<std::int32_t*>(static_cast<char*>(tm) + 20) = 8; // tmAveCharWidth
+    }
     set_last_error(abi::kErrorSuccess);
-    return 0;
+    return 1;
+}
+
+TL_MSABI int tl_GetTextMetricsA(void* const hdc, void* const tm) noexcept {
+    return tl_GetTextMetricsW(hdc, tm);
+}
+
+TL_MSABI void* tl_CreatePen(const int style, const int width, const std::uint32_t color) noexcept {
+    (void)style;
+    (void)width;
+    (void)color;
+    set_last_error(abi::kErrorSuccess);
+    return reinterpret_cast<void*>(0x50454E53ULL); // 'PENS'
+}
+
+TL_MSABI int tl_ExtTextOutW(void* const hdc, const int x, const int y, const std::uint32_t options,
+                            const void* const rect, const std::uint16_t* const string,
+                            const std::uint32_t count, const int* const dx) noexcept {
+    (void)hdc;
+    (void)x;
+    (void)y;
+    (void)options;
+    (void)rect;
+    (void)string;
+    (void)count;
+    (void)dx;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_ExtTextOutA(void* const hdc, const int x, const int y, const std::uint32_t options,
+                            const void* const rect, const char* const string,
+                            const std::uint32_t count, const int* const dx) noexcept {
+    (void)hdc;
+    (void)x;
+    (void)y;
+    (void)options;
+    (void)rect;
+    (void)string;
+    (void)count;
+    (void)dx;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_MoveToEx(void* const hdc, const int x, const int y, void* const point) noexcept {
+    (void)hdc;
+    (void)x;
+    (void)y;
+    (void)point;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_LineTo(void* const hdc, const int x, const int y) noexcept {
+    (void)hdc;
+    (void)x;
+    (void)y;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_Polyline(void* const hdc, const void* const points, const int count) noexcept {
+    (void)hdc;
+    (void)points;
+    (void)count;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_Polygon(void* const hdc, const void* const points, const int count) noexcept {
+    (void)hdc;
+    (void)points;
+    (void)count;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI void* tl_CreateRectRgn(const int left, const int top, const int right, const int bottom) noexcept {
+    (void)left;
+    (void)top;
+    (void)right;
+    (void)bottom;
+    set_last_error(abi::kErrorSuccess);
+    return reinterpret_cast<void*>(0x52454354ULL); // 'RECT'
+}
+
+TL_MSABI int tl_CombineRgn(void* const dst, void* const src1, void* const src2, const int mode) noexcept {
+    (void)dst;
+    (void)src1;
+    (void)src2;
+    (void)mode;
+    set_last_error(abi::kErrorSuccess);
+    return 2; // SIMPLEREGION
+}
+
+TL_MSABI int tl_SelectClipRgn(void* const hdc, void* const rgn) noexcept {
+    (void)hdc;
+    (void)rgn;
+    set_last_error(abi::kErrorSuccess);
+    return 2; // SIMPLEREGION
+}
+
+TL_MSABI int tl_GetClipBox(void* const hdc, void* const rect) noexcept {
+    (void)hdc;
+    if (rect != nullptr && mapped_guest_range(rect, 16, true)) {
+        *reinterpret_cast<std::int32_t*>(static_cast<char*>(rect) + 0) = 0;
+        *reinterpret_cast<std::int32_t*>(static_cast<char*>(rect) + 4) = 0;
+        *reinterpret_cast<std::int32_t*>(static_cast<char*>(rect) + 8) = 1024;
+        *reinterpret_cast<std::int32_t*>(static_cast<char*>(rect) + 12) = 768;
+    }
+    set_last_error(abi::kErrorSuccess);
+    return 2; // SIMPLEREGION
+}
+
+TL_MSABI int tl_GetCharWidthW(void* const hdc, const std::uint32_t first, const std::uint32_t last,
+                              int* const buffer) noexcept {
+    (void)hdc;
+    if (buffer != nullptr && last >= first) {
+        const std::size_t count = static_cast<std::size_t>(last - first + 1);
+        if (mapped_guest_range(buffer, count * sizeof(int), true)) {
+            for (std::size_t i = 0; i < count; ++i) {
+                buffer[i] = 8; // standard 8px mono width
+            }
+        }
+    }
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_GetCharWidth32W(void* const hdc, const std::uint32_t first, const std::uint32_t last,
+                                int* const buffer) noexcept {
+    return tl_GetCharWidthW(hdc, first, last, buffer);
+}
+
+TL_MSABI int tl_GetTextExtentPoint32A(void* const hdc, const char* const string, const int length,
+                                      void* const size) noexcept {
+    (void)hdc;
+    if (size != nullptr && mapped_guest_range(size, 8, true)) {
+        *reinterpret_cast<std::int32_t*>(static_cast<char*>(size) + 0) = (length > 0 ? length : (string ? static_cast<int>(std::strlen(string)) : 0)) * 8;
+        *reinterpret_cast<std::int32_t*>(static_cast<char*>(size) + 4) = 16;
+    }
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI std::uint32_t tl_SetTextAlign(void* const hdc, const std::uint32_t align) noexcept {
+    (void)hdc;
+    set_last_error(abi::kErrorSuccess);
+    return align;
+}
+
+TL_MSABI std::uint32_t tl_GetTextAlign(void* const hdc) noexcept {
+    (void)hdc;
+    return 0; // TA_LEFT | TA_TOP | TA_NOUPDATECP
+}
+
+TL_MSABI int tl_SetROP2(void* const hdc, const int rop2) noexcept {
+    (void)hdc;
+    return rop2;
+}
+
+TL_MSABI std::uint32_t tl_GetSystemPaletteEntries(void* const hdc, const std::uint32_t start,
+                                                  const std::uint32_t count, void* const entries) noexcept {
+    (void)hdc;
+    (void)start;
+    (void)entries;
+    return count;
 }
 
 }  // extern "C"

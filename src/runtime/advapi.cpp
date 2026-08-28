@@ -676,4 +676,106 @@ TL_ADVAPI_MSABI int tl_LsaAddAccountRights(void* const policy_handle, void* cons
     return 0; // STATUS_SUCCESS
 }
 
+TL_ADVAPI_MSABI std::int32_t tl_RegQueryInfoKeyA(void* const key, char* const class_name,
+                                                 std::uint32_t* const cch_class_name,
+                                                 std::uint32_t* const reserved,
+                                                 std::uint32_t* const sub_keys,
+                                                 std::uint32_t* const max_sub_key_len,
+                                                 std::uint32_t* const max_class_len,
+                                                 std::uint32_t* const values,
+                                                 std::uint32_t* const max_value_name_len,
+                                                 std::uint32_t* const max_value_len,
+                                                 std::uint32_t* const security_descriptor,
+                                                 void* const last_write_time) noexcept {
+    (void)key;
+    (void)class_name;
+    (void)cch_class_name;
+    (void)reserved;
+    (void)max_class_len;
+    (void)security_descriptor;
+    (void)last_write_time;
+    if (sub_keys != nullptr && mapped_range(sub_keys, sizeof(std::uint32_t), true)) {
+        *sub_keys = 0;
+    }
+    if (max_sub_key_len != nullptr && mapped_range(max_sub_key_len, sizeof(std::uint32_t), true)) {
+        *max_sub_key_len = 0;
+    }
+    if (values != nullptr && mapped_range(values, sizeof(std::uint32_t), true)) {
+        *values = 0;
+    }
+    if (max_value_name_len != nullptr && mapped_range(max_value_name_len, sizeof(std::uint32_t), true)) {
+        *max_value_name_len = 0;
+    }
+    if (max_value_len != nullptr && mapped_range(max_value_len, sizeof(std::uint32_t), true)) {
+        *max_value_len = 0;
+    }
+    return static_cast<std::int32_t>(abi::kErrorSuccess);
+}
+
+TL_ADVAPI_MSABI std::int32_t tl_RegQueryInfoKeyW(void* const key, std::uint16_t* const class_name,
+                                                 std::uint32_t* const cch_class_name,
+                                                 std::uint32_t* const reserved,
+                                                 std::uint32_t* const sub_keys,
+                                                 std::uint32_t* const max_sub_key_len,
+                                                 std::uint32_t* const max_class_len,
+                                                 std::uint32_t* const values,
+                                                 std::uint32_t* const max_value_name_len,
+                                                 std::uint32_t* const max_value_len,
+                                                 std::uint32_t* const security_descriptor,
+                                                 void* const last_write_time) noexcept {
+    (void)key;
+    (void)class_name;
+    (void)cch_class_name;
+    (void)reserved;
+    (void)max_class_len;
+    (void)security_descriptor;
+    (void)last_write_time;
+    if (sub_keys != nullptr && mapped_range(sub_keys, sizeof(std::uint32_t), true)) {
+        *sub_keys = 0;
+    }
+    if (max_sub_key_len != nullptr && mapped_range(max_sub_key_len, sizeof(std::uint32_t), true)) {
+        *max_sub_key_len = 0;
+    }
+    if (values != nullptr && mapped_range(values, sizeof(std::uint32_t), true)) {
+        *values = 0;
+    }
+    if (max_value_name_len != nullptr && mapped_range(max_value_name_len, sizeof(std::uint32_t), true)) {
+        *max_value_name_len = 0;
+    }
+    if (max_value_len != nullptr && mapped_range(max_value_len, sizeof(std::uint32_t), true)) {
+        *max_value_len = 0;
+    }
+    return static_cast<std::int32_t>(abi::kErrorSuccess);
+}
+
+TL_ADVAPI_MSABI std::int32_t tl_RegEnumKeyA(void* const key, const std::uint32_t index,
+                                            char* const name, const std::uint32_t cch_name) noexcept {
+    (void)key;
+    (void)index;
+    (void)name;
+    (void)cch_name;
+    return 259; // ERROR_NO_MORE_ITEMS
+}
+
+TL_ADVAPI_MSABI std::int32_t tl_RegEnumValueA(void* const key, const std::uint32_t index,
+                                              char* const value_name, std::uint32_t* const cch_value_name,
+                                              std::uint32_t* const reserved, std::uint32_t* const type,
+                                              std::uint8_t* const data, std::uint32_t* const cb_data) noexcept {
+    (void)key;
+    (void)index;
+    (void)value_name;
+    (void)cch_value_name;
+    (void)reserved;
+    (void)type;
+    (void)data;
+    (void)cb_data;
+    return 259; // ERROR_NO_MORE_ITEMS
+}
+
+TL_ADVAPI_MSABI std::int32_t tl_RegDeleteKeyA(void* const key, const char* const sub_key) noexcept {
+    (void)key;
+    (void)sub_key;
+    return static_cast<std::int32_t>(abi::kErrorSuccess);
+}
+
 }  // namespace tradutorlinux

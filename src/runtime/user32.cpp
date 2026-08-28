@@ -2672,6 +2672,166 @@ TL_MSABI int tl_ScreenToClient(void* const hwnd, void* const point) noexcept {
     return 1;
 }
 
+TL_MSABI int tl_CreateCaret(void* const hwnd, void* const bitmap, const int width, const int height) noexcept {
+    (void)hwnd;
+    (void)bitmap;
+    (void)width;
+    (void)height;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_DestroyCaret() noexcept {
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_SetCaretPos(const int x, const int y) noexcept {
+    (void)x;
+    (void)y;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_ShowCaret(void* const hwnd) noexcept {
+    (void)hwnd;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_HideCaret(void* const hwnd) noexcept {
+    (void)hwnd;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_GetCaretPos(void* const point) noexcept {
+    if (point != nullptr && mapped_guest_range(point, 8, true)) {
+        std::memset(point, 0, 8);
+    }
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_SetScrollInfo(void* const hwnd, const int bar, const void* const scroll_info, const int redraw) noexcept {
+    (void)hwnd;
+    (void)bar;
+    (void)scroll_info;
+    (void)redraw;
+    set_last_error(abi::kErrorSuccess);
+    return 0;
+}
+
+TL_MSABI int tl_GetScrollInfo(void* const hwnd, const int bar, void* const scroll_info) noexcept {
+    (void)hwnd;
+    (void)bar;
+    (void)scroll_info;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_ShowScrollBar(void* const hwnd, const int bar, const int show) noexcept {
+    (void)hwnd;
+    (void)bar;
+    (void)show;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_EnableScrollBar(void* const hwnd, const std::uint32_t flags, const std::uint32_t arrows) noexcept {
+    (void)hwnd;
+    (void)flags;
+    (void)arrows;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_SetScrollPos(void* const hwnd, const int bar, const int pos, const int redraw) noexcept {
+    (void)hwnd;
+    (void)bar;
+    (void)pos;
+    (void)redraw;
+    return pos;
+}
+
+TL_MSABI int tl_GetScrollPos(void* const hwnd, const int bar) noexcept {
+    (void)hwnd;
+    (void)bar;
+    return 0;
+}
+
+TL_MSABI int tl_SetScrollRange(void* const hwnd, const int bar, const int min_pos, const int max_pos, const int redraw) noexcept {
+    (void)hwnd;
+    (void)bar;
+    (void)min_pos;
+    (void)max_pos;
+    (void)redraw;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_GetScrollRange(void* const hwnd, const int bar, int* const min_pos, int* const max_pos) noexcept {
+    (void)hwnd;
+    (void)bar;
+    if (min_pos != nullptr && mapped_guest_range(min_pos, sizeof(int), true)) {
+        *min_pos = 0;
+    }
+    if (max_pos != nullptr && mapped_guest_range(max_pos, sizeof(int), true)) {
+        *max_pos = 100;
+    }
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_FlashWindow(void* const hwnd, const int invert) noexcept {
+    (void)hwnd;
+    (void)invert;
+    return 0;
+}
+
+TL_MSABI int tl_FlashWindowEx(void* const flash_info) noexcept {
+    (void)flash_info;
+    return 1;
+}
+
+TL_MSABI int tl_SetSysColors(const int count, const int* const elements, const std::uint32_t* const colors) noexcept {
+    (void)count;
+    (void)elements;
+    (void)colors;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_MessageBeep(const std::uint32_t type) noexcept {
+    (void)type;
+    return 1;
+}
+
+TL_MSABI void* tl_GetClipboardData(const std::uint32_t format) noexcept {
+    (void)format;
+    return nullptr;
+}
+
+TL_MSABI int tl_IsClipboardFormatAvailable(const std::uint32_t format) noexcept {
+    (void)format;
+    return 0;
+}
+
+TL_MSABI std::uint32_t tl_RegisterClipboardFormatA(const char* const format_name) noexcept {
+    (void)format_name;
+    set_last_error(abi::kErrorSuccess);
+    return 0xC002;
+}
+
+TL_MSABI int tl_CountClipboardFormats() noexcept {
+    return 0;
+}
+
+TL_MSABI std::uint32_t tl_EnumClipboardFormats(const std::uint32_t format) noexcept {
+    (void)format;
+    return 0;
+}
+
 }  // extern "C"
 
 }  // namespace tradutorlinux

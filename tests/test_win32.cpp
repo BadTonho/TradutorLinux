@@ -9,6 +9,7 @@
 #include "tradutorlinux/runtime/crypt32.hpp"
 #include "tradutorlinux/runtime/mpr.hpp"
 #include "tradutorlinux/runtime/msvcrt.hpp"
+#include "tradutorlinux/runtime/ws2_32.hpp"
 #include "tradutorlinux/package/msix.hpp"
 #include "tradutorlinux/prefix/prefix.hpp"
 #include "../src/runtime/runtime_context.hpp"
@@ -2657,6 +2658,103 @@ TEST(SevenZipGuiCoverageTest, AllApisAndModules) {
     EXPECT_NE(policy, nullptr);
     EXPECT_EQ(tl_LsaAddAccountRights(policy, nullptr, nullptr, 0), 0);
     EXPECT_EQ(tl_LsaClose(policy), 0);
+}
+
+TEST(PuttyCoverageTest, AllApisAndModules) {
+    // WS2_32
+    char wsa_data[512]{};
+    EXPECT_EQ(tl_WSAStartup(0x0202, wsa_data), 0);
+    void* wsa_ev = tl_WSACreateEvent();
+    EXPECT_NE(wsa_ev, nullptr);
+    EXPECT_EQ(tl_WSASetEvent(wsa_ev), 1);
+    EXPECT_EQ(tl_WSAResetEvent(wsa_ev), 1);
+    const void* ev_array[] = {wsa_ev};
+    EXPECT_EQ(tl_WSAWaitForMultipleEvents(1, ev_array, 0, 10, 0), 0U);
+    EXPECT_EQ(tl_WSACloseEvent(wsa_ev), 1);
+    EXPECT_NE(tl_gethostbyname("localhost"), nullptr);
+    EXPECT_NE(tl_getservbyname("ssh", "tcp"), nullptr);
+    tl_WSASetLastError(0);
+    EXPECT_EQ(tl_WSAGetLastError(), 0);
+    EXPECT_EQ(tl___WSAFDIsSet(0, nullptr), 0);
+
+    // GDI32
+    char tm_buf[64]{};
+    EXPECT_EQ(tl_GetTextMetricsW(nullptr, tm_buf), 1);
+    EXPECT_EQ(tl_GetTextMetricsA(nullptr, tm_buf), 1);
+    void* pen = tl_CreatePen(0, 1, 0);
+    EXPECT_NE(pen, nullptr);
+    EXPECT_EQ(tl_ExtTextOutW(nullptr, 0, 0, 0, nullptr, nullptr, 0, nullptr), 1);
+    EXPECT_EQ(tl_ExtTextOutA(nullptr, 0, 0, 0, nullptr, nullptr, 0, nullptr), 1);
+    EXPECT_EQ(tl_MoveToEx(nullptr, 0, 0, nullptr), 1);
+    EXPECT_EQ(tl_LineTo(nullptr, 10, 10), 1);
+    EXPECT_EQ(tl_Polyline(nullptr, nullptr, 0), 1);
+    EXPECT_EQ(tl_Polygon(nullptr, nullptr, 0), 1);
+    void* rgn = tl_CreateRectRgn(0, 0, 10, 10);
+    EXPECT_NE(rgn, nullptr);
+    EXPECT_EQ(tl_CombineRgn(nullptr, rgn, rgn, 0), 2);
+    EXPECT_EQ(tl_SelectClipRgn(nullptr, rgn), 2);
+    char clip_rc[16]{};
+    EXPECT_EQ(tl_GetClipBox(nullptr, clip_rc), 2);
+    int char_w[10]{};
+    EXPECT_EQ(tl_GetCharWidthW(nullptr, 0, 4, char_w), 1);
+    EXPECT_EQ(tl_GetCharWidth32W(nullptr, 0, 4, char_w), 1);
+    int txt_sz[2]{};
+    EXPECT_EQ(tl_GetTextExtentPoint32A(nullptr, "test", 4, txt_sz), 1);
+    EXPECT_EQ(tl_SetTextAlign(nullptr, 0), 0U);
+    EXPECT_EQ(tl_GetTextAlign(nullptr), 0U);
+    EXPECT_EQ(tl_SetROP2(nullptr, 1), 1);
+    EXPECT_EQ(tl_GetSystemPaletteEntries(nullptr, 0, 10, nullptr), 10U);
+
+    // USER32
+    EXPECT_EQ(tl_CreateCaret(nullptr, nullptr, 1, 10), 1);
+    EXPECT_EQ(tl_SetCaretPos(0, 0), 1);
+    EXPECT_EQ(tl_ShowCaret(nullptr), 1);
+    EXPECT_EQ(tl_HideCaret(nullptr), 1);
+    char pt[8]{};
+    EXPECT_EQ(tl_GetCaretPos(pt), 1);
+    EXPECT_EQ(tl_DestroyCaret(), 1);
+    EXPECT_EQ(tl_SetScrollInfo(nullptr, 0, nullptr, 1), 0);
+    EXPECT_EQ(tl_GetScrollInfo(nullptr, 0, nullptr), 1);
+    EXPECT_EQ(tl_ShowScrollBar(nullptr, 0, 1), 1);
+    EXPECT_EQ(tl_EnableScrollBar(nullptr, 0, 0), 1);
+    EXPECT_EQ(tl_SetScrollPos(nullptr, 0, 5, 1), 5);
+    EXPECT_EQ(tl_GetScrollPos(nullptr, 0), 0);
+    EXPECT_EQ(tl_SetScrollRange(nullptr, 0, 0, 100, 1), 1);
+    int min_p = 0, max_p = 0;
+    EXPECT_EQ(tl_GetScrollRange(nullptr, 0, &min_p, &max_p), 1);
+    EXPECT_EQ(tl_SetCapture(reinterpret_cast<void*>(0x1000)), nullptr);
+    EXPECT_EQ(tl_ReleaseCapture(), 1);
+    EXPECT_EQ(tl_GetCapture(), nullptr);
+    EXPECT_EQ(tl_GetAsyncKeyState(0), 0);
+    EXPECT_EQ(tl_GetKeyState(0), 0);
+    EXPECT_EQ(tl_FlashWindow(nullptr, 1), 0);
+    EXPECT_EQ(tl_FlashWindowEx(nullptr), 1);
+    EXPECT_EQ(tl_GetSysColor(0), 0x00FFFFFFU);
+    int sys_el = 0;
+    std::uint32_t sys_c = 0;
+    EXPECT_EQ(tl_SetSysColors(1, &sys_el, &sys_c), 1);
+    EXPECT_EQ(tl_MessageBeep(0), 1);
+    EXPECT_EQ(tl_TrackPopupMenu(nullptr, 0, 0, 0, 0, nullptr, nullptr), 0);
+    EXPECT_EQ(tl_GetClipboardData(1), nullptr);
+    EXPECT_EQ(tl_IsClipboardFormatAvailable(1), 0);
+    EXPECT_EQ(tl_RegisterClipboardFormatA("test_fmt"), 0xC002U);
+    EXPECT_EQ(tl_CountClipboardFormats(), 0);
+    EXPECT_EQ(tl_EnumClipboardFormats(0), 0U);
+
+    // COMDLG32 & IMM32 & SHELL32
+    EXPECT_EQ(tl_ChooseFontA(nullptr), 1);
+    EXPECT_EQ(tl_ChooseFontW(nullptr), 1);
+    EXPECT_EQ(tl_ImmGetVirtualKey(nullptr), 0U);
+    EXPECT_EQ(tl_ShellNotifyIconW(0, nullptr), 1);
+
+    // ADVAPI32
+    std::uint32_t subk = 0;
+    EXPECT_EQ(tl_RegQueryInfoKeyA(nullptr, nullptr, nullptr, nullptr, &subk, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr), 0);
+    EXPECT_EQ(tl_RegQueryInfoKeyW(nullptr, nullptr, nullptr, nullptr, &subk, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr), 0);
+    char reg_name[32]{};
+    EXPECT_EQ(tl_RegEnumKeyA(nullptr, 0, reg_name, 32), 259);
+    EXPECT_EQ(tl_RegEnumValueA(nullptr, 0, reg_name, nullptr, nullptr, nullptr, nullptr, nullptr), 259);
+    EXPECT_EQ(tl_RegDeleteKeyA(nullptr, "test"), 0);
 }
 
 }  // namespace

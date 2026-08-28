@@ -81,11 +81,11 @@ faltam para essa amostra, e os próximos aplicativos analisados, ficam no
 
 Novos benchmarks do portfólio popular x64 na Fase 13.13:
 - `winrar-x64-723.exe` (WinRAR 7.23 x64): **251/251 (100%)** imports resolvidos — Suporte Completo de Imports
-- `Rockstar-Games-Launcher.exe`: **295/338 (87%)** imports resolvidos
-- `7z_x64.exe` (7-Zip CLI x64): **103/133 (77%)** imports resolvidos
-- `putty_x64.exe` (PuTTY SSH): **228/348 (65%)** imports resolvidos
-- `7zFM_x64.exe` (7-Zip GUI): **179/298 (60%)** imports resolvidos
-- `notepad++.exe` (Notepad++ x64): **304/584 (52%)** imports resolvidos
+- `7z_x64.exe` (7-Zip CLI x64): **133/133 (100%)** imports resolvidos — Suporte Completo de Imports
+- `7zFM_x64.exe` (7-Zip GUI): **298/298 (100%)** imports resolvidos — Suporte Completo de Imports
+- `Rockstar-Games-Launcher.exe`: **338/338 (100%)** imports resolvidos — Suporte Completo de Imports
+- `putty_x64.exe` (PuTTY SSH Client): **348/348 (100%)** imports resolvidos — Suporte Completo de Imports
+- `notepad++.exe` (Notepad++ x64): **304/584 (52%)** imports resolvidos (próximo alvo)
 - `Affinity x64.msix`: pacote MSIX / AppX reconhecido pelo parser de manifesto
 - `HWiNFO64.exe` / `Rufus_x64.exe`: filtrados com segurança contra anomalias de cabeçalho PE
 - Wrappers 32-bit (NSIS/Inno): rejeitados com segurança pelo filtro de arquitetura x64

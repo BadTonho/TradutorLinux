@@ -12,6 +12,7 @@
 
 #include <arpa/inet.h>
 #include <fcntl.h>
+#include <netdb.h>
 #include <netinet/in.h>
 #include <poll.h>
 #include <sys/select.h>
@@ -30,6 +31,7 @@ constexpr int kIpProtoTcp = 6;
 constexpr int kIpProtoUdp = 17;
 constexpr int kWsaENotSocket = 10038;
 constexpr int kWsaEAccess = 10013;
+constexpr int kWsaEFault = 10014;
 constexpr int kWsaEInvalidArgument = 10022;
 constexpr int kWsaEAddressInUse = 10048;
 constexpr int kWsaEWouldBlock = 10035;
@@ -694,6 +696,173 @@ TL_MSABI int tl_inet_pton(const int af, const char* src, void* dst) noexcept {
     }
     g_wsa_last_error = 0;
     return res;
+}
+
+TL_MSABI int tl_getpeername(const std::uintptr_t socket, void* const name, int* const name_length) noexcept {
+    if (name == nullptr || name_length == nullptr) {
+        g_wsa_last_error = kWsaEFault;
+        return -1;
+    }
+    const SocketSlot* const slot = find_socket(socket);
+    if (slot == nullptr) {
+        g_wsa_last_error = kWsaENotSocket;
+        return -1;
+    }
+    sockaddr_storage ss{};
+    socklen_t slen = sizeof(ss);
+    if (::getpeername(slot->fd, reinterpret_cast<sockaddr*>(&ss), &slen) != 0) {
+        g_wsa_last_error = errno_to_wsa(errno);
+        return -1;
+    }
+    const int copy_len = std::min(*name_length, static_cast<int>(slen));
+    if (copy_len > 0) {
+        std::memcpy(name, &ss, static_cast<std::size_t>(copy_len));
+    }
+    *name_length = copy_len;
+    g_wsa_last_error = 0;
+    return 0;
+}
+
+TL_MSABI int tl_setsockopt(const std::uintptr_t socket, const int level, const int optname,
+                          const char* const optval, const int optlen) noexcept {
+    const SocketSlot* const slot = find_socket(socket);
+    if (slot == nullptr) {
+        g_wsa_last_error = kWsaENotSocket;
+        return -1;
+    }
+    int host_level = level;
+    if (level == 0xFFFF) { // SOL_SOCKET Win32
+        host_level = SOL_SOCKET;
+    }
+    if (::setsockopt(slot->fd, host_level, optname, optval, static_cast<socklen_t>(optlen)) != 0) {
+        g_wsa_last_error = errno_to_wsa(errno);
+        return -1;
+    }
+    g_wsa_last_error = 0;
+    return 0;
+}
+
+TL_MSABI int tl_getsockopt(const std::uintptr_t socket, const int level, const int optname,
+                          char* const optval, int* const optlen) noexcept {
+    const SocketSlot* const slot = find_socket(socket);
+    if (slot == nullptr) {
+        g_wsa_last_error = kWsaENotSocket;
+        return -1;
+    }
+    int host_level = level;
+    if (level == 0xFFFF) {
+        host_level = SOL_SOCKET;
+    }
+    socklen_t slen = optlen != nullptr ? static_cast<socklen_t>(*optlen) : 0;
+    if (::getsockopt(slot->fd, host_level, optname, optval, &slen) != 0) {
+        g_wsa_last_error = errno_to_wsa(errno);
+        return -1;
+    }
+    if (optlen != nullptr) {
+        *optlen = static_cast<int>(slen);
+    }
+    g_wsa_last_error = 0;
+    return 0;
+}
+
+TL_MSABI int tl_WSAAsyncSelect(const std::uintptr_t socket, void* const hwnd,
+                              const unsigned int msg, const long events) noexcept {
+    (void)socket;
+    (void)hwnd;
+    (void)msg;
+    (void)events;
+    g_wsa_last_error = 0;
+    return 0;
+}
+
+TL_MSABI int tl_WSAEventSelect(const std::uintptr_t socket, void* const event_handle,
+                              const long network_events) noexcept {
+    (void)socket;
+    (void)event_handle;
+    (void)network_events;
+    g_wsa_last_error = 0;
+    return 0;
+}
+
+TL_MSABI void* tl_WSACreateEvent() noexcept {
+    g_wsa_last_error = 0;
+    return reinterpret_cast<void*>(0x57534145ULL); // 'WSAE'
+}
+
+TL_MSABI int tl_WSACloseEvent(void* const event_handle) noexcept {
+    (void)event_handle;
+    g_wsa_last_error = 0;
+    return 1;
+}
+
+TL_MSABI int tl_WSASetEvent(void* const event_handle) noexcept {
+    (void)event_handle;
+    g_wsa_last_error = 0;
+    return 1;
+}
+
+TL_MSABI int tl_WSAResetEvent(void* const event_handle) noexcept {
+    (void)event_handle;
+    g_wsa_last_error = 0;
+    return 1;
+}
+
+TL_MSABI std::uint32_t tl_WSAWaitForMultipleEvents(const std::uint32_t count, const void* const* const events,
+                                                  const int wait_all, const std::uint32_t timeout,
+                                                  const int alertable) noexcept {
+    (void)count;
+    (void)events;
+    (void)wait_all;
+    (void)timeout;
+    (void)alertable;
+    g_wsa_last_error = 0;
+    return 0; // WSA_WAIT_EVENT_0
+}
+
+TL_MSABI int tl_WSAEnumNetworkEvents(const std::uintptr_t socket, void* const event_handle,
+                                    void* const network_events) noexcept {
+    (void)socket;
+    (void)event_handle;
+    if (network_events != nullptr && mapped_range(network_events, 4 + 10 * 4, true)) {
+        std::memset(network_events, 0, 4 + 10 * 4);
+    }
+    g_wsa_last_error = 0;
+    return 0;
+}
+
+TL_MSABI void* tl_gethostbyname(const char* const name) noexcept {
+    (void)name;
+    static in_addr kAddr{};
+    static char* kAddrList[2] = {reinterpret_cast<char*>(&kAddr), nullptr};
+    static hostent kHostEnt{};
+    kHostEnt.h_name = const_cast<char*>("localhost");
+    kHostEnt.h_aliases = nullptr;
+    kHostEnt.h_addrtype = AF_INET;
+    kHostEnt.h_length = sizeof(in_addr);
+    kHostEnt.h_addr_list = kAddrList;
+    g_wsa_last_error = 0;
+    return &kHostEnt;
+}
+
+TL_MSABI void* tl_getservbyname(const char* const name, const char* const proto) noexcept {
+    (void)name;
+    (void)proto;
+    static servent kServ{};
+    kServ.s_name = const_cast<char*>("ssh");
+    kServ.s_port = htons(22);
+    kServ.s_proto = const_cast<char*>("tcp");
+    g_wsa_last_error = 0;
+    return &kServ;
+}
+
+TL_MSABI void tl_WSASetLastError(const int error) noexcept {
+    g_wsa_last_error = error;
+}
+
+TL_MSABI int tl___WSAFDIsSet(const std::uintptr_t socket, void* const set) noexcept {
+    (void)socket;
+    (void)set;
+    return 0;
 }
 
 }  // extern "C"

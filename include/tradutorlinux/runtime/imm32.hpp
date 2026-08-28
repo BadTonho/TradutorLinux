@@ -18,6 +18,7 @@ TL_IMM_MSABI int tl_ImmSetCompositionWindow(void* context, const void* comp_form
 TL_IMM_MSABI std::int32_t tl_ImmGetCompositionStringA(void* context, std::uint32_t index, void* buf, std::uint32_t buflen) noexcept;
 TL_IMM_MSABI std::int32_t tl_ImmGetCompositionStringW(void* context, std::uint32_t index, void* buf, std::uint32_t buflen) noexcept;
 TL_IMM_MSABI void* tl_ImmAssociateContext(const void* window, void* context) noexcept;
+TL_IMM_MSABI std::uint32_t tl_ImmGetVirtualKey(void* hwnd) noexcept;
 
 }  // extern "C"
 

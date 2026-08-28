@@ -436,6 +436,12 @@ TL_MSABI int tl_SHGetSpecialFolderPathW(void* const hwnd, std::uint16_t* const p
     return tl_SHGetFolderPathW(hwnd, folder, nullptr, 0, path) == 0 ? 1 : 0;
 }
 
+TL_MSABI int tl_ShellNotifyIconW(const std::uint32_t message, void* const data) noexcept {
+    (void)message;
+    (void)data;
+    return 1;
+}
+
 }  // extern "C"
 
 }  // namespace tradutorlinux

@@ -2,8 +2,14 @@ if(NOT DEFINED INPUT OR NOT DEFINED RUNTIME)
     message(FATAL_ERROR "INPUT and RUNTIME are required")
 endif()
 
+if(NOT DEFINED PREFIX_DIR)
+    set(PREFIX_DIR "${CMAKE_CURRENT_BINARY_DIR}/default-report-prefix")
+endif()
+file(REMOVE_RECURSE "${PREFIX_DIR}")
+set(runtime_command "${CMAKE_COMMAND}" -E env "TL_PREFIX=${PREFIX_DIR}" "${RUNTIME}" --report "${INPUT}")
+
 execute_process(
-    COMMAND "${RUNTIME}" --report "${INPUT}"
+    COMMAND ${runtime_command}
     RESULT_VARIABLE report_result
     OUTPUT_VARIABLE report_output
     ERROR_VARIABLE report_error

@@ -59,6 +59,11 @@ TL_IMM_MSABI void* tl_ImmAssociateContext(const void* window, void* context) noe
     return context;
 }
 
+TL_IMM_MSABI std::uint32_t tl_ImmGetVirtualKey(void* const hwnd) noexcept {
+    (void)hwnd;
+    return 0; // VK_PROCESSKEY none
+}
+
 }  // extern "C"
 
 }  // namespace tradutorlinux

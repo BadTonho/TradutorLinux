@@ -10,11 +10,11 @@ if(DEFINED INPUT_TEXT)
     set(input_args INPUT_FILE "${input_file}")
 endif()
 
-set(runtime_command "${RUNTIME}" --trace "${INPUT}")
-if(DEFINED PREFIX_DIR)
-    file(REMOVE_RECURSE "${PREFIX_DIR}")
-    set(runtime_command "${CMAKE_COMMAND}" -E env "TL_PREFIX=${PREFIX_DIR}" "${RUNTIME}" --trace "${INPUT}")
+if(NOT DEFINED PREFIX_DIR)
+    set(PREFIX_DIR "${CMAKE_CURRENT_BINARY_DIR}/default-prefix")
 endif()
+file(REMOVE_RECURSE "${PREFIX_DIR}")
+set(runtime_command "${CMAKE_COMMAND}" -E env "TL_PREFIX=${PREFIX_DIR}" "${RUNTIME}" --trace "${INPUT}")
 
 execute_process(
     COMMAND ${runtime_command}

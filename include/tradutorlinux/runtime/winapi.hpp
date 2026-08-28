@@ -1636,7 +1636,7 @@ TL_MSABI int tl_ImageList_GetImageCount(void* image_list) noexcept;
 TL_MSABI std::intptr_t tl_PropertySheetW(const void* header) noexcept;
 TL_MSABI std::uint32_t tl_CommDlgExtendedError() noexcept;
 
-// ADVAPI32: 7z GUI APIs
+// ADVAPI32: 7-Zip & PuTTY APIs
 TL_MSABI int tl_GetUserNameW(std::uint16_t* buffer, std::uint32_t* size) noexcept;
 TL_MSABI int tl_LookupAccountNameW(const std::uint16_t* system_name, const std::uint16_t* account_name,
                                    void* sid, std::uint32_t* sid_size, std::uint16_t* referenced_domain,
@@ -1644,6 +1644,82 @@ TL_MSABI int tl_LookupAccountNameW(const std::uint16_t* system_name, const std::
 TL_MSABI int tl_LsaOpenPolicy(void* system_name, void* obj_attributes, std::uint32_t access_mask, void** policy_handle) noexcept;
 TL_MSABI int tl_LsaClose(void* policy_handle) noexcept;
 TL_MSABI int tl_LsaAddAccountRights(void* policy_handle, void* account_sid, void* user_rights, std::uint32_t count) noexcept;
+TL_MSABI std::int32_t tl_RegQueryInfoKeyA(void* key, char* class_name, std::uint32_t* cch_class_name,
+                                         std::uint32_t* reserved, std::uint32_t* sub_keys,
+                                         std::uint32_t* max_sub_key_len, std::uint32_t* max_class_len,
+                                         std::uint32_t* values, std::uint32_t* max_value_name_len,
+                                         std::uint32_t* max_value_len, std::uint32_t* security_descriptor,
+                                         void* last_write_time) noexcept;
+TL_MSABI std::int32_t tl_RegQueryInfoKeyW(void* key, std::uint16_t* class_name, std::uint32_t* cch_class_name,
+                                         std::uint32_t* reserved, std::uint32_t* sub_keys,
+                                         std::uint32_t* max_sub_key_len, std::uint32_t* max_class_len,
+                                         std::uint32_t* values, std::uint32_t* max_value_name_len,
+                                         std::uint32_t* max_value_len, std::uint32_t* security_descriptor,
+                                         void* last_write_time) noexcept;
+TL_MSABI std::int32_t tl_RegEnumKeyA(void* key, std::uint32_t index, char* name, std::uint32_t cch_name) noexcept;
+TL_MSABI std::int32_t tl_RegEnumValueA(void* key, std::uint32_t index, char* value_name,
+                                       std::uint32_t* cch_value_name, std::uint32_t* reserved,
+                                       std::uint32_t* type, std::uint8_t* data, std::uint32_t* cb_data) noexcept;
+TL_MSABI std::int32_t tl_RegDeleteKeyA(void* key, const char* sub_key) noexcept;
+
+// GDI32: PuTTY APIs
+TL_MSABI int tl_GetTextMetricsW(void* hdc, void* tm) noexcept;
+TL_MSABI int tl_GetTextMetricsA(void* hdc, void* tm) noexcept;
+TL_MSABI void* tl_CreatePen(int style, int width, std::uint32_t color) noexcept;
+TL_MSABI int tl_ExtTextOutW(void* hdc, int x, int y, std::uint32_t options, const void* rect,
+                            const std::uint16_t* string, std::uint32_t count, const int* dx) noexcept;
+TL_MSABI int tl_ExtTextOutA(void* hdc, int x, int y, std::uint32_t options, const void* rect,
+                            const char* string, std::uint32_t count, const int* dx) noexcept;
+TL_MSABI int tl_MoveToEx(void* hdc, int x, int y, void* point) noexcept;
+TL_MSABI int tl_LineTo(void* hdc, int x, int y) noexcept;
+TL_MSABI int tl_Polyline(void* hdc, const void* points, int count) noexcept;
+TL_MSABI int tl_Polygon(void* hdc, const void* points, int count) noexcept;
+TL_MSABI void* tl_CreateRectRgn(int left, int top, int right, int bottom) noexcept;
+TL_MSABI int tl_CombineRgn(void* dst, void* src1, void* src2, int mode) noexcept;
+TL_MSABI int tl_SelectClipRgn(void* hdc, void* rgn) noexcept;
+TL_MSABI int tl_GetClipBox(void* hdc, void* rect) noexcept;
+TL_MSABI int tl_GetCharWidthW(void* hdc, std::uint32_t first, std::uint32_t last, int* buffer) noexcept;
+TL_MSABI int tl_GetCharWidth32W(void* hdc, std::uint32_t first, std::uint32_t last, int* buffer) noexcept;
+TL_MSABI int tl_GetTextExtentPoint32A(void* hdc, const char* string, int length, void* size) noexcept;
+TL_MSABI std::uint32_t tl_SetTextAlign(void* hdc, std::uint32_t align) noexcept;
+TL_MSABI std::uint32_t tl_GetTextAlign(void* hdc) noexcept;
+TL_MSABI int tl_SetROP2(void* hdc, int rop2) noexcept;
+TL_MSABI std::uint32_t tl_GetSystemPaletteEntries(void* hdc, std::uint32_t start, std::uint32_t count, void* entries) noexcept;
+
+// USER32: PuTTY APIs
+TL_MSABI int tl_CreateCaret(void* hwnd, void* bitmap, int width, int height) noexcept;
+TL_MSABI int tl_DestroyCaret() noexcept;
+TL_MSABI int tl_SetCaretPos(int x, int y) noexcept;
+TL_MSABI int tl_ShowCaret(void* hwnd) noexcept;
+TL_MSABI int tl_HideCaret(void* hwnd) noexcept;
+TL_MSABI int tl_GetCaretPos(void* point) noexcept;
+TL_MSABI int tl_SetScrollInfo(void* hwnd, int bar, const void* scroll_info, int redraw) noexcept;
+TL_MSABI int tl_GetScrollInfo(void* hwnd, int bar, void* scroll_info) noexcept;
+TL_MSABI int tl_ShowScrollBar(void* hwnd, int bar, int show) noexcept;
+TL_MSABI int tl_EnableScrollBar(void* hwnd, std::uint32_t flags, std::uint32_t arrows) noexcept;
+TL_MSABI int tl_SetScrollPos(void* hwnd, int bar, int pos, int redraw) noexcept;
+TL_MSABI int tl_GetScrollPos(void* hwnd, int bar) noexcept;
+TL_MSABI int tl_SetScrollRange(void* hwnd, int bar, int min_pos, int max_pos, int redraw) noexcept;
+TL_MSABI int tl_GetScrollRange(void* hwnd, int bar, int* min_pos, int* max_pos) noexcept;
+TL_MSABI int tl_FlashWindow(void* hwnd, int invert) noexcept;
+TL_MSABI int tl_FlashWindowEx(void* flash_info) noexcept;
+TL_MSABI int tl_SetSysColors(int count, const int* elements, const std::uint32_t* colors) noexcept;
+TL_MSABI int tl_MessageBeep(std::uint32_t type) noexcept;
+TL_MSABI void* tl_GetClipboardData(std::uint32_t format) noexcept;
+TL_MSABI int tl_IsClipboardFormatAvailable(std::uint32_t format) noexcept;
+TL_MSABI std::uint32_t tl_RegisterClipboardFormatA(const char* format_name) noexcept;
+TL_MSABI int tl_CountClipboardFormats() noexcept;
+TL_MSABI std::uint32_t tl_EnumClipboardFormats(std::uint32_t format) noexcept;
+
+// COMDLG32: PuTTY APIs
+TL_MSABI int tl_ChooseFontA(void* choose_font) noexcept;
+TL_MSABI int tl_ChooseFontW(void* choose_font) noexcept;
+
+// IMM32: PuTTY APIs
+TL_MSABI std::uint32_t tl_ImmGetVirtualKey(void* hwnd) noexcept;
+
+// SHELL32: PuTTY APIs
+TL_MSABI int tl_ShellNotifyIconW(std::uint32_t message, void* data) noexcept;
 
 }  // extern "C"
 

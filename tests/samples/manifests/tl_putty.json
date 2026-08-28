@@ -1,0 +1,69 @@
+{
+  "name": "tl_putty",
+  "format": "PE32+",
+  "machine": "AMD64",
+  "entry_point": "tl_entry",
+  "uses_crt": false,
+  "imports": {
+    "KERNEL32.dll": [
+      "ExitProcess",
+      "GetStdHandle",
+      "WriteFile"
+    ],
+    "WS2_32.dll": [
+      "WSACloseEvent",
+      "WSACreateEvent",
+      "WSAGetLastError",
+      "WSAResetEvent",
+      "WSASetEvent",
+      "WSASetLastError",
+      "WSAStartup",
+      "gethostbyname",
+      "getservbyname"
+    ],
+    "GDI32.dll": [
+      "CreatePen",
+      "CreateRectRgn",
+      "ExtTextOutW",
+      "GetCharWidthW",
+      "GetTextExtentPoint32A",
+      "GetTextMetricsW",
+      "LineTo",
+      "MoveToEx",
+      "Polyline",
+      "SelectClipRgn",
+      "SetTextAlign"
+    ],
+    "USER32.dll": [
+      "CreateCaret",
+      "DestroyCaret",
+      "FlashWindow",
+      "GetAsyncKeyState",
+      "GetClipboardData",
+      "GetKeyState",
+      "GetSysColor",
+      "HideCaret",
+      "MessageBeep",
+      "RegisterClipboardFormatA",
+      "ReleaseCapture",
+      "SetCapture",
+      "SetCaretPos",
+      "SetScrollInfo",
+      "ShowCaret",
+      "ShowScrollBar",
+      "TrackPopupMenu"
+    ],
+    "comdlg32.dll": [
+      "ChooseFontW"
+    ],
+    "IMM32.dll": [
+      "ImmGetVirtualKey"
+    ],
+    "SHELL32.dll": [
+      "Shell_NotifyIconW"
+    ],
+    "ADVAPI32.dll": [
+      "RegQueryInfoKeyW"
+    ]
+  }
+}

@@ -102,6 +102,21 @@ TL_COMDLG_MSABI int tl_ChooseColorW(void* choose_color) noexcept {
     return 1;
 }
 
+TL_COMDLG_MSABI int tl_ChooseFontA(void* const choose_font) noexcept {
+    (void)choose_font;
+    return 1;
+}
+
+TL_COMDLG_MSABI int tl_ChooseFontW(void* const choose_font) noexcept {
+    (void)choose_font;
+    return 1;
+}
+
+TL_COMDLG_MSABI int tl_PrintDlgW(void* const print_dlg) noexcept {
+    (void)print_dlg;
+    return 1;
+}
+
 TL_COMDLG_MSABI std::uint32_t tl_CommDlgExtendedError() noexcept {
     return 0; // CDERR_GENERALCODES / No error
 }
