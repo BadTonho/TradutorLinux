@@ -66,6 +66,10 @@ constexpr std::uint8_t kUnwindKnownFlags = kUnwindFlagEHandler | kUnwindFlagUHan
 constexpr std::uint8_t kUnwindOpEpilog = 6;
 constexpr std::uint8_t kUnwindV2EpilogAtFunctionEnd = 0x1;
 
+[[nodiscard]] constexpr bool is_valid_gpr(const std::uint8_t register_number) {
+    return register_number <= 15 && register_number != 4;
+}
+
 [[nodiscard]] constexpr bool is_nonvolatile_register(const std::uint8_t register_number) {
     return register_number == 3 || register_number == 5 || register_number == 6 ||
            register_number == 7 || (register_number >= 12 && register_number <= 15);
@@ -854,7 +858,7 @@ private:
             switch (operation) {
                 case 0:
                     code.operation = UnwindOperation::PushNonVol;
-                    if (!is_nonvolatile_register(code.operation_info)) {
+                    if (!is_valid_gpr(code.operation_info)) {
                         return fail(ParseStatus::Malformed,
                                     "UWOP_PUSH_NONVOL usa registrador inválido");
                     }
@@ -878,7 +882,7 @@ private:
                     if (code.operation_info != 0U) {
                         unwind.has_extended_set_fpreg = true;
                     }
-                    if (!is_nonvolatile_register(unwind.frame_register)) {
+                    if (!is_valid_gpr(unwind.frame_register)) {
                         return fail(ParseStatus::Malformed,
                                     "UWOP_SET_FPREG inválido em RVA " +
                                         util::format_hex(unwind_rva) +
@@ -888,7 +892,7 @@ private:
                     break;
                 case 4:
                     code.operation = UnwindOperation::SaveNonVol;
-                    if (!is_nonvolatile_register(code.operation_info)) {
+                    if (!is_valid_gpr(code.operation_info)) {
                         return fail(ParseStatus::Malformed,
                                     "UWOP_SAVE_NONVOL usa registrador inválido");
                     }
@@ -896,7 +900,7 @@ private:
                     break;
                 case 5:
                     code.operation = UnwindOperation::SaveNonVolFar;
-                    if (!is_nonvolatile_register(code.operation_info)) {
+                    if (!is_valid_gpr(code.operation_info)) {
                         return fail(ParseStatus::Malformed,
                                     "UWOP_SAVE_NONVOL_FAR usa registrador inválido");
                     }
