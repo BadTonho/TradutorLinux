@@ -107,6 +107,7 @@ TL_OLE_MSABI std::int32_t tl_CoGetClassObject(const void* rclsid, std::uint32_t 
                                               const void* riid, void** ppv) noexcept;
 TL_OLE_MSABI std::int32_t tl_OleInitialize(void* reserved) noexcept;
 TL_OLE_MSABI void tl_OleUninitialize() noexcept;
+TL_OLE_MSABI std::int32_t tl_CLSIDFromString(const std::uint16_t* lpsz, void* pclsid) noexcept;
 
 }  // extern "C"
 

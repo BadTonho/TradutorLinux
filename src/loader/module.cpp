@@ -452,6 +452,18 @@ void register_builtin_modules() {
          reinterpret_cast<std::uintptr_t>(&tl_GetProcessAffinityMask)},
         {"CreateHardLinkW", 259, reinterpret_cast<std::uintptr_t>(&tl_CreateHardLinkW)},
         {"K32GetModuleFileNameExW", 260, reinterpret_cast<std::uintptr_t>(&tl_K32GetModuleFileNameExW)},
+        {"GetTickCount", 261, reinterpret_cast<std::uintptr_t>(&tl_GetTickCount)},
+        {"SetCurrentDirectoryW", 262, reinterpret_cast<std::uintptr_t>(&tl_SetCurrentDirectoryW)},
+        {"DeviceIoControl", 263, reinterpret_cast<std::uintptr_t>(&tl_DeviceIoControl)},
+        {"FoldStringW", 264, reinterpret_cast<std::uintptr_t>(&tl_FoldStringW)},
+        {"SetThreadExecutionState", 265, reinterpret_cast<std::uintptr_t>(&tl_SetThreadExecutionState)},
+        {"AllocConsole", 266, reinterpret_cast<std::uintptr_t>(&tl_AllocConsole)},
+        {"AttachConsole", 267, reinterpret_cast<std::uintptr_t>(&tl_AttachConsole)},
+        {"FreeConsole", 268, reinterpret_cast<std::uintptr_t>(&tl_FreeConsole)},
+        {"SystemTimeToTzSpecificLocalTime", 269,
+         reinterpret_cast<std::uintptr_t>(&tl_SystemTimeToTzSpecificLocalTime)},
+        {"IsDBCSLeadByte", 270, reinterpret_cast<std::uintptr_t>(&tl_IsDBCSLeadByte)},
+        {"GetNumberFormatW", 271, reinterpret_cast<std::uintptr_t>(&tl_GetNumberFormatW)},
     };
     static const InternalModule kKernel32Module{"KERNEL32.dll", kKernel32Exports};
     register_module(kKernel32Module);
@@ -569,6 +581,12 @@ void register_builtin_modules() {
         {"CharLowerW", 110, reinterpret_cast<std::uintptr_t>(&tl_CharLowerW)},
         {"DrawTextA", 111, reinterpret_cast<std::uintptr_t>(&tl_DrawTextA)},
         {"DrawTextW", 112, reinterpret_cast<std::uintptr_t>(&tl_DrawTextW)},
+        {"SetUserObjectInformationW", 113,
+         reinterpret_cast<std::uintptr_t>(&tl_SetUserObjectInformationW)},
+        {"WaitForInputIdle", 114, reinterpret_cast<std::uintptr_t>(&tl_WaitForInputIdle)},
+        {"FindWindowExW", 115, reinterpret_cast<std::uintptr_t>(&tl_FindWindowExW)},
+        {"SetProcessDefaultLayout", 116,
+         reinterpret_cast<std::uintptr_t>(&tl_SetProcessDefaultLayout)},
     };
     static const InternalModule kUser32Module{"USER32.dll", kUser32Exports};
     register_module(kUser32Module);
@@ -758,6 +776,11 @@ void register_builtin_modules() {
         {"ShellExecuteW", 6, reinterpret_cast<std::uintptr_t>(&tl_ShellExecuteW)},
         {"ShellExecuteExW", 7, reinterpret_cast<std::uintptr_t>(&tl_ShellExecuteExW)},
         {"SHFileOperationW", 8, reinterpret_cast<std::uintptr_t>(&tl_SHFileOperationW)},
+        {"SHGetFileInfoW", 9, reinterpret_cast<std::uintptr_t>(&tl_SHGetFileInfoW)},
+        {"SHGetPathFromIDListW", 10, reinterpret_cast<std::uintptr_t>(&tl_SHGetPathFromIDListW)},
+        {"SHBrowseForFolderW", 11, reinterpret_cast<std::uintptr_t>(&tl_SHBrowseForFolderW)},
+        {"SHGetMalloc", 12, reinterpret_cast<std::uintptr_t>(&tl_SHGetMalloc)},
+        {"SHChangeNotify", 13, reinterpret_cast<std::uintptr_t>(&tl_SHChangeNotify)},
     };
     static const InternalModule kShell32Module{"SHELL32.dll", kShell32Exports};
     register_module(kShell32Module);
@@ -794,6 +817,8 @@ void register_builtin_modules() {
         {"GetNamedSecurityInfoW", 30, reinterpret_cast<std::uintptr_t>(&tl_GetNamedSecurityInfoW)},
         {"SetNamedSecurityInfoW", 31, reinterpret_cast<std::uintptr_t>(&tl_SetNamedSecurityInfoW)},
         {"SetFileSecurityW", 32, reinterpret_cast<std::uintptr_t>(&tl_SetFileSecurityW)},
+        {"LookupPrivilegeValueW", 33, reinterpret_cast<std::uintptr_t>(&tl_LookupPrivilegeValueW)},
+        {"AdjustTokenPrivileges", 34, reinterpret_cast<std::uintptr_t>(&tl_AdjustTokenPrivileges)},
     };
     static const InternalModule kAdvapi32Module{"ADVAPI32.dll", kAdvapi32Exports};
     register_module(kAdvapi32Module);
@@ -810,6 +835,7 @@ void register_builtin_modules() {
         {"CoGetClassObject", 9, reinterpret_cast<std::uintptr_t>(&tl_CoGetClassObject)},
         {"OleInitialize", 10, reinterpret_cast<std::uintptr_t>(&tl_OleInitialize)},
         {"OleUninitialize", 11, reinterpret_cast<std::uintptr_t>(&tl_OleUninitialize)},
+        {"CLSIDFromString", 13, reinterpret_cast<std::uintptr_t>(&tl_CLSIDFromString)},
     };
     static const InternalModule kOle32Module{"ole32.dll", kOle32Exports};
     register_module(kOle32Module);

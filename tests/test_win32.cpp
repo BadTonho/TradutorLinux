@@ -2419,5 +2419,30 @@ TEST(Gdi32Test, BitmapAndHardLinkOperations) {
     EXPECT_EQ(tl_CreateHardLinkW(non_exist2, non_exist1, nullptr), 0);
 }
 
+TEST(WinRarCoverageTest, TickCountPrivilegeAndClsid) {
+    EXPECT_GT(tl_GetTickCount(), 0U);
+    EXPECT_EQ(tl_AllocConsole(), 1);
+    EXPECT_EQ(tl_FreeConsole(), 1);
+    EXPECT_EQ(tl_SetThreadExecutionState(1), 1U);
+    EXPECT_EQ(tl_IsDBCSLeadByte('A'), 0);
+
+    constexpr std::uint16_t src[] = {'W', 'i', 'n', 'R', 'A', 'R', 0};
+    std::uint16_t dest[16]{};
+    EXPECT_GT(tl_FoldStringW(0, src, -1, dest, 16), 0);
+
+    EXPECT_EQ(tl_SetUserObjectInformationW(nullptr, 0, nullptr, 0), 1);
+    EXPECT_EQ(tl_WaitForInputIdle(nullptr, 0), 0U);
+    EXPECT_EQ(tl_SetProcessDefaultLayout(0), 1);
+
+    constexpr std::uint16_t priv_name[] = {'S', 'e', 'D', 'e', 'b', 'u', 'g', 0};
+    std::uint8_t luid_buf[8]{};
+    EXPECT_EQ(tl_LookupPrivilegeValueW(nullptr, priv_name, luid_buf), 1);
+    EXPECT_EQ(tl_AdjustTokenPrivileges(nullptr, 0, nullptr, 0, nullptr, nullptr), 1);
+
+    std::uint8_t clsid[16]{};
+    EXPECT_EQ(tl_CLSIDFromString(nullptr, clsid), 0);
+    EXPECT_EQ(tl_SHGetMalloc(nullptr), static_cast<int>(0x80070057U));
+}
+
 }  // namespace
 }  // namespace tradutorlinux

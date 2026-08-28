@@ -505,4 +505,38 @@ TL_ADVAPI_MSABI int tl_CryptReleaseContext(void* prov_handle, const std::uint32_
     return 1;
 }
 
+struct GuestLuid {
+    std::uint32_t low_part{1};
+    std::int32_t high_part{0};
+};
+
+TL_ADVAPI_MSABI int tl_LookupPrivilegeValueW(const std::uint16_t* system_name,
+                                             const std::uint16_t* name,
+                                             void* luid) noexcept {
+    (void)system_name;
+    (void)name;
+    if (luid == nullptr || !mapped_range(luid, sizeof(GuestLuid), true)) {
+        return 0;
+    }
+    GuestLuid out{};
+    out.low_part = 1;
+    out.high_part = 0;
+    std::memcpy(luid, &out, sizeof(GuestLuid));
+    return 1;
+}
+
+TL_ADVAPI_MSABI int tl_AdjustTokenPrivileges(void* token_handle, int disable_all_privileges,
+                                             void* new_state, std::uint32_t buffer_length,
+                                             void* previous_state, std::uint32_t* return_length) noexcept {
+    (void)token_handle;
+    (void)disable_all_privileges;
+    (void)new_state;
+    (void)buffer_length;
+    (void)previous_state;
+    if (return_length != nullptr && mapped_range(return_length, sizeof(*return_length), true)) {
+        *return_length = 0;
+    }
+    return 1;
+}
+
 }  // namespace tradutorlinux

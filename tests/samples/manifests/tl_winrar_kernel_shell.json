@@ -1,0 +1,39 @@
+{
+  "name": "tl_winrar_kernel_shell",
+  "format": "PE32+",
+  "machine": "AMD64",
+  "entry_point": "tl_entry",
+  "uses_crt": false,
+  "imports": {
+    "ADVAPI32.dll": [
+      "AdjustTokenPrivileges",
+      "LookupPrivilegeValueW"
+    ],
+    "KERNEL32.dll": [
+      "AllocConsole",
+      "ExitProcess",
+      "FoldStringW",
+      "FreeConsole",
+      "GetCurrentProcess",
+      "GetStdHandle",
+      "GetTickCount",
+      "IsDBCSLeadByte",
+      "SetThreadExecutionState",
+      "WriteFile"
+    ],
+    "SHELL32.dll": [
+      "SHChangeNotify",
+      "SHGetFileInfoW",
+      "SHGetMalloc"
+    ],
+    "USER32.dll": [
+      "SetProcessDefaultLayout",
+      "SetUserObjectInformationW",
+      "WaitForInputIdle"
+    ],
+    "ole32.dll": [
+      "CLSIDFromString"
+    ]
+  }
+}
+

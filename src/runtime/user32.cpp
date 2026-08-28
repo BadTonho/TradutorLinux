@@ -2326,6 +2326,40 @@ TL_MSABI int tl_DrawTextW(const void* const dc, const std::uint16_t* const text,
     return kLineHeight;
 }
 
+TL_MSABI int tl_SetUserObjectInformationW(void* const obj, const int index, void* const info,
+                                          const std::uint32_t length) noexcept {
+    (void)obj;
+    (void)index;
+    (void)info;
+    (void)length;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI std::uint32_t tl_WaitForInputIdle(void* const process, const std::uint32_t milliseconds) noexcept {
+    (void)process;
+    (void)milliseconds;
+    set_last_error(abi::kErrorSuccess);
+    return 0; // WAIT_OBJECT_0
+}
+
+TL_MSABI void* tl_FindWindowExW(void* const hwnd_parent, void* const hwnd_child_after,
+                                const std::uint16_t* const class_name,
+                                const std::uint16_t* const window_name) noexcept {
+    (void)hwnd_parent;
+    (void)hwnd_child_after;
+    (void)class_name;
+    (void)window_name;
+    set_last_error(abi::kErrorSuccess);
+    return nullptr;
+}
+
+TL_MSABI int tl_SetProcessDefaultLayout(const std::uint32_t default_layout) noexcept {
+    (void)default_layout;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
 }  // extern "C"
 
 }  // namespace tradutorlinux

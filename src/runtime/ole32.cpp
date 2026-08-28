@@ -449,6 +449,17 @@ TL_OLE_MSABI std::int32_t tl_OleInitialize(void* reserved) noexcept {
 TL_OLE_MSABI void tl_OleUninitialize() noexcept {
 }
 
+TL_OLE_MSABI std::int32_t tl_CLSIDFromString(const std::uint16_t* lpsz, void* pclsid) noexcept {
+    if (pclsid == nullptr) {
+        return kEInvalidArg;
+    }
+    std::memset(pclsid, 0, 16);
+    if (lpsz == nullptr) {
+        return kSOk;
+    }
+    return kSOk;
+}
+
 }  // extern "C"
 
 }  // namespace tradutorlinux

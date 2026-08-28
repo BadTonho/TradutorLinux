@@ -339,6 +339,65 @@ TL_MSABI int tl_SHFileOperationW(void* const file_op) noexcept {
     return 0; // 0 = S_OK / success in SHFileOperation
 }
 
+struct GuestShFileInfoW {
+    void* hIcon{nullptr};
+    int iIcon{0};
+    std::uint32_t dwAttributes{0};
+    std::uint16_t szDisplayName[260]{};
+    std::uint16_t szTypeName[80]{};
+};
+
+TL_MSABI std::uintptr_t tl_SHGetFileInfoW(const std::uint16_t* const path, const std::uint32_t file_attributes,
+                                          void* const sfi, const std::uint32_t cb_file_info,
+                                          const std::uint32_t flags) noexcept {
+    (void)path;
+    (void)file_attributes;
+    (void)flags;
+    if (sfi != nullptr && cb_file_info >= sizeof(GuestShFileInfoW) &&
+        mapped_guest_range(sfi, sizeof(GuestShFileInfoW), true)) {
+        std::memset(sfi, 0, sizeof(GuestShFileInfoW));
+    }
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_SHGetPathFromIDListW(const void* const pidl, std::uint16_t* const path) noexcept {
+    (void)pidl;
+    if (path == nullptr || !mapped_guest_range(path, 260 * sizeof(std::uint16_t), true)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    const std::string home = get_home_dir();
+    const std::u16string wide_home(home.begin(), home.end());
+    const std::size_t len = std::min(wide_home.size(), static_cast<std::size_t>(259));
+    std::memcpy(path, wide_home.data(), len * sizeof(std::uint16_t));
+    path[len] = 0;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI void* tl_SHBrowseForFolderW(void* const bi) noexcept {
+    (void)bi;
+    set_last_error(abi::kErrorSuccess);
+    return nullptr;
+}
+
+TL_MSABI int tl_SHGetMalloc(void** const pp_malloc) noexcept {
+    if (pp_malloc == nullptr || !mapped_guest_range(pp_malloc, sizeof(void*), true)) {
+        return static_cast<int>(0x80070057U); // E_INVALIDARG
+    }
+    *pp_malloc = nullptr;
+    return 0; // S_OK
+}
+
+TL_MSABI void tl_SHChangeNotify(const std::int32_t event_id, const std::uint32_t flags,
+                                const void* const item1, const void* const item2) noexcept {
+    (void)event_id;
+    (void)flags;
+    (void)item1;
+    (void)item2;
+}
+
 }  // extern "C"
 
 }  // namespace tradutorlinux

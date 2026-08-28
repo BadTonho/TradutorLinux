@@ -1415,6 +1415,52 @@ TL_MSABI int tl_GetObjectW(const void* hgdiobj, int buffer_size, void* object_bu
 TL_MSABI void* tl_CreateDIBSection(const void* dc, const void* pbmi, std::uint32_t usage,
                                    void** ppv_bits, void* section, std::uint32_t offset) noexcept;
 
+// KERNEL32: WinRAR APIs
+TL_MSABI std::uint32_t tl_GetTickCount(void) noexcept;
+TL_MSABI int tl_SetCurrentDirectoryW(const std::uint16_t* path_name) noexcept;
+TL_MSABI int tl_DeviceIoControl(void* device, std::uint32_t io_control_code, void* in_buffer,
+                                std::uint32_t in_buffer_size, void* out_buffer,
+                                std::uint32_t out_buffer_size, std::uint32_t* bytes_returned,
+                                void* overlapped) noexcept;
+TL_MSABI int tl_FoldStringW(std::uint32_t map_flags, const std::uint16_t* src_str, int cch_src,
+                            std::uint16_t* dest_str, int cch_dest) noexcept;
+TL_MSABI std::uint32_t tl_SetThreadExecutionState(std::uint32_t es_flags) noexcept;
+TL_MSABI int tl_AllocConsole(void) noexcept;
+TL_MSABI int tl_AttachConsole(std::uint32_t process_id) noexcept;
+TL_MSABI int tl_FreeConsole(void) noexcept;
+TL_MSABI int tl_SystemTimeToTzSpecificLocalTime(const void* tz_info, const void* universal_time,
+                                               void* local_time) noexcept;
+TL_MSABI int tl_IsDBCSLeadByte(std::uint8_t test_char) noexcept;
+TL_MSABI int tl_GetNumberFormatW(std::uint32_t locale, std::uint32_t flags,
+                                 const std::uint16_t* value, const void* format,
+                                 std::uint16_t* number_str, int cch_number) noexcept;
+
+// USER32: WinRAR APIs
+TL_MSABI int tl_SetUserObjectInformationW(void* obj, int index, void* info,
+                                          std::uint32_t length) noexcept;
+TL_MSABI std::uint32_t tl_WaitForInputIdle(void* process, std::uint32_t milliseconds) noexcept;
+TL_MSABI void* tl_FindWindowExW(void* hwnd_parent, void* hwnd_child_after,
+                                const std::uint16_t* class_name,
+                                const std::uint16_t* window_name) noexcept;
+TL_MSABI int tl_SetProcessDefaultLayout(std::uint32_t default_layout) noexcept;
+
+// ADVAPI32: WinRAR APIs
+TL_MSABI int tl_LookupPrivilegeValueW(const std::uint16_t* system_name,
+                                     const std::uint16_t* name, void* luid) noexcept;
+TL_MSABI int tl_AdjustTokenPrivileges(void* token_handle, int disable_all_privileges,
+                                     void* new_state, std::uint32_t buffer_length,
+                                     void* previous_state, std::uint32_t* return_length) noexcept;
+
+// SHELL32: WinRAR APIs
+TL_MSABI std::uintptr_t tl_SHGetFileInfoW(const std::uint16_t* path, std::uint32_t file_attributes,
+                                          void* sfi, std::uint32_t cb_file_info,
+                                          std::uint32_t flags) noexcept;
+TL_MSABI int tl_SHGetPathFromIDListW(const void* pidl, std::uint16_t* path) noexcept;
+TL_MSABI void* tl_SHBrowseForFolderW(void* bi) noexcept;
+TL_MSABI int tl_SHGetMalloc(void** pp_malloc) noexcept;
+TL_MSABI void tl_SHChangeNotify(std::int32_t event_id, std::uint32_t flags,
+                                const void* item1, const void* item2) noexcept;
+
 }  // extern "C"
 
 // Define o caminho do módulo convidado antes da execução.

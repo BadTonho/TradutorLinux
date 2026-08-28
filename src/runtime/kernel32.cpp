@@ -5139,6 +5139,153 @@ TL_MSABI std::uint32_t tl_K32GetModuleFileNameExW(const void* const process,
     return tl_GetModuleFileNameW(module_handle, filename, size);
 }
 
+TL_MSABI std::uint32_t tl_GetTickCount(void) noexcept {
+    static const auto start_time = std::chrono::steady_clock::now();
+    const auto now = std::chrono::steady_clock::now();
+    return static_cast<std::uint32_t>(
+        std::chrono::duration_cast<std::chrono::milliseconds>(now - start_time).count()
+    );
+}
+
+TL_MSABI int tl_SetCurrentDirectoryW(const std::uint16_t* const path_name) noexcept {
+    if (path_name == nullptr || !mapped_guest_wstring(path_name)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    char normalized[4096]{};
+    if (!normalized_wide_path(path_name, normalized)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    if (::chdir(normalized) != 0) {
+        set_last_error(errno_to_win32(errno));
+        return 0;
+    }
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_DeviceIoControl(void* const device, const std::uint32_t io_control_code,
+                                void* const in_buffer, const std::uint32_t in_buffer_size,
+                                void* const out_buffer, const std::uint32_t out_buffer_size,
+                                std::uint32_t* const bytes_returned,
+                                void* const overlapped) noexcept {
+    (void)device;
+    (void)io_control_code;
+    (void)in_buffer;
+    (void)in_buffer_size;
+    (void)out_buffer;
+    (void)out_buffer_size;
+    (void)overlapped;
+    if (bytes_returned != nullptr && mapped_guest_range(bytes_returned, sizeof(*bytes_returned), true)) {
+        *bytes_returned = 0;
+    }
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_FoldStringW(const std::uint32_t map_flags, const std::uint16_t* const src_str,
+                            const int cch_src, std::uint16_t* const dest_str,
+                            const int cch_dest) noexcept {
+    (void)map_flags;
+    if (src_str == nullptr || !mapped_guest_wstring(src_str)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    std::size_t null_term_len = 0;
+    while (src_str[null_term_len] != 0) {
+        ++null_term_len;
+    }
+    const std::size_t src_len = (cch_src < 0) ? (null_term_len + 1) : static_cast<std::size_t>(cch_src);
+    if (cch_dest == 0) {
+        return static_cast<int>(src_len);
+    }
+    if (cch_dest < 0 || dest_str == nullptr ||
+        !mapped_guest_range(dest_str, static_cast<std::size_t>(cch_dest) * sizeof(std::uint16_t), true)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    const std::size_t to_copy = std::min(static_cast<std::size_t>(cch_dest), src_len);
+    for (std::size_t i = 0; i < to_copy; ++i) {
+        dest_str[i] = src_str[i];
+    }
+    set_last_error(abi::kErrorSuccess);
+    return static_cast<int>(to_copy);
+}
+
+TL_MSABI std::uint32_t tl_SetThreadExecutionState(const std::uint32_t es_flags) noexcept {
+    return es_flags;
+}
+
+TL_MSABI int tl_AllocConsole(void) noexcept {
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_AttachConsole(const std::uint32_t process_id) noexcept {
+    (void)process_id;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_FreeConsole(void) noexcept {
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_SystemTimeToTzSpecificLocalTime(const void* const tz_info,
+                                               const void* const universal_time,
+                                               void* const local_time) noexcept {
+    (void)tz_info;
+    if (universal_time == nullptr || local_time == nullptr) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    if (!mapped_guest_range(universal_time, 16, false) || !mapped_guest_range(local_time, 16, true)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    std::memcpy(local_time, universal_time, 16);
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_IsDBCSLeadByte(const std::uint8_t test_char) noexcept {
+    (void)test_char;
+    return 0;
+}
+
+TL_MSABI int tl_GetNumberFormatW(const std::uint32_t locale, const std::uint32_t flags,
+                                 const std::uint16_t* const value, const void* const format,
+                                 std::uint16_t* const number_str, const int cch_number) noexcept {
+    (void)locale;
+    (void)flags;
+    (void)format;
+    if (value == nullptr || !mapped_guest_wstring(value)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    std::size_t val_len = 0;
+    while (value[val_len] != 0) {
+        ++val_len;
+    }
+    const std::size_t len = val_len + 1;
+    if (cch_number == 0) {
+        return static_cast<int>(len);
+    }
+    if (cch_number < 0 || number_str == nullptr ||
+        !mapped_guest_range(number_str, static_cast<std::size_t>(cch_number) * sizeof(std::uint16_t), true)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    const std::size_t to_copy = std::min(static_cast<std::size_t>(cch_number), len);
+    for (std::size_t i = 0; i < to_copy; ++i) {
+        number_str[i] = value[i];
+    }
+    set_last_error(abi::kErrorSuccess);
+    return static_cast<int>(to_copy);
+}
+
 }  // extern "C"
 
 }  // namespace tradutorlinux

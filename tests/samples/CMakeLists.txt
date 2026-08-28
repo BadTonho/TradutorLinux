@@ -263,6 +263,9 @@ function(tl_add_pe_fixture target_name source_file manifest_file)
             elseif(target_name STREQUAL "tl_k32_gdi_link")
                 set(runtime_extra_args
                     "-DEXPECTED_HEX=6b33326764696c696e6b0a")
+            elseif(target_name STREQUAL "tl_winrar_kernel_shell")
+                set(runtime_extra_args
+                    "-DEXPECTED_HEX=77696e7261726b65726e656c7368656c6c0a")
             elseif(target_name STREQUAL "tl_stream")
                 set(runtime_extra_args
                     "-DEXPECTED_HEX=6f6c652d73747265616d0a"
@@ -656,6 +659,10 @@ tl_add_pe_fixture(tl_oleaut_bstr src/tl_oleaut_bstr.c manifests/tl_oleaut_bstr.j
 tl_add_pe_fixture(tl_k32_gdi_link src/tl_k32_gdi_link.c manifests/tl_k32_gdi_link.json
     LINK_KERNEL32 LINK_GDI32 EXPECT_RESOLVED CONSOLE REPORT RELOCATABLE
     REPORT_SYMBOL "CreateHardLinkW")
+
+tl_add_pe_fixture(tl_winrar_kernel_shell src/tl_winrar_kernel_shell.c manifests/tl_winrar_kernel_shell.json
+    LINK_KERNEL32 LINK_USER32 LINK_ADVAPI32 LINK_SHELL32 LINK_OLE32 EXPECT_RESOLVED CONSOLE REPORT RELOCATABLE
+    REPORT_SYMBOL "GetTickCount")
 
 tl_add_pe_fixture(tl_files_wide src/tl_files_wide.c manifests/tl_files_wide.json
     LINK_KERNEL32 EXPECT_RESOLVED CONSOLE REPORT RELOCATABLE
