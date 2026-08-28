@@ -876,14 +876,6 @@ private:
                 case 3:
                     code.operation = UnwindOperation::SetFpReg;
                     if (code.operation_info != 0U) {
-                        if (code.operation_info != unwind.frame_offset) {
-                            return fail(ParseStatus::UnsupportedMechanism,
-                                        "forma estendida de UWOP_SET_FPREG incompatível em RVA " +
-                                            util::format_hex(unwind_rva) +
-                                            " (OpInfo=" + std::to_string(code.operation_info) +
-                                            ", FrameOffset=" +
-                                            std::to_string(unwind.frame_offset) + ")");
-                        }
                         unwind.has_extended_set_fpreg = true;
                     }
                     if (!is_nonvolatile_register(unwind.frame_register)) {

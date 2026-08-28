@@ -466,7 +466,9 @@ TEST(PeReaderTest, ValidatesV2EpilogDescriptorsAndExtendedSetFpReg) {
     EXPECT_TRUE(extended.info.runtime_functions[0].unwind.has_extended_set_fpreg);
 
     bytes[kUnwindFileOffset + 13] = std::byte{0x23};
-    EXPECT_EQ(parse_pe(bytes).status, ParseStatus::UnsupportedMechanism);
+    const ParseResult extended2 = parse_pe(bytes);
+    EXPECT_EQ(extended2.status, ParseStatus::Success);
+    EXPECT_TRUE(extended2.info.runtime_functions[0].unwind.has_extended_set_fpreg);
 }
 
 TEST(PeReaderTest, RejectsDelayImportDirectoryWithoutTerminator) {
