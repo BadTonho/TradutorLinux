@@ -85,7 +85,7 @@ Novos benchmarks do portfólio popular x64 na Fase 13.13:
 - `7zFM_x64.exe` (7-Zip GUI): **298/298 (100%)** imports resolvidos — Suporte Completo de Imports
 - `Rockstar-Games-Launcher.exe`: **338/338 (100%)** imports resolvidos — Suporte Completo de Imports
 - `putty_x64.exe` (PuTTY SSH Client): **348/348 (100%)** imports resolvidos — Suporte Completo de Imports
-- `notepad++.exe` (Notepad++ x64): **304/584 (52%)** imports resolvidos (próximo alvo)
+- `notepad++.exe` (Notepad++ x64): **584/584 (100%)** imports resolvidos — Suporte Completo de Imports
 - `Affinity x64.msix`: pacote MSIX / AppX reconhecido pelo parser de manifesto
 - `HWiNFO64.exe` / `Rufus_x64.exe`: filtrados com segurança contra anomalias de cabeçalho PE
 - Wrappers 32-bit (NSIS/Inno): rejeitados com segurança pelo filtro de arquitetura x64

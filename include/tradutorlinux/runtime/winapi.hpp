@@ -1721,6 +1721,81 @@ TL_MSABI std::uint32_t tl_ImmGetVirtualKey(void* hwnd) noexcept;
 // SHELL32: PuTTY APIs
 TL_MSABI int tl_ShellNotifyIconW(std::uint32_t message, void* data) noexcept;
 
+// UxTheme: Notepad++ APIs
+TL_MSABI void* tl_OpenThemeData(void* hwnd, const std::uint16_t* class_list) noexcept;
+TL_MSABI std::int32_t tl_CloseThemeData(void* theme) noexcept;
+TL_MSABI std::int32_t tl_DrawThemeBackground(void* theme, void* hdc, int part_id, int state_id, const void* rect, const void* clip_rect) noexcept;
+TL_MSABI std::int32_t tl_DrawThemeText(void* theme, void* hdc, int part_id, int state_id, const std::uint16_t* text, int char_count, std::uint32_t text_flags, std::uint32_t text_flags2, const void* rect) noexcept;
+TL_MSABI std::int32_t tl_DrawThemeTextEx(void* theme, void* hdc, int part_id, int state_id, const std::uint16_t* text, int char_count, std::uint32_t text_flags, void* rect, const void* options) noexcept;
+TL_MSABI std::int32_t tl_GetThemeColor(void* theme, int part_id, int state_id, int prop_id, std::uint32_t* color) noexcept;
+TL_MSABI std::int32_t tl_GetThemeFont(void* theme, void* hdc, int part_id, int state_id, int prop_id, void* font) noexcept;
+TL_MSABI std::int32_t tl_GetThemeMetric(void* theme, void* hdc, int part_id, int state_id, int prop_id, int* val) noexcept;
+TL_MSABI std::int32_t tl_GetThemePartSize(void* theme, void* hdc, int part_id, int state_id, const void* rect, int type, void* size) noexcept;
+TL_MSABI std::uint32_t tl_GetThemeSysColor(void* theme, int color_id) noexcept;
+TL_MSABI void* tl_GetThemeSysColorBrush(void* theme, int color_id) noexcept;
+TL_MSABI int tl_IsThemeActive() noexcept;
+TL_MSABI int tl_IsAppThemed() noexcept;
+TL_MSABI int tl_IsThemeBackgroundPartiallyTransparent(void* theme, int part_id, int state_id) noexcept;
+TL_MSABI std::int32_t tl_BufferedPaintInit() noexcept;
+TL_MSABI std::int32_t tl_BufferedPaintUnInit() noexcept;
+TL_MSABI void* tl_BeginBufferedPaint(void* hdc_target, const void* target_rect, int format, const void* animation_params, void** hdc_out) noexcept;
+TL_MSABI std::int32_t tl_EndBufferedPaint(void* buffered_paint, int update_target) noexcept;
+TL_MSABI std::int32_t tl_DrawThemeParentBackground(void* hwnd, void* hdc, const void* rect) noexcept;
+
+// COMCTL32: Notepad++ APIs
+TL_MSABI std::int32_t tl_TaskDialogIndirect(const void* config, int* button, int* radio_button, int* verification_flag_checked) noexcept;
+TL_MSABI std::int32_t tl_TaskDialog(void* hwnd_parent, void* instance, const std::uint16_t* title, const std::uint16_t* main_instruction, const std::uint16_t* content, std::uint32_t common_buttons, const std::uint16_t* icon, int* button) noexcept;
+TL_MSABI int tl_ImageList_Draw(void* himl, int i, void* hdc_dst, int x, int y, std::uint32_t flags) noexcept;
+TL_MSABI int tl_ImageList_DrawEx(void* himl, int i, void* hdc_dst, int x, int y, int dx, int dy, std::uint32_t rgb_bk, std::uint32_t rgb_fg, std::uint32_t flags) noexcept;
+TL_MSABI void* tl_ImageList_GetIcon(void* himl, int i, std::uint32_t flags) noexcept;
+TL_MSABI void* tl_ImageList_Duplicate(void* himl) noexcept;
+TL_MSABI std::uint32_t tl_ImageList_SetBkColor(void* himl, std::uint32_t clr_bk) noexcept;
+TL_MSABI std::uint32_t tl_ImageList_GetBkColor(void* himl) noexcept;
+TL_MSABI int tl_ImageList_GetIconSize(void* himl, int* cx, int* cy) noexcept;
+
+// USER32 & GDI32: DPI, Icons, Rects, Regions, Blt APIs for Notepad++
+TL_MSABI std::uint32_t tl_GetDpiForWindow(void* hwnd) noexcept;
+TL_MSABI std::uint32_t tl_GetDpiForSystem() noexcept;
+TL_MSABI int tl_SetProcessDpiAwarenessContext(void* dpi_context) noexcept;
+TL_MSABI int tl_SetProcessDPIAware() noexcept;
+TL_MSABI int tl_GetSystemMetricsForDpi(int index, std::uint32_t dpi) noexcept;
+TL_MSABI int tl_AdjustWindowRectExForDpi(void* rect, std::uint32_t style, int menu, std::uint32_t ex_style, std::uint32_t dpi) noexcept;
+TL_MSABI void* tl_CreateIconIndirect(const void* icon_info) noexcept;
+TL_MSABI int tl_GetIconInfo(void* icon, void* icon_info) noexcept;
+TL_MSABI int tl_GetIconInfoExW(void* icon, void* icon_info_ex) noexcept;
+TL_MSABI int tl_DrawIcon(void* hdc, int x, int y, void* icon) noexcept;
+TL_MSABI void* tl_CopyIcon(void* icon) noexcept;
+TL_MSABI void* tl_CreatePatternBrush(void* hbmp) noexcept;
+TL_MSABI void* tl_CreateHatchBrush(int style, std::uint32_t color) noexcept;
+TL_MSABI int tl_PatBlt(void* hdc, int x, int y, int w, int h, std::uint32_t rop) noexcept;
+TL_MSABI int tl_MaskBlt(void* hdc_dest, int x_dest, int y_dest, int width, int height, void* hdc_src, int x_src, int y_src, void* mask_bmp, int x_mask, int y_mask, std::uint32_t rop) noexcept;
+TL_MSABI int tl_PlgBlt(void* hdc_dest, const void* point, void* hdc_src, int x_src, int y_src, int width, int height, void* mask_bmp, int x_mask, int y_mask) noexcept;
+TL_MSABI int tl_AlphaBlend(void* hdc_dest, int x_dest, int y_dest, int w_dest, int h_dest, void* hdc_src, int x_src, int y_src, int w_src, int h_src, std::uint32_t blend_function) noexcept;
+TL_MSABI int tl_TransparentBlt(void* hdc_dest, int x_dest, int y_dest, int w_dest, int h_dest, void* hdc_src, int x_src, int y_src, int w_src, int h_src, std::uint32_t cr_transparent) noexcept;
+TL_MSABI int tl_EnumFontFamiliesExW(void* hdc, const void* logfont, void* callback, std::intptr_t lparam, std::uint32_t flags) noexcept;
+TL_MSABI int tl_EnumFontFamiliesExA(void* hdc, const void* logfont, void* callback, std::intptr_t lparam, std::uint32_t flags) noexcept;
+TL_MSABI void* tl_CreatePolygonRgn(const void* points, int count, int mode) noexcept;
+TL_MSABI int tl_FrameRgn(void* hdc, void* rgn, void* brush, int w, int h) noexcept;
+TL_MSABI int tl_FillRgn(void* hdc, void* rgn, void* brush) noexcept;
+TL_MSABI int tl_PaintRgn(void* hdc, void* rgn) noexcept;
+TL_MSABI int tl_InvertRgn(void* hdc, void* rgn) noexcept;
+TL_MSABI int tl_SetWindowRgn(void* hwnd, void* rgn, int redraw) noexcept;
+TL_MSABI int tl_GetWindowRgn(void* hwnd, void* rgn) noexcept;
+TL_MSABI int tl_GetWindowRgnBox(void* hwnd, void* rect) noexcept;
+TL_MSABI int tl_DrawEdge(void* hdc, void* rect, std::uint32_t edge, std::uint32_t flags) noexcept;
+TL_MSABI int tl_DrawFrameControl(void* hdc, void* rect, std::uint32_t type, std::uint32_t state) noexcept;
+TL_MSABI int tl_DrawFocusRect(void* hdc, const void* rect) noexcept;
+TL_MSABI int tl_FrameRect(void* hdc, const void* rect, void* brush) noexcept;
+TL_MSABI int tl_InvertRect(void* hdc, const void* rect) noexcept;
+TL_MSABI int tl_GetUpdateRect(void* hwnd, void* rect, int erase) noexcept;
+TL_MSABI int tl_GetUpdateRgn(void* hwnd, void* rgn, int erase) noexcept;
+TL_MSABI int tl_InvalidateRgn(void* hwnd, void* rgn, int erase) noexcept;
+TL_MSABI int tl_ValidateRgn(void* hwnd, void* rgn) noexcept;
+TL_MSABI int tl_ScrollWindow(void* hwnd, int x_amount, int y_amount, const void* rect, const void* clip_rect) noexcept;
+TL_MSABI int tl_ScrollWindowEx(void* hwnd, int dx, int dy, const void* scroll_rect, const void* clip_rect, void* update_rgn, void* update_rect, std::uint32_t flags) noexcept;
+TL_MSABI int tl_RegisterHotKey(void* hwnd, int id, std::uint32_t modifiers, std::uint32_t vk) noexcept;
+TL_MSABI int tl_UnregisterHotKey(void* hwnd, int id) noexcept;
+
 }  // extern "C"
 
 // Define o caminho do módulo convidado antes da execução.

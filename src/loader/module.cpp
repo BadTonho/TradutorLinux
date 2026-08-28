@@ -12,6 +12,7 @@
 #include "tradutorlinux/runtime/oleaut32.hpp"
 #include "tradutorlinux/runtime/shlwapi.hpp"
 #include "tradutorlinux/runtime/version.hpp"
+#include "tradutorlinux/runtime/dwmapi.hpp"
 #include "tradutorlinux/runtime/winmm.hpp"
 #include "tradutorlinux/runtime/comctl32.hpp"
 #include "tradutorlinux/runtime/comdlg32.hpp"
@@ -715,6 +716,34 @@ void register_builtin_modules() {
         {"RegisterClipboardFormatA", 186, reinterpret_cast<std::uintptr_t>(&tl_RegisterClipboardFormatA)},
         {"CountClipboardFormats", 187, reinterpret_cast<std::uintptr_t>(&tl_CountClipboardFormats)},
         {"EnumClipboardFormats", 188, reinterpret_cast<std::uintptr_t>(&tl_EnumClipboardFormats)},
+        {"GetDpiForWindow", 189, reinterpret_cast<std::uintptr_t>(&tl_GetDpiForWindow)},
+        {"GetDpiForSystem", 190, reinterpret_cast<std::uintptr_t>(&tl_GetDpiForSystem)},
+        {"SetProcessDpiAwarenessContext", 191, reinterpret_cast<std::uintptr_t>(&tl_SetProcessDpiAwarenessContext)},
+        {"SetProcessDPIAware", 192, reinterpret_cast<std::uintptr_t>(&tl_SetProcessDPIAware)},
+        {"GetSystemMetricsForDpi", 193, reinterpret_cast<std::uintptr_t>(&tl_GetSystemMetricsForDpi)},
+        {"AdjustWindowRectExForDpi", 194, reinterpret_cast<std::uintptr_t>(&tl_AdjustWindowRectExForDpi)},
+        {"CreateIconIndirect", 195, reinterpret_cast<std::uintptr_t>(&tl_CreateIconIndirect)},
+        {"GetIconInfo", 196, reinterpret_cast<std::uintptr_t>(&tl_GetIconInfo)},
+        {"GetIconInfoExW", 197, reinterpret_cast<std::uintptr_t>(&tl_GetIconInfoExW)},
+        {"DrawIcon", 198, reinterpret_cast<std::uintptr_t>(&tl_DrawIcon)},
+        {"CopyIcon", 199, reinterpret_cast<std::uintptr_t>(&tl_CopyIcon)},
+        {"SetWindowRgn", 200, reinterpret_cast<std::uintptr_t>(&tl_SetWindowRgn)},
+        {"GetWindowRgn", 201, reinterpret_cast<std::uintptr_t>(&tl_GetWindowRgn)},
+        {"GetWindowRgnBox", 202, reinterpret_cast<std::uintptr_t>(&tl_GetWindowRgnBox)},
+        {"DrawEdge", 203, reinterpret_cast<std::uintptr_t>(&tl_DrawEdge)},
+        {"DrawFrameControl", 204, reinterpret_cast<std::uintptr_t>(&tl_DrawFrameControl)},
+        {"DrawFocusRect", 205, reinterpret_cast<std::uintptr_t>(&tl_DrawFocusRect)},
+        {"FillRect", 206, reinterpret_cast<std::uintptr_t>(&tl_FillRect)},
+        {"FrameRect", 207, reinterpret_cast<std::uintptr_t>(&tl_FrameRect)},
+        {"InvertRect", 208, reinterpret_cast<std::uintptr_t>(&tl_InvertRect)},
+        {"GetUpdateRect", 209, reinterpret_cast<std::uintptr_t>(&tl_GetUpdateRect)},
+        {"GetUpdateRgn", 210, reinterpret_cast<std::uintptr_t>(&tl_GetUpdateRgn)},
+        {"InvalidateRgn", 211, reinterpret_cast<std::uintptr_t>(&tl_InvalidateRgn)},
+        {"ValidateRgn", 212, reinterpret_cast<std::uintptr_t>(&tl_ValidateRgn)},
+        {"ScrollWindow", 213, reinterpret_cast<std::uintptr_t>(&tl_ScrollWindow)},
+        {"ScrollWindowEx", 214, reinterpret_cast<std::uintptr_t>(&tl_ScrollWindowEx)},
+        {"RegisterHotKey", 215, reinterpret_cast<std::uintptr_t>(&tl_RegisterHotKey)},
+        {"UnregisterHotKey", 216, reinterpret_cast<std::uintptr_t>(&tl_UnregisterHotKey)},
     };
     static const InternalModule kUser32Module{"USER32.dll", kUser32Exports};
     register_module(kUser32Module);
@@ -770,6 +799,20 @@ void register_builtin_modules() {
         {"GetTextAlign", 49, reinterpret_cast<std::uintptr_t>(&tl_GetTextAlign)},
         {"SetROP2", 50, reinterpret_cast<std::uintptr_t>(&tl_SetROP2)},
         {"GetSystemPaletteEntries", 51, reinterpret_cast<std::uintptr_t>(&tl_GetSystemPaletteEntries)},
+        {"CreatePatternBrush", 52, reinterpret_cast<std::uintptr_t>(&tl_CreatePatternBrush)},
+        {"CreateHatchBrush", 53, reinterpret_cast<std::uintptr_t>(&tl_CreateHatchBrush)},
+        {"PatBlt", 54, reinterpret_cast<std::uintptr_t>(&tl_PatBlt)},
+        {"MaskBlt", 55, reinterpret_cast<std::uintptr_t>(&tl_MaskBlt)},
+        {"PlgBlt", 56, reinterpret_cast<std::uintptr_t>(&tl_PlgBlt)},
+        {"AlphaBlend", 57, reinterpret_cast<std::uintptr_t>(&tl_AlphaBlend)},
+        {"TransparentBlt", 58, reinterpret_cast<std::uintptr_t>(&tl_TransparentBlt)},
+        {"EnumFontFamiliesExW", 59, reinterpret_cast<std::uintptr_t>(&tl_EnumFontFamiliesExW)},
+        {"EnumFontFamiliesExA", 60, reinterpret_cast<std::uintptr_t>(&tl_EnumFontFamiliesExA)},
+        {"CreatePolygonRgn", 61, reinterpret_cast<std::uintptr_t>(&tl_CreatePolygonRgn)},
+        {"FrameRgn", 62, reinterpret_cast<std::uintptr_t>(&tl_FrameRgn)},
+        {"FillRgn", 63, reinterpret_cast<std::uintptr_t>(&tl_FillRgn)},
+        {"PaintRgn", 64, reinterpret_cast<std::uintptr_t>(&tl_PaintRgn)},
+        {"InvertRgn", 65, reinterpret_cast<std::uintptr_t>(&tl_InvertRgn)},
     };
     static const InternalModule kGdi32Module{"GDI32.dll", kGdi32Exports};
     register_module(kGdi32Module);
@@ -1150,6 +1193,10 @@ void register_builtin_modules() {
         {"GetFileVersionInfoW", 4, reinterpret_cast<std::uintptr_t>(&tl_GetFileVersionInfoW)},
         {"VerQueryValueA", 5, reinterpret_cast<std::uintptr_t>(&tl_VerQueryValueA)},
         {"VerQueryValueW", 6, reinterpret_cast<std::uintptr_t>(&tl_VerQueryValueW)},
+        {"GetFileVersionInfoSizeExA", 7, reinterpret_cast<std::uintptr_t>(&tl_GetFileVersionInfoSizeExA)},
+        {"GetFileVersionInfoSizeExW", 8, reinterpret_cast<std::uintptr_t>(&tl_GetFileVersionInfoSizeExW)},
+        {"GetFileVersionInfoExA", 9, reinterpret_cast<std::uintptr_t>(&tl_GetFileVersionInfoExA)},
+        {"GetFileVersionInfoExW", 10, reinterpret_cast<std::uintptr_t>(&tl_GetFileVersionInfoExW)},
     };
     static const InternalModule kVersionModule{"version.dll", kVersionExports};
     register_module(kVersionModule);
@@ -1178,6 +1225,25 @@ void register_builtin_modules() {
     register_module(kGdiplusModule);
     static const ExportedFunction kUxThemeExports[] = {
         {"SetWindowTheme", 1, reinterpret_cast<std::uintptr_t>(&tl_SetWindowTheme)},
+        {"OpenThemeData", 2, reinterpret_cast<std::uintptr_t>(&tl_OpenThemeData)},
+        {"CloseThemeData", 3, reinterpret_cast<std::uintptr_t>(&tl_CloseThemeData)},
+        {"DrawThemeBackground", 4, reinterpret_cast<std::uintptr_t>(&tl_DrawThemeBackground)},
+        {"DrawThemeText", 5, reinterpret_cast<std::uintptr_t>(&tl_DrawThemeText)},
+        {"DrawThemeTextEx", 6, reinterpret_cast<std::uintptr_t>(&tl_DrawThemeTextEx)},
+        {"GetThemeColor", 7, reinterpret_cast<std::uintptr_t>(&tl_GetThemeColor)},
+        {"GetThemeFont", 8, reinterpret_cast<std::uintptr_t>(&tl_GetThemeFont)},
+        {"GetThemeMetric", 9, reinterpret_cast<std::uintptr_t>(&tl_GetThemeMetric)},
+        {"GetThemePartSize", 10, reinterpret_cast<std::uintptr_t>(&tl_GetThemePartSize)},
+        {"GetThemeSysColor", 11, reinterpret_cast<std::uintptr_t>(&tl_GetThemeSysColor)},
+        {"GetThemeSysColorBrush", 12, reinterpret_cast<std::uintptr_t>(&tl_GetThemeSysColorBrush)},
+        {"IsThemeActive", 13, reinterpret_cast<std::uintptr_t>(&tl_IsThemeActive)},
+        {"IsAppThemed", 14, reinterpret_cast<std::uintptr_t>(&tl_IsAppThemed)},
+        {"IsThemeBackgroundPartiallyTransparent", 15, reinterpret_cast<std::uintptr_t>(&tl_IsThemeBackgroundPartiallyTransparent)},
+        {"BufferedPaintInit", 16, reinterpret_cast<std::uintptr_t>(&tl_BufferedPaintInit)},
+        {"BufferedPaintUnInit", 17, reinterpret_cast<std::uintptr_t>(&tl_BufferedPaintUnInit)},
+        {"BeginBufferedPaint", 18, reinterpret_cast<std::uintptr_t>(&tl_BeginBufferedPaint)},
+        {"EndBufferedPaint", 19, reinterpret_cast<std::uintptr_t>(&tl_EndBufferedPaint)},
+        {"DrawThemeParentBackground", 20, reinterpret_cast<std::uintptr_t>(&tl_DrawThemeParentBackground)},
     };
     static const InternalModule kUxThemeModule{"UxTheme.dll", kUxThemeExports};
     register_module(kUxThemeModule);
@@ -1212,6 +1278,15 @@ void register_builtin_modules() {
         {"CreateToolbarEx", 9, reinterpret_cast<std::uintptr_t>(&tl_CreateToolbarEx)},
         {"ImageList_GetImageCount", 10, reinterpret_cast<std::uintptr_t>(&tl_ImageList_GetImageCount)},
         {"PropertySheetW", 11, reinterpret_cast<std::uintptr_t>(&tl_PropertySheetW)},
+        {"TaskDialogIndirect", 12, reinterpret_cast<std::uintptr_t>(&tl_TaskDialogIndirect)},
+        {"TaskDialog", 13, reinterpret_cast<std::uintptr_t>(&tl_TaskDialog)},
+        {"ImageList_Draw", 14, reinterpret_cast<std::uintptr_t>(&tl_ImageList_Draw)},
+        {"ImageList_DrawEx", 15, reinterpret_cast<std::uintptr_t>(&tl_ImageList_DrawEx)},
+        {"ImageList_GetIcon", 16, reinterpret_cast<std::uintptr_t>(&tl_ImageList_GetIcon)},
+        {"ImageList_Duplicate", 17, reinterpret_cast<std::uintptr_t>(&tl_ImageList_Duplicate)},
+        {"ImageList_SetBkColor", 18, reinterpret_cast<std::uintptr_t>(&tl_ImageList_SetBkColor)},
+        {"ImageList_GetBkColor", 19, reinterpret_cast<std::uintptr_t>(&tl_ImageList_GetBkColor)},
+        {"ImageList_GetIconSize", 20, reinterpret_cast<std::uintptr_t>(&tl_ImageList_GetIconSize)},
         {"SetWindowSubclass", 410, reinterpret_cast<std::uintptr_t>(&tl_SetWindowSubclass)},
         {"RemoveWindowSubclass", 412, reinterpret_cast<std::uintptr_t>(&tl_RemoveWindowSubclass)},
         {"DefSubclassProc", 413, reinterpret_cast<std::uintptr_t>(&tl_DefSubclassProc)},
@@ -1271,6 +1346,18 @@ void register_builtin_modules() {
     };
     static const InternalModule kMprModule{"MPR.dll", kMprExports};
     register_module(kMprModule);
+    static const ExportedFunction kDwmApiExports[] = {
+        {"DwmSetWindowAttribute", 1, reinterpret_cast<std::uintptr_t>(&tl_DwmSetWindowAttribute)},
+        {"DwmGetWindowAttribute", 2, reinterpret_cast<std::uintptr_t>(&tl_DwmGetWindowAttribute)},
+        {"DwmIsCompositionEnabled", 3, reinterpret_cast<std::uintptr_t>(&tl_DwmIsCompositionEnabled)},
+        {"DwmDefWindowProc", 4, reinterpret_cast<std::uintptr_t>(&tl_DwmDefWindowProc)},
+        {"DwmExtendFrameIntoClientArea", 5, reinterpret_cast<std::uintptr_t>(&tl_DwmExtendFrameIntoClientArea)},
+        {"DwmEnableBlurBehindWindow", 6, reinterpret_cast<std::uintptr_t>(&tl_DwmEnableBlurBehindWindow)},
+        {"DwmFlush", 7, reinterpret_cast<std::uintptr_t>(&tl_DwmFlush)},
+        {"DwmGetColorizationColor", 8, reinterpret_cast<std::uintptr_t>(&tl_DwmGetColorizationColor)},
+    };
+    static const InternalModule kDwmApiModule{"DWMAPI.dll", kDwmApiExports};
+    register_module(kDwmApiModule);
 }
 
 bool is_module_registered(const std::string_view dll) {

@@ -10,6 +10,8 @@
 #include "tradutorlinux/runtime/mpr.hpp"
 #include "tradutorlinux/runtime/msvcrt.hpp"
 #include "tradutorlinux/runtime/ws2_32.hpp"
+#include "tradutorlinux/runtime/dwmapi.hpp"
+#include "tradutorlinux/runtime/version.hpp"
 #include "tradutorlinux/package/msix.hpp"
 #include "tradutorlinux/prefix/prefix.hpp"
 #include "../src/runtime/runtime_context.hpp"
@@ -2755,6 +2757,62 @@ TEST(PuttyCoverageTest, AllApisAndModules) {
     EXPECT_EQ(tl_RegEnumKeyA(nullptr, 0, reg_name, 32), 259);
     EXPECT_EQ(tl_RegEnumValueA(nullptr, 0, reg_name, nullptr, nullptr, nullptr, nullptr, nullptr), 259);
     EXPECT_EQ(tl_RegDeleteKeyA(nullptr, "test"), 0);
+}
+
+TEST(NotepadPlusPlusCoverageTest, AllApisAndModules) {
+    // DWMAPI
+    int comp_enabled = 0;
+    EXPECT_EQ(tl_DwmIsCompositionEnabled(&comp_enabled), 0);
+    EXPECT_EQ(comp_enabled, 1);
+    EXPECT_EQ(tl_DwmSetWindowAttribute(nullptr, 0, nullptr, 0), 0);
+    std::intptr_t dwm_res = 0;
+    EXPECT_EQ(tl_DwmDefWindowProc(nullptr, 0, 0, 0, &dwm_res), 0);
+    std::uint32_t dwm_col = 0;
+    int dwm_op = 0;
+    EXPECT_EQ(tl_DwmGetColorizationColor(&dwm_col, &dwm_op), 0);
+    EXPECT_EQ(tl_DwmFlush(), 0);
+
+    // VERSION
+    std::uint32_t ver_h = 0;
+    EXPECT_EQ(tl_GetFileVersionInfoSizeA("test.exe", &ver_h), 512U);
+    EXPECT_EQ(tl_GetFileVersionInfoSizeW(nullptr, &ver_h), 512U);
+    char ver_buf[512]{};
+    EXPECT_EQ(tl_GetFileVersionInfoA("test.exe", 0, 512, ver_buf), 1);
+    void* q_buf = nullptr;
+    std::uint32_t q_len = 0;
+    EXPECT_EQ(tl_VerQueryValueA(ver_buf, "\\", &q_buf, &q_len), 1);
+    EXPECT_NE(q_buf, nullptr);
+
+    // UxTheme
+    void* theme = tl_OpenThemeData(nullptr, nullptr);
+    EXPECT_NE(theme, nullptr);
+    EXPECT_EQ(tl_IsThemeActive(), 1);
+    EXPECT_EQ(tl_IsAppThemed(), 1);
+    EXPECT_EQ(tl_DrawThemeBackground(theme, nullptr, 0, 0, nullptr, nullptr), 0);
+    EXPECT_EQ(tl_CloseThemeData(theme), 0);
+    EXPECT_EQ(tl_BufferedPaintInit(), 0);
+    EXPECT_EQ(tl_BufferedPaintUnInit(), 0);
+
+    // COMCTL32
+    int btn = 0;
+    EXPECT_EQ(tl_TaskDialog(nullptr, nullptr, nullptr, nullptr, nullptr, 0, nullptr, &btn), 0);
+    EXPECT_EQ(btn, 1);
+    EXPECT_EQ(tl_ImageList_Draw(nullptr, 0, nullptr, 0, 0, 0), 1);
+    EXPECT_EQ(tl_ImageList_GetBkColor(nullptr), 0xFFFFFFFFU);
+
+    // USER32 & GDI32 DPI, Regions, Blt
+    EXPECT_EQ(tl_GetDpiForSystem(), 96U);
+    EXPECT_EQ(tl_SetProcessDPIAware(), 1);
+    void* pbrush = tl_CreatePatternBrush(nullptr);
+    EXPECT_NE(pbrush, nullptr);
+    EXPECT_EQ(tl_PatBlt(nullptr, 0, 0, 10, 10, 0), 1);
+    EXPECT_EQ(tl_TransparentBlt(nullptr, 0, 0, 10, 10, nullptr, 0, 0, 10, 10, 0), 1);
+    EXPECT_EQ(tl_AlphaBlend(nullptr, 0, 0, 10, 10, nullptr, 0, 0, 10, 10, 0), 1);
+    void* poly_rgn = tl_CreatePolygonRgn(nullptr, 0, 0);
+    EXPECT_NE(poly_rgn, nullptr);
+    EXPECT_EQ(tl_SetWindowRgn(nullptr, poly_rgn, 1), 1);
+    EXPECT_EQ(tl_RegisterHotKey(nullptr, 1, 0, 0), 1);
+    EXPECT_EQ(tl_UnregisterHotKey(nullptr, 1), 1);
 }
 
 }  // namespace

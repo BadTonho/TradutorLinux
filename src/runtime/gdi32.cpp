@@ -600,6 +600,164 @@ TL_MSABI std::uint32_t tl_GetSystemPaletteEntries(void* const hdc, const std::ui
     return count;
 }
 
+TL_MSABI void* tl_CreatePatternBrush(void* const hbmp) noexcept {
+    (void)hbmp;
+    set_last_error(abi::kErrorSuccess);
+    return reinterpret_cast<void*>(0x50415442ULL); // 'PATB'
+}
+
+TL_MSABI void* tl_CreateHatchBrush(const int style, const std::uint32_t color) noexcept {
+    (void)style;
+    (void)color;
+    set_last_error(abi::kErrorSuccess);
+    return reinterpret_cast<void*>(0x48415443ULL); // 'HATC'
+}
+
+TL_MSABI int tl_PatBlt(void* const hdc, const int x, const int y, const int w, const int h, const std::uint32_t rop) noexcept {
+    (void)hdc;
+    (void)x;
+    (void)y;
+    (void)w;
+    (void)h;
+    (void)rop;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_MaskBlt(void* const hdc_dest, const int x_dest, const int y_dest, const int width, const int height,
+                        void* const hdc_src, const int x_src, const int y_src, void* const mask_bmp,
+                        const int x_mask, const int y_mask, const std::uint32_t rop) noexcept {
+    (void)hdc_dest;
+    (void)x_dest;
+    (void)y_dest;
+    (void)width;
+    (void)height;
+    (void)hdc_src;
+    (void)x_src;
+    (void)y_src;
+    (void)mask_bmp;
+    (void)x_mask;
+    (void)y_mask;
+    (void)rop;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_PlgBlt(void* const hdc_dest, const void* const point, void* const hdc_src,
+                       const int x_src, const int y_src, const int width, const int height,
+                       void* const mask_bmp, const int x_mask, const int y_mask) noexcept {
+    (void)hdc_dest;
+    (void)point;
+    (void)hdc_src;
+    (void)x_src;
+    (void)y_src;
+    (void)width;
+    (void)height;
+    (void)mask_bmp;
+    (void)x_mask;
+    (void)y_mask;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_AlphaBlend(void* const hdc_dest, const int x_dest, const int y_dest, const int w_dest, const int h_dest,
+                           void* const hdc_src, const int x_src, const int y_src, const int w_src, const int h_src,
+                           const std::uint32_t blend_function) noexcept {
+    (void)hdc_dest;
+    (void)x_dest;
+    (void)y_dest;
+    (void)w_dest;
+    (void)h_dest;
+    (void)hdc_src;
+    (void)x_src;
+    (void)y_src;
+    (void)w_src;
+    (void)h_src;
+    (void)blend_function;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_TransparentBlt(void* const hdc_dest, const int x_dest, const int y_dest, const int w_dest, const int h_dest,
+                               void* const hdc_src, const int x_src, const int y_src, const int w_src, const int h_src,
+                               const std::uint32_t cr_transparent) noexcept {
+    (void)hdc_dest;
+    (void)x_dest;
+    (void)y_dest;
+    (void)w_dest;
+    (void)h_dest;
+    (void)hdc_src;
+    (void)x_src;
+    (void)y_src;
+    (void)w_src;
+    (void)h_src;
+    (void)cr_transparent;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_EnumFontFamiliesExW(void* const hdc, const void* const logfont, void* const callback,
+                                    const std::intptr_t lparam, const std::uint32_t flags) noexcept {
+    (void)hdc;
+    (void)logfont;
+    (void)callback;
+    (void)lparam;
+    (void)flags;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_EnumFontFamiliesExA(void* const hdc, const void* const logfont, void* const callback,
+                                    const std::intptr_t lparam, const std::uint32_t flags) noexcept {
+    (void)hdc;
+    (void)logfont;
+    (void)callback;
+    (void)lparam;
+    (void)flags;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI void* tl_CreatePolygonRgn(const void* const points, const int count, const int mode) noexcept {
+    (void)points;
+    (void)count;
+    (void)mode;
+    set_last_error(abi::kErrorSuccess);
+    return reinterpret_cast<void*>(0x504F4C59ULL); // 'POLY'
+}
+
+TL_MSABI int tl_FrameRgn(void* const hdc, void* const rgn, void* const brush, const int w, const int h) noexcept {
+    (void)hdc;
+    (void)rgn;
+    (void)brush;
+    (void)w;
+    (void)h;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_FillRgn(void* const hdc, void* const rgn, void* const brush) noexcept {
+    (void)hdc;
+    (void)rgn;
+    (void)brush;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_PaintRgn(void* const hdc, void* const rgn) noexcept {
+    (void)hdc;
+    (void)rgn;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_InvertRgn(void* const hdc, void* const rgn) noexcept {
+    (void)hdc;
+    (void)rgn;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
 }  // extern "C"
 
 }  // namespace tradutorlinux

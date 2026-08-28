@@ -46,6 +46,8 @@ add_library(tradutorlinux_core STATIC
     runtime/powrprof.cpp
     runtime/iphlpapi.cpp
     runtime/mpr.cpp
+    runtime/dwmapi.cpp
+    runtime/version.cpp
     runtime/guest_entry.S
     runtime/unwind_capture.S
     runtime/seh.S

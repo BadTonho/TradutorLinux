@@ -2832,6 +2832,225 @@ TL_MSABI std::uint32_t tl_EnumClipboardFormats(const std::uint32_t format) noexc
     return 0;
 }
 
+TL_MSABI std::uint32_t tl_GetDpiForWindow(void* const hwnd) noexcept {
+    (void)hwnd;
+    return 96; // Standard 96 DPI (100% scaling)
+}
+
+TL_MSABI std::uint32_t tl_GetDpiForSystem() noexcept {
+    return 96;
+}
+
+TL_MSABI int tl_SetProcessDpiAwarenessContext(void* const dpi_context) noexcept {
+    (void)dpi_context;
+    return 1;
+}
+
+TL_MSABI int tl_SetProcessDPIAware() noexcept {
+    return 1;
+}
+
+TL_MSABI int tl_GetSystemMetricsForDpi(const int index, const std::uint32_t dpi) noexcept {
+    (void)dpi;
+    return tl_GetSystemMetrics(index);
+}
+
+TL_MSABI int tl_AdjustWindowRectExForDpi(void* const rect, const std::uint32_t style, const int menu,
+                                        const std::uint32_t ex_style, const std::uint32_t dpi) noexcept {
+    (void)style;
+    (void)menu;
+    (void)ex_style;
+    (void)dpi;
+    if (rect != nullptr && mapped_guest_range(rect, 16, true)) {
+        // Adjust borders if needed
+    }
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI void* tl_CreateIconIndirect(const void* const icon_info) noexcept {
+    (void)icon_info;
+    set_last_error(abi::kErrorSuccess);
+    return reinterpret_cast<void*>(0x49434F4EULL); // 'ICON'
+}
+
+TL_MSABI int tl_GetIconInfo(void* const icon, void* const icon_info) noexcept {
+    (void)icon;
+    if (icon_info != nullptr && mapped_guest_range(icon_info, 32, true)) {
+        std::memset(icon_info, 0, 32);
+    }
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_GetIconInfoExW(void* const icon, void* const icon_info_ex) noexcept {
+    (void)icon;
+    if (icon_info_ex != nullptr && mapped_guest_range(icon_info_ex, 40, true)) {
+        std::memset(icon_info_ex, 0, 40);
+    }
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_DrawIcon(void* const hdc, const int x, const int y, void* const icon) noexcept {
+    (void)hdc;
+    (void)x;
+    (void)y;
+    (void)icon;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI void* tl_CopyIcon(void* const icon) noexcept {
+    return icon;
+}
+
+TL_MSABI int tl_SetWindowRgn(void* const hwnd, void* const rgn, const int redraw) noexcept {
+    (void)hwnd;
+    (void)rgn;
+    (void)redraw;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_GetWindowRgn(void* const hwnd, void* const rgn) noexcept {
+    (void)hwnd;
+    (void)rgn;
+    set_last_error(abi::kErrorSuccess);
+    return 2; // SIMPLEREGION
+}
+
+TL_MSABI int tl_GetWindowRgnBox(void* const hwnd, void* const rect) noexcept {
+    (void)hwnd;
+    if (rect != nullptr && mapped_guest_range(rect, 16, true)) {
+        *reinterpret_cast<std::int32_t*>(static_cast<char*>(rect) + 0) = 0;
+        *reinterpret_cast<std::int32_t*>(static_cast<char*>(rect) + 4) = 0;
+        *reinterpret_cast<std::int32_t*>(static_cast<char*>(rect) + 8) = 1024;
+        *reinterpret_cast<std::int32_t*>(static_cast<char*>(rect) + 12) = 768;
+    }
+    set_last_error(abi::kErrorSuccess);
+    return 2; // SIMPLEREGION
+}
+
+TL_MSABI int tl_DrawEdge(void* const hdc, void* const rect, const std::uint32_t edge, const std::uint32_t flags) noexcept {
+    (void)hdc;
+    (void)rect;
+    (void)edge;
+    (void)flags;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_DrawFrameControl(void* const hdc, void* const rect, const std::uint32_t type, const std::uint32_t state) noexcept {
+    (void)hdc;
+    (void)rect;
+    (void)type;
+    (void)state;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_DrawFocusRect(void* const hdc, const void* const rect) noexcept {
+    (void)hdc;
+    (void)rect;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_FrameRect(void* const hdc, const void* const rect, void* const brush) noexcept {
+    (void)hdc;
+    (void)rect;
+    (void)brush;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_InvertRect(void* const hdc, const void* const rect) noexcept {
+    (void)hdc;
+    (void)rect;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_GetUpdateRect(void* const hwnd, void* const rect, const int erase) noexcept {
+    (void)hwnd;
+    (void)erase;
+    if (rect != nullptr && mapped_guest_range(rect, 16, true)) {
+        *reinterpret_cast<std::int32_t*>(static_cast<char*>(rect) + 0) = 0;
+        *reinterpret_cast<std::int32_t*>(static_cast<char*>(rect) + 4) = 0;
+        *reinterpret_cast<std::int32_t*>(static_cast<char*>(rect) + 8) = 1024;
+        *reinterpret_cast<std::int32_t*>(static_cast<char*>(rect) + 12) = 768;
+    }
+    return 1;
+}
+
+TL_MSABI int tl_GetUpdateRgn(void* const hwnd, void* const rgn, const int erase) noexcept {
+    (void)hwnd;
+    (void)rgn;
+    (void)erase;
+    return 2; // SIMPLEREGION
+}
+
+TL_MSABI int tl_InvalidateRgn(void* const hwnd, void* const rgn, const int erase) noexcept {
+    (void)hwnd;
+    (void)rgn;
+    (void)erase;
+    return 1;
+}
+
+TL_MSABI int tl_ValidateRgn(void* const hwnd, void* const rgn) noexcept {
+    (void)hwnd;
+    (void)rgn;
+    return 1;
+}
+
+TL_MSABI int tl_ScrollWindow(void* const hwnd, const int x_amount, const int y_amount,
+                             const void* const rect, const void* const clip_rect) noexcept {
+    (void)hwnd;
+    (void)x_amount;
+    (void)y_amount;
+    (void)rect;
+    (void)clip_rect;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_ScrollWindowEx(void* const hwnd, const int dx, const int dy, const void* const scroll_rect,
+                               const void* const clip_rect, void* const update_rgn, void* const update_rect,
+                               const std::uint32_t flags) noexcept {
+    (void)hwnd;
+    (void)dx;
+    (void)dy;
+    (void)scroll_rect;
+    (void)clip_rect;
+    (void)update_rgn;
+    (void)flags;
+    if (update_rect != nullptr && mapped_guest_range(update_rect, 16, true)) {
+        *reinterpret_cast<std::int32_t*>(static_cast<char*>(update_rect) + 0) = 0;
+        *reinterpret_cast<std::int32_t*>(static_cast<char*>(update_rect) + 4) = 0;
+        *reinterpret_cast<std::int32_t*>(static_cast<char*>(update_rect) + 8) = 1024;
+        *reinterpret_cast<std::int32_t*>(static_cast<char*>(update_rect) + 12) = 768;
+    }
+    set_last_error(abi::kErrorSuccess);
+    return 2; // SIMPLEREGION
+}
+
+TL_MSABI int tl_RegisterHotKey(void* const hwnd, const int id, const std::uint32_t modifiers, const std::uint32_t vk) noexcept {
+    (void)hwnd;
+    (void)id;
+    (void)modifiers;
+    (void)vk;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_UnregisterHotKey(void* const hwnd, const int id) noexcept {
+    (void)hwnd;
+    (void)id;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
 }  // extern "C"
 
 }  // namespace tradutorlinux

@@ -197,6 +197,100 @@ TL_COMCTL_MSABI std::intptr_t tl_PropertySheetW(const void* const header) noexce
     return 1;
 }
 
+TL_COMCTL_MSABI std::int32_t tl_TaskDialogIndirect(const void* const config, int* const button,
+                                                  int* const radio_button, int* const verification_flag_checked) noexcept {
+    (void)config;
+    if (button != nullptr && mapped_guest_range(button, sizeof(int), true)) {
+        *button = 1; // IDOK
+    }
+    if (radio_button != nullptr && mapped_guest_range(radio_button, sizeof(int), true)) {
+        *radio_button = 0;
+    }
+    if (verification_flag_checked != nullptr && mapped_guest_range(verification_flag_checked, sizeof(int), true)) {
+        *verification_flag_checked = 0;
+    }
+    return 0; // S_OK
+}
+
+TL_COMCTL_MSABI std::int32_t tl_TaskDialog(void* const hwnd_parent, void* const instance,
+                                           const std::uint16_t* const title,
+                                           const std::uint16_t* const main_instruction,
+                                           const std::uint16_t* const content,
+                                           const std::uint32_t common_buttons,
+                                           const std::uint16_t* const icon, int* const button) noexcept {
+    (void)hwnd_parent;
+    (void)instance;
+    (void)title;
+    (void)main_instruction;
+    (void)content;
+    (void)common_buttons;
+    (void)icon;
+    if (button != nullptr && mapped_guest_range(button, sizeof(int), true)) {
+        *button = 1; // IDOK
+    }
+    return 0; // S_OK
+}
+
+TL_COMCTL_MSABI int tl_ImageList_Draw(void* const himl, const int i, void* const hdc_dst,
+                                     const int x, const int y, const std::uint32_t flags) noexcept {
+    (void)himl;
+    (void)i;
+    (void)hdc_dst;
+    (void)x;
+    (void)y;
+    (void)flags;
+    return 1;
+}
+
+TL_COMCTL_MSABI int tl_ImageList_DrawEx(void* const himl, const int i, void* const hdc_dst,
+                                       const int x, const int y, const int dx, const int dy,
+                                       const std::uint32_t rgb_bk, const std::uint32_t rgb_fg,
+                                       const std::uint32_t flags) noexcept {
+    (void)himl;
+    (void)i;
+    (void)hdc_dst;
+    (void)x;
+    (void)y;
+    (void)dx;
+    (void)dy;
+    (void)rgb_bk;
+    (void)rgb_fg;
+    (void)flags;
+    return 1;
+}
+
+TL_COMCTL_MSABI void* tl_ImageList_GetIcon(void* const himl, const int i, const std::uint32_t flags) noexcept {
+    (void)himl;
+    (void)i;
+    (void)flags;
+    return reinterpret_cast<void*>(0x49434F4EULL); // 'ICON'
+}
+
+TL_COMCTL_MSABI void* tl_ImageList_Duplicate(void* const himl) noexcept {
+    return himl;
+}
+
+TL_COMCTL_MSABI std::uint32_t tl_ImageList_SetBkColor(void* const himl, const std::uint32_t clr_bk) noexcept {
+    (void)himl;
+    return clr_bk;
+}
+
+TL_COMCTL_MSABI std::uint32_t tl_ImageList_GetBkColor(void* const himl) noexcept {
+    (void)himl;
+    return 0xFFFFFFFF; // CLR_NONE
+}
+
+TL_COMCTL_MSABI int tl_ImageList_GetIconSize(void* const himl, int* const cx, int* const cy) noexcept {
+    (void)himl;
+    if (cx != nullptr && mapped_guest_range(cx, sizeof(int), true)) {
+        *cx = 16;
+    }
+    if (cy != nullptr && mapped_guest_range(cy, sizeof(int), true)) {
+        *cy = 16;
+    }
+    return 1;
+}
+
 }  // extern "C"
 
 }  // namespace tradutorlinux
