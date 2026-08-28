@@ -29,7 +29,18 @@ bool is_builtin_control(const char* const name) noexcept {
                                util::ascii_iequals(name, "BUTTON") ||
                                util::ascii_iequals(name, "COMBOBOX") ||
                                util::ascii_iequals(name, "STATIC") ||
-                               util::ascii_iequals(name, "SysListView32"));
+                               util::ascii_iequals(name, "SysListView32") ||
+                               util::ascii_iequals(name, "SysTabControl32") ||
+                               util::ascii_iequals(name, "ToolbarWindow32") ||
+                               util::ascii_iequals(name, "msctls_statusbar32") ||
+                               util::ascii_iequals(name, "msctls_trackbar32") ||
+                               util::ascii_iequals(name, "msctls_updown32") ||
+                               util::ascii_iequals(name, "msctls_progress32") ||
+                               util::ascii_iequals(name, "SysTreeView32") ||
+                               util::ascii_iequals(name, "SysHeader32") ||
+                               util::ascii_iequals(name, "ReBarWindow32") ||
+                               util::ascii_iequals(name, "ScrollBar") ||
+                               util::ascii_iequals(name, "Scintilla"));
 }
 
 ControlKind control_kind_for(const char* const name) noexcept {
