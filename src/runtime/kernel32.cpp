@@ -6150,13 +6150,10 @@ TL_MSABI void tl_DebugBreak() noexcept {
 }
 
 TL_MSABI int tl_InitOnceBeginInitialize(void* const init_once, const std::uint32_t flags, int* const pending, void** const context) noexcept {
-    (void)init_once;
-    (void)flags;
-    if (pending != nullptr && mapped_guest_range(pending, sizeof(int), true)) {
-        *pending = 0; // already initialized
+    if (init_once == nullptr || !mapped_guest_range(init_once, sizeof(void*), true)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
     }
-    if (context != nullptr && mapped_guest_range(context, sizeof(void*), true)) {
-        *context = nullptr;
     }
     set_last_error(abi::kErrorSuccess);
     return 1;

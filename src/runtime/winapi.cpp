@@ -685,7 +685,10 @@ GuestExecutionResult execute_guest_entry(const std::uintptr_t entry_point,
         runtime::initialize_guest_environment(guest_prefix_root());
     }
     reset_process_console_state();
-    reset_fls_process_state();
+    g_guest_peb.image_base_address = reinterpret_cast<std::uint64_t>(g_guest_image_base);
+    g_guest_peb.process_heap = 0x10000;
+    g_guest_peb.number_of_processors = 4;
+    g_guest_peb.being_debugged = 0;
     constexpr std::uintptr_t kGuestStackSize = 0x100000U;  // 1 MiB
     void* const teb = allocate_guest_teb(stack_top, kGuestStackSize);
     if (teb == nullptr) {
