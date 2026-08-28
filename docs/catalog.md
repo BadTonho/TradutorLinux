@@ -84,8 +84,14 @@ Novos benchmarks do portfólio popular x64 adicionados na Fase 13.13:
 - `Rockstar-Games-Launcher.exe`: **284/338 (84%)** imports resolvidos
 - `7z_x64.exe`: **90/133 (67%)** imports resolvidos
 - `putty_x64.exe`: **225/348 (64%)** imports resolvidos
+Novos benchmarks do portfólio popular x64 na Fase 13.13 (após OLEAUT32 + KERNEL32/GDI32):
+- `winrar-x64-723.exe`: **228/251 (90%)** imports resolvidos
+- `Rockstar-Games-Launcher.exe`: **292/338 (86%)** imports resolvidos
+- `7z_x64.exe`: **98/133 (73%)** imports resolvidos
+- `putty_x64.exe`: **226/348 (64%)** imports resolvidos
 - `7zFM_x64.exe`: **179/298 (60%)** imports resolvidos
 - `notepad++.exe`: **294/584 (50%)** imports resolvidos
+- `notepad++.exe`: **300/584 (51%)** imports resolvidos
 - `Affinity x64.msix`: pacote MSIX / AppX reconhecido pelo parser de manifesto
 - `HWiNFO64.exe` / `Rufus_x64.exe`: filtrados com segurança contra anomalias de cabeçalho PE
 - Wrappers 32-bit (NSIS/Inno): rejeitados com segurança pelo filtro de arquitetura x64

@@ -584,6 +584,15 @@ processo filho; cada thread convidada recebe seu próprio TEB/GS, stack e
 | `KERNEL32.dll` | `GetLongPathNameW` / `GetShortPathNameW` | Suportado | Converte caminhos entre formatos curto e longo |
 | `KERNEL32.dll` | `SetThreadPriority` | Suportado | Retorna sucesso para ajuste de prioridade |
 | `KERNEL32.dll` | `GetProcessAffinityMask` | Suportado | Retorna máscara de afinidade do processo e do sistema |
+| `KERNEL32.dll` | `CreateHardLinkW` | Suportado | Criação de hard links entre arquivos via chamada `link(2)` |
+| `KERNEL32.dll` | `K32GetModuleFileNameExW` | Suportado | Retorna caminho da imagem do módulo executável |
+| `GDI32.dll` | `CreateBitmap` | Suportado | Cria e registra handle de bitmap em memória |
+| `GDI32.dll` | `StretchBlt` | Suportado | Cópia e redimensionamento de blocos de imagem em DC |
+| `GDI32.dll` | `GetObjectW` | Suportado | Consulta informações de dimensões de BITMAP ou LOGFONTW |
+| `GDI32.dll` | `CreateDIBSection` | Suportado | Aloca bitmap DIB com ponteiro direto a pixels |
+| `OLEAUT32.dll` | `SysAllocString` / `SysAllocStringLen` / `SysFreeString` / `SysStringLen` / `SysStringByteLen` | Suportado | Alocação, liberação e consulta de BSTR com cabeçalho de 4 bytes e terminação null |
+| `OLEAUT32.dll` | `VariantInit` / `VariantClear` / `VariantCopy` / `VariantCopyInd` / `VariantChangeType` | Suportado | Gerenciamento e clonagem de estruturas VARIANT |
+| `OLEAUT32.dll` | `SafeArrayCreate` / `SafeArrayDestroy` / `SafeArrayGetDim` / `SafeArrayAccessData` / etc. | Suportado | Suporte e gerenciamento de contêineres SafeArray multidimensionais |
 | `SHELL32.dll` | `SHFileOperationW` | Suportado | Operações de manipulação e cópia de arquivos do shell |
 | `SHLWAPI.dll` | `SHAutoComplete` | Suportado | Retorna `S_OK` para autocompletar em caixas de texto |
 | `SHLWAPI.dll` | `PathIsRelativeA` / `PathIsRelativeW` | Suportado | Identifica se um caminho é relativo ou absoluto |

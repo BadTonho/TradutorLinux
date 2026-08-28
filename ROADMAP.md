@@ -214,6 +214,19 @@ Os itens marcados como concluídos devem ter evidência no repositório: código
 - **Próximo resultado observável (Fase 13.13):** implementar o próximo incremento de APIs
   compartilhadas mapeadas pelo portfólio (`KERNEL32!CreateHardLinkW`, `KERNEL32!K32GetModuleFileNameExW`,
   `OLEAUT32!ordinais`, `GDI32!CreateBitmap` e `COMCTL32!CreateToolbarEx`), protegido por fixtures PE32+ reproduzíveis.
+- **Marco concluído (Fase 13.13 — OLEAUT32 BSTRs/Variantes e Ordinais de Automação):**
+  `tl_oleaut_bstr.exe` cobre `SysAllocString`, `SysFreeString`, `SysStringLen`,
+  `VariantInit` e `VariantClear`, com tabela de exports por ordinais (2, 4, 6, 7, 8, 9, 10,
+  15, 16, 149, 150, 200, 201). `--report` resolve 8/8 imports, saída `oleautbstr\n`, exit `0`.
+- **Marco concluído (Fase 13.13 — KERNEL32 HardLinks e GDI32 Bitmaps):**
+  `tl_k32_gdi_link.exe` cobre `CreateHardLinkW`, `K32GetModuleFileNameExW`,
+  `CreateBitmap`, `GetObjectW`, `StretchBlt` e `CreateDIBSection`. `--report` resolve 9/9
+  imports, saída `k32gdilink\n`, exit `0`.
+  - Reanálise do portfólio: WinRAR atingiu **90% (228/251)**, Rockstar subiu para
+    **86% (292/338)**, 7-Zip CLI subiu para **73% (98/133)**, Notepad++ para
+    **51% (300/584)** e PuTTY para **64% (226/348)**.
+- **Próximo resultado observável (Fase 13.13):** implementar controles comuns de `COMCTL32.dll`
+  (`CreateToolbarEx`, `ImageList_GetImageInfo`) e rotinas restantes de I/O de disco/threads.
 
 ### Estudo de caso: `RobloxPlayerInstaller.exe` (benchmark de cobertura)
 

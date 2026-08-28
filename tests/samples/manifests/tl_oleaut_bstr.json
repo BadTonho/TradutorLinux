@@ -1,24 +1,21 @@
 {
-  "image": "tl_oleaut_bstr.exe",
-  "expected_imports": [
-    {
-      "dll": "KERNEL32.dll",
-      "symbols": [
-        "ExitProcess",
-        "GetStdHandle",
-        "WriteFile"
-      ]
-    },
-    {
-      "dll": "OLEAUT32.dll",
-      "symbols": [
-        "SysAllocString",
-        "SysFreeString",
-        "SysStringLen",
-        "VariantClear",
-        "VariantInit"
-      ]
-    }
-  ]
+  "name": "tl_oleaut_bstr",
+  "format": "PE32+",
+  "machine": "AMD64",
+  "entry_point": "tl_entry",
+  "uses_crt": false,
+  "imports": {
+    "KERNEL32.dll": [
+      "ExitProcess",
+      "GetStdHandle",
+      "WriteFile"
+    ],
+    "OLEAUT32.dll": [
+      "SysAllocString",
+      "SysFreeString",
+      "SysStringLen",
+      "VariantClear",
+      "VariantInit"
+    ]
+  }
 }
-
