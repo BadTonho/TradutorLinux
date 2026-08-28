@@ -603,4 +603,77 @@ TL_ADVAPI_MSABI std::int32_t tl_RegDeleteKeyW(void* key, const std::uint16_t* su
     return static_cast<std::int32_t>(abi::kErrorSuccess);
 }
 
+TL_ADVAPI_MSABI int tl_GetUserNameW(std::uint16_t* const buffer, std::uint32_t* const size) noexcept {
+    static const std::uint16_t kUser[] = {'T', 'o', 'n', 'h', 'o', 0};
+    constexpr std::uint32_t kLen = 6;
+    if (size == nullptr) {
+        tl_SetLastError(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    if (*size < kLen) {
+        *size = kLen;
+        tl_SetLastError(122); // ERROR_INSUFFICIENT_BUFFER
+        return 0;
+    }
+    if (buffer != nullptr && mapped_range(buffer, kLen * sizeof(std::uint16_t), true)) {
+        std::memcpy(buffer, kUser, kLen * sizeof(std::uint16_t));
+    }
+    *size = kLen;
+    tl_SetLastError(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_ADVAPI_MSABI int tl_LookupAccountNameW(const std::uint16_t* const system_name,
+                                         const std::uint16_t* const account_name,
+                                         void* const sid, std::uint32_t* const sid_size,
+                                         std::uint16_t* const referenced_domain,
+                                         std::uint32_t* const domain_size,
+                                         void* const sid_name_use) noexcept {
+    (void)system_name;
+    (void)account_name;
+    static const std::uint16_t kDomain[] = {'W', 'O', 'R', 'K', 'G', 'R', 'O', 'U', 'P', 0};
+    if (domain_size != nullptr && mapped_range(domain_size, sizeof(std::uint32_t), true)) {
+        *domain_size = 10;
+        if (referenced_domain != nullptr && mapped_range(referenced_domain, 10 * sizeof(std::uint16_t), true)) {
+            std::memcpy(referenced_domain, kDomain, sizeof(kDomain));
+        }
+    }
+    if (sid_size != nullptr && mapped_range(sid_size, sizeof(std::uint32_t), true)) {
+        *sid_size = 28;
+        if (sid != nullptr && mapped_range(sid, 28, true)) {
+            std::memset(sid, 0, 28);
+        }
+    }
+    if (sid_name_use != nullptr && mapped_range(sid_name_use, sizeof(std::uint32_t), true)) {
+        *static_cast<std::uint32_t*>(sid_name_use) = 1; // SidTypeUser
+    }
+    tl_SetLastError(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_ADVAPI_MSABI int tl_LsaOpenPolicy(void* const system_name, void* const obj_attributes,
+                                    const std::uint32_t access_mask, void** const policy_handle) noexcept {
+    (void)system_name;
+    (void)obj_attributes;
+    (void)access_mask;
+    if (policy_handle != nullptr && mapped_range(policy_handle, sizeof(void*), true)) {
+        *policy_handle = reinterpret_cast<void*>(0x4C534150ULL); // 'LSAP'
+    }
+    return 0; // STATUS_SUCCESS
+}
+
+TL_ADVAPI_MSABI int tl_LsaClose(void* const policy_handle) noexcept {
+    (void)policy_handle;
+    return 0; // STATUS_SUCCESS
+}
+
+TL_ADVAPI_MSABI int tl_LsaAddAccountRights(void* const policy_handle, void* const account_sid,
+                                          void* const user_rights, const std::uint32_t count) noexcept {
+    (void)policy_handle;
+    (void)account_sid;
+    (void)user_rights;
+    (void)count;
+    return 0; // STATUS_SUCCESS
+}
+
 }  // namespace tradutorlinux

@@ -1566,6 +1566,84 @@ TL_MSABI int tl_RegisterWaitForSingleObject(void** ph_new_wait_object, void* h_o
                                             std::uint32_t ms, std::uint32_t flags) noexcept;
 TL_MSABI int tl_SetSearchPathMode(std::uint32_t flags) noexcept;
 TL_MSABI void* tl_InterlockedPushEntrySList(void* list_head, void* list_entry) noexcept;
+// KERNEL32: 7z GUI & PuTTY APIs
+TL_MSABI int tl_CopyFileExW(const std::uint16_t* existing_file, const std::uint16_t* new_file,
+                            void* progress_routine, void* data, int* cancel, std::uint32_t flags) noexcept;
+TL_MSABI int tl_MoveFileWithProgressW(const std::uint16_t* existing_file, const std::uint16_t* new_file,
+                                     void* progress_routine, void* data, std::uint32_t flags) noexcept;
+TL_MSABI std::uint32_t tl_GetCompressedFileSizeW(const std::uint16_t* file_name, std::uint32_t* high) noexcept;
+TL_MSABI void* tl_FindFirstChangeNotificationW(const std::uint16_t* path, int watch_subtree, std::uint32_t notify_filter) noexcept;
+TL_MSABI int tl_FindNextChangeNotification(void* handle) noexcept;
+TL_MSABI int tl_FindCloseChangeNotification(void* handle) noexcept;
+TL_MSABI std::uint16_t tl_GetSystemDefaultLangID() noexcept;
+TL_MSABI std::uint16_t tl_GetUserDefaultLangID() noexcept;
+TL_MSABI std::uint32_t tl_GetWindowsDirectoryW(std::uint16_t* buffer, std::uint32_t size) noexcept;
+TL_MSABI std::size_t tl_GlobalSize(void* mem) noexcept;
+TL_MSABI int tl_SetPriorityClass(void* process, std::uint32_t priority_class) noexcept;
+TL_MSABI int tl_lstrlenW(const std::uint16_t* str) noexcept;
+
+// USER32: 7z GUI & PuTTY & Notepad++ APIs
+TL_MSABI void* tl_GetMenu(void* hwnd) noexcept;
+TL_MSABI int tl_SetMenu(void* hwnd, void* menu) noexcept;
+TL_MSABI void* tl_GetSubMenu(void* menu, int pos) noexcept;
+TL_MSABI int tl_GetMenuItemCount(void* menu) noexcept;
+TL_MSABI int tl_GetMenuItemInfoW(void* menu, std::uint32_t item, int f_by_position, void* mii) noexcept;
+TL_MSABI int tl_SetMenuItemInfoW(void* menu, std::uint32_t item, int f_by_position, const void* mii) noexcept;
+TL_MSABI int tl_InsertMenuItemW(void* menu, std::uint32_t item, int f_by_position, const void* mii) noexcept;
+TL_MSABI int tl_RemoveMenu(void* menu, std::uint32_t position, std::uint32_t flags) noexcept;
+TL_MSABI int tl_EnableMenuItem(void* menu, std::uint32_t item, std::uint32_t enable) noexcept;
+TL_MSABI std::uint32_t tl_CheckMenuItem(void* menu, std::uint32_t item, std::uint32_t check) noexcept;
+TL_MSABI int tl_CheckMenuRadioItem(void* menu, std::uint32_t first, std::uint32_t last, std::uint32_t check, std::uint32_t flags) noexcept;
+TL_MSABI int tl_DrawMenuBar(void* hwnd) noexcept;
+TL_MSABI int tl_TrackPopupMenuEx(void* menu, std::uint32_t flags, int x, int y, void* hwnd, void* params) noexcept;
+TL_MSABI void* tl_LoadMenuW(void* instance, const std::uint16_t* menu_name) noexcept;
+
+TL_MSABI int tl_CheckDlgButton(void* hdlg, int id_button, std::uint32_t check) noexcept;
+TL_MSABI std::uint32_t tl_IsDlgButtonChecked(void* hdlg, int id_button) noexcept;
+TL_MSABI int tl_CheckRadioButton(void* hdlg, int first_button, int last_button, int check_button) noexcept;
+TL_MSABI int tl_MapDialogRect(void* hdlg, void* rect) noexcept;
+TL_MSABI std::uint32_t tl_GetDialogBaseUnits() noexcept;
+
+TL_MSABI int tl_ScreenToClient(void* hwnd, void* point) noexcept;
+TL_MSABI void* tl_WindowFromPoint(std::int64_t point_coord) noexcept;
+TL_MSABI void* tl_ChildWindowFromPointEx(void* hwnd, std::int64_t point_coord, std::uint32_t flags) noexcept;
+TL_MSABI int tl_GetWindowPlacement(void* hwnd, void* placement) noexcept;
+TL_MSABI int tl_SetWindowPlacement(void* hwnd, const void* placement) noexcept;
+TL_MSABI int tl_IsWindowEnabled(void* hwnd) noexcept;
+TL_MSABI int tl_IsZoomed(void* hwnd) noexcept;
+TL_MSABI int tl_GetClassInfoW(void* instance, const std::uint16_t* class_name, void* wnd_class) noexcept;
+TL_MSABI int tl_GetMonitorInfoA(void* monitor, void* mi) noexcept;
+TL_MSABI int tl_SystemParametersInfoW(std::uint32_t action, std::uint32_t param1, void* param2, std::uint32_t win_ini) noexcept;
+
+TL_MSABI void* tl_LoadAcceleratorsW(void* instance, const std::uint16_t* table_name) noexcept;
+TL_MSABI int tl_TranslateAcceleratorW(void* hwnd, void* accel_table, void* msg) noexcept;
+TL_MSABI void* tl_LoadBitmapW(void* instance, const std::uint16_t* bitmap_name) noexcept;
+TL_MSABI std::uint32_t tl_MapVirtualKeyW(std::uint32_t code, std::uint32_t map_type) noexcept;
+TL_MSABI std::uint32_t tl_RegisterClipboardFormatW(const std::uint16_t* format_name) noexcept;
+
+// SHELL32: 7z GUI APIs
+TL_MSABI std::uint32_t tl_ExtractIconExW(const std::uint16_t* file, int index, void** icon_large, void** icon_small, std::uint32_t icons) noexcept;
+TL_MSABI int tl_SHGetDesktopFolder(void** ppshf) noexcept;
+TL_MSABI int tl_SHGetSpecialFolderLocation(void* hwnd, int folder, void** ppidl) noexcept;
+TL_MSABI int tl_SHGetSpecialFolderPathW(void* hwnd, std::uint16_t* path, int folder, int create) noexcept;
+
+// COMCTL32 & COMDLG32: 7z GUI APIs
+TL_MSABI void* tl_CreateStatusWindowW(std::int32_t style, const std::uint16_t* text, void* parent, std::uint32_t id) noexcept;
+TL_MSABI void* tl_CreateToolbarEx(void* hwnd, std::uint32_t style, std::uint32_t id, int num_bitmaps, void* instance,
+                                  std::uintptr_t bitmap_id, const void* buttons, int num_buttons, int cx_button,
+                                  int cy_button, int cx_bitmap, int cy_bitmap, std::uint32_t struct_size) noexcept;
+TL_MSABI int tl_ImageList_GetImageCount(void* image_list) noexcept;
+TL_MSABI std::intptr_t tl_PropertySheetW(const void* header) noexcept;
+TL_MSABI std::uint32_t tl_CommDlgExtendedError() noexcept;
+
+// ADVAPI32: 7z GUI APIs
+TL_MSABI int tl_GetUserNameW(std::uint16_t* buffer, std::uint32_t* size) noexcept;
+TL_MSABI int tl_LookupAccountNameW(const std::uint16_t* system_name, const std::uint16_t* account_name,
+                                   void* sid, std::uint32_t* sid_size, std::uint16_t* referenced_domain,
+                                   std::uint32_t* domain_size, void* sid_name_use) noexcept;
+TL_MSABI int tl_LsaOpenPolicy(void* system_name, void* obj_attributes, std::uint32_t access_mask, void** policy_handle) noexcept;
+TL_MSABI int tl_LsaClose(void* policy_handle) noexcept;
+TL_MSABI int tl_LsaAddAccountRights(void* policy_handle, void* account_sid, void* user_rights, std::uint32_t count) noexcept;
 
 }  // extern "C"
 

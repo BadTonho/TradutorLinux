@@ -108,6 +108,10 @@ TL_OLE_MSABI std::int32_t tl_CoGetClassObject(const void* rclsid, std::uint32_t 
 TL_OLE_MSABI std::int32_t tl_OleInitialize(void* reserved) noexcept;
 TL_OLE_MSABI void tl_OleUninitialize() noexcept;
 TL_OLE_MSABI std::int32_t tl_CLSIDFromString(const std::uint16_t* lpsz, void* pclsid) noexcept;
+TL_OLE_MSABI std::int32_t tl_RegisterDragDrop(void* hwnd, void* drop_target) noexcept;
+TL_OLE_MSABI std::int32_t tl_RevokeDragDrop(void* hwnd) noexcept;
+TL_OLE_MSABI std::int32_t tl_DoDragDrop(void* data_obj, void* drop_source, std::uint32_t ok_effects, std::uint32_t* effect) noexcept;
+TL_OLE_MSABI void tl_ReleaseStgMedium(void* medium) noexcept;
 
 }  // extern "C"
 

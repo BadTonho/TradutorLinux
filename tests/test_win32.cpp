@@ -7,6 +7,8 @@
 #include "tradutorlinux/runtime/wininet.hpp"
 #include "tradutorlinux/runtime/wintrust.hpp"
 #include "tradutorlinux/runtime/crypt32.hpp"
+#include "tradutorlinux/runtime/mpr.hpp"
+#include "tradutorlinux/runtime/msvcrt.hpp"
 #include "tradutorlinux/package/msix.hpp"
 #include "tradutorlinux/prefix/prefix.hpp"
 #include "../src/runtime/runtime_context.hpp"
@@ -2534,6 +2536,127 @@ TEST(RockstarCoverageTest, NamedPipesClipboardAndRegistry) {
     EXPECT_EQ(tl_SetWindowSubclass(nullptr, nullptr, 1, 0), 1);
     EXPECT_EQ(tl_RemoveWindowSubclass(nullptr, nullptr, 1), 1);
     EXPECT_EQ(tl_DefSubclassProc(nullptr, 0, 0, 0), 0);
+}
+
+TEST(SevenZipGuiCoverageTest, AllApisAndModules) {
+    // MSVCRT rand/srand
+    tl_srand(1234);
+    EXPECT_GE(tl_rand(), 0);
+
+    // KERNEL32
+    std::uint16_t sample_str[] = {'t', 'e', 's', 't', 0};
+    EXPECT_EQ(tl_lstrlenW(sample_str), 4);
+    EXPECT_EQ(tl_GetSystemDefaultLangID(), 0x0409);
+    EXPECT_EQ(tl_GetUserDefaultLangID(), 0x0409);
+    std::uint16_t win_dir[32]{};
+    EXPECT_GT(tl_GetWindowsDirectoryW(win_dir, 32), 0U);
+    EXPECT_GT(tl_GlobalSize(reinterpret_cast<void*>(0x1000)), 0U);
+    EXPECT_EQ(tl_SetPriorityClass(nullptr, 0), 1);
+
+    void* change_handle = tl_FindFirstChangeNotificationW(sample_str, 0, 0);
+    EXPECT_NE(change_handle, nullptr);
+    EXPECT_EQ(tl_FindNextChangeNotification(change_handle), 1);
+    EXPECT_EQ(tl_FindCloseChangeNotification(change_handle), 1);
+
+    // USER32 Menus & Dialogs & Placement
+    void* menu = tl_GetMenu(nullptr);
+    EXPECT_NE(menu, nullptr);
+    EXPECT_EQ(tl_SetMenu(nullptr, menu), 1);
+    EXPECT_NE(tl_GetSubMenu(menu, 0), nullptr);
+    EXPECT_GT(tl_GetMenuItemCount(menu), 0);
+    EXPECT_EQ(tl_GetMenuItemInfoW(menu, 0, 1, nullptr), 1);
+    EXPECT_EQ(tl_SetMenuItemInfoW(menu, 0, 1, nullptr), 1);
+    EXPECT_EQ(tl_InsertMenuItemW(menu, 0, 1, nullptr), 1);
+    EXPECT_EQ(tl_RemoveMenu(menu, 0, 0), 1);
+    EXPECT_EQ(tl_EnableMenuItem(menu, 0, 0), 0);
+    EXPECT_EQ(tl_CheckMenuItem(menu, 0, 0), 0U);
+    EXPECT_EQ(tl_CheckMenuRadioItem(menu, 0, 1, 0, 0), 1);
+    EXPECT_EQ(tl_DrawMenuBar(nullptr), 1);
+    EXPECT_EQ(tl_TrackPopupMenuEx(menu, 0, 0, 0, nullptr, nullptr), 1);
+    EXPECT_NE(tl_LoadMenuW(nullptr, sample_str), nullptr);
+
+    EXPECT_EQ(tl_CheckDlgButton(nullptr, 100, 1), 1);
+    EXPECT_EQ(tl_IsDlgButtonChecked(nullptr, 100), 0U);
+    EXPECT_EQ(tl_CheckRadioButton(nullptr, 100, 102, 100), 1);
+    EXPECT_EQ(tl_MapDialogRect(nullptr, nullptr), 1);
+    EXPECT_GT(tl_GetDialogBaseUnits(), 0U);
+
+    EXPECT_NE(tl_WindowFromPoint(0), nullptr);
+    EXPECT_NE(tl_ChildWindowFromPointEx(nullptr, 0, 0), nullptr);
+    EXPECT_EQ(tl_GetWindowPlacement(nullptr, nullptr), 1);
+    EXPECT_EQ(tl_SetWindowPlacement(nullptr, nullptr), 1);
+    EXPECT_EQ(tl_IsWindowEnabled(nullptr), 1);
+    EXPECT_EQ(tl_IsZoomed(nullptr), 0);
+    EXPECT_EQ(tl_GetClassInfoW(nullptr, sample_str, nullptr), 1);
+    EXPECT_EQ(tl_GetMonitorInfoA(nullptr, nullptr), 1);
+    EXPECT_EQ(tl_SystemParametersInfoW(0, 0, nullptr, 0), 1);
+
+    EXPECT_NE(tl_LoadAcceleratorsW(nullptr, sample_str), nullptr);
+    EXPECT_EQ(tl_TranslateAcceleratorW(nullptr, nullptr, nullptr), 0);
+    EXPECT_NE(tl_LoadBitmapW(nullptr, sample_str), nullptr);
+    EXPECT_GT(tl_MapVirtualKeyW(65, 0), 0U);
+    EXPECT_GT(tl_RegisterClipboardFormatW(sample_str), 0U);
+
+    // MPR (WNet)
+    void* enum_handle = nullptr;
+    EXPECT_EQ(tl_WNetOpenEnumW(0, 0, 0, nullptr, &enum_handle), 0U);
+    EXPECT_NE(enum_handle, nullptr);
+    std::uint32_t count = 10;
+    EXPECT_EQ(tl_WNetEnumResourceW(enum_handle, &count, nullptr, nullptr), 259U);
+    EXPECT_EQ(count, 0U);
+    EXPECT_EQ(tl_WNetCloseEnum(enum_handle), 0U);
+    EXPECT_EQ(tl_WNetAddConnection2W(nullptr, nullptr, nullptr, 0), 0U);
+    EXPECT_EQ(tl_WNetGetResourceInformationW(nullptr, nullptr, nullptr, nullptr), 0U);
+    EXPECT_EQ(tl_WNetGetResourceParentW(nullptr, nullptr, nullptr), 0U);
+
+    // COMCTL32 & COMDLG32
+    EXPECT_NE(tl_CreateStatusWindowW(0, sample_str, nullptr, 1), nullptr);
+    EXPECT_NE(tl_CreateToolbarEx(nullptr, 0, 1, 0, nullptr, 0, nullptr, 0, 16, 16, 16, 16, 0), nullptr);
+    EXPECT_EQ(tl_ImageList_GetImageCount(nullptr), 0);
+    EXPECT_EQ(tl_PropertySheetW(nullptr), 1);
+    EXPECT_EQ(tl_CommDlgExtendedError(), 0U);
+
+    // SHELL32
+    void* icon_lg = nullptr;
+    void* icon_sm = nullptr;
+    EXPECT_EQ(tl_ExtractIconExW(sample_str, 0, &icon_lg, &icon_sm, 1), 1U);
+    EXPECT_NE(icon_lg, nullptr);
+    EXPECT_NE(icon_sm, nullptr);
+    void* ppshf = nullptr;
+    EXPECT_EQ(tl_SHGetDesktopFolder(&ppshf), 0);
+    EXPECT_NE(ppshf, nullptr);
+    void* ppidl = nullptr;
+    EXPECT_EQ(tl_SHGetSpecialFolderLocation(nullptr, 0, &ppidl), 0);
+    EXPECT_NE(ppidl, nullptr);
+    std::uint16_t special_path[260]{};
+    EXPECT_EQ(tl_SHGetSpecialFolderPathW(nullptr, special_path, 0, 0), 1);
+
+    // OLE32 DragDrop
+    EXPECT_EQ(tl_RegisterDragDrop(nullptr, nullptr), 0);
+    EXPECT_EQ(tl_RevokeDragDrop(nullptr), 0);
+    std::uint32_t effect = 0;
+    EXPECT_EQ(tl_DoDragDrop(nullptr, nullptr, 1, &effect), 0x00040100);
+    EXPECT_EQ(effect, 0U);
+    tl_ReleaseStgMedium(nullptr);
+
+    // ADVAPI32
+    std::uint16_t username[32]{};
+    std::uint32_t user_len = 32;
+    EXPECT_EQ(tl_GetUserNameW(username, &user_len), 1);
+    EXPECT_GT(user_len, 0U);
+
+    std::uint32_t sid_sz = 32;
+    std::uint32_t dom_sz = 32;
+    std::uint16_t dom[32]{};
+    std::uint8_t sid[32]{};
+    std::uint32_t sid_use = 0;
+    EXPECT_EQ(tl_LookupAccountNameW(nullptr, username, sid, &sid_sz, dom, &dom_sz, &sid_use), 1);
+
+    void* policy = nullptr;
+    EXPECT_EQ(tl_LsaOpenPolicy(nullptr, nullptr, 0, &policy), 0);
+    EXPECT_NE(policy, nullptr);
+    EXPECT_EQ(tl_LsaAddAccountRights(policy, nullptr, nullptr, 0), 0);
+    EXPECT_EQ(tl_LsaClose(policy), 0);
 }
 
 }  // namespace

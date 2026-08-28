@@ -2010,4 +2010,15 @@ TL_CRT_MSABI void tl_terminate() noexcept {
     tl_abort();
 }
 
+static unsigned long g_next_rand = 1;
+
+TL_CRT_MSABI int tl_rand() noexcept {
+    g_next_rand = g_next_rand * 214013L + 2531011L;
+    return static_cast<int>((g_next_rand >> 16) & 0x7fff);
+}
+
+TL_CRT_MSABI void tl_srand(unsigned int seed) noexcept {
+    g_next_rand = seed;
+}
+
 }  // namespace tradutorlinux

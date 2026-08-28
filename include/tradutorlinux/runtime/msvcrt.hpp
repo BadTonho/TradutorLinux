@@ -156,6 +156,8 @@ TL_CRT_MSABI int tl___CxxFrameHandler(void* rec, void* frame, void* context, voi
 TL_CRT_MSABI void tl__CxxThrowException(void* pexcept, void* pthrow_info) noexcept;
 TL_CRT_MSABI void tl__purecall() noexcept;
 TL_CRT_MSABI void tl_terminate() noexcept;
+TL_CRT_MSABI int tl_rand() noexcept;
+TL_CRT_MSABI void tl_srand(unsigned int seed) noexcept;
 
 // Dados exportados por msvcrt.dll: células graváveis do hospedeiro cujos
 // endereços são gravados nos slots da IAT (imports-dados __initenv, _commode
