@@ -364,7 +364,7 @@ TL_ADVAPI_MSABI std::uint32_t tl_RegCreateKeyExA(const void* key, const char* su
     (void)class_name;
     (void)options;
     (void)access;
-    if (security_attributes != nullptr || !mapped_cstring(subkey)) {
+    if ((security_attributes != nullptr && !mapped_range(security_attributes, sizeof(std::uint32_t), false)) || !mapped_cstring(subkey)) {
         return kErrorInvalidParameter;
     }
     return open_key(key, subkey, result, disposition, true);
@@ -381,7 +381,7 @@ TL_ADVAPI_MSABI std::uint32_t tl_RegCreateKeyExW(const void* key, const std::uin
     (void)class_name;
     (void)options;
     (void)access;
-    if (security_attributes != nullptr || !mapped_wstring(subkey)) {
+    if ((security_attributes != nullptr && !mapped_range(security_attributes, sizeof(std::uint32_t), false)) || !mapped_wstring(subkey)) {
         return kErrorInvalidParameter;
     }
     return open_key(key, wide_to_utf8(subkey), result, disposition, true);

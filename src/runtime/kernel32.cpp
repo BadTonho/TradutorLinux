@@ -1877,7 +1877,8 @@ TL_MSABI std::uint32_t tl_WaitForMultipleObjects(const std::uint32_t count,
 
 TL_MSABI void* tl_CreateMutexA(const void* security_attributes, const int initial_owner,
                                const char* name) noexcept {
-    if (security_attributes != nullptr || (name != nullptr && !mapped_guest_cstring(name)) ||
+    if ((security_attributes != nullptr && !mapped_guest_range(security_attributes, sizeof(std::uint32_t), false)) ||
+        (name != nullptr && !mapped_guest_cstring(name)) ||
         (initial_owner != 0 && initial_owner != 1)) {
         set_last_error(abi::kErrorInvalidParameter);
         return nullptr;
@@ -1902,7 +1903,9 @@ TL_MSABI void* tl_CreateMutexA(const void* security_attributes, const int initia
 
 TL_MSABI void* tl_CreateMutexW(const void* security_attributes, const int initial_owner,
                                const std::uint16_t* name) noexcept {
-    if (name != nullptr && !mapped_guest_wstring(name)) {
+    if ((security_attributes != nullptr && !mapped_guest_range(security_attributes, sizeof(std::uint32_t), false)) ||
+        (name != nullptr && !mapped_guest_wstring(name)) ||
+        (initial_owner != 0 && initial_owner != 1)) {
         set_last_error(abi::kErrorInvalidParameter);
         return nullptr;
     }
@@ -1911,7 +1914,8 @@ TL_MSABI void* tl_CreateMutexW(const void* security_attributes, const int initia
 
 TL_MSABI void* tl_CreateEventA(const void* security_attributes, const int manual_reset,
                                const int initial_state, const char* name) noexcept {
-    if (security_attributes != nullptr || (name != nullptr && !mapped_guest_cstring(name)) ||
+    if ((security_attributes != nullptr && !mapped_guest_range(security_attributes, sizeof(std::uint32_t), false)) ||
+        (name != nullptr && !mapped_guest_cstring(name)) ||
         (manual_reset != 0 && manual_reset != 1) || (initial_state != 0 && initial_state != 1)) {
         set_last_error(abi::kErrorInvalidParameter);
         return nullptr;
@@ -1934,7 +1938,9 @@ TL_MSABI void* tl_CreateEventA(const void* security_attributes, const int manual
 
 TL_MSABI void* tl_CreateEventW(const void* security_attributes, const int manual_reset,
                                const int initial_state, const std::uint16_t* name) noexcept {
-    if (name != nullptr && !mapped_guest_wstring(name)) {
+    if ((security_attributes != nullptr && !mapped_guest_range(security_attributes, sizeof(std::uint32_t), false)) ||
+        (name != nullptr && !mapped_guest_wstring(name)) ||
+        (manual_reset != 0 && manual_reset != 1) || (initial_state != 0 && initial_state != 1)) {
         set_last_error(abi::kErrorInvalidParameter);
         return nullptr;
     }
@@ -1998,7 +2004,8 @@ TL_MSABI void* tl_CreateSemaphoreA(const void* security_attributes,
                                    const std::int32_t initial_count,
                                    const std::int32_t maximum_count,
                                    const char* name) noexcept {
-    if (security_attributes != nullptr || (name != nullptr && !mapped_guest_cstring(name)) ||
+    if ((security_attributes != nullptr && !mapped_guest_range(security_attributes, sizeof(std::uint32_t), false)) ||
+        (name != nullptr && !mapped_guest_cstring(name)) ||
         initial_count < 0 || maximum_count <= 0 || initial_count > maximum_count) {
         set_last_error(abi::kErrorInvalidParameter);
         return nullptr;
@@ -2583,10 +2590,10 @@ TL_MSABI std::uint32_t tl_GetModuleFileNameW(const void* module, std::uint16_t* 
 
 TL_MSABI void* tl_GetModuleHandleA(const char* module_name) noexcept {
     if (module_name == nullptr) {
+        set_last_error(abi::kErrorSuccess);
         if (g_guest_image_base != nullptr) {
             return const_cast<std::byte*>(g_guest_image_base);
         }
-        set_last_error(abi::kErrorSuccess);
         return reinterpret_cast<void*>(0x1000U);
     }
     if (!mapped_guest_cstring(module_name)) {
