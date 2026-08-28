@@ -2444,5 +2444,82 @@ TEST(WinRarCoverageTest, TickCountPrivilegeAndClsid) {
     EXPECT_EQ(tl_SHGetMalloc(nullptr), static_cast<int>(0x80070057U));
 }
 
+TEST(SevenZipCoverageTest, CrtAndStreams) {
+    EXPECT_EQ(tl_GetVersion(), 0x00060001U);
+    EXPECT_GT(tl_GetLargePageMinimum(), 0U);
+    tl_SetFileApisToOEM();
+    EXPECT_EQ(tl_SetConsoleCtrlHandler(nullptr, 1), 1);
+    EXPECT_EQ(tl_GetProcessTimes(nullptr, nullptr, nullptr, nullptr, nullptr), 1);
+    EXPECT_EQ(tl_SetProcessAffinityMask(nullptr, 1), 1);
+    EXPECT_EQ(tl_SetThreadAffinityMask(nullptr, 1), 1U);
+    EXPECT_EQ(tl_ResumeThread(nullptr), 0U);
+
+    std::uint64_t t1 = 100, t2 = 200;
+    EXPECT_EQ(tl_CompareFileTime(&t1, &t2), -1);
+    std::uint16_t fat_d = 0, fat_t = 0;
+    EXPECT_EQ(tl_FileTimeToDosDateTime(&t1, &fat_d, &fat_t), 1);
+
+    std::uint32_t spc = 0, bps = 0, nfc = 0, tnc = 0;
+    EXPECT_EQ(tl_GetDiskFreeSpaceW(nullptr, &spc, &bps, &nfc, &tnc), 1);
+    EXPECT_EQ(spc, 8U);
+    EXPECT_EQ(bps, 512U);
+
+    std::uint16_t drives[16]{};
+    EXPECT_EQ(tl_GetLogicalDriveStringsW(16, drives), 4U);
+
+    EXPECT_EQ(tl_GetFileSecurityW(nullptr, 0, nullptr, 0, nullptr), 1);
+    EXPECT_EQ(tl_memcmp("abc", "abc", 3), 0);
+
+    constexpr std::uint16_t w1[] = {'a', 'b', 'c', 0};
+    constexpr std::uint16_t w2[] = {'a', 'b', 'c', 0};
+    EXPECT_EQ(tl_wcscmp(w1, w2), 0);
+    EXPECT_NE(tl_wcsstr(w1, w2), nullptr);
+
+    EXPECT_EQ(tl__XcptFilter(0, nullptr), 1);
+    tl__c_exit();
+}
+
+TEST(RockstarCoverageTest, NamedPipesClipboardAndRegistry) {
+    EXPECT_EQ(tl_SetNamedPipeHandleState(nullptr, nullptr, nullptr, nullptr), 1);
+    constexpr std::uint16_t pipe_name[] = {'\\', '\\', '.', '\\', 'p', 'i', 'p', 'e', 0};
+    EXPECT_EQ(tl_WaitNamedPipeW(pipe_name, 0), 1);
+    std::uint32_t bread = 0, bavail = 0, bleft = 0;
+    EXPECT_EQ(tl_PeekNamedPipe(nullptr, nullptr, 0, &bread, &bavail, &bleft), 1);
+    std::uint32_t code = 0;
+    EXPECT_EQ(tl_GetExitCodeThread(nullptr, &code), 1);
+    EXPECT_EQ(tl_TryAcquireSRWLockExclusive(nullptr), 1);
+
+    EXPECT_EQ(tl_SetThreadLocale(1033), 1);
+    EXPECT_EQ(tl_SetThreadUILanguage(1033), 1033);
+    EXPECT_EQ(tl_GetUserDefaultUILanguage(), 0x0409);
+    EXPECT_EQ(tl_GetLogicalDrives(), (1U << 2));
+    std::uint64_t total_kb = 0;
+    EXPECT_EQ(tl_GetPhysicallyInstalledSystemMemory(&total_kb), 1);
+    EXPECT_GT(total_kb, 0U);
+
+    char vol[16]{};
+    EXPECT_EQ(tl_GetVolumePathNameA("C:\\test", vol, 16), 1);
+    EXPECT_STREQ(vol, "C:\\");
+
+    EXPECT_EQ(tl_RegDeleteTreeW(nullptr, nullptr), 0);
+    EXPECT_EQ(tl_RegDeleteKeyExW(nullptr, nullptr, 0, 0), 0);
+
+    EXPECT_EQ(tl_OpenClipboard(nullptr), 1);
+    EXPECT_EQ(tl_EmptyClipboard(), 1);
+    EXPECT_EQ(tl_SetClipboardData(1, nullptr), nullptr);
+    EXPECT_EQ(tl_CloseClipboard(), 1);
+
+    std::uint16_t pt[2]{};
+    EXPECT_EQ(tl_ClientToScreen(nullptr, pt), 1);
+
+    std::uint16_t sz[2]{};
+    EXPECT_EQ(tl_GetTextExtentPoint32W(nullptr, pipe_name, 8, sz), 1);
+    EXPECT_EQ(tl_StartDocW(nullptr, nullptr), 1);
+    EXPECT_EQ(tl_EndDoc(nullptr), 1);
+
+    std::uint16_t path[16] = {'C', ':', '\\', 'a', 0};
+    EXPECT_EQ(tl_PathStripToRootW(path), 1);
+}
+
 }  // namespace
 }  // namespace tradutorlinux

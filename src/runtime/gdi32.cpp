@@ -372,6 +372,61 @@ TL_MSABI void* tl_CreateDIBSection(const void* dc, const void* pbmi, const std::
     return &g_dib_token;
 }
 
+TL_MSABI int tl_GetTextExtentPoint32W(void* const hdc, const std::uint16_t* const string,
+                                      const int length, void* const size) noexcept {
+    (void)hdc;
+    (void)string;
+    struct GuestSize {
+        std::int32_t cx;
+        std::int32_t cy;
+    };
+    if (size != nullptr) {
+        GuestSize s{};
+        s.cx = length > 0 ? length * 8 : 16;
+        s.cy = 16;
+        std::memcpy(size, &s, sizeof(s));
+    }
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_StartDocW(void* const hdc, const void* const doc_info) noexcept {
+    (void)hdc;
+    (void)doc_info;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_EndDoc(void* const hdc) noexcept {
+    (void)hdc;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_StartPage(void* const hdc) noexcept {
+    (void)hdc;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_EndPage(void* const hdc) noexcept {
+    (void)hdc;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_AbortDoc(void* const hdc) noexcept {
+    (void)hdc;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_PrintDlgW(void* const print_dlg) noexcept {
+    (void)print_dlg;
+    set_last_error(abi::kErrorSuccess);
+    return 0;
+}
+
 }  // extern "C"
 
 }  // namespace tradutorlinux

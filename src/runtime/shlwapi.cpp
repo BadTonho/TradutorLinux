@@ -345,6 +345,22 @@ TL_SHLWAPI_MSABI int tl_SHAutoComplete(const void* const hwnd_edit, const std::u
     return 0;
 }
 
+TL_SHLWAPI_MSABI int tl_PathStripToRootW(std::uint16_t* const path) noexcept {
+    if (path == nullptr || !mapped_wstring(path)) {
+        return 0;
+    }
+    if (path[0] != 0 && path[1] == u':') {
+        path[2] = u'\\';
+        path[3] = 0;
+        return 1;
+    }
+    if (path[0] == u'\\' || path[0] == u'/') {
+        path[1] = 0;
+        return 1;
+    }
+    return 0;
+}
+
 }  // extern "C"
 
 }  // namespace tradutorlinux

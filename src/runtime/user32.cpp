@@ -2360,6 +2360,70 @@ TL_MSABI int tl_SetProcessDefaultLayout(const std::uint32_t default_layout) noex
     return 1;
 }
 
+TL_MSABI int tl_OpenClipboard(void* const hwnd_new_owner) noexcept {
+    (void)hwnd_new_owner;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_CloseClipboard(void) noexcept {
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI void* tl_SetClipboardData(const std::uint32_t format, void* const mem) noexcept {
+    (void)format;
+    set_last_error(abi::kErrorSuccess);
+    return mem;
+}
+
+TL_MSABI int tl_EmptyClipboard(void) noexcept {
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_MessageBoxExW(void* const hwnd, const std::uint16_t* const text,
+                              const std::uint16_t* const caption, const std::uint32_t type,
+                              const std::uint16_t language_id) noexcept {
+    (void)language_id;
+    return tl_MessageBoxW(hwnd, text, caption, type);
+}
+
+TL_MSABI int tl_DrawIconEx(void* const hdc, const int x_left, const int y_top, void* const hicon,
+                           const int cx_width, const int cy_width, const std::uint32_t step_if_ani_cur,
+                           void* const hbr_flicker_free_draw, const std::uint32_t flags) noexcept {
+    (void)hdc;
+    (void)x_left;
+    (void)y_top;
+    (void)hicon;
+    (void)cx_width;
+    (void)cy_width;
+    (void)step_if_ani_cur;
+    (void)hbr_flicker_free_draw;
+    (void)flags;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI void* tl_LoadImageW(void* const hinst, const std::uint16_t* const name, const std::uint32_t type,
+                             const int cx, const int cy, const std::uint32_t fu_load) noexcept {
+    (void)hinst;
+    (void)name;
+    (void)type;
+    (void)cx;
+    (void)cy;
+    (void)fu_load;
+    set_last_error(abi::kErrorSuccess);
+    return reinterpret_cast<void*>(0x1000);
+}
+
+TL_MSABI int tl_ClientToScreen(void* const hwnd, void* const point) noexcept {
+    (void)hwnd;
+    (void)point;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
 }  // extern "C"
 
 }  // namespace tradutorlinux

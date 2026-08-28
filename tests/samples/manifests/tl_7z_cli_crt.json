@@ -1,0 +1,40 @@
+{
+  "name": "tl_7z_cli_crt",
+  "format": "PE32+",
+  "machine": "AMD64",
+  "entry_point": "tl_entry",
+  "uses_crt": false,
+  "imports": {
+    "ADVAPI32.dll": [
+      "GetFileSecurityW"
+    ],
+    "KERNEL32.dll": [
+      "CompareFileTime",
+      "ExitProcess",
+      "FileTimeToDosDateTime",
+      "GetCurrentProcess",
+      "GetDiskFreeSpaceW",
+      "GetLargePageMinimum",
+      "GetLogicalDriveStringsW",
+      "GetProcessTimes",
+      "GetStdHandle",
+      "GetVersion",
+      "OpenEventW",
+      "OpenFileMappingW",
+      "ResumeThread",
+      "SetConsoleCtrlHandler",
+      "SetFileApisToOEM",
+      "SetProcessAffinityMask",
+      "SetThreadAffinityMask",
+      "WriteFile"
+    ],
+    "msvcrt.dll": [
+      "_XcptFilter",
+      "_c_exit",
+      "memcmp",
+      "wcscmp",
+      "wcsstr"
+    ]
+  }
+}
+

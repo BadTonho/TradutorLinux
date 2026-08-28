@@ -266,6 +266,12 @@ function(tl_add_pe_fixture target_name source_file manifest_file)
             elseif(target_name STREQUAL "tl_winrar_kernel_shell")
                 set(runtime_extra_args
                     "-DEXPECTED_HEX=77696e7261726b65726e656c7368656c6c0a")
+            elseif(target_name STREQUAL "tl_7z_cli_crt")
+                set(runtime_extra_args
+                    "-DEXPECTED_HEX=377a636c696372740a")
+            elseif(target_name STREQUAL "tl_rockstar_pipes_reg")
+                set(runtime_extra_args
+                    "-DEXPECTED_HEX=726f636b7374617270697065730a")
             elseif(target_name STREQUAL "tl_stream")
                 set(runtime_extra_args
                     "-DEXPECTED_HEX=6f6c652d73747265616d0a"
@@ -663,6 +669,14 @@ tl_add_pe_fixture(tl_k32_gdi_link src/tl_k32_gdi_link.c manifests/tl_k32_gdi_lin
 tl_add_pe_fixture(tl_winrar_kernel_shell src/tl_winrar_kernel_shell.c manifests/tl_winrar_kernel_shell.json
     LINK_KERNEL32 LINK_USER32 LINK_ADVAPI32 LINK_SHELL32 LINK_OLE32 EXPECT_RESOLVED CONSOLE REPORT RELOCATABLE
     REPORT_SYMBOL "GetTickCount")
+
+tl_add_pe_fixture(tl_7z_cli_crt src/tl_7z_cli_crt.c manifests/tl_7z_cli_crt.json
+    LINK_KERNEL32 LINK_ADVAPI32 LINK_MSVCRT EXPECT_RESOLVED CONSOLE REPORT RELOCATABLE
+    REPORT_SYMBOL "GetVersion")
+
+tl_add_pe_fixture(tl_rockstar_pipes_reg src/tl_rockstar_pipes_reg.c manifests/tl_rockstar_pipes_reg.json
+    LINK_KERNEL32 LINK_ADVAPI32 LINK_USER32 LINK_GDI32 LINK_SHLWAPI EXPECT_RESOLVED CONSOLE REPORT RELOCATABLE
+    REPORT_SYMBOL "WaitNamedPipeW")
 
 tl_add_pe_fixture(tl_files_wide src/tl_files_wide.c manifests/tl_files_wide.json
     LINK_KERNEL32 EXPECT_RESOLVED CONSOLE REPORT RELOCATABLE

@@ -1889,4 +1889,120 @@ TL_CRT_MSABI int tl_fwprintf(GuestFile* file, const std::uint16_t* format, ...) 
     return result;
 }
 
+TL_CRT_MSABI void tl__c_exit() noexcept {
+}
+
+TL_CRT_MSABI void tl__exit(int exit_code) noexcept {
+    tl_exit(exit_code);
+}
+
+TL_CRT_MSABI int tl__XcptFilter(unsigned long xcpt, void* pinfo) noexcept {
+    (void)xcpt;
+    (void)pinfo;
+    return 1; // EXCEPTION_EXECUTE_HANDLER
+}
+
+TL_CRT_MSABI void* tl___dllonexit(void (*func)(void), void** pbegin, void** pend) noexcept {
+    (void)func;
+    (void)pbegin;
+    (void)pend;
+    return reinterpret_cast<void*>(1);
+}
+
+struct BeginThreadData {
+    unsigned (*start_address)(void*);
+    void* arg_list;
+};
+
+static void* crt_thread_trampoline(void* arg) {
+    auto* data = static_cast<BeginThreadData*>(arg);
+    unsigned (*func)(void*) = data->start_address;
+    void* param = data->arg_list;
+    delete data;
+    unsigned res = func(param);
+    return reinterpret_cast<void*>(static_cast<std::uintptr_t>(res));
+}
+
+TL_CRT_MSABI std::uintptr_t tl__beginthreadex(void* security, unsigned stack_size,
+                                              unsigned (*start_address)(void*), void* arg_list,
+                                              unsigned init_flag, unsigned* thread_id) noexcept {
+    (void)security;
+    (void)stack_size;
+    (void)init_flag;
+    if (start_address == nullptr) {
+        set_error(EINVAL);
+        return 0;
+    }
+    auto* data = new (std::nothrow) BeginThreadData{start_address, arg_list};
+    if (data == nullptr) {
+        set_error(ENOMEM);
+        return 0;
+    }
+    pthread_t thread{};
+    if (::pthread_create(&thread, nullptr, crt_thread_trampoline, data) != 0) {
+        delete data;
+        set_error(EAGAIN);
+        return 0;
+    }
+    if (thread_id != nullptr) {
+        *thread_id = static_cast<unsigned>(thread);
+    }
+    return static_cast<std::uintptr_t>(thread);
+}
+
+TL_CRT_MSABI int tl_memcmp(const void* ptr1, const void* ptr2, std::size_t num) noexcept {
+    if (num == 0) return 0;
+    if (ptr1 == nullptr || ptr2 == nullptr) return 0;
+    return std::memcmp(ptr1, ptr2, num);
+}
+
+TL_CRT_MSABI int tl_wcscmp(const std::uint16_t* string1, const std::uint16_t* string2) noexcept {
+    if (string1 == nullptr && string2 == nullptr) return 0;
+    if (string1 == nullptr) return -1;
+    if (string2 == nullptr) return 1;
+    while (*string1 != 0 && *string1 == *string2) {
+        ++string1;
+        ++string2;
+    }
+    return static_cast<int>(*string1) - static_cast<int>(*string2);
+}
+
+TL_CRT_MSABI std::uint16_t* tl_wcsstr(const std::uint16_t* string, const std::uint16_t* str_char_set) noexcept {
+    if (string == nullptr || str_char_set == nullptr) return nullptr;
+    if (*str_char_set == 0) return const_cast<std::uint16_t*>(string);
+    for (const std::uint16_t* s = string; *s != 0; ++s) {
+        const std::uint16_t* s_sub = s;
+        const std::uint16_t* set_sub = str_char_set;
+        while (*s_sub != 0 && *set_sub != 0 && *s_sub == *set_sub) {
+            ++s_sub;
+            ++set_sub;
+        }
+        if (*set_sub == 0) {
+            return const_cast<std::uint16_t*>(s);
+        }
+    }
+    return nullptr;
+}
+
+TL_CRT_MSABI int tl___CxxFrameHandler(void* rec, void* frame, void* context, void* disp) noexcept {
+    (void)rec;
+    (void)frame;
+    (void)context;
+    (void)disp;
+    return 1;
+}
+
+TL_CRT_MSABI void tl__CxxThrowException(void* pexcept, void* pthrow_info) noexcept {
+    (void)pexcept;
+    (void)pthrow_info;
+}
+
+TL_CRT_MSABI void tl__purecall() noexcept {
+    tl_abort();
+}
+
+TL_CRT_MSABI void tl_terminate() noexcept {
+    tl_abort();
+}
+
 }  // namespace tradutorlinux

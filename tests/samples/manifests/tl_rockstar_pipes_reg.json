@@ -1,0 +1,47 @@
+{
+  "name": "tl_rockstar_pipes_reg",
+  "format": "PE32+",
+  "machine": "AMD64",
+  "entry_point": "tl_entry",
+  "uses_crt": false,
+  "imports": {
+    "ADVAPI32.dll": [
+      "RegDeleteKeyExW",
+      "RegDeleteTreeW"
+    ],
+    "GDI32.dll": [
+      "EndDoc",
+      "GetTextExtentPoint32W",
+      "StartDocW"
+    ],
+    "KERNEL32.dll": [
+      "ExitProcess",
+      "GetCurrentProcess",
+      "GetExitCodeThread",
+      "GetLogicalDrives",
+      "GetPhysicallyInstalledSystemMemory",
+      "GetStdHandle",
+      "GetUserDefaultUILanguage",
+      "GetVolumePathNameA",
+      "PeekNamedPipe",
+      "SetNamedPipeHandleState",
+      "SetThreadLocale",
+      "SetThreadUILanguage",
+      "TryAcquireSRWLockExclusive",
+      "WaitForSingleObjectEx",
+      "WaitNamedPipeW",
+      "WriteFile"
+    ],
+    "SHLWAPI.dll": [
+      "PathStripToRootW"
+    ],
+    "USER32.dll": [
+      "ClientToScreen",
+      "CloseClipboard",
+      "EmptyClipboard",
+      "OpenClipboard",
+      "SetClipboardData"
+    ]
+  }
+}
+

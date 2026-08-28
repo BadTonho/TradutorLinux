@@ -5288,6 +5288,306 @@ TL_MSABI int tl_GetNumberFormatW(const std::uint32_t locale, const std::uint32_t
     return static_cast<int>(to_copy);
 }
 
+TL_MSABI std::uint32_t tl_GetVersion(void) noexcept {
+    // Windows 7 / NT 6.1 (0x00060001)
+    return 0x00060001U;
+}
+
+TL_MSABI std::size_t tl_GetLargePageMinimum(void) noexcept {
+    return 2097152U; // 2MB
+}
+
+TL_MSABI void tl_SetFileApisToOEM(void) noexcept {
+}
+
+TL_MSABI int tl_SetConsoleCtrlHandler(void* const handler, const int add) noexcept {
+    (void)handler;
+    (void)add;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_GetProcessTimes(void* const process, void* const creation_time, void* const exit_time,
+                                void* const kernel_time, void* const user_time) noexcept {
+    (void)process;
+    struct GuestFileTime {
+        std::uint32_t low_date_time;
+        std::uint32_t high_date_time;
+    };
+    const GuestFileTime dummy_time{0, 0};
+    if (creation_time != nullptr && mapped_guest_range(creation_time, sizeof(dummy_time), true)) {
+        std::memcpy(creation_time, &dummy_time, sizeof(dummy_time));
+    }
+    if (exit_time != nullptr && mapped_guest_range(exit_time, sizeof(dummy_time), true)) {
+        std::memcpy(exit_time, &dummy_time, sizeof(dummy_time));
+    }
+    if (kernel_time != nullptr && mapped_guest_range(kernel_time, sizeof(dummy_time), true)) {
+        std::memcpy(kernel_time, &dummy_time, sizeof(dummy_time));
+    }
+    if (user_time != nullptr && mapped_guest_range(user_time, sizeof(dummy_time), true)) {
+        std::memcpy(user_time, &dummy_time, sizeof(dummy_time));
+    }
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_SetProcessAffinityMask(void* const process, const std::uintptr_t process_affinity_mask) noexcept {
+    (void)process;
+    (void)process_affinity_mask;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI std::uintptr_t tl_SetThreadAffinityMask(void* const thread, const std::uintptr_t thread_affinity_mask) noexcept {
+    (void)thread;
+    (void)thread_affinity_mask;
+    set_last_error(abi::kErrorSuccess);
+    return 1; // previous mask
+}
+
+TL_MSABI std::uint32_t tl_ResumeThread(void* const thread) noexcept {
+    (void)thread;
+    set_last_error(abi::kErrorSuccess);
+    return 0; // previous suspend count
+}
+
+TL_MSABI void* tl_OpenEventW(const std::uint32_t desired_access, const int inherit_handle,
+                             const std::uint16_t* const name) noexcept {
+    (void)desired_access;
+    (void)inherit_handle;
+    (void)name;
+    set_last_error(abi::kErrorSuccess);
+    return reinterpret_cast<void*>(0x1000);
+}
+
+TL_MSABI void* tl_OpenFileMappingW(const std::uint32_t desired_access, const int inherit_handle,
+                                   const std::uint16_t* const name) noexcept {
+    (void)desired_access;
+    (void)inherit_handle;
+    (void)name;
+    set_last_error(abi::kErrorSuccess);
+    return reinterpret_cast<void*>(0x2000);
+}
+
+TL_MSABI int tl_FileTimeToDosDateTime(const void* const file_time, std::uint16_t* const fat_date,
+                                      std::uint16_t* const fat_time) noexcept {
+    if (file_time == nullptr || fat_date == nullptr || fat_time == nullptr) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    if (!mapped_guest_range(file_time, 8, false) || !mapped_guest_range(fat_date, 2, true) ||
+        !mapped_guest_range(fat_time, 2, true)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    *fat_date = 0x5821; // 2024-01-01
+    *fat_time = 0x0000; // 00:00:00
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI std::int32_t tl_CompareFileTime(const void* const file_time1, const void* const file_time2) noexcept {
+    if (file_time1 == nullptr || file_time2 == nullptr) {
+        return 0;
+    }
+    std::uint64_t t1 = 0;
+    std::uint64_t t2 = 0;
+    std::memcpy(&t1, file_time1, sizeof(t1));
+    std::memcpy(&t2, file_time2, sizeof(t2));
+    if (t1 < t2) return -1;
+    if (t1 > t2) return 1;
+    return 0;
+}
+
+TL_MSABI int tl_GetDiskFreeSpaceW(const std::uint16_t* const root_path_name,
+                                  std::uint32_t* const sectors_per_cluster,
+                                  std::uint32_t* const bytes_per_sector,
+                                  std::uint32_t* const number_of_free_clusters,
+                                  std::uint32_t* const total_number_of_clusters) noexcept {
+    (void)root_path_name;
+    if (sectors_per_cluster != nullptr && mapped_guest_range(sectors_per_cluster, 4, true)) {
+        *sectors_per_cluster = 8;
+    }
+    if (bytes_per_sector != nullptr && mapped_guest_range(bytes_per_sector, 4, true)) {
+        *bytes_per_sector = 512;
+    }
+    if (number_of_free_clusters != nullptr && mapped_guest_range(number_of_free_clusters, 4, true)) {
+        *number_of_free_clusters = 1000000;
+    }
+    if (total_number_of_clusters != nullptr && mapped_guest_range(total_number_of_clusters, 4, true)) {
+        *total_number_of_clusters = 2000000;
+    }
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI void* tl_FindFirstStreamW(const std::uint16_t* const file_name, const int info_level,
+                                   void* const find_stream_data, const std::uint32_t flags) noexcept {
+    (void)file_name;
+    (void)info_level;
+    (void)find_stream_data;
+    (void)flags;
+    set_last_error(38); // ERROR_HANDLE_EOF
+    return reinterpret_cast<void*>(~static_cast<std::uintptr_t>(0)); // INVALID_HANDLE_VALUE
+}
+
+TL_MSABI int tl_FindNextStreamW(void* const find_stream, void* const find_stream_data) noexcept {
+    (void)find_stream;
+    (void)find_stream_data;
+    set_last_error(38); // ERROR_HANDLE_EOF
+    return 0;
+}
+
+TL_MSABI std::uint32_t tl_GetLogicalDriveStringsW(const std::uint32_t buffer_length,
+                                                  std::uint16_t* const buffer) noexcept {
+    static const std::uint16_t kDrives[] = {'C', ':', '\\', 0, 0};
+    constexpr std::uint32_t kNeeded = 4;
+    if (buffer_length == 0 || buffer == nullptr) {
+        return kNeeded;
+    }
+    if (!mapped_guest_range(buffer, static_cast<std::size_t>(buffer_length) * sizeof(std::uint16_t), true)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    const std::size_t to_copy = std::min(static_cast<std::size_t>(buffer_length), sizeof(kDrives) / sizeof(kDrives[0]));
+    for (std::size_t i = 0; i < to_copy; ++i) {
+        buffer[i] = kDrives[i];
+    }
+    set_last_error(abi::kErrorSuccess);
+    return kNeeded;
+}
+
+TL_MSABI int tl_SetNamedPipeHandleState(void* const named_pipe, std::uint32_t* const mode,
+                                        std::uint32_t* const max_collection_count,
+                                        std::uint32_t* const collect_data_timeout) noexcept {
+    (void)named_pipe;
+    (void)mode;
+    (void)max_collection_count;
+    (void)collect_data_timeout;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_TransactNamedPipe(void* const named_pipe, void* const in_buffer, const std::uint32_t in_buffer_size,
+                                  void* const out_buffer, const std::uint32_t out_buffer_size,
+                                  std::uint32_t* const bytes_read, void* const overlapped) noexcept {
+    (void)named_pipe;
+    (void)in_buffer;
+    (void)in_buffer_size;
+    (void)out_buffer;
+    (void)out_buffer_size;
+    (void)bytes_read;
+    (void)overlapped;
+    set_last_error(230); // ERROR_PIPE_NOT_CONNECTED
+    return 0;
+}
+
+TL_MSABI int tl_WaitNamedPipeW(const std::uint16_t* const named_pipe_name, const std::uint32_t time_out) noexcept {
+    (void)named_pipe_name;
+    (void)time_out;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_PeekNamedPipe(void* const named_pipe, void* const buffer, const std::uint32_t buffer_size,
+                              std::uint32_t* const bytes_read, std::uint32_t* const total_bytes_avail,
+                              std::uint32_t* const bytes_left_this_message) noexcept {
+    (void)named_pipe;
+    (void)buffer;
+    (void)buffer_size;
+    if (bytes_read != nullptr && mapped_guest_range(bytes_read, 4, true)) {
+        *bytes_read = 0;
+    }
+    if (total_bytes_avail != nullptr && mapped_guest_range(total_bytes_avail, 4, true)) {
+        *total_bytes_avail = 0;
+    }
+    if (bytes_left_this_message != nullptr && mapped_guest_range(bytes_left_this_message, 4, true)) {
+        *bytes_left_this_message = 0;
+    }
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI std::uint32_t tl_WaitForSingleObjectEx(void* const handle, const std::uint32_t milliseconds,
+                                                const int alertable) noexcept {
+    (void)alertable;
+    return tl_WaitForSingleObject(handle, milliseconds);
+}
+
+TL_MSABI int tl_GetExitCodeThread(void* const thread, std::uint32_t* const exit_code) noexcept {
+    (void)thread;
+    if (exit_code != nullptr && mapped_guest_range(exit_code, 4, true)) {
+        *exit_code = 0;
+    }
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_TryAcquireSRWLockExclusive(void* const srw_lock) noexcept {
+    (void)srw_lock;
+    return 1;
+}
+
+TL_MSABI void tl_FreeLibraryAndExitThread(void* const module_handle, const std::uint32_t exit_code) noexcept {
+    (void)module_handle;
+    tl_ExitThread(exit_code);
+}
+
+TL_MSABI int tl_SetThreadLocale(const std::uint32_t locale) noexcept {
+    (void)locale;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI std::uint16_t tl_SetThreadUILanguage(const std::uint16_t lang_id) noexcept {
+    return lang_id;
+}
+
+TL_MSABI std::uint16_t tl_GetUserDefaultUILanguage(void) noexcept {
+    return 0x0409; // en-US
+}
+
+TL_MSABI std::uint32_t tl_GetLogicalDrives(void) noexcept {
+    return (1U << 2); // Drive C:
+}
+
+TL_MSABI int tl_GetPhysicallyInstalledSystemMemory(std::uint64_t* const total_memory_in_kilobytes) noexcept {
+    if (total_memory_in_kilobytes != nullptr && mapped_guest_range(total_memory_in_kilobytes, sizeof(std::uint64_t), true)) {
+        *total_memory_in_kilobytes = 16ULL * 1024ULL * 1024ULL; // 16 GB in KB
+    }
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_GetVolumePathNameA(const char* const file_name, char* const volume_path_name,
+                                   const std::uint32_t buffer_length) noexcept {
+    (void)file_name;
+    if (buffer_length >= 4 && volume_path_name != nullptr && mapped_guest_range(volume_path_name, 4, true)) {
+        volume_path_name[0] = 'C';
+        volume_path_name[1] = ':';
+        volume_path_name[2] = '\\';
+        volume_path_name[3] = '\0';
+    }
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_TzSpecificLocalTimeToSystemTime(const void* const tz_info, const void* const local_time,
+                                               void* const universal_time) noexcept {
+    (void)tz_info;
+    if (local_time == nullptr || universal_time == nullptr) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    if (!mapped_guest_range(local_time, 16, false) || !mapped_guest_range(universal_time, 16, true)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    std::memcpy(universal_time, local_time, 16);
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
 }  // extern "C"
 
 }  // namespace tradutorlinux

@@ -1460,6 +1460,104 @@ TL_MSABI void* tl_SHBrowseForFolderW(void* bi) noexcept;
 TL_MSABI int tl_SHGetMalloc(void** pp_malloc) noexcept;
 TL_MSABI void tl_SHChangeNotify(std::int32_t event_id, std::uint32_t flags,
                                 const void* item1, const void* item2) noexcept;
+// KERNEL32: 7-Zip CLI & Rockstar APIs
+TL_MSABI std::uint32_t tl_GetVersion(void) noexcept;
+TL_MSABI std::size_t tl_GetLargePageMinimum(void) noexcept;
+TL_MSABI void tl_SetFileApisToOEM(void) noexcept;
+TL_MSABI int tl_SetConsoleCtrlHandler(void* handler, int add) noexcept;
+TL_MSABI int tl_GetProcessTimes(void* process, void* creation_time, void* exit_time,
+                                void* kernel_time, void* user_time) noexcept;
+TL_MSABI int tl_SetProcessAffinityMask(void* process, std::uintptr_t process_affinity_mask) noexcept;
+TL_MSABI std::uintptr_t tl_SetThreadAffinityMask(void* thread, std::uintptr_t thread_affinity_mask) noexcept;
+TL_MSABI std::uint32_t tl_ResumeThread(void* thread) noexcept;
+TL_MSABI void* tl_OpenEventW(std::uint32_t desired_access, int inherit_handle,
+                             const std::uint16_t* name) noexcept;
+TL_MSABI void* tl_OpenFileMappingW(std::uint32_t desired_access, int inherit_handle,
+                                   const std::uint16_t* name) noexcept;
+TL_MSABI int tl_FileTimeToDosDateTime(const void* file_time, std::uint16_t* fat_date,
+                                      std::uint16_t* fat_time) noexcept;
+TL_MSABI std::int32_t tl_CompareFileTime(const void* file_time1, const void* file_time2) noexcept;
+TL_MSABI int tl_GetDiskFreeSpaceW(const std::uint16_t* root_path_name,
+                                  std::uint32_t* sectors_per_cluster,
+                                  std::uint32_t* bytes_per_sector,
+                                  std::uint32_t* number_of_free_clusters,
+                                  std::uint32_t* total_number_of_clusters) noexcept;
+TL_MSABI void* tl_FindFirstStreamW(const std::uint16_t* file_name, int info_level,
+                                   void* find_stream_data, std::uint32_t flags) noexcept;
+TL_MSABI int tl_FindNextStreamW(void* find_stream, void* find_stream_data) noexcept;
+TL_MSABI std::uint32_t tl_GetLogicalDriveStringsW(std::uint32_t buffer_length,
+                                                  std::uint16_t* buffer) noexcept;
+TL_MSABI int tl_SetNamedPipeHandleState(void* named_pipe, std::uint32_t* mode,
+                                        std::uint32_t* max_collection_count,
+                                        std::uint32_t* collect_data_timeout) noexcept;
+TL_MSABI int tl_TransactNamedPipe(void* named_pipe, void* in_buffer, std::uint32_t in_buffer_size,
+                                  void* out_buffer, std::uint32_t out_buffer_size,
+                                  std::uint32_t* bytes_read, void* overlapped) noexcept;
+TL_MSABI int tl_WaitNamedPipeW(const std::uint16_t* named_pipe_name, std::uint32_t time_out) noexcept;
+TL_MSABI int tl_PeekNamedPipe(void* named_pipe, void* buffer, std::uint32_t buffer_size,
+                              std::uint32_t* bytes_read, std::uint32_t* total_bytes_avail,
+                              std::uint32_t* bytes_left_this_message) noexcept;
+TL_MSABI std::uint32_t tl_WaitForSingleObjectEx(void* handle, std::uint32_t milliseconds,
+                                                int alertable) noexcept;
+TL_MSABI int tl_GetExitCodeThread(void* thread, std::uint32_t* exit_code) noexcept;
+TL_MSABI int tl_TryAcquireSRWLockExclusive(void* srw_lock) noexcept;
+TL_MSABI void tl_FreeLibraryAndExitThread(void* module_handle, std::uint32_t exit_code) noexcept;
+TL_MSABI int tl_SetThreadLocale(std::uint32_t locale) noexcept;
+TL_MSABI std::uint16_t tl_SetThreadUILanguage(std::uint16_t lang_id) noexcept;
+TL_MSABI std::uint16_t tl_GetUserDefaultUILanguage(void) noexcept;
+TL_MSABI std::uint32_t tl_GetLogicalDrives(void) noexcept;
+TL_MSABI int tl_GetPhysicallyInstalledSystemMemory(std::uint64_t* total_memory_in_kilobytes) noexcept;
+TL_MSABI int tl_GetVolumePathNameA(const char* file_name, char* volume_path_name,
+                                   std::uint32_t buffer_length) noexcept;
+TL_MSABI int tl_TzSpecificLocalTimeToSystemTime(const void* tz_info, const void* local_time,
+                                               void* universal_time) noexcept;
+
+// ADVAPI32: 7-Zip & Rockstar APIs
+TL_MSABI int tl_GetFileSecurityW(const std::uint16_t* file_name, std::uint32_t requested_information,
+                                 void* security_descriptor, std::uint32_t length,
+                                 std::uint32_t* length_needed) noexcept;
+TL_MSABI std::int32_t tl_RegDeleteTreeW(void* key, const std::uint16_t* sub_key) noexcept;
+TL_MSABI std::int32_t tl_RegEnumValueW(void* key, std::uint32_t index, std::uint16_t* value_name,
+                                       std::uint32_t* cch_value_name, std::uint32_t* reserved,
+                                       std::uint32_t* type, std::uint8_t* data,
+                                       std::uint32_t* cb_data) noexcept;
+TL_MSABI std::int32_t tl_RegEnumKeyExW(void* key, std::uint32_t index, std::uint16_t* name,
+                                       std::uint32_t* cch_name, std::uint32_t* reserved,
+                                       std::uint16_t* class_name, std::uint32_t* cch_class_name,
+                                       void* last_write_time) noexcept;
+TL_MSABI std::int32_t tl_RegDeleteKeyExW(void* key, const std::uint16_t* sub_key,
+                                        std::uint32_t sam_desired, std::uint32_t reserved) noexcept;
+TL_MSABI std::int32_t tl_RegDeleteKeyW(void* key, const std::uint16_t* sub_key) noexcept;
+
+// USER32: Rockstar APIs
+TL_MSABI int tl_OpenClipboard(void* hwnd_new_owner) noexcept;
+TL_MSABI int tl_CloseClipboard(void) noexcept;
+TL_MSABI void* tl_SetClipboardData(std::uint32_t format, void* mem) noexcept;
+TL_MSABI int tl_EmptyClipboard(void) noexcept;
+TL_MSABI int tl_MessageBoxExW(void* hwnd, const std::uint16_t* text,
+                              const std::uint16_t* caption, std::uint32_t type,
+                              std::uint16_t language_id) noexcept;
+TL_MSABI int tl_DrawIconEx(void* hdc, int x_left, int y_top, void* hicon,
+                           int cx_width, int cy_width, std::uint32_t step_if_ani_cur,
+                           void* hbr_flicker_free_draw, std::uint32_t flags) noexcept;
+TL_MSABI void* tl_LoadImageW(void* hinst, const std::uint16_t* name, std::uint32_t type,
+                             int cx, int cy, std::uint32_t fu_load) noexcept;
+TL_MSABI int tl_ClientToScreen(void* hwnd, void* point) noexcept;
+
+// GDI32: Rockstar APIs
+TL_MSABI int tl_GetTextExtentPoint32W(void* hdc, const std::uint16_t* string,
+                                      int length, void* size) noexcept;
+TL_MSABI int tl_StartDocW(void* hdc, const void* doc_info) noexcept;
+TL_MSABI int tl_EndDoc(void* hdc) noexcept;
+TL_MSABI int tl_StartPage(void* hdc) noexcept;
+TL_MSABI int tl_EndPage(void* hdc) noexcept;
+TL_MSABI int tl_AbortDoc(void* hdc) noexcept;
+
+// COMDLG32: Rockstar APIs
+TL_MSABI int tl_PrintDlgW(void* print_dlg) noexcept;
+
+// SHLWAPI: Rockstar APIs
+TL_MSABI int tl_PathStripToRootW(std::uint16_t* path) noexcept;
 
 }  // extern "C"
 

@@ -142,6 +142,20 @@ TL_CRT_MSABI void* tl__localtime64(const std::int64_t* value) noexcept;
 TL_CRT_MSABI std::size_t tl_strftime(char* buffer, std::size_t capacity, const char* format,
                                      const void* time_value) noexcept;
 TL_CRT_MSABI char* tl__strlwr(char* text) noexcept;
+TL_CRT_MSABI void tl__c_exit() noexcept;
+TL_CRT_MSABI void tl__exit(int exit_code) noexcept;
+TL_CRT_MSABI int tl__XcptFilter(unsigned long xcpt, void* pinfo) noexcept;
+TL_CRT_MSABI void* tl___dllonexit(void (*func)(void), void** pbegin, void** pend) noexcept;
+TL_CRT_MSABI std::uintptr_t tl__beginthreadex(void* security, unsigned stack_size,
+                                              unsigned (*start_address)(void*), void* arg_list,
+                                              unsigned init_flag, unsigned* thread_id) noexcept;
+TL_CRT_MSABI int tl_memcmp(const void* ptr1, const void* ptr2, std::size_t num) noexcept;
+TL_CRT_MSABI int tl_wcscmp(const std::uint16_t* string1, const std::uint16_t* string2) noexcept;
+TL_CRT_MSABI std::uint16_t* tl_wcsstr(const std::uint16_t* string, const std::uint16_t* str_char_set) noexcept;
+TL_CRT_MSABI int tl___CxxFrameHandler(void* rec, void* frame, void* context, void* disp) noexcept;
+TL_CRT_MSABI void tl__CxxThrowException(void* pexcept, void* pthrow_info) noexcept;
+TL_CRT_MSABI void tl__purecall() noexcept;
+TL_CRT_MSABI void tl_terminate() noexcept;
 
 // Dados exportados por msvcrt.dll: células graváveis do hospedeiro cujos
 // endereços são gravados nos slots da IAT (imports-dados __initenv, _commode

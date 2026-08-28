@@ -464,6 +464,39 @@ void register_builtin_modules() {
          reinterpret_cast<std::uintptr_t>(&tl_SystemTimeToTzSpecificLocalTime)},
         {"IsDBCSLeadByte", 270, reinterpret_cast<std::uintptr_t>(&tl_IsDBCSLeadByte)},
         {"GetNumberFormatW", 271, reinterpret_cast<std::uintptr_t>(&tl_GetNumberFormatW)},
+        {"GetVersion", 272, reinterpret_cast<std::uintptr_t>(&tl_GetVersion)},
+        {"GetLargePageMinimum", 273, reinterpret_cast<std::uintptr_t>(&tl_GetLargePageMinimum)},
+        {"SetFileApisToOEM", 274, reinterpret_cast<std::uintptr_t>(&tl_SetFileApisToOEM)},
+        {"SetConsoleCtrlHandler", 275, reinterpret_cast<std::uintptr_t>(&tl_SetConsoleCtrlHandler)},
+        {"GetProcessTimes", 276, reinterpret_cast<std::uintptr_t>(&tl_GetProcessTimes)},
+        {"SetProcessAffinityMask", 277, reinterpret_cast<std::uintptr_t>(&tl_SetProcessAffinityMask)},
+        {"SetThreadAffinityMask", 278, reinterpret_cast<std::uintptr_t>(&tl_SetThreadAffinityMask)},
+        {"ResumeThread", 279, reinterpret_cast<std::uintptr_t>(&tl_ResumeThread)},
+        {"OpenEventW", 280, reinterpret_cast<std::uintptr_t>(&tl_OpenEventW)},
+        {"OpenFileMappingW", 281, reinterpret_cast<std::uintptr_t>(&tl_OpenFileMappingW)},
+        {"FileTimeToDosDateTime", 282, reinterpret_cast<std::uintptr_t>(&tl_FileTimeToDosDateTime)},
+        {"CompareFileTime", 283, reinterpret_cast<std::uintptr_t>(&tl_CompareFileTime)},
+        {"GetDiskFreeSpaceW", 284, reinterpret_cast<std::uintptr_t>(&tl_GetDiskFreeSpaceW)},
+        {"FindFirstStreamW", 285, reinterpret_cast<std::uintptr_t>(&tl_FindFirstStreamW)},
+        {"FindNextStreamW", 286, reinterpret_cast<std::uintptr_t>(&tl_FindNextStreamW)},
+        {"GetLogicalDriveStringsW", 287, reinterpret_cast<std::uintptr_t>(&tl_GetLogicalDriveStringsW)},
+        {"SetNamedPipeHandleState", 288, reinterpret_cast<std::uintptr_t>(&tl_SetNamedPipeHandleState)},
+        {"TransactNamedPipe", 289, reinterpret_cast<std::uintptr_t>(&tl_TransactNamedPipe)},
+        {"WaitNamedPipeW", 290, reinterpret_cast<std::uintptr_t>(&tl_WaitNamedPipeW)},
+        {"PeekNamedPipe", 291, reinterpret_cast<std::uintptr_t>(&tl_PeekNamedPipe)},
+        {"WaitForSingleObjectEx", 292, reinterpret_cast<std::uintptr_t>(&tl_WaitForSingleObjectEx)},
+        {"GetExitCodeThread", 293, reinterpret_cast<std::uintptr_t>(&tl_GetExitCodeThread)},
+        {"TryAcquireSRWLockExclusive", 294, reinterpret_cast<std::uintptr_t>(&tl_TryAcquireSRWLockExclusive)},
+        {"FreeLibraryAndExitThread", 295, reinterpret_cast<std::uintptr_t>(&tl_FreeLibraryAndExitThread)},
+        {"SetThreadLocale", 296, reinterpret_cast<std::uintptr_t>(&tl_SetThreadLocale)},
+        {"SetThreadUILanguage", 297, reinterpret_cast<std::uintptr_t>(&tl_SetThreadUILanguage)},
+        {"GetUserDefaultUILanguage", 298, reinterpret_cast<std::uintptr_t>(&tl_GetUserDefaultUILanguage)},
+        {"GetLogicalDrives", 299, reinterpret_cast<std::uintptr_t>(&tl_GetLogicalDrives)},
+        {"GetPhysicallyInstalledSystemMemory", 300,
+         reinterpret_cast<std::uintptr_t>(&tl_GetPhysicallyInstalledSystemMemory)},
+        {"GetVolumePathNameA", 301, reinterpret_cast<std::uintptr_t>(&tl_GetVolumePathNameA)},
+        {"TzSpecificLocalTimeToSystemTime", 302,
+         reinterpret_cast<std::uintptr_t>(&tl_TzSpecificLocalTimeToSystemTime)},
     };
     static const InternalModule kKernel32Module{"KERNEL32.dll", kKernel32Exports};
     register_module(kKernel32Module);
@@ -587,6 +620,14 @@ void register_builtin_modules() {
         {"FindWindowExW", 115, reinterpret_cast<std::uintptr_t>(&tl_FindWindowExW)},
         {"SetProcessDefaultLayout", 116,
          reinterpret_cast<std::uintptr_t>(&tl_SetProcessDefaultLayout)},
+        {"OpenClipboard", 117, reinterpret_cast<std::uintptr_t>(&tl_OpenClipboard)},
+        {"CloseClipboard", 118, reinterpret_cast<std::uintptr_t>(&tl_CloseClipboard)},
+        {"SetClipboardData", 119, reinterpret_cast<std::uintptr_t>(&tl_SetClipboardData)},
+        {"EmptyClipboard", 120, reinterpret_cast<std::uintptr_t>(&tl_EmptyClipboard)},
+        {"MessageBoxExW", 121, reinterpret_cast<std::uintptr_t>(&tl_MessageBoxExW)},
+        {"DrawIconEx", 122, reinterpret_cast<std::uintptr_t>(&tl_DrawIconEx)},
+        {"LoadImageW", 123, reinterpret_cast<std::uintptr_t>(&tl_LoadImageW)},
+        {"ClientToScreen", 124, reinterpret_cast<std::uintptr_t>(&tl_ClientToScreen)},
     };
     static const InternalModule kUser32Module{"USER32.dll", kUser32Exports};
     register_module(kUser32Module);
@@ -616,6 +657,12 @@ void register_builtin_modules() {
         {"StretchBlt", 23, reinterpret_cast<std::uintptr_t>(&tl_StretchBlt)},
         {"GetObjectW", 24, reinterpret_cast<std::uintptr_t>(&tl_GetObjectW)},
         {"CreateDIBSection", 25, reinterpret_cast<std::uintptr_t>(&tl_CreateDIBSection)},
+        {"GetTextExtentPoint32W", 26, reinterpret_cast<std::uintptr_t>(&tl_GetTextExtentPoint32W)},
+        {"StartDocW", 27, reinterpret_cast<std::uintptr_t>(&tl_StartDocW)},
+        {"EndDoc", 28, reinterpret_cast<std::uintptr_t>(&tl_EndDoc)},
+        {"StartPage", 29, reinterpret_cast<std::uintptr_t>(&tl_StartPage)},
+        {"EndPage", 30, reinterpret_cast<std::uintptr_t>(&tl_EndPage)},
+        {"AbortDoc", 31, reinterpret_cast<std::uintptr_t>(&tl_AbortDoc)},
     };
     static const InternalModule kGdi32Module{"GDI32.dll", kGdi32Exports};
     register_module(kGdi32Module);
@@ -764,6 +811,19 @@ void register_builtin_modules() {
         {"_time64", 94, reinterpret_cast<std::uintptr_t>(&tl__time64)},
         {"strftime", 95, reinterpret_cast<std::uintptr_t>(&tl_strftime)},
         {"_strlwr", 96, reinterpret_cast<std::uintptr_t>(&tl__strlwr)},
+        {"_c_exit", 97, reinterpret_cast<std::uintptr_t>(&tl__c_exit)},
+        {"_exit", 98, reinterpret_cast<std::uintptr_t>(&tl__exit)},
+        {"_XcptFilter", 99, reinterpret_cast<std::uintptr_t>(&tl__XcptFilter)},
+        {"__dllonexit", 100, reinterpret_cast<std::uintptr_t>(&tl___dllonexit)},
+        {"_beginthreadex", 101, reinterpret_cast<std::uintptr_t>(&tl__beginthreadex)},
+        {"memcmp", 102, reinterpret_cast<std::uintptr_t>(&tl_memcmp)},
+        {"wcscmp", 103, reinterpret_cast<std::uintptr_t>(&tl_wcscmp)},
+        {"wcsstr", 104, reinterpret_cast<std::uintptr_t>(&tl_wcsstr)},
+        {"__CxxFrameHandler", 105, reinterpret_cast<std::uintptr_t>(&tl___CxxFrameHandler)},
+        {"_CxxThrowException", 106, reinterpret_cast<std::uintptr_t>(&tl__CxxThrowException)},
+        {"_purecall", 107, reinterpret_cast<std::uintptr_t>(&tl__purecall)},
+        {"?terminate@@YAXXZ", 108, reinterpret_cast<std::uintptr_t>(&tl_terminate)},
+        {"??1type_info@@UEAA@XZ", 109, reinterpret_cast<std::uintptr_t>(&tl__c_exit)},
     };
     static const InternalModule kMsvcrtModule{"msvcrt.dll", kMsvcrtExports};
     register_module(kMsvcrtModule);
@@ -819,6 +879,12 @@ void register_builtin_modules() {
         {"SetFileSecurityW", 32, reinterpret_cast<std::uintptr_t>(&tl_SetFileSecurityW)},
         {"LookupPrivilegeValueW", 33, reinterpret_cast<std::uintptr_t>(&tl_LookupPrivilegeValueW)},
         {"AdjustTokenPrivileges", 34, reinterpret_cast<std::uintptr_t>(&tl_AdjustTokenPrivileges)},
+        {"GetFileSecurityW", 35, reinterpret_cast<std::uintptr_t>(&tl_GetFileSecurityW)},
+        {"RegDeleteTreeW", 36, reinterpret_cast<std::uintptr_t>(&tl_RegDeleteTreeW)},
+        {"RegEnumValueW", 37, reinterpret_cast<std::uintptr_t>(&tl_RegEnumValueW)},
+        {"RegEnumKeyExW", 38, reinterpret_cast<std::uintptr_t>(&tl_RegEnumKeyExW)},
+        {"RegDeleteKeyExW", 39, reinterpret_cast<std::uintptr_t>(&tl_RegDeleteKeyExW)},
+        {"RegDeleteKeyW", 40, reinterpret_cast<std::uintptr_t>(&tl_RegDeleteKeyW)},
     };
     static const InternalModule kAdvapi32Module{"ADVAPI32.dll", kAdvapi32Exports};
     register_module(kAdvapi32Module);
@@ -924,6 +990,10 @@ void register_builtin_modules() {
         {"PathIsRelativeA", 21, reinterpret_cast<std::uintptr_t>(&tl_PathIsRelativeA)},
         {"PathIsRelativeW", 22, reinterpret_cast<std::uintptr_t>(&tl_PathIsRelativeW)},
         {"SHAutoComplete", 23, reinterpret_cast<std::uintptr_t>(&tl_SHAutoComplete)},
+        {"PathStripToRootW", 24, reinterpret_cast<std::uintptr_t>(&tl_PathStripToRootW)},
+        {"", 176, reinterpret_cast<std::uintptr_t>(&tl_PathStripToRootW)},
+        {"", 410, reinterpret_cast<std::uintptr_t>(&tl_PathStripToRootW)},
+        {"", 413, reinterpret_cast<std::uintptr_t>(&tl_PathStripToRootW)},
     };
     static const InternalModule kShlwapiModule{"SHLWAPI.dll", kShlwapiExports};
     register_module(kShlwapiModule);
@@ -1002,6 +1072,7 @@ void register_builtin_modules() {
         {"GetSaveFileNameW", 4, reinterpret_cast<std::uintptr_t>(&tl_GetSaveFileNameW)},
         {"ChooseColorA", 5, reinterpret_cast<std::uintptr_t>(&tl_ChooseColorA)},
         {"ChooseColorW", 6, reinterpret_cast<std::uintptr_t>(&tl_ChooseColorW)},
+        {"PrintDlgW", 7, reinterpret_cast<std::uintptr_t>(&tl_PrintDlgW)},
     };
     static const InternalModule kComdlg32Module{"COMDLG32.dll", kComdlg32Exports};
     register_module(kComdlg32Module);

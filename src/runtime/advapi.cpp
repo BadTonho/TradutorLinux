@@ -539,4 +539,68 @@ TL_ADVAPI_MSABI int tl_AdjustTokenPrivileges(void* token_handle, int disable_all
     return 1;
 }
 
+TL_ADVAPI_MSABI int tl_GetFileSecurityW(const std::uint16_t* file_name, std::uint32_t requested_information,
+                                        void* security_descriptor, std::uint32_t length,
+                                        std::uint32_t* length_needed) noexcept {
+    (void)file_name;
+    (void)requested_information;
+    (void)security_descriptor;
+    (void)length;
+    if (length_needed != nullptr && mapped_range(length_needed, sizeof(*length_needed), true)) {
+        *length_needed = 0;
+    }
+    return 1;
+}
+
+TL_ADVAPI_MSABI std::int32_t tl_RegDeleteTreeW(void* key, const std::uint16_t* sub_key) noexcept {
+    (void)key;
+    (void)sub_key;
+    return static_cast<std::int32_t>(abi::kErrorSuccess);
+}
+
+TL_ADVAPI_MSABI std::int32_t tl_RegEnumValueW(void* key, std::uint32_t index, std::uint16_t* value_name,
+                                               std::uint32_t* cch_value_name, std::uint32_t* reserved,
+                                               std::uint32_t* type, std::uint8_t* data,
+                                               std::uint32_t* cb_data) noexcept {
+    (void)key;
+    (void)index;
+    (void)value_name;
+    (void)cch_value_name;
+    (void)reserved;
+    (void)type;
+    (void)data;
+    (void)cb_data;
+    return 259; // ERROR_NO_MORE_ITEMS
+}
+
+TL_ADVAPI_MSABI std::int32_t tl_RegEnumKeyExW(void* key, std::uint32_t index, std::uint16_t* name,
+                                               std::uint32_t* cch_name, std::uint32_t* reserved,
+                                               std::uint16_t* class_name, std::uint32_t* cch_class_name,
+                                               void* last_write_time) noexcept {
+    (void)key;
+    (void)index;
+    (void)name;
+    (void)cch_name;
+    (void)reserved;
+    (void)class_name;
+    (void)cch_class_name;
+    (void)last_write_time;
+    return 259; // ERROR_NO_MORE_ITEMS
+}
+
+TL_ADVAPI_MSABI std::int32_t tl_RegDeleteKeyExW(void* key, const std::uint16_t* sub_key,
+                                                std::uint32_t sam_desired, std::uint32_t reserved) noexcept {
+    (void)key;
+    (void)sub_key;
+    (void)sam_desired;
+    (void)reserved;
+    return static_cast<std::int32_t>(abi::kErrorSuccess);
+}
+
+TL_ADVAPI_MSABI std::int32_t tl_RegDeleteKeyW(void* key, const std::uint16_t* sub_key) noexcept {
+    (void)key;
+    (void)sub_key;
+    return static_cast<std::int32_t>(abi::kErrorSuccess);
+}
+
 }  // namespace tradutorlinux
