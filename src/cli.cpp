@@ -6,6 +6,7 @@
 #include "tradutorlinux/loader/import_resolver.hpp"
 #include "tradutorlinux/loader/module.hpp"
 #include "tradutorlinux/loader/process.hpp"
+#include "tradutorlinux/package/msix.hpp"
 #include "tradutorlinux/pe/pe_reader.hpp"
 #include "tradutorlinux/prefix/prefix.hpp"
 #include "tradutorlinux/process/isolate.hpp"
@@ -1206,6 +1207,40 @@ ExitCode run_command(const CommandLine& command_line, std::ostream& stdout_strea
         const std::array input_fields{diagnostics::TraceField{"path", input_path}};
         diagnostics::write_trace(stderr_stream, diagnostics::TraceComponent::Cli,
                                  diagnostics::TraceLevel::Info, "input", input_fields);
+    }
+
+    if (package::is_msix_or_appx_package(*effective_cmd.executable_path)) {
+        const auto package_info = package::inspect_msix_package(*effective_cmd.executable_path);
+        if (effective_cmd.report_only) {
+            stdout_stream << "TradutorLinux package report\n";
+            stdout_stream << "format: MSIX / AppX package\n";
+            if (package_info.has_value()) {
+                stdout_stream << "package-name: "
+                              << (package_info->package_name.empty()
+                                      ? effective_cmd.executable_path->stem().string()
+                                      : package_info->package_name)
+                              << '\n';
+                if (!package_info->publisher.empty()) {
+                    stdout_stream << "publisher: " << package_info->publisher << '\n';
+                }
+                if (!package_info->version.empty()) {
+                    stdout_stream << "version: " << package_info->version << '\n';
+                }
+                if (package_info->main_executable.has_value()) {
+                    stdout_stream << "main-executable: " << *package_info->main_executable << '\n';
+                }
+                stdout_stream << "applications: " << package_info->applications.size() << '\n';
+                for (const auto& app : package_info->applications) {
+                    stdout_stream << "  app: id=\"" << app.id << "\" exec=\"" << app.executable
+                                  << "\" name=\"" << app.display_name << "\"\n";
+                }
+            }
+            stdout_stream << "result: package-recognized\n";
+            stdout_stream << "execution: not-attempted\n";
+            return ExitCode::Success;
+        }
+        stderr_stream << "erro: formato de pacote MSIX / AppX reconhecido; use extração de pacote ou especifique o executável interno (.exe)\n";
+        return ExitCode::Unsupported;
     }
 
     const std::optional<std::vector<std::byte>> bytes = read_file(*effective_cmd.executable_path);
