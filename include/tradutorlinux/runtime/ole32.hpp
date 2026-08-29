@@ -89,7 +89,37 @@ constexpr std::int32_t kENoInterface = static_cast<std::int32_t>(0x80004002U);
 constexpr std::int32_t kStgEInvalidFunction = static_cast<std::int32_t>(0x80030001U);
 constexpr std::int32_t kStgESeekError = static_cast<std::int32_t>(0x80030019U);
 
+struct GuestIMalloc;
+
+using GuestIMallocQueryInterface = TL_OLE_MSABI std::int32_t (*)(GuestIMalloc* self, const void* riid, void** object);
+using GuestIMallocAddRef = TL_OLE_MSABI std::uint32_t (*)(GuestIMalloc* self);
+using GuestIMallocRelease = TL_OLE_MSABI std::uint32_t (*)(GuestIMalloc* self);
+using GuestIMallocAlloc = TL_OLE_MSABI void* (*)(GuestIMalloc* self, std::size_t cb);
+using GuestIMallocRealloc = TL_OLE_MSABI void* (*)(GuestIMalloc* self, void* pv, std::size_t cb);
+using GuestIMallocFree = TL_OLE_MSABI void (*)(GuestIMalloc* self, void* pv);
+using GuestIMallocGetSize = TL_OLE_MSABI std::size_t (*)(GuestIMalloc* self, void* pv);
+using GuestIMallocDidAlloc = TL_OLE_MSABI std::int32_t (*)(GuestIMalloc* self, void* pv);
+using GuestIMallocHeapMinimize = TL_OLE_MSABI void (*)(GuestIMalloc* self);
+
+struct GuestIMallocVtable {
+    GuestIMallocQueryInterface query_interface{};
+    GuestIMallocAddRef add_ref{};
+    GuestIMallocRelease release{};
+    GuestIMallocAlloc alloc{};
+    GuestIMallocRealloc realloc{};
+    GuestIMallocFree free{};
+    GuestIMallocGetSize get_size{};
+    GuestIMallocDidAlloc did_alloc{};
+    GuestIMallocHeapMinimize heap_minimize{};
+};
+
+struct GuestIMalloc {
+    const GuestIMallocVtable* vtable{};
+};
+
 extern "C" {
+
+extern GuestIMalloc g_guest_imalloc;
 
 TL_OLE_MSABI std::int32_t tl_CoInitialize(void* reserved) noexcept;
 TL_OLE_MSABI std::int32_t tl_CoInitializeEx(void* reserved, std::uint32_t co_init) noexcept;
@@ -98,6 +128,7 @@ TL_OLE_MSABI std::int32_t tl_CoCreateGuid(void* guid) noexcept;
 TL_OLE_MSABI void* tl_CoTaskMemAlloc(std::size_t size) noexcept;
 TL_OLE_MSABI void tl_CoTaskMemFree(void* ptr) noexcept;
 TL_OLE_MSABI void* tl_CoTaskMemRealloc(void* ptr, std::size_t size) noexcept;
+TL_OLE_MSABI std::int32_t tl_CoGetMalloc(std::uint32_t context, void** pp_malloc) noexcept;
 TL_OLE_MSABI std::int32_t tl_CreateStreamOnHGlobal(OleHGlobal hglobal,
                                                    std::int32_t delete_on_release,
                                                    GuestIStream** stream) noexcept;

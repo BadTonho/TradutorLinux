@@ -62,6 +62,9 @@ target_include_directories(tradutorlinux_core
 target_compile_definitions(tradutorlinux_core
     PUBLIC TRADUTORLINUX_VERSION="${PROJECT_VERSION}-dev"
 )
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options(tradutorlinux_core PUBLIC -mstackrealign)
+endif()
 find_path(TL_X11_INCLUDE_DIR X11/Xlib.h REQUIRED)
 find_library(TL_X11_LIBRARY X11 REQUIRED)
 target_include_directories(tradutorlinux_core PRIVATE "${TL_X11_INCLUDE_DIR}")

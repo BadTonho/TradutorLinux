@@ -1,4 +1,5 @@
 #include "tradutorlinux/runtime/winapi.hpp"
+#include "tradutorlinux/runtime/ole32.hpp"
 #include "runtime_context.hpp"
 #include "tradutorlinux/util/unicode.hpp"
 
@@ -386,7 +387,7 @@ TL_MSABI int tl_SHGetMalloc(void** const pp_malloc) noexcept {
     if (pp_malloc == nullptr || !mapped_guest_range(pp_malloc, sizeof(void*), true)) {
         return static_cast<int>(0x80070057U); // E_INVALIDARG
     }
-    *pp_malloc = nullptr;
+    *pp_malloc = &g_guest_imalloc;
     return 0; // S_OK
 }
 

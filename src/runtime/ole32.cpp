@@ -398,6 +398,71 @@ TL_OLE_MSABI void* tl_CoTaskMemRealloc(void* ptr, const std::size_t size) noexce
     return std::realloc(ptr, size);
 }
 
+namespace {
+
+TL_OLE_MSABI std::int32_t imalloc_query_interface(GuestIMalloc*, const void*, void** object) noexcept {
+    if (object == nullptr) {
+        return kEInvalidArg;
+    }
+    *object = &g_guest_imalloc;
+    return kSOk;
+}
+
+TL_OLE_MSABI std::uint32_t imalloc_add_ref(GuestIMalloc*) noexcept {
+    return 1;
+}
+
+TL_OLE_MSABI std::uint32_t imalloc_release(GuestIMalloc*) noexcept {
+    return 1;
+}
+
+TL_OLE_MSABI void* imalloc_alloc(GuestIMalloc*, const std::size_t cb) noexcept {
+    return tl_CoTaskMemAlloc(cb);
+}
+
+TL_OLE_MSABI void* imalloc_realloc(GuestIMalloc*, void* const pv, const std::size_t cb) noexcept {
+    return tl_CoTaskMemRealloc(pv, cb);
+}
+
+TL_OLE_MSABI void imalloc_free(GuestIMalloc*, void* const pv) noexcept {
+    tl_CoTaskMemFree(pv);
+}
+
+TL_OLE_MSABI std::size_t imalloc_get_size(GuestIMalloc*, void*) noexcept {
+    return 0;
+}
+
+TL_OLE_MSABI std::int32_t imalloc_did_alloc(GuestIMalloc*, void*) noexcept {
+    return -1;
+}
+
+TL_OLE_MSABI void imalloc_heap_minimize(GuestIMalloc*) noexcept {}
+
+const GuestIMallocVtable g_imalloc_vtable = {
+    imalloc_query_interface,
+    imalloc_add_ref,
+    imalloc_release,
+    imalloc_alloc,
+    imalloc_realloc,
+    imalloc_free,
+    imalloc_get_size,
+    imalloc_did_alloc,
+    imalloc_heap_minimize,
+};
+
+}  // namespace
+
+GuestIMalloc g_guest_imalloc = { &g_imalloc_vtable };
+
+TL_OLE_MSABI std::int32_t tl_CoGetMalloc(const std::uint32_t context, void** const pp_malloc) noexcept {
+    (void)context;
+    if (pp_malloc == nullptr || !mapped_range(pp_malloc, sizeof(void*), true)) {
+        return kEInvalidArg;
+    }
+    *pp_malloc = &g_guest_imalloc;
+    return kSOk;
+}
+
 TL_OLE_MSABI std::int32_t tl_CreateStreamOnHGlobal(const OleHGlobal hglobal,
                                                    const std::int32_t delete_on_release,
                                                    GuestIStream** stream) noexcept {

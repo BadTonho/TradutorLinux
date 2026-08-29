@@ -1,4 +1,5 @@
 #include "tradutorlinux/runtime/msvcrt.hpp"
+#include "runtime_context.hpp"
 
 #include "tradutorlinux/diagnostics/trace.hpp"
 #include "tradutorlinux/prefix/prefix.hpp"
@@ -2005,8 +2006,13 @@ TL_CRT_MSABI int tl___CxxFrameHandler(void* rec, void* frame, void* context, voi
 }
 
 TL_CRT_MSABI void tl__CxxThrowException(void* pexcept, void* pthrow_info) noexcept {
-    (void)pexcept;
-    (void)pthrow_info;
+    const std::uint64_t args[4] = {
+        0x19930520ULL,
+        reinterpret_cast<std::uint64_t>(pexcept),
+        reinterpret_cast<std::uint64_t>(pthrow_info),
+        reinterpret_cast<std::uint64_t>(g_guest_image_base),
+    };
+    tl_RaiseException(0xE06D7363U, 1U, 4U, args);
 }
 
 TL_CRT_MSABI void tl__purecall() noexcept {

@@ -1336,6 +1336,7 @@ void register_builtin_modules() {
         {"ReleaseStgMedium", 17, reinterpret_cast<std::uintptr_t>(&tl_ReleaseStgMedium)},
         {"StringFromGUID2", 18, reinterpret_cast<std::uintptr_t>(&tl_StringFromGUID2)},
         {"CLSIDFromProgID", 19, reinterpret_cast<std::uintptr_t>(&tl_CLSIDFromProgID)},
+        {"CoGetMalloc", 20, reinterpret_cast<std::uintptr_t>(&tl_CoGetMalloc)},
     };
     static const InternalModule kOle32Module{"ole32.dll", kOle32Exports};
     register_module(kOle32Module);
