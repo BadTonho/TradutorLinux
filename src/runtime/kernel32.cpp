@@ -5909,6 +5909,12 @@ TL_MSABI int tl_GetDiskFreeSpaceA(const char* const root_path_name, std::uint32_
     return 1;
 }
 
+TL_MSABI int tl_SetDefaultDllDirectories(const std::uint32_t directory_flags) noexcept {
+    (void)directory_flags;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
 TL_MSABI std::uint32_t tl_GetTempPathA(const std::uint32_t buffer_length, char* const buffer) noexcept {
     if (buffer == nullptr || buffer_length == 0 || !mapped_guest_range(buffer, buffer_length, true)) {
         return 0;

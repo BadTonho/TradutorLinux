@@ -27,9 +27,8 @@ namespace {
 constexpr std::size_t kProtocolSize = 5;  // [explicit:1][exit-code:4 LE]
 
 // Registro de falha escrito pelo handler de sinais do filho quando o convidado
-// morre por sinal fatal: [signal:1][si_addr:8 LE]. O pai só o consome depois de
-// waitpid relatar WIFSIGNALED, e o valida contra o sinal observado.
-constexpr std::size_t kFaultRecordSize = 9;
+// morre por sinal fatal: [signal:1][si_addr:8 LE][rip:8 LE].
+constexpr std::size_t kFaultRecordSize = 17;
 
 // Descritor do pipe de falha usado pelo handler no filho. Handlers de sinal
 // não podem capturar estado, então o fd é publicado aqui antes da instalação;
@@ -87,7 +86,7 @@ bool write_exact(const int fd, const std::byte* const buffer, const std::size_t 
 void install_crash_reporter(const int report_fd) noexcept {
     g_crash_report_fd = report_fd;
     struct sigaction action {};
-    action.sa_sigaction = [](const int signal_number, siginfo_t* info, void*) noexcept {
+    action.sa_sigaction = [](const int signal_number, siginfo_t* info, void* context_raw) noexcept {
         // Restaura SIG_DFL para TODOS os sinais fatais ANTES de qualquer outra
         // coisa: se algo falhar aqui dentro (inclusive uma nova falta durante o
         // write), o segundo disparo de qualquer um dos sinais já cai na
@@ -105,11 +104,20 @@ void install_crash_reporter(const int report_fd) noexcept {
         const auto address = info != nullptr && info->si_addr != nullptr
                                  ? reinterpret_cast<std::uintptr_t>(info->si_addr)
                                  : std::uintptr_t{0};
+        std::uintptr_t rip = 0;
+#if defined(__x86_64__)
+        if (context_raw != nullptr) {
+            const auto* const uc = static_cast<const ucontext_t*>(context_raw);
+            rip = static_cast<std::uintptr_t>(uc->uc_mcontext.gregs[REG_RIP]);
+        }
+#endif
         for (std::size_t index = 0; index < 8; ++index) {
             record[1 + index] =
                 std::byte{static_cast<unsigned char>((address >> (8U * index)) & 0xFFU)};
+            record[9 + index] =
+                std::byte{static_cast<unsigned char>((rip >> (8U * index)) & 0xFFU)};
         }
-        // Uma única escrita: registros de 9 bytes são atômicos em pipes. Falhas
+        // Uma única escrita: registros de 17 bytes são atômicos em pipes. Falhas
         // são ignoradas de propósito — o diagnóstico sem endereço ainda vale,
         // e o handler não pode depender de nada além de syscalls diretas.
         if (g_crash_report_fd >= 0) {
@@ -312,14 +320,20 @@ GuestOutcome run_guest_isolated(const std::uintptr_t entry_point,
                 static_cast<unsigned char>(std::to_integer<unsigned>(record[0]));
             if (recorded_signal == static_cast<unsigned char>(outcome.signal_number)) {
                 std::uint64_t address = 0;
+                std::uint64_t rip = 0;
                 for (std::size_t index = 0; index < 8; ++index) {
                     const std::uint64_t byte =
                         static_cast<std::uint64_t>(
                             std::to_integer<unsigned>(record[1 + index]));
                     address |= byte << (8U * index);
+                    const std::uint64_t rip_byte =
+                        static_cast<std::uint64_t>(
+                            std::to_integer<unsigned>(record[9 + index]));
+                    rip |= rip_byte << (8U * index);
                 }
                 outcome.fault_recorded = true;
                 outcome.fault_address = address;
+                outcome.fault_rip = rip;
             }
         }
     }

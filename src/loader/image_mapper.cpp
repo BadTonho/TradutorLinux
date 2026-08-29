@@ -45,6 +45,9 @@ constexpr std::size_t kMaxRelocBlocks = 4096;
     const bool read = (characteristics & kImageScnMemRead) != 0;
     const bool write = (characteristics & kImageScnMemWrite) != 0;
     const bool execute = (characteristics & kImageScnMemExecute) != 0;
+    if (execute && write) {
+        return SectionPermissions::ReadWriteExecute;
+    }
     if (write) {
         return SectionPermissions::ReadWrite;
     }
@@ -67,6 +70,8 @@ constexpr std::size_t kMaxRelocBlocks = 4096;
             return PROT_READ | PROT_WRITE;
         case SectionPermissions::ReadExecute:
             return PROT_READ | PROT_EXEC;
+        case SectionPermissions::ReadWriteExecute:
+            return PROT_READ | PROT_WRITE | PROT_EXEC;
     }
     return PROT_NONE;
 }
@@ -95,9 +100,17 @@ constexpr std::size_t kMaxRelocBlocks = 4096;
                 read = true;
                 execute = true;
                 break;
+            case SectionPermissions::ReadWriteExecute:
+                read = true;
+                write = true;
+                execute = true;
+                break;
             case SectionPermissions::None:
                 break;
         }
+    }
+    if (execute && write) {
+        return SectionPermissions::ReadWriteExecute;
     }
     if (write) {
         return SectionPermissions::ReadWrite;

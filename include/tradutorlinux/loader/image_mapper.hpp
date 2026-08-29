@@ -21,6 +21,7 @@ enum class SectionPermissions {
     ReadOnly,
     ReadWrite,
     ReadExecute,
+    ReadWriteExecute,
 };
 
 struct MapRegion {

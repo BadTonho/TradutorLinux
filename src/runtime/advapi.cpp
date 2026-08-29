@@ -191,9 +191,21 @@ void save_registry() noexcept {
     }
 }
 
-bool is_current_user(const void* key) noexcept {
-    return static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(key)) ==
-           static_cast<std::uint32_t>(kHkeyCurrentUser);
+bool is_predefined_key(const void* key) noexcept {
+    const auto val = static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(key));
+    return val >= 0x80000000U && val <= 0x80000006U;
+}
+
+std::string predefined_key_prefix(const void* key) noexcept {
+    const auto val = static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(key));
+    switch (val) {
+        case 0x80000000U: return "HKEY_CLASSES_ROOT";
+        case 0x80000001U: return "HKEY_CURRENT_USER";
+        case 0x80000002U: return "HKEY_LOCAL_MACHINE";
+        case 0x80000003U: return "HKEY_USERS";
+        case 0x80000005U: return "HKEY_CURRENT_CONFIG";
+        default: return "";
+    }
 }
 
 RegistryKey* find_key(const void* key) noexcept {
@@ -205,9 +217,13 @@ RegistryKey* find_key(const void* key) noexcept {
 
 std::string compose_key_path(const void* key, const std::string& subkey, bool& valid) noexcept {
     valid = false;
-    if (is_current_user(key)) {
+    if (is_predefined_key(key)) {
         valid = true;
-        return subkey;
+        const std::string prefix = predefined_key_prefix(key);
+        if (subkey.empty()) {
+            return prefix;
+        }
+        return prefix.empty() ? subkey : prefix + "\\" + subkey;
     }
     RegistryKey* parent = find_key(key);
     if (parent == nullptr) {

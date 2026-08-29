@@ -379,6 +379,8 @@ void print_pe_summary(std::ostream& stream, const pe::PeInfo& info) {
             return "rw-";
         case loader::SectionPermissions::ReadExecute:
             return "r-x";
+        case loader::SectionPermissions::ReadWriteExecute:
+            return "rwx";
     }
     return "---";
 }
@@ -1404,7 +1406,7 @@ ExitCode run_command(const CommandLine& command_line, std::ostream& stdout_strea
     const diagnostics::GuestCrashContext crash_context =
         outcome.kind == process::GuestOutcomeKind::Signaled && outcome.fault_recorded
             ? diagnostics::describe_guest_crash(process.image, process.imports,
-                                                outcome.fault_address)
+                                                outcome.fault_rip != 0 ? outcome.fault_rip : outcome.fault_address)
             : diagnostics::GuestCrashContext{};
 
     const std::uint64_t unmap_base = process.image.base;

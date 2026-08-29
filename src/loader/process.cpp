@@ -37,7 +37,8 @@ PrepareResult prepare_process(const pe::PeInfo& info, const std::span<const std:
     // podem elevar a permissão real acima da característica individual de cada
     // uma, e é essa permissão que o entry point encontrará na execução.
     const std::uint32_t entry_rva = info.address_of_entry_point;
-    if (effective_page_permissions(map.image, entry_rva) != SectionPermissions::ReadExecute) {
+    const auto perms = effective_page_permissions(map.image, entry_rva);
+    if (perms != SectionPermissions::ReadExecute && perms != SectionPermissions::ReadWriteExecute) {
         loader::unmap_image(map.image);
         return fail_prepare(PrepareStatus::InvalidImage,
                             "entry point fora de uma página executável");

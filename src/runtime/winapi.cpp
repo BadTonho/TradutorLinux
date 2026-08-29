@@ -66,6 +66,7 @@ thread_local std::uint32_t g_guest_exit_code = 0;
 thread_local std::uint32_t g_last_error = abi::kErrorSuccess;
 thread_local runtime::GuestTeb* g_current_teb = nullptr;
 runtime::GuestPeb g_guest_peb{};
+runtime::GuestProcessParameters g_guest_process_params{};
 
 std::string g_module_file_name;
 std::filesystem::path g_guest_prefix_path;
@@ -691,6 +692,7 @@ GuestExecutionResult execute_guest_entry(const std::uintptr_t entry_point,
     reset_process_console_state();
     g_guest_peb.image_base_address = reinterpret_cast<std::uint64_t>(g_guest_image_base);
     g_guest_peb.process_heap = reinterpret_cast<std::uint64_t>(tl_GetProcessHeap());
+    g_guest_peb.process_parameters = reinterpret_cast<std::uint64_t>(&g_guest_process_params);
     g_guest_peb.number_of_processors = 4;
     g_guest_peb.being_debugged = 0;
     constexpr std::uintptr_t kGuestStackSize = 0x100000U;  // 1 MiB
