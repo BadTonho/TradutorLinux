@@ -147,7 +147,13 @@ std::filesystem::path resolve_windows_path(
         return prefix_root / "drive_c" / std::filesystem::path(view);
     }
 
-    // Caso relativo simples
+    // Caso relativo simples: se existir no diretório de trabalho atual (CWD), resolve relativo ao CWD;
+    // senão faz fallback para a raiz do drive_c.
+    std::error_code ec;
+    const auto cwd_path = std::filesystem::current_path(ec) / std::filesystem::path(view);
+    if (!ec && std::filesystem::exists(cwd_path, ec)) {
+        return cwd_path;
+    }
     return prefix_root / "drive_c" / std::filesystem::path(view);
 }
 

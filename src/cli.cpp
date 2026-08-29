@@ -1159,12 +1159,17 @@ ExitCode run_command(const CommandLine& command_line, std::ostream& stdout_strea
         prefix::is_path_within(legacy_prefix, prefix_dir);
     if (!effective_cmd.guest_working_directory.has_value()) {
         if (effective_cmd.mode == CommandMode::DirectRun) {
-            std::error_code current_directory_error;
-            effective_cmd.guest_working_directory =
-                std::filesystem::current_path(current_directory_error);
-            if (current_directory_error) {
-                stderr_stream << "erro: não foi possível obter o diretório atual\n";
-                return ExitCode::InternalError;
+            std::filesystem::path parent = effective_cmd.executable_path->parent_path();
+            if (!parent.empty() && std::filesystem::is_directory(parent)) {
+                effective_cmd.guest_working_directory = parent;
+            } else {
+                std::error_code current_directory_error;
+                effective_cmd.guest_working_directory =
+                    std::filesystem::current_path(current_directory_error);
+                if (current_directory_error) {
+                    stderr_stream << "erro: não foi possível obter o diretório atual\n";
+                    return ExitCode::InternalError;
+                }
             }
         } else {
             effective_cmd.guest_working_directory = active_paths.drive_c;
