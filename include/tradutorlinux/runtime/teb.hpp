@@ -41,6 +41,36 @@ struct alignas(8) GuestPeb {
     std::uint32_t nt_global_flag{0};
 };
 
+struct alignas(8) GuestProcessParameters {
+    std::uint32_t maximum_length{sizeof(GuestProcessParameters)};
+    std::uint32_t length{sizeof(GuestProcessParameters)};
+    std::uint32_t flags{1};
+    std::uint32_t debug_flags{0};
+    void* console_handle{reinterpret_cast<void*>(0x10)};
+    std::uint64_t console_flags{0};
+    void* standard_input{reinterpret_cast<void*>(0x20)};
+    void* standard_output{reinterpret_cast<void*>(0x30)};
+    void* standard_error{reinterpret_cast<void*>(0x40)};
+    std::uint8_t current_directory[0x38]{};
+    std::uint8_t dll_path[0x10]{};
+    std::uint8_t image_path_name[0x10]{};
+    std::uint8_t command_line[0x10]{};
+    void* environment{nullptr};
+    std::uint32_t starting_x{0};
+    std::uint32_t starting_y{0};
+    std::uint32_t count_x{80};
+    std::uint32_t count_y{25};
+    std::uint32_t count_chars_x{0};
+    std::uint32_t count_chars_y{0};
+    std::uint32_t fill_attribute{0};
+    std::uint32_t window_flags{0};
+    std::uint32_t show_window_flags{1};
+    std::uint8_t window_title[0x10]{};
+    std::uint8_t desktop_info[0x10]{};
+    std::uint8_t shell_info[0x10]{};
+    std::uint8_t runtime_data[0x10]{};
+};
+
 // Estrutura do Thread Environment Block (TEB) do Windows x86-64.
 // O TEB começa em uma página alinhada apontada pelo registrador de segmento
 // %gs. Como TlsSlots começa em 0x1480, os 64 slots ocupam parte da segunda

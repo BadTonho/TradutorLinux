@@ -647,6 +647,13 @@ TL_CRT_MSABI int tl_atexit(void (*handler)(void)) noexcept {
     return 0;
 }
 
+TL_CRT_MSABI int tl_atoi(const char* const str) noexcept {
+    if (str == nullptr) {
+        return 0;
+    }
+    return std::atoi(str);
+}
+
 TL_CRT_MSABI void tl_exit(int exit_code) noexcept {
     trace_crt(TraceLevel::Info, "exit",
               {TraceField{"code", std::to_string(exit_code)}});

@@ -1643,6 +1643,7 @@ TL_MSABI int tl_LookupAccountNameW(const std::uint16_t* system_name, const std::
                                    std::uint32_t* domain_size, void* sid_name_use) noexcept;
 TL_MSABI int tl_LsaOpenPolicy(void* system_name, void* obj_attributes, std::uint32_t access_mask, void** policy_handle) noexcept;
 TL_MSABI int tl_LsaClose(void* policy_handle) noexcept;
+TL_MSABI std::uint32_t tl_CM_Get_Child(void* pdnDevInst, std::uintptr_t dnDevInst, std::uint32_t ulFlags) noexcept;
 TL_MSABI int tl_LsaAddAccountRights(void* policy_handle, void* account_sid, void* user_rights, std::uint32_t count) noexcept;
 TL_MSABI std::int32_t tl_RegQueryInfoKeyA(void* key, char* class_name, std::uint32_t* cch_class_name,
                                          std::uint32_t* reserved, std::uint32_t* sub_keys,

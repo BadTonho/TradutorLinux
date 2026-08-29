@@ -695,7 +695,7 @@ GuestExecutionResult execute_guest_entry(const std::uintptr_t entry_point,
     g_guest_peb.process_parameters = reinterpret_cast<std::uint64_t>(&g_guest_process_params);
     g_guest_peb.number_of_processors = 4;
     g_guest_peb.being_debugged = 0;
-    constexpr std::uintptr_t kGuestStackSize = 0x100000U;  // 1 MiB
+    constexpr std::uintptr_t kGuestStackSize = 0x800000U;  // 8 MiB
     void* const teb = allocate_guest_teb(stack_top, kGuestStackSize);
     if (teb == nullptr) {
         runtime::clear_guest_environment();

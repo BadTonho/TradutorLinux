@@ -51,6 +51,7 @@ TL_CRT_MSABI void tl__lock(GuestFile* file) noexcept;
 TL_CRT_MSABI void tl__unlock(GuestFile* file) noexcept;
 TL_CRT_MSABI void tl_abort() noexcept;
 TL_CRT_MSABI int tl_atexit(void (*handler)(void)) noexcept;
+TL_CRT_MSABI int tl_atoi(const char* str) noexcept;
 TL_CRT_MSABI void* tl_calloc(std::size_t count, std::size_t size) noexcept;
 TL_CRT_MSABI void tl_exit(int exit_code) noexcept;
 TL_CRT_MSABI int tl_fclose(GuestFile* file) noexcept;

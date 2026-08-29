@@ -1210,6 +1210,7 @@ void register_builtin_modules() {
         {"_iob", 110, reinterpret_cast<std::uintptr_t>(g_guest_iob)},
         {"rand", 111, reinterpret_cast<std::uintptr_t>(&tl_rand)},
         {"srand", 112, reinterpret_cast<std::uintptr_t>(&tl_srand)},
+        {"atoi", 115, reinterpret_cast<std::uintptr_t>(&tl_atoi)},
     };
     static const InternalModule kMsvcrtModule{"msvcrt.dll", kMsvcrtExports};
     register_module(kMsvcrtModule);
@@ -1565,6 +1566,7 @@ void register_builtin_modules() {
         {"ImageList_BeginDrag", 27, reinterpret_cast<std::uintptr_t>(&tl_ImageList_BeginDrag)},
         {"ImageList_Remove", 28, reinterpret_cast<std::uintptr_t>(&tl_ImageList_Remove)},
         {"ImageList_SetIconSize", 29, reinterpret_cast<std::uintptr_t>(&tl_ImageList_SetIconSize)},
+        {"CreateToolbarEx", 30, reinterpret_cast<std::uintptr_t>(&tl_CreateToolbarEx)},
         {"LoadIconWithScaleDown", 381, reinterpret_cast<std::uintptr_t>(&tl_LoadIconWithScaleDown)},
         {"SetWindowSubclass", 410, reinterpret_cast<std::uintptr_t>(&tl_SetWindowSubclass)},
         {"RemoveWindowSubclass", 412, reinterpret_cast<std::uintptr_t>(&tl_RemoveWindowSubclass)},
@@ -1651,6 +1653,13 @@ void register_builtin_modules() {
     };
     static const InternalModule kSensApiModule{"SensApi.dll", kSensApiExports};
     register_module(kSensApiModule);
+    static const ExportedFunction kSetupApiExports[] = {
+        {"CM_Get_Child", 1, reinterpret_cast<std::uintptr_t>(&tl_CM_Get_Child)},
+    };
+    static const InternalModule kSetupApiModule{"SETUPAPI.dll", kSetupApiExports};
+    register_module(kSetupApiModule);
+    static const InternalModule kCfgmgr32Module{"CFGMGR32.dll", kSetupApiExports};
+    register_module(kCfgmgr32Module);
 }
 
 bool is_module_registered(const std::string_view dll) {

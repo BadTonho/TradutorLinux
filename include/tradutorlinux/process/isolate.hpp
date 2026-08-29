@@ -24,6 +24,7 @@ struct GuestOutcome {
     // contexto PE (RVA, seção, importação mais próxima) para o diagnóstico.
     bool fault_recorded{};
     std::uint64_t fault_address{};
+    std::uint64_t fault_rip{};
 };
 
 struct SignalDescription {
