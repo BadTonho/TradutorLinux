@@ -488,6 +488,10 @@ bool read_guest_file_for_process(const char* path, std::vector<std::byte>& bytes
     // O fork copiou o cache de /proc/self/maps do pai: este processo fará
     // novos mapeamentos (imagem, pilha), então o cache precisa recomeçar.
     runtime::invalidate_memory_map_cache();
+    if (g_guest_image_base != nullptr && g_guest_image_size > 0) {
+        ::munmap(const_cast<std::byte*>(g_guest_image_base), g_guest_image_size);
+        set_guest_image_view(nullptr, 0, 0, 0);
+    }
     GuestExecutionResult result{};
     if (!working_directory.empty() && ::chdir(working_directory.c_str()) != 0) {
         result.exit_code = kChildProcessFailure;
@@ -3849,12 +3853,25 @@ TL_MSABI int tl_CreateProcessA(const char* application_name, char* command_line,
         const std::size_t slash = module_file.find_last_of('/');
         if (slash != std::string_view::npos) {
             char candidate[4096]{};
-            const int written = std::snprintf(candidate, sizeof(candidate), "%.*s/%s",
-                                              static_cast<int>(slash), module_file.data(),
-                                              normalized_path);
+            int written = std::snprintf(candidate, sizeof(candidate), "%.*s/%s",
+                                        static_cast<int>(slash), module_file.data(),
+                                        normalized_path);
             if (written > 0 && written < static_cast<int>(sizeof(candidate)) &&
-                ::access(candidate, X_OK) == 0) {
+                ::access(candidate, R_OK) == 0) {
                 std::memcpy(normalized_path, candidate, static_cast<std::size_t>(written) + 1);
+            } else {
+                const std::string_view norm_view{normalized_path};
+                const std::size_t norm_slash = norm_view.find_last_of('/');
+                const std::string_view filename = (norm_slash != std::string_view::npos)
+                                                      ? norm_view.substr(norm_slash + 1)
+                                                      : norm_view;
+                written = std::snprintf(candidate, sizeof(candidate), "%.*s/%.*s",
+                                        static_cast<int>(slash), module_file.data(),
+                                        static_cast<int>(filename.size()), filename.data());
+                if (written > 0 && written < static_cast<int>(sizeof(candidate)) &&
+                    ::access(candidate, R_OK) == 0) {
+                    std::memcpy(normalized_path, candidate, static_cast<std::size_t>(written) + 1);
+                }
             }
         }
     }

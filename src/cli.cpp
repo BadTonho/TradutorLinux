@@ -1265,6 +1265,52 @@ ExitCode run_command(const CommandLine& command_line, std::ostream& stdout_strea
 
     const pe::ParseResult parse_result = pe::parse_pe(*bytes);
     if (parse_result.status != pe::ParseStatus::Success) {
+        if (effective_cmd.mode == CommandMode::Install) {
+            const auto target_prog_dir = prefix_dir / "drive_c" / "Program Files" / installation_name;
+            std::error_code ec;
+            std::filesystem::create_directories(target_prog_dir, ec);
+            const std::string extract_cmd = "7z x -y -o\"" + target_prog_dir.string() + "\" \"" +
+                                            effective_cmd.executable_path->string() + "\" >/dev/null 2>&1";
+            if (::system(extract_cmd.c_str()) == 0) {
+                const prefix::EnvironmentPaths inst_paths = prefix::get_environment_paths(prefix_dir);
+                const ExecutableSnapshot after = snapshot_executables(inst_paths.drive_c);
+                const std::vector<std::filesystem::path> candidates = changed_executables(
+                    installation_before.value_or(ExecutableSnapshot{}), after);
+                if (!candidates.empty()) {
+                    std::filesystem::path best_candidate;
+                    for (const auto& cand : candidates) {
+                        const auto cand_bytes = read_file(cand);
+                        if (cand_bytes) {
+                            const auto cand_pe = pe::parse_pe(*cand_bytes);
+                            if (cand_pe.status == pe::ParseStatus::Success) {
+                                best_candidate = cand;
+                                break;
+                            }
+                        }
+                    }
+                    if (best_candidate.empty()) {
+                        best_candidate = candidates.front();
+                    }
+                    catalog::AppCatalog app_catalog;
+                    (void)app_catalog.load_from_file();
+                    catalog::AppEntry entry;
+                    entry.id = installation_id;
+                    entry.name = installation_name;
+                    entry.executable_path = best_candidate.string();
+                    entry.prefix_path = prefix_dir.string();
+                    entry.working_directory = best_candidate.parent_path().string();
+                    if (app_catalog.add_app(entry) && app_catalog.save_to_file()) {
+                        write_install_trace(effective_cmd.trace_enabled, stderr_stream,
+                                            diagnostics::TraceLevel::Info, "registered",
+                                            {{"prefix", prefix_dir.string()}, {"app-id", entry.id},
+                                             {"path", entry.executable_path}});
+                        stderr_stream << "instalação concluída; aplicativo registrado como '" << entry.name
+                                      << "' [id: " << entry.id << "]\n";
+                        return ExitCode::Success;
+                    }
+                }
+            }
+        }
         if (effective_cmd.trace_enabled) {
             const std::array fields{
                 diagnostics::TraceField{"status", status_label(parse_result.status)},
