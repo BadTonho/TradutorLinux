@@ -11,7 +11,7 @@
 
 namespace tradutorlinux::loader {
 
-constexpr std::size_t kGuestStackSize = 8 << 20;  // 8 MiB usáveis (padrão x64)
+constexpr std::size_t kGuestStackSize = 32 << 20;  // 32 MiB usáveis (para suportar buffers estendidos de até 8 MiB)
 
 struct GuestThread {
     std::uint64_t stack_top{};

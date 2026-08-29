@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <vector>
 
 #if defined(__GNUC__) || defined(__clang__)
 #define TL_MSABI __attribute__((ms_abi))
@@ -2127,6 +2128,10 @@ void set_guest_prefix_path(const std::filesystem::path& path);
 [[nodiscard]] std::filesystem::path guest_prefix_root();
 void set_guest_image_view(const void* image_base, std::size_t image_size,
                           std::uint32_t resource_rva, std::uint32_t resource_size) noexcept;
+void set_guest_tls_directory(std::uint64_t start_raw, std::uint64_t end_raw,
+                             std::uint64_t index_addr, const std::vector<std::uint64_t>& callbacks) noexcept;
+void initialize_thread_tls(void* teb) noexcept;
+void invoke_thread_tls_callbacks(std::uint32_t reason) noexcept;
 
 // Executa um entry point Microsoft x64 e captura ExitProcess sem encerrar o
 // processo hospedeiro. O ponteiro deve apontar para código já mapeado como

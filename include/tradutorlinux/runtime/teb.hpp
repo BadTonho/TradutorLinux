@@ -101,8 +101,7 @@ struct alignas(4096) GuestTeb {
     std::array<std::uint64_t, 64> tls_slots{};    // 0x1480: TlsSlots[64] (%gs:[0x1480])
 
     std::array<std::uint64_t, 16> tls_pointers_array{}; // Array apontado por ThreadLocalStoragePointer (%gs:[0x58])
-    std::array<std::uint8_t, 1024> tls_module0_data{};  // Buffer TLS para o módulo principal (índice 0)
-    std::uint8_t reserved_page_tail[0x2000 - 0x1480 - 64 * 8 - 16 * 8 - 1024]{};
+    std::array<std::uint8_t, 0x10000 - 0x1700> tls_module0_data{};  // Buffer TLS para o módulo principal (índice 0)
 };
 
 static_assert(offsetof(GuestTeb, self) == 0x30, "TEB::self deve estar no offset 0x30");
@@ -111,7 +110,7 @@ static_assert(offsetof(GuestTeb, unique_thread_id) == 0x48, "TEB::unique_thread_
 static_assert(offsetof(GuestTeb, peb) == 0x60, "TEB::peb deve estar no offset 0x60");
 static_assert(offsetof(GuestTeb, last_error_value) == 0x68, "TEB::last_error_value deve estar no offset 0x68");
 static_assert(offsetof(GuestTeb, tls_slots) == 0x1480, "TEB::tls_slots deve estar no offset 0x1480");
-static_assert(sizeof(GuestTeb) == 0x2000, "GuestTeb deve ocupar exatamente duas páginas");
+static_assert(sizeof(GuestTeb) == 0x10000, "GuestTeb deve ocupar 64 KiB");
 
 // Inicializa a página do TEB com os ponteiros essenciais e IDs.
 inline void initialize_guest_teb(GuestTeb* teb, GuestPeb* peb, std::uint64_t stack_base,
@@ -120,16 +119,21 @@ inline void initialize_guest_teb(GuestTeb* teb, GuestPeb* peb, std::uint64_t sta
     if (teb == nullptr) {
         return;
     }
+    (void)stack_limit;
     teb->self = reinterpret_cast<std::uint64_t>(teb);
     teb->stack_base = stack_base;
-    teb->stack_limit = stack_limit;
+    teb->stack_limit = 0;
     teb->unique_process_id = process_id;
     teb->unique_thread_id = thread_id;
     teb->peb = reinterpret_cast<std::uint64_t>(peb);
     teb->last_error_value = 0;
     teb->tls_slots.fill(0);
     teb->tls_pointers_array.fill(0);
-    teb->tls_module0_data.fill(0xFF);
+    teb->tls_module0_data.fill(0);
+    // Offset 0x744 is MSVC CRT thread-local generation epoch counter
+    if (0x744 + sizeof(std::uint32_t) <= teb->tls_module0_data.size()) {
+        *reinterpret_cast<std::uint32_t*>(&teb->tls_module0_data[0x744]) = 1U;
+    }
     teb->tls_pointers_array[0] = reinterpret_cast<std::uint64_t>(teb->tls_module0_data.data());
     teb->thread_local_storage_ptr = reinterpret_cast<std::uint64_t>(teb->tls_pointers_array.data());
 }

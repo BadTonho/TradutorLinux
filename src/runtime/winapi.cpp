@@ -619,7 +619,8 @@ bool set_guest_gs_base(const void* const base) noexcept {
 }
 
 void* allocate_guest_teb(const std::uintptr_t stack_top,
-                         const std::uintptr_t stack_size) noexcept {
+                         const std::uintptr_t stack_size,
+                         const std::uint32_t thread_id) noexcept {
     constexpr std::size_t kTebSize = sizeof(runtime::GuestTeb);
     void* const teb = mmap(nullptr, kTebSize, PROT_READ | PROT_WRITE,
                            MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
@@ -627,7 +628,7 @@ void* allocate_guest_teb(const std::uintptr_t stack_top,
         return nullptr;
     }
     auto* const fields = static_cast<runtime::GuestTeb*>(teb);
-    runtime::initialize_guest_teb(fields, &g_guest_peb, stack_top, stack_top - stack_size, g_current_thread_id);
+    runtime::initialize_guest_teb(fields, &g_guest_peb, stack_top, stack_top - stack_size, thread_id);
     g_current_teb = fields;
     return teb;
 }
@@ -673,6 +674,39 @@ void set_guest_image_view(const void* image_base, const std::size_t image_size,
     }
 }
 
+static std::uint64_t g_guest_tls_start_raw = 0;
+static std::uint64_t g_guest_tls_end_raw = 0;
+static std::uint64_t g_guest_tls_index_addr = 0;
+static std::vector<std::uint64_t> g_guest_tls_callbacks;
+
+void set_guest_tls_directory(std::uint64_t start_raw, std::uint64_t end_raw,
+                             std::uint64_t index_addr, const std::vector<std::uint64_t>& callbacks) noexcept {
+    g_guest_tls_start_raw = start_raw;
+    g_guest_tls_end_raw = end_raw;
+    g_guest_tls_index_addr = index_addr;
+    g_guest_tls_callbacks = callbacks;
+}
+
+void initialize_thread_tls(void* teb_ptr) noexcept {
+    auto* teb = static_cast<runtime::GuestTeb*>(teb_ptr);
+    if (teb != nullptr && g_guest_tls_start_raw != 0 && g_guest_tls_end_raw > g_guest_tls_start_raw) {
+        const std::size_t template_size = static_cast<std::size_t>(g_guest_tls_end_raw - g_guest_tls_start_raw);
+        const auto* src = reinterpret_cast<const std::uint8_t*>(g_guest_tls_start_raw);
+        const std::size_t copy_size = std::min(template_size, teb->tls_module0_data.size());
+        std::memcpy(teb->tls_module0_data.data(), src, copy_size);
+    }
+}
+
+void invoke_thread_tls_callbacks(const std::uint32_t reason) noexcept {
+    using TlsCallbackFn = TL_MSABI void (*)(void* dll_handle, std::uint32_t reason, void* reserved);
+    for (const std::uint64_t cb_addr : g_guest_tls_callbacks) {
+        if (cb_addr != 0) {
+            auto cb = reinterpret_cast<TlsCallbackFn>(cb_addr);
+            cb(const_cast<std::byte*>(g_guest_image_base), reason, nullptr);
+        }
+    }
+}
+
 void reset_process_console_state() noexcept {
     std::lock_guard lock(g_process_context_mutex);
     g_standard_handles = {&kStdInputToken, &kStdOutputToken, &kStdErrorToken};
@@ -695,8 +729,8 @@ GuestExecutionResult execute_guest_entry(const std::uintptr_t entry_point,
     g_guest_peb.process_parameters = reinterpret_cast<std::uint64_t>(&g_guest_process_params);
     g_guest_peb.number_of_processors = 4;
     g_guest_peb.being_debugged = 0;
-    constexpr std::uintptr_t kGuestStackSize = 0x800000U;  // 8 MiB
-    void* const teb = allocate_guest_teb(stack_top, kGuestStackSize);
+    constexpr std::uintptr_t kGuestStackSize = 0x2000000U;  // 32 MiB
+    void* const teb = allocate_guest_teb(stack_top, kGuestStackSize, kMainThreadId);
     if (teb == nullptr) {
         runtime::clear_guest_environment();
         return {};
@@ -707,6 +741,17 @@ GuestExecutionResult execute_guest_entry(const std::uintptr_t entry_point,
         runtime::clear_guest_environment();
         return {};
     }
+
+    // Inicializa template TLS e índice
+    initialize_thread_tls(g_current_teb);
+    if (g_guest_tls_index_addr != 0) {
+        *reinterpret_cast<std::uint32_t*>(g_guest_tls_index_addr) = 0;
+    }
+
+    // Executa TLS callbacks antes do entry point principal (PROCESS_ATTACH e THREAD_ATTACH para thread 1)
+    invoke_thread_tls_callbacks(1U /* DLL_PROCESS_ATTACH */);
+    invoke_thread_tls_callbacks(2U /* DLL_THREAD_ATTACH */);
+
     g_quit_requested = false;
     g_quit_code = 0;
     g_guest_execution_active = true;

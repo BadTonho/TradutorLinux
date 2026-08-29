@@ -45,17 +45,11 @@ constexpr std::size_t kMaxRelocBlocks = 4096;
     const bool read = (characteristics & kImageScnMemRead) != 0;
     const bool write = (characteristics & kImageScnMemWrite) != 0;
     const bool execute = (characteristics & kImageScnMemExecute) != 0;
-    if (execute && write) {
-        return SectionPermissions::ReadWriteExecute;
-    }
-    if (write) {
-        return SectionPermissions::ReadWrite;
-    }
     if (execute) {
         return SectionPermissions::ReadExecute;
     }
-    if (read) {
-        return SectionPermissions::ReadOnly;
+    if (write || read) {
+        return SectionPermissions::ReadWrite;
     }
     return SectionPermissions::None;
 }
@@ -363,15 +357,24 @@ MapResult map_image(const pe::PeInfo& info, const std::span<const std::byte> fil
     for (const MapRegion& region : regions) {
         if (region.raw_data_size == 0 ||
             static_cast<std::uint64_t>(region.raw_data_pointer) >= file_bytes.size()) {
+            if (region.size > 0) {
+                std::memset(memory + region.rva, 0, region.size);
+            }
             continue;
         }
         const std::size_t copy_size = std::min<std::size_t>(
             static_cast<std::size_t>(region.raw_data_size),
             file_bytes.size() - static_cast<std::size_t>(region.raw_data_pointer));
         if (copy_size == 0) {
+            if (region.size > 0) {
+                std::memset(memory + region.rva, 0, region.size);
+            }
             continue;
         }
         std::memcpy(memory + region.rva, file_bytes.data() + region.raw_data_pointer, copy_size);
+        if (region.size > copy_size) {
+            std::memset(memory + region.rva + copy_size, 0, region.size - copy_size);
+        }
     }
 
     const std::int64_t delta =

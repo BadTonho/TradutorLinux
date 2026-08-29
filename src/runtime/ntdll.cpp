@@ -139,8 +139,8 @@ NtStatus NtAllocateVirtualMemory(void** BaseAddress,
     // Contrato Fase 5: apenas MEM_COMMIT|MEM_RESERVE. Wine aceita separado,
     // mas mantemos strict e documentamos. Aceita qualquer combinação que inclua
     // ao menos COMMIT|RESERVE para compatibilidade com alvos que usam 0x3000.
-    constexpr std::uint32_t kAllowedAlloc = kMemCommit | kMemReserve;
-    if ((AllocationType & ~kAllowedAlloc) != 0 || (AllocationType & kAllowedAlloc) == 0) {
+    constexpr std::uint32_t kAllowedAlloc = kMemCommit | kMemReserve | 0x00100000U /* MEM_TOP_DOWN */ | 0x00080000U /* MEM_RESET */ | 0x00020000U /* MEM_WRITE_WATCH */;
+    if ((AllocationType & kAllowedAlloc) == 0) {
         trace_nt("NtAllocateVirtualMemory", "allocation_type não suportado", NtStatus::InvalidParameter);
         return NtStatus::InvalidParameter;
     }
@@ -148,16 +148,13 @@ NtStatus NtAllocateVirtualMemory(void** BaseAddress,
         trace_nt("NtAllocateVirtualMemory", "protect inválido", NtStatus::InvalidParameter);
         return NtStatus::InvalidParameter;
     }
-    // Para Fase 5, apenas BaseAddress == nullptr. Se não for nulo, tratar como
-    // conflicting address (inspirado em Wine virtual.c que tenta hint e falha).
-    if (*BaseAddress != nullptr) {
-        trace_nt("NtAllocateVirtualMemory", "hint address não suportado", NtStatus::ConflictingAddresses);
-        return NtStatus::ConflictingAddresses;
-    }
 
     const std::size_t aligned = align_to_page(*RegionSize);
     const int prot = prot_to_host(Protect);
-    void* result = ::mmap(nullptr, aligned, prot, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    void* result = ::mmap(*BaseAddress, aligned, prot, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    if (result == MAP_FAILED) {
+        result = ::mmap(nullptr, aligned, prot, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    }
     if (result == MAP_FAILED) {
         trace_nt("NtAllocateVirtualMemory", "mmap falhou", NtStatus::NoMemory);
         return NtStatus::NoMemory;

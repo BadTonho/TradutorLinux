@@ -104,6 +104,16 @@ struct RuntimeFunction {
     UnwindInfo unwind;
 };
 
+struct TlsDirectoryInfo {
+    std::uint64_t start_address_of_raw_data{};
+    std::uint64_t end_address_of_raw_data{};
+    std::uint64_t address_of_index{};
+    std::uint64_t address_of_callbacks{};
+    std::uint32_t size_of_zero_fill{};
+    std::uint32_t characteristics{};
+    std::vector<std::uint64_t> callback_vas;
+};
+
 struct PeInfo {
     bool is_pe32_plus{};
     std::uint16_t machine{};
@@ -124,6 +134,9 @@ struct PeInfo {
     std::uint32_t relocation_directory_size{};
     std::uint32_t delay_import_directory_rva{};
     std::uint32_t delay_import_directory_size{};
+    std::uint32_t tls_directory_rva{};
+    std::uint32_t tls_directory_size{};
+    TlsDirectoryInfo tls_info;
     std::vector<SectionInfo> sections;
     std::vector<ImportedDll> imports;
     // Imports descritos por IMAGE_DIRECTORY_ENTRY_DELAY_IMPORT. Eles mantêm

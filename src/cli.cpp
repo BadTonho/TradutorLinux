@@ -1396,6 +1396,10 @@ ExitCode run_command(const CommandLine& command_line, std::ostream& stdout_strea
     runtime::set_guest_unwind_view(process.image.memory, process.image.size,
                                    parse_result.info.exception_directory_rva,
                                    process.info.runtime_functions);
+    set_guest_tls_directory(parse_result.info.tls_info.start_address_of_raw_data,
+                            parse_result.info.tls_info.end_address_of_raw_data,
+                            parse_result.info.tls_info.address_of_index,
+                            parse_result.info.tls_info.callback_vas);
 
     const process::GuestOutcome outcome = process::run_guest_isolated(
         process.thread.entry_point, process.thread.stack_top, effective_cmd.timeout_ms,
@@ -1410,6 +1414,7 @@ ExitCode run_command(const CommandLine& command_line, std::ostream& stdout_strea
             : diagnostics::GuestCrashContext{};
 
     const std::uint64_t unmap_base = process.image.base;
+    set_guest_tls_directory(0, 0, 0, {});
     runtime::clear_guest_unwind_view();
     set_guest_image_view(nullptr, 0, 0, 0);
     loader::destroy_process(process);

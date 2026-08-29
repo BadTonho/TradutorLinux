@@ -18,6 +18,7 @@
 #include <cctype>
 #include <chrono>
 #include <condition_variable>
+#include <malloc.h>
 #include <cstdint>
 #include <cstring>
 #include <cstdio>
@@ -2115,6 +2116,9 @@ TL_MSABI void tl_EnterCriticalSection(void* critical_section) noexcept {
         return;
     }
     CriticalSectionEntry* entry = find_cs_entry(critical_section);
+    if (entry == nullptr) {
+        entry = alloc_cs_entry(critical_section);
+    }
     if (entry != nullptr) {
         pthread_mutex_lock(&entry->mutex);
         set_last_error(abi::kErrorSuccess);
@@ -2134,7 +2138,7 @@ TL_MSABI void tl_LeaveCriticalSection(void* critical_section) noexcept {
         set_last_error(abi::kErrorSuccess);
         return;
     }
-    set_last_error(abi::kErrorInvalidParameter);
+    set_last_error(abi::kErrorSuccess);
 }
 
 TL_MSABI void tl_DeleteCriticalSection(void* critical_section) noexcept {
@@ -2155,7 +2159,14 @@ TL_MSABI void tl_DeleteCriticalSection(void* critical_section) noexcept {
 }
 
 TL_MSABI int tl_TryEnterCriticalSection(void* critical_section) noexcept {
+    if (critical_section == nullptr) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
     CriticalSectionEntry* entry = find_cs_entry(critical_section);
+    if (entry == nullptr) {
+        entry = alloc_cs_entry(critical_section);
+    }
     if (entry == nullptr) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
@@ -2182,7 +2193,8 @@ TL_MSABI void* tl_CreateThread(const void* thread_attributes, const std::uintptr
         set_last_error(abi::kErrorNotEnoughMemory);
         return nullptr;
     }
-    const std::size_t real_stack_size = stack_size > 0 ? static_cast<std::size_t>(stack_size) : 0x100000U;
+    const std::size_t real_stack_size = std::max<std::size_t>(
+        stack_size > 0 ? static_cast<std::size_t>(stack_size) : 0x1000000U, 0x1000000U);
     void* stack = mmap(nullptr, real_stack_size, PROT_READ | PROT_WRITE,
                        MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
     if (stack == MAP_FAILED) {
@@ -2190,14 +2202,15 @@ TL_MSABI void* tl_CreateThread(const void* thread_attributes, const std::uintptr
         return nullptr;
     }
     const std::uintptr_t stack_top = reinterpret_cast<std::uintptr_t>(stack) + real_stack_size;
-    void* teb = allocate_guest_teb(stack_top, real_stack_size);
+    const std::uint32_t new_tid = g_next_thread_id.fetch_add(1);
+    void* teb = allocate_guest_teb(stack_top, real_stack_size, new_tid);
     if (teb == nullptr) {
         munmap(stack, real_stack_size);
         set_last_error(abi::kErrorNotEnoughMemory);
         return nullptr;
     }
     it->used = true;
-    it->thread_id = g_next_thread_id.fetch_add(1);
+    it->thread_id = new_tid;
     it->teb = teb;
     it->stack = static_cast<std::byte*>(stack);
     it->stack_size = real_stack_size;
@@ -2218,8 +2231,10 @@ TL_MSABI void* tl_CreateThread(const void* thread_attributes, const std::uintptr
                                    unwind_view = it->unwind_view]() {
         g_current_thread_id = slot_ptr->thread_id;
         set_guest_gs_base(teb);
+        initialize_thread_tls(static_cast<runtime::GuestTeb*>(teb));
         set_current_fls_thread_values(slot_ptr->fls_values);
         runtime::restore_guest_unwind_view(unwind_view);
+        invoke_thread_tls_callbacks(2U /* DLL_THREAD_ATTACH */);
         std::jmp_buf exit_point{};
         t_thread_exit_context = &exit_point;
         t_thread_exit_slot = slot_ptr;
@@ -2227,6 +2242,7 @@ TL_MSABI void* tl_CreateThread(const void* thread_attributes, const std::uintptr
             slot_ptr->exit_code = static_cast<int>(tl_call_guest_thread_on_stack(
                 reinterpret_cast<std::uintptr_t>(proc), parameter, slot_ptr->stack_top));
         }
+        invoke_thread_tls_callbacks(3U /* DLL_THREAD_DETACH */);
         // Após longjmp, ler o slot pelo TLS (não depender de registradores).
         ThreadSlot* const finished_slot = t_thread_exit_slot;
         t_thread_exit_context = nullptr;
@@ -3459,6 +3475,9 @@ TL_MSABI void* tl_TlsGetValue(std::uint32_t tls_index) noexcept {
         return nullptr;
     }
     set_last_error(abi::kErrorSuccess);
+    if (g_current_teb != nullptr && tls_index < 64) {
+        return reinterpret_cast<void*>(g_current_teb->tls_slots[tls_index]);
+    }
     return g_guest_tls_slots[tls_index];
 }
 
@@ -3471,6 +3490,9 @@ TL_MSABI int tl_TlsSetValue(std::uint32_t tls_index, void* value) noexcept {
         }
     }
     g_guest_tls_slots[tls_index] = value;
+    if (g_current_teb != nullptr && tls_index < 64) {
+        g_current_teb->tls_slots[tls_index] = reinterpret_cast<std::uint64_t>(value);
+    }
     set_last_error(abi::kErrorSuccess);
     return 1;
 }
@@ -3482,6 +3504,10 @@ TL_MSABI int tl_TlsFree(std::uint32_t tls_index) noexcept {
         return 0;
     }
     g_tls_indices_used[tls_index] = false;
+    g_guest_tls_slots[tls_index] = nullptr;
+    if (g_current_teb != nullptr && tls_index < 64) {
+        g_current_teb->tls_slots[tls_index] = 0;
+    }
     set_last_error(abi::kErrorSuccess);
     return 1;
 }
@@ -4943,8 +4969,12 @@ TL_MSABI int tl_HeapValidate(void* heap, const std::uint32_t flags, const void* 
 TL_MSABI std::size_t tl_HeapSize(void* heap, const std::uint32_t flags, const void* memory) noexcept {
     (void)heap;
     (void)flags;
-    (void)memory;
-    return 4096;
+    if (memory == nullptr) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return static_cast<std::size_t>(-1);
+    }
+    set_last_error(abi::kErrorSuccess);
+    return malloc_usable_size(const_cast<void*>(memory));
 }
 
 TL_MSABI std::size_t tl_HeapCompact(void* heap, const std::uint32_t flags) noexcept {

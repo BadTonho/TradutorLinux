@@ -344,7 +344,8 @@ std::uint32_t apply_win32_file_attributes(const char* path, std::uint32_t attrib
 std::uint32_t decode_multibyte(std::uint32_t code_page, const std::uint8_t* bytes, std::size_t length, std::size_t& pos) noexcept;
 
 bool set_guest_gs_base(const void* base) noexcept;
-void* allocate_guest_teb(std::uintptr_t stack_top, std::uintptr_t stack_size) noexcept;
+void* allocate_guest_teb(std::uintptr_t stack_top, std::uintptr_t stack_size,
+                         std::uint32_t thread_id = 1) noexcept;
 void free_guest_teb(void* teb) noexcept;
 
 void bump_guest_allocation_generation() noexcept;

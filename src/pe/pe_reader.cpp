@@ -48,6 +48,7 @@ constexpr std::size_t kDirImport = 1;
 constexpr std::size_t kDirResource = 2;
 constexpr std::size_t kDirException = 3;
 constexpr std::size_t kDirBaseReloc = 5;
+constexpr std::size_t kDirTls = 9;
 constexpr std::size_t kDirDelayImport = 13;
 
 constexpr std::size_t kMaxImportDlls = 1024;
@@ -281,6 +282,12 @@ public:
             reader_.read_u32(directory_offset + kDirBaseReloc * kDataDirectoryEntrySize + 4,
                              info.relocation_directory_size);
         }
+        if (directory_count > kDirTls) {
+            reader_.read_u32(directory_offset + kDirTls * kDataDirectoryEntrySize,
+                             info.tls_directory_rva);
+            reader_.read_u32(directory_offset + kDirTls * kDataDirectoryEntrySize + 4,
+                             info.tls_directory_size);
+        }
         if (directory_count > kDirDelayImport) {
             reader_.read_u32(directory_offset + kDirDelayImport * kDataDirectoryEntrySize,
                              info.delay_import_directory_rva);
@@ -338,6 +345,9 @@ public:
             return *error;
         }
         if (auto error = parse_runtime_functions()) {
+            return *error;
+        }
+        if (auto error = parse_tls_directory()) {
             return *error;
         }
         if (auto error = parse_relocations()) {
@@ -668,6 +678,51 @@ private:
         if (!descriptor_terminated) {
             return fail(ParseStatus::Malformed,
                         "diretório de delay imports sem descritor terminador");
+        }
+        return std::nullopt;
+    }
+
+    [[nodiscard]] std::optional<ParseResult> parse_tls_directory() {
+        if (parser_state_.tls_directory_rva == 0 ||
+            parser_state_.tls_directory_size == 0) {
+            return std::nullopt;
+        }
+        if (parser_state_.tls_directory_size < 40) {
+            return std::nullopt;
+        }
+        const std::optional<std::size_t> directory = rva_to_file_offset(
+            {parser_state_.tls_directory_rva, parser_state_.tls_directory_size});
+        if (!directory.has_value()) {
+            return std::nullopt;
+        }
+
+        const std::size_t offset = *directory;
+        reader_.read_u64(offset, parser_state_.tls_info.start_address_of_raw_data);
+        reader_.read_u64(offset + 8, parser_state_.tls_info.end_address_of_raw_data);
+        reader_.read_u64(offset + 16, parser_state_.tls_info.address_of_index);
+        reader_.read_u64(offset + 24, parser_state_.tls_info.address_of_callbacks);
+        reader_.read_u32(offset + 32, parser_state_.tls_info.size_of_zero_fill);
+        reader_.read_u32(offset + 36, parser_state_.tls_info.characteristics);
+
+        const std::uint64_t callbacks_va = parser_state_.tls_info.address_of_callbacks;
+        if (callbacks_va >= parser_state_.image_base) {
+            const std::uint64_t callbacks_rva = callbacks_va - parser_state_.image_base;
+            if (callbacks_rva <= std::numeric_limits<std::uint32_t>::max()) {
+                const std::optional<std::size_t> callbacks_file_offset = rva_to_file_offset(
+                    {static_cast<std::uint32_t>(callbacks_rva), sizeof(std::uint64_t)});
+                if (callbacks_file_offset.has_value()) {
+                    std::size_t current_cb_offset = *callbacks_file_offset;
+                    while (reader_.has_range(current_cb_offset, sizeof(std::uint64_t))) {
+                        std::uint64_t cb_va{};
+                        reader_.read_u64(current_cb_offset, cb_va);
+                        if (cb_va == 0) {
+                            break;
+                        }
+                        parser_state_.tls_info.callback_vas.push_back(cb_va);
+                        current_cb_offset += sizeof(std::uint64_t);
+                    }
+                }
+            }
         }
         return std::nullopt;
     }
