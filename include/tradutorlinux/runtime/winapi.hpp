@@ -927,6 +927,7 @@ TL_MSABI void* tl_MonitorFromWindow(const void* window, std::uint32_t flags) noe
 TL_MSABI std::uint32_t tl_GetSysColor(int index) noexcept;
 TL_MSABI std::uint16_t* tl_CharUpperW(std::uint16_t* str) noexcept;
 TL_MSABI std::uint16_t* tl_CharLowerW(std::uint16_t* str) noexcept;
+TL_MSABI const char* tl_CharPrevExA(std::uint32_t code_page, const char* start, const char* current, std::uint32_t flags) noexcept;
 TL_MSABI int tl_DrawTextA(const void* dc, const char* text, int count, void* rect,
                           std::uint32_t format) noexcept;
 TL_MSABI int tl_DrawTextW(const void* dc, const std::uint16_t* text, int count, void* rect,
@@ -1476,7 +1477,8 @@ TL_MSABI void* tl_OpenEventW(std::uint32_t desired_access, int inherit_handle,
 TL_MSABI void* tl_OpenFileMappingW(std::uint32_t desired_access, int inherit_handle,
                                    const std::uint16_t* name) noexcept;
 TL_MSABI int tl_FileTimeToDosDateTime(const void* file_time, std::uint16_t* fat_date,
-                                      std::uint16_t* fat_time) noexcept;
+                                       std::uint16_t* fat_time) noexcept;
+TL_MSABI int tl_DosDateTimeToFileTime(std::uint16_t fat_date, std::uint16_t fat_time, void* file_time) noexcept;
 TL_MSABI std::int32_t tl_CompareFileTime(const void* file_time1, const void* file_time2) noexcept;
 TL_MSABI int tl_GetDiskFreeSpaceW(const std::uint16_t* root_path_name,
                                   std::uint32_t* sectors_per_cluster,

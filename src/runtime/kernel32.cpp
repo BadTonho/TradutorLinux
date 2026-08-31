@@ -5439,7 +5439,7 @@ TL_MSABI void* tl_OpenFileMappingW(const std::uint32_t desired_access, const int
 }
 
 TL_MSABI int tl_FileTimeToDosDateTime(const void* const file_time, std::uint16_t* const fat_date,
-                                      std::uint16_t* const fat_time) noexcept {
+                                       std::uint16_t* const fat_time) noexcept {
     if (file_time == nullptr || fat_date == nullptr || fat_time == nullptr) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
@@ -5451,6 +5451,49 @@ TL_MSABI int tl_FileTimeToDosDateTime(const void* const file_time, std::uint16_t
     }
     *fat_date = 0x5821; // 2024-01-01
     *fat_time = 0x0000; // 00:00:00
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_DosDateTimeToFileTime(const std::uint16_t fat_date, const std::uint16_t fat_time,
+                                       void* const file_time) noexcept {
+    if (file_time == nullptr || !mapped_guest_range(file_time, 8, true)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    const std::uint32_t day = fat_date & 0x1FU;
+    const std::uint32_t month = (fat_date >> 5U) & 0x0FU;
+    const std::uint32_t year = ((fat_date >> 9U) & 0x7FU) + 1980U;
+    const std::uint32_t second = (fat_time & 0x1FU) * 2U;
+    const std::uint32_t minute = (fat_time >> 5U) & 0x3FU;
+    const std::uint32_t hour = (fat_time >> 11U) & 0x1FU;
+    if (day < 1U || day > 31U || month < 1U || month > 12U || year < 1980U || year > 2107U ||
+        second > 59U || minute > 59U || hour > 23U) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    // Validar dias do mês (inclui fevereiro bissexto).
+    const bool is_leap = (year % 4U == 0U && (year % 100U != 0U || year % 400U == 0U));
+    const std::uint32_t days_in_month[] = {31, is_leap ? 29U : 28U, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
+    if (day > days_in_month[month - 1U]) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    std::tm tm_utc{};
+    tm_utc.tm_year = static_cast<int>(year - 1900U);
+    tm_utc.tm_mon = static_cast<int>(month - 1U);
+    tm_utc.tm_mday = static_cast<int>(day);
+    tm_utc.tm_hour = static_cast<int>(hour);
+    tm_utc.tm_min = static_cast<int>(minute);
+    tm_utc.tm_sec = static_cast<int>(second);
+    tm_utc.tm_isdst = -1;
+    const std::time_t seconds = timegm(&tm_utc);
+    if (seconds == static_cast<std::time_t>(-1)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    auto* const out = static_cast<GuestFileTime*>(file_time);
+    filetime_from_unix(seconds, *out);
     set_last_error(abi::kErrorSuccess);
     return 1;
 }

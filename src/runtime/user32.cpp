@@ -2337,6 +2337,38 @@ TL_MSABI std::uint16_t* tl_CharLowerW(std::uint16_t* const str) noexcept {
     return str;
 }
 
+TL_MSABI const char* tl_CharPrevExA(const std::uint32_t code_page, const char* const start,
+                                     const char* const current, const std::uint32_t flags) noexcept {
+    (void)code_page;
+    (void)flags;
+    if (start == nullptr || current == nullptr) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return start;
+    }
+    if (!mapped_guest_cstring(start)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return start;
+    }
+    if (current <= start) {
+        set_last_error(abi::kErrorSuccess);
+        return start;
+    }
+    const std::uintptr_t start_addr = reinterpret_cast<std::uintptr_t>(start);
+    const std::uintptr_t cur_addr = reinterpret_cast<std::uintptr_t>(current);
+    if (cur_addr - start_addr > 1U << 20U) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return start;
+    }
+    if (!mapped_guest_range(current - 1, 1, false)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return start;
+    }
+    // DBCS não suportado (CP 932/936 etc. sempre retorna FALSE em IsDBCSLeadByteEx),
+    // então o char anterior é sempre current-1 para o 7z.dll.
+    set_last_error(abi::kErrorSuccess);
+    return current - 1;
+}
+
 TL_MSABI int tl_DrawTextA(const void* const dc, const char* const text, const int count,
                           void* const rect, const std::uint32_t format) noexcept {
     if (text == nullptr || rect == nullptr || !mapped_guest_range(rect, sizeof(abi::GuestRect), true)) {

@@ -601,6 +601,7 @@ void register_builtin_modules() {
         {"QueueUserAPC", 397, reinterpret_cast<std::uintptr_t>(&tl_QueueUserAPC)},
         {"lstrcmpW", 398, reinterpret_cast<std::uintptr_t>(&tl_lstrcmpW)},
         {"lstrcmpiW", 399, reinterpret_cast<std::uintptr_t>(&tl_lstrcmpiW)},
+        {"DosDateTimeToFileTime", 400, reinterpret_cast<std::uintptr_t>(&tl_DosDateTimeToFileTime)},
     };
     static const InternalModule kKernel32Module{"KERNEL32.dll", kKernel32Exports};
     register_module(kKernel32Module);
@@ -916,6 +917,7 @@ void register_builtin_modules() {
         {"SetMenuItemBitmaps", 305, reinterpret_cast<std::uintptr_t>(&tl_SetMenuItemBitmaps)},
         {"GetDCEx", 306, reinterpret_cast<std::uintptr_t>(&tl_GetDCEx)},
         {"IsChild", 307, reinterpret_cast<std::uintptr_t>(&tl_IsChild)},
+        {"CharPrevExA", 308, reinterpret_cast<std::uintptr_t>(&tl_CharPrevExA)},
     };
     static const InternalModule kUser32Module{"USER32.dll", kUser32Exports};
     register_module(kUser32Module);
