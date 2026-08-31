@@ -1,0 +1,10 @@
+Architecture: amd64
+Depends: libc6, libx11-6, libqt6widgets6
+Description: Runtime de compatibilidade Win32 para Linux
+Maintainer: TradutorLinux
+Package: tradutorlinux
+Priority: optional
+Section: devel
+Version: 0.0.0
+Installed-Size: 15454
+

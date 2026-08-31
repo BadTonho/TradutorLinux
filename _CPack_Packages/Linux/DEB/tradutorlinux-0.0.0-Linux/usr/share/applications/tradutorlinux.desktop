@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=TradutorLinux
+Comment=Executa aplicativos Win32 no Linux
+Exec=/usr/bin/tradutorlinux_gui
+TryExec=/usr/bin/tradutorlinux_gui
+Icon=tradutorlinux
+Terminal=false
+Categories=Utility;System;
+StartupNotify=true

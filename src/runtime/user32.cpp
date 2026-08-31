@@ -89,6 +89,11 @@ std::array<ImageSlot, 32> g_image_slots{};
     return runtime::validate_mapped_range(reinterpret_cast<const void*>(address), 1, false);
 }
 
+[[nodiscard]] bool guest_resource_or_wstring_valid(const std::uint16_t* value) noexcept {
+    const auto raw = reinterpret_cast<std::uintptr_t>(value);
+    return raw <= 0xFFFFU || mapped_guest_wstring(value);
+}
+
 [[nodiscard]] WindowSlot* dialog_control_by_id(WindowSlot& dialog, const int identifier) noexcept {
     for (WindowSlot* const child : dialog.dialog_children) {
         if (child != nullptr && child->used &&
@@ -277,29 +282,35 @@ TL_MSABI abi::Atom tl_RegisterClassW(const void* wnd_class) noexcept {
     }
     const auto* wc = static_cast<const abi::GuestWndClassW*>(wnd_class);
     if (wc->window_proc == 0 || wc->class_name == nullptr || !mapped_guest_wstring(wc->class_name) ||
-        (wc->menu_name != nullptr && !mapped_guest_wstring(wc->menu_name))) {
+        (wc->menu_name != nullptr && !guest_resource_or_wstring_valid(wc->menu_name))) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
     std::string utf8_class = util::wide_to_utf8(wc->class_name);
     std::string utf8_menu;
     const char* menu_cstr = nullptr;
-    if (wc->menu_name != nullptr) {
+    if (wc->menu_name != nullptr && reinterpret_cast<std::uintptr_t>(wc->menu_name) > 0xFFFFU) {
         utf8_menu = util::wide_to_utf8(wc->menu_name);
         menu_cstr = utf8_menu.c_str();
     }
-    abi::GuestWndClassA a{};
-    a.style = wc->style;
-    a.window_proc = wc->window_proc;
-    a.class_extra = wc->class_extra;
-    a.window_extra = wc->window_extra;
-    a.instance = wc->instance;
-    a.icon = wc->icon;
-    a.cursor = wc->cursor;
-    a.background = wc->background;
-    a.menu_name = menu_cstr;
-    a.class_name = utf8_class.c_str();
-    return tl_RegisterClassA(&a);
+    (void)menu_cstr;
+    if (find_class_slot(utf8_class.c_str()) != nullptr) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    const auto free_it = std::find_if(g_classes.begin(), g_classes.end(),
+                                      [](const ClassSlot& slot) { return !slot.used; });
+    if (free_it == g_classes.end()) {
+        set_last_error(abi::kErrorNotEnoughMemory);
+        return 0;
+    }
+    ClassSlot& slot = *free_it;
+    slot.used = true;
+    slot.name = utf8_class;
+    slot.wndproc = wc->window_proc;
+    slot.atom = static_cast<abi::Atom>(static_cast<std::size_t>(free_it - g_classes.begin()) + 1U);
+    set_last_error(abi::kErrorSuccess);
+    return slot.atom;
 }
 
 TL_MSABI abi::HWnd tl_CreateWindowExA(const std::uint32_t ex_style,
@@ -2012,26 +2023,71 @@ TL_MSABI std::int16_t tl_GetAsyncKeyState(const int) noexcept {
 }
 
 TL_MSABI int tl_LoadStringA(void* instance, const std::uint32_t id, char* buffer, const int buffer_max) noexcept {
-    (void)instance;
-    (void)id;
     if (buffer == nullptr || buffer_max <= 0 || !mapped_guest_range(buffer, static_cast<std::size_t>(buffer_max), true)) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
-    buffer[0] = '\0';
+    std::vector<std::uint16_t> wide(static_cast<std::size_t>(buffer_max), 0);
+    const int length = tl_LoadStringW(instance, id, wide.data(), buffer_max);
+    if (length <= 0) {
+        buffer[0] = '\0';
+        return 0;
+    }
+    const std::string utf8 = util::wide_to_utf8(wide.data(), static_cast<std::size_t>(length));
+    const std::size_t copied = std::min(utf8.size(), static_cast<std::size_t>(buffer_max - 1));
+    std::memcpy(buffer, utf8.data(), copied);
+    buffer[copied] = '\0';
     set_last_error(abi::kErrorSuccess);
-    return 0;
+    return static_cast<int>(copied);
 }
 
 TL_MSABI int tl_LoadStringW(void* instance, const std::uint32_t id, std::uint16_t* buffer, const int buffer_max) noexcept {
-    (void)instance;
-    (void)id;
     if (buffer == nullptr || buffer_max <= 0 || !mapped_guest_range(buffer, static_cast<std::size_t>(buffer_max) * sizeof(std::uint16_t), true)) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
+    // IMAGE_RESOURCE_DATA_ENTRY type STRING stores 16 strings in a block.
+    const auto type = reinterpret_cast<const std::uint16_t*>(static_cast<std::uintptr_t>(6U));
+    const auto block = reinterpret_cast<const std::uint16_t*>(
+        static_cast<std::uintptr_t>(id / 16U + 1U));
+    void* const resource = tl_FindResourceW(instance, block, type);
+    void* const loaded = resource == nullptr ? nullptr : tl_LoadResource(instance, resource);
+    const auto* const data = loaded == nullptr
+                                 ? nullptr
+                                 : static_cast<const std::uint16_t*>(tl_LockResource(loaded));
+    const std::uint32_t byte_size = resource == nullptr ? 0U : tl_SizeofResource(instance, resource);
+    if (data == nullptr || byte_size < sizeof(std::uint16_t)) {
+        buffer[0] = 0;
+        set_last_error(abi::kErrorResourceNameNotFound);
+        return 0;
+    }
+
+    const std::size_t unit_count = byte_size / sizeof(std::uint16_t);
+    std::size_t offset = 0;
+    const std::size_t index = id % 16U;
+    for (std::size_t current = 0; current <= index; ++current) {
+        if (offset >= unit_count) {
+            buffer[0] = 0;
+            set_last_error(abi::kErrorResourceDataNotFound);
+            return 0;
+        }
+        const std::size_t length = data[offset++];
+        if (length > unit_count - offset) {
+            buffer[0] = 0;
+            set_last_error(abi::kErrorResourceDataNotFound);
+            return 0;
+        }
+        if (current == index) {
+            const std::size_t copied = std::min(length, static_cast<std::size_t>(buffer_max - 1));
+            std::memcpy(buffer, data + offset, copied * sizeof(std::uint16_t));
+            buffer[copied] = 0;
+            set_last_error(abi::kErrorSuccess);
+            return static_cast<int>(copied);
+        }
+        offset += length;
+    }
     buffer[0] = 0;
-    set_last_error(abi::kErrorSuccess);
+    set_last_error(abi::kErrorResourceNameNotFound);
     return 0;
 }
 
