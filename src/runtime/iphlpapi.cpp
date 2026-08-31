@@ -3,6 +3,9 @@
 
 #include <cstdint>
 #include <cstring>
+#include <arpa/inet.h>
+#include <netinet/in.h>
+#include <sys/socket.h>
 
 namespace tradutorlinux {
 
@@ -82,9 +85,29 @@ TL_MSABI std::uint32_t tl_GetAdaptersAddresses(std::uint32_t Family, std::uint32
         return 87;
     }
     std::memset(AdapterAddresses, 0, *SizePointer);
-    // IP_ADAPTER_ADDRESSES minimal para 127.0.0.1 + ::1
-    // Layout simplificado: Length(4) IfIndex(4) Next(8) AdapterName(8) ... FriendlyName(8) Description(8) etc.
-    // Para o Worker basta Next==0, Length==kRequired, IfIndex==1, OperStatus==1 e FriendlyName apontando para L"lo"
+    // Layout completo para 1 adapter com 1 unicast (127.0.0.1) + 1 DNS (8.8.8.8)
+    struct GuestSocketAddress {
+        void* lpSockaddr{nullptr};
+        int iSockaddrLength{0};
+    };
+    struct GuestUnicast {
+        std::uint32_t Length{0};
+        std::uint32_t Flags{0};
+        void* Next{nullptr};
+        GuestSocketAddress Address{};
+        std::uint32_t PrefixOrigin{0};
+        std::uint32_t SuffixOrigin{0};
+        std::uint32_t DadState{0};
+        std::uint32_t ValidLifetime{0};
+        std::uint32_t PreferredLifetime{0};
+        std::uint32_t LeaseLifetime{0};
+        std::uint8_t OnLinkPrefixLength{24};
+        std::uint8_t Reserved[3]{};
+    };
+    struct GuestDns {
+        void* Next{nullptr};
+        GuestSocketAddress Address{};
+    };
     struct GuestAdapterAddrs {
         std::uint32_t Length{0};
         std::uint32_t IfIndex{1};
@@ -101,8 +124,8 @@ TL_MSABI std::uint32_t tl_GetAdaptersAddresses(std::uint32_t Family, std::uint32
         std::uint32_t PhysicalAddressLength{6};
         std::uint32_t Flags{0};
         std::uint32_t Mtu{1500};
-        std::uint32_t IfType{24}; // IF_TYPE_ETHERNET
-        std::uint32_t OperStatus{1}; // IfOperStatusUp
+        std::uint32_t IfType{24};
+        std::uint32_t OperStatus{1};
         std::uint32_t Ipv6IfIndex{0};
         std::uint32_t ZoneIndices[16]{};
         void* FirstPrefix{nullptr};
@@ -111,20 +134,42 @@ TL_MSABI std::uint32_t tl_GetAdaptersAddresses(std::uint32_t Family, std::uint32
     addrs->Length = kRequired;
     addrs->IfIndex = 1;
     addrs->Next = nullptr;
-    // FriendlyName = L"lo" logo após a estrutura
-    wchar_t* friendly = reinterpret_cast<wchar_t*>(static_cast<char*>(AdapterAddresses) + sizeof(GuestAdapterAddrs));
-    if (reinterpret_cast<std::uintptr_t>(friendly) + 6 <= reinterpret_cast<std::uintptr_t>(AdapterAddresses) + *SizePointer) {
-        friendly[0] = L'l'; friendly[1] = L'o'; friendly[2] = 0;
-        // Aponta FriendlyName para essa string (offset dentro do buffer)
-        // O campo FriendlyName na estrutura original é WCHAR*, mas simplificamos para array; copiamos "lo" para o array
-        addrs->FriendlyName[0] = L'l'; addrs->FriendlyName[1] = L'o'; addrs->FriendlyName[2] = 0;
-        const wchar_t lo_desc[] = L"Loopback";
-        for (int i = 0; lo_desc[i] != 0 && i < 8; ++i) addrs->Description[i] = lo_desc[i];
+    addrs->FriendlyName[0] = L'l'; addrs->FriendlyName[1] = L'o'; addrs->FriendlyName[2] = 0;
+    const wchar_t lo_desc[] = L"Loopback";
+    for (int i = 0; lo_desc[i] != 0 && i < 8; ++i) addrs->Description[i] = lo_desc[i];
+    addrs->PhysicalAddress[0] = 0x02;
+    // Coloca Unicast + sockaddr_in + Dns + sockaddr_in logo após o adapter
+    std::size_t offset = sizeof(GuestAdapterAddrs);
+    offset = (offset + 7) & ~static_cast<std::size_t>(7); // align 8
+    if (offset + sizeof(GuestUnicast) + sizeof(sockaddr_in) + sizeof(GuestDns) + sizeof(sockaddr_in) <= *SizePointer) {
+        auto* unicast = reinterpret_cast<GuestUnicast*>(static_cast<char*>(AdapterAddresses) + offset);
+        offset += sizeof(GuestUnicast);
+        auto* uni_sock = reinterpret_cast<sockaddr_in*>(static_cast<char*>(AdapterAddresses) + offset);
+        offset += sizeof(sockaddr_in);
+        auto* dns = reinterpret_cast<GuestDns*>(static_cast<char*>(AdapterAddresses) + offset);
+        offset += sizeof(GuestDns);
+        auto* dns_sock = reinterpret_cast<sockaddr_in*>(static_cast<char*>(AdapterAddresses) + offset);
+        // Unicast 127.0.0.1
+        unicast->Length = sizeof(GuestUnicast);
+        unicast->Next = nullptr;
+        unicast->Address.lpSockaddr = uni_sock;
+        unicast->Address.iSockaddrLength = sizeof(sockaddr_in);
+        uni_sock->sin_family = AF_INET;
+        uni_sock->sin_port = 0;
+        uni_sock->sin_addr.s_addr = htonl(0x7F000001U); // 127.0.0.1
+        // DNS 8.8.8.8
+        dns->Next = nullptr;
+        dns->Address.lpSockaddr = dns_sock;
+        dns->Address.iSockaddrLength = sizeof(sockaddr_in);
+        dns_sock->sin_family = AF_INET;
+        dns_sock->sin_port = 0;
+        dns_sock->sin_addr.s_addr = htonl(0x08080808U); // 8.8.8.8
+        addrs->FirstUnicastAddress = unicast;
+        addrs->FirstDnsServerAddress = dns;
     }
-    addrs->PhysicalAddress[0] = 0x02; // locally administered
     *SizePointer = kRequired;
     set_last_error(abi::kErrorSuccess);
-    return 0; // ERROR_SUCCESS
+    return 0;
 }
 
 TL_MSABI std::uint32_t tl_if_nametoindex(const char* ifname) noexcept {

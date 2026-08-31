@@ -141,11 +141,26 @@ void copy_host_sockaddr(const sockaddr_in& source, void* address, int* length) n
 extern "C" {
 
 TL_MSABI int tl_WSAStartup(const std::uint16_t version_requested, void* data) noexcept {
-    if (data == nullptr || !mapped_range(data, 400, true) || version_requested < 0x0101U) {
+    if (data == nullptr || !mapped_range(data, 400, true)) {
         g_wsa_last_error = kWsaEInvalidArgument;
         return kWsaEInvalidArgument;
     }
+    const std::uint16_t major = version_requested & 0xFFU;
+    const std::uint16_t minor = (version_requested >> 8) & 0xFFU;
+    if (major < 1 || (major == 1 && minor < 1)) {
+        g_wsa_last_error = 10092; // WSAVERNOTSUPPORTED
+        return 10092;
+    }
     std::memset(data, 0, 400);
+    // WSADATA: wVersion(0), wHighVersion(2), szDescription(4,257), szSystemStatus(261,128), iMaxSockets(389,2), iMaxUdpDg(391,2), lpVendorInfo(393,8)
+    *static_cast<std::uint16_t*>(data) = version_requested;
+    *reinterpret_cast<std::uint16_t*>(static_cast<char*>(data) + 2) = 0x0202U;
+    const char desc[] = "WinSock 2.0";
+    const char status[] = "Running";
+    std::memcpy(static_cast<char*>(data) + 4, desc, sizeof(desc));
+    std::memcpy(static_cast<char*>(data) + 261, status, sizeof(status));
+    *reinterpret_cast<std::uint16_t*>(static_cast<char*>(data) + 389) = 0;
+    *reinterpret_cast<std::uint16_t*>(static_cast<char*>(data) + 391) = 0;
     g_wsa_last_error = 0;
     return 0;
 }
