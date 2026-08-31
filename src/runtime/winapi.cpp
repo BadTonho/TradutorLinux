@@ -794,12 +794,12 @@ GuestExecutionResult execute_guest_entry(const std::uintptr_t entry_point,
                 const std::uintptr_t global = base + 0xc2c800U;
                 if (global + 0x799U < base + g_guest_image_size) {
                     auto* flag = reinterpret_cast<std::uint8_t*>(global + 0x798U);
-                    *flag = 0U;
+                    *flag = 1U;
                 }
                 const std::uintptr_t func_ptr_va = base + 0xbf93a0U;
                 if (func_ptr_va + 8U < base + g_guest_image_size) {
                     auto* func_slot = reinterpret_cast<std::uint64_t*>(func_ptr_va);
-                    *func_slot = reinterpret_cast<std::uint64_t>(reinterpret_cast<void*>(&dummy_worker_check));
+                    *func_slot = 0U;
                 }
             }
         }
