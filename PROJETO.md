@@ -2,14 +2,9 @@
 
 ## 1. Visão geral
 
-O TradutorLinux é um projeto educativo e funcional de sistemas: um runtime capaz de executar, de forma progressiva, **classes cada vez mais amplas de executáveis Windows no Linux**, sem máquina virtual e sem emular a CPU.
+O TradutorLinux é um runtime de compatibilidade **sério e de produção**: um runtime capaz de executar, de forma progressiva e confiável, **classes cada vez mais amplas de aplicativos Win32 reais** no Linux, sem máquina virtual e sem emular a CPU — com foco em uso diário, não apenas educacional.
 
-O objetivo estratégico é tornar o runtime útil para a maior variedade prática de
-aplicativos Windows de espaço de usuário dentro do alvo suportado, avançando por
-classes de uso e por um portfólio de aplicativos reais. Isso é uma meta de
-produto de longo prazo, não uma alegação de compatibilidade universal imediata:
-cada capacidade precisa ser implementada, testada e publicada antes de ser
-considerada suportada.
+O objetivo estratégico é tornar o runtime útil para o portfólio real `Aplicativos_Windows_Populares/` (`Roblox`, `WinRAR`, `HWiNFO64`, `7-Zip`, `putty`, `RTSSHooks`) avançando por classes de uso com `--report`/`--trace` e `exit code` reproduzíveis. Isso é uma meta de produto de longo prazo, não uma alegação de compatibilidade universal imediata: cada capacidade precisa ser implementada, testada e publicada antes de ser considerada suportada.
 
 O alvo inicial é deliberadamente restrito:
 
@@ -68,11 +63,11 @@ Linux / POSIX
 - Produzir rastros de execução que expliquem imports, chamadas e falhas.
 - Manter uma matriz de compatibilidade e testes automatizados para cada função implementada.
 
-### 3.2. Objetivos de aprendizado
+### 3.2. Objetivos de produto sério
 
-- Entender PE/COFF, mapeamento de memória, linking dinâmico e ABI.
-- Estudar as diferenças de modelo entre processos Windows e Linux.
-- Desenvolver software de baixo nível com testes, documentação e depuração de qualidade.
+- Entregar valor para o portfólio real: `Roblox`, `WinRAR`, `HWiNFO64`, `7-Zip`, `putty`, `RTSSHooks` com `compatibilidade: 100%` quando possível e `execução` reproduzível via `--trace` `docs/diagnostico.md`.
+- Garantir estabilidade: loader, ABI, memória, imports, TLS, unwind/SEH e diagnósticos com `exit code` `71/72` e `fault-address` antes de ampliar famílias de DLL.
+- Manter qualidade de produção: warnings rigorosos, `CTest` `sanitize`, `LSAN_OPTIONS`, `Xvfb` e matriz `docs/compatibilidade.md` atualizada a cada API.
 
 ### 3.3. Primeiro MVP
 

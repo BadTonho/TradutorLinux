@@ -2,9 +2,9 @@
 
 ## Missão do projeto
 
-O TradutorLinux é um runtime de compatibilidade educacional e funcional para executar, de forma progressiva, **classes cada vez mais amplas de aplicativos Win32** no Linux, sem máquina virtual e sem emular a CPU.
+O TradutorLinux é um runtime de compatibilidade **sério e de produção** para executar, de forma progressiva e confiável, **classes cada vez mais amplas de aplicativos Win32 reais** no Linux, sem máquina virtual e sem emular a CPU — com foco em uso diário, não apenas educacional.
 
-O alvo inicial é estrito: **executáveis PE32+ x86-64 em Linux x86-64**. A meta estratégica é tornar o runtime útil para uma variedade crescente de aplicativos Windows, começando por programas selecionados e avançando por classes de uso, sem prometer compatibilidade universal imediata.
+O alvo inicial é estrito: **executáveis PE32+ x86-64 em Linux x86-64**. A meta estratégica é tornar o runtime útil para o portfólio real `Aplicativos_Windows_Populares/` (`Roblox`, `WinRAR`, `HWiNFO64`, `7-Zip`, `putty`, `RTSSHooks`) avançando por classes de uso com `--report`/`--trace` e `exit code` reproduzíveis, sem prometer compatibilidade universal imediata.
 
 Antes de iniciar qualquer trabalho, leia `PROJETO.md`, `ROADMAP.md`, `docs/compatibilidade.md` e os contratos técnicos relevantes em `docs/`.
 
