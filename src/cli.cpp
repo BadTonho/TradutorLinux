@@ -1042,15 +1042,17 @@ ExitCode run_command(const CommandLine& command_line, std::ostream& stdout_strea
             return ExitCode::InternalError;
         }
         const prefix::EnvironmentPaths paths = prefix::get_environment_paths(entry_prefix);
+        const std::filesystem::path executable_parent = command_line.executable_path->parent_path();
         entry.working_directory =
-            prefix::is_path_within(*command_line.executable_path, paths.drive_c)
-                ? command_line.executable_path->parent_path().string()
+            !executable_parent.empty() && std::filesystem::is_directory(executable_parent)
+                ? executable_parent.string()
                 : paths.drive_c.string();
 
         if (!app_catalog.add_app(entry) || !app_catalog.save_to_file()) {
             stderr_stream << "erro: falha ao salvar aplicativo na biblioteca\n";
             return ExitCode::InternalError;
         }
+        (void)catalog::AppCatalog::create_desktop_entry(entry);
         stdout_stream << "Aplicativo '" << entry.name << "' cadastrado com sucesso [id: "
                       << entry.id << "].\n";
         return ExitCode::Success;
@@ -1181,8 +1183,17 @@ ExitCode run_command(const CommandLine& command_line, std::ostream& stdout_strea
             *effective_cmd.guest_working_directory, working_directory_error);
         const bool within_active_prefix = prefix::is_path_within(
             *effective_cmd.guest_working_directory, active_paths.drive_c);
+        const std::filesystem::path executable_parent =
+            effective_cmd.executable_path->parent_path();
+        const bool is_external_app_directory =
+            !executable_parent.empty() &&
+            std::filesystem::is_directory(executable_parent, working_directory_error) &&
+            prefix::is_path_within(*effective_cmd.executable_path,
+                                   *effective_cmd.guest_working_directory) &&
+            prefix::is_path_within(executable_parent, *effective_cmd.guest_working_directory) &&
+            !within_active_prefix;
         if (working_directory_error || !is_directory ||
-            (!within_active_prefix && !uses_legacy_shared_prefix)) {
+            (!within_active_prefix && !uses_legacy_shared_prefix && !is_external_app_directory)) {
             effective_cmd.guest_working_directory = active_paths.drive_c;
         }
     }
@@ -1565,6 +1576,7 @@ ExitCode run_command(const CommandLine& command_line, std::ostream& stdout_strea
             stderr_stream << "erro: instalação concluída, mas não foi possível salvar o catálogo\n";
             return ExitCode::InternalError;
         }
+        (void)catalog::AppCatalog::create_desktop_entry(entry);
         write_install_trace(effective_cmd.trace_enabled, stderr_stream,
                             diagnostics::TraceLevel::Info, "registered",
                             {{"prefix", prefix_dir.string()}, {"app-id", entry.id},

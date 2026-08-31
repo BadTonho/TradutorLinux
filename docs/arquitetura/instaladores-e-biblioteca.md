@@ -30,8 +30,9 @@ novo cadastro persistente usam, por padrão, um prefixo exclusivo em
 ```
 
 Entradas antigas cujo `prefix_path` ainda é o prefixo compartilhado preservam
-o `working_directory` externo já salvo. Entradas novas só aceitam diretório de
-trabalho dentro do seu `drive_c`.
+o `working_directory` externo já salvo. Entradas novas instaladas no prefixo
+usam o diretório do executável dentro do `drive_c`; cadastros de executáveis
+externos preservam o diretório original para localizar seus arquivos auxiliares.
 
 ### Resolução de Caminhos Windows
 - `resolve_windows_path("C:\\Program Files\\App\\app.exe")`: Resolve para `<prefix>/drive_c/Program Files/App/app.exe`.
@@ -43,6 +44,12 @@ trabalho dentro do seu `drive_c`.
   CRT, diretório atual, `TEMP`/`TMP`, `APPDATA`, `LOCALAPPDATA` e
   `USERPROFILE` usam esse contexto. Isso é isolamento funcional de dados, não
   uma sandbox: `Z:` ainda representa o sistema de arquivos do hospedeiro.
+
+Em execuções diretas e em aplicativos cadastrados fora do `drive_c`, o processo
+filho usa o diretório do executável como diretório de trabalho. Assim, recursos
+auxiliares relativos (`Lang`, DLLs, ícones e configurações) são procurados ao
+lado do programa. Caminhos `C:` permanecem confinados ao `drive_c`; tentativas
+com `..` que escapem do prefixo são rejeitadas.
 
 ---
 
@@ -127,3 +134,9 @@ A execução usa `QProcess`, procura o binário `tradutorlinux` no mesmo diretó
 do launcher e separa stdout de stderr no console visual. O contrato completo,
 os limites e os testes estão em
 [`guia-ui-qt6.md`](guia-ui-qt6.md).
+
+## 5. Pacote Debian
+
+O CMake instala `tradutorlinux` e `tradutorlinux_gui` em `/usr/bin`, o launcher
+`tradutorlinux.desktop` em `/usr/share/applications` e o ícone SVG no tema
+Hicolor. O pacote é gerado por CPack com o gerador `DEB`.

@@ -2,6 +2,8 @@ cmake_minimum_required(VERSION 3.28)
 
 project(TradutorLinux VERSION 0.0.0 LANGUAGES C CXX ASM)
 
+include(GNUInstallDirs)
+
 include(CTest)
 include(FetchContent)
 
@@ -27,6 +29,26 @@ include(Sanitizers)
 
 add_subdirectory(src)
 
+install(TARGETS tradutorlinux tradutorlinux_gui
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+)
+install(FILES resources/tradutorlinux.desktop
+    DESTINATION ${CMAKE_INSTALL_DATADIR}/applications
+)
+install(FILES resources/tradutorlinux.svg
+    DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/scalable/apps
+)
+
+set(CPACK_GENERATOR "DEB")
+set(CPACK_PACKAGE_NAME "tradutorlinux")
+set(CPACK_PACKAGE_VENDOR "TradutorLinux")
+set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "Runtime de compatibilidade Win32 para Linux")
+set(CPACK_PACKAGE_VERSION ${PROJECT_VERSION})
+set(CPACK_DEBIAN_PACKAGE_MAINTAINER "TradutorLinux")
+set(CPACK_DEBIAN_FILE_NAME DEB-DEFAULT)
+set(CPACK_DEBIAN_PACKAGE_DEPENDS "libc6, libx11-6, libqt6widgets6")
+set(CPACK_PACKAGING_INSTALL_PREFIX "/usr")
+
 if(BUILD_TESTING)
     set(INSTALL_GTEST OFF CACHE BOOL "Disable installation of GoogleTest" FORCE)
     set(BUILD_GMOCK OFF CACHE BOOL "Do not build GoogleMock" FORCE)
@@ -41,3 +63,5 @@ if(BUILD_TESTING)
 
     add_subdirectory(tests)
 endif()
+
+include(CPack)

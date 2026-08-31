@@ -1521,6 +1521,18 @@ TEST(Win32FileMetadataTest, PrefixesKeepIdenticalLogicalPathsIsolated) {
     std::filesystem::remove_all(root);
 }
 
+TEST(PrefixTest, RejectsPathsThatEscapeDriveC) {
+    const std::filesystem::path root = std::filesystem::temp_directory_path() /
+        ("tl-prefix-traversal-" + std::to_string(static_cast<unsigned long long>(::getpid())));
+    ASSERT_TRUE(prefix::initialize_prefix(root));
+
+    EXPECT_TRUE(prefix::resolve_windows_path("C:\\inside\\file.txt", root).empty() == false);
+    EXPECT_TRUE(prefix::resolve_windows_path("C:\\..\\outside.txt", root).empty());
+    EXPECT_TRUE(prefix::resolve_windows_path("C:\\Program Files\\..\\..\\outside.txt", root).empty());
+
+    std::filesystem::remove_all(root);
+}
+
 TEST(Win32DirTest, GetCurrentDirectoryAReturnsNonEmpty) {
     char buf[4096]{};
     const std::uint32_t needed = tl_GetCurrentDirectoryA(sizeof(buf), buf);

@@ -375,9 +375,21 @@ bool AppCatalog::create_desktop_entry(const AppEntry& app, const std::filesystem
 
     out << "[Desktop Entry]\n";
     out << "Type=Application\n";
-    out << "Name=" << app.name << "\n";
+    auto desktop_escape = [](std::string value) {
+        std::string escaped;
+        escaped.reserve(value.size());
+        for (const char ch : value) {
+            if (ch == '\\' || ch == '"' || ch == '`' || ch == '$') {
+                escaped.push_back('\\');
+            }
+            escaped.push_back(ch);
+        }
+        return escaped;
+    };
+    out << "Name=" << desktop_escape(app.name) << "\n";
     out << "Comment=Executado via TradutorLinux\n";
-    out << "Exec=tradutorlinux app run " << app.id << "\n";
+    out << "TryExec=/usr/bin/tradutorlinux\n";
+    out << "Exec=/usr/bin/tradutorlinux app run " << desktop_escape(app.id) << "\n";
     if (!app.icon_path.empty()) {
         out << "Icon=" << app.icon_path << "\n";
     }

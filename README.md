@@ -21,6 +21,10 @@ A tela principal pode ser aberta com:
 ./build/debug/src/tradutorlinux_gui
 ```
 
+O pacote Debian pode ser gerado com `cpack --config build/debug/CPackConfig.cmake -G DEB`
+e instalado com `sudo apt install ./tradutorlinux_0.0.0_amd64.deb`. Depois da instalação,
+o launcher aparece no menu de aplicativos como **TradutorLinux**.
+
 Ela permite informar um `.exe`, analisar imports, executar o convidado e
 acompanhar o diagnóstico diretamente na janela.
 

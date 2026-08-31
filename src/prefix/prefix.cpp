@@ -104,6 +104,27 @@ std::filesystem::path resolve_windows_path(
 
     std::string_view view = normalized;
 
+    const auto confined_drive_path = [&prefix_root](const std::filesystem::path& candidate) {
+        const auto drive = get_environment_paths(prefix_root).drive_c;
+        std::error_code ec;
+        const auto canonical_candidate = std::filesystem::weakly_canonical(candidate, ec);
+        if (ec) {
+            return std::filesystem::path{};
+        }
+        const auto canonical_drive = std::filesystem::weakly_canonical(drive, ec);
+        if (ec) {
+            return std::filesystem::path{};
+        }
+        auto candidate_it = canonical_candidate.begin();
+        for (auto drive_it = canonical_drive.begin(); drive_it != canonical_drive.end();
+             ++drive_it, ++candidate_it) {
+            if (candidate_it == canonical_candidate.end() || *candidate_it != *drive_it) {
+                return std::filesystem::path{};
+            }
+        }
+        return canonical_candidate;
+    };
+
     // Tratar Named Pipes (ex: "\\.\pipe\NomeDoPipe")
     if (view.starts_with("//./pipe/") || view.starts_with("/./pipe/")) {
         const auto pos = view.rfind('/');
@@ -127,12 +148,15 @@ std::filesystem::path resolve_windows_path(
         const auto dosdevice_target = prefix_root / "dosdevices" / drive_link_name;
         std::error_code ec;
         if (std::filesystem::exists(dosdevice_target, ec) || std::filesystem::is_symlink(dosdevice_target, ec)) {
+            if (drive_letter == 'c') {
+                return confined_drive_path(dosdevice_target / std::filesystem::path(view));
+            }
             return dosdevice_target / std::filesystem::path(view);
         }
 
         // Fallback para C:\ caso dosdevices não esteja configurado
         if (drive_letter == 'c') {
-            return prefix_root / "drive_c" / std::filesystem::path(view);
+            return confined_drive_path(prefix_root / "drive_c" / std::filesystem::path(view));
         }
         if (drive_letter == 'z') {
             return std::filesystem::path("/") / std::filesystem::path(view);
@@ -144,7 +168,7 @@ std::filesystem::path resolve_windows_path(
         while (!view.empty() && view.front() == '/') {
             view.remove_prefix(1);
         }
-        return prefix_root / "drive_c" / std::filesystem::path(view);
+        return confined_drive_path(prefix_root / "drive_c" / std::filesystem::path(view));
     }
 
     // Caso relativo simples: se existir no diretório de trabalho atual (CWD), resolve relativo ao CWD;

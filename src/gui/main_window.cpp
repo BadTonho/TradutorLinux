@@ -330,13 +330,21 @@ void MainWindow::on_register_clicked() {
             append_message(QStringLiteral("Não foi possível criar o prefixo do aplicativo."));
             return;
         }
-        entry.working_directory = prefix::get_environment_paths(entry.prefix_path).drive_c.string();
+        const std::filesystem::path executable_parent = executable.parent_path();
+        entry.working_directory =
+            !executable_parent.empty() && std::filesystem::is_directory(executable_parent)
+                ? executable_parent.string()
+                : prefix::get_environment_paths(entry.prefix_path).drive_c.string();
     }
 
     if (!catalog_.add_app(entry) || !catalog_.save_to_file()) {
         set_status(QStringLiteral("Erro ao cadastrar aplicativo"));
         append_message(QStringLiteral("Não foi possível salvar o aplicativo na biblioteca."));
         return;
+    }
+
+    if (!catalog::AppCatalog::create_desktop_entry(entry)) {
+        append_message(QStringLiteral("Aviso: não foi possível criar o atalho do aplicativo."));
     }
 
     selected_app_id_ = qstring_from_std_string(entry.id);
