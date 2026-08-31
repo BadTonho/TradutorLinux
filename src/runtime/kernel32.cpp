@@ -2237,19 +2237,18 @@ TL_MSABI void* tl_CreateThread(const void* thread_attributes, const std::uintptr
         g_current_thread_id = slot_ptr->thread_id;
         set_guest_gs_base(teb);
         initialize_thread_tls(static_cast<runtime::GuestTeb*>(teb));
-        // TLS genérico para Worker (Roblox 0x430) — igual ao main winapi.cpp:751
+        // TLS genérico para Worker: aloca slot 0x430 se zero (evita SIGSEGV 0x68)
         if (g_guest_image_base != nullptr) {
             if (auto* ct = static_cast<runtime::GuestTeb*>(teb); ct != nullptr) {
                 constexpr std::size_t kSlot430 = 0x430U;
                 if (kSlot430 + 8 <= ct->tls_module0_data.size()) {
                     auto* slot = reinterpret_cast<std::uint64_t*>(ct->tls_module0_data.data() + kSlot430);
                     if (*slot == 0U) {
-                        if (g_guest_image_size == 0x1453000U) {
-                            const std::uintptr_t base = reinterpret_cast<std::uintptr_t>(g_guest_image_base);
-                            const std::uintptr_t cand = base + 0xc2c800U;
-                            if (cand >= base && cand + 0x1000U < base + g_guest_image_size) *slot = cand;
-                            else { void* b=std::calloc(1,0x1000); if(b){*slot=reinterpret_cast<std::uint64_t>(b); (void)register_local_free_block(b);} }
-                        } else { void* b=std::calloc(1,0x1000); if(b){*slot=reinterpret_cast<std::uint64_t>(b); (void)register_local_free_block(b);} }
+                        void* b = std::calloc(1, 0x1000);
+                        if (b != nullptr) {
+                            *slot = reinterpret_cast<std::uint64_t>(b);
+                            (void)register_local_free_block(b);
+                        }
                     }
                 }
                 if (g_guest_image_size == 0x1453000U) {

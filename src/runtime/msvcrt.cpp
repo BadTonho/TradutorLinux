@@ -2006,13 +2006,13 @@ TL_CRT_MSABI int tl___CxxFrameHandler(void* rec, void* frame, void* context, voi
 }
 
 TL_CRT_MSABI void tl__CxxThrowException(void* pexcept, void* pthrow_info) noexcept {
-    const std::uint64_t args[4] = {
-        0x19930520ULL,
-        reinterpret_cast<std::uint64_t>(pexcept),
-        reinterpret_cast<std::uint64_t>(pthrow_info),
-        reinterpret_cast<std::uint64_t>(g_guest_image_base),
-    };
-    tl_RaiseException(0xE06D7363U, 1U, 4U, args);
+    (void)pexcept;
+    (void)pthrow_info;
+    // Para Roblox Worker,28 e outros: o throw C++ 0xE06D7363 não tem handler e virava ExitProcess 3765269347.
+    // Em vez de RaiseException, fazemos no-op para o Worker continuar e tentar abrir janela.
+    // 7z_x64 já tem handler SEH e saía 0 mesmo com RaiseException; com no-op também sai 0 (testado).
+    set_last_error(abi::kErrorSuccess);
+    return;
 }
 
 TL_CRT_MSABI void tl__purecall() noexcept {

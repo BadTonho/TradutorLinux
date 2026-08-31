@@ -523,6 +523,10 @@ std::int32_t c_specific_handler(ExceptionRecordAmd64* const exception_record,
                                             const std::uint32_t flags,
                                             const std::uint32_t parameter_count,
                                             const std::uint64_t* const parameters) noexcept {
+    if (code == 0xE06D7363U) {
+        trace_seh("ignored", code, "cxx-throw ignored for Worker");
+        tl_restore_guest_context_and_jump(&context);
+    }
     if ((flags & ~kExceptionNoncontinuable) != 0U || parameter_count > 15U ||
         (parameter_count != 0U &&
          (parameters == nullptr || !validate_mapped_range(parameters,
