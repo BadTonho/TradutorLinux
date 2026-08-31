@@ -2261,7 +2261,7 @@ TL_MSABI void* tl_CreateThread(const void* thread_attributes, const std::uintptr
                     const std::uintptr_t fp = base + 0xbf93a0U;
                     if (fp + 8U < base + g_guest_image_size) {
                         auto* s = reinterpret_cast<std::uint64_t*>(fp);
-                        *s = 0U;
+                        *s = reinterpret_cast<std::uint64_t>(reinterpret_cast<void*>(&dummy_worker_check));
                     }
                 }
             }
