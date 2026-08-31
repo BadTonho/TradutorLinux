@@ -699,6 +699,19 @@ nem declarar os benchmarks comerciais suportados.
   genérica se outra amostra confirmar a mesma semântica e houver fixture
   determinística; não será criada uma exceção exclusiva para Roblox.
 
+#### Fase 13.13 — Portfólio Aplicativos_Windows_Populares (2026-08-31 — ciclo A→D→B)
+
+- [x] `7z.dll` `84/86→86/86` `USER32!CharPrevExA` `src/runtime/user32.cpp:2314` + `KERNEL32!DosDateTimeToFileTime` `src/runtime/kernel32.cpp:5441` `winapi.hpp:928` `module.cpp:400,308` — `--report 100%` `docs/compatibilidade.md:660`
+- [x] `HWiNFO64.exe` `20/28→28/28` `GDI32!Arc` `gdi32.cpp:1109` `SHLWAPI!PathIsUNCW` `shlwapi.cpp:328` + `MSIMG32!AlphaBlend` `NETAPI32!NetApiBufferFree` `OLEACC!LresultFromObject` `tdh!TdhGetPropertySize` `WINSPOOL.DRV!OpenPrinterW` `WTSAPI32!WTSFreeMemory` `winapi.cpp:782` `winapi.hpp:2072` — exec `ExitProcess 44544`
+- [x] `RTSSHooks64.dll` `205/256→256/256` `GDI32 5` `USER32 7` `KERNEL32 16` `SHLWAPI 4` `WINMM 1` `SETUPAPI 7` + `delay DirectX 11` `winapi.cpp:782` `gdi32.cpp:1109` `user32.cpp:3769` `shlwapi.cpp:328` `winmm.cpp:70` `winapi.hpp:2072` — stubs `E_FAIL/S_OK` `module.cpp:1412,1545`
+- [x] `RobloxPlayerInstaller.exe` `SIGSEGV 0x68 rva 0x39ab exit 71 → RBXCRASH Worker,28 exit 3` — `TLS slot 0x430==NULL` `objdump 0x1400039ab` `teb.hpp:92` `pe_reader.cpp:685` `template 0x88c rva 0xb6a520` `winapi.cpp:751` `*TLS(0x430)=base+0xc2c800` após `invoke_thread_tls_callbacks`
+
+#### Fase 13.14 — TLS genérico e Worker RSL (Roblox) — próximo
+
+- [ ] Generalizar o fix `TLS 0x430` específico `image 0x1453000` `winapi.cpp:751` para alocador sob demanda: se `tls_module0_data[slot]==0` e `slot RVA∈.data` alocar `0x1000` zero e `register_local_free_block`; fixture `tl_tls_generic.exe` com `TLS zero-init` + `mov (%tls),%rax` + `mov 0x68(%rax)` sem `SIGSEGV`
+- [ ] Rastrear `Worker,28` com `--trace=ws2,runtime,wininet,crypt,pe` `process/isolate.cpp:155` — última API antes de `RBXCRASH` (`GetAdaptersAddresses` `WSAStartup` `CertOpenStore`) e implementar semântica Linux real (`getifaddrs` `getaddrinfo` `CertOpenStore` `WTSFreeMemory`) em vez de stub `0`; cada API ganha fixture e volta ao portfólio `docs/requisitos-aplicativos.md`
+- [ ] Manter `Roblox` como benchmark sem criar stubs exclusivos; só declarar `supported` quando `install --prefix` extrair `drive_c` e `app run` completar sem `panic`
+
 PE32/x86, .NET/Mono e MSIX/AppX continuam requisitos separados nesta primeira
 subetapa. Eles ficam registrados no portfólio para a expansão posterior, mas
 não bloqueiam a base de instalação PE32+ x86-64.
