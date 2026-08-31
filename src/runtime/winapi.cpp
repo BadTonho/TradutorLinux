@@ -779,4 +779,54 @@ GuestExecutionResult execute_guest_entry(const std::uintptr_t entry_point,
     return result;
 }
 
+extern "C" {
+
+TL_MSABI std::uint32_t tl_NetApiBufferFree(void* const buffer) noexcept {
+    (void)buffer;
+    if (buffer != nullptr) {
+        std::free(buffer);
+    }
+    set_last_error(abi::kErrorSuccess);
+    return 0; // NERR_Success
+}
+
+TL_MSABI std::intptr_t tl_LresultFromObject(const void* const riid, const std::uintptr_t w_param, void* const unk) noexcept {
+    (void)riid;
+    (void)w_param;
+    (void)unk;
+    set_last_error(abi::kErrorSuccess);
+    return 0;
+}
+
+TL_MSABI std::uint32_t tl_TdhGetPropertySize(void* const event_record, const std::uint32_t tdh_context_count, void* const tdh_context, const std::uint32_t property_data_count, void* const property_data, std::uint32_t* const property_size) noexcept {
+    (void)event_record;
+    (void)tdh_context_count;
+    (void)tdh_context;
+    (void)property_data_count;
+    (void)property_data;
+    if (property_size != nullptr && mapped_guest_range(property_size, sizeof(*property_size), true)) {
+        *property_size = 0;
+    }
+    set_last_error(abi::kErrorSuccess);
+    return 0; // ERROR_SUCCESS
+}
+
+TL_MSABI int tl_OpenPrinterW(const std::uint16_t* const printer_name, void** const printer_handle, void* const defaults) noexcept {
+    (void)printer_name;
+    (void)defaults;
+    if (printer_handle != nullptr && mapped_guest_range(printer_handle, sizeof(*printer_handle), true)) {
+        *printer_handle = reinterpret_cast<void*>(0x50524E54ULL); // 'PRNT'
+    }
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI void tl_WTSFreeMemory(void* const memory) noexcept {
+    if (memory != nullptr) {
+        std::free(memory);
+    }
+}
+
+}  // extern "C"
+
 }  // namespace tradutorlinux

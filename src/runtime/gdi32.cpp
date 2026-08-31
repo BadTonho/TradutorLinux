@@ -1118,6 +1118,20 @@ TL_MSABI int tl_RoundRect(void* const hdc, const int left, const int top, const 
     return 1;
 }
 
+TL_MSABI int tl_Arc(void* const hdc, const int left, const int top, const int right, const int bottom, const int x_start, const int y_start, const int x_end, const int y_end) noexcept {
+    (void)hdc;
+    (void)left;
+    (void)top;
+    (void)right;
+    (void)bottom;
+    (void)x_start;
+    (void)y_start;
+    (void)x_end;
+    (void)y_end;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
 }  // extern "C"
 
 }  // namespace tradutorlinux

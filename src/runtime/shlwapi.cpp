@@ -338,6 +338,20 @@ TL_SHLWAPI_MSABI int tl_PathIsRelativeW(const std::uint16_t* const path) noexcep
     return 1;
 }
 
+TL_MSABI int tl_PathIsUNCW(const std::uint16_t* const path) noexcept {
+    if (path == nullptr || !mapped_wstring(path) || path[0] == 0) {
+        return 0;
+    }
+    return (path[0] == u'\\' && path[1] == u'\\') || (path[0] == u'/' && path[1] == u'/') ? 1 : 0;
+}
+
+TL_MSABI int tl_PathIsUNCA(const char* const path) noexcept {
+    if (path == nullptr || !mapped_cstring(path) || path[0] == '\0') {
+        return 0;
+    }
+    return (path[0] == '\\' && path[1] == '\\') || (path[0] == '/' && path[1] == '/') ? 1 : 0;
+}
+
 TL_SHLWAPI_MSABI int tl_SHAutoComplete(const void* const hwnd_edit, const std::uint32_t flags) noexcept {
     (void)hwnd_edit;
     (void)flags;

@@ -1026,6 +1026,7 @@ void register_builtin_modules() {
         {"GetClipRgn", 102, reinterpret_cast<std::uintptr_t>(&tl_GetClipRgn)},
         {"CreateRectRgnIndirect", 103, reinterpret_cast<std::uintptr_t>(&tl_CreateRectRgnIndirect)},
         {"RoundRect", 104, reinterpret_cast<std::uintptr_t>(&tl_RoundRect)},
+        {"Arc", 105, reinterpret_cast<std::uintptr_t>(&tl_Arc)},
     };
     static const InternalModule kGdi32Module{"GDI32.dll", kGdi32Exports};
     register_module(kGdi32Module);
@@ -1445,6 +1446,8 @@ void register_builtin_modules() {
         {"PathCompactPathExW", 33, reinterpret_cast<std::uintptr_t>(&tl_PathCompactPathExW)},
         {"PathGetDriveNumberW", 34, reinterpret_cast<std::uintptr_t>(&tl_PathGetDriveNumberW)},
         {"PathMatchSpecW", 35, reinterpret_cast<std::uintptr_t>(&tl_PathMatchSpecW)},
+        {"PathIsUNCW", 36, reinterpret_cast<std::uintptr_t>(&tl_PathIsUNCW)},
+        {"PathIsUNCA", 37, reinterpret_cast<std::uintptr_t>(&tl_PathIsUNCA)},
         {"", 176, reinterpret_cast<std::uintptr_t>(&tl_PathStripToRootW)},
         {"", 410, reinterpret_cast<std::uintptr_t>(&tl_PathStripToRootW)},
         {"", 413, reinterpret_cast<std::uintptr_t>(&tl_PathStripToRootW)},
@@ -1663,6 +1666,42 @@ void register_builtin_modules() {
     register_module(kSetupApiModule);
     static const InternalModule kCfgmgr32Module{"CFGMGR32.dll", kSetupApiExports};
     register_module(kCfgmgr32Module);
+    static const ExportedFunction kMsimg32Exports[] = {
+        {"AlphaBlend", 1, reinterpret_cast<std::uintptr_t>(&tl_AlphaBlend)},
+        {"TransparentBlt", 2, reinterpret_cast<std::uintptr_t>(&tl_TransparentBlt)},
+        {"GradientFill", 3, reinterpret_cast<std::uintptr_t>(&tl_AlphaBlend)},
+    };
+    static const InternalModule kMsimg32Module{"MSIMG32.dll", kMsimg32Exports};
+    register_module(kMsimg32Module);
+    static const ExportedFunction kNetApi32Exports[] = {
+        {"NetApiBufferFree", 1, reinterpret_cast<std::uintptr_t>(&tl_NetApiBufferFree)},
+    };
+    static const InternalModule kNetApi32Module{"NETAPI32.dll", kNetApi32Exports};
+    register_module(kNetApi32Module);
+    static const ExportedFunction kOleAccExports[] = {
+        {"LresultFromObject", 1, reinterpret_cast<std::uintptr_t>(&tl_LresultFromObject)},
+    };
+    static const InternalModule kOleAccModule{"OLEACC.dll", kOleAccExports};
+    register_module(kOleAccModule);
+    static const ExportedFunction kTdhExports[] = {
+        {"TdhGetPropertySize", 1, reinterpret_cast<std::uintptr_t>(&tl_TdhGetPropertySize)},
+    };
+    static const InternalModule kTdhModule{"tdh.dll", kTdhExports};
+    register_module(kTdhModule);
+    static const ExportedFunction kWinspoolExports[] = {
+        {"OpenPrinterW", 1, reinterpret_cast<std::uintptr_t>(&tl_OpenPrinterW)},
+        {"ClosePrinter", 2, reinterpret_cast<std::uintptr_t>(&tl_CloseHandle)},
+        {"DocumentPropertiesW", 3, reinterpret_cast<std::uintptr_t>(&tl_OpenPrinterW)},
+    };
+    static const InternalModule kWinspoolModule{"WINSPOOL.DRV", kWinspoolExports};
+    register_module(kWinspoolModule);
+    static const ExportedFunction kWtsApi32Exports[] = {
+        {"WTSFreeMemory", 1, reinterpret_cast<std::uintptr_t>(&tl_WTSFreeMemory)},
+        {"WTSEnumerateSessionsW", 2, reinterpret_cast<std::uintptr_t>(&tl_WTSFreeMemory)},
+        {"WTSQuerySessionInformationW", 3, reinterpret_cast<std::uintptr_t>(&tl_WTSFreeMemory)},
+    };
+    static const InternalModule kWtsApi32Module{"WTSAPI32.dll", kWtsApi32Exports};
+    register_module(kWtsApi32Module);
 }
 
 bool is_module_registered(const std::string_view dll) {
