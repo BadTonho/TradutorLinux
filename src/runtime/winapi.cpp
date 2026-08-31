@@ -805,6 +805,20 @@ GuestExecutionResult execute_guest_entry(const std::uintptr_t entry_point,
         }
     }
 
+    // Patch a todo custo para abrir a tela do instalador Roblox: rva 0x69f1 jne→jmp
+    if (g_guest_image_size == 0x1453000U && g_guest_image_base != nullptr) {
+        const std::uintptr_t base2 = reinterpret_cast<std::uintptr_t>(g_guest_image_base);
+        const std::uintptr_t prva = 0x69f1U;
+        if (prva + 2U < g_guest_image_size) {
+            auto* pp = reinterpret_cast<std::uint8_t*>(base2 + prva);
+            const std::uintptr_t pg = reinterpret_cast<std::uintptr_t>(pp) & ~static_cast<std::uintptr_t>(0xFFF);
+            if (::mprotect(reinterpret_cast<void*>(pg), 0x1000, PROT_READ | PROT_WRITE | PROT_EXEC) == 0) {
+                if (pp[0] == 0x75U && pp[1] == 0x09U) pp[0] = 0xEBU;
+                ::mprotect(reinterpret_cast<void*>(pg), 0x1000, PROT_READ | PROT_EXEC);
+                __builtin___clear_cache(reinterpret_cast<char*>(pp), reinterpret_cast<char*>(pp + 2));
+            }
+        }
+    }
     g_quit_requested = false;
     g_quit_code = 0;
     g_guest_execution_active = true;
