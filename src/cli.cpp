@@ -1461,7 +1461,7 @@ ExitCode run_command(const CommandLine& command_line, std::ostream& stdout_strea
 
     std::vector<std::string> guest_argv;
     guest_argv.reserve(1 + effective_cmd.guest_arguments.size());
-    guest_argv.push_back(effective_cmd.executable_path->string());
+    guest_argv.push_back(prefix::to_windows_path(*effective_cmd.executable_path, prefix_dir));
     guest_argv.insert(guest_argv.end(), effective_cmd.guest_arguments.begin(),
                       effective_cmd.guest_arguments.end());
     msvcrt_set_guest_command_line(std::move(guest_argv));

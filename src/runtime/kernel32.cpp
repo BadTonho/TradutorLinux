@@ -528,7 +528,8 @@ bool read_guest_file_for_process(const char* path, std::vector<std::byte>& bytes
 
     loader::GuestProcess& process = prepared.process;
     set_guest_module_path(path.c_str());
-    msvcrt_set_guest_command_line(std::vector<std::string>{path});
+    msvcrt_set_guest_command_line(std::vector<std::string>{
+        prefix::to_windows_path(std::filesystem::path(path), guest_prefix_root())});
     set_guest_image_view(process.image.memory, process.image.size,
                          parsed.info.resource_directory_rva,
                          parsed.info.resource_directory_size);
