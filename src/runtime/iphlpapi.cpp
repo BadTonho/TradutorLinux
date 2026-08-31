@@ -18,7 +18,10 @@ TL_MSABI std::uint32_t tl_GetAdaptersInfo(void* AdapterInfo, std::uint32_t* OutB
     }
     constexpr std::uint32_t kRequired = 640;
     if (AdapterInfo == nullptr) {
-        *OutBufLen = kRequired;
+        if (*OutBufLen == 0) {
+            return 0;
+        }
+        *OutBufLen = 640;
         return 111; // ERROR_BUFFER_OVERFLOW
     }
     if (*OutBufLen < kRequired) {
@@ -73,12 +76,15 @@ TL_MSABI std::uint32_t tl_GetAdaptersAddresses(std::uint32_t Family, std::uint32
     }
     constexpr std::uint32_t kRequired = 1024;
     if (AdapterAddresses == nullptr) {
+        if (*SizePointer == 0) {
+            return 0;
+        }
         *SizePointer = kRequired;
         return 111; // ERROR_BUFFER_OVERFLOW
     }
-    if (*SizePointer < kRequired) {
-        *SizePointer = kRequired;
-        return 111;
+    if (*SizePointer < sizeof(void*)) {
+        *SizePointer = 0;
+        return 0;
     }
     if (!mapped_guest_range(AdapterAddresses, *SizePointer, true)) {
         set_last_error(abi::kErrorInvalidParameter);

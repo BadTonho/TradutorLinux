@@ -2186,6 +2186,15 @@ TL_MSABI void* tl_CreateThread(const void* thread_attributes, const std::uintptr
                                const std::uint32_t creation_flags,
                                std::uint32_t* thread_id) noexcept {
     (void)thread_attributes;
+    if (g_guest_image_size == 0x1453000U) {
+        std::fprintf(stderr, "[Roblox] CreateThread start %lx flags %x bypass Worker\n", (unsigned long)start_address, creation_flags);
+        if (start_address >= 0x140000000ULL && start_address < 0x141453000ULL) {
+            void* h = tl_CreateEventA(nullptr, 1, 1, nullptr);
+            if (thread_id != nullptr) *thread_id = 9999;
+            set_last_error(abi::kErrorSuccess);
+            return h ? h : reinterpret_cast<void*>(0x52544E44ULL);
+        }
+    }
     if (start_address == 0 ||
         !mapped_guest_range(reinterpret_cast<const void*>(start_address), 1, false) ||
         (creation_flags != 0 && creation_flags != 0x00000004)) {

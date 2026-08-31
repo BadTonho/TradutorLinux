@@ -1155,8 +1155,9 @@ ExitCode run_command(const CommandLine& command_line, std::ostream& stdout_strea
     const std::filesystem::path legacy_prefix = prefix::default_prefix_root();
     const bool uses_legacy_shared_prefix =
         effective_cmd.mode == CommandMode::AppRun &&
-        prefix::is_path_within(prefix_dir, legacy_prefix) &&
-        prefix::is_path_within(legacy_prefix, prefix_dir);
+        (prefix_dir == legacy_prefix ||
+         prefix::is_path_within(prefix_dir, legacy_prefix) ||
+         prefix::is_path_within(*effective_cmd.guest_working_directory, prefix_dir));
     if (!effective_cmd.guest_working_directory.has_value()) {
         if (effective_cmd.mode == CommandMode::DirectRun) {
             std::filesystem::path parent = effective_cmd.executable_path->parent_path();
@@ -1272,6 +1273,20 @@ ExitCode run_command(const CommandLine& command_line, std::ostream& stdout_strea
             const std::string extract_cmd = "7z x -y -o\"" + target_prog_dir.string() + "\" \"" +
                                             effective_cmd.executable_path->string() + "\" >/dev/null 2>&1";
             if (::system(extract_cmd.c_str()) == 0) {
+                // Instaladores NSIS descompactados trazem langs.model.xml e stylers.model.xml.
+                // Na primeira execução eles viram langs.xml e stylers.xml.
+                for (const auto& entry_it : std::filesystem::recursive_directory_iterator(target_prog_dir, ec)) {
+                    if (entry_it.is_regular_file()) {
+                        const auto p = entry_it.path();
+                        if (p.filename() == "langs.model.xml") {
+                            const auto dst = p.parent_path() / "langs.xml";
+                            if (!std::filesystem::exists(dst, ec)) std::filesystem::copy_file(p, dst, ec);
+                        } else if (p.filename() == "stylers.model.xml") {
+                            const auto dst = p.parent_path() / "stylers.xml";
+                            if (!std::filesystem::exists(dst, ec)) std::filesystem::copy_file(p, dst, ec);
+                        }
+                    }
+                }
                 const prefix::EnvironmentPaths inst_paths = prefix::get_environment_paths(prefix_dir);
                 const ExecutableSnapshot after = snapshot_executables(inst_paths.drive_c);
                 const std::vector<std::filesystem::path> candidates = changed_executables(
