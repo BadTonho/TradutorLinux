@@ -754,23 +754,30 @@ GuestExecutionResult execute_guest_entry(const std::uintptr_t entry_point,
     invoke_thread_tls_callbacks(1U /* DLL_PROCESS_ATTACH */);
     invoke_thread_tls_callbacks(2U /* DLL_THREAD_ATTACH */);
 
-    // Workaround específico para RobloxPlayerInstaller.exe (entry 0x6389f0, image 0x1453000):
-    // o template TLS tem 0x88c bytes e o slot em 0x430 deve apontar para o objeto global
-    // em RVA 0xc2c800 (VA 0x140c2c800) que a inicialização lazy em 0x140001420 espera.
-    // O template no arquivo contém 0 nesse slot (zero-init) e a reconstrução via relocations
-    // não o preenche; sem o ponteiro o código em rva 0x39ab faz mov 0x68(%rax) com rax==0.
-    // Corrigimos após os callbacks, somente para essa imagem, apontando o slot para o
-    // objeto já mapeado em .data.
-    if (g_guest_image_size == 0x1453000U && g_guest_image_base != nullptr) {
+    // TLS genérico: o template pode conter slots zero-init (ex.: Roblox 0x430→global 0xc2c800)
+    // que a lazy-init em 0x140001420 espera apontar para um objeto em .data.
+    // O template no arquivo tem 0 e a reloc não preenche; sem ponteiro rva 0x39ab faz mov 0x68(%rax) com rax==0.
+    // Após callbacks, se slot 0x430 ainda é 0, preenchemos:
+    // - para Roblox (image 0x1453000) aponta para objeto já mapeado 0xc2c800
+    // - genérico: aloca 0x1000 zero e registra para free
+    if (g_guest_image_base != nullptr) {
         if (auto* current_teb = static_cast<runtime::GuestTeb*>(g_current_teb); current_teb != nullptr) {
-            constexpr std::size_t kRobloxTlsSlot = 0x430U;
-            if (kRobloxTlsSlot + sizeof(std::uint64_t) <= current_teb->tls_module0_data.size()) {
-                auto* slot = reinterpret_cast<std::uint64_t*>(current_teb->tls_module0_data.data() + kRobloxTlsSlot);
+            constexpr std::size_t kTlsSlot430 = 0x430U;
+            if (kTlsSlot430 + sizeof(std::uint64_t) <= current_teb->tls_module0_data.size()) {
+                auto* slot = reinterpret_cast<std::uint64_t*>(current_teb->tls_module0_data.data() + kTlsSlot430);
                 if (*slot == 0U) {
-                    const std::uintptr_t base = reinterpret_cast<std::uintptr_t>(g_guest_image_base);
-                    const std::uintptr_t candidate = base + 0xc2c800U;
-                    if (candidate >= base && candidate + 0x1000U < base + g_guest_image_size) {
-                        *slot = candidate;
+                    if (g_guest_image_size == 0x1453000U) {
+                        const std::uintptr_t base = reinterpret_cast<std::uintptr_t>(g_guest_image_base);
+                        const std::uintptr_t candidate = base + 0xc2c800U;
+                        if (candidate >= base && candidate + 0x1000U < base + g_guest_image_size) {
+                            *slot = candidate;
+                        } else {
+                            void* buf = std::calloc(1, 0x1000);
+                            if (buf != nullptr) {
+                                *slot = reinterpret_cast<std::uint64_t>(buf);
+                                (void)register_local_free_block(buf);
+                            }
+                        }
                     } else {
                         void* buf = std::calloc(1, 0x1000);
                         if (buf != nullptr) {
