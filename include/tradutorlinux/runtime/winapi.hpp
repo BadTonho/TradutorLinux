@@ -2134,6 +2134,7 @@ TL_MSABI int tl_D3D10CreateDeviceAndSwapChain(void* adapter, std::uint32_t drive
 TL_MSABI int tl_D3DX10CompileFromMemory(const char* src, std::size_t len, const char* src_name, const void* defines, void* include, const char* entry, const char* profile, std::uint32_t flags1, std::uint32_t flags2, void* pump, void** shader, void** errors, void** hr) noexcept;
 TL_MSABI int tl_D3D11CreateDeviceAndSwapChain(void* adapter, std::uint32_t driver, void* sw, std::uint32_t flags, const void* feature_levels, std::uint32_t levels, std::uint32_t sdk, void* swap_desc, void** swap_chain, void** device, void* feature, void* ctx) noexcept;
 TL_MSABI int tl_D3DX11CompileFromMemory(const char* src, std::size_t len, const char* src_name, const void* defines, void* include, const char* entry, const char* target, std::uint32_t flags1, std::uint32_t flags2, void* pump, void** code, void** errors, void** hr) noexcept;
+TL_MSABI int dummy_worker_check() noexcept;
 TL_MSABI int tl_AdjustWindowRectEx(void* lpRect, std::uint32_t dwStyle, int bMenu, std::uint32_t dwExStyle) noexcept;
 TL_MSABI std::uint32_t tl_GetDlgItemTextA(void* hDlg, int nIDDlgItem, char* lpString, int cchMax) noexcept;
 TL_MSABI std::uint32_t tl_GetDlgItemTextW(void* hDlg, int nIDDlgItem, wchar_t* lpString, int cchMax) noexcept;

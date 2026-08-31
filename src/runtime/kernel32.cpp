@@ -18,6 +18,7 @@
 #include <cctype>
 #include <chrono>
 #include <condition_variable>
+#include <cstdlib>
 #include <malloc.h>
 #include <cstdint>
 #include <cstring>
@@ -2236,6 +2237,36 @@ TL_MSABI void* tl_CreateThread(const void* thread_attributes, const std::uintptr
         g_current_thread_id = slot_ptr->thread_id;
         set_guest_gs_base(teb);
         initialize_thread_tls(static_cast<runtime::GuestTeb*>(teb));
+        // TLS genérico para Worker (Roblox 0x430) — igual ao main winapi.cpp:751
+        if (g_guest_image_base != nullptr) {
+            if (auto* ct = static_cast<runtime::GuestTeb*>(teb); ct != nullptr) {
+                constexpr std::size_t kSlot430 = 0x430U;
+                if (kSlot430 + 8 <= ct->tls_module0_data.size()) {
+                    auto* slot = reinterpret_cast<std::uint64_t*>(ct->tls_module0_data.data() + kSlot430);
+                    if (*slot == 0U) {
+                        if (g_guest_image_size == 0x1453000U) {
+                            const std::uintptr_t base = reinterpret_cast<std::uintptr_t>(g_guest_image_base);
+                            const std::uintptr_t cand = base + 0xc2c800U;
+                            if (cand >= base && cand + 0x1000U < base + g_guest_image_size) *slot = cand;
+                            else { void* b=std::calloc(1,0x1000); if(b){*slot=reinterpret_cast<std::uint64_t>(b); (void)register_local_free_block(b);} }
+                        } else { void* b=std::calloc(1,0x1000); if(b){*slot=reinterpret_cast<std::uint64_t>(b); (void)register_local_free_block(b);} }
+                    }
+                }
+                if (g_guest_image_size == 0x1453000U) {
+                    const std::uintptr_t base = reinterpret_cast<std::uintptr_t>(g_guest_image_base);
+                    const std::uintptr_t global = base + 0xc2c800U;
+                    if (global + 0x799U < base + g_guest_image_size) {
+                        auto* flag = reinterpret_cast<std::uint8_t*>(global + 0x798U);
+                        *flag = 0U;
+                    }
+                    const std::uintptr_t fp = base + 0xbf93a0U;
+                    if (fp + 8U < base + g_guest_image_size) {
+                        auto* s = reinterpret_cast<std::uint64_t*>(fp);
+                        *s = 0U;
+                    }
+                }
+            }
+        }
         set_current_fls_thread_values(slot_ptr->fls_values);
         runtime::restore_guest_unwind_view(unwind_view);
         invoke_thread_tls_callbacks(2U /* DLL_THREAD_ATTACH */);

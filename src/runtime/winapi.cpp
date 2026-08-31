@@ -788,21 +788,19 @@ GuestExecutionResult execute_guest_entry(const std::uintptr_t entry_point,
                     }
                 }
             }
-            // Worker,28 check: global 0xc2c800+0x798 deve ser 1 e funcptr 0xbf93a0 !=0
+            // Worker,28 check: global 0xc2c800+0x798 e funcptr 0xbf93a0 ambos precisam ser 0 para não panicar
+            // (and %cl,%dl cmp $1 jne skip panic) — se ambos 1, panic. Deixamos 0.
             if (g_guest_image_size == 0x1453000U) {
                 const std::uintptr_t base = reinterpret_cast<std::uintptr_t>(g_guest_image_base);
                 const std::uintptr_t global = base + 0xc2c800U;
                 if (global + 0x799U < base + g_guest_image_size) {
                     auto* flag = reinterpret_cast<std::uint8_t*>(global + 0x798U);
-                    if (*flag == 0U) *flag = 1U;
+                    *flag = 0U;
                 }
                 const std::uintptr_t func_ptr_va = base + 0xbf93a0U;
                 if (func_ptr_va + 8U < base + g_guest_image_size) {
                     auto* func_slot = reinterpret_cast<std::uint64_t*>(func_ptr_va);
-                    if (*func_slot == 0U) {
-                        // dummy que retorna 1 (evita panic)
-                        *func_slot = reinterpret_cast<std::uint64_t>(reinterpret_cast<void*>(&dummy_worker_check));
-                    }
+                    *func_slot = 0U;
                 }
             }
         }
