@@ -1,8 +1,20 @@
-# GUI mínima com X11 (Fase 7)
+# GUI plain com X11 e Wayland
 
 Este é um protótipo isolado para avaliar GUI, não uma promessa de compatibilidade
-Win32 gráfica geral. A implementação usa `libX11` diretamente e mantém o
-runtime de console independente.
+Win32 gráfica geral. As janelas convidadas usam `libX11` ou `libwayland-client`
+diretamente, sem Qt, GTK, SDL ou Wine; o launcher Qt permanece separado como
+catálogo e interface de diagnóstico.
+
+## Seleção do backend plain
+
+`TL_GUI_BACKEND=auto` (padrão) tenta Wayland quando `WAYLAND_DISPLAY` está
+disponível e depois X11. `TL_GUI_BACKEND=wayland` e `TL_GUI_BACKEND=x11` tornam
+a exigência explícita. Falhas de conexão, globals ausentes e buffers inválidos
+são registradas em `stderr`, sem substituir silenciosamente o backend pedido.
+
+O dispatcher comum está em `src/gui/platform.cpp`; os backends ficam em
+`src/gui/x11.cpp` e `src/gui/wayland.cpp`. O Wayland usa `xdg-shell`, `wl_shm`
+e `xkbcommon`, com o protocolo gerado pelo CMake.
 
 ## Camada X11
 
@@ -165,7 +177,7 @@ A entrada de teclado no runtime é testada de ponta a ponta pelo cenário
 real do teclado também chega como `KeyPress` ao cliente, então digitar na janela
 funciona da mesma forma; não há teste automatizado com um WM real.
 
-Wayland nativo, recursos, ícones, menus, toolkits e a maioria do GDI (regiões,
+recursos, ícones, menus, toolkits e a maioria do GDI (regiões,
 pincéis, fontes, `BeginPaint` com atualização de região inválida, HDC de
 verdade) não fazem parte deste protótipo.
 

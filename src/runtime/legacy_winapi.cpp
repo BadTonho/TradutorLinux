@@ -1,7 +1,7 @@
 #include "tradutorlinux/runtime/winapi.hpp"
 #include "runtime_context.hpp"
 
-#include "tradutorlinux/gui/x11.hpp"
+#include "tradutorlinux/gui/platform.hpp"
 #include "tradutorlinux/prefix/prefix.hpp"
 #include "tradutorlinux/runtime/error_map.hpp"
 #include "tradutorlinux/runtime/ntdll.hpp"
@@ -1810,8 +1810,8 @@ TL_MSABI int tl_Rectangle(const void* dc, int left, int top, int right, int bott
         return 0;
     }
     if (right > left && bottom > top) {
-        gui::draw_rectangle(slot->native, left, top, right - left, bottom - top);
-        gui::flush_window(slot->native);
+        gui::platform::draw_rectangle(slot->native, left, top, right - left, bottom - top);
+        gui::platform::flush_window(slot->native);
     }
     const std::array<diagnostics::TraceField, 4> fields{
         diagnostics::TraceField{"symbol", "Rectangle"},

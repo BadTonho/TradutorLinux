@@ -46,7 +46,7 @@ set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "Runtime de compatibilidade Win32 para Lin
 set(CPACK_PACKAGE_VERSION ${PROJECT_VERSION})
 set(CPACK_DEBIAN_PACKAGE_MAINTAINER "TradutorLinux")
 set(CPACK_DEBIAN_FILE_NAME DEB-DEFAULT)
-set(CPACK_DEBIAN_PACKAGE_DEPENDS "libc6, libx11-6, libqt6widgets6")
+set(CPACK_DEBIAN_PACKAGE_DEPENDS "libc6, libx11-6, libwayland-client0, libxkbcommon0, libqt6widgets6")
 set(CPACK_PACKAGING_INSTALL_PREFIX "/usr")
 
 if(BUILD_TESTING)

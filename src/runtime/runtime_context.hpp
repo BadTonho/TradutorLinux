@@ -2,7 +2,7 @@
 
 #include "tradutorlinux/runtime/winapi.hpp"
 #include "tradutorlinux/diagnostics/trace.hpp"
-#include "tradutorlinux/gui/x11.hpp"
+#include "tradutorlinux/gui/platform.hpp"
 #include "tradutorlinux/loader/module.hpp"
 #include "tradutorlinux/loader/process.hpp"
 #include "tradutorlinux/pe/pe_reader.hpp"

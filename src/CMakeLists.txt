@@ -52,6 +52,8 @@ add_library(tradutorlinux_core STATIC
     runtime/unwind_capture.S
     runtime/seh.S
     util/unicode.cpp
+    gui/platform.cpp
+    gui/wayland.cpp
     gui/x11.cpp
 )
 
@@ -69,6 +71,35 @@ find_path(TL_X11_INCLUDE_DIR X11/Xlib.h REQUIRED)
 find_library(TL_X11_LIBRARY X11 REQUIRED)
 target_include_directories(tradutorlinux_core PRIVATE "${TL_X11_INCLUDE_DIR}")
 target_link_libraries(tradutorlinux_core PUBLIC "${TL_X11_LIBRARY}")
+
+find_path(TL_WAYLAND_INCLUDE_DIR wayland-client.h REQUIRED)
+find_library(TL_WAYLAND_CLIENT_LIBRARY wayland-client REQUIRED)
+find_path(TL_XKBCOMMON_INCLUDE_DIR xkbcommon/xkbcommon.h REQUIRED)
+find_library(TL_XKBCOMMON_LIBRARY xkbcommon REQUIRED)
+find_program(TL_WAYLAND_SCANNER wayland-scanner REQUIRED)
+find_file(TL_XDG_SHELL_XML xdg-shell.xml
+    PATHS /usr/share/wayland-protocols/stable/xdg-shell
+    REQUIRED)
+set(TL_WAYLAND_GENERATED_DIR "${CMAKE_CURRENT_BINARY_DIR}/wayland-generated")
+file(MAKE_DIRECTORY "${TL_WAYLAND_GENERATED_DIR}")
+add_custom_command(
+    OUTPUT "${TL_WAYLAND_GENERATED_DIR}/xdg-shell-client-protocol.h"
+           "${TL_WAYLAND_GENERATED_DIR}/xdg-shell-protocol.c"
+    COMMAND "${TL_WAYLAND_SCANNER}" client-header "${TL_XDG_SHELL_XML}"
+            "${TL_WAYLAND_GENERATED_DIR}/xdg-shell-client-protocol.h"
+    COMMAND "${TL_WAYLAND_SCANNER}" private-code "${TL_XDG_SHELL_XML}"
+            "${TL_WAYLAND_GENERATED_DIR}/xdg-shell-protocol.c"
+    DEPENDS "${TL_XDG_SHELL_XML}"
+    VERBATIM)
+target_sources(tradutorlinux_core PRIVATE
+    "${TL_WAYLAND_GENERATED_DIR}/xdg-shell-protocol.c")
+target_include_directories(tradutorlinux_core PRIVATE
+    "${TL_WAYLAND_INCLUDE_DIR}"
+    "${TL_XKBCOMMON_INCLUDE_DIR}"
+    "${TL_WAYLAND_GENERATED_DIR}")
+target_link_libraries(tradutorlinux_core PUBLIC
+    "${TL_WAYLAND_CLIENT_LIBRARY}"
+    "${TL_XKBCOMMON_LIBRARY}")
 if(CMAKE_DL_LIBS)
     target_link_libraries(tradutorlinux_core PUBLIC "${CMAKE_DL_LIBS}")
 endif()

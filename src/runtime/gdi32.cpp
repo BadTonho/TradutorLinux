@@ -46,8 +46,8 @@ TL_MSABI int tl_TextOut(const void* const dc, const int x, const int y,
         return 0;
     }
     if (length > 0) {
-        gui::draw_text_len(slot->native, text, length, x, y);
-        gui::flush_window(slot->native);
+        gui::platform::draw_text_len(slot->native, text, length, x, y);
+        gui::platform::flush_window(slot->native);
     }
     set_last_error(abi::kErrorSuccess);
     const std::array<diagnostics::TraceField, 4> fields{
@@ -83,8 +83,8 @@ TL_MSABI int tl_FillRect(const void* const dc,
     const int width = rc->right - rc->left;
     const int height = rc->bottom - rc->top;
     if (width > 0 && height > 0 && brush_index != 5) {
-        gui::fill_rectangle(slot->native, rc->left, rc->top, width, height, brush_index);
-        gui::flush_window(slot->native);
+        gui::platform::fill_rectangle(slot->native, rc->left, rc->top, width, height, brush_index);
+        gui::platform::flush_window(slot->native);
     }
     set_last_error(abi::kErrorSuccess);
     const std::array<diagnostics::TraceField, 4> fields{

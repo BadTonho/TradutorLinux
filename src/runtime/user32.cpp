@@ -1,5 +1,6 @@
 #include "tradutorlinux/runtime/winapi.hpp"
 #include "runtime_context.hpp"
+#include "tradutorlinux/gui/platform.hpp"
 #include "tradutorlinux/runtime/dialog_template.hpp"
 #include "tradutorlinux/util/unicode.hpp"
 
@@ -167,7 +168,7 @@ TL_MSABI int tl_MessageBoxA(const void* const window, const char* const text,
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
-    const std::uint32_t result = gui::message_box(text, caption);
+    const std::uint32_t result = gui::platform::message_box(text, caption);
     set_last_error(result == 0 ? abi::kErrorAccessDenied : abi::kErrorSuccess);
     return static_cast<int>(result);
 }
@@ -368,10 +369,10 @@ TL_MSABI abi::HWnd tl_CreateWindowExA(const std::uint32_t ex_style,
         return &slot;
     }
     const char* const caption = window_name != nullptr ? window_name : cls->name.c_str();
-    gui::NativeWindow native = gui::create_window(caption, width > 0 ? width : 800, height > 0 ? height : 600);
+    gui::NativeWindow native = gui::platform::create_window(caption, width > 0 ? width : 800, height > 0 ? height : 600);
     if (native == nullptr) {
         set_last_error(abi::kErrorAccessDenied);
-        trace_guest_failure("CreateWindowExA", "x11", "falha ao criar janela X11");
+        trace_guest_failure("CreateWindowExA", "platform", "falha ao criar janela no backend gráfico selecionado");
         return nullptr;
     }
     WindowSlot& slot = *free_it;
@@ -387,7 +388,7 @@ TL_MSABI abi::HWnd tl_CreateWindowExA(const std::uint32_t ex_style,
     slot.style = style;
     slot.visible = (style & kWsVisible) != 0U;
     if (slot.visible) {
-        slot.mapped = gui::map_window(slot.native);
+        slot.mapped = gui::platform::map_window(slot.native);
     }
     struct GuestCreateStructA {
         const void* lpCreateParams;
@@ -421,7 +422,7 @@ TL_MSABI abi::HWnd tl_CreateWindowExA(const std::uint32_t ex_style,
     const abi::Lresult create_result = call_wndproc(slot.wndproc, &slot, abi::kWmCreate, 0,
                                                    reinterpret_cast<abi::Lparam>(&cs));
     if (create_result == -1) {
-        gui::destroy_window(slot.native);
+        gui::platform::destroy_window(slot.native);
         slot = {};
         set_last_error(abi::kErrorInvalidParameter);
         trace_guest_failure("CreateWindowExA", "wm-create", "WM_CREATE rejeitou a criação");
@@ -480,10 +481,10 @@ TL_MSABI int tl_ShowWindow(const void* const window, const int cmd_show) noexcep
     if (cmd_show == 0) {
         slot->visible = false;
         if (slot->native != nullptr) {
-            gui::unmap_window(slot->native);
+            gui::platform::unmap_window(slot->native);
         }
     } else if (slot->native != nullptr) {
-        slot->mapped = gui::map_window(slot->native);
+        slot->mapped = gui::platform::map_window(slot->native);
         slot->visible = true;
     } else {
         slot->visible = true;
@@ -557,7 +558,7 @@ TL_MSABI int tl_GetMessageA(void* const msg, const void* const window,
             if (!slot.used || slot.native == nullptr || (window != nullptr && window != &slot)) {
                 continue;
             }
-            const gui::WindowEvent event = gui::next_window_event(slot.native);
+            const gui::WindowEvent event = gui::platform::next_window_event(slot.native);
             if (event.type == gui::WindowEventType::Redraw) {
                 render_controls(slot);
                 write_guest_msg(msg, &slot, abi::kWmPaint, 0, 0);
@@ -735,7 +736,7 @@ TL_MSABI int tl_DestroyWindow(const void* const window) noexcept {
         }
     }
     if (slot->native != nullptr) {
-        gui::destroy_window(slot->native);
+        gui::platform::destroy_window(slot->native);
     }
     WindowSlot* const parent = slot->parent;
     if (g_focused_control == slot) {
@@ -1053,7 +1054,7 @@ TL_MSABI int tl_InvalidateRect(const void* window, const void* rect, int erase) 
         return 0;
     }
     if (slot->native != nullptr) {
-        gui::flush_window(slot->native);
+        gui::platform::flush_window(slot->native);
     }
     set_last_error(abi::kErrorSuccess);
     return 1;
@@ -1504,7 +1505,7 @@ TL_MSABI std::intptr_t tl_DialogBoxParamW(const void* const instance,
 
     const std::string title = util::wide_to_utf8(
         reinterpret_cast<const std::uint16_t*>(parsed.title.c_str()));
-    gui::NativeWindow native = gui::create_window(title.c_str(), parsed.width, parsed.height);
+    gui::NativeWindow native = gui::platform::create_window(title.c_str(), parsed.width, parsed.height);
     if (native == nullptr) {
         if (parent_slot != nullptr) {
             parent_slot->enabled = g_modal_parent_was_enabled;
@@ -1516,7 +1517,7 @@ TL_MSABI std::intptr_t tl_DialogBoxParamW(const void* const instance,
     const auto free_it = std::find_if(g_windows.begin(), g_windows.end(),
                                       [](const WindowSlot& slot) { return !slot.used; });
     if (free_it == g_windows.end()) {
-        gui::destroy_window(native);
+        gui::platform::destroy_window(native);
         if (parent_slot != nullptr) {
             parent_slot->enabled = g_modal_parent_was_enabled;
             render_controls(*parent_slot);
@@ -1532,7 +1533,7 @@ TL_MSABI std::intptr_t tl_DialogBoxParamW(const void* const instance,
     dialog.window_title = title;
     dialog.text = title;
     dialog.native = native;
-    dialog.mapped = gui::map_window(native);
+    dialog.mapped = gui::platform::map_window(native);
     dialog.width = parsed.width > 0 ? parsed.width : 1;
     dialog.height = parsed.height > 0 ? parsed.height : 1;
     dialog.x = parsed.x;
@@ -1750,7 +1751,7 @@ TL_MSABI int tl_TrackPopupMenu(const void* menu, std::uint32_t flags, int x, int
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
-    const std::uint32_t command = gui::track_popup_menu(it->items, x, y);
+    const std::uint32_t command = gui::platform::track_popup_menu(it->items, x, y);
     if (command != 0) {
         queue_window_message(*owner_slot, abi::kWmCommand, command,
                              reinterpret_cast<abi::Lparam>(menu));
@@ -1968,7 +1969,7 @@ TL_MSABI int tl_MessageBoxW(const void* window, const std::uint16_t* text,
     }
     const std::string utf8_text = util::wide_to_utf8(text);
     const std::string utf8_cap = util::wide_to_utf8(caption);
-    const std::uint32_t result = gui::message_box(utf8_text.c_str(), utf8_cap.c_str());
+    const std::uint32_t result = gui::platform::message_box(utf8_text.c_str(), utf8_cap.c_str());
     set_last_error(result == 0 ? abi::kErrorAccessDenied : abi::kErrorSuccess);
     return static_cast<int>(result);
 }

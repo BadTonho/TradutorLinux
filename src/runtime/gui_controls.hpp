@@ -1,6 +1,6 @@
 #pragma once
 
-#include "tradutorlinux/gui/x11.hpp"
+#include "tradutorlinux/gui/platform.hpp"
 #include "tradutorlinux/runtime/winapi.hpp"
 
 #include <chrono>
