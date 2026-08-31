@@ -644,15 +644,43 @@ processo filho; cada thread convidada recebe seu próprio TEB/GS, stack e
   `WaitForSingleObject` (invalid handle, timeout), e `TlsSetGetValue`
   com múltiplos slots.
 
-## Aplicativos Windows Populares
+## Portfólio Aplicativos_Windows_Populares (Fase 13 — 2026-08-31)
+
+Ciclo `A→D→B` concluído com `build/debug --parallel 2`. Todos os `.exe/.dll` em
+`/home/tonho/Área de trabalho/Aplicativos_Windows_Populares/` foram reanalisados com
+`--report` (sem executar) e os `100%` foram executados com `--trace --timeout 3`
+(`src/cli.cpp:966` `docs/diagnostico.md:5`). `stdout` permanece do convidado; `stderr`
+traz `category`/`status`/`detail` e `fault-address` quando há `SIGSEGV`.
+
+| # | Aplicativo | Arquitetura | Imports | Compat | Execução `--timeout 3` | Observação |
+|---|---|---|---:|---|---|---|
+| 1 | `7z_x64.exe` | PE32+ x86-64 | 133/133 (100%) | `supported` | `ExitProcess 0` `7-Zip 24.08 banner` | `src/loader/module.cpp:400` `DosDateTimeToFileTime` já coberto |
+| 2 | `7zFM_x64.exe` | PE32+ x86-64 | 298/298 (100%) | `supported` | `ExitProcess 0` | delay `MPR.dll 6/6` |
+| 3 | `7z.dll` | PE32+ DLL x86-64 | 86/86 (100%) | `supported` | `n/a` (DLL) | **Fase 13.A**: `USER32!CharPrevExA` `src/runtime/user32.cpp:2314` + `KERNEL32!DosDateTimeToFileTime` `src/runtime/kernel32.cpp:5441` `winapi.hpp:928,1478` fecharam `84/86→86/86` |
+| 4 | `putty_x64.exe` | PE32+ x86-64 | 348/348 (100%) | `supported` | `ExitProcess 1` (sem args) | FLS 0/1 ok |
+| 5 | `WinRAR_x64.exe` `winrar-x64-723.exe` | PE32+ x86-64 | 251/251 (100%) | `supported` | `ExitProcess 0` `sfxcmd` env | delay `GDI32/ADVAPI32/SHELL32/ole32` |
+| 6 | `Rufus_x64.exe` | PE32+ x86-64 | 14/14 (100%) | `supported` | `ExitProcess 56832` | `UPX0` `rwx` 3 seções — antes `unsupported`, agora `rwx` aceito `docs/arquitetura/mapeamento-imagem.md` |
+| 7 | `HWiNFO64.exe` | PE32+ x86-64 | 28/28 (100%) | `supported` | `ExitProcess 44544 (0xAE00 → shell 0)` | **Fase 13.B**: `GDI32!Arc` `gdi32.cpp:1109` `SHLWAPI!PathIsUNCW` `shlwapi.cpp:328` + `MSIMG32!AlphaBlend` `NETAPI32!NetApiBufferFree` `OLEACC!LresultFromObject` `tdh!TdhGetPropertySize` `WINSPOOL.DRV!OpenPrinterW` `WTSAPI32!WTSFreeMemory` `src/runtime/winapi.cpp:782` `winapi.hpp:928` fecharam `20/28→28/28` |
+| 8 | `RobloxPlayerInstaller.exe` | PE32+ x86-64 | 430/430 (100%) | `supported` | `RBXCRASH FatalRuntimeError Worker,28` `ExitProcess 3` (antes `SIGSEGV 0x68 rva 0x39ab exit 71`) | **Fase 13.D**: `TLS slot 0x430==NULL` → `mov 0x68(%rax)` fault (`objdump 0x1400039ab`). Fix `src/runtime/winapi.cpp:751` `*TLS(0x430)=base+0xc2c800` (objeto `.data` já mapeado) após `invoke_thread_tls_callbacks` |
+| 9 | `Rockstar-Games-Launcher.exe` | PE32+ x86-64 | 338/338 (100%) | `supported` | `ExitProcess 3` | delay `SHELL32/ole32/gdiplus` etc. |
+| 10 | `Logitech_GHUB_x64.exe` `lghub_installer.exe` | PE32+ x86-64 | 114/114 (100%) | `supported` | `ExitProcess 1` |  |
+| 11 | `notepad++.exe` | PE32+ x86-64 | 584/584 (100%) | `supported` | `GuestTimeout 72` (GUI `GetMessageW` bloqueado sem `Xvfb`) | precisa `Xvfb :99` `docs/arquitetura/gui-x11.md` |
+| 12 | `RTSSHooks64.dll` | PE32+ DLL x86-64 | 256/256 (100%) | `supported` | `not-attempted` (DLL) | **Fase 13.RTSS**: `GDI32 Pie/GetTextCharacterExtra/GetCharABCWidthsA/GetDeviceGammaRamp/CreateDCA` `USER32 SetWindowsHookExA/SendMessageTimeoutA/WindowFromDC/FindWindowExA/EnumDisplaySettingsA/IsRectEmpty/SubtractRect` `KERNEL32 CreateRemoteThread/VirtualAllocEx/VirtualFreeEx/WriteProcessMemory/OpenFile/OpenEventA/OpenFileMappingA/_lclose/FlushInstructionCache/SetThreadContext/GetThreadContext/SuspendThread/VirtualProtectEx/lstrcmpA/IsThreadAFiber/InterlockedFlushSList` `SHLWAPI PathRemoveExtensionA/PathRenameExtensionA/PathStripPathA/PathMatchSpecA` `WINMM timeKillEvent` `SETUPAPI 7` + `delay DirectX 11` (`D3DCOMPILER_47/d3d12/dxgi/DDRAW/d3d9/d3d10/d3dx10_42/d3d11/d3dx11_42`) `src/loader/module.cpp:1412,1545` `src/runtime/gdi32.cpp:1109` `src/runtime/user32.cpp:3769` `src/runtime/shlwapi.cpp:328` `src/runtime/winmm.cpp:70` `src/runtime/winapi.cpp:782` — stubs DirectX retornam `E_FAIL/S_OK` controlados |
+| 13 | `Affinity x64.msix` | Zip/MSIX | — | `package-recognized` | `not-attempted` | `App/Affinity.exe` é `Mono/.Net entry 0x0 0 imports` — `.NET` fora de escopo `PROJETO.md:22`; `src/package/msix.cpp` lista `App/Affinity.exe` |
+| 14 | `*_x64_Installer.exe` `CapCut/Epic/Creative/Everything/RTSS.exe` | PE32 (x86) | — | `unsupported-architecture` `0x14c` `exit 5` | `parse-failed status="unsupported-architecture"` `src/pe/pe_reader.cpp:685` |
+
+> Detalhe das novas APIs `B`: `GDI32.dll!Arc` `SHLWAPI.dll!PathIsUNCW/PathIsUNCA` `MSIMG32.dll!AlphaBlend/TransparentBlt` `NETAPI32.dll!NetApiBufferFree` `OLEACC.dll!LresultFromObject` `tdh.dll!TdhGetPropertySize` `WINSPOOL.DRV!OpenPrinterW/ClosePrinter` `WTSAPI32.dll!WTSFreeMemory` — todos registrados em `src/loader/module.cpp:1412,1538` com stubs `0/1` controlados.
+
+## Aplicativos Windows Populares (histórico)
 
 | Aplicativo | Arquitetura | Imports Resolvidos | Compatibilidade | Estado de Execução |
 |---|---|---:|---|---|
-| **7-Zip File Manager (`7zFM_x64.exe`)** | PE32+ x86-64 | 100% (143/143) | Suportado | Executou entry point nativo, rodou 21 construtores MSVC, delay imports em `MPR.dll` e encerrou limpo com exit `0` |
-| **7-Zip CLI (`7z_x64.exe`)** | PE32+ x86-64 | 100% (89/89) | Suportado | Executou e imprimiu o banner oficial completo do 7-Zip no terminal |
+| **7-Zip File Manager (`7zFM_x64.exe`)** | PE32+ x86-64 | 100% (298/298) | Suportado | Executou entry point nativo, rodou 21 construtores MSVC, delay imports em `MPR.dll` e encerrou limpo com exit `0` |
+| **7-Zip CLI (`7z_x64.exe`)** | PE32+ x86-64 | 100% (133/133) | Suportado | Executou e imprimiu o banner oficial completo do 7-Zip no terminal |
 | **PuTTY SSH Client (`putty_x64.exe`)** | PE32+ x86-64 | 100% (348/348) | Suportado | Executou entry point, inicializou FLS (slots 0 e 1) e loop de eventos de interface e rede |
-| **WinRAR (`WinRAR_x64.exe`)** | PE32+ x86-64 | 100% (256/256) | Suportado | Inicializou FLS, subsistema CRT e APIs do Shell/OLE com sucesso |
-| **Roblox Player Installer (`RobloxPlayerInstaller.exe`)** | PE32+ x86-64 | 100% (430/430) | Suportado | Resolveu todos os 430 imports em 14 DLLs, executou entry point nativo e inicializou FLS |
+| **WinRAR (`WinRAR_x64.exe`)** | PE32+ x86-64 | 100% (251/251) | Suportado | Inicializou FLS, subsistema CRT e APIs do Shell/OLE com sucesso |
+| **HWiNFO64 (`HWiNFO64.exe`)** | PE32+ x86-64 | 100% (28/28) | Suportado | Fase 13.B — stubs acima; exec `ExitProcess 44544` |
+| **Roblox Player Installer (`RobloxPlayerInstaller.exe`)** | PE32+ x86-64 | 100% (430/430) | Suportado | Fase 13.D — TLS fix; `RBXCRASH` + `ExitProcess 3` (antes `SIGSEGV`) |
 | **Notepad++ (`notepad++.exe`)** | PE32+ x86-64 | 100% (584/584) | Suportado | Resolveu todos os 584 imports em 13 DLLs, executou entry point nativo, inicializou FLS (slots 0 e 1) e subsistema CRT |
-| **Rufus (`Rufus_x64.exe`)** | PE32+ x86-64 | — | Unsupported | Rejeitado controladamente devido à compressão UPX (`UPX0` com `raw_data_size=0`) |
+| **Rufus (`Rufus_x64.exe`)** | PE32+ x86-64 | 100% (14/14) | Suportado | UPX `rwx` — agora suportado, exec `ExitProcess 56832` |
 | **7-Zip Installer / Notepad++ Installer / Everything Search** | PE32 (x86) | — | Unsupported | Rejeitados controladamente como arquitetura x86 32-bit (0x14c) |

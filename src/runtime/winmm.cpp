@@ -69,6 +69,11 @@ TL_WINMM_MSABI std::uint32_t tl_timeSetEvent(const std::uint32_t delay, const st
     return 1;
 }
 
+TL_WINMM_MSABI std::uint32_t tl_timeKillEvent(const std::uint32_t id) noexcept {
+    (void)id;
+    return kTimerrNoError;
+}
+
 TL_WINMM_MSABI int tl_PlaySoundA(const char* sound, void* module, const std::uint32_t flags) noexcept {
     (void)sound;
     (void)module;

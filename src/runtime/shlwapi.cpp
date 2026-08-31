@@ -500,6 +500,59 @@ TL_SHLWAPI_MSABI int tl_PathMatchSpecW(const wchar_t* const pszFile, const wchar
     return 1;
 }
 
+TL_MSABI int tl_PathRemoveExtensionA(char* const path) noexcept {
+    if (path == nullptr || !mapped_cstring(path)) {
+        return 0;
+    }
+    char* dot = nullptr;
+    for (char* p = path; *p != '\0'; ++p) {
+        if (*p == '.') dot = p;
+        else if (*p == '\\' || *p == '/' || *p == ' ') dot = nullptr;
+    }
+    if (dot != nullptr) {
+        *dot = '\0';
+    }
+    return 1;
+}
+
+TL_MSABI int tl_PathRenameExtensionA(char* const path, const char* const ext) noexcept {
+    if (path == nullptr || !mapped_cstring(path)) {
+        return 0;
+    }
+    tl_PathRemoveExtensionA(path);
+    if (ext != nullptr && mapped_cstring(ext) && ext[0] != '\0') {
+        const std::size_t len = std::strlen(path);
+        const std::size_t ext_len = std::strlen(ext);
+        if (ext[0] != '.') {
+            path[len] = '.';
+            std::memcpy(path + len + 1, ext, ext_len + 1);
+        } else {
+            std::memcpy(path + len, ext, ext_len + 1);
+        }
+    }
+    return 1;
+}
+
+TL_MSABI char* tl_PathStripPathA(char* const path) noexcept {
+    if (path == nullptr || !mapped_cstring(path)) {
+        return path;
+    }
+    char* last = path;
+    for (char* p = path; *p != '\0'; ++p) {
+        if (*p == '\\' || *p == '/' || *p == ':') last = p + 1;
+    }
+    if (last != path) {
+        std::memmove(path, last, std::strlen(last) + 1);
+    }
+    return path;
+}
+
+TL_MSABI int tl_PathMatchSpecA(const char* const file, const char* const spec) noexcept {
+    (void)file;
+    (void)spec;
+    return 1;
+}
+
 }  // extern "C"
 
 }  // namespace tradutorlinux

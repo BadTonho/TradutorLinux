@@ -602,6 +602,22 @@ void register_builtin_modules() {
         {"lstrcmpW", 398, reinterpret_cast<std::uintptr_t>(&tl_lstrcmpW)},
         {"lstrcmpiW", 399, reinterpret_cast<std::uintptr_t>(&tl_lstrcmpiW)},
         {"DosDateTimeToFileTime", 400, reinterpret_cast<std::uintptr_t>(&tl_DosDateTimeToFileTime)},
+        {"CreateRemoteThread", 401, reinterpret_cast<std::uintptr_t>(&tl_CreateRemoteThread)},
+        {"VirtualAllocEx", 402, reinterpret_cast<std::uintptr_t>(&tl_VirtualAllocEx)},
+        {"VirtualFreeEx", 403, reinterpret_cast<std::uintptr_t>(&tl_VirtualFreeEx)},
+        {"WriteProcessMemory", 404, reinterpret_cast<std::uintptr_t>(&tl_WriteProcessMemory)},
+        {"OpenFile", 405, reinterpret_cast<std::uintptr_t>(&tl_OpenFile)},
+        {"OpenEventA", 406, reinterpret_cast<std::uintptr_t>(&tl_OpenEventA)},
+        {"OpenFileMappingA", 407, reinterpret_cast<std::uintptr_t>(&tl_OpenFileMappingA)},
+        {"_lclose", 408, reinterpret_cast<std::uintptr_t>(&tl__lclose)},
+        {"FlushInstructionCache", 409, reinterpret_cast<std::uintptr_t>(&tl_FlushInstructionCache)},
+        {"SetThreadContext", 410, reinterpret_cast<std::uintptr_t>(&tl_SetThreadContext)},
+        {"GetThreadContext", 411, reinterpret_cast<std::uintptr_t>(&tl_GetThreadContext)},
+        {"SuspendThread", 412, reinterpret_cast<std::uintptr_t>(&tl_SuspendThread)},
+        {"VirtualProtectEx", 413, reinterpret_cast<std::uintptr_t>(&tl_VirtualProtectEx)},
+        {"lstrcmpA", 414, reinterpret_cast<std::uintptr_t>(&tl_lstrcmpA)},
+        {"IsThreadAFiber", 415, reinterpret_cast<std::uintptr_t>(&tl_IsThreadAFiber)},
+        {"InterlockedFlushSList", 416, reinterpret_cast<std::uintptr_t>(&tl_InterlockedFlushSList)},
     };
     static const InternalModule kKernel32Module{"KERNEL32.dll", kKernel32Exports};
     register_module(kKernel32Module);
@@ -918,6 +934,13 @@ void register_builtin_modules() {
         {"GetDCEx", 306, reinterpret_cast<std::uintptr_t>(&tl_GetDCEx)},
         {"IsChild", 307, reinterpret_cast<std::uintptr_t>(&tl_IsChild)},
         {"CharPrevExA", 308, reinterpret_cast<std::uintptr_t>(&tl_CharPrevExA)},
+        {"SetWindowsHookExA", 309, reinterpret_cast<std::uintptr_t>(&tl_SetWindowsHookExA)},
+        {"SendMessageTimeoutA", 310, reinterpret_cast<std::uintptr_t>(&tl_SendMessageTimeoutA)},
+        {"WindowFromDC", 311, reinterpret_cast<std::uintptr_t>(&tl_WindowFromDC)},
+        {"FindWindowExA", 312, reinterpret_cast<std::uintptr_t>(&tl_FindWindowExA)},
+        {"EnumDisplaySettingsA", 313, reinterpret_cast<std::uintptr_t>(&tl_EnumDisplaySettingsA)},
+        {"IsRectEmpty", 314, reinterpret_cast<std::uintptr_t>(&tl_IsRectEmpty)},
+        {"SubtractRect", 315, reinterpret_cast<std::uintptr_t>(&tl_SubtractRect)},
     };
     static const InternalModule kUser32Module{"USER32.dll", kUser32Exports};
     register_module(kUser32Module);
@@ -1027,6 +1050,11 @@ void register_builtin_modules() {
         {"CreateRectRgnIndirect", 103, reinterpret_cast<std::uintptr_t>(&tl_CreateRectRgnIndirect)},
         {"RoundRect", 104, reinterpret_cast<std::uintptr_t>(&tl_RoundRect)},
         {"Arc", 105, reinterpret_cast<std::uintptr_t>(&tl_Arc)},
+        {"Pie", 106, reinterpret_cast<std::uintptr_t>(&tl_Pie)},
+        {"GetTextCharacterExtra", 107, reinterpret_cast<std::uintptr_t>(&tl_GetTextCharacterExtra)},
+        {"GetCharABCWidthsA", 108, reinterpret_cast<std::uintptr_t>(&tl_GetCharABCWidthsA)},
+        {"GetDeviceGammaRamp", 109, reinterpret_cast<std::uintptr_t>(&tl_GetDeviceGammaRamp)},
+        {"CreateDCA", 110, reinterpret_cast<std::uintptr_t>(&tl_CreateDCA)},
     };
     static const InternalModule kGdi32Module{"GDI32.dll", kGdi32Exports};
     register_module(kGdi32Module);
@@ -1448,6 +1476,10 @@ void register_builtin_modules() {
         {"PathMatchSpecW", 35, reinterpret_cast<std::uintptr_t>(&tl_PathMatchSpecW)},
         {"PathIsUNCW", 36, reinterpret_cast<std::uintptr_t>(&tl_PathIsUNCW)},
         {"PathIsUNCA", 37, reinterpret_cast<std::uintptr_t>(&tl_PathIsUNCA)},
+        {"PathRemoveExtensionA", 38, reinterpret_cast<std::uintptr_t>(&tl_PathRemoveExtensionA)},
+        {"PathRenameExtensionA", 39, reinterpret_cast<std::uintptr_t>(&tl_PathRenameExtensionA)},
+        {"PathStripPathA", 40, reinterpret_cast<std::uintptr_t>(&tl_PathStripPathA)},
+        {"PathMatchSpecA", 41, reinterpret_cast<std::uintptr_t>(&tl_PathMatchSpecA)},
         {"", 176, reinterpret_cast<std::uintptr_t>(&tl_PathStripToRootW)},
         {"", 410, reinterpret_cast<std::uintptr_t>(&tl_PathStripToRootW)},
         {"", 413, reinterpret_cast<std::uintptr_t>(&tl_PathStripToRootW)},
@@ -1476,6 +1508,7 @@ void register_builtin_modules() {
         {"PlaySoundA", 5, reinterpret_cast<std::uintptr_t>(&tl_PlaySoundA)},
         {"PlaySoundW", 6, reinterpret_cast<std::uintptr_t>(&tl_PlaySoundW)},
         {"timeSetEvent", 7, reinterpret_cast<std::uintptr_t>(&tl_timeSetEvent)},
+        {"timeKillEvent", 8, reinterpret_cast<std::uintptr_t>(&tl_timeKillEvent)},
     };
     static const InternalModule kWinmmModule{"WINMM.dll", kWinmmExports};
     register_module(kWinmmModule);
@@ -1661,6 +1694,13 @@ void register_builtin_modules() {
     register_module(kSensApiModule);
     static const ExportedFunction kSetupApiExports[] = {
         {"CM_Get_Child", 1, reinterpret_cast<std::uintptr_t>(&tl_CM_Get_Child)},
+        {"SetupDiGetClassDevsA", 2, reinterpret_cast<std::uintptr_t>(&tl_SetupDiGetClassDevsA)},
+        {"SetupDiEnumDeviceInfo", 3, reinterpret_cast<std::uintptr_t>(&tl_SetupDiEnumDeviceInfo)},
+        {"SetupDiEnumDeviceInterfaces", 4, reinterpret_cast<std::uintptr_t>(&tl_SetupDiEnumDeviceInterfaces)},
+        {"SetupDiGetDeviceInterfaceDetailA", 5, reinterpret_cast<std::uintptr_t>(&tl_SetupDiGetDeviceInterfaceDetailA)},
+        {"SetupDiGetDeviceRegistryPropertyA", 6, reinterpret_cast<std::uintptr_t>(&tl_SetupDiGetDeviceRegistryPropertyA)},
+        {"SetupDiGetDeviceInstanceIdA", 7, reinterpret_cast<std::uintptr_t>(&tl_SetupDiGetDeviceInstanceIdA)},
+        {"SetupDiDestroyDeviceInfoList", 8, reinterpret_cast<std::uintptr_t>(&tl_SetupDiDestroyDeviceInfoList)},
     };
     static const InternalModule kSetupApiModule{"SETUPAPI.dll", kSetupApiExports};
     register_module(kSetupApiModule);
@@ -1702,6 +1742,53 @@ void register_builtin_modules() {
     };
     static const InternalModule kWtsApi32Module{"WTSAPI32.dll", kWtsApi32Exports};
     register_module(kWtsApi32Module);
+    static const ExportedFunction kD3dCompiler47Exports[] = {
+        {"D3DCompile", 1, reinterpret_cast<std::uintptr_t>(&tl_D3DCompile)},
+    };
+    static const InternalModule kD3dCompiler47Module{"D3DCOMPILER_47.dll", kD3dCompiler47Exports};
+    register_module(kD3dCompiler47Module);
+    static const ExportedFunction kD3d12Exports[] = {
+        {"D3D12SerializeRootSignature", 1, reinterpret_cast<std::uintptr_t>(&tl_D3D12SerializeRootSignature)},
+        {"", 101, reinterpret_cast<std::uintptr_t>(&tl_D3D12SerializeRootSignature)},
+    };
+    static const InternalModule kD3d12Module{"d3d12.dll", kD3d12Exports};
+    register_module(kD3d12Module);
+    static const ExportedFunction kDxgiExports[] = {
+        {"CreateDXGIFactory1", 1, reinterpret_cast<std::uintptr_t>(&tl_CreateDXGIFactory1)},
+    };
+    static const InternalModule kDxgiModule{"dxgi.dll", kDxgiExports};
+    register_module(kDxgiModule);
+    static const ExportedFunction kDdrawExports[] = {
+        {"DirectDrawCreateEx", 1, reinterpret_cast<std::uintptr_t>(&tl_DirectDrawCreateEx)},
+    };
+    static const InternalModule kDdrawModule{"DDRAW.dll", kDdrawExports};
+    register_module(kDdrawModule);
+    static const ExportedFunction kD3d9Exports[] = {
+        {"Direct3DCreate9", 1, reinterpret_cast<std::uintptr_t>(&tl_Direct3DCreate9)},
+        {"Direct3DCreate9Ex", 2, reinterpret_cast<std::uintptr_t>(&tl_Direct3DCreate9Ex)},
+    };
+    static const InternalModule kD3d9Module{"d3d9.dll", kD3d9Exports};
+    register_module(kD3d9Module);
+    static const ExportedFunction kD3d10Exports[] = {
+        {"D3D10CreateDeviceAndSwapChain", 1, reinterpret_cast<std::uintptr_t>(&tl_D3D10CreateDeviceAndSwapChain)},
+    };
+    static const InternalModule kD3d10Module{"d3d10.dll", kD3d10Exports};
+    register_module(kD3d10Module);
+    static const ExportedFunction kD3dx10Exports[] = {
+        {"D3DX10CompileFromMemory", 1, reinterpret_cast<std::uintptr_t>(&tl_D3DX10CompileFromMemory)},
+    };
+    static const InternalModule kD3dx10Module{"d3dx10_42.dll", kD3dx10Exports};
+    register_module(kD3dx10Module);
+    static const ExportedFunction kD3d11Exports[] = {
+        {"D3D11CreateDeviceAndSwapChain", 1, reinterpret_cast<std::uintptr_t>(&tl_D3D11CreateDeviceAndSwapChain)},
+    };
+    static const InternalModule kD3d11Module{"d3d11.dll", kD3d11Exports};
+    register_module(kD3d11Module);
+    static const ExportedFunction kD3dx11Exports[] = {
+        {"D3DX11CompileFromMemory", 1, reinterpret_cast<std::uintptr_t>(&tl_D3DX11CompileFromMemory)},
+    };
+    static const InternalModule kD3dx11Module{"d3dx11_42.dll", kD3dx11Exports};
+    register_module(kD3dx11Module);
 }
 
 bool is_module_registered(const std::string_view dll) {

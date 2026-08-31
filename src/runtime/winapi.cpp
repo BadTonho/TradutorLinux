@@ -858,6 +858,192 @@ TL_MSABI void tl_WTSFreeMemory(void* const memory) noexcept {
     }
 }
 
+// --- RTSSHooks KERNEL32 ---
+TL_MSABI void* tl_CreateRemoteThread(void* const process, void* const attr, const std::size_t stack, void* const start, void* const param, const std::uint32_t flags, std::uint32_t* const tid) noexcept {
+    (void)process; (void)attr; (void)stack; (void)start; (void)param; (void)flags;
+    if (tid != nullptr && mapped_guest_range(tid, sizeof(*tid), true)) *tid = 0;
+    set_last_error(abi::kErrorSuccess);
+    return reinterpret_cast<void*>(0x52544E44ULL); // 'RTND'
+}
+TL_MSABI void* tl_VirtualAllocEx(void* const process, void* const addr, const std::size_t size, const std::uint32_t type, const std::uint32_t protect) noexcept {
+    (void)process;
+    return tl_VirtualAlloc(addr, size, type, protect);
+}
+TL_MSABI int tl_VirtualFreeEx(void* const process, void* const addr, const std::size_t size, const std::uint32_t type) noexcept {
+    (void)process;
+    return tl_VirtualFree(addr, size, type);
+}
+TL_MSABI int tl_WriteProcessMemory(void* const process, void* const base, const void* const buf, const std::size_t size, std::size_t* const written) noexcept {
+    (void)process; (void)base; (void)buf;
+    if (written != nullptr && mapped_guest_range(written, sizeof(*written), true)) *written = size;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+TL_MSABI int tl_OpenFile(const char* const file, void* const of_struct, const std::uint32_t style) noexcept {
+    (void)file; (void)of_struct; (void)style;
+    set_last_error(abi::kErrorSuccess);
+    return 3; // HFILE
+}
+TL_MSABI void* tl_OpenEventA(const std::uint32_t access, const int inherit, const char* const name) noexcept {
+    (void)access; (void)inherit; (void)name;
+    set_last_error(abi::kErrorSuccess);
+    return reinterpret_cast<void*>(0x45564E54ULL); // 'EVNT'
+}
+TL_MSABI void* tl_OpenFileMappingA(const std::uint32_t access, const int inherit, const char* const name) noexcept {
+    (void)access; (void)inherit; (void)name;
+    set_last_error(abi::kErrorSuccess);
+    return reinterpret_cast<void*>(0x464D4150ULL); // 'FMAP'
+}
+TL_MSABI int tl__lclose(const int fd) noexcept {
+    (void)fd;
+    if (fd >= 0) ::close(fd);
+    set_last_error(abi::kErrorSuccess);
+    return 0;
+}
+TL_MSABI int tl_FlushInstructionCache(void* const process, const void* const base, const std::size_t size) noexcept {
+    (void)process; (void)base; (void)size;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+TL_MSABI int tl_SetThreadContext(void* const thread, const void* const ctx) noexcept {
+    (void)thread; (void)ctx;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+TL_MSABI int tl_GetThreadContext(void* const thread, void* const ctx) noexcept {
+    (void)thread;
+    if (ctx != nullptr && mapped_guest_range(ctx, 1232, true)) std::memset(ctx, 0, 1232);
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+TL_MSABI std::uint32_t tl_SuspendThread(void* const thread) noexcept {
+    (void)thread;
+    set_last_error(abi::kErrorSuccess);
+    return 0;
+}
+TL_MSABI int tl_VirtualProtectEx(void* const process, void* const addr, const std::size_t size, const std::uint32_t prot, std::uint32_t* const old) noexcept {
+    (void)process;
+    return tl_VirtualProtect(addr, size, prot, old);
+}
+TL_MSABI int tl_lstrcmpA(const char* const s1, const char* const s2) noexcept {
+    if (s1 == s2) return 0;
+    if (s1 == nullptr) return -1;
+    if (s2 == nullptr) return 1;
+    return std::strcmp(s1, s2);
+}
+TL_MSABI int tl_IsThreadAFiber(void) noexcept {
+    return 0;
+}
+TL_MSABI void* tl_InterlockedFlushSList(void* const head) noexcept {
+    if (head == nullptr) return nullptr;
+    void** h = static_cast<void**>(head);
+    void* first = *h;
+    *h = nullptr;
+    return first;
+}
+
+// --- RTSSHooks SETUPAPI ---
+TL_MSABI void* tl_SetupDiGetClassDevsA(const void* const guid, const char* const enumerator, void* const parent, const std::uint32_t flags) noexcept {
+    (void)guid; (void)enumerator; (void)parent; (void)flags;
+    set_last_error(abi::kErrorSuccess);
+    return reinterpret_cast<void*>(0x53455455ULL); // 'SETU'
+}
+TL_MSABI int tl_SetupDiEnumDeviceInfo(void* const dev_info, const std::uint32_t idx, void* const dev_data) noexcept {
+    (void)dev_info; (void)idx; (void)dev_data;
+    set_last_error(18); // ERROR_NO_MORE_FILES
+    return 0;
+}
+TL_MSABI int tl_SetupDiEnumDeviceInterfaces(void* const dev_info, void* const dev_data, const void* const guid, const std::uint32_t idx, void* const iface_data) noexcept {
+    (void)dev_info; (void)dev_data; (void)guid; (void)idx; (void)iface_data;
+    set_last_error(18);
+    return 0;
+}
+TL_MSABI int tl_SetupDiGetDeviceInterfaceDetailA(void* const dev_info, void* const iface_data, void* const detail, const std::uint32_t size, std::uint32_t* const needed, void* const dev_data) noexcept {
+    (void)dev_info; (void)iface_data; (void)detail; (void)size; (void)dev_data;
+    if (needed != nullptr && mapped_guest_range(needed, sizeof(*needed), true)) *needed = 0;
+    set_last_error(abi::kErrorSuccess);
+    return 0;
+}
+TL_MSABI int tl_SetupDiGetDeviceRegistryPropertyA(void* const dev_info, void* const dev_data, const std::uint32_t prop, std::uint32_t* const reg_type, std::uint8_t* const buf, const std::uint32_t buf_size, std::uint32_t* const needed) noexcept {
+    (void)dev_info; (void)dev_data; (void)prop;
+    if (reg_type != nullptr && mapped_guest_range(reg_type, sizeof(*reg_type), true)) *reg_type = 1;
+    if (needed != nullptr && mapped_guest_range(needed, sizeof(*needed), true)) *needed = 0;
+    if (buf != nullptr && buf_size > 0 && mapped_guest_range(buf, buf_size, true)) buf[0]=0;
+    set_last_error(abi::kErrorSuccess);
+    return 0;
+}
+TL_MSABI int tl_SetupDiGetDeviceInstanceIdA(void* const dev_info, void* const dev_data, char* const id, const std::uint32_t size, std::uint32_t* const needed) noexcept {
+    (void)dev_info; (void)dev_data;
+    if (needed != nullptr && mapped_guest_range(needed, sizeof(*needed), true)) *needed = 0;
+    if (id != nullptr && size > 0 && mapped_guest_range(id, size, true)) id[0]='\0';
+    set_last_error(abi::kErrorSuccess);
+    return 0;
+}
+TL_MSABI int tl_SetupDiDestroyDeviceInfoList(void* const dev_info) noexcept {
+    (void)dev_info;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+// --- RTSSHooks DirectX stubs ---
+TL_MSABI int tl_D3DCompile(const void* const src, const std::size_t src_size, const char* const src_name, const void* const defines, void* const include, const char* const entry, const char* const target, const std::uint32_t flags1, const std::uint32_t flags2, void** const code, void** const errors) noexcept {
+    (void)src; (void)src_size; (void)src_name; (void)defines; (void)include; (void)entry; (void)target; (void)flags1; (void)flags2;
+    if (code != nullptr && mapped_guest_range(code, sizeof(*code), true)) *code = nullptr;
+    if (errors != nullptr && mapped_guest_range(errors, sizeof(*errors), true)) *errors = nullptr;
+    return static_cast<int>(0x80004005); // E_FAIL
+}
+TL_MSABI int tl_D3D12SerializeRootSignature(const void* const root_sig, const std::uint32_t version, void** const blob, void** const error) noexcept {
+    (void)root_sig; (void)version;
+    if (blob != nullptr && mapped_guest_range(blob, sizeof(*blob), true)) *blob = nullptr;
+    if (error != nullptr && mapped_guest_range(error, sizeof(*error), true)) *error = nullptr;
+    return static_cast<int>(0x80004005);
+}
+TL_MSABI int tl_CreateDXGIFactory1(const void* const riid, void** const factory) noexcept {
+    (void)riid;
+    if (factory != nullptr && mapped_guest_range(factory, sizeof(*factory), true)) *factory = reinterpret_cast<void*>(0x58475846ULL);
+    return 0; // S_OK
+}
+TL_MSABI int tl_DirectDrawCreateEx(const void* const guid, void** const dd, const void* const iid, void* const unk) noexcept {
+    (void)guid; (void)iid; (void)unk;
+    if (dd != nullptr && mapped_guest_range(dd, sizeof(*dd), true)) *dd = reinterpret_cast<void*>(0x44445241ULL);
+    return 0;
+}
+TL_MSABI int tl_Direct3DCreate9(const std::uint32_t version) noexcept {
+    (void)version;
+    return 0;
+}
+TL_MSABI int tl_Direct3DCreate9Ex(const std::uint32_t version, void** const d3d) noexcept {
+    (void)version;
+    if (d3d != nullptr && mapped_guest_range(d3d, sizeof(*d3d), true)) *d3d = reinterpret_cast<void*>(0x44334455ULL);
+    return 0;
+}
+TL_MSABI int tl_D3D10CreateDeviceAndSwapChain(void* const adapter, const std::uint32_t driver, void* const sw, const std::uint32_t flags, const std::uint32_t feature, void* const swap_desc, void** const swap_chain, void** const device) noexcept {
+    (void)adapter; (void)driver; (void)sw; (void)flags; (void)feature; (void)swap_desc;
+    if (swap_chain != nullptr && mapped_guest_range(swap_chain, sizeof(*swap_chain), true)) *swap_chain = reinterpret_cast<void*>(0x53573130ULL);
+    if (device != nullptr && mapped_guest_range(device, sizeof(*device), true)) *device = reinterpret_cast<void*>(0x44335566ULL);
+    return 0;
+}
+TL_MSABI int tl_D3DX10CompileFromMemory(const char* const src, const std::size_t len, const char* const src_name, const void* const defines, void* const include, const char* const entry, const char* const profile, const std::uint32_t flags1, const std::uint32_t flags2, void* const pump, void** const shader, void** const errors, void** const hr) noexcept {
+    (void)src; (void)len; (void)src_name; (void)defines; (void)include; (void)entry; (void)profile; (void)flags1; (void)flags2; (void)pump;
+    if (shader != nullptr && mapped_guest_range(shader, sizeof(*shader), true)) *shader = nullptr;
+    if (errors != nullptr && mapped_guest_range(errors, sizeof(*errors), true)) *errors = nullptr;
+    if (hr != nullptr && mapped_guest_range(hr, sizeof(*hr), true)) *hr = nullptr;
+    return static_cast<int>(0x80004005);
+}
+TL_MSABI int tl_D3D11CreateDeviceAndSwapChain(void* const adapter, const std::uint32_t driver, void* const sw, const std::uint32_t flags, const void* const feature_levels, const std::uint32_t levels, const std::uint32_t sdk, void* const swap_desc, void** const swap_chain, void** const device, void* const feature, void* const ctx) noexcept {
+    (void)adapter; (void)driver; (void)sw; (void)flags; (void)feature_levels; (void)levels; (void)sdk; (void)swap_desc; (void)feature; (void)ctx;
+    if (swap_chain != nullptr && mapped_guest_range(swap_chain, sizeof(*swap_chain), true)) *swap_chain = reinterpret_cast<void*>(0x53573131ULL);
+    if (device != nullptr && mapped_guest_range(device, sizeof(*device), true)) *device = reinterpret_cast<void*>(0x44335577ULL);
+    return 0;
+}
+TL_MSABI int tl_D3DX11CompileFromMemory(const char* const src, const std::size_t len, const char* const src_name, const void* const defines, void* const include, const char* const entry, const char* const target, const std::uint32_t flags1, const std::uint32_t flags2, void* const pump, void** const code, void** const errors, void** const hr) noexcept {
+    (void)src; (void)len; (void)src_name; (void)defines; (void)include; (void)entry; (void)target; (void)flags1; (void)flags2; (void)pump;
+    if (code != nullptr && mapped_guest_range(code, sizeof(*code), true)) *code = nullptr;
+    if (errors != nullptr && mapped_guest_range(errors, sizeof(*errors), true)) *errors = nullptr;
+    if (hr != nullptr && mapped_guest_range(hr, sizeof(*hr), true)) *hr = nullptr;
+    return static_cast<int>(0x80004005);
+}
+
 }  // extern "C"
 
 }  // namespace tradutorlinux

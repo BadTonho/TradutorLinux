@@ -2077,6 +2077,63 @@ TL_MSABI std::intptr_t tl_LresultFromObject(const void* riid, std::uintptr_t w_p
 TL_MSABI std::uint32_t tl_TdhGetPropertySize(void* event_record, std::uint32_t tdh_context_count, void* tdh_context, std::uint32_t property_data_count, void* property_data, std::uint32_t* property_size) noexcept;
 TL_MSABI int tl_OpenPrinterW(const std::uint16_t* printer_name, void** printer_handle, void* defaults) noexcept;
 TL_MSABI void tl_WTSFreeMemory(void* memory) noexcept;
+// RTSSHooks — GDI32
+TL_MSABI int tl_Pie(void* hdc, int left, int top, int right, int bottom, int x1, int y1, int x2, int y2) noexcept;
+TL_MSABI int tl_GetTextCharacterExtra(void* hdc) noexcept;
+TL_MSABI int tl_GetCharABCWidthsA(void* hdc, std::uint32_t first, std::uint32_t last, void* abc) noexcept;
+TL_MSABI int tl_GetDeviceGammaRamp(void* hdc, void* ramp) noexcept;
+TL_MSABI void* tl_CreateDCA(const char* driver, const char* device, const char* port, const void* dev_mode) noexcept;
+// RTSSHooks — USER32
+TL_MSABI void* tl_SetWindowsHookExA(int id_hook, void* lpfn, void* hmod, std::uint32_t thread_id) noexcept;
+TL_MSABI std::intptr_t tl_SendMessageTimeoutA(void* hwnd, std::uint32_t msg, std::uintptr_t w_param, std::intptr_t l_param, std::uint32_t flags, std::uint32_t timeout, std::uintptr_t* result) noexcept;
+TL_MSABI void* tl_WindowFromDC(void* hdc) noexcept;
+TL_MSABI void* tl_FindWindowExA(void* parent, void* after, const char* class_name, const char* window_name) noexcept;
+TL_MSABI int tl_EnumDisplaySettingsA(const char* device, std::uint32_t mode, void* dev_mode) noexcept;
+TL_MSABI int tl_IsRectEmpty(const void* rect) noexcept;
+TL_MSABI int tl_SubtractRect(void* dest, const void* src1, const void* src2) noexcept;
+// RTSSHooks — SHLWAPI A
+TL_MSABI int tl_PathRemoveExtensionA(char* path) noexcept;
+TL_MSABI int tl_PathRenameExtensionA(char* path, const char* ext) noexcept;
+TL_MSABI char* tl_PathStripPathA(char* path) noexcept;
+TL_MSABI int tl_PathMatchSpecA(const char* file, const char* spec) noexcept;
+// RTSSHooks — WINMM
+TL_MSABI std::uint32_t tl_timeKillEvent(std::uint32_t id) noexcept;
+// RTSSHooks — KERNEL32
+TL_MSABI void* tl_CreateRemoteThread(void* process, void* attr, std::size_t stack, void* start, void* param, std::uint32_t flags, std::uint32_t* tid) noexcept;
+TL_MSABI void* tl_VirtualAllocEx(void* process, void* addr, std::size_t size, std::uint32_t type, std::uint32_t protect) noexcept;
+TL_MSABI int tl_VirtualFreeEx(void* process, void* addr, std::size_t size, std::uint32_t type) noexcept;
+TL_MSABI int tl_WriteProcessMemory(void* process, void* base, const void* buf, std::size_t size, std::size_t* written) noexcept;
+TL_MSABI int tl_OpenFile(const char* file, void* of_struct, std::uint32_t style) noexcept;
+TL_MSABI void* tl_OpenEventA(std::uint32_t access, int inherit, const char* name) noexcept;
+TL_MSABI void* tl_OpenFileMappingA(std::uint32_t access, int inherit, const char* name) noexcept;
+TL_MSABI int tl__lclose(int fd) noexcept;
+TL_MSABI int tl_FlushInstructionCache(void* process, const void* base, std::size_t size) noexcept;
+TL_MSABI int tl_SetThreadContext(void* thread, const void* ctx) noexcept;
+TL_MSABI int tl_GetThreadContext(void* thread, void* ctx) noexcept;
+TL_MSABI std::uint32_t tl_SuspendThread(void* thread) noexcept;
+TL_MSABI int tl_VirtualProtectEx(void* process, void* addr, std::size_t size, std::uint32_t prot, std::uint32_t* old) noexcept;
+TL_MSABI int tl_lstrcmpA(const char* s1, const char* s2) noexcept;
+TL_MSABI int tl_IsThreadAFiber(void) noexcept;
+TL_MSABI void* tl_InterlockedFlushSList(void* head) noexcept;
+// RTSSHooks — SETUPAPI
+TL_MSABI void* tl_SetupDiGetClassDevsA(const void* guid, const char* enumerator, void* parent, std::uint32_t flags) noexcept;
+TL_MSABI int tl_SetupDiEnumDeviceInfo(void* dev_info, std::uint32_t idx, void* dev_data) noexcept;
+TL_MSABI int tl_SetupDiEnumDeviceInterfaces(void* dev_info, void* dev_data, const void* guid, std::uint32_t idx, void* iface_data) noexcept;
+TL_MSABI int tl_SetupDiGetDeviceInterfaceDetailA(void* dev_info, void* iface_data, void* detail, std::uint32_t size, std::uint32_t* needed, void* dev_data) noexcept;
+TL_MSABI int tl_SetupDiGetDeviceRegistryPropertyA(void* dev_info, void* dev_data, std::uint32_t prop, std::uint32_t* reg_type, std::uint8_t* buf, std::uint32_t buf_size, std::uint32_t* needed) noexcept;
+TL_MSABI int tl_SetupDiGetDeviceInstanceIdA(void* dev_info, void* dev_data, char* id, std::uint32_t size, std::uint32_t* needed) noexcept;
+TL_MSABI int tl_SetupDiDestroyDeviceInfoList(void* dev_info) noexcept;
+// RTSSHooks — DirectX delay imports
+TL_MSABI int tl_D3DCompile(const void* src, std::size_t src_size, const char* src_name, const void* defines, void* include, const char* entry, const char* target, std::uint32_t flags1, std::uint32_t flags2, void** code, void** errors) noexcept;
+TL_MSABI int tl_D3D12SerializeRootSignature(const void* root_sig, std::uint32_t version, void** blob, void** error) noexcept;
+TL_MSABI int tl_CreateDXGIFactory1(const void* riid, void** factory) noexcept;
+TL_MSABI int tl_DirectDrawCreateEx(const void* guid, void** dd, const void* iid, void* unk) noexcept;
+TL_MSABI int tl_Direct3DCreate9(std::uint32_t version) noexcept;
+TL_MSABI int tl_Direct3DCreate9Ex(std::uint32_t version, void** d3d) noexcept;
+TL_MSABI int tl_D3D10CreateDeviceAndSwapChain(void* adapter, std::uint32_t driver, void* sw, std::uint32_t flags, std::uint32_t feature, void* swap_desc, void** swap_chain, void** device) noexcept;
+TL_MSABI int tl_D3DX10CompileFromMemory(const char* src, std::size_t len, const char* src_name, const void* defines, void* include, const char* entry, const char* profile, std::uint32_t flags1, std::uint32_t flags2, void* pump, void** shader, void** errors, void** hr) noexcept;
+TL_MSABI int tl_D3D11CreateDeviceAndSwapChain(void* adapter, std::uint32_t driver, void* sw, std::uint32_t flags, const void* feature_levels, std::uint32_t levels, std::uint32_t sdk, void* swap_desc, void** swap_chain, void** device, void* feature, void* ctx) noexcept;
+TL_MSABI int tl_D3DX11CompileFromMemory(const char* src, std::size_t len, const char* src_name, const void* defines, void* include, const char* entry, const char* target, std::uint32_t flags1, std::uint32_t flags2, void* pump, void** code, void** errors, void** hr) noexcept;
 TL_MSABI int tl_AdjustWindowRectEx(void* lpRect, std::uint32_t dwStyle, int bMenu, std::uint32_t dwExStyle) noexcept;
 TL_MSABI std::uint32_t tl_GetDlgItemTextA(void* hDlg, int nIDDlgItem, char* lpString, int cchMax) noexcept;
 TL_MSABI std::uint32_t tl_GetDlgItemTextW(void* hDlg, int nIDDlgItem, wchar_t* lpString, int cchMax) noexcept;

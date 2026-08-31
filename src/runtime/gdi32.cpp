@@ -1132,6 +1132,54 @@ TL_MSABI int tl_Arc(void* const hdc, const int left, const int top, const int ri
     return 1;
 }
 
+TL_MSABI int tl_Pie(void* const hdc, const int left, const int top, const int right, const int bottom, const int x1, const int y1, const int x2, const int y2) noexcept {
+    (void)hdc;
+    (void)left;
+    (void)top;
+    (void)right;
+    (void)bottom;
+    (void)x1;
+    (void)y1;
+    (void)x2;
+    (void)y2;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_GetTextCharacterExtra(void* const hdc) noexcept {
+    (void)hdc;
+    return 0;
+}
+
+TL_MSABI int tl_GetCharABCWidthsA(void* const hdc, const std::uint32_t first, const std::uint32_t last, void* const abc) noexcept {
+    (void)hdc;
+    if (abc != nullptr && last >= first) {
+        const std::size_t count = static_cast<std::size_t>(last - first + 1);
+        if (mapped_guest_range(abc, count * 12, true)) {
+            std::memset(abc, 0, count * 12);
+        }
+    }
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_GetDeviceGammaRamp(void* const hdc, void* const ramp) noexcept {
+    (void)hdc;
+    if (ramp != nullptr && mapped_guest_range(ramp, 512, true)) {
+        std::memset(ramp, 0, 512);
+    }
+    return 1;
+}
+
+TL_MSABI void* tl_CreateDCA(const char* const driver, const char* const device, const char* const port, const void* const dev_mode) noexcept {
+    (void)driver;
+    (void)device;
+    (void)port;
+    (void)dev_mode;
+    set_last_error(abi::kErrorSuccess);
+    return reinterpret_cast<void*>(0x44434100ULL); // 'DCA\0'
+}
+
 }  // extern "C"
 
 }  // namespace tradutorlinux

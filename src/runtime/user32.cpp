@@ -3804,6 +3804,94 @@ TL_MSABI int tl_IsChild(void* const hWndParent, void* const hWnd) noexcept {
     return 0;
 }
 
+TL_MSABI void* tl_SetWindowsHookExA(const int id_hook, void* const lpfn, void* const hmod, const std::uint32_t thread_id) noexcept {
+    (void)id_hook;
+    (void)lpfn;
+    (void)hmod;
+    (void)thread_id;
+    set_last_error(abi::kErrorSuccess);
+    return reinterpret_cast<void*>(0x484F4F4BULL); // 'HOOK'
+}
+
+TL_MSABI std::intptr_t tl_SendMessageTimeoutA(void* const hwnd, const std::uint32_t msg, const std::uintptr_t w_param, const std::intptr_t l_param, const std::uint32_t flags, const std::uint32_t timeout, std::uintptr_t* const result) noexcept {
+    (void)hwnd;
+    (void)msg;
+    (void)w_param;
+    (void)l_param;
+    (void)flags;
+    (void)timeout;
+    if (result != nullptr && mapped_guest_range(result, sizeof(*result), true)) {
+        *result = 0;
+    }
+    set_last_error(abi::kErrorSuccess);
+    return 0;
+}
+
+TL_MSABI void* tl_WindowFromDC(void* const hdc) noexcept {
+    (void)hdc;
+    if (hdc != nullptr) {
+        // HDC == HWND token in our model
+        return hdc;
+    }
+    return reinterpret_cast<void*>(0x57494E44ULL); // 'WIND'
+}
+
+TL_MSABI void* tl_FindWindowExA(void* const parent, void* const after, const char* const class_name, const char* const window_name) noexcept {
+    (void)parent;
+    (void)after;
+    (void)class_name;
+    (void)window_name;
+    set_last_error(abi::kErrorSuccess);
+    return nullptr;
+}
+
+TL_MSABI int tl_EnumDisplaySettingsA(const char* const device, const std::uint32_t mode, void* const dev_mode) noexcept {
+    (void)device;
+    if (mode != 0) {
+        return 0;
+    }
+    if (dev_mode != nullptr && mapped_guest_range(dev_mode, 124, true)) {
+        std::memset(dev_mode, 0, 124);
+        *reinterpret_cast<std::uint32_t*>(dev_mode) = 124;
+        // dmPelsWidth/Height at offset 104/108
+        *reinterpret_cast<std::uint32_t*>(static_cast<char*>(dev_mode) + 104) = 1920;
+        *reinterpret_cast<std::uint32_t*>(static_cast<char*>(dev_mode) + 108) = 1080;
+        *reinterpret_cast<std::uint32_t*>(static_cast<char*>(dev_mode) + 112) = 32;
+    }
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_IsRectEmpty(const void* const rect) noexcept {
+    if (rect == nullptr || !mapped_guest_range(rect, 16, false)) {
+        return 1;
+    }
+    const auto* r = static_cast<const std::int32_t*>(rect);
+    return (r[2] <= r[0] || r[3] <= r[1]) ? 1 : 0;
+}
+
+TL_MSABI int tl_SubtractRect(void* const dest, const void* const src1, const void* const src2) noexcept {
+    if (dest == nullptr || src1 == nullptr || src2 == nullptr ||
+        !mapped_guest_range(dest, 16, true) || !mapped_guest_range(src1, 16, false) ||
+        !mapped_guest_range(src2, 16, false)) {
+        return 0;
+    }
+    const auto* s1 = static_cast<const std::int32_t*>(src1);
+    const auto* s2 = static_cast<const std::int32_t*>(src2);
+    auto* d = static_cast<std::int32_t*>(dest);
+    // Simplificado: dest = src1 - intersecção
+    d[0] = s1[0];
+    d[1] = s1[1];
+    d[2] = s1[2];
+    d[3] = s1[3];
+    // Se há intersecção, retorna 1
+    const int left = std::max(s1[0], s2[0]);
+    const int top = std::max(s1[1], s2[1]);
+    const int right = std::min(s1[2], s2[2]);
+    const int bottom = std::min(s1[3], s2[3]);
+    return (left < right && top < bottom) ? 1 : 0;
+}
+
 }  // extern "C"
 
 }  // namespace tradutorlinux
