@@ -331,7 +331,9 @@ TL_MSABI abi::HWnd tl_CreateWindowExA(const std::uint32_t ex_style,
         return nullptr;
     }
     ClassSlot* const cls = find_class_slot(class_name);
-    if (cls == nullptr && (class_val <= 0xFFFFU || !runtime_gui::is_builtin_control(class_name))) {
+    const bool generic_child = cls == nullptr && class_val > 0xFFFFU && parent != nullptr;
+    if (cls == nullptr && (class_val <= 0xFFFFU ||
+                           (!runtime_gui::is_builtin_control(class_name) && !generic_child))) {
         set_last_error(abi::kErrorInvalidParameter);
         trace_guest_failure("CreateWindowExA", "class-lookup", "classe não registrada");
         return nullptr;
@@ -342,7 +344,7 @@ TL_MSABI abi::HWnd tl_CreateWindowExA(const std::uint32_t ex_style,
         set_last_error(abi::kErrorNotEnoughMemory);
         return nullptr;
     }
-    if (class_val > 0xFFFFU && runtime_gui::is_builtin_control(class_name)) {
+    if (class_val > 0xFFFFU && (runtime_gui::is_builtin_control(class_name) || generic_child)) {
         WindowSlot& slot = *free_it;
         WindowSlot* parent_slot = find_window_slot(parent);
         if (parent_slot == nullptr || parent_slot->is_control) {
@@ -353,7 +355,9 @@ TL_MSABI abi::HWnd tl_CreateWindowExA(const std::uint32_t ex_style,
         slot.used = true;
         slot.class_name = class_name;
         slot.is_control = true;
-        slot.control_kind = runtime_gui::control_kind_for(class_name);
+        slot.control_kind = runtime_gui::is_builtin_control(class_name)
+                                ? runtime_gui::control_kind_for(class_name)
+                                : runtime_gui::ControlKind::ListView;
         slot.parent = parent_slot;
         slot.control_id = reinterpret_cast<std::uintptr_t>(menu);
         slot.style = style;

@@ -8,6 +8,7 @@
 #include <iostream>
 #include <limits>
 #include <mutex>
+#include <unordered_set>
 
 #include "tradutorlinux/diagnostics/trace.hpp"
 #include "tradutorlinux/runtime/memory_validator.hpp"
@@ -37,6 +38,8 @@ struct StreamState {
 
 std::array<StreamState*, kMaxStreams> g_streams{};
 std::mutex g_streams_mutex;
+std::unordered_set<void*> g_task_allocations;
+std::mutex g_task_allocations_mutex;
 
 void trace_stream(const char* operation, const char* status) noexcept {
     const std::array<diagnostics::TraceField, 3> fields{
@@ -378,12 +381,27 @@ TL_OLE_MSABI void* tl_CoTaskMemAlloc(const std::size_t size) noexcept {
     if (size == 0) {
         return nullptr;
     }
-    return std::malloc(size);
+    void* const pointer = std::malloc(size);
+    if (pointer != nullptr) {
+        std::lock_guard lock(g_task_allocations_mutex);
+        g_task_allocations.insert(pointer);
+    }
+    return pointer;
 }
 
 TL_OLE_MSABI void tl_CoTaskMemFree(void* ptr) noexcept {
-    if (ptr != nullptr) {
+    if (ptr == nullptr) {
+        return;
+    }
+    bool owned = false;
+    {
+        std::lock_guard lock(g_task_allocations_mutex);
+        owned = g_task_allocations.erase(ptr) != 0;
+    }
+    if (owned) {
         std::free(ptr);
+    } else {
+        trace_stream("CoTaskMemFree", "ignored-unowned-pointer");
     }
 }
 
@@ -395,7 +413,20 @@ TL_OLE_MSABI void* tl_CoTaskMemRealloc(void* ptr, const std::size_t size) noexce
         tl_CoTaskMemFree(ptr);
         return nullptr;
     }
-    return std::realloc(ptr, size);
+    {
+        std::lock_guard lock(g_task_allocations_mutex);
+        if (!g_task_allocations.contains(ptr)) {
+            trace_stream("CoTaskMemRealloc", "ignored-unowned-pointer");
+            return nullptr;
+        }
+    }
+    void* const replacement = std::realloc(ptr, size);
+    if (replacement != nullptr && replacement != ptr) {
+        std::lock_guard lock(g_task_allocations_mutex);
+        g_task_allocations.erase(ptr);
+        g_task_allocations.insert(replacement);
+    }
+    return replacement;
 }
 
 namespace {
