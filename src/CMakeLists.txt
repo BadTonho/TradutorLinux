@@ -69,7 +69,13 @@ target_compile_definitions(tradutorlinux_core
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
     target_compile_options(tradutorlinux_core PUBLIC -mstackrealign)
     set_source_files_properties(runtime/kernel32.cpp runtime/legacy_winapi.cpp runtime/ntdll.cpp
-        runtime/user32.cpp runtime/gdi32.cpp runtime/gui_controls.cpp
+        runtime/user32.cpp runtime/gdi32.cpp runtime/gui_controls.cpp runtime/shell32.cpp
+        runtime/winapi.cpp runtime/msvcrt.cpp runtime/advapi.cpp runtime/security.cpp
+        runtime/ws2_32.cpp runtime/wininet.cpp runtime/wintrust.cpp runtime/crypt32.cpp
+        runtime/ole32.cpp runtime/oleaut32.cpp runtime/shlwapi.cpp runtime/version.cpp
+        runtime/winmm.cpp runtime/comctl32.cpp runtime/comdlg32.cpp runtime/imm32.cpp
+        runtime/psapi.cpp runtime/gdiplus.cpp runtime/uxtheme.cpp runtime/dbghelp.cpp
+        runtime/powrprof.cpp runtime/iphlpapi.cpp runtime/mpr.cpp runtime/dwmapi.cpp
         PROPERTIES COMPILE_OPTIONS "-finstrument-functions")
     set_source_files_properties(diagnostics/trace.cpp runtime/function_trace.cpp
         PROPERTIES COMPILE_OPTIONS "-fno-instrument-functions")
