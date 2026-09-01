@@ -5,6 +5,7 @@
 #include <chrono>
 #include <condition_variable>
 #include <cstdlib>
+#include <dlfcn.h>
 #include <deque>
 #include <filesystem>
 #include <fstream>
@@ -136,6 +137,12 @@ std::thread g_trace_json_writer;
 bool g_trace_json_writer_stop = false;
 pid_t g_trace_json_owner_pid = -1;
 bool g_trace_json_atexit_registered = false;
+struct FunctionTraceRecord {
+    bool entering{};
+    std::uintptr_t function{};
+    std::uintptr_t caller{};
+};
+std::deque<FunctionTraceRecord> g_function_trace_queue;
 
 bool open_json_output_locked();
 
@@ -148,14 +155,36 @@ void write_json_record_locked(const std::string& record) {
 void json_writer_loop() {
     for (;;) {
         std::string record;
+        FunctionTraceRecord function_record{};
+        bool has_function_record = false;
         {
             std::unique_lock lock(g_trace_json_queue_mutex);
             g_trace_json_queue_cv.wait(lock, [] {
-                return g_trace_json_writer_stop || !g_trace_json_queue.empty();
+                return g_trace_json_writer_stop || !g_trace_json_queue.empty() ||
+                       !g_function_trace_queue.empty();
             });
-            if (g_trace_json_queue.empty() && g_trace_json_writer_stop) return;
-            record = std::move(g_trace_json_queue.front());
-            g_trace_json_queue.pop_front();
+            if (g_trace_json_queue.empty() && g_function_trace_queue.empty() &&
+                g_trace_json_writer_stop) return;
+            if (!g_function_trace_queue.empty()) {
+                function_record = g_function_trace_queue.front();
+                g_function_trace_queue.pop_front();
+                has_function_record = true;
+            } else {
+                record = std::move(g_trace_json_queue.front());
+                g_trace_json_queue.pop_front();
+            }
+        }
+        if (has_function_record) {
+            Dl_info info{};
+            const bool resolved = dladdr(reinterpret_cast<void*>(function_record.function), &info) != 0;
+            const std::array fields{
+                TraceField{"address", std::to_string(function_record.function)},
+                TraceField{"caller", std::to_string(function_record.caller)},
+                TraceField{"symbol", resolved && info.dli_sname != nullptr ? info.dli_sname : "<unresolved>"},
+            };
+            write_json_trace(TraceComponent::Runtime, TraceLevel::Debug,
+                             function_record.entering ? "function-enter" : "function-exit", fields);
+            continue;
         }
         std::lock_guard lock(g_trace_mutex);
         if (g_trace_json_enabled && ::getpid() == g_trace_json_owner_pid) {
@@ -177,6 +206,7 @@ void stop_json_writer() noexcept {
     if (g_trace_json_writer.joinable()) g_trace_json_writer.join();
     std::lock_guard lock(g_trace_json_queue_mutex);
     g_trace_json_queue.clear();
+    g_function_trace_queue.clear();
     g_trace_json_writer_stop = false;
 }
 
@@ -337,6 +367,20 @@ void write_json_trace(const TraceComponent component, const TraceLevel level,
                       const std::string_view event, const std::span<const TraceField> fields) {
     std::lock_guard<std::mutex> lock(g_trace_mutex);
     write_json_event_locked(component, level, event, fields);
+}
+
+void enqueue_function_json_trace(const bool entering, const std::uintptr_t function,
+                                 const std::uintptr_t caller) noexcept {
+    if (!is_trace_json_enabled()) return;
+    try {
+        if (::getpid() != g_trace_json_owner_pid) return;
+        {
+            std::lock_guard lock(g_trace_json_queue_mutex);
+            g_function_trace_queue.push_back(FunctionTraceRecord{entering, function, caller});
+        }
+        g_trace_json_queue_cv.notify_one();
+    } catch (...) {
+    }
 }
 
 }  // namespace tradutorlinux::diagnostics

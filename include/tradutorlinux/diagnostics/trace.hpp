@@ -1,6 +1,7 @@
 #pragma once
 
 #include <iosfwd>
+#include <cstdint>
 #include <filesystem>
 #include <span>
 #include <string>
@@ -59,6 +60,8 @@ void write_trace(std::ostream& stream, TraceComponent component, TraceLevel leve
                  std::string_view event, std::span<const TraceField> fields = {});
 void write_json_trace(TraceComponent component, TraceLevel level,
                       std::string_view event, std::span<const TraceField> fields = {});
+void enqueue_function_json_trace(bool entering, std::uintptr_t function,
+                                 std::uintptr_t caller) noexcept;
 
 [[nodiscard]] std::string_view failure_category_name(FailureCategory category);
 
