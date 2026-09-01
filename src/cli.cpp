@@ -1600,6 +1600,8 @@ ExitCode run_command(const CommandLine& command_line, std::ostream& stdout_strea
             if (outcome.fault_recorded) {
                 fields.push_back(diagnostics::TraceField{
                     "fault-address", util::format_hex(outcome.fault_address)});
+                fields.push_back(diagnostics::TraceField{
+                    "fault-rip", util::format_hex(outcome.fault_rip)});
             }
             if (crash_context.valid) {
                 fields.push_back(

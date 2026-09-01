@@ -2630,7 +2630,10 @@ TL_MSABI int tl_ClientToScreen(void* const hwnd, void* const point) noexcept {
 
 TL_MSABI void* tl_GetMenu(void* const hwnd) noexcept {
     (void)hwnd;
-    return reinterpret_cast<void*>(0x4D454E55ULL); // 'MENU'
+    // Ainda não há um objeto HMENU nativo associado à janela. Retornar um
+    // marcador inteiro fazia o convidado tratá-lo como ponteiro e causava
+    // SIGSEGV durante a montagem do menu do 7-Zip.
+    return nullptr;
 }
 
 TL_MSABI int tl_SetMenu(void* const hwnd, void* const menu) noexcept {
@@ -2643,12 +2646,12 @@ TL_MSABI int tl_SetMenu(void* const hwnd, void* const menu) noexcept {
 TL_MSABI void* tl_GetSubMenu(void* const menu, const int pos) noexcept {
     (void)menu;
     (void)pos;
-    return reinterpret_cast<void*>(0x5355424DULL); // 'SUBM'
+    return nullptr;
 }
 
 TL_MSABI int tl_GetMenuItemCount(void* const menu) noexcept {
     (void)menu;
-    return 5;
+    return 0;
 }
 
 TL_MSABI int tl_GetMenuItemInfoW(void* const menu, const std::uint32_t item, const int f_by_position,
@@ -2671,6 +2674,12 @@ TL_MSABI int tl_GetMenuItemInfoW(void* const menu, const std::uint32_t item, con
         std::uint32_t char_count;
     };
     if (mii != nullptr && !mapped_guest_range(mii, sizeof(GuestMenuItemInfoW), true)) {
+        const std::array<diagnostics::TraceField, 4> fields{
+            diagnostics::TraceField{"symbol", "GetMenuItemInfoW"},
+            diagnostics::TraceField{"status", "invalid-output"},
+            diagnostics::TraceField{"item", std::to_string(item)},
+            diagnostics::TraceField{"mii", std::to_string(reinterpret_cast<std::uintptr_t>(mii))}};
+        runtime_trace("GetMenuItemInfoW", fields, 4);
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
@@ -2681,7 +2690,7 @@ TL_MSABI int tl_GetMenuItemInfoW(void* const menu, const std::uint32_t item, con
         info->f_type = 0;
         info->f_state = 0;
         info->item_id = 100U + item;
-        info->sub_menu = item < 4U ? reinterpret_cast<void*>(0x5355424DULL) : nullptr;
+        info->sub_menu = nullptr;
         info->checked_bitmap = nullptr;
         info->unchecked_bitmap = nullptr;
         info->item_data = 0;
@@ -2692,7 +2701,18 @@ TL_MSABI int tl_GetMenuItemInfoW(void* const menu, const std::uint32_t item, con
             info->type_data = nullptr;
             info->char_count = 0;
         }
+        // Não anuncie um item sintético como válido: o 7-Zip usa o retorno
+        // para decidir se deve continuar enumerando o menu. Retornar sucesso
+        // sem um catálogo real provoca recursão durante o WM_CREATE.
+        set_last_error(abi::kErrorNotSupported);
+        return 0;
     }
+    const std::array<diagnostics::TraceField, 4> fields{
+        diagnostics::TraceField{"symbol", "GetMenuItemInfoW"},
+        diagnostics::TraceField{"status", "success"},
+        diagnostics::TraceField{"item", std::to_string(item)},
+        diagnostics::TraceField{"mii", std::to_string(reinterpret_cast<std::uintptr_t>(mii))}};
+    runtime_trace("GetMenuItemInfoW", fields, 4);
     set_last_error(abi::kErrorSuccess);
     return 1;
 }
