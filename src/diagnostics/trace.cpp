@@ -99,6 +99,8 @@ namespace {
     if (name.starts_with("_ZNSt") || name.starts_with("_ZSt") ||
         name.starts_with("_ZNS") || name.starts_with("_ZNKSt") ||
         name.starts_with("_ZN9__gnu_cxx") || name.starts_with("__gnu_cxx")) return false;
+    if (name == "__cyg_profile_func_enter" || name == "__cyg_profile_func_exit" ||
+        name == "trace_assembly_function_entry") return true;
     return name.find("tl_") != std::string_view::npos ||
            name.find("tradutorlinux") != std::string_view::npos;
 }

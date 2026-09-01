@@ -22,6 +22,9 @@ void __cyg_profile_func_enter(void* const function, void* const caller) noexcept
     if (g_function_trace_in_hook != 0) return;
     g_function_trace_in_hook = 1;
     tradutorlinux::diagnostics::enqueue_function_json_trace(
+        true, reinterpret_cast<std::uintptr_t>(&__cyg_profile_func_enter),
+        reinterpret_cast<std::uintptr_t>(caller));
+    tradutorlinux::diagnostics::enqueue_function_json_trace(
         true, reinterpret_cast<std::uintptr_t>(function), reinterpret_cast<std::uintptr_t>(caller));
     g_function_trace_in_hook = 0;
 }
@@ -32,6 +35,9 @@ void __cyg_profile_func_exit(void* const function, void* const caller) noexcept 
     if (g_function_trace_in_hook != 0) return;
     g_function_trace_in_hook = 1;
     tradutorlinux::diagnostics::enqueue_function_json_trace(
+        true, reinterpret_cast<std::uintptr_t>(&__cyg_profile_func_exit),
+        reinterpret_cast<std::uintptr_t>(caller));
+    tradutorlinux::diagnostics::enqueue_function_json_trace(
         false, reinterpret_cast<std::uintptr_t>(function), reinterpret_cast<std::uintptr_t>(caller));
     g_function_trace_in_hook = 0;
 }
@@ -41,6 +47,8 @@ void trace_assembly_function_entry(const char* const function) noexcept {
     if (__atomic_load_n(&tl_function_trace_enabled, __ATOMIC_ACQUIRE) == 0 || function == nullptr) {
         return;
     }
+    tradutorlinux::diagnostics::enqueue_function_json_trace(
+        true, reinterpret_cast<std::uintptr_t>(&trace_assembly_function_entry), 0);
     const std::array fields{tradutorlinux::diagnostics::TraceField{"function", function}};
     tradutorlinux::diagnostics::write_json_trace(
         tradutorlinux::diagnostics::TraceComponent::Runtime,
