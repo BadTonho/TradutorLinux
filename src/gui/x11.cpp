@@ -325,6 +325,10 @@ bool map_window(const NativeWindow window) noexcept {
     }
     XMapWindow(dpy, state->window);
     XFlush(dpy);
+    // O servidor envia Expose após o map. Aguarde esse evento antes de o
+    // runtime desenhar o primeiro frame, evitando que a pintura seja apagada
+    // pelo background padrão branco da janela.
+    XSync(dpy, False);
     std::fprintf(stderr, "[tl][gui][info] backend=x11 window-mapped id=%lu size=%dx%d\n",
                  static_cast<unsigned long>(state->window), state->width, state->height);
     return true;
