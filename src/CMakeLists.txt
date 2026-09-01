@@ -79,7 +79,7 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
         util/unicode.cpp catalog/app_catalog.cpp package/msix.cpp
         diagnostics/crash_context.cpp gui/platform.cpp gui/wayland.cpp gui/x11.cpp
         loader/dll_overrides.cpp loader/image_mapper.cpp loader/import_resolver.cpp
-        loader/module.cpp pe/pe_reader.cpp prefix/prefix.cpp
+        loader/module.cpp loader/process.cpp pe/pe_reader.cpp prefix/prefix.cpp
         runtime/memory_validator.cpp runtime/environment.cpp runtime/guest_context.cpp
         runtime/dialog_template.cpp runtime/unwind.cpp
         PROPERTIES COMPILE_OPTIONS "-finstrument-functions")
