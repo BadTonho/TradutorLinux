@@ -450,6 +450,23 @@ void write_json_trace(const TraceComponent component, const TraceLevel level,
     write_json_event_locked(component, level, event, fields);
 }
 
+FunctionTraceScope::FunctionTraceScope(const std::string_view function) noexcept
+    : function_(function) {
+    try {
+        const std::array fields{TraceField{"function", std::string{function_}}};
+        write_json_trace(TraceComponent::Runtime, TraceLevel::Debug, "function-enter", fields);
+    } catch (...) {
+    }
+}
+
+FunctionTraceScope::~FunctionTraceScope() noexcept {
+    try {
+        const std::array fields{TraceField{"function", std::string{function_}}};
+        write_json_trace(TraceComponent::Runtime, TraceLevel::Debug, "function-exit", fields);
+    } catch (...) {
+    }
+}
+
 void enqueue_function_json_trace(const bool entering, const std::uintptr_t function,
                                  const std::uintptr_t caller) noexcept {
     if (!is_trace_json_enabled()) return;

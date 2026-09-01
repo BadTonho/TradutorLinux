@@ -58,6 +58,18 @@ struct TraceField {
     std::string value;
 };
 
+class FunctionTraceScope {
+public:
+    explicit FunctionTraceScope(std::string_view function) noexcept;
+    ~FunctionTraceScope() noexcept;
+
+    FunctionTraceScope(const FunctionTraceScope&) = delete;
+    FunctionTraceScope& operator=(const FunctionTraceScope&) = delete;
+
+private:
+    std::string_view function_;
+};
+
 void write_trace(std::ostream& stream, TraceComponent component, TraceLevel level,
                  std::string_view event, std::span<const TraceField> fields = {});
 void write_json_trace(TraceComponent component, TraceLevel level,
@@ -68,3 +80,6 @@ void enqueue_function_json_trace(bool entering, std::uintptr_t function,
 [[nodiscard]] std::string_view failure_category_name(FailureCategory category);
 
 }  // namespace tradutorlinux::diagnostics
+
+#define TL_TRACE_FUNCTION() \
+    ::tradutorlinux::diagnostics::FunctionTraceScope tl_function_trace_scope{__PRETTY_FUNCTION__}

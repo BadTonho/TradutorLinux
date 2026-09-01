@@ -46,6 +46,7 @@ constexpr std::string_view kUsage =
     "  tradutorlinux app remove <id>\n";
 
 [[nodiscard]] bool is_option(const std::string_view argument) {
+    TL_TRACE_FUNCTION();
     return argument.starts_with('-');
 }
 
@@ -55,6 +56,7 @@ constexpr std::uint64_t kMaxPeFileSize = 512ULL * 1024 * 1024;
 
 [[nodiscard]] std::optional<std::vector<std::byte>> read_file(
     const std::filesystem::path& path) {
+    TL_TRACE_FUNCTION();
     std::ifstream stream{path, std::ios::binary};
     if (!stream) {
         return std::nullopt;
@@ -86,6 +88,7 @@ struct FileSignature {
 using ExecutableSnapshot = std::map<std::filesystem::path, FileSignature>;
 
 [[nodiscard]] std::string lowercase(std::string value) {
+    TL_TRACE_FUNCTION();
     std::transform(value.begin(), value.end(), value.begin(), [](const unsigned char character) {
         return static_cast<char>(std::tolower(character));
     });
@@ -93,6 +96,7 @@ using ExecutableSnapshot = std::map<std::filesystem::path, FileSignature>;
 }
 
 [[nodiscard]] bool is_x64_pe_file(const std::filesystem::path& path) {
+    TL_TRACE_FUNCTION();
     const std::optional<std::vector<std::byte>> bytes = read_file(path);
     if (!bytes.has_value()) {
         return false;
@@ -103,6 +107,7 @@ using ExecutableSnapshot = std::map<std::filesystem::path, FileSignature>;
 }
 
 [[nodiscard]] ExecutableSnapshot snapshot_executables(const std::filesystem::path& drive_c) {
+    TL_TRACE_FUNCTION();
     ExecutableSnapshot result;
     std::error_code ec;
     std::filesystem::recursive_directory_iterator iterator(
@@ -228,6 +233,7 @@ void write_install_trace(const bool enabled, std::ostream& stream,
 }
 
 void write_pe_trace(std::ostream& stream, const pe::PeInfo& info) {
+    TL_TRACE_FUNCTION();
     const std::string format = info.is_pe32_plus ? "PE32+" : "PE32";
     const std::string arch = info.machine == 0x8664 ? "x86-64" : "desconhecida";
     const std::array image_fields{
@@ -341,6 +347,7 @@ void write_pe_trace(std::ostream& stream, const pe::PeInfo& info) {
 }
 
 void print_pe_summary(std::ostream& stream, const pe::PeInfo& info) {
+    TL_TRACE_FUNCTION();
     const std::string_view format = info.is_pe32_plus ? "PE32+" : "PE32";
     stream << format << " x86-64 | entry=" << util::format_hex(info.address_of_entry_point)
            << " | image-base=" << util::format_hex(info.image_base) << " | "
@@ -387,6 +394,7 @@ void print_pe_summary(std::ostream& stream, const pe::PeInfo& info) {
 }
 
 void write_map_trace(std::ostream& stream, const loader::MappedImage& image) {
+    TL_TRACE_FUNCTION();
     const std::string_view at_preferred = image.delta == 0 ? "sim" : "não";
     const std::array image_fields{
         diagnostics::TraceField{"preferred-base", util::format_hex(image.preferred_base)},
@@ -422,6 +430,7 @@ void write_map_trace(std::ostream& stream, const loader::MappedImage& image) {
 }
 
 void write_unmap_trace(std::ostream& stream, const std::uint64_t base) {
+    TL_TRACE_FUNCTION();
     const std::array fields{
         diagnostics::TraceField{"base", util::format_hex(base)},
     };
@@ -440,6 +449,7 @@ void write_map_failed_trace(std::ostream& stream, const std::string_view status,
 }
 
 void print_map_summary(std::ostream& stream, const loader::MappedImage& image) {
+    TL_TRACE_FUNCTION();
     stream << "  mapeado base=" << util::format_hex(image.base)
            << " preferred=" << util::format_hex(image.preferred_base)
            << " delta=" << util::format_signed_hex(image.delta);
@@ -483,6 +493,7 @@ void print_map_summary(std::ostream& stream, const loader::MappedImage& image) {
 }
 
 void write_imports_trace(std::ostream& stream, const loader::ResolveResult& imports) {
+    TL_TRACE_FUNCTION();
     for (const loader::ResolvedImport& entry : imports.imports) {
         if (entry.status == loader::ImportStatus::Resolved) {
             const std::array fields{
@@ -508,6 +519,7 @@ void write_imports_trace(std::ostream& stream, const loader::ResolveResult& impo
 }
 
 void print_imports_summary(std::ostream& stream, const loader::ResolveResult& imports) {
+    TL_TRACE_FUNCTION();
     const std::size_t resolved = static_cast<std::size_t>(std::count_if(
         imports.imports.begin(), imports.imports.end(), [](const loader::ResolvedImport& entry) {
             return entry.status == loader::ImportStatus::Resolved;
@@ -631,6 +643,7 @@ void print_support_report_group(std::ostream& stream, const loader::ResolveResul
 }  // namespace
 
 ParseResult parse_command_line(const int argc, const char* const argv[]) {
+    TL_TRACE_FUNCTION();
     CommandLine command_line;
     if (argc <= 1) {
         return {.command_line = std::move(command_line), .error_message = {}};
@@ -985,6 +998,7 @@ ParseResult parse_command_line(const int argc, const char* const argv[]) {
 
 ExitCode run_command(const CommandLine& command_line, std::ostream& stdout_stream,
                      std::ostream& stderr_stream) {
+    TL_TRACE_FUNCTION();
     // Configura filtro de trace (inspirado em WINEDEBUG): --trace sozinho = tudo,
     // --trace=pe,loader filtra apenas esses componentes.
     if (command_line.trace_enabled) {
@@ -1724,6 +1738,7 @@ ExitCode run_command(const CommandLine& command_line, std::ostream& stdout_strea
 }
 
 void print_help(std::ostream& stream) {
+    TL_TRACE_FUNCTION();
     stream << kUsage;
     stream << "\n";
     stream << "Comandos de Gerenciamento da Biblioteca e Instalação:\n";
