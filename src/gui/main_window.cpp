@@ -493,6 +493,16 @@ void MainWindow::start_runtime(const bool report_only) {
         return;
     }
 
+    const QByteArray display = qgetenv("DISPLAY");
+    const QByteArray wayland_display = qgetenv("WAYLAND_DISPLAY");
+    if (display.isEmpty() && wayland_display.isEmpty()) {
+        set_status(QStringLiteral("Nenhum display gráfico disponível"));
+        append_message(QStringLiteral(
+            "Erro gráfico: DISPLAY e WAYLAND_DISPLAY não estão definidos. "
+            "Abra o launcher dentro da sua sessão gráfica."));
+        return;
+    }
+
     const QString program = runtime_executable();
     install_in_progress_ = false;
     catalog_registration_in_progress_ = false;
@@ -525,6 +535,12 @@ void MainWindow::start_runtime(const bool report_only) {
 
     process_start_failed_ = false;
     set_status(report_only ? QStringLiteral("Analisando...") : QStringLiteral("Executando..."));
+    append_message(QStringLiteral("Display: %1%2")
+                       .arg(display.isEmpty() ? QStringLiteral("Wayland")
+                                              : QStringLiteral("X11 ") + QString::fromLocal8Bit(display))
+                       .arg(!wayland_display.isEmpty()
+                                ? QStringLiteral(" (WAYLAND_DISPLAY=%1)").arg(QString::fromLocal8Bit(wayland_display))
+                                : QString{}));
     append_message(QStringLiteral("Iniciando: %1 %2").arg(program, arguments.join(QChar(' '))));
     process_.start(program, arguments);
     update_action_state();
