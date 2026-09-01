@@ -46,11 +46,12 @@ TEST(TraceTest, WritesJsonEventImmediately) {
     const std::array fields{TraceField{"action", "paint"}};
     std::ostringstream stream;
     write_trace(stream, TraceComponent::Gui, TraceLevel::Info, "window-created", fields);
+    disable_trace_json_directory();
 
     std::size_t json_files = 0;
     std::filesystem::path json_path;
     for (const auto& entry : std::filesystem::directory_iterator(directory)) {
-        if (entry.path().extension() == ".json") {
+        if (entry.path().extension() == ".jsonl") {
             ++json_files;
             json_path = entry.path();
         }

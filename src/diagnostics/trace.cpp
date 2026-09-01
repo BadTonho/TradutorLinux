@@ -1,10 +1,10 @@
 #include "tradutorlinux/diagnostics/trace.hpp"
 
 #include <array>
+#include <atomic>
 #include <chrono>
 #include <filesystem>
 #include <fstream>
-#include <iomanip>
 #include <mutex>
 #include <ostream>
 #include <sstream>
@@ -122,23 +122,34 @@ std::mutex g_trace_mutex;
 std::filesystem::path g_trace_json_directory;
 std::uint64_t g_trace_json_sequence = 0;
 bool g_trace_json_enabled = false;
+std::atomic<bool> g_trace_json_enabled_fast{false};
+std::ofstream g_trace_json_output;
+pid_t g_trace_json_pid = -1;
+
+bool open_json_output_locked() {
+    const pid_t current_pid = ::getpid();
+    if (g_trace_json_output.is_open() && g_trace_json_pid == current_pid) return true;
+    if (g_trace_json_output.is_open()) g_trace_json_output.close();
+    std::ostringstream filename;
+    filename << "events-" << static_cast<long long>(current_pid) << ".jsonl";
+    g_trace_json_output.open(g_trace_json_directory / filename.str(),
+                             std::ios::out | std::ios::app);
+    g_trace_json_pid = current_pid;
+    g_trace_json_sequence = 0;
+    return static_cast<bool>(g_trace_json_output);
+}
 
 void write_json_event_locked(const TraceComponent component, const TraceLevel level,
                              const std::string_view event,
                              const std::span<const TraceField> fields) {
     if (!g_trace_json_enabled) return;
 
+    if (!open_json_output_locked()) return;
     const std::uint64_t sequence = ++g_trace_json_sequence;
-    std::ostringstream filename;
-    filename << "event-" << static_cast<long long>(::getpid()) << '-'
-             << std::setw(8) << std::setfill('0') << sequence << ".json";
-    const auto path = g_trace_json_directory / filename.str();
-
-    std::ofstream output(path, std::ios::out | std::ios::trunc);
-    if (!output) return;
 
     const auto timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::system_clock::now().time_since_epoch()).count();
+    auto& output = g_trace_json_output;
     output << "{\n"
            << "  \"sequence\": " << sequence << ",\n"
            << "  \"pid\": " << static_cast<long long>(::getpid()) << ",\n"
@@ -165,11 +176,28 @@ bool configure_trace_json_directory(const std::filesystem::path& directory) noex
         std::filesystem::create_directories(directory);
         if (!std::filesystem::is_directory(directory)) return false;
         g_trace_json_directory = directory;
+        if (g_trace_json_output.is_open()) g_trace_json_output.close();
+        g_trace_json_pid = -1;
         g_trace_json_sequence = 0;
         g_trace_json_enabled = true;
+        g_trace_json_enabled_fast.store(true, std::memory_order_release);
         return true;
     } catch (...) {
         return false;
+    }
+}
+
+bool is_trace_json_enabled() noexcept {
+    return g_trace_json_enabled_fast.load(std::memory_order_acquire);
+}
+
+void disable_trace_json_directory() noexcept {
+    std::lock_guard<std::mutex> lock(g_trace_mutex);
+    g_trace_json_enabled_fast.store(false, std::memory_order_release);
+    g_trace_json_enabled = false;
+    if (g_trace_json_output.is_open()) {
+        g_trace_json_output.flush();
+        g_trace_json_output.close();
     }
 }
 
