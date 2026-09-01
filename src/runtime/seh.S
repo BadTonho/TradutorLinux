@@ -57,6 +57,13 @@ tl_RaiseException:
     movq 136(%rsp), %rdx
     movq 184(%rsp), %rcx
     movq 192(%rsp), %r8
+    leaq .Ltl_RaiseException_name(%rip), %rdi
+    callq trace_assembly_function_entry
+    movq %rsp, %rdi
+    movq 128(%rsp), %rsi
+    movq 136(%rsp), %rdx
+    movq 184(%rsp), %rcx
+    movq 192(%rsp), %r8
     callq tl_dispatch_raised_exception_from_asm
     ud2
 .size tl_RaiseException, .-tl_RaiseException
@@ -70,6 +77,13 @@ tl_RtlUnwind:
     movq 136(%rsp), %rdx
     movq 184(%rsp), %rcx
     movq 192(%rsp), %r8
+    leaq .Ltl_RtlUnwind_name(%rip), %rdi
+    callq trace_assembly_function_entry
+    movq %rsp, %rdi
+    movq 128(%rsp), %rsi
+    movq 136(%rsp), %rdx
+    movq 184(%rsp), %rcx
+    movq 192(%rsp), %r8
     callq tl_dispatch_rtl_unwind_from_asm
     ud2
 .size tl_RtlUnwind, .-tl_RtlUnwind
@@ -78,7 +92,10 @@ tl_RtlUnwind:
 .type tl_restore_guest_context_and_jump, @function
 tl_restore_guest_context_and_jump:
     # System V: RDI = ContextAmd64*. RAX mantém a base até o último load.
-    movq %rdi, %rax
+    pushq %rdi
+    leaq .Ltl_restore_guest_context_and_jump_name(%rip), %rdi
+    callq trace_assembly_function_entry
+    popq %rax
     movdqu 416(%rax), %xmm0
     movdqu 432(%rax), %xmm1
     movdqu 448(%rax), %xmm2
@@ -117,5 +134,13 @@ tl_restore_guest_context_and_jump:
     movq 120(%rax), %rax
     retq
 .size tl_restore_guest_context_and_jump, .-tl_restore_guest_context_and_jump
+
+.section .rodata
+.Ltl_RaiseException_name:
+    .asciz "tl_RaiseException"
+.Ltl_RtlUnwind_name:
+    .asciz "tl_RtlUnwind"
+.Ltl_restore_guest_context_and_jump_name:
+    .asciz "tl_restore_guest_context_and_jump"
 
 .section .note.GNU-stack,"",@progbits

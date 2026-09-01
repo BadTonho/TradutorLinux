@@ -1,5 +1,6 @@
 #include "tradutorlinux/diagnostics/trace.hpp"
 
+#include <array>
 #include <cstdint>
 
 extern "C" {
@@ -33,4 +34,15 @@ void __cyg_profile_func_exit(void* const function, void* const caller) noexcept 
     tradutorlinux::diagnostics::enqueue_function_json_trace(
         false, reinterpret_cast<std::uintptr_t>(function), reinterpret_cast<std::uintptr_t>(caller));
     g_function_trace_in_hook = 0;
+}
+
+extern "C" __attribute__((no_instrument_function))
+void trace_assembly_function_entry(const char* const function) noexcept {
+    if (__atomic_load_n(&tl_function_trace_enabled, __ATOMIC_ACQUIRE) == 0 || function == nullptr) {
+        return;
+    }
+    const std::array fields{tradutorlinux::diagnostics::TraceField{"function", function}};
+    tradutorlinux::diagnostics::write_json_trace(
+        tradutorlinux::diagnostics::TraceComponent::Runtime,
+        tradutorlinux::diagnostics::TraceLevel::Debug, "function-enter", fields);
 }

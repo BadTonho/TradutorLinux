@@ -46,7 +46,13 @@ tl_RtlCaptureContext:
     movdqu %xmm13, 624(%r11)
     movdqu %xmm14, 640(%r11)
     movdqu %xmm15, 656(%r11)
+    leaq .Ltl_RtlCaptureContext_name(%rip), %rdi
+    callq trace_assembly_function_entry
     retq
 .size tl_RtlCaptureContext, .-tl_RtlCaptureContext
+
+.section .rodata
+.Ltl_RtlCaptureContext_name:
+    .asciz "tl_RtlCaptureContext"
 
 .section .note.GNU-stack,"",@progbits

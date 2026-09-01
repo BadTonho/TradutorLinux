@@ -76,6 +76,7 @@ void write_json_trace(TraceComponent component, TraceLevel level,
                       std::string_view event, std::span<const TraceField> fields = {});
 void enqueue_function_json_trace(bool entering, std::uintptr_t function,
                                  std::uintptr_t caller) noexcept;
+extern "C" void trace_assembly_function_entry(const char* function) noexcept;
 
 [[nodiscard]] std::string_view failure_category_name(FailureCategory category);
 
