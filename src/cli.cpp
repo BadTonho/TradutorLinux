@@ -145,6 +145,7 @@ using ExecutableSnapshot = std::map<std::filesystem::path, FileSignature>;
 
 [[nodiscard]] std::vector<std::filesystem::path> changed_executables(
     const ExecutableSnapshot& before, const ExecutableSnapshot& after) {
+    TL_TRACE_FUNCTION();
     std::vector<std::filesystem::path> candidates;
     for (const auto& [path, signature] : after) {
         const auto previous = before.find(path);
@@ -158,6 +159,7 @@ using ExecutableSnapshot = std::map<std::filesystem::path, FileSignature>;
 
 [[nodiscard]] std::optional<std::filesystem::path> resolve_installed_executable(
     const std::filesystem::path& raw_path, const std::filesystem::path& prefix_root) {
+    TL_TRACE_FUNCTION();
     const std::string value = raw_path.string();
     const bool windows_absolute =
         (value.size() >= 2 && std::isalpha(static_cast<unsigned char>(value[0])) != 0 &&
@@ -181,6 +183,7 @@ using ExecutableSnapshot = std::map<std::filesystem::path, FileSignature>;
 
 [[nodiscard]] std::string unique_app_id(const catalog::AppCatalog& app_catalog,
                                         const std::string_view requested_name) {
+    TL_TRACE_FUNCTION();
     const std::string base = catalog::AppCatalog::generate_id(requested_name);
     auto has_id = [&app_catalog](const std::string_view value) {
         return std::any_of(app_catalog.list_apps().begin(), app_catalog.list_apps().end(),
@@ -201,6 +204,7 @@ using ExecutableSnapshot = std::map<std::filesystem::path, FileSignature>;
 void write_install_trace(const bool enabled, std::ostream& stream,
                          const diagnostics::TraceLevel level, const std::string_view event,
                          const std::initializer_list<diagnostics::TraceField> fields) {
+    TL_TRACE_FUNCTION();
     if (enabled) {
         diagnostics::write_trace(stream, diagnostics::TraceComponent::Install, level, event,
                                  std::span<const diagnostics::TraceField>{fields.begin(), fields.size()});
@@ -208,6 +212,7 @@ void write_install_trace(const bool enabled, std::ostream& stream,
 }
 
 [[nodiscard]] std::string symbol_label(const pe::ImportedSymbol& symbol) {
+    TL_TRACE_FUNCTION();
     if (symbol.by_ordinal) {
         return "ordinal(" + std::to_string(symbol.ordinal) + ")";
     }
@@ -215,6 +220,7 @@ void write_install_trace(const bool enabled, std::ostream& stream,
 }
 
 [[nodiscard]] const char* status_label(const pe::ParseStatus status) {
+    TL_TRACE_FUNCTION();
     switch (status) {
         case pe::ParseStatus::Success:
             return "success";
@@ -378,6 +384,7 @@ void print_pe_summary(std::ostream& stream, const pe::PeInfo& info) {
 }
 
 [[nodiscard]] std::string_view permissions_label(const loader::SectionPermissions permissions) {
+    TL_TRACE_FUNCTION();
     switch (permissions) {
         case loader::SectionPermissions::None:
             return "---";
@@ -464,6 +471,7 @@ void print_map_summary(std::ostream& stream, const loader::MappedImage& image) {
 }
 
 [[nodiscard]] const char* import_status_label(const loader::ImportStatus status) {
+    TL_TRACE_FUNCTION();
     switch (status) {
         case loader::ImportStatus::Resolved:
             return "resolved";
@@ -482,6 +490,7 @@ void print_map_summary(std::ostream& stream, const loader::MappedImage& image) {
 }
 
 [[nodiscard]] std::string resolved_symbol_label(const loader::ResolvedImport& entry) {
+    TL_TRACE_FUNCTION();
     if (entry.by_ordinal) {
         return "ordinal(" + std::to_string(entry.ordinal) + ")";
     }
@@ -489,6 +498,7 @@ void print_map_summary(std::ostream& stream, const loader::MappedImage& image) {
 }
 
 [[nodiscard]] const char* import_mechanism_label(const loader::ImportMechanism mechanism) {
+    TL_TRACE_FUNCTION();
     return mechanism == loader::ImportMechanism::Delay ? "delay-import" : "import";
 }
 
@@ -540,6 +550,7 @@ void print_imports_summary(std::ostream& stream, const loader::ResolveResult& im
 
 void print_support_report_group(std::ostream& stream, const loader::ResolveResult& result,
                                 const loader::ImportMechanism mechanism) {
+    TL_TRACE_FUNCTION();
     std::vector<std::string> dll_names;
     for (const loader::ResolvedImport& entry : result.imports) {
         if (entry.mechanism != mechanism ||
@@ -574,6 +585,7 @@ void print_support_report_group(std::ostream& stream, const loader::ResolveResul
 
 [[nodiscard]] loader::ResolveResult print_support_report(std::ostream& stream,
                                                           const pe::PeInfo& info) {
+    TL_TRACE_FUNCTION();
     const loader::ResolveResult result = loader::inspect_imports(info);
     const std::size_t total_imports = result.imports.size();
     const std::size_t resolved_imports = static_cast<std::size_t>(std::count_if(
