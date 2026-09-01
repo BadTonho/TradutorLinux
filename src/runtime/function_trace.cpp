@@ -11,12 +11,16 @@ namespace {
 
 thread_local bool g_in_function_trace = false;
 
+[[nodiscard]] bool is_runtime_api(const char* const symbol) noexcept {
+    return symbol != nullptr && std::string_view{symbol}.find("tl_") != std::string_view::npos;
+}
+
 void write_function_event(const char* const event, const void* const address) noexcept {
     if (g_in_function_trace || !tradutorlinux::diagnostics::is_trace_json_enabled()) return;
     g_in_function_trace = true;
     try {
         Dl_info info{};
-        if (dladdr(address, &info) == 0 || info.dli_sname == nullptr) {
+        if (dladdr(address, &info) == 0 || !is_runtime_api(info.dli_sname)) {
             g_in_function_trace = false;
             return;
         }

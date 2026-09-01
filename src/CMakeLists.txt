@@ -68,7 +68,8 @@ target_compile_definitions(tradutorlinux_core
 )
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
     target_compile_options(tradutorlinux_core PUBLIC -mstackrealign)
-    set_source_files_properties(runtime/user32.cpp runtime/gdi32.cpp runtime/gui_controls.cpp
+    set_source_files_properties(runtime/kernel32.cpp runtime/legacy_winapi.cpp runtime/ntdll.cpp
+        runtime/user32.cpp runtime/gdi32.cpp runtime/gui_controls.cpp
         PROPERTIES COMPILE_OPTIONS "-finstrument-functions")
     set_source_files_properties(diagnostics/trace.cpp runtime/function_trace.cpp
         PROPERTIES COMPILE_OPTIONS "-fno-instrument-functions")
