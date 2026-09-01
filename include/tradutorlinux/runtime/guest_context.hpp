@@ -47,6 +47,18 @@ struct GuestContext {
     std::array<void*, 3> standard_handles{};
     std::mutex process_context_mutex;
 
+    struct ContextFileSlot {
+        int fd{-1};
+        bool used{false};
+        std::uint64_t file_size{0};
+        std::int64_t position{0};
+        std::string path;
+        bool delete_pending{false};
+        bool unlinked{false};
+    };
+    std::array<ContextFileSlot, 256> files{};
+    std::mutex files_mutex;
+
     struct ContextExport {
         std::string name;
         std::uint16_t ordinal{0};

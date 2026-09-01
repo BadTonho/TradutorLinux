@@ -72,15 +72,7 @@ extern char kStdErrorToken;
 extern char kStockObjectTokens[24];
 extern std::atomic<std::uintptr_t> g_pointer_cookie;
 
-struct FileSlot {
-    int fd{-1};
-    bool used{false};
-    std::uint64_t file_size{0};
-    std::int64_t position{0};
-    std::string path;
-    bool delete_pending{false};
-    bool unlinked{false};
-};
+using FileSlot = runtime::GuestContext::ContextFileSlot;
 
 struct AllocationSlot {
     void* address{nullptr};
@@ -100,8 +92,6 @@ struct GlobalMemorySlot {
     bool global{false};
 };
 
-extern std::mutex g_files_mutex;
-extern std::array<FileSlot, 256> g_files;
 
 struct FileMappingSlot {
     bool used{false};
@@ -312,6 +302,8 @@ inline void set_last_error(const std::uint32_t error) noexcept {
 #define g_guest_tls_callbacks (::tradutorlinux::runtime::guest_context().tls_callbacks)
 #define g_standard_handles (::tradutorlinux::runtime::guest_context().standard_handles)
 #define g_process_context_mutex (::tradutorlinux::runtime::guest_context().process_context_mutex)
+#define g_files (::tradutorlinux::runtime::guest_context().files)
+#define g_files_mutex (::tradutorlinux::runtime::guest_context().files_mutex)
 
 inline bool mapped_guest_range(const void* address, std::size_t size, bool writable) noexcept {
     return runtime::validate_mapped_range(address, size, writable);

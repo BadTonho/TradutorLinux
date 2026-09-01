@@ -54,4 +54,18 @@ TEST(GuestContextTest, ContextCarriesIndependentStandardHandles) {
     EXPECT_EQ(second.standard_handles[1], &second_handle);
 }
 
+TEST(GuestContextTest, FileTablesAreIndependent) {
+    GuestContext first;
+    GuestContext second;
+    first.files[0].used = true;
+    first.files[0].path = "first.txt";
+    second.files[0].used = true;
+    second.files[0].path = "second.txt";
+
+    EXPECT_TRUE(first.files[0].used);
+    EXPECT_TRUE(second.files[0].used);
+    EXPECT_EQ(first.files[0].path, "first.txt");
+    EXPECT_EQ(second.files[0].path, "second.txt");
+}
+
 }  // namespace tradutorlinux::runtime
