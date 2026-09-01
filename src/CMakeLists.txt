@@ -111,6 +111,10 @@ add_custom_command(
     VERBATIM)
 target_sources(tradutorlinux_core PRIVATE
     "${TL_WAYLAND_GENERATED_DIR}/xdg-shell-protocol.c")
+if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+    set_source_files_properties("${TL_WAYLAND_GENERATED_DIR}/xdg-shell-protocol.c"
+        PROPERTIES COMPILE_OPTIONS "-finstrument-functions")
+endif()
 target_include_directories(tradutorlinux_core PRIVATE
     "${TL_WAYLAND_INCLUDE_DIR}"
     "${TL_XKBCOMMON_INCLUDE_DIR}"
