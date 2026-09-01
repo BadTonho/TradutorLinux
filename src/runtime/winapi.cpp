@@ -774,6 +774,7 @@ GuestExecutionResult execute_guest_entry(const std::uintptr_t entry_point,
     g_current_thread_id = kMainThreadId;
     static_cast<void>(ensure_fls_thread_values());
     if (setjmp(g_guest_exit_context) == 0) {
+        diagnostics::FunctionTraceScope assembly_scope{"tl_call_guest_on_stack"};
         tl_call_guest_on_stack(std::bit_cast<std::uintptr_t>(entry), stack_top);
         cleanup_current_fls_values();
         g_guest_execution_active = false;

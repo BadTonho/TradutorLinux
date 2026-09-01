@@ -2289,6 +2289,7 @@ TL_MSABI void* tl_CreateThread(const void* thread_attributes, const std::uintptr
         t_thread_exit_context = &exit_point;
         t_thread_exit_slot = slot_ptr;
         if (setjmp(exit_point) == 0) {
+            diagnostics::FunctionTraceScope assembly_scope{"tl_call_guest_thread_on_stack"};
             slot_ptr->exit_code = static_cast<int>(tl_call_guest_thread_on_stack(
                 reinterpret_cast<std::uintptr_t>(proc), parameter, slot_ptr->stack_top));
         }
