@@ -389,6 +389,7 @@ void draw_text_len_color(const NativeWindow window, const char* const text, cons
     }
     XSetForeground(dpy, gc, pixel_for_rgb(dpy, state->screen, rgb));
     XDrawString(dpy, state->window, gc, x, y, text, length);
+    XFlush(dpy);
 }
 
 void draw_rectangle(const NativeWindow window, const int x, const int y, const int width,
@@ -407,6 +408,7 @@ void draw_rectangle_color(const NativeWindow window, const int x, const int y, c
     XSetForeground(dpy, fill.gc, pixel_for_rgb(dpy, state->screen, rgb));
     XDrawRectangle(dpy, state->window, fill.gc, x, y,
                    static_cast<unsigned int>(width), static_cast<unsigned int>(height));
+    XFlush(dpy);
 }
 
 void fill_rectangle(const NativeWindow window, const int x, const int y, const int width,
@@ -423,6 +425,7 @@ void fill_rectangle(const NativeWindow window, const int x, const int y, const i
     XSetForeground(dpy, fill.gc, fill.pixels[static_cast<std::size_t>(brush_index)]);
     XFillRectangle(dpy, state->window, fill.gc, x, y,
                    static_cast<unsigned int>(width), static_cast<unsigned int>(height));
+    XFlush(dpy);
 }
 
 void fill_rectangle_color(const NativeWindow window, const int x, const int y, const int width,
@@ -436,6 +439,7 @@ void fill_rectangle_color(const NativeWindow window, const int x, const int y, c
     XSetForeground(dpy, fill.gc, pixel_for_rgb(dpy, state->screen, rgb));
     XFillRectangle(dpy, state->window, fill.gc, x, y, static_cast<unsigned int>(width),
                    static_cast<unsigned int>(height));
+    XFlush(dpy);
 }
 
 WindowEvent next_window_event(const NativeWindow window) noexcept {
