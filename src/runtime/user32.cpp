@@ -422,8 +422,22 @@ TL_MSABI abi::HWnd tl_CreateWindowExA(const std::uint32_t ex_style,
     cs.lpszName = caption;
     cs.lpszClass = cls->name.c_str();
     cs.dwExStyle = ex_style;
+    const std::array<diagnostics::TraceField, 4> create_begin_fields{
+        diagnostics::TraceField{"symbol", "CreateWindowExA"},
+        diagnostics::TraceField{"stage", "WM_CREATE-begin"},
+        diagnostics::TraceField{},
+        diagnostics::TraceField{},
+    };
+    runtime_trace("CreateWindowExA", create_begin_fields, 2);
     const abi::Lresult create_result = call_wndproc(slot.wndproc, &slot, abi::kWmCreate, 0,
                                                    reinterpret_cast<abi::Lparam>(&cs));
+    const std::array<diagnostics::TraceField, 4> create_end_fields{
+        diagnostics::TraceField{"symbol", "CreateWindowExA"},
+        diagnostics::TraceField{"stage", "WM_CREATE-end"},
+        diagnostics::TraceField{"result", std::to_string(create_result)},
+        diagnostics::TraceField{},
+    };
+    runtime_trace("CreateWindowExA", create_end_fields, 3);
     if (create_result == -1) {
         gui::platform::destroy_window(slot.native);
         slot = {};
