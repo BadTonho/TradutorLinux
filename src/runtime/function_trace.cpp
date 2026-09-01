@@ -21,6 +21,7 @@ namespace {
 
 extern "C" __attribute__((no_instrument_function))
 void __cyg_profile_func_enter(void* const function, void* const caller) noexcept {
+    if (!tradutorlinux::diagnostics::is_trace_json_enabled()) return;
     if (!should_trace(function)) return;
     tradutorlinux::diagnostics::enqueue_function_json_trace(
         true, reinterpret_cast<std::uintptr_t>(function), reinterpret_cast<std::uintptr_t>(caller));
@@ -28,6 +29,7 @@ void __cyg_profile_func_enter(void* const function, void* const caller) noexcept
 
 extern "C" __attribute__((no_instrument_function))
 void __cyg_profile_func_exit(void* const function, void* const caller) noexcept {
+    if (!tradutorlinux::diagnostics::is_trace_json_enabled()) return;
     if (!should_trace(function)) return;
     tradutorlinux::diagnostics::enqueue_function_json_trace(
         false, reinterpret_cast<std::uintptr_t>(function), reinterpret_cast<std::uintptr_t>(caller));
