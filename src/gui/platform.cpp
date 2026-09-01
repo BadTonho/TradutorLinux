@@ -53,6 +53,7 @@ NativeWindow create_window(const char* caption, const int width, const int heigh
     }
     NativeWindow native = ::tradutorlinux::gui::create_window(caption, width, height);
     if (native == nullptr) return nullptr;
+    std::fprintf(stderr, "[tl][gui][info] backend=x11 selected\n");
     auto* result = new (std::nothrow) WindowHandle{Backend::X11, native};
     if (result == nullptr) {
         ::tradutorlinux::gui::destroy_window(native);

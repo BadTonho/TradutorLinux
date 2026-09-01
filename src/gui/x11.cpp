@@ -134,6 +134,18 @@ private:
 [[nodiscard]] Display* display() noexcept {
     static Display* const instance = XOpenDisplay(nullptr);
     static DisplayCloser closer{instance};
+    static const bool reported = [](Display* const value) {
+        if (value == nullptr) {
+            const char* const display_name = std::getenv("DISPLAY");
+            std::fprintf(stderr, "[tl][gui][error] backend=x11 status=connect-failed DISPLAY=%s\n",
+                         display_name != nullptr ? display_name : "<unset>");
+        } else {
+            std::fprintf(stderr, "[tl][gui][info] backend=x11 status=connected display=%s\n",
+                         DisplayString(value));
+        }
+        return true;
+    }(instance);
+    (void)reported;
     return instance;
 }
 
@@ -269,6 +281,7 @@ NativeWindow create_window(const char* const caption, const int width,  // NOLIN
                             static_cast<unsigned int>(resolved_height), 1,
                             BlackPixel(dpy, screen), WhitePixel(dpy, screen));
     if (window == 0) {
+        std::fprintf(stderr, "[tl][gui][error] backend=x11 status=create-window-failed\n");
         return nullptr;
     }
     XStoreName(dpy, window, caption != nullptr ? caption : "TradutorLinux");
@@ -287,6 +300,8 @@ NativeWindow create_window(const char* const caption, const int width,  // NOLIN
         .created_at = std::chrono::steady_clock::now(),
         .pending = {},
     };
+    std::fprintf(stderr, "[tl][gui][info] backend=x11 window-created id=%lu caption=\"%s\" size=%dx%d\n",
+                 static_cast<unsigned long>(window), state->caption.c_str(), resolved_width, resolved_height);
     return state;
 }
 
@@ -310,6 +325,8 @@ bool map_window(const NativeWindow window) noexcept {
     }
     XMapWindow(dpy, state->window);
     XFlush(dpy);
+    std::fprintf(stderr, "[tl][gui][info] backend=x11 window-mapped id=%lu size=%dx%d\n",
+                 static_cast<unsigned long>(state->window), state->width, state->height);
     return true;
 }
 
