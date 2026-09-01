@@ -393,6 +393,25 @@ TL_MSABI abi::HWnd tl_CreateWindowExA(const std::uint32_t ex_style,
     // mapeada torna o diagnóstico impossível e parece que nada aconteceu.
     slot.mapped = gui::platform::map_window(slot.native);
     slot.visible = slot.mapped || slot.visible;
+    if (slot.mapped) {
+        // Primeiro frame de segurança: o aplicativo pode executar uma parte
+        // longa de sua inicialização no WM_CREATE. Ainda assim a janela deve
+        // apresentar conteúdo imediatamente, em vez de parecer congelada em
+        // branco enquanto o callback convidado não retorna.
+        gui::platform::fill_rectangle_color(slot.native, 0, 0, slot.width, slot.height,
+                                            0xE2E8F0U);
+        gui::platform::fill_rectangle_color(slot.native, 0, 0, slot.width, 56,
+                                            0x1D4ED8U);
+        gui::platform::draw_text_color(slot.native, "TradutorLinux - inicializando 7-Zip", 24, 34,
+                                       0xFFFFFFU, true);
+        gui::platform::draw_text_color(slot.native,
+                                       "Erro: o aplicativo nao concluiu WM_CREATE",
+                                       24, 104, 0xB91C1CU, true);
+        gui::platform::draw_text_color(slot.native,
+                                       "A inicializacao do aplicativo esta bloqueada.",
+                                       24, 132, 0x334155U, false);
+        gui::platform::flush_window(slot.native);
+    }
     struct GuestCreateStructA {
         const void* lpCreateParams;
         const void* hInstance;
