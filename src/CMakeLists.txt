@@ -81,7 +81,7 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
         loader/dll_overrides.cpp loader/image_mapper.cpp loader/import_resolver.cpp
         loader/module.cpp pe/pe_reader.cpp prefix/prefix.cpp
         runtime/memory_validator.cpp runtime/environment.cpp runtime/guest_context.cpp
-        runtime/dialog_template.cpp
+        runtime/dialog_template.cpp runtime/unwind.cpp
         PROPERTIES COMPILE_OPTIONS "-finstrument-functions")
     set_source_files_properties(diagnostics/trace.cpp runtime/function_trace.cpp
         PROPERTIES COMPILE_OPTIONS "-fno-instrument-functions")
