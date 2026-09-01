@@ -25,6 +25,17 @@ TEST(CommandLineTest, AcceptsTraceAndExecutable) {
     EXPECT_EQ(result.command_line->executable_path->string(), "programa.exe");
 }
 
+TEST(CommandLineTest, AcceptsJsonTraceDirectory) {
+    const std::vector<const char*> arguments{
+        "tradutorlinux", "--trace-json", "/tmp/tl-events", "programa.exe"};
+
+    const ParseResult result = parse_arguments(arguments);
+
+    ASSERT_TRUE(result.command_line.has_value());
+    ASSERT_TRUE(result.command_line->trace_json_directory.has_value());
+    EXPECT_EQ(result.command_line->trace_json_directory->string(), "/tmp/tl-events");
+}
+
 TEST(CommandLineTest, AcceptsReportAndExecutable) {
     const std::vector<const char*> arguments{"tradutorlinux", "--report", "programa.exe"};
 

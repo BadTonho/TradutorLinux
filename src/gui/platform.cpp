@@ -1,12 +1,15 @@
 #include "tradutorlinux/gui/platform.hpp"
 
+#include "tradutorlinux/diagnostics/trace.hpp"
 #include "tradutorlinux/gui/wayland.hpp"
 
 #include <cstdlib>
 #include <cstdio>
 #include <cstring>
+#include <array>
 #include <memory>
 #include <new>
+#include <iostream>
 
 namespace tradutorlinux::gui::platform {
 namespace {
@@ -53,7 +56,13 @@ NativeWindow create_window(const char* caption, const int width, const int heigh
     }
     NativeWindow native = ::tradutorlinux::gui::create_window(caption, width, height);
     if (native == nullptr) return nullptr;
-    std::fprintf(stderr, "[tl][gui][info] backend=x11 selected\n");
+    try {
+        const std::array fields{diagnostics::TraceField{"backend", "x11"},
+                                diagnostics::TraceField{"status", "selected"}};
+        diagnostics::write_trace(std::cerr, diagnostics::TraceComponent::Gui,
+                                 diagnostics::TraceLevel::Info, "backend", fields);
+    } catch (...) {
+    }
     auto* result = new (std::nothrow) WindowHandle{Backend::X11, native};
     if (result == nullptr) {
         ::tradutorlinux::gui::destroy_window(native);

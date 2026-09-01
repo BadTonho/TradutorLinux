@@ -38,6 +38,7 @@ struct CommandLine {
     bool show_version{false};
     bool trace_enabled{false};
     std::vector<std::string> trace_channels_raw;
+    std::optional<std::filesystem::path> trace_json_directory;
     bool report_only{false};
     // Tempo máximo de execução do convidado, em milissegundos; 0 = sem limite.
     std::uint64_t timeout_ms{0};

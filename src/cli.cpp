@@ -723,6 +723,12 @@ ParseResult parse_command_line(const int argc, const char* const argv[]) {
                 }
             } else if (arg == "--report") {
                 command_line.report_only = true;
+            } else if (arg == "--trace-json") {
+                if (i + 1 >= argc) {
+                    return {.command_line = std::nullopt,
+                            .error_message = "a opção --trace-json requer um diretório"};
+                }
+                command_line.trace_json_directory = std::filesystem::path{argv[++i]};
             } else if (!command_line.executable_path.has_value() && !arg.starts_with('-')) {
                 command_line.executable_path = std::filesystem::path{std::string{arg}};
             } else {
@@ -911,6 +917,19 @@ ParseResult parse_command_line(const int argc, const char* const argv[]) {
             continue;
         }
 
+        if (!options_ended && argument == "--trace-json") {
+            if (command_line.trace_json_directory.has_value()) {
+                return {.command_line = std::nullopt,
+                        .error_message = "a opção --trace-json foi repetida"};
+            }
+            if (index + 1 >= argc) {
+                return {.command_line = std::nullopt,
+                        .error_message = "a opção --trace-json requer um diretório"};
+            }
+            command_line.trace_json_directory = std::filesystem::path{argv[++index]};
+            continue;
+        }
+
         if (!options_ended && argument == "--timeout") {
             if (command_line.timeout_set) {
                 return {.command_line = std::nullopt,
@@ -984,6 +1003,13 @@ ExitCode run_command(const CommandLine& command_line, std::ostream& stdout_strea
         }
     } else {
         diagnostics::configure_trace_all();
+    }
+
+    if (command_line.trace_json_directory.has_value() &&
+        !diagnostics::configure_trace_json_directory(*command_line.trace_json_directory)) {
+        stderr_stream << "erro: não foi possível criar o diretório de trace JSON: "
+                      << command_line.trace_json_directory->string() << '\n';
+        return ExitCode::Usage;
     }
 
     if (command_line.show_help) {
@@ -1715,6 +1741,7 @@ void print_help(std::ostream& stream) {
     stream << "  --trace[=canais]  escreve diagnóstico estruturado em stderr\n";
     stream << "                    canais: cli,pe,loader,imports,runtime,process,gui,crt,install (ex: --trace=pe,loader)\n";
     stream << "                    sem lista = todos os canais (compatível com WINEDEBUG)\n";
+    stream << "  --trace-json <dir> grava um arquivo JSON por evento, durante a execução\n";
     stream << "  --report   relata imports suportados sem executar o arquivo\n";
     stream << "  --timeout <segundos>\n";
     stream << "             limita a execução do convidado; 0 = sem limite (padrão)\n";

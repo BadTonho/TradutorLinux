@@ -1,9 +1,15 @@
 #include "tradutorlinux/diagnostics/trace.hpp"
 
 #include <array>
+#include <chrono>
+#include <filesystem>
+#include <fstream>
+#include <iomanip>
 #include <mutex>
 #include <ostream>
+#include <sstream>
 #include <string>
+#include <unistd.h>
 #include <vector>
 
 namespace tradutorlinux::diagnostics {
@@ -113,7 +119,59 @@ namespace {
 std::array<bool, 9> g_trace_enabled{};
 bool g_trace_filter_active = false;
 std::mutex g_trace_mutex;
+std::filesystem::path g_trace_json_directory;
+std::uint64_t g_trace_json_sequence = 0;
+bool g_trace_json_enabled = false;
+
+void write_json_event_locked(const TraceComponent component, const TraceLevel level,
+                             const std::string_view event,
+                             const std::span<const TraceField> fields) {
+    if (!g_trace_json_enabled) return;
+
+    const std::uint64_t sequence = ++g_trace_json_sequence;
+    std::ostringstream filename;
+    filename << "event-" << static_cast<long long>(::getpid()) << '-'
+             << std::setw(8) << std::setfill('0') << sequence << ".json";
+    const auto path = g_trace_json_directory / filename.str();
+
+    std::ofstream output(path, std::ios::out | std::ios::trunc);
+    if (!output) return;
+
+    const auto timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::system_clock::now().time_since_epoch()).count();
+    output << "{\n"
+           << "  \"sequence\": " << sequence << ",\n"
+           << "  \"pid\": " << static_cast<long long>(::getpid()) << ",\n"
+           << "  \"timestamp_ms\": " << timestamp << ",\n"
+           << "  \"component\": \"" << escape_value(component_name(component)) << "\",\n"
+           << "  \"level\": \"" << escape_value(level_name(level)) << "\",\n"
+           << "  \"event\": \"" << escape_value(event) << "\",\n"
+           << "  \"fields\": {";
+    for (std::size_t index = 0; index < fields.size(); ++index) {
+        if (index != 0) output << ',';
+        output << "\n    \"" << escape_value(fields[index].key) << "\": \""
+               << escape_value(fields[index].value) << '\"';
+    }
+    if (!fields.empty()) output << '\n' << "  ";
+    output << "}\n}\n";
+    output.flush();
+}
 }  // namespace
+
+bool configure_trace_json_directory(const std::filesystem::path& directory) noexcept {
+    try {
+        if (directory.empty()) return false;
+        std::lock_guard<std::mutex> lock(g_trace_mutex);
+        std::filesystem::create_directories(directory);
+        if (!std::filesystem::is_directory(directory)) return false;
+        g_trace_json_directory = directory;
+        g_trace_json_sequence = 0;
+        g_trace_json_enabled = true;
+        return true;
+    } catch (...) {
+        return false;
+    }
+}
 
 void configure_trace_filter(const std::vector<TraceComponent>& filter) noexcept {
     std::lock_guard<std::mutex> lock(g_trace_mutex);
@@ -162,21 +220,18 @@ std::string_view failure_category_name(const FailureCategory category) {
 
 void write_trace(std::ostream& stream, const TraceComponent component, const TraceLevel level,
                  const std::string_view event, const std::span<const TraceField> fields) {
-    {
-        std::lock_guard<std::mutex> lock(g_trace_mutex);
-        if (g_trace_filter_active) {
-            const auto idx = static_cast<std::size_t>(component);
-            if (idx >= g_trace_enabled.size() || !g_trace_enabled[idx]) {
-                return;
-            }
-        }
+    std::lock_guard<std::mutex> lock(g_trace_mutex);
+    write_json_event_locked(component, level, event, fields);
+    if (g_trace_filter_active) {
+        const auto idx = static_cast<std::size_t>(component);
+        if (idx >= g_trace_enabled.size() || !g_trace_enabled[idx]) return;
+    }
         // Mantém o lock durante a escrita para evitar intercalação de linhas de threads concorrentes.
         stream << "[tl][" << component_name(component) << "][" << level_name(level) << "] " << event;
         for (const TraceField& field : fields) {
             stream << ' ' << field.key << "=\"" << escape_value(field.value) << '"';
         }
         stream << '\n';
-    }
 }
 
 }  // namespace tradutorlinux::diagnostics

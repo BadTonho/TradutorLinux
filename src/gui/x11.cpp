@@ -1,5 +1,7 @@
 #include "tradutorlinux/gui/x11.hpp"
 
+#include "tradutorlinux/diagnostics/trace.hpp"
+
 #include <X11/Xatom.h>
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
@@ -10,11 +12,21 @@
 #include <cstdlib>
 #include <cstring>
 #include <deque>
+#include <iostream>
 #include <string>
 #include <thread>
 
 namespace tradutorlinux::gui {
 namespace {
+
+void write_gui_trace(const diagnostics::TraceLevel level, const std::string_view event,
+                     const std::span<const diagnostics::TraceField> fields = {}) noexcept {
+    try {
+        diagnostics::write_trace(std::cerr, diagnostics::TraceComponent::Gui, level, event, fields);
+    } catch (...) {
+        // Diagnóstico nunca pode derrubar o processo convidado.
+    }
+}
 
 constexpr int kDefaultWidth = 480;
 constexpr int kDefaultHeight = 180;
@@ -138,11 +150,15 @@ private:
     static const bool reported = [](Display* const value) {
         if (value == nullptr) {
             const char* const display_name = std::getenv("DISPLAY");
-            std::fprintf(stderr, "[tl][gui][error] backend=x11 status=connect-failed DISPLAY=%s\n",
-                         display_name != nullptr ? display_name : "<unset>");
+            const std::array fields{diagnostics::TraceField{"backend", "x11"},
+                                    diagnostics::TraceField{"status", "connect-failed"},
+                                    diagnostics::TraceField{"display", display_name != nullptr ? display_name : "<unset>"}};
+            write_gui_trace(diagnostics::TraceLevel::Error, "backend", fields);
         } else {
-            std::fprintf(stderr, "[tl][gui][info] backend=x11 status=connected display=%s\n",
-                         DisplayString(value));
+            const std::array fields{diagnostics::TraceField{"backend", "x11"},
+                                    diagnostics::TraceField{"status", "connected"},
+                                    diagnostics::TraceField{"display", DisplayString(value)}};
+            write_gui_trace(diagnostics::TraceLevel::Info, "backend", fields);
         }
         return true;
     }(instance);
@@ -282,7 +298,9 @@ NativeWindow create_window(const char* const caption, const int width,  // NOLIN
                             static_cast<unsigned int>(resolved_height), 1,
                             BlackPixel(dpy, screen), WhitePixel(dpy, screen));
     if (window == 0) {
-        std::fprintf(stderr, "[tl][gui][error] backend=x11 status=create-window-failed\n");
+        const std::array fields{diagnostics::TraceField{"backend", "x11"},
+                                diagnostics::TraceField{"status", "create-window-failed"}};
+        write_gui_trace(diagnostics::TraceLevel::Error, "window-create", fields);
         return nullptr;
     }
     XStoreName(dpy, window, caption != nullptr ? caption : "TradutorLinux");
@@ -301,8 +319,12 @@ NativeWindow create_window(const char* const caption, const int width,  // NOLIN
         .created_at = std::chrono::steady_clock::now(),
         .pending = {},
     };
-    std::fprintf(stderr, "[tl][gui][info] backend=x11 window-created id=%lu caption=\"%s\" size=%dx%d\n",
-                 static_cast<unsigned long>(window), state->caption.c_str(), resolved_width, resolved_height);
+    const std::array fields{diagnostics::TraceField{"backend", "x11"},
+                            diagnostics::TraceField{"window_id", std::to_string(static_cast<unsigned long>(window))},
+                            diagnostics::TraceField{"caption", state->caption},
+                            diagnostics::TraceField{"width", std::to_string(resolved_width)},
+                            diagnostics::TraceField{"height", std::to_string(resolved_height)}};
+    write_gui_trace(diagnostics::TraceLevel::Info, "window-created", fields);
     return state;
 }
 
@@ -330,8 +352,11 @@ bool map_window(const NativeWindow window) noexcept {
     // runtime desenhar o primeiro frame, evitando que a pintura seja apagada
     // pelo background padrão branco da janela.
     XSync(dpy, False);
-    std::fprintf(stderr, "[tl][gui][info] backend=x11 window-mapped id=%lu size=%dx%d\n",
-                 static_cast<unsigned long>(state->window), state->width, state->height);
+    const std::array fields{diagnostics::TraceField{"backend", "x11"},
+                            diagnostics::TraceField{"window_id", std::to_string(static_cast<unsigned long>(state->window))},
+                            diagnostics::TraceField{"width", std::to_string(state->width)},
+                            diagnostics::TraceField{"height", std::to_string(state->height)}};
+    write_gui_trace(diagnostics::TraceLevel::Info, "window-mapped", fields);
     return true;
 }
 

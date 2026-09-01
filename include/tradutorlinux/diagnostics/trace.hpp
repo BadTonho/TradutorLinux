@@ -1,6 +1,7 @@
 #pragma once
 
 #include <iosfwd>
+#include <filesystem>
 #include <span>
 #include <string>
 #include <string_view>
@@ -26,6 +27,7 @@ enum class TraceComponent {
 void configure_trace_filter(const std::vector<TraceComponent>& filter) noexcept;
 void configure_trace_all() noexcept;
 [[nodiscard]] bool is_trace_enabled(TraceComponent component) noexcept;
+[[nodiscard]] bool configure_trace_json_directory(const std::filesystem::path& directory) noexcept;
 
 enum class FailureCategory {
     ExitProcess,
