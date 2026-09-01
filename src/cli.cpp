@@ -447,6 +447,7 @@ void write_unmap_trace(std::ostream& stream, const std::uint64_t base) {
 
 void write_map_failed_trace(std::ostream& stream, const std::string_view status,
                             const std::string& detail) {
+    TL_TRACE_FUNCTION();
     const std::array fields{
         diagnostics::TraceField{"status", std::string{status}},
         diagnostics::TraceField{"detail", detail},
