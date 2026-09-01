@@ -65,5 +65,27 @@ TEST(TraceTest, WritesJsonEventImmediately) {
     std::filesystem::remove_all(directory);
 }
 
+TEST(TraceTest, FunctionScopeWritesEntryAndExit) {
+    const auto directory = std::filesystem::temp_directory_path() / "tl-function-scope-test";
+    std::filesystem::remove_all(directory);
+    ASSERT_TRUE(configure_trace_json_directory(directory));
+    {
+        FunctionTraceScope scope{"fixture::scoped_function"};
+    }
+    disable_trace_json_directory();
+
+    std::filesystem::path json_path;
+    for (const auto& entry : std::filesystem::directory_iterator(directory)) {
+        if (entry.path().extension() == ".jsonl") json_path = entry.path();
+    }
+    ASSERT_FALSE(json_path.empty());
+    std::ifstream input(json_path);
+    const std::string contents{std::istreambuf_iterator<char>{input}, {}};
+    EXPECT_NE(contents.find("\"event\": \"function-enter\""), std::string::npos);
+    EXPECT_NE(contents.find("\"event\": \"function-exit\""), std::string::npos);
+    EXPECT_NE(contents.find("fixture::scoped_function"), std::string::npos);
+    std::filesystem::remove_all(directory);
+}
+
 }  // namespace
 }  // namespace tradutorlinux::diagnostics
