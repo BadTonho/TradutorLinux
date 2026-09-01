@@ -673,6 +673,9 @@ extern "C" [[noreturn]] void tl_dispatch_raised_exception_from_asm(
     runtime::ContextAmd64* const context, const std::uint32_t code,
     const std::uint32_t flags, const std::uint32_t parameter_count,
     const std::uint64_t* const parameters) noexcept {
+    const std::array fields{diagnostics::TraceField{"function", "tl_RaiseException"}};
+    diagnostics::write_json_trace(diagnostics::TraceComponent::Runtime,
+                                  diagnostics::TraceLevel::Debug, "function-enter", fields);
     if (context == nullptr) {
         std::abort();
     }
@@ -682,6 +685,9 @@ extern "C" [[noreturn]] void tl_dispatch_raised_exception_from_asm(
 extern "C" [[noreturn]] void tl_dispatch_rtl_unwind_from_asm(
     runtime::ContextAmd64* const context, void* const target_frame, void* const target_ip,
     runtime::ExceptionRecordAmd64* const exception_record, void* const return_value) noexcept {
+    const std::array fields{diagnostics::TraceField{"function", "tl_RtlUnwind"}};
+    diagnostics::write_json_trace(diagnostics::TraceComponent::Runtime,
+                                  diagnostics::TraceLevel::Debug, "function-enter", fields);
     runtime::unwind_to_target(target_frame, target_ip, exception_record, return_value,
                               context, nullptr);
 }
