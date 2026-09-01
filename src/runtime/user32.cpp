@@ -2654,9 +2654,45 @@ TL_MSABI int tl_GetMenuItemCount(void* const menu) noexcept {
 TL_MSABI int tl_GetMenuItemInfoW(void* const menu, const std::uint32_t item, const int f_by_position,
                                 void* const mii) noexcept {
     (void)menu;
-    (void)item;
     (void)f_by_position;
-    (void)mii;
+    // MENUITEMINFOW em Win64: os ponteiros ficam alinhados em 8 bytes após
+    // os cinco campos UINT iniciais.
+    struct GuestMenuItemInfoW {
+        std::uint32_t cb_size;
+        std::uint32_t f_mask;
+        std::uint32_t f_type;
+        std::uint32_t f_state;
+        std::uint32_t item_id;
+        void* sub_menu;
+        void* checked_bitmap;
+        void* unchecked_bitmap;
+        std::uintptr_t item_data;
+        std::uint16_t* type_data;
+        std::uint32_t char_count;
+    };
+    if (mii != nullptr && !mapped_guest_range(mii, sizeof(GuestMenuItemInfoW), true)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    if (mii != nullptr) {
+        auto* const info = static_cast<GuestMenuItemInfoW*>(mii);
+        const std::uint32_t requested_mask = info->f_mask;
+        info->cb_size = sizeof(GuestMenuItemInfoW);
+        info->f_type = 0;
+        info->f_state = 0;
+        info->item_id = 100U + item;
+        info->sub_menu = item < 4U ? reinterpret_cast<void*>(0x5355424DULL) : nullptr;
+        info->checked_bitmap = nullptr;
+        info->unchecked_bitmap = nullptr;
+        info->item_data = 0;
+        // O buffer de saída pode ter sido preparado por uma versão diferente
+        // de MENUITEMINFO. Não devolva ao convidado ponteiros inventados nem
+        // reutilize type_data sem validar o layout e a capacidade completos.
+        if ((requested_mask & 0x00000040U) != 0U) {
+            info->type_data = nullptr;
+            info->char_count = 0;
+        }
+    }
     set_last_error(abi::kErrorSuccess);
     return 1;
 }

@@ -1189,12 +1189,17 @@ TL_CRT_MSABI int tl_fprintf(GuestFile* file, const char* format, ...) noexcept {
 // Memória, strings e conversões.
 // ---------------------------------------------------------------------------
 
+[[nodiscard]] bool trace_malloc_enabled() noexcept {
+    static const bool enabled = std::getenv("TL_TRACE_MALLOC") != nullptr;
+    return enabled;
+}
+
 TL_CRT_MSABI void* tl_malloc(std::size_t size) noexcept {
     void* result = std::malloc(size);
     // malloc is called in tight loops by real GUI applications. Keep the
     // diagnostic available without flooding the terminal and hiding the
     // actual runtime/GUI error by default.
-    if (std::getenv("TL_TRACE_MALLOC") != nullptr) {
+    if (trace_malloc_enabled()) {
         std::fprintf(stderr, "[tl][dbg] malloc size=%zu -> %p\n", size, result);
     }
     return result;
