@@ -387,9 +387,12 @@ TL_MSABI abi::HWnd tl_CreateWindowExA(const std::uint32_t ex_style,
     slot.height = height > 0 ? height : 600;
     slot.style = style;
     slot.visible = (style & kWsVisible) != 0U;
-    if (slot.visible) {
-        slot.mapped = gui::platform::map_window(slot.native);
-    }
+    // A janela principal precisa estar presente no compositor enquanto o
+    // WM_CREATE é executado. Alguns aplicativos fazem parte da inicialização
+    // dentro desse callback; se ele bloquear, uma janela criada mas ainda não
+    // mapeada torna o diagnóstico impossível e parece que nada aconteceu.
+    slot.mapped = gui::platform::map_window(slot.native);
+    slot.visible = slot.mapped || slot.visible;
     struct GuestCreateStructA {
         const void* lpCreateParams;
         const void* hInstance;
