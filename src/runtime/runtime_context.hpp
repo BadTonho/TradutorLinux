@@ -116,8 +116,6 @@ extern std::mutex g_sync_mutex;
 extern std::array<SyncSlot, 256> g_syncs;
 
 constexpr std::uint32_t kMainThreadId = 1;
-extern thread_local std::uint32_t g_current_thread_id;
-extern std::atomic<std::uint32_t> g_next_thread_id;
 
 struct ThreadSlot {
     bool used{false};
@@ -142,10 +140,8 @@ extern std::array<ThreadSlot, 256> g_threads;
 constexpr std::uintptr_t kThreadHandleBase = 0x0000400000000000ULL;
 
 constexpr std::uint32_t kMaxTlsSlots = 256;
-extern std::array<bool, kMaxTlsSlots> g_tls_indices_used;
-extern std::mutex g_tls_mutex;
 extern thread_local std::array<void*, 64> g_guest_tls_slots;
-extern std::atomic<std::uintptr_t> g_unhandled_exception_filter;
+extern thread_local std::uint32_t g_current_thread_id;
 
 constexpr std::uint32_t kMaxFlsSlots = 128;
 struct FlsSlot {
@@ -283,6 +279,10 @@ inline void set_last_error(const std::uint32_t error) noexcept {
 #define g_local_free_mutex (::tradutorlinux::runtime::guest_context().local_free_mutex)
 #define g_resources (::tradutorlinux::runtime::guest_context().resources)
 #define g_resource_mutex (::tradutorlinux::runtime::guest_context().resource_mutex)
+#define g_tls_indices_used (::tradutorlinux::runtime::guest_context().tls_indices_used)
+#define g_tls_mutex (::tradutorlinux::runtime::guest_context().tls_mutex)
+#define g_next_thread_id (::tradutorlinux::runtime::guest_context().next_thread_id)
+#define g_unhandled_exception_filter (::tradutorlinux::runtime::guest_context().unhandled_exception_filter)
 
 inline bool mapped_guest_range(const void* address, std::size_t size, bool writable) noexcept {
     return runtime::validate_mapped_range(address, size, writable);

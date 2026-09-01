@@ -3,6 +3,7 @@
 #include "tradutorlinux/runtime/teb.hpp"
 
 #include <array>
+#include <atomic>
 #include <csetjmp>
 #include <cstddef>
 #include <cstdint>
@@ -107,6 +108,11 @@ struct GuestContext {
     };
     std::vector<ContextModule> modules;
     std::mutex modules_mutex;
+
+    std::array<bool, 256> tls_indices_used{};
+    std::mutex tls_mutex;
+    std::atomic<std::uint32_t> next_thread_id{2};
+    std::atomic<std::uintptr_t> unhandled_exception_filter{0};
 };
 
 // O contexto é local à thread hospedeira para que uma thread convidada nunca

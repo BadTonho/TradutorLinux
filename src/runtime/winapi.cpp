@@ -71,16 +71,11 @@ std::atomic<std::uintptr_t> g_pointer_cookie{0};
 std::mutex g_sync_mutex;
 std::array<SyncSlot, 256> g_syncs{};
 
-thread_local std::uint32_t g_current_thread_id = kMainThreadId;
-std::atomic<std::uint32_t> g_next_thread_id{kMainThreadId + 1};
-
 std::mutex g_threads_mutex;
 std::array<ThreadSlot, 256> g_threads{};
 
-std::array<bool, kMaxTlsSlots> g_tls_indices_used{};
-std::mutex g_tls_mutex;
 thread_local std::array<void*, 64> g_guest_tls_slots{};
-std::atomic<std::uintptr_t> g_unhandled_exception_filter{0};
+thread_local std::uint32_t g_current_thread_id = kMainThreadId;
 
 std::array<FlsSlot, kMaxFlsSlots> g_fls_slots{};
 std::mutex g_fls_mutex;
