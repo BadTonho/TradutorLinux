@@ -1033,7 +1033,7 @@ TL_MSABI int tl_GetWindowTextA(const void* window, char* text, int capacity) noe
     }
     runtime_gui::copy_control_text(*slot, text, capacity);
     set_last_error(abi::kErrorSuccess);
-    return 0;
+    return static_cast<int>(std::strlen(text));
 }
 
 TL_MSABI int tl_SetWindowTextW(const void* window, const std::uint16_t* text) noexcept {
@@ -1499,18 +1499,29 @@ TL_MSABI int tl_IsDialogMessageW(const void* dialog, const void* message) noexce
 
 TL_MSABI int tl_EndDialog(const void* dialog, const std::intptr_t result) noexcept {
     WindowSlot* const slot = find_window_slot(dialog);
-    if (slot == nullptr || !slot->is_dialog || slot != g_active_dialog || g_modal_done) {
+    WindowSlot* modal_parent = nullptr;
+    bool modal_parent_was_enabled = true;
+    {
+        std::lock_guard lock(g_modal_mutex);
+        if (slot == nullptr || !slot->is_dialog || slot != g_active_dialog || g_modal_done) {
+            set_last_error(abi::kErrorInvalidHandle);
+            return 0;
+        }
+        g_modal_result = result;
+        g_modal_done = true;
+        modal_parent = g_modal_parent;
+        modal_parent_was_enabled = g_modal_parent_was_enabled;
+    }
+    if (slot == nullptr) {
         set_last_error(abi::kErrorInvalidHandle);
         return 0;
     }
-    g_modal_result = result;
-    g_modal_done = true;
     const abi::HWnd hwnd = slot;
     tl_DestroyWindow(hwnd);
-    if (g_modal_parent != nullptr) {
-        WindowSlot* const parent = find_window_slot(g_modal_parent);
+    if (modal_parent != nullptr) {
+        WindowSlot* const parent = find_window_slot(modal_parent);
         if (parent != nullptr) {
-            parent->enabled = g_modal_parent_was_enabled;
+            parent->enabled = modal_parent_was_enabled;
             render_controls(*parent);
         }
     }
@@ -1569,12 +1580,18 @@ TL_MSABI std::intptr_t tl_DialogBoxParamW(const void* const instance,
                            : abi::kErrorInvalidParameter);
         return -1;
     }
+    bool parent_was_enabled = true;
     if (parent_slot != nullptr) {
-        g_modal_parent = parent_slot;
-        g_modal_parent_was_enabled = parent_slot->enabled;
+        parent_was_enabled = parent_slot->enabled;
+        {
+            std::lock_guard lock(g_modal_mutex);
+            g_modal_parent = parent_slot;
+            g_modal_parent_was_enabled = parent_was_enabled;
+        }
         parent_slot->enabled = false;
         render_controls(*parent_slot);
     } else {
+        std::lock_guard lock(g_modal_mutex);
         g_modal_parent = nullptr;
         g_modal_parent_was_enabled = true;
     }
@@ -1584,7 +1601,7 @@ TL_MSABI std::intptr_t tl_DialogBoxParamW(const void* const instance,
     gui::NativeWindow native = gui::platform::create_window(title.c_str(), parsed.width, parsed.height);
     if (native == nullptr) {
         if (parent_slot != nullptr) {
-            parent_slot->enabled = g_modal_parent_was_enabled;
+            parent_slot->enabled = parent_was_enabled;
             render_controls(*parent_slot);
         }
         set_last_error(abi::kErrorAccessDenied);
@@ -1595,7 +1612,7 @@ TL_MSABI std::intptr_t tl_DialogBoxParamW(const void* const instance,
     if (free_it == g_windows.end()) {
         gui::platform::destroy_window(native);
         if (parent_slot != nullptr) {
-            parent_slot->enabled = g_modal_parent_was_enabled;
+            parent_slot->enabled = parent_was_enabled;
             render_controls(*parent_slot);
         }
         set_last_error(abi::kErrorNotEnoughMemory);
@@ -1624,7 +1641,7 @@ TL_MSABI std::intptr_t tl_DialogBoxParamW(const void* const instance,
         if (child_it == g_windows.end()) {
             tl_DestroyWindow(&dialog);
             if (parent_slot != nullptr) {
-                parent_slot->enabled = g_modal_parent_was_enabled;
+                parent_slot->enabled = parent_was_enabled;
                 render_controls(*parent_slot);
             }
             set_last_error(abi::kErrorNotEnoughMemory);
@@ -1654,9 +1671,12 @@ TL_MSABI std::intptr_t tl_DialogBoxParamW(const void* const instance,
         }
         dialog.dialog_children.push_back(&child);
     }
-    g_active_dialog = &dialog;
-    g_modal_done = false;
-    g_modal_result = 0;
+    {
+        std::lock_guard lock(g_modal_mutex);
+        g_active_dialog = &dialog;
+        g_modal_done = false;
+        g_modal_result = 0;
+    }
     render_controls(dialog);
     if (next_dialog_tab_item(dialog, nullptr, false) != nullptr) {
         set_focus_control(next_dialog_tab_item(dialog, nullptr, false));
@@ -1670,7 +1690,13 @@ TL_MSABI std::intptr_t tl_DialogBoxParamW(const void* const instance,
     };
     runtime_trace("DialogBoxParamW", created_fields, 4);
 
-    while (!g_modal_done) {
+    while (true) {
+        {
+            std::lock_guard lock(g_modal_mutex);
+            if (g_modal_done) {
+                break;
+            }
+        }
         abi::GuestMsg message{};
         const int received = tl_GetMessageW(&message, &dialog, 0, 0);
         if (received <= 0) {
@@ -1682,8 +1708,11 @@ TL_MSABI std::intptr_t tl_DialogBoxParamW(const void* const instance,
         }
         const abi::Lresult handled = call_wndproc(dialog.wndproc, &dialog, message.message,
                                                   message.wparam, message.lparam);
-        if (g_modal_done) {
-            continue;
+        {
+            std::lock_guard lock(g_modal_mutex);
+            if (g_modal_done) {
+                continue;
+            }
         }
         if (handled == 0 && message.message == abi::kWmClose) {
             static_cast<void>(tl_EndDialog(&dialog, kIdCancel));
@@ -1694,10 +1723,14 @@ TL_MSABI std::intptr_t tl_DialogBoxParamW(const void* const instance,
             }
         }
     }
-    const std::intptr_t result = g_modal_result;
-    g_active_dialog = nullptr;
-    g_modal_parent = nullptr;
-    g_modal_done = false;
+    std::intptr_t result = 0;
+    {
+        std::lock_guard lock(g_modal_mutex);
+        result = g_modal_result;
+        g_active_dialog = nullptr;
+        g_modal_parent = nullptr;
+        g_modal_done = false;
+    }
     const std::array<diagnostics::TraceField, 4> returned_fields{
         diagnostics::TraceField{"symbol", "DialogBoxParamW"},
         diagnostics::TraceField{"result", std::to_string(result)},
@@ -2447,12 +2480,16 @@ TL_MSABI std::uint32_t tl_GetSysColor(const int index) noexcept {
 TL_MSABI std::uint16_t* tl_CharUpperW(std::uint16_t* const str) noexcept {
     if (reinterpret_cast<std::uintptr_t>(str) <= 0xFFFFU) {
         auto ch = static_cast<char16_t>(reinterpret_cast<std::uintptr_t>(str));
-        if (ch >= u'a' && ch <= u'z') ch = ch - u'a' + u'A';
+        if (ch >= u'a' && ch <= u'z') {
+            ch = static_cast<char16_t>(ch - u'a' + u'A');
+        }
         return reinterpret_cast<std::uint16_t*>(static_cast<std::uintptr_t>(ch));
     }
     if (!mapped_guest_wstring(str)) return str;
     for (std::uint16_t* p = str; *p != 0; ++p) {
-        if (*p >= u'a' && *p <= u'z') *p = *p - u'a' + u'A';
+        if (*p >= u'a' && *p <= u'z') {
+            *p = static_cast<std::uint16_t>(*p - u'a' + u'A');
+        }
     }
     return str;
 }
@@ -2460,12 +2497,16 @@ TL_MSABI std::uint16_t* tl_CharUpperW(std::uint16_t* const str) noexcept {
 TL_MSABI std::uint16_t* tl_CharLowerW(std::uint16_t* const str) noexcept {
     if (reinterpret_cast<std::uintptr_t>(str) <= 0xFFFFU) {
         auto ch = static_cast<char16_t>(reinterpret_cast<std::uintptr_t>(str));
-        if (ch >= u'A' && ch <= u'Z') ch = ch - u'A' + u'a';
+        if (ch >= u'A' && ch <= u'Z') {
+            ch = static_cast<char16_t>(ch - u'A' + u'a');
+        }
         return reinterpret_cast<std::uint16_t*>(static_cast<std::uintptr_t>(ch));
     }
     if (!mapped_guest_wstring(str)) return str;
     for (std::uint16_t* p = str; *p != 0; ++p) {
-        if (*p >= u'A' && *p <= u'Z') *p = *p - u'A' + u'a';
+        if (*p >= u'A' && *p <= u'Z') {
+            *p = static_cast<std::uint16_t>(*p - u'A' + u'a');
+        }
     }
     return str;
 }

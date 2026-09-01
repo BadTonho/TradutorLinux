@@ -46,7 +46,9 @@ constexpr std::size_t kMaxRelocBlocks = 4096;
     const bool write = (characteristics & kImageScnMemWrite) != 0;
     const bool execute = (characteristics & kImageScnMemExecute) != 0;
     if (execute && write) {
-        return SectionPermissions::ReadWriteExecute;
+        // W^X: uma seção PE pode pedir execute+write, mas o runtime nunca
+        // expõe uma página com as duas permissões.
+        return SectionPermissions::ReadWrite;
     }
     if (execute) {
         return SectionPermissions::ReadExecute;
@@ -78,8 +80,9 @@ constexpr std::size_t kMaxRelocBlocks = 4096;
 
 [[nodiscard]] SectionPermissions permissions_for_page(const std::vector<MapRegion>& regions,
                                                       const std::uint64_t page_start,
-                                                      const std::uint64_t page_end) {
-    bool read = false;
+                                                      const std::uint64_t page_end,
+                                                      const std::size_t headers_size = 0) {
+    bool read = page_start < headers_size;
     bool write = false;
     bool execute = false;
     for (const MapRegion& region : regions) {
@@ -110,7 +113,7 @@ constexpr std::size_t kMaxRelocBlocks = 4096;
         }
     }
     if (execute && write) {
-        return SectionPermissions::ReadWriteExecute;
+        return SectionPermissions::ReadWrite;
     }
     if (write) {
         return SectionPermissions::ReadWrite;
@@ -127,7 +130,7 @@ SectionPermissions effective_page_permissions(const MappedImage& image, const st
     const std::size_t page = util::host_page_size();
     const std::uint64_t page_start = align_down(rva, page);
     const std::uint64_t page_end = align_up(static_cast<std::uint64_t>(rva) + 1, page);
-    return permissions_for_page(image.regions, page_start, page_end);
+    return permissions_for_page(image.regions, page_start, page_end, image.headers_size);
 }
 
 namespace {
@@ -422,7 +425,8 @@ MapResult map_image(const pe::PeInfo& info, const std::span<const std::byte> fil
         const std::size_t protect_size =
             static_cast<std::size_t>(std::min(page_end, mapping_size_u64) - page_start);
         const SectionPermissions page_permissions =
-            permissions_for_page(regions, page_start, page_start + protect_size);
+            permissions_for_page(regions, page_start, page_start + protect_size,
+                                 info.size_of_headers);
         if (mprotect(static_cast<std::byte*>(mapping) + static_cast<std::ptrdiff_t>(page_start),
                      protect_size, to_prot(page_permissions)) != 0) {
             const int error = errno;
@@ -433,25 +437,29 @@ MapResult map_image(const pe::PeInfo& info, const std::span<const std::byte> fil
         }
     }
 
-    // Protege os headers por último: se um header compartilhar a página com a
-    // primeira seção (SizeOfHeaders não múltiplo da página), aplicar antes do
-    // loop deixaria a seção re-proteger a página com RW/RX, tornando os headers
-    // graváveis/executáveis. Por último, os headers permanecem somente leitura.
+    // Protege os headers por último. Se uma seção compartilhar a primeira
+    // página com os headers, a permissão efetiva é a união por página: isso
+    // mantém o entry point executável sem criar uma página RWX.
     const std::uint64_t header_protect_size = align_up(
         std::min<std::uint64_t>(static_cast<std::uint64_t>(info.size_of_headers), mapping_size_u64),
         page);
-    if (header_protect_size > 0 && mprotect(mapping, header_protect_size, PROT_READ) != 0) {
-        const int error = errno;
-        munmap(mapping, mapping_size);
-        return fail(MapStatus::OutOfMemory,
-                    "não foi possível proteger os headers da imagem (errno=" +
-                        std::to_string(error) + ")");
+    if (header_protect_size > 0) {
+        const SectionPermissions header_permissions =
+            permissions_for_page(regions, 0, header_protect_size, info.size_of_headers);
+        if (mprotect(mapping, header_protect_size, to_prot(header_permissions)) != 0) {
+            const int error = errno;
+            munmap(mapping, mapping_size);
+            return fail(MapStatus::OutOfMemory,
+                        "não foi possível proteger os headers da imagem (errno=" +
+                            std::to_string(error) + ")");
+        }
     }
 
     MappedImage image{
         .preferred_base = preferred_base,
         .base = static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(mapping)),
         .size = mapping_size,
+        .headers_size = std::min<std::size_t>(info.size_of_headers, mapping_size),
         .memory = memory,
         .delta = delta,
         .has_relocation_directory = has_relocation_directory,
@@ -469,6 +477,7 @@ void unmap_image(MappedImage& image) {
     image.size = 0;
     image.base = 0;
     image.preferred_base = 0;
+    image.headers_size = 0;
     image.delta = 0;
     image.has_relocation_directory = false;
     image.applied_relocations = 0;
@@ -477,7 +486,9 @@ void unmap_image(MappedImage& image) {
 
 PatchStatus write_image_bytes(MappedImage& image, const std::uint32_t rva,
                               const std::byte* data, const std::size_t size) {
-    if (image.memory == nullptr || size == 0) {
+    if (image.memory == nullptr || data == nullptr || size == 0 ||
+        static_cast<std::uint64_t>(rva) > std::numeric_limits<std::uint64_t>::max() - size ||
+        static_cast<std::uint64_t>(rva) + size > image.size) {
         return PatchStatus::InvalidAddress;
     }
     const MapRegion* covering = nullptr;
@@ -490,7 +501,10 @@ PatchStatus write_image_bytes(MappedImage& image, const std::uint32_t rva,
             break;
         }
     }
-    if (covering == nullptr) {
+    const std::uint64_t end = static_cast<std::uint64_t>(rva) + size;
+    const bool covers_headers = static_cast<std::uint64_t>(rva) < image.headers_size &&
+                                 end <= image.headers_size;
+    if (covering == nullptr && !covers_headers) {
         return PatchStatus::InvalidAddress;
     }
     const std::size_t page = util::host_page_size();
@@ -511,7 +525,7 @@ PatchStatus write_image_bytes(MappedImage& image, const std::uint32_t rva,
     }
     std::memcpy(image.memory + static_cast<std::ptrdiff_t>(rva), data, size);
     const SectionPermissions page_permissions = permissions_for_page(
-        image.regions, page_start, page_end);
+        image.regions, page_start, page_end, image.headers_size);
     if (mprotect(page_base, page_size, to_prot(page_permissions)) != 0) {
         // Tenta ao menos voltar para somente leitura para não deixar RWX/RW exposto (M10).
         (void)mprotect(page_base, page_size, PROT_READ);

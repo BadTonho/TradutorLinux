@@ -66,6 +66,29 @@ constexpr std::uint32_t kStillActive = 259U;
 constexpr std::uint32_t kChildProcessFailure = 0xC0000001U;
 constexpr std::size_t kChildProcessProtocolSize = 5;
 
+[[nodiscard]] std::uint64_t relocate_tls_va_for_child(
+    const std::uint64_t value, const pe::PeInfo& info,
+    const loader::MappedImage& image) noexcept {
+    if (value == 0 || value < info.image_base ||
+        value - info.image_base >= static_cast<std::uint64_t>(info.size_of_image)) {
+        return value;
+    }
+    const std::uint64_t rva = value - info.image_base;
+    return rva < image.size && image.base <= std::numeric_limits<std::uint64_t>::max() - rva
+               ? image.base + rva
+               : value;
+}
+
+[[nodiscard]] std::vector<std::uint64_t> relocated_tls_callbacks_for_child(
+    const pe::PeInfo& info, const loader::MappedImage& image) {
+    std::vector<std::uint64_t> callbacks;
+    callbacks.reserve(info.tls_info.callback_vas.size());
+    for (const std::uint64_t callback : info.tls_info.callback_vas) {
+        callbacks.push_back(relocate_tls_va_for_child(callback, info, image));
+    }
+    return callbacks;
+}
+
 void* const kInvalidHandleValue = reinterpret_cast<void*>(~static_cast<std::uintptr_t>(0));  // INVALID_HANDLE_VALUE
 
 // Ponto de retorno para ExitThread dentro de threads convidadas. pthread_exit é
@@ -536,7 +559,16 @@ bool read_guest_file_for_process(const char* path, std::vector<std::byte>& bytes
     runtime::set_guest_unwind_view(process.image.memory, process.image.size,
                                    parsed.info.exception_directory_rva,
                                    process.info.runtime_functions);
+    set_guest_tls_directory(
+        relocate_tls_va_for_child(parsed.info.tls_info.start_address_of_raw_data,
+                                  parsed.info, process.image),
+        relocate_tls_va_for_child(parsed.info.tls_info.end_address_of_raw_data,
+                                  parsed.info, process.image),
+        relocate_tls_va_for_child(parsed.info.tls_info.address_of_index,
+                                  parsed.info, process.image),
+        relocated_tls_callbacks_for_child(parsed.info, process.image));
     result = execute_guest_entry(process.thread.entry_point, process.thread.stack_top);
+    set_guest_tls_directory(0, 0, 0, {});
     runtime::clear_guest_unwind_view();
     set_guest_image_view(nullptr, 0, 0, 0);
     loader::destroy_process(process);
@@ -1497,6 +1529,10 @@ TL_MSABI std::uint64_t tl_GetTickCount64() noexcept {
 }
 
 TL_MSABI void tl_GetSystemTimeAsFileTime(void* file_time) noexcept {
+    if (file_time == nullptr || !mapped_guest_range(file_time, sizeof(std::uint64_t), true)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return;
+    }
     auto* ft = static_cast<std::uint64_t*>(file_time);
     using namespace std::chrono;
     const auto now = system_clock::now().time_since_epoch();
@@ -2242,8 +2278,14 @@ TL_MSABI void* tl_CreateThread(const void* thread_attributes, const std::uintptr
     }
     using ThreadProc = TL_MSABI std::uint32_t (*)(const void*);
     auto proc = reinterpret_cast<ThreadProc>(start_address);
-    it->host_thread = std::thread([slot_ptr = &*it, proc, parameter, teb,
+    runtime::GuestContext* const guest_context = &runtime::guest_context();
+    it->host_thread = std::thread([slot_ptr = &*it, proc, parameter, teb, guest_context,
                                    unwind_view = it->unwind_view]() {
+        // O contexto ativo é thread-local. Uma thread host nova começa no
+        // contexto padrão, portanto precisa herdar explicitamente o contexto
+        // do processo convidado antes de consultar imagem, TLS, handles ou
+        // qualquer outra tabela pertencente à execução.
+        runtime::GuestContextScope context_scope(*guest_context);
         g_current_thread_id = slot_ptr->thread_id;
         set_guest_gs_base(teb);
         initialize_thread_tls(static_cast<runtime::GuestTeb*>(teb));
@@ -6067,9 +6109,28 @@ TL_MSABI std::uint32_t tl_GetTempPathA(const std::uint32_t buffer_length, char* 
 }
 
 TL_MSABI int tl_MoveFileExA(const char* const existing_file, const char* const new_file, const std::uint32_t flags) noexcept {
-    (void)flags;
-    if (existing_file == nullptr || new_file == nullptr) {
+    constexpr std::uint32_t kMoveFileReplaceExisting = 0x1U;
+    if (existing_file == nullptr || new_file == nullptr ||
+        !mapped_guest_cstring(existing_file) || !mapped_guest_cstring(new_file) ||
+        (flags & ~kMoveFileReplaceExisting) != 0U) {
         set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    char source[4096]{};
+    char destination[4096]{};
+    if (!translate_windows_path(existing_file, source, sizeof(source)) ||
+        !translate_windows_path(new_file, destination, sizeof(destination))) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    std::error_code error;
+    if ((flags & kMoveFileReplaceExisting) == 0U &&
+        std::filesystem::exists(destination, error)) {
+        set_last_error(abi::kErrorAlreadyExists);
+        return 0;
+    }
+    if (::rename(source, destination) != 0) {
+        set_last_error(errno_to_win32(errno));
         return 0;
     }
     set_last_error(abi::kErrorSuccess);

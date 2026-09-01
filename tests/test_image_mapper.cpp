@@ -2,6 +2,7 @@
 #include "tradutorlinux/loader/image_mapper.hpp"
 #include "tradutorlinux/pe/pe_reader.hpp"
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <fstream>
@@ -346,6 +347,25 @@ TEST_F(ImageMapperTest, DowngradesWritableExecutableSectionToReadWrite) {
     ASSERT_TRUE(header_perms.has_value());
     EXPECT_EQ(*header_perms, "r--p");
 
+    unmap_image(result.image);
+}
+
+TEST_F(ImageMapperTest, PatchesBytesStoredInHeaders) {
+    const std::vector<std::byte> bytes = make_minimal();
+    const pe::ParseResult parse = pe::parse_pe(bytes);
+    ASSERT_EQ(parse.status, pe::ParseStatus::Success);
+
+    MapOptions options;
+    options.preferred_base = kTestPreferredBase;
+    MapResult result = map_image(parse.info, bytes, options);
+    ASSERT_EQ(result.status, MapStatus::Success);
+
+    const std::array<std::byte, 8> replacement{
+        std::byte{0x11}, std::byte{0x22}, std::byte{0x33}, std::byte{0x44},
+        std::byte{0x55}, std::byte{0x66}, std::byte{0x77}, std::byte{0x88}};
+    EXPECT_EQ(write_image_bytes(result.image, 0x100, replacement.data(), replacement.size()),
+              PatchStatus::Success);
+    EXPECT_TRUE(std::equal(replacement.begin(), replacement.end(), result.image.memory + 0x100));
     unmap_image(result.image);
 }
 

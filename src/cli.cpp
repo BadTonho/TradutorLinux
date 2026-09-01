@@ -54,6 +54,33 @@ constexpr std::string_view kUsage =
 // entrada hostil e rejeitado antes do parse.
 constexpr std::uint64_t kMaxPeFileSize = 512ULL * 1024 * 1024;
 
+// Os campos de IMAGE_TLS_DIRECTORY são VAs absolutos gravados na imagem na
+// base preferencial. O parser preserva essa representação para o --report;
+// antes da execução eles precisam apontar para a cópia realmente mapeada.
+[[nodiscard]] std::uint64_t relocate_tls_va(const std::uint64_t value,
+                                             const pe::PeInfo& info,
+                                             const loader::MappedImage& image) noexcept {
+    if (value == 0 || value < info.image_base ||
+        value - info.image_base >= static_cast<std::uint64_t>(info.size_of_image)) {
+        return value;
+    }
+    const std::uint64_t rva = value - info.image_base;
+    if (rva >= image.size || image.base > std::numeric_limits<std::uint64_t>::max() - rva) {
+        return value;
+    }
+    return image.base + rva;
+}
+
+[[nodiscard]] std::vector<std::uint64_t> relocated_tls_callbacks(
+    const pe::PeInfo& info, const loader::MappedImage& image) {
+    std::vector<std::uint64_t> callbacks;
+    callbacks.reserve(info.tls_info.callback_vas.size());
+    for (const std::uint64_t callback : info.tls_info.callback_vas) {
+        callbacks.push_back(relocate_tls_va(callback, info, image));
+    }
+    return callbacks;
+}
+
 [[nodiscard]] std::optional<std::vector<std::byte>> read_file(
     const std::filesystem::path& path) {
     TL_TRACE_FUNCTION();
@@ -1528,10 +1555,14 @@ ExitCode run_command(const CommandLine& command_line, std::ostream& stdout_strea
     runtime::set_guest_unwind_view(process.image.memory, process.image.size,
                                    parse_result.info.exception_directory_rva,
                                    process.info.runtime_functions);
-    set_guest_tls_directory(parse_result.info.tls_info.start_address_of_raw_data,
-                            parse_result.info.tls_info.end_address_of_raw_data,
-                            parse_result.info.tls_info.address_of_index,
-                            parse_result.info.tls_info.callback_vas);
+    set_guest_tls_directory(
+        relocate_tls_va(parse_result.info.tls_info.start_address_of_raw_data,
+                        parse_result.info, process.image),
+        relocate_tls_va(parse_result.info.tls_info.end_address_of_raw_data,
+                        parse_result.info, process.image),
+        relocate_tls_va(parse_result.info.tls_info.address_of_index,
+                        parse_result.info, process.image),
+        relocated_tls_callbacks(parse_result.info, process.image));
 
     const process::GuestOutcome outcome = process::run_guest_isolated(
         process.thread.entry_point, process.thread.stack_top, effective_cmd.timeout_ms,

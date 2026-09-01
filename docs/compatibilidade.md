@@ -376,7 +376,7 @@ que recebem arquivos do host como argumentos.
 | `KERNEL32.dll` | `SetFilePointer` | Suportado | Seek por `FILE_BEGIN`/`FILE_CURRENT`/`FILE_END`; suporta ponteiro `high_distance`; atualiza `FileSlot.position` |
 | `KERNEL32.dll` | `GetFileAttributesA` | Suportado | `stat()` + bits `FILE_ATTRIBUTE_DIRECTORY`/`FILE_ATTRIBUTE_ARCHIVE`/`FILE_ATTRIBUTE_READONLY` |
 | `KERNEL32.dll` | `DeleteFileA` | Suportado | `unlink()` com mapeamento de erros |
-| `KERNEL32.dll` | `MoveFileA` | Suportado | `rename()` com mapeamento de erros |
+| `KERNEL32.dll` | `MoveFileA` / `MoveFileExA` | Suportado no subconjunto | `rename()` com mapeamento de erros; `MoveFileExA` aceita `MOVEFILE_REPLACE_EXISTING` e rejeita flags não implementadas |
 | `KERNEL32.dll` | `CreateDirectoryA` | Suportado | `mkdir()` com permissão 0777 |
 | `KERNEL32.dll` | `FindFirstFileA` | Suportado | Abre `opendir()` + `readdir()` e preenche atributos, tamanho e tempos |
 | `KERNEL32.dll` | `FindNextFileA` | Suportado | Continua iteração com o mesmo padrão |
@@ -591,7 +591,7 @@ processo filho; cada thread convidada recebe seu próprio TEB/GS, stack e
 | `GDI32.dll` | `CreateBitmap` | Suportado | Cria e registra handle de bitmap em memória |
 | `GDI32.dll` | `StretchBlt` | Suportado | Cópia e redimensionamento de blocos de imagem em DC |
 | `GDI32.dll` | `GetObjectW` | Suportado | Consulta informações de dimensões de BITMAP ou LOGFONTW |
-| `GDI32.dll` | `CreateDIBSection` | Suportado | Aloca bitmap DIB com ponteiro direto a pixels |
+| `GDI32.dll` | `CreateDIBSection` | Suportado no subconjunto | Valida `BITMAPINFO`/dimensões, aloca bitmap DIB com ponteiro direto a pixels e limita a superfície a 256 MiB |
 | `OLEAUT32.dll` | `SysAllocString` / `SysAllocStringLen` / `SysFreeString` / `SysStringLen` / `SysStringByteLen` | Suportado | Alocação, liberação e consulta de BSTR com cabeçalho de 4 bytes e terminação null |
 | `OLEAUT32.dll` | `VariantInit` / `VariantClear` / `VariantCopy` / `VariantCopyInd` / `VariantChangeType` | Suportado | Gerenciamento e clonagem de estruturas VARIANT |
 | `OLEAUT32.dll` | `SafeArrayCreate` / `SafeArrayDestroy` / `SafeArrayGetDim` / `SafeArrayAccessData` / etc. | Suportado | Suporte e gerenciamento de contêineres SafeArray multidimensionais |
@@ -659,17 +659,17 @@ traz `category`/`status`/`detail` e `fault-address` quando há `SIGSEGV`.
 | 3 | `7z.dll` | PE32+ DLL x86-64 | 86/86 (100%) | `supported` | `n/a` (DLL) | **Fase 13.A**: `USER32!CharPrevExA` `src/runtime/user32.cpp:2314` + `KERNEL32!DosDateTimeToFileTime` `src/runtime/kernel32.cpp:5441` `winapi.hpp:928,1478` fecharam `84/86→86/86` |
 | 4 | `putty_x64.exe` | PE32+ x86-64 | 348/348 (100%) | `supported` | `ExitProcess 1` (sem args) | FLS 0/1 ok |
 | 5 | `WinRAR_x64.exe` `winrar-x64-723.exe` | PE32+ x86-64 | 251/251 (100%) | `supported` | `ExitProcess 0` `sfxcmd` env | delay `GDI32/ADVAPI32/SHELL32/ole32` |
-| 6 | `Rufus_x64.exe` | PE32+ x86-64 | 14/14 (100%) | `supported` | `ExitProcess 56832` | `UPX0` `rwx` 3 seções — antes `unsupported`, agora `rwx` aceito `docs/arquitetura/mapeamento-imagem.md` |
-| 7 | `HWiNFO64.exe` | PE32+ x86-64 | 28/28 (100%) | `supported` | `ExitProcess 44544 (0xAE00 → shell 0)` | **Fase 13.B**: `GDI32!Arc` `gdi32.cpp:1109` `SHLWAPI!PathIsUNCW` `shlwapi.cpp:328` + `MSIMG32!AlphaBlend` `NETAPI32!NetApiBufferFree` `OLEACC!LresultFromObject` `tdh!TdhGetPropertySize` `WINSPOOL.DRV!OpenPrinterW` `WTSAPI32!WTSFreeMemory` `src/runtime/winapi.cpp:782` `winapi.hpp:928` fecharam `20/28→28/28` |
+| 6 | `Rufus_x64.exe` | PE32+ x86-64 | 14/14 (100%) | `supported` | `ExitProcess 56832` | `UPX0` possui 3 seções marcadas `rwx`; o loader aplica W^X e mapeia a combinação como `RW`, sem página `RWX` |
+| 7 | `HWiNFO64.exe` | PE32+ x86-64 | 28/28 (100%) | `supported` | `ExitProcess 44544 (0xAE00 → shell 0)` | **Fase 13.B**: imports fechados `20/28→28/28`; `OpenPrinterW` resolve o import, mas a operação de impressão retorna `ERROR_NOT_SUPPORTED` de forma controlada |
 | 8 | `RobloxPlayerInstaller.exe` | PE32+ x86-64 | 430/430 (100%) | `supported` | `RBXCRASH FatalRuntimeError Worker,28` `ExitProcess 3` (antes `SIGSEGV 0x68 rva 0x39ab exit 71`) | **Fase 13.D**: `TLS slot 0x430==NULL` → `mov 0x68(%rax)` fault (`objdump 0x1400039ab`). Fix `src/runtime/winapi.cpp:751` `*TLS(0x430)=base+0xc2c800` (objeto `.data` já mapeado) após `invoke_thread_tls_callbacks` |
 | 9 | `Rockstar-Games-Launcher.exe` | PE32+ x86-64 | 338/338 (100%) | `supported` | `ExitProcess 3` | delay `SHELL32/ole32/gdiplus` etc. |
 | 10 | `Logitech_GHUB_x64.exe` `lghub_installer.exe` | PE32+ x86-64 | 114/114 (100%) | `supported` | `ExitProcess 1` |  |
 | 11 | `notepad++.exe` | PE32+ x86-64 | 584/584 (100%) | `supported` | `GuestTimeout 72` (GUI `GetMessageW` bloqueado sem `Xvfb`) | precisa `Xvfb :99` `docs/arquitetura/gui-x11.md` |
-| 12 | `RTSSHooks64.dll` | PE32+ DLL x86-64 | 256/256 (100%) | `supported` | `not-attempted` (DLL) | **Fase 13.RTSS**: `GDI32 Pie/GetTextCharacterExtra/GetCharABCWidthsA/GetDeviceGammaRamp/CreateDCA` `USER32 SetWindowsHookExA/SendMessageTimeoutA/WindowFromDC/FindWindowExA/EnumDisplaySettingsA/IsRectEmpty/SubtractRect` `KERNEL32 CreateRemoteThread/VirtualAllocEx/VirtualFreeEx/WriteProcessMemory/OpenFile/OpenEventA/OpenFileMappingA/_lclose/FlushInstructionCache/SetThreadContext/GetThreadContext/SuspendThread/VirtualProtectEx/lstrcmpA/IsThreadAFiber/InterlockedFlushSList` `SHLWAPI PathRemoveExtensionA/PathRenameExtensionA/PathStripPathA/PathMatchSpecA` `WINMM timeKillEvent` `SETUPAPI 7` + `delay DirectX 11` (`D3DCOMPILER_47/d3d12/dxgi/DDRAW/d3d9/d3d10/d3dx10_42/d3d11/d3dx11_42`) `src/loader/module.cpp:1412,1545` `src/runtime/gdi32.cpp:1109` `src/runtime/user32.cpp:3769` `src/runtime/shlwapi.cpp:328` `src/runtime/winmm.cpp:70` `src/runtime/winapi.cpp:782` — stubs DirectX retornam `E_FAIL/S_OK` controlados |
+| 12 | `RTSSHooks64.dll` | PE32+ DLL x86-64 | 256/256 (100%) | `supported` | `not-attempted` (DLL) | **Fase 13.RTSS**: imports resolvidos para análise; `CreateRemoteThread` e `WriteProcessMemory` agora falham com `ERROR_NOT_SUPPORTED` (sem fingir execução remota). O restante inclui `GDI32 ...`, `USER32 ...`, `KERNEL32 ...`, `SHLWAPI ...`, `WINMM ...`, `SETUPAPI 7` e `delay DirectX 11`; os stubs DirectX retornam `E_FAIL/S_OK` controlados |
 | 13 | `Affinity x64.msix` | Zip/MSIX | — | `package-recognized` | `not-attempted` | `App/Affinity.exe` é `Mono/.Net entry 0x0 0 imports` — `.NET` fora de escopo `PROJETO.md:22`; `src/package/msix.cpp` lista `App/Affinity.exe` |
 | 14 | `*_x64_Installer.exe` `CapCut/Epic/Creative/Everything/RTSS.exe` | PE32 (x86) | — | `unsupported-architecture` `0x14c` `exit 5` | `parse-failed status="unsupported-architecture"` `src/pe/pe_reader.cpp:685` |
 
-> Detalhe das novas APIs `B`: `GDI32.dll!Arc` `SHLWAPI.dll!PathIsUNCW/PathIsUNCA` `MSIMG32.dll!AlphaBlend/TransparentBlt` `NETAPI32.dll!NetApiBufferFree` `OLEACC.dll!LresultFromObject` `tdh.dll!TdhGetPropertySize` `WINSPOOL.DRV!OpenPrinterW/ClosePrinter` `WTSAPI32.dll!WTSFreeMemory` — todos registrados em `src/loader/module.cpp:1412,1538` com stubs `0/1` controlados.
+> Detalhe das novas APIs `B`: `GDI32.dll!Arc` `SHLWAPI.dll!PathIsUNCW/PathIsUNCA` `MSIMG32.dll!AlphaBlend/TransparentBlt` `NETAPI32.dll!NetApiBufferFree` `OLEACC.dll!LresultFromObject` `tdh.dll!TdhGetPropertySize` `WINSPOOL.DRV!OpenPrinterW/ClosePrinter` `WTSAPI32.dll!WTSFreeMemory` — todas registradas para resolver imports; `OpenPrinterW` falha com `ERROR_NOT_SUPPORTED` quando a operação é chamada.
 
 ## Aplicativos Windows Populares (histórico)
 
@@ -682,5 +682,5 @@ traz `category`/`status`/`detail` e `fault-address` quando há `SIGSEGV`.
 | **HWiNFO64 (`HWiNFO64.exe`)** | PE32+ x86-64 | 100% (28/28) | Suportado | Fase 13.B — stubs acima; exec `ExitProcess 44544` |
 | **Roblox Player Installer (`RobloxPlayerInstaller.exe`)** | PE32+ x86-64 | 100% (430/430) | Suportado | Fase 13.D — TLS fix; `RBXCRASH` + `ExitProcess 3` (antes `SIGSEGV`) |
 | **Notepad++ (`notepad++.exe`)** | PE32+ x86-64 | 100% (584/584) | Suportado | Resolveu todos os 584 imports em 13 DLLs, executou entry point nativo, inicializou FLS (slots 0 e 1) e subsistema CRT |
-| **Rufus (`Rufus_x64.exe`)** | PE32+ x86-64 | 100% (14/14) | Suportado | UPX `rwx` — agora suportado, exec `ExitProcess 56832` |
+| **Rufus (`Rufus_x64.exe`)** | PE32+ x86-64 | 100% (14/14) | Suportado | UPX marca seções `rwx`; o loader mantém W^X, exec `ExitProcess 56832` |
 | **7-Zip Installer / Notepad++ Installer / Everything Search** | PE32 (x86) | — | Unsupported | Rejeitados controladamente como arquitetura x86 32-bit (0x14c) |

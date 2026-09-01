@@ -29,6 +29,7 @@
 #include <csignal>
 #include <cstddef>
 #include <cstdint>
+#include <cstdio>
 #include <cstring>
 #include <ctime>
 #include <fstream>
@@ -86,6 +87,7 @@ std::array<ClassSlot, 32> g_classes{};
 std::array<WindowSlot, 32> g_windows{};
 WindowSlot* g_focused_control = nullptr;
 WindowSlot* g_active_dialog = nullptr;
+std::mutex g_modal_mutex;
 bool g_modal_done = false;
 std::intptr_t g_modal_result = 0;
 WindowSlot* g_modal_parent = nullptr;
@@ -105,6 +107,28 @@ extern "C" TL_MSABI int dummy_worker_check() noexcept;
 // ---------------------------------------------------------------------------
 // Helpers compartilhados do runtime
 // ---------------------------------------------------------------------------
+
+[[nodiscard]] bool guest_executable_address(const std::uintptr_t address) noexcept {
+    if (g_guest_image_base == nullptr || address == 0) {
+        return false;
+    }
+    const std::uintptr_t base = reinterpret_cast<std::uintptr_t>(g_guest_image_base);
+    if (address < base || address - base >= g_guest_image_size) {
+        return false;
+    }
+    std::ifstream maps{"/proc/self/maps"};
+    std::string line;
+    while (std::getline(maps, line)) {
+        unsigned long long start = 0;
+        unsigned long long end = 0;
+        char permissions[5]{};
+        if (std::sscanf(line.c_str(), "%llx-%llx %4s", &start, &end, permissions) == 3 &&
+            address >= start && address < end) {
+            return permissions[2] == 'x';
+        }
+    }
+    return false;
+}
 
 bool register_local_free_block(void* const address) noexcept {
     if (address == nullptr) {
@@ -645,14 +669,16 @@ void initialize_thread_tls(void* teb_ptr) noexcept {
         const std::size_t template_size = static_cast<std::size_t>(g_guest_tls_end_raw - g_guest_tls_start_raw);
         const auto* src = reinterpret_cast<const std::uint8_t*>(g_guest_tls_start_raw);
         const std::size_t copy_size = std::min(template_size, teb->tls_module0_data.size());
-        std::memcpy(teb->tls_module0_data.data(), src, copy_size);
+        if (copy_size > 0 && mapped_guest_range(src, copy_size, false)) {
+            std::memcpy(teb->tls_module0_data.data(), src, copy_size);
+        }
     }
 }
 
 void invoke_thread_tls_callbacks(const std::uint32_t reason) noexcept {
     using TlsCallbackFn = TL_MSABI void (*)(void* dll_handle, std::uint32_t reason, void* reserved);
     for (const std::uint64_t cb_addr : g_guest_tls_callbacks) {
-        if (cb_addr != 0) {
+        if (guest_executable_address(static_cast<std::uintptr_t>(cb_addr))) {
             auto cb = reinterpret_cast<TlsCallbackFn>(cb_addr);
             cb(const_cast<std::byte*>(g_guest_image_base), reason, nullptr);
         }
@@ -696,7 +722,9 @@ GuestExecutionResult execute_guest_entry(const std::uintptr_t entry_point,
 
     // Inicializa template TLS e índice
     initialize_thread_tls(g_current_teb);
-    if (g_guest_tls_index_addr != 0) {
+    if (g_guest_tls_index_addr != 0 &&
+        mapped_guest_range(reinterpret_cast<const void*>(g_guest_tls_index_addr),
+                           sizeof(std::uint32_t), true)) {
         *reinterpret_cast<std::uint32_t*>(g_guest_tls_index_addr) = 0;
     }
 
@@ -761,7 +789,9 @@ GuestExecutionResult execute_guest_entry(const std::uintptr_t entry_point,
         if (prva + 2U < g_guest_image_size) {
             auto* pp = reinterpret_cast<std::uint8_t*>(base2 + prva);
             const std::uintptr_t pg = reinterpret_cast<std::uintptr_t>(pp) & ~static_cast<std::uintptr_t>(0xFFF);
-            if (::mprotect(reinterpret_cast<void*>(pg), 0x1000, PROT_READ | PROT_WRITE | PROT_EXEC) == 0) {
+            // O patch é feito com a página não executável; o estado final
+            // volta a ser RX, preservando W^X também neste caminho legado.
+            if (::mprotect(reinterpret_cast<void*>(pg), 0x1000, PROT_READ | PROT_WRITE) == 0) {
                 if (pp[0] == 0x75U && pp[1] == 0x09U) pp[0] = 0xEBU;
                 ::mprotect(reinterpret_cast<void*>(pg), 0x1000, PROT_READ | PROT_EXEC);
                 __builtin___clear_cache(reinterpret_cast<char*>(pp), reinterpret_cast<char*>(pp + 2));
@@ -829,13 +859,20 @@ TL_MSABI std::uint32_t tl_TdhGetPropertySize(void* const event_record, const std
 }
 
 TL_MSABI int tl_OpenPrinterW(const std::uint16_t* const printer_name, void** const printer_handle, void* const defaults) noexcept {
-    (void)printer_name;
     (void)defaults;
-    if (printer_handle != nullptr && mapped_guest_range(printer_handle, sizeof(*printer_handle), true)) {
-        *printer_handle = reinterpret_cast<void*>(0x50524E54ULL); // 'PRNT'
+    if (printer_handle == nullptr || !mapped_guest_range(printer_handle, sizeof(*printer_handle), true) ||
+        (printer_name != nullptr && !mapped_guest_wstring(printer_name))) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
     }
-    set_last_error(abi::kErrorSuccess);
-    return 1;
+    *printer_handle = nullptr;
+    set_last_error(abi::kErrorNotSupported);
+    runtime_trace("OpenPrinterW", {
+        diagnostics::TraceField{"symbol", "OpenPrinterW"},
+        diagnostics::TraceField{"status", "unsupported"},
+        diagnostics::TraceField{"mechanism", "stub"},
+        diagnostics::TraceField{"detail", "impressão não implementada"}}, 4);
+    return 0;
 }
 
 TL_MSABI void tl_WTSFreeMemory(void* const memory) noexcept {
@@ -847,9 +884,18 @@ TL_MSABI void tl_WTSFreeMemory(void* const memory) noexcept {
 // --- RTSSHooks KERNEL32 ---
 TL_MSABI void* tl_CreateRemoteThread(void* const process, void* const attr, const std::size_t stack, void* const start, void* const param, const std::uint32_t flags, std::uint32_t* const tid) noexcept {
     (void)process; (void)attr; (void)stack; (void)start; (void)param; (void)flags;
-    if (tid != nullptr && mapped_guest_range(tid, sizeof(*tid), true)) *tid = 0;
-    set_last_error(abi::kErrorSuccess);
-    return reinterpret_cast<void*>(0x52544E44ULL); // 'RTND'
+    if (tid != nullptr && !mapped_guest_range(tid, sizeof(*tid), true)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return nullptr;
+    }
+    if (tid != nullptr) *tid = 0;
+    set_last_error(abi::kErrorNotSupported);
+    runtime_trace("CreateRemoteThread", {
+        diagnostics::TraceField{"symbol", "CreateRemoteThread"},
+        diagnostics::TraceField{"status", "unsupported"},
+        diagnostics::TraceField{"mechanism", "stub"},
+        diagnostics::TraceField{"detail", "threads remotos não implementados"}}, 4);
+    return nullptr;
 }
 TL_MSABI void* tl_VirtualAllocEx(void* const process, void* const addr, const std::size_t size, const std::uint32_t type, const std::uint32_t protect) noexcept {
     (void)process;
@@ -860,10 +906,19 @@ TL_MSABI int tl_VirtualFreeEx(void* const process, void* const addr, const std::
     return tl_VirtualFree(addr, size, type);
 }
 TL_MSABI int tl_WriteProcessMemory(void* const process, void* const base, const void* const buf, const std::size_t size, std::size_t* const written) noexcept {
-    (void)process; (void)base; (void)buf;
-    if (written != nullptr && mapped_guest_range(written, sizeof(*written), true)) *written = size;
-    set_last_error(abi::kErrorSuccess);
-    return 1;
+    (void)process; (void)base; (void)buf; (void)size;
+    if (written != nullptr && !mapped_guest_range(written, sizeof(*written), true)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    if (written != nullptr) *written = 0;
+    set_last_error(abi::kErrorNotSupported);
+    runtime_trace("WriteProcessMemory", {
+        diagnostics::TraceField{"symbol", "WriteProcessMemory"},
+        diagnostics::TraceField{"status", "unsupported"},
+        diagnostics::TraceField{"mechanism", "stub"},
+        diagnostics::TraceField{"detail", "memória de outro processo não implementada"}}, 4);
+    return 0;
 }
 TL_MSABI int tl_OpenFile(const char* const file, void* const of_struct, const std::uint32_t style) noexcept {
     (void)file; (void)of_struct; (void)style;

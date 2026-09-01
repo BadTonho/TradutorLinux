@@ -5,6 +5,7 @@
 #include <array>
 #include <cstdint>
 #include <cstring>
+#include <limits>
 #include <string>
 
 namespace tradutorlinux {
@@ -146,7 +147,22 @@ TL_MSABI void* tl_CreateSolidBrush(const std::uint32_t color) noexcept {
 }
 
 TL_MSABI int tl_DeleteObject(const void* object) noexcept {
-    (void)object;
+    if (object == nullptr) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    {
+        std::lock_guard lock(g_dib_mutex);
+        const auto dib = std::find_if(g_dibs.begin(), g_dibs.end(),
+                                      [object](const DibSlot& slot) {
+                                          return slot.used && &slot == object;
+                                      });
+        if (dib != g_dibs.end()) {
+            *dib = {};
+            set_last_error(abi::kErrorSuccess);
+            return 1;
+        }
+    }
     set_last_error(abi::kErrorSuccess);
     return 1;
 }
@@ -363,26 +379,105 @@ TL_MSABI void* tl_CreateDIBSection(const void* dc, const void* pbmi, const std::
     (void)usage;
     (void)section;
     (void)offset;
-    static char g_dib_buffer[4096]{};
-    if (ppv_bits != nullptr) {
-        *ppv_bits = g_dib_buffer;
+    if (ppv_bits != nullptr && !mapped_guest_range(ppv_bits, sizeof(*ppv_bits), true)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return nullptr;
     }
-    static char g_dib_token = 0;
+
+    struct GuestBitmapInfoHeader {
+        std::uint32_t size;
+        std::int32_t width;
+        std::int32_t height;
+        std::uint16_t planes;
+        std::uint16_t bit_count;
+        std::uint32_t compression;
+        std::uint32_t size_image;
+        std::int32_t x_pels_per_meter;
+        std::int32_t y_pels_per_meter;
+        std::uint32_t clr_used;
+        std::uint32_t clr_important;
+    } header{40U, 100, 100, 1, 32, 0, 0, 0, 0, 0, 0};
+    if (pbmi != nullptr) {
+        if (!mapped_guest_range(pbmi, sizeof(header), false)) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return nullptr;
+        }
+        std::memcpy(&header, pbmi, sizeof(header));
+        if (header.size < sizeof(header) || header.width == 0 || header.height == 0 ||
+            header.planes != 1 || header.bit_count == 0 || header.compression > 3U) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return nullptr;
+        }
+    }
+
+    const std::uint64_t width = header.width < 0
+                                    ? static_cast<std::uint64_t>(-(static_cast<std::int64_t>(header.width)))
+                                    : static_cast<std::uint64_t>(header.width);
+    const std::uint64_t height = header.height < 0
+                                     ? static_cast<std::uint64_t>(-(static_cast<std::int64_t>(header.height)))
+                                     : static_cast<std::uint64_t>(header.height);
+    const std::uint64_t bits_per_row = width * header.bit_count;
+    if (bits_per_row > std::numeric_limits<std::uint64_t>::max() - 31U) {
+        set_last_error(abi::kErrorNotEnoughMemory);
+        return nullptr;
+    }
+    const std::uint64_t stride = ((bits_per_row + 31U) / 32U) * 4U;
+    if (stride == 0 || height > std::numeric_limits<std::uint64_t>::max() / stride) {
+        set_last_error(abi::kErrorNotEnoughMemory);
+        return nullptr;
+    }
+    constexpr std::uint64_t kMaxDibBytes = 256ULL * 1024ULL * 1024ULL;
+    const std::uint64_t byte_count = stride * height;
+    if (byte_count > kMaxDibBytes || byte_count > std::numeric_limits<std::size_t>::max()) {
+        set_last_error(abi::kErrorNotEnoughMemory);
+        return nullptr;
+    }
+
+    std::lock_guard lock(g_dib_mutex);
+    const auto free_it = std::find_if(g_dibs.begin(), g_dibs.end(),
+                                      [](const DibSlot& slot) { return !slot.used; });
+    if (free_it == g_dibs.end()) {
+        set_last_error(abi::kErrorNotEnoughMemory);
+        return nullptr;
+    }
+    try {
+        free_it->pixels.assign(static_cast<std::size_t>(byte_count), std::byte{0});
+    } catch (...) {
+        set_last_error(abi::kErrorNotEnoughMemory);
+        return nullptr;
+    }
+    free_it->used = true;
+    free_it->width = header.width;
+    free_it->height = header.height;
+    free_it->stride = static_cast<std::uint32_t>(std::min<std::uint64_t>(stride,
+                                                                          std::numeric_limits<std::uint32_t>::max()));
+    if (ppv_bits != nullptr) {
+        *ppv_bits = free_it->pixels.data();
+    }
     set_last_error(abi::kErrorSuccess);
-    return &g_dib_token;
+    return &*free_it;
 }
 
 TL_MSABI int tl_GetTextExtentPoint32W(void* const hdc, const std::uint16_t* const string,
                                       const int length, void* const size) noexcept {
     (void)hdc;
-    (void)string;
     struct GuestSize {
         std::int32_t cx;
         std::int32_t cy;
     };
+    if (length < 0 || size == nullptr || !mapped_guest_range(size, sizeof(GuestSize), true) ||
+        (length > 0 && (string == nullptr ||
+                         !mapped_guest_range(string, static_cast<std::size_t>(length) * sizeof(*string), false)))) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
     if (size != nullptr) {
         GuestSize s{};
-        s.cx = length > 0 ? length * 8 : 16;
+        const std::int64_t measured_width = length > 0
+                                                ? static_cast<std::int64_t>(length) * 8
+                                                : 16;
+        s.cx = static_cast<std::int32_t>(std::min<std::int64_t>(
+            measured_width, std::numeric_limits<std::int32_t>::max()));
         s.cy = 16;
         std::memcpy(size, &s, sizeof(s));
     }

@@ -91,6 +91,17 @@ struct GuestContext {
     std::mutex mapping_mutex;
     std::array<ContextGlobalMemorySlot, 256> global_memory{};
     std::mutex global_memory_mutex;
+
+    struct ContextDibSlot {
+        bool used{false};
+        std::int32_t width{0};
+        std::int32_t height{0};
+        std::uint32_t stride{0};
+        std::vector<std::byte> pixels;
+    };
+    std::array<ContextDibSlot, 32> dibs{};
+    std::mutex dib_mutex;
+
     std::array<void*, 512> local_free_blocks{};
     std::mutex local_free_mutex;
 

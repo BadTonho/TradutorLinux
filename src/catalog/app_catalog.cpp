@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cctype>
 #include <chrono>
+#include <cstdint>
 #include <cstdlib>
 #include <fstream>
 #include <iomanip>
@@ -40,6 +41,29 @@ std::string escape_json_string(std::string_view input) {
 }
 
 std::string unescape_json_string(std::string_view input) {
+    const auto hex_digit = [](const char value) -> int {
+        if (value >= '0' && value <= '9') return value - '0';
+        if (value >= 'a' && value <= 'f') return value - 'a' + 10;
+        if (value >= 'A' && value <= 'F') return value - 'A' + 10;
+        return -1;
+    };
+    const auto append_utf8 = [](std::string& output, const std::uint32_t codepoint) {
+        if (codepoint <= 0x7FU) {
+            output.push_back(static_cast<char>(codepoint));
+        } else if (codepoint <= 0x7FFU) {
+            output.push_back(static_cast<char>(0xC0U | (codepoint >> 6U)));
+            output.push_back(static_cast<char>(0x80U | (codepoint & 0x3FU)));
+        } else if (codepoint <= 0xFFFFU) {
+            output.push_back(static_cast<char>(0xE0U | (codepoint >> 12U)));
+            output.push_back(static_cast<char>(0x80U | ((codepoint >> 6U) & 0x3FU)));
+            output.push_back(static_cast<char>(0x80U | (codepoint & 0x3FU)));
+        } else if (codepoint <= 0x10FFFFU) {
+            output.push_back(static_cast<char>(0xF0U | (codepoint >> 18U)));
+            output.push_back(static_cast<char>(0x80U | ((codepoint >> 12U) & 0x3FU)));
+            output.push_back(static_cast<char>(0x80U | ((codepoint >> 6U) & 0x3FU)));
+            output.push_back(static_cast<char>(0x80U | (codepoint & 0x3FU)));
+        }
+    };
     std::string output;
     output.reserve(input.size());
     for (std::size_t i = 0; i < input.size(); ++i) {
@@ -54,6 +78,49 @@ std::string unescape_json_string(std::string_view input) {
                 case 'n':  output += '\n'; break;
                 case 'r':  output += '\r'; break;
                 case 't':  output += '\t'; break;
+                case 'u': {
+                    if (i + 4 >= input.size()) {
+                        output += 'u';
+                        break;
+                    }
+                    std::uint32_t codepoint = 0;
+                    bool valid = true;
+                    for (std::size_t digit = 1; digit <= 4; ++digit) {
+                        const int value = hex_digit(input[i + digit]);
+                        if (value < 0) {
+                            valid = false;
+                            break;
+                        }
+                        codepoint = (codepoint << 4U) | static_cast<std::uint32_t>(value);
+                    }
+                    if (!valid) {
+                        output += 'u';
+                        break;
+                    }
+                    i += 4;
+                    if (codepoint >= 0xD800U && codepoint <= 0xDBFFU &&
+                        i + 6 < input.size() && input[i + 1] == '\\' && input[i + 2] == 'u') {
+                        std::uint32_t low = 0;
+                        bool low_valid = true;
+                        for (std::size_t digit = 3; digit <= 6; ++digit) {
+                            const int value = hex_digit(input[i + digit]);
+                            if (value < 0) {
+                                low_valid = false;
+                                break;
+                            }
+                            low = (low << 4U) | static_cast<std::uint32_t>(value);
+                        }
+                        if (low_valid && low >= 0xDC00U && low <= 0xDFFFU) {
+                            codepoint = 0x10000U + ((codepoint - 0xD800U) << 10U) +
+                                        (low - 0xDC00U);
+                            i += 6;
+                        }
+                    }
+                    if (codepoint < 0xD800U || codepoint > 0xDFFFU) {
+                        append_utf8(output, codepoint);
+                    }
+                    break;
+                }
                 default:   output += input[i]; break;
             }
         } else {
@@ -61,6 +128,19 @@ std::string unescape_json_string(std::string_view input) {
         }
     }
     return output;
+}
+
+[[nodiscard]] bool is_safe_app_id(std::string_view id) noexcept {
+    if (id.empty() || id.size() > 128 || id == "." || id == "..") {
+        return false;
+    }
+    return std::all_of(id.begin(), id.end(), [](const char value) {
+        const bool ascii_alphanumeric = (value >= 'A' && value <= 'Z') ||
+                                        (value >= 'a' && value <= 'z') ||
+                                        (value >= '0' && value <= '9');
+        return ascii_alphanumeric ||
+               value == '_' || value == '-' || value == '.';
+    });
 }
 
 void skip_whitespace(std::string_view& src) {
@@ -142,7 +222,7 @@ std::string AppCatalog::generate_id(std::string_view name_or_filename) {
 }
 
 bool AppCatalog::add_app(const AppEntry& app) {
-    if (app.id.empty() || app.executable_path.empty()) {
+    if (!is_safe_app_id(app.id) || app.executable_path.empty()) {
         return false;
     }
 
@@ -336,7 +416,7 @@ bool AppCatalog::load_from_file(const std::filesystem::path& path) {
             }
         }
 
-        if (!entry.id.empty() && !entry.executable_path.empty()) {
+        if (is_safe_app_id(entry.id) && !entry.executable_path.empty()) {
             apps_.push_back(std::move(entry));
         }
 
@@ -358,6 +438,9 @@ std::filesystem::path AppCatalog::default_desktop_entries_dir() {
 }
 
 bool AppCatalog::create_desktop_entry(const AppEntry& app, const std::filesystem::path& destination_dir) {
+    if (!is_safe_app_id(app.id)) {
+        return false;
+    }
     std::filesystem::path dir = destination_dir.empty() ? default_desktop_entries_dir() : destination_dir;
     if (dir.empty()) {
         return false;

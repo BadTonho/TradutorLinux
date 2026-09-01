@@ -13,6 +13,7 @@
 #include <cstring>
 #include <deque>
 #include <iostream>
+#include <mutex>
 #include <string>
 #include <thread>
 
@@ -60,7 +61,6 @@ constexpr std::array<unsigned long, 6> kBrushRgb = {
 struct FillState {
     GC gc{};
     std::array<unsigned long, 6> pixels{};
-    bool ready{false};
 };
 
 struct TextState {
@@ -68,12 +68,12 @@ struct TextState {
     GC bold_gc{};
     XFontStruct* regular_font{nullptr};
     XFontStruct* bold_font{nullptr};
-    bool ready{false};
 };
 
 FillState& fill_state(Display* const dpy, const int screen) {
     static FillState state;
-    if (!state.ready) {
+    static std::once_flag initialized;
+    std::call_once(initialized, [&] {
         state.gc = XCreateGC(dpy, RootWindow(dpy, screen), 0, nullptr);
         const Colormap colormap = DefaultColormap(dpy, screen);
         for (std::size_t index = 0; index < kBrushRgb.size(); ++index) {
@@ -88,14 +88,14 @@ FillState& fill_state(Display* const dpy, const int screen) {
                 state.pixels[index] = BlackPixel(dpy, screen);
             }
         }
-        state.ready = true;
-    }
+    });
     return state;
 }
 
 TextState& text_state(Display* const dpy, const int screen) {
     static TextState state;
-    if (!state.ready) {
+    static std::once_flag initialized;
+    std::call_once(initialized, [&] {
         const Window root = RootWindow(dpy, screen);
         state.regular_gc = XCreateGC(dpy, root, 0, nullptr);
         state.bold_gc = XCreateGC(dpy, root, 0, nullptr);
@@ -111,8 +111,7 @@ TextState& text_state(Display* const dpy, const int screen) {
         } else if (state.regular_font != nullptr) {
             XSetFont(dpy, state.bold_gc, state.regular_font->fid);
         }
-        state.ready = true;
-    }
+    });
     return state;
 }
 
@@ -438,7 +437,8 @@ void draw_rectangle_color(const NativeWindow window, const int x, const int y, c
 
 void fill_rectangle(const NativeWindow window, const int x, const int y, const int width,
                     const int height, const int brush_index) noexcept {
-    if (brush_index == 5) {  // NULL_BRUSH: nenhum preenchimento
+    if (brush_index < 0 || brush_index >= static_cast<int>(kBrushRgb.size()) ||
+        width <= 0 || height <= 0 || brush_index == 5) {  // NULL_BRUSH: nenhum preenchimento
         return;
     }
     Display* const dpy = display();
@@ -546,9 +546,15 @@ std::uint32_t track_popup_menu(const std::vector<PopupMenuItem>& items, int x, i
         return 0;
     }
     XStoreName(dpy, menu, "TradutorLinuxPopup");
-    XSelectInput(dpy, menu, ExposureMask | ButtonPressMask | StructureNotifyMask);
+    XSelectInput(dpy, menu, ExposureMask | ButtonPressMask | KeyPressMask |
+                               StructureNotifyMask);
     XMapRaised(dpy, menu);
     XFlush(dpy);
+    const bool pointer_grabbed =
+        XGrabPointer(dpy, menu, True, ButtonPressMask | PointerMotionMask,
+                     GrabModeAsync, GrabModeAsync, None, None, CurrentTime) == GrabSuccess;
+    const bool keyboard_grabbed =
+        XGrabKeyboard(dpy, menu, True, GrabModeAsync, GrabModeAsync, CurrentTime) == GrabSuccess;
     std::uint32_t result = 0;
     bool done = false;
     while (!done) {
@@ -570,8 +576,18 @@ std::uint32_t track_popup_menu(const std::vector<PopupMenuItem>& items, int x, i
                 }
             }
             XFlush(dpy);
-        } else if (event.type == ButtonPress && event.xbutton.window == menu &&
-                   event.xbutton.button == 1) {
+        } else if (event.type == KeyPress && event.xkey.keycode != 0) {
+            char key = '\0';
+            KeySym keysym = NoSymbol;
+            XLookupString(&event.xkey, &key, 1, &keysym, nullptr);
+            if (keysym == 0xFF1BUL) {  // XK_Escape
+                done = true;
+            }
+        } else if (event.type == ButtonPress && event.xbutton.button == 1) {
+            if (event.xbutton.window != menu) {
+                done = true;
+                continue;
+            }
             const int index = event.xbutton.y / row_height;
             if (index >= 0 && static_cast<std::size_t>(index) < items.size() &&
                 !items[static_cast<std::size_t>(index)].separator) {
@@ -581,6 +597,12 @@ std::uint32_t track_popup_menu(const std::vector<PopupMenuItem>& items, int x, i
         } else if (event.type == DestroyNotify && event.xdestroywindow.window == menu) {
             done = true;
         }
+    }
+    if (keyboard_grabbed) {
+        XUngrabKeyboard(dpy, CurrentTime);
+    }
+    if (pointer_grabbed) {
+        XUngrabPointer(dpy, CurrentTime);
     }
     XDestroyWindow(dpy, menu);
     XFlush(dpy);

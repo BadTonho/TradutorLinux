@@ -81,6 +81,8 @@ using AllocationSlot = runtime::GuestContext::ContextAllocationSlot;
 // sem liberar um ponteiro arbitrário do convidado.
 using GlobalMemorySlot = runtime::GuestContext::ContextGlobalMemorySlot;
 
+using DibSlot = runtime::GuestContext::ContextDibSlot;
+
 
 using FileMappingSlot = runtime::GuestContext::ContextFileMappingSlot;
 
@@ -168,6 +170,7 @@ extern std::array<ClassSlot, 32> g_classes;
 extern std::array<WindowSlot, 32> g_windows;
 extern WindowSlot* g_focused_control;
 extern WindowSlot* g_active_dialog;
+extern std::mutex g_modal_mutex;
 extern bool g_modal_done;
 extern std::intptr_t g_modal_result;
 extern WindowSlot* g_modal_parent;
@@ -259,6 +262,8 @@ inline void set_last_error(const std::uint32_t error) noexcept {
 #define g_global_memory_mutex (::tradutorlinux::runtime::guest_context().global_memory_mutex)
 #define g_local_free_blocks (::tradutorlinux::runtime::guest_context().local_free_blocks)
 #define g_local_free_mutex (::tradutorlinux::runtime::guest_context().local_free_mutex)
+#define g_dibs (::tradutorlinux::runtime::guest_context().dibs)
+#define g_dib_mutex (::tradutorlinux::runtime::guest_context().dib_mutex)
 #define g_resources (::tradutorlinux::runtime::guest_context().resources)
 #define g_resource_mutex (::tradutorlinux::runtime::guest_context().resource_mutex)
 #define g_tls_indices_used (::tradutorlinux::runtime::guest_context().tls_indices_used)

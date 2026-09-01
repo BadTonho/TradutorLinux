@@ -13,6 +13,7 @@
 #include "tradutorlinux/runtime/dwmapi.hpp"
 #include "tradutorlinux/runtime/version.hpp"
 #include "tradutorlinux/package/msix.hpp"
+#include "tradutorlinux/catalog/app_catalog.hpp"
 #include "tradutorlinux/prefix/prefix.hpp"
 #include "../src/runtime/runtime_context.hpp"
 
@@ -23,6 +24,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
+#include <fstream>
 #include <limits>
 #include <string>
 #include <thread>
@@ -406,6 +408,65 @@ TEST(MsixParserTest, ParseManifestXml) {
     EXPECT_EQ(info->applications[0].executable, "App\\Photo.exe");
     EXPECT_EQ(info->applications[0].display_name, "Affinity Photo 2");
     EXPECT_EQ(info->main_executable.value_or(""), "App\\Photo.exe");
+}
+
+TEST(MsixParserTest, RejectsTruncatedManifestWithoutLargeAllocation) {
+    const std::filesystem::path path = "_tl_truncated.msix";
+    {
+        std::ofstream output(path, std::ios::binary | std::ios::trunc);
+        ASSERT_TRUE(output.good());
+        const auto write_u16 = [&output](const std::uint16_t value) {
+            const char bytes[2]{static_cast<char>(value & 0xFFU),
+                                static_cast<char>((value >> 8U) & 0xFFU)};
+            output.write(bytes, sizeof(bytes));
+        };
+        const auto write_u32 = [&output](const std::uint32_t value) {
+            const char bytes[4]{static_cast<char>(value & 0xFFU),
+                                static_cast<char>((value >> 8U) & 0xFFU),
+                                static_cast<char>((value >> 16U) & 0xFFU),
+                                static_cast<char>((value >> 24U) & 0xFFU)};
+            output.write(bytes, sizeof(bytes));
+        };
+        write_u32(0x04034B50U);
+        write_u16(20);  // version
+        write_u16(0);   // flags
+        write_u16(0);   // stored
+        write_u16(0);
+        write_u16(0);
+        write_u32(0);   // crc32
+        write_u32(0);   // compressed size
+        write_u32(0xFFFFFFFFU);  // impossible uncompressed size
+        const std::string name = "AppxManifest.xml";
+        write_u16(static_cast<std::uint16_t>(name.size()));
+        write_u16(0);
+        output.write(name.data(), static_cast<std::streamsize>(name.size()));
+    }
+    EXPECT_FALSE(package::inspect_msix_package(path).has_value());
+    std::error_code error;
+    std::filesystem::remove(path, error);
+}
+
+TEST(AppCatalogTest, RejectsPathTraversalAndReadsUnicodeEscapes) {
+    catalog::AppCatalog catalog;
+    catalog::AppEntry unsafe{};
+    unsafe.id = "../escape";
+    unsafe.executable_path = "/tmp/app.exe";
+    EXPECT_FALSE(catalog.add_app(unsafe));
+    EXPECT_FALSE(catalog::AppCatalog::create_desktop_entry(unsafe, "."));
+
+    const std::filesystem::path path = "_tl_catalog_unicode.json";
+    {
+        std::ofstream output(path, std::ios::trunc);
+        ASSERT_TRUE(output.good());
+        output << R"({"version":1,"apps":[{"id":"unicode_app","name":"Caf\u00e9","executable_path":"/tmp/app.exe"}]})";
+    }
+    catalog::AppCatalog loaded;
+    ASSERT_TRUE(loaded.load_from_file(path));
+    const auto app = loaded.find_app("unicode_app");
+    ASSERT_TRUE(app.has_value());
+    EXPECT_EQ(app->name, "Caf\xC3\xA9");
+    std::error_code error;
+    std::filesystem::remove(path, error);
 }
 
 TEST(Win32CodePageTest, Cp1252ConvertsByte80ToEuroSign) {
@@ -1051,6 +1112,11 @@ TEST(Win32TimeTest, GetSystemTimeAsFileTimeReturnsReasonableValue) {
     // Year 2020 in 100-ns intervals since 1601
     const std::uint64_t year_2020 = 132537600000000000ULL;
     EXPECT_GT(ft, year_2020);
+}
+
+TEST(Win32TimeTest, GetSystemTimeAsFileTimeRejectsInvalidDestination) {
+    tl_GetSystemTimeAsFileTime(reinterpret_cast<void*>(0x1U));
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
 }
 
 // --- Fase 10: Sistema de arquivos e utilitários ---
@@ -2436,6 +2502,64 @@ TEST(Gdi32Test, BitmapAndHardLinkOperations) {
     EXPECT_EQ(tl_CreateHardLinkW(non_exist2, non_exist1, nullptr), 0);
 }
 
+TEST(Gdi32Test, CreateDibSectionAllocatesRequestedSurface) {
+    struct BitmapInfoHeader {
+        std::uint32_t size{40};
+        std::int32_t width{1024};
+        std::int32_t height{1024};
+        std::uint16_t planes{1};
+        std::uint16_t bit_count{32};
+        std::uint32_t compression{0};
+        std::uint32_t size_image{0};
+        std::int32_t x_pels_per_meter{0};
+        std::int32_t y_pels_per_meter{0};
+        std::uint32_t clr_used{0};
+        std::uint32_t clr_important{0};
+    } header;
+    void* bits = nullptr;
+    void* const bitmap = tl_CreateDIBSection(nullptr, &header, 0, &bits, nullptr, 0);
+    ASSERT_NE(bitmap, nullptr);
+    ASSERT_NE(bits, nullptr);
+    auto* const pixels = static_cast<std::byte*>(bits);
+    pixels[4U * 1024U * 1024U - 1U] = std::byte{0xA5};
+    EXPECT_EQ(tl_DeleteObject(bitmap), 1);
+}
+
+TEST(Gdi32Test, GetTextExtentPoint32RejectsInvalidDestination) {
+    constexpr std::uint16_t text[] = {'t', 'e', 's', 't', 0};
+    EXPECT_EQ(tl_GetTextExtentPoint32W(nullptr, text, 4,
+                                        reinterpret_cast<void*>(0x1U)), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+}
+
+TEST(User32Test, GetWindowTextAReturnsCopiedLength) {
+    WindowSlot& slot = g_windows[0];
+    slot = {};
+    slot.used = true;
+    slot.text = "window title";
+    char output[64]{};
+    EXPECT_EQ(tl_GetWindowTextA(&slot, output, sizeof(output)), 12);
+    EXPECT_STREQ(output, "window title");
+    slot = {};
+}
+
+TEST(UnsupportedApiTest, StubsReportFailureInsteadOfSuccess) {
+    void* printer = reinterpret_cast<void*>(0x1U);
+    EXPECT_EQ(tl_OpenPrinterW(nullptr, &printer, nullptr), 0);
+    EXPECT_EQ(printer, nullptr);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorNotSupported);
+
+    std::uint32_t thread_id = 123;
+    EXPECT_EQ(tl_CreateRemoteThread(nullptr, nullptr, 0, nullptr, nullptr, 0, &thread_id), nullptr);
+    EXPECT_EQ(thread_id, 0U);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorNotSupported);
+
+    std::size_t written = 123;
+    EXPECT_EQ(tl_WriteProcessMemory(nullptr, nullptr, nullptr, 8, &written), 0);
+    EXPECT_EQ(written, 0U);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorNotSupported);
+}
+
 TEST(WinRarCoverageTest, TickCountPrivilegeAndClsid) {
     EXPECT_GT(tl_GetTickCount(), 0U);
     EXPECT_EQ(tl_AllocConsole(), 1);
@@ -2841,12 +2965,29 @@ TEST(RobloxCoverageTest, AllApisAndModules) {
     EXPECT_EQ(tl_GetDiskFreeSpaceA(nullptr, nullptr, nullptr, nullptr, nullptr), 1);
     char temp_a[64]{};
     EXPECT_GT(tl_GetTempPathA(sizeof(temp_a), temp_a), 0U);
-    EXPECT_EQ(tl_MoveFileExA("a", "b", 0), 1);
+    const std::string move_source = "_tl_move_source_" + std::to_string(::getpid());
+    const std::string move_destination = "_tl_move_destination_" + std::to_string(::getpid());
+    {
+        std::FILE* const file = std::fopen(move_source.c_str(), "wb");
+        ASSERT_NE(file, nullptr);
+        std::fputs("move", file);
+        std::fclose(file);
+        std::FILE* const old_file = std::fopen(move_destination.c_str(), "wb");
+        ASSERT_NE(old_file, nullptr);
+        std::fputs("old", old_file);
+        std::fclose(old_file);
+    }
+    EXPECT_EQ(tl_MoveFileExA(move_source.c_str(), move_destination.c_str(), 1), 1);
+    EXPECT_FALSE(std::filesystem::exists(move_source));
+    EXPECT_TRUE(std::filesystem::exists(move_destination));
+    std::error_code move_error;
+    std::filesystem::remove(move_destination, move_error);
     EXPECT_EQ(tl_LockFile(nullptr, 0, 0, 0, 0), 1);
     EXPECT_EQ(tl_UnlockFile(nullptr, 0, 0, 0, 0), 1);
+    std::uintptr_t init_once = 0;
     int pending = 0;
-    EXPECT_EQ(tl_InitOnceBeginInitialize(nullptr, 0, &pending, nullptr), 1);
-    EXPECT_EQ(tl_InitOnceComplete(nullptr, 0, nullptr), 1);
+    EXPECT_EQ(tl_InitOnceBeginInitialize(&init_once, 0, &pending, nullptr), 1);
+    EXPECT_EQ(tl_InitOnceComplete(&init_once, 0, nullptr), 1);
     void* timer = tl_CreateWaitableTimerA(nullptr, 0, nullptr);
     EXPECT_NE(timer, nullptr);
     EXPECT_EQ(tl_SetWaitableTimer(timer, nullptr, 0, nullptr, nullptr, 0), 1);

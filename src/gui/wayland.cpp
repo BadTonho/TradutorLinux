@@ -291,12 +291,19 @@ const wl_buffer_listener kBufferListener{buffer_release};
 
 std::uint32_t pixel(const std::uint32_t rgb) noexcept { return 0xFF000000U | (rgb & 0xFFFFFFU); }
 void fill(WaylandWindow& w, int x, int y, int width, int height, std::uint32_t color) noexcept {
-    if (w.pixels == nullptr) return;
-    const int left = std::max(0, x), top = std::max(0, y);
-    const int right = std::min(w.width, x + width), bottom = std::min(w.height, y + height);
+    if (w.pixels == nullptr || width <= 0 || height <= 0 || w.width <= 0 || w.height <= 0) return;
+    const std::int64_t left = std::max<std::int64_t>(0, x);
+    const std::int64_t top = std::max<std::int64_t>(0, y);
+    const std::int64_t right = std::min<std::int64_t>(w.width,
+                                                       static_cast<std::int64_t>(x) + width);
+    const std::int64_t bottom = std::min<std::int64_t>(w.height,
+                                                        static_cast<std::int64_t>(y) + height);
+    if (left >= right || top >= bottom) return;
     auto* data = static_cast<std::uint32_t*>(w.pixels);
-    for (int row = top; row < bottom; ++row)
-        std::fill(data + row * w.width + left, data + row * w.width + right, pixel(color));
+    for (std::int64_t row = top; row < bottom; ++row) {
+        auto* const row_start = data + row * w.width;
+        std::fill(row_start + left, row_start + right, pixel(color));
+    }
 }
 
 }  // namespace

@@ -163,6 +163,15 @@ std::optional<AppxPackageInfo> inspect_msix_package(const std::filesystem::path&
             break;
         }
 
+        const std::streamoff after_header = stream.tellg();
+        if (after_header < 0 || static_cast<std::uintmax_t>(after_header) > file_size) {
+            break;
+        }
+        const std::uintmax_t metadata_size = static_cast<std::uintmax_t>(filename_len) + extra_len;
+        if (metadata_size > file_size - static_cast<std::uintmax_t>(after_header)) {
+            break;
+        }
+
         std::string filename(filename_len, '\0');
         if (filename_len > 0) {
             stream.read(filename.data(), filename_len);
@@ -173,12 +182,35 @@ std::optional<AppxPackageInfo> inspect_msix_package(const std::filesystem::path&
             stream.seekg(extra_len, std::ios::cur);
         }
 
+        const std::streamoff after_metadata = stream.tellg();
+        if (after_metadata < 0 || static_cast<std::uintmax_t>(after_metadata) > file_size) {
+            break;
+        }
+        const std::uintmax_t remaining =
+            file_size - static_cast<std::uintmax_t>(after_metadata);
+        const std::uintmax_t data_size = compression_method == 0
+                                             ? static_cast<std::uintmax_t>(uncompressed_size)
+                                             : static_cast<std::uintmax_t>(compressed_size);
+        // Bit 3 means that sizes are supplied by a data descriptor after the
+        // payload. This minimal inspector does not parse descriptors; refusing
+        // the entry is safer than treating a zero size as a valid manifest.
+        if ((flags & 0x0008U) != 0U || data_size > remaining) {
+            break;
+        }
+
         if (filename == "AppxManifest.xml") {
             // Found AppxManifest.xml
             if (compression_method == 0) { // Stored
-                std::string xml_data(uncompressed_size, '\0');
+                if (uncompressed_size > kMaxPackageFileSize ||
+                    static_cast<std::uintmax_t>(uncompressed_size) > remaining) {
+                    return std::nullopt;
+                }
+                std::string xml_data(static_cast<std::size_t>(uncompressed_size), '\0');
                 if (uncompressed_size > 0) {
                     stream.read(xml_data.data(), uncompressed_size);
+                }
+                if (!stream) {
+                    return std::nullopt;
                 }
                 return parse_appx_manifest_xml(xml_data);
             }
@@ -189,8 +221,11 @@ std::optional<AppxPackageInfo> inspect_msix_package(const std::filesystem::path&
         }
 
         // Skip compressed data
-        if (compressed_size > 0) {
-            stream.seekg(compressed_size, std::ios::cur);
+        if (data_size > 0) {
+            stream.seekg(static_cast<std::streamoff>(data_size), std::ios::cur);
+            if (!stream) {
+                break;
+            }
         }
     }
 
@@ -198,4 +233,3 @@ std::optional<AppxPackageInfo> inspect_msix_package(const std::filesystem::path&
 }
 
 }  // namespace tradutorlinux::package
-

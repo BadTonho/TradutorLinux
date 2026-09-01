@@ -103,7 +103,8 @@ struct [[maybe_unused]] MapsRegion {
             return PROT_READ | PROT_EXEC;
         case abi::kPageExecuteReadWrite:
         case abi::kPageExecuteWriteCopy:
-            return PROT_READ | PROT_WRITE | PROT_EXEC;
+            // W^X: páginas graváveis não permanecem executáveis.
+            return PROT_READ | PROT_WRITE;
         default:
             return -1;
     }

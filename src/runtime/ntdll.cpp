@@ -62,7 +62,10 @@ constexpr std::uint32_t kPageExecuteWriteCopy = 0x80U;
             return PROT_READ | PROT_EXEC;
         case kPageExecuteReadWrite:
         case kPageExecuteWriteCopy:
-            return PROT_READ | PROT_WRITE | PROT_EXEC;
+            // O runtime aplica W^X. A capacidade Win32 é aceita para fins de
+            // compatibilidade, mas a página permanece não executável enquanto
+            // estiver gravável.
+            return PROT_READ | PROT_WRITE;
         default:
             return PROT_READ | PROT_WRITE;
     }

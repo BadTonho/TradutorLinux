@@ -37,6 +37,7 @@ struct MappedImage {
     std::uint64_t preferred_base{};
     std::uint64_t base{};
     std::size_t size{};
+    std::size_t headers_size{};
     std::byte* memory{nullptr};
     std::int64_t delta{};
     bool has_relocation_directory{};
