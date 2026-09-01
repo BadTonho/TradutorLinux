@@ -448,8 +448,12 @@ TL_MSABI abi::HWnd tl_CreateWindowExA(const std::uint32_t ex_style,
         diagnostics::TraceField{},
     };
     runtime_trace("CreateWindowExA", create_begin_fields, 2);
-    const abi::Lresult create_result = call_wndproc(slot.wndproc, &slot, abi::kWmCreate, 0,
-                                                   reinterpret_cast<abi::Lparam>(&cs));
+    const bool skip_toplevel_create = std::getenv("TL_SKIP_TOPLEVEL_WM_CREATE") != nullptr &&
+                                      slot.parent == nullptr;
+    const abi::Lresult create_result = skip_toplevel_create
+                                            ? 0
+                                            : call_wndproc(slot.wndproc, &slot, abi::kWmCreate, 0,
+                                                           reinterpret_cast<abi::Lparam>(&cs));
     const std::array<diagnostics::TraceField, 4> create_end_fields{
         diagnostics::TraceField{"symbol", "CreateWindowExA"},
         diagnostics::TraceField{"stage", "WM_CREATE-end"},
@@ -507,6 +511,10 @@ TL_MSABI abi::HWnd tl_CreateWindowExW(const std::uint32_t ex_style,
 }
 
 TL_MSABI int tl_ShowWindow(const void* const window, const int cmd_show) noexcept {
+    const std::array<diagnostics::TraceField, 4> show_begin{
+        diagnostics::TraceField{"symbol", "ShowWindow"},
+        diagnostics::TraceField{"stage", "begin"}, diagnostics::TraceField{}, diagnostics::TraceField{}};
+    runtime_trace("ShowWindow", show_begin, 2);
     WindowSlot* slot = find_window_slot(window);
     if (slot == nullptr) {
         set_last_error(abi::kErrorInvalidHandle);
@@ -529,10 +537,18 @@ TL_MSABI int tl_ShowWindow(const void* const window, const int cmd_show) noexcep
         render_controls(*slot->parent);
     }
     set_last_error(abi::kErrorSuccess);
+    const std::array<diagnostics::TraceField, 4> show_end{
+        diagnostics::TraceField{"symbol", "ShowWindow"},
+        diagnostics::TraceField{"stage", "end"}, diagnostics::TraceField{}, diagnostics::TraceField{}};
+    runtime_trace("ShowWindow", show_end, 2);
     return was_visible ? 1 : 0;
 }
 
 TL_MSABI int tl_UpdateWindow(const void* const window) noexcept {
+    const std::array<diagnostics::TraceField, 4> update_begin{
+        diagnostics::TraceField{"symbol", "UpdateWindow"},
+        diagnostics::TraceField{"stage", "begin"}, diagnostics::TraceField{}, diagnostics::TraceField{}};
+    runtime_trace("UpdateWindow", update_begin, 2);
     WindowSlot* slot = find_window_slot(window);
     if (slot == nullptr) {
         set_last_error(abi::kErrorInvalidHandle);
@@ -544,6 +560,10 @@ TL_MSABI int tl_UpdateWindow(const void* const window) noexcept {
     }
     render_controls(*slot);
     set_last_error(abi::kErrorSuccess);
+    const std::array<diagnostics::TraceField, 4> update_end{
+        diagnostics::TraceField{"symbol", "UpdateWindow"},
+        diagnostics::TraceField{"stage", "end"}, diagnostics::TraceField{}, diagnostics::TraceField{}};
+    runtime_trace("UpdateWindow", update_end, 2);
     return 1;
 }
 
