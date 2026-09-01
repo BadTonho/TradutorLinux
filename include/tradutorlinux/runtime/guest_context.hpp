@@ -46,6 +46,18 @@ struct GuestContext {
     std::array<char, 3> standard_handle_tokens{};
     std::array<void*, 3> standard_handles{};
     std::mutex process_context_mutex;
+
+    struct ContextExport {
+        std::string name;
+        std::uint16_t ordinal{0};
+        std::uintptr_t address{0};
+    };
+    struct ContextModule {
+        std::string name;
+        std::vector<ContextExport> exports;
+    };
+    std::vector<ContextModule> modules;
+    std::mutex modules_mutex;
 };
 
 // O contexto é local à thread hospedeira para que uma thread convidada nunca

@@ -7,6 +7,7 @@
 #include "tradutorlinux/runtime/wininet.hpp"
 #include "tradutorlinux/runtime/wintrust.hpp"
 #include "tradutorlinux/runtime/crypt32.hpp"
+#include "tradutorlinux/runtime/guest_context.hpp"
 
 #include <cstdint>
 #include <string_view>
@@ -81,6 +82,26 @@ TEST_F(ModuleTest, ClearModulesResetsRegistry) {
     clear_modules();
     EXPECT_EQ(registered_module_count(), 0U);
     EXPECT_FALSE(find_export(ExportQuery{"FAKE.dll", "DoWork"}).found);
+}
+
+TEST_F(ModuleTest, RegistriesAreIsolatedPerGuestContext) {
+    runtime::GuestContext first;
+    runtime::GuestContext second;
+    {
+        runtime::GuestContextScope scope(first);
+        ASSERT_TRUE(register_module(kFakeModule));
+        EXPECT_TRUE(find_export(ExportQuery{"FAKE.dll", "DoWork"}).found);
+    }
+    {
+        runtime::GuestContextScope scope(second);
+        EXPECT_FALSE(is_module_registered("FAKE.dll"));
+        EXPECT_FALSE(find_export(ExportQuery{"FAKE.dll", "DoWork"}).found);
+        ASSERT_TRUE(register_module(kFakeModule));
+    }
+    {
+        runtime::GuestContextScope scope(first);
+        EXPECT_TRUE(find_export(ExportQuery{"FAKE.dll", "DoWork"}).found);
+    }
 }
 
 TEST_F(ModuleTest, RegistersBuiltinKernel32Exports) {

@@ -7,6 +7,7 @@
 #include "tradutorlinux/runtime/ws2_32.hpp"
 #include "tradutorlinux/runtime/wininet.hpp"
 #include "tradutorlinux/runtime/wintrust.hpp"
+#include "tradutorlinux/runtime/guest_context.hpp"
 #include "tradutorlinux/runtime/crypt32.hpp"
 #include "tradutorlinux/runtime/ole32.hpp"
 #include "tradutorlinux/runtime/oleaut32.hpp"
@@ -30,26 +31,12 @@
 namespace tradutorlinux::loader {
 namespace {
 
-struct OwnedExport {
-    std::string name;
-    std::uint16_t ordinal{};
-    std::uintptr_t address{};
-};
+using OwnedExport = runtime::GuestContext::ContextExport;
+using OwnedModule = runtime::GuestContext::ContextModule;
 
-struct OwnedModule {
-    std::string name;
-    std::vector<OwnedExport> exports;
-};
+std::vector<OwnedModule>& modules() { return runtime::guest_context().modules; }
 
-std::vector<OwnedModule>& modules() {
-    static std::vector<OwnedModule> instance;
-    return instance;
-}
-
-std::mutex& modules_mutex() {
-    static std::mutex instance;
-    return instance;
-}
+std::mutex& modules_mutex() { return runtime::guest_context().modules_mutex; }
 
 // Requer que modules_mutex() esteja bloqueado pelo chamador.
 const OwnedModule* find_module_locked(const std::string_view dll) {
