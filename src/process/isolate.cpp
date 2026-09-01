@@ -84,6 +84,7 @@ bool write_exact(const int fd, const std::byte* const buffer, const std::size_t 
 // mesmo sinal. Assim o processo morre exatamente como antes (mesmo status no
 // waitpid, mesma interação com sanitizers), mas o pai ganha o endereço da
 // falta para converter em contexto PE (RVA, seção, importação mais próxima).
+__attribute__((no_instrument_function))
 void install_crash_reporter(const int report_fd) noexcept {
     g_crash_report_fd = report_fd;
     struct sigaction action {};
@@ -180,6 +181,7 @@ SignalDescription describe_signal(const int signal_number) noexcept {
     }
 }
 
+__attribute__((no_instrument_function))
 GuestOutcome run_guest_isolated(const std::uintptr_t entry_point,
                                 const std::uintptr_t stack_top,
                                 const std::uint64_t timeout_ms,
