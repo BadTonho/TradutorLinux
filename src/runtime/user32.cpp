@@ -357,7 +357,7 @@ TL_MSABI abi::HWnd tl_CreateWindowExA(const std::uint32_t ex_style,
         slot.is_control = true;
         slot.control_kind = runtime_gui::is_builtin_control(class_name)
                                 ? runtime_gui::control_kind_for(class_name)
-                                : runtime_gui::ControlKind::ListView;
+                                : runtime_gui::ControlKind::Generic;
         slot.parent = parent_slot;
         slot.control_id = reinterpret_cast<std::uintptr_t>(menu);
         slot.style = style;
@@ -369,6 +369,14 @@ TL_MSABI abi::HWnd tl_CreateWindowExA(const std::uint32_t ex_style,
         slot.visible = (style & kWsVisible) != 0U || style == 0U;
         slot.enabled = (style & kWsDisabled) == 0U;
         slot.combo_selection = -1;
+        if (generic_child) {
+            const std::array<diagnostics::TraceField, 4> fields{
+                diagnostics::TraceField{"class", class_name},
+                diagnostics::TraceField{"status", "generic-child"},
+                diagnostics::TraceField{"width", std::to_string(slot.width)},
+                diagnostics::TraceField{"height", std::to_string(slot.height)}};
+            runtime_trace("CreateWindowExA", fields, 4);
+        }
         set_last_error(abi::kErrorSuccess);
         return &slot;
     }

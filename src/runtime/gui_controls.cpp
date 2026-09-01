@@ -56,7 +56,10 @@ ControlKind control_kind_for(const char* const name) noexcept {
     if (util::ascii_iequals(name, "STATIC")) {
         return ControlKind::Static;
     }
-    return ControlKind::ListView;
+    if (util::ascii_iequals(name, "SysListView32")) {
+        return ControlKind::ListView;
+    }
+    return ControlKind::Generic;
 }
 
 void queue_window_message(WindowSlot& slot, const std::uint32_t message,

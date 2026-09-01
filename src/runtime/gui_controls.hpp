@@ -12,7 +12,7 @@
 
 namespace tradutorlinux::runtime_gui {
 
-enum class ControlKind { None, Edit, Button, ComboBox, Static, ListView };
+enum class ControlKind { None, Edit, Button, ComboBox, Static, ListView, Generic };
 
 struct ListViewRow {
     std::vector<std::string> columns;
