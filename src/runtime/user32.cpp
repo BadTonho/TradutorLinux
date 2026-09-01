@@ -2791,8 +2791,8 @@ TL_MSABI int tl_TrackPopupMenuEx(void* const menu, const std::uint32_t flags, co
 TL_MSABI void* tl_LoadMenuW(void* const instance, const std::uint16_t* const menu_name) noexcept {
     (void)instance;
     (void)menu_name;
-    set_last_error(abi::kErrorSuccess);
-    return reinterpret_cast<void*>(0x4D454E55ULL);
+    set_last_error(abi::kErrorResourceNotFound);
+    return nullptr;
 }
 
 TL_MSABI int tl_CheckDlgButton(void* const hdlg, const int id_button, const std::uint32_t check) noexcept {
@@ -3372,8 +3372,8 @@ TL_MSABI void* tl_CreateDialogParamA(void* const instance, const char* const tem
 }
 
 TL_MSABI void* tl_CreateMenu() noexcept {
-    set_last_error(abi::kErrorSuccess);
-    return reinterpret_cast<void*>(0x4D454E55ULL); // 'MENU'
+    set_last_error(abi::kErrorNotSupported);
+    return nullptr;
 }
 
 TL_MSABI std::intptr_t tl_DefDlgProcA(void* const hwnd, const std::uint32_t msg, const std::uintptr_t wparam, const std::intptr_t lparam) noexcept {
