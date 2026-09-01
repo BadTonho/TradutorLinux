@@ -32,6 +32,8 @@ void configure_trace_all() noexcept;
 [[nodiscard]] bool configure_trace_json_directory(const std::filesystem::path& directory) noexcept;
 void disable_trace_json_directory() noexcept;
 [[nodiscard]] bool is_trace_json_enabled() noexcept;
+void suspend_trace_json_for_fork() noexcept;
+void resume_trace_json_after_fork() noexcept;
 
 enum class FailureCategory {
     ExitProcess,

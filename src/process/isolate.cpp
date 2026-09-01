@@ -4,6 +4,7 @@
 
 #include "tradutorlinux/process/isolate.hpp"
 
+#include "tradutorlinux/diagnostics/trace.hpp"
 #include "tradutorlinux/runtime/winapi.hpp"
 
 #include <array>
@@ -194,8 +195,10 @@ GuestOutcome run_guest_isolated(const std::uintptr_t entry_point,
         return {.kind = GuestOutcomeKind::SpawnFailed};
     }
 
+    diagnostics::suspend_trace_json_for_fork();
     const ::pid_t child = ::fork();
     if (child < 0) {
+        diagnostics::resume_trace_json_after_fork();
         ::close(pipe_fds[0]);
         ::close(pipe_fds[1]);
         ::close(fault_fds[0]);
@@ -204,6 +207,7 @@ GuestOutcome run_guest_isolated(const std::uintptr_t entry_point,
     }
 
     if (child == 0) {
+        diagnostics::resume_trace_json_after_fork();
         ::close(pipe_fds[0]);
         ::close(fault_fds[0]);
         if (!working_directory.empty() && ::chdir(working_directory.c_str()) != 0) {
@@ -223,9 +227,11 @@ GuestOutcome run_guest_isolated(const std::uintptr_t entry_point,
         };
         const bool sent = write_exact(pipe_fds[1], message.data(), message.size());
         ::close(pipe_fds[1]);
+        diagnostics::disable_trace_json_directory();
         ::_exit(sent ? 0 : 125);
     }
 
+    diagnostics::resume_trace_json_after_fork();
     ::close(pipe_fds[1]);
     ::close(fault_fds[1]);
 

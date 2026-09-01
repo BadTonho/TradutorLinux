@@ -334,6 +334,42 @@ bool is_trace_json_enabled() noexcept {
     return g_trace_json_enabled_fast.load(std::memory_order_acquire);
 }
 
+void suspend_trace_json_for_fork() noexcept {
+    if (!is_trace_json_enabled()) return;
+    __atomic_store_n(&tl_function_trace_enabled, static_cast<unsigned char>(0),
+                     __ATOMIC_RELEASE);
+    g_trace_json_enabled_fast.store(false, std::memory_order_release);
+    stop_json_writer();
+    std::lock_guard<std::mutex> lock(g_trace_mutex);
+    if (g_trace_json_output.is_open()) {
+        g_trace_json_output.flush();
+        g_trace_json_output.close();
+    }
+    g_trace_json_pid = -1;
+}
+
+void resume_trace_json_after_fork() noexcept {
+    if (!g_trace_json_enabled) return;
+    try {
+        const bool is_new_process = ::getpid() != g_trace_json_owner_pid;
+        g_trace_json_owner_pid = ::getpid();
+        g_trace_json_pid = -1;
+        g_trace_json_sequence = 0;
+        if (is_new_process) {
+            for (auto& slot : g_function_trace_seen) {
+                slot.store(0, std::memory_order_relaxed);
+            }
+        }
+        g_trace_json_writer = std::thread(json_writer_loop);
+        __atomic_store_n(&tl_function_trace_enabled, static_cast<unsigned char>(1),
+                         __ATOMIC_RELEASE);
+        g_trace_json_enabled_fast.store(true, std::memory_order_release);
+    } catch (...) {
+        g_trace_json_enabled = false;
+        g_trace_json_enabled_fast.store(false, std::memory_order_release);
+    }
+}
+
 void disable_trace_json_directory() noexcept {
     __atomic_store_n(&tl_function_trace_enabled, static_cast<unsigned char>(0),
                      __ATOMIC_RELEASE);
