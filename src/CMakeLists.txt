@@ -78,6 +78,8 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
         runtime/powrprof.cpp runtime/iphlpapi.cpp runtime/mpr.cpp runtime/dwmapi.cpp
         util/unicode.cpp catalog/app_catalog.cpp package/msix.cpp
         diagnostics/crash_context.cpp gui/platform.cpp gui/wayland.cpp gui/x11.cpp
+        loader/dll_overrides.cpp loader/image_mapper.cpp loader/import_resolver.cpp
+        loader/module.cpp pe/pe_reader.cpp prefix/prefix.cpp
         PROPERTIES COMPILE_OPTIONS "-finstrument-functions")
     set_source_files_properties(diagnostics/trace.cpp runtime/function_trace.cpp
         PROPERTIES COMPILE_OPTIONS "-fno-instrument-functions")
