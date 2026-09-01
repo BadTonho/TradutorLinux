@@ -1010,7 +1010,6 @@ ParseResult parse_command_line(const int argc, const char* const argv[]) {
 
 ExitCode run_command(const CommandLine& command_line, std::ostream& stdout_stream,
                      std::ostream& stderr_stream) {
-    TL_TRACE_FUNCTION();
     // Configura filtro de trace (inspirado em WINEDEBUG): --trace sozinho = tudo,
     // --trace=pe,loader filtra apenas esses componentes.
     if (command_line.trace_enabled) {
