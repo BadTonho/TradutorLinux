@@ -18,6 +18,7 @@ namespace {
 
 constexpr int kDefaultWidth = 480;
 constexpr int kDefaultHeight = 180;
+constexpr int kMaxWindowDimension = 8192;
 constexpr std::size_t kMaxWindows = 16;
 
 struct WindowState {
@@ -274,8 +275,8 @@ NativeWindow create_window(const char* const caption, const int width,  // NOLIN
     }
     const int screen = DefaultScreen(dpy);
     const Window root = RootWindow(dpy, screen);
-    const int resolved_width = width > 0 ? width : kDefaultWidth;
-    const int resolved_height = height > 0 ? height : kDefaultHeight;
+    const int resolved_width = width > 0 && width <= kMaxWindowDimension ? width : kDefaultWidth;
+    const int resolved_height = height > 0 && height <= kMaxWindowDimension ? height : kDefaultHeight;
     const Window window =
         XCreateSimpleWindow(dpy, root, 0, 0, static_cast<unsigned int>(resolved_width),
                             static_cast<unsigned int>(resolved_height), 1,

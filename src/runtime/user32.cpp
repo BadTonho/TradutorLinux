@@ -20,6 +20,12 @@ namespace {
 
 using WndProc = TL_MSABI abi::Lresult (*)(abi::HWnd, std::uint32_t, abi::Wparam, abi::Lparam);
 
+constexpr int kMaxGuestWindowDimension = 8192;
+
+[[nodiscard]] int guest_window_dimension(const int value, const int fallback) noexcept {
+    return value > 0 && value <= kMaxGuestWindowDimension ? value : fallback;
+}
+
 abi::Lresult call_wndproc(const std::uintptr_t wndproc, const abi::HWnd hwnd,
                           const std::uint32_t message, const abi::Wparam wparam,
                           const abi::Lparam lparam) noexcept {
@@ -324,6 +330,8 @@ TL_MSABI abi::HWnd tl_CreateWindowExA(const std::uint32_t ex_style,
     (void)instance;
     (void)param;
     const auto class_val = reinterpret_cast<std::uintptr_t>(class_name);
+    const int resolved_width = guest_window_dimension(width, 800);
+    const int resolved_height = guest_window_dimension(height, 600);
     if (class_name == nullptr || (class_val > 0xFFFFU && !mapped_guest_cstring(class_name)) ||
         (window_name != nullptr && !mapped_guest_cstring(window_name))) {
         set_last_error(abi::kErrorInvalidParameter);
@@ -363,8 +371,8 @@ TL_MSABI abi::HWnd tl_CreateWindowExA(const std::uint32_t ex_style,
         slot.style = style;
         slot.x = x;
         slot.y = y;
-        slot.width = width > 0 ? width : 1;
-        slot.height = height > 0 ? height : 1;
+        slot.width = guest_window_dimension(width, 1);
+        slot.height = guest_window_dimension(height, 1);
         slot.text = window_name != nullptr ? window_name : "";
         slot.visible = (style & kWsVisible) != 0U || style == 0U;
         slot.enabled = (style & kWsDisabled) == 0U;
@@ -381,7 +389,7 @@ TL_MSABI abi::HWnd tl_CreateWindowExA(const std::uint32_t ex_style,
         return &slot;
     }
     const char* const caption = window_name != nullptr ? window_name : cls->name.c_str();
-    gui::NativeWindow native = gui::platform::create_window(caption, width > 0 ? width : 800, height > 0 ? height : 600);
+    gui::NativeWindow native = gui::platform::create_window(caption, resolved_width, resolved_height);
     if (native == nullptr) {
         set_last_error(abi::kErrorAccessDenied);
         trace_guest_failure("CreateWindowExA", "platform", "falha ao criar janela no backend gráfico selecionado");
@@ -395,8 +403,8 @@ TL_MSABI abi::HWnd tl_CreateWindowExA(const std::uint32_t ex_style,
     slot.native = native;
     slot.x = x;
     slot.y = y;
-    slot.width = width > 0 ? width : 800;
-    slot.height = height > 0 ? height : 600;
+    slot.width = resolved_width;
+    slot.height = resolved_height;
     slot.style = style;
     slot.visible = (style & kWsVisible) != 0U;
     // A janela principal precisa estar presente no compositor enquanto o
