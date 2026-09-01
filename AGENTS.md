@@ -77,6 +77,18 @@ O notebook do usuário não aguenta compilações pesadas. Regras obrigatórias:
 4. Valide no Linux x86-64 e registre limitações honestamente.
 5. Pare e peça direção antes de expandir o escopo além dos documentos do projeto.
 
+## Regra de execução da tarefa
+
+- Quando o usuário pedir para corrigir um problema, diagnóstico é apenas uma
+  etapa intermediária: implemente a correção no código, valide-a e continue
+  trabalhando até o comportamento solicitado ser alcançado.
+- Não substitua uma correção por um relatório do erro, uma explicação ou um
+  comando para o usuário executar. Só pare quando o problema estiver corrigido
+  e verificado, ou quando houver um bloqueio técnico real que exija informação
+  ou autorização externa.
+- Se a primeira hipótese não resolver, use o resultado para escolher e aplicar
+  a próxima correção; não repita apenas o diagnóstico.
+
 ## Commits
 
 - **Nunca faça commit automático.** Só crie, altere (amend) ou envie commits
