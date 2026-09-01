@@ -59,6 +59,35 @@ struct GuestContext {
     std::array<ContextFileSlot, 256> files{};
     std::mutex files_mutex;
 
+    struct ContextAllocationSlot {
+        void* address{nullptr};
+        std::size_t size{0};
+        bool view{false};
+    };
+    struct ContextFileMappingSlot {
+        bool used{false};
+        int fd{-1};
+        std::uint64_t size{0};
+        std::uint32_t protect{0};
+        std::string name;
+    };
+    struct ContextGlobalMemorySlot {
+        bool used{false};
+        void* address{nullptr};
+        std::size_t size{0};
+        std::uint32_t flags{0};
+        std::uint32_t lock_count{0};
+        bool global{false};
+    };
+    std::array<ContextAllocationSlot, 256> allocations{};
+    std::mutex allocations_mutex;
+    std::array<ContextFileMappingSlot, 64> mappings{};
+    std::mutex mapping_mutex;
+    std::array<ContextGlobalMemorySlot, 256> global_memory{};
+    std::mutex global_memory_mutex;
+    std::array<void*, 512> local_free_blocks{};
+    std::mutex local_free_mutex;
+
     struct ContextExport {
         std::string name;
         std::uint16_t ordinal{0};

@@ -68,16 +68,6 @@ char kStdErrorToken = 0;
 char kStockObjectTokens[24]{};
 std::atomic<std::uintptr_t> g_pointer_cookie{0};
 
-std::mutex g_mapping_mutex;
-std::array<FileMappingSlot, 64> g_mappings{};
-
-std::mutex g_allocations_mutex;
-std::array<AllocationSlot, 256> g_allocations{};
-std::mutex g_global_memory_mutex;
-std::array<GlobalMemorySlot, 256> g_global_memory{};
-std::mutex g_local_free_mutex;
-std::array<void*, 512> g_local_free_blocks{};
-
 std::mutex g_resource_mutex;
 std::array<ResourceSlot, 256> g_resources{};
 

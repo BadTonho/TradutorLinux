@@ -74,41 +74,16 @@ extern std::atomic<std::uintptr_t> g_pointer_cookie;
 
 using FileSlot = runtime::GuestContext::ContextFileSlot;
 
-struct AllocationSlot {
-    void* address{nullptr};
-    std::size_t size{0};
-    bool view{false};  // true: visão de MapViewOfFile; false: NtAllocateVirtualMemory
-};
+using AllocationSlot = runtime::GuestContext::ContextAllocationSlot;
 
 // Blocos devolvidos por Global/LocalAlloc. O endereço do bloco é usado como
 // handle no subconjunto atual; a tabela permite validar GlobalLock/Unlock/Free
 // sem liberar um ponteiro arbitrário do convidado.
-struct GlobalMemorySlot {
-    bool used{false};
-    void* address{nullptr};
-    std::size_t size{0};
-    std::uint32_t flags{0};
-    std::uint32_t lock_count{0};
-    bool global{false};
-};
+using GlobalMemorySlot = runtime::GuestContext::ContextGlobalMemorySlot;
 
 
-struct FileMappingSlot {
-    bool used{false};
-    int fd{-1};
-    std::uint64_t size{0};
-    std::uint32_t protect{0};
-    std::string name;
-};
-extern std::mutex g_mapping_mutex;
-extern std::array<FileMappingSlot, 64> g_mappings;
+using FileMappingSlot = runtime::GuestContext::ContextFileMappingSlot;
 
-extern std::mutex g_allocations_mutex;
-extern std::array<AllocationSlot, 256> g_allocations;
-extern std::mutex g_global_memory_mutex;
-extern std::array<GlobalMemorySlot, 256> g_global_memory;
-extern std::mutex g_local_free_mutex;
-extern std::array<void*, 512> g_local_free_blocks;
 
 [[nodiscard]] bool register_local_free_block(void* address) noexcept;
 [[nodiscard]] bool take_local_free_block(void* address) noexcept;
@@ -304,6 +279,14 @@ inline void set_last_error(const std::uint32_t error) noexcept {
 #define g_process_context_mutex (::tradutorlinux::runtime::guest_context().process_context_mutex)
 #define g_files (::tradutorlinux::runtime::guest_context().files)
 #define g_files_mutex (::tradutorlinux::runtime::guest_context().files_mutex)
+#define g_allocations (::tradutorlinux::runtime::guest_context().allocations)
+#define g_allocations_mutex (::tradutorlinux::runtime::guest_context().allocations_mutex)
+#define g_mappings (::tradutorlinux::runtime::guest_context().mappings)
+#define g_mapping_mutex (::tradutorlinux::runtime::guest_context().mapping_mutex)
+#define g_global_memory (::tradutorlinux::runtime::guest_context().global_memory)
+#define g_global_memory_mutex (::tradutorlinux::runtime::guest_context().global_memory_mutex)
+#define g_local_free_blocks (::tradutorlinux::runtime::guest_context().local_free_blocks)
+#define g_local_free_mutex (::tradutorlinux::runtime::guest_context().local_free_mutex)
 
 inline bool mapped_guest_range(const void* address, std::size_t size, bool writable) noexcept {
     return runtime::validate_mapped_range(address, size, writable);
