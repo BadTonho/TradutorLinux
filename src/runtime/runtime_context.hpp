@@ -91,13 +91,7 @@ using FileMappingSlot = runtime::GuestContext::ContextFileMappingSlot;
 // Imagem do convidado
 
 constexpr std::uintptr_t kResourceHandleBase = 0x0000A00000000000ULL;
-struct ResourceSlot {
-    bool used{false};
-    std::uint32_t data_rva{0};
-    std::uint32_t data_size{0};
-};
-extern std::mutex g_resource_mutex;
-extern std::array<ResourceSlot, 256> g_resources;
+using ResourceSlot = runtime::GuestContext::ContextResourceSlot;
 
 constexpr std::uintptr_t kSyncHandleBase = 0x0000600000000000ULL;
 enum class SyncKind { Mutex, Event, Semaphore, Process };
@@ -287,6 +281,8 @@ inline void set_last_error(const std::uint32_t error) noexcept {
 #define g_global_memory_mutex (::tradutorlinux::runtime::guest_context().global_memory_mutex)
 #define g_local_free_blocks (::tradutorlinux::runtime::guest_context().local_free_blocks)
 #define g_local_free_mutex (::tradutorlinux::runtime::guest_context().local_free_mutex)
+#define g_resources (::tradutorlinux::runtime::guest_context().resources)
+#define g_resource_mutex (::tradutorlinux::runtime::guest_context().resource_mutex)
 
 inline bool mapped_guest_range(const void* address, std::size_t size, bool writable) noexcept {
     return runtime::validate_mapped_range(address, size, writable);

@@ -88,6 +88,14 @@ struct GuestContext {
     std::array<void*, 512> local_free_blocks{};
     std::mutex local_free_mutex;
 
+    struct ContextResourceSlot {
+        bool used{false};
+        std::uint32_t data_rva{0};
+        std::uint32_t data_size{0};
+    };
+    std::array<ContextResourceSlot, 256> resources{};
+    std::mutex resource_mutex;
+
     struct ContextExport {
         std::string name;
         std::uint16_t ordinal{0};
