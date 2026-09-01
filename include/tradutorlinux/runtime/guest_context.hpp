@@ -5,14 +5,19 @@
 #include <array>
 #include <atomic>
 #include <csetjmp>
+#include <condition_variable>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <mutex>
 #include <string>
+#include <sys/types.h>
+#include <thread>
 #include <vector>
 
 namespace tradutorlinux::runtime {
+
+enum class ContextSyncKind { Mutex, Event, Semaphore, Process };
 
 // Estado pertencente a uma execução Win32. O objeto é deliberadamente
 // independente do ABI convidado: as APIs exportadas continuam sendo funções
@@ -113,6 +118,26 @@ struct GuestContext {
     std::mutex tls_mutex;
     std::atomic<std::uint32_t> next_thread_id{2};
     std::atomic<std::uintptr_t> unhandled_exception_filter{0};
+
+    struct ContextSyncSlot {
+        bool used{false};
+        ContextSyncKind kind{ContextSyncKind::Event};
+        std::mutex mutex;
+        std::condition_variable condition;
+        bool signaled{false};
+        bool manual_reset{false};
+        bool owner_valid{false};
+        std::thread::id owner{};
+        std::uint32_t recursion{0};
+        std::int32_t count{0};
+        std::int32_t maximum{0};
+        pid_t child_pid{-1};
+        int child_result_fd{-1};
+        bool process_running{false};
+        std::uint32_t process_exit_code{259U};
+    };
+    std::array<ContextSyncSlot, 256> syncs{};
+    std::mutex sync_mutex;
 };
 
 // O contexto é local à thread hospedeira para que uma thread convidada nunca

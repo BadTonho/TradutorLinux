@@ -94,26 +94,8 @@ constexpr std::uintptr_t kResourceHandleBase = 0x0000A00000000000ULL;
 using ResourceSlot = runtime::GuestContext::ContextResourceSlot;
 
 constexpr std::uintptr_t kSyncHandleBase = 0x0000600000000000ULL;
-enum class SyncKind { Mutex, Event, Semaphore, Process };
-struct SyncSlot {
-    bool used{false};
-    SyncKind kind{SyncKind::Event};
-    std::mutex mutex;
-    std::condition_variable condition;
-    bool signaled{false};
-    bool manual_reset{false};
-    bool owner_valid{false};
-    std::thread::id owner{};
-    std::uint32_t recursion{0};
-    std::int32_t count{0};
-    std::int32_t maximum{0};
-    pid_t child_pid{-1};
-    int child_result_fd{-1};
-    bool process_running{false};
-    std::uint32_t process_exit_code{259U};  // STILL_ACTIVE
-};
-extern std::mutex g_sync_mutex;
-extern std::array<SyncSlot, 256> g_syncs;
+using SyncKind = runtime::ContextSyncKind;
+using SyncSlot = runtime::GuestContext::ContextSyncSlot;
 
 constexpr std::uint32_t kMainThreadId = 1;
 
@@ -283,6 +265,8 @@ inline void set_last_error(const std::uint32_t error) noexcept {
 #define g_tls_mutex (::tradutorlinux::runtime::guest_context().tls_mutex)
 #define g_next_thread_id (::tradutorlinux::runtime::guest_context().next_thread_id)
 #define g_unhandled_exception_filter (::tradutorlinux::runtime::guest_context().unhandled_exception_filter)
+#define g_syncs (::tradutorlinux::runtime::guest_context().syncs)
+#define g_sync_mutex (::tradutorlinux::runtime::guest_context().sync_mutex)
 
 inline bool mapped_guest_range(const void* address, std::size_t size, bool writable) noexcept {
     return runtime::validate_mapped_range(address, size, writable);

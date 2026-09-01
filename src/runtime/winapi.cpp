@@ -68,9 +68,6 @@ char kStdErrorToken = 0;
 char kStockObjectTokens[24]{};
 std::atomic<std::uintptr_t> g_pointer_cookie{0};
 
-std::mutex g_sync_mutex;
-std::array<SyncSlot, 256> g_syncs{};
-
 std::mutex g_threads_mutex;
 std::array<ThreadSlot, 256> g_threads{};
 

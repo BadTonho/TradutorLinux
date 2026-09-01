@@ -68,4 +68,16 @@ TEST(GuestContextTest, FileTablesAreIndependent) {
     EXPECT_EQ(second.files[0].path, "second.txt");
 }
 
+TEST(GuestContextTest, SynchronizationTablesAreIndependent) {
+    GuestContext first;
+    GuestContext second;
+    first.syncs[0].used = true;
+    first.syncs[0].kind = ContextSyncKind::Event;
+    second.syncs[0].used = true;
+    second.syncs[0].kind = ContextSyncKind::Mutex;
+
+    EXPECT_EQ(first.syncs[0].kind, ContextSyncKind::Event);
+    EXPECT_EQ(second.syncs[0].kind, ContextSyncKind::Mutex);
+}
+
 }  // namespace tradutorlinux::runtime
