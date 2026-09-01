@@ -83,7 +83,7 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
         runtime/memory_validator.cpp runtime/environment.cpp runtime/guest_context.cpp
         runtime/dialog_template.cpp runtime/unwind.cpp process/isolate.cpp
         PROPERTIES COMPILE_OPTIONS "-finstrument-functions")
-    set_source_files_properties(diagnostics/trace.cpp runtime/function_trace.cpp
+    set_source_files_properties(runtime/function_trace.cpp
         PROPERTIES COMPILE_OPTIONS "-fno-instrument-functions")
 endif()
 find_path(TL_X11_INCLUDE_DIR X11/Xlib.h REQUIRED)
