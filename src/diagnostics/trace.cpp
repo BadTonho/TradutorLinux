@@ -18,6 +18,9 @@
 #include <thread>
 
 namespace tradutorlinux::diagnostics {
+
+extern "C" volatile unsigned char tl_function_trace_enabled;
+
 namespace {
 
 [[nodiscard]] std::string_view component_name(const TraceComponent component) {
@@ -90,6 +93,16 @@ namespace {
     return escaped;
 }
 
+[[nodiscard]] bool is_project_function(const char* const symbol) noexcept {
+    if (symbol == nullptr) return false;
+    const std::string_view name{symbol};
+    if (name.starts_with("_ZNSt") || name.starts_with("_ZSt") ||
+        name.starts_with("_ZNS") || name.starts_with("_ZNKSt") ||
+        name.starts_with("_ZN9__gnu_cxx") || name.starts_with("__gnu_cxx")) return false;
+    return name.find("tl_") != std::string_view::npos ||
+           name.find("tradutorlinux") != std::string_view::npos;
+}
+
 }  // namespace
 
 bool trace_component_from_name(const std::string_view name,
@@ -143,13 +156,33 @@ struct FunctionTraceRecord {
     std::uintptr_t caller{};
 };
 std::deque<FunctionTraceRecord> g_function_trace_queue;
+constexpr std::size_t kFunctionTraceSeenCapacity = 262144U;
+std::array<std::atomic<std::uintptr_t>, kFunctionTraceSeenCapacity> g_function_trace_seen{};
 
 bool open_json_output_locked();
+void write_json_event_locked(TraceComponent component, TraceLevel level,
+                             std::string_view event, std::span<const TraceField> fields,
+                             bool direct = false);
 
 void write_json_record_locked(const std::string& record) {
     if (!open_json_output_locked()) return;
     g_trace_json_output << record;
-    g_trace_json_output.flush();
+}
+
+[[nodiscard]] bool remember_function(const std::uintptr_t function) noexcept {
+    if (function == 0) return false;
+    const std::size_t initial =
+        (function >> 4U) % kFunctionTraceSeenCapacity;
+    for (std::size_t probe = 0; probe < kFunctionTraceSeenCapacity; ++probe) {
+        auto& slot = g_function_trace_seen[(initial + probe) % kFunctionTraceSeenCapacity];
+        std::uintptr_t expected = 0;
+        if (slot.compare_exchange_strong(expected, function, std::memory_order_relaxed,
+                                         std::memory_order_relaxed)) {
+            return true;
+        }
+        if (expected == function) return false;
+    }
+    return false;
 }
 
 void json_writer_loop() {
@@ -177,13 +210,18 @@ void json_writer_loop() {
         if (has_function_record) {
             Dl_info info{};
             const bool resolved = dladdr(reinterpret_cast<void*>(function_record.function), &info) != 0;
+            if (!resolved || !is_project_function(info.dli_sname)) continue;
             const std::array fields{
                 TraceField{"address", std::to_string(function_record.function)},
                 TraceField{"caller", std::to_string(function_record.caller)},
-                TraceField{"symbol", resolved && info.dli_sname != nullptr ? info.dli_sname : "<unresolved>"},
+                TraceField{"symbol", info.dli_sname},
             };
-            write_json_trace(TraceComponent::Runtime, TraceLevel::Debug,
-                             function_record.entering ? "function-enter" : "function-exit", fields);
+            std::lock_guard lock(g_trace_mutex);
+            if (g_trace_json_enabled) {
+                write_json_event_locked(
+                    TraceComponent::Runtime, TraceLevel::Debug,
+                    function_record.entering ? "function-enter" : "function-exit", fields, true);
+            }
             continue;
         }
         std::lock_guard lock(g_trace_mutex);
@@ -225,7 +263,7 @@ bool open_json_output_locked() {
 
 void write_json_event_locked(const TraceComponent component, const TraceLevel level,
                              const std::string_view event,
-                             const std::span<const TraceField> fields) {
+                             const std::span<const TraceField> fields, const bool direct) {
     if (!g_trace_json_enabled) return;
 
     const std::uint64_t sequence = ++g_trace_json_sequence;
@@ -249,7 +287,7 @@ void write_json_event_locked(const TraceComponent component, const TraceLevel le
     if (!fields.empty()) record << '\n' << "  ";
     record << "}\n}\n";
 
-    if (::getpid() != g_trace_json_owner_pid) {
+    if (direct || ::getpid() != g_trace_json_owner_pid) {
         write_json_record_locked(record.str());
         return;
     }
@@ -269,12 +307,17 @@ bool configure_trace_json_directory(const std::filesystem::path& directory) noex
         std::lock_guard<std::mutex> lock(g_trace_mutex);
         std::filesystem::create_directories(directory);
         if (!std::filesystem::is_directory(directory)) return false;
+        for (auto& slot : g_function_trace_seen) {
+            slot.store(0, std::memory_order_relaxed);
+        }
         g_trace_json_directory = directory;
         if (g_trace_json_output.is_open()) g_trace_json_output.close();
         g_trace_json_pid = -1;
         g_trace_json_sequence = 0;
         g_trace_json_enabled = true;
         g_trace_json_owner_pid = ::getpid();
+        __atomic_store_n(&tl_function_trace_enabled, static_cast<unsigned char>(1),
+                         __ATOMIC_RELEASE);
         g_trace_json_enabled_fast.store(true, std::memory_order_release);
         if (!g_trace_json_atexit_registered) {
             std::atexit([] { disable_trace_json_directory(); });
@@ -292,6 +335,8 @@ bool is_trace_json_enabled() noexcept {
 }
 
 void disable_trace_json_directory() noexcept {
+    __atomic_store_n(&tl_function_trace_enabled, static_cast<unsigned char>(0),
+                     __ATOMIC_RELEASE);
     g_trace_json_enabled_fast.store(false, std::memory_order_release);
     stop_json_writer();
     std::lock_guard<std::mutex> lock(g_trace_mutex);
@@ -372,6 +417,7 @@ void write_json_trace(const TraceComponent component, const TraceLevel level,
 void enqueue_function_json_trace(const bool entering, const std::uintptr_t function,
                                  const std::uintptr_t caller) noexcept {
     if (!is_trace_json_enabled()) return;
+    if (!remember_function(function)) return;
     try {
         if (::getpid() != g_trace_json_owner_pid) return;
         {
