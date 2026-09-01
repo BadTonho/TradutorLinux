@@ -3,6 +3,9 @@
 #include <array>
 #include <atomic>
 #include <chrono>
+#include <condition_variable>
+#include <cstdlib>
+#include <deque>
 #include <filesystem>
 #include <fstream>
 #include <mutex>
@@ -11,6 +14,7 @@
 #include <string>
 #include <unistd.h>
 #include <vector>
+#include <thread>
 
 namespace tradutorlinux::diagnostics {
 namespace {
@@ -125,6 +129,56 @@ bool g_trace_json_enabled = false;
 std::atomic<bool> g_trace_json_enabled_fast{false};
 std::ofstream g_trace_json_output;
 pid_t g_trace_json_pid = -1;
+std::mutex g_trace_json_queue_mutex;
+std::condition_variable g_trace_json_queue_cv;
+std::deque<std::string> g_trace_json_queue;
+std::thread g_trace_json_writer;
+bool g_trace_json_writer_stop = false;
+pid_t g_trace_json_owner_pid = -1;
+bool g_trace_json_atexit_registered = false;
+
+bool open_json_output_locked();
+
+void write_json_record_locked(const std::string& record) {
+    if (!open_json_output_locked()) return;
+    g_trace_json_output << record;
+    g_trace_json_output.flush();
+}
+
+void json_writer_loop() {
+    for (;;) {
+        std::string record;
+        {
+            std::unique_lock lock(g_trace_json_queue_mutex);
+            g_trace_json_queue_cv.wait(lock, [] {
+                return g_trace_json_writer_stop || !g_trace_json_queue.empty();
+            });
+            if (g_trace_json_queue.empty() && g_trace_json_writer_stop) return;
+            record = std::move(g_trace_json_queue.front());
+            g_trace_json_queue.pop_front();
+        }
+        std::lock_guard lock(g_trace_mutex);
+        if (g_trace_json_enabled && ::getpid() == g_trace_json_owner_pid) {
+            write_json_record_locked(record);
+        }
+    }
+}
+
+void stop_json_writer() noexcept {
+    if (g_trace_json_owner_pid != -1 && ::getpid() != g_trace_json_owner_pid) {
+        if (g_trace_json_writer.joinable()) g_trace_json_writer.detach();
+        return;
+    }
+    {
+        std::lock_guard lock(g_trace_json_queue_mutex);
+        g_trace_json_writer_stop = true;
+    }
+    g_trace_json_queue_cv.notify_all();
+    if (g_trace_json_writer.joinable()) g_trace_json_writer.join();
+    std::lock_guard lock(g_trace_json_queue_mutex);
+    g_trace_json_queue.clear();
+    g_trace_json_writer_stop = false;
+}
 
 bool open_json_output_locked() {
     const pid_t current_pid = ::getpid();
@@ -144,13 +198,12 @@ void write_json_event_locked(const TraceComponent component, const TraceLevel le
                              const std::span<const TraceField> fields) {
     if (!g_trace_json_enabled) return;
 
-    if (!open_json_output_locked()) return;
     const std::uint64_t sequence = ++g_trace_json_sequence;
 
     const auto timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::system_clock::now().time_since_epoch()).count();
-    auto& output = g_trace_json_output;
-    output << "{\n"
+    std::ostringstream record;
+    record << "{\n"
            << "  \"sequence\": " << sequence << ",\n"
            << "  \"pid\": " << static_cast<long long>(::getpid()) << ",\n"
            << "  \"timestamp_ms\": " << timestamp << ",\n"
@@ -159,19 +212,30 @@ void write_json_event_locked(const TraceComponent component, const TraceLevel le
            << "  \"event\": \"" << escape_value(event) << "\",\n"
            << "  \"fields\": {";
     for (std::size_t index = 0; index < fields.size(); ++index) {
-        if (index != 0) output << ',';
-        output << "\n    \"" << escape_value(fields[index].key) << "\": \""
+        if (index != 0) record << ',';
+        record << "\n    \"" << escape_value(fields[index].key) << "\": \""
                << escape_value(fields[index].value) << '\"';
     }
-    if (!fields.empty()) output << '\n' << "  ";
-    output << "}\n}\n";
-    output.flush();
+    if (!fields.empty()) record << '\n' << "  ";
+    record << "}\n}\n";
+
+    if (::getpid() != g_trace_json_owner_pid) {
+        write_json_record_locked(record.str());
+        return;
+    }
+    {
+        std::lock_guard queue_lock(g_trace_json_queue_mutex);
+        if (g_trace_json_queue.size() >= 65536U) return;
+        g_trace_json_queue.push_back(record.str());
+    }
+    g_trace_json_queue_cv.notify_one();
 }
 }  // namespace
 
 bool configure_trace_json_directory(const std::filesystem::path& directory) noexcept {
     try {
         if (directory.empty()) return false;
+        stop_json_writer();
         std::lock_guard<std::mutex> lock(g_trace_mutex);
         std::filesystem::create_directories(directory);
         if (!std::filesystem::is_directory(directory)) return false;
@@ -180,7 +244,13 @@ bool configure_trace_json_directory(const std::filesystem::path& directory) noex
         g_trace_json_pid = -1;
         g_trace_json_sequence = 0;
         g_trace_json_enabled = true;
+        g_trace_json_owner_pid = ::getpid();
         g_trace_json_enabled_fast.store(true, std::memory_order_release);
+        if (!g_trace_json_atexit_registered) {
+            std::atexit([] { disable_trace_json_directory(); });
+            g_trace_json_atexit_registered = true;
+        }
+        g_trace_json_writer = std::thread(json_writer_loop);
         return true;
     } catch (...) {
         return false;
@@ -192,8 +262,9 @@ bool is_trace_json_enabled() noexcept {
 }
 
 void disable_trace_json_directory() noexcept {
-    std::lock_guard<std::mutex> lock(g_trace_mutex);
     g_trace_json_enabled_fast.store(false, std::memory_order_release);
+    stop_json_writer();
+    std::lock_guard<std::mutex> lock(g_trace_mutex);
     g_trace_json_enabled = false;
     if (g_trace_json_output.is_open()) {
         g_trace_json_output.flush();
