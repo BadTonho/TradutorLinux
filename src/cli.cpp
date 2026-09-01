@@ -11,6 +11,7 @@
 #include "tradutorlinux/prefix/prefix.hpp"
 #include "tradutorlinux/process/isolate.hpp"
 #include "tradutorlinux/runtime/msvcrt.hpp"
+#include "tradutorlinux/runtime/guest_context.hpp"
 #include "tradutorlinux/runtime/unwind.hpp"
 #include "tradutorlinux/runtime/winapi.hpp"
 #include "tradutorlinux/util/basics.hpp"
@@ -1076,6 +1077,8 @@ ExitCode run_command(const CommandLine& command_line, std::ostream& stdout_strea
         return ExitCode::Success;
     }
 
+    runtime::GuestContext execution_context;
+    runtime::GuestContextScope execution_scope(execution_context);
     CommandLine effective_cmd = command_line;
     std::optional<ExecutableSnapshot> installation_before;
     std::string installation_name;

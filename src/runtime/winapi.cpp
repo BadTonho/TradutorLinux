@@ -62,27 +62,10 @@ namespace tradutorlinux {
 // Definições de estado compartilhado (declarados extern em runtime_context.hpp)
 // ---------------------------------------------------------------------------
 
-thread_local std::jmp_buf g_guest_exit_context;
-thread_local bool g_guest_execution_active = false;
-thread_local std::uint32_t g_guest_exit_code = 0;
-thread_local std::uint32_t g_last_error = abi::kErrorSuccess;
-thread_local runtime::GuestTeb* g_current_teb = nullptr;
-runtime::GuestPeb g_guest_peb{};
-runtime::GuestProcessParameters g_guest_process_params{};
-
-std::string g_module_file_name;
-std::filesystem::path g_guest_prefix_path;
-
 char kStdInputToken = 0;
 char kStdOutputToken = 0;
 char kStdErrorToken = 0;
 char kStockObjectTokens[24]{};
-std::mutex g_process_context_mutex;
-std::array<void*, 3> g_standard_handles{
-    &kStdInputToken,
-    &kStdOutputToken,
-    &kStdErrorToken,
-};
 std::atomic<std::uintptr_t> g_pointer_cookie{0};
 
 std::mutex g_files_mutex;
@@ -97,11 +80,6 @@ std::mutex g_global_memory_mutex;
 std::array<GlobalMemorySlot, 256> g_global_memory{};
 std::mutex g_local_free_mutex;
 std::array<void*, 512> g_local_free_blocks{};
-
-const std::byte* g_guest_image_base{nullptr};
-std::size_t g_guest_image_size{0};
-std::uint32_t g_guest_resource_rva{0};
-std::uint32_t g_guest_resource_size{0};
 
 std::mutex g_resource_mutex;
 std::array<ResourceSlot, 256> g_resources{};
@@ -676,11 +654,6 @@ void set_guest_image_view(const void* image_base, const std::size_t image_size,
         slot = {};
     }
 }
-
-static std::uint64_t g_guest_tls_start_raw = 0;
-static std::uint64_t g_guest_tls_end_raw = 0;
-static std::uint64_t g_guest_tls_index_addr = 0;
-static std::vector<std::uint64_t> g_guest_tls_callbacks;
 
 void set_guest_tls_directory(std::uint64_t start_raw, std::uint64_t end_raw,
                              std::uint64_t index_addr, const std::vector<std::uint64_t>& callbacks) noexcept {

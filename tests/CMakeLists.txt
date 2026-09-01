@@ -18,6 +18,7 @@ add_executable(tradutorlinux_unit_tests
     test_abi.cpp
     test_cli.cpp
     test_crash_context.cpp
+    test_guest_context.cpp
     test_image_mapper.cpp
     test_import_resolver.cpp
     test_module.cpp

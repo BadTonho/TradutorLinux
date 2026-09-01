@@ -8,6 +8,7 @@
 #include "tradutorlinux/pe/pe_reader.hpp"
 #include "tradutorlinux/prefix/prefix.hpp"
 #include "tradutorlinux/runtime/error_map.hpp"
+#include "tradutorlinux/runtime/guest_context.hpp"
 #include "tradutorlinux/runtime/memory_validator.hpp"
 #include "tradutorlinux/runtime/msvcrt.hpp"
 #include "tradutorlinux/runtime/teb.hpp"
@@ -54,25 +55,21 @@
 
 namespace tradutorlinux {
 
+using runtime::current_guest_context;
+using runtime::default_guest_context;
+using runtime::guest_context;
+using runtime::GuestContext;
+using runtime::GuestContextScope;
+
 // Estado de execução da thread atual
-extern thread_local std::jmp_buf g_guest_exit_context;
-extern thread_local bool g_guest_execution_active;
-extern thread_local std::uint32_t g_guest_exit_code;
-extern thread_local std::uint32_t g_last_error;
-extern thread_local runtime::GuestTeb* g_current_teb;
-extern runtime::GuestPeb g_guest_peb;
 
 // Caminho do executável convidado
-extern std::string g_module_file_name;
-extern std::filesystem::path g_guest_prefix_path;
 
 // Tokens padrão
 extern char kStdInputToken;
 extern char kStdOutputToken;
 extern char kStdErrorToken;
 extern char kStockObjectTokens[24];
-extern std::mutex g_process_context_mutex;
-extern std::array<void*, 3> g_standard_handles;
 extern std::atomic<std::uintptr_t> g_pointer_cookie;
 
 struct FileSlot {
@@ -127,10 +124,6 @@ extern std::array<void*, 512> g_local_free_blocks;
 [[nodiscard]] bool take_local_free_block(void* address) noexcept;
 
 // Imagem do convidado
-extern const std::byte* g_guest_image_base;
-extern std::size_t g_guest_image_size;
-extern std::uint32_t g_guest_resource_rva;
-extern std::uint32_t g_guest_resource_size;
 
 constexpr std::uintptr_t kResourceHandleBase = 0x0000A00000000000ULL;
 struct ResourceSlot {
@@ -291,11 +284,34 @@ constexpr std::uintptr_t kProcessHandleRange = 0x100000ULL; // pid até ~1M
 
 // Helpers compartilhados
 inline void set_last_error(const std::uint32_t error) noexcept {
-    g_last_error = error;
-    if (g_current_teb != nullptr) {
-        g_current_teb->last_error_value = error;
+    runtime::GuestContext& context = runtime::guest_context();
+    context.last_error = error;
+    if (context.current_teb != nullptr) {
+        context.current_teb->last_error_value = error;
     }
 }
+
+// Aliases temporários do Marco 1. Os módulos existentes ainda usam os nomes
+// antigos, mas o armazenamento agora pertence ao GuestContext ativo.
+#define g_last_error (::tradutorlinux::runtime::guest_context().last_error)
+#define g_guest_exit_context (::tradutorlinux::runtime::guest_context().exit_context)
+#define g_guest_execution_active (::tradutorlinux::runtime::guest_context().execution_active)
+#define g_guest_exit_code (::tradutorlinux::runtime::guest_context().exit_code)
+#define g_current_teb (::tradutorlinux::runtime::guest_context().current_teb)
+#define g_guest_peb (::tradutorlinux::runtime::guest_context().peb)
+#define g_guest_process_params (::tradutorlinux::runtime::guest_context().process_parameters)
+#define g_module_file_name (::tradutorlinux::runtime::guest_context().module_file_name)
+#define g_guest_prefix_path (::tradutorlinux::runtime::guest_context().prefix_path)
+#define g_guest_image_base (::tradutorlinux::runtime::guest_context().image_base)
+#define g_guest_image_size (::tradutorlinux::runtime::guest_context().image_size)
+#define g_guest_resource_rva (::tradutorlinux::runtime::guest_context().resource_rva)
+#define g_guest_resource_size (::tradutorlinux::runtime::guest_context().resource_size)
+#define g_guest_tls_start_raw (::tradutorlinux::runtime::guest_context().tls_start_raw)
+#define g_guest_tls_end_raw (::tradutorlinux::runtime::guest_context().tls_end_raw)
+#define g_guest_tls_index_addr (::tradutorlinux::runtime::guest_context().tls_index_address)
+#define g_guest_tls_callbacks (::tradutorlinux::runtime::guest_context().tls_callbacks)
+#define g_standard_handles (::tradutorlinux::runtime::guest_context().standard_handles)
+#define g_process_context_mutex (::tradutorlinux::runtime::guest_context().process_context_mutex)
 
 inline bool mapped_guest_range(const void* address, std::size_t size, bool writable) noexcept {
     return runtime::validate_mapped_range(address, size, writable);
