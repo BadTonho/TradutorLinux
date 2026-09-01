@@ -48,6 +48,7 @@ add_library(tradutorlinux_core STATIC
     runtime/iphlpapi.cpp
     runtime/mpr.cpp
     runtime/dwmapi.cpp
+    runtime/function_trace.cpp
     runtime/version.cpp
     runtime/guest_entry.S
     runtime/unwind_capture.S
@@ -67,6 +68,10 @@ target_compile_definitions(tradutorlinux_core
 )
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
     target_compile_options(tradutorlinux_core PUBLIC -mstackrealign)
+    set_source_files_properties(runtime/user32.cpp runtime/gdi32.cpp runtime/gui_controls.cpp
+        PROPERTIES COMPILE_OPTIONS "-finstrument-functions")
+    set_source_files_properties(diagnostics/trace.cpp runtime/function_trace.cpp
+        PROPERTIES COMPILE_OPTIONS "-fno-instrument-functions")
 endif()
 find_path(TL_X11_INCLUDE_DIR X11/Xlib.h REQUIRED)
 find_library(TL_X11_LIBRARY X11 REQUIRED)
@@ -109,6 +114,9 @@ tl_enable_sanitizers(tradutorlinux_core)
 
 add_executable(tradutorlinux main.cpp)
 target_link_libraries(tradutorlinux PRIVATE tradutorlinux_core)
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    target_link_options(tradutorlinux PRIVATE -rdynamic)
+endif()
 tl_enable_warnings(tradutorlinux)
 tl_enable_sanitizers(tradutorlinux)
 

@@ -262,4 +262,10 @@ void write_trace(std::ostream& stream, const TraceComponent component, const Tra
         stream << '\n';
 }
 
+void write_json_trace(const TraceComponent component, const TraceLevel level,
+                      const std::string_view event, const std::span<const TraceField> fields) {
+    std::lock_guard<std::mutex> lock(g_trace_mutex);
+    write_json_event_locked(component, level, event, fields);
+}
+
 }  // namespace tradutorlinux::diagnostics
