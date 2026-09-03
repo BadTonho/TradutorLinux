@@ -841,13 +841,13 @@ TL_MSABI int tl_ReadConsoleW(const void* const console_input, std::uint16_t* con
         return 0;
     }
     *chars_read = 0;
-    if (input_control != nullptr || console_input != &kStdInputToken ||
-        console_input != current_standard_handle(0) || chars_to_read > (1U << 20U) ||
+    const int fd = handle_fd(console_input);
+    if (input_control != nullptr || fd != STDIN_FILENO || chars_to_read > (1U << 20U) ||
         (chars_to_read != 0 &&
          !mapped_guest_range(buffer, static_cast<std::size_t>(chars_to_read) * sizeof(*buffer),
                              true))) {
-        set_last_error(console_input != &kStdInputToken ? abi::kErrorInvalidHandle
-                                                        : abi::kErrorInvalidParameter);
+        set_last_error(fd != STDIN_FILENO ? abi::kErrorInvalidHandle
+                                          : abi::kErrorInvalidParameter);
         return 0;
     }
     if (chars_to_read == 0) {
@@ -857,7 +857,7 @@ TL_MSABI int tl_ReadConsoleW(const void* const console_input, std::uint16_t* con
     std::vector<char> bytes(static_cast<std::size_t>(chars_to_read) * 4U);
     ssize_t byte_count = -1;
     do {
-        byte_count = ::read(STDIN_FILENO, bytes.data(), bytes.size());
+        byte_count = ::read(fd, bytes.data(), bytes.size());
     } while (byte_count < 0 && errno == EINTR);
     if (byte_count < 0) {
         const std::uint32_t error = errno_to_win32(errno);
@@ -885,13 +885,13 @@ TL_MSABI int tl_WriteConsoleW(const void* const console_output,
         return 0;
     }
     *chars_written = 0;
-    if (reserved != nullptr ||
-        (console_output != &kStdOutputToken && console_output != &kStdErrorToken) ||
+    const int fd = handle_fd(console_output);
+    if (reserved != nullptr || (fd != STDOUT_FILENO && fd != STDERR_FILENO) ||
         chars_to_write > (1U << 20U) ||
         (chars_to_write != 0 &&
          !mapped_guest_range(buffer, static_cast<std::size_t>(chars_to_write) * sizeof(*buffer),
                              false))) {
-        set_last_error((console_output != &kStdOutputToken && console_output != &kStdErrorToken)
+        set_last_error((fd != STDOUT_FILENO && fd != STDERR_FILENO)
                            ? abi::kErrorInvalidHandle
                            : abi::kErrorInvalidParameter);
         return 0;
@@ -907,7 +907,6 @@ TL_MSABI int tl_WriteConsoleW(const void* const console_output,
             encoded);
         utf8.append(encoded, encoded_size);
     }
-    const int fd = console_output == &kStdErrorToken ? STDERR_FILENO : STDOUT_FILENO;
     if (!write_all(fd, utf8.data(), utf8.size())) {
         const std::uint32_t error = errno_to_win32(errno);
         set_last_error(error);
