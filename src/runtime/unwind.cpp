@@ -46,14 +46,20 @@ constexpr std::int32_t kInvalidDisposition = 0x7FFFFFFF;
 
 [[nodiscard]] std::optional<std::size_t> find_function_by_pc(const std::uint64_t pc) noexcept {
     const std::uint64_t base = reinterpret_cast<std::uintptr_t>(g_unwind_image.base);
-    if (g_unwind_image.base == nullptr || pc < base || pc - base >= g_unwind_image.size) {
+    if (g_unwind_image.base == nullptr || pc < base || pc - base >= g_unwind_image.size ||
+        g_unwind_image.functions.empty()) {
         return std::nullopt;
     }
     const std::uint64_t rva = pc - base;
-    for (std::size_t index = 0; index < g_unwind_image.functions.size(); ++index) {
-        const pe::RuntimeFunction& function = g_unwind_image.functions[index];
-        if (rva >= function.begin_rva && rva < function.end_rva) {
-            return index;
+    // Conforme a especificação PE32+ x86-64, o diretório .pdata é estritamente ordenado por begin_rva crescente
+    auto it = std::upper_bound(g_unwind_image.functions.begin(), g_unwind_image.functions.end(), rva,
+                               [](const std::uint64_t val, const pe::RuntimeFunction& fn) noexcept {
+                                   return val < fn.begin_rva;
+                               });
+    if (it != g_unwind_image.functions.begin()) {
+        --it;
+        if (rva >= it->begin_rva && rva < it->end_rva) {
+            return static_cast<std::size_t>(it - g_unwind_image.functions.begin());
         }
     }
     return std::nullopt;
