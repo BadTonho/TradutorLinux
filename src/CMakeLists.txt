@@ -28,12 +28,14 @@ add_library(tradutorlinux_core STATIC
     runtime/msvcrt.cpp
     runtime/advapi.cpp
     runtime/security.cpp
-    runtime/ws2_32.cpp
-    runtime/wininet.cpp
-    runtime/wintrust.cpp
-    runtime/crypt32.cpp
-    runtime/ole32.cpp
-    runtime/oleaut32.cpp
+    runtime/dlls/net/ws2_32.cpp
+    runtime/dlls/net/wininet.cpp
+    runtime/dlls/net/iphlpapi.cpp
+    runtime/dlls/net/mpr.cpp
+    runtime/dlls/crypto/crypt32.cpp
+    runtime/dlls/crypto/wintrust.cpp
+    runtime/dlls/com/ole32.cpp
+    runtime/dlls/com/oleaut32.cpp
     runtime/shlwapi.cpp
     runtime/version.cpp
     runtime/winmm.cpp
@@ -45,11 +47,8 @@ add_library(tradutorlinux_core STATIC
     runtime/uxtheme.cpp
     runtime/dbghelp.cpp
     runtime/powrprof.cpp
-    runtime/iphlpapi.cpp
-    runtime/mpr.cpp
     runtime/dwmapi.cpp
     runtime/function_trace.cpp
-    runtime/version.cpp
     runtime/guest_entry.S
     runtime/unwind_capture.S
     runtime/seh.S
@@ -62,6 +61,8 @@ add_library(tradutorlinux_core STATIC
 target_include_directories(tradutorlinux_core
     PUBLIC
         "${PROJECT_SOURCE_DIR}/include"
+    PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/runtime"
 )
 target_compile_definitions(tradutorlinux_core
     PUBLIC TRADUTORLINUX_VERSION="${PROJECT_VERSION}-dev"
@@ -71,11 +72,11 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
     set_source_files_properties(runtime/kernel32.cpp runtime/legacy_winapi.cpp runtime/ntdll.cpp
         runtime/user32.cpp runtime/gdi32.cpp runtime/gui_controls.cpp runtime/shell32.cpp
         runtime/winapi.cpp runtime/msvcrt.cpp runtime/advapi.cpp runtime/security.cpp
-        runtime/ws2_32.cpp runtime/wininet.cpp runtime/wintrust.cpp runtime/crypt32.cpp
-        runtime/ole32.cpp runtime/oleaut32.cpp runtime/shlwapi.cpp runtime/version.cpp
+        runtime/dlls/net/ws2_32.cpp runtime/dlls/net/wininet.cpp runtime/dlls/crypto/wintrust.cpp runtime/dlls/crypto/crypt32.cpp
+        runtime/dlls/com/ole32.cpp runtime/dlls/com/oleaut32.cpp runtime/shlwapi.cpp runtime/version.cpp
         runtime/winmm.cpp runtime/comctl32.cpp runtime/comdlg32.cpp runtime/imm32.cpp
         runtime/psapi.cpp runtime/gdiplus.cpp runtime/uxtheme.cpp runtime/dbghelp.cpp
-        runtime/powrprof.cpp runtime/iphlpapi.cpp runtime/mpr.cpp runtime/dwmapi.cpp
+        runtime/powrprof.cpp runtime/dlls/net/iphlpapi.cpp runtime/dlls/net/mpr.cpp runtime/dwmapi.cpp
         util/unicode.cpp catalog/app_catalog.cpp package/msix.cpp
         diagnostics/crash_context.cpp gui/platform.cpp gui/wayland.cpp gui/x11.cpp
         loader/dll_overrides.cpp loader/image_mapper.cpp loader/import_resolver.cpp
