@@ -1164,13 +1164,31 @@ TL_MSABI int tl_GetFileAttributesExW(const std::uint16_t* path, int info_level, 
 
 TL_MSABI int tl_MoveFileExW(const std::uint16_t* from, const std::uint16_t* to,
                             std::uint32_t flags) noexcept {
-    std::string from_utf8;
-    std::string to_utf8;
-    if (!wide_path_to_string(from, from_utf8) || !wide_path_to_string(to, to_utf8)) {
+    constexpr std::uint32_t kMoveFileReplaceExisting = 0x1U;
+    if (from == nullptr || to == nullptr || (flags & ~kMoveFileReplaceExisting) != 0U) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
-    return tl_MoveFileExA(from_utf8.c_str(), to_utf8.c_str(), flags);
+    std::string source_path;
+    std::string target_path;
+    if (!normalize_wide_path(from, source_path) || !normalize_wide_path(to, target_path)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    std::error_code error;
+    if ((flags & kMoveFileReplaceExisting) == 0U &&
+        std::filesystem::exists(target_path, error)) {
+        set_last_error(abi::kErrorAlreadyExists);
+        return 0;
+    }
+    if (::rename(source_path.c_str(), target_path.c_str()) != 0) {
+        set_last_error(errno_to_win32(errno));
+        return 0;
+    }
+    runtime::security::rename_path(std::filesystem::path{source_path},
+                                   std::filesystem::path{target_path});
+    set_last_error(abi::kErrorSuccess);
+    return 1;
 }
 
 TL_MSABI int tl_MoveFileW(const std::uint16_t* from, const std::uint16_t* to) noexcept {
