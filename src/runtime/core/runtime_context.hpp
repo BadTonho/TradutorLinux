@@ -15,7 +15,7 @@
 #include "tradutorlinux/runtime/unwind.hpp"
 #include "tradutorlinux/util/basics.hpp"
 #include "tradutorlinux/util/unicode.hpp"
-#include "gui_controls.hpp"
+#include "../gui_controls.hpp"
 
 #include <algorithm>
 #include <array>

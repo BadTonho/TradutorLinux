@@ -12,10 +12,14 @@ add_library(tradutorlinux_core STATIC
     pe/pe_reader.cpp
     prefix/prefix.cpp
     process/isolate.cpp
-    runtime/memory_validator.cpp
-    runtime/environment.cpp
-    runtime/guest_context.cpp
-    runtime/unwind.cpp
+    runtime/core/memory_validator.cpp
+    runtime/core/environment.cpp
+    runtime/core/guest_context.cpp
+    runtime/core/winapi.cpp
+    runtime/core/guest_entry.S
+    runtime/seh/unwind.cpp
+    runtime/seh/unwind_capture.S
+    runtime/seh/seh.S
     runtime/ntdll.cpp
     runtime/kernel32.cpp
     runtime/legacy_winapi.cpp
@@ -23,7 +27,6 @@ add_library(tradutorlinux_core STATIC
     runtime/dialog_template.cpp
     runtime/gdi32.cpp
     runtime/shell32.cpp
-    runtime/winapi.cpp
     runtime/gui_controls.cpp
     runtime/msvcrt.cpp
     runtime/advapi.cpp
@@ -49,9 +52,6 @@ add_library(tradutorlinux_core STATIC
     runtime/powrprof.cpp
     runtime/dwmapi.cpp
     runtime/function_trace.cpp
-    runtime/guest_entry.S
-    runtime/unwind_capture.S
-    runtime/seh.S
     util/unicode.cpp
     gui/platform.cpp
     gui/wayland.cpp
@@ -63,6 +63,7 @@ target_include_directories(tradutorlinux_core
         "${PROJECT_SOURCE_DIR}/include"
     PRIVATE
         "${CMAKE_CURRENT_SOURCE_DIR}/runtime"
+        "${CMAKE_CURRENT_SOURCE_DIR}/runtime/core"
 )
 target_compile_definitions(tradutorlinux_core
     PUBLIC TRADUTORLINUX_VERSION="${PROJECT_VERSION}-dev"
@@ -71,7 +72,7 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
     target_compile_options(tradutorlinux_core PUBLIC -mstackrealign)
     set_source_files_properties(runtime/kernel32.cpp runtime/legacy_winapi.cpp runtime/ntdll.cpp
         runtime/user32.cpp runtime/gdi32.cpp runtime/gui_controls.cpp runtime/shell32.cpp
-        runtime/winapi.cpp runtime/msvcrt.cpp runtime/advapi.cpp runtime/security.cpp
+        runtime/core/winapi.cpp runtime/msvcrt.cpp runtime/advapi.cpp runtime/security.cpp
         runtime/dlls/net/ws2_32.cpp runtime/dlls/net/wininet.cpp runtime/dlls/crypto/wintrust.cpp runtime/dlls/crypto/crypt32.cpp
         runtime/dlls/com/ole32.cpp runtime/dlls/com/oleaut32.cpp runtime/shlwapi.cpp runtime/version.cpp
         runtime/winmm.cpp runtime/comctl32.cpp runtime/comdlg32.cpp runtime/imm32.cpp
@@ -81,8 +82,8 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
         diagnostics/crash_context.cpp gui/platform.cpp gui/wayland.cpp gui/x11.cpp
         loader/dll_overrides.cpp loader/image_mapper.cpp loader/import_resolver.cpp
         loader/module.cpp loader/process.cpp pe/pe_reader.cpp prefix/prefix.cpp
-        runtime/memory_validator.cpp runtime/environment.cpp runtime/guest_context.cpp
-        runtime/dialog_template.cpp runtime/unwind.cpp process/isolate.cpp
+        runtime/core/memory_validator.cpp runtime/core/environment.cpp runtime/core/guest_context.cpp
+        runtime/dialog_template.cpp runtime/seh/unwind.cpp process/isolate.cpp
         runtime/function_trace.cpp
         PROPERTIES COMPILE_OPTIONS "-finstrument-functions")
 endif()

@@ -15,7 +15,7 @@
 #include "tradutorlinux/package/msix.hpp"
 #include "tradutorlinux/catalog/app_catalog.hpp"
 #include "tradutorlinux/prefix/prefix.hpp"
-#include "../src/runtime/runtime_context.hpp"
+#include "../src/runtime/core/runtime_context.hpp"
 
 #include <array>
 #include <chrono>
