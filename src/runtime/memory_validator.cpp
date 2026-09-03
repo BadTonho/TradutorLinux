@@ -6,7 +6,7 @@
 #include <cstring>
 #include <fstream>
 #include <limits>
-#include <mutex>
+#include <shared_mutex>
 #include <string>
 #include <vector>
 
@@ -20,10 +20,10 @@ struct MemoryRegion {
     bool writable{false};
 };
 
-std::mutex g_map_mutex;
+std::shared_mutex g_map_mutex;
 std::vector<MemoryRegion> g_map_regions;
 std::atomic<std::size_t> g_allocation_generation{1};
-std::size_t g_cached_generation{0};
+std::atomic<std::size_t> g_cached_generation{0};
 
 void rebuild_cache_locked() noexcept {
     g_map_regions.clear();
@@ -58,7 +58,42 @@ void rebuild_cache_locked() noexcept {
 
         g_map_regions.push_back(MemoryRegion{region_start, region_end, readable, writable});
     }
-    g_cached_generation = g_allocation_generation.load(std::memory_order_relaxed);
+    g_cached_generation.store(g_allocation_generation.load(std::memory_order_relaxed),
+                              std::memory_order_release);
+}
+
+void ensure_cache_valid() noexcept {
+    if (g_cached_generation.load(std::memory_order_acquire) ==
+            g_allocation_generation.load(std::memory_order_acquire) &&
+        !g_map_regions.empty()) {
+        return;
+    }
+    std::unique_lock<std::shared_mutex> write_lock(g_map_mutex);
+    if (g_cached_generation.load(std::memory_order_relaxed) !=
+            g_allocation_generation.load(std::memory_order_relaxed) ||
+        g_map_regions.empty()) {
+        rebuild_cache_locked();
+    }
+}
+
+// Busca binaria O(log N) para encontrar a regiao que cobre address
+const MemoryRegion* find_region_covering(const std::vector<MemoryRegion>& regions,
+                                         const std::uintptr_t address) noexcept {
+    if (regions.empty()) {
+        return nullptr;
+    }
+    auto it = std::upper_bound(regions.begin(), regions.end(), address,
+                               [](const std::uintptr_t addr, const MemoryRegion& reg) noexcept {
+                                   return addr < reg.start;
+                               });
+    if (it == regions.begin()) {
+        return nullptr;
+    }
+    --it;
+    if (address >= it->start && address < it->end) {
+        return &(*it);
+    }
+    return nullptr;
 }
 
 }  // namespace
@@ -78,27 +113,23 @@ bool validate_mapped_range(const void* address, const std::size_t size, const bo
     }
     const std::uintptr_t target_end = target_start + size;
 
-    std::lock_guard<std::mutex> lock(g_map_mutex);
-    if (g_cached_generation != g_allocation_generation.load(std::memory_order_relaxed) || g_map_regions.empty()) {
-        rebuild_cache_locked();
-    }
+    ensure_cache_valid();
 
-    // Permite que o intervalo cruze múltiplas VMAs contíguas com mesma permissão (ex: stack split).
+    std::shared_lock<std::shared_mutex> lock(g_map_mutex);
     std::uintptr_t cur = target_start;
-    for (const auto& region : g_map_regions) {
-        if (cur >= region.start && cur < region.end) {
-            if (writable ? !region.writable : !region.readable) {
-                return false;
-            }
-            const std::uintptr_t chunk_end = std::min(target_end, region.end);
-            cur = chunk_end;
-            if (cur == target_end) {
-                return true;
-            }
+
+    while (cur < target_end) {
+        const MemoryRegion* region = find_region_covering(g_map_regions, cur);
+        if (region == nullptr) {
+            return false;
         }
+        if (writable ? !region->writable : !region->readable) {
+            return false;
+        }
+        cur = std::min(target_end, region->end);
     }
 
-    return false;
+    return true;
 }
 
 bool validate_mapped_cstring(const char* str, const std::size_t max_len) noexcept {
@@ -106,35 +137,26 @@ bool validate_mapped_cstring(const char* str, const std::size_t max_len) noexcep
         return false;
     }
 
-    const std::uintptr_t start = reinterpret_cast<std::uintptr_t>(str);
-    std::lock_guard<std::mutex> lock(g_map_mutex);
-    if (g_cached_generation != g_allocation_generation.load(std::memory_order_relaxed) || g_map_regions.empty()) {
-        rebuild_cache_locked();
-    }
+    ensure_cache_valid();
 
-    for (std::size_t index = 0; index < max_len; ++index) {
-        const std::uintptr_t curr_addr = start + index;
-        bool mapped = false;
-        for (const auto& region : g_map_regions) {
-            if (curr_addr >= region.start && curr_addr < region.end) {
-                if (!region.readable) {
-                    return false;
-                }
-                mapped = true;
-                // Otimização: se o resto da string cabe na região atual, buscar o nulo diretamente na memória
-                const std::size_t remaining_in_region = static_cast<std::size_t>(region.end - curr_addr);
-                const char* current_ptr = reinterpret_cast<const char*>(curr_addr);
-                const char* null_ptr = static_cast<const char*>(std::memchr(current_ptr, '\0', std::min(max_len - index, remaining_in_region)));
-                if (null_ptr != nullptr) {
-                    return true;
-                }
-                index += remaining_in_region - 1;
-                break;
-            }
-        }
-        if (!mapped) {
+    std::shared_lock<std::shared_mutex> lock(g_map_mutex);
+    std::uintptr_t cur = reinterpret_cast<std::uintptr_t>(str);
+    std::size_t checked = 0;
+
+    while (checked < max_len) {
+        const MemoryRegion* region = find_region_covering(g_map_regions, cur);
+        if (region == nullptr || !region->readable) {
             return false;
         }
+        const std::size_t bytes_in_region = static_cast<std::size_t>(region->end - cur);
+        const std::size_t scan_count = std::min(max_len - checked, bytes_in_region);
+        const char* const ptr = reinterpret_cast<const char*>(cur);
+        const void* const null_found = std::memchr(ptr, '\0', scan_count);
+        if (null_found != nullptr) {
+            return true;
+        }
+        checked += scan_count;
+        cur += scan_count;
     }
 
     return false;
@@ -145,30 +167,31 @@ bool validate_mapped_wstring(const std::uint16_t* wstr, const std::size_t max_le
         return false;
     }
 
-    const std::uintptr_t start = reinterpret_cast<std::uintptr_t>(wstr);
-    std::lock_guard<std::mutex> lock(g_map_mutex);
-    if (g_cached_generation != g_allocation_generation.load(std::memory_order_relaxed) || g_map_regions.empty()) {
-        rebuild_cache_locked();
-    }
+    ensure_cache_valid();
 
-    for (std::size_t index = 0; index < max_len; ++index) {
-        const std::uintptr_t curr_addr = start + index * sizeof(std::uint16_t);
-        bool mapped = false;
-        for (const auto& region : g_map_regions) {
-            if (curr_addr >= region.start && curr_addr + sizeof(std::uint16_t) <= region.end) {
-                if (!region.readable) {
-                    return false;
-                }
-                mapped = true;
-                if (wstr[index] == 0) {
-                    return true;
-                }
-                break;
-            }
-        }
-        if (!mapped) {
+    std::shared_lock<std::shared_mutex> lock(g_map_mutex);
+    std::uintptr_t cur = reinterpret_cast<std::uintptr_t>(wstr);
+    std::size_t checked = 0;
+
+    while (checked < max_len) {
+        const MemoryRegion* region = find_region_covering(g_map_regions, cur);
+        if (region == nullptr || !region->readable) {
             return false;
         }
+        const std::size_t bytes_in_region = static_cast<std::size_t>(region->end - cur);
+        const std::size_t elements_in_region = bytes_in_region / sizeof(std::uint16_t);
+        if (elements_in_region == 0) {
+            return false;
+        }
+        const std::size_t scan_count = std::min(max_len - checked, elements_in_region);
+        const auto* const ptr = reinterpret_cast<const std::uint16_t*>(cur);
+        for (std::size_t i = 0; i < scan_count; ++i) {
+            if (ptr[i] == 0) {
+                return true;
+            }
+        }
+        checked += scan_count;
+        cur += scan_count * sizeof(std::uint16_t);
     }
 
     return false;
