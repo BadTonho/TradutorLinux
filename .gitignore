@@ -5,6 +5,8 @@
 # Artefatos gerados por execuções de teste na raiz do repositório
 .tl-registry.db
 _tl_wide_dir/
+_tl_*
+_tl_test/
 *.input
 
 # IDEs and operating systems
