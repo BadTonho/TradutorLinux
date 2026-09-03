@@ -72,6 +72,36 @@ bool is_kernelbase_dll(const std::string_view dll) noexcept {
            util::ascii_iequals(dll, "kernelbase");
 }
 
+[[nodiscard]] std::string_view preferred_api_set_module(const std::string_view dll) noexcept {
+    auto starts_with_ci = [](std::string_view s, std::string_view prefix) {
+        if (s.size() < prefix.size()) return false;
+        for (std::size_t i = 0; i < prefix.size(); ++i) {
+            if (std::tolower(static_cast<unsigned char>(s[i])) != prefix[i]) return false;
+        }
+        return true;
+    };
+    if (starts_with_ci(dll, "api-ms-win-core-") || starts_with_ci(dll, "ext-ms-win-kernel32-")) {
+        return "KERNEL32.dll";
+    }
+    if (starts_with_ci(dll, "api-ms-win-crt-") || starts_with_ci(dll, "api-ms-win-core-crt-")) {
+        return "msvcrt.dll";
+    }
+    if (starts_with_ci(dll, "api-ms-win-security-") || starts_with_ci(dll, "api-ms-win-eventing-") ||
+        starts_with_ci(dll, "api-ms-win-service-")) {
+        return "ADVAPI32.dll";
+    }
+    if (starts_with_ci(dll, "ext-ms-win-ntuser-") || starts_with_ci(dll, "ext-ms-win-gui-")) {
+        return "USER32.dll";
+    }
+    if (starts_with_ci(dll, "ext-ms-win-gdi-")) {
+        return "GDI32.dll";
+    }
+    if (starts_with_ci(dll, "api-ms-win-shcore-") || starts_with_ci(dll, "api-ms-win-shell-")) {
+        return "SHELL32.dll";
+    }
+    return {};
+}
+
 ExportLookup find_export_forwarded(const ExportQuery& query) {
     ExportLookup direct = find_export(query);
     if (direct.found) {
@@ -85,14 +115,19 @@ ExportLookup find_export_forwarded(const ExportQuery& query) {
     if (!is_api_set_dll(query.dll)) {
         return direct;
     }
+    const std::string_view preferred = preferred_api_set_module(query.dll);
+    if (!preferred.empty()) {
+        ExportLookup pref_lookup = find_export(ExportQuery{preferred, query.symbol});
+        if (pref_lookup.found) return pref_lookup;
+    }
     // Ordem de tentativa espelha Wine: esgotar os provedores reais mais comuns.
-    // KERNEL32/KERNELBASE cobrem file, memory, process, synch, etc.
     static constexpr std::string_view kCandidates[] = {
         "KERNEL32.dll", "USER32.dll",  "GDI32.dll",   "ADVAPI32.dll", "WS2_32.dll",
         "SHELL32.dll",  "ole32.dll",   "SHLWAPI.dll", "version.dll",  "WINMM.dll",
         "COMCTL32.dll", "COMDLG32.dll","IMM32.dll",   "PSAPI.dll",    "msvcrt.dll",
     };
     for (const auto& cand : kCandidates) {
+        if (cand == preferred) continue;
         ExportLookup cand_lookup = find_export(ExportQuery{cand, query.symbol});
         if (cand_lookup.found) {
             return cand_lookup;
@@ -110,12 +145,18 @@ ExportLookup find_export_by_ordinal_forwarded(const std::string_view dll,
         if (k32.found) return k32;
     }
     if (!is_api_set_dll(dll)) return direct;
+    const std::string_view preferred = preferred_api_set_module(dll);
+    if (!preferred.empty()) {
+        ExportLookup pref_lookup = find_export_by_ordinal(preferred, ordinal);
+        if (pref_lookup.found) return pref_lookup;
+    }
     static constexpr std::string_view kCandidates[] = {
         "KERNEL32.dll", "USER32.dll",  "GDI32.dll",   "ADVAPI32.dll", "WS2_32.dll",
         "SHELL32.dll",  "ole32.dll",   "SHLWAPI.dll", "version.dll",  "WINMM.dll",
         "COMCTL32.dll", "COMDLG32.dll","IMM32.dll",   "PSAPI.dll",    "msvcrt.dll",
     };
     for (const auto& cand : kCandidates) {
+        if (cand == preferred) continue;
         ExportLookup cand_lookup = find_export_by_ordinal(cand, ordinal);
         if (cand_lookup.found) return cand_lookup;
     }
