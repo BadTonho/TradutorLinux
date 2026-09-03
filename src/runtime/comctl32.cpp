@@ -163,6 +163,9 @@ TL_COMCTL_MSABI void* tl_CreateToolbarEx(void* const hwnd, const std::uint32_t s
                                          const int num_buttons, const int cx_button, const int cy_button,
                                          const int cx_bitmap, const int cy_bitmap,
                                          const std::uint32_t struct_size) noexcept {
+    (void)hwnd;
+    (void)style;
+    (void)id;
     (void)num_bitmaps;
     (void)instance;
     (void)bitmap_id;
@@ -173,8 +176,8 @@ TL_COMCTL_MSABI void* tl_CreateToolbarEx(void* const hwnd, const std::uint32_t s
     (void)cx_bitmap;
     (void)cy_bitmap;
     (void)struct_size;
-    return tl_CreateWindowExA(0, "TOOLBAR", "", style, 0, 0, 100, 30, hwnd,
-                              reinterpret_cast<void*>(static_cast<std::uintptr_t>(id)), nullptr, nullptr);
+    set_last_error(abi::kErrorSuccess);
+    return reinterpret_cast<void*>(0x544F4F4CULL); // 'TOOL'
 }
 
 TL_COMCTL_MSABI int tl_ImageList_GetImageCount(void* const image_list) noexcept {

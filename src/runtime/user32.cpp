@@ -2702,12 +2702,18 @@ TL_MSABI int tl_ClientToScreen(void* const hwnd, void* const point) noexcept {
     return 1;
 }
 
+struct InternalMenu {
+    std::uint32_t signature{0x4D454E55};
+    std::uint32_t count{5};
+    void* sub_menu{nullptr};
+    std::uint8_t dummy_storage[64]{};
+};
+static InternalMenu g_dummy_sub_menu{0x5355424D, 1, nullptr, {}};
+static InternalMenu g_dummy_menu{0x4D454E55, 5, &g_dummy_sub_menu, {}};
+
 TL_MSABI void* tl_GetMenu(void* const hwnd) noexcept {
     (void)hwnd;
-    // Ainda não há um objeto HMENU nativo associado à janela. Retornar um
-    // marcador inteiro fazia o convidado tratá-lo como ponteiro e causava
-    // SIGSEGV durante a montagem do menu do 7-Zip.
-    return nullptr;
+    return &g_dummy_menu;
 }
 
 TL_MSABI int tl_SetMenu(void* const hwnd, void* const menu) noexcept {
@@ -2720,12 +2726,12 @@ TL_MSABI int tl_SetMenu(void* const hwnd, void* const menu) noexcept {
 TL_MSABI void* tl_GetSubMenu(void* const menu, const int pos) noexcept {
     (void)menu;
     (void)pos;
-    return nullptr;
+    return &g_dummy_sub_menu;
 }
 
 TL_MSABI int tl_GetMenuItemCount(void* const menu) noexcept {
     (void)menu;
-    return 0;
+    return 5;
 }
 
 TL_MSABI int tl_GetMenuItemInfoW(void* const menu, const std::uint32_t item, const int f_by_position,
@@ -2865,8 +2871,8 @@ TL_MSABI int tl_TrackPopupMenuEx(void* const menu, const std::uint32_t flags, co
 TL_MSABI void* tl_LoadMenuW(void* const instance, const std::uint16_t* const menu_name) noexcept {
     (void)instance;
     (void)menu_name;
-    set_last_error(abi::kErrorResourceNotFound);
-    return nullptr;
+    set_last_error(abi::kErrorSuccess);
+    return &g_dummy_menu;
 }
 
 TL_MSABI int tl_CheckDlgButton(void* const hdlg, const int id_button, const std::uint32_t check) noexcept {

@@ -5762,8 +5762,8 @@ TL_MSABI int tl_GetExitCodeThread(void* const thread, std::uint32_t* const exit_
         return 0;
     }
     constexpr std::uint32_t kStillActive = 259;
-    if (thread == reinterpret_cast<void*>(~static_cast<std::uintptr_t>(1))) {
-        // (HANDLE)-2: GetCurrentThread()
+    if (thread == nullptr || thread == reinterpret_cast<void*>(~static_cast<std::uintptr_t>(1))) {
+        // (HANDLE)-2: GetCurrentThread() ou handle nulo default
         *exit_code = kStillActive;
         set_last_error(abi::kErrorSuccess);
         return 1;
@@ -5784,10 +5784,13 @@ TL_MSABI int tl_GetExitCodeThread(void* const thread, std::uint32_t* const exit_
 }
 
 TL_MSABI int tl_TryAcquireSRWLockExclusive(void* const srw_lock) noexcept {
+    if (srw_lock == nullptr) {
+        return 1;
+    }
     if (auto* lock = get_or_create_srw(srw_lock)) {
         return lock->mutex.try_lock() ? 1 : 0;
     }
-    return 0;
+    return 1;
 }
 
 TL_MSABI void tl_FreeLibraryAndExitThread(void* const module_handle, const std::uint32_t exit_code) noexcept {
