@@ -935,6 +935,11 @@ private:
                 case 3:
                     code.operation = UnwindOperation::SetFpReg;
                     if (code.operation_info != 0U) {
+                        if (code.operation_info != unwind.frame_offset) {
+                            return fail(ParseStatus::UnsupportedMechanism,
+                                        "UWOP_SET_FPREG com OpInfo não suportado em RVA " +
+                                            util::format_hex(unwind_rva));
+                        }
                         unwind.has_extended_set_fpreg = true;
                     }
                     if (!is_valid_gpr(unwind.frame_register)) {
