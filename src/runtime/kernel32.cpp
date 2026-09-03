@@ -2310,7 +2310,7 @@ TL_MSABI void* tl_CreateThread(const void* thread_attributes, const std::uintptr
         bool should_cleanup = false;
         {
             std::lock_guard<std::mutex> join_lock(finished_slot->join_mutex);
-            std::lock_guard<std::mutex> lock(g_threads_mutex);
+            std::lock_guard<std::mutex> threads_lock(g_threads_mutex);
             finished_slot->finished = true;
             if (finished_slot->handle_closed && !finished_slot->joined) {
                 finished_slot->joined = true;
@@ -2322,7 +2322,7 @@ TL_MSABI void* tl_CreateThread(const void* thread_attributes, const std::uintptr
             if (finished_slot->host_thread.joinable()) {
                 finished_slot->host_thread.detach();
             }
-            std::lock_guard<std::mutex> lock(g_threads_mutex);
+            std::lock_guard<std::mutex> threads_lock(g_threads_mutex);
             if (finished_slot->teb != nullptr) {
                 free_guest_teb(finished_slot->teb);
             }

@@ -11,6 +11,7 @@
 #include <filesystem>
 #include <fstream>
 #include <limits>
+#include <mutex>
 #include <sstream>
 #include <string>
 #include <vector>

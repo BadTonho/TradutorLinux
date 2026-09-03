@@ -6,6 +6,7 @@
 #include <cstring>
 #include <fstream>
 #include <limits>
+#include <mutex>
 #include <shared_mutex>
 #include <string>
 #include <vector>

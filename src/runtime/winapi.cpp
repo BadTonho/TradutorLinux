@@ -864,7 +864,7 @@ TL_MSABI int tl_OpenFile(const char* const file, void* const of_struct, const st
         return -1;
     }
     void* handle = tl_CreateFileA(file, abi::kGenericRead | abi::kGenericWrite, 0, nullptr, abi::kOpenExisting, 0, nullptr);
-    if (handle == kInvalidHandleValue || handle == nullptr) {
+    if (handle == reinterpret_cast<void*>(~static_cast<std::uintptr_t>(0)) || handle == nullptr) {
         return -1;
     }
     std::lock_guard<std::mutex> lock(g_files_mutex);

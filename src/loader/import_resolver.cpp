@@ -42,11 +42,6 @@ void fail(ResolveResult& result, ResolvedImport& entry, const ImportStatus statu
           std::string detail) {
     entry.status = status;
     entry.detail = std::move(detail);
-    if (entry.mechanism == ImportMechanism::Delay) {
-        // Delay-load imports are resolved on-demand by runtime helper thunks;
-        // missing delay imports must not prevent process startup.
-        return;
-    }
     if (result.status == ImportStatus::Resolved) {
         result.status = status;
         const std::string symbol = entry.by_ordinal
