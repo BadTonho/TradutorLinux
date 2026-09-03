@@ -275,16 +275,6 @@ RelocationResult apply_relocations(const std::span<std::byte> image,
                 write_le_u64(image, target_rva,
                              value + static_cast<std::uint64_t>(delta));
                 ++applied;
-            } else if (type == kImageRelBasedHighLow) {
-                std::uint32_t value{};
-                if (!read_le_u32(image, target_rva, value)) {
-                    return fail_reloc(MapStatus::InvalidImage,
-                                      "alvo HIGHLOW em RVA " + std::to_string(target_rva) +
-                                          " fora da imagem");
-                }
-                write_le_u32(image, target_rva,
-                             static_cast<std::uint32_t>(value + static_cast<std::uint32_t>(delta)));
-                ++applied;
             } else {
                 return fail_reloc(MapStatus::InvalidImage,
                                   "tipo de relocação " + std::to_string(type) +
