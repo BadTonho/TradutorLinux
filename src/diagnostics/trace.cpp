@@ -175,7 +175,8 @@ void write_json_record_locked(const std::string& record) {
     if (function == 0) return false;
     const std::size_t initial =
         (function >> 4U) % kFunctionTraceSeenCapacity;
-    for (std::size_t probe = 0; probe < kFunctionTraceSeenCapacity; ++probe) {
+    constexpr std::size_t kMaxProbes = 32U;
+    for (std::size_t probe = 0; probe < kMaxProbes; ++probe) {
         auto& slot = g_function_trace_seen[(initial + probe) % kFunctionTraceSeenCapacity];
         std::uintptr_t expected = 0;
         if (slot.compare_exchange_strong(expected, function, std::memory_order_relaxed,
