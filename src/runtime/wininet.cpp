@@ -268,7 +268,7 @@ bool parse_url(const std::string_view input, ParsedUrl& result) noexcept {
         return false;
     }
     result.scheme = lower_ascii(std::string(input.substr(0, scheme_end)));
-    if (result.scheme != "https" && result.scheme != "http") {
+    if (result.scheme != "https") {
         return false;
     }
     std::string_view authority_and_path = input.substr(scheme_end + 3U);
