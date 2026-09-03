@@ -268,13 +268,14 @@ FileSlot* find_file_slot(const void* handle) noexcept {
 }
 
 int handle_fd(const void* handle) noexcept {
-    if (handle == &kStdInputToken) {
+    auto& ctx = runtime::guest_context();
+    if (handle == &kStdInputToken || handle == &ctx.standard_handle_tokens[0] || handle == ctx.standard_handles[0]) {
         return STDIN_FILENO;
     }
-    if (handle == &kStdOutputToken) {
+    if (handle == &kStdOutputToken || handle == &ctx.standard_handle_tokens[1] || handle == ctx.standard_handles[1]) {
         return STDOUT_FILENO;
     }
-    if (handle == &kStdErrorToken) {
+    if (handle == &kStdErrorToken || handle == &ctx.standard_handle_tokens[2] || handle == ctx.standard_handles[2]) {
         return STDERR_FILENO;
     }
     if (const FileSlot* slot = find_file_slot(handle); slot != nullptr) {
@@ -689,7 +690,8 @@ void invoke_thread_tls_callbacks(const std::uint32_t reason) noexcept {
 
 void reset_process_console_state() noexcept {
     std::lock_guard lock(g_process_context_mutex);
-    g_standard_handles = {&kStdInputToken, &kStdOutputToken, &kStdErrorToken};
+    auto& ctx = runtime::guest_context();
+    g_standard_handles = {&ctx.standard_handle_tokens[0], &ctx.standard_handle_tokens[1], &ctx.standard_handle_tokens[2]};
     g_pointer_cookie.store(0, std::memory_order_release);
 }
 
