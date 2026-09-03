@@ -212,12 +212,10 @@ bool translate_windows_path(const char* win_path,
     }
 
     std::string_view view{win_path};
+    // Caminhos absolutos do hospedeiro ("/...") não são caminhos Windows válidos
+    // para o convidado: rejeitar para o chamador reportar ERROR_INVALID_PARAMETER.
     if (view.starts_with('/')) {
-        if (view.size() + 1 > out_size) {
-            return false;
-        }
-        std::memcpy(linux_out, win_path, view.size() + 1);
-        return true;
+        return false;
     }
     if ((view.size() >= 2 && std::isalpha(static_cast<unsigned char>(view[0])) && view[1] == ':') ||
         view.starts_with('\\')) {

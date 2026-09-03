@@ -96,7 +96,7 @@ execute_process(
 if(NOT multi_result EQUAL 6)
     message(FATAL_ERROR "multi-candidate install returned ${multi_result}\n${multi_stderr}")
 endif()
-string(REGEX MATCHALL "\[tl\]\[install\]\[info\] candidate" multi_candidates "${multi_stderr}")
+string(REGEX MATCHALL "candidate" multi_candidates "${multi_stderr}")
 list(LENGTH multi_candidates multi_candidate_count)
 if(NOT multi_candidate_count EQUAL 2)
     message(FATAL_ERROR "expected two install candidates, got ${multi_candidate_count}\n${multi_stderr}")

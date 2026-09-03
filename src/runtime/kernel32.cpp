@@ -6182,8 +6182,11 @@ TL_MSABI int tl_MoveFileExA(const char* const existing_file, const char* const n
     }
     char source[4096]{};
     char destination[4096]{};
-    if (!translate_windows_path(existing_file, source, sizeof(source)) ||
-        !translate_windows_path(new_file, destination, sizeof(destination))) {
+    if (existing_file[0] == '/' && new_file[0] == '/') {
+        std::strncpy(source, existing_file, sizeof(source) - 1);
+        std::strncpy(destination, new_file, sizeof(destination) - 1);
+    } else if (!translate_windows_path(existing_file, source, sizeof(source)) ||
+               !translate_windows_path(new_file, destination, sizeof(destination))) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
