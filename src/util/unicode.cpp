@@ -32,6 +32,24 @@ constexpr std::array<std::uint32_t, 128> kCp437High{
     0x00B0, 0x2219, 0x00B7, 0x221A, 0x207F, 0x00B2, 0x25A0, 0x00A0,
 };
 
+struct Cp437Entry {
+    std::uint16_t codepoint{};
+    std::uint8_t byte{};
+};
+
+constexpr auto make_cp437_reverse() {
+    std::array<Cp437Entry, 128> table{};
+    for (std::size_t i = 0; i < 128; ++i) {
+        table[i] = {static_cast<std::uint16_t>(kCp437High[i]), static_cast<std::uint8_t>(0x80U + i)};
+    }
+    std::sort(table.begin(), table.end(), [](const Cp437Entry& a, const Cp437Entry& b) {
+        return a.codepoint < b.codepoint;
+    });
+    return table;
+}
+
+constexpr auto kCp437Reverse = make_cp437_reverse();
+
 }  // namespace
 
 std::uint32_t cp1252_to_unicode(const std::uint8_t byte) noexcept {
@@ -42,16 +60,46 @@ std::uint32_t cp1252_to_unicode(const std::uint8_t byte) noexcept {
 }
 
 bool unicode_to_cp1252(const std::uint32_t codepoint, std::uint8_t& byte) noexcept {
-    if (codepoint <= 0xFFU) {
+    if (codepoint <= 0x7FU || (codepoint >= 0xA0U && codepoint <= 0xFFU)) {
         byte = static_cast<std::uint8_t>(codepoint);
         return true;
     }
-    const auto found = std::find(kCp1252Control.begin(), kCp1252Control.end(), codepoint);
-    if (found == kCp1252Control.end()) {
-        return false;
+    switch (codepoint) {
+        case 0x20AC: byte = 0x80; return true;
+        case 0x0081: byte = 0x81; return true;
+        case 0x201A: byte = 0x82; return true;
+        case 0x0192: byte = 0x83; return true;
+        case 0x201E: byte = 0x84; return true;
+        case 0x2026: byte = 0x85; return true;
+        case 0x2020: byte = 0x86; return true;
+        case 0x2021: byte = 0x87; return true;
+        case 0x02C6: byte = 0x88; return true;
+        case 0x2030: byte = 0x89; return true;
+        case 0x0160: byte = 0x8A; return true;
+        case 0x2039: byte = 0x8B; return true;
+        case 0x0152: byte = 0x8C; return true;
+        case 0x008D: byte = 0x8D; return true;
+        case 0x017D: byte = 0x8E; return true;
+        case 0x008F: byte = 0x8F; return true;
+        case 0x0090: byte = 0x90; return true;
+        case 0x2018: byte = 0x91; return true;
+        case 0x2019: byte = 0x92; return true;
+        case 0x201C: byte = 0x93; return true;
+        case 0x201D: byte = 0x94; return true;
+        case 0x2022: byte = 0x95; return true;
+        case 0x2013: byte = 0x96; return true;
+        case 0x2014: byte = 0x97; return true;
+        case 0x02DC: byte = 0x98; return true;
+        case 0x2122: byte = 0x99; return true;
+        case 0x0161: byte = 0x9A; return true;
+        case 0x203A: byte = 0x9B; return true;
+        case 0x0153: byte = 0x9C; return true;
+        case 0x009D: byte = 0x9D; return true;
+        case 0x017E: byte = 0x9E; return true;
+        case 0x0178: byte = 0x9F; return true;
+        default: break;
     }
-    byte = static_cast<std::uint8_t>(0x80U + static_cast<std::size_t>(found - kCp1252Control.begin()));
-    return true;
+    return false;
 }
 
 std::uint32_t cp437_to_unicode(const std::uint8_t byte) noexcept {
@@ -64,12 +112,19 @@ bool unicode_to_cp437(const std::uint32_t codepoint, std::uint8_t& byte) noexcep
         byte = static_cast<std::uint8_t>(codepoint);
         return true;
     }
-    const auto found = std::find(kCp437High.begin(), kCp437High.end(), codepoint);
-    if (found == kCp437High.end()) {
+    if (codepoint > 0xFFFFU) {
         return false;
     }
-    byte = static_cast<std::uint8_t>(0x80U + static_cast<std::size_t>(found - kCp437High.begin()));
-    return true;
+    const auto cp16 = static_cast<std::uint16_t>(codepoint);
+    auto it = std::lower_bound(kCp437Reverse.begin(), kCp437Reverse.end(), cp16,
+                               [](const Cp437Entry& entry, const std::uint16_t val) noexcept {
+                                   return entry.codepoint < val;
+                               });
+    if (it != kCp437Reverse.end() && it->codepoint == cp16) {
+        byte = it->byte;
+        return true;
+    }
+    return false;
 }
 
 std::uint32_t decode_utf8(const char* const bytes, const std::size_t length,
