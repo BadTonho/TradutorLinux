@@ -89,7 +89,7 @@ struct GuestContext {
     std::mutex allocations_mutex;
     std::array<ContextFileMappingSlot, 64> mappings{};
     std::mutex mapping_mutex;
-    std::array<ContextGlobalMemorySlot, 256> global_memory{};
+    std::array<ContextGlobalMemorySlot, 4096> global_memory{};
     std::mutex global_memory_mutex;
 
     struct ContextDibSlot {

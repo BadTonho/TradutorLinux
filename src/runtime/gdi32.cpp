@@ -452,6 +452,10 @@ TL_MSABI void* tl_CreateDIBSection(const void* dc, const void* pbmi, const std::
     free_it->stride = static_cast<std::uint32_t>(std::min<std::uint64_t>(stride,
                                                                           std::numeric_limits<std::uint32_t>::max()));
     if (ppv_bits != nullptr) {
+        if (!mapped_guest_range(ppv_bits, sizeof(void*), true)) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return nullptr;
+        }
         *ppv_bits = free_it->pixels.data();
     }
     set_last_error(abi::kErrorSuccess);

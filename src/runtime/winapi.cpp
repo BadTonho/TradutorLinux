@@ -74,6 +74,8 @@ std::array<ThreadSlot, 256> g_threads{};
 
 thread_local std::array<void*, 64> g_guest_tls_slots{};
 thread_local std::uint32_t g_current_thread_id = kMainThreadId;
+thread_local runtime::GuestTeb* g_thread_teb = nullptr;
+thread_local std::uint32_t g_thread_last_error = 0;
 
 std::array<FlsSlot, kMaxFlsSlots> g_fls_slots{};
 std::mutex g_fls_mutex;
@@ -100,8 +102,8 @@ std::array<FindSlot, 16> g_find_slots{};
 std::array<SnapshotSlot, 16> g_snapshots{};
 std::mutex g_snapshot_mutex;
 
-extern "C" void tl_call_guest_on_stack(std::uintptr_t entry,
-                                       std::uintptr_t stack_top) noexcept;
+extern "C" std::uint32_t tl_call_guest_on_stack(std::uintptr_t entry,
+                                                std::uintptr_t stack_top) noexcept;
 extern "C" TL_MSABI int dummy_worker_check() noexcept;
 
 // ---------------------------------------------------------------------------
@@ -594,6 +596,7 @@ std::uint32_t decode_multibyte(const std::uint32_t code_page,
 }
 
 bool set_guest_gs_base(const void* const base) noexcept {
+    g_thread_teb = const_cast<runtime::GuestTeb*>(static_cast<const runtime::GuestTeb*>(base));
     constexpr long kArchSetGs = 0x1001;  // ARCH_SET_GS
     return ::syscall(SYS_arch_prctl, kArchSetGs,
                      static_cast<std::uintptr_t>(reinterpret_cast<std::uintptr_t>(base))) == 0;
@@ -610,14 +613,13 @@ void* allocate_guest_teb(const std::uintptr_t stack_top,
     }
     auto* const fields = static_cast<runtime::GuestTeb*>(teb);
     runtime::initialize_guest_teb(fields, &g_guest_peb, stack_top, stack_top - stack_size, thread_id);
-    g_current_teb = fields;
     return teb;
 }
 
 void free_guest_teb(void* const teb) noexcept {
     if (teb != nullptr) {
-        if (g_current_teb == teb) {
-            g_current_teb = nullptr;
+        if (g_thread_teb == teb) {
+            g_thread_teb = nullptr;
         }
         static_cast<void>(munmap(teb, sizeof(runtime::GuestTeb)));
     }
@@ -732,72 +734,6 @@ GuestExecutionResult execute_guest_entry(const std::uintptr_t entry_point,
     invoke_thread_tls_callbacks(1U /* DLL_PROCESS_ATTACH */);
     invoke_thread_tls_callbacks(2U /* DLL_THREAD_ATTACH */);
 
-    // TLS genérico: o template pode conter slots zero-init (ex.: Roblox 0x430→global 0xc2c800)
-    // que a lazy-init em 0x140001420 espera apontar para um objeto em .data.
-    // O template no arquivo tem 0 e a reloc não preenche; sem ponteiro rva 0x39ab faz mov 0x68(%rax) com rax==0.
-    // Após callbacks, se slot 0x430 ainda é 0, preenchemos:
-    // - para Roblox (image 0x1453000) aponta para objeto já mapeado 0xc2c800
-    // - genérico: aloca 0x1000 zero e registra para free
-    if (g_guest_image_base != nullptr) {
-        if (auto* current_teb = static_cast<runtime::GuestTeb*>(g_current_teb); current_teb != nullptr) {
-            constexpr std::size_t kTlsSlot430 = 0x430U;
-            if (kTlsSlot430 + sizeof(std::uint64_t) <= current_teb->tls_module0_data.size()) {
-                auto* slot = reinterpret_cast<std::uint64_t*>(current_teb->tls_module0_data.data() + kTlsSlot430);
-                if (*slot == 0U) {
-                    if (g_guest_image_size == 0x1453000U) {
-                        const std::uintptr_t base = reinterpret_cast<std::uintptr_t>(g_guest_image_base);
-                        const std::uintptr_t candidate = base + 0xc2c800U;
-                        if (candidate >= base && candidate + 0x1000U < base + g_guest_image_size) {
-                            *slot = candidate;
-                        } else {
-                            void* buf = std::calloc(1, 0x1000);
-                            if (buf != nullptr) {
-                                *slot = reinterpret_cast<std::uint64_t>(buf);
-                                (void)register_local_free_block(buf);
-                            }
-                        }
-                    } else {
-                        void* buf = std::calloc(1, 0x1000);
-                        if (buf != nullptr) {
-                            *slot = reinterpret_cast<std::uint64_t>(buf);
-                            (void)register_local_free_block(buf);
-                        }
-                    }
-                }
-            }
-            // Worker,28: flag 0xc2c800+0x798=0 e funcptr 0xbf93a0=dummy => and 0 => skip panic, mas funcptr dummy para call *%rax não fault
-            if (g_guest_image_size == 0x1453000U) {
-                const std::uintptr_t base = reinterpret_cast<std::uintptr_t>(g_guest_image_base);
-                const std::uintptr_t global = base + 0xc2c800U;
-                if (global + 0x799U < base + g_guest_image_size) {
-                    auto* flag = reinterpret_cast<std::uint8_t*>(global + 0x798U);
-                    *flag = 1U;
-                }
-                const std::uintptr_t func_ptr_va = base + 0xbf93a0U;
-                if (func_ptr_va + 8U < base + g_guest_image_size) {
-                    auto* func_slot = reinterpret_cast<std::uint64_t*>(func_ptr_va);
-                    *func_slot = 0U;
-                }
-            }
-        }
-    }
-
-    // Patch a todo custo para abrir a tela do instalador Roblox: rva 0x69f1 jne→jmp
-    if (g_guest_image_size == 0x1453000U && g_guest_image_base != nullptr) {
-        const std::uintptr_t base2 = reinterpret_cast<std::uintptr_t>(g_guest_image_base);
-        const std::uintptr_t prva = 0x69f1U;
-        if (prva + 2U < g_guest_image_size) {
-            auto* pp = reinterpret_cast<std::uint8_t*>(base2 + prva);
-            const std::uintptr_t pg = reinterpret_cast<std::uintptr_t>(pp) & ~static_cast<std::uintptr_t>(0xFFF);
-            // O patch é feito com a página não executável; o estado final
-            // volta a ser RX, preservando W^X também neste caminho legado.
-            if (::mprotect(reinterpret_cast<void*>(pg), 0x1000, PROT_READ | PROT_WRITE) == 0) {
-                if (pp[0] == 0x75U && pp[1] == 0x09U) pp[0] = 0xEBU;
-                ::mprotect(reinterpret_cast<void*>(pg), 0x1000, PROT_READ | PROT_EXEC);
-                __builtin___clear_cache(reinterpret_cast<char*>(pp), reinterpret_cast<char*>(pp + 2));
-            }
-        }
-    }
     g_quit_requested = false;
     g_quit_code = 0;
     g_guest_execution_active = true;
@@ -805,7 +741,8 @@ GuestExecutionResult execute_guest_entry(const std::uintptr_t entry_point,
     static_cast<void>(ensure_fls_thread_values());
     if (setjmp(g_guest_exit_context) == 0) {
         diagnostics::FunctionTraceScope assembly_scope{"tl_call_guest_on_stack"};
-        tl_call_guest_on_stack(std::bit_cast<std::uintptr_t>(entry), stack_top);
+        const std::uint32_t natural_code =
+            tl_call_guest_on_stack(std::bit_cast<std::uintptr_t>(entry), stack_top);
         cleanup_current_fls_values();
         g_guest_execution_active = false;
         static_cast<void>(set_guest_gs_base(nullptr));
@@ -813,7 +750,7 @@ GuestExecutionResult execute_guest_entry(const std::uintptr_t entry_point,
         reset_fls_process_state();
         reset_process_console_state();
         runtime::clear_guest_environment();
-        return {};
+        return GuestExecutionResult{.exited_explicitly = false, .exit_code = natural_code};
     }
     cleanup_current_fls_values();
     g_guest_execution_active = false;
@@ -921,9 +858,22 @@ TL_MSABI int tl_WriteProcessMemory(void* const process, void* const base, const 
     return 0;
 }
 TL_MSABI int tl_OpenFile(const char* const file, void* const of_struct, const std::uint32_t style) noexcept {
-    (void)file; (void)of_struct; (void)style;
-    set_last_error(abi::kErrorSuccess);
-    return 3; // HFILE
+    (void)of_struct; (void)style;
+    if (file == nullptr || !mapped_guest_cstring(file)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return -1;
+    }
+    void* handle = tl_CreateFileA(file, abi::kGenericRead | abi::kGenericWrite, 0, nullptr, abi::kOpenExisting, 0, nullptr);
+    if (handle == kInvalidHandleValue || handle == nullptr) {
+        return -1;
+    }
+    std::lock_guard<std::mutex> lock(g_files_mutex);
+    for (std::size_t i = 0; i < g_files.size(); ++i) {
+        if (g_files[i].used && &g_files[i] == handle) {
+            return static_cast<int>(i + 1); // 1-based handle
+        }
+    }
+    return -1;
 }
 TL_MSABI void* tl_OpenEventA(const std::uint32_t access, const int inherit, const char* const name) noexcept {
     (void)access; (void)inherit; (void)name;
@@ -936,10 +886,24 @@ TL_MSABI void* tl_OpenFileMappingA(const std::uint32_t access, const int inherit
     return reinterpret_cast<void*>(0x464D4150ULL); // 'FMAP'
 }
 TL_MSABI int tl__lclose(const int fd) noexcept {
-    (void)fd;
-    if (fd >= 0) ::close(fd);
-    set_last_error(abi::kErrorSuccess);
-    return 0;
+    if (fd <= 0) {
+        set_last_error(abi::kErrorInvalidHandle);
+        return -1;
+    }
+    std::lock_guard<std::mutex> lock(g_files_mutex);
+    const std::size_t index = static_cast<std::size_t>(fd - 1);
+    if (index < g_files.size() && g_files[index].used) {
+        if (g_files[index].fd >= 0) {
+            ::close(g_files[index].fd);
+        }
+        g_files[index].used = false;
+        g_files[index].fd = -1;
+        g_files[index].path.clear();
+        set_last_error(abi::kErrorSuccess);
+        return 0;
+    }
+    set_last_error(abi::kErrorInvalidHandle);
+    return -1;
 }
 TL_MSABI int tl_FlushInstructionCache(void* const process, const void* const base, const std::size_t size) noexcept {
     (void)process; (void)base; (void)size;
@@ -1041,13 +1005,13 @@ TL_MSABI int tl_D3D12SerializeRootSignature(const void* const root_sig, const st
 }
 TL_MSABI int tl_CreateDXGIFactory1(const void* const riid, void** const factory) noexcept {
     (void)riid;
-    if (factory != nullptr && mapped_guest_range(factory, sizeof(*factory), true)) *factory = reinterpret_cast<void*>(0x58475846ULL);
-    return 0; // S_OK
+    if (factory != nullptr && mapped_guest_range(factory, sizeof(*factory), true)) *factory = nullptr;
+    return static_cast<int>(0x887A0004); // DXGI_ERROR_UNSUPPORTED
 }
 TL_MSABI int tl_DirectDrawCreateEx(const void* const guid, void** const dd, const void* const iid, void* const unk) noexcept {
     (void)guid; (void)iid; (void)unk;
-    if (dd != nullptr && mapped_guest_range(dd, sizeof(*dd), true)) *dd = reinterpret_cast<void*>(0x44445241ULL);
-    return 0;
+    if (dd != nullptr && mapped_guest_range(dd, sizeof(*dd), true)) *dd = nullptr;
+    return static_cast<int>(0x80004002); // E_NOINTERFACE
 }
 TL_MSABI int tl_Direct3DCreate9(const std::uint32_t version) noexcept {
     (void)version;
@@ -1055,14 +1019,14 @@ TL_MSABI int tl_Direct3DCreate9(const std::uint32_t version) noexcept {
 }
 TL_MSABI int tl_Direct3DCreate9Ex(const std::uint32_t version, void** const d3d) noexcept {
     (void)version;
-    if (d3d != nullptr && mapped_guest_range(d3d, sizeof(*d3d), true)) *d3d = reinterpret_cast<void*>(0x44334455ULL);
-    return 0;
+    if (d3d != nullptr && mapped_guest_range(d3d, sizeof(*d3d), true)) *d3d = nullptr;
+    return static_cast<int>(0x8876086A); // D3DERR_NOTAVAILABLE
 }
 TL_MSABI int tl_D3D10CreateDeviceAndSwapChain(void* const adapter, const std::uint32_t driver, void* const sw, const std::uint32_t flags, const std::uint32_t feature, void* const swap_desc, void** const swap_chain, void** const device) noexcept {
     (void)adapter; (void)driver; (void)sw; (void)flags; (void)feature; (void)swap_desc;
-    if (swap_chain != nullptr && mapped_guest_range(swap_chain, sizeof(*swap_chain), true)) *swap_chain = reinterpret_cast<void*>(0x53573130ULL);
-    if (device != nullptr && mapped_guest_range(device, sizeof(*device), true)) *device = reinterpret_cast<void*>(0x44335566ULL);
-    return 0;
+    if (swap_chain != nullptr && mapped_guest_range(swap_chain, sizeof(*swap_chain), true)) *swap_chain = nullptr;
+    if (device != nullptr && mapped_guest_range(device, sizeof(*device), true)) *device = nullptr;
+    return static_cast<int>(0x80004002); // E_NOINTERFACE
 }
 TL_MSABI int tl_D3DX10CompileFromMemory(const char* const src, const std::size_t len, const char* const src_name, const void* const defines, void* const include, const char* const entry, const char* const profile, const std::uint32_t flags1, const std::uint32_t flags2, void* const pump, void** const shader, void** const errors, void** const hr) noexcept {
     (void)src; (void)len; (void)src_name; (void)defines; (void)include; (void)entry; (void)profile; (void)flags1; (void)flags2; (void)pump;
@@ -1073,9 +1037,9 @@ TL_MSABI int tl_D3DX10CompileFromMemory(const char* const src, const std::size_t
 }
 TL_MSABI int tl_D3D11CreateDeviceAndSwapChain(void* const adapter, const std::uint32_t driver, void* const sw, const std::uint32_t flags, const void* const feature_levels, const std::uint32_t levels, const std::uint32_t sdk, void* const swap_desc, void** const swap_chain, void** const device, void* const feature, void* const ctx) noexcept {
     (void)adapter; (void)driver; (void)sw; (void)flags; (void)feature_levels; (void)levels; (void)sdk; (void)swap_desc; (void)feature; (void)ctx;
-    if (swap_chain != nullptr && mapped_guest_range(swap_chain, sizeof(*swap_chain), true)) *swap_chain = reinterpret_cast<void*>(0x53573131ULL);
-    if (device != nullptr && mapped_guest_range(device, sizeof(*device), true)) *device = reinterpret_cast<void*>(0x44335577ULL);
-    return 0;
+    if (swap_chain != nullptr && mapped_guest_range(swap_chain, sizeof(*swap_chain), true)) *swap_chain = nullptr;
+    if (device != nullptr && mapped_guest_range(device, sizeof(*device), true)) *device = nullptr;
+    return static_cast<int>(0x887A0004); // DXGI_ERROR_UNSUPPORTED
 }
 TL_MSABI int tl_D3DX11CompileFromMemory(const char* const src, const std::size_t len, const char* const src_name, const void* const defines, void* const include, const char* const entry, const char* const target, const std::uint32_t flags1, const std::uint32_t flags2, void* const pump, void** const code, void** const errors, void** const hr) noexcept {
     (void)src; (void)len; (void)src_name; (void)defines; (void)include; (void)entry; (void)target; (void)flags1; (void)flags2; (void)pump;

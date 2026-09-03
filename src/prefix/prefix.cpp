@@ -67,6 +67,16 @@ bool initialize_prefix(const std::filesystem::path& prefix_root) {
     std::filesystem::create_directories(paths.temp_dir, ec);
     if (ec) return false;
 
+    // Criar symlinks de compatibilidade de caixa (Windows / System32)
+    const auto win_upper = paths.drive_c / "Windows";
+    if (!std::filesystem::exists(win_upper, ec) && !std::filesystem::is_symlink(win_upper, ec)) {
+        std::filesystem::create_directory_symlink("windows", win_upper, ec);
+    }
+    const auto sys32_upper = paths.windows_dir / "System32";
+    if (!std::filesystem::exists(sys32_upper, ec) && !std::filesystem::is_symlink(sys32_upper, ec)) {
+        std::filesystem::create_directory_symlink("system32", sys32_upper, ec);
+    }
+
     // Criar symlinks no dosdevices: c: -> ../drive_c e z: -> /
     // Não limpar cegamente o ec: um EACCES real (sem permissão para criar o
     // symlink) deve falhar o prefixo em vez de retornar "ok" meio-inicializado.

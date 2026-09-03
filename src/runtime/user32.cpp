@@ -1374,17 +1374,30 @@ TL_MSABI int tl_SendMessageA(const void* window, const std::uint32_t message,
 
 TL_MSABI int tl_SendMessageW(const void* window, const std::uint32_t message,
                               const abi::Wparam wparam, const abi::Lparam lparam) noexcept {
-    if (message == 0x000C && lparam != 0 &&
-        mapped_guest_wstring(reinterpret_cast<const std::uint16_t*>(lparam))) {
-        const std::string utf8 = util::wide_to_utf8(reinterpret_cast<const std::uint16_t*>(lparam));
-        return tl_SendMessageA(window, message, wparam, reinterpret_cast<abi::Lparam>(utf8.c_str()));
+    WindowSlot* const slot = find_window_slot(window);
+    if (slot == nullptr) {
+        set_last_error(abi::kErrorInvalidHandle);
+        return 0;
     }
-    if (message == abi::kCbAddString && lparam != 0 &&
-        mapped_guest_wstring(reinterpret_cast<const std::uint16_t*>(lparam))) {
-        const std::string utf8 = util::wide_to_utf8(reinterpret_cast<const std::uint16_t*>(lparam));
-        return tl_SendMessageA(window, message, wparam, reinterpret_cast<abi::Lparam>(utf8.c_str()));
+    if (slot->is_control) {
+        if (message == 0x000C && lparam != 0 &&
+            mapped_guest_wstring(reinterpret_cast<const std::uint16_t*>(lparam))) {
+            const std::string utf8 = util::wide_to_utf8(reinterpret_cast<const std::uint16_t*>(lparam));
+            return tl_SendMessageA(window, message, wparam, reinterpret_cast<abi::Lparam>(utf8.c_str()));
+        }
+        if (message == abi::kCbAddString && lparam != 0 &&
+            mapped_guest_wstring(reinterpret_cast<const std::uint16_t*>(lparam))) {
+            const std::string utf8 = util::wide_to_utf8(reinterpret_cast<const std::uint16_t*>(lparam));
+            return tl_SendMessageA(window, message, wparam, reinterpret_cast<abi::Lparam>(utf8.c_str()));
+        }
+        return tl_SendMessageA(window, message, wparam, lparam);
     }
-    return tl_SendMessageA(window, message, wparam, lparam);
+    if (slot->wndproc != 0) {
+        return static_cast<int>(call_wndproc(slot->wndproc, const_cast<abi::HWnd>(window), message,
+                                             wparam, lparam));
+    }
+    set_last_error(abi::kErrorSuccess);
+    return 0;
 }
 
 TL_MSABI void* tl_GetDlgItem(const void* dialog, const int identifier) noexcept {

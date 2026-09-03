@@ -115,11 +115,15 @@ struct ThreadSlot {
     std::mutex join_mutex;
     bool finished{false};
     bool joined{false};
+    bool handle_closed{false};
     int exit_code{0};
     std::condition_variable finish_cv;
 };
 extern std::mutex g_threads_mutex;
 extern std::array<ThreadSlot, 256> g_threads;
+
+extern thread_local runtime::GuestTeb* g_thread_teb;
+extern thread_local std::uint32_t g_thread_last_error;
 
 constexpr std::uintptr_t kThreadHandleBase = 0x0000400000000000ULL;
 
@@ -224,20 +228,19 @@ constexpr std::uintptr_t kProcessHandleRange = 0x100000ULL; // pid até ~1M
 
 // Helpers compartilhados
 inline void set_last_error(const std::uint32_t error) noexcept {
-    runtime::GuestContext& context = runtime::guest_context();
-    context.last_error = error;
-    if (context.current_teb != nullptr) {
-        context.current_teb->last_error_value = error;
+    g_thread_last_error = error;
+    if (g_thread_teb != nullptr) {
+        g_thread_teb->last_error_value = error;
     }
 }
 
 // Aliases temporários do Marco 1. Os módulos existentes ainda usam os nomes
 // antigos, mas o armazenamento agora pertence ao GuestContext ativo.
-#define g_last_error (::tradutorlinux::runtime::guest_context().last_error)
+#define g_last_error (::tradutorlinux::g_thread_last_error)
 #define g_guest_exit_context (::tradutorlinux::runtime::guest_context().exit_context)
 #define g_guest_execution_active (::tradutorlinux::runtime::guest_context().execution_active)
 #define g_guest_exit_code (::tradutorlinux::runtime::guest_context().exit_code)
-#define g_current_teb (::tradutorlinux::runtime::guest_context().current_teb)
+#define g_current_teb (::tradutorlinux::g_thread_teb)
 #define g_guest_peb (::tradutorlinux::runtime::guest_context().peb)
 #define g_guest_process_params (::tradutorlinux::runtime::guest_context().process_parameters)
 #define g_module_file_name (::tradutorlinux::runtime::guest_context().module_file_name)

@@ -378,14 +378,21 @@ std::string format_atom(const std::string& flags, int width, int precision, cons
             if (length == "l" || length == "w") {
                 const std::uint16_t* wide =
                     reinterpret_cast<const std::uint16_t*>(read_ptr_slot(ap));
-                const std::string text = utf16_to_utf8(
-                    wide, precision >= 0 ? static_cast<std::size_t>(precision)
-                                         : std::numeric_limits<std::size_t>::max());
+                if (wide != nullptr && !runtime::validate_mapped_wstring(wide)) {
+                    wide = nullptr;
+                }
+                const std::string text = (wide != nullptr)
+                    ? utf16_to_utf8(wide, precision >= 0 ? static_cast<std::size_t>(precision)
+                                                         : std::numeric_limits<std::size_t>::max())
+                    : "(null)";
                 const std::string format =
                     build_host_format(adjusted_flags, adjusted_width, -1, "", 's');
                 return sprint(format, text.c_str());
             }
             const char* value = reinterpret_cast<const char*>(read_ptr_slot(ap));
+            if (value != nullptr && !runtime::validate_mapped_cstring(value)) {
+                value = nullptr;
+            }
             if (value == nullptr) {
                 value = "(null)";
             }
@@ -401,7 +408,8 @@ std::string format_atom(const std::string& flags, int width, int precision, cons
         }
         case 'n': {
             const std::uintptr_t target = read_ptr_slot(ap);
-            if (target != 0) {
+            const std::size_t target_size = (length == "ll") ? sizeof(long long) : sizeof(int);
+            if (target != 0 && runtime::validate_mapped_range(reinterpret_cast<const void*>(target), target_size, true)) {
                 if (length == "ll") {
                     long long value = static_cast<long long>(count);
                     std::memcpy(reinterpret_cast<void*>(target), &value, sizeof(value));
@@ -656,7 +664,7 @@ TL_CRT_MSABI int tl_atexit(void (*handler)(void)) noexcept {
 }
 
 TL_CRT_MSABI int tl_atoi(const char* const str) noexcept {
-    if (str == nullptr) {
+    if (str == nullptr || !mapped_guest_cstring(str)) {
         return 0;
     }
     return std::atoi(str);
@@ -697,7 +705,7 @@ TL_CRT_MSABI void tl__unlock(GuestFile* file) noexcept {
 }
 
 TL_CRT_MSABI char* tl_getenv(const char* name) noexcept {
-    if (name == nullptr) {
+    if (name == nullptr || !mapped_guest_cstring(name)) {
         set_error(EINVAL);
         return nullptr;
     }
@@ -838,7 +846,7 @@ TL_CRT_MSABI GuestFile* tl__fdopen(int file_descriptor, const char* mode) noexce
 
 TL_CRT_MSABI GuestFile* tl_fopen(const char* path, const char* mode) noexcept {
     ensure_standard_files();
-    if (path == nullptr || mode == nullptr) {
+    if (path == nullptr || mode == nullptr || !mapped_guest_cstring(path) || !mapped_guest_cstring(mode)) {
         set_error(EINVAL);
         return nullptr;
     }
@@ -866,11 +874,24 @@ TL_CRT_MSABI GuestFile* tl_fopen(const char* path, const char* mode) noexcept {
             case 't':
                 binary = false;
                 break;
+            case 'c': // commit flag (MSVC)
+            case 'n': // no-commit flag (MSVC)
+            case 'R': // random access (MSVC)
+            case 'S': // sequential access (MSVC)
+            case 'T': // short-lived (MSVC)
+            case 'D': // temporary (MSVC)
+            case 'x': // exclusive (C11)
+            case 'e': // O_CLOEXEC (glibc)
+            case 'N': // O_CLOEXEC (MSVC)
+                break;
+            case ',':
+                goto mode_parsed;
             default:
                 set_error(EINVAL);
                 return nullptr;
         }
     }
+mode_parsed:
     if (kind == '\0') {
         set_error(EINVAL);
         return nullptr;

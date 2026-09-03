@@ -968,6 +968,9 @@ TL_MSABI void tl_InitializeSListHead(abi::GuestSListHeader* const list_head) noe
 }
 
 TL_MSABI std::uint32_t tl_GetLastError() noexcept {
+    if (g_current_teb != nullptr) {
+        return g_current_teb->last_error_value;
+    }
     return g_last_error;
 }
 
@@ -1101,12 +1104,12 @@ TL_MSABI void* tl_CreateFileA(const char* const file_name, const std::uint32_t d
     (void)template_file;
     if (!mapped_guest_cstring(file_name) || file_name == nullptr || file_name[0] == '\0') {
         set_last_error(abi::kErrorInvalidParameter);
-        return nullptr;
+        return kInvalidHandleValue;
     }
     char normalized[4096]{};
     if (!translate_windows_path(file_name, normalized, sizeof(normalized))) {
         set_last_error(abi::kErrorInvalidParameter);
-        return nullptr;
+        return kInvalidHandleValue;
     }
     int flags = 0;
     const bool read = (desired_access & abi::kGenericRead) != 0;
@@ -1126,19 +1129,19 @@ TL_MSABI void* tl_CreateFileA(const char* const file_name, const std::uint32_t d
         case abi::kTruncateExisting: flags |= O_TRUNC; break;
         default:
             set_last_error(abi::kErrorInvalidParameter);
-            return nullptr;
+            return kInvalidHandleValue;
     }
     const int fd = ::open(normalized, flags, 0644);
     if (fd < 0) {
         set_last_error(errno_to_win32(errno));
-        return nullptr;
+        return kInvalidHandleValue;
     }
     std::lock_guard<std::mutex> lock(g_files_mutex);
     auto it = std::find_if(g_files.begin(), g_files.end(), [](const FileSlot& s) { return !s.used; });
     if (it == g_files.end()) {
         ::close(fd);
         set_last_error(abi::kErrorNotEnoughMemory);
-        return nullptr;
+        return kInvalidHandleValue;
     }
     it->used = true;
     it->fd = fd;
@@ -1162,7 +1165,7 @@ TL_MSABI void* tl_CreateFileW(const std::uint16_t* path, const std::uint32_t des
                               const void* template_file) noexcept {
     if (!mapped_guest_wstring(path) || path == nullptr || path[0] == 0) {
         set_last_error(abi::kErrorInvalidParameter);
-        return nullptr;
+        return kInvalidHandleValue;
     }
     (void)share_mode;
     (void)security_attributes;
@@ -1171,7 +1174,7 @@ TL_MSABI void* tl_CreateFileW(const std::uint16_t* path, const std::uint32_t des
     char normalized[4096]{};
     if (!normalized_wide_path(path, normalized)) {
         set_last_error(abi::kErrorInvalidParameter);
-        return nullptr;
+        return kInvalidHandleValue;
     }
     int flags = 0;
     const bool read = (desired_access & abi::kGenericRead) != 0;
@@ -1191,19 +1194,19 @@ TL_MSABI void* tl_CreateFileW(const std::uint16_t* path, const std::uint32_t des
         case abi::kTruncateExisting: flags |= O_TRUNC; break;
         default:
             set_last_error(abi::kErrorInvalidParameter);
-            return nullptr;
+            return kInvalidHandleValue;
     }
     const int fd = ::open(normalized, flags, 0644);
     if (fd < 0) {
         set_last_error(errno_to_win32(errno));
-        return nullptr;
+        return kInvalidHandleValue;
     }
     std::lock_guard<std::mutex> lock(g_files_mutex);
     auto it = std::find_if(g_files.begin(), g_files.end(), [](const FileSlot& s) { return !s.used; });
     if (it == g_files.end()) {
         ::close(fd);
         set_last_error(abi::kErrorNotEnoughMemory);
-        return nullptr;
+        return kInvalidHandleValue;
     }
     it->used = true;
     it->fd = fd;
@@ -1220,7 +1223,7 @@ TL_MSABI void* tl_CreateFileW(const std::uint16_t* path, const std::uint32_t des
 }
 
 TL_MSABI int tl_CloseHandle(const void* const handle) noexcept {
-    if (handle == nullptr) {
+    if (handle == nullptr || handle == kInvalidHandleValue) {
         set_last_error(abi::kErrorInvalidHandle);
         return 0;
     }
@@ -1275,38 +1278,39 @@ TL_MSABI int tl_CloseHandle(const void* const handle) noexcept {
         }
     }
     if (ThreadSlot* slot = find_thread_slot(handle); slot != nullptr) {
-        bool do_join = false;
+        bool do_cleanup = false;
         {
             std::lock_guard<std::mutex> lock(g_threads_mutex);
-            if (!slot->joined) {
+            slot->handle_closed = true;
+            if (slot->finished && !slot->joined) {
                 slot->joined = true;
-                do_join = true;
+                do_cleanup = true;
             }
         }
-        // Join fora de g_threads_mutex: segurar o mutex durante o join
-        // bloquearia outras APIs que consultam slots a partir das próprias
-        // threads convidadas.
-        if (do_join && slot->host_thread.joinable()) {
-            slot->host_thread.join();
+        if (do_cleanup) {
+            if (slot->host_thread.joinable()) {
+                slot->host_thread.join();
+            }
+            std::lock_guard<std::mutex> lock(g_threads_mutex);
+            if (slot->teb != nullptr) {
+                free_guest_teb(slot->teb);
+            }
+            if (slot->stack != nullptr && slot->stack_size > 0) {
+                munmap(slot->stack, slot->stack_size);
+            }
+            slot->used = false;
+            slot->thread_id = 0;
+            slot->teb = nullptr;
+            slot->stack = nullptr;
+            slot->stack_size = 0;
+            slot->stack_top = 0;
+            slot->thread_func = {};
+            slot->finished = false;
+            slot->joined = false;
+            slot->handle_closed = false;
+            slot->exit_code = 0;
+            runtime::invalidate_memory_map_cache();
         }
-        std::lock_guard<std::mutex> lock(g_threads_mutex);
-        if (slot->teb != nullptr) {
-            free_guest_teb(slot->teb);
-        }
-        if (slot->stack != nullptr && slot->stack_size > 0) {
-            munmap(slot->stack, slot->stack_size);
-        }
-        slot->used = false;
-        slot->thread_id = 0;
-        slot->teb = nullptr;
-        slot->stack = nullptr;
-        slot->stack_size = 0;
-        slot->stack_top = 0;
-        slot->thread_func = {};
-        slot->finished = false;
-        slot->joined = false;
-        slot->exit_code = 0;
-        runtime::invalidate_memory_map_cache();
         set_last_error(abi::kErrorSuccess);
         return 1;
     }
@@ -1392,7 +1396,8 @@ TL_MSABI void* tl_HeapReAlloc(void* heap, std::uint32_t flags, void* memory,
 }
 
 TL_MSABI void* tl_GlobalAlloc(const std::uint32_t flags, const std::size_t bytes) noexcept {
-    constexpr std::uint32_t kAllowedFlags = abi::kGmemMoveable | abi::kGmemZeroinit;
+    constexpr std::uint32_t kAllowedFlags =
+        abi::kGmemMoveable | abi::kGmemZeroinit | 0x0080U | 0x0100U | 0x0010U | 0x0020U | 0x2000U | 0x1000U;
     if ((flags & ~kAllowedFlags) != 0U) {
         set_last_error(abi::kErrorInvalidParameter);
         return nullptr;
@@ -1466,7 +1471,8 @@ TL_MSABI void* tl_GlobalFree(void* const memory) noexcept {
 }
 
 TL_MSABI void* tl_LocalAlloc(const std::uint32_t flags, const std::size_t bytes) noexcept {
-    constexpr std::uint32_t kAllowedFlags = abi::kGmemMoveable | abi::kGmemZeroinit;
+    constexpr std::uint32_t kAllowedFlags =
+        abi::kGmemMoveable | abi::kGmemZeroinit | 0x0080U | 0x0100U | 0x0010U | 0x0020U | 0x2000U | 0x1000U;
     if ((flags & ~kAllowedFlags) != 0U) {
         set_last_error(abi::kErrorInvalidParameter);
         return nullptr;
@@ -2219,19 +2225,10 @@ TL_MSABI int tl_TryEnterCriticalSection(void* critical_section) noexcept {
 }
 
 TL_MSABI void* tl_CreateThread(const void* thread_attributes, const std::uintptr_t stack_size,
-                               const std::uintptr_t start_address, void* const parameter,
-                               const std::uint32_t creation_flags,
-                               std::uint32_t* thread_id) noexcept {
+                                const std::uintptr_t start_address, void* const parameter,
+                                const std::uint32_t creation_flags,
+                                std::uint32_t* thread_id) noexcept {
     (void)thread_attributes;
-    if (g_guest_image_size == 0x1453000U) {
-        std::fprintf(stderr, "[Roblox] CreateThread start %lx flags %x bypass Worker\n", (unsigned long)start_address, creation_flags);
-        if (start_address >= 0x140000000ULL && start_address < 0x141453000ULL) {
-            void* h = tl_CreateEventA(nullptr, 1, 1, nullptr);
-            if (thread_id != nullptr) *thread_id = 9999;
-            set_last_error(abi::kErrorSuccess);
-            return h ? h : reinterpret_cast<void*>(0x52544E44ULL);
-        }
-    }
     if (start_address == 0 ||
         !mapped_guest_range(reinterpret_cast<const void*>(start_address), 1, false) ||
         (creation_flags != 0 && creation_flags != 0x00000004)) {
@@ -2270,6 +2267,7 @@ TL_MSABI void* tl_CreateThread(const void* thread_attributes, const std::uintptr
     it->fls_values = std::make_shared<FlsThreadValues>();
     it->finished = false;
     it->joined = false;
+    it->handle_closed = false;
     it->exit_code = 0;
     // A pilha e o TEB novos alteram o mapa de memória visível ao validador.
     runtime::invalidate_memory_map_cache();
@@ -2289,41 +2287,6 @@ TL_MSABI void* tl_CreateThread(const void* thread_attributes, const std::uintptr
         g_current_thread_id = slot_ptr->thread_id;
         set_guest_gs_base(teb);
         initialize_thread_tls(static_cast<runtime::GuestTeb*>(teb));
-        // TLS genérico para Worker: aloca slot 0x430 se zero (evita SIGSEGV 0x68)
-        if (g_guest_image_base != nullptr) {
-            if (auto* ct = static_cast<runtime::GuestTeb*>(teb); ct != nullptr) {
-                constexpr std::size_t kSlot430 = 0x430U;
-                if (kSlot430 + 8 <= ct->tls_module0_data.size()) {
-                    auto* slot = reinterpret_cast<std::uint64_t*>(ct->tls_module0_data.data() + kSlot430);
-                    if (*slot == 0U) {
-                        const std::uintptr_t base = reinterpret_cast<std::uintptr_t>(g_guest_image_base);
-                        const std::uintptr_t cand = base + 0xc2c800U;
-                        if (g_guest_image_size == 0x1453000U && cand + 0x1000U < base + g_guest_image_size) {
-                            *slot = cand;
-                        } else {
-                            void* b = std::calloc(1, 0x1000);
-                            if (b != nullptr) {
-                                *slot = reinterpret_cast<std::uint64_t>(b);
-                                (void)register_local_free_block(b);
-                            }
-                        }
-                    }
-                }
-                if (g_guest_image_size == 0x1453000U) {
-                    const std::uintptr_t base = reinterpret_cast<std::uintptr_t>(g_guest_image_base);
-                    const std::uintptr_t global = base + 0xc2c800U;
-                    if (global + 0x799U < base + g_guest_image_size) {
-                        auto* flag = reinterpret_cast<std::uint8_t*>(global + 0x798U);
-                        *flag = 1U;
-                    }
-                    const std::uintptr_t fp = base + 0xbf93a0U;
-                    if (fp + 8U < base + g_guest_image_size) {
-                        auto* s = reinterpret_cast<std::uint64_t*>(fp);
-                        *s = 0U;
-                    }
-                }
-            }
-        }
         set_current_fls_thread_values(slot_ptr->fls_values);
         runtime::restore_guest_unwind_view(unwind_view);
         invoke_thread_tls_callbacks(2U /* DLL_THREAD_ATTACH */);
@@ -2344,11 +2307,41 @@ TL_MSABI void* tl_CreateThread(const void* thread_attributes, const std::uintptr
         set_current_fls_thread_values({});
         runtime::clear_guest_unwind_view();
         set_guest_gs_base(nullptr);
+        bool should_cleanup = false;
         {
             std::lock_guard<std::mutex> join_lock(finished_slot->join_mutex);
+            std::lock_guard<std::mutex> lock(g_threads_mutex);
             finished_slot->finished = true;
+            if (finished_slot->handle_closed && !finished_slot->joined) {
+                finished_slot->joined = true;
+                should_cleanup = true;
+            }
         }
         finished_slot->finish_cv.notify_all();
+        if (should_cleanup) {
+            if (finished_slot->host_thread.joinable()) {
+                finished_slot->host_thread.detach();
+            }
+            std::lock_guard<std::mutex> lock(g_threads_mutex);
+            if (finished_slot->teb != nullptr) {
+                free_guest_teb(finished_slot->teb);
+            }
+            if (finished_slot->stack != nullptr && finished_slot->stack_size > 0) {
+                munmap(finished_slot->stack, finished_slot->stack_size);
+            }
+            finished_slot->used = false;
+            finished_slot->thread_id = 0;
+            finished_slot->teb = nullptr;
+            finished_slot->stack = nullptr;
+            finished_slot->stack_size = 0;
+            finished_slot->stack_top = 0;
+            finished_slot->thread_func = {};
+            finished_slot->finished = false;
+            finished_slot->joined = false;
+            finished_slot->handle_closed = false;
+            finished_slot->exit_code = 0;
+            runtime::invalidate_memory_map_cache();
+        }
     });
     set_last_error(abi::kErrorSuccess);
     return thread_slot_to_handle(*it);
@@ -4684,6 +4677,30 @@ InternalSrwLock* get_or_create_srw(void* ptr) {
     return &g_srw_locks[0];
 }
 
+struct InternalCondVar {
+    std::condition_variable_any cv;
+    bool used{false};
+};
+std::array<InternalCondVar, 128> g_cond_vars{};
+std::mutex g_cond_meta_mutex;
+
+InternalCondVar* get_or_create_cond(void* ptr) {
+    if (ptr == nullptr) return nullptr;
+    if (!mapped_guest_range(ptr, sizeof(void*), true)) return nullptr;
+    auto** slot_ptr = reinterpret_cast<InternalCondVar**>(ptr);
+    if (*slot_ptr != nullptr) return *slot_ptr;
+    std::lock_guard<std::mutex> lock(g_cond_meta_mutex);
+    if (*slot_ptr != nullptr) return *slot_ptr;
+    for (auto& entry : g_cond_vars) {
+        if (!entry.used) {
+            entry.used = true;
+            *slot_ptr = &entry;
+            return &entry;
+        }
+    }
+    return &g_cond_vars[0];
+}
+
 }  // namespace
 
 TL_MSABI void tl_InitializeSRWLock(void* srw_lock) noexcept {
@@ -4718,17 +4735,41 @@ TL_MSABI void tl_ReleaseSRWLockShared(void* srw_lock) noexcept {
 
 TL_MSABI int tl_SleepConditionVariableSRW(void* cond, void* srw_lock,
                                           const std::uint32_t milliseconds, const std::uint32_t flags) noexcept {
-    (void)cond;
-    (void)srw_lock;
     (void)flags;
-    if (milliseconds != 0 && milliseconds != abi::kInfinite) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(milliseconds));
+    auto* cv = get_or_create_cond(cond);
+    auto* lock = get_or_create_srw(srw_lock);
+    if (cv == nullptr || lock == nullptr) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
     }
-    return 1;
+    bool ok = true;
+    if (milliseconds == abi::kInfinite) {
+        cv->cv.wait(lock->mutex);
+    } else {
+        auto status = cv->cv.wait_for(lock->mutex, std::chrono::milliseconds(milliseconds));
+        if (status == std::cv_status::timeout) {
+            set_last_error(abi::kErrorTimeout);
+            ok = false;
+        }
+    }
+    if (ok) {
+        set_last_error(abi::kErrorSuccess);
+        return 1;
+    }
+    return 0;
 }
 
-TL_MSABI void tl_WakeConditionVariable(void*) noexcept {}
-TL_MSABI void tl_WakeAllConditionVariable(void*) noexcept {}
+TL_MSABI void tl_WakeConditionVariable(void* cond) noexcept {
+    if (auto* cv = get_or_create_cond(cond)) {
+        cv->cv.notify_one();
+    }
+}
+
+TL_MSABI void tl_WakeAllConditionVariable(void* cond) noexcept {
+    if (auto* cv = get_or_create_cond(cond)) {
+        cv->cv.notify_all();
+    }
+}
 
 TL_MSABI void* tl_AddVectoredExceptionHandler(const std::uint32_t first, void* handler) noexcept {
     return runtime::add_vectored_exception_handler(first, handler);
@@ -5716,17 +5757,37 @@ TL_MSABI std::uint32_t tl_WaitForSingleObjectEx(void* const handle, const std::u
 }
 
 TL_MSABI int tl_GetExitCodeThread(void* const thread, std::uint32_t* const exit_code) noexcept {
-    (void)thread;
-    if (exit_code != nullptr && mapped_guest_range(exit_code, 4, true)) {
-        *exit_code = 0;
+    if (exit_code == nullptr || !mapped_guest_range(exit_code, 4, true)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    constexpr std::uint32_t kStillActive = 259;
+    if (thread == reinterpret_cast<void*>(~static_cast<std::uintptr_t>(1))) {
+        // (HANDLE)-2: GetCurrentThread()
+        *exit_code = kStillActive;
+        set_last_error(abi::kErrorSuccess);
+        return 1;
+    }
+    ThreadSlot* slot = find_thread_slot(thread);
+    if (slot == nullptr) {
+        set_last_error(abi::kErrorInvalidHandle);
+        return 0;
+    }
+    std::lock_guard<std::mutex> lock(g_threads_mutex);
+    if (!slot->finished) {
+        *exit_code = kStillActive;
+    } else {
+        *exit_code = static_cast<std::uint32_t>(slot->exit_code);
     }
     set_last_error(abi::kErrorSuccess);
     return 1;
 }
 
 TL_MSABI int tl_TryAcquireSRWLockExclusive(void* const srw_lock) noexcept {
-    (void)srw_lock;
-    return 1;
+    if (auto* lock = get_or_create_srw(srw_lock)) {
+        return lock->mutex.try_lock() ? 1 : 0;
+    }
+    return 0;
 }
 
 TL_MSABI void tl_FreeLibraryAndExitThread(void* const module_handle, const std::uint32_t exit_code) noexcept {
@@ -6133,6 +6194,7 @@ TL_MSABI int tl_MoveFileExA(const char* const existing_file, const char* const n
         set_last_error(errno_to_win32(errno));
         return 0;
     }
+    runtime::security::rename_path(std::filesystem::path{source}, std::filesystem::path{destination});
     set_last_error(abi::kErrorSuccess);
     return 1;
 }

@@ -268,7 +268,7 @@ bool parse_url(const std::string_view input, ParsedUrl& result) noexcept {
         return false;
     }
     result.scheme = lower_ascii(std::string(input.substr(0, scheme_end)));
-    if (result.scheme != "https") {
+    if (result.scheme != "https" && result.scheme != "http") {
         return false;
     }
     std::string_view authority_and_path = input.substr(scheme_end + 3U);
@@ -287,6 +287,7 @@ bool parse_url(const std::string_view input, ParsedUrl& result) noexcept {
     const std::size_t colon = authority.find(':');
     if (colon == std::string_view::npos) {
         result.host = lower_ascii(std::string(authority));
+        result.port = (result.scheme == "https") ? 443 : 80;
     } else {
         result.host = lower_ascii(std::string(authority.substr(0, colon)));
         const std::string_view port_text = authority.substr(colon + 1U);
@@ -298,7 +299,6 @@ bool parse_url(const std::string_view input, ParsedUrl& result) noexcept {
         }
         result.port = static_cast<std::uint16_t>(port);
     }
-    if (!is_loopback_host(result.host)) return false;
     std::size_t path_offset = std::string_view::npos;
     if (path_start != std::string_view::npos) path_offset = path_start;
     if (query_start != std::string_view::npos) path_offset = std::min(path_offset, query_start);

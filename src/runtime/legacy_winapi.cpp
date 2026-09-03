@@ -34,6 +34,9 @@ namespace tradutorlinux {
 
 using runtime::errno_to_win32;
 
+extern "C" TL_MSABI int tl_MoveFileExA(const char* existing_file, const char* new_file,
+                                       std::uint32_t flags) noexcept;
+
 namespace {
 
 struct [[maybe_unused]] MapsRegion {
@@ -1025,21 +1028,7 @@ TL_MSABI int tl_LCMapStringEx(const std::uint16_t* const locale_name, const std:
 }
 
 TL_MSABI int tl_MoveFileA(const char* from, const char* to) noexcept {
-    if (from == nullptr || to == nullptr || !mapped_guest_cstring(from) || !mapped_guest_cstring(to) ||
-        from[0] == '\0' || to[0] == '\0') {
-        set_last_error(abi::kErrorInvalidParameter);
-        return 0;
-    }
-    char from_path[4096]{};
-    char to_path[4096]{};
-    if (!translate_windows_path(from, from_path, sizeof(from_path)) ||
-        !translate_windows_path(to, to_path, sizeof(to_path)) || ::rename(from_path, to_path) != 0) {
-        set_last_error(errno_to_win32(errno));
-        return 0;
-    }
-    runtime::security::rename_path(std::filesystem::path{from_path}, std::filesystem::path{to_path});
-    set_last_error(abi::kErrorSuccess);
-    return 1;
+    return tl_MoveFileExA(from, to, 0);
 }
 
 TL_MSABI void* tl_FindFirstFileW(const std::uint16_t* path, void* find_data) noexcept {
@@ -1173,24 +1162,19 @@ TL_MSABI int tl_GetFileAttributesExW(const std::uint16_t* path, int info_level, 
     return 1;
 }
 
-TL_MSABI int tl_MoveFileW(const std::uint16_t* from, const std::uint16_t* to) noexcept {
+TL_MSABI int tl_MoveFileExW(const std::uint16_t* from, const std::uint16_t* to,
+                            std::uint32_t flags) noexcept {
     std::string from_utf8;
     std::string to_utf8;
     if (!wide_path_to_string(from, from_utf8) || !wide_path_to_string(to, to_utf8)) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
-    return tl_MoveFileA(from_utf8.c_str(), to_utf8.c_str());
+    return tl_MoveFileExA(from_utf8.c_str(), to_utf8.c_str(), flags);
 }
 
-TL_MSABI int tl_MoveFileExW(const std::uint16_t* from, const std::uint16_t* to,
-                            std::uint32_t flags) noexcept {
-    constexpr std::uint32_t kMoveFileReplaceExisting = 0x1U;
-    if ((flags & ~kMoveFileReplaceExisting) != 0U) {
-        set_last_error(abi::kErrorInvalidParameter);
-        return 0;
-    }
-    return tl_MoveFileW(from, to);
+TL_MSABI int tl_MoveFileW(const std::uint16_t* from, const std::uint16_t* to) noexcept {
+    return tl_MoveFileExW(from, to, 0);
 }
 
 TL_MSABI int tl_CopyFileW(const std::uint16_t* from, const std::uint16_t* to,

@@ -42,6 +42,11 @@ void fail(ResolveResult& result, ResolvedImport& entry, const ImportStatus statu
           std::string detail) {
     entry.status = status;
     entry.detail = std::move(detail);
+    if (entry.mechanism == ImportMechanism::Delay) {
+        // Delay-load imports are resolved on-demand by runtime helper thunks;
+        // missing delay imports must not prevent process startup.
+        return;
+    }
     if (result.status == ImportStatus::Resolved) {
         result.status = status;
         const std::string symbol = entry.by_ordinal
@@ -105,6 +110,12 @@ ResolveResult inspect_imports(const pe::PeInfo& info) {
 ResolveResult resolve_imports(MappedImage& image, const pe::PeInfo& info) {
     ResolveResult result = inspect_imports(info);
     for (ResolvedImport& entry : result.imports) {
+        if (entry.mechanism == ImportMechanism::Delay) {
+            if (entry.status == ImportStatus::Resolved && entry.address != 0) {
+                patch_address(image, entry);
+            }
+            continue;
+        }
         if (entry.status != ImportStatus::Resolved) {
             continue;
         }

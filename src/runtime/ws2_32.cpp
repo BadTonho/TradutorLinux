@@ -49,6 +49,7 @@ struct SocketSlot {
     int type{0};
 };
 std::array<SocketSlot, 256> g_sockets{};
+std::mutex g_sockets_mutex;
 
 struct GuestAddrInfo {
     int flags{};
@@ -63,6 +64,7 @@ struct GuestAddrInfo {
     std::string canon_name;
 };
 std::array<GuestAddrInfo, 128> g_addrinfos{};
+std::mutex g_addrinfos_mutex;
 
 struct GuestPollFd {
     std::uintptr_t socket{};
@@ -186,6 +188,7 @@ TL_MSABI std::uintptr_t tl_socket(const int address_family, const int type,
         g_wsa_last_error = errno_to_wsa(errno);
         return kInvalidSocket;
     }
+    std::lock_guard<std::mutex> lock(g_sockets_mutex);
     auto free_it = std::find_if(g_sockets.begin(), g_sockets.end(),
                                 [](const SocketSlot& slot) { return !slot.used; });
     if (free_it == g_sockets.end()) {
@@ -201,6 +204,7 @@ TL_MSABI std::uintptr_t tl_socket(const int address_family, const int type,
 }
 
 TL_MSABI int tl_closesocket(const std::uintptr_t socket) noexcept {
+    std::lock_guard<std::mutex> lock(g_sockets_mutex);
     SocketSlot* slot = find_socket(socket);
     if (slot == nullptr) {
         g_wsa_last_error = kWsaENotSocket;
@@ -417,17 +421,42 @@ TL_MSABI int tl_getaddrinfo(const char* node, const char* service, const void* h
             return kWsaEAIFlags;
         }
     }
-    if (node != nullptr && std::strcmp(node, "localhost") != 0 &&
-        std::strcmp(node, "127.0.0.1") != 0) {
-        g_wsa_last_error = kWsaENoData;
-        return kWsaENoData;
-    }
+    std::lock_guard<std::mutex> lock(g_addrinfos_mutex);
     unsigned long port = 0;
     if (service != nullptr) {
         const auto parsed = std::from_chars(service, service + std::strlen(service), port, 10);
         if (parsed.ec != std::errc{} || port > 65535U) {
             g_wsa_last_error = kWsaEInvalidArgument;
             return kWsaEInvalidArgument;
+        }
+    }
+    struct in_addr resolved_addr{};
+    resolved_addr.s_addr = htonl(INADDR_LOOPBACK);
+    if (node != nullptr && std::strcmp(node, "localhost") != 0 &&
+        std::strcmp(node, "127.0.0.1") != 0) {
+        struct addrinfo hints_posix{};
+        hints_posix.ai_family = family == 0 ? AF_INET : family;
+        hints_posix.ai_socktype = type == 0 ? SOCK_STREAM : type;
+        hints_posix.ai_protocol = protocol;
+        struct addrinfo* res_posix = nullptr;
+        if (::getaddrinfo(node, service, &hints_posix, &res_posix) == 0 && res_posix != nullptr) {
+            bool found = false;
+            for (struct addrinfo* p = res_posix; p != nullptr; p = p->ai_next) {
+                if (p->ai_family == AF_INET && p->ai_addr != nullptr) {
+                    const auto* sin = reinterpret_cast<const sockaddr_in*>(p->ai_addr);
+                    resolved_addr = sin->sin_addr;
+                    found = true;
+                    break;
+                }
+            }
+            ::freeaddrinfo(res_posix);
+            if (!found) {
+                g_wsa_last_error = kWsaENoData;
+                return kWsaENoData;
+            }
+        } else {
+            g_wsa_last_error = kWsaENoData;
+            return kWsaENoData;
         }
     }
     auto free_it = std::find_if(g_addrinfos.begin(), g_addrinfos.end(),
@@ -443,7 +472,7 @@ TL_MSABI int tl_getaddrinfo(const char* node, const char* service, const void* h
     info.protocol = protocol == 0 ? (info.socktype == SOCK_DGRAM ? IPPROTO_UDP : IPPROTO_TCP) : protocol;
     info.address_length = sizeof(sockaddr_in);
     info.socket_address.sin_family = AF_INET;
-    info.socket_address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    info.socket_address.sin_addr = resolved_addr;
     info.socket_address.sin_port = htons(static_cast<std::uint16_t>(port));
     info.address = &info.socket_address;
     info.canon_name = node != nullptr ? node : "localhost";
@@ -458,6 +487,7 @@ TL_MSABI void tl_freeaddrinfo(void* address_info) noexcept {
     if (address_info == nullptr) {
         return;
     }
+    std::lock_guard<std::mutex> lock(g_addrinfos_mutex);
     for (GuestAddrInfo& info : g_addrinfos) {
         if (&info == address_info) {
             info = {};

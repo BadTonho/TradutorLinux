@@ -56,7 +56,7 @@ TEST(RuntimeTest, FileSubsetCreatesWritesReopensAndReads) {
 TEST(RuntimeTest, RejectsAbsoluteFilePath) {
     const void* file = tl_CreateFileA("/tmp/not-supported", abi::kGenericRead, 0, nullptr,
                                       abi::kOpenExisting, 0, nullptr);
-    EXPECT_EQ(file, nullptr);
+    EXPECT_EQ(file, reinterpret_cast<void*>(~static_cast<std::uintptr_t>(0)));
     EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
 }
 
