@@ -148,113 +148,24 @@ DialogTemplateStatus parse_dialog_template(const std::span<const std::byte> byte
     if (!read_u32(bytes, offset, first_dword)) {
         return DialogTemplateStatus::Malformed;
     }
-    std::uint32_t help_id = 0;
-    std::uint16_t item_count = 0;
-    std::uint16_t marker = 0;
-
     if ((first_dword & 0xFFFFU) == 1U && (first_dword >> 16U) == 0xFFFFU) {
-        if (!read_u32(bytes, offset, help_id) ||
-            !read_u32(bytes, offset, output.extended_style) ||
-            !read_u32(bytes, offset, output.style) ||
-            !read_u16(bytes, offset, item_count) ||
-            !read_i16(bytes, offset, output.x) ||
-            !read_i16(bytes, offset, output.y) ||
-            !read_i16(bytes, offset, output.width) ||
-            !read_i16(bytes, offset, output.height)) {
-            return DialogTemplateStatus::Malformed;
-        }
-        std::u16string menu_field;
-        std::u16string class_field;
-        if (!read_field(bytes, offset, menu_field) || !read_field(bytes, offset, class_field)) {
-            return DialogTemplateStatus::Malformed;
-        }
-        if (!read_utf16z(bytes, offset, output.title)) {
-            return DialogTemplateStatus::Malformed;
-        }
-        if ((output.style & kDsSetFont) != 0U || (output.style & 0x0200U) != 0U) {
-            std::uint16_t pointsize = 0;
-            std::uint16_t weight = 0;
-            std::u16string font_name;
-            if (!read_u16(bytes, offset, pointsize) || !read_u16(bytes, offset, weight) ||
-                offset + 2U > bytes.size()) {
-                return DialogTemplateStatus::Malformed;
-            }
-            offset += 2U;
-            if (!read_utf16z(bytes, offset, font_name)) {
-                return DialogTemplateStatus::Malformed;
-            }
-        }
-        if (!align_dword(bytes, offset)) {
-            return DialogTemplateStatus::Malformed;
-        }
-        output.controls.reserve(item_count);
-        for (std::uint16_t index = 0; index < item_count; ++index) {
-            if (!align_dword(bytes, offset)) {
-                return DialogTemplateStatus::Malformed;
-            }
-            DialogControl control{};
-            std::uint32_t item_help_id = 0;
-            std::uint32_t item_id_32 = 0;
-            if (!read_u32(bytes, offset, item_help_id) ||
-                !read_u32(bytes, offset, control.extended_style) ||
-                !read_u32(bytes, offset, control.style) ||
-                !read_i16(bytes, offset, control.x) ||
-                !read_i16(bytes, offset, control.y) ||
-                !read_i16(bytes, offset, control.width) ||
-                !read_i16(bytes, offset, control.height) ||
-                !read_u32(bytes, offset, item_id_32) ||
-                !read_u16(bytes, offset, marker)) {
-                return DialogTemplateStatus::Malformed;
-            }
-            control.id = static_cast<std::uint16_t>(item_id_32 & 0xFFFFU);
-            if (marker == 0xFFFFU) {
-                std::uint16_t class_ordinal = 0;
-                if (!read_u16(bytes, offset, class_ordinal)) {
-                    return DialogTemplateStatus::Malformed;
-                }
-                switch (class_ordinal) {
-                    case 0x0080U: control.control_class = DialogControlClass::Button; break;
-                    case 0x0081U: control.control_class = DialogControlClass::Edit; break;
-                    case 0x0082U: control.control_class = DialogControlClass::Static; break;
-                    case 0x0085U: control.control_class = DialogControlClass::ComboBox; break;
-                    default: control.control_class = DialogControlClass::Static; break;
-                }
-            } else {
-                std::u16string class_name(1, static_cast<char16_t>(marker));
-                std::u16string tail;
-                if (!read_utf16z(bytes, offset, tail)) {
-                    return DialogTemplateStatus::Malformed;
-                }
-                class_name += tail;
-                if (!classify_control_name(class_name, control.control_class)) {
-                    control.control_class = DialogControlClass::Static;
-                }
-            }
-            if (!read_field(bytes, offset, control.title)) {
-                return DialogTemplateStatus::Malformed;
-            }
-            std::uint16_t extra_count = 0;
-            if (read_u16(bytes, offset, extra_count) && extra_count > 0 && offset + extra_count <= bytes.size()) {
-                offset += extra_count;
-            }
-            output.controls.push_back(std::move(control));
-        }
-        return DialogTemplateStatus::Success;
+        return DialogTemplateStatus::DialogEx;
     }
-
     output.style = first_dword;
     if (!read_u32(bytes, offset, output.extended_style)) {
         return DialogTemplateStatus::Malformed;
     }
+    std::uint16_t item_count = 0;
     if (!read_u16(bytes, offset, item_count) || !read_i16(bytes, offset, output.x) ||
         !read_i16(bytes, offset, output.y) || !read_i16(bytes, offset, output.width) ||
         !read_i16(bytes, offset, output.height)) {
         return DialogTemplateStatus::Malformed;
     }
-    if (item_count > kMaxDialogControls) {
+    if (item_count > kMaxDialogControls || (output.style & kDsSetFont) != 0U) {
         return DialogTemplateStatus::Unsupported;
     }
 
+    std::uint16_t marker = 0;
     if (!read_u16(bytes, offset, marker)) {
         return DialogTemplateStatus::Malformed;
     }
@@ -297,7 +208,7 @@ DialogTemplateStatus parse_dialog_template(const std::span<const std::byte> byte
                 case 0x0081U: control.control_class = DialogControlClass::Edit; break;
                 case 0x0082U: control.control_class = DialogControlClass::Static; break;
                 case 0x0085U: control.control_class = DialogControlClass::ComboBox; break;
-                default: control.control_class = DialogControlClass::Static; break;
+                default: return DialogTemplateStatus::Unsupported;
             }
         } else {
             std::u16string class_name(1, static_cast<char16_t>(marker));
@@ -307,7 +218,7 @@ DialogTemplateStatus parse_dialog_template(const std::span<const std::byte> byte
             }
             class_name += tail;
             if (!classify_control_name(class_name, control.control_class)) {
-                control.control_class = DialogControlClass::Static;
+                return DialogTemplateStatus::Unsupported;
             }
         }
         if (!read_field(bytes, offset, control.title) || !read_u16(bytes, offset, marker)) {
