@@ -41,6 +41,7 @@ struct RegistryValue {
     std::vector<unsigned char> data;
 };
 
+std::mutex g_registry_mutex;
 std::array<RegistryKey, 256> g_keys{};
 std::vector<RegistryValue> g_values;
 bool g_loaded = false;
@@ -138,7 +139,7 @@ void ensure_default_registry_keys() noexcept {
     set_default_sz("HKEY_CURRENT_USER\\Environment", "TMP", "C:\\windows\\temp");
 }
 
-void load_registry() noexcept {
+void load_registry_locked() noexcept {
     if (g_loaded) {
         return;
     }
@@ -175,7 +176,7 @@ void load_registry() noexcept {
     ensure_default_registry_keys();
 }
 
-void save_registry() noexcept {
+void save_registry_locked() noexcept {
     const std::filesystem::path path{registry_path()};
     std::error_code error;
     if (path.has_parent_path()) {
@@ -240,6 +241,7 @@ std::uint32_t open_key(const void* key, const std::string& subkey, void** result
         (disposition != nullptr && !mapped_range(disposition, sizeof(*disposition), true))) {
         return kErrorInvalidParameter;
     }
+    std::lock_guard<std::mutex> lock(g_registry_mutex);
     bool valid = false;
     const std::string path = compose_key_path(key, subkey, valid);
     if (!valid) {
@@ -253,7 +255,7 @@ std::uint32_t open_key(const void* key, const std::string& subkey, void** result
     if (free_it == g_keys.end()) {
         return abi::kErrorNotEnoughMemory;
     }
-    load_registry();
+    load_registry_locked();
     const bool existed = std::any_of(g_values.begin(), g_values.end(), [&](const RegistryValue& value) {
         return value.key_path == path;
     });
@@ -268,12 +270,15 @@ std::uint32_t open_key(const void* key, const std::string& subkey, void** result
 
 std::uint32_t set_value(const void* key, const std::string& name, const std::uint32_t type,
                         const unsigned char* data, const std::uint32_t data_size) noexcept {
-    RegistryKey* open = find_key(key);
-    if (open == nullptr || (data_size != 0 &&
-                            (data == nullptr || !mapped_range(data, data_size, false)))) {
+    if (data_size != 0 && (data == nullptr || !mapped_range(data, data_size, false))) {
         return abi::kErrorInvalidParameter;
     }
-    load_registry();
+    std::lock_guard<std::mutex> lock(g_registry_mutex);
+    RegistryKey* open = find_key(key);
+    if (open == nullptr) {
+        return abi::kErrorInvalidParameter;
+    }
+    load_registry_locked();
     auto found = std::find_if(g_values.begin(), g_values.end(), [&](const RegistryValue& value) {
         return value.key_path == open->path && value.value_name == name;
     });
@@ -286,18 +291,22 @@ std::uint32_t set_value(const void* key, const std::string& name, const std::uin
     } else {
         *found = std::move(replacement);
     }
-    save_registry();
+    save_registry_locked();
     return abi::kErrorSuccess;
 }
 
 std::uint32_t query_value(const void* key, const std::string& name, std::uint32_t* type,
                           unsigned char* data, std::uint32_t* data_size) noexcept {
-    RegistryKey* open = find_key(key);
-    if (open == nullptr || data_size == nullptr || !mapped_range(data_size, sizeof(*data_size), true) ||
+    if (data_size == nullptr || !mapped_range(data_size, sizeof(*data_size), true) ||
         (type != nullptr && !mapped_range(type, sizeof(*type), true))) {
         return abi::kErrorInvalidParameter;
     }
-    load_registry();
+    std::lock_guard<std::mutex> lock(g_registry_mutex);
+    RegistryKey* open = find_key(key);
+    if (open == nullptr) {
+        return abi::kErrorInvalidParameter;
+    }
+    load_registry_locked();
     const auto found = std::find_if(g_values.begin(), g_values.end(), [&](const RegistryValue& value) {
         return value.key_path == open->path && value.value_name == name;
     });
@@ -321,11 +330,12 @@ std::uint32_t query_value(const void* key, const std::string& name, std::uint32_
 }
 
 std::uint32_t delete_value(const void* key, const std::string& name) noexcept {
+    std::lock_guard<std::mutex> lock(g_registry_mutex);
     RegistryKey* open = find_key(key);
     if (open == nullptr) {
         return abi::kErrorInvalidHandle;
     }
-    load_registry();
+    load_registry_locked();
     const auto found = std::find_if(g_values.begin(), g_values.end(), [&](const RegistryValue& value) {
         return value.key_path == open->path && value.value_name == name;
     });
@@ -333,13 +343,14 @@ std::uint32_t delete_value(const void* key, const std::string& name) noexcept {
         return kErrorFileNotFound;
     }
     g_values.erase(found);
-    save_registry();
+    save_registry_locked();
     return abi::kErrorSuccess;
 }
 
 }  // namespace
 
 TL_ADVAPI_MSABI std::uint32_t tl_RegCloseKey(const void* key) noexcept {
+    std::lock_guard<std::mutex> lock(g_registry_mutex);
     RegistryKey* open = find_key(key);
     if (open == nullptr) {
         return abi::kErrorInvalidHandle;
