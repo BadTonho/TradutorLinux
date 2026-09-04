@@ -35,7 +35,9 @@ struct SevenZipDirectoryEntry {
 }
 
 [[nodiscard]] std::string seven_zip_display_name(const std::string_view name) {
-    constexpr std::size_t kMaxNameBytes = 30;
+    // A coluna de nome tem cerca de 200 px no shell 800x600. O limite mantém
+    // o tamanho visível separado mesmo quando o diretório contém installers.
+    constexpr std::size_t kMaxNameBytes = 24;
     if (name.size() <= kMaxNameBytes) {
         return std::string{name};
     }
