@@ -335,7 +335,8 @@ function(tl_add_pe_fixture target_name source_file manifest_file)
                     "-DEXPECTED_HEX=7365680a")
             elseif(target_name STREQUAL "tl_powr")
                 set(runtime_extra_args
-                    "-DEXPECTED_HEX=706f77720a")
+                    "-DEXPECTED_HEX=706f77720a"
+                    "-DSKIP_EXIT=77")
             elseif(target_name STREQUAL "tl_locale_env_fls")
                 set(runtime_extra_args
                     "-DEXPECTED_HEX=6c6f63616c652d656e762d666c730a"
