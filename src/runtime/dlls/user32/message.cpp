@@ -1,4 +1,7 @@
 #include "user32_internal.hpp"
+
+#include <limits>
+
 namespace tradutorlinux {
 extern "C" {
 
@@ -285,6 +288,140 @@ TL_MSABI int tl_SendMessageA(const void* window, const std::uint32_t message,
         if (message == abi::kWmSetFont) {
             return 0;
         }
+        if (slot->control_kind == ControlKind::Toolbar) {
+            constexpr std::uint32_t kMaxToolbarButtons = 128U;
+            constexpr std::uint32_t kMaxToolbarStructSize = 64U;
+
+            if (message == abi::kTbButtonStructSize) {
+                if (wparam < sizeof(std::int32_t) * 2U || wparam > kMaxToolbarStructSize) {
+                    set_last_error(abi::kErrorInvalidParameter);
+                    return 0;
+                }
+                slot->toolbar_button_struct_size = static_cast<std::uint32_t>(wparam);
+                set_last_error(abi::kErrorSuccess);
+                return 1;
+            }
+            if (message == abi::kTbSetButtonSize || message == abi::kTbSetBitmapSize) {
+                const std::uint32_t packed = static_cast<std::uint32_t>(lparam);
+                const int width = static_cast<int>(packed & 0xFFFFU);
+                const int height = static_cast<int>((packed >> 16U) & 0xFFFFU);
+                if (width == 0 || height == 0 || width > kMaxGuestWindowDimension ||
+                    height > kMaxGuestWindowDimension) {
+                    set_last_error(abi::kErrorInvalidParameter);
+                    return 0;
+                }
+                slot->toolbar_button_width = width;
+                if (message == abi::kTbSetButtonSize) {
+                    slot->height = height;
+                }
+                if (slot->parent != nullptr) {
+                    render_controls(*slot->parent);
+                }
+                set_last_error(abi::kErrorSuccess);
+                return 1;
+            }
+            if (message == abi::kTbAddButtons) {
+                const std::size_t count = static_cast<std::size_t>(wparam);
+                const std::size_t struct_size = slot->toolbar_button_struct_size == 0U
+                                                    ? 32U
+                                                    : slot->toolbar_button_struct_size;
+                if (count == 0U) {
+                    set_last_error(abi::kErrorSuccess);
+                    return 1;
+                }
+                if (count > kMaxToolbarButtons || count > kMaxToolbarButtons - slot->toolbar_buttons.size() ||
+                    lparam == 0 || struct_size < sizeof(std::int32_t) * 2U ||
+                    struct_size > kMaxToolbarStructSize ||
+                    count > std::numeric_limits<std::size_t>::max() / struct_size ||
+                    !mapped_guest_range(reinterpret_cast<const void*>(lparam), count * struct_size,
+                                        false)) {
+                    set_last_error(abi::kErrorInvalidParameter);
+                    return 0;
+                }
+                slot->toolbar_button_struct_size = static_cast<std::uint32_t>(struct_size);
+                const auto* const bytes = reinterpret_cast<const std::byte*>(lparam);
+                for (std::size_t index = 0; index < count; ++index) {
+                    std::int32_t command_id = 0;
+                    std::memcpy(&command_id, bytes + index * struct_size + sizeof(std::int32_t),
+                                sizeof(command_id));
+                    slot->toolbar_buttons.push_back(ToolbarButton{command_id});
+                }
+                if (slot->parent != nullptr) {
+                    render_controls(*slot->parent);
+                }
+                set_last_error(abi::kErrorSuccess);
+                return 1;
+            }
+            if (message == abi::kTbButtonCount) {
+                set_last_error(abi::kErrorSuccess);
+                return static_cast<int>(slot->toolbar_buttons.size());
+            }
+            if (message == abi::kTbDeleteButton) {
+                const std::size_t index = static_cast<std::size_t>(wparam);
+                if (index >= slot->toolbar_buttons.size()) {
+                    set_last_error(abi::kErrorInvalidParameter);
+                    return 0;
+                }
+                slot->toolbar_buttons.erase(
+                    slot->toolbar_buttons.begin() +
+                    static_cast<std::vector<ToolbarButton>::difference_type>(index));
+                if (slot->parent != nullptr) {
+                    render_controls(*slot->parent);
+                }
+                set_last_error(abi::kErrorSuccess);
+                return 1;
+            }
+            if (message == abi::kTbAutoSize || message == abi::kTbSetImageList ||
+                message == abi::kTbEnableButton) {
+                set_last_error(abi::kErrorSuccess);
+                return 1;
+            }
+        }
+        if (slot->control_kind == ControlKind::StatusBar) {
+            if (message == abi::kSbSetTextA || message == abi::kSbSetTextW) {
+                if (lparam == 0) {
+                    slot->text.clear();
+                } else if (!mapped_guest_cstring(reinterpret_cast<const char*>(lparam))) {
+                    set_last_error(abi::kErrorInvalidParameter);
+                    return 0;
+                } else {
+                    slot->text = reinterpret_cast<const char*>(lparam);
+                }
+                if (slot->parent != nullptr) {
+                    render_controls(*slot->parent);
+                }
+                set_last_error(abi::kErrorSuccess);
+                return 1;
+            }
+            if (message == abi::kSbSetParts) {
+                const std::size_t count = static_cast<std::size_t>(wparam);
+                if (count > 128U || (count > 0U &&
+                                     (lparam == 0 || !mapped_guest_range(
+                                                           reinterpret_cast<const void*>(lparam),
+                                                           count * sizeof(std::int32_t), false)))) {
+                    set_last_error(abi::kErrorInvalidParameter);
+                    return 0;
+                }
+                set_last_error(abi::kErrorSuccess);
+                return 1;
+            }
+            if (message == abi::kSbSetMinHeight) {
+                if (wparam == 0U || wparam > kMaxGuestWindowDimension) {
+                    set_last_error(abi::kErrorInvalidParameter);
+                    return 0;
+                }
+                slot->height = static_cast<int>(wparam);
+                if (slot->parent != nullptr) {
+                    render_controls(*slot->parent);
+                }
+                set_last_error(abi::kErrorSuccess);
+                return 1;
+            }
+            if (message == abi::kSbSimple) {
+                set_last_error(abi::kErrorSuccess);
+                return 1;
+            }
+        }
         if (slot->control_kind == ControlKind::Edit) {
             if (message == 0x000C && lparam != 0 &&
                 mapped_guest_cstring(reinterpret_cast<const char*>(lparam))) {
@@ -425,6 +562,19 @@ TL_MSABI int tl_SendMessageW(const void* window, const std::uint32_t message,
         return 0;
     }
     if (slot->is_control) {
+        if (slot->control_kind == ControlKind::StatusBar && message == abi::kSbSetTextW) {
+            if (lparam == 0) {
+                return tl_SendMessageA(window, abi::kSbSetTextA, wparam, 0);
+            }
+            if (!mapped_guest_wstring(reinterpret_cast<const std::uint16_t*>(lparam))) {
+                set_last_error(abi::kErrorInvalidParameter);
+                return 0;
+            }
+            const std::string utf8 =
+                util::wide_to_utf8(reinterpret_cast<const std::uint16_t*>(lparam));
+            return tl_SendMessageA(window, abi::kSbSetTextA, wparam,
+                                   reinterpret_cast<abi::Lparam>(utf8.c_str()));
+        }
         if (message == 0x000C && lparam != 0 &&
             mapped_guest_wstring(reinterpret_cast<const std::uint16_t*>(lparam))) {
             const std::string utf8 = util::wide_to_utf8(reinterpret_cast<const std::uint16_t*>(lparam));

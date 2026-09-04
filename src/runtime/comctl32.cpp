@@ -198,7 +198,7 @@ TL_COMCTL_MSABI void* tl_CreateToolbarEx(void* const hwnd, const std::uint32_t s
     (void)cy_bitmap;
     if (hwnd == nullptr || num_buttons < 0 || num_buttons > 128 ||
         (num_buttons > 0 &&
-         (buttons == nullptr || struct_size < sizeof(std::int32_t) * 2U ||
+         (buttons == nullptr || struct_size < sizeof(std::int32_t) * 2U || struct_size > 64U ||
           static_cast<std::size_t>(num_buttons) >
               std::numeric_limits<std::size_t>::max() / struct_size))) {
         set_last_error(abi::kErrorInvalidParameter);
@@ -227,6 +227,7 @@ TL_COMCTL_MSABI void* tl_CreateToolbarEx(void* const hwnd, const std::uint32_t s
         return nullptr;
     }
     slot->toolbar_button_width = button_width;
+    slot->toolbar_button_struct_size = struct_size == 0U ? 32U : struct_size;
     slot->toolbar_buttons.reserve(static_cast<std::size_t>(num_buttons));
     for (int index = 0; index < num_buttons; ++index) {
         std::int32_t command_id = 0;

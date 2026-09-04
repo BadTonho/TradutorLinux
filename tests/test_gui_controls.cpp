@@ -131,6 +131,11 @@ TEST(CommonControls, CreateStatusAndToolbarAsLogicalChildren) {
     EXPECT_EQ(status_slot->y, 456);
     EXPECT_EQ(status_slot->width, 640);
     EXPECT_EQ(status_slot->text, "Ready");
+    constexpr std::uint16_t updated_status[] = {'O', 'K', 0};
+    EXPECT_EQ(tl_SendMessageW(status, abi::kSbSetTextW, 0,
+                              reinterpret_cast<abi::Lparam>(updated_status)),
+              1);
+    EXPECT_EQ(status_slot->text, "OK");
 
     struct TestToolbarButton {
         std::int32_t bitmap;
@@ -148,6 +153,7 @@ TEST(CommonControls, CreateStatusAndToolbarAsLogicalChildren) {
     EXPECT_EQ(toolbar_slot->toolbar_button_width, 80);
     EXPECT_EQ(toolbar_slot->height, 32);
     EXPECT_EQ(toolbar_slot->width, 640);
+    EXPECT_EQ(tl_SendMessageA(toolbar, abi::kTbButtonCount, 0, 0), 2);
     g_windows = {};
 }
 
@@ -196,6 +202,33 @@ TEST(CommonControls, ToolbarClickQueuesCommandWithButtonId) {
     EXPECT_EQ(message.wparam & 0xFFFFU, 202U);
     EXPECT_EQ(message.wparam >> 16U, 0U);
     EXPECT_EQ(message.lparam, reinterpret_cast<abi::Lparam>(&toolbar));
+    g_windows = {};
+}
+
+TEST(CommonControls, ToolbarMessagesBuildLogicalButtonModel) {
+    g_windows = {};
+    WindowSlot& parent = g_windows[0];
+    parent.used = true;
+    parent.width = 640;
+    parent.height = 480;
+    WindowSlot* const toolbar = create_logical_control(
+        parent, "ToolbarWindow32", {}, 0, 901, 0, 0, 640, 36);
+    ASSERT_NE(toolbar, nullptr);
+
+    struct TestToolbarButton {
+        std::int32_t bitmap;
+        std::int32_t command_id;
+    } buttons[]{{0, 303}, {1, 404}};
+    EXPECT_EQ(tl_SendMessageA(toolbar, abi::kTbButtonStructSize, sizeof(TestToolbarButton), 0), 1);
+    EXPECT_EQ(tl_SendMessageA(toolbar, abi::kTbAddButtons, 2,
+                              reinterpret_cast<abi::Lparam>(buttons)),
+              1);
+    EXPECT_EQ(tl_SendMessageA(toolbar, abi::kTbButtonCount, 0, 0), 2);
+    ASSERT_EQ(toolbar->toolbar_buttons.size(), 2U);
+    EXPECT_EQ(toolbar->toolbar_buttons[0].command_id, 303);
+    EXPECT_EQ(toolbar->toolbar_buttons[1].command_id, 404);
+    EXPECT_EQ(tl_SendMessageA(toolbar, abi::kTbDeleteButton, 0, 0), 1);
+    EXPECT_EQ(tl_SendMessageA(toolbar, abi::kTbButtonCount, 0, 0), 1);
     g_windows = {};
 }
 

@@ -63,6 +63,7 @@ struct WindowSlot {
     int combo_selection{-1};
     std::vector<ToolbarButton> toolbar_buttons;
     int toolbar_button_width{0};
+    std::uint32_t toolbar_button_struct_size{0};
     std::vector<ListViewRow> list_rows;
     int list_selection{-1};
     void* user_data{nullptr};
