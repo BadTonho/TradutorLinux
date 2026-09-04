@@ -135,6 +135,11 @@ lógica com os `idCommand` das entradas `TBBUTTON` validadas. A toolbar pode
 encaminhar um clique básico ao parent como `WM_COMMAND`; bitmaps, image lists,
 temas e estilos avançados ainda não fazem parte do contrato.
 
+Pelo mesmo motivo, `SendMessageA/W` trata apenas o ciclo necessário para esse
+modelo: dimensionamento, `TB_ADDBUTTONS`, contagem/exclusão e atualização de
+texto da status bar. O vetor recebido pelo convidado é validado antes de ser
+lido; nenhum ponteiro de bitmap ou image list é executado pelo backend.
+
 ## Validação
 
 As fixtures `tl_gui.exe`, `tl_win.exe`, `tl_win2.exe`, `tl_key.exe`,

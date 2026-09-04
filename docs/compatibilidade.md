@@ -182,6 +182,7 @@ diretamente. Ele é experimental, não altera o subsistema de console e só acei
 | `USER32.dll` | `PostQuitMessage` | Suportado | Sinaliza `WM_QUIT`; `GetMessageA` retorna `0` |
 | `USER32.dll` | `GetDC` / `ReleaseDC` | Suportado | `HDC == HWND` (token opaco da janela); validam o par `hwnd`/`dc`; controles lógicos projetam o desenho na superfície X11 do pai com offsets acumulados |
 | `USER32.dll` | `BeginPaint` / `EndPaint` | Suportado | Preenchem o `PAINTSTRUCT` (layout Microsoft x64, 72 bytes) com o tamanho da janela/controle e marcam/desmarcam o estado de pintura; o `HDC` usa a superfície X11 da janela principal |
+| `USER32.dll` | `SendMessageA` / `SendMessageW` (controles comuns) | Suportado no subconjunto | Toolbar: `TB_BUTTONSTRUCTSIZE`, `TB_ADDBUTTONS`, `TB_BUTTONCOUNT`, `TB_DELETEBUTTON`, `TB_SETBUTTONSIZE`, `TB_SETBITMAPSIZE`, `TB_AUTOSIZE`, `TB_SETIMAGELIST`, `TB_ENABLEBUTTON`; status bar: `SB_SETTEXTA/W`, `SB_SETPARTS`, `SB_SETMINHEIGHT`, `SB_SIMPLE` |
 | `GDI32.dll` | `GetStockObject` | Suportado | Token opaco por stock object (tabela estática, `object` em `0..23`); stock objects não são liberados |
 | `GDI32.dll` | `TextOutA` / `TextOut` | Suportado | Desenha texto ANSI com comprimento explícito via `XDrawString`; em controles lógicos soma a posição dos pais ao destino |
 
@@ -194,7 +195,7 @@ diretamente. Ele é experimental, não altera o subsistema de console e só acei
 | `USER32.dll` | `CopyImage`, `DestroyIcon` | Suportado no subconjunto | Tokens de ícone copiados; não há `LoadImageW` nem desenho de ícones |
 | `COMCTL32.dll` | `InitCommonControlsEx` | Suportado no layout de 8 bytes | Valida `cbSize`/classes; ordinais 410/413 continuam `unknown-ordinal` |
 | `COMCTL32.dll` | `CreateStatusWindowW` | Suportado no subconjunto | Parent válido; cria uma `msctls_statusbar32` lógica no rodapé, com texto UTF-16 convertido para UTF-8 e desenho na superfície X11 principal |
-| `COMCTL32.dll` | `CreateToolbarEx` | Suportado no subconjunto | Parent válido; valida até 128 entradas do vetor `TBBUTTON`, preserva `idCommand`, desenha botões lógicos e encaminha clique básico por `WM_COMMAND`; bitmaps, image lists e estilos avançados permanecem fora |
+| `COMCTL32.dll` | `CreateToolbarEx` | Suportado no subconjunto | Parent válido; valida até 128 entradas do vetor `TBBUTTON`, preserva `idCommand`, desenha botões lógicos e encaminha clique básico por `WM_COMMAND`; mensagens `TB_*` atualizam esse modelo; bitmaps, image lists e estilos avançados permanecem fora |
 
 `tl_dialog.exe` valida o ciclo mínimo sob Xvfb quando o ambiente fornece o
 socket X11. O smoke confirma Tab/Enter, `WM_COMMAND`, retorno 42, saída

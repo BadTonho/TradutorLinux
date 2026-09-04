@@ -676,6 +676,9 @@ nem declarar os benchmarks comerciais suportados.
 - [x] Modelar `CreateStatusWindowW` e `CreateToolbarEx` como controles lógicos
   filhos, validar parent/`TBBUTTON`, renderizar o estado mínimo na superfície
   compartilhada e encaminhar comandos básicos da toolbar por `WM_COMMAND`.
+- [x] Processar o ciclo mínimo de mensagens `TB_*`/`SB_*` usado para montar e
+  atualizar esses controles, com validação de buffers e regressões de
+  `idCommand`, contagem, exclusão e texto UTF-16.
 
 #### Fase 13.12 — automação, rede e confiança, em entregas separadas
 
