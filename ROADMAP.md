@@ -26,10 +26,10 @@ as referências nas fases não criem listas paralelas.
 ## Estado atual
 
 - **Fase atual:** Fase 13 — compatibilidade ampla por portfólio.
-- **Próximo ciclo:** escolher explicitamente entre aprofundar um fluxo real do
-  portfólio (`B5`) ou transformar a tradução por aplicativo (`B2`) em uma
-  trilha de produto própria. Os itens não escolhidos permanecem estacionados,
-  não são trabalho simultâneo.
+- **Próximo ciclo:** B5 foi escolhida como a trilha ativa. O representante é
+  `7zFM_x64.exe` 24.08, com SHA-256 registrado no inventário canônico; B2 fica
+  estacionada até uma decisão de produto específica sobre tradução de
+  interface.
 - **Último incremento:** a Fase 13.14 concluiu TLS genérico e a fixture
   reutilizável Worker/RSL. O caso comercial do Roblox continua como benchmark:
   imports resolvidos, mas execução interrompida em `RBXCRASH`/`ExitProcess 3`.
@@ -922,12 +922,19 @@ fica pronta somente com a evidência exigida na definição de pronto abaixo.
   corrige as entradas atuais e alinha `docs/catalog.md`, a matriz e o contrato
   de diagnóstico; nenhuma compatibilidade foi promovida por inferência.
 
-### Próximo ciclo — decisão e robustez
+### Próximo ciclo — B5 e robustez
 
-A ordem operacional agora é: decidir entre **B2** e **B5**, executar a trilha
-escolhida, depois tratar **B1** e **B10**. B2 é uma trilha de produto separada
-do runtime Win32; B5 deve escolher um único fluxo real para aprofundar, não
-apenas adicionar executáveis.
+A ordem operacional agora é: concluir **B5** no 7-Zip File Manager, depois
+tratar **B1** e **B10**. B2 é uma trilha de produto separada do runtime Win32 e
+fica estacionada; B5 escolhe um único fluxo real para aprofundar, não apenas
+adicionar executáveis.
+
+**Decisão registrada:** o 7-Zip File Manager 24.08 foi escolhido porque já
+possui amostra PE32+ x86-64 local, 298/298 imports resolvidos, classe Win32
+identificada, fixture de contratos GUI e shell visual experimental. O escopo
+do fluxo será navegação confinada ao prefixo, seleção de arquivo e uma
+operação de arquivo verificável; abertura da janela ou aumento de cobertura de
+imports não encerra B5.
 
 - [ ] **B2 — Arquivos de tradução isolados por aplicativo.** Se a tradução de
   interface for confirmada como prioridade de produto, criar uma trilha
@@ -939,9 +946,9 @@ apenas adicionar executáveis.
 - [ ] **B5 — Aprofundar um fluxo real versionado.** Escolher um único
   representante autorizado de instalador, produtividade/GUI ou ferramenta de
   rede e concluir um fluxo principal, com versão, hash, manifest, smoke
-  reproduzível, entrada na matriz e limitações publicadas. Priorizar
-  dependências compartilhadas; não adicionar APIs apenas para elevar a
-  porcentagem de um binário.
+  reproduzível, entrada na matriz e limitações publicadas. **Representante
+  escolhido: 7-Zip File Manager 24.08.** Priorizar dependências compartilhadas;
+  não adicionar APIs apenas para elevar a porcentagem de um binário.
 - [ ] **B1 — Limites de CPU e RAM por aplicativo.** Depois da reconciliação
   documental, definir a interface de configuração (CLI, catálogo e launcher),
   a unidade dos limites, a herança para processos-filhos, o tratamento de
