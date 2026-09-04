@@ -254,6 +254,7 @@ constexpr std::uint32_t kCbAddString = 0x0143;
 constexpr std::uint32_t kCbGetCurSel = 0x0147;
 constexpr std::uint32_t kCbSetCurSel = 0x014E;
 constexpr std::uint32_t kTbAddButtons = 0x0414;
+constexpr std::uint32_t kTbAddButtonsW = 0x0444;
 constexpr std::uint32_t kTbDeleteButton = 0x0416;
 constexpr std::uint32_t kTbButtonCount = 0x0418;
 constexpr std::uint32_t kTbSetBitmapSize = 0x041D;

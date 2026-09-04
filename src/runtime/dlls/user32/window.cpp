@@ -299,15 +299,19 @@ TL_MSABI abi::HWnd tl_CreateWindowExA(const std::uint32_t ex_style,
             const std::array<diagnostics::TraceField, 4> fields{
                 diagnostics::TraceField{"class", class_name},
                 diagnostics::TraceField{"status", "generic-child"},
-                diagnostics::TraceField{"x", std::to_string(slot.x)},
-                diagnostics::TraceField{"y", std::to_string(slot.y)}};
+                diagnostics::TraceField{"position", std::to_string(slot.x) + "," +
+                                             std::to_string(slot.y)},
+                diagnostics::TraceField{"size", std::to_string(slot.width) + "x" +
+                                             std::to_string(slot.height)}};
             runtime_trace("CreateWindowExA", fields, 4);
         } else if (registered_child) {
             const std::array<diagnostics::TraceField, 4> fields{
                 diagnostics::TraceField{"class", class_name},
                 diagnostics::TraceField{"status", "registered-child"},
-                diagnostics::TraceField{"x", std::to_string(slot.x)},
-                diagnostics::TraceField{"y", std::to_string(slot.y)}};
+                diagnostics::TraceField{"position", std::to_string(slot.x) + "," +
+                                             std::to_string(slot.y)},
+                diagnostics::TraceField{"size", std::to_string(slot.width) + "x" +
+                                             std::to_string(slot.height)}};
             runtime_trace("CreateWindowExA", fields, 4);
         }
         set_last_error(abi::kErrorSuccess);

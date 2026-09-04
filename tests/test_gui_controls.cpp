@@ -235,6 +235,71 @@ TEST(CommonControls, ToolbarClickQueuesCommandWithButtonId) {
     g_windows = {};
 }
 
+TEST(CommonControls, UnicodeToolbarAddButtonsBuildsLogicalModel) {
+    g_windows = {};
+    WindowSlot& parent = g_windows[0];
+    parent.used = true;
+    parent.width = 320;
+    parent.height = 120;
+
+    WindowSlot& toolbar = g_windows[1];
+    toolbar.used = true;
+    toolbar.is_control = true;
+    toolbar.control_kind = ControlKind::Toolbar;
+    toolbar.parent = &parent;
+    toolbar.width = 320;
+    toolbar.height = 1;
+
+    struct TestToolbarButton {
+        std::int32_t bitmap;
+        std::int32_t command_id;
+    } buttons[]{{0, 540}, {1, 546}};
+
+    ASSERT_EQ(tl_SendMessageA(&toolbar, abi::kTbButtonStructSize, sizeof(TestToolbarButton), 0),
+              1);
+    ASSERT_EQ(tl_SendMessageW(&toolbar, abi::kTbAddButtonsW, 2,
+                              reinterpret_cast<abi::Lparam>(buttons)),
+              1);
+    ASSERT_EQ(toolbar.toolbar_buttons.size(), 2U);
+    EXPECT_EQ(toolbar.toolbar_buttons[0].command_id, 540);
+    EXPECT_EQ(toolbar.toolbar_buttons[1].command_id, 546);
+    ASSERT_EQ(tl_SendMessageW(&toolbar, abi::kTbAutoSize, 0, 0), 1);
+    EXPECT_EQ(toolbar.width, 320);
+    EXPECT_EQ(toolbar.height, 24);
+    g_windows = {};
+}
+
+TEST(CommonControls, SevenZipVisualToolbarUsesGuestCommandOrder) {
+    g_windows = {};
+    WindowSlot& parent = g_windows[0];
+    parent.used = true;
+    parent.class_name = "7-Zip::FM";
+    parent.width = 800;
+    parent.height = 600;
+
+    WindowSlot& toolbar = g_windows[1];
+    toolbar.used = true;
+    toolbar.is_control = true;
+    toolbar.control_kind = ControlKind::Toolbar;
+    toolbar.parent = &parent;
+    toolbar.visible = true;
+    toolbar.toolbar_buttons = {{1070}, {1071}, {1072}, {546}, {547}, {548}, {551}};
+
+    EXPECT_EQ(find_control_at(parent, std::span<WindowSlot>{g_windows}, 20, 45), &toolbar);
+    EXPECT_EQ(find_control_at(parent, std::span<WindowSlot>{g_windows}, 20, 90), nullptr);
+
+    WindowSlot* focused = nullptr;
+    handle_control_mouse(parent, std::span<WindowSlot>{g_windows}, focused,
+                         gui::WindowEvent{gui::WindowEventType::Press, 20, 45});
+    handle_control_mouse(parent, std::span<WindowSlot>{g_windows}, focused,
+                         gui::WindowEvent{gui::WindowEventType::Release, 20, 45});
+
+    ASSERT_EQ(parent.queued_messages.size(), 1U);
+    EXPECT_EQ(parent.queued_messages.front().message, abi::kWmCommand);
+    EXPECT_EQ(parent.queued_messages.front().wparam & 0xFFFFU, 1070U);
+    g_windows = {};
+}
+
 TEST(CommonControls, ToolbarMessagesBuildLogicalButtonModel) {
     g_windows = {};
     WindowSlot& parent = g_windows[0];

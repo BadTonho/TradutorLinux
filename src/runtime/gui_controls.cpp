@@ -44,20 +44,84 @@ struct SevenZipDirectoryEntry {
     return std::string{name.substr(0, kMaxNameBytes - 3)} + "...";
 }
 
+struct SevenZipToolbarVisual {
+    std::int32_t command_id;
+    const char* icon;
+    const char* label;
+    int width;
+};
+
+constexpr std::array<SevenZipToolbarVisual, 7> kSevenZipToolbarVisuals{{
+    {1070, "+", "Add", 66},
+    {1071, "->", "Extract", 78},
+    {1072, "T", "Test", 66},
+    {546, "C", "Copy", 68},
+    {547, "M", "Move", 68},
+    {548, "X", "Delete", 76},
+    {551, "i", "Info", 62},
+}};
+
+[[nodiscard]] const SevenZipToolbarVisual* seven_zip_toolbar_visual(
+    const std::int32_t command_id) noexcept {
+    const auto found = std::find_if(
+        kSevenZipToolbarVisuals.begin(), kSevenZipToolbarVisuals.end(),
+        [command_id](const SevenZipToolbarVisual& visual) {
+            return visual.command_id == command_id;
+        });
+    return found == kSevenZipToolbarVisuals.end() ? nullptr : &*found;
+}
+
+[[nodiscard]] int seven_zip_toolbar_button_width(const std::int32_t command_id) noexcept {
+    const SevenZipToolbarVisual* const visual = seven_zip_toolbar_visual(command_id);
+    return visual == nullptr ? 68 : visual->width;
+}
+
 void draw_seven_zip_toolbar_button(const gui::NativeWindow native, const char* const icon,
                                    const char* const label, const int x, const int y,
-                                   const int width) noexcept {
+                                   const int width, const bool pressed) noexcept {
     constexpr std::uint32_t kButton = 0xF8FAFCU;
+    constexpr std::uint32_t kPressed = 0xD4E5F7U;
     constexpr std::uint32_t kBorder = 0xB7C2CCU;
     constexpr std::uint32_t kIcon = 0x245B8FU;
     constexpr std::uint32_t kText = 0x263442U;
-    gui::platform::fill_rectangle_color(native, x, y, width, 36, kButton);
+    gui::platform::fill_rectangle_color(native, x, y, width, 36, pressed ? kPressed : kButton);
     gui::platform::draw_rectangle_color(native, x, y, width, 36, kBorder);
     gui::platform::draw_text_color(native, icon, x + 8, y + 23, kIcon, true);
     gui::platform::draw_text_color(native, label, x + 27, y + 23, kText);
 }
 
-void render_seven_zip_file_manager(WindowSlot& parent) noexcept {
+[[nodiscard]] WindowSlot* seven_zip_toolbar_control(WindowSlot& parent,
+                                                     const std::span<WindowSlot> windows) noexcept {
+    for (auto it = windows.rbegin(); it != windows.rend(); ++it) {
+        if (it->used && it->is_control && it->parent == &parent && it->visible &&
+            it->control_kind == ControlKind::Toolbar) {
+            return &*it;
+        }
+    }
+    return nullptr;
+}
+
+[[nodiscard]] int seven_zip_toolbar_button_at(const WindowSlot& toolbar, const int x,
+                                              const int y) noexcept {
+    constexpr int kToolbarY = 32;
+    constexpr int kToolbarHeight = 36;
+    if (y < kToolbarY || y >= kToolbarY + kToolbarHeight || x < 8) {
+        return -1;
+    }
+    int button_x = 8;
+    for (std::size_t index = 0; index < toolbar.toolbar_buttons.size(); ++index) {
+        const int width = seven_zip_toolbar_button_width(
+            toolbar.toolbar_buttons[index].command_id);
+        if (x >= button_x && x < button_x + width) {
+            return static_cast<int>(index);
+        }
+        button_x += width + 4;
+    }
+    return -1;
+}
+
+void render_seven_zip_file_manager(WindowSlot& parent,
+                                   const std::span<WindowSlot> windows) noexcept {
     constexpr std::uint32_t kWindow = 0xF5F7F9U;
     constexpr std::uint32_t kMenu = 0xEEF1F4U;
     constexpr std::uint32_t kToolbar = 0xE2E7ECU;
@@ -86,20 +150,32 @@ void render_seven_zip_file_manager(WindowSlot& parent) noexcept {
         gui::platform::draw_text_color(parent.native, kMenus[index], kMenu_x[index], 19, kText);
     }
 
-    // The classic 7-Zip toolbar remains a visual shell surface. The guest's
-    // ToolbarWindow32 is modeled separately from this application-specific
-    // drawing until its complete command and bitmap contracts are supported.
+    // The visual shell uses the command order supplied by the guest toolbar.
+    // Labels/icons remain a small app-specific presentation map until the
+    // resource-backed bitmap contract is supported.
     gui::platform::fill_rectangle_color(parent.native, 0, 28, width, 44, kToolbar);
     gui::platform::fill_rectangle_color(parent.native, 0, 71, width, 1, kBorder);
-    constexpr std::array<const char*, 7> kToolbar_icons{"+", "->", "T", "C", "M", "X", "i"};
-    constexpr std::array<const char*, 7> kToolbar_labels{
-        "Add", "Extract", "Test", "Copy", "Move", "Delete", "Info"};
-    constexpr std::array<int, 7> kToolbar_widths{66, 78, 66, 68, 68, 76, 62};
+    WindowSlot* const logical_toolbar = seven_zip_toolbar_control(parent, windows);
     int toolbar_x = 8;
-    for (std::size_t index = 0; index < kToolbar_labels.size(); ++index) {
-        draw_seven_zip_toolbar_button(parent.native, kToolbar_icons[index], kToolbar_labels[index],
-                                      toolbar_x, 32, kToolbar_widths[index]);
-        toolbar_x += kToolbar_widths[index] + 4;
+    if (logical_toolbar != nullptr && !logical_toolbar->toolbar_buttons.empty()) {
+        for (std::size_t index = 0; index < logical_toolbar->toolbar_buttons.size(); ++index) {
+            const std::int32_t command_id = logical_toolbar->toolbar_buttons[index].command_id;
+            const SevenZipToolbarVisual* const visual = seven_zip_toolbar_visual(command_id);
+            const int button_width = seven_zip_toolbar_button_width(command_id);
+            const std::string fallback_label = "#" + std::to_string(command_id);
+            draw_seven_zip_toolbar_button(
+                parent.native, visual == nullptr ? "?" : visual->icon,
+                visual == nullptr ? fallback_label.c_str() : visual->label, toolbar_x, 32,
+                button_width,
+                logical_toolbar->pressed_toolbar_index == static_cast<int>(index));
+            toolbar_x += button_width + 4;
+        }
+    } else {
+        for (const SevenZipToolbarVisual& visual : kSevenZipToolbarVisuals) {
+            draw_seven_zip_toolbar_button(parent.native, visual.icon, visual.label, toolbar_x, 32,
+                                          visual.width, false);
+            toolbar_x += visual.width + 4;
+        }
     }
 
     // Location bar.
@@ -200,6 +276,12 @@ void render_seven_zip_file_manager(WindowSlot& parent) noexcept {
 
 WindowSlot* find_control_at(WindowSlot& parent, const std::span<WindowSlot> windows,
                             const int x, const int y) noexcept {
+    if (is_seven_zip_file_manager(parent)) {
+        WindowSlot* const toolbar = seven_zip_toolbar_control(parent, windows);
+        if (toolbar != nullptr && seven_zip_toolbar_button_at(*toolbar, x, y) >= 0) {
+            return toolbar;
+        }
+    }
     for (auto it = windows.rbegin(); it != windows.rend(); ++it) {
         WindowSlot& control = *it;
         if (control.used && control.is_control && control.parent == &parent && control.visible &&
@@ -379,7 +461,7 @@ void render_controls(WindowSlot& parent, const std::span<WindowSlot> windows) no
     constexpr std::uint32_t kNeutral = 0x64748BU;
 
     if (is_seven_zip_file_manager(parent)) {
-        render_seven_zip_file_manager(parent);
+        render_seven_zip_file_manager(parent, windows);
         return;
     }
 
@@ -597,6 +679,10 @@ void handle_control_mouse(WindowSlot& parent, const std::span<WindowSlot> window
         set_focus_control(control->control_kind == ControlKind::Edit ? control : nullptr,
                           focused_control);
         control->pressed = true;
+        if (control->control_kind == ControlKind::Toolbar && control->parent != nullptr &&
+            is_seven_zip_file_manager(*control->parent)) {
+            control->pressed_toolbar_index = seven_zip_toolbar_button_at(*control, event.x, event.y);
+        }
         if (control->control_kind == ControlKind::ListView) {
             const int row = (event.y - control->y - 24) / 20;
             if (row >= 0 && static_cast<std::size_t>(row) < control->list_rows.size()) {
@@ -617,19 +703,25 @@ void handle_control_mouse(WindowSlot& parent, const std::span<WindowSlot> window
                                        static_cast<int>(control->combo_items.size());
         } else if (control->control_kind == ControlKind::Toolbar &&
                    !control->toolbar_buttons.empty()) {
-            const int available_width = std::max(control->width, 16);
-            const int fitting_width = std::max(
-                (available_width - 8) / static_cast<int>(control->toolbar_buttons.size()), 1);
-            const int button_width = std::min(
-                fitting_width, control->toolbar_button_width > 0 ? control->toolbar_button_width
-                                                                  : fitting_width);
-            const int index = (event.x - control->x - 4) / button_width;
+            int index = -1;
+            if (control->parent != nullptr && is_seven_zip_file_manager(*control->parent)) {
+                index = seven_zip_toolbar_button_at(*control, event.x, event.y);
+            } else {
+                const int available_width = std::max(control->width, 16);
+                const int fitting_width = std::max(
+                    (available_width - 8) / static_cast<int>(control->toolbar_buttons.size()), 1);
+                const int button_width = std::min(
+                    fitting_width, control->toolbar_button_width > 0 ? control->toolbar_button_width
+                                                                      : fitting_width);
+                index = (event.x - control->x - 4) / button_width;
+            }
             if (index >= 0 && static_cast<std::size_t>(index) < control->toolbar_buttons.size()) {
                 queue_command_id(*control, 0,
                                  static_cast<std::uintptr_t>(
                                      control->toolbar_buttons[static_cast<std::size_t>(index)]
                                          .command_id));
             }
+            control->pressed_toolbar_index = -1;
         }
         render_controls(parent, windows);
     }

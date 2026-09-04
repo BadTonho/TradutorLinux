@@ -20,6 +20,33 @@ namespace {
            control->parent != nullptr;
 }
 
+[[nodiscard]] std::string toolbar_command_ids(const WindowSlot& toolbar) {
+    std::string result;
+    for (std::size_t index = 0; index < toolbar.toolbar_buttons.size(); ++index) {
+        if (index != 0) {
+            result += ",";
+        }
+        result += std::to_string(toolbar.toolbar_buttons[index].command_id);
+    }
+    return result;
+}
+
+[[nodiscard]] const char* toolbar_message_name(const std::uint32_t message) noexcept {
+    switch (message) {
+        case abi::kTbButtonStructSize: return "TB_BUTTONSTRUCTSIZE";
+        case abi::kTbAddButtons: return "TB_ADDBUTTONS";
+        case abi::kTbAddButtonsW: return "TB_ADDBUTTONSW";
+        case abi::kTbButtonCount: return "TB_BUTTONCOUNT";
+        case abi::kTbDeleteButton: return "TB_DELETEBUTTON";
+        case abi::kTbSetButtonSize: return "TB_SETBUTTONSIZE";
+        case abi::kTbSetBitmapSize: return "TB_SETBITMAPSIZE";
+        case abi::kTbAutoSize: return "TB_AUTOSIZE";
+        case abi::kTbSetImageList: return "TB_SETIMAGELIST";
+        case abi::kTbEnableButton: return "TB_ENABLEBUTTON";
+        default: return "unknown";
+    }
+}
+
 }  // namespace
 
 extern "C" {
@@ -338,6 +365,13 @@ TL_MSABI int tl_SendMessageA(const void* window, const std::uint32_t message,
             constexpr std::uint32_t kMaxToolbarButtons = 128U;
             constexpr std::uint32_t kMaxToolbarStructSize = 64U;
 
+            const std::array<diagnostics::TraceField, 4> message_fields{
+                diagnostics::TraceField{"symbol", toolbar_message_name(message)},
+                diagnostics::TraceField{"message", std::to_string(message)},
+                diagnostics::TraceField{"wparam", std::to_string(wparam)},
+                diagnostics::TraceField{"lparam", std::to_string(lparam)}};
+            runtime_trace("ToolbarMessage", message_fields, 4);
+
             if (message == abi::kTbButtonStructSize) {
                 if (wparam < sizeof(std::int32_t) * 2U || wparam > kMaxToolbarStructSize) {
                     set_last_error(abi::kErrorInvalidParameter);
@@ -366,7 +400,7 @@ TL_MSABI int tl_SendMessageA(const void* window, const std::uint32_t message,
                 set_last_error(abi::kErrorSuccess);
                 return 1;
             }
-            if (message == abi::kTbAddButtons) {
+            if (message == abi::kTbAddButtons || message == abi::kTbAddButtonsW) {
                 const std::size_t count = static_cast<std::size_t>(wparam);
                 const std::size_t struct_size = slot->toolbar_button_struct_size == 0U
                                                     ? 32U
@@ -392,6 +426,15 @@ TL_MSABI int tl_SendMessageA(const void* window, const std::uint32_t message,
                                 sizeof(command_id));
                     slot->toolbar_buttons.push_back(ToolbarButton{command_id});
                 }
+                const std::array<diagnostics::TraceField, 4> fields{
+                    diagnostics::TraceField{"symbol", "TB_ADDBUTTONS"},
+                    diagnostics::TraceField{"buttons", std::to_string(count)},
+                    diagnostics::TraceField{"command-ids", toolbar_command_ids(*slot)},
+                    diagnostics::TraceField{"geometry", std::to_string(slot->x) + "," +
+                                                     std::to_string(slot->y) + "," +
+                                                     std::to_string(slot->width) + "x" +
+                                                     std::to_string(slot->height)}};
+                runtime_trace("ToolbarModel", fields, 4);
                 if (slot->parent != nullptr) {
                     render_controls(*slot->parent);
                 }
@@ -417,8 +460,18 @@ TL_MSABI int tl_SendMessageA(const void* window, const std::uint32_t message,
                 set_last_error(abi::kErrorSuccess);
                 return 1;
             }
-            if (message == abi::kTbAutoSize || message == abi::kTbSetImageList ||
-                message == abi::kTbEnableButton) {
+            if (message == abi::kTbAutoSize) {
+                if (slot->parent != nullptr) {
+                    slot->x = 0;
+                    slot->y = 0;
+                    slot->width = std::max(slot->parent->width, 1);
+                    slot->height = std::max(slot->height, 24);
+                    render_controls(*slot->parent);
+                }
+                set_last_error(abi::kErrorSuccess);
+                return 1;
+            }
+            if (message == abi::kTbSetImageList || message == abi::kTbEnableButton) {
                 set_last_error(abi::kErrorSuccess);
                 return 1;
             }
