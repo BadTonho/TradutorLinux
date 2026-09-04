@@ -410,6 +410,22 @@ que recebem arquivos do host como argumentos.
 | `POWRPROF.dll` | `PowerGetActiveScheme` / `PowerSetActiveScheme` / `CallNtPowerInformation` | Suportado | `PowerGetActiveScheme` aloca GUID `Balanced` via `malloc`, `PowerSetActiveScheme` `S_OK`, `CallNtPowerInformation` `memset` `0` |
 | `IPHLPAPI.DLL` | `GetAdaptersInfo` / `GetAdaptersAddresses` / `if_nametoindex` | Suportado no subconjunto | `getifaddrs` do host, contratos de buffer `ERROR_BUFFER_OVERFLOW`/`ERROR_NO_DATA`, registros x64 com strings UTF-16 de largura fixa, interfaces IPv4 e `if_nametoindex` real; IPv6 e campos DNS continuam fora |
 
+### Stubs com contrato explícito
+
+`ExportSupport::Stub` identifica uma resolução deliberadamente limitada; não
+significa que a API esteja implementada nem que o aplicativo tenha suporte de
+fluxo principal. Os contratos abaixo são protegidos por
+`Win32StubTest.*` e pelas suítes de cobertura dos aplicativos:
+
+| Família | Contrato auditado |
+|---|---|
+| `KERNEL32.dll` / `WINSPOOL.DRV` / `WTSAPI32.dll` | Operações remotas, impressão e consulta detalhada de sessão retornam falha controlada, zeram saídas válidas e definem `ERROR_NOT_SUPPORTED`; os eventos incluem símbolo, mecanismo `stub` e detalhe. |
+| `USER32.dll` | Operações de menu ainda não implementadas retornam falha e `ERROR_NOT_SUPPORTED`; `GetMenuItemInfoW` valida o buffer antes de falhar. |
+| `SensApi.dll` | `IsDestinationReachableW` e `IsNetworkAlive` mantêm o contrato conservador usado pelos alvos atuais; flags válidas são preenchidas com `NETWORK_ALIVE_LAN`. |
+| `SETUPAPI.dll` / `CFGMGR32.dll` | O enumerador usa handle sentinela, reporta coleção vazia com `ERROR_NO_MORE_FILES` e zera buffers/contadores de saída. |
+| `D3D*.dll` / `DXGI.dll` / `DDRAW.dll` | Fábricas e compiladores não criam objetos: retornam HRESULT de falha/indisponibilidade e limpam ponteiros de saída válidos. Não há suporte DirectX, GPU ou jogos. |
+| `WINMM.dll` | `PlaySoundA/W` e `timeSetEvent` mantêm os retornos de compatibilidade históricos; callbacks multimídia não são agendados e `timeKillEvent` não mantém estado de timer. |
+
 ### Limitações conhecidas
 
 - `WIN32_FIND_DATAW` tem layout de 592 bytes; enumeração preenche atributos,

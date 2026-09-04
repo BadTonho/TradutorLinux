@@ -10,7 +10,7 @@ explícitos abaixo.
 ## Estado atual
 
 - Commits desta retomada: `ce66739`, `4f95c65`, `2fa9ebd`, `d9aeb9f`,
-  `956aadc`, `17f4305` e `45cc3f9`.
+  `956aadc`, `17f4305`, `45cc3f9`, `990b960` e `6d7c855`.
 - O alvo continua sendo PE32+ x86-64 em Linux x86-64.
 - Já foram implementados e testados no build Debug Linux os subconjuntos de `IPHLPAPI`, `WTSAPI32` e parte de `CRYPT32`, além das correções de forwarders, TLS genérico e parser de manifests MSIX.
 - A validação executada até aqui cobriu fixtures próprias, testes unitários direcionados e traces de `tl_worker_rsl` e `tl_powr`.
@@ -51,15 +51,18 @@ explícitos abaixo.
   helpers compartilhados e os mesmos 356 testes/79 suítes preservados. A
   validação também corrigiu o relatório `--report` para exibir `support=` em
   cada import resolvida.
+- [x] Auditoria de `ExportSupport::Stub`: retornos, `LastError`, buffers e
+  traces dos stubs de processo, impressão, WTS, SetupAPI, SensApi, DirectX,
+  WINMM e USER32 foram registrados e protegidos por testes direcionados;
+  DirectX, GPU, áudio e impressão continuam fora de suporte funcional.
 - [ ] Worker/RSL comercial: bloqueado nesta cópia do checkout; a busca não
   encontrou um executável comercial `Worker`/`RSL` em
   `Aplicativos_Windows_Populares/`. Só existe a fixture própria
   `tl_worker_rsl.exe`, que retorna `77` de forma controlada neste host sem
   IPv4. Nenhum estado comercial foi promovido.
-- [ ] Manutenção restante: a auditoria completa de `ExportSupport::Stub`,
-  limites configuráveis de recursos e a camada genérica de tradução continuam
-  backlog. Os limites de recursos e a camada de tradução exigem decisão de
-  escopo antes de implementação.
+- [ ] Manutenção restante: limites configuráveis de recursos e a camada
+  genérica de tradução continuam backlog. Os limites de recursos e a camada de
+  tradução exigem decisão de escopo antes de implementação.
 
 ## Ordem de execução
 
@@ -179,7 +182,7 @@ As validações acima foram concluídas, mas a manutenção foi separada por ris
 
 - [x] eliminar o helper de permissões duplicado e nomear as constantes Win32;
 - [x] dividir `tests/test_win32.cpp` em suítes por domínio, preservando nomes e cobertura;
-- [ ] auditar APIs marcadas como `ExportSupport::Stub`, adicionando testes de retorno, `LastError`, buffers de saída e trace;
+- [x] auditar APIs marcadas como `ExportSupport::Stub`, adicionando testes de retorno, `LastError`, buffers de saída e trace;
 - [ ] revisar limites de recursos do processo convidado, se a decisão de escopo for aprovada;
 - [x] corrigir contradições históricas em `docs/compatibilidade.md`, especialmente linhas que diziam “suportado” enquanto a matriz atual registra `execution-failed`;
 - [ ] atualizar medições e o catálogo de aplicativos somente com evidência reproduzível.
