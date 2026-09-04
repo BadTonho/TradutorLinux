@@ -52,6 +52,14 @@ struct SevenZipToolbarVisual {
     int width;
 };
 
+struct SevenZipListGeometry {
+    int body_y{108};
+    int status_y{0};
+    int navigation_width{0};
+    int list_x{0};
+    int list_width{0};
+};
+
 constexpr std::array<SevenZipToolbarVisual, 7> kSevenZipToolbarVisuals{{
     {1070, "+", "Add", 66},
     {1071, "->", "Extract", 78},
@@ -75,6 +83,23 @@ constexpr std::array<SevenZipToolbarVisual, 7> kSevenZipToolbarVisuals{{
 [[nodiscard]] int seven_zip_toolbar_button_width(const std::int32_t command_id) noexcept {
     const SevenZipToolbarVisual* const visual = seven_zip_toolbar_visual(command_id);
     return visual == nullptr ? 68 : visual->width;
+}
+
+[[nodiscard]] SevenZipListGeometry seven_zip_list_geometry(const WindowSlot& parent) noexcept {
+    SevenZipListGeometry geometry{};
+    const int width = std::max(parent.width, 1);
+    const int height = std::max(parent.height, 1);
+    geometry.status_y = std::max(height - 24, 0);
+    geometry.navigation_width = width >= 480 ? std::clamp(width / 4, 170, 220)
+                                             : std::max(width / 3, 1);
+    geometry.list_x = geometry.navigation_width + 8;
+    geometry.list_width = std::max(width - geometry.list_x - 8, 1);
+    return geometry;
+}
+
+[[nodiscard]] std::filesystem::path seven_zip_current_directory(
+    const WindowSlot& parent) noexcept {
+    return parent.visual_directory.empty() ? seven_zip_host_directory() : parent.visual_directory;
 }
 
 [[nodiscard]] std::string menu_display_text(const std::string_view text) {
@@ -189,6 +214,29 @@ struct SevenZipPopupGeometry {
     return index >= 0 && static_cast<std::size_t>(index) < geometry.menu->logical_items.size()
                ? index
                : -1;
+}
+
+[[nodiscard]] int seven_zip_list_row_at(const WindowSlot& parent, const int x,
+                                        const int y) noexcept {
+    const SevenZipListGeometry geometry = seven_zip_list_geometry(parent);
+    if (geometry.status_y <= geometry.body_y || x < geometry.list_x ||
+        x >= geometry.list_x + geometry.list_width) {
+        return -1;
+    }
+    constexpr int kRowTop = 31;
+    constexpr int kRowStep = 22;
+    constexpr int kRowHeight = 21;
+    if (y < geometry.body_y + kRowTop || y >= geometry.status_y) {
+        return -1;
+    }
+    const int relative_y = y - geometry.body_y - kRowTop;
+    if (relative_y % kRowStep >= kRowHeight) {
+        return -1;
+    }
+    const int index = relative_y / kRowStep;
+    const std::vector<ListViewRow> rows =
+        collect_seven_zip_directory_rows(seven_zip_current_directory(parent));
+    return index >= 0 && static_cast<std::size_t>(index) < rows.size() ? index : -1;
 }
 
 void close_seven_zip_menu(WindowSlot& parent) noexcept {
@@ -312,6 +360,25 @@ void activate_seven_zip_menu_item(WindowSlot& parent, const SevenZipPopupGeometr
     return false;
 }
 
+[[nodiscard]] bool handle_seven_zip_file_list_mouse(WindowSlot& parent,
+                                                    const std::span<WindowSlot> windows,
+                                                    const gui::WindowEvent& event) noexcept {
+    if (!is_seven_zip_file_manager(parent) ||
+        (event.type != gui::WindowEventType::Press &&
+         event.type != gui::WindowEventType::Release)) {
+        return false;
+    }
+    const int row = seven_zip_list_row_at(parent, event.x, event.y);
+    if (row < 0) {
+        return false;
+    }
+    if (event.type == gui::WindowEventType::Press) {
+        parent.list_selection = row;
+        render_controls(parent, windows);
+    }
+    return true;
+}
+
 void draw_seven_zip_toolbar_button(const gui::NativeWindow native, const char* const icon,
                                    const char* const label, const int x, const int y,
                                    const int width, const bool pressed) noexcept {
@@ -372,8 +439,9 @@ void render_seven_zip_file_manager(WindowSlot& parent,
 
     const int width = std::max(parent.width, 1);
     const int height = std::max(parent.height, 1);
-    const int status_y = std::max(height - 24, 0);
-    const int body_y = 108;
+    const SevenZipListGeometry list_geometry = seven_zip_list_geometry(parent);
+    const int status_y = list_geometry.status_y;
+    const int body_y = list_geometry.body_y;
 
     gui::platform::fill_rectangle_color(parent.native, 0, 0, width, height, kWindow);
 
@@ -442,10 +510,9 @@ void render_seven_zip_file_manager(WindowSlot& parent,
     if (status_y > body_y) {
         // Navigation tree on the left and file list on the right.
         const int body_height = status_y - body_y;
-        const int navigation_width = width >= 480 ? std::clamp(width / 4, 170, 220)
-                                                  : std::max(width / 3, 1);
-        const int list_x = navigation_width + 8;
-        const int list_width = std::max(width - list_x - 8, 1);
+        const int navigation_width = list_geometry.navigation_width;
+        const int list_x = list_geometry.list_x;
+        const int list_width = list_geometry.list_width;
         gui::platform::fill_rectangle_color(parent.native, 8, body_y, navigation_width,
                                             body_height, 0xF0F3F6U);
         gui::platform::draw_rectangle_color(parent.native, 8, body_y, navigation_width,
@@ -481,8 +548,8 @@ void render_seven_zip_file_manager(WindowSlot& parent,
             }
         }
 
-        const std::vector<ListViewRow> rows =
-            collect_seven_zip_directory_rows(seven_zip_host_directory());
+        const std::filesystem::path current_directory = seven_zip_current_directory(parent);
+        const std::vector<ListViewRow> rows = collect_seven_zip_directory_rows(current_directory);
         if (rows.empty()) {
             gui::platform::draw_text_color(parent.native, "(diretorio indisponivel)", list_x + 65,
                                            body_y + 48, kMuted);
@@ -492,7 +559,8 @@ void render_seven_zip_file_manager(WindowSlot& parent,
             if (row_y + 8 >= status_y) {
                 break;
             }
-            if (index == 0) {
+            const int selected_row = parent.list_selection >= 0 ? parent.list_selection : 0;
+            if (static_cast<int>(index) == selected_row) {
                 gui::platform::fill_rectangle_color(parent.native, list_x + 1, row_y - 17,
                                                     std::max(list_width - 2, 1), 21, kSelection);
             }
@@ -968,6 +1036,31 @@ void handle_control_key(WindowSlot& parent, const std::span<WindowSlot> windows,
         }
         return;
     }
+    if (is_seven_zip_file_manager(parent) && parent.open_menu_index < 0 &&
+        event.type == gui::WindowEventType::KeyDown && event.keysym == 0xFF0DUL &&
+        parent.list_selection >= 0) {  // XK_Return: abre uma pasta selecionada
+        try {
+            const std::filesystem::path current_directory = seven_zip_current_directory(parent);
+            const std::vector<ListViewRow> rows =
+                collect_seven_zip_directory_rows(current_directory);
+            const std::size_t selected = static_cast<std::size_t>(parent.list_selection);
+            if (selected < rows.size() && rows[selected].columns.size() > 1U &&
+                rows[selected].columns[1] == "<DIR>" && !rows[selected].columns.empty()) {
+                const std::filesystem::path next_directory = rows[selected].columns[0] == ".."
+                                                                  ? current_directory.parent_path()
+                                                                  : current_directory / rows[selected].columns[0];
+                std::error_code error;
+                if (std::filesystem::is_directory(next_directory, error) && !error) {
+                    parent.visual_directory = next_directory;
+                    parent.list_selection = 0;
+                    render_controls(parent, windows);
+                }
+            }
+        } catch (...) {
+            // A falha de conversão do caminho não pode derrubar o convidado.
+        }
+        return;
+    }
     (void)windows;
     WindowSlot* control = focused_control;
     if (control == nullptr || control->parent != &parent || control->control_kind != ControlKind::Edit ||
@@ -993,6 +1086,9 @@ void handle_control_key(WindowSlot& parent, const std::span<WindowSlot> windows,
 void handle_control_mouse(WindowSlot& parent, const std::span<WindowSlot> windows,
                           WindowSlot*& focused_control, const gui::WindowEvent& event) noexcept {
     if (handle_seven_zip_menu_mouse(parent, windows, event)) {
+        return;
+    }
+    if (handle_seven_zip_file_list_mouse(parent, windows, event)) {
         return;
     }
     WindowSlot* control = find_control_at(parent, windows, event.x, event.y);

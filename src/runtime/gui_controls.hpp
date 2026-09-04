@@ -71,6 +71,7 @@ struct WindowSlot {
     std::uint32_t toolbar_button_struct_size{0};
     std::vector<ListViewRow> list_rows;
     int list_selection{-1};
+    std::filesystem::path visual_directory;
     void* user_data{nullptr};
     std::uint32_t style{0};
     std::uint32_t extended_style{0};

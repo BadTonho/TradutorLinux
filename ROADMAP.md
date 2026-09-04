@@ -697,6 +697,10 @@ nem declarar os benchmarks comerciais suportados.
   `WNDPROC` da janela principal; `Up`/`Down`/`Enter`/`Escape` operam o menu
   pelo teclado. Mutações e submenus aninhados continuam fora do contrato. As
   regressões cobrem a seleção por mouse e por teclado de comandos folha.
+- [x] Tornar a lista do shell explorável: clicar seleciona uma entrada e
+  `Enter` abre uma pasta no diretório Linux correspondente, com retorno visual
+  para `..`; operações de arquivo e despacho de navegação ao convidado
+  continuam fora do contrato. A regressão usa um diretório temporário.
 
 #### Fase 13.12 — automação, rede e confiança, em entregas separadas
 

@@ -41,8 +41,9 @@ explícitos abaixo.
   ocorrência no trace. A lista agora mostra, em modo somente leitura, as
   entradas imediatas do diretório que contém o executável, sem recursão ou
   seguimento de links simbólicos, com limite de 128 linhas. A interface é
-  navegável apenas visualmente; comandos, menus reais, ícones e navegação do
-  painel ainda não estão ligados ao convidado.
+  navegável apenas visualmente; a lista agora seleciona entradas e abre pastas
+  do diretório Linux correspondente com Enter, mas comandos, ícones e
+  operações de arquivo ainda não estão ligados ao convidado.
   O aplicativo continua explicitamente fora de suporte como fluxo GUI concluído.
 - [x] MSIX: 8 testes `MsixParserTest.*` e o teste de afinidade passaram no
   unitário e no CTest. A validação é estrutural; não houve instalação ou
