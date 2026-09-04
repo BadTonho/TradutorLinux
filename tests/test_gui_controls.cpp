@@ -343,6 +343,44 @@ TEST(CommonControls, SevenZipMenuClickQueuesLeafCommand) {
     g_focused_control = nullptr;
 }
 
+TEST(CommonControls, SevenZipMenuKeyboardSelectsLeafCommand) {
+    g_windows = {};
+    g_menus = {};
+    g_focused_control = nullptr;
+
+    WindowSlot& parent = g_windows[0];
+    parent.used = true;
+    parent.class_name = "7-Zip::FM";
+    parent.width = 800;
+    parent.height = 600;
+
+    MenuSlot& root = g_menus[0];
+    root.used = true;
+    MenuSlot& file_menu = g_menus[1];
+    file_menu.used = true;
+    file_menu.logical_items.push_back(MenuItem{.command_id = 2001U, .text = "Open"});
+    file_menu.logical_items.push_back(MenuItem{.command_id = 2002U, .text = "Extract"});
+    root.logical_items.push_back(MenuItem{.text = "&File", .submenu = &file_menu});
+    parent.menu_handle = &root;
+
+    WindowSlot* focused = nullptr;
+    handle_control_mouse(parent, std::span<WindowSlot>{g_windows}, focused,
+                         gui::WindowEvent{gui::WindowEventType::Press, 20, 10});
+    handle_control_key(parent, std::span<WindowSlot>{g_windows}, focused,
+                       gui::WindowEvent{gui::WindowEventType::KeyDown, 0, 0, '\0', 0xFF54UL});
+    EXPECT_EQ(parent.hovered_menu_item, 0);
+    handle_control_key(parent, std::span<WindowSlot>{g_windows}, focused,
+                       gui::WindowEvent{gui::WindowEventType::KeyDown, 0, 0, '\0', 0xFF0DUL});
+
+    ASSERT_EQ(parent.queued_messages.size(), 1U);
+    EXPECT_EQ(parent.queued_messages.front().message, abi::kWmCommand);
+    EXPECT_EQ(parent.queued_messages.front().wparam & 0xFFFFU, 2001U);
+    EXPECT_EQ(parent.open_menu_index, -1);
+    g_menus = {};
+    g_windows = {};
+    g_focused_control = nullptr;
+}
+
 TEST(CommonControls, ToolbarMessagesBuildLogicalButtonModel) {
     g_windows = {};
     WindowSlot& parent = g_windows[0];

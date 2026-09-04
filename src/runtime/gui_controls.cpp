@@ -197,6 +197,43 @@ void close_seven_zip_menu(WindowSlot& parent) noexcept {
     parent.pressed_menu_item = -1;
 }
 
+[[nodiscard]] bool seven_zip_menu_item_selectable(const MenuItem& item) noexcept {
+    return (item.type & kSevenZipMenuSeparator) == 0U &&
+           (item.state & kSevenZipMenuDisabled) == 0U && item.submenu == nullptr &&
+           item.command_id != 0U;
+}
+
+void activate_seven_zip_menu_item(WindowSlot& parent, const SevenZipPopupGeometry& geometry,
+                                  const int index) noexcept {
+    if (geometry.menu == nullptr || index < 0 ||
+        static_cast<std::size_t>(index) >= geometry.menu->logical_items.size()) {
+        return;
+    }
+    const MenuItem& item = geometry.menu->logical_items[static_cast<std::size_t>(index)];
+    if (seven_zip_menu_item_selectable(item)) {
+        queue_window_message(parent, abi::kWmCommand,
+                             static_cast<abi::Wparam>(item.command_id), 0);
+    }
+}
+
+[[nodiscard]] int next_seven_zip_menu_item(const SevenZipPopupGeometry& geometry,
+                                           const int current, const int direction) noexcept {
+    if (geometry.menu == nullptr || geometry.menu->logical_items.empty() || direction == 0) {
+        return -1;
+    }
+    const int count = static_cast<int>(geometry.menu->logical_items.size());
+    int index = current < 0 ? (direction > 0 ? -1 : 0) : current;
+    for (int step = 0; step < count; ++step) {
+        index = (index + direction + count) % count;
+        const MenuItem& item = geometry.menu->logical_items[static_cast<std::size_t>(index)];
+        if ((item.type & kSevenZipMenuSeparator) == 0U &&
+            (item.state & kSevenZipMenuDisabled) == 0U) {
+            return index;
+        }
+    }
+    return -1;
+}
+
 [[nodiscard]] bool handle_seven_zip_menu_mouse(WindowSlot& parent,
                                                 const std::span<WindowSlot> windows,
                                                 const gui::WindowEvent& event) noexcept {
@@ -266,13 +303,7 @@ void close_seven_zip_menu(WindowSlot& parent) noexcept {
     if (event.type == gui::WindowEventType::Release) {
         if (item_index >= 0 && item_index == parent.pressed_menu_item &&
             geometry.menu != nullptr) {
-            const MenuItem& item = geometry.menu->logical_items[static_cast<std::size_t>(item_index)];
-            const bool disabled = (item.state & kSevenZipMenuDisabled) != 0U;
-            const bool separator = (item.type & kSevenZipMenuSeparator) != 0U;
-            if (!disabled && !separator && item.submenu == nullptr && item.command_id != 0U) {
-                queue_window_message(parent, abi::kWmCommand,
-                                     static_cast<abi::Wparam>(item.command_id), 0);
-            }
+            activate_seven_zip_menu_item(parent, geometry, item_index);
         }
         close_seven_zip_menu(parent);
         render_controls(parent, windows);
@@ -911,6 +942,32 @@ void copy_control_text(const WindowSlot& control, char* const output, const int 
 
 void handle_control_key(WindowSlot& parent, const std::span<WindowSlot> windows,
                         WindowSlot*& focused_control, const gui::WindowEvent& event) noexcept {
+    if (is_seven_zip_file_manager(parent) && parent.open_menu_index >= 0 &&
+        event.type == gui::WindowEventType::KeyDown) {
+        if (event.keysym == 0xFF1BUL) {  // XK_Escape
+            close_seven_zip_menu(parent);
+            render_controls(parent, windows);
+            return;
+        }
+        const SevenZipPopupGeometry geometry = seven_zip_popup_geometry(parent);
+        if (event.keysym == 0xFF54UL || event.keysym == 0xFF52UL) {  // XK_Down/XK_Up
+            const int direction = event.keysym == 0xFF54UL ? 1 : -1;
+            const int next = next_seven_zip_menu_item(geometry, parent.hovered_menu_item, direction);
+            if (next >= 0) {
+                parent.hovered_menu_item = next;
+                parent.pressed_menu_item = -1;
+                render_controls(parent, windows);
+            }
+            return;
+        }
+        if (event.keysym == 0xFF0DUL) {  // XK_Return
+            activate_seven_zip_menu_item(parent, geometry, parent.hovered_menu_item);
+            close_seven_zip_menu(parent);
+            render_controls(parent, windows);
+            return;
+        }
+        return;
+    }
     (void)windows;
     WindowSlot* control = focused_control;
     if (control == nullptr || control->parent != &parent || control->control_kind != ControlKind::Edit ||

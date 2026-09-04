@@ -694,8 +694,9 @@ nem declarar os benchmarks comerciais suportados.
   fixture de recurso.
 - [x] Abrir o dropdown do menu real na superfície visual do 7-Zip, destacar
   itens no mouse e encaminhar a seleção de itens folha como `WM_COMMAND` ao
-  `WNDPROC` da janela principal; mutações e submenus aninhados continuam fora
-  do contrato. A regressão cobre a seleção de um comando folha.
+  `WNDPROC` da janela principal; `Up`/`Down`/`Enter`/`Escape` operam o menu
+  pelo teclado. Mutações e submenus aninhados continuam fora do contrato. As
+  regressões cobrem a seleção por mouse e por teclado de comandos folha.
 
 #### Fase 13.12 — automação, rede e confiança, em entregas separadas
 
