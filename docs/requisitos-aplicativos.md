@@ -52,24 +52,25 @@ atuais são os do índice e devem ser usados para novas decisões do roadmap.
 O snapshot abaixo é a referência mínima para novas análises. `não registrado`
 é deliberado: significa que a amostra ou a ferramenta histórica não deixou o
 dado disponível no repositório e que ele precisa ser coletado antes de uma nova
-declaração. A ferramenta de resolução é `tradutorlinux --report`; a execução
-usa o runner documentado com trace e timeout quando indicado.
+declaração. Este snapshot de arquivos foi coletado em 2026-09-04; a ferramenta
+registrada é `tradutorlinux 0.0.0-dev`. A execução usa o runner documentado com
+trace e timeout quando indicado.
 
 | Amostra | Versão | Formato/arquitetura | SHA-256 | Coleta | Ferramenta/versão | `--report` | Execução observada |
 |---|---|---|---|---|---|---|---|
-| `7z_x64.exe` | não registrada | PE32+ x86-64 | não registrado | Fase 13.13 / data não registrada | `tradutorlinux --report` / não registrada | 133/133 | `ExitProcess 0`, banner 7-Zip |
-| `7zFM_x64.exe` | não registrada | PE32+ x86-64 | não registrado | Fase 13.13 / data não registrada | `tradutorlinux --report` / não registrada | 298/298 | shell visual experimental; fluxo funcional não concluído |
-| `7z.dll` | não registrada | DLL PE32+ x86-64 | não registrado | Fase 13.13 / data não registrada | `tradutorlinux --report` / não registrada | 86/86 | não executada como aplicação |
-| `putty_x64.exe` | não registrada | PE32+ x86-64 | não registrado | Fase 13.13 / data não registrada | `tradutorlinux --report` / não registrada | 348/348 | `ExitProcess 1`, sem argumentos |
-| `winrar-x64-723.exe` | 7.23 | PE32+ x86-64 | `f435b24d4c2c5342c4f7c0143ef358f0f425b7b8a0972dd34d9dcf94789e9c4d` | 2026-08-31 | `tradutorlinux --report` / não registrada | 251/251 | smoke `sfxcmd`/ambiente, exit `0` |
-| `Rufus_x64.exe` | não registrada | PE32+ x86-64 | não registrado | Fase 13.13 / data não registrada | `tradutorlinux --report` / não registrada | 14/14 | exit `56832`; fluxo de uso não validado |
-| `HWiNFO64.exe` | não registrada | PE32+ x86-64 | não registrado | Fase 13.13 / data não registrada | `tradutorlinux --report` / não registrada | 28/28 | exit `44544`; `OpenPrinterW` limitado |
-| `RobloxPlayerInstaller.exe` | não registrada | PE32+ x86-64 | `d156faf0c712d4ce26d95a596ad9b1dfc813021b5c422c93887b2522d8b01a59` | 2026-09-04 | `tradutorlinux --report` / não registrada | 430/430 | `RBXCRASH` Worker/RSL, exit `3` |
-| `Rockstar-Games-Launcher.exe` | não registrada | PE32+ x86-64 | `c70131cb0427d146c9489297822e99ad87d4d5e141fd999d19f00975ab1a31f2` | 2026-08-31 | `tradutorlinux --report` / não registrada | 338/338 | exit `3`; fluxo principal não validado |
-| `lghub_installer.exe` | não registrada | PE32+ x86-64 | `4b2f9903b27c8434afcd52fe65845632fcae47cc50432fb6b3b1637144e811e1` | 2026-08-25 | `tradutorlinux --report` / não registrada | 114/114 | `GuestTimeout 72` durante a inicialização |
-| `notepad++.exe` | não registrada | PE32+ x86-64 | não registrado | Fase 13.13 / data não registrada | `tradutorlinux --report` / não registrada | 584/584 | `GuestTimeout 72` sem `Xvfb` |
-| `RTSSHooks64.dll` | não registrada | DLL PE32+ x86-64 | não registrado | Fase 13.13 / data não registrada | `tradutorlinux --report` / não registrada | 256/256 | não executada como aplicação |
-| `Affinity x64.msix` | não registrada | MSIX/AppX | `d3baa74d30b7b41655651e6ea58a505a1bafeb33ec7576d52e625c147bae164c` | 2026-09-04 | `tradutorlinux --report` / não registrada | pacote reconhecido; PE interno não é alvo funcional | não instalado nem executado |
+| `7z_x64.exe` | 24.08 | PE32+ x86-64 | `707f415d7d581edd9bce99a0429ad4629d3be0316c329e8b9ebd576f7ab50b71` | 2026-09-04 | `tradutorlinux --report` / 0.0.0-dev | 133/133 | `ExitProcess 0`, banner 7-Zip |
+| `7zFM_x64.exe` | 24.08 | PE32+ x86-64 | `028cf2158df45889e9a565c9ce3c6648fb05c286b97f39c33317163e35d6f6be` | 2026-09-04 | `tradutorlinux --report` / 0.0.0-dev | 298/298 | shell visual experimental; fluxo funcional não concluído |
+| `7z.dll` | 24.08 | DLL PE32+ x86-64 | `e79ddfb6319dbf9bac6382035d23597dad979db5e71a605d81a61ee817c1e812` | 2026-09-04 | `tradutorlinux --report` / 0.0.0-dev | 86/86 | não executada como aplicação |
+| `putty_x64.exe` | Release 0.85 | PE32+ x86-64 | `d01fdb5aae8f112526040a39b0bfb9e27d813003178645e65f8d1cfdb2a26c87` | 2026-09-04 | `tradutorlinux --report` / 0.0.0-dev | 348/348 | `ExitProcess 1`, sem argumentos |
+| `winrar-x64-723.exe` | 7.23 | PE32+ x86-64 | `f435b24d4c2c5342c4f7c0143ef358f0f425b7b8a0972dd34d9dcf94789e9c4d` | 2026-08-31 | `tradutorlinux --report` / 0.0.0-dev | 251/251 | smoke `sfxcmd`/ambiente, exit `0` |
+| `Rufus_x64.exe` | 4.5.2180 | PE32+ x86-64 | `c6e6cdba209f899e5087f1a1a4babc759414b4a687b60ba4bce62b6b37e8e82b` | 2026-09-04 | `tradutorlinux --report` / 0.0.0-dev | 14/14 | exit `56832`; fluxo de uso não validado |
+| `HWiNFO64.exe` | 8.52-6060 | PE32+ x86-64 | `39292da56747eaed8b6025ba5e231e096e5792708bf4671308c2e700ed059cc0` | 2026-09-04 | `tradutorlinux --report` / 0.0.0-dev | 28/28 | exit `44544`; `OpenPrinterW` limitado |
+| `RobloxPlayerInstaller.exe` | não registrada | PE32+ x86-64 | `d156faf0c712d4ce26d95a596ad9b1dfc813021b5c422c93887b2522d8b01a59` | 2026-09-04 | `tradutorlinux --report` / 0.0.0-dev | 430/430 | `RBXCRASH` Worker/RSL, exit `3` |
+| `Rockstar-Games-Launcher.exe` | não registrada | PE32+ x86-64 | `c70131cb0427d146c9489297822e99ad87d4d5e141fd999d19f00975ab1a31f2` | 2026-09-04 | `tradutorlinux --report` / 0.0.0-dev | 338/338 | exit `3`; fluxo principal não validado |
+| `lghub_installer.exe` | 2026.4.919028 | PE32+ x86-64 | `4b2f9903b27c8434afcd52fe65845632fcae47cc50432fb6b3b1637144e811e1` | 2026-09-04 | `tradutorlinux --report` / 0.0.0-dev | 114/114 | `GuestTimeout 72` durante a inicialização |
+| `notepad++.exe` | 8.6.9 | PE32+ x86-64 | `0cac294da853593a8136f1438b6d31da915309034027934a3ec893c2b9f2456b` | 2026-09-04 | `tradutorlinux --report` / 0.0.0-dev | 584/584 | `GuestTimeout 72` sem `Xvfb` |
+| `RTSSHooks64.dll` | não registrada | DLL PE32+ x86-64 | `68c496dea7ded5b8766092f0159f4e9ba3947df0829f594eb6981d2b06352ad5` | 2026-09-04 | `tradutorlinux --report` / 0.0.0-dev | 256/256 | não executada como aplicação |
+| `Affinity x64.msix` | não registrada | MSIX/AppX | `d3baa74d30b7b41655651e6ea58a505a1bafeb33ec7576d52e625c147bae164c` | 2026-09-04 | `tradutorlinux 0.0.0-dev` | pacote reconhecido; PE interno não é alvo funcional | não instalado nem executado |
 
 Para as entradas com data ou versão ainda não registrada, a próxima coleta deve
 preencher o campo antes de alterar o estado. O hash deve ser calculado sobre o
