@@ -48,7 +48,18 @@ constexpr const char* kDialogCaption = "TL Dialog";
 constexpr int kReadyTimeoutMs = 15000;
 constexpr unsigned int kPollDelayUs = 100000;
 
+pid_t g_xvfb_pid = -1;
+
+void stop_xvfb() noexcept {
+    if (g_xvfb_pid > 0) {
+        ::kill(g_xvfb_pid, SIGTERM);
+        ::waitpid(g_xvfb_pid, nullptr, 0);
+        g_xvfb_pid = -1;
+    }
+}
+
 [[noreturn]] void fail(const std::string& message) {
+    stop_xvfb();
     std::fprintf(stderr, "runtime_gui_smoke: %s\n", message.c_str());
     std::exit(1);
 }
@@ -80,8 +91,6 @@ void require_trace_contains(const std::string& trace, const std::string& needle,
         std::exit(1);
     }
 }
-
-pid_t g_xvfb_pid = -1;
 
 // O teste roda sempre num Xvfb próprio, sem window manager: a janela é filha
 // direta da root (find_window_by_caption a encontra) e os eventos sintéticos
@@ -692,9 +701,6 @@ int main(const int argc, char** argv) {
                                     "DialogBoxParamW symbol=\"DialogBoxParamW\" result=\"42\" status=\"returned\""}});
     }
 
-    if (g_xvfb_pid > 0) {
-        ::kill(g_xvfb_pid, SIGTERM);
-        ::waitpid(g_xvfb_pid, nullptr, 0);
-    }
+    stop_xvfb();
     return 0;
 }

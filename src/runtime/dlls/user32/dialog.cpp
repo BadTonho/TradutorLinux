@@ -365,8 +365,9 @@ TL_MSABI std::intptr_t tl_DialogBoxParamW(const void* const instance,
         if (handled == 0 && message.message == abi::kWmClose) {
             static_cast<void>(tl_EndDialog(&dialog, kIdCancel));
         } else if (handled == 0 && message.message == abi::kWmCommand) {
+            const auto notification = static_cast<std::uint32_t>(message.wparam >> 16U);
             const int identifier = static_cast<int>(message.wparam & 0xFFFFU);
-            if (identifier == kIdOk || identifier == kIdCancel) {
+            if (notification == 0U && (identifier == kIdOk || identifier == kIdCancel)) {
                 static_cast<void>(tl_EndDialog(&dialog, identifier));
             }
         }

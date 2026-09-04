@@ -277,6 +277,5 @@ int main() {
     run_scenario(display, "2000", Action::Destroy);
     run_scenario(display, "40", Action::Timeout);
     ::unsetenv("TL_GUI_POPUP_TIMEOUT_MS");
-    stop_xvfb();
     return 0;
 }

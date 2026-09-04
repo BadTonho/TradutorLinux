@@ -58,7 +58,7 @@ __attribute__((dllimport, noreturn)) void ExitProcess(dword_t code);
 static const word_t* const kTemplate = (const word_t*)(unsigned long long)101U;
 static const word_t kValue[] = {'f', 'i', 'x', 't', 'u', 'r', 'e', 0};
 static const word_t kEdited[] = {'e', 'd', 'i', 't', 'e', 'd', 0};
-static const word_t kDialogOutput[] = {'d', 'i', 'a', 'l', 'o', 'g', '\n', 0};
+static const char kDialogOutput[] = {'d', 'i', 'a', 'l', 'o', 'g', '\n', 0};
 
 static int g_init_seen;
 static int g_checks_ok;
@@ -83,7 +83,8 @@ static lresult_t dialog_proc(hwnd_t dialog, dword_t message, wparam_t wparam,
         g_checks_ok = g_init_seen;
         return 1;
     }
-    if (message == 0x0111U && (wparam & 0xFFFFU) == 1U) { /* WM_COMMAND/IDOK */
+    if (message == 0x0111U && (wparam >> 16U) == 0U &&
+        (wparam & 0xFFFFU) == 1U) { /* WM_COMMAND/BN_CLICKED/IDOK */
         if (g_init_seen) {
             EndDialog(dialog, 42);
         }
