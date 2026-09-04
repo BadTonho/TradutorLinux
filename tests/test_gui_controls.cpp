@@ -1,4 +1,5 @@
 #include "../src/runtime/gui_controls.hpp"
+#include "../src/runtime/core/runtime_context.hpp"
 
 #include <gtest/gtest.h>
 
@@ -69,6 +70,47 @@ TEST(SevenZipDirectoryRows, InvalidDirectoryReturnsNoRows) {
                          "tradutorlinux-gui-rows-does-not-exist";
     const std::vector<ListViewRow> rows = collect_seven_zip_directory_rows(missing);
     EXPECT_TRUE(rows.empty());
+}
+
+TEST(WindowDrawingTarget, ProjectsNestedLogicalChildIntoTopLevelSurface) {
+    g_windows = {};
+    WindowSlot& parent = g_windows[0];
+    parent.used = true;
+    parent.native = reinterpret_cast<gui::NativeWindow>(0x1234U);
+
+    WindowSlot& child = g_windows[1];
+    child.used = true;
+    child.is_control = true;
+    child.parent = &parent;
+    child.x = 12;
+    child.y = 34;
+
+    WindowSlot& nested = g_windows[2];
+    nested.used = true;
+    nested.is_control = true;
+    nested.parent = &child;
+    nested.x = 5;
+    nested.y = 7;
+
+    const WindowDrawingTarget target = window_drawing_target(&nested);
+
+    EXPECT_EQ(target.native, parent.native);
+    EXPECT_EQ(target.offset_x, 17);
+    EXPECT_EQ(target.offset_y, 41);
+    g_windows = {};
+}
+
+TEST(WindowDrawingTarget, RejectsUnknownOrDetachedWindow) {
+    g_windows = {};
+    WindowSlot& detached = g_windows[0];
+    detached.used = true;
+    detached.is_control = true;
+    detached.x = 1;
+    detached.y = 2;
+
+    EXPECT_EQ(window_drawing_target(&detached).native, nullptr);
+    EXPECT_EQ(window_drawing_target(reinterpret_cast<void*>(0x4321U)).native, nullptr);
+    g_windows = {};
 }
 
 }  // namespace

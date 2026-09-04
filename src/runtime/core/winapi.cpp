@@ -575,6 +575,28 @@ WindowSlot* find_window_slot(const void* const handle) noexcept {
     return nullptr;
 }
 
+WindowDrawingTarget window_drawing_target(const void* const handle) noexcept {
+    WindowSlot* current = find_window_slot(handle);
+    if (current == nullptr) {
+        return {};
+    }
+
+    int offset_x = 0;
+    int offset_y = 0;
+    for (std::size_t depth = 0; current->is_control && depth < g_windows.size(); ++depth) {
+        offset_x += current->x;
+        offset_y += current->y;
+        current = current->parent;
+        if (current == nullptr || !current->used) {
+            return {};
+        }
+    }
+    if (current->is_control || current->native == nullptr) {
+        return {};
+    }
+    return {current->native, offset_x, offset_y};
+}
+
 FindSlot* find_slot_for_handle(const void* handle) noexcept {
     const auto idx = reinterpret_cast<std::uintptr_t>(handle) - kFindHandleBase;
     if (idx >= g_find_slots.size()) {

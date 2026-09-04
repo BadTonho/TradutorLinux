@@ -42,15 +42,16 @@ TL_MSABI int tl_TextOut(const void* const dc, const int x, const int y,
         trace_guest_failure("TextOut", "text", "ponteiro ou comprimento inválido");
         return 0;
     }
-    WindowSlot* const slot = find_window_slot(dc);
-    if (slot == nullptr || slot->native == nullptr) {
+    const WindowDrawingTarget target = window_drawing_target(dc);
+    if (target.native == nullptr) {
         set_last_error(abi::kErrorInvalidHandle);
         trace_guest_failure("TextOut", "dc", "HDC inválido");
         return 0;
     }
     if (length > 0) {
-        gui::platform::draw_text_len(slot->native, text, length, x, y);
-        gui::platform::flush_window(slot->native);
+        gui::platform::draw_text_len(target.native, text, length, x + target.offset_x,
+                                     y + target.offset_y);
+        gui::platform::flush_window(target.native);
     }
     set_last_error(abi::kErrorSuccess);
     const std::array<diagnostics::TraceField, 4> fields{
@@ -70,8 +71,8 @@ TL_MSABI int tl_FillRect(const void* const dc,
         trace_guest_failure("FillRect", "rect", "ponteiro RECT inválido");
         return 0;
     }
-    WindowSlot* const slot = find_window_slot(dc);
-    if (slot == nullptr || slot->native == nullptr) {
+    const WindowDrawingTarget target = window_drawing_target(dc);
+    if (target.native == nullptr) {
         set_last_error(abi::kErrorInvalidHandle);
         trace_guest_failure("FillRect", "dc", "HDC inválido");
         return 0;
@@ -86,8 +87,9 @@ TL_MSABI int tl_FillRect(const void* const dc,
     const int width = rc->right - rc->left;
     const int height = rc->bottom - rc->top;
     if (width > 0 && height > 0 && brush_index != 5) {
-        gui::platform::fill_rectangle(slot->native, rc->left, rc->top, width, height, brush_index);
-        gui::platform::flush_window(slot->native);
+        gui::platform::fill_rectangle(target.native, rc->left + target.offset_x,
+                                      rc->top + target.offset_y, width, height, brush_index);
+        gui::platform::flush_window(target.native);
     }
     set_last_error(abi::kErrorSuccess);
     const std::array<diagnostics::TraceField, 4> fields{
@@ -1282,14 +1284,15 @@ TL_MSABI void* tl_CreateDCA(const char* const driver, const char* const device, 
 }
 
 TL_MSABI int tl_Rectangle(const void* dc, int left, int top, int right, int bottom) noexcept {
-    WindowSlot* slot = find_window_slot(dc);
-    if (slot == nullptr || slot->native == nullptr) {
+    const WindowDrawingTarget target = window_drawing_target(dc);
+    if (target.native == nullptr) {
         set_last_error(abi::kErrorInvalidHandle);
         return 0;
     }
     if (right > left && bottom > top) {
-        gui::platform::draw_rectangle(slot->native, left, top, right - left, bottom - top);
-        gui::platform::flush_window(slot->native);
+        gui::platform::draw_rectangle(target.native, left + target.offset_x,
+                                      top + target.offset_y, right - left, bottom - top);
+        gui::platform::flush_window(target.native);
     }
     const std::array<diagnostics::TraceField, 4> fields{
         diagnostics::TraceField{"symbol", "Rectangle"},

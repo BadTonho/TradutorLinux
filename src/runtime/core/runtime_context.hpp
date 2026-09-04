@@ -332,6 +332,14 @@ CriticalSectionEntry* alloc_cs_entry(void* cs) noexcept;
 
 ClassSlot* find_class_slot(const char* name) noexcept;
 WindowSlot* find_window_slot(const void* handle) noexcept;
+
+struct WindowDrawingTarget {
+    gui::NativeWindow native{nullptr};
+    int offset_x{0};
+    int offset_y{0};
+};
+
+[[nodiscard]] WindowDrawingTarget window_drawing_target(const void* handle) noexcept;
 FindSlot* find_slot_for_handle(const void* handle) noexcept;
 
 int stock_object_index(const void* token) noexcept;

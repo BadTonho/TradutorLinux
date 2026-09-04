@@ -12,7 +12,7 @@ TL_MSABI void* tl_BeginPaint(const void* const window, void* const paint_struct)
         return nullptr;
     }
     WindowSlot* const slot = find_window_slot(window);
-    if (slot == nullptr || slot->native == nullptr) {
+    if (slot == nullptr || window_drawing_target(window).native == nullptr) {
         set_last_error(abi::kErrorInvalidHandle);
         return nullptr;
     }
@@ -197,7 +197,7 @@ TL_MSABI void* tl_GetDC(const void* window) noexcept {
         return &g_screen_dc_token;
     }
     WindowSlot* slot = find_window_slot(window);
-    if (slot == nullptr) {
+    if (slot == nullptr || window_drawing_target(window).native == nullptr) {
         set_last_error(abi::kErrorInvalidHandle);
         return nullptr;
     }
