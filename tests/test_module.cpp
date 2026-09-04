@@ -216,7 +216,7 @@ TEST_F(ModuleTest, RegistersBuiltinKernel32Exports) {
     EXPECT_EQ(find_export(ExportQuery{"KERNEL32.dll", "WriteProcessMemory"}).support,
               ExportSupport::Stub);
     EXPECT_EQ(find_export(ExportQuery{"USER32.dll", "GetMenuItemInfoW"}).support,
-              ExportSupport::Stub);
+              ExportSupport::Limited);
     EXPECT_EQ(find_export(ExportQuery{"USER32.dll", "TrackPopupMenuEx"}).support,
               ExportSupport::Stub);
     EXPECT_EQ(find_export(ExportQuery{"USER32.dll", "GetMenu"}).support,

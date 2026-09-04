@@ -1,6 +1,7 @@
 #pragma once
 
 #include "tradutorlinux/runtime/winapi.hpp"
+#include "tradutorlinux/win32/kernel32.hpp"
 #include "tradutorlinux/loader/module.hpp"
 #include "tradutorlinux/loader/builtin_modules.hpp"
 #include "../../core/runtime_context.hpp"

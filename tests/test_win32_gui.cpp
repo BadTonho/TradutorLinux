@@ -24,6 +24,107 @@ TEST(Win32GuiTest, PopupMenuHandleHasLifecycle) {
     EXPECT_EQ(tl_DestroyMenu(menu), 1);
 }
 
+TEST(Win32GuiTest, LoadsExtendedMenuResourceAndExposesHierarchy) {
+    std::vector<std::byte> image(512, std::byte{0});
+    const auto write_u16 = [&image](const std::size_t offset, const std::uint16_t value) {
+        image[offset] = static_cast<std::byte>(value & 0xFFU);
+        image[offset + 1U] = static_cast<std::byte>((value >> 8U) & 0xFFU);
+    };
+    const auto write_u32 = [&write_u16](const std::size_t offset, const std::uint32_t value) {
+        write_u16(offset, static_cast<std::uint16_t>(value & 0xFFFFU));
+        write_u16(offset + 2U, static_cast<std::uint16_t>(value >> 16U));
+    };
+
+    write_u16(14, 1);
+    write_u32(16, 4);
+    write_u32(20, 0x80000020U);
+    write_u16(32 + 14, 1);
+    write_u32(48, 71);
+    write_u32(52, 0x80000040U);
+    write_u16(64 + 14, 1);
+    write_u32(80, 0x00000409U);
+    write_u32(84, 0x000000A0U);
+    write_u32(160, 256);
+
+    write_u16(256, 1);
+    write_u16(258, 4);
+    const auto append_item = [&write_u16, &write_u32](std::size_t offset,
+                                                       const std::uint32_t type,
+                                                       const std::uint32_t state,
+                                                       const std::uint32_t command,
+                                                       const std::uint16_t flags,
+                                                       const std::u16string_view text) {
+        write_u32(offset, type);
+        write_u32(offset + 4U, state);
+        write_u32(offset + 8U, command);
+        write_u16(offset + 12U, flags);
+        offset += 14U;
+        for (const char16_t unit : text) {
+            write_u16(offset, static_cast<std::uint16_t>(unit));
+            offset += 2U;
+        }
+        write_u16(offset, 0);
+        offset += 2U;
+        return (offset + 3U) & ~static_cast<std::size_t>(3U);
+    };
+    std::size_t menu_end = append_item(264, 0, 0, 500, 1, u"&File");
+    write_u32(menu_end, 0);
+    menu_end += 4U;
+    menu_end = append_item(menu_end, 0, 0, 1, 0x80, u"&Open");
+    menu_end = append_item(menu_end, 0, 0, 501, 0x80, u"&Edit");
+    write_u32(164, static_cast<std::uint32_t>(menu_end - 256U));
+
+    g_menus = {};
+    set_guest_image_view(image.data(), image.size(), 0,
+                         static_cast<std::uint32_t>(image.size()));
+    const auto* const resource_name = reinterpret_cast<const std::uint16_t*>(71U);
+    void* const menu = tl_LoadMenuW(nullptr, resource_name);
+    EXPECT_NE(menu, nullptr);
+    if (menu == nullptr) {
+        set_guest_image_view(nullptr, 0, 0, 0);
+        g_menus = {};
+        return;
+    }
+    EXPECT_EQ(tl_GetMenuItemCount(menu), 2);
+    void* const submenu = tl_GetSubMenu(menu, 0);
+    EXPECT_NE(submenu, nullptr);
+    if (submenu == nullptr) {
+        EXPECT_EQ(tl_DestroyMenu(menu), 1);
+        set_guest_image_view(nullptr, 0, 0, 0);
+        g_menus = {};
+        return;
+    }
+    EXPECT_EQ(tl_GetMenuItemCount(submenu), 1);
+
+    struct GuestMenuItemInfoW {
+        std::uint32_t cb_size;
+        std::uint32_t f_mask;
+        std::uint32_t f_type;
+        std::uint32_t f_state;
+        std::uint32_t item_id;
+        void* sub_menu;
+        void* checked_bitmap;
+        void* unchecked_bitmap;
+        std::uintptr_t item_data;
+        std::uint16_t* type_data;
+        std::uint32_t char_count;
+        void* item_bitmap;
+    } info{};
+    static_assert(sizeof(GuestMenuItemInfoW) == 80);
+    std::uint16_t text[16]{};
+    info.cb_size = sizeof(info);
+    info.f_mask = 0x00000004U | 0x00000008U | 0x00000040U;
+    info.type_data = text;
+    info.char_count = static_cast<std::uint32_t>(std::size(text));
+    EXPECT_EQ(tl_GetMenuItemInfoW(menu, 0, 1, &info), 1);
+    EXPECT_EQ(info.item_id, 500U);
+    EXPECT_EQ(info.sub_menu, submenu);
+    EXPECT_EQ(std::u16string(reinterpret_cast<const char16_t*>(text)), u"&File");
+    EXPECT_EQ(tl_DestroyMenu(menu), 1);
+    set_guest_image_view(nullptr, 0, 0, 0);
+    g_menus = {};
+}
+
 TEST(Win32GuiTest, InvalidateRectQueuesPaintForLogicalWindow) {
     g_windows = {};
     WindowSlot& parent = g_windows[0];

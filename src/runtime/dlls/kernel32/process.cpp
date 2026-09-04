@@ -1160,6 +1160,13 @@ TL_MSABI void* tl_FindResourceW(const void* module, const std::uint16_t* name,
                                 const std::uint16_t* type) noexcept {
     const auto slot = resolve_resource(module, name, type);
     if (!slot.has_value()) {
+        const std::array<diagnostics::TraceField, 4> fields{
+            diagnostics::TraceField{"symbol", "FindResourceW"},
+            diagnostics::TraceField{"status", "not-found"},
+            diagnostics::TraceField{"resource-rva", std::to_string(g_guest_resource_rva)},
+            diagnostics::TraceField{"resource-size", std::to_string(g_guest_resource_size)},
+        };
+        runtime_trace("FindResourceW", fields, 4);
         set_last_error(abi::kErrorResourceNotFound);
         return nullptr;
     }

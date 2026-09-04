@@ -1,5 +1,6 @@
 #include "gui_controls.hpp"
 
+#include "runtime_context.hpp"
 #include "tradutorlinux/runtime/guest_context.hpp"
 #include "tradutorlinux/util/basics.hpp"
 
@@ -76,6 +77,29 @@ constexpr std::array<SevenZipToolbarVisual, 7> kSevenZipToolbarVisuals{{
     return visual == nullptr ? 68 : visual->width;
 }
 
+[[nodiscard]] std::string menu_display_text(const std::string_view text) {
+    std::string result;
+    result.reserve(text.size());
+    bool accelerator = false;
+    for (std::size_t index = 0; index < text.size(); ++index) {
+        const char character = text[index];
+        if (character == '\t') {
+            break;
+        }
+        if (character == '&' && !accelerator) {
+            if (index + 1U < text.size() && text[index + 1U] == '&') {
+                result.push_back('&');
+                ++index;
+            }
+            accelerator = true;
+            continue;
+        }
+        accelerator = false;
+        result.push_back(character);
+    }
+    return result;
+}
+
 void draw_seven_zip_toolbar_button(const gui::NativeWindow native, const char* const icon,
                                    const char* const label, const int x, const int y,
                                    const int width, const bool pressed) noexcept {
@@ -144,10 +168,26 @@ void render_seven_zip_file_manager(WindowSlot& parent,
     // File Manager's menu bar.
     gui::platform::fill_rectangle_color(parent.native, 0, 0, width, 28, kMenu);
     gui::platform::fill_rectangle_color(parent.native, 0, 27, width, 1, kBorder);
-    constexpr std::array<const char*, 5> kMenus{"File", "Edit", "View", "Tools", "Help"};
-    constexpr std::array<int, 5> kMenu_x{14, 63, 111, 165, 220};
-    for (std::size_t index = 0; index < kMenus.size(); ++index) {
-        gui::platform::draw_text_color(parent.native, kMenus[index], kMenu_x[index], 19, kText);
+    const MenuSlot* const menu = find_menu_slot(parent.menu_handle);
+    int menu_x = 14;
+    if (menu != nullptr && !menu->logical_items.empty()) {
+        for (const MenuItem& item : menu->logical_items) {
+            const std::string label = menu_display_text(item.text);
+            if (label.empty()) {
+                continue;
+            }
+            gui::platform::draw_text_color(parent.native, label.c_str(), menu_x, 19, kText);
+            menu_x += std::max(46, static_cast<int>(label.size()) * 8 + 20);
+            if (menu_x >= width - 20) {
+                break;
+            }
+        }
+    } else {
+        constexpr std::array<const char*, 5> kMenus{"File", "Edit", "View", "Tools", "Help"};
+        constexpr std::array<int, 5> kMenu_x{14, 63, 111, 165, 220};
+        for (std::size_t index = 0; index < kMenus.size(); ++index) {
+            gui::platform::draw_text_color(parent.native, kMenus[index], kMenu_x[index], 19, kText);
+        }
     }
 
     // The visual shell uses the command order supplied by the guest toolbar.

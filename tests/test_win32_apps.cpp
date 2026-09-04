@@ -190,7 +190,8 @@ TEST(SevenZipGuiCoverageTest, AllApisAndModules) {
     EXPECT_EQ(tl_DrawMenuBar(nullptr), 1);
     EXPECT_EQ(tl_TrackPopupMenuEx(menu, 0, 0, 0, nullptr, nullptr), 0);
     EXPECT_EQ(tl_GetLastError(), abi::kErrorNotSupported);
-    EXPECT_NE(tl_LoadMenuW(nullptr, sample_str), nullptr);
+    EXPECT_EQ(tl_LoadMenuW(nullptr, sample_str), nullptr);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorResourceNotFound);
 
     EXPECT_EQ(tl_CheckDlgButton(nullptr, 100, 1), 1);
     EXPECT_EQ(tl_IsDlgButtonChecked(nullptr, 100), 0U);

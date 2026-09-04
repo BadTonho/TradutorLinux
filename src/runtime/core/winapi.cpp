@@ -98,7 +98,7 @@ bool g_modal_parent_was_enabled = true;
 bool g_quit_requested = false;
 std::uint32_t g_quit_code = 0;
 
-std::array<MenuSlot, 16> g_menus{};
+std::array<MenuSlot, 256> g_menus{};
 std::array<FindSlot, 16> g_find_slots{};
 std::array<SnapshotSlot, 16> g_snapshots{};
 std::mutex g_snapshot_mutex;

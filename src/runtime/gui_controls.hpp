@@ -60,6 +60,7 @@ struct WindowSlot {
     bool focused{false};
     bool pressed{false};
     int pressed_toolbar_index{-1};
+    const void* menu_handle{nullptr};
     std::vector<std::string> combo_items;
     int combo_selection{-1};
     std::vector<ToolbarButton> toolbar_buttons;

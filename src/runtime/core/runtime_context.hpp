@@ -171,6 +171,8 @@ struct ClassSlot {
     std::string name;
     std::uintptr_t wndproc{0};
     std::uint16_t atom{0};
+    std::uintptr_t menu_name_raw{0};
+    std::u16string menu_name_text;
 };
 
 using runtime_gui::ControlKind;
@@ -191,11 +193,34 @@ extern bool g_modal_parent_was_enabled;
 extern bool g_quit_requested;
 extern std::uint32_t g_quit_code;
 
+struct MenuSlot;
+
+struct MenuItem {
+    std::uint32_t type{0};
+    std::uint32_t state{0};
+    std::uint32_t command_id{0};
+    std::uint16_t flags{0};
+    std::string text;
+    MenuSlot* submenu{nullptr};
+};
+
 struct MenuSlot {
     bool used{false};
     std::vector<gui::PopupMenuItem> items;
+    std::vector<MenuItem> logical_items;
 };
-extern std::array<MenuSlot, 16> g_menus;
+extern std::array<MenuSlot, 256> g_menus;
+
+[[nodiscard]] inline const MenuSlot* find_menu_slot(const void* const menu) noexcept {
+    if (menu == nullptr) {
+        return nullptr;
+    }
+    const auto it = std::find_if(g_menus.begin(), g_menus.end(),
+                                 [menu](const MenuSlot& entry) {
+                                     return entry.used && &entry == menu;
+                                 });
+    return it == g_menus.end() ? nullptr : &*it;
+}
 
 struct Win32FindDataA {
     std::uint32_t dw_file_attributes{0};
