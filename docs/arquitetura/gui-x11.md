@@ -247,6 +247,10 @@ aberto, em ordem determinística, sem seguir links simbólicos e limitada a 128
 linhas; clicar seleciona uma entrada e `Enter` ou duplo clique abre uma pasta no
 diretório Linux correspondente, com `..` retornando ao pai; o caminho visual continua sendo
 `Z:\` e nenhuma operação de arquivo do convidado é disparada pela tela. A
+árvore lateral permite retornar à raiz visual por `Computer`/`Local Disk (Z:)`
+e selecionar `Home`, `Desktop` e `Documents` do usuário quando os diretórios
+existem; os nomes `Desktop`/`Documents` também reconhecem as variantes
+localizadas `Área de trabalho`/`Documentos`. A
 normalização da geometria inválida desse alvo também
 fica registrada no trace. A faixa visual usa a ordem de `idCommand` enviada pelo
 7-Zip e o hit-test dela pode enfileirar `WM_COMMAND` no parent; os rótulos e

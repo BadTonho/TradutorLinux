@@ -700,8 +700,9 @@ nem declarar os benchmarks comerciais suportados.
 - [x] Tornar a lista do shell explorável: clicar seleciona uma entrada e
   `Enter` ou duplo clique abre uma pasta no diretório Linux correspondente, com
   retorno visual para `..`; operações de arquivo e despacho de navegação ao
-  convidado continuam fora do contrato. A regressão usa um diretório
-  temporário.
+  convidado continuam fora do contrato. A árvore lateral também retorna à raiz
+  visual e seleciona `Home`, `Desktop` e `Documents` Linux quando disponíveis.
+  As regressões usam um diretório temporário.
 
 #### Fase 13.12 — automação, rede e confiança, em entregas separadas
 
