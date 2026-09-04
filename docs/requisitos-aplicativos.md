@@ -60,7 +60,7 @@ o LGHub bloqueia durante a inicialização.
 | Contexto de processo e console | WinRAR, Logitech G HUB, Rockstar | startup W, handles padrão, console UTF-16, diretório lógico, recursos AMD64, encode/decode e SList vazia suportados; alocação de console, herança explícita e operações interlocked pendentes |
 | Segurança, identidade e ACLs | WinRAR, Logitech G HUB, Rockstar | token/SID virtual e DACL persistente para arquivos existentes em `C:\` por prefixo; sem SACL, privilégios, `AccessCheck` ou permissões Linux |
 | Alocação Global/Local | WinRAR, Rockstar + fixture de protocolo | `GlobalAlloc`/`GlobalLock`/`GlobalUnlock`/`GlobalFree` e `LocalAlloc`/`LocalFree` com flags `MOVEABLE`/`ZEROINIT`, tabela lateral e rejeição de handles arbitrários |
-| Pacote MSIX/AppX | Affinity | pendente |
+| Pacote MSIX/AppX | Affinity | inspeção estrutural validada (8 testes do parser + afinidade no Debug); instalação/execução .NET não tentada |
 | `delay-import` | WinRAR, Rockstar | suportado para descritores RVA (`grAttrs=0x1`), com resolução antecipada |
 | Automação OLE | WinRAR, Rockstar | `CreateStreamOnHGlobal` entregue como stream em memória em `tl_stream.exe`; `OLEAUT32`/`IDispatch` pendentes |
 | HTTP WinINet | Rockstar + fixture de protocolo | subconjunto HTTPS direto de loopback entregue em `tl_wininet.exe`; sem execução do Rockstar |
@@ -109,6 +109,15 @@ Ordem de trabalho:
 Os instaladores PE32/x86, assemblies .NET/Mono e pacotes MSIX/AppX continuam
 catalogados, mas pertencem a trilhas posteriores: cada um exige uma capacidade
 de base diferente da instalação nativa PE32+ x86-64.
+
+## Inventário Worker/RSL (2026-09-04)
+
+A busca em `Aplicativos_Windows_Populares/` não encontrou um executável
+comercial com `worker` ou `rsl` no nome. A única amostra correspondente nesta
+retomada é a fixture própria `tl_worker_rsl.exe`, localizada no diretório de
+saída do build. Ela cobre somente o subconjunto documentado e termina com exit
+`77` quando o host não possui interface IPv4; isso não é evidência para mudar o
+estado do Worker/RSL comercial.
 
 ## `RobloxPlayerInstaller.exe`
 
@@ -590,8 +599,8 @@ Office Deployment Tool.
 | Arquivo | `Affinity x64.msix` |
 | Contêiner observado | arquivo ZIP (deflate; requer extração compatível com ZIP 4.5+) |
 | SHA-256 | `d3baa74d30b7b41655651e6ea58a505a1bafeb33ec7576d52e625c147bae164c` |
-| Resultado atual | não selecionável como executável e não analisável pelo loader PE direto |
-| Fonte | inspeção local de 2026-08-23 |
+| Resultado atual | inspeção estrutural validada no Debug; não selecionável como executável PE direto |
+| Fonte | inspeção local de 2026-08-23; validação estrutural em 2026-09-04 |
 
 MSIX/AppX é um pacote de aplicativo, não um PE. Antes de o `--report` poder
 listar imports, o runtime precisa localizar o executável definido pelo manifesto

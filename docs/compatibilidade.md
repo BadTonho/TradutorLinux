@@ -33,6 +33,7 @@ Esta matriz declara o comportamento suportado; ela não é uma promessa de compa
 | `tl_crash.exe` | PE32+ AMD64 | Não | Nenhum | Gerado, verificado, mapeado e executado em processo filho isolado: o convidado acessa o endereço `0`, o hospedeiro observa o `SIGSEGV` via `waitpid`, emite `terminated category="guest-signal" signal="SIGSEGV" fault-address="0x0"` (o crash log captura o `si_addr` no filho e o converte em RVA/seção/importação quando o endereço cai dentro da imagem) e retorna `71` (`GuestFault`) | Diagnóstico de falhas |
 | `tl_hang.exe` | PE32+ AMD64 | Não | Nenhum | Gerado, verificado e executado em processo filho isolado com `--timeout 1`: o convidado entra em loop infinito, o hospedeiro o mata com `SIGKILL`, emite `terminated category="guest-timeout"` e retorna `72` (`GuestTimeout`) | Diagnóstico de falhas |
 | `tl_thread.exe` | PE32+ AMD64 | Não | `KERNEL32.dll!CloseHandle`, `CreateThread`, `ExitProcess`, `ExitThread`, `GetStdHandle`, `WaitForSingleObject`, `WriteFile` | **Suportado no escopo da Fase 11**: cria duas threads sequenciais, cada uma escreve "Thread done" e termina via `ExitThread`; a thread principal aguarda cada handle, escreve "Main done" e encerra. Metadata e execução e2e passam em Debug, Release e Sanitize (`LSAN_OPTIONS=detect_leaks=0`); saída esperada: `Thread done\nThread done\nMain done\n` e exit `0` | Fase 11 |
+| `tl_tls_generic.exe` | PE32+ AMD64 | Não | `KERNEL32.dll!ExitProcess`, `GetStdHandle`, `WriteFile` | **Suportado no subconjunto TLS:** valida byte inicializado, zero-fill, slot pointer-backed `0x430` e bloco associado zerado; saída `tls-generic\n`, exit `0`. A fixture declara explicitamente o diretório PE TLS para o build sem CRT; unitário e 4 testes CTest passam no Debug | TLS genérico |
 | `tl_files_wide.exe` | PE32+ AMD64 | Não | `KERNEL32.dll` — arquivos, metadados, tempos e caminhos Unicode | Fixture genérica suportada: cria arquivo com `é`, consulta tamanho/atributos/tempos, copia, move e remove; saída `files\n`, exit `0` | Base de arquivos |
 | `tl_resources.exe` | PE32+ AMD64 | Não | `KERNEL32.dll!FindResourceW`, `LoadResource`, `LockResource`, `SizeofResource` | Lê somente o recurso `RCDATA` embutido após validação de limites; saída byte-idêntica ao payload, exit `0`; `--report` não executa | Recursos PE |
 | `tl_sync.exe` | PE32+ AMD64 | Não | eventos, mutex, semáforo e esperas em `KERNEL32.dll` | Cobre evento manual/automático, timeout, semáforo, mutex recursivo e `WaitForMultipleObjects`; saída `sync\n`, exit `0` | Sincronização |
@@ -199,15 +200,17 @@ socket X11. O smoke confirma Tab/Enter, `WM_COMMAND`, retorno 42, saída
 
 `tl_gui.exe` é validado automaticamente quanto a formato e imports; a janela
 deve ser validada manualmente numa sessão X11. `tl_win.exe`, `tl_win2.exe`,
-`tl_key.exe`, `tl_timer.exe` e `tl_gdi.exe` são executados de ponta a ponta sob
-`Xvfb` (sempre um servidor próprio, sem window manager) pelo teste
-`runtime_gui_smoke`, que cobre o message loop (autoclose), o fechamento real por
-`WM_DELETE_WINDOW`, a entrada de teclado (`KeyPress` sintético →
-`WM_KEYDOWN`/`WM_CHAR`), a demultiplexação entre duas janelas simultâneas, o
-teclado estendido (`KeyPress`+`KeyRelease`, `Shift`, teclas sem caractere →
-`WM_KEYDOWN`/`WM_KEYUP`), os timers (`SetTimer` → `WM_TIMER` → `KillTimer`) e a
-pintura mínima (`BeginPaint`/`TextOut`/`EndPaint`). O driver valida também os
-traces de contrato do message loop: `GetMessageA ... result="quit"`,
+`tl_key.exe`, `tl_timer.exe`, `tl_gdi.exe`, `tl_paint.exe` e `tl_dialog.exe`
+são executados de ponta a ponta sob `Xvfb` (sempre um servidor próprio, sem
+window manager) pelo teste `runtime_gui_smoke`, que cobre o message loop
+(autoclose), o fechamento real por `WM_DELETE_WINDOW`, a entrada de teclado
+(`KeyPress` sintético → `WM_KEYDOWN`/`WM_CHAR`), a demultiplexação entre duas
+janelas simultâneas, o teclado estendido (`KeyPress`+`KeyRelease`, `Shift`,
+teclas sem caractere → `WM_KEYDOWN`/`WM_KEYUP`), os timers (`SetTimer` →
+`WM_TIMER` → `KillTimer`), a pintura mínima (`BeginPaint`/`TextOut`/`EndPaint`)
+e o diálogo modal (`Tab`/`Enter`/`WM_COMMAND`). O `x11_popup_smoke` cobre
+Escape, clique externo, destruição externa e timeout. O driver valida também
+os traces de contrato do message loop: `GetMessageA ... result="quit"`,
 `ExitProcess ... mechanism="guest-transfer"`, `TranslateMessage ...
 status="translated"`, `SetTimer`/`GetMessageA(WM_TIMER)`/`KillTimer`,
 `BeginPaint`, `TextOut`, `Rectangle` e `FillRect` — ver
@@ -645,7 +648,8 @@ processo filho; cada thread convidada recebe seu próprio TEB/GS, stack e
 - O fixture `tl_tls_generic.exe` cobre um template TLS com byte inicializado,
   zero-fill, leitura do slot pointer-backed `0x430` e leitura zero-inicializada
   do bloco associado. O mecanismo continua sendo um subconjunto orientado por
-  evidência, não uma implementação de TLS dinâmica universal.
+  evidência, não uma implementação de TLS dinâmica universal. A validação
+  Debug do unitário e dos quatro testes CTest passou em 2026-09-04.
 - Testes unitários em `tests/test_win32.cpp` cobrem `TlsAlloc`,
   `TlsSetValue`, `TlsGetValue`, `TlsFree`, `GetCurrentThreadId`,
   `GetCurrentProcessId`, `CRITICAL_SECTION` (init/enter/leave/delete,
@@ -683,7 +687,7 @@ continuam sendo a evidência necessária para registrá-lo como suportado.
 | 10 | `Logitech_GHUB_x64.exe` `lghub_installer.exe` | PE32+ x86-64 | 114/114 (100%) | `supported` | `ExitProcess 1` |  |
 | 11 | `notepad++.exe` | PE32+ x86-64 | 584/584 (100%) | `execution-failed` | `GuestTimeout 72` (GUI `GetMessageW` bloqueado sem `Xvfb`) | precisa `Xvfb :99` `docs/arquitetura/gui-x11.md` |
 | 12 | `RTSSHooks64.dll` | PE32+ DLL x86-64 | 256/256 (100%) | `imports-resolved` | `not-attempted` (DLL) | **Fase 13.RTSS**: imports resolvidos para análise; `CreateRemoteThread` e `WriteProcessMemory` agora falham com `ERROR_NOT_SUPPORTED` (sem fingir execução remota). O restante inclui `GDI32 ...`, `USER32 ...`, `KERNEL32 ...`, `SHLWAPI ...`, `WINMM ...`, `SETUPAPI 7` e `delay DirectX 11`; os stubs DirectX retornam `E_FAIL/S_OK` controlados |
-| 13 | `Affinity x64.msix` | Zip/MSIX | — | `package-recognized` | `not-attempted` | `App/Affinity.exe` é `Mono/.Net entry 0x0 0 imports` — `.NET` fora de escopo `PROJETO.md:22`; o inspector lê central directory, manifesto armazenado/DEFLATE e metadados estruturais, mas não instala nem executa o pacote |
+| 13 | `Affinity x64.msix` | Zip/MSIX | — | `package-recognized` | `not-attempted` | `App/Affinity.exe` é `Mono/.Net entry 0x0 0 imports` — `.NET` fora de escopo `PROJETO.md:22`; o inspector lê central directory, manifesto armazenado/DEFLATE e metadados estruturais. Os 8 testes do parser e o teste de afinidade passaram no Debug; não instala nem executa o pacote |
 | 14 | `*_x64_Installer.exe` `CapCut/Epic/Creative/Everything/RTSS.exe` | PE32 (x86) | — | `unsupported-architecture` `0x14c` `exit 5` | `parse-failed status="unsupported-architecture"` `src/pe/pe_reader.cpp:685` |
 
 > Detalhe das novas APIs `B`: `GDI32.dll!Arc` `SHLWAPI.dll!PathIsUNCW/PathIsUNCA` `MSIMG32.dll!AlphaBlend/TransparentBlt` `NETAPI32.dll!NetApiBufferFree` `OLEACC.dll!LresultFromObject` `tdh.dll!TdhGetPropertySize` `WINSPOOL.DRV!OpenPrinterW/ClosePrinter` `WTSAPI32.dll!WTSFreeMemory` — todas registradas para resolver imports; `OpenPrinterW` falha com `ERROR_NOT_SUPPORTED` quando a operação é chamada.
@@ -697,7 +701,7 @@ continuam sendo a evidência necessária para registrá-lo como suportado.
 | **PuTTY SSH Client (`putty_x64.exe`)** | PE32+ x86-64 | 100% (348/348) | Suportado | Executou entry point, inicializou FLS (slots 0 e 1) e loop de eventos de interface e rede |
 | **WinRAR (`WinRAR_x64.exe`)** | PE32+ x86-64 | 100% (251/251) | Suportado | Inicializou FLS, subsistema CRT e APIs do Shell/OLE com sucesso |
 | **HWiNFO64 (`HWiNFO64.exe`)** | PE32+ x86-64 | 100% (28/28) | Suportado | Fase 13.B — stubs acima; exec `ExitProcess 44544` |
-| **Roblox Player Installer (`RobloxPlayerInstaller.exe`)** | PE32+ x86-64 | 100% (430/430) | Suportado | Fase 13.D — TLS fix; `RBXCRASH` + `ExitProcess 3` (antes `SIGSEGV`) |
-| **Notepad++ (`notepad++.exe`)** | PE32+ x86-64 | 100% (584/584) | Suportado | Resolveu todos os 584 imports em 13 DLLs, executou entry point nativo, inicializou FLS (slots 0 e 1) e subsistema CRT |
+| **Roblox Player Installer (`RobloxPlayerInstaller.exe`)** | PE32+ x86-64 | 100% (430/430) | Não suportado como fluxo concluído | Fase 13.D — `RBXCRASH` + `ExitProcess 3` (antes `SIGSEGV`); resolução de imports e correção TLS não equivalem a suporte |
+| **Notepad++ (`notepad++.exe`)** | PE32+ x86-64 | 100% (584/584) | Não suportado como fluxo concluído | Histórico de resolução; execução registrada terminou em `GuestTimeout 72` sem Xvfb |
 | **Rufus (`Rufus_x64.exe`)** | PE32+ x86-64 | 100% (14/14) | Suportado | UPX marca seções `rwx`; o loader mantém W^X, exec `ExitProcess 56832` |
 | **7-Zip Installer / Notepad++ Installer / Everything Search** | PE32 (x86) | — | Unsupported | Rejeitados controladamente como arquitetura x86 32-bit (0x14c) |

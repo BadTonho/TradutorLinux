@@ -3,9 +3,9 @@
 Data da revisão: 2026-09-04
 
 Este arquivo reúne as pendências que ainda exigem decisão, código, teste ou
-atualização documental, além das correções aplicadas nesta rodada que aguardam
-validação no ambiente Linux. Os achados encerrados ficam registrados no final
-para não serem reabertos por análises antigas.
+atualização documental, além das correções aplicadas nesta rodada. As
+validações encerradas ficam registradas no final para não serem reabertas por
+análises antigas.
 
 O `ROADMAP.md` continua sendo a fonte de verdade para a fase do projeto. Esta
 lista é o backlog consolidado da auditoria técnica e documental. Nenhuma
@@ -46,7 +46,7 @@ Critérios de conclusão:
 - cobrir a rejeição cross-thread com teste de regressão e, quando disponível,
   ThreadSanitizer.
 
-#### P0.3 — Inspeção MSIX (implementada nesta rodada; falta validar no Linux)
+#### P0.3 — Inspeção MSIX (implementada e validada nesta rodada)
 
 `src/package/msix.cpp` agora limita o manifesto a 16 MiB, impõe limites de
 entradas, nomes e tamanho descompactado acumulado, rejeita traversal, entradas
@@ -58,17 +58,18 @@ O parser XML agora valida aninhamento, comentários, CDATA, namespaces por nome
 local, aspas simples/duplas e entidades XML sem resolver DTDs ou recursos
 externos. As regressões cobrem manifesto DEFLATE em central directory, data
 descriptor, CRC, traversal, truncamento, manifesto acima do limite e excesso
-de entradas. A execução no Linux/CTest ainda é necessária para fechar a
-validação desta etapa.
+de entradas. No Debug Linux, os oito testes `MsixParserTest.*` e o teste de
+afinidade passaram no unitário e no CTest. Isso não inclui instalação ou
+execução de .NET/MSIX.
 
-#### P0.4 — Popup X11 (cancelamento temporal implementado; falta validar)
+#### P0.4 — Popup X11 (cancelamento temporal implementado e validado)
 
 `src/gui/x11.cpp::track_popup_menu` agora trata Escape, `DestroyNotify`, clique
 fora do menu e timeout configurável por `TL_GUI_POPUP_TIMEOUT_MS` (30 segundos
 por padrão, no máximo 10 minutos). A implementação libera grabs e destrói a
-janela também no timeout. Continua pendente a validação de integração sob Xvfb
-para todos os caminhos de encerramento; o smoke `x11_popup_smoke` agora cobre
-Escape, clique externo, destruição externa e timeout.
+janela também no timeout. A validação de integração sob Xvfb passou para todos
+os caminhos de encerramento; o smoke `x11_popup_smoke` cobre Escape, clique
+externo, destruição externa e timeout.
 
 Critérios de conclusão:
 
@@ -79,13 +80,17 @@ Critérios de conclusão:
 
 ### P1 — compatibilidade e decisões de arquitetura
 
-#### P1.1 — Delay imports: política eager explicitada (falta validar no Linux)
+#### P1.1 — Delay imports: política eager explicitada e validada
 
 `src/loader/import_resolver.cpp` resolve e grava toda a delay IAT antes do
 entry point. A decisão desta rodada é manter esse subconjunto `eager`, com a
 limitação explícita na arquitetura e na matriz; ele diverge da resolução sob
 demanda do Windows e pode impedir a inicialização quando uma API atrasada não
 é usada.
+
+No Debug Linux, os testes unitários de delay-import e os testes CTest
+direcionados de delay-import, forwarder, carregamento dinâmico e relatório
+passaram (29 unitários e 14 CTest).
 
 Critérios de conclusão:
 
@@ -95,13 +100,16 @@ Critérios de conclusão:
 - se for implementada resolução lazy, criar fixture para import atrasado não
   usado, usado e ausente, com diagnóstico por símbolo.
 
-#### P1.2 — Forwarders reais (implementados nesta rodada; falta validar no Linux)
+#### P1.2 — Forwarders reais (implementados e validados nesta rodada)
 
 `ExportedFunction` agora representa forwarder textual `DLL.Símbolo` ou
 `DLL.#ordinal`. `src/loader/module.cpp` segue cadeias de até 32 saltos,
 normaliza o sufixo `.dll` quando necessário e rejeita ciclos, sintaxe inválida
 e destinos ausentes com detalhe controlado. API Set mapping e forwarder real
 continuam documentados como mecanismos distintos.
+
+Os testes de cadeia, ciclo, destino ausente e resolução por ordinal passaram no
+Debug Linux junto com a validação CTest de metadata e relatório.
 
 Critérios de conclusão:
 
@@ -110,7 +118,7 @@ Critérios de conclusão:
   inexistente;
 - alinhar `docs/compatibilidade.md` e `docs/arquitetura/imports.md`.
 
-#### P1.3 — TLS genérico implementado no subconjunto (falta validar no Linux)
+#### P1.3 — TLS genérico implementado e validado no subconjunto
 
 O runtime agora propaga `SizeOfZeroFill` do `IMAGE_TLS_DIRECTORY`, copia o
 template com limites validados e inicializa o slot pointer-backed `0x430` sob
@@ -118,7 +126,9 @@ demanda quando ele está dentro do span TLS declarado. Cada TEB mantém sua
 própria tabela de blocos zerados, liberada antes do `munmap`; não há correção
 condicionada ao tamanho da imagem ou ao nome de um aplicativo. A fixture
 `tl_tls_generic.exe` cobre byte do template, zero-fill, leitura do ponteiro e
-`0x68` zero-inicializado.
+`0x68` zero-inicializado. No Debug Linux, o unitário e os quatro testes CTest
+passaram. A fixture emite explicitamente os registros PE TLS, pois o
+toolchain MinGW sem CRT não os gerou automaticamente.
 
 Critérios de conclusão:
 
@@ -152,9 +162,11 @@ aceita somente os provedores de loja documentados e `WTSAPI32` enumera a sessão
 local com memória rastreada. `tl_worker_rsl.exe` cobre o fluxo combinado;
 `tl_powr.exe` também protege os contratos de buffer de IPHLPAPI.
 
-Validação Linux concluída no preset Debug: build dos alvos afetados, 11 testes
-unitários direcionados e 4 testes CTest de metadata/execução passaram. Isso
-reduz o bloqueio da fixture, mas não equivale a executar o Worker comercial.
+Validação Linux concluída no preset Debug: build dos alvos afetados, 10 testes
+unitários direcionados passaram e 1 foi skip controlado por ausência de IPv4;
+os 4 testes CTest de metadata/execução foram concluídos, aceitando exit `77`
+como skip controlado. Isso reduz o bloqueio da fixture, mas não equivale a
+executar o Worker comercial.
 
 Critérios de conclusão:
 
@@ -167,24 +179,26 @@ Critérios de conclusão:
 
 ### P2 — manutenção, testes e melhorias futuras
 
-#### P2.1 — Vazamento de cores no X11 (corrigido nesta rodada; falta validar)
+#### P2.1 — Vazamento de cores no X11 (corrigido e validado funcionalmente)
 
 `pixel_for_rgb` agora reutiliza um cache fixo de 256 cores e libera as
 alocações rastreadas com `XFreeColors` antes de fechar o display. O estado dos
-brushes permanece limitado ao ciclo de vida do display. Continua pendente a
-validação sob Xvfb com desenho repetido e LeakSanitizer; o smoke de popup
-também exercita a inicialização e o teardown do display sob múltiplos cenários.
+brushes permanece limitado ao ciclo de vida do display. O `runtime_gui_smoke`
+passou sob Xvfb pelos cenários de pintura e o `x11_popup_smoke` passou pelos
+cenários de inicialização e teardown do display. LeakSanitizer ainda não foi
+rerodado nesta retomada.
 
 Critérios de conclusão:
 
 - executar validação sob Xvfb com desenho repetido e ASAN/LeakSanitizer.
 
-#### P2.2 — Parser XML do MSIX (implementado nesta rodada; falta validar no Linux)
+#### P2.2 — Parser XML do MSIX (implementado e validado nesta rodada)
 
 `parse_appx_manifest_xml` deixou de buscar substrings e passou a usar um parser
 estrutural pequeno, limitado ao contrato de metadados do AppX. Ele rejeita XML
 malformado e DTDs, não busca recursos externos e decodifica apenas entidades
-XML predefinidas/númericas. A regressão estrutural aguarda CTest no Linux.
+XML predefinidas/númericas. Os oito testes estruturais do parser e o teste de
+afinidade passaram no unitário e no CTest no Debug Linux.
 
 #### P2.3 — Suíte de testes Win32 ainda é monolítica
 
@@ -201,13 +215,15 @@ Critérios de conclusão:
 
 #### P2.4 — Helpers e constantes de teste duplicados
 
-`maps_permissions_for` aparece em três testes. Ainda há constantes como
-`259U` e `0xC002U` sem nome semântico próximo ao uso.
+`maps_permissions_for` aparecia em três testes. A implementação foi movida
+para `tests/test_support.hpp`; `259U` e `0xC002U` agora têm constantes
+semânticas em `tests/test_win32.cpp`. A alteração foi compilada e os testes
+direcionados passaram.
 
 Critérios de conclusão:
 
-- criar helper compartilhado;
-- substituir números por constantes nomeadas ou comentários que indiquem o
+- [x] criar helper compartilhado;
+- [x] substituir números por constantes nomeadas ou comentários que indiquem o
   contrato Win32 testado.
 
 #### P2.5 — Testes de stubs precisam verificar contrato negativo
@@ -288,9 +304,8 @@ Os itens abaixo não devem voltar ao backlog sem uma nova evidência:
 
 ## Limitação da validação desta revisão
 
-Esta consolidação foi feita por inspeção estática, testes existentes e
-referências cruzadas. `CTest` não foi executado nesta máquina porque o cache
-existente de `build/debug` foi criado em WSL e está sendo acessado pelo caminho
-Windows; o ambiente WSL não estava disponível. Antes de fechar qualquer item,
-executar o preset Linux/CI correspondente e registrar a evidência no roadmap e
-na matriz de compatibilidade.
+Esta consolidação foi complementada por validação no build Debug Linux. Os
+presets Release e Sanitize não foram rerodados nesta retomada para respeitar o
+custo de build; o host não possui interface IPv4, por isso os testes que
+dependem dela usam skip controlado. A validação X11 foi feita sob Xvfb. Isso
+não altera a matriz de aplicativos comerciais nem declara suporte amplo.

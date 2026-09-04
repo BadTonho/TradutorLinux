@@ -21,7 +21,7 @@ Os itens marcados como concluídos devem ter evidência no repositório: código
 
 - **Fase atual:** Fase 13 — compatibilidade ampla por portfólio.
 - **Marco concluído:** a Fase 7 foi validada de ponta a ponta e a decisão de produto foi tomada: **seguir com a GUI Win32 mínima como objetivo experimental**. `tl_gui.exe` abriu a janela X11, recebeu o clique em OK e encerrou com código `0`; `tl_win.exe` criou uma janela real e executou um message loop completo (`RegisterClassExA`, `CreateWindowExA`, `ShowWindow`, `GetMessageA`, `DispatchMessageA`, `DefWindowProcA`, `PostQuitMessage`), encerrando via `WM_CLOSE`/autoclose com código `0`; o modo `--report` lista imports suportados sem executar o PE; `tl_hello`, `tl_echo` e `tl_file` têm regressões e limitações publicadas na matriz.
-- **Marco concluído:** o smoke test de GUI passou a ter cobertura automática em CI. O teste `runtime_gui_smoke` sobe um `Xvfb` próprio e executa `tl_win.exe` de ponta a ponta em dois cenários: autoclose (message loop encerra sozinho via `WM_QUIT`) e fechamento real por `WM_DELETE_WINDOW` (mesmo `ClientMessage` do botão de fechar do WM), exigindo exit-code `1`, stdout vazio e os eventos esperados no trace. A conexão X11 do runtime é fechada no teardown (`DisplayCloser`), validado sob ASAN com `detect_leaks=1`.
+- **Marco concluído:** o smoke test de GUI passou a ter cobertura automática em CI. O teste `runtime_gui_smoke` sobe um `Xvfb` próprio e executa `tl_win.exe`, `tl_win2.exe`, `tl_key.exe`, `tl_timer.exe`, `tl_gdi.exe`, `tl_paint.exe` e `tl_dialog.exe` de ponta a ponta, cobrindo message loop, `WM_DELETE_WINDOW`, teclado, duas janelas, timers, pintura e diálogo modal. O `x11_popup_smoke` cobre Escape, clique externo, destruição externa e timeout; a conexão X11 do runtime é fechada no teardown (`DisplayCloser`). A validação Debug desta retomada passou nos dois smokes.
 - **Marco concluído:** `CreateWindowExA` agora despacha `WM_CREATE` ao `WNDPROC` do convidado antes de devolver o `HWND` (retorno `-1` aborta a criação e devolve `NULL`). A fixture `tl_win.c` marca uma flag no `WM_CREATE` e propaga no exit code via `PostQuitMessage`, então o `runtime_gui_smoke` prova o despacho exigindo exit-code `1`.
 - **Marco concluído:** o message loop ganhou entrada real de teclado. `KeyPress` X11 vira `WM_KEYDOWN` (virtual key: letras em maiúsculas) com o caractere guardado; `TranslateMessage` converte em `WM_CHAR` enfileirado (entregue antes dos próximos eventos X11) e registra o evento de trace `TranslateMessage message="WM_CHAR" wparam status="translated"`. A fixture `tl_win.c` encerra a janela ao receber `WM_CHAR('q')`, e o terceiro cenário do `runtime_gui_smoke` envia um `KeyPress` sintético sob `Xvfb` e exige exit-code `3`. O teste agora sobe sempre um `Xvfb` próprio (sem window manager): com WM a janela é reparentada e o `XSendEvent` para o frame não chega ao cliente.
 - **Marco concluído:** o pump passou a usar fila de eventos por janela. Todos os eventos X11 pendentes são demultiplexados para a fila da janela-alvo a cada consulta, então nada se perde entre janelas independentemente da ordem do message loop. A fixture `tl_win2.exe` cria duas janelas simultâneas com `WNDPROC`s independentes ("Janela A" e "Janela B"); o quarto cenário do `runtime_gui_smoke` envia `KeyPress 'q'` à A e `'k'` à B e exige exit-code `15` (flags 1+2+4+8), provando o roteamento independente por janela.
@@ -58,12 +58,12 @@ Os itens marcados como concluídos devem ter evidência no repositório: código
   com diagnóstico `mechanism="delay-import"`. WinRAR e Rockstar foram
   reanalisados apenas com `--report` e continuam `unsupported` pelas APIs
   restantes.
-- **Marco em validação (Fase 13.13 — Cadeias de export forwarder):** o registro
+- **Marco concluído (Fase 13.13 — Cadeias de export forwarder):** o registro
   aceita `DLL.Símbolo` e `DLL.#ordinal`; `find_export_forwarded` segue até o
   export direto com limite de 32 saltos e rejeita ciclos, sintaxe inválida e
   destinos ausentes. Testes unitários cobrem cadeia de múltiplos saltos,
-  destino ordinal, ciclo e símbolo inexistente. A validação Linux/CTest ainda
-  precisa ser registrada antes de marcar o marco como concluído.
+  destino ordinal, ciclo e símbolo inexistente. No Debug Linux, 29 testes
+  unitários e 14 testes CTest direcionados passaram.
 - **Marco concluído (Fase 13.3):** o núcleo reutilizável de unwinding AMD64
   lê e valida `.pdata`/`.xdata` v1, todos os opcodes x64 v1, handlers e
   cadeias; `RtlCaptureContext`, `RtlLookupFunctionEntry`,
@@ -198,13 +198,14 @@ Os itens marcados como concluídos devem ter evidência no repositório: código
   `tl_shell_path.exe` cobre `SHAutoComplete`, `PathIsRelativeA/W`,
   `PathCombineW`, `PathRemoveFileSpecW` e `SHELL32.dll!SHFileOperationW`.
   `--report` resolve 9/9 imports, saída `shellpath\n`, exit `0`.
-- **Marco em validação (Fase 13.13 — Suporte Estrutural e Parser de Pacotes MSIX/AppX):**
+- **Marco concluído (Fase 13.13 — Suporte Estrutural e Parser de Pacotes MSIX/AppX):**
   `tradutorlinux::package` valida a central directory ZIP/MSIX, limites,
   traversal, CRC e manifesto DEFLATE/data descriptor; o parser estrutural de
   `AppxManifest.xml` extrai identidade, aplicações e executável principal sem
   resolver DTDs ou recursos externos. As regressões cobrem namespaces,
-  comentários, CDATA, entidades e XML malformado. A execução Linux/CTest ainda
-  precisa ser registrada antes de marcar este marco como concluído.
+  comentários, CDATA, entidades e XML malformado. No Debug Linux, os oito
+  testes `MsixParserTest.*` e o teste de afinidade passaram no unitário e no
+  CTest. Instalação e execução de .NET/MSIX continuam fora do escopo.
 - **Marco concluído (Fase 13.13 — Análise e Bateria de Testes do Portfólio Popular):**
   Bateria automatizada de `--report` e execução controlada no conjunto de aplicativos
   Windows x64 mais demandados pela comunidade:
@@ -697,9 +698,10 @@ nem declarar os benchmarks comerciais suportados.
 
 #### Backlog condicionado — formatos, arquitetura e unwind adicional
 
-- [ ] MSIX/AppX: primeiro detectar pacote, ler `AppxManifest.xml` e localizar
-  estruturalmente o executável interno; instalação/executar pacote exige fase
-  própria e não é coberta pelo prefixo atual.
+- [x] MSIX/AppX: detectar pacote, ler `AppxManifest.xml` e localizar
+  estruturalmente o executável interno; a validação de central directory,
+  DEFLATE, CRC e limites está coberta por testes. [ ] Instalação e execução do
+  pacote exigem fase própria e não são cobertas pelo prefixo atual.
 - [ ] PE32/x86, .NET/Mono, ARM e WOW64 continuam fora do alvo. Não há plano de
   executar esses binários sem uma decisão explícita de arquitetura/emulação.
 - [ ] A forma de `UWOP_SET_FPREG` do Roblox (`OpInfo=10`, `FrameOffset=0`)
@@ -716,8 +718,8 @@ nem declarar os benchmarks comerciais suportados.
 
 #### Fase 13.14 — TLS genérico e Worker RSL (Roblox) — em andamento
 
-- [x] Generalizar o contrato do slot pointer-backed `TLS 0x430` com validação do span raw + `SizeOfZeroFill`, alocação sob demanda de bloco `0x1000` zerado, tabela por TEB e liberação no encerramento; `tl_tls_generic.exe` cobre `TLS zero-init` + leitura do ponteiro + `mov 0x68(%rax)` sem `SIGSEGV` (código e fixture prontos; validação Linux pendente)
-- [x] Implementar e validar o subconjunto Linux reutilizável observado no Worker: `GetAdaptersInfo`/`GetAdaptersAddresses`/`if_nametoindex` via `getifaddrs`, `CertOpenStore` com provedores controlados e `WTSEnumerateSessionsW`/`WTSFreeMemory`; `tl_worker_rsl.exe` cobre `WSAStartup`/`getaddrinfo`, interfaces IPv4, loja em memória e sessão local (Debug: 11 testes unitários direcionados + 4 CTest de fixture)
+- [x] Generalizar o contrato do slot pointer-backed `TLS 0x430` com validação do span raw + `SizeOfZeroFill`, alocação sob demanda de bloco `0x1000` zerado, tabela por TEB e liberação no encerramento; `tl_tls_generic.exe` cobre `TLS zero-init` + leitura do ponteiro + `mov 0x68(%rax)` sem `SIGSEGV` (Debug: teste unitário e 4 CTest passaram; fixture emite registros PE TLS explícitos sem CRT)
+- [x] Implementar e validar o subconjunto Linux reutilizável observado no Worker: `GetAdaptersInfo`/`GetAdaptersAddresses`/`if_nametoindex` via `getifaddrs`, `CertOpenStore` com provedores controlados e `WTSEnumerateSessionsW`/`WTSFreeMemory`; `tl_worker_rsl.exe` cobre `WSAStartup`/`getaddrinfo`, interfaces IPv4, loja em memória e sessão local (Debug: 10 testes unitários passaram, 1 skip controlado sem IPv4 + 4 CTest de fixture)
 - [ ] Reexecutar `Worker,28` com `--trace=ws2,runtime,wininet,crypt,pe` `process/isolate.cpp:155` e só então avaliar novo bloqueio; implementar qualquer API adicional somente com evidência, fixture e registro em `docs/requisitos-aplicativos.md`
 - [ ] Manter `Roblox` como benchmark sem criar stubs exclusivos; só declarar `supported` quando `install --prefix` extrair `drive_c` e `app run` completar sem `panic`
 
