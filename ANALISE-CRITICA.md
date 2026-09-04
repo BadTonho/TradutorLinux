@@ -222,35 +222,17 @@ Critérios de conclusão:
 
 ## Pendências documentais
 
-Estas inconsistências não são novos bugs do runtime, mas precisam ser corrigidas
-para que o projeto não publique um estado falso:
+Estas são as únicas pendências documentais identificadas nesta revisão:
 
-1. `docs/compatibilidade.md` chama WinRAR, Roblox, Rockstar e Notepad++ de
-   `supported`, embora haja linhas com `RBXCRASH`, timeout ou execução não
-   validada. Separar claramente `imports-resolved`, `runtime-support` e
-   `execution-tested`; usar `supported` somente quando o critério de execução
-   estiver atendido.
-2. `docs/compatibilidade.md` e `ROADMAP.md` ainda citam caminhos antigos como
-   `src/runtime/kernel32.cpp`, `src/runtime/user32.cpp`, `src/runtime/winapi.cpp`
-   e `src/cli.cpp`. Atualizar para os módulos atuais ou marcar referências como
-   históricas.
-3. `docs/requisitos-aplicativos.md` contém medições históricas honestas, mas
-   precisa indicar de forma uniforme data, hash, versão do binário e se a
+1. `docs/requisitos-aplicativos.md` contém medições históricas honestas, mas
+   ainda precisa indicar de forma uniforme data, hash, versão do binário e se a
    medição foi apenas `--report`.
-4. `ideia.md` diz primeiro que o guest roda no mesmo processo e depois afirma
-   que o isolamento por filho já foi implementado. A seção deve ser convertida
-   em histórico/status atual.
-5. `docs/proposta-reorganizacao-e-refatoracao.md` descreve como futura uma
-   modularização que já ocorreu parcialmente. Marcar fases concluídas e listar
-   somente o restante: subpastas de GDI/shell/system/CRT, controles e divisão
-   de testes.
-6. `ROADMAP.md` marca limites de recursos como concluídos embora a execução
-   atual demonstre isolamento e timeout, não limite efetivo de CPU/RAM. Também
-   há uma tarefa MSIX não marcada e um marco posterior que descreve o parser
-   como concluído; separar reconhecimento/parser de extração segura.
-7. Revisar referências antigas em `docs/arquitetura/abi-x64.md` e
-   `docs/arquitetura/gui-x11.md`, especialmente caminhos de assembly e do
-   dispatcher.
+
+As demais inconsistências documentais desta lista foram corrigidas nesta
+revisão: a matriz de compatibilidade agora separa resolução de imports,
+suporte de runtime e execução testada; os caminhos antigos foram marcados como
+históricos ou substituídos; e `ideia.md`, o documento de reorganização, o
+`ROADMAP.md` e os contratos de ABI/GUI refletem o estado atual.
 
 ## Achados encerrados nesta revisão
 
