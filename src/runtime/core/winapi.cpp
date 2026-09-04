@@ -575,6 +575,45 @@ WindowSlot* find_window_slot(const void* const handle) noexcept {
     return nullptr;
 }
 
+WindowSlot* create_logical_control(WindowSlot& parent, const std::string_view class_name,
+                                   const std::string_view title, const std::uint32_t style,
+                                   const std::uintptr_t control_id, const int x, const int y,
+                                   const int width, const int height) noexcept {
+    if (find_window_slot(&parent) != &parent || parent.is_control || class_name.empty()) {
+        return nullptr;
+    }
+    const auto free_it = std::find_if(g_windows.begin(), g_windows.end(),
+                                      [](const WindowSlot& slot) { return !slot.used; });
+    if (free_it == g_windows.end()) {
+        return nullptr;
+    }
+    WindowSlot& slot = *free_it;
+    slot = {};
+    slot.used = true;
+    slot.class_name.assign(class_name.data(), class_name.size());
+    slot.window_title.assign(title.data(), title.size());
+    slot.native = nullptr;
+    slot.mapped = false;
+    slot.is_control = true;
+    if (!runtime_gui::is_builtin_control(slot.class_name.c_str())) {
+        slot = {};
+        return nullptr;
+    }
+    slot.control_kind = runtime_gui::control_kind_for(slot.class_name.c_str());
+    slot.parent = &parent;
+    slot.control_id = control_id;
+    slot.style = style;
+    slot.x = x;
+    slot.y = y;
+    slot.width = width > 0 ? width : 1;
+    slot.height = height > 0 ? height : 1;
+    slot.text = slot.window_title;
+    slot.visible = style == 0U || (style & 0x10000000U) != 0U;
+    slot.enabled = (style & 0x08000000U) == 0U;
+    slot.combo_selection = -1;
+    return &slot;
+}
+
 WindowDrawingTarget window_drawing_target(const void* const handle) noexcept {
     WindowSlot* current = find_window_slot(handle);
     if (current == nullptr) {

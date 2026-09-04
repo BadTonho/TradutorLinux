@@ -229,8 +229,17 @@ TEST(SevenZipGuiCoverageTest, AllApisAndModules) {
     EXPECT_EQ(tl_WNetGetResourceParentW(nullptr, nullptr, nullptr), 0U);
 
     // COMCTL32 & COMDLG32
-    EXPECT_NE(tl_CreateStatusWindowW(0, sample_str, nullptr, 1), nullptr);
-    EXPECT_NE(tl_CreateToolbarEx(nullptr, 0, 1, 0, nullptr, 0, nullptr, 0, 16, 16, 16, 16, 0), nullptr);
+    g_windows = {};
+    WindowSlot& common_control_parent = g_windows[0];
+    common_control_parent.used = true;
+    common_control_parent.native = reinterpret_cast<gui::NativeWindow>(0x1234U);
+    common_control_parent.width = 800;
+    common_control_parent.height = 600;
+    EXPECT_NE(tl_CreateStatusWindowW(0, sample_str, &common_control_parent, 1), nullptr);
+    EXPECT_NE(tl_CreateToolbarEx(&common_control_parent, 0, 1, 0, nullptr, 0, nullptr, 0, 16,
+                                 16, 16, 16, 0),
+              nullptr);
+    g_windows = {};
     EXPECT_EQ(tl_ImageList_GetImageCount(nullptr), 0);
     EXPECT_EQ(tl_PropertySheetW(nullptr), 1);
     EXPECT_EQ(tl_CommDlgExtendedError(), 0U);

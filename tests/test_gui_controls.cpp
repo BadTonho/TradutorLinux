@@ -113,5 +113,59 @@ TEST(WindowDrawingTarget, RejectsUnknownOrDetachedWindow) {
     g_windows = {};
 }
 
+TEST(CommonControls, CreateStatusAndToolbarAsLogicalChildren) {
+    g_windows = {};
+    WindowSlot& parent = g_windows[0];
+    parent.used = true;
+    parent.native = reinterpret_cast<gui::NativeWindow>(0x1234U);
+    parent.width = 640;
+    parent.height = 480;
+
+    constexpr std::uint16_t status_text[] = {'R', 'e', 'a', 'd', 'y', 0};
+    void* const status = tl_CreateStatusWindowW(0, status_text, &parent, 900);
+    ASSERT_NE(status, nullptr);
+    WindowSlot* const status_slot = find_window_slot(status);
+    ASSERT_NE(status_slot, nullptr);
+    EXPECT_EQ(status_slot->control_kind, ControlKind::StatusBar);
+    EXPECT_EQ(status_slot->parent, &parent);
+    EXPECT_EQ(status_slot->y, 456);
+    EXPECT_EQ(status_slot->width, 640);
+    EXPECT_EQ(status_slot->text, "Ready");
+
+    struct TestToolbarButton {
+        std::int32_t bitmap;
+        std::int32_t command_id;
+    } buttons[]{{0, 101}, {1, 202}};
+    void* const toolbar = tl_CreateToolbarEx(&parent, 0, 901, 0, nullptr, 0, buttons, 2, 80, 32,
+                                             16, 16, sizeof(TestToolbarButton));
+    ASSERT_NE(toolbar, nullptr);
+    WindowSlot* const toolbar_slot = find_window_slot(toolbar);
+    ASSERT_NE(toolbar_slot, nullptr);
+    EXPECT_EQ(toolbar_slot->control_kind, ControlKind::Toolbar);
+    ASSERT_EQ(toolbar_slot->toolbar_buttons.size(), 2U);
+    EXPECT_EQ(toolbar_slot->toolbar_buttons[0].command_id, 101);
+    EXPECT_EQ(toolbar_slot->toolbar_buttons[1].command_id, 202);
+    EXPECT_EQ(toolbar_slot->toolbar_button_width, 80);
+    EXPECT_EQ(toolbar_slot->height, 32);
+    EXPECT_EQ(toolbar_slot->width, 640);
+    g_windows = {};
+}
+
+TEST(CommonControls, RejectInvalidToolbarBufferAndParent) {
+    g_windows = {};
+    EXPECT_EQ(tl_CreateToolbarEx(nullptr, 0, 1, 0, nullptr, 0, nullptr, 1, 16, 16, 16, 16, 8),
+              nullptr);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+
+    WindowSlot& parent = g_windows[0];
+    parent.used = true;
+    parent.width = 640;
+    parent.height = 480;
+    EXPECT_EQ(tl_CreateToolbarEx(&parent, 0, 1, 0, nullptr, 0, nullptr, 1, 16, 16, 16, 16, 8),
+              nullptr);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    g_windows = {};
+}
+
 }  // namespace
 }  // namespace tradutorlinux::runtime_gui

@@ -3,8 +3,12 @@
 #include "tradutorlinux/loader/builtin_modules.hpp"
 #include "tradutorlinux/runtime/winapi.hpp"
 
+#include <algorithm>
 #include <array>
 #include <cstdint>
+#include <cstring>
+#include <limits>
+#include <string>
 
 #include "runtime_context.hpp"
 
@@ -151,12 +155,34 @@ TL_COMCTL_MSABI std::intptr_t tl_DefSubclassProc(void* const hwnd, const std::ui
 
 TL_COMCTL_MSABI void* tl_CreateStatusWindowW(const std::int32_t style, const std::uint16_t* const text,
                                              void* const parent, const std::uint32_t id) noexcept {
-    (void)style;
-    (void)text;
-    (void)parent;
-    (void)id;
+    if (parent == nullptr || (text != nullptr && !mapped_guest_wstring(text))) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return nullptr;
+    }
+    WindowSlot* const parent_slot = find_window_slot(parent);
+    if (parent_slot == nullptr || parent_slot->is_control) {
+        set_last_error(abi::kErrorInvalidHandle);
+        return nullptr;
+    }
+    const std::string utf8_text = text == nullptr ? std::string{} : util::wide_to_utf8(text);
+    constexpr int kStatusHeight = 24;
+    WindowSlot* const slot = create_logical_control(
+        *parent_slot, "msctls_statusbar32", utf8_text, static_cast<std::uint32_t>(style), id, 0,
+        std::max(parent_slot->height - kStatusHeight, 0), std::max(parent_slot->width, 1),
+        kStatusHeight);
+    if (slot == nullptr) {
+        set_last_error(abi::kErrorNotEnoughMemory);
+        return nullptr;
+    }
     set_last_error(abi::kErrorSuccess);
-    return reinterpret_cast<void*>(0x53544154ULL); // 'STAT'
+    const std::array<diagnostics::TraceField, 4> fields{
+        diagnostics::TraceField{"symbol", "CreateStatusWindowW"},
+        diagnostics::TraceField{"class", slot->class_name},
+        diagnostics::TraceField{"status", "logical-child"},
+        diagnostics::TraceField{"id", std::to_string(id)},
+    };
+    runtime_trace("CreateStatusWindowW", fields, 4);
+    return slot;
 }
 
 TL_COMCTL_MSABI void* tl_CreateToolbarEx(void* const hwnd, const std::uint32_t style, const std::uint32_t id,
@@ -165,21 +191,59 @@ TL_COMCTL_MSABI void* tl_CreateToolbarEx(void* const hwnd, const std::uint32_t s
                                          const int num_buttons, const int cx_button, const int cy_button,
                                          const int cx_bitmap, const int cy_bitmap,
                                          const std::uint32_t struct_size) noexcept {
-    (void)hwnd;
-    (void)style;
-    (void)id;
     (void)num_bitmaps;
     (void)instance;
     (void)bitmap_id;
-    (void)buttons;
-    (void)num_buttons;
-    (void)cx_button;
-    (void)cy_button;
     (void)cx_bitmap;
     (void)cy_bitmap;
-    (void)struct_size;
+    if (hwnd == nullptr || num_buttons < 0 || num_buttons > 128 ||
+        (num_buttons > 0 &&
+         (buttons == nullptr || struct_size < sizeof(std::int32_t) * 2U ||
+          static_cast<std::size_t>(num_buttons) >
+              std::numeric_limits<std::size_t>::max() / struct_size))) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return nullptr;
+    }
+    WindowSlot* const parent_slot = find_window_slot(hwnd);
+    if (parent_slot == nullptr || parent_slot->is_control) {
+        set_last_error(abi::kErrorInvalidHandle);
+        return nullptr;
+    }
+    if (num_buttons > 0 &&
+        !mapped_range(buttons, static_cast<std::size_t>(num_buttons) * struct_size, false)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return nullptr;
+    }
+    constexpr int kMaxControlDimension = 8192;
+    const int button_width = std::clamp(cx_button > 0 ? cx_button : 72, 1,
+                                        kMaxControlDimension);
+    const int toolbar_height = std::clamp(cy_button > 0 ? cy_button : 24, 1,
+                                          kMaxControlDimension);
+    WindowSlot* const slot = create_logical_control(
+        *parent_slot, "ToolbarWindow32", {}, style, id, 0, 0, std::max(parent_slot->width, 1),
+        toolbar_height);
+    if (slot == nullptr) {
+        set_last_error(abi::kErrorNotEnoughMemory);
+        return nullptr;
+    }
+    slot->toolbar_button_width = button_width;
+    slot->toolbar_buttons.reserve(static_cast<std::size_t>(num_buttons));
+    for (int index = 0; index < num_buttons; ++index) {
+        std::int32_t command_id = 0;
+        const auto* const entry = static_cast<const std::byte*>(buttons) +
+                                  static_cast<std::size_t>(index) * struct_size;
+        std::memcpy(&command_id, entry + sizeof(std::int32_t), sizeof(command_id));
+        slot->toolbar_buttons.push_back(ToolbarButton{command_id});
+    }
     set_last_error(abi::kErrorSuccess);
-    return reinterpret_cast<void*>(0x544F4F4CULL); // 'TOOL'
+    const std::array<diagnostics::TraceField, 4> fields{
+        diagnostics::TraceField{"symbol", "CreateToolbarEx"},
+        diagnostics::TraceField{"class", slot->class_name},
+        diagnostics::TraceField{"status", "logical-child"},
+        diagnostics::TraceField{"buttons", std::to_string(num_buttons)},
+    };
+    runtime_trace("CreateToolbarEx", fields, 4);
+    return slot;
 }
 
 TL_COMCTL_MSABI int tl_ImageList_GetImageCount(void* const image_list) noexcept {

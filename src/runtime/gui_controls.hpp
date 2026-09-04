@@ -13,7 +13,11 @@
 
 namespace tradutorlinux::runtime_gui {
 
-enum class ControlKind { None, Edit, Button, ComboBox, Static, ListView, Generic };
+enum class ControlKind { None, Edit, Button, ComboBox, Static, ListView, Toolbar, StatusBar, Generic };
+
+struct ToolbarButton {
+    std::int32_t command_id{0};
+};
 
 struct ListViewRow {
     std::vector<std::string> columns;
@@ -57,6 +61,8 @@ struct WindowSlot {
     bool pressed{false};
     std::vector<std::string> combo_items;
     int combo_selection{-1};
+    std::vector<ToolbarButton> toolbar_buttons;
+    int toolbar_button_width{0};
     std::vector<ListViewRow> list_rows;
     int list_selection{-1};
     void* user_data{nullptr};
@@ -76,6 +82,8 @@ struct WindowSlot {
 void queue_window_message(WindowSlot& slot, std::uint32_t message, abi::Wparam wparam,
                           abi::Lparam lparam) noexcept;
 void queue_command(WindowSlot& control, std::uint32_t notification) noexcept;
+void queue_command_id(WindowSlot& control, std::uint32_t notification,
+                      std::uintptr_t command_id) noexcept;
 void queue_list_notification(WindowSlot& list, std::int32_t code, int item) noexcept;
 
 void render_controls(WindowSlot& parent, std::span<WindowSlot> windows) noexcept;

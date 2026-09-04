@@ -41,6 +41,7 @@
 #include <optional>
 #include <span>
 #include <string>
+#include <string_view>
 #include <thread>
 #include <vector>
 #include <fcntl.h>
@@ -175,6 +176,7 @@ struct ClassSlot {
 using runtime_gui::ControlKind;
 using runtime_gui::GuestTimer;
 using runtime_gui::ListViewRow;
+using runtime_gui::ToolbarButton;
 using runtime_gui::WindowSlot;
 
 extern std::array<ClassSlot, 32> g_classes;
@@ -332,6 +334,11 @@ CriticalSectionEntry* alloc_cs_entry(void* cs) noexcept;
 
 ClassSlot* find_class_slot(const char* name) noexcept;
 WindowSlot* find_window_slot(const void* handle) noexcept;
+
+WindowSlot* create_logical_control(WindowSlot& parent, std::string_view class_name,
+                                   std::string_view title, std::uint32_t style,
+                                   std::uintptr_t control_id, int x, int y, int width,
+                                   int height) noexcept;
 
 struct WindowDrawingTarget {
     gui::NativeWindow native{nullptr};

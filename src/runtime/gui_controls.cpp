@@ -306,6 +306,12 @@ ControlKind control_kind_for(const char* const name) noexcept {
     if (util::ascii_iequals(name, "SysListView32")) {
         return ControlKind::ListView;
     }
+    if (util::ascii_iequals(name, "ToolbarWindow32")) {
+        return ControlKind::Toolbar;
+    }
+    if (util::ascii_iequals(name, "msctls_statusbar32")) {
+        return ControlKind::StatusBar;
+    }
     return ControlKind::Generic;
 }
 
@@ -318,14 +324,19 @@ void queue_window_message(WindowSlot& slot, const std::uint32_t message,
                                                  .lparam = lparam});
 }
 
-void queue_command(WindowSlot& control, const std::uint32_t notification) noexcept {
+void queue_command_id(WindowSlot& control, const std::uint32_t notification,
+                      const std::uintptr_t command_id) noexcept {
     if (control.parent == nullptr) {
         return;
     }
     const abi::Wparam value = (static_cast<abi::Wparam>(notification) << 16U) |
-                              (control.control_id & 0xFFFFU);
+                              (command_id & 0xFFFFU);
     queue_window_message(*control.parent, abi::kWmCommand, value,
                          reinterpret_cast<abi::Lparam>(&control));
+}
+
+void queue_command(WindowSlot& control, const std::uint32_t notification) noexcept {
+    queue_command_id(control, notification, control.control_id);
 }
 
 void queue_list_notification(WindowSlot& list, const std::int32_t code, const int item) noexcept {
@@ -459,6 +470,43 @@ void render_controls(WindowSlot& parent, const std::span<WindowSlot> windows) no
                     column_x += columns[column];
                 }
             }
+        } else if (control.control_kind == ControlKind::Toolbar) {
+            const int width = std::max(control.width, 16);
+            const int height = std::max(control.height, 24);
+            gui::platform::fill_rectangle_color(parent.native, x, y, width, height, kPanel);
+            gui::platform::draw_rectangle_color(parent.native, x, y, width, height, kBorder);
+            if (!control.toolbar_buttons.empty()) {
+                const int fitting_width = std::max(
+                    (width - 8) / static_cast<int>(control.toolbar_buttons.size()), 1);
+                const int button_width = std::min(
+                    fitting_width, control.toolbar_button_width > 0 ? control.toolbar_button_width
+                                                                     : fitting_width);
+                int button_x = x + 4;
+                for (std::size_t index = 0; index < control.toolbar_buttons.size(); ++index) {
+                    const int remaining = x + width - button_x - 4;
+                    const int current_width = std::min(button_width, std::max(remaining, 1));
+                    gui::platform::fill_rectangle_color(parent.native, button_x, y + 3,
+                                                        current_width, height - 6, kSurface);
+                    gui::platform::draw_rectangle_color(parent.native, button_x, y + 3,
+                                                        current_width, height - 6, kBorder);
+                    const std::string label =
+                        "#" + std::to_string(control.toolbar_buttons[index].command_id);
+                    gui::platform::draw_text_color(parent.native, label.c_str(), button_x + 8,
+                                                   y + std::min(height - 7, 21), kText, true);
+                    button_x += current_width + 3;
+                    if (button_x >= x + width - 3) {
+                        break;
+                    }
+                }
+            }
+        } else if (control.control_kind == ControlKind::StatusBar) {
+            const int width = std::max(control.width, 16);
+            const int height = std::max(control.height, 20);
+            gui::platform::fill_rectangle_color(parent.native, x, y, width, height, kPanel);
+            gui::platform::fill_rectangle_color(parent.native, x, y, width, 1, kBorder);
+            gui::platform::draw_text_color(parent.native,
+                                           control.text.empty() ? "Ready" : control.text.c_str(),
+                                           x + 8, y + std::min(height - 4, 16), kMuted);
         } else if (control.control_kind == ControlKind::Generic && control.width > 8 &&
                    control.height > 8) {
             // Um controle registrado pelo convidado pode ter um WNDPROC válido
@@ -566,6 +614,21 @@ void handle_control_mouse(WindowSlot& parent, const std::span<WindowSlot> window
         } else if (control->control_kind == ControlKind::ComboBox && !control->combo_items.empty()) {
             control->combo_selection = (control->combo_selection + 1) %
                                        static_cast<int>(control->combo_items.size());
+        } else if (control->control_kind == ControlKind::Toolbar &&
+                   !control->toolbar_buttons.empty()) {
+            const int available_width = std::max(control->width, 16);
+            const int fitting_width = std::max(
+                (available_width - 8) / static_cast<int>(control->toolbar_buttons.size()), 1);
+            const int button_width = std::min(
+                fitting_width, control->toolbar_button_width > 0 ? control->toolbar_button_width
+                                                                  : fitting_width);
+            const int index = (event.x - control->x - 4) / button_width;
+            if (index >= 0 && static_cast<std::size_t>(index) < control->toolbar_buttons.size()) {
+                queue_command_id(*control, 0,
+                                 static_cast<std::uintptr_t>(
+                                     control->toolbar_buttons[static_cast<std::size_t>(index)]
+                                         .command_id));
+            }
         }
         render_controls(parent, windows);
     }
