@@ -9,8 +9,8 @@ explícitos abaixo.
 
 ## Estado atual
 
-- Commits desta retomada: `ce66739`, `4f95c65`, `2fa9ebd`, `d9aeb9f` e
-  `956aadc`.
+- Commits desta retomada: `ce66739`, `4f95c65`, `2fa9ebd`, `d9aeb9f`,
+  `956aadc` e `17f4305`.
 - O alvo continua sendo PE32+ x86-64 em Linux x86-64.
 - Já foram implementados e testados no build Debug Linux os subconjuntos de `IPHLPAPI`, `WTSAPI32` e parte de `CRYPT32`, além das correções de forwarders, TLS genérico e parser de manifests MSIX.
 - A validação executada até aqui cobriu fixtures próprias, testes unitários direcionados e traces de `tl_worker_rsl` e `tl_powr`.
@@ -28,10 +28,14 @@ explícitos abaixo.
   janela, teclado, timer, GDI, pintura e diálogo sob Xvfb.
 - [x] Correção de diagnóstico GUI no 7-Zip: `GetClassInfoW` deixou de
   retornar sucesso falso para classes ausentes; classes próprias filhas agora
-  entram no ciclo básico de `WM_CREATE`/`WM_PAINT`. Quando a classe ainda não
-  tem renderer, a janela exibe a limitação e o nome do controle em vez de uma
-  tela branca silenciosa. O `7zFM_x64.exe` continua explicitamente fora de
-  suporte como fluxo GUI concluído.
+  entram no ciclo básico de `WM_CREATE`/`WM_PAINT`.
+- [x] Primeiro shell visual do `7zFM_x64.exe`: o renderer específico de
+  `7-Zip::FM` desenha menu, toolbar, endereço, navegação lateral, lista de
+  arquivos e status em X11. Também normaliza a geometria impossível entregue
+  pelo aplicativo (`22731,-1163111472,7029x272`) para `800x600`, registrando a
+  ocorrência no trace. A interface é navegável apenas visualmente; comandos,
+  menus reais, ícones e dados de diretório ainda não estão ligados ao convidado.
+  O aplicativo continua explicitamente fora de suporte como fluxo GUI concluído.
 - [x] MSIX: 8 testes `MsixParserTest.*` e o teste de afinidade passaram no
   unitário e no CTest. A validação é estrutural; não houve instalação ou
   execução de .NET/MSIX.

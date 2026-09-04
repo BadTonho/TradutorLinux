@@ -221,8 +221,13 @@ Classes customizadas registradas pelo convidado também entram na side-table e
 recebem o ciclo básico de `WM_CREATE`/`WM_PAINT`, mas não são tratadas como se
 fossem visualmente suportadas: quando não há renderer para a classe, a área
 mostra um diagnóstico explícito com o nome do controle. Isso evita uma tela
-branca silenciosa em aplicações como o 7-Zip File Manager; menus, toolbars e
-painéis customizados ainda exigem um contrato próprio e regressão.
+branca silenciosa em aplicações genéricas. Há uma exceção deliberada para o
+alvo real `7zFM_x64.exe`: quando a classe principal é `7-Zip::FM`, o backend
+desenha um shell visual próprio com menu, toolbar, endereço, navegação lateral,
+lista e status, sem fingir que os comandos do convidado já funcionam. A
+normalização da geometria inválida desse alvo também fica registrada no trace.
+Comandos, menus reais, ícones, dados de diretório e interação do painel ainda
+exigem contratos próprios e regressão antes de promover o aplicativo.
 
 `SendMessageA` implementa os contratos usados pelo alvo para `WM_SETFONT`,
 `CB_ADDSTRING`, `CB_SETCURSEL`, `CB_GETCURSEL` e as mensagens de list view de

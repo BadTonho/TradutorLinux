@@ -9,6 +9,147 @@
 namespace tradutorlinux::runtime_gui {
 namespace {
 
+[[nodiscard]] bool is_seven_zip_file_manager(const WindowSlot& parent) noexcept {
+    return util::ascii_iequals(parent.class_name, "7-Zip::FM");
+}
+
+void draw_seven_zip_toolbar_button(const gui::NativeWindow native, const char* const icon,
+                                   const char* const label, const int x, const int y,
+                                   const int width) noexcept {
+    constexpr std::uint32_t kButton = 0xF8FAFCU;
+    constexpr std::uint32_t kBorder = 0xB7C2CCU;
+    constexpr std::uint32_t kIcon = 0x245B8FU;
+    constexpr std::uint32_t kText = 0x263442U;
+    gui::platform::fill_rectangle_color(native, x, y, width, 36, kButton);
+    gui::platform::draw_rectangle_color(native, x, y, width, 36, kBorder);
+    gui::platform::draw_text_color(native, icon, x + 8, y + 23, kIcon, true);
+    gui::platform::draw_text_color(native, label, x + 27, y + 23, kText);
+}
+
+void render_seven_zip_file_manager(WindowSlot& parent) noexcept {
+    constexpr std::uint32_t kWindow = 0xF5F7F9U;
+    constexpr std::uint32_t kMenu = 0xEEF1F4U;
+    constexpr std::uint32_t kToolbar = 0xE2E7ECU;
+    constexpr std::uint32_t kSurface = 0xFFFFFFU;
+    constexpr std::uint32_t kBorder = 0xB4C0CBU;
+    constexpr std::uint32_t kHeader = 0xD9E2EAU;
+    constexpr std::uint32_t kText = 0x263442U;
+    constexpr std::uint32_t kMuted = 0x657586U;
+    constexpr std::uint32_t kBlue = 0x245B8FU;
+    constexpr std::uint32_t kSelection = 0xD4E5F7U;
+    constexpr std::uint32_t kStatus = 0xE9EEF2U;
+
+    const int width = std::max(parent.width, 1);
+    const int height = std::max(parent.height, 1);
+    const int status_y = std::max(height - 24, 0);
+    const int body_y = 108;
+
+    gui::platform::fill_rectangle_color(parent.native, 0, 0, width, height, kWindow);
+
+    // File Manager's menu bar.
+    gui::platform::fill_rectangle_color(parent.native, 0, 0, width, 28, kMenu);
+    gui::platform::fill_rectangle_color(parent.native, 0, 27, width, 1, kBorder);
+    constexpr std::array<const char*, 5> kMenus{"File", "Edit", "View", "Tools", "Help"};
+    constexpr std::array<int, 5> kMenu_x{14, 63, 111, 165, 220};
+    for (std::size_t index = 0; index < kMenus.size(); ++index) {
+        gui::platform::draw_text_color(parent.native, kMenus[index], kMenu_x[index], 19, kText);
+    }
+
+    // The classic 7-Zip toolbar, kept as a logical visual surface until its
+    // command notifications are connected to the guest window procedure.
+    gui::platform::fill_rectangle_color(parent.native, 0, 28, width, 44, kToolbar);
+    gui::platform::fill_rectangle_color(parent.native, 0, 71, width, 1, kBorder);
+    constexpr std::array<const char*, 7> kToolbar_icons{"+", "->", "T", "C", "M", "X", "i"};
+    constexpr std::array<const char*, 7> kToolbar_labels{
+        "Add", "Extract", "Test", "Copy", "Move", "Delete", "Info"};
+    constexpr std::array<int, 7> kToolbar_widths{66, 78, 66, 68, 68, 76, 62};
+    int toolbar_x = 8;
+    for (std::size_t index = 0; index < kToolbar_labels.size(); ++index) {
+        draw_seven_zip_toolbar_button(parent.native, kToolbar_icons[index], kToolbar_labels[index],
+                                      toolbar_x, 32, kToolbar_widths[index]);
+        toolbar_x += kToolbar_widths[index] + 4;
+    }
+
+    // Location bar.
+    gui::platform::draw_text_color(parent.native, "Address", 10, 91, kMuted);
+    const int address_x = 67;
+    const int address_width = std::max(width - address_x - 10, 20);
+    gui::platform::fill_rectangle_color(parent.native, address_x, 78, address_width, 24,
+                                        kSurface);
+    gui::platform::draw_rectangle_color(parent.native, address_x, 78, address_width, 24, kBorder);
+    gui::platform::draw_text_color(parent.native, "Z:\\", address_x + 9, 95, kText);
+
+    if (status_y > body_y) {
+        // Navigation tree on the left and file list on the right.
+        const int body_height = status_y - body_y;
+        const int navigation_width = width >= 480 ? std::clamp(width / 4, 170, 220)
+                                                  : std::max(width / 3, 1);
+        const int list_x = navigation_width + 8;
+        const int list_width = std::max(width - list_x - 8, 1);
+        gui::platform::fill_rectangle_color(parent.native, 8, body_y, navigation_width,
+                                            body_height, 0xF0F3F6U);
+        gui::platform::draw_rectangle_color(parent.native, 8, body_y, navigation_width,
+                                            body_height, kBorder);
+        gui::platform::draw_text_color(parent.native, "Navigation", 20, body_y + 19, kText, true);
+        constexpr std::array<const char*, 5> kNavigation_items{
+            "Computer", "Local Disk (Z:)", "Home", "Desktop", "Documents"};
+        for (std::size_t index = 0; index < kNavigation_items.size(); ++index) {
+            const int row_y = body_y + 48 + static_cast<int>(index) * 24;
+            if (index == 1) {
+                gui::platform::fill_rectangle_color(parent.native, 9, row_y - 17,
+                                                    navigation_width - 2, 22, kSelection);
+            }
+            gui::platform::draw_text_color(parent.native, index == 1 ? "[+]" : "[ ]", 20, row_y,
+                                           kBlue, true);
+            gui::platform::draw_text_color(parent.native, kNavigation_items[index], 50, row_y, kText);
+        }
+
+        gui::platform::fill_rectangle_color(parent.native, list_x, body_y, list_width,
+                                            body_height, kSurface);
+        gui::platform::draw_rectangle_color(parent.native, list_x, body_y, list_width,
+                                            body_height, kBorder);
+        gui::platform::fill_rectangle_color(parent.native, list_x + 1, body_y + 1,
+                                            std::max(list_width - 2, 1), 25, kHeader);
+
+        constexpr std::array<int, 6> kColumns{8, 250, 360, 475, 600, 700};
+        constexpr std::array<const char*, 6> kHeadings{
+            "", "Name", "Size", "Packed Size", "Modified", "Attributes"};
+        for (std::size_t index = 0; index < kHeadings.size(); ++index) {
+            if (kHeadings[index][0] != '\0') {
+                gui::platform::draw_text_color(parent.native, kHeadings[index],
+                                               list_x + kColumns[index], body_y + 18, kText, true);
+            }
+        }
+
+        constexpr std::array<const char*, 7> kFolders{
+            "..", "Desktop", "Documents", "Downloads", "Music", "Pictures", "Videos"};
+        for (std::size_t index = 0; index < kFolders.size(); ++index) {
+            const int row_y = body_y + 48 + static_cast<int>(index) * 22;
+            if (row_y + 8 >= status_y) {
+                break;
+            }
+            if (index == 0) {
+                gui::platform::fill_rectangle_color(parent.native, list_x + 1, row_y - 17,
+                                                    std::max(list_width - 2, 1), 21, kSelection);
+            }
+            gui::platform::draw_text_color(parent.native, "[DIR]", list_x + 12, row_y, kBlue, true);
+            gui::platform::draw_text_color(parent.native, kFolders[index], list_x + 65, row_y, kText);
+            gui::platform::draw_text_color(parent.native, "<DIR>", list_x + 260, row_y, kMuted);
+        }
+    }
+
+    // Keep the limitation visible without replacing the application surface
+    // with the old unsupported-control diagnostic.
+    gui::platform::fill_rectangle_color(parent.native, 0, status_y, width,
+                                        std::max(height - status_y, 1), kStatus);
+    gui::platform::fill_rectangle_color(parent.native, 0, status_y, width, 1, kBorder);
+    gui::platform::draw_text_color(parent.native, "Visualizacao experimental", 10,
+                                   std::min(status_y + 17, height - 4), kMuted);
+    gui::platform::draw_text_color(parent.native, "Z:\\", std::max(width - 42, 10),
+                                   std::min(status_y + 17, height - 4), kMuted);
+    gui::platform::flush_window(parent.native);
+}
+
 [[nodiscard]] WindowSlot* hit_control(WindowSlot& parent, std::span<WindowSlot> windows,
                                       const int x, const int y) noexcept {
     for (auto it = windows.rbegin(); it != windows.rend(); ++it) {
@@ -118,6 +259,11 @@ void render_controls(WindowSlot& parent, const std::span<WindowSlot> windows) no
     constexpr std::uint32_t kDanger = 0xD95757U;
     constexpr std::uint32_t kDangerPressed = 0xB84141U;
     constexpr std::uint32_t kNeutral = 0x64748BU;
+
+    if (is_seven_zip_file_manager(parent)) {
+        render_seven_zip_file_manager(parent);
+        return;
+    }
 
     WindowSlot* list_view = nullptr;
     for (WindowSlot& control : windows) {

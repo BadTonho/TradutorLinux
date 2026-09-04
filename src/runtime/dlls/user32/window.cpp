@@ -197,8 +197,12 @@ TL_MSABI abi::HWnd tl_CreateWindowExA(const std::uint32_t ex_style,
     (void)instance;
     (void)param;
     const auto class_val = reinterpret_cast<std::uintptr_t>(class_name);
-    const int resolved_width = guest_window_dimension(width, 800);
-    const int resolved_height = guest_window_dimension(height, 600);
+    const bool normalize_geometry =
+        guest_window_geometry_is_unreasonable(x, y, width, height);
+    const int resolved_width = normalize_geometry ? 800 : guest_window_dimension(width, 800);
+    const int resolved_height = normalize_geometry ? 600 : guest_window_dimension(height, 600);
+    const int resolved_x = normalize_geometry ? 0 : x;
+    const int resolved_y = normalize_geometry ? 0 : y;
     if (class_name == nullptr || (class_val > 0xFFFFU && !mapped_guest_cstring(class_name)) ||
         (window_name != nullptr && !mapped_guest_cstring(window_name))) {
         set_last_error(abi::kErrorInvalidParameter);
@@ -322,12 +326,23 @@ TL_MSABI abi::HWnd tl_CreateWindowExA(const std::uint32_t ex_style,
     slot.class_name = cls->name;
     slot.window_title = caption;
     slot.native = native;
-    slot.x = x;
-    slot.y = y;
+    slot.x = resolved_x;
+    slot.y = resolved_y;
     slot.width = resolved_width;
     slot.height = resolved_height;
     slot.style = style;
     slot.visible = (style & kWsVisible) != 0U;
+    if (normalize_geometry) {
+        const std::array<diagnostics::TraceField, 4> fields{
+            diagnostics::TraceField{"symbol", "CreateWindowExA"},
+            diagnostics::TraceField{"status", "geometry-normalized"},
+            diagnostics::TraceField{"requested-position",
+                                    std::to_string(x) + "," + std::to_string(y)},
+            diagnostics::TraceField{"requested-size",
+                                    std::to_string(width) + "x" + std::to_string(height)},
+        };
+        runtime_trace("CreateWindowExA", fields, 4);
+    }
     // A janela principal precisa estar presente no compositor enquanto o
     // WM_CREATE é executado. Alguns aplicativos fazem parte da inicialização
     // dentro desse callback; se ele bloquear, uma janela criada mas ainda não
@@ -360,8 +375,8 @@ TL_MSABI abi::HWnd tl_CreateWindowExA(const std::uint32_t ex_style,
     cs.hwndParent = parent;
     cs.cy = slot.height;
     cs.cx = slot.width;
-    cs.y = y;
-    cs.x = x;
+    cs.y = resolved_y;
+    cs.x = resolved_x;
     cs.style = style;
     cs.lpszName = caption;
     cs.lpszClass = cls->name.c_str();

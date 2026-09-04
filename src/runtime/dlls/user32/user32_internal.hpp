@@ -29,6 +29,15 @@ constexpr int kMaxGuestWindowDimension = 8192;
     return value > 0 && value <= kMaxGuestWindowDimension ? value : fallback;
 }
 
+[[nodiscard]] inline bool guest_window_geometry_is_unreasonable(const int x, const int y,
+                                                                const int width,
+                                                                const int height) noexcept {
+    constexpr int kMaxHostWindowDimension = 4096;
+    return x < -kMaxGuestWindowDimension || x > kMaxGuestWindowDimension ||
+           y < -kMaxGuestWindowDimension || y > kMaxGuestWindowDimension ||
+           width > kMaxHostWindowDimension || height > kMaxHostWindowDimension;
+}
+
 inline abi::Lresult call_wndproc(const std::uintptr_t wndproc, const abi::HWnd hwnd,
                                  const std::uint32_t message, const abi::Wparam wparam,
                                  const abi::Lparam lparam) noexcept {

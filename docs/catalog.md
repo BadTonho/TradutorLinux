@@ -44,7 +44,7 @@ promessa de suporte universal; cada entrada é verificada via `tests/samples` ou
 | `tl_win.exe` | USER32 A 10 | **fluxo principal** | janela + message loop X11 |
 | `tl_win_w.exe` | USER32 W 12 | **fluxo principal** | W wrappers via `wide_to_utf8` |
 | `simple_todo` | 105 (GDI32/USER32/SHELL32/msvcrt) | **uso diário** | `targetapp_simple_todo_gui_smoke` `105/105` |
-| `7zFM_x64.exe` | 298 | **imports resolvidos; GUI não concluída** | janela X11 abre, mas `7-Zip::Panel` recebe diagnóstico de renderer ausente |
+| `7zFM_x64.exe` | 298 | **shell visual experimental** | menu, toolbar, endereço, navegação e lista são desenhados; comandos e dados reais ainda não estão ligados |
 
 ## Sistema
 
@@ -87,7 +87,7 @@ comportamental completa. Use o campo `runtime-support` do `--report` e os testes
 de integração para avaliar o nível real de suporte:
 - `winrar-x64-723.exe` (WinRAR 7.23 x64): **251/251 (100%)** imports resolvidos
 - `7z_x64.exe` (7-Zip CLI x64): **133/133 (100%)** imports resolvidos
-- `7zFM_x64.exe` (7-Zip GUI): **298/298 (100%)** imports resolvidos; a GUI continua não concluída porque o controle customizado `7-Zip::Panel` não possui renderer
+- `7zFM_x64.exe` (7-Zip GUI): **298/298 (100%)** imports resolvidos; há um shell visual experimental para `7-Zip::FM`, mas comandos, menus reais e dados de diretório ainda não estão ligados
 - `Rockstar-Games-Launcher.exe`: **338/338 (100%)** imports resolvidos
 - `putty_x64.exe` (PuTTY SSH Client): **348/348 (100%)** imports resolvidos
 - `notepad++.exe` (Notepad++ x64): **584/584 (100%)** imports resolvidos
