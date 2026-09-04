@@ -30,7 +30,13 @@ add_library(tradutorlinux_core STATIC
     runtime/dlls/kernel32/console.cpp
     runtime/dlls/kernel32/locale.cpp
     runtime/dlls/kernel32/module.cpp
-    runtime/user32.cpp
+    runtime/dlls/user32/window.cpp
+    runtime/dlls/user32/message.cpp
+    runtime/dlls/user32/dialog.cpp
+    runtime/dlls/user32/menu.cpp
+    runtime/dlls/user32/clipboard.cpp
+    runtime/dlls/user32/misc.cpp
+    runtime/dlls/user32/module.cpp
     runtime/dialog_template.cpp
     runtime/gdi32.cpp
     runtime/shell32.cpp
@@ -77,8 +83,14 @@ target_compile_definitions(tradutorlinux_core
 )
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
     target_compile_options(tradutorlinux_core PUBLIC -mstackrealign)
-    set_source_files_properties(runtime/kernel32.cpp runtime/legacy_winapi.cpp runtime/ntdll.cpp
-        runtime/user32.cpp runtime/gdi32.cpp runtime/gui_controls.cpp runtime/shell32.cpp
+    set_source_files_properties(
+        runtime/dlls/kernel32/file.cpp runtime/dlls/kernel32/process.cpp runtime/dlls/kernel32/thread.cpp
+        runtime/dlls/kernel32/sync.cpp runtime/dlls/kernel32/memory.cpp runtime/dlls/kernel32/time.cpp
+        runtime/dlls/kernel32/console.cpp runtime/dlls/kernel32/locale.cpp runtime/dlls/kernel32/module.cpp
+        runtime/dlls/user32/window.cpp runtime/dlls/user32/message.cpp runtime/dlls/user32/dialog.cpp
+        runtime/dlls/user32/menu.cpp runtime/dlls/user32/clipboard.cpp runtime/dlls/user32/misc.cpp
+        runtime/dlls/user32/module.cpp runtime/ntdll.cpp
+        runtime/gdi32.cpp runtime/gui_controls.cpp runtime/shell32.cpp
         runtime/core/winapi.cpp runtime/msvcrt.cpp runtime/advapi.cpp runtime/security.cpp
         runtime/dlls/net/ws2_32.cpp runtime/dlls/net/wininet.cpp runtime/dlls/crypto/wintrust.cpp runtime/dlls/crypto/crypt32.cpp
         runtime/dlls/com/ole32.cpp runtime/dlls/com/oleaut32.cpp runtime/shlwapi.cpp runtime/version.cpp
