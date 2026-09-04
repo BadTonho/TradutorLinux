@@ -3,6 +3,9 @@ namespace tradutorlinux {
 extern "C" {
 
 TL_MSABI abi::Atom tl_RegisterClassExA(const void* const wnd_class) noexcept {
+    if (!user32_gui_thread_allowed("RegisterClassExA")) {
+        return 0;
+    }
     if (wnd_class == nullptr ||
         !mapped_guest_range(wnd_class, sizeof(abi::GuestWndClassExA), false)) {
         set_last_error(abi::kErrorInvalidParameter);
@@ -67,6 +70,9 @@ TL_MSABI abi::Atom tl_RegisterClassA(const void* wnd_class) noexcept {
 }
 
 TL_MSABI abi::Atom tl_RegisterClassExW(const void* const wnd_class) noexcept {
+    if (!user32_gui_thread_allowed("RegisterClassExW")) {
+        return 0;
+    }
     if (wnd_class == nullptr ||
         !mapped_guest_range(wnd_class, sizeof(abi::GuestWndClassExW), false)) {
         set_last_error(abi::kErrorInvalidParameter);
@@ -106,6 +112,9 @@ TL_MSABI abi::Atom tl_RegisterClassExW(const void* const wnd_class) noexcept {
 }
 
 TL_MSABI abi::Atom tl_RegisterClassW(const void* wnd_class) noexcept {
+    if (!user32_gui_thread_allowed("RegisterClassW")) {
+        return 0;
+    }
     if (wnd_class == nullptr || !mapped_guest_range(wnd_class, sizeof(abi::GuestWndClassW), false)) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
@@ -149,6 +158,9 @@ TL_MSABI abi::HWnd tl_CreateWindowExA(const std::uint32_t ex_style,
                                       const int width, const int height, const void* const parent,
                                       const void* const menu, const void* const instance,
                                       const void* const param) noexcept {
+    if (!user32_gui_thread_allowed("CreateWindowExA")) {
+        return nullptr;
+    }
     (void)ex_style;
     (void)instance;
     (void)param;
@@ -429,6 +441,9 @@ TL_MSABI abi::Lresult tl_DefWindowProcW(const void* const window,
 }
 
 TL_MSABI int tl_DestroyWindow(const void* const window) noexcept {
+    if (!user32_gui_thread_allowed("DestroyWindow")) {
+        return 0;
+    }
     WindowSlot* slot = find_window_slot(window);
     if (slot == nullptr) {
         set_last_error(abi::kErrorInvalidHandle);
@@ -618,6 +633,9 @@ TL_MSABI int tl_EnableWindow(const void* window, int enable) noexcept {
 }
 
 TL_MSABI const void* tl_SetFocus(const void* window) noexcept {
+    if (!user32_gui_thread_allowed("SetFocus")) {
+        return nullptr;
+    }
     WindowSlot* slot = find_window_slot(window);
     if (slot == nullptr || !slot->is_control) {
         set_last_error(abi::kErrorInvalidHandle);
@@ -635,6 +653,9 @@ TL_MSABI int tl_IsWindowVisible(const void* window) noexcept {
 }
 
 TL_MSABI const void* tl_FindWindowA(const char* class_name, const char* window_name) noexcept {
+    if (!user32_gui_thread_allowed("FindWindowA")) {
+        return nullptr;
+    }
     for (const WindowSlot& slot : g_windows) {
         if (!slot.used || slot.native == nullptr ||
             (class_name != nullptr && !util::ascii_iequals(slot.class_name, class_name))) {
@@ -649,6 +670,9 @@ TL_MSABI const void* tl_FindWindowA(const char* class_name, const char* window_n
 }
 
 TL_MSABI const void* tl_FindWindowW(const std::uint16_t* class_name, const std::uint16_t* window_name) noexcept {
+    if (!user32_gui_thread_allowed("FindWindowW")) {
+        return nullptr;
+    }
     std::string utf8_class, utf8_window;
     const char* class_cstr = nullptr;
     const char* window_cstr = nullptr;
@@ -823,10 +847,16 @@ TL_MSABI void* tl_GetDesktopWindow() noexcept {
 }
 
 TL_MSABI void* tl_GetFocus() noexcept {
+    if (!user32_gui_thread_allowed("GetFocus")) {
+        return nullptr;
+    }
     return g_focused_control != nullptr ? g_focused_control : nullptr;
 }
 
 TL_MSABI void* tl_SetCapture(const void* const window) noexcept {
+    if (!user32_gui_thread_allowed("SetCapture")) {
+        return nullptr;
+    }
     void* const prev = g_captured_window;
     if (window == nullptr) {
         g_captured_window = nullptr;
@@ -837,11 +867,17 @@ TL_MSABI void* tl_SetCapture(const void* const window) noexcept {
 }
 
 TL_MSABI int tl_ReleaseCapture() noexcept {
+    if (!user32_gui_thread_allowed("ReleaseCapture")) {
+        return 0;
+    }
     g_captured_window = nullptr;
     return 1;
 }
 
 TL_MSABI void* tl_GetCapture() noexcept {
+    if (!user32_gui_thread_allowed("GetCapture")) {
+        return nullptr;
+    }
     return g_captured_window;
 }
 
@@ -859,6 +895,9 @@ TL_MSABI int tl_BringWindowToTop(const void* const window) noexcept {
 }
 
 TL_MSABI void* tl_GetWindow(const void* const window, const std::uint32_t cmd) noexcept {
+    if (!user32_gui_thread_allowed("GetWindow")) {
+        return nullptr;
+    }
     WindowSlot* const slot = find_window_slot(window);
     if (slot == nullptr) {
         set_last_error(abi::kErrorInvalidHandle);

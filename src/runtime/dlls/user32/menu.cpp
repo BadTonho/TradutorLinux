@@ -3,6 +3,9 @@ namespace tradutorlinux {
 extern "C" {
 
 TL_MSABI void* tl_CreatePopupMenu() noexcept {
+    if (!user32_gui_thread_allowed("CreatePopupMenu")) {
+        return nullptr;
+    }
     const auto free_it = std::find_if(g_menus.begin(), g_menus.end(),
                                       [](const MenuSlot& menu) { return !menu.used; });
     if (free_it == g_menus.end()) {
@@ -17,6 +20,9 @@ TL_MSABI void* tl_CreatePopupMenu() noexcept {
 
 TL_MSABI int tl_AppendMenuA(const void* menu, std::uint32_t flags, std::uintptr_t command,
                             const char* text) noexcept {
+    if (!user32_gui_thread_allowed("AppendMenuA")) {
+        return 0;
+    }
     const auto it = std::find_if(g_menus.begin(), g_menus.end(),
                                  [menu](const MenuSlot& entry) { return entry.used && &entry == menu; });
     if (it == g_menus.end()) {
@@ -42,6 +48,9 @@ TL_MSABI int tl_AppendMenuW(const void* menu, std::uint32_t flags, std::uintptr_
 }
 
 TL_MSABI int tl_DestroyMenu(const void* menu) noexcept {
+    if (!user32_gui_thread_allowed("DestroyMenu")) {
+        return 0;
+    }
     const auto it = std::find_if(g_menus.begin(), g_menus.end(),
                                  [menu](const MenuSlot& entry) { return entry.used && &entry == menu; });
     if (it == g_menus.end()) {
@@ -55,6 +64,9 @@ TL_MSABI int tl_DestroyMenu(const void* menu) noexcept {
 
 TL_MSABI int tl_TrackPopupMenu(const void* menu, std::uint32_t flags, int x, int y, int reserved,
                                const void* owner, const void* rect) noexcept {
+    if (!user32_gui_thread_allowed("TrackPopupMenu")) {
+        return 0;
+    }
     (void)flags;
     (void)reserved;
     (void)rect;

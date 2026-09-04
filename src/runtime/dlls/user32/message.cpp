@@ -5,6 +5,9 @@ extern "C" {
 TL_MSABI int tl_GetMessageA(void* const msg, const void* const window,
                             const std::uint32_t filter_min,
                             const std::uint32_t filter_max) noexcept {
+    if (!user32_gui_thread_allowed("GetMessageA")) {
+        return -1;
+    }
     if (msg == nullptr || !mapped_guest_range(msg, sizeof(abi::GuestMsg), true)) {
         set_last_error(abi::kErrorInvalidParameter);
         trace_guest_failure("GetMessageA", "output-message", "ponteiro sem permissão de escrita");
@@ -142,6 +145,9 @@ TL_MSABI int tl_GetMessageW(void* const msg, const void* const window,
 }
 
 TL_MSABI int tl_TranslateMessage(const void* const msg) noexcept {
+    if (!user32_gui_thread_allowed("TranslateMessage")) {
+        return 0;
+    }
     if (msg == nullptr || !mapped_guest_range(msg, sizeof(abi::GuestMsg), false)) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
@@ -173,6 +179,9 @@ TL_MSABI int tl_TranslateMessage(const void* const msg) noexcept {
 }
 
 TL_MSABI abi::Lresult tl_DispatchMessageA(const void* const msg) noexcept {
+    if (!user32_gui_thread_allowed("DispatchMessageA")) {
+        return 0;
+    }
     if (msg == nullptr || !mapped_guest_range(msg, sizeof(abi::GuestMsg), false)) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
@@ -193,6 +202,9 @@ TL_MSABI abi::Lresult tl_DispatchMessageW(const void* const msg) noexcept {
 }
 
 TL_MSABI void tl_PostQuitMessage(const int exit_code) noexcept {
+    if (!user32_gui_thread_allowed("PostQuitMessage")) {
+        return;
+    }
     g_quit_code = static_cast<std::uint32_t>(exit_code);
     g_quit_requested = true;
 }
@@ -201,6 +213,9 @@ TL_MSABI std::uintptr_t tl_SetTimer(const void* const window,
                                     const std::uintptr_t id,
                                     const std::uint32_t elapsed_ms,
                                     const void* const timer_proc) noexcept {
+    if (!user32_gui_thread_allowed("SetTimer")) {
+        return 0;
+    }
     WindowSlot* const slot = find_window_slot(window);
     if (slot == nullptr || elapsed_ms == 0 || timer_proc != nullptr) {
         set_last_error(abi::kErrorInvalidParameter);
@@ -231,6 +246,9 @@ TL_MSABI std::uintptr_t tl_SetTimer(const void* const window,
 }
 
 TL_MSABI int tl_KillTimer(const void* const window, const std::uintptr_t id) noexcept {
+    if (!user32_gui_thread_allowed("KillTimer")) {
+        return 0;
+    }
     WindowSlot* const slot = find_window_slot(window);
     if (slot == nullptr) {
         set_last_error(abi::kErrorInvalidParameter);
@@ -255,6 +273,9 @@ TL_MSABI int tl_KillTimer(const void* const window, const std::uintptr_t id) noe
 
 TL_MSABI int tl_SendMessageA(const void* window, const std::uint32_t message,
                              const abi::Wparam wparam, const abi::Lparam lparam) noexcept {
+    if (!user32_gui_thread_allowed("SendMessageA")) {
+        return 0;
+    }
     WindowSlot* slot = find_window_slot(window);
     if (slot == nullptr) {
         set_last_error(abi::kErrorInvalidHandle);
@@ -426,6 +447,9 @@ TL_MSABI int tl_SendMessageW(const void* window, const std::uint32_t message,
 
 TL_MSABI int tl_PostMessageA(const void* window, const std::uint32_t message,
                              const abi::Wparam wparam, const abi::Lparam lparam) noexcept {
+    if (!user32_gui_thread_allowed("PostMessageA")) {
+        return 0;
+    }
     WindowSlot* slot = find_window_slot(window);
     if (slot == nullptr) {
         set_last_error(abi::kErrorInvalidHandle);
@@ -446,6 +470,9 @@ TL_MSABI std::uint32_t tl_MsgWaitForMultipleObjectsEx(const std::uint32_t count,
                                                       const std::uint32_t milliseconds,
                                                       const std::uint32_t wake_mask,
                                                       const std::uint32_t flags) noexcept {
+    if (!user32_gui_thread_allowed("MsgWaitForMultipleObjectsEx")) {
+        return abi::kWaitFailed;
+    }
     (void)wake_mask;
     (void)flags;
     if (count > 64 || (count > 0 && (handles == nullptr || !mapped_guest_range(handles, count * sizeof(void*), false)))) {
@@ -507,6 +534,9 @@ TL_MSABI std::int16_t tl_GetAsyncKeyState(const int) noexcept {
 TL_MSABI int tl_PeekMessageA(void* const msg, const void* const window,
                              const std::uint32_t filter_min, const std::uint32_t filter_max,
                              const std::uint32_t remove_msg) noexcept {
+    if (!user32_gui_thread_allowed("PeekMessageA")) {
+        return 0;
+    }
     (void)filter_min;
     (void)filter_max;
     if (msg == nullptr || !mapped_guest_range(msg, sizeof(abi::GuestMsg), true)) {

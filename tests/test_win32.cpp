@@ -934,6 +934,31 @@ TEST(Win32GuiTest, PopupMenuHandleHasLifecycle) {
     EXPECT_EQ(tl_DestroyMenu(menu), 1);
 }
 
+TEST(Win32GuiTest, RejectsStatefulGuiCallsFromNonPrimaryGuestThread) {
+    void* worker_menu = nullptr;
+    std::uint32_t worker_menu_error = abi::kErrorSuccess;
+    int worker_get_message = 0;
+    std::uint32_t worker_message_error = abi::kErrorSuccess;
+    std::thread worker([&] {
+        g_current_thread_id = 2;
+        worker_menu = tl_CreatePopupMenu();
+        worker_menu_error = tl_GetLastError();
+        abi::GuestMsg message{};
+        worker_get_message = tl_GetMessageA(&message, nullptr, 0, 0);
+        worker_message_error = tl_GetLastError();
+    });
+    worker.join();
+
+    EXPECT_EQ(worker_menu, nullptr);
+    EXPECT_EQ(worker_menu_error, abi::kErrorNotSupported);
+    EXPECT_EQ(worker_get_message, -1);
+    EXPECT_EQ(worker_message_error, abi::kErrorNotSupported);
+
+    void* main_menu = tl_CreatePopupMenu();
+    ASSERT_NE(main_menu, nullptr);
+    EXPECT_EQ(tl_DestroyMenu(main_menu), 1);
+}
+
 TEST(Win32RegistryTest, TodoAutorunValueRoundTrips) {
     const void* current_user = reinterpret_cast<const void*>(0x80000001U);
     void* key = nullptr;

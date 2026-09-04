@@ -27,21 +27,24 @@ Critério atendido para as duas exports: o registro e a regressão em
 `tests/test_module.cpp` confirmam `support=stub`. A revisão sistemática de
 outras exports que retornam sucesso sintético permanece coberta pela P2.5.
 
-#### P0.2 — Estado modal e tabelas de USER32 ainda não têm contrato de concorrência
+#### P0.2 — Estado modal e tabelas de USER32 com afinidade explícita
 
-`src/runtime/dlls/user32/dialog.cpp` agora protege a leitura inicial de
-`g_active_dialog` e as demais transições de `g_modal_*` com `g_modal_mutex`.
-A tabela global `g_windows`, o foco e as filas ainda não possuem uma política
-única de sincronização.
+O runtime agora restringe o estado de USER32/GUI ao thread convidado principal
+(`g_current_thread_id == kMainThreadId`). Chamadas de outros threads falham com
+`ERROR_NOT_SUPPORTED` antes de acessar `g_windows`, `g_classes`, filas, foco,
+captura, menus ou estado modal. `g_modal_*` continua protegido por
+`g_modal_mutex` nas transições do diálogo; a expansão para janelas em threads
+distintos permanece fora do contrato atual.
 
 Critérios de conclusão:
 
-- definir quais operações podem ser chamadas por threads convidadas;
+- documentar quais operações podem ser chamadas pelo thread GUI principal;
+- rejeitar chamadas de outros threads antes de tocar o estado compartilhado;
 - proteger todas as leituras e escritas do estado modal com o mesmo protocolo;
-- evitar usar ponteiros de `g_windows` depois de liberar o lock sem uma regra de
-  vida documentada;
-- cobrir entrada concorrente, encerramento modal e postagem de mensagens com
-  teste de regressão e, quando disponível, ThreadSanitizer.
+- manter ponteiros de `g_windows` restritos ao thread proprietário e ao ciclo de
+  vida documentado;
+- cobrir a rejeição cross-thread com teste de regressão e, quando disponível,
+  ThreadSanitizer.
 
 #### P0.3 — Inspeção MSIX (parcialmente corrigida nesta rodada)
 
@@ -120,19 +123,19 @@ Critérios de conclusão:
 - manter Roblox como benchmark e só mudar seu estado após execução reproduzível
   do fluxo definido no roadmap.
 
-#### P1.4 — Concorrência geral do backend GUI ainda não está definida
+#### P1.4 — Concorrência geral do backend GUI restrita no escopo atual
 
-O `ready flag` antigo do X11 foi substituído por `std::call_once`, mas estado
-de janelas, filas e desenho continua compartilhado. O runtime precisa declarar
-se USER32/GUI é single-thread no escopo atual ou implementar sincronização
-completa para chamadas vindas de threads convidadas.
+O `ready flag` antigo do X11 foi substituído por `std::call_once`, e o contrato
+atual de USER32/GUI foi declarado como thread-affine ao thread convidado
+principal. O backend não aceita chamadas de GUI vindas de threads convidados
+secundários; elas falham de forma controlada, sem tocar estado ou display.
 
 Critérios de conclusão:
 
 - documentar o modelo de threads suportado;
 - impedir corrida em estado de janela, fila, display e recursos X11;
-- cobrir duas threads convidadas usando GUI ou rejeitar o cenário com erro
-  controlado e teste.
+- cobrir uma chamada de GUI em thread secundário com rejeição, erro controlado
+  e teste; uma futura implementação cross-thread exigirá um contrato novo.
 
 ### P2 — manutenção, testes e melhorias futuras
 

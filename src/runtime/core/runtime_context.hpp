@@ -294,6 +294,16 @@ void trace_guest_failure(const char* symbol, const char* operation, const char* 
 void trace_linux_failure(const char* symbol, const char* operation, int error, std::uint32_t win32_error) noexcept;
 void trace_stub(const char* symbol) noexcept;
 
+[[nodiscard]] inline bool user32_gui_thread_allowed(const char* const symbol) noexcept {
+    if (g_current_thread_id == kMainThreadId) {
+        return true;
+    }
+    set_last_error(abi::kErrorNotSupported);
+    trace_guest_failure(symbol, "thread-affinity",
+                        "USER32 stateful GUI calls require the primary guest thread");
+    return false;
+}
+
 bool translate_windows_path(const char* win_path, char* linux_out, std::size_t out_size) noexcept;
 bool wide_path_to_string(const std::uint16_t* path, std::string& result) noexcept;
 bool normalized_wide_path(const std::uint16_t* path, char (&buffer)[4096]) noexcept;

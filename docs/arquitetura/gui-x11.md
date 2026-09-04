@@ -46,6 +46,20 @@ e máximo de 10 minutos. Valor ausente, zero ou inválido usa o padrão. Escape,
 clique fora do menu, destruição da janela e timeout liberam os grabs e fecham o
 popup; o timeout é registrado no trace `gui`.
 
+## Afinidade de thread da GUI
+
+No escopo atual, o estado de USER32 e o display X11 pertencem ao thread
+convidado principal, identificado por `GetCurrentThreadId() == 1`. As APIs
+stateful de janela, fila, menu, foco, captura, timer, diálogo e pintura só
+podem ser chamadas por esse thread. Uma chamada de outro thread não acessa as
+tabelas globais nem o display: falha com `ERROR_NOT_SUPPORTED` e registra o
+diagnóstico `thread-affinity`.
+
+Esse contrato é uma restrição explícita do runtime, não uma equivalência
+completa com o modelo Win32. A expansão futura para janelas associadas a
+threads diferentes exigirá filas thread-safe, ciclo de vida de handles e
+despacho cross-thread testados em conjunto.
+
 ## `MessageBoxA`
 
 `USER32.dll!MessageBoxA` aceita `hWnd == NULL`, texto e título ANSI, e somente

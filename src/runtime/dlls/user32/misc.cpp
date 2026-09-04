@@ -3,6 +3,9 @@ namespace tradutorlinux {
 extern "C" {
 
 TL_MSABI void* tl_BeginPaint(const void* const window, void* const paint_struct) noexcept {
+    if (!user32_gui_thread_allowed("BeginPaint")) {
+        return nullptr;
+    }
     if (paint_struct == nullptr ||
         !mapped_guest_range(paint_struct, sizeof(abi::GuestPaintStruct), true)) {
         set_last_error(abi::kErrorInvalidParameter);
@@ -29,6 +32,9 @@ TL_MSABI void* tl_BeginPaint(const void* const window, void* const paint_struct)
 }
 
 TL_MSABI int tl_EndPaint(const void* const window, const void* const paint_struct) noexcept {
+    if (!user32_gui_thread_allowed("EndPaint")) {
+        return 0;
+    }
     if (paint_struct == nullptr ||
         !mapped_guest_range(paint_struct, sizeof(abi::GuestPaintStruct), false)) {
         set_last_error(abi::kErrorInvalidParameter);
@@ -62,6 +68,9 @@ TL_MSABI int tl_GetCursorPos(void* point) noexcept {
 }
 
 TL_MSABI int tl_InvalidateRect(const void* window, const void* rect, int erase) noexcept {
+    if (!user32_gui_thread_allowed("InvalidateRect")) {
+        return 0;
+    }
     (void)rect;
     (void)erase;
     WindowSlot* slot = find_window_slot(window);
@@ -110,6 +119,9 @@ TL_MSABI std::uintptr_t tl_LoadIconW(const void* instance, const std::uint16_t* 
 
 TL_MSABI void* tl_CopyImage(const void* image, const std::uint32_t image_type, const int width,
                             const int height, const std::uint32_t flags) noexcept {
+    if (!user32_gui_thread_allowed("CopyImage")) {
+        return nullptr;
+    }
     (void)flags;
     if (image == nullptr || image_type != kImageIcon || width < 0 || height < 0 ||
         (image != reinterpret_cast<const void*>(1U) &&
@@ -131,6 +143,9 @@ TL_MSABI void* tl_CopyImage(const void* image, const std::uint32_t image_type, c
 }
 
 TL_MSABI int tl_DestroyIcon(const void* icon) noexcept {
+    if (!user32_gui_thread_allowed("DestroyIcon")) {
+        return 0;
+    }
     if (icon == reinterpret_cast<const void*>(1U)) {
         set_last_error(abi::kErrorSuccess);
         return 1;
@@ -173,6 +188,9 @@ TL_MSABI int tl_GetSystemMetrics(const int index) noexcept {
 }
 
 TL_MSABI void* tl_GetDC(const void* window) noexcept {
+    if (!user32_gui_thread_allowed("GetDC")) {
+        return nullptr;
+    }
     if (window == nullptr) {
         static char g_screen_dc_token = 0;
         set_last_error(abi::kErrorSuccess);

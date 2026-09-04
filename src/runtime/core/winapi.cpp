@@ -487,7 +487,7 @@ CriticalSectionEntry* alloc_cs_entry(void* cs) noexcept {
 }
 
 ClassSlot* find_class_slot(const char* const name) noexcept {
-    if (name == nullptr) {
+    if (name == nullptr || g_current_thread_id != kMainThreadId) {
         return nullptr;
     }
     const auto found = std::find_if(g_classes.begin(), g_classes.end(),
@@ -501,6 +501,9 @@ ClassSlot* find_class_slot(const char* const name) noexcept {
 }
 
 WindowSlot* find_window_slot(const void* const handle) noexcept {
+    if (g_current_thread_id != kMainThreadId) {
+        return nullptr;
+    }
     const auto found = std::find_if(g_windows.begin(), g_windows.end(),
                                     [handle](const WindowSlot& slot) {
                                         return slot.used && handle == &slot;

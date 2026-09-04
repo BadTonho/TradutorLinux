@@ -4,6 +4,9 @@ extern "C" {
 
 TL_MSABI int tl_MessageBoxA(const void* const window, const char* const text,
                             const char* const caption, const std::uint32_t type) noexcept {
+    if (!user32_gui_thread_allowed("MessageBoxA")) {
+        return 0;
+    }
     (void)window;
     if (type != 0 || !mapped_guest_cstring(text) || !mapped_guest_cstring(caption)) {
         set_last_error(abi::kErrorInvalidParameter);
@@ -15,6 +18,9 @@ TL_MSABI int tl_MessageBoxA(const void* const window, const char* const text,
 }
 
 TL_MSABI void* tl_GetDlgItem(const void* dialog, const int identifier) noexcept {
+    if (!user32_gui_thread_allowed("GetDlgItem")) {
+        return nullptr;
+    }
     WindowSlot* const slot = find_window_slot(dialog);
     if (slot == nullptr || !slot->is_dialog) {
         set_last_error(abi::kErrorInvalidHandle);
@@ -51,6 +57,9 @@ TL_MSABI abi::Lresult tl_SendDlgItemMessageW(const void* dialog, const int ident
 
 TL_MSABI void* tl_GetNextDlgTabItem(const void* dialog, const void* control,
                                     const int previous) noexcept {
+    if (!user32_gui_thread_allowed("GetNextDlgTabItem")) {
+        return nullptr;
+    }
     WindowSlot* const slot = find_window_slot(dialog);
     WindowSlot* current = nullptr;
     if (control != nullptr) {
@@ -70,6 +79,9 @@ TL_MSABI void* tl_GetNextDlgTabItem(const void* dialog, const void* control,
 }
 
 TL_MSABI int tl_IsDialogMessageW(const void* dialog, const void* message) noexcept {
+    if (!user32_gui_thread_allowed("IsDialogMessageW")) {
+        return 0;
+    }
     WindowSlot* const slot = find_window_slot(dialog);
     if (slot == nullptr || !slot->is_dialog || message == nullptr ||
         !mapped_guest_range(message, sizeof(abi::GuestMsg), false)) {
@@ -125,6 +137,9 @@ TL_MSABI int tl_IsDialogMessageW(const void* dialog, const void* message) noexce
 }
 
 TL_MSABI int tl_EndDialog(const void* dialog, const std::intptr_t result) noexcept {
+    if (!user32_gui_thread_allowed("EndDialog")) {
+        return 0;
+    }
     WindowSlot* const slot = find_window_slot(dialog);
     WindowSlot* modal_parent = nullptr;
     bool modal_parent_was_enabled = true;
@@ -168,6 +183,9 @@ TL_MSABI std::intptr_t tl_DialogBoxParamW(const void* const instance,
                                            const void* const parent,
                                            const std::uintptr_t dialog_proc,
                                            const abi::Lparam init_param) noexcept {
+    if (!user32_gui_thread_allowed("DialogBoxParamW")) {
+        return -1;
+    }
     {
         std::lock_guard lock(g_modal_mutex);
         if (g_active_dialog != nullptr) {
@@ -374,6 +392,9 @@ TL_MSABI std::intptr_t tl_DialogBoxParamW(const void* const instance,
 
 TL_MSABI int tl_MessageBoxW(const void* window, const std::uint16_t* text,
                             const std::uint16_t* caption, const std::uint32_t type) noexcept {
+    if (!user32_gui_thread_allowed("MessageBoxW")) {
+        return 0;
+    }
     (void)window;
     if (type != 0 || !mapped_guest_wstring(text) || !mapped_guest_wstring(caption)) {
         set_last_error(abi::kErrorInvalidParameter);
