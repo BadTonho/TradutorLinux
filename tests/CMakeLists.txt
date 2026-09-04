@@ -47,6 +47,7 @@ add_executable(tradutorlinux_unit_tests
     test_win32_apps.cpp
     test_win32_external.cpp
     test_win32_gui.cpp
+    test_gui_controls.cpp
     test_win32_security.cpp
     test_win32_stubs.cpp
 )

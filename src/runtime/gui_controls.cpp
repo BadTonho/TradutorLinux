@@ -1,16 +1,45 @@
 #include "gui_controls.hpp"
 
+#include "tradutorlinux/runtime/guest_context.hpp"
 #include "tradutorlinux/util/basics.hpp"
 
 #include <algorithm>
 #include <array>
 #include <cstring>
+#include <filesystem>
+#include <string_view>
 
 namespace tradutorlinux::runtime_gui {
 namespace {
 
 [[nodiscard]] bool is_seven_zip_file_manager(const WindowSlot& parent) noexcept {
     return util::ascii_iequals(parent.class_name, "7-Zip::FM");
+}
+
+struct SevenZipDirectoryEntry {
+    std::string name;
+    std::string size;
+    bool directory{false};
+};
+
+[[nodiscard]] std::filesystem::path seven_zip_host_directory() noexcept {
+    const auto& module_path = runtime::guest_context().module_file_name;
+    if (module_path.empty()) {
+        return {};
+    }
+    const std::filesystem::path executable{module_path};
+    if (executable.empty() || !executable.is_absolute() || executable.filename().empty()) {
+        return {};
+    }
+    return executable.parent_path();
+}
+
+[[nodiscard]] std::string seven_zip_display_name(const std::string_view name) {
+    constexpr std::size_t kMaxNameBytes = 30;
+    if (name.size() <= kMaxNameBytes) {
+        return std::string{name};
+    }
+    return std::string{name.substr(0, kMaxNameBytes - 3)} + "...";
 }
 
 void draw_seven_zip_toolbar_button(const gui::NativeWindow native, const char* const icon,
@@ -121,9 +150,13 @@ void render_seven_zip_file_manager(WindowSlot& parent) noexcept {
             }
         }
 
-        constexpr std::array<const char*, 7> kFolders{
-            "..", "Desktop", "Documents", "Downloads", "Music", "Pictures", "Videos"};
-        for (std::size_t index = 0; index < kFolders.size(); ++index) {
+        const std::vector<ListViewRow> rows =
+            collect_seven_zip_directory_rows(seven_zip_host_directory());
+        if (rows.empty()) {
+            gui::platform::draw_text_color(parent.native, "(diretorio indisponivel)", list_x + 65,
+                                           body_y + 48, kMuted);
+        }
+        for (std::size_t index = 0; index < rows.size(); ++index) {
             const int row_y = body_y + 48 + static_cast<int>(index) * 22;
             if (row_y + 8 >= status_y) {
                 break;
@@ -132,9 +165,19 @@ void render_seven_zip_file_manager(WindowSlot& parent) noexcept {
                 gui::platform::fill_rectangle_color(parent.native, list_x + 1, row_y - 17,
                                                     std::max(list_width - 2, 1), 21, kSelection);
             }
-            gui::platform::draw_text_color(parent.native, "[DIR]", list_x + 12, row_y, kBlue, true);
-            gui::platform::draw_text_color(parent.native, kFolders[index], list_x + 65, row_y, kText);
-            gui::platform::draw_text_color(parent.native, "<DIR>", list_x + 260, row_y, kMuted);
+            const bool directory = rows[index].columns.size() > 1 &&
+                                   rows[index].columns[1] == "<DIR>";
+            gui::platform::draw_text_color(parent.native, directory ? "[DIR]" : "[FILE]",
+                                           list_x + 12, row_y, kBlue, true);
+            if (!rows[index].columns.empty()) {
+                const std::string name = seven_zip_display_name(rows[index].columns[0]);
+                gui::platform::draw_text_color(parent.native, name.c_str(), list_x + 65, row_y,
+                                               kText);
+            }
+            if (rows[index].columns.size() > 1) {
+                gui::platform::draw_text_color(parent.native, rows[index].columns[1].c_str(),
+                                               list_x + 260, row_y, kMuted);
+            }
         }
     }
 
@@ -164,6 +207,67 @@ void render_seven_zip_file_manager(WindowSlot& parent) noexcept {
 }
 
 }  // namespace
+
+std::vector<ListViewRow> collect_seven_zip_directory_rows(
+    const std::filesystem::path& directory, const std::size_t max_rows) noexcept {
+    std::vector<ListViewRow> rows;
+    if (directory.empty() || max_rows == 0) {
+        return rows;
+    }
+
+    try {
+        const std::size_t row_limit = std::min(max_rows, kSevenZipDirectoryRowLimit);
+        std::vector<SevenZipDirectoryEntry> entries;
+        entries.reserve(row_limit - 1);
+        std::error_code iterator_error;
+        std::filesystem::directory_iterator iterator(
+            directory, std::filesystem::directory_options::skip_permission_denied,
+            iterator_error);
+        if (iterator_error) {
+            return rows;
+        }
+
+        for (const auto end = std::filesystem::directory_iterator{};
+             iterator != end && entries.size() + 1 < row_limit; iterator.increment(iterator_error)) {
+            if (iterator_error) {
+                break;
+            }
+            const std::filesystem::directory_entry& entry = *iterator;
+            std::error_code status_error;
+            const std::filesystem::file_status status = entry.symlink_status(status_error);
+            if (status_error) {
+                continue;
+            }
+            const bool is_directory = std::filesystem::is_directory(status);
+            std::string size = is_directory ? "<DIR>" : "";
+            if (!is_directory && std::filesystem::is_regular_file(status)) {
+                std::error_code size_error;
+                const std::uintmax_t bytes = entry.file_size(size_error);
+                if (!size_error) {
+                    size = std::to_string(bytes);
+                }
+            }
+            entries.push_back({entry.path().filename().string(), std::move(size), is_directory});
+        }
+
+        std::sort(entries.begin(), entries.end(), [](const SevenZipDirectoryEntry& left,
+                                                     const SevenZipDirectoryEntry& right) {
+            if (left.directory != right.directory) {
+                return left.directory > right.directory;
+            }
+            return left.name < right.name;
+        });
+
+        rows.reserve(entries.size() + 1);
+        rows.push_back({{"..", "<DIR>"}, 0});
+        for (SevenZipDirectoryEntry& entry : entries) {
+            rows.push_back({{std::move(entry.name), std::move(entry.size)}, 0});
+        }
+    } catch (...) {
+        rows.clear();
+    }
+    return rows;
+}
 
 bool is_builtin_control(const char* const name) noexcept {
     return name != nullptr && (util::ascii_iequals(name, "EDIT") ||

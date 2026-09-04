@@ -6,6 +6,7 @@
 #include <chrono>
 #include <cstdint>
 #include <deque>
+#include <filesystem>
 #include <span>
 #include <string>
 #include <vector>
@@ -18,6 +19,8 @@ struct ListViewRow {
     std::vector<std::string> columns;
     std::intptr_t param{};
 };
+
+inline constexpr std::size_t kSevenZipDirectoryRowLimit = 128;
 
 struct GuestTimer {
     std::uintptr_t id{0};
@@ -66,6 +69,9 @@ struct WindowSlot {
 
 [[nodiscard]] bool is_builtin_control(const char* name) noexcept;
 [[nodiscard]] ControlKind control_kind_for(const char* name) noexcept;
+[[nodiscard]] std::vector<ListViewRow> collect_seven_zip_directory_rows(
+    const std::filesystem::path& directory,
+    std::size_t max_rows = kSevenZipDirectoryRowLimit) noexcept;
 
 void queue_window_message(WindowSlot& slot, std::uint32_t message, abi::Wparam wparam,
                           abi::Lparam lparam) noexcept;
