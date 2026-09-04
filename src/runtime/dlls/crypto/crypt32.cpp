@@ -1,4 +1,6 @@
 #include "tradutorlinux/runtime/crypt32.hpp"
+#include "tradutorlinux/loader/module.hpp"
+#include "tradutorlinux/loader/builtin_modules.hpp"
 
 #include "runtime_context.hpp"
 
@@ -873,5 +875,36 @@ TL_CRYPT32_MSABI std::uint32_t tl_CertNameToStrW(const std::uint32_t dwCertEncod
 }
 
 }  // extern "C"
-
 }  // namespace tradutorlinux
+
+namespace tradutorlinux::loader {
+
+void register_crypt32_module() {
+    static const ExportedFunction kCrypt32Exports[] = {
+        {"CertGetNameStringW", 1, reinterpret_cast<std::uintptr_t>(&tl_CertGetNameStringW)},
+        {"CertDuplicateCertificateContext", 2,
+         reinterpret_cast<std::uintptr_t>(&tl_CertDuplicateCertificateContext)},
+        {"CertFreeCertificateContext", 3,
+         reinterpret_cast<std::uintptr_t>(&tl_CertFreeCertificateContext)},
+        {"CertOpenStore", 4, reinterpret_cast<std::uintptr_t>(&tl_CertOpenStore)},
+        {"CertCloseStore", 5, reinterpret_cast<std::uintptr_t>(&tl_CertCloseStore)},
+        {"CertEnumCertificatesInStore", 6,
+         reinterpret_cast<std::uintptr_t>(&tl_CertEnumCertificatesInStore)},
+        {"CertFindCertificateInStore", 7,
+         reinterpret_cast<std::uintptr_t>(&tl_CertFindCertificateInStore)},
+        {"CertGetCertificateContextProperty", 8,
+         reinterpret_cast<std::uintptr_t>(&tl_CertGetCertificateContextProperty)},
+        {"CertOpenSystemStoreA", 9, reinterpret_cast<std::uintptr_t>(&tl_CertOpenSystemStoreA)},
+        {"CertOpenSystemStoreW", 10, reinterpret_cast<std::uintptr_t>(&tl_CertOpenSystemStoreW)},
+        {"CertGetEnhancedKeyUsage", 11, reinterpret_cast<std::uintptr_t>(&tl_CertGetEnhancedKeyUsage)},
+        {"CertGetIntendedKeyUsage", 12, reinterpret_cast<std::uintptr_t>(&tl_CertGetIntendedKeyUsage)},
+        {"CryptMsgClose", 13, reinterpret_cast<std::uintptr_t>(&tl_CryptMsgClose)},
+        {"CryptMsgGetParam", 14, reinterpret_cast<std::uintptr_t>(&tl_CryptMsgGetParam)},
+        {"CryptQueryObject", 15, reinterpret_cast<std::uintptr_t>(&tl_CryptQueryObject)},
+        {"CertNameToStrW", 16, reinterpret_cast<std::uintptr_t>(&tl_CertNameToStrW)},
+    };
+    static const InternalModule kCrypt32Module{"CRYPT32.dll", kCrypt32Exports};
+    register_module(kCrypt32Module);
+}
+
+}  // namespace tradutorlinux::loader

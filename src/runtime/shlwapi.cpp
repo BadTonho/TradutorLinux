@@ -1,4 +1,6 @@
 #include "tradutorlinux/runtime/shlwapi.hpp"
+#include "tradutorlinux/loader/module.hpp"
+#include "tradutorlinux/loader/builtin_modules.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -554,5 +556,59 @@ TL_MSABI int tl_PathMatchSpecA(const char* const file, const char* const spec) n
 }
 
 }  // extern "C"
-
 }  // namespace tradutorlinux
+
+namespace tradutorlinux::loader {
+
+void register_shlwapi_module() {
+    static const ExportedFunction kShlwapiExports[] = {
+        {"PathFileExistsA", 1, reinterpret_cast<std::uintptr_t>(&tl_PathFileExistsA)},
+        {"PathFileExistsW", 2, reinterpret_cast<std::uintptr_t>(&tl_PathFileExistsW)},
+        {"PathIsDirectoryA", 3, reinterpret_cast<std::uintptr_t>(&tl_PathIsDirectoryA)},
+        {"PathIsDirectoryW", 4, reinterpret_cast<std::uintptr_t>(&tl_PathIsDirectoryW)},
+        {"PathCombineA", 5, reinterpret_cast<std::uintptr_t>(&tl_PathCombineA)},
+        {"PathCombineW", 6, reinterpret_cast<std::uintptr_t>(&tl_PathCombineW)},
+        {"PathFindFileNameA", 7, reinterpret_cast<std::uintptr_t>(&tl_PathFindFileNameA)},
+        {"PathFindFileNameW", 8, reinterpret_cast<std::uintptr_t>(&tl_PathFindFileNameW)},
+        {"PathFindExtensionA", 9, reinterpret_cast<std::uintptr_t>(&tl_PathFindExtensionA)},
+        {"PathFindExtensionW", 10, reinterpret_cast<std::uintptr_t>(&tl_PathFindExtensionW)},
+        {"PathRemoveFileSpecA", 11, reinterpret_cast<std::uintptr_t>(&tl_PathRemoveFileSpecA)},
+        {"PathRemoveFileSpecW", 12, reinterpret_cast<std::uintptr_t>(&tl_PathRemoveFileSpecW)},
+        {"PathAddBackslashA", 13, reinterpret_cast<std::uintptr_t>(&tl_PathAddBackslashA)},
+        {"PathAddBackslashW", 14, reinterpret_cast<std::uintptr_t>(&tl_PathAddBackslashW)},
+        {"PathRemoveBackslashA", 15, reinterpret_cast<std::uintptr_t>(&tl_PathRemoveBackslashA)},
+        {"PathRemoveBackslashW", 16, reinterpret_cast<std::uintptr_t>(&tl_PathRemoveBackslashW)},
+        {"StrStrIA", 17, reinterpret_cast<std::uintptr_t>(&tl_StrStrIA)},
+        {"StrStrIW", 18, reinterpret_cast<std::uintptr_t>(&tl_StrStrIW)},
+        {"StrCmpIA", 19, reinterpret_cast<std::uintptr_t>(&tl_StrCmpIA)},
+        {"StrCmpIW", 20, reinterpret_cast<std::uintptr_t>(&tl_StrCmpIW)},
+        {"PathIsRelativeA", 21, reinterpret_cast<std::uintptr_t>(&tl_PathIsRelativeA)},
+        {"PathIsRelativeW", 22, reinterpret_cast<std::uintptr_t>(&tl_PathIsRelativeW)},
+        {"SHAutoComplete", 23, reinterpret_cast<std::uintptr_t>(&tl_SHAutoComplete)},
+        {"PathStripToRootW", 24, reinterpret_cast<std::uintptr_t>(&tl_PathStripToRootW)},
+        {"AssocQueryStringW", 25, reinterpret_cast<std::uintptr_t>(&tl_AssocQueryStringW)},
+        {"ColorRGBToHLS", 26, reinterpret_cast<std::uintptr_t>(&tl_ColorRGBToHLS)},
+        {"ColorHLSToRGB", 27, reinterpret_cast<std::uintptr_t>(&tl_ColorHLSToRGB)},
+        {"ColorAdjustLuma", 28, reinterpret_cast<std::uintptr_t>(&tl_ColorAdjustLuma)},
+        {"PathStripPathW", 29, reinterpret_cast<std::uintptr_t>(&tl_PathStripPathW)},
+        {"PathAddExtensionW", 30, reinterpret_cast<std::uintptr_t>(&tl_PathAddExtensionW)},
+        {"PathAppendW", 31, reinterpret_cast<std::uintptr_t>(&tl_PathAppendW)},
+        {"PathRemoveExtensionW", 32, reinterpret_cast<std::uintptr_t>(&tl_PathRemoveExtensionW)},
+        {"PathCompactPathExW", 33, reinterpret_cast<std::uintptr_t>(&tl_PathCompactPathExW)},
+        {"PathGetDriveNumberW", 34, reinterpret_cast<std::uintptr_t>(&tl_PathGetDriveNumberW)},
+        {"PathMatchSpecW", 35, reinterpret_cast<std::uintptr_t>(&tl_PathMatchSpecW)},
+        {"PathIsUNCW", 36, reinterpret_cast<std::uintptr_t>(&tl_PathIsUNCW)},
+        {"PathIsUNCA", 37, reinterpret_cast<std::uintptr_t>(&tl_PathIsUNCA)},
+        {"PathRemoveExtensionA", 38, reinterpret_cast<std::uintptr_t>(&tl_PathRemoveExtensionA)},
+        {"PathRenameExtensionA", 39, reinterpret_cast<std::uintptr_t>(&tl_PathRenameExtensionA)},
+        {"PathStripPathA", 40, reinterpret_cast<std::uintptr_t>(&tl_PathStripPathA)},
+        {"PathMatchSpecA", 41, reinterpret_cast<std::uintptr_t>(&tl_PathMatchSpecA)},
+        {"", 176, reinterpret_cast<std::uintptr_t>(&tl_PathStripToRootW)},
+        {"", 410, reinterpret_cast<std::uintptr_t>(&tl_PathStripToRootW)},
+        {"", 413, reinterpret_cast<std::uintptr_t>(&tl_PathStripToRootW)},
+    };
+    static const InternalModule kShlwapiModule{"SHLWAPI.dll", kShlwapiExports};
+    register_module(kShlwapiModule);
+}
+
+}  // namespace tradutorlinux::loader

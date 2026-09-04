@@ -1,4 +1,6 @@
 #include "tradutorlinux/runtime/comdlg32.hpp"
+#include "tradutorlinux/loader/module.hpp"
+#include "tradutorlinux/loader/builtin_modules.hpp"
 
 #include <cstring>
 #include <string>
@@ -122,5 +124,25 @@ TL_COMDLG_MSABI std::uint32_t tl_CommDlgExtendedError() noexcept {
 }
 
 }  // extern "C"
-
 }  // namespace tradutorlinux
+
+namespace tradutorlinux::loader {
+
+void register_comdlg32_module() {
+    static const ExportedFunction kComdlg32Exports[] = {
+        {"GetOpenFileNameA", 1, reinterpret_cast<std::uintptr_t>(&tl_GetOpenFileNameA)},
+        {"GetOpenFileNameW", 2, reinterpret_cast<std::uintptr_t>(&tl_GetOpenFileNameW)},
+        {"GetSaveFileNameA", 3, reinterpret_cast<std::uintptr_t>(&tl_GetSaveFileNameA)},
+        {"GetSaveFileNameW", 4, reinterpret_cast<std::uintptr_t>(&tl_GetSaveFileNameW)},
+        {"ChooseColorA", 5, reinterpret_cast<std::uintptr_t>(&tl_ChooseColorA)},
+        {"ChooseColorW", 6, reinterpret_cast<std::uintptr_t>(&tl_ChooseColorW)},
+        {"PrintDlgW", 7, reinterpret_cast<std::uintptr_t>(&tl_PrintDlgW)},
+        {"CommDlgExtendedError", 8, reinterpret_cast<std::uintptr_t>(&tl_CommDlgExtendedError)},
+        {"ChooseFontA", 9, reinterpret_cast<std::uintptr_t>(&tl_ChooseFontA)},
+        {"ChooseFontW", 10, reinterpret_cast<std::uintptr_t>(&tl_ChooseFontW)},
+    };
+    static const InternalModule kComdlg32Module{"COMDLG32.dll", kComdlg32Exports};
+    register_module(kComdlg32Module);
+}
+
+}  // namespace tradutorlinux::loader

@@ -1,4 +1,6 @@
 #include "tradutorlinux/runtime/winapi.hpp"
+#include "tradutorlinux/loader/module.hpp"
+#include "tradutorlinux/loader/builtin_modules.hpp"
 #include "runtime_context.hpp"
 
 #include <cstdint>
@@ -193,5 +195,18 @@ TL_MSABI std::uint32_t tl_if_nametoindex(const char* ifname) noexcept {
 }
 
 } // extern "C"
-
 } // namespace tradutorlinux
+
+namespace tradutorlinux::loader {
+
+void register_iphlpapi_module() {
+    static const ExportedFunction kIphlpapiExports[] = {
+        {"GetAdaptersInfo", 1, reinterpret_cast<std::uintptr_t>(&tl_GetAdaptersInfo)},
+        {"GetAdaptersAddresses", 2, reinterpret_cast<std::uintptr_t>(&tl_GetAdaptersAddresses)},
+        {"if_nametoindex", 3, reinterpret_cast<std::uintptr_t>(&tl_if_nametoindex)},
+    };
+    static const InternalModule kIphlpapiModule{"IPHLPAPI.DLL", kIphlpapiExports};
+    register_module(kIphlpapiModule);
+}
+
+} // namespace tradutorlinux::loader

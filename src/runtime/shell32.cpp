@@ -1,4 +1,6 @@
 #include "tradutorlinux/runtime/winapi.hpp"
+#include "tradutorlinux/loader/module.hpp"
+#include "tradutorlinux/loader/builtin_modules.hpp"
 #include "tradutorlinux/runtime/ole32.hpp"
 #include "runtime_context.hpp"
 #include "tradutorlinux/util/unicode.hpp"
@@ -485,5 +487,39 @@ TL_MSABI void tl_DragFinish(void* const hDrop) noexcept {
 }
 
 }  // extern "C"
-
 }  // namespace tradutorlinux
+
+namespace tradutorlinux::loader {
+
+void register_shell32_module() {
+    static const ExportedFunction kShell32Exports[] = {
+        {"CommandLineToArgvW", 1, reinterpret_cast<std::uintptr_t>(&tl_CommandLineToArgvW)},
+        {"Shell_NotifyIconA", 2, reinterpret_cast<std::uintptr_t>(&tl_ShellNotifyIconA)},
+        {"SHGetKnownFolderPath", 3, reinterpret_cast<std::uintptr_t>(&tl_SHGetKnownFolderPath)},
+        {"SHGetFolderPathW", 4, reinterpret_cast<std::uintptr_t>(&tl_SHGetFolderPathW)},
+        {"SHGetFolderPathAndSubDirW", 5, reinterpret_cast<std::uintptr_t>(&tl_SHGetFolderPathAndSubDirW)},
+        {"ShellExecuteW", 6, reinterpret_cast<std::uintptr_t>(&tl_ShellExecuteW)},
+        {"ShellExecuteExW", 7, reinterpret_cast<std::uintptr_t>(&tl_ShellExecuteExW)},
+        {"SHFileOperationW", 8, reinterpret_cast<std::uintptr_t>(&tl_SHFileOperationW)},
+        {"SHGetFileInfoW", 9, reinterpret_cast<std::uintptr_t>(&tl_SHGetFileInfoW)},
+        {"SHGetPathFromIDListW", 10, reinterpret_cast<std::uintptr_t>(&tl_SHGetPathFromIDListW)},
+        {"SHBrowseForFolderW", 11, reinterpret_cast<std::uintptr_t>(&tl_SHBrowseForFolderW)},
+        {"SHGetMalloc", 12, reinterpret_cast<std::uintptr_t>(&tl_SHGetMalloc)},
+        {"SHChangeNotify", 13, reinterpret_cast<std::uintptr_t>(&tl_SHChangeNotify)},
+        {"ExtractIconExW", 14, reinterpret_cast<std::uintptr_t>(&tl_ExtractIconExW)},
+        {"SHGetDesktopFolder", 15, reinterpret_cast<std::uintptr_t>(&tl_SHGetDesktopFolder)},
+        {"SHGetSpecialFolderLocation", 16, reinterpret_cast<std::uintptr_t>(&tl_SHGetSpecialFolderLocation)},
+        {"SHGetSpecialFolderPathW", 17, reinterpret_cast<std::uintptr_t>(&tl_SHGetSpecialFolderPathW)},
+        {"Shell_NotifyIconW", 18, reinterpret_cast<std::uintptr_t>(&tl_ShellNotifyIconW)},
+        {"ShellExecuteA", 19, reinterpret_cast<std::uintptr_t>(&tl_ShellExecuteA)},
+        {"SHCreateItemFromParsingName", 20, reinterpret_cast<std::uintptr_t>(&tl_SHCreateItemFromParsingName)},
+        {"DragQueryFileW", 21, reinterpret_cast<std::uintptr_t>(&tl_DragQueryFileW)},
+        {"DragQueryPoint", 22, reinterpret_cast<std::uintptr_t>(&tl_DragQueryPoint)},
+        {"DragFinish", 23, reinterpret_cast<std::uintptr_t>(&tl_DragFinish)},
+        {"", 165, reinterpret_cast<std::uintptr_t>(&tl_SHCreateItemFromParsingName)},
+    };
+    static const InternalModule kShell32Module{"SHELL32.dll", kShell32Exports};
+    register_module(kShell32Module);
+}
+
+}  // namespace tradutorlinux::loader

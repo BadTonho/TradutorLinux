@@ -1,4 +1,6 @@
 #include "tradutorlinux/runtime/oleaut32.hpp"
+#include "tradutorlinux/loader/module.hpp"
+#include "tradutorlinux/loader/builtin_modules.hpp"
 
 #include <cstdlib>
 #include <cstring>
@@ -325,6 +327,43 @@ TL_OLEAUT_MSABI std::int32_t tl_SafeArrayUnaccessData(GuestSafeArray* psa) noexc
 }
 
 }  // extern "C"
-
 }  // namespace tradutorlinux
+
+namespace tradutorlinux::loader {
+
+void register_oleaut32_module() {
+    static const ExportedFunction kOleaut32Exports[] = {
+        {"SysAllocString", 2, reinterpret_cast<std::uintptr_t>(&tl_SysAllocString)},
+        {"SysReAllocString", 3, reinterpret_cast<std::uintptr_t>(&tl_SysReAllocString)},
+        {"SysAllocStringLen", 4, reinterpret_cast<std::uintptr_t>(&tl_SysAllocStringLen)},
+        {"SysReAllocStringLen", 5, reinterpret_cast<std::uintptr_t>(&tl_SysReAllocStringLen)},
+        {"SysFreeString", 6, reinterpret_cast<std::uintptr_t>(&tl_SysFreeString)},
+        {"SysStringLen", 7, reinterpret_cast<std::uintptr_t>(&tl_SysStringLen)},
+        {"VariantInit", 8, reinterpret_cast<std::uintptr_t>(&tl_VariantInit)},
+        {"VariantClear", 9, reinterpret_cast<std::uintptr_t>(&tl_VariantClear)},
+        {"VariantCopy", 10, reinterpret_cast<std::uintptr_t>(&tl_VariantCopy)},
+        {"VariantCopyInd", 11, reinterpret_cast<std::uintptr_t>(&tl_VariantCopyInd)},
+        {"VariantChangeType", 12, reinterpret_cast<std::uintptr_t>(&tl_VariantChangeType)},
+        {"SafeArrayCreate", 15, reinterpret_cast<std::uintptr_t>(&tl_SafeArrayCreate)},
+        {"SafeArrayDestroy", 16, reinterpret_cast<std::uintptr_t>(&tl_SafeArrayDestroy)},
+        {"SafeArrayGetDim", 17, reinterpret_cast<std::uintptr_t>(&tl_SafeArrayGetDim)},
+        {"SafeArrayGetElemsize", 18, reinterpret_cast<std::uintptr_t>(&tl_SafeArrayGetElemsize)},
+        {"SafeArrayGetUBound", 19, reinterpret_cast<std::uintptr_t>(&tl_SafeArrayGetUBound)},
+        {"SafeArrayGetLBound", 20, reinterpret_cast<std::uintptr_t>(&tl_SafeArrayGetLBound)},
+        {"SafeArrayLock", 21, reinterpret_cast<std::uintptr_t>(&tl_SafeArrayLock)},
+        {"SafeArrayUnlock", 22, reinterpret_cast<std::uintptr_t>(&tl_SafeArrayUnlock)},
+        {"SafeArrayAccessData", 23, reinterpret_cast<std::uintptr_t>(&tl_SafeArrayAccessData)},
+        {"SafeArrayUnaccessData", 24, reinterpret_cast<std::uintptr_t>(&tl_SafeArrayUnaccessData)},
+        {"VariantChangeTypeEx", 147, reinterpret_cast<std::uintptr_t>(&tl_VariantChangeTypeEx)},
+        {"SysStringByteLen", 149, reinterpret_cast<std::uintptr_t>(&tl_SysStringByteLen)},
+        {"SysAllocStringByteLen", 150, reinterpret_cast<std::uintptr_t>(&tl_SysAllocStringByteLen)},
+        {"SafeArrayDestroyData", 200, reinterpret_cast<std::uintptr_t>(&tl_SafeArrayDestroyData)},
+        {"SafeArrayDestroyDescriptor", 201, reinterpret_cast<std::uintptr_t>(&tl_SafeArrayDestroyDescriptor)},
+        {"SafeArrayCreateVector", 411, reinterpret_cast<std::uintptr_t>(&tl_SafeArrayCreateVector)},
+    };
+    static const InternalModule kOleaut32Module{"OLEAUT32.dll", kOleaut32Exports};
+    register_module(kOleaut32Module);
+}
+
+}  // namespace tradutorlinux::loader
 

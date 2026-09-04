@@ -1,4 +1,6 @@
 #include "tradutorlinux/runtime/mpr.hpp"
+#include "tradutorlinux/loader/module.hpp"
+#include "tradutorlinux/loader/builtin_modules.hpp"
 #include "tradutorlinux/runtime/winapi.hpp"
 #include "tradutorlinux/runtime/memory_validator.hpp"
 
@@ -79,6 +81,24 @@ TL_MPR_MSABI std::uint32_t tl_WNetGetResourceParentW(const void* const net_resou
 }
 
 }  // extern "C"
-
 }  // namespace tradutorlinux
+
+namespace tradutorlinux::loader {
+
+void register_mpr_module() {
+    static const ExportedFunction kMprExports[] = {
+        {"WNetAddConnection2W", 1, reinterpret_cast<std::uintptr_t>(&tl_WNetAddConnection2W)},
+        {"WNetOpenEnumW", 2, reinterpret_cast<std::uintptr_t>(&tl_WNetOpenEnumW)},
+        {"WNetEnumResourceW", 3, reinterpret_cast<std::uintptr_t>(&tl_WNetEnumResourceW)},
+        {"WNetCloseEnum", 4, reinterpret_cast<std::uintptr_t>(&tl_WNetCloseEnum)},
+        {"WNetGetResourceInformationW", 5,
+         reinterpret_cast<std::uintptr_t>(&tl_WNetGetResourceInformationW)},
+        {"WNetGetResourceParentW", 6,
+         reinterpret_cast<std::uintptr_t>(&tl_WNetGetResourceParentW)},
+    };
+    static const InternalModule kMprModule{"MPR.dll", kMprExports};
+    register_module(kMprModule);
+}
+
+}  // namespace tradutorlinux::loader
 

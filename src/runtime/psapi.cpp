@@ -1,4 +1,6 @@
 #include "tradutorlinux/runtime/psapi.hpp"
+#include "tradutorlinux/loader/module.hpp"
+#include "tradutorlinux/loader/builtin_modules.hpp"
 
 #include <algorithm>
 #include <cstring>
@@ -145,5 +147,23 @@ TL_PSAPI_MSABI int tl_GetProcessMemoryInfo(const void* process, void* counters,
 }
 
 }  // extern "C"
-
 }  // namespace tradutorlinux
+
+namespace tradutorlinux::loader {
+
+void register_psapi_module() {
+    static const ExportedFunction kPsapiExports[] = {
+        {"EnumProcesses", 1, reinterpret_cast<std::uintptr_t>(&tl_EnumProcesses)},
+        {"EnumProcessModules", 2, reinterpret_cast<std::uintptr_t>(&tl_EnumProcessModules)},
+        {"EnumProcessModulesEx", 3, reinterpret_cast<std::uintptr_t>(&tl_EnumProcessModulesEx)},
+        {"GetModuleBaseNameA", 4, reinterpret_cast<std::uintptr_t>(&tl_GetModuleBaseNameA)},
+        {"GetModuleBaseNameW", 5, reinterpret_cast<std::uintptr_t>(&tl_GetModuleBaseNameW)},
+        {"GetModuleFileNameExA", 6, reinterpret_cast<std::uintptr_t>(&tl_GetModuleFileNameExA)},
+        {"GetModuleFileNameExW", 7, reinterpret_cast<std::uintptr_t>(&tl_GetModuleFileNameExW)},
+        {"GetProcessMemoryInfo", 8, reinterpret_cast<std::uintptr_t>(&tl_GetProcessMemoryInfo)},
+    };
+    static const InternalModule kPsapiModule{"PSAPI.dll", kPsapiExports};
+    register_module(kPsapiModule);
+}
+
+}  // namespace tradutorlinux::loader

@@ -1,4 +1,6 @@
 #include "tradutorlinux/runtime/imm32.hpp"
+#include "tradutorlinux/loader/module.hpp"
+#include "tradutorlinux/loader/builtin_modules.hpp"
 
 #include <cstdint>
 
@@ -109,5 +111,28 @@ TL_IMM_MSABI int tl_ImmNotifyIME(void* const himc, const std::uint32_t action, c
 }
 
 }  // extern "C"
-
 }  // namespace tradutorlinux
+
+namespace tradutorlinux::loader {
+
+void register_imm32_module() {
+    static const ExportedFunction kImm32Exports[] = {
+        {"ImmGetContext", 1, reinterpret_cast<std::uintptr_t>(&tl_ImmGetContext)},
+        {"ImmReleaseContext", 2, reinterpret_cast<std::uintptr_t>(&tl_ImmReleaseContext)},
+        {"ImmSetCompositionWindow", 3, reinterpret_cast<std::uintptr_t>(&tl_ImmSetCompositionWindow)},
+        {"ImmGetCompositionStringA", 4, reinterpret_cast<std::uintptr_t>(&tl_ImmGetCompositionStringA)},
+        {"ImmGetCompositionStringW", 5, reinterpret_cast<std::uintptr_t>(&tl_ImmGetCompositionStringW)},
+        {"ImmAssociateContext", 6, reinterpret_cast<std::uintptr_t>(&tl_ImmAssociateContext)},
+        {"ImmGetVirtualKey", 7, reinterpret_cast<std::uintptr_t>(&tl_ImmGetVirtualKey)},
+        {"ImmSetCompositionFontA", 8, reinterpret_cast<std::uintptr_t>(&tl_ImmSetCompositionFontA)},
+        {"ImmSetCompositionFontW", 9, reinterpret_cast<std::uintptr_t>(&tl_ImmSetCompositionFontW)},
+        {"ImmSetCandidateWindow", 10, reinterpret_cast<std::uintptr_t>(&tl_ImmSetCandidateWindow)},
+        {"ImmSetCompositionStringW", 11, reinterpret_cast<std::uintptr_t>(&tl_ImmSetCompositionStringW)},
+        {"ImmEscapeW", 12, reinterpret_cast<std::uintptr_t>(&tl_ImmEscapeW)},
+        {"ImmNotifyIME", 13, reinterpret_cast<std::uintptr_t>(&tl_ImmNotifyIME)},
+    };
+    static const InternalModule kImm32Module{"IMM32.dll", kImm32Exports};
+    register_module(kImm32Module);
+}
+
+}  // namespace tradutorlinux::loader

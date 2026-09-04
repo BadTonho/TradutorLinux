@@ -1,4 +1,6 @@
 #include "tradutorlinux/runtime/dwmapi.hpp"
+#include "tradutorlinux/loader/module.hpp"
+#include "tradutorlinux/loader/builtin_modules.hpp"
 #include "tradutorlinux/runtime/memory_validator.hpp"
 
 #include <cstring>
@@ -80,6 +82,24 @@ TL_DWM_MSABI std::int32_t tl_DwmGetColorizationColor(std::uint32_t* const color,
 }
 
 }  // extern "C"
-
 }  // namespace tradutorlinux
+
+namespace tradutorlinux::loader {
+
+void register_dwmapi_module() {
+    static const ExportedFunction kDwmApiExports[] = {
+        {"DwmSetWindowAttribute", 1, reinterpret_cast<std::uintptr_t>(&tl_DwmSetWindowAttribute)},
+        {"DwmGetWindowAttribute", 2, reinterpret_cast<std::uintptr_t>(&tl_DwmGetWindowAttribute)},
+        {"DwmIsCompositionEnabled", 3, reinterpret_cast<std::uintptr_t>(&tl_DwmIsCompositionEnabled)},
+        {"DwmDefWindowProc", 4, reinterpret_cast<std::uintptr_t>(&tl_DwmDefWindowProc)},
+        {"DwmExtendFrameIntoClientArea", 5, reinterpret_cast<std::uintptr_t>(&tl_DwmExtendFrameIntoClientArea)},
+        {"DwmEnableBlurBehindWindow", 6, reinterpret_cast<std::uintptr_t>(&tl_DwmEnableBlurBehindWindow)},
+        {"DwmFlush", 7, reinterpret_cast<std::uintptr_t>(&tl_DwmFlush)},
+        {"DwmGetColorizationColor", 8, reinterpret_cast<std::uintptr_t>(&tl_DwmGetColorizationColor)},
+    };
+    static const InternalModule kDwmApiModule{"DWMAPI.dll", kDwmApiExports};
+    register_module(kDwmApiModule);
+}
+
+}  // namespace tradutorlinux::loader
 

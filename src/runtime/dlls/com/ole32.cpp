@@ -1,4 +1,6 @@
 #include "tradutorlinux/runtime/ole32.hpp"
+#include "tradutorlinux/loader/module.hpp"
+#include "tradutorlinux/loader/builtin_modules.hpp"
 
 #include <algorithm>
 #include <array>
@@ -600,5 +602,35 @@ TL_OLE_MSABI int tl_CLSIDFromProgID(const wchar_t* const lpszProgID, void* const
 }
 
 }  // extern "C"
-
 }  // namespace tradutorlinux
+
+namespace tradutorlinux::loader {
+
+void register_ole32_module() {
+    static const ExportedFunction kOle32Exports[] = {
+        {"CoInitialize", 1, reinterpret_cast<std::uintptr_t>(&tl_CoInitialize)},
+        {"CoInitializeEx", 2, reinterpret_cast<std::uintptr_t>(&tl_CoInitializeEx)},
+        {"CoUninitialize", 3, reinterpret_cast<std::uintptr_t>(&tl_CoUninitialize)},
+        {"CoCreateGuid", 4, reinterpret_cast<std::uintptr_t>(&tl_CoCreateGuid)},
+        {"CoTaskMemAlloc", 5, reinterpret_cast<std::uintptr_t>(&tl_CoTaskMemAlloc)},
+        {"CoTaskMemFree", 6, reinterpret_cast<std::uintptr_t>(&tl_CoTaskMemFree)},
+        {"CoTaskMemRealloc", 7, reinterpret_cast<std::uintptr_t>(&tl_CoTaskMemRealloc)},
+        {"CreateStreamOnHGlobal", 12, reinterpret_cast<std::uintptr_t>(&tl_CreateStreamOnHGlobal)},
+        {"CoCreateInstance", 8, reinterpret_cast<std::uintptr_t>(&tl_CoCreateInstance)},
+        {"CoGetClassObject", 9, reinterpret_cast<std::uintptr_t>(&tl_CoGetClassObject)},
+        {"OleInitialize", 10, reinterpret_cast<std::uintptr_t>(&tl_OleInitialize)},
+        {"OleUninitialize", 11, reinterpret_cast<std::uintptr_t>(&tl_OleUninitialize)},
+        {"CLSIDFromString", 13, reinterpret_cast<std::uintptr_t>(&tl_CLSIDFromString)},
+        {"RegisterDragDrop", 14, reinterpret_cast<std::uintptr_t>(&tl_RegisterDragDrop)},
+        {"RevokeDragDrop", 15, reinterpret_cast<std::uintptr_t>(&tl_RevokeDragDrop)},
+        {"DoDragDrop", 16, reinterpret_cast<std::uintptr_t>(&tl_DoDragDrop)},
+        {"ReleaseStgMedium", 17, reinterpret_cast<std::uintptr_t>(&tl_ReleaseStgMedium)},
+        {"StringFromGUID2", 18, reinterpret_cast<std::uintptr_t>(&tl_StringFromGUID2)},
+        {"CLSIDFromProgID", 19, reinterpret_cast<std::uintptr_t>(&tl_CLSIDFromProgID)},
+        {"CoGetMalloc", 20, reinterpret_cast<std::uintptr_t>(&tl_CoGetMalloc)},
+    };
+    static const InternalModule kOle32Module{"ole32.dll", kOle32Exports};
+    register_module(kOle32Module);
+}
+
+}  // namespace tradutorlinux::loader

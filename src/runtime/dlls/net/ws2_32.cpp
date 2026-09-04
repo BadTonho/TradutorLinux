@@ -1,4 +1,6 @@
 #include "tradutorlinux/runtime/ws2_32.hpp"
+#include "tradutorlinux/loader/module.hpp"
+#include "tradutorlinux/loader/builtin_modules.hpp"
 
 #include <algorithm>
 #include <array>
@@ -973,3 +975,64 @@ TL_MSABI char* tl_inet_ntoa(const std::uint32_t in) noexcept {
 
 }  // extern "C"
 }  // namespace tradutorlinux
+
+namespace tradutorlinux::loader {
+
+void register_ws2_32_module() {
+    static const ExportedFunction kWs2_32Exports[] = {
+        {"accept", 1, reinterpret_cast<std::uintptr_t>(&tl_accept)},
+        {"bind", 2, reinterpret_cast<std::uintptr_t>(&tl_bind)},
+        {"closesocket", 3, reinterpret_cast<std::uintptr_t>(&tl_closesocket)},
+        {"connect", 4, reinterpret_cast<std::uintptr_t>(&tl_connect)},
+        {"getpeername", 5, reinterpret_cast<std::uintptr_t>(&tl_getpeername)},
+        {"getsockname", 6, reinterpret_cast<std::uintptr_t>(&tl_getsockname)},
+        {"getsockopt", 7, reinterpret_cast<std::uintptr_t>(&tl_getsockopt)},
+        {"htonl", 8, reinterpret_cast<std::uintptr_t>(&tl_htonl)},
+        {"htons", 9, reinterpret_cast<std::uintptr_t>(&tl_htons)},
+        {"inet_addr", 10, reinterpret_cast<std::uintptr_t>(&tl_inet_addr)},
+        {"inet_ntoa", 11, reinterpret_cast<std::uintptr_t>(&tl_inet_ntoa)},
+        {"ioctlsocket", 12, reinterpret_cast<std::uintptr_t>(&tl_ioctlsocket)},
+        {"listen", 13, reinterpret_cast<std::uintptr_t>(&tl_listen)},
+        {"ntohl", 14, reinterpret_cast<std::uintptr_t>(&tl_ntohl)},
+        {"ntohs", 15, reinterpret_cast<std::uintptr_t>(&tl_ntohs)},
+        {"recv", 16, reinterpret_cast<std::uintptr_t>(&tl_recv)},
+        {"recvfrom", 17, reinterpret_cast<std::uintptr_t>(&tl_recvfrom)},
+        {"select", 18, reinterpret_cast<std::uintptr_t>(&tl_select)},
+        {"send", 19, reinterpret_cast<std::uintptr_t>(&tl_send)},
+        {"sendto", 20, reinterpret_cast<std::uintptr_t>(&tl_sendto)},
+        {"setsockopt", 21, reinterpret_cast<std::uintptr_t>(&tl_setsockopt)},
+        {"shutdown", 22, reinterpret_cast<std::uintptr_t>(&tl_shutdown)},
+        {"socket", 23, reinterpret_cast<std::uintptr_t>(&tl_socket)},
+        {"gethostbyaddr", 51, reinterpret_cast<std::uintptr_t>(&tl_gethostbyaddr)},
+        {"gethostbyname", 52, reinterpret_cast<std::uintptr_t>(&tl_gethostbyname)},
+        {"gethostname", 57, reinterpret_cast<std::uintptr_t>(&tl_gethostname)},
+        {"getservbyport", 56, reinterpret_cast<std::uintptr_t>(&tl_getservbyname)},
+        {"getservbyname", 55, reinterpret_cast<std::uintptr_t>(&tl_getservbyname)},
+        {"WSAGetLastError", 111, reinterpret_cast<std::uintptr_t>(&tl_WSAGetLastError)},
+        {"WSASetLastError", 112, reinterpret_cast<std::uintptr_t>(&tl_WSASetLastError)},
+        {"WSAAsyncSelect", 115, reinterpret_cast<std::uintptr_t>(&tl_WSAAsyncSelect)},
+        {"WSAAsyncGetHostByName", 116, reinterpret_cast<std::uintptr_t>(&tl_gethostbyname)},
+        {"__WSAFDIsSet", 151, reinterpret_cast<std::uintptr_t>(&tl___WSAFDIsSet)},
+        {"WSAStartup", 1001, reinterpret_cast<std::uintptr_t>(&tl_WSAStartup)},
+        {"WSACleanup", 1002, reinterpret_cast<std::uintptr_t>(&tl_WSACleanup)},
+        {"getaddrinfo", 1003, reinterpret_cast<std::uintptr_t>(&tl_getaddrinfo)},
+        {"freeaddrinfo", 1004, reinterpret_cast<std::uintptr_t>(&tl_freeaddrinfo)},
+        {"WSAPoll", 1005, reinterpret_cast<std::uintptr_t>(&tl_WSAPoll)},
+        {"inet_ntop", 1006, reinterpret_cast<std::uintptr_t>(&tl_inet_ntop)},
+        {"inet_pton", 1007, reinterpret_cast<std::uintptr_t>(&tl_inet_pton)},
+        {"WSAEventSelect", 1008, reinterpret_cast<std::uintptr_t>(&tl_WSAEventSelect)},
+        {"WSACreateEvent", 1009, reinterpret_cast<std::uintptr_t>(&tl_WSACreateEvent)},
+        {"WSACloseEvent", 1010, reinterpret_cast<std::uintptr_t>(&tl_WSACloseEvent)},
+        {"WSASetEvent", 1011, reinterpret_cast<std::uintptr_t>(&tl_WSASetEvent)},
+        {"WSAResetEvent", 1012, reinterpret_cast<std::uintptr_t>(&tl_WSAResetEvent)},
+        {"WSAWaitForMultipleEvents", 1013, reinterpret_cast<std::uintptr_t>(&tl_WSAWaitForMultipleEvents)},
+        {"WSAEnumNetworkEvents", 1014, reinterpret_cast<std::uintptr_t>(&tl_WSAEnumNetworkEvents)},
+        {"WSAIoctl", 1015, reinterpret_cast<std::uintptr_t>(&tl_WSAIoctl)},
+        {"getnameinfo", 1016, reinterpret_cast<std::uintptr_t>(&tl_getnameinfo)},
+        {"WSASocketA", 1017, reinterpret_cast<std::uintptr_t>(&tl_WSASocketA)},
+    };
+    static const InternalModule kWs2_32Module{"WS2_32.dll", kWs2_32Exports};
+    register_module(kWs2_32Module);
+}
+
+}  // namespace tradutorlinux::loader

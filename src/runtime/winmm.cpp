@@ -1,4 +1,6 @@
 #include "tradutorlinux/runtime/winmm.hpp"
+#include "tradutorlinux/loader/module.hpp"
+#include "tradutorlinux/loader/builtin_modules.hpp"
 
 #include <chrono>
 #include <cstdint>
@@ -89,5 +91,23 @@ TL_WINMM_MSABI int tl_PlaySoundW(const std::uint16_t* sound, void* module, const
 }
 
 }  // extern "C"
-
 }  // namespace tradutorlinux
+
+namespace tradutorlinux::loader {
+
+void register_winmm_module() {
+    static const ExportedFunction kWinmmExports[] = {
+        {"timeGetTime", 1, reinterpret_cast<std::uintptr_t>(&tl_timeGetTime)},
+        {"timeBeginPeriod", 2, reinterpret_cast<std::uintptr_t>(&tl_timeBeginPeriod)},
+        {"timeEndPeriod", 3, reinterpret_cast<std::uintptr_t>(&tl_timeEndPeriod)},
+        {"timeGetDevCaps", 4, reinterpret_cast<std::uintptr_t>(&tl_timeGetDevCaps)},
+        {"PlaySoundA", 5, reinterpret_cast<std::uintptr_t>(&tl_PlaySoundA)},
+        {"PlaySoundW", 6, reinterpret_cast<std::uintptr_t>(&tl_PlaySoundW)},
+        {"timeSetEvent", 7, reinterpret_cast<std::uintptr_t>(&tl_timeSetEvent)},
+        {"timeKillEvent", 8, reinterpret_cast<std::uintptr_t>(&tl_timeKillEvent)},
+    };
+    static const InternalModule kWinmmModule{"WINMM.dll", kWinmmExports};
+    register_module(kWinmmModule);
+}
+
+}  // namespace tradutorlinux::loader

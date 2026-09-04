@@ -1,5 +1,6 @@
 #include "tradutorlinux/runtime/advapi.hpp"
-
+#include "tradutorlinux/loader/module.hpp"
+#include "tradutorlinux/loader/builtin_modules.hpp"
 #include "tradutorlinux/runtime/winapi.hpp"
 
 #include <algorithm>
@@ -1092,3 +1093,84 @@ TL_ADVAPI_MSABI int tl_IsTextUnicode(const void* const lpv, const int iSize, int
 }
 
 }  // namespace tradutorlinux
+
+namespace tradutorlinux::loader {
+
+void register_advapi32_module() {
+    static const ExportedFunction kAdvapi32Exports[] = {
+        {"RegCloseKey", 1, reinterpret_cast<std::uintptr_t>(&tl_RegCloseKey)},
+        {"RegDeleteValueA", 2, reinterpret_cast<std::uintptr_t>(&tl_RegDeleteValueA)},
+        {"RegDeleteValueW", 6, reinterpret_cast<std::uintptr_t>(&tl_RegDeleteValueW)},
+        {"RegCreateKeyExA", 7, reinterpret_cast<std::uintptr_t>(&tl_RegCreateKeyExA)},
+        {"RegCreateKeyExW", 8, reinterpret_cast<std::uintptr_t>(&tl_RegCreateKeyExW)},
+        {"RegOpenKeyExA", 3, reinterpret_cast<std::uintptr_t>(&tl_RegOpenKeyExA)},
+        {"RegOpenKeyExW", 9, reinterpret_cast<std::uintptr_t>(&tl_RegOpenKeyExW)},
+        {"RegQueryValueExA", 4, reinterpret_cast<std::uintptr_t>(&tl_RegQueryValueExA)},
+        {"RegQueryValueExW", 10, reinterpret_cast<std::uintptr_t>(&tl_RegQueryValueExW)},
+        {"RegSetValueExA", 5, reinterpret_cast<std::uintptr_t>(&tl_RegSetValueExA)},
+        {"RegSetValueExW", 11, reinterpret_cast<std::uintptr_t>(&tl_RegSetValueExW)},
+        {"CryptAcquireContextA", 12, reinterpret_cast<std::uintptr_t>(&tl_CryptAcquireContextA)},
+        {"CryptAcquireContextW", 13, reinterpret_cast<std::uintptr_t>(&tl_CryptAcquireContextW)},
+        {"CryptGenRandom", 14, reinterpret_cast<std::uintptr_t>(&tl_CryptGenRandom)},
+        {"CryptReleaseContext", 15, reinterpret_cast<std::uintptr_t>(&tl_CryptReleaseContext)},
+        {"OpenProcessToken", 16, reinterpret_cast<std::uintptr_t>(&tl_OpenProcessToken)},
+        {"GetTokenInformation", 17, reinterpret_cast<std::uintptr_t>(&tl_GetTokenInformation)},
+        {"AllocateAndInitializeSid", 18, reinterpret_cast<std::uintptr_t>(&tl_AllocateAndInitializeSid)},
+        {"FreeSid", 19, reinterpret_cast<std::uintptr_t>(&tl_FreeSid)},
+        {"GetLengthSid", 20, reinterpret_cast<std::uintptr_t>(&tl_GetLengthSid)},
+        {"CopySid", 21, reinterpret_cast<std::uintptr_t>(&tl_CopySid)},
+        {"EqualSid", 22, reinterpret_cast<std::uintptr_t>(&tl_EqualSid)},
+        {"IsValidSid", 23, reinterpret_cast<std::uintptr_t>(&tl_IsValidSid)},
+        {"CreateWellKnownSid", 24, reinterpret_cast<std::uintptr_t>(&tl_CreateWellKnownSid)},
+        {"CheckTokenMembership", 25, reinterpret_cast<std::uintptr_t>(&tl_CheckTokenMembership)},
+        {"BuildTrusteeWithSidW", 26, reinterpret_cast<std::uintptr_t>(&tl_BuildTrusteeWithSidW)},
+        {"InitializeSecurityDescriptor", 27, reinterpret_cast<std::uintptr_t>(&tl_InitializeSecurityDescriptor)},
+        {"SetSecurityDescriptorDacl", 28, reinterpret_cast<std::uintptr_t>(&tl_SetSecurityDescriptorDacl)},
+        {"SetEntriesInAclW", 29, reinterpret_cast<std::uintptr_t>(&tl_SetEntriesInAclW)},
+        {"GetNamedSecurityInfoW", 30, reinterpret_cast<std::uintptr_t>(&tl_GetNamedSecurityInfoW)},
+        {"SetNamedSecurityInfoW", 31, reinterpret_cast<std::uintptr_t>(&tl_SetNamedSecurityInfoW)},
+        {"SetFileSecurityW", 32, reinterpret_cast<std::uintptr_t>(&tl_SetFileSecurityW)},
+        {"LookupPrivilegeValueW", 33, reinterpret_cast<std::uintptr_t>(&tl_LookupPrivilegeValueW)},
+        {"AdjustTokenPrivileges", 34, reinterpret_cast<std::uintptr_t>(&tl_AdjustTokenPrivileges)},
+        {"GetFileSecurityW", 35, reinterpret_cast<std::uintptr_t>(&tl_GetFileSecurityW)},
+        {"RegDeleteTreeW", 36, reinterpret_cast<std::uintptr_t>(&tl_RegDeleteTreeW)},
+        {"RegEnumValueW", 37, reinterpret_cast<std::uintptr_t>(&tl_RegEnumValueW)},
+        {"RegEnumKeyExW", 38, reinterpret_cast<std::uintptr_t>(&tl_RegEnumKeyExW)},
+        {"RegDeleteKeyExW", 39, reinterpret_cast<std::uintptr_t>(&tl_RegDeleteKeyExW)},
+        {"RegDeleteKeyW", 40, reinterpret_cast<std::uintptr_t>(&tl_RegDeleteKeyW)},
+        {"GetUserNameW", 41, reinterpret_cast<std::uintptr_t>(&tl_GetUserNameW)},
+        {"LookupAccountNameW", 42, reinterpret_cast<std::uintptr_t>(&tl_LookupAccountNameW)},
+        {"LsaOpenPolicy", 43, reinterpret_cast<std::uintptr_t>(&tl_LsaOpenPolicy)},
+        {"LsaClose", 44, reinterpret_cast<std::uintptr_t>(&tl_LsaClose)},
+        {"LsaAddAccountRights", 45, reinterpret_cast<std::uintptr_t>(&tl_LsaAddAccountRights)},
+        {"RegQueryInfoKeyA", 46, reinterpret_cast<std::uintptr_t>(&tl_RegQueryInfoKeyA)},
+        {"RegQueryInfoKeyW", 47, reinterpret_cast<std::uintptr_t>(&tl_RegQueryInfoKeyW)},
+        {"RegEnumKeyA", 48, reinterpret_cast<std::uintptr_t>(&tl_RegEnumKeyA)},
+        {"RegEnumValueA", 49, reinterpret_cast<std::uintptr_t>(&tl_RegEnumValueA)},
+        {"RegDeleteKeyA", 50, reinterpret_cast<std::uintptr_t>(&tl_RegDeleteKeyA)},
+        {"RegGetValueW", 51, reinterpret_cast<std::uintptr_t>(&tl_RegGetValueW)},
+        {"RegisterEventSourceW", 52, reinterpret_cast<std::uintptr_t>(&tl_RegisterEventSourceW)},
+        {"DeregisterEventSource", 53, reinterpret_cast<std::uintptr_t>(&tl_DeregisterEventSource)},
+        {"ReportEventW", 54, reinterpret_cast<std::uintptr_t>(&tl_ReportEventW)},
+        {"CryptCreateHash", 55, reinterpret_cast<std::uintptr_t>(&tl_CryptCreateHash)},
+        {"CryptHashData", 56, reinterpret_cast<std::uintptr_t>(&tl_CryptHashData)},
+        {"CryptGetHashParam", 57, reinterpret_cast<std::uintptr_t>(&tl_CryptGetHashParam)},
+        {"CryptSetHashParam", 58, reinterpret_cast<std::uintptr_t>(&tl_CryptSetHashParam)},
+        {"CryptDestroyHash", 59, reinterpret_cast<std::uintptr_t>(&tl_CryptDestroyHash)},
+        {"CryptSignHashW", 60, reinterpret_cast<std::uintptr_t>(&tl_CryptSignHashW)},
+        {"CryptDecrypt", 61, reinterpret_cast<std::uintptr_t>(&tl_CryptDecrypt)},
+        {"CryptExportKey", 62, reinterpret_cast<std::uintptr_t>(&tl_CryptExportKey)},
+        {"CryptGetUserKey", 63, reinterpret_cast<std::uintptr_t>(&tl_CryptGetUserKey)},
+        {"CryptGetProvParam", 64, reinterpret_cast<std::uintptr_t>(&tl_CryptGetProvParam)},
+        {"CryptDestroyKey", 65, reinterpret_cast<std::uintptr_t>(&tl_CryptDestroyKey)},
+        {"CryptEnumProvidersW", 66, reinterpret_cast<std::uintptr_t>(&tl_CryptEnumProvidersW)},
+        {"SystemFunction036", 67, reinterpret_cast<std::uintptr_t>(&tl_SystemFunction036)},
+        {"GetUserNameA", 68, reinterpret_cast<std::uintptr_t>(&tl_GetUserNameA)},
+        {"SetSecurityDescriptorOwner", 69, reinterpret_cast<std::uintptr_t>(&tl_SetSecurityDescriptorOwner)},
+        {"IsTextUnicode", 70, reinterpret_cast<std::uintptr_t>(&tl_IsTextUnicode)},
+    };
+    static const InternalModule kAdvapi32Module{"ADVAPI32.dll", kAdvapi32Exports};
+    register_module(kAdvapi32Module);
+}
+
+}  // namespace tradutorlinux::loader

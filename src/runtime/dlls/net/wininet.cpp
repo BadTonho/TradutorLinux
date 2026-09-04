@@ -1,4 +1,6 @@
 #include "tradutorlinux/runtime/wininet.hpp"
+#include "tradutorlinux/loader/module.hpp"
+#include "tradutorlinux/loader/builtin_modules.hpp"
 
 #include "tradutorlinux/diagnostics/trace.hpp"
 #include "tradutorlinux/runtime/memory_validator.hpp"
@@ -1082,5 +1084,26 @@ TL_MSABI int tl_InternetCrackUrlW(const std::uint16_t* url,
 }
 
 }  // extern "C"
-
 }  // namespace tradutorlinux
+
+namespace tradutorlinux::loader {
+
+void register_wininet_module() {
+    static const ExportedFunction kWininetExports[] = {
+        {"InternetReadFile", 1, reinterpret_cast<std::uintptr_t>(&tl_InternetReadFile)},
+        {"InternetCrackUrlW", 2, reinterpret_cast<std::uintptr_t>(&tl_InternetCrackUrlW)},
+        {"InternetCloseHandle", 3, reinterpret_cast<std::uintptr_t>(&tl_InternetCloseHandle)},
+        {"InternetConnectW", 4, reinterpret_cast<std::uintptr_t>(&tl_InternetConnectW)},
+        {"InternetQueryDataAvailable", 5, reinterpret_cast<std::uintptr_t>(&tl_InternetQueryDataAvailable)},
+        {"InternetSetOptionW", 6, reinterpret_cast<std::uintptr_t>(&tl_InternetSetOptionW)},
+        {"HttpOpenRequestW", 7, reinterpret_cast<std::uintptr_t>(&tl_HttpOpenRequestW)},
+        {"HttpAddRequestHeadersW", 8, reinterpret_cast<std::uintptr_t>(&tl_HttpAddRequestHeadersW)},
+        {"HttpSendRequestW", 9, reinterpret_cast<std::uintptr_t>(&tl_HttpSendRequestW)},
+        {"HttpQueryInfoW", 10, reinterpret_cast<std::uintptr_t>(&tl_HttpQueryInfoW)},
+        {"InternetOpenW", 11, reinterpret_cast<std::uintptr_t>(&tl_InternetOpenW)},
+    };
+    static const InternalModule kWininetModule{"WININET.dll", kWininetExports};
+    register_module(kWininetModule);
+}
+
+}  // namespace tradutorlinux::loader

@@ -1,4 +1,6 @@
 #include "tradutorlinux/runtime/comctl32.hpp"
+#include "tradutorlinux/loader/module.hpp"
+#include "tradutorlinux/loader/builtin_modules.hpp"
 #include "tradutorlinux/runtime/winapi.hpp"
 
 #include <array>
@@ -356,5 +358,55 @@ TL_COMCTL_MSABI int tl_LoadIconWithScaleDown(void* const hinst, const wchar_t* c
 }
 
 }  // extern "C"
-
 }  // namespace tradutorlinux
+
+namespace tradutorlinux::loader {
+
+void register_comctl32_module() {
+    static const ExportedFunction kComctl32Exports[] = {
+        {"InitCommonControls", 1, reinterpret_cast<std::uintptr_t>(&tl_InitCommonControls)},
+        {"InitCommonControlsEx", 2, reinterpret_cast<std::uintptr_t>(&tl_InitCommonControlsEx)},
+        {"ImageList_Create", 3, reinterpret_cast<std::uintptr_t>(&tl_ImageList_Create)},
+        {"ImageList_Destroy", 4, reinterpret_cast<std::uintptr_t>(&tl_ImageList_Destroy)},
+        {"ImageList_Add", 5, reinterpret_cast<std::uintptr_t>(&tl_ImageList_Add)},
+        {"ImageList_AddMasked", 6, reinterpret_cast<std::uintptr_t>(&tl_ImageList_AddMasked)},
+        {"ImageList_ReplaceIcon", 7, reinterpret_cast<std::uintptr_t>(&tl_ImageList_ReplaceIcon)},
+        {"CreateStatusWindowW", 8, reinterpret_cast<std::uintptr_t>(&tl_CreateStatusWindowW)},
+        {"CreateToolbarEx", 9, reinterpret_cast<std::uintptr_t>(&tl_CreateToolbarEx)},
+        {"ImageList_GetImageCount", 10, reinterpret_cast<std::uintptr_t>(&tl_ImageList_GetImageCount)},
+        {"PropertySheetW", 11, reinterpret_cast<std::uintptr_t>(&tl_PropertySheetW)},
+        {"TaskDialogIndirect", 12, reinterpret_cast<std::uintptr_t>(&tl_TaskDialogIndirect)},
+        {"TaskDialog", 13, reinterpret_cast<std::uintptr_t>(&tl_TaskDialog)},
+        {"ImageList_Draw", 14, reinterpret_cast<std::uintptr_t>(&tl_ImageList_Draw)},
+        {"ImageList_DrawEx", 15, reinterpret_cast<std::uintptr_t>(&tl_ImageList_DrawEx)},
+        {"ImageList_GetIcon", 16, reinterpret_cast<std::uintptr_t>(&tl_ImageList_GetIcon)},
+        {"ImageList_Duplicate", 17, reinterpret_cast<std::uintptr_t>(&tl_ImageList_Duplicate)},
+        {"ImageList_SetBkColor", 18, reinterpret_cast<std::uintptr_t>(&tl_ImageList_SetBkColor)},
+        {"ImageList_GetBkColor", 19, reinterpret_cast<std::uintptr_t>(&tl_ImageList_GetBkColor)},
+        {"ImageList_GetIconSize", 20, reinterpret_cast<std::uintptr_t>(&tl_ImageList_GetIconSize)},
+        {"_TrackMouseEvent", 21, reinterpret_cast<std::uintptr_t>(&tl_TrackMouseEvent_alias)},
+        {"ImageList_GetImageInfo", 22, reinterpret_cast<std::uintptr_t>(&tl_ImageList_GetImageInfo)},
+        {"ImageList_EndDrag", 23, reinterpret_cast<std::uintptr_t>(&tl_ImageList_EndDrag)},
+        {"ImageList_DragShowNolock", 24, reinterpret_cast<std::uintptr_t>(&tl_ImageList_DragShowNolock)},
+        {"ImageList_DragEnter", 25, reinterpret_cast<std::uintptr_t>(&tl_ImageList_DragEnter)},
+        {"ImageList_DragMove", 26, reinterpret_cast<std::uintptr_t>(&tl_ImageList_DragMove)},
+        {"ImageList_BeginDrag", 27, reinterpret_cast<std::uintptr_t>(&tl_ImageList_BeginDrag)},
+        {"ImageList_Remove", 28, reinterpret_cast<std::uintptr_t>(&tl_ImageList_Remove)},
+        {"ImageList_SetIconSize", 29, reinterpret_cast<std::uintptr_t>(&tl_ImageList_SetIconSize)},
+        {"CreateToolbarEx", 30, reinterpret_cast<std::uintptr_t>(&tl_CreateToolbarEx)},
+        {"LoadIconWithScaleDown", 381, reinterpret_cast<std::uintptr_t>(&tl_LoadIconWithScaleDown)},
+        {"SetWindowSubclass", 410, reinterpret_cast<std::uintptr_t>(&tl_SetWindowSubclass)},
+        {"RemoveWindowSubclass", 412, reinterpret_cast<std::uintptr_t>(&tl_RemoveWindowSubclass)},
+        {"DefSubclassProc", 413, reinterpret_cast<std::uintptr_t>(&tl_DefSubclassProc)},
+        {"", 17, reinterpret_cast<std::uintptr_t>(&tl_InitCommonControls)},
+        {"", 381, reinterpret_cast<std::uintptr_t>(&tl_LoadIconWithScaleDown)},
+        {"", 410, reinterpret_cast<std::uintptr_t>(&tl_SetWindowSubclass)},
+        {"", 411, reinterpret_cast<std::uintptr_t>(&tl_TaskDialogIndirect)},
+        {"", 412, reinterpret_cast<std::uintptr_t>(&tl_RemoveWindowSubclass)},
+        {"", 413, reinterpret_cast<std::uintptr_t>(&tl_DefSubclassProc)},
+    };
+    static const InternalModule kComctl32Module{"COMCTL32.dll", kComctl32Exports};
+    register_module(kComctl32Module);
+}
+
+}  // namespace tradutorlinux::loader

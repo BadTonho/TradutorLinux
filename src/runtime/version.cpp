@@ -1,4 +1,6 @@
 #include "tradutorlinux/runtime/version.hpp"
+#include "tradutorlinux/loader/module.hpp"
+#include "tradutorlinux/loader/builtin_modules.hpp"
 #include "tradutorlinux/runtime/memory_validator.hpp"
 
 #include <cstring>
@@ -106,5 +108,25 @@ TL_VER_MSABI int tl_GetFileVersionInfoExW(const std::uint32_t flags, const std::
 }
 
 }  // extern "C"
-
 }  // namespace tradutorlinux
+
+namespace tradutorlinux::loader {
+
+void register_version_module() {
+    static const ExportedFunction kVersionExports[] = {
+        {"GetFileVersionInfoSizeA", 1, reinterpret_cast<std::uintptr_t>(&tl_GetFileVersionInfoSizeA)},
+        {"GetFileVersionInfoSizeW", 2, reinterpret_cast<std::uintptr_t>(&tl_GetFileVersionInfoSizeW)},
+        {"GetFileVersionInfoA", 3, reinterpret_cast<std::uintptr_t>(&tl_GetFileVersionInfoA)},
+        {"GetFileVersionInfoW", 4, reinterpret_cast<std::uintptr_t>(&tl_GetFileVersionInfoW)},
+        {"VerQueryValueA", 5, reinterpret_cast<std::uintptr_t>(&tl_VerQueryValueA)},
+        {"VerQueryValueW", 6, reinterpret_cast<std::uintptr_t>(&tl_VerQueryValueW)},
+        {"GetFileVersionInfoSizeExA", 7, reinterpret_cast<std::uintptr_t>(&tl_GetFileVersionInfoSizeExA)},
+        {"GetFileVersionInfoSizeExW", 8, reinterpret_cast<std::uintptr_t>(&tl_GetFileVersionInfoSizeExW)},
+        {"GetFileVersionInfoExA", 9, reinterpret_cast<std::uintptr_t>(&tl_GetFileVersionInfoExA)},
+        {"GetFileVersionInfoExW", 10, reinterpret_cast<std::uintptr_t>(&tl_GetFileVersionInfoExW)},
+    };
+    static const InternalModule kVersionModule{"version.dll", kVersionExports};
+    register_module(kVersionModule);
+}
+
+}  // namespace tradutorlinux::loader

@@ -1,4 +1,6 @@
 #include "tradutorlinux/runtime/winapi.hpp"
+#include "tradutorlinux/loader/module.hpp"
+#include "tradutorlinux/loader/builtin_modules.hpp"
 #include "runtime_context.hpp"
 
 namespace tradutorlinux {
@@ -45,5 +47,17 @@ TL_MSABI void* tl_ImageNtHeader(void* const base) noexcept {
 }
 
 } // extern "C"
-
 } // namespace tradutorlinux
+
+namespace tradutorlinux::loader {
+
+void register_dbghelp_module() {
+    static const ExportedFunction kDbghelpExports[] = {
+        {"SymFromAddr", 1, reinterpret_cast<std::uintptr_t>(&tl_SymFromAddr)},
+        {"ImageNtHeader", 2, reinterpret_cast<std::uintptr_t>(&tl_ImageNtHeader)},
+    };
+    static const InternalModule kDbghelpModule{"dbghelp.dll", kDbghelpExports};
+    register_module(kDbghelpModule);
+}
+
+} // namespace tradutorlinux::loader

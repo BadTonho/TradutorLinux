@@ -1,4 +1,6 @@
 #include "tradutorlinux/runtime/winapi.hpp"
+#include "tradutorlinux/loader/module.hpp"
+#include "tradutorlinux/loader/builtin_modules.hpp"
 #include "runtime_context.hpp"
 
 #include <string>
@@ -251,5 +253,42 @@ TL_MSABI int tl_BufferedPaintRenderAnimation(void* const hwnd, void* const hdcTa
 }
 
 } // extern "C"
-
 } // namespace tradutorlinux
+
+namespace tradutorlinux::loader {
+
+void register_uxtheme_module() {
+    static const ExportedFunction kUxThemeExports[] = {
+        {"SetWindowTheme", 1, reinterpret_cast<std::uintptr_t>(&tl_SetWindowTheme)},
+        {"OpenThemeData", 2, reinterpret_cast<std::uintptr_t>(&tl_OpenThemeData)},
+        {"CloseThemeData", 3, reinterpret_cast<std::uintptr_t>(&tl_CloseThemeData)},
+        {"DrawThemeBackground", 4, reinterpret_cast<std::uintptr_t>(&tl_DrawThemeBackground)},
+        {"DrawThemeText", 5, reinterpret_cast<std::uintptr_t>(&tl_DrawThemeText)},
+        {"DrawThemeTextEx", 6, reinterpret_cast<std::uintptr_t>(&tl_DrawThemeTextEx)},
+        {"GetThemeColor", 7, reinterpret_cast<std::uintptr_t>(&tl_GetThemeColor)},
+        {"GetThemeFont", 8, reinterpret_cast<std::uintptr_t>(&tl_GetThemeFont)},
+        {"GetThemeMetric", 9, reinterpret_cast<std::uintptr_t>(&tl_GetThemeMetric)},
+        {"GetThemePartSize", 10, reinterpret_cast<std::uintptr_t>(&tl_GetThemePartSize)},
+        {"GetThemeSysColor", 11, reinterpret_cast<std::uintptr_t>(&tl_GetThemeSysColor)},
+        {"GetThemeSysColorBrush", 12, reinterpret_cast<std::uintptr_t>(&tl_GetThemeSysColorBrush)},
+        {"IsThemeActive", 13, reinterpret_cast<std::uintptr_t>(&tl_IsThemeActive)},
+        {"IsAppThemed", 14, reinterpret_cast<std::uintptr_t>(&tl_IsAppThemed)},
+        {"IsThemeBackgroundPartiallyTransparent", 15, reinterpret_cast<std::uintptr_t>(&tl_IsThemeBackgroundPartiallyTransparent)},
+        {"BufferedPaintInit", 16, reinterpret_cast<std::uintptr_t>(&tl_BufferedPaintInit)},
+        {"BufferedPaintUnInit", 17, reinterpret_cast<std::uintptr_t>(&tl_BufferedPaintUnInit)},
+        {"BeginBufferedPaint", 18, reinterpret_cast<std::uintptr_t>(&tl_BeginBufferedPaint)},
+        {"EndBufferedPaint", 19, reinterpret_cast<std::uintptr_t>(&tl_EndBufferedPaint)},
+        {"DrawThemeParentBackground", 20, reinterpret_cast<std::uintptr_t>(&tl_DrawThemeParentBackground)},
+        {"EndBufferedAnimation", 21, reinterpret_cast<std::uintptr_t>(&tl_EndBufferedAnimation)},
+        {"GetThemeTransitionDuration", 22, reinterpret_cast<std::uintptr_t>(&tl_GetThemeTransitionDuration)},
+        {"GetThemeBackgroundContentRect", 23, reinterpret_cast<std::uintptr_t>(&tl_GetThemeBackgroundContentRect)},
+        {"EnableThemeDialogTexture", 24, reinterpret_cast<std::uintptr_t>(&tl_EnableThemeDialogTexture)},
+        {"BufferedPaintStopAllAnimations", 25, reinterpret_cast<std::uintptr_t>(&tl_BufferedPaintStopAllAnimations)},
+        {"BeginBufferedAnimation", 26, reinterpret_cast<std::uintptr_t>(&tl_BeginBufferedAnimation)},
+        {"BufferedPaintRenderAnimation", 27, reinterpret_cast<std::uintptr_t>(&tl_BufferedPaintRenderAnimation)},
+    };
+    static const InternalModule kUxThemeModule{"UxTheme.dll", kUxThemeExports};
+    register_module(kUxThemeModule);
+}
+
+} // namespace tradutorlinux::loader

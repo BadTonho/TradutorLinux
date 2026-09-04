@@ -1,4 +1,6 @@
 #include "tradutorlinux/runtime/wintrust.hpp"
+#include "tradutorlinux/loader/module.hpp"
+#include "tradutorlinux/loader/builtin_modules.hpp"
 
 #include "tradutorlinux/diagnostics/trace.hpp"
 #include "tradutorlinux/runtime/memory_validator.hpp"
@@ -372,5 +374,22 @@ TL_WINTRUST_MSABI GuestWintrustProviderCert* tl_WTHelperGetProvCertFromChain(
 }
 
 }  // extern "C"
-
 }  // namespace tradutorlinux
+
+namespace tradutorlinux::loader {
+
+void register_wintrust_module() {
+    static const ExportedFunction kWintrustExports[] = {
+        {"WinVerifyTrust", 1, reinterpret_cast<std::uintptr_t>(&tl_WinVerifyTrust)},
+        {"WTHelperProvDataFromStateData", 2,
+         reinterpret_cast<std::uintptr_t>(&tl_WTHelperProvDataFromStateData)},
+        {"WTHelperGetProvSignerFromChain", 3,
+         reinterpret_cast<std::uintptr_t>(&tl_WTHelperGetProvSignerFromChain)},
+        {"WTHelperGetProvCertFromChain", 4,
+         reinterpret_cast<std::uintptr_t>(&tl_WTHelperGetProvCertFromChain)},
+    };
+    static const InternalModule kWintrustModule{"WINTRUST.dll", kWintrustExports};
+    register_module(kWintrustModule);
+}
+
+}  // namespace tradutorlinux::loader

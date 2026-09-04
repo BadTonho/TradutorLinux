@@ -4,6 +4,7 @@
 #include "tradutorlinux/diagnostics/trace.hpp"
 #include "tradutorlinux/gui/platform.hpp"
 #include "tradutorlinux/loader/module.hpp"
+#include "tradutorlinux/loader/builtin_modules.hpp"
 #include "tradutorlinux/loader/process.hpp"
 #include "tradutorlinux/pe/pe_reader.hpp"
 #include "tradutorlinux/prefix/prefix.hpp"
@@ -1056,5 +1057,107 @@ TL_MSABI int dummy_worker_check() noexcept {
 }
 
 }  // extern "C"
-
 }  // namespace tradutorlinux
+
+namespace tradutorlinux::loader {
+
+void register_winapi_stubs_module() {
+    static const ExportedFunction kSensApiExports[] = {
+        {"IsDestinationReachableW", 1, reinterpret_cast<std::uintptr_t>(&tl_IsDestinationReachableW)},
+        {"IsNetworkAlive", 2, reinterpret_cast<std::uintptr_t>(&tl_IsNetworkAlive)},
+    };
+    static const InternalModule kSensApiModule{"SensApi.dll", kSensApiExports};
+    register_module(kSensApiModule);
+    static const ExportedFunction kSetupApiExports[] = {
+        {"CM_Get_Child", 1, reinterpret_cast<std::uintptr_t>(&tl_CM_Get_Child)},
+        {"SetupDiGetClassDevsA", 2, reinterpret_cast<std::uintptr_t>(&tl_SetupDiGetClassDevsA)},
+        {"SetupDiEnumDeviceInfo", 3, reinterpret_cast<std::uintptr_t>(&tl_SetupDiEnumDeviceInfo)},
+        {"SetupDiEnumDeviceInterfaces", 4, reinterpret_cast<std::uintptr_t>(&tl_SetupDiEnumDeviceInterfaces)},
+        {"SetupDiGetDeviceInterfaceDetailA", 5, reinterpret_cast<std::uintptr_t>(&tl_SetupDiGetDeviceInterfaceDetailA)},
+        {"SetupDiGetDeviceRegistryPropertyA", 6, reinterpret_cast<std::uintptr_t>(&tl_SetupDiGetDeviceRegistryPropertyA)},
+        {"SetupDiGetDeviceInstanceIdA", 7, reinterpret_cast<std::uintptr_t>(&tl_SetupDiGetDeviceInstanceIdA)},
+        {"SetupDiDestroyDeviceInfoList", 8, reinterpret_cast<std::uintptr_t>(&tl_SetupDiDestroyDeviceInfoList)},
+    };
+    static const InternalModule kSetupApiModule{"SETUPAPI.dll", kSetupApiExports};
+    register_module(kSetupApiModule);
+    static const InternalModule kCfgmgr32Module{"CFGMGR32.dll", kSetupApiExports};
+    register_module(kCfgmgr32Module);
+    static const ExportedFunction kNetApi32Exports[] = {
+        {"NetApiBufferFree", 1, reinterpret_cast<std::uintptr_t>(&tl_NetApiBufferFree)},
+    };
+    static const InternalModule kNetApi32Module{"NETAPI32.dll", kNetApi32Exports};
+    register_module(kNetApi32Module);
+    static const ExportedFunction kOleAccExports[] = {
+        {"LresultFromObject", 1, reinterpret_cast<std::uintptr_t>(&tl_LresultFromObject)},
+    };
+    static const InternalModule kOleAccModule{"OLEACC.dll", kOleAccExports};
+    register_module(kOleAccModule);
+    static const ExportedFunction kTdhExports[] = {
+        {"TdhGetPropertySize", 1, reinterpret_cast<std::uintptr_t>(&tl_TdhGetPropertySize)},
+    };
+    static const InternalModule kTdhModule{"tdh.dll", kTdhExports};
+    register_module(kTdhModule);
+    static const ExportedFunction kWinspoolExports[] = {
+        {"OpenPrinterW", 1, reinterpret_cast<std::uintptr_t>(&tl_OpenPrinterW)},
+        {"ClosePrinter", 2, reinterpret_cast<std::uintptr_t>(&tl_CloseHandle)},
+        {"DocumentPropertiesW", 3, reinterpret_cast<std::uintptr_t>(&tl_OpenPrinterW)},
+    };
+    static const InternalModule kWinspoolModule{"WINSPOOL.DRV", kWinspoolExports};
+    register_module(kWinspoolModule);
+    static const ExportedFunction kWtsApi32Exports[] = {
+        {"WTSFreeMemory", 1, reinterpret_cast<std::uintptr_t>(&tl_WTSFreeMemory)},
+        {"WTSEnumerateSessionsW", 2, reinterpret_cast<std::uintptr_t>(&tl_WTSFreeMemory)},
+        {"WTSQuerySessionInformationW", 3, reinterpret_cast<std::uintptr_t>(&tl_WTSFreeMemory)},
+    };
+    static const InternalModule kWtsApi32Module{"WTSAPI32.dll", kWtsApi32Exports};
+    register_module(kWtsApi32Module);
+    static const ExportedFunction kD3dCompiler47Exports[] = {
+        {"D3DCompile", 1, reinterpret_cast<std::uintptr_t>(&tl_D3DCompile)},
+    };
+    static const InternalModule kD3dCompiler47Module{"D3DCOMPILER_47.dll", kD3dCompiler47Exports};
+    register_module(kD3dCompiler47Module);
+    static const ExportedFunction kD3d12Exports[] = {
+        {"D3D12SerializeRootSignature", 1, reinterpret_cast<std::uintptr_t>(&tl_D3D12SerializeRootSignature)},
+        {"", 101, reinterpret_cast<std::uintptr_t>(&tl_D3D12SerializeRootSignature)},
+    };
+    static const InternalModule kD3d12Module{"d3d12.dll", kD3d12Exports};
+    register_module(kD3d12Module);
+    static const ExportedFunction kDxgiExports[] = {
+        {"CreateDXGIFactory1", 1, reinterpret_cast<std::uintptr_t>(&tl_CreateDXGIFactory1)},
+    };
+    static const InternalModule kDxgiModule{"dxgi.dll", kDxgiExports};
+    register_module(kDxgiModule);
+    static const ExportedFunction kDdrawExports[] = {
+        {"DirectDrawCreateEx", 1, reinterpret_cast<std::uintptr_t>(&tl_DirectDrawCreateEx)},
+    };
+    static const InternalModule kDdrawModule{"DDRAW.dll", kDdrawExports};
+    register_module(kDdrawModule);
+    static const ExportedFunction kD3d9Exports[] = {
+        {"Direct3DCreate9", 1, reinterpret_cast<std::uintptr_t>(&tl_Direct3DCreate9)},
+        {"Direct3DCreate9Ex", 2, reinterpret_cast<std::uintptr_t>(&tl_Direct3DCreate9Ex)},
+    };
+    static const InternalModule kD3d9Module{"d3d9.dll", kD3d9Exports};
+    register_module(kD3d9Module);
+    static const ExportedFunction kD3d10Exports[] = {
+        {"D3D10CreateDeviceAndSwapChain", 1, reinterpret_cast<std::uintptr_t>(&tl_D3D10CreateDeviceAndSwapChain)},
+    };
+    static const InternalModule kD3d10Module{"d3d10.dll", kD3d10Exports};
+    register_module(kD3d10Module);
+    static const ExportedFunction kD3dx10Exports[] = {
+        {"D3DX10CompileFromMemory", 1, reinterpret_cast<std::uintptr_t>(&tl_D3DX10CompileFromMemory)},
+    };
+    static const InternalModule kD3dx10Module{"d3dx10_42.dll", kD3dx10Exports};
+    register_module(kD3dx10Module);
+    static const ExportedFunction kD3d11Exports[] = {
+        {"D3D11CreateDeviceAndSwapChain", 1, reinterpret_cast<std::uintptr_t>(&tl_D3D11CreateDeviceAndSwapChain)},
+    };
+    static const InternalModule kD3d11Module{"d3d11.dll", kD3d11Exports};
+    register_module(kD3d11Module);
+    static const ExportedFunction kD3dx11Exports[] = {
+        {"D3DX11CompileFromMemory", 1, reinterpret_cast<std::uintptr_t>(&tl_D3DX11CompileFromMemory)},
+    };
+    static const InternalModule kD3dx11Module{"d3dx11_42.dll", kD3dx11Exports};
+    register_module(kD3dx11Module);
+}
+
+}  // namespace tradutorlinux::loader

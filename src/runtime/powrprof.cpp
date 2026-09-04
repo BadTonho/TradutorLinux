@@ -1,4 +1,6 @@
 #include "tradutorlinux/runtime/winapi.hpp"
+#include "tradutorlinux/loader/module.hpp"
+#include "tradutorlinux/loader/builtin_modules.hpp"
 #include "runtime_context.hpp"
 
 #include <cstdlib>
@@ -59,5 +61,18 @@ TL_MSABI std::uint32_t tl_CallNtPowerInformation(int InformationLevel, void* Inp
 }
 
 } // extern "C"
-
 } // namespace tradutorlinux
+
+namespace tradutorlinux::loader {
+
+void register_powrprof_module() {
+    static const ExportedFunction kPowrProfExports[] = {
+        {"PowerGetActiveScheme", 1, reinterpret_cast<std::uintptr_t>(&tl_PowerGetActiveScheme)},
+        {"PowerSetActiveScheme", 2, reinterpret_cast<std::uintptr_t>(&tl_PowerSetActiveScheme)},
+        {"CallNtPowerInformation", 3, reinterpret_cast<std::uintptr_t>(&tl_CallNtPowerInformation)},
+    };
+    static const InternalModule kPowrProfModule{"POWRPROF.dll", kPowrProfExports};
+    register_module(kPowrProfModule);
+}
+
+} // namespace tradutorlinux::loader

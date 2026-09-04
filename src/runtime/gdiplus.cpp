@@ -1,4 +1,6 @@
 #include "tradutorlinux/runtime/winapi.hpp"
+#include "tradutorlinux/loader/module.hpp"
+#include "tradutorlinux/loader/builtin_modules.hpp"
 #include "runtime_context.hpp"
 
 #include <cstdlib>
@@ -78,5 +80,23 @@ TL_MSABI int tl_GdipCreateHBITMAPFromBitmap(void* bitmap, void** hbm, std::uint3
 }
 
 } // extern "C"
-
 } // namespace tradutorlinux
+
+namespace tradutorlinux::loader {
+
+void register_gdiplus_module() {
+    static const ExportedFunction kGdiplusExports[] = {
+        {"GdiplusStartup", 1, reinterpret_cast<std::uintptr_t>(&tl_GdiplusStartup)},
+        {"GdiplusShutdown", 2, reinterpret_cast<std::uintptr_t>(&tl_GdiplusShutdown)},
+        {"GdipAlloc", 3, reinterpret_cast<std::uintptr_t>(&tl_GdipAlloc)},
+        {"GdipFree", 4, reinterpret_cast<std::uintptr_t>(&tl_GdipFree)},
+        {"GdipCreateBitmapFromStream", 5, reinterpret_cast<std::uintptr_t>(&tl_GdipCreateBitmapFromStream)},
+        {"GdipCloneImage", 6, reinterpret_cast<std::uintptr_t>(&tl_GdipCloneImage)},
+        {"GdipDisposeImage", 7, reinterpret_cast<std::uintptr_t>(&tl_GdipDisposeImage)},
+        {"GdipCreateHBITMAPFromBitmap", 8, reinterpret_cast<std::uintptr_t>(&tl_GdipCreateHBITMAPFromBitmap)},
+    };
+    static const InternalModule kGdiplusModule{"gdiplus.dll", kGdiplusExports};
+    register_module(kGdiplusModule);
+}
+
+} // namespace tradutorlinux::loader
