@@ -1,6 +1,8 @@
 add_library(tradutorlinux_core STATIC
     catalog/app_catalog.cpp
-    cli.cpp
+    cli/options.cpp
+    cli/report.cpp
+    cli/runner.cpp
     diagnostics/trace.cpp
     diagnostics/crash_context.cpp
     loader/dll_overrides.cpp
@@ -75,6 +77,7 @@ target_include_directories(tradutorlinux_core
     PUBLIC
         "${PROJECT_SOURCE_DIR}/include"
     PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/cli"
         "${CMAKE_CURRENT_SOURCE_DIR}/runtime"
         "${CMAKE_CURRENT_SOURCE_DIR}/runtime/core"
 )
