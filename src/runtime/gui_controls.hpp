@@ -76,6 +76,9 @@ struct WindowSlot {
     int navigation_selection{1};
     std::filesystem::path visual_root_directory;
     std::filesystem::path visual_directory;
+    bool address_editing{false};
+    bool address_error{false};
+    std::string address_text;
     void* user_data{nullptr};
     std::uint32_t style{0};
     std::uint32_t extended_style{0};

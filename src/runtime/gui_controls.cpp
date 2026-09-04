@@ -171,6 +171,53 @@ constexpr std::array<SevenZipToolbarVisual, 7> kSevenZipToolbarVisuals{{
     }
 }
 
+[[nodiscard]] bool seven_zip_address_hit(const WindowSlot& parent, const int x,
+                                          const int y) noexcept {
+    const int width = std::max(parent.width, 1);
+    const int address_x = 67;
+    const int address_width = std::max(width - address_x - 10, 20);
+    return x >= address_x && x < address_x + address_width && y >= 78 && y < 102;
+}
+
+[[nodiscard]] std::filesystem::path seven_zip_path_from_address(
+    const WindowSlot& parent, const std::string_view address) noexcept {
+    try {
+        if (address.size() < 2U || (address[0] != 'Z' && address[0] != 'z') ||
+            address[1] != ':') {
+            return {};
+        }
+        const std::filesystem::path root = seven_zip_root_directory(parent);
+        if (root.empty()) {
+            return {};
+        }
+        std::string relative_text{address.substr(2)};
+        while (!relative_text.empty() &&
+               (relative_text.front() == '\\' || relative_text.front() == '/')) {
+            relative_text.erase(relative_text.begin());
+        }
+        for (char& character : relative_text) {
+            if (character == '\\') {
+                character = '/';
+            }
+        }
+        const std::filesystem::path candidate =
+            (relative_text.empty() ? root : root / relative_text).lexically_normal();
+        const std::string relative = candidate.lexically_relative(root).generic_string();
+        if (relative == ".." || relative.starts_with("../")) {
+            return {};
+        }
+        return candidate;
+    } catch (...) {
+        return {};
+    }
+}
+
+void clear_seven_zip_address_edit(WindowSlot& parent) noexcept {
+    parent.address_editing = false;
+    parent.address_error = false;
+    parent.address_text.clear();
+}
+
 [[nodiscard]] std::string menu_display_text(const std::string_view text) {
     std::string result;
     result.reserve(text.size());
@@ -354,6 +401,7 @@ struct SevenZipPopupGeometry {
         parent.list_selection = 0;
         parent.last_list_press_row = -1;
         parent.last_list_press_time = {};
+        clear_seven_zip_address_edit(parent);
         return true;
     } catch (...) {
         // A falha de conversão do caminho não pode derrubar o convidado.
@@ -537,11 +585,31 @@ void activate_seven_zip_menu_item(WindowSlot& parent, const SevenZipPopupGeometr
                 parent.list_selection = 0;
                 parent.last_list_press_row = -1;
                 parent.last_list_press_time = {};
+                clear_seven_zip_address_edit(parent);
                 render_controls(parent, windows);
             }
         } catch (...) {
             // A falha de leitura do diretório não pode derrubar o convidado.
         }
+    }
+    return true;
+}
+
+[[nodiscard]] bool handle_seven_zip_address_mouse(
+    WindowSlot& parent, const std::span<WindowSlot> windows,
+    WindowSlot*& focused_control, const gui::WindowEvent& event) noexcept {
+    if (!is_seven_zip_file_manager(parent) ||
+        (event.type != gui::WindowEventType::Press &&
+         event.type != gui::WindowEventType::Release) ||
+        !seven_zip_address_hit(parent, event.x, event.y)) {
+        return false;
+    }
+    if (event.type == gui::WindowEventType::Press) {
+        set_focus_control(nullptr, focused_control);
+        parent.address_editing = true;
+        parent.address_error = false;
+        parent.address_text = seven_zip_visual_address(parent);
+        render_controls(parent, windows);
     }
     return true;
 }
@@ -671,9 +739,20 @@ void render_seven_zip_file_manager(WindowSlot& parent,
     const int address_width = std::max(width - address_x - 10, 20);
     gui::platform::fill_rectangle_color(parent.native, address_x, 78, address_width, 24,
                                         kSurface);
-    gui::platform::draw_rectangle_color(parent.native, address_x, 78, address_width, 24, kBorder);
     const std::string visual_address = seven_zip_visual_address(parent);
-    gui::platform::draw_text_color(parent.native, visual_address.c_str(), address_x + 9, 95, kText);
+    const std::string& address_display = parent.address_editing ? parent.address_text
+                                                                 : visual_address;
+    const std::uint32_t address_border = parent.address_editing ? kBlue : kBorder;
+    gui::platform::draw_rectangle_color(parent.native, address_x, 78, address_width, 24,
+                                        address_border);
+    gui::platform::draw_text_color(parent.native, address_display.c_str(), address_x + 9, 95,
+                                   parent.address_error ? 0xB42318U : kText);
+    if (parent.address_editing) {
+        const int cursor_x = std::min(
+            address_x + 9 + static_cast<int>(address_display.size()) * 8,
+            address_x + address_width - 4);
+        gui::platform::fill_rectangle_color(parent.native, cursor_x, 82, 1, 16, kBlue);
+    }
 
     if (status_y > body_y) {
         // Navigation tree on the left and file list on the right.
@@ -757,7 +836,9 @@ void render_seven_zip_file_manager(WindowSlot& parent,
     gui::platform::fill_rectangle_color(parent.native, 0, status_y, width,
                                         std::max(height - status_y, 1), kStatus);
     gui::platform::fill_rectangle_color(parent.native, 0, status_y, width, 1, kBorder);
-    gui::platform::draw_text_color(parent.native, "Visualizacao experimental", 10,
+    const char* const status_text = parent.address_error ? "Pasta nao encontrada"
+                                                          : "Visualizacao experimental";
+    gui::platform::draw_text_color(parent.native, status_text, 10,
                                    std::min(status_y + 17, height - 4), kMuted);
     const int status_address_x = std::max(
         width - static_cast<int>(visual_address.size()) * 8 - 12, 10);
@@ -1211,6 +1292,47 @@ void handle_control_key(WindowSlot& parent, const std::span<WindowSlot> windows,
         return;
     }
     if (is_seven_zip_file_manager(parent) && parent.open_menu_index < 0 &&
+        parent.address_editing && event.type == gui::WindowEventType::KeyDown) {
+        if (event.keysym == 0xFF1BUL) {  // XK_Escape
+            clear_seven_zip_address_edit(parent);
+            render_controls(parent, windows);
+            return;
+        }
+        if (event.keysym == 0xFF0DUL) {  // XK_Return
+            const std::filesystem::path target =
+                seven_zip_path_from_address(parent, parent.address_text);
+            std::error_code error;
+            if (!target.empty() && std::filesystem::is_directory(target, error) && !error) {
+                if (parent.visual_root_directory.empty()) {
+                    parent.visual_root_directory = seven_zip_root_directory(parent);
+                }
+                parent.visual_directory = target;
+                parent.list_selection = 0;
+                parent.last_list_press_row = -1;
+                parent.last_list_press_time = {};
+                clear_seven_zip_address_edit(parent);
+            } else {
+                parent.address_error = true;
+            }
+            render_controls(parent, windows);
+            return;
+        }
+        if (event.keysym == 0xFF08UL || event.keysym == 0xFFFFUL) {
+            if (!parent.address_text.empty()) {
+                parent.address_text.pop_back();
+            }
+            parent.address_error = false;
+            render_controls(parent, windows);
+            return;
+        }
+        if (event.character >= 0x20 && event.character != 0x7F) {
+            parent.address_text.push_back(event.character);
+            parent.address_error = false;
+            render_controls(parent, windows);
+        }
+        return;
+    }
+    if (is_seven_zip_file_manager(parent) && parent.open_menu_index < 0 &&
         event.type == gui::WindowEventType::KeyDown && event.keysym == 0xFF0DUL &&
         parent.list_selection >= 0) {  // XK_Return: abre uma pasta selecionada
         if (open_seven_zip_directory_row(parent, parent.list_selection)) {
@@ -1264,6 +1386,11 @@ void handle_control_key(WindowSlot& parent, const std::span<WindowSlot> windows,
 
 void handle_control_mouse(WindowSlot& parent, const std::span<WindowSlot> windows,
                           WindowSlot*& focused_control, const gui::WindowEvent& event) noexcept {
+    if (is_seven_zip_file_manager(parent) && event.type == gui::WindowEventType::Press &&
+        parent.address_editing && !seven_zip_address_hit(parent, event.x, event.y)) {
+        clear_seven_zip_address_edit(parent);
+        render_controls(parent, windows);
+    }
     if (handle_seven_zip_menu_mouse(parent, windows, event)) {
         return;
     }
@@ -1271,6 +1398,9 @@ void handle_control_mouse(WindowSlot& parent, const std::span<WindowSlot> window
         return;
     }
     if (handle_seven_zip_navigation_mouse(parent, windows, event)) {
+        return;
+    }
+    if (handle_seven_zip_address_mouse(parent, windows, focused_control, event)) {
         return;
     }
     WindowSlot* control = find_control_at(parent, windows, event.x, event.y);

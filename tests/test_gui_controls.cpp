@@ -458,6 +458,50 @@ TEST_F(SevenZipDirectoryRowsTest, SevenZipPanelNavigationTreeReturnsToVisualRoot
     g_windows = {};
 }
 
+TEST_F(SevenZipDirectoryRowsTest, SevenZipPanelAddressBarNavigatesWithinVisualRoot) {
+    ASSERT_TRUE(std::filesystem::create_directory(directory_ / "Folder"));
+
+    g_windows = {};
+    WindowSlot& parent = g_windows[0];
+    parent.used = true;
+    parent.class_name = "7-Zip::FM";
+    parent.width = 800;
+    parent.height = 600;
+    parent.visual_root_directory = directory_;
+    parent.visual_directory = directory_;
+
+    WindowSlot* focused = nullptr;
+    handle_control_mouse(parent, std::span<WindowSlot>{g_windows}, focused,
+                         gui::WindowEvent{gui::WindowEventType::Press, 100, 90});
+    EXPECT_TRUE(parent.address_editing);
+    EXPECT_EQ(parent.address_text, "Z:\\");
+
+    for (int index = 0; index < 3; ++index) {
+        handle_control_key(parent, std::span<WindowSlot>{g_windows}, focused,
+                           gui::WindowEvent{gui::WindowEventType::KeyDown, 0, 0, '\0', 0xFF08UL});
+    }
+    for (const char character : std::string{"Z:\\Folder"}) {
+        handle_control_key(parent, std::span<WindowSlot>{g_windows}, focused,
+                           gui::WindowEvent{gui::WindowEventType::KeyDown, 0, 0, character, 0});
+    }
+    handle_control_key(parent, std::span<WindowSlot>{g_windows}, focused,
+                       gui::WindowEvent{gui::WindowEventType::KeyDown, 0, 0, '\0', 0xFF0DUL});
+
+    EXPECT_EQ(parent.visual_directory, directory_ / "Folder");
+    EXPECT_FALSE(parent.address_editing);
+    EXPECT_FALSE(parent.address_error);
+
+    handle_control_mouse(parent, std::span<WindowSlot>{g_windows}, focused,
+                         gui::WindowEvent{gui::WindowEventType::Press, 100, 90});
+    parent.address_text = "Z:\\missing";
+    handle_control_key(parent, std::span<WindowSlot>{g_windows}, focused,
+                       gui::WindowEvent{gui::WindowEventType::KeyDown, 0, 0, '\0', 0xFF0DUL});
+    EXPECT_TRUE(parent.address_editing);
+    EXPECT_TRUE(parent.address_error);
+    EXPECT_EQ(parent.visual_directory, directory_ / "Folder");
+    g_windows = {};
+}
+
 TEST(CommonControls, ToolbarMessagesBuildLogicalButtonModel) {
     g_windows = {};
     WindowSlot& parent = g_windows[0];
