@@ -8,8 +8,24 @@ __attribute__((dllimport)) int WriteFile(const void* handle, const void* buffer,
                                          dword_t bytes_to_write, dword_t* bytes_written,
                                          const void* overlapped);
 
-/* The runtime must preserve the raw TLS byte and provide the zero-fill tail. */
-__declspec(thread) static byte_t tl_tls_template[0x438] = {0x5A};
+/* The runtime must preserve the raw TLS byte and provide the zero-fill tail.
+ * Keep the PE TLS directory explicit because this fixture is linked without
+ * the MinGW CRT, whose TLS support normally emits these records. */
+__attribute__((section(".tls$AAA"), used)) const byte_t __tls_start__ = 0;
+__attribute__((section(".tls$AAB"), used)) static const byte_t tl_tls_template[0x438] = {0x5A};
+typedef struct {
+    uint64_t start;
+    uint64_t end;
+    uint64_t index;
+    uint64_t callbacks;
+    unsigned int zero_fill;
+    unsigned int characteristics;
+} tls_directory_t;
+extern const byte_t __tls_end__;
+unsigned int _tls_index;
+__attribute__((section(".rdata$T"), used)) const tls_directory_t _tls_used = {
+    (uint64_t)&__tls_start__, (uint64_t)&__tls_end__, (uint64_t)&_tls_index, 0, 0, 0};
+__attribute__((section(".tls$ZZZ"), used)) const byte_t __tls_end__ = 0;
 
 static void* read_pointer_backed_tls_slot(void) {
     void* tls_array = 0;
