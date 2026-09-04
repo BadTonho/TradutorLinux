@@ -101,10 +101,12 @@ explícitos abaixo.
   recurso `RT_MENU`/MENUEX `71`, valida alinhamento e limites, preserva os seis
   itens de nível superior e a hierarquia de submenus, e `GetMenuItemInfoW`
   expõe texto, IDs e submenus no modelo lógico. A janela principal passa a
-  usar esse menu do próprio executável; mutações, dropdown visual e comandos
-  ainda não estão implementados. A ponte Unicode `CreateWindowExW` também foi
+  usar esse menu do próprio executável. O shell agora abre os dropdowns na
+  própria superfície Linux, destaca o item sob o mouse e enfileira
+  `WM_COMMAND` para itens folha; mutações de menu continuam fora do contrato.
+  A ponte Unicode `CreateWindowExW` também foi
   corrigida para permitir a criação do `7-Zip::Panel` sem relaxar a validação
-  de chamadas A feitas pelo convidado. A suíte ficou em 375 testes (374
+  de chamadas A feitas pelo convidado. A suíte ficou em 376 testes (375
   aprovados e 1 skip ambiental).
 - [x] Medições e catálogo: o catálogo registra os `298/298` imports do
   `7zFM_x64.exe`, a janela X11 real `800x600`, a normalização de geometria e

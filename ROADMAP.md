@@ -691,8 +691,11 @@ nem declarar os benchmarks comerciais suportados.
 - [x] Carregar o menu de classe `RT_MENU` MENUEX v1 do 7-Zip, incluindo o
   `MENUHELPID` de popups, alinhamento, IDs, texto e submenus no modelo lógico;
   associá-lo à janela principal e proteger `LoadMenuW`/`GetMenuItemInfoW` com
-  fixture de recurso. Dropdown visual, mutação e despacho de comandos de menu
-  continuam fora do contrato.
+  fixture de recurso.
+- [x] Abrir o dropdown do menu real na superfície visual do 7-Zip, destacar
+  itens no mouse e encaminhar a seleção de itens folha como `WM_COMMAND` ao
+  `WNDPROC` da janela principal; mutações e submenus aninhados continuam fora
+  do contrato. A regressão cobre a seleção de um comando folha.
 
 #### Fase 13.12 — automação, rede e confiança, em entregas separadas
 

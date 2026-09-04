@@ -12,6 +12,12 @@ namespace {
 }
 
 [[nodiscard]] WindowSlot* event_control(WindowSlot& parent, const gui::WindowEvent& event) noexcept {
+    // Um submenu aberto captura os cliques sobre a superfície lógica. Sem
+    // esta precedência, a faixa do popup que cobre a toolbar seria entregue
+    // também ao controle Win32 por baixo do menu.
+    if (parent.open_menu_index >= 0) {
+        return nullptr;
+    }
     return runtime_gui::find_control_at(parent, std::span<WindowSlot>{g_windows}, event.x, event.y);
 }
 
@@ -146,6 +152,7 @@ TL_MSABI int tl_GetMessageA(void* const msg, const void* const window,
             }
             if (event.type == gui::WindowEventType::MouseMove) {
                 WindowSlot* const control = event_control(slot, event);
+                handle_control_mouse(slot, event);
                 const WindowDrawingTarget target = logical_child_mouse_message(control)
                                                        ? window_drawing_target(control)
                                                        : WindowDrawingTarget{};

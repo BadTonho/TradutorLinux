@@ -100,6 +100,187 @@ constexpr std::array<SevenZipToolbarVisual, 7> kSevenZipToolbarVisuals{{
     return result;
 }
 
+constexpr int kSevenZipMenuBarHeight = 28;
+constexpr int kSevenZipMenuRowHeight = 24;
+constexpr std::uint32_t kSevenZipMenuSeparator = 0x00000800U;
+constexpr std::uint32_t kSevenZipMenuDisabled = 0x00000003U;
+
+[[nodiscard]] int seven_zip_menu_label_width(const MenuItem& item) noexcept {
+    const std::string label = menu_display_text(item.text);
+    return std::max(46, static_cast<int>(label.size()) * 8 + 20);
+}
+
+struct SevenZipPopupGeometry {
+    const MenuSlot* menu{nullptr};
+    int x{0};
+    int y{0};
+    int width{0};
+    int height{0};
+};
+
+[[nodiscard]] int seven_zip_top_menu_at(const WindowSlot& parent, const MenuSlot& menu,
+                                        const int x, const int y) noexcept {
+    if (y < 0 || y >= kSevenZipMenuBarHeight) {
+        return -1;
+    }
+    int menu_x = 14;
+    for (std::size_t index = 0; index < menu.logical_items.size(); ++index) {
+        const MenuItem& item = menu.logical_items[index];
+        if (menu_display_text(item.text).empty()) {
+            continue;
+        }
+        const int width = seven_zip_menu_label_width(item);
+        if (x >= menu_x && x < menu_x + width) {
+            return static_cast<int>(index);
+        }
+        menu_x += width;
+        if (menu_x >= std::max(parent.width, 1) - 20) {
+            break;
+        }
+    }
+    return -1;
+}
+
+[[nodiscard]] SevenZipPopupGeometry seven_zip_popup_geometry(const WindowSlot& parent) noexcept {
+    SevenZipPopupGeometry geometry{};
+    const MenuSlot* const menu = find_menu_slot(parent.menu_handle);
+    if (menu == nullptr || parent.open_menu_index < 0 ||
+        static_cast<std::size_t>(parent.open_menu_index) >= menu->logical_items.size()) {
+        return geometry;
+    }
+    const MenuItem& top_item =
+        menu->logical_items[static_cast<std::size_t>(parent.open_menu_index)];
+    if (top_item.submenu == nullptr || top_item.submenu->logical_items.empty()) {
+        return geometry;
+    }
+
+    int popup_x = 14;
+    for (int index = 0; index < parent.open_menu_index; ++index) {
+        const MenuItem& item = menu->logical_items[static_cast<std::size_t>(index)];
+        if (!menu_display_text(item.text).empty()) {
+            popup_x += seven_zip_menu_label_width(item);
+        }
+    }
+    int popup_width = 170;
+    for (const MenuItem& item : top_item.submenu->logical_items) {
+        const std::string label = menu_display_text(item.text);
+        const int arrow_width = item.submenu != nullptr ? 20 : 0;
+        popup_width = std::max(popup_width, static_cast<int>(label.size()) * 8 + 34 + arrow_width);
+    }
+    const int available_width = std::max(parent.width, 1);
+    if (popup_x + popup_width > available_width) {
+        popup_x = std::max(0, available_width - popup_width);
+    }
+    geometry.menu = top_item.submenu;
+    geometry.x = popup_x;
+    geometry.y = kSevenZipMenuBarHeight;
+    geometry.width = popup_width;
+    geometry.height = static_cast<int>(geometry.menu->logical_items.size()) * kSevenZipMenuRowHeight;
+    return geometry;
+}
+
+[[nodiscard]] int seven_zip_popup_item_at(const SevenZipPopupGeometry& geometry, const int x,
+                                          const int y) noexcept {
+    if (geometry.menu == nullptr || x < geometry.x || x >= geometry.x + geometry.width ||
+        y < geometry.y || y >= geometry.y + geometry.height) {
+        return -1;
+    }
+    const int index = (y - geometry.y) / kSevenZipMenuRowHeight;
+    return index >= 0 && static_cast<std::size_t>(index) < geometry.menu->logical_items.size()
+               ? index
+               : -1;
+}
+
+void close_seven_zip_menu(WindowSlot& parent) noexcept {
+    parent.open_menu_index = -1;
+    parent.hovered_menu_item = -1;
+    parent.pressed_menu_item = -1;
+}
+
+[[nodiscard]] bool handle_seven_zip_menu_mouse(WindowSlot& parent,
+                                                const std::span<WindowSlot> windows,
+                                                const gui::WindowEvent& event) noexcept {
+    if (!is_seven_zip_file_manager(parent)) {
+        return false;
+    }
+    const MenuSlot* const menu = find_menu_slot(parent.menu_handle);
+    if (menu == nullptr || menu->logical_items.empty()) {
+        close_seven_zip_menu(parent);
+        return false;
+    }
+
+    if (event.type == gui::WindowEventType::Press &&
+        event.y >= 0 && event.y < kSevenZipMenuBarHeight) {
+        const int index = seven_zip_top_menu_at(parent, *menu, event.x, event.y);
+        if (index >= 0) {
+            parent.open_menu_index = index;
+            parent.hovered_menu_item = -1;
+            parent.pressed_menu_item = -1;
+            set_focus_control(nullptr, g_focused_control);
+            render_controls(parent, windows);
+            return true;
+        }
+    }
+
+    if (parent.open_menu_index < 0) {
+        return false;
+    }
+
+    if ((event.type == gui::WindowEventType::Press ||
+         event.type == gui::WindowEventType::Release ||
+         event.type == gui::WindowEventType::MouseMove) &&
+        event.y >= 0 && event.y < kSevenZipMenuBarHeight) {
+        const int index = seven_zip_top_menu_at(parent, *menu, event.x, event.y);
+        if (index >= 0) {
+            if (event.type != gui::WindowEventType::Release || index != parent.open_menu_index) {
+                parent.open_menu_index = index;
+                parent.hovered_menu_item = -1;
+                parent.pressed_menu_item = -1;
+                render_controls(parent, windows);
+            }
+            return true;
+        }
+    }
+
+    const SevenZipPopupGeometry geometry = seven_zip_popup_geometry(parent);
+    const int item_index = seven_zip_popup_item_at(geometry, event.x, event.y);
+    if (event.type == gui::WindowEventType::Press) {
+        if (item_index >= 0) {
+            parent.hovered_menu_item = item_index;
+            parent.pressed_menu_item = item_index;
+            render_controls(parent, windows);
+            return true;
+        }
+        close_seven_zip_menu(parent);
+        render_controls(parent, windows);
+        return true;
+    }
+    if (event.type == gui::WindowEventType::MouseMove) {
+        const int hovered = item_index;
+        if (hovered != parent.hovered_menu_item) {
+            parent.hovered_menu_item = hovered;
+            render_controls(parent, windows);
+        }
+        return true;
+    }
+    if (event.type == gui::WindowEventType::Release) {
+        if (item_index >= 0 && item_index == parent.pressed_menu_item &&
+            geometry.menu != nullptr) {
+            const MenuItem& item = geometry.menu->logical_items[static_cast<std::size_t>(item_index)];
+            const bool disabled = (item.state & kSevenZipMenuDisabled) != 0U;
+            const bool separator = (item.type & kSevenZipMenuSeparator) != 0U;
+            if (!disabled && !separator && item.submenu == nullptr && item.command_id != 0U) {
+                queue_window_message(parent, abi::kWmCommand,
+                                     static_cast<abi::Wparam>(item.command_id), 0);
+            }
+        }
+        close_seven_zip_menu(parent);
+        render_controls(parent, windows);
+        return true;
+    }
+    return false;
+}
+
 void draw_seven_zip_toolbar_button(const gui::NativeWindow native, const char* const icon,
                                    const char* const label, const int x, const int y,
                                    const int width, const bool pressed) noexcept {
@@ -309,6 +490,49 @@ void render_seven_zip_file_manager(WindowSlot& parent,
                                    std::min(status_y + 17, height - 4), kMuted);
     gui::platform::draw_text_color(parent.native, "Z:\\", std::max(width - 42, 10),
                                    std::min(status_y + 17, height - 4), kMuted);
+
+    // O submenu fica na mesma superfície lógica da janela principal. Isso
+    // preserva a hierarquia carregada do recurso Win32 e permite que o
+    // próximo clique seja traduzido para WM_COMMAND pelo pump normal.
+    const SevenZipPopupGeometry popup = seven_zip_popup_geometry(parent);
+    if (popup.menu != nullptr) {
+        constexpr std::uint32_t kPopup = 0xFFFFFFU;
+        constexpr std::uint32_t kPopupBorder = 0x8998A8U;
+        constexpr std::uint32_t kPopupSelection = 0xD4E5F7U;
+        gui::platform::fill_rectangle_color(parent.native, popup.x, popup.y, popup.width,
+                                            popup.height, kPopup);
+        gui::platform::draw_rectangle_color(parent.native, popup.x, popup.y, popup.width,
+                                             popup.height, kPopupBorder);
+        for (std::size_t index = 0; index < popup.menu->logical_items.size(); ++index) {
+            const MenuItem& item = popup.menu->logical_items[index];
+            const int row_y = popup.y + static_cast<int>(index) * kSevenZipMenuRowHeight;
+            if (row_y >= height || row_y + kSevenZipMenuRowHeight <= 0) {
+                continue;
+            }
+            const bool separator = (item.type & kSevenZipMenuSeparator) != 0U;
+            const bool disabled = (item.state & kSevenZipMenuDisabled) != 0U;
+            if (static_cast<int>(index) == parent.hovered_menu_item && !disabled && !separator) {
+                gui::platform::fill_rectangle_color(parent.native, popup.x + 1, row_y + 1,
+                                                    std::max(popup.width - 2, 1),
+                                                    kSevenZipMenuRowHeight - 2, kPopupSelection);
+            }
+            if (separator) {
+                gui::platform::draw_rectangle_color(parent.native, popup.x + 9,
+                                                     row_y + kSevenZipMenuRowHeight / 2,
+                                                     std::max(popup.width - 18, 1), 1,
+                                                     kPopupBorder);
+                continue;
+            }
+            const std::string label = menu_display_text(item.text);
+            const std::uint32_t text_color = disabled ? kMuted : kText;
+            gui::platform::draw_text_color(parent.native, label.c_str(), popup.x + 12,
+                                           row_y + 17, text_color, false);
+            if (item.submenu != nullptr) {
+                gui::platform::draw_text_color(parent.native, ">", popup.x + popup.width - 17,
+                                               row_y + 17, text_color, true);
+            }
+        }
+    }
     gui::platform::flush_window(parent.native);
 }
 
@@ -711,6 +935,9 @@ void handle_control_key(WindowSlot& parent, const std::span<WindowSlot> windows,
 
 void handle_control_mouse(WindowSlot& parent, const std::span<WindowSlot> windows,
                           WindowSlot*& focused_control, const gui::WindowEvent& event) noexcept {
+    if (handle_seven_zip_menu_mouse(parent, windows, event)) {
+        return;
+    }
     WindowSlot* control = find_control_at(parent, windows, event.x, event.y);
     if (event.type == gui::WindowEventType::Press) {
         if (control == nullptr) {

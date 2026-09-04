@@ -251,10 +251,11 @@ fica registrada no trace. A faixa visual usa a ordem de `idCommand` enviada pelo
 ícones continuam sendo uma apresentação específica do shell. A classe principal
 também carrega o recurso `RT_MENU` MENUEX do próprio executável e usa seus seis
 itens de nível superior para os rótulos; `GetMenuItemInfoW` consulta a hierarquia
-carregada, mas dropdown visual, mutação e despacho de comandos de menu ainda
-exigem contratos próprios e regressão antes de promover o aplicativo. Esse
-encaminhamento de toolbar não implica que as operações de arquivo já estejam
-implementadas.
+carregada. O clique nos rótulos abre o submenu na própria superfície lógica,
+itens folha são destacados e sua seleção enfileira `WM_COMMAND` no parent; a
+captura impede que a toolbar sob o popup receba o mesmo clique. Mutações de
+menu e submenus aninhados ainda exigem contratos próprios, e esse despacho não
+implica que as operações de arquivo já estejam implementadas.
 
 `SendMessageA` implementa os contratos usados pelo alvo para `WM_SETFONT`,
 `CB_ADDSTRING`, `CB_SETCURSEL`, `CB_GETCURSEL` e as mensagens de list view de
