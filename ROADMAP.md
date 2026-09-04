@@ -702,7 +702,9 @@ nem declarar os benchmarks comerciais suportados.
   retorno visual para `..`; operações de arquivo e despacho de navegação ao
   convidado continuam fora do contrato. A árvore lateral também retorna à raiz
   visual e seleciona `Home`, `Desktop` e `Documents` Linux quando disponíveis.
-  As regressões usam um diretório temporário.
+  A barra `Address` aceita caminhos `Z:\...`, confirma somente diretórios dentro
+  da raiz visual e rejeita destinos inválidos. As regressões usam um diretório
+  temporário.
 
 #### Fase 13.12 — automação, rede e confiança, em entregas separadas
 

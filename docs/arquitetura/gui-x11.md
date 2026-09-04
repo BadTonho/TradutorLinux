@@ -251,6 +251,10 @@ diretório Linux correspondente, com `..` retornando ao pai; o caminho visual co
 e selecionar `Home`, `Desktop` e `Documents` do usuário quando os diretórios
 existem; os nomes `Desktop`/`Documents` também reconhecem as variantes
 localizadas `Área de trabalho`/`Documentos`. A
+barra `Address` pode ser focada com o mouse, editada com caracteres ASCII,
+confirmada com `Enter` ou cancelada com `Escape`; o parser aceita somente a
+forma `Z:\...`, normaliza separadores, exige um diretório existente e rejeita
+qualquer caminho que escape da raiz visual. A
 normalização da geometria inválida desse alvo também
 fica registrada no trace. A faixa visual usa a ordem de `idCommand` enviada pelo
 7-Zip e o hit-test dela pode enfileirar `WM_COMMAND` no parent; os rótulos e

@@ -41,6 +41,20 @@ O contrato da interface, o fluxo assíncrono e os limites do launcher estão em
 `tl_gui.exe` abre uma caixa X11 com o botão `OK`. Fechar a janela ou clicar no
 botão encerra a fixture.
 
+## Abrir o 7-Zip real
+
+```bash
+DISPLAY=:0.0 XDG_SESSION_TYPE=x11 \
+./build/debug/src/tradutorlinux \
+  "/caminho/para/Aplicativos_Windows_Populares/7-Zip/7zFM.exe"
+```
+
+No shell visual experimental, a lista mostra a pasta do executável. Clique ou
+use as setas para selecionar; `Enter` ou duplo clique abre diretórios. A árvore
+lateral volta à raiz ou seleciona pastas conhecidas do usuário. Também é possível
+clicar em `Address`, editar um caminho `Z:\...` e confirmar com `Enter`; somente
+diretórios existentes dentro da raiz visual são aceitos.
+
 ## Abrir uma janela com message loop
 
 ```bash
