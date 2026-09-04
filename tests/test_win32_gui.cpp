@@ -24,6 +24,28 @@ TEST(Win32GuiTest, PopupMenuHandleHasLifecycle) {
     EXPECT_EQ(tl_DestroyMenu(menu), 1);
 }
 
+TEST(Win32GuiTest, InvalidateRectQueuesPaintForLogicalWindow) {
+    g_windows = {};
+    WindowSlot& parent = g_windows[0];
+    parent.used = true;
+    WindowSlot& child = g_windows[1];
+    child.used = true;
+    child.is_control = true;
+    child.parent = &parent;
+
+    abi::GuestRect rect{1, 2, 30, 40};
+    EXPECT_EQ(tl_InvalidateRect(&child, &rect, 1), 1);
+    ASSERT_EQ(child.queued_messages.size(), 1U);
+    EXPECT_EQ(child.queued_messages.front().hwnd, &child);
+    EXPECT_EQ(child.queued_messages.front().message, abi::kWmPaint);
+
+    EXPECT_EQ(tl_InvalidateRect(&child, &rect, 0), 1);
+    EXPECT_EQ(child.queued_messages.size(), 1U);
+    EXPECT_EQ(tl_InvalidateRect(&child, reinterpret_cast<const void*>(0x1U), 0), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    g_windows = {};
+}
+
 TEST(Win32GuiTest, RejectsStatefulGuiCallsFromNonPrimaryGuestThread) {
     void* worker_menu = nullptr;
     std::uint32_t worker_menu_error = abi::kErrorSuccess;

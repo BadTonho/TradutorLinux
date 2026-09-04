@@ -71,15 +71,25 @@ TL_MSABI int tl_InvalidateRect(const void* window, const void* rect, int erase) 
     if (!user32_gui_thread_allowed("InvalidateRect")) {
         return 0;
     }
-    (void)rect;
     (void)erase;
+    if (rect != nullptr && !mapped_guest_range(rect, sizeof(abi::GuestRect), false)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
     WindowSlot* slot = find_window_slot(window);
     if (slot == nullptr) {
         set_last_error(abi::kErrorInvalidHandle);
         return 0;
     }
-    if (slot->native != nullptr) {
-        gui::platform::flush_window(slot->native);
+    const bool paint_already_queued = std::any_of(
+        slot->queued_messages.begin(), slot->queued_messages.end(),
+        [](const abi::GuestMsg& message) { return message.message == abi::kWmPaint; });
+    if (!paint_already_queued) {
+        queue_window_message(*slot, abi::kWmPaint, 0, 0);
+    }
+    const WindowDrawingTarget target = window_drawing_target(window);
+    if (target.native != nullptr) {
+        gui::platform::flush_window(target.native);
     }
     set_last_error(abi::kErrorSuccess);
     return 1;
