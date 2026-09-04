@@ -1403,7 +1403,8 @@ void handle_control_mouse(WindowSlot& parent, const std::span<WindowSlot> window
     if (handle_seven_zip_address_mouse(parent, windows, focused_control, event)) {
         return;
     }
-    WindowSlot* control = find_control_at(parent, windows, event.x, event.y);
+    WindowSlot* const hit_control = find_control_at(parent, windows, event.x, event.y);
+    WindowSlot* control = hit_control;
     if (event.type == gui::WindowEventType::Press) {
         if (control == nullptr) {
             return;
@@ -1414,25 +1415,47 @@ void handle_control_mouse(WindowSlot& parent, const std::span<WindowSlot> window
         if (control->control_kind == ControlKind::Toolbar && control->parent != nullptr &&
             is_seven_zip_file_manager(*control->parent)) {
             control->pressed_toolbar_index = seven_zip_toolbar_button_at(*control, event.x, event.y);
+        } else if (control->control_kind == ControlKind::Toolbar &&
+                   !control->toolbar_buttons.empty()) {
+            const int available_width = std::max(control->width, 16);
+            const int fitting_width = std::max(
+                (available_width - 8) / static_cast<int>(control->toolbar_buttons.size()), 1);
+            const int button_width = std::min(
+                fitting_width, control->toolbar_button_width > 0 ? control->toolbar_button_width
+                                                                   : fitting_width);
+            control->pressed_toolbar_index = (event.x - control->x - 4) / button_width;
         }
         if (control->control_kind == ControlKind::ListView) {
             const int row = (event.y - control->y - 24) / 20;
             if (row >= 0 && static_cast<std::size_t>(row) < control->list_rows.size()) {
                 control->list_selection = row;
                 queue_list_notification(*control, abi::kLvnItemChanged, row);
-                render_controls(parent, windows);
             }
         }
+        render_controls(parent, windows);
     } else if (event.type == gui::WindowEventType::Release) {
+        if (control == nullptr || !control->pressed) {
+            for (auto it = windows.rbegin(); it != windows.rend(); ++it) {
+                if (it->used && it->is_control && it->parent == &parent && it->pressed) {
+                    control = &*it;
+                    break;
+                }
+            }
+        }
         if (control == nullptr || !control->pressed) {
             return;
         }
+        const bool released_over_pressed_control = hit_control == control;
         control->pressed = false;
         if (control->control_kind == ControlKind::Button) {
-            queue_command(*control, abi::kBnClicked);
+            if (released_over_pressed_control) {
+                queue_command(*control, abi::kBnClicked);
+            }
         } else if (control->control_kind == ControlKind::ComboBox && !control->combo_items.empty()) {
-            control->combo_selection = (control->combo_selection + 1) %
-                                       static_cast<int>(control->combo_items.size());
+            if (released_over_pressed_control) {
+                control->combo_selection = (control->combo_selection + 1) %
+                                           static_cast<int>(control->combo_items.size());
+            }
         } else if (control->control_kind == ControlKind::Toolbar &&
                    !control->toolbar_buttons.empty()) {
             int index = -1;
@@ -1447,7 +1470,8 @@ void handle_control_mouse(WindowSlot& parent, const std::span<WindowSlot> window
                                                                       : fitting_width);
                 index = (event.x - control->x - 4) / button_width;
             }
-            if (index >= 0 && static_cast<std::size_t>(index) < control->toolbar_buttons.size()) {
+            if (released_over_pressed_control && index == control->pressed_toolbar_index &&
+                index >= 0 && static_cast<std::size_t>(index) < control->toolbar_buttons.size()) {
                 queue_command_id(*control, 0,
                                  static_cast<std::uintptr_t>(
                                      control->toolbar_buttons[static_cast<std::size_t>(index)]

@@ -300,6 +300,36 @@ TEST(CommonControls, SevenZipVisualToolbarUsesGuestCommandOrder) {
     g_windows = {};
 }
 
+TEST(CommonControls, SevenZipToolbarCancelsWhenReleasedOutsideButton) {
+    g_windows = {};
+    WindowSlot& parent = g_windows[0];
+    parent.used = true;
+    parent.class_name = "7-Zip::FM";
+    parent.width = 800;
+    parent.height = 600;
+
+    WindowSlot& toolbar = g_windows[1];
+    toolbar.used = true;
+    toolbar.is_control = true;
+    toolbar.control_kind = ControlKind::Toolbar;
+    toolbar.parent = &parent;
+    toolbar.visible = true;
+    toolbar.toolbar_buttons = {{1070}, {1071}, {1072}};
+
+    WindowSlot* focused = nullptr;
+    handle_control_mouse(parent, std::span<WindowSlot>{g_windows}, focused,
+                         gui::WindowEvent{gui::WindowEventType::Press, 20, 45});
+    EXPECT_TRUE(toolbar.pressed);
+    EXPECT_EQ(toolbar.pressed_toolbar_index, 0);
+    handle_control_mouse(parent, std::span<WindowSlot>{g_windows}, focused,
+                         gui::WindowEvent{gui::WindowEventType::Release, 700, 45});
+
+    EXPECT_FALSE(toolbar.pressed);
+    EXPECT_EQ(toolbar.pressed_toolbar_index, -1);
+    EXPECT_TRUE(parent.queued_messages.empty());
+    g_windows = {};
+}
+
 TEST(CommonControls, SevenZipMenuClickQueuesLeafCommand) {
     g_windows = {};
     g_menus = {};
