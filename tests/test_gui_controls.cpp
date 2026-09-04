@@ -167,5 +167,37 @@ TEST(CommonControls, RejectInvalidToolbarBufferAndParent) {
     g_windows = {};
 }
 
+TEST(CommonControls, ToolbarClickQueuesCommandWithButtonId) {
+    g_windows = {};
+    WindowSlot& parent = g_windows[0];
+    parent.used = true;
+    parent.width = 100;
+    parent.height = 50;
+
+    WindowSlot& toolbar = g_windows[1];
+    toolbar.used = true;
+    toolbar.is_control = true;
+    toolbar.control_kind = ControlKind::Toolbar;
+    toolbar.parent = &parent;
+    toolbar.width = 100;
+    toolbar.height = 24;
+    toolbar.toolbar_button_width = 40;
+    toolbar.toolbar_buttons = {{101}, {202}};
+
+    WindowSlot* focused = nullptr;
+    handle_control_mouse(parent, std::span<WindowSlot>{g_windows}, focused,
+                         gui::WindowEvent{gui::WindowEventType::Press, 60, 10});
+    handle_control_mouse(parent, std::span<WindowSlot>{g_windows}, focused,
+                         gui::WindowEvent{gui::WindowEventType::Release, 60, 10});
+
+    ASSERT_EQ(parent.queued_messages.size(), 1U);
+    const abi::GuestMsg& message = parent.queued_messages.front();
+    EXPECT_EQ(message.message, abi::kWmCommand);
+    EXPECT_EQ(message.wparam & 0xFFFFU, 202U);
+    EXPECT_EQ(message.wparam >> 16U, 0U);
+    EXPECT_EQ(message.lparam, reinterpret_cast<abi::Lparam>(&toolbar));
+    g_windows = {};
+}
+
 }  // namespace
 }  // namespace tradutorlinux::runtime_gui
