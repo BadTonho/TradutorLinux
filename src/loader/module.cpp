@@ -241,12 +241,12 @@ ExportLookup resolve_forwarder_named(const ForwarderQuery& query,
         return std::nullopt;
     };
     if (!preferred.empty()) {
-        if (const auto candidate = try_module(preferred)) return finish(std::move(*candidate));
+        if (const auto candidate = try_module(preferred)) return finish(*candidate);
     }
     for (const std::string_view candidate_module : kCandidates) {
         if (candidate_module == preferred) continue;
         if (const auto candidate = try_module(candidate_module)) {
-            return finish(std::move(*candidate));
+            return finish(*candidate);
         }
     }
     return finish(std::move(direct));

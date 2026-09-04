@@ -1,0 +1,32 @@
+{
+  "name": "tl_worker_rsl",
+  "format": "PE32+",
+  "machine": "AMD64",
+  "entry_point": "tl_entry",
+  "uses_crt": false,
+  "imports": {
+    "CRYPT32.dll": [
+      "CertCloseStore",
+      "CertOpenStore"
+    ],
+    "IPHLPAPI.DLL": [
+      "GetAdaptersAddresses",
+      "if_nametoindex"
+    ],
+    "KERNEL32.dll": [
+      "ExitProcess",
+      "GetStdHandle",
+      "WriteFile"
+    ],
+    "WS2_32.dll": [
+      "WSACleanup",
+      "WSAStartup",
+      "freeaddrinfo",
+      "getaddrinfo"
+    ],
+    "WTSAPI32.dll": [
+      "WTSFreeMemory",
+      "WTSEnumerateSessionsW"
+    ]
+  }
+}

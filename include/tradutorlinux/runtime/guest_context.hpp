@@ -113,6 +113,9 @@ struct GuestContext {
     std::array<ContextTlsDynamicBlock, 256> tls_dynamic_blocks{};
     std::mutex tls_dynamic_mutex;
 
+    std::array<void*, 64> wts_allocations{};
+    std::mutex wts_mutex;
+
     struct ContextResourceSlot {
         bool used{false};
         std::uint32_t data_rva{0};

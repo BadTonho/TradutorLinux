@@ -198,6 +198,30 @@ void free_tls_dynamic_blocks(void* const owner_teb) noexcept {
     }
 }
 
+bool register_wts_allocation(void* const address) noexcept {
+    if (address == nullptr) return false;
+    std::lock_guard lock(runtime::guest_context().wts_mutex);
+    for (void*& slot : runtime::guest_context().wts_allocations) {
+        if (slot == nullptr) {
+            slot = address;
+            return true;
+        }
+    }
+    return false;
+}
+
+bool take_wts_allocation(void* const address) noexcept {
+    if (address == nullptr) return false;
+    std::lock_guard lock(runtime::guest_context().wts_mutex);
+    for (void*& slot : runtime::guest_context().wts_allocations) {
+        if (slot == address) {
+            slot = nullptr;
+            return true;
+        }
+    }
+    return false;
+}
+
 void bump_guest_allocation_generation() noexcept {
     runtime::invalidate_memory_map_cache();
 }
@@ -901,9 +925,71 @@ TL_MSABI int tl_OpenPrinterW(const std::uint16_t* const printer_name, void** con
 }
 
 TL_MSABI void tl_WTSFreeMemory(void* const memory) noexcept {
-    if (memory != nullptr) {
+    if (memory != nullptr && take_wts_allocation(memory)) {
         std::free(memory);
     }
+}
+
+TL_MSABI int tl_WTSEnumerateSessionsW(void* const server, const std::uint32_t reserved,
+                                      const std::uint32_t version, void** const session_info,
+                                      std::uint32_t* const count) noexcept {
+    (void)server;
+    if (reserved != 0U || version != 1U || session_info == nullptr || count == nullptr ||
+        !mapped_guest_range(session_info, sizeof(*session_info), true) ||
+        !mapped_guest_range(count, sizeof(*count), true)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    *session_info = nullptr;
+    *count = 0U;
+
+    struct GuestWtsSessionInfo {
+        std::uint32_t session_id{0};
+        std::uint16_t* win_station_name{nullptr};
+        std::uint32_t state{0};
+    };
+    static_assert(sizeof(GuestWtsSessionInfo) == 24U);
+    constexpr std::size_t kNameUnits = 8U;
+    const std::size_t allocation_size = sizeof(GuestWtsSessionInfo) +
+                                        kNameUnits * sizeof(std::uint16_t);
+    auto* const allocation = static_cast<std::byte*>(std::calloc(1, allocation_size));
+    if (allocation == nullptr || !register_wts_allocation(allocation)) {
+        std::free(allocation);
+        set_last_error(abi::kErrorNotEnoughMemory);
+        return 0;
+    }
+    auto* const result = reinterpret_cast<GuestWtsSessionInfo*>(allocation);
+    result->win_station_name = reinterpret_cast<std::uint16_t*>(
+        allocation + sizeof(GuestWtsSessionInfo));
+    constexpr std::uint16_t kConsoleName[] = {u'C', u'o', u'n', u's', u'o', u'l', u'e', 0};
+    std::memcpy(result->win_station_name, kConsoleName, sizeof(kConsoleName));
+    *session_info = allocation;
+    *count = 1U;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_WTSQuerySessionInformationW(
+    void* const server, const std::uint32_t session_id, const std::uint32_t info_class,
+    std::uint16_t** const buffer, std::uint32_t* const bytes_returned) noexcept {
+    (void)server;
+    (void)session_id;
+    (void)info_class;
+    if (buffer == nullptr || bytes_returned == nullptr ||
+        !mapped_guest_range(buffer, sizeof(*buffer), true) ||
+        !mapped_guest_range(bytes_returned, sizeof(*bytes_returned), true)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    *buffer = nullptr;
+    *bytes_returned = 0U;
+    set_last_error(abi::kErrorNotSupported);
+    runtime_trace("WTSQuerySessionInformationW", {
+        diagnostics::TraceField{"symbol", "WTSQuerySessionInformationW"},
+        diagnostics::TraceField{"status", "unsupported"},
+        diagnostics::TraceField{"mechanism", "stub"},
+        diagnostics::TraceField{"detail", "classes de informação WTS não implementadas"}}, 4);
+    return 0;
 }
 
 // --- RTSSHooks KERNEL32 ---
@@ -1198,8 +1284,8 @@ void register_winapi_stubs_module() {
     register_module(kWinspoolModule);
     static const ExportedFunction kWtsApi32Exports[] = {
         {"WTSFreeMemory", 1, reinterpret_cast<std::uintptr_t>(&tl_WTSFreeMemory)},
-        {"WTSEnumerateSessionsW", 2, reinterpret_cast<std::uintptr_t>(&tl_WTSFreeMemory), ExportSupport::Stub},
-        {"WTSQuerySessionInformationW", 3, reinterpret_cast<std::uintptr_t>(&tl_WTSFreeMemory), ExportSupport::Stub},
+        {"WTSEnumerateSessionsW", 2, reinterpret_cast<std::uintptr_t>(&tl_WTSEnumerateSessionsW)},
+        {"WTSQuerySessionInformationW", 3, reinterpret_cast<std::uintptr_t>(&tl_WTSQuerySessionInformationW), ExportSupport::Stub},
     };
     static const InternalModule kWtsApi32Module{"WTSAPI32.dll", kWtsApi32Exports};
     register_module(kWtsApi32Module);

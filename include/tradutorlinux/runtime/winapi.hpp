@@ -237,6 +237,12 @@ TL_MSABI std::intptr_t tl_LresultFromObject(const void* riid, std::uintptr_t w_p
 TL_MSABI std::uint32_t tl_TdhGetPropertySize(void* event_record, std::uint32_t tdh_context_count, void* tdh_context, std::uint32_t property_data_count, void* property_data, std::uint32_t* property_size) noexcept;
 TL_MSABI int tl_OpenPrinterW(const std::uint16_t* printer_name, void** printer_handle, void* defaults) noexcept;
 TL_MSABI void tl_WTSFreeMemory(void* memory) noexcept;
+TL_MSABI int tl_WTSEnumerateSessionsW(void* server, std::uint32_t reserved,
+                                      std::uint32_t version, void** session_info,
+                                      std::uint32_t* count) noexcept;
+TL_MSABI int tl_WTSQuerySessionInformationW(void* server, std::uint32_t session_id,
+                                            std::uint32_t info_class, std::uint16_t** buffer,
+                                            std::uint32_t* bytes_returned) noexcept;
 TL_MSABI int tl_PathRemoveExtensionA(char* path) noexcept;
 TL_MSABI int tl_PathRenameExtensionA(char* path, const char* ext) noexcept;
 TL_MSABI char* tl_PathStripPathA(char* path) noexcept;

@@ -91,6 +91,8 @@ using FileMappingSlot = runtime::GuestContext::ContextFileMappingSlot;
 [[nodiscard]] bool take_local_free_block(void* address) noexcept;
 [[nodiscard]] bool register_tls_dynamic_block(void* owner_teb, void* address) noexcept;
 void free_tls_dynamic_blocks(void* owner_teb) noexcept;
+[[nodiscard]] bool register_wts_allocation(void* address) noexcept;
+[[nodiscard]] bool take_wts_allocation(void* address) noexcept;
 constexpr std::size_t kPointerBackedTlsSlotOffset = 0x430U;
 constexpr std::size_t kPointerBackedTlsAllocationSize = 0x1000U;
 void initialize_pointer_backed_tls_slot(void* teb) noexcept;

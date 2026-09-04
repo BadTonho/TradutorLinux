@@ -18,7 +18,7 @@ find_program(TL_MINGW_WINDRES
 set(TL_FIXTURE_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/generated")
 
 function(tl_add_pe_fixture target_name source_file manifest_file)
-    set(options LINK_KERNEL32 LINK_USER32 LINK_GDI32 LINK_COMCTL32 LINK_GDIPLUS LINK_UXTHEME LINK_DBGHELP LINK_OLE32 LINK_OLEAUT32 LINK_POWRPROF LINK_IPHLPAPI LINK_WINMM LINK_WS2_32 LINK_WININET LINK_WINTRUST LINK_CRYPT32 LINK_ADVAPI32 LINK_SHELL32 LINK_SHLWAPI LINK_MSVCRT LINK_MPR LINK_COMDLG32 LINK_IMM32 LINK_DWMAPI LINK_VERSION RELOCATABLE UNWIND EXPECT_RESOLVED CONSOLE REPORT REPORT_ONLY NO_RUNTIME_CHECK RUNTIME_FAILURE)
+    set(options LINK_KERNEL32 LINK_USER32 LINK_GDI32 LINK_COMCTL32 LINK_GDIPLUS LINK_UXTHEME LINK_DBGHELP LINK_OLE32 LINK_OLEAUT32 LINK_POWRPROF LINK_IPHLPAPI LINK_WTSAPI32 LINK_WINMM LINK_WS2_32 LINK_WININET LINK_WINTRUST LINK_CRYPT32 LINK_ADVAPI32 LINK_SHELL32 LINK_SHLWAPI LINK_MSVCRT LINK_MPR LINK_COMDLG32 LINK_IMM32 LINK_DWMAPI LINK_VERSION RELOCATABLE UNWIND EXPECT_RESOLVED CONSOLE REPORT REPORT_ONLY NO_RUNTIME_CHECK RUNTIME_FAILURE)
     set(oneValueArgs REPORT_SYMBOL REPORT_SUPPORT RESOURCE_FILE IMPORT_DEF)
     cmake_parse_arguments(ARG "${options}" "${oneValueArgs}" "" ${ARGN})
 
@@ -71,6 +71,9 @@ function(tl_add_pe_fixture target_name source_file manifest_file)
     endif()
     if(ARG_LINK_IPHLPAPI)
         list(APPEND link_libraries -liphlpapi)
+    endif()
+    if(ARG_LINK_WTSAPI32)
+        list(APPEND link_libraries -lwtsapi32)
     endif()
     if(ARG_LINK_WINMM)
         list(APPEND link_libraries -lwinmm)
@@ -232,6 +235,10 @@ function(tl_add_pe_fixture target_name source_file manifest_file)
             elseif(target_name STREQUAL "tl_network_loopback")
                 set(runtime_extra_args
                     "-DEXPECTED_HEX=6e6574776f726b0a"
+                    "-DSKIP_EXIT=77")
+            elseif(target_name STREQUAL "tl_worker_rsl")
+                set(runtime_extra_args
+                    "-DEXPECTED_HEX=776f726b65722d72736c0a"
                     "-DSKIP_EXIT=77")
             elseif(target_name STREQUAL "tl_registry_unicode")
                 set(runtime_extra_args
@@ -770,6 +777,11 @@ add_dependencies(tl_process_parent_fixture tl_process_child_fixture tl_process_h
 tl_add_pe_fixture(tl_network_loopback src/tl_network_loopback.c manifests/tl_network_loopback.json
     LINK_KERNEL32 LINK_WS2_32 EXPECT_RESOLVED CONSOLE REPORT RELOCATABLE
     REPORT_SYMBOL "socket")
+
+tl_add_pe_fixture(tl_worker_rsl src/tl_worker_rsl.c manifests/tl_worker_rsl.json
+    LINK_KERNEL32 LINK_WS2_32 LINK_IPHLPAPI LINK_CRYPT32 LINK_WTSAPI32
+    EXPECT_RESOLVED CONSOLE REPORT RELOCATABLE
+    REPORT_SYMBOL "GetAdaptersAddresses")
 
 tl_add_pe_fixture(tl_wininet src/tl_wininet.c manifests/tl_wininet.json
     LINK_KERNEL32 LINK_WININET EXPECT_RESOLVED CONSOLE REPORT RELOCATABLE NO_RUNTIME_CHECK

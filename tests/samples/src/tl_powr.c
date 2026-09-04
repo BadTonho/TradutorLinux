@@ -27,7 +27,7 @@ void tl_entry(void) {
     // PowerGetActiveScheme with null out param should fail
     res = PowerGetActiveScheme((void*)0, (void**)0);
     if (res != 87) ExitProcess(12U);
-    // PowerSetActiveScheme with null guid should succeed (stub)
+    // PowerSetActiveScheme accepts the limited runtime contract.
     res = PowerSetActiveScheme((void*)0, (void*)0);
     if (res != 0) ExitProcess(13U);
     // Com guid dummy
@@ -35,33 +35,33 @@ void tl_entry(void) {
     res = PowerSetActiveScheme((void*)0, dummyGuid);
     if (res != 0) ExitProcess(14U);
 
-    // IPHLPAPI GetAdaptersInfo null buffer
+    // IPHLPAPI follows the Windows two-call buffer contract.
     dword_t len = 0;
     res = GetAdaptersInfo((void*)0, &len);
-    if (res != 0) ExitProcess(20U);
-    // Com buffer pequeno
-    char buf[16] = {0};
+    if (res == 232U) ExitProcess(77U);
+    if (res != 111U) ExitProcess(20U + (res % 10U));
+    if (len == 0U) ExitProcess(30U);
+    static char buf[65536];
     len = sizeof(buf);
     res = GetAdaptersInfo(buf, &len);
-    if (res != 0 && res != 111) {
-        // nosso stub retorna 0 com len 0, aceita
-    }
+    if (res != 0 || *(dword_t*)buf == 0) ExitProcess(21U);
     // Com len null deve falhar 87
     res = GetAdaptersInfo(buf, (dword_t*)0);
-    if (res != 87) ExitProcess(21U);
+    if (res != 87) ExitProcess(22U);
 
     // GetAdaptersAddresses
     dword_t size = 0;
     res = GetAdaptersAddresses(0, 0, (void*)0, (void*)0, &size);
-    if (res != 0) ExitProcess(30U);
-    if (size != 0) ExitProcess(31U);
-    char buf2[64] = {0};
+    if (res == 232U) ExitProcess(77U);
+    if (res != 111U) ExitProcess(40U + (res % 10U));
+    if (size == 0U) ExitProcess(50U);
+    static char buf2[65536];
     size = sizeof(buf2);
     res = GetAdaptersAddresses(2, 0, (void*)0, buf2, &size);
-    if (res != 0) ExitProcess(32U);
+    if (res != 0 || *(dword_t*)buf2 == 0 || *(void**)(buf2 + 24) == (void*)0) ExitProcess(31U);
     // Com size null deve falhar
     res = GetAdaptersAddresses(0,0,(void*)0, buf2, (dword_t*)0);
-    if (res != 87) ExitProcess(33U);
+    if (res != 87) ExitProcess(32U);
 
     // CallNtPowerInformation
     char out[16] = {0};
@@ -79,6 +79,8 @@ void tl_entry(void) {
     if (idx == 0) ExitProcess(50U);
     idx = if_nametoindex((const char*)0);
     if (idx != 0) ExitProcess(51U);
+    idx = if_nametoindex("tl-interface-does-not-exist");
+    if (idx != 0) ExitProcess(52U);
 
     static const char msg[] = "powr\n";
     if (!WriteFile(stdout_handle, msg, sizeof(msg)-1, &written, (void*)0) || written != sizeof(msg)-1) {

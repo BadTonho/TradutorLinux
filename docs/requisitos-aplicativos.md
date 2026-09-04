@@ -64,7 +64,7 @@ o LGHub bloqueia durante a inicialização.
 | `delay-import` | WinRAR, Rockstar | suportado para descritores RVA (`grAttrs=0x1`), com resolução antecipada |
 | Automação OLE | WinRAR, Rockstar | `CreateStreamOnHGlobal` entregue como stream em memória em `tl_stream.exe`; `OLEAUT32`/`IDispatch` pendentes |
 | HTTP WinINet | Rockstar + fixture de protocolo | subconjunto HTTPS direto de loopback entregue em `tl_wininet.exe`; sem execução do Rockstar |
-| Certificados/WinTrust | Rockstar + fixtures de protocolo | `CertGetNameStringW` extrai nomes de blob DER em `tl_crypt32.exe`; cadeia explícita em `tl_trust.exe`; `WTHelper*` percorre estado/signer/folha-raiz em `tl_wthelper.exe`; Authenticode e loja Windows pendentes |
+| Certificados/WinTrust | Rockstar + fixtures de protocolo | `CertGetNameStringW` extrai nomes de blob DER em `tl_crypt32.exe`; cadeia explícita em `tl_trust.exe`; `WTHelper*` percorre estado/signer/folha-raiz em `tl_wthelper.exe`; `CertOpenStore` cobre somente loja em memória e wrappers de nome; Authenticode e trust store Windows pendentes |
 
 ## Prioridade ativa — instaladores PE32+ x86-64
 

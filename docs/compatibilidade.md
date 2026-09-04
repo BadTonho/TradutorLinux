@@ -42,6 +42,7 @@ Esta matriz declara o comportamento suportado; ela não é uma promessa de compa
 | `tl_process_parent.exe` / `tl_process_child.exe` | PE32+ AMD64 | Não | `CreateProcessW`, ambiente W, `GetExitCodeProcess`, `TerminateProcess` e `WaitForSingleObject` | Pai cria filhos PE32+ pelo mesmo parser/loader/import resolver e define uma variável que o filho precisa ler, provando a cópia do ambiente Win32; o código de saída real viaja pelo pipe `[flag][exit_code LE32]`. Valida código `7`, encerramento `9` e saída `child\nparent\n`, exit `0`. | Processos filhos |
 | `tl_install_setup.exe` / `tl_install_app.exe` | PE32+ AMD64 | Não | arquivos Unicode, ambiente, `GetModuleFileNameW`, `CreateProcessW`, espera e handles | **Fluxo de instalação suportado:** setup externo observa `Z:\\...`, copia a aplicação de `C:\\windows\\temp` para `C:\\Program Files` e a inicia com `CreateProcessW`; a aplicação observa `C:\\...`, diretório herdado e `%LOCALAPPDATA%` do mesmo prefixo. `install → catálogo → app run` é coberto por `integration_install_prefix_catalog_run`; prefixos distintos não compartilham estado. O setup de múltiplos candidatos confirma `InstallPending` (`6`) e a escolha no launcher | Instalação por prefixo |
 | `tl_network_loopback.exe` | PE32+ AMD64 | Não | `WS2_32.dll` TCP/UDP, resolução local e `WSAPoll` | Fixture somente loopback, com TCP, UDP e `localhost`; passa com sockets permitidos e é skip controlado em sandbox que retorna `EACCES/EPERM` | WS2_32 |
+| `tl_worker_rsl.exe` | PE32+ AMD64 | Não | `WS2_32.dll`/`IPHLPAPI.DLL`/`CRYPT32.dll`/`WTSAPI32.dll` + console | Fluxo combinado do Worker: `WSAStartup`/`getaddrinfo` local, enumeração IPv4 via `getifaddrs`, loja CRYPT32 em memória e sessão WTS local; `ExitProcess 0`, ou skip controlado `77` sem interface IPv4 | Worker RSL |
 | `tl_wininet.exe` | PE32+ AMD64 | Não | `WININET.dll` — abertura, conexão HTTPS, requisição, cabeçalhos, resposta, leitura, consulta e fechamento; `KERNEL32.dll` — ambiente/console | **Suportado somente para protocolo HTTPS loopback:** o smoke cria servidor TLS e CA efêmeros em `127.0.0.1`, valida URL, cabeçalho, status `200`, leitura parcial e CA confiável; uma CA diferente falha de forma controlada. Sem Internet, proxy, cookies, credenciais, redirecionamento ou WinTrust. | WinINet HTTPS local |
 | `tl_stream.exe` | PE32+ AMD64 | Não | `ole32.dll!CreateStreamOnHGlobal`; vtable `IStream` | **Suportado no subconjunto de stream em memória:** `QueryInterface`, referências, `Read`/`Write`, `Seek`, `SetSize`, `Stat`, `Commit`/`Revert`; saída `ole-stream\n`, exit `0` | OLE stream em memória |
 | `tl_trust.exe` | PE32+ AMD64 | Não | `WINTRUST.dll!WinVerifyTrust`; `KERNEL32.dll` — console | **Suportado somente na política de blob TLTC:** cadeia DER explícita folha→raiz, UI desabilitada e sem revogação; rejeita raiz incorreta e política incompatível; saída `trust\n`, exit `0` | Cadeia WinTrust local |
@@ -306,7 +307,7 @@ Contratos de ABI em `docs/arquitetura/msvcrt.md` e
 | `KERNEL32.dll` | `AreFileApisANSI` | Suportado no subconjunto | Retorna `TRUE` para o ACP determinístico `1252` |
 | `KERNEL32.dll` | `FormatMessageA` / `FormatMessageW` | Suportado no subconjunto | Mensagens de sistema fixas, buffer fornecido ou `FORMAT_MESSAGE_ALLOCATE_BUFFER`; sem inserts, tabelas externas ou recursos de mensagem |
 | `KERNEL32.dll` | `GlobalAlloc` / `GlobalLock` / `GlobalUnlock` / `GlobalFree`, `LocalAlloc` / `LocalFree` | Suportado no subconjunto | Blocos `malloc`/`calloc` rastreados por handle, flags `GMEM_MOVEABLE`/`ZEROINIT`, contagem de locks e rejeição de ponteiros arbitrários; `GlobalAlloc` e `LocalAlloc` usam o mesmo envelope de memória do processo |
-| `KERNEL32.dll` | `TlsGetValue` | Suportado | Retorna `NULL` com `ERROR_SUCCESS` para slot não usado (TLS do CRT não é inicializado por nenhum callback do xxd) |
+| `KERNEL32.dll` | `TlsGetValue` | Suportado | Retorna o valor do slot TLS da thread convidada e `ERROR_SUCCESS` para slot não usado; TLS estático e callback possuem contrato separado na seção de concorrência |
 | `KERNEL32.dll` | `GetConsoleMode` / `SetConsoleMode` | Suportado | `GetConsoleMode` devolve `0x3` e `TRUE` só para fd com `isatty`; caso contrário `ERROR_INVALID_HANDLE` |
 | `KERNEL32.dll` | `IsDBCSLeadByteEx` | Suportado | Sempre `FALSE` (sem DBCS) |
 | `KERNEL32.dll` | `Sleep` | Suportado | `nanosleep` com loop `EINTR` |
@@ -403,7 +404,7 @@ que recebem arquivos do host como argumentos.
 | `WINMM.dll` | `timeSetEvent` | Suportado | Stub retorna `1` |
 | `dbghelp.dll` | `SymFromAddr` | Suportado | Valida `process`/`displacement`/`symbol`, `displacement=0`, retorna `0` (não encontrado) mas sem crash |
 | `POWRPROF.dll` | `PowerGetActiveScheme` / `PowerSetActiveScheme` / `CallNtPowerInformation` | Suportado | `PowerGetActiveScheme` aloca GUID `Balanced` via `malloc`, `PowerSetActiveScheme` `S_OK`, `CallNtPowerInformation` `memset` `0` |
-| `IPHLPAPI.DLL` | `GetAdaptersInfo` / `GetAdaptersAddresses` / `if_nametoindex` | Suportado | `GetAdaptersInfo` `0` sem adapters, `GetAdaptersAddresses` `0`, `if_nametoindex` `1` |
+| `IPHLPAPI.DLL` | `GetAdaptersInfo` / `GetAdaptersAddresses` / `if_nametoindex` | Suportado no subconjunto | `getifaddrs` do host, contratos de buffer `ERROR_BUFFER_OVERFLOW`/`ERROR_NO_DATA`, registros x64 com strings UTF-16 de largura fixa, interfaces IPv4 e `if_nametoindex` real; IPv6 e campos DNS continuam fora |
 
 ### Limitações conhecidas
 
@@ -497,6 +498,9 @@ revogação.
 | `WINTRUST.dll` | `WinVerifyTrust` | Suportado no subconjunto | Valida `WINTRUST_ACTION_GENERIC_VERIFY_V2` + `WTD_CHOICE_BLOB` com envelope `TLTC`, cadeia de dois DER, assinatura/validade X.509 e raiz explícita; HRESULT não nulo para política ou cadeia inválida |
 | `WINTRUST.dll` | `WTHelperProvDataFromStateData`, `WTHelperGetProvSignerFromChain`, `WTHelperGetProvCertFromChain` | Suportado no subconjunto | Consulta o estado criado por `WTD_STATEACTION_VERIFY`, signer `0` e certificados folha/raiz `0..1`; rejeita contra-assinantes, índices inválidos e ponteiros externos; estado encerra em `CLOSE` |
 | `CRYPT32.dll` | `CertGetNameStringW` | Suportado no subconjunto | Valida `CERT_CONTEXT`/estrutura DER e extrai `CERT_NAME_SIMPLE_DISPLAY_TYPE`, `CERT_NAME_FRIENDLY_DISPLAY_TYPE`, `CERT_NAME_DNS_TYPE`, `CERT_NAME_EMAIL_TYPE` ou `CERT_NAME_ATTR_TYPE`; sem verificação criptográfica, loja, SAN, Authenticode ou `Cert*` de cadeia |
+| `CRYPT32.dll` | `CertOpenStore` / `CertCloseStore` | Suportado no subconjunto | Loja em memória e wrappers `CertOpenSystemStoreA/W` com nomes validados; provedores não implementados retornam `ERROR_NOT_SUPPORTED`, sem loja Windows ou leitura do trust store Linux |
+| `WTSAPI32.dll` | `WTSEnumerateSessionsW` / `WTSFreeMemory` | Suportado no subconjunto | Retorna uma sessão local `Console` com alocação rastreada; `WTSFreeMemory` só libera blocos emitidos pelo runtime |
+| `WTSAPI32.dll` | `WTSQuerySessionInformationW` | Stub controlado | Retorna `FALSE` + `ERROR_NOT_SUPPORTED`, zera os parâmetros de saída e emite trace |
 
 ## Registro genérico
 

@@ -358,6 +358,8 @@ TEST(Crypt32Test, CertContextAndStoreManagement) {
     // Store operations
     EXPECT_EQ(tl_CertOpenStore(nullptr, 0, nullptr, 0, nullptr), nullptr);
     EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_CertOpenStore("TL_UNKNOWN_STORE_PROVIDER", 0, nullptr, 0, nullptr), nullptr);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorNotSupported);
 
     void* mem_store = tl_CertOpenStore(reinterpret_cast<const char*>(kCertStoreProvMemory), 0,
                                        nullptr, 0, nullptr);
@@ -475,6 +477,80 @@ TEST(ShellPathTest, PathIsRelativeAndAutoComplete) {
 
     std::uint8_t op_buf[100]{};
     EXPECT_EQ(tl_SHFileOperationW(op_buf), 0);
+}
+
+TEST(IphlpapiTest, EnumeratesLinuxAdaptersWithWin32BufferContracts) {
+    constexpr std::uint32_t kErrorBufferOverflow = 111U;
+    constexpr std::uint32_t kErrorNoData = 232U;
+
+    std::uint32_t info_size = 0;
+    const std::uint32_t info_probe = tl_GetAdaptersInfo(nullptr, &info_size);
+    if (info_probe == kErrorNoData) GTEST_SKIP() << "host has no network interfaces";
+    ASSERT_EQ(info_probe, kErrorBufferOverflow);
+    ASSERT_GT(info_size, 0U);
+    std::vector<std::uint8_t> info(info_size);
+    ASSERT_EQ(tl_GetAdaptersInfo(info.data(), &info_size), 0U);
+    std::uint32_t combo_index = 0;
+    std::memcpy(&combo_index, info.data(), sizeof(combo_index));
+    EXPECT_GT(combo_index, 0U);
+
+    std::uint32_t addresses_size = 0;
+    const std::uint32_t addresses_probe =
+        tl_GetAdaptersAddresses(2U, 0U, nullptr, nullptr, &addresses_size);
+    if (addresses_probe == kErrorNoData) GTEST_SKIP() << "host has no IPv4 network interfaces";
+    ASSERT_EQ(addresses_probe, kErrorBufferOverflow);
+    ASSERT_GT(addresses_size, 0U);
+    std::vector<std::uint8_t> addresses(addresses_size);
+    ASSERT_EQ(tl_GetAdaptersAddresses(2U, 0U, nullptr, addresses.data(), &addresses_size), 0U);
+
+    std::uint32_t record_length = 0;
+    std::uint32_t interface_index = 0;
+    std::uintptr_t unicast_address = 0;
+    std::memcpy(&record_length, addresses.data(), sizeof(record_length));
+    std::memcpy(&interface_index, addresses.data() + 4U, sizeof(interface_index));
+    std::memcpy(&unicast_address, addresses.data() + 24U, sizeof(unicast_address));
+    EXPECT_EQ(record_length, 184U);
+    EXPECT_GT(interface_index, 0U);
+    EXPECT_NE(unicast_address, 0U);
+    EXPECT_GE(unicast_address, reinterpret_cast<std::uintptr_t>(addresses.data()));
+    EXPECT_LT(unicast_address,
+              reinterpret_cast<std::uintptr_t>(addresses.data() + addresses.size()));
+
+    char loopback[] = "lo";
+    EXPECT_GT(tl_if_nametoindex(loopback), 0U);
+    EXPECT_EQ(tl_if_nametoindex("tl-interface-does-not-exist"), 0U);
+}
+
+TEST(WtsApiTest, EnumeratesAndReleasesLocalSession) {
+    void* session_info = nullptr;
+    std::uint32_t count = 0;
+    ASSERT_EQ(tl_WTSEnumerateSessionsW(nullptr, 0U, 1U, &session_info, &count), 1);
+    ASSERT_NE(session_info, nullptr);
+    ASSERT_EQ(count, 1U);
+
+    std::uint32_t session_id = 0;
+    std::uintptr_t station_name = 0;
+    std::uint32_t state = 0;
+    std::memcpy(&session_id, session_info, sizeof(session_id));
+    std::memcpy(&station_name, static_cast<std::byte*>(session_info) + 8U,
+                sizeof(station_name));
+    std::memcpy(&state, static_cast<std::byte*>(session_info) + 16U, sizeof(state));
+    EXPECT_EQ(session_id, 0U);
+    EXPECT_NE(station_name, 0U);
+    EXPECT_EQ(state, 0U);
+    EXPECT_EQ(static_cast<const std::uint16_t*>(reinterpret_cast<const void*>(station_name))[0],
+              u'C');
+
+    tl_WTSFreeMemory(session_info);
+    tl_WTSFreeMemory(session_info);
+
+    std::uint16_t* query_buffer = reinterpret_cast<std::uint16_t*>(0x1U);
+    std::uint32_t bytes_returned = 99U;
+    EXPECT_EQ(tl_WTSQuerySessionInformationW(nullptr, 0U, 8U, &query_buffer,
+                                              &bytes_returned), 0);
+    EXPECT_EQ(query_buffer, nullptr);
+    EXPECT_EQ(bytes_returned, 0U);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorNotSupported);
 }
 
 TEST(MsixParserTest, ParseManifestXml) {

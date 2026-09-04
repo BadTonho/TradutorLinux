@@ -505,10 +505,32 @@ TL_CRYPT32_MSABI void* tl_CertOpenStore(
     const char* const store_provider, const std::uint32_t encoding_type,
     void* const crypt_prov, const std::uint32_t flags, const void* const para) noexcept {
     (void)crypt_prov;
-    (void)para;
     if (store_provider == nullptr) {
         set_last_error(abi::kErrorInvalidParameter);
         return nullptr;
+    }
+
+    const std::uintptr_t provider = reinterpret_cast<std::uintptr_t>(store_provider);
+    if (provider != kCertStoreProvMemory && provider != kCertStoreProvSystemA &&
+        provider != kCertStoreProvSystemW) {
+        if (provider < 4096U || !runtime::validate_mapped_cstring(store_provider)) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return nullptr;
+        }
+        set_last_error(abi::kErrorNotSupported);
+        return nullptr;
+    }
+    if (provider == kCertStoreProvSystemA) {
+        if (para == nullptr || !runtime::validate_mapped_cstring(static_cast<const char*>(para))) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return nullptr;
+        }
+    } else if (provider == kCertStoreProvSystemW) {
+        if (para == nullptr ||
+            !runtime::validate_mapped_wstring(static_cast<const std::uint16_t*>(para))) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return nullptr;
+        }
     }
 
     std::lock_guard<std::mutex> lock(g_crypto_mutex);

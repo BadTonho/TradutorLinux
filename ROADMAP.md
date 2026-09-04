@@ -717,7 +717,8 @@ nem declarar os benchmarks comerciais suportados.
 #### Fase 13.14 — TLS genérico e Worker RSL (Roblox) — em andamento
 
 - [x] Generalizar o contrato do slot pointer-backed `TLS 0x430` com validação do span raw + `SizeOfZeroFill`, alocação sob demanda de bloco `0x1000` zerado, tabela por TEB e liberação no encerramento; `tl_tls_generic.exe` cobre `TLS zero-init` + leitura do ponteiro + `mov 0x68(%rax)` sem `SIGSEGV` (código e fixture prontos; validação Linux pendente)
-- [ ] Rastrear `Worker,28` com `--trace=ws2,runtime,wininet,crypt,pe` `process/isolate.cpp:155` — última API antes de `RBXCRASH` (`GetAdaptersAddresses` `WSAStartup` `CertOpenStore`) e implementar semântica Linux real (`getifaddrs` `getaddrinfo` `CertOpenStore` `WTSFreeMemory`) em vez de stub `0`; cada API ganha fixture e volta ao portfólio `docs/requisitos-aplicativos.md`
+- [x] Implementar e validar o subconjunto Linux reutilizável observado no Worker: `GetAdaptersInfo`/`GetAdaptersAddresses`/`if_nametoindex` via `getifaddrs`, `CertOpenStore` com provedores controlados e `WTSEnumerateSessionsW`/`WTSFreeMemory`; `tl_worker_rsl.exe` cobre `WSAStartup`/`getaddrinfo`, interfaces IPv4, loja em memória e sessão local (Debug: 11 testes unitários direcionados + 4 CTest de fixture)
+- [ ] Reexecutar `Worker,28` com `--trace=ws2,runtime,wininet,crypt,pe` `process/isolate.cpp:155` e só então avaliar novo bloqueio; implementar qualquer API adicional somente com evidência, fixture e registro em `docs/requisitos-aplicativos.md`
 - [ ] Manter `Roblox` como benchmark sem criar stubs exclusivos; só declarar `supported` quando `install --prefix` extrair `drive_c` e `app run` completar sem `panic`
 
 PE32/x86, .NET/Mono e MSIX/AppX continuam requisitos separados nesta primeira

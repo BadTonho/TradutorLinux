@@ -143,6 +143,28 @@ Critérios de conclusão:
 - cobrir uma chamada de GUI em thread secundário com rejeição, erro controlado
   e teste; uma futura implementação cross-thread exigirá um contrato novo.
 
+#### P1.5 — Subconjunto de rede e sessão para o Worker entregue
+
+As APIs observadas no caminho `Worker,28` agora possuem uma implementação
+reutilizável e limitada: `IPHLPAPI` consulta `getifaddrs` e preenche os layouts
+Win32 x64 para interfaces IPv4, `WS2_32` mantém resolução local, `CRYPT32`
+aceita somente os provedores de loja documentados e `WTSAPI32` enumera a sessão
+local com memória rastreada. `tl_worker_rsl.exe` cobre o fluxo combinado;
+`tl_powr.exe` também protege os contratos de buffer de IPHLPAPI.
+
+Validação Linux concluída no preset Debug: build dos alvos afetados, 11 testes
+unitários direcionados e 4 testes CTest de metadata/execução passaram. Isso
+reduz o bloqueio da fixture, mas não equivale a executar o Worker comercial.
+
+Critérios de conclusão:
+
+- implementar somente os contratos de rede/sessão justificados pelo trace;
+- proteger layouts, tamanhos, ownership e falhas negativas com fixtures e
+  testes unitários;
+- manter `WTSQuerySessionInformationW`, IPv6, trust store e provedores
+  CRYPT32 não implementados como limitações explícitas;
+- reexecutar o Worker real antes de promover qualquer estado de compatibilidade.
+
 ### P2 — manutenção, testes e melhorias futuras
 
 #### P2.1 — Vazamento de cores no X11 (corrigido nesta rodada; falta validar)
