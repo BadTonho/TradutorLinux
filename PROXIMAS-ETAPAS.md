@@ -10,7 +10,7 @@ explícitos abaixo.
 ## Estado atual
 
 - Commits desta retomada: `ce66739`, `4f95c65`, `2fa9ebd`, `d9aeb9f`,
-  `956aadc`, `17f4305`, `45cc3f9`, `990b960` e `6d7c855`.
+  `956aadc`, `17f4305`, `45cc3f9`, `990b960`, `6d7c855` e `3df05e4`.
 - O alvo continua sendo PE32+ x86-64 em Linux x86-64.
 - Já foram implementados e testados no build Debug Linux os subconjuntos de `IPHLPAPI`, `WTSAPI32` e parte de `CRYPT32`, além das correções de forwarders, TLS genérico e parser de manifests MSIX.
 - A validação executada até aqui cobriu fixtures próprias, testes unitários direcionados e traces de `tl_worker_rsl` e `tl_powr`.
@@ -53,8 +53,10 @@ explícitos abaixo.
   cada import resolvida.
 - [x] Auditoria de `ExportSupport::Stub`: retornos, `LastError`, buffers e
   traces dos stubs de processo, impressão, WTS, SetupAPI, SensApi, DirectX,
-  WINMM e USER32 foram registrados e protegidos por testes direcionados;
-  DirectX, GPU, áudio e impressão continuam fora de suporte funcional.
+  WINMM e USER32 foram registrados e protegidos por 5 testes direcionados;
+  o unitário completo ficou em 361 testes/80 suítes, com 360 aprovados e 1
+  skip ambiental; DirectX, GPU, áudio e impressão continuam fora de suporte
+  funcional.
 - [ ] Worker/RSL comercial: bloqueado nesta cópia do checkout; a busca não
   encontrou um executável comercial `Worker`/`RSL` em
   `Aplicativos_Windows_Populares/`. Só existe a fixture própria
