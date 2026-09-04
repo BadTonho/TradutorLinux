@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cstdlib>
 #include <cstring>
 #include <filesystem>
 #include <string_view>
@@ -102,9 +103,55 @@ constexpr std::array<SevenZipToolbarVisual, 7> kSevenZipToolbarVisuals{{
     return parent.visual_directory.empty() ? seven_zip_host_directory() : parent.visual_directory;
 }
 
+[[nodiscard]] std::filesystem::path seven_zip_root_directory(
+    const WindowSlot& parent) noexcept {
+    return parent.visual_root_directory.empty() ? seven_zip_host_directory()
+                                                  : parent.visual_root_directory;
+}
+
+[[nodiscard]] std::filesystem::path seven_zip_home_directory() noexcept {
+    const char* const home = std::getenv("HOME");
+    if (home == nullptr || home[0] == '\0') {
+        return {};
+    }
+    return std::filesystem::path{home};
+}
+
+[[nodiscard]] std::filesystem::path seven_zip_navigation_directory(
+    const WindowSlot& parent, const int row) noexcept {
+    const std::filesystem::path root = seven_zip_root_directory(parent);
+    if (row == 0 || row == 1) {
+        return root;
+    }
+    const std::filesystem::path home = seven_zip_home_directory();
+    if (home.empty()) {
+        return {};
+    }
+    if (row == 2) {
+        return home;
+    }
+    if (row == 3) {
+        const std::filesystem::path desktop = home / "Desktop";
+        std::error_code error;
+        if (std::filesystem::is_directory(desktop, error) && !error) {
+            return desktop;
+        }
+        return home / "Área de trabalho";
+    }
+    if (row == 4) {
+        const std::filesystem::path documents = home / "Documents";
+        std::error_code error;
+        if (std::filesystem::is_directory(documents, error) && !error) {
+            return documents;
+        }
+        return home / "Documentos";
+    }
+    return {};
+}
+
 [[nodiscard]] std::string seven_zip_visual_address(const WindowSlot& parent) noexcept {
     try {
-        const std::filesystem::path base = seven_zip_host_directory();
+        const std::filesystem::path base = seven_zip_root_directory(parent);
         const std::filesystem::path current = seven_zip_current_directory(parent);
         if (base.empty() || current.empty()) {
             return "Z:\\";
@@ -261,6 +308,26 @@ struct SevenZipPopupGeometry {
     return index >= 0 && static_cast<std::size_t>(index) < rows.size() ? index : -1;
 }
 
+[[nodiscard]] int seven_zip_navigation_row_at(const WindowSlot& parent, const int x,
+                                              const int y) noexcept {
+    const SevenZipListGeometry geometry = seven_zip_list_geometry(parent);
+    if (geometry.status_y <= geometry.body_y || x < 8 || x >= 8 + geometry.navigation_width) {
+        return -1;
+    }
+    constexpr int kRowTop = 31;
+    constexpr int kRowStep = 24;
+    constexpr int kRowHeight = 22;
+    if (y < geometry.body_y + kRowTop || y >= geometry.status_y) {
+        return -1;
+    }
+    const int relative_y = y - geometry.body_y - kRowTop;
+    if (relative_y % kRowStep >= kRowHeight) {
+        return -1;
+    }
+    const int index = relative_y / kRowStep;
+    return index >= 0 && index < 5 ? index : -1;
+}
+
 [[nodiscard]] bool open_seven_zip_directory_row(WindowSlot& parent, const int row) noexcept {
     try {
         const std::filesystem::path current_directory = seven_zip_current_directory(parent);
@@ -279,6 +346,9 @@ struct SevenZipPopupGeometry {
         std::error_code error;
         if (!std::filesystem::is_directory(next_directory, error) || error) {
             return false;
+        }
+        if (parent.visual_root_directory.empty()) {
+            parent.visual_root_directory = current_directory;
         }
         parent.visual_directory = next_directory;
         parent.list_selection = 0;
@@ -442,6 +512,40 @@ void activate_seven_zip_menu_item(WindowSlot& parent, const SevenZipPopupGeometr
     return true;
 }
 
+[[nodiscard]] bool handle_seven_zip_navigation_mouse(
+    WindowSlot& parent, const std::span<WindowSlot> windows,
+    const gui::WindowEvent& event) noexcept {
+    if (!is_seven_zip_file_manager(parent) ||
+        (event.type != gui::WindowEventType::Press &&
+         event.type != gui::WindowEventType::Release)) {
+        return false;
+    }
+    const int row = seven_zip_navigation_row_at(parent, event.x, event.y);
+    if (row < 0) {
+        return false;
+    }
+    if (event.type == gui::WindowEventType::Press) {
+        try {
+            if (parent.visual_root_directory.empty()) {
+                parent.visual_root_directory = seven_zip_current_directory(parent);
+            }
+            const std::filesystem::path target = seven_zip_navigation_directory(parent, row);
+            std::error_code error;
+            if (!target.empty() && std::filesystem::is_directory(target, error) && !error) {
+                parent.visual_directory = target;
+                parent.navigation_selection = row;
+                parent.list_selection = 0;
+                parent.last_list_press_row = -1;
+                parent.last_list_press_time = {};
+                render_controls(parent, windows);
+            }
+        } catch (...) {
+            // A falha de leitura do diretório não pode derrubar o convidado.
+        }
+    }
+    return true;
+}
+
 void draw_seven_zip_toolbar_button(const gui::NativeWindow native, const char* const icon,
                                    const char* const label, const int x, const int y,
                                    const int width, const bool pressed) noexcept {
@@ -586,11 +690,15 @@ void render_seven_zip_file_manager(WindowSlot& parent,
             "Computer", "Local Disk (Z:)", "Home", "Desktop", "Documents"};
         for (std::size_t index = 0; index < kNavigation_items.size(); ++index) {
             const int row_y = body_y + 48 + static_cast<int>(index) * 24;
-            if (index == 1) {
+            if (static_cast<int>(index) == parent.navigation_selection) {
                 gui::platform::fill_rectangle_color(parent.native, 9, row_y - 17,
                                                     navigation_width - 2, 22, kSelection);
             }
-            gui::platform::draw_text_color(parent.native, index == 1 ? "[+]" : "[ ]", 20, row_y,
+            gui::platform::draw_text_color(parent.native,
+                                           static_cast<int>(index) == parent.navigation_selection
+                                               ? "[+]"
+                                               : "[ ]",
+                                           20, row_y,
                                            kBlue, true);
             gui::platform::draw_text_color(parent.native, kNavigation_items[index], 50, row_y, kText);
         }
@@ -1160,6 +1268,9 @@ void handle_control_mouse(WindowSlot& parent, const std::span<WindowSlot> window
         return;
     }
     if (handle_seven_zip_file_list_mouse(parent, windows, event)) {
+        return;
+    }
+    if (handle_seven_zip_navigation_mouse(parent, windows, event)) {
         return;
     }
     WindowSlot* control = find_control_at(parent, windows, event.x, event.y);
