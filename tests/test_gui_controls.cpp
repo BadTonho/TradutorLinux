@@ -113,6 +113,36 @@ TEST(WindowDrawingTarget, RejectsUnknownOrDetachedWindow) {
     g_windows = {};
 }
 
+TEST(LogicalControls, HitTestReturnsTopmostVisibleChild) {
+    g_windows = {};
+    WindowSlot& parent = g_windows[0];
+    parent.used = true;
+
+    WindowSlot& first = g_windows[1];
+    first.used = true;
+    first.is_control = true;
+    first.parent = &parent;
+    first.x = 10;
+    first.y = 20;
+    first.width = 100;
+    first.height = 40;
+
+    WindowSlot& second = g_windows[2];
+    second.used = true;
+    second.is_control = true;
+    second.parent = &parent;
+    second.x = 40;
+    second.y = 30;
+    second.width = 100;
+    second.height = 40;
+
+    EXPECT_EQ(find_control_at(parent, std::span<WindowSlot>{g_windows}, 50, 40), &second);
+    second.visible = false;
+    EXPECT_EQ(find_control_at(parent, std::span<WindowSlot>{g_windows}, 50, 40), &first);
+    EXPECT_EQ(find_control_at(parent, std::span<WindowSlot>{g_windows}, 500, 400), nullptr);
+    g_windows = {};
+}
+
 TEST(CommonControls, CreateStatusAndToolbarAsLogicalChildren) {
     g_windows = {};
     WindowSlot& parent = g_windows[0];

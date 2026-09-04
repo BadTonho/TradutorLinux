@@ -87,6 +87,8 @@ void queue_command_id(WindowSlot& control, std::uint32_t notification,
                       std::uintptr_t command_id) noexcept;
 void queue_list_notification(WindowSlot& list, std::int32_t code, int item) noexcept;
 
+[[nodiscard]] WindowSlot* find_control_at(WindowSlot& parent, std::span<WindowSlot> windows,
+                                          int x, int y) noexcept;
 void render_controls(WindowSlot& parent, std::span<WindowSlot> windows) noexcept;
 void handle_control_key(WindowSlot& parent, std::span<WindowSlot> windows,
                         WindowSlot*& focused_control, const gui::WindowEvent& event) noexcept;

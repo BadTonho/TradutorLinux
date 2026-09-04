@@ -3,6 +3,25 @@
 #include <limits>
 
 namespace tradutorlinux {
+
+namespace {
+
+[[nodiscard]] abi::Lparam mouse_lparam(const int x, const int y) noexcept {
+    return (static_cast<std::intptr_t>(y & 0xFFFF) << 16) |
+           static_cast<std::intptr_t>(x & 0xFFFF);
+}
+
+[[nodiscard]] WindowSlot* event_control(WindowSlot& parent, const gui::WindowEvent& event) noexcept {
+    return runtime_gui::find_control_at(parent, std::span<WindowSlot>{g_windows}, event.x, event.y);
+}
+
+[[nodiscard]] bool logical_child_mouse_message(WindowSlot* const control) noexcept {
+    return control != nullptr && control->wndproc != 0 && control->is_control &&
+           control->parent != nullptr;
+}
+
+}  // namespace
+
 extern "C" {
 
 TL_MSABI int tl_GetMessageA(void* const msg, const void* const window,
@@ -63,31 +82,58 @@ TL_MSABI int tl_GetMessageA(void* const msg, const void* const window,
                 return 1;
             }
             if (event.type == gui::WindowEventType::Press) {
+                WindowSlot* const control = event_control(slot, event);
                 handle_control_mouse(slot, event);
                 slot.left_button_down = true;
-                const abi::Lparam lparam =
-                    (static_cast<std::intptr_t>(event.y & 0xFFFF) << 16) |
-                    static_cast<std::intptr_t>(event.x & 0xFFFF);
-                write_guest_msg(msg, &slot, abi::kWmLButtonDown, abi::kMkLButton, lparam);
+                const WindowDrawingTarget target = logical_child_mouse_message(control)
+                                                       ? window_drawing_target(control)
+                                                       : WindowDrawingTarget{};
+                if (logical_child_mouse_message(control) && target.native != nullptr) {
+                    write_guest_msg(msg, control, abi::kWmLButtonDown, abi::kMkLButton,
+                                    mouse_lparam(event.x - target.offset_x,
+                                                 event.y - target.offset_y));
+                } else {
+                    write_guest_msg(msg, &slot, abi::kWmLButtonDown, abi::kMkLButton,
+                                    mouse_lparam(event.x, event.y));
+                }
                 set_last_error(abi::kErrorSuccess);
                 return 1;
             }
             if (event.type == gui::WindowEventType::Release) {
+                WindowSlot* const control = event_control(slot, event);
                 handle_control_mouse(slot, event);
                 slot.left_button_down = false;
-                const abi::Lparam lparam =
-                    (static_cast<std::intptr_t>(event.y & 0xFFFF) << 16) |
-                    static_cast<std::intptr_t>(event.x & 0xFFFF);
-                write_guest_msg(msg, &slot, abi::kWmLButtonUp, 0, lparam);
+                const WindowDrawingTarget target = logical_child_mouse_message(control)
+                                                       ? window_drawing_target(control)
+                                                       : WindowDrawingTarget{};
+                if (logical_child_mouse_message(control) && target.native != nullptr) {
+                    write_guest_msg(msg, control, abi::kWmLButtonUp, 0,
+                                    mouse_lparam(event.x - target.offset_x,
+                                                 event.y - target.offset_y));
+                } else {
+                    write_guest_msg(msg, &slot, abi::kWmLButtonUp, 0,
+                                    mouse_lparam(event.x, event.y));
+                }
                 set_last_error(abi::kErrorSuccess);
                 return 1;
             }
             if (event.type == gui::WindowEventType::MouseMove) {
-                const abi::Lparam lparam =
-                    (static_cast<std::intptr_t>(event.y & 0xFFFF) << 16) |
-                    static_cast<std::intptr_t>(event.x & 0xFFFF);
+                WindowSlot* const control = event_control(slot, event);
+                const WindowDrawingTarget target = logical_child_mouse_message(control)
+                                                       ? window_drawing_target(control)
+                                                       : WindowDrawingTarget{};
+                const bool deliver_to_child = logical_child_mouse_message(control) &&
+                                              target.native != nullptr;
+                const int local_x = deliver_to_child
+                                        ? event.x - target.offset_x
+                                        : event.x;
+                const int local_y = deliver_to_child
+                                        ? event.y - target.offset_y
+                                        : event.y;
                 const abi::Wparam wparam = slot.left_button_down ? abi::kMkLButton : 0;
-                write_guest_msg(msg, &slot, abi::kWmMouseMove, wparam, lparam);
+                write_guest_msg(msg,
+                                deliver_to_child ? control : &slot,
+                                abi::kWmMouseMove, wparam, mouse_lparam(local_x, local_y));
                 set_last_error(abi::kErrorSuccess);
                 return 1;
             }

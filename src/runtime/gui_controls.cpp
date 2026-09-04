@@ -195,8 +195,10 @@ void render_seven_zip_file_manager(WindowSlot& parent) noexcept {
     gui::platform::flush_window(parent.native);
 }
 
-[[nodiscard]] WindowSlot* hit_control(WindowSlot& parent, std::span<WindowSlot> windows,
-                                      const int x, const int y) noexcept {
+}  // namespace
+
+WindowSlot* find_control_at(WindowSlot& parent, const std::span<WindowSlot> windows,
+                            const int x, const int y) noexcept {
     for (auto it = windows.rbegin(); it != windows.rend(); ++it) {
         WindowSlot& control = *it;
         if (control.used && control.is_control && control.parent == &parent && control.visible &&
@@ -207,8 +209,6 @@ void render_seven_zip_file_manager(WindowSlot& parent) noexcept {
     }
     return nullptr;
 }
-
-}  // namespace
 
 std::vector<ListViewRow> collect_seven_zip_directory_rows(
     const std::filesystem::path& directory, const std::size_t max_rows) noexcept {
@@ -588,7 +588,7 @@ void handle_control_key(WindowSlot& parent, const std::span<WindowSlot> windows,
 
 void handle_control_mouse(WindowSlot& parent, const std::span<WindowSlot> windows,
                           WindowSlot*& focused_control, const gui::WindowEvent& event) noexcept {
-    WindowSlot* control = hit_control(parent, windows, event.x, event.y);
+    WindowSlot* control = find_control_at(parent, windows, event.x, event.y);
     if (event.type == gui::WindowEventType::Press) {
         if (control == nullptr) {
             return;
