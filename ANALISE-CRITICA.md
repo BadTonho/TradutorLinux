@@ -65,7 +65,8 @@ directory; o parser XML estrutural continua em P2.2.
 fora do menu e timeout configurável por `TL_GUI_POPUP_TIMEOUT_MS` (30 segundos
 por padrão, no máximo 10 minutos). A implementação libera grabs e destrói a
 janela também no timeout. Continua pendente a validação de integração sob Xvfb
-para todos os caminhos de encerramento.
+para todos os caminhos de encerramento; o smoke `x11_popup_smoke` agora cobre
+Escape, clique externo, destruição externa e timeout.
 
 Critérios de conclusão:
 
@@ -144,7 +145,8 @@ Critérios de conclusão:
 `pixel_for_rgb` agora reutiliza um cache fixo de 256 cores e libera as
 alocações rastreadas com `XFreeColors` antes de fechar o display. O estado dos
 brushes permanece limitado ao ciclo de vida do display. Continua pendente a
-validação sob Xvfb com desenho repetido e LeakSanitizer.
+validação sob Xvfb com desenho repetido e LeakSanitizer; o smoke de popup
+também exercita a inicialização e o teardown do display sob múltiplos cenários.
 
 Critérios de conclusão:
 

@@ -2,12 +2,27 @@ add_subdirectory(samples)
 
 find_program(TL_XVFB_EXECUTABLE NAMES Xvfb xvfb)
 if(TL_XVFB_EXECUTABLE)
+    find_path(TL_X11_INCLUDE_DIR X11/Xlib.h REQUIRED)
     find_library(TL_X11_LIBRARY X11 REQUIRED)
     add_executable(simple_todo_gui_smoke
         gui/simple_todo_gui_smoke.cpp
     )
     target_link_libraries(simple_todo_gui_smoke PRIVATE "${TL_X11_LIBRARY}")
     tl_enable_warnings(simple_todo_gui_smoke)
+
+    add_executable(x11_popup_smoke
+        gui/x11_popup_smoke.cpp
+    )
+    target_include_directories(x11_popup_smoke PRIVATE "${TL_X11_INCLUDE_DIR}")
+    target_link_libraries(x11_popup_smoke PRIVATE tradutorlinux_core "${TL_X11_LIBRARY}")
+    tl_enable_warnings(x11_popup_smoke)
+    tl_enable_sanitizers(x11_popup_smoke)
+    add_test(NAME x11_popup_smoke COMMAND x11_popup_smoke)
+    set_tests_properties(x11_popup_smoke PROPERTIES
+        LABELS "runtime;gui;x11"
+        TIMEOUT 20
+        SKIP_RETURN_CODE 77
+    )
 endif()
 
 if(TL_BUILD_TARGET_APPS)

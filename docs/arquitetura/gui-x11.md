@@ -46,6 +46,10 @@ e máximo de 10 minutos. Valor ausente, zero ou inválido usa o padrão. Escape,
 clique fora do menu, destruição da janela e timeout liberam os grabs e fecham o
 popup; o timeout é registrado no trace `gui`.
 
+O teste `x11_popup_smoke` executa esses caminhos sob um Xvfb próprio: Escape,
+clique externo, destruição externa e timeout. O cenário de destruição externa
+também garante que o cleanup não tente destruir a mesma janela duas vezes.
+
 ## Afinidade de thread da GUI
 
 No escopo atual, o estado de USER32 e o display X11 pertencem ao thread

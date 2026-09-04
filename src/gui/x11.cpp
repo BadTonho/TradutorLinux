@@ -5,6 +5,7 @@
 #include <X11/Xatom.h>
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
+#include <X11/keysym.h>
 
 #include <algorithm>
 #include <array>
@@ -630,6 +631,7 @@ std::uint32_t track_popup_menu(const std::vector<PopupMenuItem>& items, int x, i
     std::uint32_t result = 0;
     bool done = false;
     bool timed_out = false;
+    bool menu_destroyed = false;
     const std::uint64_t timeout_ms = popup_timeout_ms();
     const auto deadline = std::chrono::steady_clock::now() +
                           std::chrono::milliseconds(timeout_ms);
@@ -704,6 +706,7 @@ std::uint32_t track_popup_menu(const std::vector<PopupMenuItem>& items, int x, i
                 done = true;
             }
         } else if (event.type == DestroyNotify && event.xdestroywindow.window == menu) {
+            menu_destroyed = true;
             done = true;
         }
     }
@@ -723,7 +726,9 @@ std::uint32_t track_popup_menu(const std::vector<PopupMenuItem>& items, int x, i
     if (pointer_grabbed) {
         XUngrabPointer(dpy, CurrentTime);
     }
-    XDestroyWindow(dpy, menu);
+    if (!menu_destroyed) {
+        XDestroyWindow(dpy, menu);
+    }
     XFlush(dpy);
     return result;
 }
