@@ -2,15 +2,14 @@
 
 ## 1. Contexto e Motivação
 
-O TradutorLinux evoluiu de forma rápida ao longo das 13 fases do seu roadmap, passando de um runtime mínimo de console com apenas 3 APIs importadas (`GetStdHandle`, `WriteFile`, `ExitProcess`) para um subsistema abrangente com suporte a dezenas de bibliotecas Win32, PE loader completo, unwinding SEH x86-64, rede, registro persistente e GUI X11.
+O TradutorLinux evoluiu de forma rápida ao longo das 13 fases do seu roadmap, passando de um runtime mínimo de console com apenas 3 APIs importadas (`GetStdHandle`, `WriteFile`, `ExitProcess`) para um runtime com loader PE, unwinding SEH x86-64, rede, registro persistente e GUI X11 experimental.
 
-Com esse crescimento veloz, a estrutura de código tornou-se excessivamente plana e acumulou monólitos que dificultam a manutenção e elevam o tempo de compilação:
-1. **`src/runtime/` possui 42 arquivos soltos na raiz**, misturando infraestrutura profunda de baixo nível com dezenas de DLLs Win32 de alto nível.
-2. **`kernel32.cpp` atingiu 275 KB (~6.900 linhas)** e **`user32.cpp` atingiu 158 KB (~4.150 linhas)**, acumulando responsabilidades díspares no mesmo arquivo.
-3. **`include/tradutorlinux/runtime/winapi.hpp` atingiu 146 KB**, atuando como um megacabeçalho que força o pré-processador a ler centenas de declarações não relacionadas em cada arquivo `.cpp`.
-4. **`legacy_winapi.cpp` (77 KB) e `kernel32.cpp` (275 KB)** sobrepõem funções da mesma DLL (`KERNEL32.dll`), criando divisão artificial e confusão de manutenção.
-5. **`src/loader/module.cpp` (1.874 linhas)** concentra mais de 1.500 linhas apenas em tabelas estáticas de exportação de todas as DLLs do runtime.
-6. **`src/cli.cpp` (90 KB)** mistura parsing de argumentos, formatação de relatórios (`--report`), gerador de manifesto, catálogo de aplicativos e motor de instalação.
+A reorganização principal já foi aplicada. O estado atual é modular em `src/runtime/core`, `src/runtime/seh`, `src/runtime/dlls` e `src/cli`; os pontos que ainda justificam manutenção são:
+1. `src/runtime/dlls/kernel32/` e `src/runtime/dlls/user32/` ainda podem ganhar subdivisões internas quando houver um alvo concreto.
+2. `tests/test_win32.cpp` continua concentrando testes de arquivos, GUI, catálogo, locale, memória e aplicativos.
+3. Algumas famílias legadas permanecem diretamente em `src/runtime/` (`gdi32.cpp`, `shell32.cpp`, rede e outras) e só devem ser movidas junto com testes e dependências reais.
+4. `include/tradutorlinux/win32/` já separa tipos e contratos por família; `winapi.hpp` permanece como superfície de compatibilidade.
+5. O próximo trabalho de refatoração deve priorizar testes e famílias ainda grandes, sem repetir a migração já concluída.
 
 ---
 
@@ -18,18 +17,23 @@ Com esse crescimento veloz, a estrutura de código tornou-se excessivamente plan
 
 | Arquivo Atual | Tamanho | Responsabilidades Misturadas | Destino Proposto |
 |---|---|---|---|
-| `src/runtime/kernel32.cpp` | ~275 KB | Arquivos, processos, threads, mutexes, memória, heap, tempo, console, fibers | Subpasta `src/runtime/dlls/kernel32/` dividida em módulos temáticos |
-| `src/runtime/user32.cpp` | ~158 KB | Message loop X11, janelas, desenho de controles (edit, button, listview), caixas de diálogo | Subpasta `src/runtime/dlls/user32/` dividida em mensageria, janelas e controles |
-| `include/.../winapi.hpp` | ~146 KB | Protótipos de KERNEL32, USER32, GDI32, SHELL32 e structs Win32 | Modularizar em `include/tradutorlinux/win32/` por DLL, mantendo `winapi.hpp` como guarda-chuva |
-| `src/cli.cpp` | ~90 KB | Parser CLI, exportador JSON `--report`, catálogo de apps, instalador | Separar em `src/cli/options.cpp`, `report.cpp`, `runner.cpp` |
-| `src/runtime/legacy_winapi.cpp` | ~77 KB | Funções legadas da KERNEL32 (arquivos, diretórios, paths) | Extinguir, unificando com `kernel32/file.cpp` |
-| `src/loader/module.cpp` | ~143 KB | Registro de módulos + 1.500 linhas de tabelas estáticas de exports | Cada DLL mantém sua própria tabela `get_*_exports()`; `module.cpp` fica com ~100 linhas |
+| `src/runtime/dlls/kernel32/*.cpp` | módulos temáticos | Arquivos, processos, threads, memória, tempo e console | Dividir somente quando uma API-alvo justificar |
+| `src/runtime/dlls/user32/*.cpp` | módulos temáticos | Mensageria, janelas, menus, diálogos e clipboard | Dividir controles quando houver contrato e teste próprios |
+| `include/tradutorlinux/win32/` | headers por família | Tipos e contratos ABI Win32 | Manter `winapi.hpp` apenas como superfície compatível |
+| `src/cli/*.cpp` | `options`, `report`, `runner` | CLI, relatório, catálogo e execução | Manter separação e evitar retorno a um monólito |
+| `tests/test_win32.cpp` | monólito remanescente | Testes de vários subsistemas | Separar por domínio, preservando fixtures e helpers |
+| `src/loader/module.cpp` | registro de módulos | Registro e lookup de exports | Manter tabelas junto das DLLs, como já ocorre |
 
 ---
 
 ## 3. Estrutura Proposta
 
 ### 3.1. Reorganização de `src/runtime/`
+
+Nota: a árvore abaixo preserva a proposta original para fins de histórico. A
+reorganização correspondente já existe em grande parte; não recriar caminhos
+que já foram migrados. O restante deve ser executado apenas quando houver um
+alvo, teste e benefício de manutenção claramente identificados.
 
 ```text
 src/runtime/
@@ -117,40 +121,43 @@ Criar subpastas em `include/tradutorlinux/win32/`:
 ## 4. Benefícios Práticos da Refatoração
 
 1. **Velocidade de Compilação Drasticamente Superior**:
-   - Atualmente, alterar uma única linha em uma função de arquivo (ex.: `tl_MoveFileA`) aciona a recompilação de `kernel32.cpp` (275 KB) e `legacy_winapi.cpp` (77 KB), gerando carga pesada de CPU.
-   - Com arquivos divididos por área, apenas `file.cpp` (~15 KB) é reconstruído em frações de segundo.
+   - A divisão atual permite alterar APIs de arquivo em `src/runtime/dlls/kernel32/file.cpp` sem recompilar um monólito histórico.
+   - O custo restante mais visível está na suíte monolítica `tests/test_win32.cpp`, que deve ser separada por domínio quando houver uma janela de manutenção adequada.
 2. **Localização Imediata do Código**:
    - Rede $\to$ `src/runtime/dlls/net/`.
    - Criptografia $\to$ `src/runtime/dlls/crypto/`.
    - Threads e Concorrência $\to$ `src/runtime/dlls/kernel32/thread.cpp` e `sync.cpp`.
    - Janelas e Eventos $\to$ `src/runtime/dlls/user32/window.cpp` e `message.cpp`.
 3. **Eliminação de Código Duplicado**:
-   - Extingue `legacy_winapi.cpp`, agrupando a implementação de cada API em seu módulo legítimo.
+   - A antiga sobreposição de `legacy_winapi.cpp` foi eliminada; novas APIs devem continuar entrando no módulo da família correspondente.
 4. **Descentralização do Registro de DLLs**:
-   - Em vez de um `module.cpp` com quase 2.000 linhas, cada DLL expõe sua tabela estática independente (`get_kernel32_exports()`, `get_user32_exports()`), tornando simples adicionar ou atualizar APIs sem mexer no loader.
+   - As tabelas de exportação já ficam junto dos módulos de cada DLL, enquanto o loader mantém apenas registro e lookup.
 5. **Facilidade para Testes Unitários Focados**:
-   - O monólito `tests/test_win32.cpp` (129 KB) pode ser quebrado em suítes específicas (`test_file.cpp`, `test_sync.cpp`, `test_memory.cpp`), permitindo que a máquina de desenvolvimento execute somente os testes afetados pela alteração.
+   - O monólito `tests/test_win32.cpp` (aproximadamente 130 KiB) continua como pendência de manutenção e pode ser quebrado em suítes específicas (`test_file.cpp`, `test_sync.cpp`, `test_memory.cpp`).
 
 ---
 
-## 5. Roteiro Gradual de Migração (Passo a Passo)
+## 5. Roteiro e pendências remanescentes
 
-Para não desestabilizar o repositório e evitar builds pesados, a refatoração deve ser executada em fases independentes:
+As fases abaixo registram o histórico da migração e o que ainda pode ser feito.
+As fases 1–6 já foram aplicadas em grande parte; não são instruções para mover
+novamente os mesmos arquivos. O restante deve ser acompanhado por testes e
+benefício concreto:
 
-* **Fase 1 — Agrupamento de DLLs Independentes**:
+* **Fase 1 — Agrupamento de DLLs Independentes (concluída)**:
   - Mover `ws2_32.cpp`, `wininet.cpp`, `iphlpapi.cpp`, `mpr.cpp` $\to$ `src/runtime/dlls/net/`.
   - Mover `crypt32.cpp`, `wintrust.cpp` $\to$ `src/runtime/dlls/crypto/`.
   - Mover `ole32.cpp`, `oleaut32.cpp` $\to$ `src/runtime/dlls/com/`.
   - Atualizar caminhos no `CMakeLists.txt`.
-* **Fase 2 — Infraestrutura Core e SEH**:
+* **Fase 2 — Infraestrutura Core e SEH (concluída)**:
   - Mover arquivos de bootstrap para `src/runtime/core/`.
   - Mover arquivos de exceção para `src/runtime/seh/`.
   - Atualizar caminhos no `CMakeLists.txt`.
-* **Fase 3 — Descentralização de `module.cpp`**:
+* **Fase 3 — Descentralização de `module.cpp` (concluída)**:
   - Extrair as tabelas de exports para cada DLL respectiva.
-* **Fase 4 — Modularização de `kernel32.cpp` e Unificação de `legacy_winapi.cpp`**:
+* **Fase 4 — Modularização de `kernel32.cpp` e Unificação de `legacy_winapi.cpp` (concluída)**:
   - Criar a subpasta `src/runtime/dlls/kernel32/` e dividir por funcionalidade (`file.cpp`, `process.cpp`, `thread.cpp`, `sync.cpp`, `memory.cpp`, `time.cpp`).
-* **Fase 5 — Modularização de `user32.cpp`**:
+* **Fase 5 — Modularização de `user32.cpp` (concluída parcialmente)**:
   - Criar a subpasta `src/runtime/dlls/user32/` e separar `message.cpp`, `window.cpp`, `controls/`, `dialog.cpp`.
-* **Fase 6 — Modularização de Cabeçalhos e CLI**:
+* **Fase 6 — Modularização de Cabeçalhos e CLI (concluída)**:
   - Dividir `winapi.hpp` e `cli.cpp` conforme a proposta.

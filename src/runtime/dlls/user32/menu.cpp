@@ -116,7 +116,7 @@ TL_MSABI int tl_GetMenuItemInfoW(void* const menu, const std::uint32_t item, con
         std::uint16_t* type_data;
         std::uint32_t char_count;
     };
-    if (mii != nullptr && !mapped_guest_range(mii, sizeof(GuestMenuItemInfoW), true)) {
+    if (mii == nullptr || !mapped_guest_range(mii, sizeof(GuestMenuItemInfoW), true)) {
         const std::array<diagnostics::TraceField, 4> fields{
             diagnostics::TraceField{"symbol", "GetMenuItemInfoW"},
             diagnostics::TraceField{"status", "invalid-output"},
@@ -126,38 +126,14 @@ TL_MSABI int tl_GetMenuItemInfoW(void* const menu, const std::uint32_t item, con
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
-    if (mii != nullptr) {
-        auto* const info = static_cast<GuestMenuItemInfoW*>(mii);
-        const std::uint32_t requested_mask = info->f_mask;
-        info->cb_size = sizeof(GuestMenuItemInfoW);
-        info->f_type = 0;
-        info->f_state = 0;
-        info->item_id = 100U + item;
-        info->sub_menu = nullptr;
-        info->checked_bitmap = nullptr;
-        info->unchecked_bitmap = nullptr;
-        info->item_data = 0;
-        // O buffer de saída pode ter sido preparado por uma versão diferente
-        // de MENUITEMINFO. Não devolva ao convidado ponteiros inventados nem
-        // reutilize type_data sem validar o layout e a capacidade completos.
-        if ((requested_mask & 0x00000040U) != 0U) {
-            info->type_data = nullptr;
-            info->char_count = 0;
-        }
-        // Não anuncie um item sintético como válido: o 7-Zip usa o retorno
-        // para decidir se deve continuar enumerando o menu. Retornar sucesso
-        // sem um catálogo real provoca recursão durante o WM_CREATE.
-        set_last_error(abi::kErrorNotSupported);
-        return 0;
-    }
     const std::array<diagnostics::TraceField, 4> fields{
         diagnostics::TraceField{"symbol", "GetMenuItemInfoW"},
-        diagnostics::TraceField{"status", "success"},
+        diagnostics::TraceField{"status", "not-supported"},
         diagnostics::TraceField{"item", std::to_string(item)},
         diagnostics::TraceField{"mii", std::to_string(reinterpret_cast<std::uintptr_t>(mii))}};
     runtime_trace("GetMenuItemInfoW", fields, 4);
-    set_last_error(abi::kErrorSuccess);
-    return 1;
+    set_last_error(abi::kErrorNotSupported);
+    return 0;
 }
 
 TL_MSABI int tl_SetMenuItemInfoW(void* const menu, const std::uint32_t item, const int f_by_position,
@@ -166,8 +142,8 @@ TL_MSABI int tl_SetMenuItemInfoW(void* const menu, const std::uint32_t item, con
     (void)item;
     (void)f_by_position;
     (void)mii;
-    set_last_error(abi::kErrorSuccess);
-    return 1;
+    set_last_error(abi::kErrorNotSupported);
+    return 0;
 }
 
 TL_MSABI int tl_InsertMenuItemW(void* const menu, const std::uint32_t item, const int f_by_position,
@@ -176,22 +152,23 @@ TL_MSABI int tl_InsertMenuItemW(void* const menu, const std::uint32_t item, cons
     (void)item;
     (void)f_by_position;
     (void)mii;
-    set_last_error(abi::kErrorSuccess);
-    return 1;
+    set_last_error(abi::kErrorNotSupported);
+    return 0;
 }
 
 TL_MSABI int tl_RemoveMenu(void* const menu, const std::uint32_t position, const std::uint32_t flags) noexcept {
     (void)menu;
     (void)position;
     (void)flags;
-    set_last_error(abi::kErrorSuccess);
-    return 1;
+    set_last_error(abi::kErrorNotSupported);
+    return 0;
 }
 
 TL_MSABI int tl_EnableMenuItem(void* const menu, const std::uint32_t item, const std::uint32_t enable) noexcept {
     (void)menu;
     (void)item;
     (void)enable;
+    set_last_error(abi::kErrorNotSupported);
     return 0;
 }
 
@@ -199,6 +176,7 @@ TL_MSABI std::uint32_t tl_CheckMenuItem(void* const menu, const std::uint32_t it
     (void)menu;
     (void)item;
     (void)check;
+    set_last_error(abi::kErrorNotSupported);
     return 0;
 }
 
@@ -209,8 +187,8 @@ TL_MSABI int tl_CheckMenuRadioItem(void* const menu, const std::uint32_t first, 
     (void)last;
     (void)check;
     (void)flags;
-    set_last_error(abi::kErrorSuccess);
-    return 1;
+    set_last_error(abi::kErrorNotSupported);
+    return 0;
 }
 
 TL_MSABI int tl_DrawMenuBar(void* const hwnd) noexcept {
@@ -227,8 +205,8 @@ TL_MSABI int tl_TrackPopupMenuEx(void* const menu, const std::uint32_t flags, co
     (void)y;
     (void)hwnd;
     (void)params;
-    set_last_error(abi::kErrorSuccess);
-    return 1;
+    set_last_error(abi::kErrorNotSupported);
+    return 0;
 }
 
 TL_MSABI void* tl_LoadMenuW(void* const instance, const std::uint16_t* const menu_name) noexcept {

@@ -446,6 +446,84 @@ TEST(MsixParserTest, RejectsTruncatedManifestWithoutLargeAllocation) {
     std::filesystem::remove(path, error);
 }
 
+TEST(MsixParserTest, RejectsOversizedManifestBeforeParsing) {
+    const std::string oversized_manifest(17U * 1024U * 1024U, 'x');
+    EXPECT_FALSE(package::parse_appx_manifest_xml(oversized_manifest).has_value());
+}
+
+TEST(MsixParserTest, RejectsZipPathTraversal) {
+    const std::filesystem::path path = "_tl_traversal.msix";
+    {
+        std::ofstream output(path, std::ios::binary | std::ios::trunc);
+        ASSERT_TRUE(output.good());
+        const auto write_u16 = [&output](const std::uint16_t value) {
+            const char bytes[2]{static_cast<char>(value & 0xFFU),
+                                static_cast<char>((value >> 8U) & 0xFFU)};
+            output.write(bytes, sizeof(bytes));
+        };
+        const auto write_u32 = [&output](const std::uint32_t value) {
+            const char bytes[4]{static_cast<char>(value & 0xFFU),
+                                static_cast<char>((value >> 8U) & 0xFFU),
+                                static_cast<char>((value >> 16U) & 0xFFU),
+                                static_cast<char>((value >> 24U) & 0xFFU)};
+            output.write(bytes, sizeof(bytes));
+        };
+        write_u32(0x04034B50U);
+        write_u16(20);
+        write_u16(0);
+        write_u16(0);
+        write_u16(0);
+        write_u16(0);
+        write_u32(0);
+        write_u32(0);
+        write_u32(0);
+        const std::string name = "../AppxManifest.xml";
+        write_u16(static_cast<std::uint16_t>(name.size()));
+        write_u16(0);
+        output.write(name.data(), static_cast<std::streamsize>(name.size()));
+    }
+    EXPECT_FALSE(package::inspect_msix_package(path).has_value());
+    std::error_code error;
+    std::filesystem::remove(path, error);
+}
+
+TEST(MsixParserTest, RejectsPackagesWithTooManyEntries) {
+    const std::filesystem::path path = "_tl_many_entries.msix";
+    {
+        std::ofstream output(path, std::ios::binary | std::ios::trunc);
+        ASSERT_TRUE(output.good());
+        const auto write_u16 = [&output](const std::uint16_t value) {
+            const char bytes[2]{static_cast<char>(value & 0xFFU),
+                                static_cast<char>((value >> 8U) & 0xFFU)};
+            output.write(bytes, sizeof(bytes));
+        };
+        const auto write_u32 = [&output](const std::uint32_t value) {
+            const char bytes[4]{static_cast<char>(value & 0xFFU),
+                                static_cast<char>((value >> 8U) & 0xFFU),
+                                static_cast<char>((value >> 16U) & 0xFFU),
+                                static_cast<char>((value >> 24U) & 0xFFU)};
+            output.write(bytes, sizeof(bytes));
+        };
+        for (std::uint32_t index = 0; index < 10001U; ++index) {
+            write_u32(0x04034B50U);
+            write_u16(20);
+            write_u16(0);
+            write_u16(0);
+            write_u16(0);
+            write_u16(0);
+            write_u32(0);
+            write_u32(0);
+            write_u32(0);
+            write_u16(1);
+            write_u16(0);
+            output.put('a');
+        }
+    }
+    EXPECT_FALSE(package::inspect_msix_package(path).has_value());
+    std::error_code error;
+    std::filesystem::remove(path, error);
+}
+
 TEST(AppCatalogTest, RejectsPathTraversalAndReadsUnicodeEscapes) {
     catalog::AppCatalog catalog;
     catalog::AppEntry unsafe{};
@@ -2703,15 +2781,23 @@ TEST(SevenZipGuiCoverageTest, AllApisAndModules) {
     EXPECT_EQ(tl_SetMenu(nullptr, menu), 1);
     EXPECT_NE(tl_GetSubMenu(menu, 0), nullptr);
     EXPECT_GT(tl_GetMenuItemCount(menu), 0);
-    EXPECT_EQ(tl_GetMenuItemInfoW(menu, 0, 1, nullptr), 1);
-    EXPECT_EQ(tl_SetMenuItemInfoW(menu, 0, 1, nullptr), 1);
-    EXPECT_EQ(tl_InsertMenuItemW(menu, 0, 1, nullptr), 1);
-    EXPECT_EQ(tl_RemoveMenu(menu, 0, 0), 1);
+    EXPECT_EQ(tl_GetMenuItemInfoW(menu, 0, 1, nullptr), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_SetMenuItemInfoW(menu, 0, 1, nullptr), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorNotSupported);
+    EXPECT_EQ(tl_InsertMenuItemW(menu, 0, 1, nullptr), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorNotSupported);
+    EXPECT_EQ(tl_RemoveMenu(menu, 0, 0), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorNotSupported);
     EXPECT_EQ(tl_EnableMenuItem(menu, 0, 0), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorNotSupported);
     EXPECT_EQ(tl_CheckMenuItem(menu, 0, 0), 0U);
-    EXPECT_EQ(tl_CheckMenuRadioItem(menu, 0, 1, 0, 0), 1);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorNotSupported);
+    EXPECT_EQ(tl_CheckMenuRadioItem(menu, 0, 1, 0, 0), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorNotSupported);
     EXPECT_EQ(tl_DrawMenuBar(nullptr), 1);
-    EXPECT_EQ(tl_TrackPopupMenuEx(menu, 0, 0, 0, nullptr, nullptr), 1);
+    EXPECT_EQ(tl_TrackPopupMenuEx(menu, 0, 0, 0, nullptr, nullptr), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorNotSupported);
     EXPECT_NE(tl_LoadMenuW(nullptr, sample_str), nullptr);
 
     EXPECT_EQ(tl_CheckDlgButton(nullptr, 100, 1), 1);

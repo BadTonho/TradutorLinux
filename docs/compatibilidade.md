@@ -646,11 +646,12 @@ processo filho; cada thread convidada recebe seu próprio TEB/GS, stack e
 
 ## Portfólio Aplicativos_Windows_Populares (Fase 13 — 2026-08-31)
 
-Ciclo `A→D→B` concluído com `build/debug --parallel 2`. Todos os `.exe/.dll` em
-`/home/tonho/Área de trabalho/Aplicativos_Windows_Populares/` foram reanalisados com
-`--report` (sem executar) e os `100%` foram executados com `--trace --timeout 3`
-(`src/cli.cpp:966` `docs/diagnostico.md:5`). `stdout` permanece do convidado; `stderr`
-traz `category`/`status`/`detail` e `fault-address` quando há `SIGSEGV`.
+Ciclo `A→D→B` concluído com uma coleta histórica em Linux. Os `.exe/.dll` em
+`Aplicativos_Windows_Populares/` foram reanalisados com `--report`; somente os
+cenários explicitamente listados na coluna de execução foram executados. A
+coluna `Compat` não substitui a evidência de execução. O relatório atual é
+implementado em `src/cli/report.cpp`; `stdout` permanece do convidado e
+`stderr` traz `category`/`status`/`detail` e `fault-address` quando há `SIGSEGV`.
 
 Nesta tabela, `Compat` registra o resultado da resolução de imports. Isso não
 é uma afirmação de equivalência comportamental: o `--report` também informa
@@ -663,16 +664,16 @@ continuam sendo a evidência necessária para registrá-lo como suportado.
 |---|---|---|---:|---|---|---|
 | 1 | `7z_x64.exe` | PE32+ x86-64 | 133/133 (100%) | `supported` | `ExitProcess 0` `7-Zip 24.08 banner` | `src/loader/module.cpp:400` `DosDateTimeToFileTime` já coberto |
 | 2 | `7zFM_x64.exe` | PE32+ x86-64 | 298/298 (100%) | `supported` | `ExitProcess 0` | delay `MPR.dll 6/6` |
-| 3 | `7z.dll` | PE32+ DLL x86-64 | 86/86 (100%) | `supported` | `n/a` (DLL) | **Fase 13.A**: `USER32!CharPrevExA` `src/runtime/user32.cpp:2314` + `KERNEL32!DosDateTimeToFileTime` `src/runtime/kernel32.cpp:5441` `winapi.hpp:928,1478` fecharam `84/86→86/86` |
+| 3 | `7z.dll` | PE32+ DLL x86-64 | 86/86 (100%) | `imports-resolved` | `not-attempted` (DLL) | **Fase 13.A**: imports resolvidos; a DLL não foi executada como aplicação independente |
 | 4 | `putty_x64.exe` | PE32+ x86-64 | 348/348 (100%) | `supported` | `ExitProcess 1` (sem args) | FLS 0/1 ok |
 | 5 | `WinRAR_x64.exe` `winrar-x64-723.exe` | PE32+ x86-64 | 251/251 (100%) | `supported` | `ExitProcess 0` `sfxcmd` env | delay `GDI32/ADVAPI32/SHELL32/ole32` |
 | 6 | `Rufus_x64.exe` | PE32+ x86-64 | 14/14 (100%) | `supported` | `ExitProcess 56832` | `UPX0` possui 3 seções marcadas `rwx`; o loader aplica W^X e mapeia a combinação como `RW`, sem página `RWX` |
 | 7 | `HWiNFO64.exe` | PE32+ x86-64 | 28/28 (100%) | `supported` | `ExitProcess 44544 (0xAE00 → shell 0)` | **Fase 13.B**: imports fechados `20/28→28/28`; `OpenPrinterW` resolve o import, mas a operação de impressão retorna `ERROR_NOT_SUPPORTED` de forma controlada |
-| 8 | `RobloxPlayerInstaller.exe` | PE32+ x86-64 | 430/430 (100%) | `supported` | `RBXCRASH FatalRuntimeError Worker,28` `ExitProcess 3` (antes `SIGSEGV 0x68 rva 0x39ab exit 71`) | **Fase 13.D**: `TLS slot 0x430==NULL` → `mov 0x68(%rax)` fault (`objdump 0x1400039ab`). Fix `src/runtime/winapi.cpp:751` `*TLS(0x430)=base+0xc2c800` (objeto `.data` já mapeado) após `invoke_thread_tls_callbacks` |
-| 9 | `Rockstar-Games-Launcher.exe` | PE32+ x86-64 | 338/338 (100%) | `supported` | `ExitProcess 3` | delay `SHELL32/ole32/gdiplus` etc. |
+| 8 | `RobloxPlayerInstaller.exe` | PE32+ x86-64 | 430/430 (100%) | `execution-failed` | `RBXCRASH FatalRuntimeError Worker,28` `ExitProcess 3` (antes `SIGSEGV 0x68 rva 0x39ab exit 71`) | **Fase 13.D**: imports resolvidos, mas o fluxo ainda não conclui com sucesso; o slot TLS específico continua sendo benchmark, não suporte declarado |
+| 9 | `Rockstar-Games-Launcher.exe` | PE32+ x86-64 | 338/338 (100%) | `execution-failed` | `ExitProcess 3` | imports resolvidos; fluxo principal ainda não validado como concluído |
 | 10 | `Logitech_GHUB_x64.exe` `lghub_installer.exe` | PE32+ x86-64 | 114/114 (100%) | `supported` | `ExitProcess 1` |  |
-| 11 | `notepad++.exe` | PE32+ x86-64 | 584/584 (100%) | `supported` | `GuestTimeout 72` (GUI `GetMessageW` bloqueado sem `Xvfb`) | precisa `Xvfb :99` `docs/arquitetura/gui-x11.md` |
-| 12 | `RTSSHooks64.dll` | PE32+ DLL x86-64 | 256/256 (100%) | `supported` | `not-attempted` (DLL) | **Fase 13.RTSS**: imports resolvidos para análise; `CreateRemoteThread` e `WriteProcessMemory` agora falham com `ERROR_NOT_SUPPORTED` (sem fingir execução remota). O restante inclui `GDI32 ...`, `USER32 ...`, `KERNEL32 ...`, `SHLWAPI ...`, `WINMM ...`, `SETUPAPI 7` e `delay DirectX 11`; os stubs DirectX retornam `E_FAIL/S_OK` controlados |
+| 11 | `notepad++.exe` | PE32+ x86-64 | 584/584 (100%) | `execution-failed` | `GuestTimeout 72` (GUI `GetMessageW` bloqueado sem `Xvfb`) | precisa `Xvfb :99` `docs/arquitetura/gui-x11.md` |
+| 12 | `RTSSHooks64.dll` | PE32+ DLL x86-64 | 256/256 (100%) | `imports-resolved` | `not-attempted` (DLL) | **Fase 13.RTSS**: imports resolvidos para análise; `CreateRemoteThread` e `WriteProcessMemory` agora falham com `ERROR_NOT_SUPPORTED` (sem fingir execução remota). O restante inclui `GDI32 ...`, `USER32 ...`, `KERNEL32 ...`, `SHLWAPI ...`, `WINMM ...`, `SETUPAPI 7` e `delay DirectX 11`; os stubs DirectX retornam `E_FAIL/S_OK` controlados |
 | 13 | `Affinity x64.msix` | Zip/MSIX | — | `package-recognized` | `not-attempted` | `App/Affinity.exe` é `Mono/.Net entry 0x0 0 imports` — `.NET` fora de escopo `PROJETO.md:22`; `src/package/msix.cpp` lista `App/Affinity.exe` |
 | 14 | `*_x64_Installer.exe` `CapCut/Epic/Creative/Everything/RTSS.exe` | PE32 (x86) | — | `unsupported-architecture` `0x14c` `exit 5` | `parse-failed status="unsupported-architecture"` `src/pe/pe_reader.cpp:685` |
 

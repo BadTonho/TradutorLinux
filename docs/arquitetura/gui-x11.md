@@ -40,6 +40,12 @@ numa sessão X11 sem interação humana. O ambiente precisa fornecer `DISPLAY`
 acessível. O display X11 do processo é fechado no teardown (`DisplayCloser` em
 `src/gui/x11.cpp`), de modo que o runtime não deixa conexão aberta ao sair.
 
+Menus popup são modais, mas não ficam bloqueados indefinidamente: o backend
+usa `TL_GUI_POPUP_TIMEOUT_MS` para definir o limite, com padrão de 30 segundos
+e máximo de 10 minutos. Valor ausente, zero ou inválido usa o padrão. Escape,
+clique fora do menu, destruição da janela e timeout liberam os grabs e fecham o
+popup; o timeout é registrado no trace `gui`.
+
 ## `MessageBoxA`
 
 `USER32.dll!MessageBoxA` aceita `hWnd == NULL`, texto e título ANSI, e somente
@@ -82,7 +88,7 @@ só emite `WM_CHAR` quando o `WM_KEYDOWN` tinha caractere real.
 é invocado pela convenção Microsoft x64 (`TL_MSABI`) a partir do endereço lido
 na classe; como o hospedeiro já executa sobre a pilha convidada quando o
 convidado chama as APIs hospedeiras, essa fronteira host→convidado não precisa
-de trampolim de pilha (`call_wndproc` em `src/runtime/winapi.cpp`).
+de trampolim de pilha (`call_wndproc` em `src/runtime/dlls/user32/user32_internal.hpp`).
 
 `Expose` não desenha conteúdo diretamente: o driver X11 apenas enfileira o
 evento `Redraw`. O runtime repinta o client area completo antes de entregar o
@@ -187,8 +193,9 @@ O Simple Todo C usa controles Win32 que não precisam virar janelas X11
 individuais. `CreateWindowExA` cria tokens filhos em uma side-table ligada à
 janela principal; `MoveWindow`, `ShowWindow`, `EnableWindow`, foco e
 `Get/SetWindowTextA` atualizam esse estado. O estado e o renderer dos controles
-ficam isolados em `src/runtime/gui_controls.cpp`; `winapi.cpp` mantém apenas a
-ponte das APIs Win32 e o despacho de eventos. O renderer hospedeiro desenha o
+ficam isolados em `src/runtime/gui_controls.cpp`; os módulos em
+`src/runtime/dlls/user32/` mantêm as pontes das APIs Win32 e o despacho de
+eventos. O renderer hospedeiro desenha o
 subconjunto exercitado pelo alvo: `EDIT`, `BUTTON`, `COMBOBOX`, `STATIC` e
 `SysListView32`.
 
@@ -206,6 +213,13 @@ na janela X11 gera `WM_USER + 1` com `WM_RBUTTONUP`; `CreatePopupMenu`,
 fica mapeada enquanto sua visibilidade Win32 é falsa para que o surrogate da
 bandeja permaneça acionável. Isso é deliberadamente uma emulação de teste, não
 uma integração com o tray do desktop.
+
+`GetMenuItemInfoW` exige um buffer válido, mas retorna `ERROR_NOT_SUPPORTED`
+porque o catálogo sintético ainda não representa itens reais. As operações
+de mutação de itens (`SetMenuItemInfoW`, `InsertMenuItemW`, `RemoveMenu`,
+`EnableMenuItem`, `CheckMenuItem` e `CheckMenuRadioItem`) e
+`TrackPopupMenuEx` também falham explicitamente como stubs; o relatório os
+classifica como `stub`.
 
 O alvo Simple Todo recebe um overlay Linux versionado em
 `tests/targets/patches/`: a opção de inicialização com Windows é removida e o

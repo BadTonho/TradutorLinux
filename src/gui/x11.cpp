@@ -8,12 +8,15 @@
 
 #include <algorithm>
 #include <array>
+#include <cerrno>
 #include <chrono>
 #include <cstdlib>
 #include <cstring>
 #include <deque>
 #include <iostream>
+#include <limits>
 #include <mutex>
+#include <poll.h>
 #include <string>
 #include <thread>
 
@@ -70,6 +73,18 @@ struct TextState {
     XFontStruct* bold_font{nullptr};
 };
 
+struct CachedColor {
+    Display* display{nullptr};
+    int screen{0};
+    std::uint32_t rgb{0};
+    unsigned long pixel{0};
+    bool allocated{false};
+};
+
+constexpr std::size_t kMaxCachedColors = 256;
+std::array<CachedColor, kMaxCachedColors> g_cached_colors{};
+std::mutex g_color_mutex;
+
 FillState& fill_state(Display* const dpy, const int screen) {
     static FillState state;
     static std::once_flag initialized;
@@ -117,15 +132,71 @@ TextState& text_state(Display* const dpy, const int screen) {
 
 [[nodiscard]] unsigned long pixel_for_rgb(Display* const dpy, const int screen,
                                            const std::uint32_t rgb) noexcept {
+    std::lock_guard lock(g_color_mutex);
+    for (const CachedColor& cached : g_cached_colors) {
+        if (cached.allocated && cached.display == dpy && cached.screen == screen &&
+            cached.rgb == rgb) {
+            return cached.pixel;
+        }
+    }
+
+    CachedColor* free_slot = nullptr;
+    for (CachedColor& cached : g_cached_colors) {
+        if (!cached.allocated) {
+            free_slot = &cached;
+            break;
+        }
+    }
+    // Keep drawing bounded if a guest cycles through more colors than the
+    // fixed cache can retain. Returning black is preferable to leaking an
+    // untracked X11 colormap allocation.
+    if (free_slot == nullptr) {
+        return BlackPixel(dpy, screen);
+    }
+
     XColor color{};
     color.flags = DoRed | DoGreen | DoBlue;
     color.red = static_cast<unsigned short>(((rgb >> 16U) & 0xFFU) * 257U);
     color.green = static_cast<unsigned short>(((rgb >> 8U) & 0xFFU) * 257U);
     color.blue = static_cast<unsigned short>((rgb & 0xFFU) * 257U);
     if (XAllocColor(dpy, DefaultColormap(dpy, screen), &color)) {
+        free_slot->display = dpy;
+        free_slot->screen = screen;
+        free_slot->rgb = rgb;
+        free_slot->pixel = color.pixel;
+        free_slot->allocated = true;
         return color.pixel;
     }
     return BlackPixel(dpy, screen);
+}
+
+void release_cached_colors(Display* const dpy) noexcept {
+    std::lock_guard lock(g_color_mutex);
+    for (CachedColor& cached : g_cached_colors) {
+        if (!cached.allocated || cached.display != dpy) {
+            continue;
+        }
+        unsigned long pixel = cached.pixel;
+        XFreeColors(dpy, DefaultColormap(dpy, cached.screen), &pixel, 1, 0);
+        cached = {};
+    }
+}
+
+constexpr std::uint64_t kDefaultPopupTimeoutMs = 30000;
+constexpr std::uint64_t kMaxPopupTimeoutMs = 10ULL * 60ULL * 1000ULL;
+
+[[nodiscard]] std::uint64_t popup_timeout_ms() noexcept {
+    const char* const raw_value = std::getenv("TL_GUI_POPUP_TIMEOUT_MS");
+    if (raw_value == nullptr || *raw_value == '\0' || *raw_value == '-') {
+        return kDefaultPopupTimeoutMs;
+    }
+    errno = 0;
+    char* end = nullptr;
+    const unsigned long long parsed = std::strtoull(raw_value, &end, 10);
+    if (errno == ERANGE || end == raw_value || end == nullptr || *end != '\0' || parsed == 0) {
+        return kDefaultPopupTimeoutMs;
+    }
+    return std::min<std::uint64_t>(static_cast<std::uint64_t>(parsed), kMaxPopupTimeoutMs);
 }
 
 class DisplayCloser {
@@ -133,6 +204,7 @@ public:
     explicit DisplayCloser(Display* const dpy) noexcept : dpy_(dpy) {}
     ~DisplayCloser() {
         if (dpy_ != nullptr) {
+            release_cached_colors(dpy_);
             XCloseDisplay(dpy_);
         }
     }
@@ -557,7 +629,44 @@ std::uint32_t track_popup_menu(const std::vector<PopupMenuItem>& items, int x, i
         XGrabKeyboard(dpy, menu, True, GrabModeAsync, GrabModeAsync, CurrentTime) == GrabSuccess;
     std::uint32_t result = 0;
     bool done = false;
+    bool timed_out = false;
+    const std::uint64_t timeout_ms = popup_timeout_ms();
+    const auto deadline = std::chrono::steady_clock::now() +
+                          std::chrono::milliseconds(timeout_ms);
     while (!done) {
+        if (std::chrono::steady_clock::now() >= deadline) {
+            timed_out = true;
+            break;
+        }
+        if (XPending(dpy) == 0) {
+            const auto now = std::chrono::steady_clock::now();
+            const auto remaining = std::chrono::duration_cast<std::chrono::milliseconds>(deadline - now);
+            if (remaining.count() <= 0) {
+                timed_out = true;
+                break;
+            }
+            struct pollfd descriptor {
+                ConnectionNumber(dpy), POLLIN, 0
+            };
+            const auto max_poll_timeout = std::chrono::milliseconds(
+                std::numeric_limits<int>::max());
+            const int poll_timeout = static_cast<int>(std::min(remaining, max_poll_timeout).count());
+            int poll_result = 0;
+            do {
+                poll_result = ::poll(&descriptor, 1, poll_timeout);
+            } while (poll_result < 0 && errno == EINTR);
+            if (poll_result == 0) {
+                timed_out = true;
+                break;
+            }
+            if (poll_result < 0 ||
+                (descriptor.revents & (POLLERR | POLLHUP | POLLNVAL)) != 0) {
+                break;
+            }
+            if (XPending(dpy) == 0) {
+                continue;
+            }
+        }
         XEvent event{};
         XNextEvent(dpy, &event);
         if (event.type == Expose) {
@@ -596,6 +705,16 @@ std::uint32_t track_popup_menu(const std::vector<PopupMenuItem>& items, int x, i
             }
         } else if (event.type == DestroyNotify && event.xdestroywindow.window == menu) {
             done = true;
+        }
+    }
+    if (timed_out) {
+        try {
+            const std::array fields{diagnostics::TraceField{"status", "timeout"},
+                                    diagnostics::TraceField{"timeout-ms", std::to_string(timeout_ms)}};
+            write_gui_trace(diagnostics::TraceLevel::Info, "popup", fields);
+        } catch (...) {
+            // O caminho de timeout ainda precisa liberar grabs e destruir a
+            // janela X11 se a alocacao do diagnostico falhar.
         }
     }
     if (keyboard_grabbed) {

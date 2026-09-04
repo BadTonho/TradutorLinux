@@ -701,7 +701,7 @@ nem declarar os benchmarks comerciais suportados.
 
 #### Fase 13.13 — Portfólio Aplicativos_Windows_Populares (2026-08-31 — ciclo A→D→B)
 
-- [x] `7z.dll` `84/86→86/86` `USER32!CharPrevExA` `src/runtime/user32.cpp:2314` + `KERNEL32!DosDateTimeToFileTime` `src/runtime/kernel32.cpp:5441` `winapi.hpp:928` `module.cpp:400,308` — `--report 100%` `docs/compatibilidade.md:660`
+- [x] `7z.dll` `84/86→86/86` `USER32!CharPrevExA` + `KERNEL32!DosDateTimeToFileTime` — marco histórico; referências atuais ficam nos módulos em `src/runtime/dlls/` e no relatório em `src/cli/report.cpp`.
 - [x] `HWiNFO64.exe` `20/28→28/28` `GDI32!Arc` `gdi32.cpp:1109` `SHLWAPI!PathIsUNCW` `shlwapi.cpp:328` + `MSIMG32!AlphaBlend` `NETAPI32!NetApiBufferFree` `OLEACC!LresultFromObject` `tdh!TdhGetPropertySize` `WINSPOOL.DRV!OpenPrinterW` `WTSAPI32!WTSFreeMemory` `winapi.cpp:782` `winapi.hpp:2072` — exec `ExitProcess 44544`
 - [x] `RTSSHooks64.dll` `205/256→256/256` `GDI32 5` `USER32 7` `KERNEL32 16` `SHLWAPI 4` `WINMM 1` `SETUPAPI 7` + `delay DirectX 11` `winapi.cpp:782` `gdi32.cpp:1109` `user32.cpp:3769` `shlwapi.cpp:328` `winmm.cpp:70` `winapi.hpp:2072` — stubs `E_FAIL/S_OK` `module.cpp:1412,1545`
 - [x] `RobloxPlayerInstaller.exe` `SIGSEGV 0x68 rva 0x39ab exit 71 → RBXCRASH Worker,28 exit 3` — `TLS slot 0x430==NULL` `objdump 0x1400039ab` `teb.hpp:92` `pe_reader.cpp:685` `template 0x88c rva 0xb6a520` `winapi.cpp:751` `*TLS(0x430)=base+0xc2c800` após `invoke_thread_tls_callbacks`
@@ -751,7 +751,9 @@ quantidade de APIs declaradas sem uso real.
 - [x] Coletar imports de muitos aplicativos e priorizar APIs que aparecem em vários alvos (`Roblox` `430` imports, `gdiplus` `8/8`, `SHELL32` `5/5`).
 - [x] Implementar famílias de DLLs por demanda: `KERNEL32`, `NTDLL` limitada, `ADVAPI32`, `USER32`, `GDI32`, `SHELL32`, `OLE32`, `COMDLG32`, `WS2_32`, `WININET`, `WINTRUST`, `CRYPT32` e CRTs (23 módulos `tests/test_module.cpp:87`).
 - [x] Criar testes de integração por aplicativo e uma matriz pública de limitações (`docs/compatibilidade.md` + `tests/samples` 36 fixtures).
-- [x] Adicionar execução isolada, timeout, limites de recursos e diagnóstico para que aplicativos grandes não derrubem o host (`process/isolate.cpp` `71`/`72`).
+- [x] Adicionar execução isolada, timeout e diagnóstico para que aplicativos grandes não derrubem o host (`process/isolate.cpp` `71`/`72`).
+- [ ] Definir e implementar limites efetivos de CPU/RAM por aplicativo; o
+  isolamento de processo e o timeout não equivalem a contenção de recursos.
 - [ ] Avaliar compatibilidade por versões e builds específicos, sem assumir que duas versões do mesmo aplicativo usam as mesmas APIs.
 
 ### Etapas para aplicativos grandes

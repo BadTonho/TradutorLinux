@@ -90,7 +90,7 @@ certificados, SAN, Authenticode e cadeia permanecem fora do contrato; a fixture
 
 `RtlCaptureContext` não pode ser expresso como uma chamada C++ comum: ela
 precisa observar RIP/RSP e os registradores no ponto exato da chamada do
-convidado. Por isso `src/runtime/unwind_capture.S` é uma entrada Microsoft x64
+convidado. Por isso `src/runtime/seh/unwind_capture.S` é uma entrada Microsoft x64
 sem prólogo; ela recebe `CONTEXT*` em `RCX`, preserva a fotografia dos
 registradores do chamador e grava RIP/RSP, flags, MXCSR e XMM0–XMM15 no layout
 de `ContextAmd64`. Os offsets e o tamanho (1232 bytes) têm `static_assert` no
@@ -98,7 +98,7 @@ cabeçalho. O restante do núcleo de unwinding volta imediatamente ao C++
 `noexcept`; nenhum mecanismo C++ de exceção atravessa essa fronteira. Ver
 também [unwinding-x64.md](unwinding-x64.md).
 
-`src/runtime/seh.S` aplica a mesma regra para `RaiseException` e `RtlUnwind`:
+`src/runtime/seh/seh.S` aplica a mesma regra para `RaiseException` e `RtlUnwind`:
 captura o frame Microsoft x64 do chamador antes de entrar em C++ e entrega a
 fotografia ao despachante. O trampolim inverso restaura GPRs, XMM0–XMM15,
 MXCSR, RSP, RIP e RAX a partir de `CONTEXT` e nunca retorna ao hospedeiro.

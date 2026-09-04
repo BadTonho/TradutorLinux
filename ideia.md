@@ -36,26 +36,26 @@ Exemplo desejado:
 
 ### Isolamento recomendado
 
-O guest atualmente roda no mesmo processo Linux do runtime. Por isso, um
-`SIGSEGV` inesperado pode encerrar o processo hospedeiro inteiro.
+Historicamente o guest rodava no mesmo processo Linux do runtime. O fluxo atual
+prepara o guest e o executa em um processo filho; assim, um `SIGSEGV` inesperado
+é classificado pelo processo principal sem derrubar o launcher.
 
-A solução robusta para capturar falhas fatais é executar o guest em um processo
-filho. O processo principal deve preparar o PE, iniciar o guest no filho,
-esperar com `waitpid()`, distinguir saída normal de término por sinal e publicar
-um diagnóstico controlado em `stderr`.
+A solução implementada prepara o PE, inicia o guest no filho, espera com
+`waitpid()`, distingue saída normal de término por sinal e publica um
+diagnóstico controlado em `stderr`.
 
 Não devemos usar `signal()` para tratamento geral. Um handler de sinal não pode
 executar livremente C++, alocar memória ou escrever logs complexos. O isolamento
-em processo filho deve ser uma fase própria do roadmap, posterior ao protótipo
-GUI da Fase 7.
+em processo filho é o marco M8 já implementado; a expansão de limites de
+recursos continua sendo uma decisão futura.
 
 ### Ordem de implementação
 
 1. Consolidar categorias e códigos para falhas já controladas.
 2. Registrar `errno` e a operação nas APIs Linux relevantes.
 3. Adicionar testes para falhas de ponteiro, arquivo, memória e imports.
-4. Avaliar a execução em processo filho antes de prometer recuperação de
-   `SIGSEGV`, `SIGILL` ou `SIGBUS`.
+4. Definir limites de CPU/RAM e observabilidade antes de prometer contenção de
+   consumo; o isolamento em processo filho e o timeout já existem.
 
 ### Status
 

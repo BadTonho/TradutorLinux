@@ -168,9 +168,12 @@ TL_MSABI std::intptr_t tl_DialogBoxParamW(const void* const instance,
                                            const void* const parent,
                                            const std::uintptr_t dialog_proc,
                                            const abi::Lparam init_param) noexcept {
-    if (g_active_dialog != nullptr) {
-        set_last_error(abi::kErrorNotSupported);
-        return -1;
+    {
+        std::lock_guard lock(g_modal_mutex);
+        if (g_active_dialog != nullptr) {
+            set_last_error(abi::kErrorNotSupported);
+            return -1;
+        }
     }
     if ((instance != nullptr && reinterpret_cast<std::uintptr_t>(instance) != 0x1000U &&
          reinterpret_cast<std::uintptr_t>(instance) !=

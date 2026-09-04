@@ -2,9 +2,10 @@
 
 Data da revisão: 2026-09-04
 
-Este arquivo reúne somente as pendências que ainda exigem decisão, código,
-teste ou atualização documental. Os achados encerrados ficam registrados no
-final para não serem reabertos por análises antigas.
+Este arquivo reúne as pendências que ainda exigem decisão, código, teste ou
+atualização documental, além das correções aplicadas nesta rodada que aguardam
+validação no ambiente Linux. Os achados encerrados ficam registrados no final
+para não serem reabertos por análises antigas.
 
 O `ROADMAP.md` continua sendo a fonte de verdade para a fase do projeto. Esta
 lista é o backlog consolidado da auditoria técnica e documental. Nenhuma
@@ -15,28 +16,23 @@ implementação, regressão e evidência no aplicativo-alvo correspondente.
 
 ### P0 — segurança, estado e robustez
 
-#### P0.1 — Relatório ainda classifica APIs remotas como `full`
+#### P0.1 — Relatório das APIs remotas (corrigido nesta rodada)
 
-`CreateRemoteThread` e `WriteProcessMemory` já falham com
-`ERROR_NOT_SUPPORTED`, mas continuam com o valor padrão `ExportSupport::Full`
-em `src/runtime/dlls/kernel32/module.cpp`. Assim, o `--report` pode afirmar
-`runtime-support: full` para uma API que deliberadamente não executa sua
-operação.
+`CreateRemoteThread` e `WriteProcessMemory` continuam falhando de forma
+controlada com `ERROR_NOT_SUPPORTED`, e agora estão marcadas como
+`ExportSupport::Stub` em `src/runtime/dlls/kernel32/module.cpp`. O `--report`
+e os testes de registro não devem mais classificá-las como `full`.
 
-Critérios de conclusão:
-
-- marcar as duas exports como `ExportSupport::Stub`;
-- adicionar uma regressão do relatório para confirmar `support=stub` e
-  `runtime-support: stub`;
-- revisar outras exports que retornam sucesso sintético e classificá-las como
-  `Limited` ou `Stub` conforme o comportamento real.
+Critério atendido para as duas exports: o registro e a regressão em
+`tests/test_module.cpp` confirmam `support=stub`. A revisão sistemática de
+outras exports que retornam sucesso sintético permanece coberta pela P2.5.
 
 #### P0.2 — Estado modal e tabelas de USER32 ainda não têm contrato de concorrência
 
-`src/runtime/dlls/user32/dialog.cpp` protege grande parte de `g_modal_*`, mas
-`g_active_dialog` ainda é lido sem `g_modal_mutex` no início de
-`tl_DialogBoxParamW`. A tabela global `g_windows` também não possui uma
-política única de sincronização.
+`src/runtime/dlls/user32/dialog.cpp` agora protege a leitura inicial de
+`g_active_dialog` e as demais transições de `g_modal_*` com `g_modal_mutex`.
+A tabela global `g_windows`, o foco e as filas ainda não possuem uma política
+única de sincronização.
 
 Critérios de conclusão:
 
@@ -47,37 +43,32 @@ Critérios de conclusão:
 - cobrir entrada concorrente, encerramento modal e postagem de mensagens com
   teste de regressão e, quando disponível, ThreadSanitizer.
 
-#### P0.3 — Inspeção MSIX ainda pode consumir memória excessiva
+#### P0.3 — Inspeção MSIX (parcialmente corrigida nesta rodada)
 
-`src/package/msix.cpp` limita o arquivo a 2 GiB e valida vários limites ZIP,
-mas ainda pode alocar um manifesto armazenado próximo desse limite. A função
-também não limita explicitamente quantidade de entradas ou tamanho do
-manifesto, não trata todos os data descriptors/central directory e usa parser
-XML por substring.
+`src/package/msix.cpp` agora limita o manifesto a 16 MiB, impõe limites de
+entradas, nomes e tamanho descompactado acumulado, rejeita traversal, data
+descriptors não tratados, tamanhos inconsistentes e captura `bad_alloc`. O
+inspector ainda não descompacta manifesto DEFLATE nem usa um parser XML
+estrutural; essas limitações continuam abertas em P1/P2.
 
-Critérios de conclusão:
+O núcleo de validação de limites e falhas de alocação foi implementado nesta
+rodada, com regressões para truncamento, manifesto acima do limite, path
+traversal e excesso de entradas. Resta a decisão sobre aceitar DEFLATE/central
+directory; o parser XML estrutural continua em P2.2.
 
-- estabelecer limites independentes para manifesto, entrada, número de entradas
-  e tamanho total descompactado;
-- rejeitar a entrada antes de qualquer alocação que ultrapasse esses limites;
-- tratar ou rejeitar explicitamente central directory, data descriptor,
-  compressão e caminhos inválidos;
-- garantir que `bad_alloc` não atravesse a fronteira do inspector;
-- adicionar fixtures para truncamento, campos inconsistentes, manifesto grande,
-  muitos arquivos e path traversal.
+#### P0.4 — Popup X11 (cancelamento temporal implementado; falta validar)
 
-#### P0.4 — Popup X11 não possui cancelamento temporal
-
-`src/gui/x11.cpp::track_popup_menu` já trata Escape, `DestroyNotify` e clique
-fora do menu, mas ainda bloqueia indefinidamente em `XNextEvent` quando nenhum
-evento chega. Isso é aceitável somente se o contrato for explicitamente
-modal e sem timeout; para execução automatizada e encerramento controlado,
-falta uma política de cancelamento.
+`src/gui/x11.cpp::track_popup_menu` agora trata Escape, `DestroyNotify`, clique
+fora do menu e timeout configurável por `TL_GUI_POPUP_TIMEOUT_MS` (30 segundos
+por padrão, no máximo 10 minutos). A implementação libera grabs e destrói a
+janela também no timeout. Continua pendente a validação de integração sob Xvfb
+para todos os caminhos de encerramento.
 
 Critérios de conclusão:
 
-- escolher timeout configurável, cancelamento por evento ou API não bloqueante;
-- garantir liberação de grabs e da janela em todos os caminhos;
+- validar o timeout configurável, o cancelamento por evento e a API não
+  bloqueante sob Xvfb;
+- manter a garantia de liberação de grabs e da janela em todos os caminhos;
 - adicionar teste sob Xvfb para Escape, clique externo, timeout e destruição.
 
 ### P1 — compatibilidade e decisões de arquitetura
@@ -145,17 +136,16 @@ Critérios de conclusão:
 
 ### P2 — manutenção, testes e melhorias futuras
 
-#### P2.1 — Vazamento de cores no X11
+#### P2.1 — Vazamento de cores no X11 (corrigido nesta rodada; falta validar)
 
-`XAllocColor` é chamado por `pixel_for_rgb` em operações de desenho e os
-pixels não são liberados com `XFreeColors`. O estado dos brushes pode ser
-mantido até o fechamento do display, mas cores alocadas por desenho repetido
-podem consumir recursos do colormap.
+`pixel_for_rgb` agora reutiliza um cache fixo de 256 cores e libera as
+alocações rastreadas com `XFreeColors` antes de fechar o display. O estado dos
+brushes permanece limitado ao ciclo de vida do display. Continua pendente a
+validação sob Xvfb com desenho repetido e LeakSanitizer.
 
 Critérios de conclusão:
 
-- reutilizar/cachear cores ou liberar cada alocação com ciclo de vida definido;
-- adicionar validação sob Xvfb com desenho repetido e ASAN/LeakSanitizer.
+- executar validação sob Xvfb com desenho repetido e ASAN/LeakSanitizer.
 
 #### P2.2 — Parser XML do MSIX precisa de parser estrutural
 
@@ -193,6 +183,11 @@ Critérios de conclusão:
 Há testes que aceitam tokens sintéticos e retornos de sucesso para APIs sem
 semântica real, como a cobertura de menus. Isso pode mascarar regressões e
 contradiz a política de falha controlada.
+
+Nesta rodada, as APIs de menu sem implementação real foram classificadas como
+`Stub`, passaram a retornar `ERROR_NOT_SUPPORTED` (ou parâmetro inválido) e a
+regressão em `tests/test_win32.cpp` verifica esses retornos. Ainda falta
+revisar as demais famílias de stubs.
 
 Critérios de conclusão:
 
