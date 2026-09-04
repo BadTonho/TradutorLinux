@@ -11,6 +11,7 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
 find_package(Qt6 REQUIRED COMPONENTS Widgets)
+find_package(ZLIB REQUIRED)
 
 option(TL_ENABLE_SANITIZERS "Enable AddressSanitizer and UndefinedBehaviorSanitizer" OFF)
 option(TL_BUILD_SAMPLES "Build PE32+ integration fixtures" ON)

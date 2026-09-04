@@ -27,10 +27,12 @@
 #include <fstream>
 #include <limits>
 #include <string>
+#include <string_view>
 #include <thread>
 #include <vector>
 
 #include <gtest/gtest.h>
+#include <zlib.h>
 #include <unistd.h>
 #include <sys/stat.h>
 
@@ -45,6 +47,94 @@ void append_u16(std::vector<std::byte>& bytes, const std::uint16_t value) {
 void append_u32(std::vector<std::byte>& bytes, const std::uint32_t value) {
     append_u16(bytes, static_cast<std::uint16_t>(value & 0xFFFFU));
     append_u16(bytes, static_cast<std::uint16_t>(value >> 16U));
+}
+
+void append_bytes(std::vector<std::byte>& bytes, const std::string_view value) {
+    const auto* const begin = reinterpret_cast<const std::byte*>(value.data());
+    bytes.insert(bytes.end(), begin, begin + value.size());
+}
+
+std::vector<std::byte> raw_deflate(const std::string_view input) {
+    z_stream stream{};
+    if (deflateInit2(&stream, Z_DEFAULT_COMPRESSION, Z_DEFLATED, -MAX_WBITS, 8,
+                     Z_DEFAULT_STRATEGY) != Z_OK) {
+        return {};
+    }
+    std::vector<std::byte> compressed(compressBound(static_cast<uLong>(input.size())));
+    stream.next_in = reinterpret_cast<Bytef*>(const_cast<char*>(input.data()));
+    stream.avail_in = static_cast<uInt>(input.size());
+    stream.next_out = reinterpret_cast<Bytef*>(compressed.data());
+    stream.avail_out = static_cast<uInt>(compressed.size());
+    const int result = deflate(&stream, Z_FINISH);
+    const bool valid = result == Z_STREAM_END;
+    const std::size_t written = static_cast<std::size_t>(stream.total_out);
+    deflateEnd(&stream);
+    if (!valid) return {};
+    compressed.resize(written);
+    return compressed;
+}
+
+bool write_deflated_msix(const std::filesystem::path& path, const std::string_view manifest) {
+    const std::string filename = "AppxManifest.xml";
+    const std::vector<std::byte> compressed = raw_deflate(manifest);
+    if (compressed.empty()) return false;
+    const std::uint32_t checksum = static_cast<std::uint32_t>(
+        crc32(crc32(0L, Z_NULL, 0), reinterpret_cast<const Bytef*>(manifest.data()),
+              static_cast<uInt>(manifest.size())));
+    std::vector<std::byte> bytes;
+    append_u32(bytes, 0x04034B50U);  // local file header
+    append_u16(bytes, 20);
+    append_u16(bytes, 0x0008U);  // data descriptor follows the payload
+    append_u16(bytes, 8);       // DEFLATE
+    append_u16(bytes, 0);
+    append_u16(bytes, 0);
+    append_u32(bytes, 0);
+    append_u32(bytes, 0);
+    append_u32(bytes, 0);
+    append_u16(bytes, static_cast<std::uint16_t>(filename.size()));
+    append_u16(bytes, 0);
+    append_bytes(bytes, filename);
+    bytes.insert(bytes.end(), compressed.begin(), compressed.end());
+    append_u32(bytes, 0x08074B50U);  // data descriptor signature
+    append_u32(bytes, checksum);
+    append_u32(bytes, static_cast<std::uint32_t>(compressed.size()));
+    append_u32(bytes, static_cast<std::uint32_t>(manifest.size()));
+
+    const std::uint32_t central_offset = static_cast<std::uint32_t>(bytes.size());
+    append_u32(bytes, 0x02014B50U);  // central directory header
+    append_u16(bytes, 20);
+    append_u16(bytes, 20);
+    append_u16(bytes, 0x0008U);
+    append_u16(bytes, 8);
+    append_u16(bytes, 0);
+    append_u16(bytes, 0);
+    append_u32(bytes, checksum);
+    append_u32(bytes, static_cast<std::uint32_t>(compressed.size()));
+    append_u32(bytes, static_cast<std::uint32_t>(manifest.size()));
+    append_u16(bytes, static_cast<std::uint16_t>(filename.size()));
+    append_u16(bytes, 0);
+    append_u16(bytes, 0);
+    append_u16(bytes, 0);
+    append_u16(bytes, 0);
+    append_u32(bytes, 0);
+    append_u32(bytes, 0);
+    append_bytes(bytes, filename);
+
+    const std::uint32_t central_size = static_cast<std::uint32_t>(bytes.size()) - central_offset;
+    append_u32(bytes, 0x06054B50U);  // end of central directory
+    append_u16(bytes, 0);
+    append_u16(bytes, 0);
+    append_u16(bytes, 1);
+    append_u16(bytes, 1);
+    append_u32(bytes, central_size);
+    append_u32(bytes, central_offset);
+    append_u16(bytes, 0);
+
+    std::ofstream output(path, std::ios::binary | std::ios::trunc);
+    if (!output) return false;
+    output.write(reinterpret_cast<const char*>(bytes.data()),
+                 static_cast<std::streamsize>(bytes.size()));
+    return static_cast<bool>(output);
 }
 
 std::vector<std::byte> valid_dialog_template() {
@@ -408,6 +498,54 @@ TEST(MsixParserTest, ParseManifestXml) {
     EXPECT_EQ(info->applications[0].executable, "App\\Photo.exe");
     EXPECT_EQ(info->applications[0].display_name, "Affinity Photo 2");
     EXPECT_EQ(info->main_executable.value_or(""), "App\\Photo.exe");
+}
+
+TEST(MsixParserTest, ParsesNamespacesCommentsCdataEntitiesAndSingleQuotes) {
+    const std::string_view manifest = R"(<?xml version='1.0'?>
+<!-- <Application Id="fake" Executable="fake.exe" /> -->
+<Package xmlns='http://schemas.microsoft.com/appx/manifest/foundation/windows10'
+         xmlns:uap='http://schemas.microsoft.com/appx/manifest/uap/windows10'>
+  <Identity Version='1.2.3.4' Publisher='CN=Example &amp; Co' Name='Example.App' />
+  <Applications>
+    <Application EntryPoint='Windows.FullTrustApplication' Id='App'
+                 Executable='bin\\Example.exe'>
+      <![CDATA[<Application Id="fake-in-cdata" />]]>
+      <uap:VisualElements DisplayName='Example &amp; Tools &#x1F680;' />
+    </Application>
+  </Applications>
+</Package>)";
+
+    const auto info = package::parse_appx_manifest_xml(manifest);
+    ASSERT_TRUE(info.has_value());
+    EXPECT_EQ(info->publisher, "CN=Example & Co");
+    ASSERT_EQ(info->applications.size(), 1U);
+    EXPECT_EQ(info->applications[0].display_name, "Example & Tools \xF0\x9F\x9A\x80");
+    EXPECT_EQ(info->main_executable.value_or(""), "bin\\\\Example.exe");
+}
+
+TEST(MsixParserTest, RejectsMalformedXmlAndExternalEntityDeclarations) {
+    EXPECT_FALSE(package::parse_appx_manifest_xml(
+                     "<Package><Applications></Package>")
+                     .has_value());
+    EXPECT_FALSE(package::parse_appx_manifest_xml(
+                     "<!DOCTYPE Package SYSTEM 'file:///tmp/evil'><Package />")
+                     .has_value());
+}
+
+TEST(MsixParserTest, InspectsDeflatedManifestFromCentralDirectory) {
+    const std::filesystem::path path = "_tl_deflated.msix";
+    const std::string manifest = R"(<Package xmlns="urn:appx"><Identity Name="Deflated" Publisher="CN=Test" Version="1.0.0.0"/><Applications><Application Id="App" Executable="app.exe"><uap:VisualElements DisplayName="Deflated app"/></Application></Applications></Package>)";
+    ASSERT_TRUE(write_deflated_msix(path, manifest));
+
+    const auto info = package::inspect_msix_package(path);
+    ASSERT_TRUE(info.has_value());
+    EXPECT_EQ(info->package_name, "Deflated");
+    EXPECT_EQ(info->main_executable.value_or(""), "app.exe");
+    ASSERT_EQ(info->applications.size(), 1U);
+    EXPECT_EQ(info->applications[0].display_name, "Deflated app");
+
+    std::error_code error;
+    std::filesystem::remove(path, error);
 }
 
 TEST(MsixParserTest, RejectsTruncatedManifestWithoutLargeAllocation) {

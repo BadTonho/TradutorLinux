@@ -46,18 +46,20 @@ Critérios de conclusão:
 - cobrir a rejeição cross-thread com teste de regressão e, quando disponível,
   ThreadSanitizer.
 
-#### P0.3 — Inspeção MSIX (parcialmente corrigida nesta rodada)
+#### P0.3 — Inspeção MSIX (implementada nesta rodada; falta validar no Linux)
 
 `src/package/msix.cpp` agora limita o manifesto a 16 MiB, impõe limites de
-entradas, nomes e tamanho descompactado acumulado, rejeita traversal, data
-descriptors não tratados, tamanhos inconsistentes e captura `bad_alloc`. O
-inspector ainda não descompacta manifesto DEFLATE nem usa um parser XML
-estrutural; essas limitações continuam abertas em P1/P2.
+entradas, nomes e tamanho descompactado acumulado, rejeita traversal, entradas
+criptografadas, ZIP64 e tamanhos inconsistentes, valida CRC e captura
+`bad_alloc`. A leitura usa a central directory, aceita manifesto DEFLATE e
+data descriptors com os tamanhos autenticados pelo registro central.
 
-O núcleo de validação de limites e falhas de alocação foi implementado nesta
-rodada, com regressões para truncamento, manifesto acima do limite, path
-traversal e excesso de entradas. Resta a decisão sobre aceitar DEFLATE/central
-directory; o parser XML estrutural continua em P2.2.
+O parser XML agora valida aninhamento, comentários, CDATA, namespaces por nome
+local, aspas simples/duplas e entidades XML sem resolver DTDs ou recursos
+externos. As regressões cobrem manifesto DEFLATE em central directory, data
+descriptor, CRC, traversal, truncamento, manifesto acima do limite e excesso
+de entradas. A execução no Linux/CTest ainda é necessária para fechar a
+validação desta etapa.
 
 #### P0.4 — Popup X11 (cancelamento temporal implementado; falta validar)
 
@@ -152,12 +154,12 @@ Critérios de conclusão:
 
 - executar validação sob Xvfb com desenho repetido e ASAN/LeakSanitizer.
 
-#### P2.2 — Parser XML do MSIX precisa de parser estrutural
+#### P2.2 — Parser XML do MSIX (implementado nesta rodada; falta validar no Linux)
 
-A busca por substrings em `parse_appx_manifest_xml` não trata corretamente
-namespaces, comentários, CDATA, entidades, aspas alternativas e elementos
-aninhados. Isso deve ser resolvido junto da pendência P0.3, sem introduzir uma
-dependência grande sem decisão de escopo.
+`parse_appx_manifest_xml` deixou de buscar substrings e passou a usar um parser
+estrutural pequeno, limitado ao contrato de metadados do AppX. Ele rejeita XML
+malformado e DTDs, não busca recursos externos e decodifica apenas entidades
+XML predefinidas/númericas. A regressão estrutural aguarda CTest no Linux.
 
 #### P2.3 — Suíte de testes Win32 ainda é monolítica
 

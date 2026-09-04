@@ -192,11 +192,13 @@ Os itens marcados como concluídos devem ter evidência no repositório: código
   `tl_shell_path.exe` cobre `SHAutoComplete`, `PathIsRelativeA/W`,
   `PathCombineW`, `PathRemoveFileSpecW` e `SHELL32.dll!SHFileOperationW`.
   `--report` resolve 9/9 imports, saída `shellpath\n`, exit `0`.
-- **Marco concluído (Fase 13.13 — Suporte Estrutural e Parser de Pacotes MSIX/AppX):**
-  Adicionado módulo `tradutorlinux::package` com validação de contêiner ZIP/MSIX,
-  parser de manifesto `AppxManifest.xml` e extração de metadados/executável
-  principal para suporte ao benchmark `Affinity x64.msix`. Protegido por
-  `MsixParserTest.ParseManifestXml`.
+- **Marco em validação (Fase 13.13 — Suporte Estrutural e Parser de Pacotes MSIX/AppX):**
+  `tradutorlinux::package` valida a central directory ZIP/MSIX, limites,
+  traversal, CRC e manifesto DEFLATE/data descriptor; o parser estrutural de
+  `AppxManifest.xml` extrai identidade, aplicações e executável principal sem
+  resolver DTDs ou recursos externos. As regressões cobrem namespaces,
+  comentários, CDATA, entidades e XML malformado. A execução Linux/CTest ainda
+  precisa ser registrada antes de marcar este marco como concluído.
 - **Marco concluído (Fase 13.13 — Análise e Bateria de Testes do Portfólio Popular):**
   Bateria automatizada de `--report` e execução controlada no conjunto de aplicativos
   Windows x64 mais demandados pela comunidade:

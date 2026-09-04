@@ -113,6 +113,7 @@ find_path(TL_X11_INCLUDE_DIR X11/Xlib.h REQUIRED)
 find_library(TL_X11_LIBRARY X11 REQUIRED)
 target_include_directories(tradutorlinux_core PRIVATE "${TL_X11_INCLUDE_DIR}")
 target_link_libraries(tradutorlinux_core PUBLIC "${TL_X11_LIBRARY}")
+target_link_libraries(tradutorlinux_core PUBLIC ZLIB::ZLIB)
 
 find_path(TL_WAYLAND_INCLUDE_DIR wayland-client.h REQUIRED)
 find_library(TL_WAYLAND_CLIENT_LIBRARY wayland-client REQUIRED)
