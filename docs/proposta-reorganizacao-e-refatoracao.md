@@ -145,12 +145,13 @@ Criar subpastas em `include/tradutorlinux/win32/`:
 
 ---
 
-## 5. Roteiro e pendências remanescentes
+## 5. Histórico da reorganização
 
-As fases abaixo registram o histórico da migração e o que ainda pode ser feito.
-As fases 1–6 já foram aplicadas em grande parte; não são instruções para mover
-novamente os mesmos arquivos. O restante deve ser acompanhado por testes e
-benefício concreto:
+As fases abaixo registram somente o histórico da migração. As fases 1–7 foram
+aplicadas conforme a estrutura atual do projeto e não são instruções para mover
+novamente os mesmos arquivos. Qualquer manutenção futura, inclusive uma nova
+subdivisão motivada por um alvo concreto, deve ser registrada no
+[backlog consolidado do `ROADMAP.md`](../ROADMAP.md#backlog-consolidado).
 
 * **Fase 1 — Agrupamento de DLLs Independentes (concluída)**:
   - Mover `ws2_32.cpp`, `wininet.cpp`, `iphlpapi.cpp`, `mpr.cpp` $\to$ `src/runtime/dlls/net/`.

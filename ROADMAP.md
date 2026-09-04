@@ -8,6 +8,12 @@ Cada fase só deve avançar quando seus critérios de saída estiverem atendidos
 
 Os itens marcados como concluídos devem ter evidência no repositório: código, teste, documentação ou um artefato reproduzível. O roadmap descreve ordem de dependências, não uma promessa de prazo.
 
+Este é o único backlog normativo do projeto. `PROXIMAS-ETAPAS.md`,
+`ANALISE-CRITICA.md`, `ideia.md` e as propostas em `docs/` permanecem apenas
+como referências históricas; novas tarefas devem ser registradas aqui. O
+backlog consolidado ao final deste documento usa IDs `B1`, `B2` etc. para que
+as referências nas fases não criem listas paralelas.
+
 ## Stack decidido
 
 - **Linguagem principal:** C++20.
@@ -220,7 +226,7 @@ Os itens marcados como concluídos devem ter evidência no repositório: código
   - `Affinity x64.msix`: Reconhecido como pacote de aplicativo válido pelo parser de manifesto.
   - `HWiNFO64.exe` e `Rufus_x64.exe`: Validados com segurança pelo parser PE contra cabeçalhos corrompidos/fora da imagem.
   - Instaladores com wrappers 32-bit (NSIS/Inno): Rejeitados com segurança pelo filtro de arquitetura x64.
-- **Próximo resultado observável (Fase 13.13):** implementar o próximo incremento de APIs
+- **Histórico do ciclo (entregue nos marcos seguintes):** implementar o incremento de APIs
   compartilhadas mapeadas pelo portfólio (`KERNEL32!CreateHardLinkW`, `KERNEL32!K32GetModuleFileNameExW`,
   `OLEAUT32!ordinais`, `GDI32!CreateBitmap` e `COMCTL32!CreateToolbarEx`), protegido por fixtures PE32+ reproduzíveis.
 - **Marco concluído (Fase 13.13 — OLEAUT32 BSTRs/Variantes e Ordinais de Automação):**
@@ -245,7 +251,7 @@ Os itens marcados como concluídos devem ter evidência no repositório: código
   - **`WinRAR_x64.exe`**: atingiu **100% (251/251 imports resolvidos)** e entra em execução no bootstrap CRT/FLS.
   - Reanálise do portfólio: Rockstar Launcher subiu para **87% (295/338)**, 7-Zip CLI subiu para **77% (103/133)**,
     PuTTY subiu para **65% (228/348)** e Notepad++ para **52% (304/584)**.
-- **Próximo resultado observável (Fase 13.13):** implementar rotinas CRT para o 7-Zip CLI (`7z_x64.exe`)
+- **Histórico do ciclo (entregue nos marcos seguintes):** implementar rotinas CRT para o 7-Zip CLI (`7z_x64.exe`)
   e controles comuns de `COMCTL32.dll` (`CreateToolbarEx`, `ImageList_GetImageInfo`), protegido por fixtures PE32+ reproduzíveis.
 
 ### Estudo de caso: `RobloxPlayerInstaller.exe` (benchmark de cobertura)
@@ -333,7 +339,8 @@ reutilizáveis por várias classes de aplicativos. As lacunas observadas são:
   temporizadores multimídia e diagnóstico (fixture `tl_gdiex.exe` cobre 3+8+1+1+1); `POWRPROF.dll` e `IPHLPAPI.DLL` permanecem avaliação futura;
 - [x] manter isolamento de processo, timeout, `--report`, mensagens de falha e
   testes de integração para as famílias implementadas;
-- [ ] definir e implementar limites configuráveis de CPU/RAM por aplicativo;
+- [ ] definir e implementar limites configuráveis de CPU/RAM por aplicativo
+  (item `B1` do backlog consolidado).
 
 A ordem de implementação continua subordinada à fase atual e ao método do
 projeto: cada item precisa de um aplicativo-alvo ou fixture independente,
@@ -571,7 +578,7 @@ compatibilidade imediata com qualquer executável, jogo ou mecanismo protegido.
   manifests e regressões para `xxd`, `bzip2`, `dos2unix`/`unix2dos` e
   `simple-todo`, além das fixtures de instalador e rede;
 - [ ] Completar o portfólio versionado com representantes reais adicionais de
-  instalador, GUI de produtividade e ferramenta de rede autorizada.
+  instalador, GUI de produtividade e ferramenta de rede autorizada (item `B5`).
 - [x] **Prioridade 13.1 — instaladores x64 nativos:** usar as amostras WinRAR,
   Logitech G HUB, Rockstar e Roblox como evidência de cobertura, mas escolher
   um instalador PE32+ x86-64 reproduzível como alvo de regressão inicial.
@@ -590,7 +597,8 @@ compatibilidade imediata com qualquer executável, jogo ou mecanismo protegido.
   instalado -> app run` com teste de integração e artefatos reproduzíveis.
 - [x] Adicionar descoberta estrutural de formatos de distribuição: distinguir
   PE direto de pacotes MSIX/AppX, validar o arquivo, ler `AppxManifest.xml` e
-  localizar o PE interno. Instalação e execução do pacote continuam pendentes.
+  localizar o PE interno. Instalação e execução do pacote continuam pendentes
+  (item `B8`).
 - [x] Registrar imports, versão, hash e fluxo principal dos alvos acompanhados
   no catálogo e em `docs/requisitos-aplicativos.md`, usando recorrência de
   dependências para ordenar o trabalho; o preenchimento de amostras comerciais
@@ -755,13 +763,13 @@ nem declarar os benchmarks comerciais suportados.
   estruturalmente o executável interno; a validação de central directory,
   DEFLATE, CRC e limites está coberta por testes.
 - [ ] Instalação e execução de pacotes MSIX/AppX exigem fase própria e não são
-  cobertas pelo prefixo atual.
+  cobertas pelo prefixo atual (item `B8`).
 - [ ] PE32/x86, .NET/Mono, ARM e WOW64 continuam fora do alvo. Não há plano de
   executar esses binários sem uma decisão explícita de arquitetura/emulação.
 - [ ] A forma de `UWOP_SET_FPREG` do Roblox (`OpInfo=10`, `FrameOffset=0`)
   permanece diagnóstico de portfólio. Só será promovida a uma fase de unwind
   genérica se outra amostra confirmar a mesma semântica e houver fixture
-  determinística; não será criada uma exceção exclusiva para Roblox.
+  determinística; não será criada uma exceção exclusiva para Roblox (item `B9`).
 
 #### Fase 13.13 — Portfólio Aplicativos_Windows_Populares (2026-08-31 — ciclo A→D→B)
 
@@ -785,7 +793,8 @@ nem declarar os benchmarks comerciais suportados.
   de imports, o TLS genérico e a fixture Worker/RSL estão registrados sem
   promover o aplicativo a suportado.
 - [ ] Declarar `Roblox` como `supported` somente quando `install --prefix`
-  extrair `drive_c` e `app run` completar sem `panic`.
+  extrair `drive_c` e `app run` completar sem `panic`, após a amostra comercial
+  correspondente estar disponível (item `B6`).
 
 PE32/x86, .NET/Mono e MSIX/AppX continuam requisitos separados nesta primeira
 subetapa. Eles ficam registrados no portfólio para a expansão posterior, mas
@@ -828,7 +837,8 @@ quantidade de APIs declaradas sem uso real.
 - [x] Criar testes de integração por aplicativo e uma matriz pública de limitações (`docs/compatibilidade.md` + `tests/samples` 36 fixtures).
 - [x] Adicionar execução isolada, timeout e diagnóstico para que aplicativos grandes não derrubem o host (`process/isolate.cpp` `71`/`72`).
 - [ ] Definir e implementar limites efetivos de CPU/RAM por aplicativo; o
-  isolamento de processo e o timeout não equivalem a contenção de recursos.
+  isolamento de processo e o timeout não equivalem a contenção de recursos
+  (item `B1`).
 - [x] Avaliar compatibilidade por versões e builds específicos, sem assumir que
   duas versões do mesmo aplicativo usam as mesmas APIs; os targets reproduzíveis
   são fixados por versão, commit/hash, arquitetura e toolchain.
@@ -875,6 +885,120 @@ keys, `Shift`), timers (`WM_TIMER` periódico) e um GDI mínimo (pintura com
 `BeginPaint`/`EndPaint`/`TextOut`). Cada nova API exige fixture e regressão; o
 próximo passo natural, quando justificado por um aplicativo-alvo, é o desenho de
 formas (`Rectangle`/`FillRect`), fontes/cores ou a entrada de mouse completa.
+
+## Backlog consolidado
+
+Este inventário reúne as pendências de `PROXIMAS-ETAPAS.md`,
+`ANALISE-CRITICA.md`, `ideia.md`, `docs/propostas-evolucao.md` e da proposta de
+reorganização. Ele é a única lista de trabalho aberta do projeto. Uma tarefa
+fica pronta somente com a evidência exigida na definição de pronto abaixo.
+
+### Próximo ciclo
+
+- [ ] **B1 — Limites de CPU e RAM por aplicativo.** Definir a interface de
+  configuração (CLI, catálogo e launcher), a unidade dos limites, a herança
+  para processos-filhos, o tratamento de `timeout` e os diagnósticos. Escolher
+  um mecanismo Linux efetivo, como `setrlimit` ou cgroup, e implementar limites
+  verificáveis de CPU e memória. Criar uma fixture que exceda cada limite,
+  validar o código/evento de saída e deixar claro que isso é contenção de
+  recursos, não sandbox.
+- [ ] **B2 — Arquivos de tradução isolados por aplicativo.** Criar uma camada
+  independente do loader e das APIs Win32 para permitir tradução de programas
+  de terceiros. Definir formato, diretório, identificação por aplicativo
+  (ID/hash/versão), seleção de idioma, precedência, fallback e comportamento
+  para arquivo ausente ou inválido. A aplicação da tradução deve ser opt-in
+  por aplicativo e não alterar os demais; validar com um programa externo de
+  teste e registrar o resultado no catálogo.
+- [ ] **B4 — Uniformizar o inventário de aplicativos.** Atualizar
+  `docs/requisitos-aplicativos.md` para que toda medição informe data, hash,
+  versão, arquitetura, ferramenta/versão e se foi somente `--report` ou
+  execução. Corrigir entradas antigas sem esses metadados sem promover
+  compatibilidade por inferência.
+- [ ] **B5 — Completar o portfólio versionado.** Adicionar representantes reais
+  autorizados de instalador, produtividade/GUI e ferramenta de rede, sempre
+  com versão, hash, manifest, fixture ou smoke reproduzível e entrada na
+  matriz. Priorizar dependências compartilhadas e não APIs adicionadas apenas
+  para elevar a porcentagem de um binário.
+- [ ] **B6 — Reexecutar Worker/RSL e concluir o caso Roblox.** Localizar ou
+  receber a amostra comercial exata, registrar hash e repetir
+  `install --prefix` seguido de `app run` com trace. Só promover o estado para
+  `supported` quando o fluxo terminar sem `panic`, com saída e efeitos
+  observáveis corretos. Esta tarefa está bloqueada nesta cópia porque não há
+  executável comercial `Worker`/`RSL`; `tl_worker_rsl.exe` é apenas a fixture
+  reutilizável e o exit `77` sem IPv4 continua sendo skip controlado.
+- [ ] **B7 — Tornar o shell visual do 7-Zip um fluxo funcional.** Com fixture e
+  alvo reproduzíveis, ligar comandos de menu/toolbar à navegação do convidado,
+  operações de arquivo e submenus aninhados. Manter a lista, a barra de
+  endereço e a árvore confinadas ao contrato de prefixo e só alterar a matriz
+  após um fluxo representativo concluído; abrir a janela não basta.
+- [ ] **B8 — Instalação e execução de MSIX/AppX.** Criar uma fase própria para
+  instalar o pacote validado no prefixo, selecionar o PE interno, preservar
+  limites de segurança do parser e executar somente PE32+ x86-64 suportado.
+  Não incluir .NET/Mono por consequência; o parser estrutural já entregue
+  continua sendo apenas inspeção.
+- [ ] **B9 — Generalizar `UWOP_SET_FPREG` somente por evidência.** Só aceitar a
+  forma não canônica observada no Roblox (`OpInfo=10`, `FrameOffset=0`) após
+  outra amostra confirmar a mesma semântica e existir fixture determinística.
+  Não criar uma exceção exclusiva para o Roblox.
+- [ ] **B10 — Fechar a validação de recursos X11 com LeakSanitizer.** Reexecutar
+  o smoke sob Xvfb com desenho repetido e LeakSanitizer, registrar o resultado
+  e manter a liberação de cores, grabs, janelas e displays protegida por
+  regressão.
+
+### Evolução condicionada a alvo ou benefício medido
+
+- [ ] **B11 — Cabeçalho comum para objetos e handles.** Padronizar, sem mudar
+  a ABI pública, tipo, contagem de referências e operação de fechamento das
+  tabelas de arquivos, sincronização, threads e mapeamentos. Só iniciar com
+  regressão de handle misturado ou benefício mensurável de manutenção.
+- [ ] **B12 — `VirtualQuery` coerente com alocações do runtime.** Representar
+  explicitamente regiões `RESERVE`/`COMMIT`/`FREE` e proteções das alocações
+  próprias, mantendo `/proc/self/maps` apenas para regiões externas. Adicionar
+  fixture de heap/coletor ou aplicativo que exija a distinção.
+- [ ] **B13 — Tabelas de codepage versionadas como dados.** Extrair as tabelas
+  embutidas para dados gerados de fonte pública somente quando um aplicativo
+  exigir outra página além de CP 0/1252/437/65001; versionar a fonte e testar
+  conversões e erros.
+- [ ] **B14 — Override de comportamento por aplicativo.** Diferenciar o
+  override de DLL já existente (`TL_DLL_OVERRIDES`) de uma eventual política
+  por API/aplicativo. Definir configuração, precedência, isolamento e
+  diagnóstico antes de permitir divergências específicas; exigir alvo e
+  regressão para cada override.
+- [ ] **B15 — Drives do prefixo como symlinks ou mecanismo equivalente.**
+  Avaliar se o mapeamento atual de caminhos atende um alvo real antes de
+  expor letras de drive como links no host; preservar a rejeição de traversal
+  e documentar que prefixo não é sandbox.
+- [ ] **B16 — Expectativas explícitas nos fixtures.** Avaliar uma macro ou
+  metadado equivalente a `TL_TODO` para registrar divergências conhecidas e
+  exigir atualização da matriz quando deixarem de existir, sem mascarar uma
+  falha como sucesso.
+
+### Longo prazo, somente com decisão explícita
+
+- [ ] **B17 — Supervisor de objetos entre processos convidados.** Considerar
+  um supervisor para herança de handles, processos e threads somente se um
+  aplicativo-alvo exigir estado compartilhado além do protocolo atual de
+  `fork`/`waitpid` e pipe.
+- [ ] **B18 — SEH estruturado além do subconjunto atual.** Incluir unwinding e
+  exceções adicionais, como C++/`__finally`, apenas com aplicativo-alvo,
+  contrato x64 e fixtures; sinais Linux continuam sendo tratados pelo
+  isolamento do processo.
+- [ ] **B19 — Novas famílias abundantes de API.** Threadpool, ALPC e qualquer
+  outra família só entram quando um alvo justificar o subconjunto, com teste,
+  trace e matriz. Fibras já entregues não devem voltar ao backlog.
+
+### Itens das listas antigas já absorvidos
+
+O isolamento em processo filho, o crash log com endereço/RVA/seção quando
+possível, o timeout, os forwarders, TLS genérico, o parser MSIX, a divisão da
+suíte Win32, a centralização de helpers e a auditoria de stubs já possuem
+implementação e evidência no repositório. A entrada/localização básica por
+caminho também já existe em `<app.exe>`, `app add`, `install --app-exe` e no
+launcher; isso corresponde ao item `B3`. Eles não devem ser reabertos por causa
+das versões históricas dos documentos auxiliares.
+
+As restrições de PE32/x86, ARM, WOW64, .NET/Mono, DirectX, áudio, drivers,
+anticheat e serviços Windows continuam limites de escopo, não tarefas abertas.
 
 ## Definição de pronto
 
