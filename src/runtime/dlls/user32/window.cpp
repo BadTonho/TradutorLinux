@@ -1,5 +1,30 @@
 #include "user32_internal.hpp"
 namespace tradutorlinux {
+
+void paint_registered_children(WindowSlot& parent) noexcept {
+    for (WindowSlot& child : g_windows) {
+        if (!child.used || !child.is_control || child.parent != &parent || child.wndproc == 0 ||
+            !child.visible) {
+            continue;
+        }
+        const std::array<diagnostics::TraceField, 4> begin_fields{
+            diagnostics::TraceField{"symbol", "CreateWindowExA"},
+            diagnostics::TraceField{"stage", "WM_PAINT-child-begin"},
+            diagnostics::TraceField{"class", child.class_name},
+            diagnostics::TraceField{"status", "dispatch"},
+        };
+        runtime_trace("CreateWindowExA", begin_fields, 4);
+        (void)call_wndproc(child.wndproc, &child, abi::kWmPaint, 0, 0);
+        const std::array<diagnostics::TraceField, 4> end_fields{
+            diagnostics::TraceField{"symbol", "CreateWindowExA"},
+            diagnostics::TraceField{"stage", "WM_PAINT-child-end"},
+            diagnostics::TraceField{"class", child.class_name},
+            diagnostics::TraceField{"status", "success"},
+        };
+        runtime_trace("CreateWindowExA", end_fields, 4);
+    }
+}
+
 extern "C" {
 
 TL_MSABI abi::Atom tl_RegisterClassExA(const void* const wnd_class) noexcept {
@@ -149,6 +174,13 @@ TL_MSABI abi::Atom tl_RegisterClassW(const void* wnd_class) noexcept {
     slot.wndproc = wc->window_proc;
     slot.atom = static_cast<abi::Atom>(static_cast<std::size_t>(free_it - g_classes.begin()) + 1U);
     set_last_error(abi::kErrorSuccess);
+    const std::array<diagnostics::TraceField, 4> fields{
+        diagnostics::TraceField{"symbol", "RegisterClassW"},
+        diagnostics::TraceField{"class", slot.name},
+        diagnostics::TraceField{"atom", std::to_string(slot.atom)},
+        diagnostics::TraceField{"status", "success"},
+    };
+    runtime_trace("RegisterClassW", fields, 4);
     return slot.atom;
 }
 
@@ -175,6 +207,7 @@ TL_MSABI abi::HWnd tl_CreateWindowExA(const std::uint32_t ex_style,
     }
     ClassSlot* const cls = find_class_slot(class_name);
     const bool generic_child = cls == nullptr && class_val > 0xFFFFU && parent != nullptr;
+    const bool registered_child = cls != nullptr && parent != nullptr;
     if (cls == nullptr && (class_val <= 0xFFFFU ||
                            (!runtime_gui::is_builtin_control(class_name) && !generic_child))) {
         set_last_error(abi::kErrorInvalidParameter);
@@ -187,7 +220,24 @@ TL_MSABI abi::HWnd tl_CreateWindowExA(const std::uint32_t ex_style,
         set_last_error(abi::kErrorNotEnoughMemory);
         return nullptr;
     }
-    if (class_val > 0xFFFFU && (runtime_gui::is_builtin_control(class_name) || generic_child)) {
+    struct GuestCreateStructA {
+        const void* lpCreateParams;
+        const void* hInstance;
+        const void* hMenu;
+        const void* hwndParent;
+        int cy;
+        int cx;
+        int y;
+        int x;
+        std::uint32_t style;
+        std::uint32_t pad0;
+        const char* lpszName;
+        const char* lpszClass;
+        std::uint32_t dwExStyle;
+        std::uint32_t pad1;
+    };
+    if (class_val > 0xFFFFU &&
+        (runtime_gui::is_builtin_control(class_name) || generic_child || registered_child)) {
         WindowSlot& slot = *free_it;
         WindowSlot* parent_slot = find_window_slot(parent);
         if (parent_slot == nullptr || parent_slot->is_control) {
@@ -196,7 +246,11 @@ TL_MSABI abi::HWnd tl_CreateWindowExA(const std::uint32_t ex_style,
         }
         slot = {};
         slot.used = true;
+        slot.wndproc = cls != nullptr ? cls->wndproc : 0;
         slot.class_name = class_name;
+        slot.window_title = window_name != nullptr ? window_name : "";
+        slot.native = registered_child ? parent_slot->native : nullptr;
+        slot.mapped = registered_child ? parent_slot->mapped : false;
         slot.is_control = true;
         slot.control_kind = runtime_gui::is_builtin_control(class_name)
                                 ? runtime_gui::control_kind_for(class_name)
@@ -212,12 +266,44 @@ TL_MSABI abi::HWnd tl_CreateWindowExA(const std::uint32_t ex_style,
         slot.visible = (style & kWsVisible) != 0U || style == 0U;
         slot.enabled = (style & kWsDisabled) == 0U;
         slot.combo_selection = -1;
+        if (registered_child) {
+            GuestCreateStructA cs{};
+            cs.lpCreateParams = param;
+            cs.hInstance = instance;
+            cs.hMenu = menu;
+            cs.hwndParent = parent;
+            cs.cy = slot.height;
+            cs.cx = slot.width;
+            cs.y = y;
+            cs.x = x;
+            cs.style = style;
+            cs.lpszName = window_name;
+            cs.lpszClass = class_name;
+            cs.dwExStyle = ex_style;
+            const abi::Lresult create_result = call_wndproc(
+                slot.wndproc, &slot, abi::kWmCreate, 0,
+                reinterpret_cast<abi::Lparam>(&cs));
+            if (create_result == -1) {
+                slot = {};
+                set_last_error(abi::kErrorInvalidParameter);
+                trace_guest_failure("CreateWindowExA", "wm-create",
+                                    "WM_CREATE do filho rejeitou a criação");
+                return nullptr;
+            }
+        }
         if (generic_child) {
             const std::array<diagnostics::TraceField, 4> fields{
                 diagnostics::TraceField{"class", class_name},
                 diagnostics::TraceField{"status", "generic-child"},
-                diagnostics::TraceField{"width", std::to_string(slot.width)},
-                diagnostics::TraceField{"height", std::to_string(slot.height)}};
+                diagnostics::TraceField{"x", std::to_string(slot.x)},
+                diagnostics::TraceField{"y", std::to_string(slot.y)}};
+            runtime_trace("CreateWindowExA", fields, 4);
+        } else if (registered_child) {
+            const std::array<diagnostics::TraceField, 4> fields{
+                diagnostics::TraceField{"class", class_name},
+                diagnostics::TraceField{"status", "registered-child"},
+                diagnostics::TraceField{"x", std::to_string(slot.x)},
+                diagnostics::TraceField{"y", std::to_string(slot.y)}};
             runtime_trace("CreateWindowExA", fields, 4);
         }
         set_last_error(abi::kErrorSuccess);
@@ -267,22 +353,6 @@ TL_MSABI abi::HWnd tl_CreateWindowExA(const std::uint32_t ex_style,
                                        24, 132, 0x334155U, false);
         gui::platform::flush_window(slot.native);
     }
-    struct GuestCreateStructA {
-        const void* lpCreateParams;
-        const void* hInstance;
-        const void* hMenu;
-        const void* hwndParent;
-        int cy;
-        int cx;
-        int y;
-        int x;
-        std::uint32_t style;
-        std::uint32_t pad0;
-        const char* lpszName;
-        const char* lpszClass;
-        std::uint32_t dwExStyle;
-        std::uint32_t pad1;
-    };
     GuestCreateStructA cs{};
     cs.lpCreateParams = param;
     cs.hInstance = instance;
@@ -459,7 +529,7 @@ TL_MSABI int tl_DestroyWindow(const void* const window) noexcept {
             child = {};
         }
     }
-    if (slot->native != nullptr) {
+    if (slot->native != nullptr && !slot->is_control) {
         gui::platform::destroy_window(slot->native);
     }
     WindowSlot* const parent = slot->parent;
@@ -1102,9 +1172,41 @@ TL_MSABI int tl_IsZoomed(void* const hwnd) noexcept {
 TL_MSABI int tl_GetClassInfoW(void* const instance, const std::uint16_t* const class_name,
                               void* const wnd_class) noexcept {
     (void)instance;
-    (void)class_name;
-    (void)wnd_class;
+    if (!user32_gui_thread_allowed("GetClassInfoW") || class_name == nullptr ||
+        !mapped_guest_wstring(class_name)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    const std::string utf8_class = util::wide_to_utf8(class_name);
+    ClassSlot* const cls = find_class_slot(utf8_class.c_str());
+    if (cls == nullptr) {
+        set_last_error(abi::kErrorClassDoesNotExist);
+        const std::array<diagnostics::TraceField, 4> fields{
+            diagnostics::TraceField{"symbol", "GetClassInfoW"},
+            diagnostics::TraceField{"class", utf8_class},
+            diagnostics::TraceField{"status", "not-found"},
+            diagnostics::TraceField{"error", std::to_string(abi::kErrorClassDoesNotExist)},
+        };
+        runtime_trace("GetClassInfoW", fields, 4);
+        return 0;
+    }
+    if (wnd_class == nullptr || !mapped_guest_range(wnd_class, sizeof(abi::GuestWndClassW), true)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        trace_guest_failure("GetClassInfoW", "wnd-class", "estrutura WNDCLASSW inválida");
+        return 0;
+    }
+    auto* const output = static_cast<abi::GuestWndClassW*>(wnd_class);
+    *output = {};
+    output->window_proc = cls->wndproc;
+    output->class_name = class_name;
     set_last_error(abi::kErrorSuccess);
+    const std::array<diagnostics::TraceField, 4> fields{
+        diagnostics::TraceField{"symbol", "GetClassInfoW"},
+        diagnostics::TraceField{"class", cls->name},
+        diagnostics::TraceField{"status", "success"},
+        diagnostics::TraceField{"mechanism", "class-table"},
+    };
+    runtime_trace("GetClassInfoW", fields, 4);
     return 1;
 }
 

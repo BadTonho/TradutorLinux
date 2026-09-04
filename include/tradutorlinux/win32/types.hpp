@@ -37,6 +37,7 @@ constexpr Dword kErrorNotLocked = 158;
 constexpr Dword kErrorNotSupported = 50;
 constexpr Dword kErrorAccessDenied = 5;
 constexpr Dword kErrorInvalidHandle = 6;
+constexpr Dword kErrorClassDoesNotExist = 141;
 constexpr Dword kErrorNotEnoughMemory = 8;
 constexpr Dword kErrorAlreadyExists = 183;
 constexpr Dword kErrorInvalidParameter = 87;

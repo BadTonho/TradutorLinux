@@ -98,7 +98,7 @@ void queue_list_notification(WindowSlot& list, const std::int32_t code, const in
 }
 
 void render_controls(WindowSlot& parent, const std::span<WindowSlot> windows) noexcept {
-    if (!parent.used || parent.native == nullptr || !parent.mapped) {
+    if (!parent.used || parent.is_control || parent.native == nullptr || !parent.mapped) {
         return;
     }
 
@@ -206,6 +206,31 @@ void render_controls(WindowSlot& parent, const std::span<WindowSlot> windows) no
                                          row_y, kText);
                     column_x += columns[column];
                 }
+            }
+        } else if (control.control_kind == ControlKind::Generic && control.width > 8 &&
+                   control.height > 8) {
+            // Um controle registrado pelo convidado pode ter um WNDPROC válido
+            // sem que o subconjunto atual possua o backend de pintura dele.
+            // Mostre a limitação na própria área do controle, em vez de
+            // produzir uma janela aparentemente congelada e completamente
+            // branca.
+            const int width = std::max(control.width, 16);
+            const int height = std::max(control.height, 16);
+            gui::platform::fill_rectangle_color(parent.native, x, y, width, height, kSurface);
+            gui::platform::draw_rectangle_color(parent.native, x, y, width, height, kBorder);
+            gui::platform::fill_rectangle_color(parent.native, x + 1, y + 1, width - 2,
+                                                std::min(height - 2, 32), kHeader);
+            const std::string title = "Controle Win32 sem renderer: " + control.class_name;
+            gui::platform::draw_text_color(parent.native, title.c_str(), x + 10, y + 22,
+                                           kText, true);
+            if (height > 48) {
+                gui::platform::draw_text_color(
+                    parent.native,
+                    "A classe foi registrada e recebeu WM_PAINT; o backend visual ainda nao",
+                    x + 10, y + 52, kMuted, false);
+                gui::platform::draw_text_color(
+                    parent.native, "implementa este controle ou seu modelo de desenho.", x + 10,
+                    y + 72, kMuted, false);
             }
         }
     }

@@ -3081,7 +3081,8 @@ TEST(SevenZipGuiCoverageTest, AllApisAndModules) {
     EXPECT_EQ(tl_SetWindowPlacement(nullptr, nullptr), 1);
     EXPECT_EQ(tl_IsWindowEnabled(nullptr), 1);
     EXPECT_EQ(tl_IsZoomed(nullptr), 0);
-    EXPECT_EQ(tl_GetClassInfoW(nullptr, sample_str, nullptr), 1);
+    EXPECT_EQ(tl_GetClassInfoW(nullptr, sample_str, nullptr), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorClassDoesNotExist);
     EXPECT_EQ(tl_GetMonitorInfoA(nullptr, nullptr), 1);
     EXPECT_EQ(tl_SystemParametersInfoW(0, 0, nullptr, 0), 1);
 

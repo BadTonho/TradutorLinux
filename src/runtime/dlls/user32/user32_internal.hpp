@@ -35,8 +35,11 @@ inline abi::Lresult call_wndproc(const std::uintptr_t wndproc, const abi::HWnd h
     return std::bit_cast<WndProc>(wndproc)(hwnd, message, wparam, lparam);
 }
 
+void paint_registered_children(WindowSlot& parent) noexcept;
+
 inline void render_controls(WindowSlot& parent) noexcept {
     runtime_gui::render_controls(parent, std::span<WindowSlot>{g_windows});
+    paint_registered_children(parent);
 }
 
 inline void handle_control_key(WindowSlot& parent, const gui::WindowEvent& event) noexcept {

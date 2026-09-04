@@ -25,6 +25,12 @@ explícitos abaixo.
 - [x] X11: `x11_popup_smoke` passou os caminhos de Escape, clique externo,
   destruição externa e timeout; `runtime_gui_smoke` passou as fixtures de
   janela, teclado, timer, GDI, pintura e diálogo sob Xvfb.
+- [x] Correção de diagnóstico GUI no 7-Zip: `GetClassInfoW` deixou de
+  retornar sucesso falso para classes ausentes; classes próprias filhas agora
+  entram no ciclo básico de `WM_CREATE`/`WM_PAINT`. Quando a classe ainda não
+  tem renderer, a janela exibe a limitação e o nome do controle em vez de uma
+  tela branca silenciosa. O `7zFM_x64.exe` continua explicitamente fora de
+  suporte como fluxo GUI concluído.
 - [x] MSIX: 8 testes `MsixParserTest.*` e o teste de afinidade passaram no
   unitário e no CTest. A validação é estrutural; não houve instalação ou
   execução de .NET/MSIX.

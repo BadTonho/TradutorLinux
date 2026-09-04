@@ -217,6 +217,13 @@ eventos. O renderer hospedeiro desenha o
 subconjunto exercitado pelo alvo: `EDIT`, `BUTTON`, `COMBOBOX`, `STATIC` e
 `SysListView32`.
 
+Classes customizadas registradas pelo convidado também entram na side-table e
+recebem o ciclo básico de `WM_CREATE`/`WM_PAINT`, mas não são tratadas como se
+fossem visualmente suportadas: quando não há renderer para a classe, a área
+mostra um diagnóstico explícito com o nome do controle. Isso evita uma tela
+branca silenciosa em aplicações como o 7-Zip File Manager; menus, toolbars e
+painéis customizados ainda exigem um contrato próprio e regressão.
+
 `SendMessageA` implementa os contratos usados pelo alvo para `WM_SETFONT`,
 `CB_ADDSTRING`, `CB_SETCURSEL`, `CB_GETCURSEL` e as mensagens de list view de
 colunas, itens, seleção, texto, limpeza e ordenação. O mouse usa hit-testing

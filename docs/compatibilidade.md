@@ -167,7 +167,7 @@ diretamente. Ele é experimental, não altera o subsistema de console e só acei
 |---|---|---|---|
 | `USER32.dll` | `MessageBoxA` | Suportado | Caixa modal com `hWnd == NULL` e `uType == 0`; OK retorna `1`, fechar retorna `0` |
 | `USER32.dll` | `RegisterClassExA` | Suportado | Classe única por nome (case-insensitive); retorna atom `>= 1` |
-| `USER32.dll` | `CreateWindowExA` | Suportado | Cria janela X11 a partir da classe registrada e despacha `WM_CREATE` ao `WNDPROC` (retorno `-1` aborta a criação); parent/menu/instância/param ignorados |
+| `USER32.dll` | `CreateWindowExA` | Suportado no subconjunto | Cria janela X11 a partir da classe registrada e despacha `WM_CREATE` ao `WNDPROC`; classes próprias usadas como filhos ficam em uma side-table e não viram janelas X11 individuais |
 | `USER32.dll` | `ShowWindow` | Suportado | Mostra/esconde a janela X11 |
 | `USER32.dll` | `UpdateWindow` | Suportado | Despacha `WM_PAINT` diretamente ao `WNDPROC` |
 | `USER32.dll` | `GetMessageA` | Suportado | Traduz eventos X11 para `WM_PAINT`/`WM_LBUTTONDOWN`/`WM_KEYDOWN`/`WM_KEYUP`/`WM_CLOSE`, roteados por janela (fila por janela no pump); entrega mensagens pendentes antes dos eventos X11; despacha `WM_TIMER` expirados; retorna `0` com `WM_QUIT` após `PostQuitMessage` |
@@ -177,6 +177,7 @@ diretamente. Ele é experimental, não altera o subsistema de console e só acei
 | `USER32.dll` | `DispatchMessageA` | Suportado | Invoca o `WNDPROC` do convidado (`TL_MSABI`, host→convidado) |
 | `USER32.dll` | `DefWindowProcA` | Suportado | `WM_CLOSE` → `DestroyWindow`; demais retornam `0` |
 | `USER32.dll` | `RegisterClassExW`/`CreateWindowExW`/`DefWindowProcW`/`GetMessageW`/`DispatchMessageW`/`SetWindowTextW`/`GetWindowTextW`/`FindWindowW`/`LoadCursorW`/`SendMessageW` etc. | Suportado | Wrappers para `A` via `wide_to_utf8`/`utf8_to_wide`; `RegisterClassExW` converte `WNDCLASSEXW` (80 bytes), `CreateWindowExW` converte classe/título, `SetWindowTextW`/`GetWindowTextW`/`GetWindowTextLengthW` convertem, `FindWindowW`/`SendMessageW`/`AppendMenuW` delegam |
+| `USER32.dll` | `GetClassInfoW` | Suportado no subconjunto | Consulta a tabela de classes registrada, preenche `WNDCLASSW` quando há saída válida e retorna `ERROR_CLASS_DOES_NOT_EXIST` (`141`) para classe ausente |
 | `USER32.dll` | `DestroyWindow` | Suportado | Destrói a janela e despacha `WM_DESTROY` |
 | `USER32.dll` | `PostQuitMessage` | Suportado | Sinaliza `WM_QUIT`; `GetMessageA` retorna `0` |
 | `USER32.dll` | `GetDC` / `ReleaseDC` | Suportado | `HDC == HWND` (token opaco da janela); validam o par `hwnd`/`dc` |
@@ -188,7 +189,7 @@ diretamente. Ele é experimental, não altera o subsistema de console e só acei
 
 | Módulo | APIs | Estado | Limite publicado |
 |---|---|---|---|
-| `USER32.dll` | `DialogBoxParamW`, `EndDialog`, `GetDlgItem`, `SetDlgItemTextW`, `SendDlgItemMessageW`, `GetNextDlgTabItem`, `IsDialogMessageW` | Suportado no subconjunto | Somente template numérico `RT_DIALOG` padrão do módulo atual; modal único; controles lógicos `BUTTON`/`EDIT`/`STATIC`/`COMBOBOX`; sem `DIALOGEX`, fontes, menus ou classes customizados |
+| `USER32.dll` | `DialogBoxParamW`, `EndDialog`, `GetDlgItem`, `SetDlgItemTextW`, `SendDlgItemMessageW`, `GetNextDlgTabItem`, `IsDialogMessageW` | Suportado no subconjunto | Somente template numérico `RT_DIALOG` padrão do módulo atual; modal único; controles lógicos `BUTTON`/`EDIT`/`STATIC`/`COMBOBOX`; classes customizadas recebem ciclo básico, mas continuam sem renderer visual |
 | `USER32.dll` | `GetWindowRect`, `GetWindowLongW`, `SetWindowLongW` | Suportado no subconjunto | Geometria side-table e wrappers limitados de 32 bits sobre `*Ptr` |
 | `USER32.dll` | `CopyImage`, `DestroyIcon` | Suportado no subconjunto | Tokens de ícone copiados; não há `LoadImageW` nem desenho de ícones |
 | `COMCTL32.dll` | `InitCommonControlsEx` | Suportado no layout de 8 bytes | Valida `cbSize`/classes; ordinais 410/413 continuam `unknown-ordinal` |
@@ -676,7 +677,7 @@ continuam sendo a evidência necessária para registrá-lo como suportado.
 | # | Aplicativo | Arquitetura | Imports | Compat | Execução `--timeout 3` | Observação |
 |---|---|---|---:|---|---|---|
 | 1 | `7z_x64.exe` | PE32+ x86-64 | 133/133 (100%) | `supported` | `ExitProcess 0` `7-Zip 24.08 banner` | `src/loader/module.cpp:400` `DosDateTimeToFileTime` já coberto |
-| 2 | `7zFM_x64.exe` | PE32+ x86-64 | 298/298 (100%) | `supported` | `ExitProcess 0` | delay `MPR.dll 6/6` |
+| 2 | `7zFM_x64.exe` | PE32+ x86-64 | 298/298 (100%) | `execution-failed` | janela X11 abre, mas `7-Zip::Panel` fica sem renderer visual; execução interativa não é promovida | delay `MPR.dll 6/6` |
 | 3 | `7z.dll` | PE32+ DLL x86-64 | 86/86 (100%) | `imports-resolved` | `not-attempted` (DLL) | **Fase 13.A**: imports resolvidos; a DLL não foi executada como aplicação independente |
 | 4 | `putty_x64.exe` | PE32+ x86-64 | 348/348 (100%) | `supported` | `ExitProcess 1` (sem args) | FLS 0/1 ok |
 | 5 | `WinRAR_x64.exe` `winrar-x64-723.exe` | PE32+ x86-64 | 251/251 (100%) | `supported` | `ExitProcess 0` `sfxcmd` env | delay `GDI32/ADVAPI32/SHELL32/ole32` |
@@ -696,7 +697,7 @@ continuam sendo a evidência necessária para registrá-lo como suportado.
 
 | Aplicativo | Arquitetura | Imports Resolvidos | Compatibilidade | Estado de Execução |
 |---|---|---:|---|---|
-| **7-Zip File Manager (`7zFM_x64.exe`)** | PE32+ x86-64 | 100% (298/298) | Suportado | Executou entry point nativo, rodou 21 construtores MSVC, delay imports em `MPR.dll` e encerrou limpo com exit `0` |
+| **7-Zip File Manager (`7zFM_x64.exe`)** | PE32+ x86-64 | 100% (298/298) | Não suportado como fluxo GUI concluído | Entry point e message loop iniciam; `GetClassInfoW`/classes filhas são diagnosticáveis, mas `7-Zip::Panel` fica sem renderer visual |
 | **7-Zip CLI (`7z_x64.exe`)** | PE32+ x86-64 | 100% (133/133) | Suportado | Executou e imprimiu o banner oficial completo do 7-Zip no terminal |
 | **PuTTY SSH Client (`putty_x64.exe`)** | PE32+ x86-64 | 100% (348/348) | Suportado | Executou entry point, inicializou FLS (slots 0 e 1) e loop de eventos de interface e rede |
 | **WinRAR (`WinRAR_x64.exe`)** | PE32+ x86-64 | 100% (251/251) | Suportado | Inicializou FLS, subsistema CRT e APIs do Shell/OLE com sucesso |
