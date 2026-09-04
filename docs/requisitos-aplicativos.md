@@ -47,6 +47,34 @@ resolvidos e execução falha permanecem dimensões separadas.
 As medições intermediárias abaixo preservam a evolução histórica. Os valores
 atuais são os do índice e devem ser usados para novas decisões do roadmap.
 
+## Snapshot canônico de metadados
+
+O snapshot abaixo é a referência mínima para novas análises. `não registrado`
+é deliberado: significa que a amostra ou a ferramenta histórica não deixou o
+dado disponível no repositório e que ele precisa ser coletado antes de uma nova
+declaração. A ferramenta de resolução é `tradutorlinux --report`; a execução
+usa o runner documentado com trace e timeout quando indicado.
+
+| Amostra | Versão | Formato/arquitetura | SHA-256 | Coleta | Ferramenta/versão | `--report` | Execução observada |
+|---|---|---|---|---|---|---|---|
+| `7z_x64.exe` | não registrada | PE32+ x86-64 | não registrado | Fase 13.13 / data não registrada | `tradutorlinux --report` / não registrada | 133/133 | `ExitProcess 0`, banner 7-Zip |
+| `7zFM_x64.exe` | não registrada | PE32+ x86-64 | não registrado | Fase 13.13 / data não registrada | `tradutorlinux --report` / não registrada | 298/298 | shell visual experimental; fluxo funcional não concluído |
+| `7z.dll` | não registrada | DLL PE32+ x86-64 | não registrado | Fase 13.13 / data não registrada | `tradutorlinux --report` / não registrada | 86/86 | não executada como aplicação |
+| `putty_x64.exe` | não registrada | PE32+ x86-64 | não registrado | Fase 13.13 / data não registrada | `tradutorlinux --report` / não registrada | 348/348 | `ExitProcess 1`, sem argumentos |
+| `winrar-x64-723.exe` | 7.23 | PE32+ x86-64 | `f435b24d4c2c5342c4f7c0143ef358f0f425b7b8a0972dd34d9dcf94789e9c4d` | 2026-08-31 | `tradutorlinux --report` / não registrada | 251/251 | smoke `sfxcmd`/ambiente, exit `0` |
+| `Rufus_x64.exe` | não registrada | PE32+ x86-64 | não registrado | Fase 13.13 / data não registrada | `tradutorlinux --report` / não registrada | 14/14 | exit `56832`; fluxo de uso não validado |
+| `HWiNFO64.exe` | não registrada | PE32+ x86-64 | não registrado | Fase 13.13 / data não registrada | `tradutorlinux --report` / não registrada | 28/28 | exit `44544`; `OpenPrinterW` limitado |
+| `RobloxPlayerInstaller.exe` | não registrada | PE32+ x86-64 | `d156faf0c712d4ce26d95a596ad9b1dfc813021b5c422c93887b2522d8b01a59` | 2026-09-04 | `tradutorlinux --report` / não registrada | 430/430 | `RBXCRASH` Worker/RSL, exit `3` |
+| `Rockstar-Games-Launcher.exe` | não registrada | PE32+ x86-64 | `c70131cb0427d146c9489297822e99ad87d4d5e141fd999d19f00975ab1a31f2` | 2026-08-31 | `tradutorlinux --report` / não registrada | 338/338 | exit `3`; fluxo principal não validado |
+| `lghub_installer.exe` | não registrada | PE32+ x86-64 | `4b2f9903b27c8434afcd52fe65845632fcae47cc50432fb6b3b1637144e811e1` | 2026-08-25 | `tradutorlinux --report` / não registrada | 114/114 | `GuestTimeout 72` durante a inicialização |
+| `notepad++.exe` | não registrada | PE32+ x86-64 | não registrado | Fase 13.13 / data não registrada | `tradutorlinux --report` / não registrada | 584/584 | `GuestTimeout 72` sem `Xvfb` |
+| `RTSSHooks64.dll` | não registrada | DLL PE32+ x86-64 | não registrado | Fase 13.13 / data não registrada | `tradutorlinux --report` / não registrada | 256/256 | não executada como aplicação |
+| `Affinity x64.msix` | não registrada | MSIX/AppX | `d3baa74d30b7b41655651e6ea58a505a1bafeb33ec7576d52e625c147bae164c` | 2026-09-04 | `tradutorlinux --report` / não registrada | pacote reconhecido; PE interno não é alvo funcional | não instalado nem executado |
+
+Para as entradas com data ou versão ainda não registrada, a próxima coleta deve
+preencher o campo antes de alterar o estado. O hash deve ser calculado sobre o
+arquivo exato usado na execução; não se deve reutilizar o hash de outra versão.
+
 ## Recorrências observadas
 
 | Capacidade | Amostras que a evidenciam | Situação |

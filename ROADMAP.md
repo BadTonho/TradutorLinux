@@ -26,11 +26,10 @@ as referências nas fases não criem listas paralelas.
 ## Estado atual
 
 - **Fase atual:** Fase 13 — compatibilidade ampla por portfólio.
-- **Próximo ciclo:** primeiro reconciliar o inventário e os níveis de
-  compatibilidade (`B4`); depois escolher explicitamente entre aprofundar um
-  fluxo real do portfólio (`B5`) ou transformar a tradução por aplicativo
-  (`B2`) em uma trilha de produto própria. Os itens não escolhidos permanecem
-  estacionados, não são trabalho simultâneo.
+- **Próximo ciclo:** escolher explicitamente entre aprofundar um fluxo real do
+  portfólio (`B5`) ou transformar a tradução por aplicativo (`B2`) em uma
+  trilha de produto própria. Os itens não escolhidos permanecem estacionados,
+  não são trabalho simultâneo.
 - **Último incremento:** a Fase 13.14 concluiu TLS genérico e a fixture
   reutilizável Worker/RSL. O caso comercial do Roblox continua como benchmark:
   imports resolvidos, mas execução interrompida em `RBXCRASH`/`ExitProcess 3`.
@@ -914,18 +913,22 @@ Este inventário reúne as pendências de `PROXIMAS-ETAPAS.md`,
 reorganização. Ele é a única lista de trabalho aberta do projeto. Uma tarefa
 fica pronta somente com a evidência exigida na definição de pronto abaixo.
 
-### Próximo ciclo — documentação e decisão
+### B4 — etapa concluída
 
-A ordem operacional deste ciclo é: **B4**, decisão entre **B2** e **B5**, depois
-**B1** e **B10**. O objetivo é tornar o estado confiável antes de ampliar a
-implementação. B2 é uma trilha de produto separada do runtime Win32; B5 deve
-escolher um único fluxo real para aprofundar, não apenas adicionar executáveis.
-
-- [ ] **B4 — Uniformizar o inventário de aplicativos.** Atualizar
+- [x] **B4 — Uniformizar o inventário de aplicativos.** Atualizar
   `docs/requisitos-aplicativos.md` para que toda medição informe data, hash,
   versão, arquitetura, ferramenta/versão e se foi somente `--report` ou
-  execução. Corrigir entradas antigas sem esses metadados sem promover
-  compatibilidade por inferência; alinhar também `docs/catalog.md` e a matriz.
+  execução. O snapshot canônico marca explicitamente dados não registrados,
+  corrige as entradas atuais e alinha `docs/catalog.md`, a matriz e o contrato
+  de diagnóstico; nenhuma compatibilidade foi promovida por inferência.
+
+### Próximo ciclo — decisão e robustez
+
+A ordem operacional agora é: decidir entre **B2** e **B5**, executar a trilha
+escolhida, depois tratar **B1** e **B10**. B2 é uma trilha de produto separada
+do runtime Win32; B5 deve escolher um único fluxo real para aprofundar, não
+apenas adicionar executáveis.
+
 - [ ] **B2 — Arquivos de tradução isolados por aplicativo.** Se a tradução de
   interface for confirmada como prioridade de produto, criar uma trilha
   independente do loader e das APIs Win32 para programas de terceiros. Definir
