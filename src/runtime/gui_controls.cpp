@@ -102,6 +102,28 @@ constexpr std::array<SevenZipToolbarVisual, 7> kSevenZipToolbarVisuals{{
     return parent.visual_directory.empty() ? seven_zip_host_directory() : parent.visual_directory;
 }
 
+[[nodiscard]] std::string seven_zip_visual_address(const WindowSlot& parent) noexcept {
+    try {
+        const std::filesystem::path base = seven_zip_host_directory();
+        const std::filesystem::path current = seven_zip_current_directory(parent);
+        if (base.empty() || current.empty()) {
+            return "Z:\\";
+        }
+        const std::filesystem::path relative = current.lexically_relative(base);
+        const std::string relative_text = relative.generic_string();
+        if (relative_text.empty() || relative_text == ".") {
+            return "Z:\\";
+        }
+        std::string result = "Z:\\";
+        for (const char character : relative_text) {
+            result.push_back(character == '/' ? '\\' : character);
+        }
+        return result;
+    } catch (...) {
+        return "Z:\\";
+    }
+}
+
 [[nodiscard]] std::string menu_display_text(const std::string_view text) {
     std::string result;
     result.reserve(text.size());
@@ -505,7 +527,8 @@ void render_seven_zip_file_manager(WindowSlot& parent,
     gui::platform::fill_rectangle_color(parent.native, address_x, 78, address_width, 24,
                                         kSurface);
     gui::platform::draw_rectangle_color(parent.native, address_x, 78, address_width, 24, kBorder);
-    gui::platform::draw_text_color(parent.native, "Z:\\", address_x + 9, 95, kText);
+    const std::string visual_address = seven_zip_visual_address(parent);
+    gui::platform::draw_text_color(parent.native, visual_address.c_str(), address_x + 9, 95, kText);
 
     if (status_y > body_y) {
         // Navigation tree on the left and file list on the right.
@@ -587,7 +610,9 @@ void render_seven_zip_file_manager(WindowSlot& parent,
     gui::platform::fill_rectangle_color(parent.native, 0, status_y, width, 1, kBorder);
     gui::platform::draw_text_color(parent.native, "Visualizacao experimental", 10,
                                    std::min(status_y + 17, height - 4), kMuted);
-    gui::platform::draw_text_color(parent.native, "Z:\\", std::max(width - 42, 10),
+    const int status_address_x = std::max(
+        width - static_cast<int>(visual_address.size()) * 8 - 12, 10);
+    gui::platform::draw_text_color(parent.native, visual_address.c_str(), status_address_x,
                                    std::min(status_y + 17, height - 4), kMuted);
 
     // O submenu fica na mesma superfície lógica da janela principal. Isso
@@ -1058,6 +1083,28 @@ void handle_control_key(WindowSlot& parent, const std::span<WindowSlot> windows,
             }
         } catch (...) {
             // A falha de conversão do caminho não pode derrubar o convidado.
+        }
+        return;
+    }
+    if (is_seven_zip_file_manager(parent) && parent.open_menu_index < 0 &&
+        event.type == gui::WindowEventType::KeyDown &&
+        (event.keysym == 0xFF52UL || event.keysym == 0xFF54UL)) {  // XK_Up/XK_Down
+        try {
+            const std::vector<ListViewRow> rows =
+                collect_seven_zip_directory_rows(seven_zip_current_directory(parent));
+            if (!rows.empty()) {
+                const int direction = event.keysym == 0xFF54UL ? 1 : -1;
+                const int last = static_cast<int>(rows.size()) - 1;
+                if (parent.list_selection < 0) {
+                    parent.list_selection = direction > 0 ? 0 : last;
+                } else {
+                    parent.list_selection =
+                        std::clamp(parent.list_selection + direction, 0, last);
+                }
+                render_controls(parent, windows);
+            }
+        } catch (...) {
+            // A falha de leitura do diretório não pode derrubar o convidado.
         }
         return;
     }

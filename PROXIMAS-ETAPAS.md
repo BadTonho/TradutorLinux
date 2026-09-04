@@ -109,7 +109,7 @@ explícitos abaixo.
   menu pelo teclado; mutações de menu continuam fora do contrato.
   A ponte Unicode `CreateWindowExW` também foi
   corrigida para permitir a criação do `7-Zip::Panel` sem relaxar a validação
-  de chamadas A feitas pelo convidado. A suíte ficou em 377 testes (376
+  de chamadas A feitas pelo convidado. A suíte ficou em 378 testes (377
   aprovados e 1 skip ambiental).
 - [x] Medições e catálogo: o catálogo registra os `298/298` imports do
   `7zFM_x64.exe`, a janela X11 real `800x600`, a normalização de geometria e

@@ -398,6 +398,13 @@ TEST_F(SevenZipDirectoryRowsTest, SevenZipPanelSelectsAndOpensDirectory) {
     EXPECT_EQ(parent.list_selection, 1);
     handle_control_mouse(parent, std::span<WindowSlot>{g_windows}, focused,
                          gui::WindowEvent{gui::WindowEventType::Release, 220, 178});
+    parent.list_selection = -1;
+    handle_control_key(parent, std::span<WindowSlot>{g_windows}, focused,
+                       gui::WindowEvent{gui::WindowEventType::KeyDown, 0, 0, '\0', 0xFF54UL});
+    EXPECT_EQ(parent.list_selection, 0);
+    handle_control_key(parent, std::span<WindowSlot>{g_windows}, focused,
+                       gui::WindowEvent{gui::WindowEventType::KeyDown, 0, 0, '\0', 0xFF54UL});
+    EXPECT_EQ(parent.list_selection, 1);
     handle_control_key(parent, std::span<WindowSlot>{g_windows}, focused,
                        gui::WindowEvent{gui::WindowEventType::KeyDown, 0, 0, '\0', 0xFF0DUL});
 
