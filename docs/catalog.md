@@ -46,6 +46,13 @@ promessa de suporte universal; cada entrada é verificada via `tests/samples` ou
 | `simple_todo` | 105 (GDI32/USER32/SHELL32/msvcrt) | **uso diário** | `targetapp_simple_todo_gui_smoke` `105/105` |
 | `7zFM_x64.exe` | 298 | **shell visual experimental** | menu, toolbar, endereço, navegação e lista são desenhados; comandos e dados reais ainda não estão ligados |
 
+Evidência atual do `7zFM_x64.exe`: o runtime em `build/debug` abriu a janela
+real no X11 com `800x600`; o trace registrou a normalização da geometria
+inválida recebida do aplicativo e o shell desenhou as áreas de menu, toolbar,
+endereço, navegação, lista e status. A validação complementar de GUI passou em
+`x11_popup_smoke` e `runtime_gui_smoke` (2/2). Isso continua sendo uma
+validação visual experimental, não suporte funcional do fluxo de compactação.
+
 ## Sistema
 
 | Aplicativo | Imports | Estado | Fixture |

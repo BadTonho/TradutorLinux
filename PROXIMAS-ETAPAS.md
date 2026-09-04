@@ -57,6 +57,10 @@ explícitos abaixo.
   o unitário completo ficou em 361 testes/80 suítes, com 360 aprovados e 1
   skip ambiental; DirectX, GPU, áudio e impressão continuam fora de suporte
   funcional.
+- [x] Medições e catálogo: o catálogo registra os `298/298` imports do
+  `7zFM_x64.exe`, a janela X11 real `800x600`, a normalização de geometria e
+  os dois smokes GUI aprovados, sem transformar essa evidência visual em
+  suporte funcional.
 - [ ] Worker/RSL comercial: bloqueado nesta cópia do checkout; a busca não
   encontrou um executável comercial `Worker`/`RSL` em
   `Aplicativos_Windows_Populares/`. Só existe a fixture própria
@@ -187,7 +191,7 @@ As validações acima foram concluídas, mas a manutenção foi separada por ris
 - [x] auditar APIs marcadas como `ExportSupport::Stub`, adicionando testes de retorno, `LastError`, buffers de saída e trace;
 - [ ] revisar limites de recursos do processo convidado, se a decisão de escopo for aprovada;
 - [x] corrigir contradições históricas em `docs/compatibilidade.md`, especialmente linhas que diziam “suportado” enquanto a matriz atual registra `execution-failed`;
-- [ ] atualizar medições e o catálogo de aplicativos somente com evidência reproduzível.
+- [x] atualizar medições e o catálogo de aplicativos somente com evidência reproduzível.
 
 ## Regra para cada etapa concluída
 
