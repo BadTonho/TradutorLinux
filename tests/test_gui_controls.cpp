@@ -536,6 +536,28 @@ TEST_F(SevenZipDirectoryRowsTest, SevenZipPanelNavigationTreeReturnsToVisualRoot
     g_windows = {};
 }
 
+TEST_F(SevenZipDirectoryRowsTest, SevenZipPanelHoverTracksNavigationRowAndClears) {
+    ASSERT_TRUE(std::filesystem::create_directory(directory_ / "Folder"));
+
+    g_windows = {};
+    WindowSlot& parent = g_windows[0];
+    parent.used = true;
+    parent.class_name = "7-Zip::FM";
+    parent.width = 800;
+    parent.height = 600;
+    parent.visual_directory = directory_;
+
+    WindowSlot* focused = nullptr;
+    handle_control_mouse(parent, std::span<WindowSlot>{g_windows}, focused,
+                         gui::WindowEvent{gui::WindowEventType::MouseMove, 30, 154});
+    EXPECT_EQ(parent.hovered_navigation_row, 0);
+    EXPECT_EQ(parent.navigation_selection, 1);
+    handle_control_mouse(parent, std::span<WindowSlot>{g_windows}, focused,
+                         gui::WindowEvent{gui::WindowEventType::MouseMove, 700, 90});
+    EXPECT_EQ(parent.hovered_navigation_row, -1);
+    g_windows = {};
+}
+
 TEST_F(SevenZipDirectoryRowsTest, SevenZipPanelAddressBarNavigatesWithinVisualRoot) {
     ASSERT_TRUE(std::filesystem::create_directory(directory_ / "Folder"));
 

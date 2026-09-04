@@ -76,6 +76,7 @@ struct WindowSlot {
     int last_list_press_row{-1};
     std::chrono::steady_clock::time_point last_list_press_time{};
     int navigation_selection{1};
+    int hovered_navigation_row{-1};
     std::filesystem::path visual_root_directory;
     std::filesystem::path visual_directory;
     bool address_editing{false};

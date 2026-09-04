@@ -682,6 +682,11 @@ void draw_seven_zip_toolbar_button(const gui::NativeWindow native, const char* c
         parent.hovered_list_row = hovered_row;
         changed = true;
     }
+    const int hovered_navigation = seven_zip_navigation_row_at(parent, event.x, event.y);
+    if (parent.hovered_navigation_row != hovered_navigation) {
+        parent.hovered_navigation_row = hovered_navigation;
+        changed = true;
+    }
     if (changed) {
         render_controls(parent, windows);
     }
@@ -700,6 +705,7 @@ void render_seven_zip_file_manager(WindowSlot& parent,
     constexpr std::uint32_t kMuted = 0x657586U;
     constexpr std::uint32_t kBlue = 0x245B8FU;
     constexpr std::uint32_t kSelection = 0xD4E5F7U;
+    constexpr std::uint32_t kHover = 0xEAF2FAU;
     constexpr std::uint32_t kStatus = 0xE9EEF2U;
 
     const int width = std::max(parent.width, 1);
@@ -803,6 +809,9 @@ void render_seven_zip_file_manager(WindowSlot& parent,
             if (static_cast<int>(index) == parent.navigation_selection) {
                 gui::platform::fill_rectangle_color(parent.native, 9, row_y - 17,
                                                     navigation_width - 2, 22, kSelection);
+            } else if (static_cast<int>(index) == parent.hovered_navigation_row) {
+                gui::platform::fill_rectangle_color(parent.native, 9, row_y - 17,
+                                                    navigation_width - 2, 22, kHover);
             }
             gui::platform::draw_text_color(parent.native,
                                            static_cast<int>(index) == parent.navigation_selection
@@ -847,7 +856,7 @@ void render_seven_zip_file_manager(WindowSlot& parent,
                                                     std::max(list_width - 2, 1), 21, kSelection);
             } else if (static_cast<int>(index) == parent.hovered_list_row) {
                 gui::platform::fill_rectangle_color(parent.native, list_x + 1, row_y - 17,
-                                                    std::max(list_width - 2, 1), 21, 0xEAF2FAU);
+                                                    std::max(list_width - 2, 1), 21, kHover);
             }
             const bool directory = rows[index].columns.size() > 1 &&
                                    rows[index].columns[1] == "<DIR>";
