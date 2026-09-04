@@ -11,7 +11,7 @@ explícitos abaixo.
 
 - Commits desta retomada: `ce66739`, `4f95c65`, `2fa9ebd`, `d9aeb9f`,
   `956aadc`, `17f4305`, `45cc3f9`, `990b960`, `6d7c855`, `3df05e4`,
-  `ee1fec9`, `5fe3e6d`, `a1fe77f` e `144be0d`.
+  `ee1fec9`, `5fe3e6d`, `a1fe77f`, `144be0d` e `03085a7`.
 - O alvo continua sendo PE32+ x86-64 em Linux x86-64.
 - Já foram implementados e testados no build Debug Linux os subconjuntos de `IPHLPAPI`, `WTSAPI32` e parte de `CRYPT32`, além das correções de forwarders, TLS genérico e parser de manifests MSIX.
 - A validação executada até aqui cobriu fixtures próprias, testes unitários direcionados e traces de `tl_worker_rsl` e `tl_powr`.
@@ -73,7 +73,7 @@ explícitos abaixo.
 - [x] Controles comuns mínimos: `CreateStatusWindowW` e `CreateToolbarEx`
   agora criam filhos lógicos reais, validam o parent e o vetor `TBBUTTON`,
   renderizam status/toolbar na superfície compartilhada e encaminham cliques
-  da toolbar por `WM_COMMAND`; a suíte ficou em 368 testes (367 aprovados e
+  da toolbar por `WM_COMMAND`; a suíte ficou em 369 testes (368 aprovados e
   1 skip ambiental), sem declarar suporte amplo ao `COMCTL32`.
 - [x] Medições e catálogo: o catálogo registra os `298/298` imports do
   `7zFM_x64.exe`, a janela X11 real `800x600`, a normalização de geometria e
