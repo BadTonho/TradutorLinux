@@ -129,6 +129,12 @@ superfície X11 da janela principal; o controle não precisa virar uma janela
 X11 individual. `GetStockObject` devolve um token opaco por
 objeto (endereço de uma tabela estática; stock objects não são liberados).
 
+O subconjunto atual de `COMCTL32` segue o mesmo modelo: `CreateStatusWindowW`
+cria uma status bar lógica no rodapé e `CreateToolbarEx` cria uma toolbar
+lógica com os `idCommand` das entradas `TBBUTTON` validadas. A toolbar pode
+encaminhar um clique básico ao parent como `WM_COMMAND`; bitmaps, image lists,
+temas e estilos avançados ainda não fazem parte do contrato.
+
 ## Validação
 
 As fixtures `tl_gui.exe`, `tl_win.exe`, `tl_win2.exe`, `tl_key.exe`,

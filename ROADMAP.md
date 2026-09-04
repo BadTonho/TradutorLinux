@@ -673,6 +673,9 @@ nem declarar os benchmarks comerciais suportados.
 - [x] Projetar o `HDC` de controles lógicos na superfície X11 da janela
   principal, acumulando offsets de pais para `TextOut`, `FillRect` e
   `Rectangle`, com regressão para filhos aninhados e handles órfãos.
+- [x] Modelar `CreateStatusWindowW` e `CreateToolbarEx` como controles lógicos
+  filhos, validar parent/`TBBUTTON`, renderizar o estado mínimo na superfície
+  compartilhada e encaminhar comandos básicos da toolbar por `WM_COMMAND`.
 
 #### Fase 13.12 — automação, rede e confiança, em entregas separadas
 

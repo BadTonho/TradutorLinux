@@ -193,6 +193,8 @@ diretamente. Ele é experimental, não altera o subsistema de console e só acei
 | `USER32.dll` | `GetWindowRect`, `GetWindowLongW`, `SetWindowLongW` | Suportado no subconjunto | Geometria side-table e wrappers limitados de 32 bits sobre `*Ptr` |
 | `USER32.dll` | `CopyImage`, `DestroyIcon` | Suportado no subconjunto | Tokens de ícone copiados; não há `LoadImageW` nem desenho de ícones |
 | `COMCTL32.dll` | `InitCommonControlsEx` | Suportado no layout de 8 bytes | Valida `cbSize`/classes; ordinais 410/413 continuam `unknown-ordinal` |
+| `COMCTL32.dll` | `CreateStatusWindowW` | Suportado no subconjunto | Parent válido; cria uma `msctls_statusbar32` lógica no rodapé, com texto UTF-16 convertido para UTF-8 e desenho na superfície X11 principal |
+| `COMCTL32.dll` | `CreateToolbarEx` | Suportado no subconjunto | Parent válido; valida até 128 entradas do vetor `TBBUTTON`, preserva `idCommand`, desenha botões lógicos e encaminha clique básico por `WM_COMMAND`; bitmaps, image lists e estilos avançados permanecem fora |
 
 `tl_dialog.exe` valida o ciclo mínimo sob Xvfb quando o ambiente fornece o
 socket X11. O smoke confirma Tab/Enter, `WM_COMMAND`, retorno 42, saída

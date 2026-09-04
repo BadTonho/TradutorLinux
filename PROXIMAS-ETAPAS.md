@@ -11,7 +11,7 @@ explícitos abaixo.
 
 - Commits desta retomada: `ce66739`, `4f95c65`, `2fa9ebd`, `d9aeb9f`,
   `956aadc`, `17f4305`, `45cc3f9`, `990b960`, `6d7c855`, `3df05e4`,
-  `ee1fec9`, `5fe3e6d` e `a1fe77f`.
+  `ee1fec9`, `5fe3e6d`, `a1fe77f` e `144be0d`.
 - O alvo continua sendo PE32+ x86-64 em Linux x86-64.
 - Já foram implementados e testados no build Debug Linux os subconjuntos de `IPHLPAPI`, `WTSAPI32` e parte de `CRYPT32`, além das correções de forwarders, TLS genérico e parser de manifests MSIX.
 - A validação executada até aqui cobriu fixtures próprias, testes unitários direcionados e traces de `tl_worker_rsl` e `tl_powr`.
@@ -70,6 +70,11 @@ explícitos abaixo.
   acumulados dos pais; dois testes protegem projeção aninhada e rejeição de
   handles órfãos. Isso prepara a tradução de controles reais sem criar uma
   janela X11 separada para cada filho Win32.
+- [x] Controles comuns mínimos: `CreateStatusWindowW` e `CreateToolbarEx`
+  agora criam filhos lógicos reais, validam o parent e o vetor `TBBUTTON`,
+  renderizam status/toolbar na superfície compartilhada e encaminham cliques
+  da toolbar por `WM_COMMAND`; a suíte ficou em 368 testes (367 aprovados e
+  1 skip ambiental), sem declarar suporte amplo ao `COMCTL32`.
 - [x] Medições e catálogo: o catálogo registra os `298/298` imports do
   `7zFM_x64.exe`, a janela X11 real `800x600`, a normalização de geometria e
   os dois smokes GUI aprovados, sem transformar essa evidência visual em
