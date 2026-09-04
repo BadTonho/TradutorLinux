@@ -20,35 +20,32 @@ provam sozinhos que um aplicativo vai executar: DLLs e funções carregadas
 dinamicamente, processos-filhos e semântica de cada API precisam de validação
 posterior.
 
+No índice, `supported` só pode ser usado quando houver um fluxo executado e
+registrado; `imports-resolved` representa apenas análise estática; e
+`execution-failed` representa uma tentativa que terminou com falha controlada.
+O nível funcional detalhado fica no catálogo.
+
 ## Índice de análises
 
 | Aplicativo | Imports resolvidos | Imports ausentes | Bloqueio adicional | Estado |
 |---|---:|---:|---|---|
-| `RobloxPlayerInstaller.exe` | — | — | `UWOP_SET_FPREG` estendido incompatível antes da leitura de imports | `unsupported` |
-| `winrar-x64-723.exe` | 209/251 | 42 | GUI e APIs de sistema pendentes | `unsupported` |
+| `RobloxPlayerInstaller.exe` | 430/430 | 0 | execução comercial termina em `RBXCRASH FatalRuntimeError Worker,28` / exit `3` | `execution-failed` |
+| `winrar-x64-723.exe` | 251/251 | 0 | somente o smoke `sfxcmd`/ambiente foi validado; GUI e uso diário não foram declarados | `supported` no fluxo restrito |
 | `Creative_Cloud_Set-Up_7474.exe` | — | — | PE32 x86 (`0x14c`) | arquitetura não suportada |
 | `officedeploymenttool_20228-20124.exe` | — | — | PE32 x86 (`0x14c`) | arquitetura não suportada |
 | `Affinity x64.msix` | — | — | pacote MSIX; executável interno não localizado | formato não suportado |
 | `CapCut_7677236283084898320_installer.exe` | — | — | PE32 x86 (`0x14c`) | arquitetura não suportada |
 | `EpicInstaller-20.1.4-831cc1564f92442abc51fdb4a9854359.exe` | — | — | PE32 x86 (`0x14c`) + Mono/.NET | arquitetura/formato não suportados |
-| `lghub_installer.exe` | 114/114 | 0 | execução expira em prefixo temporário | `supported` no `--report`; fluxo não validado |
-| `Rockstar-Games-Launcher.exe` | 265/338 | 73 | GUI/rede e APIs pendentes | `unsupported` |
+| `lghub_installer.exe` | 114/114 | 0 | execução expira em prefixo temporário (`GuestTimeout 72`) | `execution-failed` |
+| `Rockstar-Games-Launcher.exe` | 338/338 | 0 | execução termina com exit `3`; fluxo principal não validado | `execution-failed` |
 
-Na Fase 13.11, WinRAR e Rockstar foram medidos novamente somente com
-`--report`; ambos continuam `unsupported`, retornam `5` e não foram executados.
-Em 2026-08-26, o mesmo relatório atual resolveu mais cinco imports de memória
-global/local: WinRAR passou a 209/251 e Rockstar a 262/338. Em seguida, a
-fixture `tl_wthelper.exe` cobriu os três imports de travessia `WINTRUST`, e o
-Rockstar passou a 265/338. As fixtures
-`tl_globalmem.exe` e `tl_crypt32.exe` cobrem, respectivamente,
-`GlobalAlloc`/`GlobalLock`/`GlobalUnlock`/`GlobalFree`/`LocalAlloc`/`LocalFree` e
-`CertGetNameStringW`; isso reduz lacunas compartilhadas, mas não altera a
-declaração de compatibilidade. O binário Logitech foi reanalisado em
-2026-08-25: `tl_k32_gap.exe` cobriu as quatro lacunas de `KERNEL32`, o
-`--report` resolveu 114/114 e o primeiro teste de execução em prefixo temporário
-retornou `72` por timeout de 20 segundos, sem stdout ou arquivos criados.
-WinRAR e Rockstar ainda dependem de GUI, rede e demais APIs ausentes, enquanto
-o LGHub bloqueia durante a inicialização.
+O índice usa o estado de execução atual, não apenas o resultado do `--report`.
+`supported` no WinRAR significa somente o fluxo restrito `sfxcmd`/ambiente
+registrado na matriz; não significa uso diário da GUI. Para o restante, imports
+resolvidos e execução falha permanecem dimensões separadas.
+
+As medições intermediárias abaixo preservam a evolução histórica. Os valores
+atuais são os do índice e devem ser usados para novas decisões do roadmap.
 
 ## Recorrências observadas
 
@@ -128,23 +125,25 @@ estado do Worker/RSL comercial.
 | Arquivo | `RobloxPlayerInstaller.exe` |
 | Formato | PE32+ GUI x86-64, 7 seções |
 | SHA-256 | `d156faf0c712d4ce26d95a596ad9b1dfc813021b5c422c93887b2522d8b01a59` |
-| Imports estáticos | 430 em 17 DLLs (última leitura completa histórica) |
-| Resolvidos pelo runtime | 244/430 (última leitura completa histórica) |
-| Ausentes | 186 (última leitura completa histórica) |
-| Resultado observado | relatório atual: `Unsupported`/exit `5` antes de ler imports; o entry point não foi executado |
-| Fonte | análise local de 2026-08-23 |
+| Imports estáticos | 430 em 17 DLLs |
+| Resolvidos pelo runtime | 430/430, reanálise de 2026-09-04 |
+| Ausentes | 0 na leitura atual |
+| Resultado do `--report` | `supported`, exit `0`; resolução estática concluída |
+| Primeiro teste de execução | `RBXCRASH FatalRuntimeError Worker,28`, `ExitProcess 3`; fluxo comercial não concluído |
+| Fonte | análise local de 2026-09-04; hash fixado acima |
 
 O Roblox é um benchmark de cobertura do portfólio, não um alvo exclusivo e nem
-uma autorização para stubs específicos para ele. O relatório detalhado anterior
-alcançou a leitura dos imports e produziu os totais históricos acima. No runtime
-atual, a análise para antes dessa etapa: o `UNWIND_INFO` contém em
-`RVA 0xbdb0b8` uma forma estendida de `UWOP_SET_FPREG` com `OpInfo=10` e
-`FrameOffset=0`. Ela não satisfaz o único padrão estendido aceito na Fase 13.4
-(`OpInfo == FrameOffset`), portanto é rejeitada controladamente como
-`unsupported-mechanism`. Não há, neste momento, um total atual de imports para
-este mesmo arquivo.
+uma autorização para stubs específicos para ele. A leitura atual resolve todos
+os imports estáticos, mas a execução comercial termina de forma controlada no
+Worker/RSL (`RBXCRASH`, exit `3`). TLS genérico e `tl_worker_rsl.exe` são
+evidências reutilizáveis, não equivalem à execução bem-sucedida do instalador.
+As observações de `UWOP_SET_FPREG` e os totais anteriores permanecem abaixo
+como histórico de diagnóstico, não como estado atual.
 
-### Lacunas por módulo
+### Lacunas históricas por módulo
+
+As contagens a seguir são do snapshot de 2026-08-23 e não representam imports
+ausentes na leitura atual de 430/430.
 
 | DLL | APIs/ordinais ausentes |
 |---|---:|
@@ -157,7 +156,7 @@ este mesmo arquivo.
 | `ole32.dll` | 1 |
 | `SHELL32.dll` | 1 |
 
-### Imports estáticos ausentes
+### Imports estáticos ausentes (histórico)
 
 #### `KERNEL32.dll` (108)
 
@@ -408,23 +407,20 @@ contrato, fixture e regressão antes de ser promovido a suporte.
 | SHA-256 | `f435b24d4c2c5342c4f7c0143ef358f0f425b7b8a0972dd34d9dcf94789e9c4d` |
 | Imports estáticos | 156 em 3 DLLs |
 | Delay imports | 95 em 7 DLLs |
-| Resolvidos pelo runtime | 209/251 (138 estáticos + 71 atrasados), reanálise 2026-08-26 |
-| Ausentes | 42 (18 estáticos + 24 atrasados), reanálise 2026-08-26 |
+| Resolvidos pelo runtime | 251/251 (156 estáticos + 95 atrasados), reanálise de 2026-08-31 |
+| Ausentes | 0, reanálise de 2026-08-31 |
 | Mecanismo adicional | `delay-import` RVA resolvido antecipadamente; `.pdata`: 1316 funções (1313 V1, 3 V2), 3 epílogos, 2 `SET_FPREG` estendidos, 263 handlers e 14 cadeias |
-| Resultado do `--report` | Reanálise 2026-08-26: `Unsupported`/exit `5` por imports ausentes; execução não tentada |
-| Fonte | análise local de 2026-08-26 |
+| Resultado do `--report` | `supported`, 251/251; execução restrita `sfxcmd`/ambiente concluída com exit `0` |
+| Fonte | análise local de 2026-08-31 |
 
-Na Fase 13.11, o `--report` leu V2 e classificou todos os 251 imports sem
-executar o binário. Dos 95 símbolos atrasados, 70 foram resolvidos; o token/SID
-virtual, as DACLs e o subconjunto modal acrescentaram 21 imports desde a Fase
-13.10. WinRAR permanece `unsupported`
-sobretudo por GUI e APIs de sistema restantes.
+O `--report` atual classifica os 251 imports e o smoke `sfxcmd`/ambiente encerra
+com exit `0`. Isso valida somente esse fluxo restrito; GUI, operações de
+compactação interativas e uso diário continuam fora da declaração de suporte.
 
-Na reanálise de 2026-08-26, a fixture `tl_globalmem.exe` justificou e cobriu
-as quatro APIs Global de `KERNEL32` usadas pelo WinRAR; o relatório atual é
-209/251. O entry point comercial continua não executado.
+As listas de lacunas abaixo são mantidas como histórico das reanálises de
+2026-08-26. Elas não devem ser usadas para calcular o estado atual.
 
-### Lacunas por módulo e mecanismo
+### Lacunas históricas por módulo e mecanismo
 
 | DLL/mecanismo | APIs/ordinais ausentes |
 |---|---:|
@@ -438,7 +434,7 @@ as quatro APIs Global de `KERNEL32` usadas pelo WinRAR; o relatório atual é
 | delay `SHELL32.dll` | 6 |
 | delay `ole32.dll` | 1 |
 
-### Imports estáticos ausentes
+### Imports estáticos ausentes (histórico)
 
 #### `KERNEL32.dll` (16)
 
@@ -676,7 +672,7 @@ independentes, não uma API Win32 específica faltante.
 | Resolvidos pelo runtime | 114/114, após a fixture `tl_k32_gap.exe` |
 | Ausentes | 0 |
 | Metadados adicionais | `.pdata`: 1375 funções (1371 V1, 4 V2), 4 epílogos, 4 `SET_FPREG` estendidos, 233 handlers e 6 cadeias |
-| Resultado do `--report` | `supported`, `114/114`; `execution: not-attempted` |
+| Resultado do `--report` | `supported`, `114/114`; resolução estática concluída |
 | Primeiro teste de execução | Prefixo temporário, timeout de 20 s, exit `72`; stdout vazio e nenhum arquivo criado |
 | Fonte | análise local de 2026-08-25 |
 
@@ -685,7 +681,8 @@ incluindo `InitializeCriticalSectionAndSpinCount`, `FormatMessageA`,
 `AreFileApisANSI` e `InitializeCriticalSectionEx`. A execução entrou na fase de
 execução do convidado, ficou bloqueada durante a inicialização e expirou pelo
 limite do runner; isso não declara o instalador compatível nem prova o fluxo de
-instalação.
+instalação. O estado correto é `execution-failed`, não `supported` como nível
+funcional.
 
 ### Lacunas cobertas no incremento KERNEL32
 
@@ -724,29 +721,21 @@ deve declarar suporte ao fluxo Logitech apenas porque o `--report` passou.
 | SHA-256 | `c70131cb0427d146c9489297822e99ad87d4d5e141fd999d19f00975ab1a31f2` |
 | Imports estáticos | 205 em 5 DLLs |
 | Delay imports | 133 em 11 DLLs |
-| Resolvidos pelo runtime | 265/338 (166 estáticos + 99 atrasados), reanálise 2026-08-26 |
-| Ausentes | 73 (39 estáticos + 34 atrasados), reanálise 2026-08-26 |
+| Resolvidos pelo runtime | 338/338 (205 estáticos + 133 atrasados), reanálise de 2026-08-31 |
+| Ausentes | 0, reanálise de 2026-08-31 |
 | Mecanismo adicional | `delay-import` RVA resolvido antecipadamente; `.pdata`: 2663 funções (2661 V1, 2 V2), 2 epílogos, 6 `SET_FPREG` estendidos, 356 handlers e 584 cadeias |
-| Resultado do `--report` | Reanálise 2026-08-26: `Unsupported`/exit `5` por imports ausentes; execução não tentada |
-| Fonte | análise local de 2026-08-26 |
+| Resultado do `--report` | `supported`, 338/338; execução termina com exit `3` |
+| Fonte | análise local de 2026-08-31 |
 
-Na Fase 13.11, o `--report` aceitou a extensão observada em
-`UWOP_SET_FPREG` (RVA `0xcead8`, `OpInfo=3` igual ao `FrameOffset`) e
-classificou os 338 imports sem executar o binário. Ambiente, locale, FLS e o
-contexto de processo/console, enumeração de arquivos e segurança virtual
-resolveram 47 imports compartilhados; além das
-lacunas em `KERNEL32`, ele requer controles comuns por ordinal, automação OLE,
-diálogo de impressão e uma camada HTTP WinINet.
+O `--report` atual resolve os 338 imports, mas a execução termina com exit `3`;
+isso não valida o fluxo principal do launcher. As fixtures de memória,
+certificados, WTHelper, WinINet e OLE continuam sendo evidências de capacidades
+reutilizáveis, não suporte funcional do Rockstar.
 
-Na reanálise de 2026-08-26, `tl_globalmem.exe` cobriu quatro das lacunas de
-memória compartilhadas pelo Rockstar (`GlobalAlloc`, `GlobalLock`,
-`GlobalUnlock` e `LocalAlloc`) e `tl_crypt32.exe` cobriu
-`CertGetNameStringW`; em seguida `tl_wthelper.exe` cobriu os três
-`WTHelper*`, e o relatório atual é 265/338. A presença de
-imports resolvidos não autoriza executar o Launcher: GUI, automação, impressão,
-rede e confiança ainda precisam de contratos/fixtures próprios.
+As listas de lacunas abaixo são mantidas como histórico das reanálises de
+2026-08-26. Elas não devem ser usadas para calcular o estado atual.
 
-### Lacunas por módulo e mecanismo
+### Lacunas históricas por módulo e mecanismo
 
 | DLL/mecanismo | APIs/ordinais ausentes |
 |---|---:|
@@ -760,7 +749,7 @@ rede e confiança ainda precisam de contratos/fixtures próprios.
 | delay `SHELL32.dll` | 2 |
 | delay `SHLWAPI.dll` | 2 |
 
-### Imports estáticos ausentes
+### Imports estáticos ausentes (histórico)
 
 #### `KERNEL32.dll` (29)
 

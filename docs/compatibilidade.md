@@ -1,6 +1,23 @@
 # Matriz de compatibilidade
 
-Esta matriz declara o comportamento suportado; ela não é uma promessa de compatibilidade geral com Windows.
+Esta matriz registra resolução de imports, resultados de execução e limitações
+conhecidas; ela não é uma promessa de compatibilidade geral com Windows.
+
+## Como ler a matriz
+
+Há três dimensões independentes:
+
+- **`--report`/imports:** `supported` significa que todos os imports estáticos
+  foram resolvidos; `unsupported` significa que ao menos uma dependência ou
+  mecanismo não foi resolvido. Isso não comprova execução.
+- **execução:** `not-attempted`, `passed` ou uma falha controlada como
+  `GuestTimeout 72`, `GuestFault 71` ou um código explícito do convidado.
+- **nível funcional:** o catálogo usa `inicia`, `fluxo principal restrito`,
+  `fluxo principal` e `uso diário` somente quando há fluxo representativo,
+  resultado observável e limitações publicadas.
+
+Assim, um aplicativo pode ter `supported` na resolução de imports e continuar
+`execution-failed` ou sem nível funcional no catálogo.
 
 ## Aplicações de teste
 
@@ -695,7 +712,7 @@ para exports que resolvem, mas têm semântica parcial ou apenas um retorno cont
 A execução e os testes do aplicativo
 continuam sendo a evidência necessária para registrá-lo como suportado.
 
-| # | Aplicativo | Arquitetura | Imports | Compat | Execução `--timeout 3` | Observação |
+| # | Aplicativo | Arquitetura | Imports | `--report` | Execução `--timeout 3` | Observação |
 |---|---|---|---:|---|---|---|
 | 1 | `7z_x64.exe` | PE32+ x86-64 | 133/133 (100%) | `supported` | `ExitProcess 0` `7-Zip 24.08 banner` | `src/loader/module.cpp:400` `DosDateTimeToFileTime` já coberto |
 | 2 | `7zFM_x64.exe` | PE32+ x86-64 | 298/298 (100%) | `execution-failed` | janela X11 abre com shell visual experimental; menu de classe `RT_MENU`/MENUEX real (6 itens de nível superior), dropdowns de primeiro nível e seleção básica por mouse/teclado de itens folha encaminham `WM_COMMAND`; lista imediata do diretório do executável é selecionável, recebe hover e permite navegação visual por pastas com Enter ou duplo clique; árvore lateral recebe hover, retorna à raiz e seleciona diretórios Linux conhecidos; barra `Address` permite navegar somente dentro da raiz visual; toolbar segue os `idCommand` reais, recebe hover, mostra pressão e cancela soltura fora do botão, mas operações e comandos de menu ainda não concluem o fluxo | geometria inválida normalizada para `800x600`; limite da lista em 128 linhas; delay `MPR.dll 6/6` |
@@ -706,7 +723,7 @@ continuam sendo a evidência necessária para registrá-lo como suportado.
 | 7 | `HWiNFO64.exe` | PE32+ x86-64 | 28/28 (100%) | `supported` | `ExitProcess 44544 (0xAE00 → shell 0)` | **Fase 13.B**: imports fechados `20/28→28/28`; `OpenPrinterW` resolve o import, mas a operação de impressão retorna `ERROR_NOT_SUPPORTED` de forma controlada |
 | 8 | `RobloxPlayerInstaller.exe` | PE32+ x86-64 | 430/430 (100%) | `execution-failed` | `RBXCRASH FatalRuntimeError Worker,28` `ExitProcess 3` (antes `SIGSEGV 0x68 rva 0x39ab exit 71`) | **Fase 13.D**: imports resolvidos, mas o fluxo ainda não conclui com sucesso; o slot TLS específico continua sendo benchmark, não suporte declarado |
 | 9 | `Rockstar-Games-Launcher.exe` | PE32+ x86-64 | 338/338 (100%) | `execution-failed` | `ExitProcess 3` | imports resolvidos; fluxo principal ainda não validado como concluído |
-| 10 | `Logitech_GHUB_x64.exe` `lghub_installer.exe` | PE32+ x86-64 | 114/114 (100%) | `supported` | `ExitProcess 1` |  |
+| 10 | `Logitech_GHUB_x64.exe` `lghub_installer.exe` | PE32+ x86-64 | 114/114 (100%) | `supported` | `GuestTimeout 72` durante a inicialização | imports resolvidos; o fluxo do instalador não foi concluído e não é suporte funcional |
 | 11 | `notepad++.exe` | PE32+ x86-64 | 584/584 (100%) | `execution-failed` | `GuestTimeout 72` (GUI `GetMessageW` bloqueado sem `Xvfb`) | precisa `Xvfb :99` `docs/arquitetura/gui-x11.md` |
 | 12 | `RTSSHooks64.dll` | PE32+ DLL x86-64 | 256/256 (100%) | `imports-resolved` | `not-attempted` (DLL) | **Fase 13.RTSS**: imports resolvidos para análise; `CreateRemoteThread` e `WriteProcessMemory` agora falham com `ERROR_NOT_SUPPORTED` (sem fingir execução remota). O restante inclui `GDI32 ...`, `USER32 ...`, `KERNEL32 ...`, `SHLWAPI ...`, `WINMM ...`, `SETUPAPI 7` e `delay DirectX 11`; os stubs DirectX retornam `E_FAIL/S_OK` controlados |
 | 13 | `Affinity x64.msix` | Zip/MSIX | — | `package-recognized` | `not-attempted` | `App/Affinity.exe` é `Mono/.Net entry 0x0 0 imports` — `.NET` fora de escopo `PROJETO.md:22`; o inspector lê central directory, manifesto armazenado/DEFLATE e metadados estruturais. Os 8 testes do parser e o teste de afinidade passaram no Debug; não instala nem executa o pacote |
@@ -722,8 +739,8 @@ continuam sendo a evidência necessária para registrá-lo como suportado.
 | **7-Zip CLI (`7z_x64.exe`)** | PE32+ x86-64 | 100% (133/133) | Suportado | Executou e imprimiu o banner oficial completo do 7-Zip no terminal |
 | **PuTTY SSH Client (`putty_x64.exe`)** | PE32+ x86-64 | 100% (348/348) | Suportado | Executou entry point, inicializou FLS (slots 0 e 1) e loop de eventos de interface e rede |
 | **WinRAR (`WinRAR_x64.exe`)** | PE32+ x86-64 | 100% (251/251) | Suportado | Inicializou FLS, subsistema CRT e APIs do Shell/OLE com sucesso |
-| **HWiNFO64 (`HWiNFO64.exe`)** | PE32+ x86-64 | 100% (28/28) | Suportado | Fase 13.B — stubs acima; exec `ExitProcess 44544` |
+| **HWiNFO64 (`HWiNFO64.exe`)** | PE32+ x86-64 | 100% (28/28) | Fluxo principal restrito | Fase 13.B — exec `ExitProcess 44544`; `OpenPrinterW` retorna `ERROR_NOT_SUPPORTED` |
 | **Roblox Player Installer (`RobloxPlayerInstaller.exe`)** | PE32+ x86-64 | 100% (430/430) | Não suportado como fluxo concluído | Fase 13.D — `RBXCRASH` + `ExitProcess 3` (antes `SIGSEGV`); resolução de imports e correção TLS não equivalem a suporte |
 | **Notepad++ (`notepad++.exe`)** | PE32+ x86-64 | 100% (584/584) | Não suportado como fluxo concluído | Histórico de resolução; execução registrada terminou em `GuestTimeout 72` sem Xvfb |
-| **Rufus (`Rufus_x64.exe`)** | PE32+ x86-64 | 100% (14/14) | Suportado | UPX marca seções `rwx`; o loader mantém W^X, exec `ExitProcess 56832` |
+| **Rufus (`Rufus_x64.exe`)** | PE32+ x86-64 | 100% (14/14) | Inicia | UPX marca seções `rwx`; o loader mantém W^X, exec `ExitProcess 56832`; fluxo de uso não validado |
 | **7-Zip Installer / Notepad++ Installer / Everything Search** | PE32 (x86) | — | Unsupported | Rejeitados controladamente como arquitetura x86 32-bit (0x14c) |

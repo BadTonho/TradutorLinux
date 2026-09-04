@@ -9,10 +9,20 @@ promessa de suporte universal; cada entrada é verificada via `tests/samples` ou
 
 ## Níveis
 
-- **inicia** — PE32+ válido, imports resolvidos, entry point não executado (`unsupported` → `supported` no `--report`)
-- **fluxo principal** — executa fluxo principal com saída byte-idêntica ou GUI smoke sob Xvfb
-- **uso diário** — múltiplos fluxos, persistência e erros tratados
-- **cobertura avançada** — múltiplas DLLs, threads, rede, recursos
+Os níveis abaixo são funcionais e independentes do `result` do `--report`:
+
+- **analisado** — houve leitura de PE/imports, mas o entry point não foi executado;
+- **inicia** — o entry point inicia e há resultado observável, sem validação de
+  um fluxo representativo;
+- **fluxo principal restrito** — um fluxo representativo passa, com limitações
+  explícitas que impedem classificá-lo como uso geral;
+- **fluxo principal** — o fluxo principal escolhido para o alvo passa com
+  resultado verificável;
+- **uso diário** — múltiplos fluxos, persistência e erros tratados;
+- **cobertura avançada** — múltiplas DLLs, threads, rede ou recursos validados.
+
+`result: supported` no `--report` significa somente `imports-resolved`. Ele não
+eleva sozinho um aplicativo para qualquer nível funcional acima.
 
 ## Console
 
@@ -84,26 +94,30 @@ experimental, não suporte funcional do fluxo de compactação.
 - `225/430 (52%)` SHELL32
 - `240/430 (55%)` GDI estendido
 - `244/430 (56%)` análise local de 2026-08-23
+- `430/430 (100%)` resolução estática na coleta de 2026-09-04
 
-Ainda `unsupported`, `execution: not-attempted`. O instalador é um benchmark de
-cobertura, não um alvo exclusivo: lacunas restantes são priorizadas por API e
-categoria no portfólio da Fase 13. A lista completa de imports estáticos que
-faltam para essa amostra, e os próximos aplicativos analisados, ficam no
+A amostra está com `result: supported` para resolução de imports, mas a execução
+comercial falhou de forma controlada em `RBXCRASH FatalRuntimeError Worker,28`
+(`ExitProcess 3`). O instalador é um benchmark de cobertura, não um alvo
+exclusivo: ele não recebe nível funcional até que um fluxo de instalação e
+execução conclua. A lista completa de requisitos históricos e as reanálises ficam no
 [registro unificado de requisitos](requisitos-aplicativos.md).
 
 `lghub_installer.exe` (Logitech G HUB) resolve `114/114` imports no
-`--report`, com execução completa do bootstrap CRT/FLS.
+`--report`, mas a execução em prefixo temporário expirou com `GuestTimeout 72`
+durante a inicialização; portanto permanece sem fluxo funcional validado.
 
 Novos benchmarks do portfólio popular x64 na Fase 13.13. Os percentuais abaixo
 medem cobertura de resolução de imports; não significam, sozinhos, semântica
 comportamental completa. Use o campo `runtime-support` do `--report` e os testes
 de integração para avaliar o nível real de suporte:
-- `winrar-x64-723.exe` (WinRAR 7.23 x64): **251/251 (100%)** imports resolvidos
+- `winrar-x64-723.exe` (WinRAR 7.23 x64): **251/251 (100%)** imports resolvidos; smoke `sfxcmd` concluído
 - `7z_x64.exe` (7-Zip CLI x64): **133/133 (100%)** imports resolvidos
 - `7zFM_x64.exe` (7-Zip GUI): **298/298 (100%)** imports resolvidos; há um shell visual experimental para `7-Zip::FM` com listagem imediata do diretório do executável, seleção, hover, árvore lateral com hover, barra de endereço restrita à raiz e navegação visual por pastas via Enter ou duplo clique, mas comandos de arquivo ainda não estão ligados
 - `Rockstar-Games-Launcher.exe`: **338/338 (100%)** imports resolvidos
 - `putty_x64.exe` (PuTTY SSH Client): **348/348 (100%)** imports resolvidos
 - `notepad++.exe` (Notepad++ x64): **584/584 (100%)** imports resolvidos
 - `Affinity x64.msix`: pacote MSIX / AppX reconhecido pelo parser de manifesto
-- `HWiNFO64.exe` / `Rufus_x64.exe`: filtrados com segurança contra anomalias de cabeçalho PE
+- `HWiNFO64.exe`: **inicia**; `OpenPrinterW` retorna `ERROR_NOT_SUPPORTED` de forma controlada
+- `Rufus_x64.exe`: **inicia**; o fluxo de uso não foi validado
 - Wrappers 32-bit (NSIS/Inno): rejeitados com segurança pelo filtro de arquitetura x64

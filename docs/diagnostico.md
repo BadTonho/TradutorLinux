@@ -96,6 +96,19 @@ Em todos os casos, `execution: not-attempted` e
 `execution-result: not-attempted` deixam claro que o relatório não executa o
 PE.
 
+Para evitar confundir análise com compatibilidade de aplicativo, use esta ordem
+de evidência:
+
+1. `result` mede somente a resolução estática de imports.
+2. `execution` registra se o entry point foi executado (`not-attempted`,
+   `passed` ou `failed`).
+3. O catálogo só pode registrar `fluxo principal`, `uso diário` ou outro nível
+   funcional quando houver um fluxo representativo executado, resultado
+   observável e limitações publicadas.
+
+Um `result: supported` sem execução correspondente significa apenas
+`imports-resolved`; não deve ser apresentado como suporte funcional ao usuário.
+
 Quando uma importação não pode ser resolvida, emite um evento `unresolved` com os campos `dll`, `symbol`, `status`, `detail` e `mechanism`:
 
 ```text

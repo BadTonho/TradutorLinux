@@ -14,7 +14,7 @@ O alvo inicial é deliberadamente restrito:
 | Máquina hospedeira | Linux x86-64 |
 | Tipo de aplicativo | Console Win32 e GUI Win32 mínima experimental |
 | Dependências | Conjunto documentado de APIs `KERNEL32`, `USER32` e `GDI32` |
-| Fora do escopo inicial | PE32 x86, ARM, .NET, COM, drivers, GUI Win32 ampla, GDI completo, DirectX e anticheat |
+| Fora do escopo inicial | PE32 x86, ARM, .NET, COM amplo/ActiveX, drivers, GUI Win32 ampla, GDI completo, DirectX e anticheat |
 
 Com CPU igual nos dois lados, as instruções x86-64 do programa podem ser executadas nativamente. O trabalho do TradutorLinux é carregar a imagem PE, preparar o contexto de processo esperado por ela e fornecer as APIs Windows que o programa importa.
 
@@ -65,7 +65,7 @@ Linux / POSIX
 
 ### 3.2. Objetivos de produto sério
 
-- Entregar valor para o portfólio real: `Roblox`, `WinRAR`, `HWiNFO64`, `7-Zip`, `putty`, `RTSSHooks` com `compatibilidade: 100%` quando possível e `execução` reproduzível via `--trace` `docs/diagnostico.md`.
+- Entregar valor para o portfólio real: `Roblox`, `WinRAR`, `HWiNFO64`, `7-Zip`, `putty`, `RTSSHooks`, medindo separadamente resolução de imports, nível de execução e limitações reproduzíveis via `--trace` em `docs/diagnostico.md`.
 - Garantir estabilidade: loader, ABI, memória, imports, TLS, unwind/SEH e diagnósticos com `exit code` `71/72` e `fault-address` antes de ampliar famílias de DLL.
 - Manter qualidade de produção: warnings rigorosos, `CTest` `sanitize`, `LSAN_OPTIONS`, `Xvfb` e matriz `docs/compatibilidade.md` atualizada a cada API.
 
@@ -83,7 +83,9 @@ O resultado deve imprimir a saída esperada, retornar o código correto e gerar 
 
 - Compatibilidade presumida com qualquer executável sem análise, implementação e regressão correspondentes.
 - Interface gráfica Win32 além do subconjunto experimental, GDI completo, DirectX, áudio e GPU.
-- COM, ActiveX, .NET, drivers e serviços Windows.
+- COM/ActiveX amplo, automação `IDispatch`, .NET, drivers e serviços Windows. Os
+  fixtures de `ole32.dll` e streams em memória documentados na matriz são
+  contratos mínimos isolados, não suporte geral a COM.
 - Suporte a 32 bits, ARM, WOW64 ou execução cruzada de arquitetura.
 - Segurança de executáveis não confiáveis. Compatibilidade não é sandbox: um `.exe` executado nativamente tem os privilégios do usuário atual.
 

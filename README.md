@@ -6,8 +6,11 @@ experimental no Linux x86-64.
 
 O objetivo de longo prazo é ampliar esse subconjunto para classes cada vez mais abrangentes de aplicativos Windows, sempre com testes, limitações publicadas e regressões reproduzíveis.
 
-O estado atual é a **Fase 13**, com o próximo marco em **13.14 (TLS genérico e
-Worker RSL)**. Parser, mapeamento, imports, console, runtime básico,
+O estado atual é a **Fase 13**. A subetapa **13.14 (TLS genérico e Worker RSL)**
+foi concluída para as fixtures reutilizáveis; o caso comercial do Roblox
+continua como benchmark com execução não concluída. O próximo ciclo começa pela
+reconciliação do inventário e dos níveis de compatibilidade (`B4` no
+`ROADMAP.md`). Parser, mapeamento, imports, console, runtime básico,
 diagnóstico, relatório de cobertura, instaladores em prefixos e GUI Win32
 experimental já têm entregas validadas. O suporte continua restrito às
 aplicações, APIs e limitações publicadas na matriz de compatibilidade.
@@ -72,9 +75,11 @@ tradutorlinux --version
 
 `--trace` escreve diagnósticos somente em `stderr`. A saída padrão será reservada à futura saída do programa Windows. O contrato completo de trace e códigos de saída está em [docs/diagnostico.md](docs/diagnostico.md).
 
-`--report` lista os imports e o estado de suporte sem mapear nem executar o
-entry point. Retorna `0` quando todas as dependências pertencem ao subconjunto
-suportado e `5` quando há uma limitação conhecida.
+`--report` lista os imports e o estado de resolução sem mapear nem executar o
+entry point. Retorna `0` quando todas as dependências estáticas foram resolvidas
+e `5` quando há uma limitação de resolução conhecida. Isso não prova que o
+aplicativo executa um fluxo funcional; essa conclusão exige execução e teste
+registrados em [docs/compatibilidade.md](docs/compatibilidade.md).
 
 ## Qualidade
 

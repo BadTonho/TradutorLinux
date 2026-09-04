@@ -26,6 +26,17 @@ as referências nas fases não criem listas paralelas.
 ## Estado atual
 
 - **Fase atual:** Fase 13 — compatibilidade ampla por portfólio.
+- **Próximo ciclo:** primeiro reconciliar o inventário e os níveis de
+  compatibilidade (`B4`); depois escolher explicitamente entre aprofundar um
+  fluxo real do portfólio (`B5`) ou transformar a tradução por aplicativo
+  (`B2`) em uma trilha de produto própria. Os itens não escolhidos permanecem
+  estacionados, não são trabalho simultâneo.
+- **Último incremento:** a Fase 13.14 concluiu TLS genérico e a fixture
+  reutilizável Worker/RSL. O caso comercial do Roblox continua como benchmark:
+  imports resolvidos, mas execução interrompida em `RBXCRASH`/`ExitProcess 3`.
+
+Os demais bullets desta seção são registro cronológico de marcos já entregues;
+para decidir o próximo trabalho, use somente a ordem do backlog abaixo.
 - **Marco concluído:** a Fase 7 foi validada de ponta a ponta e a decisão de produto foi tomada: **seguir com a GUI Win32 mínima como objetivo experimental**. `tl_gui.exe` abriu a janela X11, recebeu o clique em OK e encerrou com código `0`; `tl_win.exe` criou uma janela real e executou um message loop completo (`RegisterClassExA`, `CreateWindowExA`, `ShowWindow`, `GetMessageA`, `DispatchMessageA`, `DefWindowProcA`, `PostQuitMessage`), encerrando via `WM_CLOSE`/autoclose com código `0`; o modo `--report` lista imports suportados sem executar o PE; `tl_hello`, `tl_echo` e `tl_file` têm regressões e limitações publicadas na matriz.
 - **Marco concluído:** o smoke test de GUI passou a ter cobertura automática em CI. O teste `runtime_gui_smoke` sobe um `Xvfb` próprio e executa `tl_win.exe`, `tl_win2.exe`, `tl_key.exe`, `tl_timer.exe`, `tl_gdi.exe`, `tl_paint.exe` e `tl_dialog.exe` de ponta a ponta, cobrindo message loop, `WM_DELETE_WINDOW`, teclado, duas janelas, timers, pintura e diálogo modal. O `x11_popup_smoke` cobre Escape, clique externo, destruição externa e timeout; a conexão X11 do runtime é fechada no teardown (`DisplayCloser`). A validação Debug desta retomada passou nos dois smokes.
 - **Marco concluído:** `CreateWindowExA` agora despacha `WM_CREATE` ao `WNDPROC` do convidado antes de devolver o `HWND` (retorno `-1` aborta a criação e devolve `NULL`). A fixture `tl_win.c` marca uma flag no `WM_CREATE` e propaga no exit code via `PostQuitMessage`, então o `runtime_gui_smoke` prova o despacho exigindo exit-code `1`.
@@ -779,7 +790,7 @@ nem declarar os benchmarks comerciais suportados.
 - [x] `RTSSHooks64.dll` `205/256→256/256` `GDI32 5` `USER32 7` `KERNEL32 16` `SHLWAPI 4` `WINMM 1` `SETUPAPI 7` + `delay DirectX 11` `winapi.cpp:782` `gdi32.cpp:1109` `user32.cpp:3769` `shlwapi.cpp:328` `winmm.cpp:70` `winapi.hpp:2072` — stubs `E_FAIL/S_OK` `module.cpp:1412,1545`
 - [x] `RobloxPlayerInstaller.exe` `SIGSEGV 0x68 rva 0x39ab exit 71 → RBXCRASH Worker,28 exit 3` — `TLS slot 0x430==NULL` `objdump 0x1400039ab` `teb.hpp:92` `pe_reader.cpp:685` `template 0x88c rva 0xb6a520` `winapi.cpp:751` `*TLS(0x430)=base+0xc2c800` após `invoke_thread_tls_callbacks`
 
-#### Fase 13.14 — TLS genérico e Worker RSL (Roblox) — em andamento
+#### Fase 13.14 — TLS genérico e Worker RSL (Roblox) — subetapa concluída
 
 - [x] Generalizar o contrato do slot pointer-backed `TLS 0x430` com validação do span raw + `SizeOfZeroFill`, alocação sob demanda de bloco `0x1000` zerado, tabela por TEB e liberação no encerramento; `tl_tls_generic.exe` cobre `TLS zero-init` + leitura do ponteiro + `mov 0x68(%rax)` sem `SIGSEGV` (Debug: teste unitário e 4 CTest passaram; fixture emite registros PE TLS explícitos sem CRT)
 - [x] Implementar e validar o subconjunto Linux reutilizável observado no Worker: `GetAdaptersInfo`/`GetAdaptersAddresses`/`if_nametoindex` via `getifaddrs`, `CertOpenStore` com provedores controlados e `WTSEnumerateSessionsW`/`WTSFreeMemory`; `tl_worker_rsl.exe` cobre `WSAStartup`/`getaddrinfo`, interfaces IPv4, loja em memória e sessão local (Debug: 10 testes unitários passaram, 1 skip controlado sem IPv4 + 4 CTest de fixture)
@@ -811,7 +822,10 @@ o que ainda não é suportado.
 
 ## O que fica explicitamente fora do estágio atual
 
-- Jogos, DirectX, drivers, anti-cheat, .NET, COM, ActiveX e serviços Windows, até que exista decisão explícita, alvo concreto e fase própria.
+- Jogos, DirectX, drivers, anti-cheat, .NET, COM/ActiveX amplo, automação
+  `IDispatch` e serviços Windows, até que exista decisão explícita, alvo
+  concreto e fase própria. Os fixtures mínimos de `ole32.dll` e streams em
+  memória não representam suporte geral a COM.
 - Implementar centenas de APIs sem aplicativo-alvo e regressão.
 - Declarar suporte porque o programa abriu; o fluxo principal precisa ser verificável.
 
@@ -832,7 +846,10 @@ quantidade de APIs declaradas sem uso real.
 ### Estratégia de expansão
 
 - [x] Criar um catálogo de aplicativos reais por categoria: console, arquivos, rede, ferramentas de desenvolvimento, produtividade e GUI (`docs/catalog.md` com `xxd`/`bzip2`/`dos2unix`/`tl_*`/`simple_todo`/`Roblox`).
-- [x] Manter níveis de compatibilidade: inicia, fluxo principal, uso diário e cobertura avançada (definidos em `docs/catalog.md`).
+- [x] Manter níveis funcionais de compatibilidade: analisado, inicia, fluxo
+  principal restrito, fluxo principal, uso diário e cobertura avançada
+  (definidos em `docs/catalog.md`); resolução de imports permanece uma dimensão
+  separada.
 - [x] Coletar imports de muitos aplicativos e priorizar APIs que aparecem em vários alvos (`Roblox` `430` imports, `gdiplus` `8/8`, `SHELL32` `5/5`).
 - [x] Implementar famílias de DLLs por demanda: `KERNEL32`, `NTDLL` limitada, `ADVAPI32`, `USER32`, `GDI32`, `SHELL32`, `OLE32`, `COMDLG32`, `WS2_32`, `WININET`, `WINTRUST`, `CRYPT32` e CRTs (23 módulos `tests/test_module.cpp:87`).
 - [x] Criar testes de integração por aplicativo e uma matriz pública de limitações (`docs/compatibilidade.md` + `tests/samples` 36 fixtures).
@@ -863,7 +880,11 @@ Cada etapa depende da anterior. Um aplicativo grande não será considerado
 suportado por simplesmente abrir a janela: ele precisa concluir operações
 representativas sem corrupção, travamento ou resultado incorreto.
 
-## Próximos marcos
+## Marcos de referência (histórico)
+
+Os marcos abaixo registram a sequência já cumprida do projeto. Eles não são a
+fila atual de trabalho; novas tarefas devem entrar somente no backlog
+consolidado e seguir a ordem do próximo ciclo indicada adiante.
 
 | Marco | Resultado verificável |
 |---|---|
@@ -880,12 +901,11 @@ representativas sem corrupção, travamento ou resultado incorreto.
 | M11 — Arquivos reais | Um aplicativo cria, enumera e manipula arquivos e diretórios usando caminhos traduzidos. |
 | M12 — GUI real | Um aplicativo GUI escolhido por seus imports completa um fluxo principal sob X11. |
 
-Com o marco M7 concluído, a GUI mínima avançou além do planejado e passa a ser
-acompanhada no próprio roadmap da Fase 7: teclado estendido (`WM_KEYUP`, virtual
-keys, `Shift`), timers (`WM_TIMER` periódico) e um GDI mínimo (pintura com
-`BeginPaint`/`EndPaint`/`TextOut`). Cada nova API exige fixture e regressão; o
-próximo passo natural, quando justificado por um aplicativo-alvo, é o desenho de
-formas (`Rectangle`/`FillRect`), fontes/cores ou a entrada de mouse completa.
+Com o marco M7 concluído, a GUI mínima avançou além do plano original:
+teclado estendido (`WM_KEYUP`, virtual keys, `Shift`), timers (`WM_TIMER`) e
+GDI mínimo já possuem fixtures e regressões. Qualquer expansão visual futura
+depende de um alvo escolhido em `B5` ou `B7`; não é uma tarefa implícita do
+roadmap.
 
 ## Backlog consolidado
 
@@ -894,32 +914,45 @@ Este inventário reúne as pendências de `PROXIMAS-ETAPAS.md`,
 reorganização. Ele é a única lista de trabalho aberta do projeto. Uma tarefa
 fica pronta somente com a evidência exigida na definição de pronto abaixo.
 
-### Próximo ciclo
+### Próximo ciclo — documentação e decisão
 
-- [ ] **B1 — Limites de CPU e RAM por aplicativo.** Definir a interface de
-  configuração (CLI, catálogo e launcher), a unidade dos limites, a herança
-  para processos-filhos, o tratamento de `timeout` e os diagnósticos. Escolher
-  um mecanismo Linux efetivo, como `setrlimit` ou cgroup, e implementar limites
-  verificáveis de CPU e memória. Criar uma fixture que exceda cada limite,
-  validar o código/evento de saída e deixar claro que isso é contenção de
-  recursos, não sandbox.
-- [ ] **B2 — Arquivos de tradução isolados por aplicativo.** Criar uma camada
-  independente do loader e das APIs Win32 para permitir tradução de programas
-  de terceiros. Definir formato, diretório, identificação por aplicativo
-  (ID/hash/versão), seleção de idioma, precedência, fallback e comportamento
-  para arquivo ausente ou inválido. A aplicação da tradução deve ser opt-in
-  por aplicativo e não alterar os demais; validar com um programa externo de
-  teste e registrar o resultado no catálogo.
+A ordem operacional deste ciclo é: **B4**, decisão entre **B2** e **B5**, depois
+**B1** e **B10**. O objetivo é tornar o estado confiável antes de ampliar a
+implementação. B2 é uma trilha de produto separada do runtime Win32; B5 deve
+escolher um único fluxo real para aprofundar, não apenas adicionar executáveis.
+
 - [ ] **B4 — Uniformizar o inventário de aplicativos.** Atualizar
   `docs/requisitos-aplicativos.md` para que toda medição informe data, hash,
   versão, arquitetura, ferramenta/versão e se foi somente `--report` ou
   execução. Corrigir entradas antigas sem esses metadados sem promover
-  compatibilidade por inferência.
-- [ ] **B5 — Completar o portfólio versionado.** Adicionar representantes reais
-  autorizados de instalador, produtividade/GUI e ferramenta de rede, sempre
-  com versão, hash, manifest, fixture ou smoke reproduzível e entrada na
-  matriz. Priorizar dependências compartilhadas e não APIs adicionadas apenas
-  para elevar a porcentagem de um binário.
+  compatibilidade por inferência; alinhar também `docs/catalog.md` e a matriz.
+- [ ] **B2 — Arquivos de tradução isolados por aplicativo.** Se a tradução de
+  interface for confirmada como prioridade de produto, criar uma trilha
+  independente do loader e das APIs Win32 para programas de terceiros. Definir
+  formato, diretório, identificação por aplicativo (ID/hash/versão), seleção de
+  idioma, precedência, fallback e comportamento para arquivo ausente ou
+  inválido. A aplicação deve ser opt-in, isolada por aplicativo e validada com
+  um programa externo de teste; não misturar essa camada ao contrato do runtime.
+- [ ] **B5 — Aprofundar um fluxo real versionado.** Escolher um único
+  representante autorizado de instalador, produtividade/GUI ou ferramenta de
+  rede e concluir um fluxo principal, com versão, hash, manifest, smoke
+  reproduzível, entrada na matriz e limitações publicadas. Priorizar
+  dependências compartilhadas; não adicionar APIs apenas para elevar a
+  porcentagem de um binário.
+- [ ] **B1 — Limites de CPU e RAM por aplicativo.** Depois da reconciliação
+  documental, definir a interface de configuração (CLI, catálogo e launcher),
+  a unidade dos limites, a herança para processos-filhos, o tratamento de
+  `timeout` e os diagnósticos. Escolher um mecanismo Linux efetivo, como
+  `setrlimit` ou cgroup, e implementar limites verificáveis de CPU e memória.
+  Criar uma fixture que exceda cada limite, validar o código/evento de saída e
+  deixar claro que isso é contenção de recursos, não sandbox.
+- [ ] **B10 — Fechar a validação de recursos X11 com LeakSanitizer.** Reexecutar
+  o smoke sob Xvfb com desenho repetido e LeakSanitizer, registrar o resultado
+  e manter a liberação de cores, grabs, janelas e displays protegida por
+  regressão.
+
+### Estacionadas até haver condição explícita
+
 - [ ] **B6 — Reexecutar Worker/RSL e concluir o caso Roblox.** Localizar ou
   receber a amostra comercial exata, registrar hash e repetir
   `install --prefix` seguido de `app run` com trace. Só promover o estado para
@@ -927,8 +960,9 @@ fica pronta somente com a evidência exigida na definição de pronto abaixo.
   observáveis corretos. Esta tarefa está bloqueada nesta cópia porque não há
   executável comercial `Worker`/`RSL`; `tl_worker_rsl.exe` é apenas a fixture
   reutilizável e o exit `77` sem IPv4 continua sendo skip controlado.
-- [ ] **B7 — Tornar o shell visual do 7-Zip um fluxo funcional.** Com fixture e
-  alvo reproduzíveis, ligar comandos de menu/toolbar à navegação do convidado,
+- [ ] **B7 — Tornar o shell visual do 7-Zip um fluxo funcional.** Só iniciar
+  depois de escolher o 7-Zip como representante de `B5`. Com fixture e alvo
+  reproduzíveis, ligar comandos de menu/toolbar à navegação do convidado,
   operações de arquivo e submenus aninhados. Manter a lista, a barra de
   endereço e a árvore confinadas ao contrato de prefixo e só alterar a matriz
   após um fluxo representativo concluído; abrir a janela não basta.
@@ -941,10 +975,6 @@ fica pronta somente com a evidência exigida na definição de pronto abaixo.
   forma não canônica observada no Roblox (`OpInfo=10`, `FrameOffset=0`) após
   outra amostra confirmar a mesma semântica e existir fixture determinística.
   Não criar uma exceção exclusiva para o Roblox.
-- [ ] **B10 — Fechar a validação de recursos X11 com LeakSanitizer.** Reexecutar
-  o smoke sob Xvfb com desenho repetido e LeakSanitizer, registrar o resultado
-  e manter a liberação de cores, grabs, janelas e displays protegida por
-  regressão.
 
 ### Evolução condicionada a alvo ou benefício medido
 
