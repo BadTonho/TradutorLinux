@@ -670,6 +670,9 @@ nem declarar os benchmarks comerciais suportados.
   GDI completo, impressão, shell de arquivos ou todos os controles Windows.
 - [x] Reanalisar os dois benchmarks e só iniciar execução manual quando todos
   os imports estáticos e atrasados correspondentes estiverem resolvidos.
+- [x] Projetar o `HDC` de controles lógicos na superfície X11 da janela
+  principal, acumulando offsets de pais para `TextOut`, `FillRect` e
+  `Rectangle`, com regressão para filhos aninhados e handles órfãos.
 
 #### Fase 13.12 — automação, rede e confiança, em entregas separadas
 

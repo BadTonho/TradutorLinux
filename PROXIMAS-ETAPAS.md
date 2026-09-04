@@ -11,7 +11,7 @@ explícitos abaixo.
 
 - Commits desta retomada: `ce66739`, `4f95c65`, `2fa9ebd`, `d9aeb9f`,
   `956aadc`, `17f4305`, `45cc3f9`, `990b960`, `6d7c855`, `3df05e4`,
-  `ee1fec9` e `5fe3e6d`.
+  `ee1fec9`, `5fe3e6d` e `a1fe77f`.
 - O alvo continua sendo PE32+ x86-64 em Linux x86-64.
 - Já foram implementados e testados no build Debug Linux os subconjuntos de `IPHLPAPI`, `WTSAPI32` e parte de `CRYPT32`, além das correções de forwarders, TLS genérico e parser de manifests MSIX.
 - A validação executada até aqui cobriu fixtures próprias, testes unitários direcionados e traces de `tl_worker_rsl` e `tl_powr`.
@@ -61,10 +61,15 @@ explícitos abaixo.
   o unitário completo ficou em 361 testes/80 suítes, com 360 aprovados e 1
   skip ambiental; DirectX, GPU, áudio e impressão continuam fora de suporte
   funcional.
-- [x] Listagem controlada do shell 7-Zip: a suíte unitária passou com 364 testes
-  (363 aprovados e 1 skip ambiental); três testes protegem diretório imediato,
+- [x] Listagem controlada do shell 7-Zip: a suíte unitária passou com 366 testes
+  (365 aprovados e 1 skip ambiental); três testes protegem diretório imediato,
   ordenação, limite de 128 linhas e caminho ausente. O renderer usa somente o
   diretório absoluto do executável aberto e não conecta comandos de arquivo.
+- [x] Ponte GDI para controles lógicos: `TextOut`, `FillRect` e `Rectangle`
+  agora desenham na superfície X11 da janela principal com os offsets
+  acumulados dos pais; dois testes protegem projeção aninhada e rejeição de
+  handles órfãos. Isso prepara a tradução de controles reais sem criar uma
+  janela X11 separada para cada filho Win32.
 - [x] Medições e catálogo: o catálogo registra os `298/298` imports do
   `7zFM_x64.exe`, a janela X11 real `800x600`, a normalização de geometria e
   os dois smokes GUI aprovados, sem transformar essa evidência visual em

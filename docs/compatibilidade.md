@@ -180,10 +180,10 @@ diretamente. Ele é experimental, não altera o subsistema de console e só acei
 | `USER32.dll` | `GetClassInfoW` | Suportado no subconjunto | Consulta a tabela de classes registrada, preenche `WNDCLASSW` quando há saída válida e retorna `ERROR_CLASS_DOES_NOT_EXIST` (`141`) para classe ausente |
 | `USER32.dll` | `DestroyWindow` | Suportado | Destrói a janela e despacha `WM_DESTROY` |
 | `USER32.dll` | `PostQuitMessage` | Suportado | Sinaliza `WM_QUIT`; `GetMessageA` retorna `0` |
-| `USER32.dll` | `GetDC` / `ReleaseDC` | Suportado | `HDC == HWND` (token opaco da janela); validam o par `hwnd`/`dc` |
-| `USER32.dll` | `BeginPaint` / `EndPaint` | Suportado | Preenchem o `PAINTSTRUCT` (layout Microsoft x64, 72 bytes) com o tamanho da janela e marcam/desmarcam o estado de pintura; `HDC == HWND` |
+| `USER32.dll` | `GetDC` / `ReleaseDC` | Suportado | `HDC == HWND` (token opaco da janela); validam o par `hwnd`/`dc`; controles lógicos projetam o desenho na superfície X11 do pai com offsets acumulados |
+| `USER32.dll` | `BeginPaint` / `EndPaint` | Suportado | Preenchem o `PAINTSTRUCT` (layout Microsoft x64, 72 bytes) com o tamanho da janela/controle e marcam/desmarcam o estado de pintura; o `HDC` usa a superfície X11 da janela principal |
 | `GDI32.dll` | `GetStockObject` | Suportado | Token opaco por stock object (tabela estática, `object` em `0..23`); stock objects não são liberados |
-| `GDI32.dll` | `TextOutA` / `TextOut` | Suportado | Desenha texto ANSI com comprimento explícito via `XDrawString` no `HDC`/janela |
+| `GDI32.dll` | `TextOutA` / `TextOut` | Suportado | Desenha texto ANSI com comprimento explícito via `XDrawString`; em controles lógicos soma a posição dos pais ao destino |
 
 ### Diálogos e controles (Fase 13.11)
 

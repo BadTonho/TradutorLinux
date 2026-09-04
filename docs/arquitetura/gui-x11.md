@@ -89,7 +89,7 @@ Além de `MessageBoxA`, `USER32.dll` exporta um subconjunto mínimo de janela:
 | `DefWindowProcA` | `WM_CLOSE` → `DestroyWindow`; demais mensagens retornam `0`. |
 | `DestroyWindow` | Destrói a janela X11 e despacha `WM_DESTROY` ao `WNDPROC` do convidado. |
 | `PostQuitMessage` | Sinaliza `WM_QUIT` com o código informado; `GetMessageA` passa a retornar `0`. |
-| `GetDC` / `ReleaseDC` | Devolvem um `HDC` que é o próprio handle de janela (token opaco) e validam o par `hwnd`/`dc`; servem de base para o desenho com GDI mínimo. |
+| `GetDC` / `ReleaseDC` | Devolvem um `HDC` que é o próprio handle de janela (token opaco) e validam o par `hwnd`/`dc`; servem de base para o desenho com GDI mínimo. Para controles lógicos, o destino é a superfície X11 da janela principal com o deslocamento acumulado dos pais. |
 
 ### Virtual keys e `TranslateMessage`
 
@@ -123,7 +123,10 @@ destino sem objeto DC real. `BeginPaint` preenche o `PAINTSTRUCT` convidado
 (layout Microsoft x64, 72 bytes; `R`ECT de 16 bytes) com o tamanho armazenado
 no `CreateWindowExA` e marca a janela como "pintando" até o `EndPaint`
 correspondente. `TextOutA` desenha o texto (com o comprimento explícito) via
-`XDrawString` no `HDC`/janela. `GetStockObject` devolve um token opaco por
+`XDrawString` no `HDC`/janela. Quando o `HDC` pertence a um controle lógico,
+`TextOut`, `FillRect` e `Rectangle` somam a posição do controle e desenham na
+superfície X11 da janela principal; o controle não precisa virar uma janela
+X11 individual. `GetStockObject` devolve um token opaco por
 objeto (endereço de uma tabela estática; stock objects não são liberados).
 
 ## Validação
