@@ -224,10 +224,14 @@ mostra um diagnóstico explícito com o nome do controle. Isso evita uma tela
 branca silenciosa em aplicações genéricas. Há uma exceção deliberada para o
 alvo real `7zFM_x64.exe`: quando a classe principal é `7-Zip::FM`, o backend
 desenha um shell visual próprio com menu, toolbar, endereço, navegação lateral,
-lista e status, sem fingir que os comandos do convidado já funcionam. A
-normalização da geometria inválida desse alvo também fica registrada no trace.
-Comandos, menus reais, ícones, dados de diretório e interação do painel ainda
-exigem contratos próprios e regressão antes de promover o aplicativo.
+lista e status, sem fingir que os comandos do convidado já funcionam. A lista
+mostra somente as entradas imediatas do diretório que contém o executável
+aberto, em ordem determinística, sem seguir links simbólicos e limitada a 128
+linhas; o caminho visual continua sendo `Z:\` e nenhuma operação de arquivo é
+disparada pela tela. A normalização da geometria inválida desse alvo também
+fica registrada no trace. Comandos, menus reais, ícones, navegação da lista e
+interação do painel ainda exigem contratos próprios e regressão antes de
+promover o aplicativo.
 
 `SendMessageA` implementa os contratos usados pelo alvo para `WM_SETFONT`,
 `CB_ADDSTRING`, `CB_SETCURSEL`, `CB_GETCURSEL` e as mensagens de list view de

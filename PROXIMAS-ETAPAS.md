@@ -10,7 +10,8 @@ explícitos abaixo.
 ## Estado atual
 
 - Commits desta retomada: `ce66739`, `4f95c65`, `2fa9ebd`, `d9aeb9f`,
-  `956aadc`, `17f4305`, `45cc3f9`, `990b960`, `6d7c855` e `3df05e4`.
+  `956aadc`, `17f4305`, `45cc3f9`, `990b960`, `6d7c855`, `3df05e4` e
+  `ee1fec9`.
 - O alvo continua sendo PE32+ x86-64 em Linux x86-64.
 - Já foram implementados e testados no build Debug Linux os subconjuntos de `IPHLPAPI`, `WTSAPI32` e parte de `CRYPT32`, além das correções de forwarders, TLS genérico e parser de manifests MSIX.
 - A validação executada até aqui cobriu fixtures próprias, testes unitários direcionados e traces de `tl_worker_rsl` e `tl_powr`.
@@ -33,8 +34,11 @@ explícitos abaixo.
   `7-Zip::FM` desenha menu, toolbar, endereço, navegação lateral, lista de
   arquivos e status em X11. Também normaliza a geometria impossível entregue
   pelo aplicativo (`22731,-1163111472,7029x272`) para `800x600`, registrando a
-  ocorrência no trace. A interface é navegável apenas visualmente; comandos,
-  menus reais, ícones e dados de diretório ainda não estão ligados ao convidado.
+  ocorrência no trace. A lista agora mostra, em modo somente leitura, as
+  entradas imediatas do diretório que contém o executável, sem recursão ou
+  seguimento de links simbólicos, com limite de 128 linhas. A interface é
+  navegável apenas visualmente; comandos, menus reais, ícones e navegação do
+  painel ainda não estão ligados ao convidado.
   O aplicativo continua explicitamente fora de suporte como fluxo GUI concluído.
 - [x] MSIX: 8 testes `MsixParserTest.*` e o teste de afinidade passaram no
   unitário e no CTest. A validação é estrutural; não houve instalação ou
@@ -57,6 +61,10 @@ explícitos abaixo.
   o unitário completo ficou em 361 testes/80 suítes, com 360 aprovados e 1
   skip ambiental; DirectX, GPU, áudio e impressão continuam fora de suporte
   funcional.
+- [x] Listagem controlada do shell 7-Zip: a suíte unitária passou com 364 testes
+  (363 aprovados e 1 skip ambiental); três testes protegem diretório imediato,
+  ordenação, limite de 128 linhas e caminho ausente. O renderer usa somente o
+  diretório absoluto do executável aberto e não conecta comandos de arquivo.
 - [x] Medições e catálogo: o catálogo registra os `298/298` imports do
   `7zFM_x64.exe`, a janela X11 real `800x600`, a normalização de geometria e
   os dois smokes GUI aprovados, sem transformar essa evidência visual em
