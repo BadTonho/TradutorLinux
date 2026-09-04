@@ -91,11 +91,14 @@ O notebook do usuário não aguenta compilações pesadas. Regras obrigatórias:
 
 ## Commits
 
-- **Nunca faça commit automático.** Só crie, altere (amend) ou envie commits
-  quando o usuário pedir explicitamente.
+- **Faça commit assim que uma etapa for concluída.** Considere como etapa uma
+  unidade coerente de trabalho que esteja implementada e validada; não espere
+  o encerramento de tarefas posteriores para registrar essa etapa.
 - Antes de commitar, inspecione `git status` e `git diff` e inclua apenas os
   arquivos da mudança pretendida; nunca inclua artefatos de execução de testes
   (arquivos gerados na raiz, bancos locais, diretórios temporários).
+- Não faça `push`, não altere (amend) commits existentes e não reescreva o
+  histórico sem pedido explícito do usuário.
 - Se houver qualquer hook, integração ou ferramenta que comita sozinha,
   avise o usuário em vez de deixar o commit acontecer.
 
