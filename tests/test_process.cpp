@@ -1,10 +1,10 @@
+#include "test_support.hpp"
 #include "tradutorlinux/loader/module.hpp"
 #include "tradutorlinux/loader/process.hpp"
 
 #include <cstddef>
 #include <cstdint>
 #include <fstream>
-#include <optional>
 #include <string>
 #include <vector>
 
@@ -13,6 +13,8 @@
 
 namespace tradutorlinux::loader {
 namespace {
+
+using tradutorlinux::test_support::maps_permissions_for;
 
 std::vector<std::byte> read_file(const std::string& path) {
     std::ifstream input(path, std::ios::binary);
@@ -27,30 +29,6 @@ std::vector<std::byte> read_file(const std::string& path) {
 
 std::string fixture_path(const std::string& name) {
     return std::string(TL_FIXTURE_OUTPUT_DIRECTORY) + "/" + name + ".exe";
-}
-
-std::optional<std::string> maps_permissions_for(const std::uintptr_t address) {
-    std::ifstream maps("/proc/self/maps");
-    std::string line;
-    while (std::getline(maps, line)) {
-        const std::string::size_type space = line.find(' ');
-        if (space == std::string::npos) {
-            continue;
-        }
-        const std::string range = line.substr(0, space);
-        const std::string::size_type dash = range.find('-');
-        if (dash == std::string::npos) {
-            continue;
-        }
-        const std::uintptr_t start = static_cast<std::uintptr_t>(
-            std::stoull(range.substr(0, dash), nullptr, 16));
-        const std::uintptr_t end = static_cast<std::uintptr_t>(
-            std::stoull(range.substr(dash + 1), nullptr, 16));
-        if (address >= start && address < end) {
-            return line.substr(space + 1, 4);
-        }
-    }
-    return std::nullopt;
 }
 
 class ProcessTest : public ::testing::Test {

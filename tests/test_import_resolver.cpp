@@ -1,4 +1,5 @@
 #include "pe_builder.hpp"
+#include "test_support.hpp"
 #include "tradutorlinux/loader/import_resolver.hpp"
 #include "tradutorlinux/loader/module.hpp"
 #include "tradutorlinux/pe/pe_reader.hpp"
@@ -6,8 +7,6 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <fstream>
-#include <optional>
 #include <string>
 #include <vector>
 
@@ -18,6 +17,7 @@ namespace tradutorlinux::loader {
 namespace {
 
 using namespace tradutorlinux::pe::testutil;
+using tradutorlinux::test_support::maps_permissions_for;
 
 constexpr std::uint64_t kTestPreferredBase = 0x10000000ULL;
 
@@ -33,32 +33,6 @@ std::uint64_t read_le_u64(const MappedImage& image, const std::uint32_t rva) {
 
 std::uint32_t align_page_down(const std::uint32_t value, const std::uint32_t page) {
     return value - value % page;
-}
-
-// Procura em /proc/self/maps a linha que cobre `address` e retorna as
-// permissões ("r--p"); std::nullopt se não houver.
-std::optional<std::string> maps_permissions_for(const std::uintptr_t address) {
-    std::ifstream maps("/proc/self/maps");
-    std::string line;
-    while (std::getline(maps, line)) {
-        const std::string::size_type space = line.find(' ');
-        if (space == std::string::npos) {
-            continue;
-        }
-        const std::string range = line.substr(0, space);
-        const std::string::size_type dash = range.find('-');
-        if (dash == std::string::npos) {
-            continue;
-        }
-        const std::uintptr_t start = static_cast<std::uintptr_t>(
-            std::stoull(range.substr(0, dash), nullptr, 16));
-        const std::uintptr_t end = static_cast<std::uintptr_t>(
-            std::stoull(range.substr(dash + 1), nullptr, 16));
-        if (address >= start && address < end) {
-            return line.substr(space + 1, 4);
-        }
-    }
-    return std::nullopt;
 }
 
 // Anexa um bloco de relocations vazio (válido) à última seção: permite o

@@ -39,6 +39,9 @@
 namespace tradutorlinux {
 namespace {
 
+constexpr std::uint32_t kWNetNoMoreEntries = 259U;
+constexpr std::uint32_t kRegisteredClipboardFormat = 0xC002U;
+
 void append_u16(std::vector<std::byte>& bytes, const std::uint16_t value) {
     bytes.push_back(static_cast<std::byte>(value & 0xFFU));
     bytes.push_back(static_cast<std::byte>((value >> 8U) & 0xFFU));
@@ -3093,7 +3096,8 @@ TEST(SevenZipGuiCoverageTest, AllApisAndModules) {
     EXPECT_EQ(tl_WNetOpenEnumW(0, 0, 0, nullptr, &enum_handle), 0U);
     EXPECT_NE(enum_handle, nullptr);
     std::uint32_t count = 10;
-    EXPECT_EQ(tl_WNetEnumResourceW(enum_handle, &count, nullptr, nullptr), 259U);
+    EXPECT_EQ(tl_WNetEnumResourceW(enum_handle, &count, nullptr, nullptr),
+              kWNetNoMoreEntries);
     EXPECT_EQ(count, 0U);
     EXPECT_EQ(tl_WNetCloseEnum(enum_handle), 0U);
     EXPECT_EQ(tl_WNetAddConnection2W(nullptr, nullptr, nullptr, 0), 0U);
@@ -3227,7 +3231,7 @@ TEST(PuttyCoverageTest, AllApisAndModules) {
     EXPECT_EQ(tl_TrackPopupMenu(nullptr, 0, 0, 0, 0, nullptr, nullptr), 0);
     EXPECT_EQ(tl_GetClipboardData(1), nullptr);
     EXPECT_EQ(tl_IsClipboardFormatAvailable(1), 0);
-    EXPECT_EQ(tl_RegisterClipboardFormatA("test_fmt"), 0xC002U);
+    EXPECT_EQ(tl_RegisterClipboardFormatA("test_fmt"), kRegisteredClipboardFormat);
     EXPECT_EQ(tl_CountClipboardFormats(), 0);
     EXPECT_EQ(tl_EnumClipboardFormats(0), 0U);
 
