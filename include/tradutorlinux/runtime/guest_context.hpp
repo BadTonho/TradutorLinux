@@ -47,6 +47,7 @@ struct GuestContext {
     std::uint64_t tls_start_raw{0};
     std::uint64_t tls_end_raw{0};
     std::uint64_t tls_index_address{0};
+    std::uint32_t tls_zero_fill_size{0};
     std::vector<std::uint64_t> tls_callbacks;
 
     std::array<char, 3> standard_handle_tokens{};
@@ -104,6 +105,13 @@ struct GuestContext {
 
     std::array<void*, 512> local_free_blocks{};
     std::mutex local_free_mutex;
+
+    struct ContextTlsDynamicBlock {
+        void* owner_teb{nullptr};
+        void* address{nullptr};
+    };
+    std::array<ContextTlsDynamicBlock, 256> tls_dynamic_blocks{};
+    std::mutex tls_dynamic_mutex;
 
     struct ContextResourceSlot {
         bool used{false};

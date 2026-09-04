@@ -210,6 +210,9 @@ function(tl_add_pe_fixture target_name source_file manifest_file)
             elseif(target_name STREQUAL "tl_thread")
                 set(runtime_extra_args
                     "-DEXPECTED_HEX=54687265616420646f6e650a54687265616420646f6e650a4d61696e20646f6e650a")
+            elseif(target_name STREQUAL "tl_tls_generic")
+                set(runtime_extra_args
+                    "-DEXPECTED_HEX=746c732d67656e657269630a")
             elseif(target_name STREQUAL "tl_resources")
                 set(runtime_extra_args
                     "-DEXPECTED_HEX=546c207265736f75726365207061796c6f61640a")
@@ -621,6 +624,10 @@ tl_add_pe_fixture(tl_hang src/tl_hang.c manifests/tl_hang.json RELOCATABLE NO_RU
 
 tl_add_pe_fixture(tl_thread src/tl_thread.c manifests/tl_thread.json
     LINK_KERNEL32 EXPECT_RESOLVED CONSOLE RELOCATABLE)
+
+tl_add_pe_fixture(tl_tls_generic src/tl_tls_generic.c manifests/tl_tls_generic.json
+    LINK_KERNEL32 EXPECT_RESOLVED CONSOLE REPORT RELOCATABLE
+    REPORT_SYMBOL "GetStdHandle")
 
 tl_add_pe_fixture(tl_locale_env_fls src/tl_locale_env_fls.c manifests/tl_locale_env_fls.json
     LINK_KERNEL32 UNWIND EXPECT_RESOLVED CONSOLE REPORT RELOCATABLE

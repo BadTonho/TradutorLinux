@@ -714,9 +714,9 @@ nem declarar os benchmarks comerciais suportados.
 - [x] `RTSSHooks64.dll` `205/256→256/256` `GDI32 5` `USER32 7` `KERNEL32 16` `SHLWAPI 4` `WINMM 1` `SETUPAPI 7` + `delay DirectX 11` `winapi.cpp:782` `gdi32.cpp:1109` `user32.cpp:3769` `shlwapi.cpp:328` `winmm.cpp:70` `winapi.hpp:2072` — stubs `E_FAIL/S_OK` `module.cpp:1412,1545`
 - [x] `RobloxPlayerInstaller.exe` `SIGSEGV 0x68 rva 0x39ab exit 71 → RBXCRASH Worker,28 exit 3` — `TLS slot 0x430==NULL` `objdump 0x1400039ab` `teb.hpp:92` `pe_reader.cpp:685` `template 0x88c rva 0xb6a520` `winapi.cpp:751` `*TLS(0x430)=base+0xc2c800` após `invoke_thread_tls_callbacks`
 
-#### Fase 13.14 — TLS genérico e Worker RSL (Roblox) — próximo
+#### Fase 13.14 — TLS genérico e Worker RSL (Roblox) — em andamento
 
-- [ ] Generalizar o fix `TLS 0x430` específico `image 0x1453000` `winapi.cpp:751` para alocador sob demanda: se `tls_module0_data[slot]==0` e `slot RVA∈.data` alocar `0x1000` zero e `register_local_free_block`; fixture `tl_tls_generic.exe` com `TLS zero-init` + `mov (%tls),%rax` + `mov 0x68(%rax)` sem `SIGSEGV`
+- [x] Generalizar o contrato do slot pointer-backed `TLS 0x430` com validação do span raw + `SizeOfZeroFill`, alocação sob demanda de bloco `0x1000` zerado, tabela por TEB e liberação no encerramento; `tl_tls_generic.exe` cobre `TLS zero-init` + leitura do ponteiro + `mov 0x68(%rax)` sem `SIGSEGV` (código e fixture prontos; validação Linux pendente)
 - [ ] Rastrear `Worker,28` com `--trace=ws2,runtime,wininet,crypt,pe` `process/isolate.cpp:155` — última API antes de `RBXCRASH` (`GetAdaptersAddresses` `WSAStartup` `CertOpenStore`) e implementar semântica Linux real (`getifaddrs` `getaddrinfo` `CertOpenStore` `WTSFreeMemory`) em vez de stub `0`; cada API ganha fixture e volta ao portfólio `docs/requisitos-aplicativos.md`
 - [ ] Manter `Roblox` como benchmark sem criar stubs exclusivos; só declarar `supported` quando `install --prefix` extrair `drive_c` e `app run` completar sem `panic`
 

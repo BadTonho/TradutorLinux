@@ -110,16 +110,20 @@ Critérios de conclusão:
   inexistente;
 - alinhar `docs/compatibilidade.md` e `docs/arquitetura/imports.md`.
 
-#### P1.3 — TLS genérico ainda depende de correção específica do Roblox
+#### P1.3 — TLS genérico implementado no subconjunto (falta validar no Linux)
 
-O realocamento dos endereços de callbacks TLS já foi corrigido nos fluxos
-normal e filho. A pendência diferente é o slot TLS zero-initializado usado pelo
-benchmark Roblox: `ROADMAP.md` registra o fix específico do slot `0x430` e
-mantém aberto um alocador genérico para slots sem dados iniciais.
+O runtime agora propaga `SizeOfZeroFill` do `IMAGE_TLS_DIRECTORY`, copia o
+template com limites validados e inicializa o slot pointer-backed `0x430` sob
+demanda quando ele está dentro do span TLS declarado. Cada TEB mantém sua
+própria tabela de blocos zerados, liberada antes do `munmap`; não há correção
+condicionada ao tamanho da imagem ou ao nome de um aplicativo. A fixture
+`tl_tls_generic.exe` cobre byte do template, zero-fill, leitura do ponteiro e
+`0x68` zero-inicializado.
 
 Critérios de conclusão:
 
-- implementar alocação sob demanda somente para slots/RVAs válidos da imagem;
+- implementar alocação sob demanda somente para um slot dentro do span TLS
+  validado, incluindo o zero-fill declarado pelo PE;
 - registrar e liberar o bloco no ciclo de vida da thread convidada;
 - criar `tl_tls_generic.exe` e regressão de zero-init, leitura e encerramento;
 - manter Roblox como benchmark e só mudar seu estado após execução reproduzível

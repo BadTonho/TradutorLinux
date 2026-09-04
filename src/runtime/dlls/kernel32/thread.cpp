@@ -171,6 +171,7 @@ TL_MSABI void* tl_CreateThread(const void* thread_attributes, const std::uintptr
         set_current_fls_thread_values(slot_ptr->fls_values);
         runtime::restore_guest_unwind_view(unwind_view);
         invoke_thread_tls_callbacks(2U /* DLL_THREAD_ATTACH */);
+        initialize_pointer_backed_tls_slot(static_cast<runtime::GuestTeb*>(teb));
         std::jmp_buf exit_point{};
         t_thread_exit_context = &exit_point;
         t_thread_exit_slot = slot_ptr;
@@ -180,6 +181,9 @@ TL_MSABI void* tl_CreateThread(const void* thread_attributes, const std::uintptr
                 reinterpret_cast<std::uintptr_t>(proc), parameter, slot_ptr->stack_top));
         }
         invoke_thread_tls_callbacks(3U /* DLL_THREAD_DETACH */);
+        // O bloco pointer-backed pertence à vida útil da thread convidada,
+        // não à vida útil posterior do handle retornado por CreateThread.
+        free_tls_dynamic_blocks(teb);
         // Após longjmp, ler o slot pelo TLS (não depender de registradores).
         ThreadSlot* const finished_slot = t_thread_exit_slot;
         t_thread_exit_context = nullptr;

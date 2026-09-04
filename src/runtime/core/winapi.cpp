@@ -161,6 +161,43 @@ bool take_local_free_block(void* const address) noexcept {
     return false;
 }
 
+bool register_tls_dynamic_block(void* const owner_teb, void* const address) noexcept {
+    if (owner_teb == nullptr || address == nullptr) {
+        return false;
+    }
+    std::lock_guard lock(runtime::guest_context().tls_dynamic_mutex);
+    for (runtime::GuestContext::ContextTlsDynamicBlock& slot :
+         runtime::guest_context().tls_dynamic_blocks) {
+        if (slot.address == nullptr) {
+            slot.owner_teb = owner_teb;
+            slot.address = address;
+            return true;
+        }
+    }
+    return false;
+}
+
+void free_tls_dynamic_blocks(void* const owner_teb) noexcept {
+    if (owner_teb == nullptr) {
+        return;
+    }
+    std::array<void*, 256> blocks{};
+    std::size_t block_count = 0;
+    {
+        std::lock_guard lock(runtime::guest_context().tls_dynamic_mutex);
+        for (runtime::GuestContext::ContextTlsDynamicBlock& slot :
+             runtime::guest_context().tls_dynamic_blocks) {
+            if (slot.owner_teb == owner_teb && slot.address != nullptr) {
+                blocks[block_count++] = slot.address;
+                slot = {};
+            }
+        }
+    }
+    for (std::size_t index = 0; index < block_count; ++index) {
+        std::free(blocks[index]);
+    }
+}
+
 void bump_guest_allocation_generation() noexcept {
     runtime::invalidate_memory_map_cache();
 }
@@ -623,6 +660,7 @@ void* allocate_guest_teb(const std::uintptr_t stack_top,
 
 void free_guest_teb(void* const teb) noexcept {
     if (teb != nullptr) {
+        free_tls_dynamic_blocks(teb);
         if (g_thread_teb == teb) {
             g_thread_teb = nullptr;
         }
@@ -663,23 +701,66 @@ void set_guest_image_view(const void* image_base, const std::size_t image_size,
 }
 
 void set_guest_tls_directory(std::uint64_t start_raw, std::uint64_t end_raw,
-                             std::uint64_t index_addr, const std::vector<std::uint64_t>& callbacks) noexcept {
+                             std::uint64_t index_addr, const std::uint32_t zero_fill_size,
+                             const std::vector<std::uint64_t>& callbacks) noexcept {
     g_guest_tls_start_raw = start_raw;
     g_guest_tls_end_raw = end_raw;
     g_guest_tls_index_addr = index_addr;
+    runtime::guest_context().tls_zero_fill_size = zero_fill_size;
     g_guest_tls_callbacks = callbacks;
 }
 
 void initialize_thread_tls(void* teb_ptr) noexcept {
     auto* teb = static_cast<runtime::GuestTeb*>(teb_ptr);
     if (teb != nullptr && g_guest_tls_start_raw != 0 && g_guest_tls_end_raw > g_guest_tls_start_raw) {
-        const std::size_t template_size = static_cast<std::size_t>(g_guest_tls_end_raw - g_guest_tls_start_raw);
+        const std::uint64_t template_size_raw = g_guest_tls_end_raw - g_guest_tls_start_raw;
+        if (template_size_raw > std::numeric_limits<std::size_t>::max()) return;
+        const std::size_t template_size = static_cast<std::size_t>(template_size_raw);
         const auto* src = reinterpret_cast<const std::uint8_t*>(g_guest_tls_start_raw);
         const std::size_t copy_size = std::min(template_size, teb->tls_module0_data.size());
         if (copy_size > 0 && mapped_guest_range(src, copy_size, false)) {
             std::memcpy(teb->tls_module0_data.data(), src, copy_size);
         }
     }
+}
+
+void initialize_pointer_backed_tls_slot(void* const teb_ptr) noexcept {
+    auto* const teb = static_cast<runtime::GuestTeb*>(teb_ptr);
+    if (teb == nullptr || g_guest_tls_start_raw == 0 ||
+        g_guest_tls_end_raw <= g_guest_tls_start_raw) {
+        return;
+    }
+    const std::uint64_t template_size_raw = g_guest_tls_end_raw - g_guest_tls_start_raw;
+    if (template_size_raw > std::numeric_limits<std::size_t>::max() ||
+        template_size_raw > std::numeric_limits<std::uint64_t>::max() -
+                                 runtime::guest_context().tls_zero_fill_size) {
+        return;
+    }
+    const std::uint64_t tls_size_raw =
+        template_size_raw + runtime::guest_context().tls_zero_fill_size;
+    if (kPointerBackedTlsSlotOffset > tls_size_raw ||
+        tls_size_raw - kPointerBackedTlsSlotOffset < sizeof(std::uint64_t) ||
+        kPointerBackedTlsSlotOffset > teb->tls_module0_data.size() ||
+        teb->tls_module0_data.size() - kPointerBackedTlsSlotOffset < sizeof(std::uint64_t)) {
+        return;
+    }
+    std::uint64_t slot_value = 0;
+    std::memcpy(&slot_value, teb->tls_module0_data.data() + kPointerBackedTlsSlotOffset,
+                sizeof(slot_value));
+    if (slot_value != 0U) return;
+    void* const block = std::calloc(1, kPointerBackedTlsAllocationSize);
+    if (block == nullptr) {
+        trace_guest_failure("TLS", "allocate-pointer-slot", "host allocation failed");
+        return;
+    }
+    if (!register_tls_dynamic_block(teb, block)) {
+        std::free(block);
+        trace_guest_failure("TLS", "allocate-pointer-slot", "per-context TLS block table exhausted");
+        return;
+    }
+    const std::uint64_t block_value = reinterpret_cast<std::uintptr_t>(block);
+    std::memcpy(teb->tls_module0_data.data() + kPointerBackedTlsSlotOffset,
+                &block_value, sizeof(block_value));
 }
 
 void invoke_thread_tls_callbacks(const std::uint32_t reason) noexcept {
@@ -739,6 +820,7 @@ GuestExecutionResult execute_guest_entry(const std::uintptr_t entry_point,
     // Executa TLS callbacks antes do entry point principal (PROCESS_ATTACH e THREAD_ATTACH para thread 1)
     invoke_thread_tls_callbacks(1U /* DLL_PROCESS_ATTACH */);
     invoke_thread_tls_callbacks(2U /* DLL_THREAD_ATTACH */);
+    initialize_pointer_backed_tls_slot(g_current_teb);
 
     g_quit_requested = false;
     g_quit_code = 0;

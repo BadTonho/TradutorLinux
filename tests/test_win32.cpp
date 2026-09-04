@@ -1944,6 +1944,33 @@ TEST(Win32ConcurrencyTest, TlsSetValueAndGetValueRoundTrip) {
     EXPECT_NE(tl_TlsFree(idx), 0);
 }
 
+TEST(Win32ConcurrencyTest, PointerBackedTlsSlotIsZeroInitializedAndReleased) {
+    std::array<std::byte, 8> raw_template{};
+    raw_template[0] = std::byte{0x5A};
+    runtime::GuestTeb teb{};
+    runtime::initialize_guest_teb(&teb, &g_guest_peb, 0, 0, 1);
+
+    set_guest_tls_directory(
+        reinterpret_cast<std::uintptr_t>(raw_template.data()),
+        reinterpret_cast<std::uintptr_t>(raw_template.data() + raw_template.size()),
+        0, static_cast<std::uint32_t>(kPointerBackedTlsSlotOffset + sizeof(std::uint64_t)), {});
+    initialize_thread_tls(&teb);
+    initialize_pointer_backed_tls_slot(&teb);
+
+    std::uint64_t block_value = 0;
+    std::memcpy(&block_value, teb.tls_module0_data.data() + kPointerBackedTlsSlotOffset,
+                sizeof(block_value));
+    ASSERT_NE(block_value, 0U);
+    const auto* const block = reinterpret_cast<const std::byte*>(
+        static_cast<std::uintptr_t>(block_value));
+    for (std::size_t index = 0; index < kPointerBackedTlsAllocationSize; ++index) {
+        ASSERT_EQ(block[index], std::byte{0});
+    }
+
+    free_tls_dynamic_blocks(&teb);
+    set_guest_tls_directory(0, 0, 0, 0, {});
+}
+
 TEST(Win32FlsTest, ValuesAreIndependentPerHostThreadAndFreeClearsTheIndex) {
     const std::uint32_t index = tl_FlsAlloc(0);
     ASSERT_NE(index, abi::kFlsOutOfIndexes);

@@ -567,6 +567,7 @@ processo filho; cada thread convidada recebe seu próprio TEB/GS, stack e
 | `KERNEL32.dll` | `TlsAlloc` | Suportado | Aloca índice de slot `thread_local` (0–63); retorna `0xFFFFFFFF` na exaustão |
 | `KERNEL32.dll` | `TlsSetValue` | Suportado | Armazena valor em `g_guest_tls_slots[index]`; rejeita índice inválido |
 | `KERNEL32.dll` | `TlsFree` | Suportado | Libera índice para reuso |
+| `KERNEL32.dll` | TLS estático do módulo principal | Suportado no subconjunto | Copia o template `IMAGE_TLS_DIRECTORY`, preserva o zero-fill e, para o slot pointer-backed de contrato `0x430`, aloca um bloco zerado de `0x1000` por TEB; a memória é liberada no encerramento da thread |
 | `KERNEL32.dll` | `InitializeCriticalSection` | Suportado | Side-table com `pthread_mutex_t` (máximo 32 entradas) |
 | `KERNEL32.dll` | `EnterCriticalSection` | Suportado | `pthread_mutex_lock` via side-table |
 | `KERNEL32.dll` | `LeaveCriticalSection` | Suportado | `pthread_mutex_unlock` via side-table |
@@ -637,7 +638,11 @@ processo filho; cada thread convidada recebe seu próprio TEB/GS, stack e
 - O fixture `tl_thread.exe` requer mingw-w64 para cross-build; a regressão e2e
   está coberta por `fixture_tl_thread_metadata` e
   `runtime_tl_thread_matches_readobj`.
-- 18 testes unitários em `tests/test_win32.cpp` cobrem `TlsAlloc`,
+- O fixture `tl_tls_generic.exe` cobre um template TLS com byte inicializado,
+  zero-fill, leitura do slot pointer-backed `0x430` e leitura zero-inicializada
+  do bloco associado. O mecanismo continua sendo um subconjunto orientado por
+  evidência, não uma implementação de TLS dinâmica universal.
+- Testes unitários em `tests/test_win32.cpp` cobrem `TlsAlloc`,
   `TlsSetValue`, `TlsGetValue`, `TlsFree`, `GetCurrentThreadId`,
   `GetCurrentProcessId`, `CRITICAL_SECTION` (init/enter/leave/delete,
   null check, side-table exhaustion), `CloseHandle` (null/garbage),

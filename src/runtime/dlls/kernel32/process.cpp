@@ -344,9 +344,10 @@ bool read_guest_file_for_process(const char* path, std::vector<std::byte>& bytes
                                   parsed.info, process.image),
         relocate_tls_va_for_child(parsed.info.tls_info.address_of_index,
                                   parsed.info, process.image),
+        parsed.info.tls_info.size_of_zero_fill,
         relocated_tls_callbacks_for_child(parsed.info, process.image));
     result = execute_guest_entry(process.thread.entry_point, process.thread.stack_top);
-    set_guest_tls_directory(0, 0, 0, {});
+    set_guest_tls_directory(0, 0, 0, 0, {});
     runtime::clear_guest_unwind_view();
     set_guest_image_view(nullptr, 0, 0, 0);
     loader::destroy_process(process);

@@ -273,7 +273,8 @@ void set_guest_prefix_path(const std::filesystem::path& path);
 void set_guest_image_view(const void* image_base, std::size_t image_size,
                           std::uint32_t resource_rva, std::uint32_t resource_size) noexcept;
 void set_guest_tls_directory(std::uint64_t start_raw, std::uint64_t end_raw,
-                             std::uint64_t index_addr, const std::vector<std::uint64_t>& callbacks) noexcept;
+                             std::uint64_t index_addr, std::uint32_t zero_fill_size,
+                             const std::vector<std::uint64_t>& callbacks) noexcept;
 void initialize_thread_tls(void* teb) noexcept;
 void invoke_thread_tls_callbacks(std::uint32_t reason) noexcept;
 
