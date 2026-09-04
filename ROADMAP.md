@@ -58,6 +58,12 @@ Os itens marcados como concluídos devem ter evidência no repositório: código
   com diagnóstico `mechanism="delay-import"`. WinRAR e Rockstar foram
   reanalisados apenas com `--report` e continuam `unsupported` pelas APIs
   restantes.
+- **Marco em validação (Fase 13.13 — Cadeias de export forwarder):** o registro
+  aceita `DLL.Símbolo` e `DLL.#ordinal`; `find_export_forwarded` segue até o
+  export direto com limite de 32 saltos e rejeita ciclos, sintaxe inválida e
+  destinos ausentes. Testes unitários cobrem cadeia de múltiplos saltos,
+  destino ordinal, ciclo e símbolo inexistente. A validação Linux/CTest ainda
+  precisa ser registrada antes de marcar o marco como concluído.
 - **Marco concluído (Fase 13.3):** o núcleo reutilizável de unwinding AMD64
   lê e valida `.pdata`/`.xdata` v1, todos os opcodes x64 v1, handlers e
   cadeias; `RtlCaptureContext`, `RtlLookupFunctionEntry`,

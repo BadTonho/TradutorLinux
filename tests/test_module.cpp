@@ -86,6 +86,58 @@ TEST_F(ModuleTest, UnknownDllAndSymbolAreNotFound) {
     EXPECT_FALSE(find_export_by_ordinal("NOPE.dll", 1).found);
 }
 
+TEST_F(ModuleTest, ResolvesMultiHopForwarderByNameAndOrdinal) {
+    const ExportedFunction target_exports[] = {
+        {"Final", 7, 0x4000000000000070ULL},
+        {"OrdinalTarget", 9, 0x4000000000000090ULL},
+    };
+    const ExportedFunction middle_exports[] = {
+        {"Middle", 3, 0, ExportSupport::Full, "TARGET.dll.Final"},
+        {"ByOrdinal", 4, 0, ExportSupport::Full, "TARGET.#9"},
+    };
+    const ExportedFunction entry_exports[] = {
+        {"Entry", 1, 0, ExportSupport::Limited, "MIDDLE.Middle"},
+        {"EntryOrdinal", 2, 0, ExportSupport::Full, "MIDDLE.ByOrdinal"},
+    };
+    ASSERT_TRUE(register_module(InternalModule{"TARGET.dll", target_exports}));
+    ASSERT_TRUE(register_module(InternalModule{"MIDDLE.dll", middle_exports}));
+    ASSERT_TRUE(register_module(InternalModule{"ENTRY.dll", entry_exports}));
+
+    const ExportLookup by_name = find_export_forwarded(ExportQuery{"ENTRY.dll", "Entry"});
+    ASSERT_TRUE(by_name.found);
+    EXPECT_EQ(by_name.address, 0x4000000000000070ULL);
+    EXPECT_EQ(by_name.ordinal, 7U);
+
+    const ExportLookup by_ordinal =
+        find_export_forwarded(ExportQuery{"ENTRY.dll", "EntryOrdinal"});
+    ASSERT_TRUE(by_ordinal.found);
+    EXPECT_EQ(by_ordinal.address, 0x4000000000000090ULL);
+    EXPECT_EQ(by_ordinal.ordinal, 9U);
+}
+
+TEST_F(ModuleTest, RejectsForwarderCyclesAndMissingTargets) {
+    const ExportedFunction cycle_a[] = {
+        {"One", 1, 0, ExportSupport::Full, "CYCLEB.Two"},
+    };
+    const ExportedFunction cycle_b[] = {
+        {"Two", 2, 0, ExportSupport::Full, "CYCLEA.One"},
+    };
+    const ExportedFunction missing[] = {
+        {"Missing", 3, 0, ExportSupport::Full, "ABSENT.NoSuchExport"},
+    };
+    ASSERT_TRUE(register_module(InternalModule{"CYCLEA.dll", cycle_a}));
+    ASSERT_TRUE(register_module(InternalModule{"CYCLEB.dll", cycle_b}));
+    ASSERT_TRUE(register_module(InternalModule{"BROKEN.dll", missing}));
+
+    const ExportLookup cycle = find_export_forwarded(ExportQuery{"CYCLEA.dll", "One"});
+    EXPECT_FALSE(cycle.found);
+    EXPECT_EQ(cycle.detail, "forwarder cycle detected");
+
+    const ExportLookup absent = find_export_forwarded(ExportQuery{"BROKEN.dll", "Missing"});
+    EXPECT_FALSE(absent.found);
+    EXPECT_EQ(absent.detail, "forwarder target not found");
+}
+
 TEST_F(ModuleTest, DuplicateRegistrationIsRejected) {
     ASSERT_TRUE(register_module(kFakeModule));
     EXPECT_FALSE(register_module(kFakeModule));

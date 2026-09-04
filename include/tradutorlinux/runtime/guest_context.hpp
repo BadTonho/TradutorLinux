@@ -120,6 +120,7 @@ struct GuestContext {
         // Espelha loader::ExportSupport sem acoplar o contexto ao header do
         // loader. 0=Full, 1=Limited, 2=Stub.
         std::uint8_t support{0};
+        std::string forwarder;
     };
     struct ContextModule {
         std::string name;

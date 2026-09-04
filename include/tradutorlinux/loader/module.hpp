@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <cstddef>
 #include <span>
+#include <string>
 #include <string_view>
 
 namespace tradutorlinux::loader {
@@ -21,6 +22,9 @@ struct ExportedFunction {
     std::uint16_t ordinal{};
     std::uintptr_t address{};
     ExportSupport support{ExportSupport::Full};
+    // Texto de um export forwarder no formato "DLL.Simbolo" ou
+    // "DLL.#ordinal". Quando preenchido, address deve ser zero.
+    std::string_view forwarder{};
 };
 
 struct InternalModule {
@@ -33,6 +37,8 @@ struct ExportLookup {
     std::uint16_t ordinal{};
     std::uintptr_t address{};
     ExportSupport support{ExportSupport::Full};
+    std::string detail;
+    std::string forwarder;
 };
 
 struct ExportQuery {
@@ -59,10 +65,10 @@ ExportLookup find_export_by_ordinal_global(std::uint16_t ordinal);
 
 bool is_valid_module_handle(void* handle) noexcept;
 
-// Wine: api-ms-win-* e ext-ms-win-* são API Sets que encaminham (forward) para
-// as DLLs reais. Inspirado em dlls/*/ *.spec do Wine, resolvemos o símbolo
-// procurando na DLL exata e, quando for um API Set, nos candidatos reais
-// (KERNEL32, USER32, etc.) e em KERNELBASE -> KERNEL32.
+// API Sets e exports forwarders são resolvidos separadamente: um API Set é um
+// alias de módulo conhecido pelo runtime; um forwarder é uma cadeia explícita
+// registrada como "DLL.Simbolo" ou "DLL.#ordinal". A cadeia possui limite de
+// profundidade e rejeita ciclos/destinos ausentes.
 bool is_api_set_dll(std::string_view dll) noexcept;
 bool is_kernelbase_dll(std::string_view dll) noexcept;
 ExportLookup find_export_forwarded(const ExportQuery& query);

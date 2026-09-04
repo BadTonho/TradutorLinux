@@ -79,36 +79,35 @@ Critérios de conclusão:
 
 ### P1 — compatibilidade e decisões de arquitetura
 
-#### P1.1 — Delay imports continuam resolvidos antecipadamente
+#### P1.1 — Delay imports: política eager explicitada (falta validar no Linux)
 
 `src/loader/import_resolver.cpp` resolve e grava toda a delay IAT antes do
-entry point. O comportamento está documentado em
-`docs/arquitetura/imports.md` e protegido pela fixture `tl_delay_import.exe`,
-mas diverge da resolução sob demanda do Windows e pode impedir a inicialização
-quando uma API atrasada não é usada.
+entry point. A decisão desta rodada é manter esse subconjunto `eager`, com a
+limitação explícita na arquitetura e na matriz; ele diverge da resolução sob
+demanda do Windows e pode impedir a inicialização quando uma API atrasada não
+é usada.
 
 Critérios de conclusão:
 
-- decidir formalmente entre manter o subconjunto eager ou implementar resolução
-  lazy;
-- se permanecer eager, expor essa limitação no relatório/matriz e não chamá-la
-  de equivalência Win32;
+- decisão formal registrada: manter o subconjunto eager nesta fase;
+- limitação exposta na arquitetura e matriz, sem chamá-la de equivalência
+  Win32;
 - se for implementada resolução lazy, criar fixture para import atrasado não
   usado, usado e ausente, com diagnóstico por símbolo.
 
-#### P1.2 — Forwarders reais ainda não têm cadeia de múltiplos saltos
+#### P1.2 — Forwarders reais (implementados nesta rodada; falta validar no Linux)
 
-`src/loader/module.cpp` resolve API Sets e o alias `KERNELBASE -> KERNEL32`,
-mas `ExportedFunction` não representa um forwarder textual
-`DLL.Símbolo`. Portanto, a implementação não prova uma cadeia
-forwarder -> forwarder; a documentação deve distinguir API Set mapping de
-forwarder real.
+`ExportedFunction` agora representa forwarder textual `DLL.Símbolo` ou
+`DLL.#ordinal`. `src/loader/module.cpp` segue cadeias de até 32 saltos,
+normaliza o sufixo `.dll` quando necessário e rejeita ciclos, sintaxe inválida
+e destinos ausentes com detalhe controlado. API Set mapping e forwarder real
+continuam documentados como mecanismos distintos.
 
 Critérios de conclusão:
 
-- definir o modelo de export forwarder e limite de profundidade;
-- resolver ciclos e destinos ausentes como erro controlado;
-- adicionar testes para cadeia válida, ciclo, ordinal e símbolo inexistente;
+- modelo, limite, ciclos e destinos ausentes implementados;
+- testes cobrem cadeia de múltiplos saltos, destino por ordinal, ciclo e símbolo
+  inexistente;
 - alinhar `docs/compatibilidade.md` e `docs/arquitetura/imports.md`.
 
 #### P1.3 — TLS genérico ainda depende de correção específica do Roblox

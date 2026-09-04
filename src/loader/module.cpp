@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -84,65 +85,182 @@ bool is_kernelbase_dll(const std::string_view dll) noexcept {
     return {};
 }
 
-ExportLookup find_export_forwarded(const ExportQuery& query) {
-    ExportLookup direct = find_export(query);
+constexpr std::size_t kMaxForwarderDepth = 32;
+
+struct ForwarderQuery {
+    std::string_view dll;
+    bool by_ordinal = false;
+    std::string_view symbol;
+    std::uint16_t ordinal = 0;
+};
+
+struct ForwarderVisit {
+    std::string dll;
+    std::string symbol;
+    bool by_ordinal = false;
+    std::uint16_t ordinal = 0;
+};
+
+struct ForwarderTarget {
+    std::string dll;
+    bool by_ordinal = false;
+    std::string symbol;
+    std::uint16_t ordinal = 0;
+};
+
+[[nodiscard]] ExportLookup forwarder_error(const std::string_view detail) {
+    ExportLookup lookup;
+    lookup.detail = detail;
+    return lookup;
+}
+
+[[nodiscard]] bool has_visit(const std::vector<ForwarderVisit>& visits,
+                             const ForwarderQuery& query) {
+    return std::any_of(visits.begin(), visits.end(), [&](const ForwarderVisit& visit) {
+        if (visit.by_ordinal != query.by_ordinal || !util::ascii_iequals(visit.dll, query.dll)) {
+            return false;
+        }
+        return visit.by_ordinal ? visit.ordinal == query.ordinal : visit.symbol == query.symbol;
+    });
+}
+
+[[nodiscard]] std::optional<ForwarderTarget> parse_forwarder(
+    const std::string_view forwarder) {
+    const std::size_t separator = forwarder.rfind('.');
+    if (separator == std::string_view::npos || separator == 0 ||
+        separator + 1U >= forwarder.size()) {
+        return std::nullopt;
+    }
+    ForwarderTarget target;
+    target.dll = std::string(forwarder.substr(0, separator));
+    if (target.dll.find('.') == std::string::npos) target.dll += ".dll";
+    const std::string_view symbol = forwarder.substr(separator + 1U);
+    if (symbol.front() != '#') {
+        target.symbol = std::string(symbol);
+        return target;
+    }
+    if (symbol.size() == 1U) return std::nullopt;
+    std::uint32_t value = 0;
+    for (std::size_t index = 1; index < symbol.size(); ++index) {
+        const unsigned char digit = static_cast<unsigned char>(symbol[index]);
+        if (digit < static_cast<unsigned char>('0') ||
+            digit > static_cast<unsigned char>('9')) {
+            return std::nullopt;
+        }
+        const std::uint32_t value_digit = digit - static_cast<unsigned char>('0');
+        if (value > (0xFFFFU - value_digit) / 10U) return std::nullopt;
+        value = value * 10U + value_digit;
+    }
+    if (value == 0) return std::nullopt;
+    target.by_ordinal = true;
+    target.ordinal = static_cast<std::uint16_t>(value);
+    return target;
+}
+
+ExportLookup resolve_forwarder_named(const ForwarderQuery& query,
+                                     std::vector<ForwarderVisit>& visits,
+                                     const std::size_t depth);
+
+ExportLookup resolve_forwarder_ordinal(const ForwarderQuery& query,
+                                       std::vector<ForwarderVisit>& visits,
+                                       const std::size_t depth) {
+    if (depth >= kMaxForwarderDepth) return forwarder_error("forwarder depth exceeded");
+    if (has_visit(visits, query)) return forwarder_error("forwarder cycle detected");
+    visits.push_back(ForwarderVisit{std::string(query.dll), {}, true, query.ordinal});
+    const auto finish = [&](ExportLookup lookup) {
+        visits.pop_back();
+        return lookup;
+    };
+
+    ExportLookup direct = find_export_by_ordinal(query.dll, query.ordinal);
     if (direct.found) {
-        return direct;
+        if (direct.forwarder.empty()) return finish(std::move(direct));
+        const auto target = parse_forwarder(direct.forwarder);
+        if (!target.has_value()) return finish(forwarder_error("invalid export forwarder"));
+        const ForwarderQuery next{target->dll, target->by_ordinal, target->symbol,
+                                  target->ordinal};
+        ExportLookup resolved = target->by_ordinal
+                                    ? resolve_forwarder_ordinal(next, visits, depth + 1U)
+                                    : resolve_forwarder_named(next, visits, depth + 1U);
+        if (!resolved.found && resolved.detail.empty()) {
+            resolved.detail = "forwarder target not found";
+        }
+        return finish(std::move(resolved));
     }
-    // KERNELBASE é o host real de grande parte do KERNEL32 em Windows 7+.
     if (is_kernelbase_dll(query.dll)) {
-        ExportLookup k32 = find_export(ExportQuery{"KERNEL32.dll", query.symbol});
-        if (k32.found) return k32;
+        ExportLookup kernel32 = resolve_forwarder_ordinal(
+            ForwarderQuery{"KERNEL32.dll", true, {}, query.ordinal}, visits, depth + 1U);
+        if (kernel32.found || !kernel32.detail.empty()) return finish(std::move(kernel32));
     }
-    if (!is_api_set_dll(query.dll)) {
-        return direct;
+    return finish(std::move(direct));
+}
+
+ExportLookup resolve_forwarder_named(const ForwarderQuery& query,
+                                     std::vector<ForwarderVisit>& visits,
+                                     const std::size_t depth) {
+    if (depth >= kMaxForwarderDepth) return forwarder_error("forwarder depth exceeded");
+    if (has_visit(visits, query)) return forwarder_error("forwarder cycle detected");
+    visits.push_back(ForwarderVisit{std::string(query.dll), std::string(query.symbol), false, 0});
+    const auto finish = [&](ExportLookup lookup) {
+        visits.pop_back();
+        return lookup;
+    };
+
+    ExportLookup direct = find_export(ExportQuery{query.dll, query.symbol});
+    if (direct.found) {
+        if (direct.forwarder.empty()) return finish(std::move(direct));
+        const auto target = parse_forwarder(direct.forwarder);
+        if (!target.has_value()) return finish(forwarder_error("invalid export forwarder"));
+        const ForwarderQuery next{target->dll, target->by_ordinal, target->symbol,
+                                  target->ordinal};
+        ExportLookup resolved = target->by_ordinal
+                                    ? resolve_forwarder_ordinal(next, visits, depth + 1U)
+                                    : resolve_forwarder_named(next, visits, depth + 1U);
+        if (!resolved.found && resolved.detail.empty()) {
+            resolved.detail = "forwarder target not found";
+        }
+        return finish(std::move(resolved));
     }
-    const std::string_view preferred = preferred_api_set_module(query.dll);
-    if (!preferred.empty()) {
-        ExportLookup pref_lookup = find_export(ExportQuery{preferred, query.symbol});
-        if (pref_lookup.found) return pref_lookup;
+    if (is_kernelbase_dll(query.dll)) {
+        ExportLookup kernel32 = resolve_forwarder_named(
+            ForwarderQuery{"KERNEL32.dll", false, query.symbol, 0}, visits, depth + 1U);
+        if (kernel32.found || !kernel32.detail.empty()) return finish(std::move(kernel32));
     }
-    // Ordem de tentativa espelha Wine: esgotar os provedores reais mais comuns.
+    if (!is_api_set_dll(query.dll)) return finish(std::move(direct));
+
     static constexpr std::string_view kCandidates[] = {
         "KERNEL32.dll", "USER32.dll",  "GDI32.dll",   "ADVAPI32.dll", "WS2_32.dll",
         "SHELL32.dll",  "ole32.dll",   "SHLWAPI.dll", "version.dll",  "WINMM.dll",
-        "COMCTL32.dll", "COMDLG32.dll","IMM32.dll",   "PSAPI.dll",    "msvcrt.dll",
+        "COMCTL32.dll", "COMDLG32.dll", "IMM32.dll",  "PSAPI.dll",    "msvcrt.dll",
     };
-    for (const auto& cand : kCandidates) {
-        if (cand == preferred) continue;
-        ExportLookup cand_lookup = find_export(ExportQuery{cand, query.symbol});
-        if (cand_lookup.found) {
-            return cand_lookup;
+    const std::string_view preferred = preferred_api_set_module(query.dll);
+    const auto try_module = [&](const std::string_view module) -> std::optional<ExportLookup> {
+        ExportLookup candidate = resolve_forwarder_named(
+            ForwarderQuery{module, false, query.symbol, 0}, visits, depth + 1U);
+        if (candidate.found || !candidate.detail.empty()) return candidate;
+        return std::nullopt;
+    };
+    if (!preferred.empty()) {
+        if (const auto candidate = try_module(preferred)) return finish(std::move(*candidate));
+    }
+    for (const std::string_view candidate_module : kCandidates) {
+        if (candidate_module == preferred) continue;
+        if (const auto candidate = try_module(candidate_module)) {
+            return finish(std::move(*candidate));
         }
     }
-    return direct;
+    return finish(std::move(direct));
+}
+
+ExportLookup find_export_forwarded(const ExportQuery& query) {
+    std::vector<ForwarderVisit> visits;
+    return resolve_forwarder_named(ForwarderQuery{query.dll, false, query.symbol, 0}, visits, 0);
 }
 
 ExportLookup find_export_by_ordinal_forwarded(const std::string_view dll,
                                               const std::uint16_t ordinal) {
-    ExportLookup direct = find_export_by_ordinal(dll, ordinal);
-    if (direct.found) return direct;
-    if (is_kernelbase_dll(dll)) {
-        ExportLookup k32 = find_export_by_ordinal("KERNEL32.dll", ordinal);
-        if (k32.found) return k32;
-    }
-    if (!is_api_set_dll(dll)) return direct;
-    const std::string_view preferred = preferred_api_set_module(dll);
-    if (!preferred.empty()) {
-        ExportLookup pref_lookup = find_export_by_ordinal(preferred, ordinal);
-        if (pref_lookup.found) return pref_lookup;
-    }
-    static constexpr std::string_view kCandidates[] = {
-        "KERNEL32.dll", "USER32.dll",  "GDI32.dll",   "ADVAPI32.dll", "WS2_32.dll",
-        "SHELL32.dll",  "ole32.dll",   "SHLWAPI.dll", "version.dll",  "WINMM.dll",
-        "COMCTL32.dll", "COMDLG32.dll","IMM32.dll",   "PSAPI.dll",    "msvcrt.dll",
-    };
-    for (const auto& cand : kCandidates) {
-        if (cand == preferred) continue;
-        ExportLookup cand_lookup = find_export_by_ordinal(cand, ordinal);
-        if (cand_lookup.found) return cand_lookup;
-    }
-    return direct;
+    std::vector<ForwarderVisit> visits;
+    return resolve_forwarder_ordinal(ForwarderQuery{dll, true, {}, ordinal}, visits, 0);
 }
 
 bool is_module_registered_forwarded(const std::string_view dll) noexcept {
@@ -170,11 +288,15 @@ bool register_module(const InternalModule& module) {
     owned.name = std::string{module.name};
     owned.exports.reserve(module.exports.size());
     for (const ExportedFunction& export_ : module.exports) {
+        if (!export_.forwarder.empty() && export_.address != 0) {
+            return false;
+        }
         owned.exports.push_back(OwnedExport{
             .name = std::string{export_.name},
             .ordinal = export_.ordinal,
             .address = export_.address,
             .support = static_cast<std::uint8_t>(export_.support),
+            .forwarder = std::string{export_.forwarder},
         });
     }
     modules().push_back(std::move(owned));
@@ -237,6 +359,7 @@ ExportLookup find_export(const ExportQuery& query) {
         lookup.ordinal = found->ordinal;
         lookup.address = found->address;
         lookup.support = static_cast<ExportSupport>(found->support);
+        lookup.forwarder = found->forwarder;
     }
     return lookup;
 }
@@ -257,6 +380,7 @@ ExportLookup find_export_by_ordinal(const std::string_view dll, const std::uint1
         lookup.ordinal = found->ordinal;
         lookup.address = found->address;
         lookup.support = static_cast<ExportSupport>(found->support);
+        lookup.forwarder = found->forwarder;
     }
     return lookup;
 }
@@ -274,6 +398,7 @@ ExportLookup find_export_global(const std::string_view symbol) {
             lookup.ordinal = found->ordinal;
             lookup.address = found->address;
             lookup.support = static_cast<ExportSupport>(found->support);
+            lookup.forwarder = found->forwarder;
             return lookup;
         }
     }
@@ -293,6 +418,7 @@ ExportLookup find_export_by_ordinal_global(const std::uint16_t ordinal) {
             lookup.ordinal = found->ordinal;
             lookup.address = found->address;
             lookup.support = static_cast<ExportSupport>(found->support);
+            lookup.forwarder = found->forwarder;
             return lookup;
         }
     }

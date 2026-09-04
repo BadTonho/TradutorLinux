@@ -19,6 +19,11 @@ O registro de módulos é populado por `loader::register_builtin_modules()` ante
 - `clear_modules()`: remove todos os módulos (usado em testes).
 - `is_module_registered(dll)`, `find_export(ExportQuery{dll, symbol})`, `find_export_by_ordinal(dll, ordinal)`: consultas usadas pelo resolvedor.
 - `ExportLookup` devolve `found`, `ordinal` e `address`; `address == 0` significa símbolo conhecido sem implementação (`not-implemented`).
+- Um `ExportedFunction` pode declarar um forwarder textual (`DLL.Simbolo` ou
+  `DLL.#ordinal`) com `address == 0`. `find_export_forwarded` segue a cadeia
+  até um export direto, com profundidade máxima 32; ciclos, sintaxe inválida e
+  destinos ausentes retornam `found=false` e `ExportLookup::detail` descreve a
+  causa. `find_export` continua sendo a consulta direta, sem seguir a cadeia.
 
 ### Módulos embutidos
 
@@ -110,10 +115,12 @@ INT deve terminar em thunk nulo; símbolos por nome e por ordinal usam o mesmo
 formato PE32+ da import table normal. O terminador do diretório precisa ter os
 oito campos nulos.
 
-O runtime resolve a tabela de modo antecipado: antes de executar o entry point,
-substitui cada slot da delay IAT pelo export interno já registrado. Assim, a
-primeira chamada chega diretamente ao export, sem executar o helper de
-delay-load do Windows. `hmod`, binding e unload não são emulados nesta etapa.
+O runtime resolve a tabela de modo antecipado (política `eager` do subconjunto
+atual): antes de executar o entry point, substitui cada slot da delay IAT pelo
+export interno já registrado. Assim, a primeira chamada chega diretamente ao
+export, sem executar o helper de delay-load do Windows. `hmod`, binding e
+unload não são emulados nesta etapa; portanto, isso não é uma equivalência com
+a resolução sob demanda do Windows.
 
 `ResolvedImport::mechanism` diferencia `Static` de `Delay`; o trace usa
 `mechanism="import"` ou `mechanism="delay-import"`, e o relatório separa as
@@ -128,7 +135,13 @@ O resolvedor reporta **todas** as entradas: para cada uma, um `ResolvedImport` c
 ## Mecanismos fora de escopo
 
 - Delay imports com atributos diferentes de `grAttrs=0x1` continuam `unsupported-mechanism`. O helper de carregamento sob demanda e as semânticas de binding/unload não são executados: a resolução antecipada ignora essas tabelas.
-- Forwarders de export ainda não são resolvidos na resolução estática; somente exports diretos de módulos internos registrados são aceitos. Para carregamento dinâmico, `GetProcAddress` usa busca global (`find_export_global`) e suporta ordinais via `MAKEINTRESOURCE`.
+- Forwarders registrados pelo runtime são resolvidos na resolução estática por
+  `find_export_forwarded`, incluindo cadeias de múltiplos saltos e destino por
+  ordinal. API Sets continuam sendo aliases de módulo separados de forwarders
+  textuais; ciclos, destinos ausentes e profundidade acima de 32 falham de
+  forma controlada. Para carregamento dinâmico, `GetProcAddress` ainda usa a
+  busca global (`find_export_global`) e suporta ordinais via `MAKEINTRESOURCE`;
+  não há identidade de DLL por handle nesta etapa.
 - `RtlUnwind`, `RtlUnwindEx`, `RaiseException`, VEH,
   `UnhandledExceptionFilter` e `__C_specific_handler` são exports funcionais
   somente para despacho SEH explícito da imagem ativa: `__try/__except`, V1/V2

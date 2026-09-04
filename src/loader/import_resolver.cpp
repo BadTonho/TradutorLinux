@@ -75,8 +75,10 @@ void inspect_group(ResolveResult& result, const std::vector<pe::ImportedDll>& dl
             if (!lookup.found) {
                 fail(result, entry,
                      symbol.by_ordinal ? ImportStatus::UnknownOrdinal : ImportStatus::UnknownSymbol,
-                     symbol.by_ordinal ? "ordinal não exportado pelo módulo"
-                                       : "símbolo não exportado pelo módulo");
+                     lookup.detail.empty()
+                         ? (symbol.by_ordinal ? "ordinal não exportado pelo módulo"
+                                              : "símbolo não exportado pelo módulo")
+                         : lookup.detail);
                 result.imports.push_back(std::move(entry));
                 continue;
             }
