@@ -86,8 +86,9 @@ void render_seven_zip_file_manager(WindowSlot& parent) noexcept {
         gui::platform::draw_text_color(parent.native, kMenus[index], kMenu_x[index], 19, kText);
     }
 
-    // The classic 7-Zip toolbar, kept as a logical visual surface until its
-    // command notifications are connected to the guest window procedure.
+    // The classic 7-Zip toolbar remains a visual shell surface. The guest's
+    // ToolbarWindow32 is modeled separately from this application-specific
+    // drawing until its complete command and bitmap contracts are supported.
     gui::platform::fill_rectangle_color(parent.native, 0, 28, width, 44, kToolbar);
     gui::platform::fill_rectangle_color(parent.native, 0, 71, width, 1, kBorder);
     constexpr std::array<const char*, 7> kToolbar_icons{"+", "->", "T", "C", "M", "X", "i"};

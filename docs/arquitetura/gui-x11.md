@@ -78,10 +78,10 @@ Além de `MessageBoxA`, `USER32.dll` exporta um subconjunto mínimo de janela:
 | API | Comportamento suportado |
 |---|---|
 | `RegisterClassExA` | Lê a `WNDCLASSEXA` do convidado (layout Microsoft x64, 80 bytes), valida `cbSize >= 80`, `lpfnWndProc` e `lpszClassName`, registra por nome (comparação sem diferenciar maiúsculas) e retorna um atom `>= 1`. |
-| `CreateWindowExA` | Procura a classe, cria a janela X11 e despacha `WM_CREATE` ao `WNDPROC` do convidado antes de devolver o `HWND` token opaco; se o `WNDPROC` retornar `-1`, destrói a janela e devolve `NULL` (`lParam` do `WM_CREATE` é `0`; não há `CREATESTRUCT`). Aceita largura/altura `<= 0` (usa 480×180). Parent, menu, instância e parâmetro são ignorados. |
+| `CreateWindowExA` | Procura a classe, cria a janela X11 e despacha `WM_CREATE` ao `WNDPROC` do convidado antes de devolver o `HWND` token opaco; se o `WNDPROC` retornar `-1`, destrói a janela e devolve `NULL` (`lParam` do `WM_CREATE` é `0`; não há `CREATESTRUCT`). Aceita largura/altura `<= 0` (usa 480×180). Parent, menu, instância e parâmetro são ignorados; classes próprias usadas como filhos ficam em uma side-table lógica e entram no hit-test de mouse. |
 | `ShowWindow` | Mapeia/desmapeia a janela X11; `cmdShow != 0` mostra, `0` esconde. |
 | `UpdateWindow` | Despacha `WM_PAINT` diretamente ao `WNDPROC` do convidado. |
-| `GetMessageA` | Drena os eventos X11 da janela, traduz e preenche o `MSG` do convidado; retorna `0` quando `PostQuitMessage` foi chamado (preenche `WM_QUIT`). Uma mensagem traduzida em espera (`WM_CHAR` gerado por `TranslateMessage`) é entregue antes dos próximos eventos X11. `KeyPress` vira `WM_KEYDOWN` e `KeyRelease` vira `WM_KEYUP`, ambos com a virtual key; o caractere da tecla é guardado para o `TranslateMessage` subsequente. Timers expirados são entregues como `WM_TIMER` entre as consultas X11. Os filtros `wMsgFilterMin`/`wMsgFilterMax` e `hWnd` (quando `NULL` não filtra) são ignorados; `hWnd != NULL` filtra por janela. |
+| `GetMessageA` | Drena os eventos X11 da janela, traduz e preenche o `MSG` do convidado; retorna `0` quando `PostQuitMessage` foi chamado (preenche `WM_QUIT`). Uma mensagem traduzida em espera (`WM_CHAR` gerado por `TranslateMessage`) é entregue antes dos próximos eventos X11. `KeyPress` vira `WM_KEYDOWN` e `KeyRelease` vira `WM_KEYUP`, ambos com a virtual key; o caractere da tecla é guardado para o `TranslateMessage` subsequente. `ButtonPress`/`ButtonRelease`/movimento fazem hit-test dos filhos lógicos; quando o filho tem `WNDPROC`, a mensagem preserva seu `HWND` e usa coordenadas locais, e controles comuns sem `WNDPROC` continuam gerando notificações no parent. Timers expirados são entregues como `WM_TIMER` entre as consultas X11. Os filtros `wMsgFilterMin`/`wMsgFilterMax` e `hWnd` (quando `NULL` não filtra) são ignorados; `hWnd != NULL` filtra por janela. |
 | `TranslateMessage` | Converte o `WM_KEYDOWN` mais recente de cada janela em `WM_CHAR` (com o caractere real) enfileirado para o próximo `GetMessageA`; retorna `1` quando traduziu e `0` caso contrário. |
 | `SetTimer` | Cria/atualiza um timer periódico por janela (`WM_TIMER`), exigindo `lpTimerFunc == NULL` e `uElapse != 0`; devolve o id informado ou `0` em falha. |
 | `KillTimer` | Remove um timer ativo; devolve `1` quando existia, `0` caso contrário. |
@@ -244,8 +244,9 @@ aberto, em ordem determinística, sem seguir links simbólicos e limitada a 128
 linhas; o caminho visual continua sendo `Z:\` e nenhuma operação de arquivo é
 disparada pela tela. A normalização da geometria inválida desse alvo também
 fica registrada no trace. Comandos, menus reais, ícones, navegação da lista e
-interação do painel ainda exigem contratos próprios e regressão antes de
-promover o aplicativo.
+ações funcionais do painel ainda exigem contratos próprios e regressão antes de
+promover o aplicativo; o despacho básico de mouse para a classe customizada não
+implica que essas ações já estejam implementadas.
 
 `SendMessageA` implementa os contratos usados pelo alvo para `WM_SETFONT`,
 `CB_ADDSTRING`, `CB_SETCURSEL`, `CB_GETCURSEL` e as mensagens de list view de

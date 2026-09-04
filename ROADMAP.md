@@ -679,6 +679,9 @@ nem declarar os benchmarks comerciais suportados.
 - [x] Processar o ciclo mínimo de mensagens `TB_*`/`SB_*` usado para montar e
   atualizar esses controles, com validação de buffers e regressões de
   `idCommand`, contagem, exclusão e texto UTF-16.
+- [x] Roteiar eventos de mouse para filhos lógicos customizados encontrados pelo
+  hit-test, preservando o `HWND` do filho e convertendo as coordenadas para o
+  espaço local antes de despachar `WM_LBUTTONDOWN`/`UP` e `WM_MOUSEMOVE`.
 
 #### Fase 13.12 — automação, rede e confiança, em entregas separadas
 
