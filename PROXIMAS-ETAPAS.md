@@ -46,15 +46,20 @@ explícitos abaixo.
   MinGW usado sem CRT não gerou esse diretório automaticamente.
 - [x] Manutenção P2.4: helper de permissões de memória centralizado e
   constantes Win32 nomeadas; 41 testes direcionados passaram.
+- [x] Manutenção da suíte Win32: `tests/test_win32.cpp` foi separado por
+  domínio em arquivos de GUI, segurança, APIs externas e aplicativos, com
+  helpers compartilhados e os mesmos 356 testes/79 suítes preservados. A
+  validação também corrigiu o relatório `--report` para exibir `support=` em
+  cada import resolvida.
 - [ ] Worker/RSL comercial: bloqueado nesta cópia do checkout; a busca não
   encontrou um executável comercial `Worker`/`RSL` em
   `Aplicativos_Windows_Populares/`. Só existe a fixture própria
   `tl_worker_rsl.exe`, que retorna `77` de forma controlada neste host sem
   IPv4. Nenhum estado comercial foi promovido.
-- [ ] Manutenção restante: a divisão de `tests/test_win32.cpp`, a auditoria
-  completa de `ExportSupport::Stub`, limites configuráveis de recursos e a
-  camada genérica de tradução continuam backlog. Os limites de recursos e a
-  camada de tradução exigem decisão de escopo antes de implementação.
+- [ ] Manutenção restante: a auditoria completa de `ExportSupport::Stub`,
+  limites configuráveis de recursos e a camada genérica de tradução continuam
+  backlog. Os limites de recursos e a camada de tradução exigem decisão de
+  escopo antes de implementação.
 
 ## Ordem de execução
 
@@ -173,7 +178,7 @@ fixture gerada `build/debug/tests/samples/generated/tl_worker_rsl.exe`.
 As validações acima foram concluídas, mas a manutenção foi separada por risco:
 
 - [x] eliminar o helper de permissões duplicado e nomear as constantes Win32;
-- [ ] dividir `tests/test_win32.cpp` em suítes por domínio, preservando nomes e cobertura;
+- [x] dividir `tests/test_win32.cpp` em suítes por domínio, preservando nomes e cobertura;
 - [ ] auditar APIs marcadas como `ExportSupport::Stub`, adicionando testes de retorno, `LastError`, buffers de saída e trace;
 - [ ] revisar limites de recursos do processo convidado, se a decisão de escopo for aprovada;
 - [x] corrigir contradições históricas em `docs/compatibilidade.md`, especialmente linhas que diziam “suportado” enquanto a matriz atual registra `execution-failed`;

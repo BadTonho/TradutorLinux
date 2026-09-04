@@ -396,7 +396,11 @@ void print_support_report_group(std::ostream& stream, const loader::ResolveResul
                 continue;
             }
             stream << "  import: " << resolved_symbol_label(entry)
-                   << " status=" << import_status_label(entry.status) << '\n';
+                   << " status=" << import_status_label(entry.status);
+            if (entry.status == loader::ImportStatus::Resolved) {
+                stream << " support=" << export_support_label(entry.support);
+            }
+            stream << '\n';
         }
     }
 }
