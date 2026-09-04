@@ -117,6 +117,9 @@ struct GuestContext {
         std::string name;
         std::uint16_t ordinal{0};
         std::uintptr_t address{0};
+        // Espelha loader::ExportSupport sem acoplar o contexto ao header do
+        // loader. 0=Full, 1=Limited, 2=Stub.
+        std::uint8_t support{0};
     };
     struct ContextModule {
         std::string name;

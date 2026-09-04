@@ -155,6 +155,22 @@ TEST_F(ImportResolverTest, ResolvesByOrdinalAndWritesIat) {
               reinterpret_cast<std::uintptr_t>(&tl_WriteFile));
 }
 
+TEST_F(ImportResolverTest, PropagatesExportSupportLevel) {
+    const ExportedFunction exports[] = {
+        {"Partial", 7, reinterpret_cast<std::uintptr_t>(&tl_GetStdHandle),
+         ExportSupport::Limited},
+        {"Placeholder", 8, reinterpret_cast<std::uintptr_t>(&tl_WriteFile),
+         ExportSupport::Stub},
+    };
+    ASSERT_TRUE(register_module(InternalModule{"SUPPORT.dll", exports}));
+
+    const ResolveResult result = resolve({{"SUPPORT.dll", {"Partial", "Placeholder"}, {}}});
+    ASSERT_EQ(result.status, ImportStatus::Resolved);
+    ASSERT_EQ(result.imports.size(), 2U);
+    EXPECT_EQ(result.imports[0].support, ExportSupport::Limited);
+    EXPECT_EQ(result.imports[1].support, ExportSupport::Stub);
+}
+
 TEST_F(ImportResolverTest, PatchesEveryIatSlotInOrder) {
     const ResolveResult result = resolve({{"FAKE.dll", {"DoWork", "WriteFile"}, {}}});
     ASSERT_EQ(result.status, ImportStatus::Resolved);

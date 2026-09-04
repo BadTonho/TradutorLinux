@@ -292,6 +292,19 @@ void print_map_summary(std::ostream& stream, const loader::MappedImage& image) {
     return "unknown";
 }
 
+[[nodiscard]] const char* export_support_label(const loader::ExportSupport support) {
+    TL_TRACE_FUNCTION();
+    switch (support) {
+        case loader::ExportSupport::Full:
+            return "full";
+        case loader::ExportSupport::Limited:
+            return "limited";
+        case loader::ExportSupport::Stub:
+            return "stub";
+    }
+    return "unknown";
+}
+
 [[nodiscard]] std::string resolved_symbol_label(const loader::ResolvedImport& entry) {
     TL_TRACE_FUNCTION();
     if (entry.by_ordinal) {
@@ -314,6 +327,7 @@ void write_imports_trace(std::ostream& stream, const loader::ResolveResult& impo
                 diagnostics::TraceField{"symbol", resolved_symbol_label(entry)},
                 diagnostics::TraceField{"address", util::format_hex(entry.address)},
                 diagnostics::TraceField{"mechanism", import_mechanism_label(entry.mechanism)},
+                diagnostics::TraceField{"support", export_support_label(entry.support)},
             };
             diagnostics::write_trace(stream, diagnostics::TraceComponent::Imports,
                                      diagnostics::TraceLevel::Info, "resolved", fields);
@@ -344,7 +358,8 @@ void print_imports_summary(std::ostream& stream, const loader::ResolveResult& im
             stream << " [delay-import]";
         }
         if (entry.status == loader::ImportStatus::Resolved) {
-            stream << " -> " << util::format_hex(entry.address) << '\n';
+            stream << " -> " << util::format_hex(entry.address)
+                   << " support=" << export_support_label(entry.support) << '\n';
         } else {
             stream << " [" << import_status_label(entry.status) << "] " << entry.detail << '\n';
         }
@@ -404,6 +419,16 @@ void print_support_report_group(std::ostream& stream, const loader::ResolveResul
             return entry.mechanism == loader::ImportMechanism::Delay &&
                    entry.status == loader::ImportStatus::Resolved;
         }));
+    const std::size_t limited_exports = static_cast<std::size_t>(std::count_if(
+        result.imports.begin(), result.imports.end(), [](const loader::ResolvedImport& entry) {
+            return entry.status == loader::ImportStatus::Resolved &&
+                   entry.support == loader::ExportSupport::Limited;
+        }));
+    const std::size_t stub_exports = static_cast<std::size_t>(std::count_if(
+        result.imports.begin(), result.imports.end(), [](const loader::ResolvedImport& entry) {
+            return entry.status == loader::ImportStatus::Resolved &&
+                   entry.support == loader::ExportSupport::Stub;
+        }));
 
     stream << "TradutorLinux compatibility report\n";
     stream << "format: " << (info.is_pe32_plus ? "PE32+ x86-64" : "unsupported") << '\n';
@@ -450,6 +475,12 @@ void print_support_report_group(std::ostream& stream, const loader::ResolveResul
            << '\n';
     stream << "compatibility: " << pct << "% (" << resolved_imports << '/'
            << total_imports << " imports resolved)\n";
+    const char* runtime_support = result.status != loader::ImportStatus::Resolved
+                                      ? "unresolved"
+                                      : (stub_exports != 0 ? "stub"
+                                                           : (limited_exports != 0 ? "limited" : "full"));
+    stream << "runtime-support: " << runtime_support
+           << " (" << limited_exports << " limited, " << stub_exports << " stub)\n";
     stream << "execution: not-attempted\n";
     stream << "execution-result: not-attempted\n";
     return result;

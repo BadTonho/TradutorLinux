@@ -79,13 +79,16 @@ faltam para essa amostra, e os próximos aplicativos analisados, ficam no
 `lghub_installer.exe` (Logitech G HUB) resolve `114/114` imports no
 `--report`, com execução completa do bootstrap CRT/FLS.
 
-Novos benchmarks do portfólio popular x64 na Fase 13.13:
-- `winrar-x64-723.exe` (WinRAR 7.23 x64): **251/251 (100%)** imports resolvidos — Suporte Completo de Imports
-- `7z_x64.exe` (7-Zip CLI x64): **133/133 (100%)** imports resolvidos — Suporte Completo de Imports
-- `7zFM_x64.exe` (7-Zip GUI): **298/298 (100%)** imports resolvidos — Suporte Completo de Imports
-- `Rockstar-Games-Launcher.exe`: **338/338 (100%)** imports resolvidos — Suporte Completo de Imports
-- `putty_x64.exe` (PuTTY SSH Client): **348/348 (100%)** imports resolvidos — Suporte Completo de Imports
-- `notepad++.exe` (Notepad++ x64): **584/584 (100%)** imports resolvidos — Suporte Completo de Imports
+Novos benchmarks do portfólio popular x64 na Fase 13.13. Os percentuais abaixo
+medem cobertura de resolução de imports; não significam, sozinhos, semântica
+comportamental completa. Use o campo `runtime-support` do `--report` e os testes
+de integração para avaliar o nível real de suporte:
+- `winrar-x64-723.exe` (WinRAR 7.23 x64): **251/251 (100%)** imports resolvidos
+- `7z_x64.exe` (7-Zip CLI x64): **133/133 (100%)** imports resolvidos
+- `7zFM_x64.exe` (7-Zip GUI): **298/298 (100%)** imports resolvidos
+- `Rockstar-Games-Launcher.exe`: **338/338 (100%)** imports resolvidos
+- `putty_x64.exe` (PuTTY SSH Client): **348/348 (100%)** imports resolvidos
+- `notepad++.exe` (Notepad++ x64): **584/584 (100%)** imports resolvidos
 - `Affinity x64.msix`: pacote MSIX / AppX reconhecido pelo parser de manifesto
 - `HWiNFO64.exe` / `Rufus_x64.exe`: filtrados com segurança contra anomalias de cabeçalho PE
 - Wrappers 32-bit (NSIS/Inno): rejeitados com segurança pelo filtro de arquitetura x64

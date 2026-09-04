@@ -88,6 +88,7 @@ void inspect_group(ResolveResult& result, const std::vector<pe::ImportedDll>& dl
                 continue;
             }
             entry.address = lookup.address;
+            entry.support = lookup.support;
             result.imports.push_back(std::move(entry));
         }
     }

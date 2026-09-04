@@ -1,13 +1,16 @@
 # TradutorLinux
 
-Runtime educacional de compatibilidade Win32 para Linux. O projeto executa, de forma gradual e documentada, um subconjunto de executáveis PE32+ x86-64 de console e GUI experimental no Linux x86-64.
+Runtime de compatibilidade Win32 para Linux. O projeto executa, de forma gradual
+e documentada, um subconjunto de executáveis PE32+ x86-64 de console e GUI
+experimental no Linux x86-64.
 
 O objetivo de longo prazo é ampliar esse subconjunto para classes cada vez mais abrangentes de aplicativos Windows, sempre com testes, limitações publicadas e regressões reproduzíveis.
 
-O estado atual é a **Fase 8**: as fases de parser, mapeamento, imports, console,
-runtime básico, diagnóstico, relatório de cobertura e GUI Win32 experimental
-estão concluídas. O suporte continua restrito às aplicações e limitações
-publicadas na matriz de compatibilidade.
+O estado atual é a **Fase 13**, com o próximo marco em **13.14 (TLS genérico e
+Worker RSL)**. Parser, mapeamento, imports, console, runtime básico,
+diagnóstico, relatório de cobertura, instaladores em prefixos e GUI Win32
+experimental já têm entregas validadas. O suporte continua restrito às
+aplicações, APIs e limitações publicadas na matriz de compatibilidade.
 
 Consulte [PROJETO.md](PROJETO.md) para visão e arquitetura e [ROADMAP.md](ROADMAP.md) para os marcos.
 

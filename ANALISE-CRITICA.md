@@ -2,6 +2,12 @@
 
 Data: 2026-09-01
 
+> **Nota de manutenção:** esta análise é um retrato histórico anterior à
+> refatoração dos módulos de runtime e às correções aplicadas depois de
+> 2026-09-01. Os caminhos e achados abaixo devem ser confirmados no código
+> atual antes de serem tratados como problemas ainda abertos; o roadmap e os
+> testes são a fonte de verdade para o estado presente.
+
 ## Resumo executivo
 
 O projeto está **muito saudável estruturalmente** (44 mil linhas, 417+ testes, 4 presets, arquitetura em camadas clara, roadmap detalhado). Encontrei **erros reais** concentrados em três áreas: (1) segurança do loader/memória, (2) bugs de comportamento em APIs "suportadas" e (3) falhas no backend gráfico X11/Wayland. Os achados foram verificados diretamente no código.

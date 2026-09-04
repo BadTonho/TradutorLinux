@@ -19,7 +19,7 @@ set(TL_FIXTURE_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/generated")
 
 function(tl_add_pe_fixture target_name source_file manifest_file)
     set(options LINK_KERNEL32 LINK_USER32 LINK_GDI32 LINK_COMCTL32 LINK_GDIPLUS LINK_UXTHEME LINK_DBGHELP LINK_OLE32 LINK_OLEAUT32 LINK_POWRPROF LINK_IPHLPAPI LINK_WINMM LINK_WS2_32 LINK_WININET LINK_WINTRUST LINK_CRYPT32 LINK_ADVAPI32 LINK_SHELL32 LINK_SHLWAPI LINK_MSVCRT LINK_MPR LINK_COMDLG32 LINK_IMM32 LINK_DWMAPI LINK_VERSION RELOCATABLE UNWIND EXPECT_RESOLVED CONSOLE REPORT REPORT_ONLY NO_RUNTIME_CHECK RUNTIME_FAILURE)
-    set(oneValueArgs REPORT_SYMBOL RESOURCE_FILE IMPORT_DEF)
+    set(oneValueArgs REPORT_SYMBOL REPORT_SUPPORT RESOURCE_FILE IMPORT_DEF)
     cmake_parse_arguments(ARG "${options}" "${oneValueArgs}" "" ${ARGN})
 
     set(output_file "${TL_FIXTURE_OUTPUT_DIRECTORY}/${target_name}.exe")
@@ -387,6 +387,9 @@ function(tl_add_pe_fixture target_name source_file manifest_file)
         endif()
         if(ARG_REPORT_SYMBOL)
             list(APPEND report_extra_args "-DEXPECTED_SYMBOL=${ARG_REPORT_SYMBOL}")
+        endif()
+        if(ARG_REPORT_SUPPORT)
+            list(APPEND report_extra_args "-DEXPECTED_SUPPORT=${ARG_REPORT_SUPPORT}")
         endif()
         add_test(
             NAME report_${target_name}_support
@@ -823,7 +826,7 @@ tl_add_pe_fixture(tl_shell src/tl_shell.c manifests/tl_shell.json
 
 tl_add_pe_fixture(tl_gdiex src/tl_gdiex.c manifests/tl_gdiex.json
     LINK_KERNEL32 LINK_USER32 LINK_GDI32 LINK_GDIPLUS LINK_UXTHEME LINK_WINMM LINK_DBGHELP EXPECT_RESOLVED CONSOLE REPORT RELOCATABLE
-    REPORT_SYMBOL "CreateFontW")
+    REPORT_SYMBOL "timeSetEvent" REPORT_SUPPORT "stub")
 
 tl_add_pe_fixture(tl_com src/tl_com.c manifests/tl_com.json
     LINK_KERNEL32 LINK_OLE32 EXPECT_RESOLVED CONSOLE REPORT RELOCATABLE

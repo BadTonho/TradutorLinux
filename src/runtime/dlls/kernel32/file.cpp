@@ -1632,7 +1632,7 @@ TL_MSABI std::uint32_t tl_GetTempPathA(const std::uint32_t buffer_length, char* 
     if (buffer == nullptr || buffer_length == 0 || !mapped_guest_range(buffer, buffer_length, true)) {
         return 0;
     }
-    const char temp[] = "C:\\Temp\\";
+    const char temp[] = "C:\\windows\\temp\\";
     const std::uint32_t len = static_cast<std::uint32_t>(std::strlen(temp));
     if (buffer_length <= len) {
         return len + 1;

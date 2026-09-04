@@ -219,6 +219,8 @@ TEST(CommandRunTest, ReportsSupportWithoutExecutingEntryPoint) {
     EXPECT_NE(output.find("execution: not-attempted"), std::string::npos);
     EXPECT_NE(output.find("execution-result: not-attempted"), std::string::npos);
     EXPECT_NE(output.find("compatibility:"), std::string::npos);
+    EXPECT_NE(output.find("runtime-support: full"), std::string::npos);
+    EXPECT_NE(output.find("support=full"), std::string::npos);
     EXPECT_NE(output.find("dll: KERNEL32.dll"), std::string::npos);
     EXPECT_EQ(output.find("fase5"), std::string::npos);
     EXPECT_EQ(stderr_stream.str().find("mapped"), std::string::npos);
@@ -240,6 +242,7 @@ TEST(CommandRunTest, ReportsUnsupportedWhenDllNotRegistered) {
     EXPECT_NE(output.find("execution: not-attempted"), std::string::npos);
     EXPECT_NE(output.find("execution-result: not-attempted"), std::string::npos);
     EXPECT_NE(output.find("compatibility:"), std::string::npos);
+    EXPECT_NE(output.find("runtime-support: unresolved"), std::string::npos);
     EXPECT_NE(output.find("% ("), std::string::npos);
 }
 

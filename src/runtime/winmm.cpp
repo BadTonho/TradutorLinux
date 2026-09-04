@@ -101,10 +101,10 @@ void register_winmm_module() {
         {"timeBeginPeriod", 2, reinterpret_cast<std::uintptr_t>(&tl_timeBeginPeriod)},
         {"timeEndPeriod", 3, reinterpret_cast<std::uintptr_t>(&tl_timeEndPeriod)},
         {"timeGetDevCaps", 4, reinterpret_cast<std::uintptr_t>(&tl_timeGetDevCaps)},
-        {"PlaySoundA", 5, reinterpret_cast<std::uintptr_t>(&tl_PlaySoundA)},
-        {"PlaySoundW", 6, reinterpret_cast<std::uintptr_t>(&tl_PlaySoundW)},
-        {"timeSetEvent", 7, reinterpret_cast<std::uintptr_t>(&tl_timeSetEvent)},
-        {"timeKillEvent", 8, reinterpret_cast<std::uintptr_t>(&tl_timeKillEvent)},
+        {"PlaySoundA", 5, reinterpret_cast<std::uintptr_t>(&tl_PlaySoundA), ExportSupport::Stub},
+        {"PlaySoundW", 6, reinterpret_cast<std::uintptr_t>(&tl_PlaySoundW), ExportSupport::Stub},
+        {"timeSetEvent", 7, reinterpret_cast<std::uintptr_t>(&tl_timeSetEvent), ExportSupport::Stub},
+        {"timeKillEvent", 8, reinterpret_cast<std::uintptr_t>(&tl_timeKillEvent), ExportSupport::Stub},
     };
     static const InternalModule kWinmmModule{"WINMM.dll", kWinmmExports};
     register_module(kWinmmModule);

@@ -87,8 +87,14 @@ pipe sem leitor (ex.: `tradutorlinux prog.exe | head -c 0`) falha com
 `linux-failure` do `WriteFile`, em vez de matar o convidado pelo sinal.
 
 O modo `--report` produz um relatório textual em stdout sem executar o entry
-point. Cada import aparece com seu estado, seguido de `result: supported` ou
-`result: unsupported` e `execution: not-attempted`.
+point. Cada import aparece com seu estado e, quando resolvido, com
+`support=full`, `support=limited` ou `support=stub`. O campo
+`result: supported` ou `result: unsupported` continua indicando somente se todos
+os imports foram resolvidos; `runtime-support` resume a cobertura comportamental
+declarada pelas exports resolvidas, ou `unresolved` quando a resolução falha.
+Em todos os casos, `execution: not-attempted` e
+`execution-result: not-attempted` deixam claro que o relatório não executa o
+PE.
 
 Quando uma importação não pode ser resolvida, emite um evento `unresolved` com os campos `dll`, `symbol`, `status`, `detail` e `mechanism`:
 

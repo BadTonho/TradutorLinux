@@ -22,17 +22,24 @@
 #include <cctype>
 #include <cstddef>
 #include <cstdint>
+#include <cerrno>
 #include <filesystem>
+#include <fcntl.h>
 #include <fstream>
 #include <initializer_list>
 #include <limits>
 #include <map>
 #include <optional>
 #include <ostream>
+#include <spawn.h>
 #include <string>
 #include <string_view>
+#include <sys/wait.h>
+#include <unistd.h>
 #include <utility>
 #include <vector>
+
+extern char** environ;
 
 namespace tradutorlinux {
 
@@ -93,6 +100,45 @@ constexpr std::uint64_t kMaxPeFileSize = 512ULL * 1024 * 1024;
         }
     }
     return bytes;
+}
+
+[[nodiscard]] bool extract_archive_with_7z(const std::filesystem::path& archive,
+                                           const std::filesystem::path& destination) {
+    TL_TRACE_FUNCTION();
+    std::array<std::string, 5> arguments{
+        "7z", "x", "-y", "-o" + destination.string(), archive.string()};
+    std::array<char*, 6> argv{};
+    for (std::size_t index = 0; index < arguments.size(); ++index) {
+        argv[index] = arguments[index].data();
+    }
+
+    posix_spawn_file_actions_t actions{};
+    if (posix_spawn_file_actions_init(&actions) != 0) {
+        return false;
+    }
+    const auto destroy_actions = [&actions]() noexcept {
+        (void)posix_spawn_file_actions_destroy(&actions);
+    };
+    if (posix_spawn_file_actions_addopen(&actions, STDOUT_FILENO, "/dev/null", O_WRONLY, 0) != 0 ||
+        posix_spawn_file_actions_addopen(&actions, STDERR_FILENO, "/dev/null", O_WRONLY, 0) != 0) {
+        destroy_actions();
+        return false;
+    }
+
+    pid_t child = -1;
+    const int spawn_status = posix_spawnp(&child, arguments[0].c_str(), &actions, nullptr,
+                                          argv.data(), environ);
+    destroy_actions();
+    if (spawn_status != 0) {
+        return false;
+    }
+
+    int child_status = 0;
+    pid_t wait_result = -1;
+    do {
+        wait_result = ::waitpid(child, &child_status, 0);
+    } while (wait_result < 0 && errno == EINTR);
+    return wait_result == child && WIFEXITED(child_status) && WEXITSTATUS(child_status) == 0;
 }
 
 struct FileSignature {
@@ -555,9 +601,7 @@ ExitCode run_command(const CommandLine& command_line, std::ostream& stdout_strea
             const auto target_prog_dir = prefix_dir / "drive_c" / "Program Files" / installation_name;
             std::error_code ec;
             std::filesystem::create_directories(target_prog_dir, ec);
-            const std::string extract_cmd = "7z x -y -o\"" + target_prog_dir.string() + "\" \"" +
-                                            effective_cmd.executable_path->string() + "\" >/dev/null 2>&1";
-            if (::system(extract_cmd.c_str()) == 0) {
+            if (extract_archive_with_7z(*effective_cmd.executable_path, target_prog_dir)) {
                 // Instaladores NSIS descompactados trazem langs.model.xml e stylers.model.xml.
                 // Na primeira execução eles viram langs.xml e stylers.xml.
                 for (const auto& entry_it : std::filesystem::recursive_directory_iterator(target_prog_dir, ec)) {

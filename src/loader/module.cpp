@@ -174,6 +174,7 @@ bool register_module(const InternalModule& module) {
             .name = std::string{export_.name},
             .ordinal = export_.ordinal,
             .address = export_.address,
+            .support = static_cast<std::uint8_t>(export_.support),
         });
     }
     modules().push_back(std::move(owned));
@@ -235,6 +236,7 @@ ExportLookup find_export(const ExportQuery& query) {
         lookup.found = true;
         lookup.ordinal = found->ordinal;
         lookup.address = found->address;
+        lookup.support = static_cast<ExportSupport>(found->support);
     }
     return lookup;
 }
@@ -254,6 +256,7 @@ ExportLookup find_export_by_ordinal(const std::string_view dll, const std::uint1
         lookup.found = true;
         lookup.ordinal = found->ordinal;
         lookup.address = found->address;
+        lookup.support = static_cast<ExportSupport>(found->support);
     }
     return lookup;
 }
@@ -270,6 +273,7 @@ ExportLookup find_export_global(const std::string_view symbol) {
             lookup.found = true;
             lookup.ordinal = found->ordinal;
             lookup.address = found->address;
+            lookup.support = static_cast<ExportSupport>(found->support);
             return lookup;
         }
     }
@@ -288,6 +292,7 @@ ExportLookup find_export_by_ordinal_global(const std::uint16_t ordinal) {
             lookup.found = true;
             lookup.ordinal = found->ordinal;
             lookup.address = found->address;
+            lookup.support = static_cast<ExportSupport>(found->support);
             return lookup;
         }
     }

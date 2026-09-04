@@ -7,10 +7,20 @@
 
 namespace tradutorlinux::loader {
 
+// Descreve o contrato comportamental de uma exportação. Resolver o endereço
+// de uma função é uma operação diferente de garantir que sua semântica esteja
+// implementada; o relatório usa este nível para não confundir as duas coisas.
+enum class ExportSupport : std::uint8_t {
+    Full,
+    Limited,
+    Stub,
+};
+
 struct ExportedFunction {
     std::string_view name;
     std::uint16_t ordinal{};
     std::uintptr_t address{};
+    ExportSupport support{ExportSupport::Full};
 };
 
 struct InternalModule {
@@ -22,6 +32,7 @@ struct ExportLookup {
     bool found{};
     std::uint16_t ordinal{};
     std::uintptr_t address{};
+    ExportSupport support{ExportSupport::Full};
 };
 
 struct ExportQuery {

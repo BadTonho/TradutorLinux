@@ -2965,6 +2965,13 @@ TEST(RobloxCoverageTest, AllApisAndModules) {
     EXPECT_EQ(tl_GetDiskFreeSpaceA(nullptr, nullptr, nullptr, nullptr, nullptr), 1);
     char temp_a[64]{};
     EXPECT_GT(tl_GetTempPathA(sizeof(temp_a), temp_a), 0U);
+    EXPECT_STREQ(temp_a, "C:\\windows\\temp\\");
+    std::uint16_t temp_w[64]{};
+    EXPECT_GT(tl_GetTempPathW(64, temp_w), 0U);
+    constexpr char16_t expected_temp_w[] = u"C:\\windows\\temp\\";
+    for (std::size_t index = 0; index < std::size(expected_temp_w); ++index) {
+        EXPECT_EQ(temp_w[index], static_cast<std::uint16_t>(expected_temp_w[index]));
+    }
     const std::string move_source = "_tl_move_source_" + std::to_string(::getpid());
     const std::string move_destination = "_tl_move_destination_" + std::to_string(::getpid());
     {

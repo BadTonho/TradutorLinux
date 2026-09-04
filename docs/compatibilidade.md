@@ -652,6 +652,13 @@ Ciclo `A→D→B` concluído com `build/debug --parallel 2`. Todos os `.exe/.dll
 (`src/cli.cpp:966` `docs/diagnostico.md:5`). `stdout` permanece do convidado; `stderr`
 traz `category`/`status`/`detail` e `fault-address` quando há `SIGSEGV`.
 
+Nesta tabela, `Compat` registra o resultado da resolução de imports. Isso não
+é uma afirmação de equivalência comportamental: o `--report` também informa
+`runtime-support: full|limited|stub` — ou `unresolved` quando a resolução falha —
+para exports que resolvem, mas têm semântica parcial ou apenas um retorno controlado.
+A execução e os testes do aplicativo
+continuam sendo a evidência necessária para registrá-lo como suportado.
+
 | # | Aplicativo | Arquitetura | Imports | Compat | Execução `--timeout 3` | Observação |
 |---|---|---|---:|---|---|---|
 | 1 | `7z_x64.exe` | PE32+ x86-64 | 133/133 (100%) | `supported` | `ExitProcess 0` `7-Zip 24.08 banner` | `src/loader/module.cpp:400` `DosDateTimeToFileTime` já coberto |

@@ -61,6 +61,37 @@ if(NOT state_content STREQUAL "installed\n")
     message(FATAL_ERROR "unexpected state file content: ${state_content}")
 endif()
 
+# O nome do arquivo contém aspas para garantir que a extração não seja
+# montada como uma linha de shell. O arquivo é um tar simples que o 7z abre.
+set(archive_source "${WORK}/quoted-archive-source")
+file(MAKE_DIRECTORY "${archive_source}")
+file(COPY_FILE "${INSTALLED_APP}" "${archive_source}/tl_install_app.exe")
+set(quoted_archive "${WORK}/setup\"quoted.tar")
+execute_process(
+    COMMAND "${CMAKE_COMMAND}" -E tar cf "${quoted_archive}" tl_install_app.exe
+    WORKING_DIRECTORY "${archive_source}"
+    RESULT_VARIABLE archive_result
+)
+if(NOT archive_result EQUAL 0)
+    message(FATAL_ERROR "could not create quoted-path archive: ${archive_result}")
+endif()
+set(quoted_prefix "${WORK}/quoted-prefix")
+execute_process(
+    COMMAND "${CMAKE_COMMAND}" -E env "XDG_CONFIG_HOME=${config}"
+        "${RUNTIME}" install "${quoted_archive}" --name "TL Quoted Archive"
+        --prefix "${quoted_prefix}" --trace
+    RESULT_VARIABLE quoted_result
+    OUTPUT_VARIABLE quoted_stdout
+    ERROR_VARIABLE quoted_stderr
+)
+if(NOT quoted_result EQUAL 0 OR NOT quoted_stdout STREQUAL "")
+    message(FATAL_ERROR "quoted-path archive install failed (${quoted_result})\nstdout:\n${quoted_stdout}\nstderr:\n${quoted_stderr}")
+endif()
+string(FIND "${quoted_stderr}" "[tl][install][info] registered" quoted_registered_position)
+if(quoted_registered_position EQUAL -1)
+    message(FATAL_ERROR "quoted-path archive was not registered:\n${quoted_stderr}")
+endif()
+
 # --app-exe evita a descoberta e ainda exige que o caminho escolhido pertença
 # ao prefixo da instalação.
 set(explicit_prefix "${WORK}/explicit-prefix")

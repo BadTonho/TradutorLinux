@@ -50,6 +50,22 @@ TEST_F(ModuleTest, RegistersModuleAndFindsExports) {
     EXPECT_EQ(by_ordinal.address, 0x4000000000000002ULL);
 }
 
+TEST_F(ModuleTest, PreservesExportSupportLevel) {
+    const ExportedFunction exports[] = {
+        {"Full", 1, 0x4000000000000010ULL, ExportSupport::Full},
+        {"Limited", 2, 0x4000000000000020ULL, ExportSupport::Limited},
+        {"Stub", 3, 0x4000000000000030ULL, ExportSupport::Stub},
+    };
+    ASSERT_TRUE(register_module(InternalModule{"SUPPORT.dll", exports}));
+
+    EXPECT_EQ(find_export(ExportQuery{"SUPPORT.dll", "Full"}).support,
+              ExportSupport::Full);
+    EXPECT_EQ(find_export(ExportQuery{"SUPPORT.dll", "Limited"}).support,
+              ExportSupport::Limited);
+    EXPECT_EQ(find_export_by_ordinal("SUPPORT.dll", 3).support,
+              ExportSupport::Stub);
+}
+
 TEST_F(ModuleTest, DllNamesAreCaseInsensitive) {
     ASSERT_TRUE(register_module(kFakeModule));
     EXPECT_TRUE(find_export(ExportQuery{"fake.dll", "DoWork"}).found);
@@ -127,6 +143,8 @@ TEST_F(ModuleTest, RegistersBuiltinKernel32Exports) {
               reinterpret_cast<std::uintptr_t>(&tl_ExitProcess));
     EXPECT_EQ(find_export(ExportQuery{"CRYPT32.dll", "CertGetNameStringW"}).address,
               reinterpret_cast<std::uintptr_t>(&tl_CertGetNameStringW));
+    EXPECT_EQ(find_export(ExportQuery{"WINMM.dll", "timeSetEvent"}).support,
+              ExportSupport::Stub);
     EXPECT_EQ(find_export(ExportQuery{"WINTRUST.dll", "WTHelperProvDataFromStateData"}).address,
               reinterpret_cast<std::uintptr_t>(&tl_WTHelperProvDataFromStateData));
     EXPECT_EQ(find_export(ExportQuery{"WINTRUST.dll", "WTHelperGetProvSignerFromChain"}).address,

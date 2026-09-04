@@ -1,6 +1,7 @@
 #pragma once
 
 #include "tradutorlinux/loader/image_mapper.hpp"
+#include "tradutorlinux/loader/module.hpp"
 #include "tradutorlinux/pe/pe_reader.hpp"
 
 #include <cstdint>
@@ -33,6 +34,7 @@ struct ResolvedImport {
     ImportStatus status{ImportStatus::Resolved};
     std::string detail;
     ImportMechanism mechanism{ImportMechanism::Static};
+    ExportSupport support{ExportSupport::Full};
 };
 
 struct ResolveResult {

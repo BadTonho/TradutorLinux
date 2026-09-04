@@ -1,6 +1,9 @@
 /build/
 /compile_commands.json
 /.cache/
+/Testing/
+/_CPack_Packages/
+*.deb
 
 # Artefatos gerados por execuções de teste na raiz do repositório
 .tl-registry.db
