@@ -248,10 +248,13 @@ linhas; o caminho visual continua sendo `Z:\` e nenhuma operação de arquivo é
 disparada pela tela. A normalização da geometria inválida desse alvo também
 fica registrada no trace. A faixa visual usa a ordem de `idCommand` enviada pelo
 7-Zip e o hit-test dela pode enfileirar `WM_COMMAND` no parent; os rótulos e
-ícones continuam sendo uma apresentação específica do shell. Menus reais,
-navegação da lista e ações funcionais do painel ainda exigem contratos próprios
-e regressão antes de promover o aplicativo; esse encaminhamento de comando não
-implica que as operações de arquivo já estejam implementadas.
+ícones continuam sendo uma apresentação específica do shell. A classe principal
+também carrega o recurso `RT_MENU` MENUEX do próprio executável e usa seus seis
+itens de nível superior para os rótulos; `GetMenuItemInfoW` consulta a hierarquia
+carregada, mas dropdown visual, mutação e despacho de comandos de menu ainda
+exigem contratos próprios e regressão antes de promover o aplicativo. Esse
+encaminhamento de toolbar não implica que as operações de arquivo já estejam
+implementadas.
 
 `SendMessageA` implementa os contratos usados pelo alvo para `WM_SETFONT`,
 `CB_ADDSTRING`, `CB_SETCURSEL`, `CB_GETCURSEL` e as mensagens de list view de
@@ -268,9 +271,11 @@ fica mapeada enquanto sua visibilidade Win32 é falsa para que o surrogate da
 bandeja permaneça acionável. Isso é deliberadamente uma emulação de teste, não
 uma integração com o tray do desktop.
 
-`GetMenuItemInfoW` exige um buffer válido, mas retorna `ERROR_NOT_SUPPORTED`
-porque o catálogo sintético ainda não representa itens reais. As operações
-de mutação de itens (`SetMenuItemInfoW`, `InsertMenuItemW`, `RemoveMenu`,
+`LoadMenuW` reconhece o recurso `RT_MENU` MENUEX v1 do módulo convidado, cria a
+hierarquia lógica e `GetMenuItemInfoW` devolve os campos solicitados com
+validação do buffer. A implementação atual cobre o menu de classe usado pelo
+7-Zip e retorna falha controlada para templates padrão v0 ou recursos ausentes.
+As operações de mutação de itens (`SetMenuItemInfoW`, `InsertMenuItemW`, `RemoveMenu`,
 `EnableMenuItem`, `CheckMenuItem` e `CheckMenuRadioItem`) e
 `TrackPopupMenuEx` também falham explicitamente como stubs; o relatório os
 classifica como `stub`.

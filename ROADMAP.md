@@ -688,6 +688,11 @@ nem declarar os benchmarks comerciais suportados.
 - [x] Aceitar `TB_ADDBUTTONSW` e `TB_AUTOSIZE` no modelo de toolbar, usar a ordem
   real de `idCommand` do 7-Zip no shell visual e proteger o hit-test da faixa
   visual com regressão de `WM_COMMAND`.
+- [x] Carregar o menu de classe `RT_MENU` MENUEX v1 do 7-Zip, incluindo o
+  `MENUHELPID` de popups, alinhamento, IDs, texto e submenus no modelo lógico;
+  associá-lo à janela principal e proteger `LoadMenuW`/`GetMenuItemInfoW` com
+  fixture de recurso. Dropdown visual, mutação e despacho de comandos de menu
+  continuam fora do contrato.
 
 #### Fase 13.12 — automação, rede e confiança, em entregas separadas
 

@@ -13,7 +13,8 @@ explícitos abaixo.
   `956aadc`, `17f4305`, `45cc3f9`, `990b960`, `6d7c855`, `3df05e4`,
   `ee1fec9`, `5fe3e6d`, `a1fe77f`, `144be0d`, `03085a7` e `a609137`.
   A etapa de entrada dos filhos lógicos foi registrada em `39e4aa0` e a etapa
-  de repaint lógico em `66a6b30`; a etapa de toolbar Unicode em `0465f31`.
+  de repaint lógico em `66a6b30`; a etapa de toolbar Unicode em `0465f31` e a
+  etapa de menu real do 7-Zip em `26e2b63`.
 - O alvo continua sendo PE32+ x86-64 em Linux x86-64.
 - Já foram implementados e testados no build Debug Linux os subconjuntos de `IPHLPAPI`, `WTSAPI32` e parte de `CRYPT32`, além das correções de forwarders, TLS genérico e parser de manifests MSIX.
 - A validação executada até aqui cobriu fixtures próprias, testes unitários direcionados e traces de `tl_worker_rsl` e `tl_powr`.
@@ -96,6 +97,15 @@ explícitos abaixo.
   547,548,551`). O hit-test da faixa visual encaminha o comando ao parent;
   dois testes protegem a variante Unicode e esse roteamento. A suíte ficou em
   374 testes (373 aprovados e 1 skip ambiental).
+- [x] Menu de classe real do `7zFM_x64.exe`: `LoadMenuW` agora resolve o
+  recurso `RT_MENU`/MENUEX `71`, valida alinhamento e limites, preserva os seis
+  itens de nível superior e a hierarquia de submenus, e `GetMenuItemInfoW`
+  expõe texto, IDs e submenus no modelo lógico. A janela principal passa a
+  usar esse menu do próprio executável; mutações, dropdown visual e comandos
+  ainda não estão implementados. A ponte Unicode `CreateWindowExW` também foi
+  corrigida para permitir a criação do `7-Zip::Panel` sem relaxar a validação
+  de chamadas A feitas pelo convidado. A suíte ficou em 375 testes (374
+  aprovados e 1 skip ambiental).
 - [x] Medições e catálogo: o catálogo registra os `298/298` imports do
   `7zFM_x64.exe`, a janela X11 real `800x600`, a normalização de geometria e
   os dois smokes GUI aprovados, sem transformar essa evidência visual em
