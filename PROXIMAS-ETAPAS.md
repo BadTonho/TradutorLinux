@@ -114,6 +114,10 @@ explícitos abaixo.
   suporte funcional. O trace no display real confirmou a criação de sete
   botões Unicode; o smoke Xvfb desta execução ficou `Skipped` porque o socket
   X11 virtual não estava disponível.
+- [x] Reexecução da fixture Worker/RSL: com os canais válidos
+  `--trace=pe,imports,runtime,process,crt`, os `14/14` imports foram resolvidos
+  e `GetAdaptersAddresses` retornou `ERROR_NO_DATA`, levando ao exit `77`
+  controlado por ausência de interface IPv4; não houve nova API justificada.
 - [ ] Worker/RSL comercial: bloqueado nesta cópia do checkout; a busca não
   encontrou um executável comercial `Worker`/`RSL` em
   `Aplicativos_Windows_Populares/`. Só existe a fixture própria
@@ -232,8 +236,10 @@ Os canais válidos do CLI devem ser conferidos em `--help`; referências antigas
 Não mudar o estado de compatibilidade de um aplicativo comercial apenas por resolver imports ou iniciar o processo. Para cada nova API necessária, seguir o ciclo: aplicativo-alvo ou fixture, implementação mínima, teste de regressão, trace, atualização da matriz e documentação.
 
 Resultado: nenhuma amostra comercial correspondente foi encontrada no
-checkout, então a execução não foi tentada. A única ocorrência relevante é a
-fixture gerada `build/debug/tests/samples/generated/tl_worker_rsl.exe`.
+checkout, então a execução comercial não foi tentada. A fixture gerada
+`build/debug/tests/samples/generated/tl_worker_rsl.exe` foi reexecutada com
+trace filtrado; ela resolveu `14/14` imports e terminou com exit `77` controlado
+em `GetAdaptersAddresses`, por ausência de IPv4 no host.
 
 ### 7. Manutenção após fechar os bloqueios funcionais
 

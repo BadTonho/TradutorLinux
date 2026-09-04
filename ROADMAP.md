@@ -746,7 +746,13 @@ nem declarar os benchmarks comerciais suportados.
 
 - [x] Generalizar o contrato do slot pointer-backed `TLS 0x430` com validação do span raw + `SizeOfZeroFill`, alocação sob demanda de bloco `0x1000` zerado, tabela por TEB e liberação no encerramento; `tl_tls_generic.exe` cobre `TLS zero-init` + leitura do ponteiro + `mov 0x68(%rax)` sem `SIGSEGV` (Debug: teste unitário e 4 CTest passaram; fixture emite registros PE TLS explícitos sem CRT)
 - [x] Implementar e validar o subconjunto Linux reutilizável observado no Worker: `GetAdaptersInfo`/`GetAdaptersAddresses`/`if_nametoindex` via `getifaddrs`, `CertOpenStore` com provedores controlados e `WTSEnumerateSessionsW`/`WTSFreeMemory`; `tl_worker_rsl.exe` cobre `WSAStartup`/`getaddrinfo`, interfaces IPv4, loja em memória e sessão local (Debug: 10 testes unitários passaram, 1 skip controlado sem IPv4 + 4 CTest de fixture)
-- [ ] Reexecutar `Worker,28` com `--trace=ws2,runtime,wininet,crypt,pe` `process/isolate.cpp:155` e só então avaliar novo bloqueio; implementar qualquer API adicional somente com evidência, fixture e registro em `docs/requisitos-aplicativos.md`
+- [x] Reexecutar a fixture `tl_worker_rsl.exe` com os canais válidos
+  `--trace=pe,imports,runtime,process,crt` (`process/isolate.cpp:155`): os
+  `14/14` imports foram resolvidos e a execução parou de forma controlada em
+  `GetAdaptersAddresses` (`ERROR_NO_DATA`, exit `77`) porque este host não
+  expõe interface IPv4. Não surgiu uma API adicional justificada; qualquer
+  expansão continua exigindo evidência, fixture e registro em
+  `docs/requisitos-aplicativos.md`.
 - [ ] Manter `Roblox` como benchmark sem criar stubs exclusivos; só declarar `supported` quando `install --prefix` extrair `drive_c` e `app run` completar sem `panic`
 
 PE32/x86, .NET/Mono e MSIX/AppX continuam requisitos separados nesta primeira
