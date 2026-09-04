@@ -1,116 +1,287 @@
-# Análise completa do projeto TradutorLinux
+# Análise crítica consolidada — TradutorLinux
 
-Data: 2026-09-01
+Data da revisão: 2026-09-04
 
-> **Nota de manutenção:** esta análise é um retrato histórico anterior à
-> refatoração dos módulos de runtime e às correções aplicadas depois de
-> 2026-09-01. Os caminhos e achados abaixo devem ser confirmados no código
-> atual antes de serem tratados como problemas ainda abertos; o roadmap e os
-> testes são a fonte de verdade para o estado presente.
+Este arquivo reúne somente as pendências que ainda exigem decisão, código,
+teste ou atualização documental. Os achados encerrados ficam registrados no
+final para não serem reabertos por análises antigas.
 
-## Resumo executivo
+O `ROADMAP.md` continua sendo a fonte de verdade para a fase do projeto. Esta
+lista é o backlog consolidado da auditoria técnica e documental. Nenhuma
+entrada aqui autoriza declarar compatibilidade ampla: cada item precisa de
+implementação, regressão e evidência no aplicativo-alvo correspondente.
 
-O projeto está **muito saudável estruturalmente** (44 mil linhas, 417+ testes, 4 presets, arquitetura em camadas clara, roadmap detalhado). Encontrei **erros reais** concentrados em três áreas: (1) segurança do loader/memória, (2) bugs de comportamento em APIs "suportadas" e (3) falhas no backend gráfico X11/Wayland. Os achados foram verificados diretamente no código.
+## Pendências atuais
 
----
+### P0 — segurança, estado e robustez
 
-## 🔴 CRÍTICOS (corrupção de memória / segurança)
+#### P0.1 — Relatório ainda classifica APIs remotas como `full`
 
-### C1. Seção exec+write vira memória RWX (viola a política documentada)
-`src/loader/image_mapper.cpp:48-50` + `:63-74` + `:112-114`
-O header `image_mapper.hpp:79` promete: *"A section requesting execute+write is downgraded to read-write"* e o AGENTS.md proíbe memória executável gravável. **O código não implementa o downgrade** — `section_permissions()` retorna `ReadWriteExecute` e `permissions_for_page()` também (`:112-114`), então `mprotect` aplica `PROT_READ|WRITE|EXEC` em qualquer seção marcada exec+write. Um PE hostil ou até linker real com `MEM_WRITE|MEM_EXECUTE` obtém página W+X, permitindo automodificação de código — exatamente o que a política do projeto proíbe.
+`CreateRemoteThread` e `WriteProcessMemory` já falham com
+`ERROR_NOT_SUPPORTED`, mas continuam com o valor padrão `ExportSupport::Full`
+em `src/runtime/dlls/kernel32/module.cpp`. Assim, o `--report` pode afirmar
+`runtime-support: full` para uma API que deliberadamente não executa sua
+operação.
 
-### C2. Callbacks TLS invocados com endereços não-relocados
-`src/pe/pe_reader.cpp:721` + `src/runtime/winapi.cpp:656`
-`callback_vas` são lidos dos **bytes do arquivo** (VAs absolutos na base preferencial), passados crus e invocados diretamente como ponteiro de função. Quando a imagem é mapeada fora da base preferencial (`delta != 0`, comum pois `0x140000000` costuma estar ocupado), cada callback aponta para endereço errado → **crash**. O relocations aplica a correção na cópia em memória, mas a lista invocada não é ajustada pelo `delta`.
+Critérios de conclusão:
 
-### C3. Backend X11: out-of-bounds read em `fill_rectangle`
-`src/gui/x11.cpp:450`
-```cpp
-XSetForeground(dpy, fill.gc, fill.pixels[static_cast<std::size_t>(brush_index)]);
-```
-Só rejeita `brush_index == 5`. Valor negativo vira `size_t` gigante; valor >5 lê além do array de 6 elementos. O backend Wayland (`wayland.cpp:407`) valida corretamente; o X11 não.
+- marcar as duas exports como `ExportSupport::Stub`;
+- adicionar uma regressão do relatório para confirmar `support=stub` e
+  `runtime-support: stub`;
+- revisar outras exports que retornam sucesso sintético e classificá-las como
+  `Limited` ou `Stub` conforme o comportamento real.
 
-### C4. Backend Wayland: overflow assinado em `fill()`
-`src/gui/wayland.cpp:296`
-```cpp
-const int right = std::min(w.width, x + width), bottom = std::min(w.height, y + height);
-```
-`x + width` pode estourar `int` (UB), produzindo range inválida para `std::fill` → corrupção de heap.
+#### P0.2 — Estado modal e tabelas de USER32 ainda não têm contrato de concorrência
 
-### C5. Buffer de DIB fixo de 4096 bytes entregue ao convidado
-`src/runtime/gdi32.cpp:360-373`
-`tl_CreateDIBSection` devolve um `static char g_dib_buffer[4096]` **sem relação com o `BITMAPINFO` fornecido**. Um convidado pedindo um surface de 1024×1024×32bpp (4 MB) estoura o buffer estático do host.
+`src/runtime/dlls/user32/dialog.cpp` protege grande parte de `g_modal_*`, mas
+`g_active_dialog` ainda é lido sem `g_modal_mutex` no início de
+`tl_DialogBoxParamW`. A tabela global `g_windows` também não possui uma
+política única de sincronização.
 
-### C6. Escritas do convidado sem validação de endereço
-- `tl_GetSystemTimeAsFileTime` — `kernel32.cpp:1499-1506`: escreve `*file_time` sem `mapped_guest_range`.
-- `tl_GetTextExtentPoint32W` — `gdi32.cpp:375-389`: `memcpy(size,...)` com só `!= nullptr`.
+Critérios de conclusão:
 
----
+- definir quais operações podem ser chamadas por threads convidadas;
+- proteger todas as leituras e escritas do estado modal com o mesmo protocolo;
+- evitar usar ponteiros de `g_windows` depois de liberar o lock sem uma regra de
+  vida documentada;
+- cobrir entrada concorrente, encerramento modal e postagem de mensagens com
+  teste de regressão e, quando disponível, ThreadSanitizer.
 
-## 🟠 MAJORES (comportamento errado em caminho suportado)
+#### P0.3 — Inspeção MSIX ainda pode consumir memória excessiva
 
-### M1. `tl_MoveFileExA` é no-op silencioso
-`kernel32.cpp:6069-6077` — retorna sucesso (1) e **não move nada**. Apps que fazem rename/temp (updaters, instaladores) perdem dados silenciosamente.
+`src/package/msix.cpp` limita o arquivo a 2 GiB e valida vários limites ZIP,
+mas ainda pode alocar um manifesto armazenado próximo desse limite. A função
+também não limita explicitamente quantidade de entradas ou tamanho do
+manifesto, não trata todos os data descriptors/central directory e usa parser
+XML por substring.
 
-### M2. `tl_GetTempPathA` / `tl_GetSystemDirectoryA` retornam caminhos Windows literais
-`kernel32.cpp:6061`, `:6184` — `"C:\\Temp\\"`, `"C:\\Windows\\System32"` sem tradução para o caminho Linux real (que não existem em `drive_c`). Apps que abrem o arquivo de temp falham com "não encontrado".
+Critérios de conclusão:
 
-### M3. `tl_GetWindowTextA` sempre retorna 0 mesmo em sucesso
-`user32.cpp:1036` — copia o texto mas retorna 0 (a variante W retorna o comprimento corretamente em `:1068`). Apps usam o retorno para saber quantos chars foram lidos → texto truncado.
+- estabelecer limites independentes para manifesto, entrada, número de entradas
+  e tamanho total descompactado;
+- rejeitar a entrada antes de qualquer alocação que ultrapasse esses limites;
+- tratar ou rejeitar explicitamente central directory, data descriptor,
+  compressão e caminhos inválidos;
+- garantir que `bad_alloc` não atravesse a fronteira do inspector;
+- adicionar fixtures para truncamento, campos inconsistentes, manifesto grande,
+  muitos arquivos e path traversal.
 
-### M4. Stubs que "mentem sucesso"
-`winapi.cpp` — `tl_OpenPrinterW` devolve token `'PRNT'`, `tl_CreateRemoteThread` devolve `'RTND'`, `tl_WriteProcessMemory` retorna sucesso sem escrever, entre outros. Violam a regra do projeto ("falhe de forma controlada") e corrompem o estado do chamador downstream.
+#### P0.4 — Popup X11 não possui cancelamento temporal
 
-### M5. Estado modal de diálogo sem sincronização
-`user32.cpp` — `g_modal_*` são globals lidas/escritas pelo loop sem lock, enquanto threads convidadas podem postar/entrar diálogos → data race.
+`src/gui/x11.cpp::track_popup_menu` já trata Escape, `DestroyNotify` e clique
+fora do menu, mas ainda bloqueia indefinidamente em `XNextEvent` quando nenhum
+evento chega. Isso é aceitável somente se o contrato for explicitamente
+modal e sem timeout; para execução automatizada e encerramento controlado,
+falta uma política de cancelamento.
 
-### M6. Import IAT no cabeçalho DOS é validado mas nunca pode ser aplicado
-`pe_reader.cpp:479-488` + `image_mapper.cpp:493` — IAT em `RVA < SizeOfHeaders` passa na validação mas `write_image_bytes` exige um `MapRegion` que cobre (headers não são região) → `InvalidAddress`. PE válido mas atípico falha de forma silenciosa.
+Critérios de conclusão:
 
-### M7. Delay imports resolvidos agressivamente no startup
-`import_resolver.cpp:101,107-115` — resolvem e vinculam todos os delay imports antes do entry point. Windows resolve sob demanda; aqui uma DLL delay-import ausente **impede o programa de iniciar** quando deveria iniciar de qualquer forma.
+- escolher timeout configurável, cancelamento por evento ou API não bloqueante;
+- garantir liberação de grabs e da janela em todos os caminhos;
+- adicionar teste sob Xvfb para Escape, clique externo, timeout e destruição.
 
-### M8. Cadeias de forwarder com apenas 1 salto
-`module.cpp:75-102` — `find_export_forwarded` não segue forwarder→forwarder; pode retornar `NotImpl`/endereço 0 onde existe implementação.
+### P1 — compatibilidade e decisões de arquitetura
 
-### M9. MSIX parser: DoS de alocação e validação de campos ZIP
-`src/package/msix.cpp:179` — `std::string(uncompressed_size, '\0')` com `uncompressed_size` até ~4 GB → `bad_alloc` não tratado. `:132-195` — `filename_len`/`compressed_size` sem checagem contra tamanho real do arquivo.
+#### P1.1 — Delay imports continuam resolvidos antecipadamente
 
-### M10. Path traversal em desktop entry
-`src/catalog/app_catalog.cpp:370` — `app.id` não validado como componente de nome; um ID com `../` escreve fora do diretório de aplicativos.
+`src/loader/import_resolver.cpp` resolve e grava toda a delay IAT antes do
+entry point. O comportamento está documentado em
+`docs/arquitetura/imports.md` e protegido pela fixture `tl_delay_import.exe`,
+mas diverge da resolução sob demanda do Windows e pode impedir a inicialização
+quando uma API atrasada não é usada.
 
-### M11. `track_popup_menu` bloqueia para sempre em `XNextEvent`
-`src/gui/x11.cpp:556-584` — sem timeout/`XPending`/Escape → deadlock do loop se o ponteiro sair do popup e não chegar mais evento.
+Critérios de conclusão:
 
----
+- decidir formalmente entre manter o subconjunto eager ou implementar resolução
+  lazy;
+- se permanecer eager, expor essa limitação no relatório/matriz e não chamá-la
+  de equivalência Win32;
+- se for implementada resolução lazy, criar fixture para import atrasado não
+  usado, usado e ausente, com diagnóstico por símbolo.
 
-## 🟡 MENORES
-- `test_win32.cpp` com testes monolíticos de "cobertura por aplicativo" (200+ asserts) — falha única esconde qual API regrediu.
-- Magic numbers sem comentário (`259U`, `0x40100`, `0xC002U`) em `test_win32.cpp:2620,2653,2754`.
-- `maps_permissions_for` duplicado verbatim em 3 arquivos de teste.
-- `version.cpp` listado 2× em `src/CMakeLists.txt:38,52` — **CMake deduplica** (só há 1 `.o`), então não quebra build, mas é código morto/confuso.
-- `g_modal_*`/estado estático de GUI sem atomicidade (`x11.cpp:74-117` `ready` flag) — data race sob threads.
-- `XAllocColor` sem `XFreeColors` → vazamento de colormap.
-- Parser XML do MSIX ingênuo (substring, sem CDATA/comentários/entidades).
-- `unescape_json_string` não decodifica `\uXXXX`.
-- Testes de stubs testam "retorna algo" em vez de comportamento correto (`tl_GetMenu(nullptr)`).
+#### P1.2 — Forwarders reais ainda não têm cadeia de múltiplos saltos
 
----
+`src/loader/module.cpp` resolve API Sets e o alias `KERNELBASE -> KERNEL32`,
+mas `ExportedFunction` não representa um forwarder textual
+`DLL.Símbolo`. Portanto, a implementação não prova uma cadeia
+forwarder -> forwarder; a documentação deve distinguir API Set mapping de
+forwarder real.
 
-## ❌ Correções a alegações dos subagentes (verifiquei)
-- **Não** há falta de CI — existe `.github/workflows/ci.yml`.
-- A duplicação de `version.cpp` **não** quebra o build (CMake deduplica) — é só confusão no arquivo.
+Critérios de conclusão:
 
----
+- definir o modelo de export forwarder e limite de profundidade;
+- resolver ciclos e destinos ausentes como erro controlado;
+- adicionar testes para cadeia válida, ciclo, ordinal e símbolo inexistente;
+- alinhar `docs/compatibilidade.md` e `docs/arquitetura/imports.md`.
 
-## Prioridade recomendada
+#### P1.3 — TLS genérico ainda depende de correção específica do Roblox
 
-| Ordem | Correção | Impacto |
-|---|---|---|
-| 1 | **C1** — implementar o downgrade RWX→RW prometido | Segurança/isolamento |
-| 2 | **C2** — relocar VAs de TLS callbacks por `delta` | Crash real com PEs comuns |
-| 3 | **C5/C6** — validar buffers/sizes antes de escrever | Corrupção de memória host |
-| 4 | **C3/C4** — bounds check em X11/Wayland | OOB read/write |
-| 5 | **M1/M2/M3** — implementar MoveFileEx/TempPath/GetWindowTextA de verdade | Comportamento errado em apps suportados |
-| 6 | **M4** — stubs devem falhar, não fingir sucesso | Corrupção downstream |
+O realocamento dos endereços de callbacks TLS já foi corrigido nos fluxos
+normal e filho. A pendência diferente é o slot TLS zero-initializado usado pelo
+benchmark Roblox: `ROADMAP.md` registra o fix específico do slot `0x430` e
+mantém aberto um alocador genérico para slots sem dados iniciais.
+
+Critérios de conclusão:
+
+- implementar alocação sob demanda somente para slots/RVAs válidos da imagem;
+- registrar e liberar o bloco no ciclo de vida da thread convidada;
+- criar `tl_tls_generic.exe` e regressão de zero-init, leitura e encerramento;
+- manter Roblox como benchmark e só mudar seu estado após execução reproduzível
+  do fluxo definido no roadmap.
+
+#### P1.4 — Concorrência geral do backend GUI ainda não está definida
+
+O `ready flag` antigo do X11 foi substituído por `std::call_once`, mas estado
+de janelas, filas e desenho continua compartilhado. O runtime precisa declarar
+se USER32/GUI é single-thread no escopo atual ou implementar sincronização
+completa para chamadas vindas de threads convidadas.
+
+Critérios de conclusão:
+
+- documentar o modelo de threads suportado;
+- impedir corrida em estado de janela, fila, display e recursos X11;
+- cobrir duas threads convidadas usando GUI ou rejeitar o cenário com erro
+  controlado e teste.
+
+### P2 — manutenção, testes e melhorias futuras
+
+#### P2.1 — Vazamento de cores no X11
+
+`XAllocColor` é chamado por `pixel_for_rgb` em operações de desenho e os
+pixels não são liberados com `XFreeColors`. O estado dos brushes pode ser
+mantido até o fechamento do display, mas cores alocadas por desenho repetido
+podem consumir recursos do colormap.
+
+Critérios de conclusão:
+
+- reutilizar/cachear cores ou liberar cada alocação com ciclo de vida definido;
+- adicionar validação sob Xvfb com desenho repetido e ASAN/LeakSanitizer.
+
+#### P2.2 — Parser XML do MSIX precisa de parser estrutural
+
+A busca por substrings em `parse_appx_manifest_xml` não trata corretamente
+namespaces, comentários, CDATA, entidades, aspas alternativas e elementos
+aninhados. Isso deve ser resolvido junto da pendência P0.3, sem introduzir uma
+dependência grande sem decisão de escopo.
+
+#### P2.3 — Suíte de testes Win32 ainda é monolítica
+
+`tests/test_win32.cpp` tem aproximadamente 130 KiB e concentra testes de
+arquivos, GUI, catálogo, locale, memória e aplicativos. A divisão por domínio
+reduziria tempo de diagnóstico e custo de execução.
+
+Critérios de conclusão:
+
+- separar pelo menos arquivos, memória/loader, USER32/GDI, catálogo e
+  cobertura de aplicativos;
+- preservar nomes e mensagens de falha úteis;
+- mover helpers compartilhados para um único suporte de testes.
+
+#### P2.4 — Helpers e constantes de teste duplicados
+
+`maps_permissions_for` aparece em três testes. Ainda há constantes como
+`259U` e `0xC002U` sem nome semântico próximo ao uso.
+
+Critérios de conclusão:
+
+- criar helper compartilhado;
+- substituir números por constantes nomeadas ou comentários que indiquem o
+  contrato Win32 testado.
+
+#### P2.5 — Testes de stubs precisam verificar contrato negativo
+
+Há testes que aceitam tokens sintéticos e retornos de sucesso para APIs sem
+semântica real, como a cobertura de menus. Isso pode mascarar regressões e
+contradiz a política de falha controlada.
+
+Critérios de conclusão:
+
+- para cada stub, verificar retorno, `GetLastError`, buffers de saída e trace;
+- não usar sucesso sintético como prova de compatibilidade comportamental;
+- incluir pelo menos uma regressão para cada família marcada `Stub`.
+
+#### P2.6 — Limites configuráveis de CPU e RAM ainda não existem
+
+`ideia.md` propõe limitar CPU e RAM por aplicativo. O código atual implementa
+isolamento de processo e timeout, mas não há limite efetivo por `setrlimit`,
+cgroup ou mecanismo equivalente.
+
+Critérios de conclusão:
+
+- decidir se esse recurso pertence à fase atual ou a uma fase futura;
+- definir CLI, herança para processos filhos, erro e observabilidade;
+- validar limites de CPU, memória e timeout sem confundir isso com sandbox.
+
+#### P2.7 — Camada genérica de tradução por aplicativo ainda não existe
+
+O instalador copia especificamente alguns arquivos de idioma do Notepad++,
+mas não existe uma camada geral para aplicar arquivos de tradução por aplicativo
+sem alterar o runtime inteiro.
+
+Critérios de conclusão:
+
+- definir formato, diretório, seleção por ID/hash/versão e precedência;
+- manter a camada isolada do loader e do comportamento Win32;
+- adicionar um aplicativo externo de teste e validar fallback quando a tradução
+  estiver ausente ou inválida.
+
+## Pendências documentais
+
+Estas inconsistências não são novos bugs do runtime, mas precisam ser corrigidas
+para que o projeto não publique um estado falso:
+
+1. `docs/compatibilidade.md` chama WinRAR, Roblox, Rockstar e Notepad++ de
+   `supported`, embora haja linhas com `RBXCRASH`, timeout ou execução não
+   validada. Separar claramente `imports-resolved`, `runtime-support` e
+   `execution-tested`; usar `supported` somente quando o critério de execução
+   estiver atendido.
+2. `docs/compatibilidade.md` e `ROADMAP.md` ainda citam caminhos antigos como
+   `src/runtime/kernel32.cpp`, `src/runtime/user32.cpp`, `src/runtime/winapi.cpp`
+   e `src/cli.cpp`. Atualizar para os módulos atuais ou marcar referências como
+   históricas.
+3. `docs/requisitos-aplicativos.md` contém medições históricas honestas, mas
+   precisa indicar de forma uniforme data, hash, versão do binário e se a
+   medição foi apenas `--report`.
+4. `ideia.md` diz primeiro que o guest roda no mesmo processo e depois afirma
+   que o isolamento por filho já foi implementado. A seção deve ser convertida
+   em histórico/status atual.
+5. `docs/proposta-reorganizacao-e-refatoracao.md` descreve como futura uma
+   modularização que já ocorreu parcialmente. Marcar fases concluídas e listar
+   somente o restante: subpastas de GDI/shell/system/CRT, controles e divisão
+   de testes.
+6. `ROADMAP.md` marca limites de recursos como concluídos embora a execução
+   atual demonstre isolamento e timeout, não limite efetivo de CPU/RAM. Também
+   há uma tarefa MSIX não marcada e um marco posterior que descreve o parser
+   como concluído; separar reconhecimento/parser de extração segura.
+7. Revisar referências antigas em `docs/arquitetura/abi-x64.md` e
+   `docs/arquitetura/gui-x11.md`, especialmente caminhos de assembly e do
+   dispatcher.
+
+## Achados encerrados nesta revisão
+
+Os itens abaixo não devem voltar ao backlog sem uma nova evidência:
+
+- C1: seções `exec+write` são rebaixadas para `ReadWrite`; não há página RWX.
+- C2: callbacks e campos TLS são realocados antes da execução normal e filha.
+- C3: `fill_rectangle` valida índice, dimensões e o brush nulo no X11.
+- C4: o backend Wayland calcula limites com inteiros de largura maior.
+- C5: `CreateDIBSection` aloca pixels conforme o bitmap e impõe limite.
+- C6: `GetSystemTimeAsFileTime` e `GetTextExtentPoint32W` validam destinos.
+- M1: `MoveFileExA` executa rename real e trata replace/erros.
+- M2: caminhos como `C:\\windows\\temp\\` são caminhos Windows virtuais
+  traduzidos pelo prefixo; não são uma promessa de caminho POSIX ao guest.
+- M3: `GetWindowTextA` retorna o comprimento copiado.
+- M6: patches da IAT podem cobrir os headers mapeados.
+- M10: IDs do catálogo rejeitam traversal e componentes inseguros.
+- `unescape_json_string` trata `\\uXXXX` e pares substitutos.
+- O antigo `ready flag` do X11 foi substituído por inicialização com
+  `std::call_once`.
+
+## Limitação da validação desta revisão
+
+Esta consolidação foi feita por inspeção estática, testes existentes e
+referências cruzadas. `CTest` não foi executado nesta máquina porque o cache
+existente de `build/debug` foi criado em WSL e está sendo acessado pelo caminho
+Windows; o ambiente WSL não estava disponível. Antes de fechar qualquer item,
+executar o preset Linux/CI correspondente e registrar a evidência no roadmap e
+na matriz de compatibilidade.
