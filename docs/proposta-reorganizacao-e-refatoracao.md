@@ -6,7 +6,10 @@ O TradutorLinux evoluiu de forma rápida ao longo das 13 fases do seu roadmap, p
 
 A reorganização principal já foi aplicada. O estado atual é modular em `src/runtime/core`, `src/runtime/seh`, `src/runtime/dlls` e `src/cli`; os pontos que ainda justificam manutenção são:
 1. `src/runtime/dlls/kernel32/` e `src/runtime/dlls/user32/` ainda podem ganhar subdivisões internas quando houver um alvo concreto.
-2. `tests/test_win32.cpp` continua concentrando testes de arquivos, GUI, catálogo, locale, memória e aplicativos.
+2. A suíte Win32 já foi separada por domínio em `test_win32_apps.cpp`,
+   `test_win32_external.cpp`, `test_win32_gui.cpp`, `test_win32_security.cpp` e
+   `test_win32_stubs.cpp`; `tests/test_win32.cpp` ainda concentra os testes
+   comuns remanescentes e é o maior arquivo da suíte.
 3. Algumas famílias legadas permanecem diretamente em `src/runtime/` (`gdi32.cpp`, `shell32.cpp`, rede e outras) e só devem ser movidas junto com testes e dependências reais.
 4. `include/tradutorlinux/win32/` já separa tipos e contratos por família; `winapi.hpp` permanece como superfície de compatibilidade.
 5. O próximo trabalho de refatoração deve priorizar testes e famílias ainda grandes, sem repetir a migração já concluída.
@@ -21,7 +24,7 @@ A reorganização principal já foi aplicada. O estado atual é modular em `src/
 | `src/runtime/dlls/user32/*.cpp` | módulos temáticos | Mensageria, janelas, menus, diálogos e clipboard | Dividir controles quando houver contrato e teste próprios |
 | `include/tradutorlinux/win32/` | headers por família | Tipos e contratos ABI Win32 | Manter `winapi.hpp` apenas como superfície compatível |
 | `src/cli/*.cpp` | `options`, `report`, `runner` | CLI, relatório, catálogo e execução | Manter separação e evitar retorno a um monólito |
-| `tests/test_win32.cpp` | monólito remanescente | Testes de vários subsistemas | Separar por domínio, preservando fixtures e helpers |
+| `tests/test_win32.cpp` | maior fonte de testes remanescentes | Testes comuns de Win32 | Dividir apenas os domínios que ainda trouxerem benefício de manutenção |
 | `src/loader/module.cpp` | registro de módulos | Registro e lookup de exports | Manter tabelas junto das DLLs, como já ocorre |
 
 ---
@@ -122,7 +125,9 @@ Criar subpastas em `include/tradutorlinux/win32/`:
 
 1. **Velocidade de Compilação Drasticamente Superior**:
    - A divisão atual permite alterar APIs de arquivo em `src/runtime/dlls/kernel32/file.cpp` sem recompilar um monólito histórico.
-   - O custo restante mais visível está na suíte monolítica `tests/test_win32.cpp`, que deve ser separada por domínio quando houver uma janela de manutenção adequada.
+   - Os domínios principais da suíte Win32 já foram extraídos para arquivos
+     próprios; `tests/test_win32.cpp` permanece como núcleo comum e pode ser
+     reduzido em uma manutenção futura, caso isso traga benefício mensurável.
 2. **Localização Imediata do Código**:
    - Rede $\to$ `src/runtime/dlls/net/`.
    - Criptografia $\to$ `src/runtime/dlls/crypto/`.
@@ -133,7 +138,10 @@ Criar subpastas em `include/tradutorlinux/win32/`:
 4. **Descentralização do Registro de DLLs**:
    - As tabelas de exportação já ficam junto dos módulos de cada DLL, enquanto o loader mantém apenas registro e lookup.
 5. **Facilidade para Testes Unitários Focados**:
-   - O monólito `tests/test_win32.cpp` (aproximadamente 130 KiB) continua como pendência de manutenção e pode ser quebrado em suítes específicas (`test_file.cpp`, `test_sync.cpp`, `test_memory.cpp`).
+   - A separação por domínio já cobre aplicativos, APIs externas, GUI,
+     segurança e stubs. O arquivo `tests/test_win32.cpp` ainda pode receber
+     uma divisão adicional por assunto, mas deixou de ser a única suíte para
+     esses subsistemas.
 
 ---
 
@@ -161,3 +169,6 @@ benefício concreto:
   - Criar a subpasta `src/runtime/dlls/user32/` e separar `message.cpp`, `window.cpp`, `controls/`, `dialog.cpp`.
 * **Fase 6 — Modularização de Cabeçalhos e CLI (concluída)**:
   - Dividir `winapi.hpp` e `cli.cpp` conforme a proposta.
+* **Fase 7 — Separação da suíte Win32 (concluída)**:
+  - Extrair os testes de aplicativos, APIs externas, GUI, segurança e stubs,
+    preservando helpers compartilhados, fixtures e regressões existentes.

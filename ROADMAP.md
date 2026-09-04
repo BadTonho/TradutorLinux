@@ -327,12 +327,13 @@ reutilizáveis por várias classes de aplicativos. As lacunas observadas são:
   `tl_crypt32.exe`);
 - [x] definir uma camada `OLE32`/COM mínima (`CoCreateInstance`/`CoGetClassObject`/`OleInitialize` via `ole32.dll`, fixture `tl_com.exe` cobre `S_OK`/`REGDB_E_CLASSNOTREG`/`CLASS_E_NOAGGREGATION`);
 - [x] ampliar a GUI de forma genérica: variantes Unicode de `USER32` (`RegisterClassExW`/`CreateWindowExW`/`DefWindowProcW`/`GetMessageW`/`DispatchMessageW`/`SetWindowTextW`/`GetWindowTextW`/`FindWindowW`/`LoadCursorW`/`SendMessageW` etc. via wrappers `wide_to_utf8`), validado por `tl_win_w.exe` sob `Xvfb` análogo a `tl_win`;
-- [ ] ampliar `SHELL32`/`SHLWAPI` para pastas conhecidas, execução de processos
-  e manipulação de caminhos;
+- [x] ampliar `SHELL32`/`SHLWAPI` para pastas conhecidas, execução de processos
+  e manipulação de caminhos (fixture `tl_shell.exe`);
 - [x] avaliar `GDI32`, `gdiplus`, `UxTheme`, `WINMM`, `dbghelp` para desenho, imagens, temas,
   temporizadores multimídia e diagnóstico (fixture `tl_gdiex.exe` cobre 3+8+1+1+1); `POWRPROF.dll` e `IPHLPAPI.DLL` permanecem avaliação futura;
-- [ ] manter isolamento, timeout, limites de recursos, `--report`, mensagens
-  de falha e testes de integração para qualquer nova família de DLL.
+- [x] manter isolamento de processo, timeout, `--report`, mensagens de falha e
+  testes de integração para as famílias implementadas;
+- [ ] definir e implementar limites configuráveis de CPU/RAM por aplicativo;
 
 A ordem de implementação continua subordinada à fase atual e ao método do
 projeto: cada item precisa de um aplicativo-alvo ou fixture independente,
@@ -549,7 +550,9 @@ APIs.
 - [x] Implementar fontes, brushes, desenho e invalidação somente no subconjunto usado pelo alvo.
 - [x] Implementar EDIT, BUTTON, COMBOBOX, STATIC e SysListView32 como controles lógicos.
 - [x] Validar o smoke completo sob Xvfb e promover o alvo após evidência de integração.
-- [ ] Avaliar Wayland/toolkit depois de existir uma aplicação GUI real suportada.
+- [x] Avaliar Wayland/toolkit depois de existir uma aplicação GUI real suportada;
+  a camada plain Wayland está documentada e separada do backend X11, enquanto
+  os smokes automatizados continuam usando X11/Xvfb.
 - [x] Automatizar propriedades observáveis, stdout, exit code, trace, persistência e visibilidade; screenshot permanece fora do escopo.
 
 ### Critério de saída
@@ -564,9 +567,11 @@ classes de uso. A meta de longo prazo é maximizar a cobertura prática de
 aplicativos Win32 PE32+ x86-64 de espaço de usuário; ela não equivale a prometer
 compatibilidade imediata com qualquer executável, jogo ou mecanismo protegido.
 
-- [ ] Fixar um portfólio versionado de aplicativos-alvo de código aberto ou
-  redistribuição autorizada, com pelo menos um representante de instalador,
-  aplicativo GUI de produtividade e ferramenta de rede.
+- [x] Fixar o núcleo reproduzível do portfólio com fontes, versões, hashes,
+  manifests e regressões para `xxd`, `bzip2`, `dos2unix`/`unix2dos` e
+  `simple-todo`, além das fixtures de instalador e rede;
+- [ ] Completar o portfólio versionado com representantes reais adicionais de
+  instalador, GUI de produtividade e ferramenta de rede autorizada.
 - [x] **Prioridade 13.1 — instaladores x64 nativos:** usar as amostras WinRAR,
   Logitech G HUB, Rockstar e Roblox como evidência de cobertura, mas escolher
   um instalador PE32+ x86-64 reproduzível como alvo de regressão inicial.
@@ -583,22 +588,24 @@ compatibilidade imediata com qualquer executável, jogo ou mecanismo protegido.
   contratos sem declarar suporte aos benchmarks comerciais.
 - [x] Validar `install -> arquivos no prefixo -> cadastro do executável
   instalado -> app run` com teste de integração e artefatos reproduzíveis.
-- [ ] Adicionar descoberta de formatos de distribuição ao portfólio: distinguir
-  PE direto de pacotes MSIX/AppX, extrair de forma estruturalmente validada para
-  um prefixo próprio, ler `AppxManifest.xml` e só então analisar o PE interno.
-- [ ] Registrar imports, versão, hash e fluxo principal de cada alvo, e usar a
-  interseção e a frequência dessas dependências para ordenar o trabalho.
-- [ ] Expandir famílias de APIs somente quando a implementação servir a mais de
-  um alvo ou completar uma capacidade de sistema bem delimitada; cada API ganha
-  fixture independente e regressão de integração.
-- [ ] Priorizar o núcleo comum na ordem publicada abaixo: locale ampliado,
+- [x] Adicionar descoberta estrutural de formatos de distribuição: distinguir
+  PE direto de pacotes MSIX/AppX, validar o arquivo, ler `AppxManifest.xml` e
+  localizar o PE interno. Instalação e execução do pacote continuam pendentes.
+- [x] Registrar imports, versão, hash e fluxo principal dos alvos acompanhados
+  no catálogo e em `docs/requisitos-aplicativos.md`, usando recorrência de
+  dependências para ordenar o trabalho; o preenchimento de amostras comerciais
+  sem metadados completos continua sendo manutenção do inventário.
+- [x] Expandir famílias de APIs somente quando a implementação servir a mais
+  de um alvo ou completar uma capacidade delimitada; cada entrega recente tem
+  fixture ou regressão de integração associada.
+- [x] Priorizar e executar o núcleo comum na ordem publicada: locale ampliado,
   contexto de processo/console, enumeração de arquivos, identidade/ACL,
-  controles GUI e, somente depois, automação, HTTP e confiança.
-- [ ] Manter o `--report` como porta de entrada: apresentar imports faltantes
-  por DLL e por capacidade, mas considerar carregamentos dinâmicos e o fluxo
-  de execução antes de declarar suporte.
-- [ ] Avaliar o `RobloxPlayerInstaller.exe` como benchmark do portfólio, sem
-  criar stubs específicos para Roblox e sem declarar suporte ao cliente/jogo.
+  controles GUI, automação, HTTP e confiança.
+- [x] Manter o `--report` como porta de entrada, agrupando imports ausentes por
+  DLL e capacidade e separando resolução estática de carregamentos dinâmicos e
+  do fluxo efetivo de execução.
+- [x] Avaliar o `RobloxPlayerInstaller.exe` como benchmark do portfólio sem
+  criar stubs específicos; o aplicativo continua sem declaração de suporte.
 
 ### Sequência planejada a partir do portfólio local
 
@@ -738,15 +745,17 @@ nem declarar os benchmarks comerciais suportados.
   separada `CRYPT32!CertGetNameStringW` é coberta por `tl_crypt32.exe` apenas
   para `CERT_CONTEXT`/DER explícito; `tl_wthelper.exe` cobre a travessia
   limitada de estado, signer e certificados folha/raiz.
-- [ ] Não usar esses componentes para declarar compatibilidade do Rockstar
-  antes de validar um fluxo de instalação/atualização inteiro.
+- [x] Não usar esses componentes para declarar compatibilidade do Rockstar
+  antes de validar um fluxo de instalação/atualização inteiro; a matriz atual
+  mantém o alvo como execução não concluída.
 
 #### Backlog condicionado — formatos, arquitetura e unwind adicional
 
 - [x] MSIX/AppX: detectar pacote, ler `AppxManifest.xml` e localizar
   estruturalmente o executável interno; a validação de central directory,
-  DEFLATE, CRC e limites está coberta por testes. [ ] Instalação e execução do
-  pacote exigem fase própria e não são cobertas pelo prefixo atual.
+  DEFLATE, CRC e limites está coberta por testes.
+- [ ] Instalação e execução de pacotes MSIX/AppX exigem fase própria e não são
+  cobertas pelo prefixo atual.
 - [ ] PE32/x86, .NET/Mono, ARM e WOW64 continuam fora do alvo. Não há plano de
   executar esses binários sem uma decisão explícita de arquitetura/emulação.
 - [ ] A forma de `UWOP_SET_FPREG` do Roblox (`OpInfo=10`, `FrameOffset=0`)
@@ -772,7 +781,11 @@ nem declarar os benchmarks comerciais suportados.
   expõe interface IPv4. Não surgiu uma API adicional justificada; qualquer
   expansão continua exigindo evidência, fixture e registro em
   `docs/requisitos-aplicativos.md`.
-- [ ] Manter `Roblox` como benchmark sem criar stubs exclusivos; só declarar `supported` quando `install --prefix` extrair `drive_c` e `app run` completar sem `panic`
+- [x] Manter `Roblox` como benchmark sem criar stubs exclusivos; a resolução
+  de imports, o TLS genérico e a fixture Worker/RSL estão registrados sem
+  promover o aplicativo a suportado.
+- [ ] Declarar `Roblox` como `supported` somente quando `install --prefix`
+  extrair `drive_c` e `app run` completar sem `panic`.
 
 PE32/x86, .NET/Mono e MSIX/AppX continuam requisitos separados nesta primeira
 subetapa. Eles ficam registrados no portfólio para a expansão posterior, mas
@@ -816,7 +829,9 @@ quantidade de APIs declaradas sem uso real.
 - [x] Adicionar execução isolada, timeout e diagnóstico para que aplicativos grandes não derrubem o host (`process/isolate.cpp` `71`/`72`).
 - [ ] Definir e implementar limites efetivos de CPU/RAM por aplicativo; o
   isolamento de processo e o timeout não equivalem a contenção de recursos.
-- [ ] Avaliar compatibilidade por versões e builds específicos, sem assumir que duas versões do mesmo aplicativo usam as mesmas APIs.
+- [x] Avaliar compatibilidade por versões e builds específicos, sem assumir que
+  duas versões do mesmo aplicativo usam as mesmas APIs; os targets reproduzíveis
+  são fixados por versão, commit/hash, arquitetura e toolchain.
 
 ### Etapas para aplicativos grandes
 
