@@ -131,13 +131,15 @@ X11 individual. `GetStockObject` devolve um token opaco por
 objeto (endereço de uma tabela estática; stock objects não são liberados).
 
 O subconjunto atual de `COMCTL32` segue o mesmo modelo: `CreateStatusWindowW`
-cria uma status bar lógica no rodapé e `CreateToolbarEx` cria uma toolbar
-lógica com os `idCommand` das entradas `TBBUTTON` validadas. A toolbar pode
-encaminhar um clique básico ao parent como `WM_COMMAND`; bitmaps, image lists,
-temas e estilos avançados ainda não fazem parte do contrato.
+cria uma status bar lógica no rodapé e `CreateToolbarEx`, ou
+`CreateWindowEx` seguido de `TB_ADDBUTTONSW`, cria uma toolbar lógica com os
+`idCommand` das entradas `TBBUTTON` validadas. `TB_AUTOSIZE` atualiza a
+geometria mínima desse controle. A toolbar pode encaminhar um clique básico ao
+parent como `WM_COMMAND`; bitmaps, image lists, temas e estilos avançados ainda
+não fazem parte do contrato.
 
 Pelo mesmo motivo, `SendMessageA/W` trata apenas o ciclo necessário para esse
-modelo: dimensionamento, `TB_ADDBUTTONS`, contagem/exclusão e atualização de
+modelo: dimensionamento, `TB_ADDBUTTONSA/W`, contagem/exclusão e atualização de
 texto da status bar. O vetor recebido pelo convidado é validado antes de ser
 lido; nenhum ponteiro de bitmap ou image list é executado pelo backend.
 
@@ -244,10 +246,12 @@ mostra somente as entradas imediatas do diretório que contém o executável
 aberto, em ordem determinística, sem seguir links simbólicos e limitada a 128
 linhas; o caminho visual continua sendo `Z:\` e nenhuma operação de arquivo é
 disparada pela tela. A normalização da geometria inválida desse alvo também
-fica registrada no trace. Comandos, menus reais, ícones, navegação da lista e
-ações funcionais do painel ainda exigem contratos próprios e regressão antes de
-promover o aplicativo; o despacho básico de mouse para a classe customizada não
-implica que essas ações já estejam implementadas.
+fica registrada no trace. A faixa visual usa a ordem de `idCommand` enviada pelo
+7-Zip e o hit-test dela pode enfileirar `WM_COMMAND` no parent; os rótulos e
+ícones continuam sendo uma apresentação específica do shell. Menus reais,
+navegação da lista e ações funcionais do painel ainda exigem contratos próprios
+e regressão antes de promover o aplicativo; esse encaminhamento de comando não
+implica que as operações de arquivo já estejam implementadas.
 
 `SendMessageA` implementa os contratos usados pelo alvo para `WM_SETFONT`,
 `CB_ADDSTRING`, `CB_SETCURSEL`, `CB_GETCURSEL` e as mensagens de list view de

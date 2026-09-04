@@ -183,7 +183,7 @@ diretamente. Ele é experimental, não altera o subsistema de console e só acei
 | `USER32.dll` | `PostQuitMessage` | Suportado | Sinaliza `WM_QUIT`; `GetMessageA` retorna `0` |
 | `USER32.dll` | `GetDC` / `ReleaseDC` | Suportado | `HDC == HWND` (token opaco da janela); validam o par `hwnd`/`dc`; controles lógicos projetam o desenho na superfície X11 do pai com offsets acumulados |
 | `USER32.dll` | `BeginPaint` / `EndPaint` | Suportado | Preenchem o `PAINTSTRUCT` (layout Microsoft x64, 72 bytes) com o tamanho da janela/controle e marcam/desmarcam o estado de pintura; o `HDC` usa a superfície X11 da janela principal |
-| `USER32.dll` | `SendMessageA` / `SendMessageW` (controles comuns) | Suportado no subconjunto | Toolbar: `TB_BUTTONSTRUCTSIZE`, `TB_ADDBUTTONS`, `TB_BUTTONCOUNT`, `TB_DELETEBUTTON`, `TB_SETBUTTONSIZE`, `TB_SETBITMAPSIZE`, `TB_AUTOSIZE`, `TB_SETIMAGELIST`, `TB_ENABLEBUTTON`; status bar: `SB_SETTEXTA/W`, `SB_SETPARTS`, `SB_SETMINHEIGHT`, `SB_SIMPLE` |
+| `USER32.dll` | `SendMessageA` / `SendMessageW` (controles comuns) | Suportado no subconjunto | Toolbar: `TB_BUTTONSTRUCTSIZE`, `TB_ADDBUTTONSA/W`, `TB_BUTTONCOUNT`, `TB_DELETEBUTTON`, `TB_SETBUTTONSIZE`, `TB_SETBITMAPSIZE`, `TB_AUTOSIZE`, `TB_SETIMAGELIST`, `TB_ENABLEBUTTON`; status bar: `SB_SETTEXTA/W`, `SB_SETPARTS`, `SB_SETMINHEIGHT`, `SB_SIMPLE` |
 | `GDI32.dll` | `GetStockObject` | Suportado | Token opaco por stock object (tabela estática, `object` em `0..23`); stock objects não são liberados |
 | `GDI32.dll` | `TextOutA` / `TextOut` | Suportado | Desenha texto ANSI com comprimento explícito via `XDrawString`; em controles lógicos soma a posição dos pais ao destino |
 
@@ -196,7 +196,7 @@ diretamente. Ele é experimental, não altera o subsistema de console e só acei
 | `USER32.dll` | `CopyImage`, `DestroyIcon` | Suportado no subconjunto | Tokens de ícone copiados; não há `LoadImageW` nem desenho de ícones |
 | `COMCTL32.dll` | `InitCommonControlsEx` | Suportado no layout de 8 bytes | Valida `cbSize`/classes; ordinais 410/413 continuam `unknown-ordinal` |
 | `COMCTL32.dll` | `CreateStatusWindowW` | Suportado no subconjunto | Parent válido; cria uma `msctls_statusbar32` lógica no rodapé, com texto UTF-16 convertido para UTF-8 e desenho na superfície X11 principal |
-| `COMCTL32.dll` | `CreateToolbarEx` | Suportado no subconjunto | Parent válido; valida até 128 entradas do vetor `TBBUTTON`, preserva `idCommand`, desenha botões lógicos e encaminha clique básico por `WM_COMMAND`; mensagens `TB_*` atualizam esse modelo; bitmaps, image lists e estilos avançados permanecem fora |
+| `COMCTL32.dll` | `CreateToolbarEx` | Suportado no subconjunto | Parent válido; valida até 128 entradas do vetor `TBBUTTON`, preserva `idCommand`, desenha botões lógicos e encaminha clique básico por `WM_COMMAND`; mensagens `TB_ADDBUTTONSA/W` e `TB_AUTOSIZE` também atualizam esse modelo; bitmaps, image lists e estilos avançados permanecem fora |
 
 `tl_dialog.exe` valida o ciclo mínimo sob Xvfb quando o ambiente fornece o
 socket X11. O smoke confirma Tab/Enter, `WM_COMMAND`, retorno 42, saída
@@ -697,7 +697,7 @@ continuam sendo a evidência necessária para registrá-lo como suportado.
 | # | Aplicativo | Arquitetura | Imports | Compat | Execução `--timeout 3` | Observação |
 |---|---|---|---:|---|---|---|
 | 1 | `7z_x64.exe` | PE32+ x86-64 | 133/133 (100%) | `supported` | `ExitProcess 0` `7-Zip 24.08 banner` | `src/loader/module.cpp:400` `DosDateTimeToFileTime` já coberto |
-| 2 | `7zFM_x64.exe` | PE32+ x86-64 | 298/298 (100%) | `execution-failed` | janela X11 abre com shell visual experimental; lista imediata do diretório do executável aparece em modo somente leitura; comandos e menus reais ainda não estão ligados | geometria inválida normalizada para `800x600`; limite da lista em 128 linhas; delay `MPR.dll 6/6` |
+| 2 | `7zFM_x64.exe` | PE32+ x86-64 | 298/298 (100%) | `execution-failed` | janela X11 abre com shell visual experimental; lista imediata do diretório do executável aparece em modo somente leitura; toolbar segue os `idCommand` reais e encaminha `WM_COMMAND` básico, mas operações e menus reais continuam não funcionais | geometria inválida normalizada para `800x600`; limite da lista em 128 linhas; delay `MPR.dll 6/6` |
 | 3 | `7z.dll` | PE32+ DLL x86-64 | 86/86 (100%) | `imports-resolved` | `not-attempted` (DLL) | **Fase 13.A**: imports resolvidos; a DLL não foi executada como aplicação independente |
 | 4 | `putty_x64.exe` | PE32+ x86-64 | 348/348 (100%) | `supported` | `ExitProcess 1` (sem args) | FLS 0/1 ok |
 | 5 | `WinRAR_x64.exe` `winrar-x64-723.exe` | PE32+ x86-64 | 251/251 (100%) | `supported` | `ExitProcess 0` `sfxcmd` env | delay `GDI32/ADVAPI32/SHELL32/ole32` |
@@ -717,7 +717,7 @@ continuam sendo a evidência necessária para registrá-lo como suportado.
 
 | Aplicativo | Arquitetura | Imports Resolvidos | Compatibilidade | Estado de Execução |
 |---|---|---:|---|---|
-| **7-Zip File Manager (`7zFM_x64.exe`)** | PE32+ x86-64 | 100% (298/298) | Shell visual experimental; não suportado como fluxo GUI concluído | Menu, toolbar, endereço, navegação lateral, lista imediata somente leitura (até 128 linhas) e status aparecem; comandos, menus reais e navegação ainda não estão ligados |
+| **7-Zip File Manager (`7zFM_x64.exe`)** | PE32+ x86-64 | 100% (298/298) | Shell visual experimental; não suportado como fluxo GUI concluído | Menu, toolbar orientada pelos `idCommand` reais, endereço, navegação lateral, lista imediata somente leitura (até 128 linhas) e status aparecem; `WM_COMMAND` básico pode ser encaminhado, mas menus reais, operações de arquivo e navegação ainda não estão ligados |
 | **7-Zip CLI (`7z_x64.exe`)** | PE32+ x86-64 | 100% (133/133) | Suportado | Executou e imprimiu o banner oficial completo do 7-Zip no terminal |
 | **PuTTY SSH Client (`putty_x64.exe`)** | PE32+ x86-64 | 100% (348/348) | Suportado | Executou entry point, inicializou FLS (slots 0 e 1) e loop de eventos de interface e rede |
 | **WinRAR (`WinRAR_x64.exe`)** | PE32+ x86-64 | 100% (251/251) | Suportado | Inicializou FLS, subsistema CRT e APIs do Shell/OLE com sucesso |

@@ -13,7 +13,7 @@ explícitos abaixo.
   `956aadc`, `17f4305`, `45cc3f9`, `990b960`, `6d7c855`, `3df05e4`,
   `ee1fec9`, `5fe3e6d`, `a1fe77f`, `144be0d`, `03085a7` e `a609137`.
   A etapa de entrada dos filhos lógicos foi registrada em `39e4aa0` e a etapa
-  de repaint lógico em `66a6b30`.
+  de repaint lógico em `66a6b30`; a etapa de toolbar Unicode em `0465f31`.
 - O alvo continua sendo PE32+ x86-64 em Linux x86-64.
 - Já foram implementados e testados no build Debug Linux os subconjuntos de `IPHLPAPI`, `WTSAPI32` e parte de `CRYPT32`, além das correções de forwarders, TLS genérico e parser de manifests MSIX.
 - A validação executada até aqui cobriu fixtures próprias, testes unitários direcionados e traces de `tl_worker_rsl` e `tl_powr`.
@@ -90,10 +90,18 @@ explícitos abaixo.
   projetada. A regressão protege o `HWND` do filho, a deduplicação e a rejeição
   de ponteiro inválido; a suíte ficou em 372 testes (371 aprovados e 1 skip
   ambiental).
+- [x] Toolbar real do `7zFM_x64.exe`: `TB_ADDBUTTONSW` agora é aceito junto
+  da variante ANSI, `TB_AUTOSIZE` dimensiona o controle lógico e o shell visual
+  segue a ordem dos `idCommand` recebidos pelo convidado (`1070,1071,1072,546,
+  547,548,551`). O hit-test da faixa visual encaminha o comando ao parent;
+  dois testes protegem a variante Unicode e esse roteamento. A suíte ficou em
+  374 testes (373 aprovados e 1 skip ambiental).
 - [x] Medições e catálogo: o catálogo registra os `298/298` imports do
   `7zFM_x64.exe`, a janela X11 real `800x600`, a normalização de geometria e
   os dois smokes GUI aprovados, sem transformar essa evidência visual em
-  suporte funcional.
+  suporte funcional. O trace no display real confirmou a criação de sete
+  botões Unicode; o smoke Xvfb desta execução ficou `Skipped` porque o socket
+  X11 virtual não estava disponível.
 - [ ] Worker/RSL comercial: bloqueado nesta cópia do checkout; a busca não
   encontrou um executável comercial `Worker`/`RSL` em
   `Aplicativos_Windows_Populares/`. Só existe a fixture própria

@@ -685,6 +685,9 @@ nem declarar os benchmarks comerciais suportados.
 - [x] Fazer `InvalidateRect` de uma janela lógica produzir um `WM_PAINT` na fila
   do próprio filho, com validação do `RECT`, deduplicação de repaints e flush da
   superfície X11 projetada.
+- [x] Aceitar `TB_ADDBUTTONSW` e `TB_AUTOSIZE` no modelo de toolbar, usar a ordem
+  real de `idCommand` do 7-Zip no shell visual e proteger o hit-test da faixa
+  visual com regressão de `WM_COMMAND`.
 
 #### Fase 13.12 — automação, rede e confiança, em entregas separadas
 
