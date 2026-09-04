@@ -18,7 +18,7 @@ explícitos abaixo.
   do bloqueio do Worker em `ca4554a`, a navegação de teclado em `3a1361c` e a
   navegação por duplo clique em `c8d7ffd`, a árvore lateral em `9035076` e a
   barra de endereço em `f694930`, captura da toolbar em `f8c4f09` e hover
-  visual em `d52df26`.
+  visual em `d52df26` e hover da navegação em `592a3e5`.
 - O alvo continua sendo PE32+ x86-64 em Linux x86-64.
 - Já foram implementados e testados no build Debug Linux os subconjuntos de `IPHLPAPI`, `WTSAPI32` e parte de `CRYPT32`, além das correções de forwarders, TLS genérico e parser de manifests MSIX.
 - A validação executada até aqui cobriu fixtures próprias, testes unitários direcionados e traces de `tl_worker_rsl` e `tl_powr`.
@@ -53,7 +53,8 @@ explícitos abaixo.
   destinos inexistentes ou fora dela. A toolbar redesenha o botão pressionado,
   cancela a ação quando a soltura ocorre fora dele e destaca o botão sob o
   ponteiro; a lista usa o mesmo feedback para a linha sob o mouse sem misturar
-  hover com seleção.
+  hover com seleção. A árvore lateral também destaca a linha sob o ponteiro sem
+  trocar a pasta selecionada.
   O aplicativo continua explicitamente fora de suporte como fluxo GUI concluído.
 - [x] MSIX: 8 testes `MsixParserTest.*` e o teste de afinidade passaram no
   unitário e no CTest. A validação é estrutural; não houve instalação ou
@@ -140,6 +141,10 @@ explícitos abaixo.
 - [x] Feedback de hover do shell: toolbar e lista acompanham o ponteiro,
   limpam o destaque ao sair da área e mantêm o hover separado da seleção; duas
   regressões protegem esse comportamento. A suíte ficou em 384 testes (383
+  aprovados e 1 skip ambiental).
+- [x] Feedback de hover da navegação lateral: a árvore destaca a linha sob o
+  ponteiro, limpa o destaque ao sair e preserva a seleção atual; a regressão
+  protege a entrada e a saída do hover. A suíte ficou em 385 testes (384
   aprovados e 1 skip ambiental).
 - [x] Medições e catálogo: o catálogo registra os `298/298` imports do
   `7zFM_x64.exe`, a janela X11 real `800x600`, a normalização de geometria e

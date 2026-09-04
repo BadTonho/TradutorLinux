@@ -695,6 +695,9 @@ nem declarar os benchmarks comerciais suportados.
 - [x] Exibir feedback de hover na toolbar e nas linhas da lista do shell visual,
   limpar o destaque ao sair da área e manter esse estado independente da
   seleção; regressões cobrem entrada, troca e saída do ponteiro.
+- [x] Exibir feedback de hover na árvore lateral sem alterar a pasta selecionada
+  e limpar o destaque quando o ponteiro sai da navegação; regressão cobre o
+  estado independente da seleção.
 - [x] Carregar o menu de classe `RT_MENU` MENUEX v1 do 7-Zip, incluindo o
   `MENUHELPID` de popups, alinhamento, IDs, texto e submenus no modelo lógico;
   associá-lo à janela principal e proteger `LoadMenuW`/`GetMenuItemInfoW` com

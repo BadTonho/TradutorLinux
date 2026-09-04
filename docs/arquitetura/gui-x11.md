@@ -262,7 +262,8 @@ qualquer caminho que escape da raiz visual. A
 normalização da geometria inválida desse alvo também
 fica registrada no trace. A faixa visual usa a ordem de `idCommand` enviada pelo
 7-Zip, fornece hover independente da seleção e o hit-test dela pode enfileirar
-`WM_COMMAND` no parent; os rótulos e
+`WM_COMMAND` no parent; a árvore lateral também fornece hover sem alterar a
+pasta selecionada; os rótulos e
 ícones continuam sendo uma apresentação específica do shell. A classe principal
 também carrega o recurso `RT_MENU` MENUEX do próprio executável e usa seus seis
 itens de nível superior para os rótulos; `GetMenuItemInfoW` consulta a hierarquia
