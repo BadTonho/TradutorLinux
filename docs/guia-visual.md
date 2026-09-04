@@ -53,8 +53,9 @@ No shell visual experimental, a lista mostra a pasta do executável. Clique ou
 use as setas para selecionar; `Enter` ou duplo clique abre diretórios. A árvore
 lateral volta à raiz ou seleciona pastas conhecidas do usuário. Também é possível
 clicar em `Address`, editar um caminho `Z:\...` e confirmar com `Enter`; somente
-diretórios existentes dentro da raiz visual são aceitos. Na toolbar, mantenha o
-clique pressionado para ver o botão ativo; solte fora dele para cancelar.
+diretórios existentes dentro da raiz visual são aceitos. Passe o mouse sobre um
+botão da toolbar ou uma linha para ver o hover; mantenha o clique pressionado
+para ver o botão ativo e solte fora dele para cancelar.
 
 ## Abrir uma janela com message loop
 

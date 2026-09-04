@@ -137,8 +137,10 @@ cria uma status bar lógica no rodapé e `CreateToolbarEx`, ou
 geometria mínima desse controle. A toolbar pode encaminhar um clique básico ao
 parent como `WM_COMMAND`; o botão pressionado é redesenhado no `Press`, a
 captura lógica mantém o controle até o `Release` e uma soltura fora do botão
-pressionado cancela o comando. Bitmaps, image lists, temas e estilos avançados
-ainda não fazem parte do contrato.
+pressionado cancela o comando. No shell visual específico do 7-Zip, o botão sob
+o ponteiro recebe hover independente da pressão, e a linha da lista recebe o
+mesmo feedback sem alterar a seleção. Bitmaps, image lists, temas e estilos
+avançados ainda não fazem parte do contrato.
 
 Pelo mesmo motivo, `SendMessageA/W` trata apenas o ciclo necessário para esse
 modelo: dimensionamento, `TB_ADDBUTTONSA/W`, contagem/exclusão e atualização de
@@ -259,7 +261,8 @@ forma `Z:\...`, normaliza separadores, exige um diretório existente e rejeita
 qualquer caminho que escape da raiz visual. A
 normalização da geometria inválida desse alvo também
 fica registrada no trace. A faixa visual usa a ordem de `idCommand` enviada pelo
-7-Zip e o hit-test dela pode enfileirar `WM_COMMAND` no parent; os rótulos e
+7-Zip, fornece hover independente da seleção e o hit-test dela pode enfileirar
+`WM_COMMAND` no parent; os rótulos e
 ícones continuam sendo uma apresentação específica do shell. A classe principal
 também carrega o recurso `RT_MENU` MENUEX do próprio executável e usa seus seis
 itens de nível superior para os rótulos; `GetMenuItemInfoW` consulta a hierarquia

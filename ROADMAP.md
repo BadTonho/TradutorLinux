@@ -692,6 +692,9 @@ nem declarar os benchmarks comerciais suportados.
   manter o controle lógico durante a captura e cancelar a ação quando o
   `Release` ocorrer fora do botão pressionado; somente o `idCommand` original
   pode ser encaminhado.
+- [x] Exibir feedback de hover na toolbar e nas linhas da lista do shell visual,
+  limpar o destaque ao sair da área e manter esse estado independente da
+  seleção; regressões cobrem entrada, troca e saída do ponteiro.
 - [x] Carregar o menu de classe `RT_MENU` MENUEX v1 do 7-Zip, incluindo o
   `MENUHELPID` de popups, alinhamento, IDs, texto e submenus no modelo lógico;
   associá-lo à janela principal e proteger `LoadMenuW`/`GetMenuItemInfoW` com
