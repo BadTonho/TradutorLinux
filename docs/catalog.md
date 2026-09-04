@@ -44,7 +44,7 @@ promessa de suporte universal; cada entrada é verificada via `tests/samples` ou
 | `tl_win.exe` | USER32 A 10 | **fluxo principal** | janela + message loop X11 |
 | `tl_win_w.exe` | USER32 W 12 | **fluxo principal** | W wrappers via `wide_to_utf8` |
 | `simple_todo` | 105 (GDI32/USER32/SHELL32/msvcrt) | **uso diário** | `targetapp_simple_todo_gui_smoke` `105/105` |
-| `7zFM_x64.exe` | 298 | **shell visual experimental** | menu, toolbar, endereço, navegação e lista são desenhados; a lista mostra entradas imediatas do diretório do executável, limitada a 128 linhas, permite seleção e abre pastas por Enter ou duplo clique; a árvore lateral retorna à raiz e seleciona diretórios Linux conhecidos; a barra de endereço navega somente dentro da raiz visual; comandos reais ainda não estão ligados |
+| `7zFM_x64.exe` | 298 | **shell visual experimental** | menu, toolbar, endereço, navegação e lista são desenhados; a lista mostra entradas imediatas do diretório do executável, limitada a 128 linhas, permite seleção e abre pastas por Enter ou duplo clique; a árvore lateral retorna à raiz e seleciona diretórios Linux conhecidos; a barra de endereço navega somente dentro da raiz visual; a toolbar mostra pressão e cancela soltura fora do botão; comandos reais ainda não estão ligados |
 
 Evidência atual do `7zFM_x64.exe`: o runtime em `build/debug` abriu a janela
 real no X11 com `800x600`; o trace registrou a normalização da geometria

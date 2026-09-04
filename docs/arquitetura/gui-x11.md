@@ -135,8 +135,10 @@ cria uma status bar lógica no rodapé e `CreateToolbarEx`, ou
 `CreateWindowEx` seguido de `TB_ADDBUTTONSW`, cria uma toolbar lógica com os
 `idCommand` das entradas `TBBUTTON` validadas. `TB_AUTOSIZE` atualiza a
 geometria mínima desse controle. A toolbar pode encaminhar um clique básico ao
-parent como `WM_COMMAND`; bitmaps, image lists, temas e estilos avançados ainda
-não fazem parte do contrato.
+parent como `WM_COMMAND`; o botão pressionado é redesenhado no `Press`, a
+captura lógica mantém o controle até o `Release` e uma soltura fora do botão
+pressionado cancela o comando. Bitmaps, image lists, temas e estilos avançados
+ainda não fazem parte do contrato.
 
 Pelo mesmo motivo, `SendMessageA/W` trata apenas o ciclo necessário para esse
 modelo: dimensionamento, `TB_ADDBUTTONSA/W`, contagem/exclusão e atualização de

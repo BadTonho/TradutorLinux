@@ -688,6 +688,10 @@ nem declarar os benchmarks comerciais suportados.
 - [x] Aceitar `TB_ADDBUTTONSW` e `TB_AUTOSIZE` no modelo de toolbar, usar a ordem
   real de `idCommand` do 7-Zip no shell visual e proteger o hit-test da faixa
   visual com regressão de `WM_COMMAND`.
+- [x] Capturar o estado de pressão da toolbar visual: redesenhar no `Press`,
+  manter o controle lógico durante a captura e cancelar a ação quando o
+  `Release` ocorrer fora do botão pressionado; somente o `idCommand` original
+  pode ser encaminhado.
 - [x] Carregar o menu de classe `RT_MENU` MENUEX v1 do 7-Zip, incluindo o
   `MENUHELPID` de popups, alinhamento, IDs, texto e submenus no modelo lógico;
   associá-lo à janela principal e proteger `LoadMenuW`/`GetMenuItemInfoW` com
