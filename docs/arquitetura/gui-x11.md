@@ -268,10 +268,11 @@ pasta selecionada; os rótulos e
 também carrega o recurso `RT_MENU` MENUEX do próprio executável e usa seus seis
 itens de nível superior para os rótulos; `GetMenuItemInfoW` consulta a hierarquia
 carregada. O clique nos rótulos abre o submenu na própria superfície lógica,
-itens folha são destacados e sua seleção enfileira `WM_COMMAND` no parent; a
-captura impede que a toolbar sob o popup receba o mesmo clique. As setas
-`Up`/`Down`, `Enter` e `Escape` também operam esse primeiro nível pelo teclado.
-Mutações de menu e submenus aninhados ainda exigem contratos próprios, e esse
+itens folha são destacados e sua seleção enfileira `WM_COMMAND` no parent; itens
+com submenu abrem o próximo nível ao serem pressionados. A captura impede que a
+toolbar sob o popup receba o mesmo clique. As setas `Up`/`Down`, `Right`, `Left`,
+`Enter` e `Escape` percorrem a trilha aberta, com limite de profundidade imposto
+pelo parser MENUEX. Mutações de menu ainda exigem contratos próprios, e esse
 despacho não implica que as operações de arquivo já estejam implementadas.
 
 `SendMessageA` implementa os contratos usados pelo alvo para `WM_SETFONT`,

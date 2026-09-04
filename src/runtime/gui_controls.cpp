@@ -259,6 +259,19 @@ struct SevenZipPopupGeometry {
     int height{0};
 };
 
+[[nodiscard]] int seven_zip_open_menu_path_index(const WindowSlot& parent,
+                                                 const std::size_t level) noexcept {
+    if (!parent.open_menu_path.empty()) {
+        return level < parent.open_menu_path.size() ? parent.open_menu_path[level] : -1;
+    }
+    return level == 0 ? parent.open_menu_index : -1;
+}
+
+[[nodiscard]] std::size_t seven_zip_open_menu_path_size(const WindowSlot& parent) noexcept {
+    return parent.open_menu_path.empty() ? (parent.open_menu_index >= 0 ? 1U : 0U)
+                                         : parent.open_menu_path.size();
+}
+
 [[nodiscard]] int seven_zip_top_menu_at(const WindowSlot& parent, const MenuSlot& menu,
                                         const int x, const int y) noexcept {
     if (y < 0 || y >= kSevenZipMenuBarHeight) {
@@ -282,41 +295,73 @@ struct SevenZipPopupGeometry {
     return -1;
 }
 
+[[nodiscard]] int seven_zip_popup_width(const MenuSlot& menu) noexcept {
+    int width = 170;
+    for (const MenuItem& item : menu.logical_items) {
+        const std::string label = menu_display_text(item.text);
+        const int arrow_width = item.submenu != nullptr ? 20 : 0;
+        width = std::max(width, static_cast<int>(label.size()) * 8 + 34 + arrow_width);
+    }
+    return width;
+}
+
 [[nodiscard]] SevenZipPopupGeometry seven_zip_popup_geometry(const WindowSlot& parent) noexcept {
     SevenZipPopupGeometry geometry{};
-    const MenuSlot* const menu = find_menu_slot(parent.menu_handle);
-    if (menu == nullptr || parent.open_menu_index < 0 ||
-        static_cast<std::size_t>(parent.open_menu_index) >= menu->logical_items.size()) {
-        return geometry;
-    }
-    const MenuItem& top_item =
-        menu->logical_items[static_cast<std::size_t>(parent.open_menu_index)];
-    if (top_item.submenu == nullptr || top_item.submenu->logical_items.empty()) {
+    const MenuSlot* menu = find_menu_slot(parent.menu_handle);
+    const std::size_t path_size = seven_zip_open_menu_path_size(parent);
+    if (menu == nullptr || path_size == 0U) {
         return geometry;
     }
 
+    int parent_popup_x = 0;
+    int parent_popup_y = 0;
+    int parent_popup_width = 0;
+    int parent_item_index = 0;
     int popup_x = 14;
-    for (int index = 0; index < parent.open_menu_index; ++index) {
-        const MenuItem& item = menu->logical_items[static_cast<std::size_t>(index)];
-        if (!menu_display_text(item.text).empty()) {
-            popup_x += seven_zip_menu_label_width(item);
+    int popup_y = kSevenZipMenuBarHeight;
+    int popup_width = 0;
+    for (std::size_t level = 0; level < path_size; ++level) {
+        const int item_index = seven_zip_open_menu_path_index(parent, level);
+        if (item_index < 0 || static_cast<std::size_t>(item_index) >= menu->logical_items.size()) {
+            return {};
         }
+        const MenuItem& item = menu->logical_items[static_cast<std::size_t>(item_index)];
+        if (item.submenu == nullptr || item.submenu->logical_items.empty()) {
+            return {};
+        }
+
+        if (level == 0U) {
+            popup_x = 14;
+            for (int index = 0; index < item_index; ++index) {
+                const MenuItem& previous = menu->logical_items[static_cast<std::size_t>(index)];
+                if (!menu_display_text(previous.text).empty()) {
+                    popup_x += seven_zip_menu_label_width(previous);
+                }
+            }
+            popup_y = kSevenZipMenuBarHeight;
+        } else {
+            popup_x = parent_popup_x + parent_popup_width - 2;
+            popup_y = parent_popup_y + parent_item_index * kSevenZipMenuRowHeight;
+        }
+
+        popup_width = seven_zip_popup_width(*item.submenu);
+        const int available_width = std::max(parent.width, 1);
+        if (popup_x + popup_width > available_width) {
+            popup_x = level == 0U ? std::max(0, available_width - popup_width)
+                                  : std::max(0, parent_popup_x - popup_width + 2);
+        }
+        parent_popup_x = popup_x;
+        parent_popup_y = popup_y;
+        parent_popup_width = popup_width;
+        parent_item_index = item_index;
+        menu = item.submenu;
     }
-    int popup_width = 170;
-    for (const MenuItem& item : top_item.submenu->logical_items) {
-        const std::string label = menu_display_text(item.text);
-        const int arrow_width = item.submenu != nullptr ? 20 : 0;
-        popup_width = std::max(popup_width, static_cast<int>(label.size()) * 8 + 34 + arrow_width);
-    }
-    const int available_width = std::max(parent.width, 1);
-    if (popup_x + popup_width > available_width) {
-        popup_x = std::max(0, available_width - popup_width);
-    }
-    geometry.menu = top_item.submenu;
+
+    geometry.menu = menu;
     geometry.x = popup_x;
-    geometry.y = kSevenZipMenuBarHeight;
+    geometry.y = popup_y;
     geometry.width = popup_width;
-    geometry.height = static_cast<int>(geometry.menu->logical_items.size()) * kSevenZipMenuRowHeight;
+    geometry.height = static_cast<int>(menu->logical_items.size()) * kSevenZipMenuRowHeight;
     return geometry;
 }
 
@@ -411,8 +456,40 @@ struct SevenZipPopupGeometry {
 
 void close_seven_zip_menu(WindowSlot& parent) noexcept {
     parent.open_menu_index = -1;
+    parent.open_menu_path.clear();
     parent.hovered_menu_item = -1;
     parent.pressed_menu_item = -1;
+}
+
+[[nodiscard]] bool open_seven_zip_submenu(WindowSlot& parent, const int index) noexcept {
+    const SevenZipPopupGeometry geometry = seven_zip_popup_geometry(parent);
+    if (geometry.menu == nullptr || index < 0 ||
+        static_cast<std::size_t>(index) >= geometry.menu->logical_items.size() ||
+        geometry.menu->logical_items[static_cast<std::size_t>(index)].submenu == nullptr) {
+        return false;
+    }
+    try {
+        parent.open_menu_path.push_back(index);
+        parent.hovered_menu_item = -1;
+        parent.pressed_menu_item = -1;
+        return true;
+    } catch (...) {
+        return false;
+    }
+}
+
+[[nodiscard]] bool open_seven_zip_root_menu(WindowSlot& parent, const int index) noexcept {
+    try {
+        parent.open_menu_index = index;
+        parent.open_menu_path.clear();
+        parent.open_menu_path.push_back(index);
+        parent.hovered_menu_item = -1;
+        parent.pressed_menu_item = -1;
+        return true;
+    } catch (...) {
+        close_seven_zip_menu(parent);
+        return false;
+    }
 }
 
 [[nodiscard]] bool seven_zip_menu_item_selectable(const MenuItem& item) noexcept {
@@ -468,9 +545,9 @@ void activate_seven_zip_menu_item(WindowSlot& parent, const SevenZipPopupGeometr
         event.y >= 0 && event.y < kSevenZipMenuBarHeight) {
         const int index = seven_zip_top_menu_at(parent, *menu, event.x, event.y);
         if (index >= 0) {
-            parent.open_menu_index = index;
-            parent.hovered_menu_item = -1;
-            parent.pressed_menu_item = -1;
+            if (!open_seven_zip_root_menu(parent, index)) {
+                return true;
+            }
             set_focus_control(nullptr, g_focused_control);
             render_controls(parent, windows);
             return true;
@@ -488,9 +565,9 @@ void activate_seven_zip_menu_item(WindowSlot& parent, const SevenZipPopupGeometr
         const int index = seven_zip_top_menu_at(parent, *menu, event.x, event.y);
         if (index >= 0) {
             if (event.type != gui::WindowEventType::Release || index != parent.open_menu_index) {
-                parent.open_menu_index = index;
-                parent.hovered_menu_item = -1;
-                parent.pressed_menu_item = -1;
+                if (!open_seven_zip_root_menu(parent, index)) {
+                    return true;
+                }
                 render_controls(parent, windows);
             }
             return true;
@@ -521,6 +598,12 @@ void activate_seven_zip_menu_item(WindowSlot& parent, const SevenZipPopupGeometr
     if (event.type == gui::WindowEventType::Release) {
         if (item_index >= 0 && item_index == parent.pressed_menu_item &&
             geometry.menu != nullptr) {
+            const MenuItem& item = geometry.menu->logical_items[static_cast<std::size_t>(item_index)];
+            if (item.submenu != nullptr) {
+                (void)open_seven_zip_submenu(parent, item_index);
+                render_controls(parent, windows);
+                return true;
+            }
             activate_seven_zip_menu_item(parent, geometry, item_index);
         }
         close_seven_zip_menu(parent);
@@ -1327,9 +1410,41 @@ void handle_control_key(WindowSlot& parent, const std::span<WindowSlot> windows,
             return;
         }
         if (event.keysym == 0xFF0DUL) {  // XK_Return
+            if (geometry.menu != nullptr && parent.hovered_menu_item >= 0 &&
+                static_cast<std::size_t>(parent.hovered_menu_item) <
+                    geometry.menu->logical_items.size() &&
+                geometry.menu->logical_items[static_cast<std::size_t>(parent.hovered_menu_item)]
+                        .submenu != nullptr) {
+                (void)open_seven_zip_submenu(parent, parent.hovered_menu_item);
+                render_controls(parent, windows);
+                return;
+            }
             activate_seven_zip_menu_item(parent, geometry, parent.hovered_menu_item);
             close_seven_zip_menu(parent);
             render_controls(parent, windows);
+            return;
+        }
+        if (event.keysym == 0xFF53UL) {  // XK_Right
+            if (geometry.menu != nullptr && parent.hovered_menu_item >= 0 &&
+                static_cast<std::size_t>(parent.hovered_menu_item) <
+                    geometry.menu->logical_items.size() &&
+                geometry.menu->logical_items[static_cast<std::size_t>(parent.hovered_menu_item)]
+                        .submenu != nullptr &&
+                open_seven_zip_submenu(parent, parent.hovered_menu_item)) {
+                render_controls(parent, windows);
+            }
+            return;
+        }
+        if (event.keysym == 0xFF51UL) {  // XK_Left
+            if (parent.open_menu_path.size() > 1U) {
+                parent.open_menu_path.pop_back();
+                parent.hovered_menu_item = -1;
+                parent.pressed_menu_item = -1;
+                render_controls(parent, windows);
+            } else {
+                close_seven_zip_menu(parent);
+                render_controls(parent, windows);
+            }
             return;
         }
         return;

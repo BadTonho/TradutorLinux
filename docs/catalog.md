@@ -54,7 +54,7 @@ eleva sozinho um aplicativo para qualquer nível funcional acima.
 | `tl_win.exe` | USER32 A 10 | **fluxo principal** | janela + message loop X11 |
 | `tl_win_w.exe` | USER32 W 12 | **fluxo principal** | W wrappers via `wide_to_utf8` |
 | `simple_todo` | 105 (GDI32/USER32/SHELL32/msvcrt) | **uso diário** | `targetapp_simple_todo_gui_smoke` `105/105` |
-| `7zFM_x64.exe` | 298 | **shell visual experimental** | menu, toolbar, endereço, navegação e lista são desenhados; a lista mostra entradas imediatas do diretório do executável, limitada a 128 linhas, permite seleção, hover e abre pastas por Enter ou duplo clique; a árvore lateral oferece hover, retorna à raiz e seleciona diretórios Linux conhecidos; a barra de endereço navega somente dentro da raiz visual; a toolbar mostra hover e pressão, cancela soltura fora do botão; comandos reais ainda não estão ligados |
+| `7zFM_x64.exe` | 298 | **shell visual experimental** | menu, toolbar, endereço, navegação e lista são desenhados; o menu MENUEX abre submenus aninhados e encaminha itens folha por `WM_COMMAND`; a lista mostra entradas imediatas do diretório do executável, limitada a 128 linhas, permite seleção, hover e abre pastas por Enter ou duplo clique; a árvore lateral oferece hover, retorna à raiz e seleciona diretórios Linux conhecidos; a barra de endereço navega somente dentro da raiz visual; a toolbar mostra hover e pressão, cancela soltura fora do botão; operações de arquivo ainda não estão ligadas |
 
 Evidência atual do `7zFM_x64.exe`: o runtime em `build/debug` abriu a janela
 real no X11 com `800x600`; o trace registrou a normalização da geometria
@@ -113,7 +113,7 @@ comportamental completa. Use o campo `runtime-support` do `--report` e os testes
 de integração para avaliar o nível real de suporte:
 - `winrar-x64-723.exe` (WinRAR 7.23 x64): **251/251 (100%)** imports resolvidos; smoke `sfxcmd` concluído
 - `7z_x64.exe` (7-Zip CLI x64): **133/133 (100%)** imports resolvidos
-- `7zFM_x64.exe` (7-Zip GUI): **298/298 (100%)** imports resolvidos; há um shell visual experimental para `7-Zip::FM` com listagem imediata do diretório do executável, seleção, hover, árvore lateral com hover, barra de endereço restrita à raiz e navegação visual por pastas via Enter ou duplo clique, mas comandos de arquivo ainda não estão ligados
+- `7zFM_x64.exe` (7-Zip GUI): **298/298 (100%)** imports resolvidos; há um shell visual experimental para `7-Zip::FM` com menu MENUEX e submenus aninhados, listagem imediata do diretório do executável, seleção, hover, árvore lateral com hover, barra de endereço restrita à raiz e navegação visual por pastas via Enter ou duplo clique, mas operações de arquivo ainda não estão ligadas
 - `Rockstar-Games-Launcher.exe`: **338/338 (100%)** imports resolvidos
 - `putty_x64.exe` (PuTTY SSH Client): **348/348 (100%)** imports resolvidos
 - `notepad++.exe` (Notepad++ x64): **584/584 (100%)** imports resolvidos
