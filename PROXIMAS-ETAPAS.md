@@ -15,7 +15,8 @@ explícitos abaixo.
   A etapa de entrada dos filhos lógicos foi registrada em `39e4aa0` e a etapa
   de repaint lógico em `66a6b30`; a etapa de toolbar Unicode em `0465f31`, a
   etapa de menu real do 7-Zip em `26e2b63`, o dropdown em `0e5960d`, o registro
-  do bloqueio do Worker em `ca4554a` e a navegação de teclado em `3a1361c`.
+  do bloqueio do Worker em `ca4554a`, a navegação de teclado em `3a1361c` e a
+  navegação por duplo clique em `c8d7ffd`.
 - O alvo continua sendo PE32+ x86-64 em Linux x86-64.
 - Já foram implementados e testados no build Debug Linux os subconjuntos de `IPHLPAPI`, `WTSAPI32` e parte de `CRYPT32`, além das correções de forwarders, TLS genérico e parser de manifests MSIX.
 - A validação executada até aqui cobriu fixtures próprias, testes unitários direcionados e traces de `tl_worker_rsl` e `tl_powr`.
@@ -42,8 +43,8 @@ explícitos abaixo.
   entradas imediatas do diretório que contém o executável, sem recursão ou
   seguimento de links simbólicos, com limite de 128 linhas. A interface é
   navegável apenas visualmente; a lista agora seleciona entradas e abre pastas
-  do diretório Linux correspondente com Enter, mas comandos, ícones e
-  operações de arquivo ainda não estão ligados ao convidado.
+  do diretório Linux correspondente com Enter ou duplo clique, mas comandos,
+  ícones e operações de arquivo ainda não estão ligados ao convidado.
   O aplicativo continua explicitamente fora de suporte como fluxo GUI concluído.
 - [x] MSIX: 8 testes `MsixParserTest.*` e o teste de afinidade passaram no
   unitário e no CTest. A validação é estrutural; não houve instalação ou
@@ -110,6 +111,10 @@ explícitos abaixo.
   A ponte Unicode `CreateWindowExW` também foi
   corrigida para permitir a criação do `7-Zip::Panel` sem relaxar a validação
   de chamadas A feitas pelo convidado. A suíte ficou em 378 testes (377
+  aprovados e 1 skip ambiental).
+- [x] Navegação visual do painel: a lista abre pastas por Enter e por duplo
+  clique, preserva a seleção e permite retornar por `..`; a regressão cobre o
+  duplo clique em diretório temporário. A suíte ficou em 379 testes (378
   aprovados e 1 skip ambiental).
 - [x] Medições e catálogo: o catálogo registra os `298/298` imports do
   `7zFM_x64.exe`, a janela X11 real `800x600`, a normalização de geometria e

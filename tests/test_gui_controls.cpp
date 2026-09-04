@@ -413,6 +413,29 @@ TEST_F(SevenZipDirectoryRowsTest, SevenZipPanelSelectsAndOpensDirectory) {
     g_windows = {};
 }
 
+TEST_F(SevenZipDirectoryRowsTest, SevenZipPanelDoubleClickOpensDirectory) {
+    ASSERT_TRUE(std::filesystem::create_directory(directory_ / "Folder"));
+
+    g_windows = {};
+    WindowSlot& parent = g_windows[0];
+    parent.used = true;
+    parent.class_name = "7-Zip::FM";
+    parent.width = 800;
+    parent.height = 600;
+    parent.visual_directory = directory_;
+
+    WindowSlot* focused = nullptr;
+    const gui::WindowEvent press{gui::WindowEventType::Press, 220, 178};
+    const gui::WindowEvent release{gui::WindowEventType::Release, 220, 178};
+    handle_control_mouse(parent, std::span<WindowSlot>{g_windows}, focused, press);
+    handle_control_mouse(parent, std::span<WindowSlot>{g_windows}, focused, release);
+    handle_control_mouse(parent, std::span<WindowSlot>{g_windows}, focused, press);
+
+    EXPECT_EQ(parent.visual_directory, directory_ / "Folder");
+    EXPECT_EQ(parent.list_selection, 0);
+    g_windows = {};
+}
+
 TEST(CommonControls, ToolbarMessagesBuildLogicalButtonModel) {
     g_windows = {};
     WindowSlot& parent = g_windows[0];

@@ -261,6 +261,36 @@ struct SevenZipPopupGeometry {
     return index >= 0 && static_cast<std::size_t>(index) < rows.size() ? index : -1;
 }
 
+[[nodiscard]] bool open_seven_zip_directory_row(WindowSlot& parent, const int row) noexcept {
+    try {
+        const std::filesystem::path current_directory = seven_zip_current_directory(parent);
+        const std::vector<ListViewRow> rows = collect_seven_zip_directory_rows(current_directory);
+        if (row < 0) {
+            return false;
+        }
+        const std::size_t selected = static_cast<std::size_t>(row);
+        if (selected >= rows.size() || rows[selected].columns.size() < 2U ||
+            rows[selected].columns[1] != "<DIR>" || rows[selected].columns[0].empty()) {
+            return false;
+        }
+        const std::filesystem::path next_directory =
+            rows[selected].columns[0] == ".." ? current_directory.parent_path()
+                                               : current_directory / rows[selected].columns[0];
+        std::error_code error;
+        if (!std::filesystem::is_directory(next_directory, error) || error) {
+            return false;
+        }
+        parent.visual_directory = next_directory;
+        parent.list_selection = 0;
+        parent.last_list_press_row = -1;
+        parent.last_list_press_time = {};
+        return true;
+    } catch (...) {
+        // A falha de conversão do caminho não pode derrubar o convidado.
+        return false;
+    }
+}
+
 void close_seven_zip_menu(WindowSlot& parent) noexcept {
     parent.open_menu_index = -1;
     parent.hovered_menu_item = -1;
@@ -395,7 +425,18 @@ void activate_seven_zip_menu_item(WindowSlot& parent, const SevenZipPopupGeometr
         return false;
     }
     if (event.type == gui::WindowEventType::Press) {
+        const auto now = std::chrono::steady_clock::now();
+        constexpr auto kDoubleClickWindow = std::chrono::milliseconds{500};
+        const bool double_click = parent.last_list_press_row == row &&
+                                  parent.last_list_press_time !=
+                                      std::chrono::steady_clock::time_point{} &&
+                                  now - parent.last_list_press_time <= kDoubleClickWindow;
         parent.list_selection = row;
+        parent.last_list_press_row = row;
+        parent.last_list_press_time = now;
+        if (double_click && open_seven_zip_directory_row(parent, row)) {
+            // A abertura redefine a seleção para a primeira entrada da nova pasta.
+        }
         render_controls(parent, windows);
     }
     return true;
@@ -1064,25 +1105,8 @@ void handle_control_key(WindowSlot& parent, const std::span<WindowSlot> windows,
     if (is_seven_zip_file_manager(parent) && parent.open_menu_index < 0 &&
         event.type == gui::WindowEventType::KeyDown && event.keysym == 0xFF0DUL &&
         parent.list_selection >= 0) {  // XK_Return: abre uma pasta selecionada
-        try {
-            const std::filesystem::path current_directory = seven_zip_current_directory(parent);
-            const std::vector<ListViewRow> rows =
-                collect_seven_zip_directory_rows(current_directory);
-            const std::size_t selected = static_cast<std::size_t>(parent.list_selection);
-            if (selected < rows.size() && rows[selected].columns.size() > 1U &&
-                rows[selected].columns[1] == "<DIR>" && !rows[selected].columns.empty()) {
-                const std::filesystem::path next_directory = rows[selected].columns[0] == ".."
-                                                                  ? current_directory.parent_path()
-                                                                  : current_directory / rows[selected].columns[0];
-                std::error_code error;
-                if (std::filesystem::is_directory(next_directory, error) && !error) {
-                    parent.visual_directory = next_directory;
-                    parent.list_selection = 0;
-                    render_controls(parent, windows);
-                }
-            }
-        } catch (...) {
-            // A falha de conversão do caminho não pode derrubar o convidado.
+        if (open_seven_zip_directory_row(parent, parent.list_selection)) {
+            render_controls(parent, windows);
         }
         return;
     }

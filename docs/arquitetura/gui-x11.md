@@ -244,8 +244,8 @@ desenha um shell visual próprio com menu, toolbar, endereço, navegação later
 lista e status, sem fingir que os comandos do convidado já funcionam. A lista
 mostra somente as entradas imediatas do diretório que contém o executável
 aberto, em ordem determinística, sem seguir links simbólicos e limitada a 128
-linhas; clicar seleciona uma entrada e `Enter` abre uma pasta no diretório Linux
-correspondente, com `..` retornando ao pai; o caminho visual continua sendo
+linhas; clicar seleciona uma entrada e `Enter` ou duplo clique abre uma pasta no
+diretório Linux correspondente, com `..` retornando ao pai; o caminho visual continua sendo
 `Z:\` e nenhuma operação de arquivo do convidado é disparada pela tela. A
 normalização da geometria inválida desse alvo também
 fica registrada no trace. A faixa visual usa a ordem de `idCommand` enviada pelo

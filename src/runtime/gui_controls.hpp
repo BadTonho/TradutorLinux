@@ -71,6 +71,8 @@ struct WindowSlot {
     std::uint32_t toolbar_button_struct_size{0};
     std::vector<ListViewRow> list_rows;
     int list_selection{-1};
+    int last_list_press_row{-1};
+    std::chrono::steady_clock::time_point last_list_press_time{};
     std::filesystem::path visual_directory;
     void* user_data{nullptr};
     std::uint32_t style{0};
