@@ -13,8 +13,9 @@ explícitos abaixo.
   `956aadc`, `17f4305`, `45cc3f9`, `990b960`, `6d7c855`, `3df05e4`,
   `ee1fec9`, `5fe3e6d`, `a1fe77f`, `144be0d`, `03085a7` e `a609137`.
   A etapa de entrada dos filhos lógicos foi registrada em `39e4aa0` e a etapa
-  de repaint lógico em `66a6b30`; a etapa de toolbar Unicode em `0465f31` e a
-  etapa de menu real do 7-Zip em `26e2b63`.
+  de repaint lógico em `66a6b30`; a etapa de toolbar Unicode em `0465f31`, a
+  etapa de menu real do 7-Zip em `26e2b63`, o dropdown em `0e5960d`, o registro
+  do bloqueio do Worker em `ca4554a` e a navegação de teclado em `3a1361c`.
 - O alvo continua sendo PE32+ x86-64 em Linux x86-64.
 - Já foram implementados e testados no build Debug Linux os subconjuntos de `IPHLPAPI`, `WTSAPI32` e parte de `CRYPT32`, além das correções de forwarders, TLS genérico e parser de manifests MSIX.
 - A validação executada até aqui cobriu fixtures próprias, testes unitários direcionados e traces de `tl_worker_rsl` e `tl_powr`.
