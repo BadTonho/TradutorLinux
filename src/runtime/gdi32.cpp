@@ -1281,6 +1281,25 @@ TL_MSABI void* tl_CreateDCA(const char* const driver, const char* const device, 
     return reinterpret_cast<void*>(0x44434100ULL); // 'DCA\0'
 }
 
+TL_MSABI int tl_Rectangle(const void* dc, int left, int top, int right, int bottom) noexcept {
+    WindowSlot* slot = find_window_slot(dc);
+    if (slot == nullptr || slot->native == nullptr) {
+        set_last_error(abi::kErrorInvalidHandle);
+        return 0;
+    }
+    if (right > left && bottom > top) {
+        gui::platform::draw_rectangle(slot->native, left, top, right - left, bottom - top);
+        gui::platform::flush_window(slot->native);
+    }
+    const std::array<diagnostics::TraceField, 4> fields{
+        diagnostics::TraceField{"symbol", "Rectangle"},
+        diagnostics::TraceField{"status", "success"},
+    };
+    runtime_trace("Rectangle", fields, 2);
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
 }  // extern "C"
 }  // namespace tradutorlinux
 

@@ -1056,6 +1056,13 @@ TL_MSABI int dummy_worker_check() noexcept {
     return 1;
 }
 
+TL_MSABI std::uint32_t tl_CM_Get_Child(void* pdnDevInst, std::uintptr_t dnDevInst, std::uint32_t ulFlags) noexcept {
+    (void)pdnDevInst;
+    (void)dnDevInst;
+    (void)ulFlags;
+    return 0x0000000DU; // CR_NO_SUCH_DEVNODE
+}
+
 }  // extern "C"
 }  // namespace tradutorlinux
 

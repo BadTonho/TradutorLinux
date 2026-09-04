@@ -21,8 +21,15 @@ add_library(tradutorlinux_core STATIC
     runtime/seh/unwind_capture.S
     runtime/seh/seh.S
     runtime/ntdll.cpp
-    runtime/kernel32.cpp
-    runtime/legacy_winapi.cpp
+    runtime/dlls/kernel32/file.cpp
+    runtime/dlls/kernel32/process.cpp
+    runtime/dlls/kernel32/thread.cpp
+    runtime/dlls/kernel32/sync.cpp
+    runtime/dlls/kernel32/memory.cpp
+    runtime/dlls/kernel32/time.cpp
+    runtime/dlls/kernel32/console.cpp
+    runtime/dlls/kernel32/locale.cpp
+    runtime/dlls/kernel32/module.cpp
     runtime/user32.cpp
     runtime/dialog_template.cpp
     runtime/gdi32.cpp
