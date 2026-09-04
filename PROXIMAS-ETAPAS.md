@@ -9,7 +9,8 @@ explícitos abaixo.
 
 ## Estado atual
 
-- Commits desta retomada: `ce66739`, `4f95c65`, `2fa9ebd` e `d9aeb9f`.
+- Commits desta retomada: `ce66739`, `4f95c65`, `2fa9ebd`, `d9aeb9f` e
+  `956aadc`.
 - O alvo continua sendo PE32+ x86-64 em Linux x86-64.
 - Já foram implementados e testados no build Debug Linux os subconjuntos de `IPHLPAPI`, `WTSAPI32` e parte de `CRYPT32`, além das correções de forwarders, TLS genérico e parser de manifests MSIX.
 - A validação executada até aqui cobriu fixtures próprias, testes unitários direcionados e traces de `tl_worker_rsl` e `tl_powr`.
