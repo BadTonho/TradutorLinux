@@ -502,7 +502,8 @@ aplicativos escolhidos.
 - [x] Adicionar o subconjunto mínimo de `msvcrt.dll` exigido pelo primeiro alvo (`xxd`).
 - [x] Expandir a CRT somente pelos imports e fluxos exigidos pelos próximos aplicativos-alvo.
 - [x] Cobrir inicialização/encerramento do CRT, argumentos `argc/argv`, retorno de `main` e erros para o primeiro alvo.
-- [ ] Ampliar essa cobertura para cada nova família de CRT ou aplicativo suportado.
+- [ ] Ampliar essa cobertura para cada nova família de CRT ou aplicativo
+  suportado, conforme o portfólio admitir novos alvos (item `B5`).
 
 ### Critério de saída
 
@@ -764,7 +765,7 @@ nem declarar os benchmarks comerciais suportados.
   DEFLATE, CRC e limites está coberta por testes.
 - [ ] Instalação e execução de pacotes MSIX/AppX exigem fase própria e não são
   cobertas pelo prefixo atual (item `B8`).
-- [ ] PE32/x86, .NET/Mono, ARM e WOW64 continuam fora do alvo. Não há plano de
+- PE32/x86, .NET/Mono, ARM e WOW64 continuam fora do alvo. Não há plano de
   executar esses binários sem uma decisão explícita de arquitetura/emulação.
 - [ ] A forma de `UWOP_SET_FPREG` do Roblox (`OpInfo=10`, `FrameOffset=0`)
   permanece diagnóstico de portfólio. Só será promovida a uma fase de unwind
