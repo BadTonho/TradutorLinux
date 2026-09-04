@@ -682,6 +682,9 @@ nem declarar os benchmarks comerciais suportados.
 - [x] Roteiar eventos de mouse para filhos lógicos customizados encontrados pelo
   hit-test, preservando o `HWND` do filho e convertendo as coordenadas para o
   espaço local antes de despachar `WM_LBUTTONDOWN`/`UP` e `WM_MOUSEMOVE`.
+- [x] Fazer `InvalidateRect` de uma janela lógica produzir um `WM_PAINT` na fila
+  do próprio filho, com validação do `RECT`, deduplicação de repaints e flush da
+  superfície X11 projetada.
 
 #### Fase 13.12 — automação, rede e confiança, em entregas separadas
 

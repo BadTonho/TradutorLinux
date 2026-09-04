@@ -12,7 +12,8 @@ explícitos abaixo.
 - Commits desta retomada: `ce66739`, `4f95c65`, `2fa9ebd`, `d9aeb9f`,
   `956aadc`, `17f4305`, `45cc3f9`, `990b960`, `6d7c855`, `3df05e4`,
   `ee1fec9`, `5fe3e6d`, `a1fe77f`, `144be0d`, `03085a7` e `a609137`.
-  A etapa de entrada dos filhos lógicos foi registrada em `39e4aa0`.
+  A etapa de entrada dos filhos lógicos foi registrada em `39e4aa0` e a etapa
+  de repaint lógico em `66a6b30`.
 - O alvo continua sendo PE32+ x86-64 em Linux x86-64.
 - Já foram implementados e testados no build Debug Linux os subconjuntos de `IPHLPAPI`, `WTSAPI32` e parte de `CRYPT32`, além das correções de forwarders, TLS genérico e parser de manifests MSIX.
 - A validação executada até aqui cobriu fixtures próprias, testes unitários direcionados e traces de `tl_worker_rsl` e `tl_powr`.
@@ -84,6 +85,11 @@ explícitos abaixo.
   coordenadas locais. Controles comuns sem `WNDPROC` continuam usando as
   notificações lógicas no parent. A suíte ficou em 371 testes (370 aprovados e
   1 skip ambiental); isso não promove o shell visual do 7-Zip a fluxo funcional.
+- [x] Repaint de janelas lógicas: `InvalidateRect` valida o `RECT` opcional,
+  enfileira no máximo um `WM_PAINT` por janela e faz flush da superfície X11
+  projetada. A regressão protege o `HWND` do filho, a deduplicação e a rejeição
+  de ponteiro inválido; a suíte ficou em 372 testes (371 aprovados e 1 skip
+  ambiental).
 - [x] Medições e catálogo: o catálogo registra os `298/298` imports do
   `7zFM_x64.exe`, a janela X11 real `800x600`, a normalização de geometria e
   os dois smokes GUI aprovados, sem transformar essa evidência visual em

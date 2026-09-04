@@ -170,6 +170,7 @@ diretamente. Ele é experimental, não altera o subsistema de console e só acei
 | `USER32.dll` | `CreateWindowExA` | Suportado no subconjunto | Cria janela X11 a partir da classe registrada e despacha `WM_CREATE` ao `WNDPROC`; classes próprias usadas como filhos ficam em uma side-table, não viram janelas X11 individuais e participam do hit-test de mouse |
 | `USER32.dll` | `ShowWindow` | Suportado | Mostra/esconde a janela X11 |
 | `USER32.dll` | `UpdateWindow` | Suportado | Despacha `WM_PAINT` diretamente ao `WNDPROC` |
+| `USER32.dll` | `InvalidateRect` | Suportado no subconjunto | Valida o `RECT` opcional, enfileira um `WM_PAINT` por janela até a entrega e faz flush da superfície X11 projetada para filhos lógicos |
 | `USER32.dll` | `GetMessageA` | Suportado no subconjunto | Traduz eventos X11 para `WM_PAINT`/`WM_LBUTTONDOWN`/`WM_KEYDOWN`/`WM_KEYUP`/`WM_CLOSE`; o hit-test entrega mouse a filhos lógicos customizados com `HWND` e coordenadas locais, enquanto controles comuns sem `WNDPROC` preservam suas notificações no parent; entrega mensagens pendentes antes dos eventos X11, despacha `WM_TIMER` expirados e retorna `0` com `WM_QUIT` após `PostQuitMessage` |
 | `USER32.dll` | `TranslateMessage` | Suportado | Converte o `WM_KEYDOWN` mais recente em `WM_CHAR` com o caractere real (sem `WM_CHAR` para teclas sem caractere) |
 | `USER32.dll` | `SetTimer` | Suportado | Timer periódico por janela → `WM_TIMER`; só `lpTimerFunc == NULL` |
