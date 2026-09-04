@@ -59,6 +59,7 @@ struct WindowSlot {
     bool enabled{true};
     bool focused{false};
     bool pressed{false};
+    int hovered_toolbar_index{-1};
     int pressed_toolbar_index{-1};
     const void* menu_handle{nullptr};
     int open_menu_index{-1};
@@ -71,6 +72,7 @@ struct WindowSlot {
     std::uint32_t toolbar_button_struct_size{0};
     std::vector<ListViewRow> list_rows;
     int list_selection{-1};
+    int hovered_list_row{-1};
     int last_list_press_row{-1};
     std::chrono::steady_clock::time_point last_list_press_time{};
     int navigation_selection{1};

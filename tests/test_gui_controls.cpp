@@ -330,6 +330,32 @@ TEST(CommonControls, SevenZipToolbarCancelsWhenReleasedOutsideButton) {
     g_windows = {};
 }
 
+TEST(CommonControls, SevenZipToolbarHoverTracksAndClears) {
+    g_windows = {};
+    WindowSlot& parent = g_windows[0];
+    parent.used = true;
+    parent.class_name = "7-Zip::FM";
+    parent.width = 800;
+    parent.height = 600;
+
+    WindowSlot& toolbar = g_windows[1];
+    toolbar.used = true;
+    toolbar.is_control = true;
+    toolbar.control_kind = ControlKind::Toolbar;
+    toolbar.parent = &parent;
+    toolbar.visible = true;
+    toolbar.toolbar_buttons = {{1070}, {1071}, {1072}};
+
+    WindowSlot* focused = nullptr;
+    handle_control_mouse(parent, std::span<WindowSlot>{g_windows}, focused,
+                         gui::WindowEvent{gui::WindowEventType::MouseMove, 20, 45});
+    EXPECT_EQ(toolbar.hovered_toolbar_index, 0);
+    handle_control_mouse(parent, std::span<WindowSlot>{g_windows}, focused,
+                         gui::WindowEvent{gui::WindowEventType::MouseMove, 700, 45});
+    EXPECT_EQ(toolbar.hovered_toolbar_index, -1);
+    g_windows = {};
+}
+
 TEST(CommonControls, SevenZipMenuClickQueuesLeafCommand) {
     g_windows = {};
     g_menus = {};
@@ -440,6 +466,28 @@ TEST_F(SevenZipDirectoryRowsTest, SevenZipPanelSelectsAndOpensDirectory) {
 
     EXPECT_EQ(parent.visual_directory, directory_ / "Folder");
     EXPECT_EQ(parent.list_selection, 0);
+    g_windows = {};
+}
+
+TEST_F(SevenZipDirectoryRowsTest, SevenZipPanelHoverTracksListRowAndClears) {
+    ASSERT_TRUE(std::filesystem::create_directory(directory_ / "Folder"));
+
+    g_windows = {};
+    WindowSlot& parent = g_windows[0];
+    parent.used = true;
+    parent.class_name = "7-Zip::FM";
+    parent.width = 800;
+    parent.height = 600;
+    parent.visual_directory = directory_;
+
+    WindowSlot* focused = nullptr;
+    handle_control_mouse(parent, std::span<WindowSlot>{g_windows}, focused,
+                         gui::WindowEvent{gui::WindowEventType::MouseMove, 220, 178});
+    EXPECT_EQ(parent.hovered_list_row, 1);
+    EXPECT_EQ(parent.list_selection, -1);
+    handle_control_mouse(parent, std::span<WindowSlot>{g_windows}, focused,
+                         gui::WindowEvent{gui::WindowEventType::MouseMove, 30, 178});
+    EXPECT_EQ(parent.hovered_list_row, -1);
     g_windows = {};
 }
 

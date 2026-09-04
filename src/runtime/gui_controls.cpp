@@ -616,13 +616,15 @@ void activate_seven_zip_menu_item(WindowSlot& parent, const SevenZipPopupGeometr
 
 void draw_seven_zip_toolbar_button(const gui::NativeWindow native, const char* const icon,
                                    const char* const label, const int x, const int y,
-                                   const int width, const bool pressed) noexcept {
+                                   const int width, const bool pressed, const bool hovered) noexcept {
     constexpr std::uint32_t kButton = 0xF8FAFCU;
     constexpr std::uint32_t kPressed = 0xD4E5F7U;
+    constexpr std::uint32_t kHover = 0xEAF2FAU;
     constexpr std::uint32_t kBorder = 0xB7C2CCU;
     constexpr std::uint32_t kIcon = 0x245B8FU;
     constexpr std::uint32_t kText = 0x263442U;
-    gui::platform::fill_rectangle_color(native, x, y, width, 36, pressed ? kPressed : kButton);
+    const std::uint32_t fill = pressed ? kPressed : hovered ? kHover : kButton;
+    gui::platform::fill_rectangle_color(native, x, y, width, 36, fill);
     gui::platform::draw_rectangle_color(native, x, y, width, 36, kBorder);
     gui::platform::draw_text_color(native, icon, x + 8, y + 23, kIcon, true);
     gui::platform::draw_text_color(native, label, x + 27, y + 23, kText);
@@ -656,6 +658,34 @@ void draw_seven_zip_toolbar_button(const gui::NativeWindow native, const char* c
         button_x += width + 4;
     }
     return -1;
+}
+
+[[nodiscard]] bool handle_seven_zip_hover_mouse(
+    WindowSlot& parent, const std::span<WindowSlot> windows,
+    const gui::WindowEvent& event) noexcept {
+    if (!is_seven_zip_file_manager(parent) || event.type != gui::WindowEventType::MouseMove) {
+        return false;
+    }
+
+    bool changed = false;
+    WindowSlot* const toolbar = seven_zip_toolbar_control(parent, windows);
+    const int hovered_toolbar = toolbar == nullptr
+                                    ? -1
+                                    : seven_zip_toolbar_button_at(*toolbar, event.x, event.y);
+    if (toolbar != nullptr && toolbar->hovered_toolbar_index != hovered_toolbar) {
+        toolbar->hovered_toolbar_index = hovered_toolbar;
+        changed = true;
+    }
+
+    const int hovered_row = seven_zip_list_row_at(parent, event.x, event.y);
+    if (parent.hovered_list_row != hovered_row) {
+        parent.hovered_list_row = hovered_row;
+        changed = true;
+    }
+    if (changed) {
+        render_controls(parent, windows);
+    }
+    return changed || hovered_toolbar >= 0 || hovered_row >= 0;
 }
 
 void render_seven_zip_file_manager(WindowSlot& parent,
@@ -722,13 +752,14 @@ void render_seven_zip_file_manager(WindowSlot& parent,
                 parent.native, visual == nullptr ? "?" : visual->icon,
                 visual == nullptr ? fallback_label.c_str() : visual->label, toolbar_x, 32,
                 button_width,
-                logical_toolbar->pressed_toolbar_index == static_cast<int>(index));
+                logical_toolbar->pressed_toolbar_index == static_cast<int>(index),
+                logical_toolbar->hovered_toolbar_index == static_cast<int>(index));
             toolbar_x += button_width + 4;
         }
     } else {
         for (const SevenZipToolbarVisual& visual : kSevenZipToolbarVisuals) {
             draw_seven_zip_toolbar_button(parent.native, visual.icon, visual.label, toolbar_x, 32,
-                                          visual.width, false);
+                                          visual.width, false, false);
             toolbar_x += visual.width + 4;
         }
     }
@@ -814,6 +845,9 @@ void render_seven_zip_file_manager(WindowSlot& parent,
             if (static_cast<int>(index) == selected_row) {
                 gui::platform::fill_rectangle_color(parent.native, list_x + 1, row_y - 17,
                                                     std::max(list_width - 2, 1), 21, kSelection);
+            } else if (static_cast<int>(index) == parent.hovered_list_row) {
+                gui::platform::fill_rectangle_color(parent.native, list_x + 1, row_y - 17,
+                                                    std::max(list_width - 2, 1), 21, 0xEAF2FAU);
             }
             const bool directory = rows[index].columns.size() > 1 &&
                                    rows[index].columns[1] == "<DIR>";
@@ -1394,6 +1428,9 @@ void handle_control_mouse(WindowSlot& parent, const std::span<WindowSlot> window
     if (handle_seven_zip_menu_mouse(parent, windows, event)) {
         return;
     }
+    if (handle_seven_zip_hover_mouse(parent, windows, event)) {
+        return;
+    }
     if (handle_seven_zip_file_list_mouse(parent, windows, event)) {
         return;
     }
@@ -1415,6 +1452,7 @@ void handle_control_mouse(WindowSlot& parent, const std::span<WindowSlot> window
         if (control->control_kind == ControlKind::Toolbar && control->parent != nullptr &&
             is_seven_zip_file_manager(*control->parent)) {
             control->pressed_toolbar_index = seven_zip_toolbar_button_at(*control, event.x, event.y);
+            control->hovered_toolbar_index = control->pressed_toolbar_index;
         } else if (control->control_kind == ControlKind::Toolbar &&
                    !control->toolbar_buttons.empty()) {
             const int available_width = std::max(control->width, 16);
@@ -1476,6 +1514,9 @@ void handle_control_mouse(WindowSlot& parent, const std::span<WindowSlot> window
                                  static_cast<std::uintptr_t>(
                                      control->toolbar_buttons[static_cast<std::size_t>(index)]
                                          .command_id));
+            }
+            if (control->parent != nullptr && is_seven_zip_file_manager(*control->parent)) {
+                control->hovered_toolbar_index = index;
             }
             control->pressed_toolbar_index = -1;
         }
