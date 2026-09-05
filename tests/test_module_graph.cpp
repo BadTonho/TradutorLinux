@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <cstdint>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
@@ -23,7 +24,7 @@ namespace {
 
 using namespace tradutorlinux::pe::testutil;
 
-std::vector<std::byte> make_export_dll() {
+std::vector<std::byte> make_export_dll(const bool attach_succeeds = true) {
     constexpr std::uint32_t export_rva = 0x2000;
     std::vector<std::byte> data(0xA0, std::byte{0});
     write_u32(data, 12, export_rva + 0x54);
@@ -59,7 +60,14 @@ std::vector<std::byte> make_export_dll() {
     text[3] = std::byte{0x00};
     text[4] = std::byte{0x00};
     text[5] = std::byte{0xC3};  // ret
+    text[6] = std::byte{0xB8};  // mov eax, attach_succeeds ? 1 : 0
+    text[7] = attach_succeeds ? std::byte{0x01} : std::byte{0x00};
+    text[8] = std::byte{0x00};
+    text[9] = std::byte{0x00};
+    text[10] = std::byte{0x00};
+    text[11] = std::byte{0xC3};  // ret
     spec.section_names = {".text", ".edata"};
+    spec.entry_point = 0x1006;
     spec.section_data = {std::move(text), data};
     spec.export_rva = export_rva;
     spec.export_size = 0xA0;
@@ -185,6 +193,50 @@ TEST_F(ModuleGraphTest, MissingProfileDllFallsBackToBuiltinProvider) {
     ASSERT_EQ(resolved.status, ImportStatus::UnknownDll);
     ASSERT_EQ(resolved.imports.size(), 2U);
     EXPECT_EQ(resolved.imports[1].provider, "builtin");
+    unmap_image(mapped.image);
+}
+
+TEST_F(ModuleGraphTest, FailedProfileAttachIsReplacedByDriveProvider) {
+    runtime::GuestContextScope scope(context_);
+    register_builtin_modules();
+    const auto paths = prefix::get_environment_paths(root_);
+    std::ofstream drive_dll(paths.drive_c / "KERNEL32.dll",
+                            std::ios::binary | std::ios::trunc);
+    ASSERT_TRUE(drive_dll);
+    const std::vector<std::byte> drive_bytes = make_export_dll(true);
+    drive_dll.write(reinterpret_cast<const char*>(drive_bytes.data()),
+                    static_cast<std::streamsize>(drive_bytes.size()));
+    drive_dll.close();
+    std::ofstream profile_dll(compat::dlls_directory(root_) / "shim.dll",
+                              std::ios::binary | std::ios::trunc);
+    ASSERT_TRUE(profile_dll);
+    const std::vector<std::byte> profile_bytes = make_export_dll(false);
+    profile_dll.write(reinterpret_cast<const char*>(profile_bytes.data()),
+                      static_cast<std::streamsize>(profile_bytes.size()));
+    profile_dll.close();
+
+    compat::Profile profile;
+    profile.schema = 2;
+    profile.app_id = "fixture";
+    profile.dlls.push_back({"KERNEL32.dll", "shim.dll"});
+    GuestModuleGraph graph(root_, profile, root_ / "app.exe", true);
+    const std::vector<std::byte> executable = make_importing_executable();
+    const pe::ParseResult parsed = pe::parse_pe(executable);
+    ASSERT_EQ(parsed.status, pe::ParseStatus::Success) << parsed.error_message;
+    MapResult mapped = map_image(parsed.info, executable);
+    ASSERT_EQ(mapped.status, MapStatus::Success) << mapped.error_message;
+    const ResolveResult resolved =
+        graph.resolve_imports(mapped.image, parsed.info, root_ / "app.exe");
+    ASSERT_EQ(resolved.status, ImportStatus::Resolved) << resolved.error_message;
+    ASSERT_TRUE(graph.process_attach());
+
+    void* const drive_handle = graph.get_module_handle("KERNEL32.dll");
+    ASSERT_NE(drive_handle, nullptr);
+    std::uint64_t custom_address = 0;
+    std::memcpy(&custom_address, mapped.image.memory + resolved.imports[0].iat_rva,
+                sizeof(custom_address));
+    EXPECT_EQ(custom_address, reinterpret_cast<std::uintptr_t>(drive_handle) + 0x1000U);
+    graph.process_detach();
     unmap_image(mapped.image);
 }
 

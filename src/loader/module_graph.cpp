@@ -91,6 +91,28 @@ enum class LoadedState {
     return bytes;
 }
 
+[[nodiscard]] std::optional<std::filesystem::path> find_regular_file_case_insensitive(
+    const std::filesystem::path& requested) {
+    std::error_code ec;
+    if (std::filesystem::is_regular_file(requested, ec) &&
+        !std::filesystem::is_symlink(requested, ec)) {
+        return requested;
+    }
+
+    const std::filesystem::path parent = requested.parent_path();
+    if (parent.empty()) return std::nullopt;
+    std::filesystem::directory_iterator entries{parent, ec};
+    if (ec) return std::nullopt;
+    for (const std::filesystem::directory_entry& entry : entries) {
+        if (!util::ascii_iequals(entry.path().filename().string(),
+                                 requested.filename().string())) {
+            continue;
+        }
+        if (entry.is_regular_file(ec) && !entry.is_symlink(ec)) return entry.path();
+    }
+    return std::nullopt;
+}
+
 [[nodiscard]] std::uint64_t relocate_va(const std::uint64_t value,
                                          const pe::PeInfo& info,
                                          const MappedImage& image) noexcept {
@@ -368,17 +390,20 @@ std::optional<std::size_t> GuestModuleGraph::ensure_drive_module(
     const auto paths = prefix::get_environment_paths(prefix_root_);
     std::vector<std::filesystem::path> candidates;
     const std::filesystem::path module_path{std::string{module_name}};
-    if (!requester.empty()) candidates.push_back(requester.parent_path() / module_path);
+    // A profile DLL is deliberately not searched by directory. Its imports
+    // must name another profile mapping explicitly; otherwise compat/ remains
+    // invisible and the normal drive_c search is used.
+    if (!requester.empty() && prefix::is_path_within(requester, paths.drive_c)) {
+        candidates.push_back(requester.parent_path() / module_path);
+    }
     candidates.push_back(paths.system32_dir / module_path);
     candidates.push_back(paths.windows_dir / module_path);
     candidates.push_back(paths.drive_c / module_path);
 
     for (const auto& candidate : candidates) {
-        std::error_code ec;
-        if (!std::filesystem::is_regular_file(candidate, ec) ||
-            std::filesystem::is_symlink(candidate, ec)) {
-            continue;
-        }
+        const auto found_path = find_regular_file_case_insensitive(candidate);
+        if (!found_path.has_value()) continue;
+        trace_event("dll-found", module_name, provider_name(ModuleProvider::DriveC));
         const auto existing = find_loaded(module_name, ModuleProvider::DriveC);
         if (existing.has_value()) {
             if (modules_[*existing]->state == LoadedState::Resolving) {
@@ -388,7 +413,7 @@ std::optional<std::size_t> GuestModuleGraph::ensure_drive_module(
             return existing;
         }
         return load_pe_module(std::string{module_name}, ModuleProvider::DriveC,
-                              candidate, owner_index);
+                              *found_path, owner_index);
     }
     return std::nullopt;
 }
