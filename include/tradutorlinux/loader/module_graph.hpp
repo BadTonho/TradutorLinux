@@ -46,6 +46,8 @@ public:
     [[nodiscard]] ResolveResult resolve_imports(MappedImage& image,
                                                  const pe::PeInfo& info,
                                                  const std::filesystem::path& requester);
+    void bind_main_image(MappedImage& image, const pe::PeInfo& info,
+                         const std::filesystem::path& requester) noexcept;
 
     [[nodiscard]] void* load_library(std::string_view module_name) noexcept;
     [[nodiscard]] bool free_library(void* module_handle) noexcept;
@@ -115,7 +117,8 @@ private:
     void reject_profile_module(std::string_view module_name) noexcept;
     [[nodiscard]] bool is_guest_executable(std::uintptr_t address) const noexcept;
     void trace_event(std::string_view event, std::string_view module,
-                     std::string_view detail = {}) const noexcept;
+                     std::string_view detail = {},
+                     std::string_view provider = {}) const noexcept;
 
     std::filesystem::path prefix_root_;
     std::filesystem::path main_path_;

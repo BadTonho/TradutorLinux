@@ -80,11 +80,19 @@ std::vector<std::byte> make_importing_executable() {
     const std::vector<std::byte> data = make_import_data({
         {"KERNEL32.dll", {"CustomEntry", "GetStdHandle"}, {}},
     });
+    std::vector<std::byte> relocations(12, std::byte{0});
+    write_u32(relocations, 0, 0x1000);
+    write_u32(relocations, 4, 12);
+    write_u16(relocations, 8, 0xA000);
     BuildSpec spec;
-    spec.section_names = {".text", ".idata"};
-    spec.section_data = {std::vector<std::byte>(0x20), data};
+    spec.section_count = 3;
+    spec.size_of_image = 0x4000;
+    spec.section_names = {".text", ".idata", ".reloc"};
+    spec.section_data = {std::vector<std::byte>(0x20), data, relocations};
     spec.import_rva = kImportDataRva;
     spec.import_size = 40;
+    spec.reloc_rva = 0x3000;
+    spec.reloc_size = 12;
     return build(spec);
 }
 

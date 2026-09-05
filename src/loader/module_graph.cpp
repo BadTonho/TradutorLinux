@@ -315,15 +315,21 @@ std::string GuestModuleGraph::normalize_module(const std::string_view module_nam
 
 void GuestModuleGraph::trace_event(const std::string_view event,
                                    const std::string_view module,
-                                   const std::string_view detail) const noexcept {
+                                   const std::string_view detail,
+                                   const std::string_view provider) const noexcept {
     if (!trace_enabled_) return;
     try {
         const bool is_provider = detail == "profile" || detail == "drive_c" ||
                                  detail == "builtin";
+        const std::string_view provider_value = provider.empty()
+                                                    ? (is_provider ? detail : std::string_view{})
+                                                    : provider;
         const std::array fields{
             diagnostics::TraceField{"module", std::string{module}},
-            diagnostics::TraceField{"provider", is_provider ? std::string{detail} : std::string{}},
-            diagnostics::TraceField{"detail", is_provider ? std::string{} : std::string{detail}},
+            diagnostics::TraceField{"provider", std::string{provider_value}},
+            diagnostics::TraceField{"detail", provider.empty() && is_provider
+                                                        ? std::string{}
+                                                        : std::string{detail}},
         };
         diagnostics::write_trace(std::cerr, diagnostics::TraceComponent::Loader,
                                  diagnostics::TraceLevel::Info, event, fields);
@@ -383,7 +389,7 @@ std::optional<std::size_t> GuestModuleGraph::ensure_profile_module(
     const std::filesystem::path source = paths.compat_dlls_dir / mapping->source;
     std::error_code ec;
     if (std::filesystem::is_symlink(source, ec)) {
-        trace_event("provider-rejected", module_name, "profile source is symlink");
+        trace_event("provider-rejected", module_name, "profile source is symlink", "profile");
         return std::nullopt;
     }
     if (std::filesystem::is_regular_file(source, ec)) {
@@ -479,7 +485,8 @@ std::optional<std::size_t> GuestModuleGraph::load_pe_module(
         }
         modules_.resize(index);
         if (provider == ModuleProvider::Profile) reject_profile_module(rejected_name);
-        trace_event("provider-rejected", rejected_name, imports.error_message);
+        trace_event("provider-rejected", rejected_name, imports.error_message,
+                    provider_name(provider));
         return std::nullopt;
     }
     modules_[index]->state = LoadedState::Ready;
@@ -553,18 +560,27 @@ GraphExportLookup GuestModuleGraph::resolve_export_named_internal(
         return result;
     };
 
+    bool profile_was_loaded = false;
     if (const auto profile = ensure_profile_module(module_name, owner_index)) {
+        profile_was_loaded = true;
         if (const auto result = try_guest(profile, ModuleProvider::Profile)) {
             return finish(*result);
         }
     }
     if (const auto drive = ensure_drive_module(module_name, requester, owner_index)) {
+        if (profile_was_loaded) {
+            trace_event("fallback-export", module_name, provider_name(ModuleProvider::DriveC));
+        }
         if (const auto result = try_guest(drive, ModuleProvider::DriveC)) {
             return finish(*result);
         }
     }
     ExportLookup builtin = find_export_forwarded(ExportQuery{module_name, symbol});
     if (builtin.found) {
+        if (profile_was_loaded) {
+            trace_event("fallback-export", module_name, provider_name(ModuleProvider::Builtin));
+        }
+        trace_event("provider-selected", module_name, provider_name(ModuleProvider::Builtin));
         return finish(GraphExportLookup{.lookup = std::move(builtin),
                                         .provider = ModuleProvider::Builtin,
                                         .module_index = kNoModule,
@@ -626,18 +642,27 @@ GraphExportLookup GuestModuleGraph::resolve_export_ordinal_internal(
         return result;
     };
 
+    bool profile_was_loaded = false;
     if (const auto profile = ensure_profile_module(module_name, owner_index)) {
+        profile_was_loaded = true;
         if (const auto result = try_guest(profile, ModuleProvider::Profile)) {
             return finish(*result);
         }
     }
     if (const auto drive = ensure_drive_module(module_name, requester, owner_index)) {
+        if (profile_was_loaded) {
+            trace_event("fallback-export", module_name, provider_name(ModuleProvider::DriveC));
+        }
         if (const auto result = try_guest(drive, ModuleProvider::DriveC)) {
             return finish(*result);
         }
     }
     ExportLookup builtin = find_export_by_ordinal_forwarded(module_name, ordinal);
     if (builtin.found) {
+        if (profile_was_loaded) {
+            trace_event("fallback-export", module_name, provider_name(ModuleProvider::Builtin));
+        }
+        trace_event("provider-selected", module_name, provider_name(ModuleProvider::Builtin));
         return finish(GraphExportLookup{.lookup = std::move(builtin),
                                         .provider = ModuleProvider::Builtin,
                                         .module_index = kNoModule,
@@ -760,6 +785,13 @@ ResolveResult GuestModuleGraph::resolve_imports(MappedImage& image,
     return resolve_imports_for_module(image, info, requester, kNoModule);
 }
 
+void GuestModuleGraph::bind_main_image(MappedImage& image, const pe::PeInfo& info,
+                                       const std::filesystem::path& requester) noexcept {
+    main_image_ = &image;
+    main_info_ = &info;
+    main_path_ = requester;
+}
+
 bool GuestModuleGraph::is_guest_executable(const std::uintptr_t address) const noexcept {
     if (address == 0) return false;
     std::ifstream maps{"/proc/self/maps"};
@@ -854,7 +886,7 @@ void GuestModuleGraph::reject_loaded_module(const std::size_t index,
                                              const std::string_view reason) noexcept {
     if (index >= modules_.size()) return;
     LoadedModule& module = *modules_[index];
-    trace_event("provider-rejected", module.name, reason);
+    trace_event("provider-rejected", module.name, reason, provider_name(module.provider));
     for (const std::size_t dependency : module.dependencies) release_dependency(dependency);
     module.dependencies.clear();
     module.process_attached = false;

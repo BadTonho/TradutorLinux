@@ -861,6 +861,10 @@ ExitCode run_command(const CommandLine& command_line, std::ostream& stdout_strea
     }
 
     loader::GuestProcess& process = prepare_result.process;
+    if (execution_context.module_graph != nullptr) {
+        execution_context.module_graph->bind_main_image(
+            process.image, process.info, *effective_cmd.executable_path);
+    }
     if (effective_cmd.trace_enabled) {
         write_map_trace(stderr_stream, process.image);
     } else {
