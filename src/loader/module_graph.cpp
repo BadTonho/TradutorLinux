@@ -3,6 +3,7 @@
 #include "tradutorlinux/diagnostics/trace.hpp"
 #include "tradutorlinux/loader/module.hpp"
 #include "tradutorlinux/prefix/prefix.hpp"
+#include "tradutorlinux/runtime/memory_validator.hpp"
 #include "tradutorlinux/util/basics.hpp"
 
 #include <algorithm>
@@ -411,6 +412,7 @@ std::optional<std::size_t> GuestModuleGraph::load_pe_module(
         trace_event("provider-rejected", module_name, provider_name(provider));
         return std::nullopt;
     }
+    runtime::invalidate_memory_map_cache();
 
     auto loaded = std::make_unique<LoadedModule>();
     loaded->name = std::move(module_name);
@@ -433,7 +435,10 @@ std::optional<std::size_t> GuestModuleGraph::load_pe_module(
         }
         for (std::size_t cursor = modules_.size(); cursor > index; --cursor) {
             LoadedModule& candidate = *modules_[cursor - 1U];
-            if (candidate.image.memory != nullptr) unmap_image(candidate.image);
+            if (candidate.image.memory != nullptr) {
+                unmap_image(candidate.image);
+                runtime::invalidate_memory_map_cache();
+            }
             candidate.state = LoadedState::Unloaded;
         }
         modules_.resize(index);
@@ -685,16 +690,18 @@ ResolveResult GuestModuleGraph::resolve_imports_for_module(
                                "símbolo conhecido sem implementação");
                 } else if (!patch_import(image, entry)) {
                     fail_entry(entry, entry.status, entry.detail);
-                } else if (lookup.module_index != kNoModule && lookup.module_index != owner_index) {
-                    LoadedModule& dependency = *modules_[lookup.module_index];
-                    if (owner_index == kNoModule) {
-                        ++dependency.static_refs;
-                    } else {
-                        LoadedModule& owner = *modules_[owner_index];
-                        if (std::find(owner.dependencies.begin(), owner.dependencies.end(),
-                                      lookup.module_index) == owner.dependencies.end()) {
-                            owner.dependencies.push_back(lookup.module_index);
+                } else {
+                    if (lookup.module_index != kNoModule && lookup.module_index != owner_index) {
+                        LoadedModule& dependency = *modules_[lookup.module_index];
+                        if (owner_index == kNoModule) {
                             ++dependency.static_refs;
+                        } else {
+                            LoadedModule& owner = *modules_[owner_index];
+                            if (std::find(owner.dependencies.begin(), owner.dependencies.end(),
+                                          lookup.module_index) == owner.dependencies.end()) {
+                                owner.dependencies.push_back(lookup.module_index);
+                                ++dependency.static_refs;
+                            }
                         }
                     }
                     trace_event("import-resolved", entry.dll, entry.provider);
@@ -799,6 +806,7 @@ void GuestModuleGraph::detach_module(const std::size_t index) noexcept {
     module.state = LoadedState::Unloaded;
     trace_event("dll-detach", module.name, provider_name(module.provider));
     unmap_image(module.image);
+    runtime::invalidate_memory_map_cache();
     for (const std::size_t dependency : module.dependencies) release_dependency(dependency);
 }
 
@@ -1069,7 +1077,10 @@ bool GuestModuleGraph::is_valid_module_handle(void* const module_handle) const n
 void GuestModuleGraph::discard_loaded_modules() noexcept {
     process_detach();
     for (const auto& module : modules_) {
-        if (module->image.memory != nullptr) unmap_image(module->image);
+        if (module->image.memory != nullptr) {
+            unmap_image(module->image);
+            runtime::invalidate_memory_map_cache();
+        }
         module->state = LoadedState::Unloaded;
     }
     modules_.clear();

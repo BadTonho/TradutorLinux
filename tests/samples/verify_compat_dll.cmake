@@ -95,7 +95,7 @@ tl_run_fixture(compat-dll-a "636f6d7061742d610a" ran_a run_a_stdout run_a_trace)
 foreach(needle
         "provider-selected module=\"compat.dll\""
         "dll-mapped module=\"compat.dll\""
-        "import-resolved module=\"COMPAT.dll\""
+        "import-resolved module=\"KERNEL32.dll\""
         "dll-attach module=\"compat.dll\""
         "dll-detach module=\"compat.dll\"")
     if(NOT run_a_trace MATCHES "${needle}")
