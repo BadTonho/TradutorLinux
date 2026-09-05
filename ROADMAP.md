@@ -996,6 +996,13 @@ marcam itens condicionais como concluídos; definem os gates para retomá-los.
   Não será permitido carregar bibliotecas Linux, scripts ou código nativo
   arbitrário a partir do perfil; DLLs PE convidadas continuam executando com as
   permissões do runtime, que não é sandbox.
+- **Backend Proton — decisão confirmada pelo usuário em 2026-09-05:** registrar
+  o Proton como backend opcional do aplicativo, sem reimplementá-lo do zero e
+  sem substituir o runtime próprio. O backend será selecionado por aplicativo,
+  terá prefixo e diagnóstico próprios, e só será promovido após validação
+  reproduzível de versão, dependências, execução, exit code e limitações. O
+  Roblox é um alvo candidato, não uma promessa de suporte; a integração deverá
+  respeitar as restrições do aplicativo e registrar qualquer bloqueio externo.
 - **B17 e processos — opção 1 confirmada pelo usuário em 2026-09-05:** manter
   o supervisor adiado. O protocolo atual de `fork`/`waitpid`/pipe é suficiente
   para o portfólio conhecido; um supervisor só será criado se um aplicativo
@@ -1122,8 +1129,8 @@ imports não encerra B5.
   aplicativo, por exemplo `compat/profile.json` e `compat/files/`. O perfil
   deverá ser selecionado pelo ID estável do catálogo, com hash ou versão
   opcional quando necessário, e poderá declarar somente recursos validados,
-  como arquivos e, após a B14.4, DLLs PE32+ personalizadas para aquele
-  aplicativo. A pasta não será automaticamente visível ao aplicativo.
+  como arquivos, DLLs PE32+ personalizadas após a B14.4 e a seleção de backend
+  Proton após a B14.6. A pasta não será automaticamente visível ao aplicativo.
   Bibliotecas Linux, scripts e código nativo arbitrário continuarão proibidos;
   DLLs PE convidadas exigirão isolamento por prefixo, precedência, fallback,
   diagnóstico e validação próprios. Sem extensão aplicável, usa-se o
@@ -1181,6 +1188,40 @@ imports não encerra B5.
      promovida. A conclusão da B14 como um todo aguarda a B14.4 reaberta; até
      lá, o runtime continua usando somente o contrato v1 de arquivos auxiliares
      e o comportamento genérico quando não houver extensão aplicável.
+  6. [ ] **B14.6 — Backend Proton opcional.** Integrar uma distribuição Proton
+     versionada como backend separado para aplicativos que exigem uma camada
+     Win32/DirectX maior que o subconjunto próprio, mantendo o runtime
+     TradutorLinux como backend padrão e preservando a seleção por aplicativo.
+     O Proton não será reimplementado do zero nem carregado como biblioteca
+     Linux arbitrária a partir de `compat/`.
+
+     Subetapas:
+
+     - [ ] **B14.6.1 — Contrato de seleção.** Definir no perfil/catálogo a
+       escolha explícita entre runtime próprio, Proton e eventual modo
+       automático, incluindo versão mínima, precedência, fallback e erro
+       quando o backend solicitado não estiver disponível.
+     - [ ] **B14.6.2 — Descoberta e validação.** Localizar uma instalação
+       configurada do Proton, validar executável, arquitetura, versão, hash e
+       componentes necessários, sem download silencioso nem dependência
+       implícita do Steam.
+     - [ ] **B14.6.3 — Execução isolada.** Criar e controlar um prefixo Proton
+       separado, preparar `WINEPREFIX`, ambiente, diretório de trabalho,
+       argumentos, drives e arquivos do aplicativo, sem misturar o processo
+       Proton com o contexto interno do runtime próprio.
+     - [ ] **B14.6.4 — Diagnóstico e ciclo de vida.** Registrar backend, versão,
+       prefixo, componentes gráficos selecionados, início, término, timeout,
+       crash e exit code; preservar `stdout` do convidado e separar os logs do
+       runtime em `stderr`.
+     - [ ] **B14.6.5 — Componentes gráficos e dependências.** Validar de forma
+       incremental Vulkan, DXVK, VKD3D-Proton, entrada, áudio e demais
+       dependências somente quando um aplicativo-alvo exigir cada componente.
+       Não declarar suporte amplo por instalar o backend.
+     - [ ] **B14.6.6 — Piloto e promoção.** Criar fixture PE32+ ou aplicativo
+       alvo com instalação, execução e resultado observável; testar em prefixos
+       independentes, atualizar a matriz e publicar limitações. Roblox poderá
+       ser avaliado aqui, mas só será marcado como suportado após teste real
+       reproduzível, inclusive de eventuais bloqueios do fornecedor.
 - [x] **B15 — Drives do prefixo como symlinks ou mecanismo equivalente.** O
   prefixo cria `dosdevices/c:` → `../drive_c` e `dosdevices/z:` → `/`; a
   resolução de `C:` canoniza e confina o caminho ao `drive_c`, enquanto `Z:`
