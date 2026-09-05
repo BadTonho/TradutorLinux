@@ -981,9 +981,11 @@ marcam itens condicionais como concluídos; definem os gates para retomá-los.
   o supervisor adiado. O protocolo atual de `fork`/`waitpid`/pipe é suficiente
   para o portfólio conhecido; um supervisor só será criado se um aplicativo
   exigir estado compartilhado além desse protocolo.
-- **B18 e SEH:** permanece o subconjunto atual de exceções/unwind x64. C++,
-  `__finally` e outras extensões só entram com aplicativo-alvo, contrato e
-  fixture; sinais Linux continuam sendo tratados pelo isolamento do processo.
+- **B18 e SEH — opção 1 confirmada pelo usuário em 2026-09-05:** manter
+  adiado o suporte avançado. Permanece o subconjunto atual de exceções/unwind
+  x64. C++, `__finally` e outras extensões só entram com aplicativo-alvo,
+  contrato e fixture; sinais Linux continuam sendo tratados pelo isolamento do
+  processo.
 - **B19 e novas famílias:** threadpool, ALPC e outras famílias abundantes não
   entram por antecipação. Cada uma exigirá um alvo, um subconjunto pequeno,
   trace, matriz e regressão.
