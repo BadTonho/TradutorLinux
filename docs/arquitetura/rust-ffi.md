@@ -1,8 +1,9 @@
 # Fronteira FFI Rust↔C++
 
-Este documento descreve a B20.1. A biblioteca Rust desta etapa existe somente
-como probe opt-in; nenhum parser, loader, runtime Win32 ou API pública de
-compatibilidade foi migrado para Rust.
+Este documento descreve as B20.1–B20.3. A biblioteca Rust continua opt-in:
+além do probe, a B20.3 usa Rust somente para a validação lexical dos caminhos
+de perfis e materialização. Nenhum parser, loader, runtime Win32 ou API pública
+de compatibilidade foi migrado para Rust.
 
 ## Build e escopo
 
@@ -12,9 +13,11 @@ toolchain fixa em `rust-toolchain.toml` (`1.97.1`). O `TL_RUST_TOOLCHAIN` do
 CMake mantém o mesmo valor como override explícito para diagnóstico e testes
 negativos; os presets e o CI usam a versão fixada.
 
-A biblioteca é uma `staticlib` Cargo sem crates externos e só é ligada ao
-`tl_rust_ffi_probe`. O probe não é instalado nem carregado pelo runtime. Cargo
-recebe `--locked --offline`: o build não altera o lockfile nem consulta o
+A biblioteca é uma `staticlib` Cargo sem crates externos. Com
+`TL_BUILD_RUST=ON`, ela é ligada ao `tradutorlinux_core` e habilita o adaptador
+de validação lexical; o `tl_rust_ffi_probe` também é construído. Com
+`TL_BUILD_RUST=OFF`, o runtime não referencia Rust e mantém o caminho C++.
+Cargo recebe `--locked --offline`: o build não altera o lockfile nem consulta o
 registro de crates. Os artefatos e o `target/` Cargo ficam dentro do diretório
 de build CMake e não são versionados.
 
@@ -32,6 +35,17 @@ ctest --preset sanitize-rust -R '^rust_ffi_probe$' --output-on-failure
 cmake --preset release-rust
 cmake --build --preset release-rust --target tl_rust_ffi_probe
 ctest --preset release-rust -R '^rust_ffi_probe$' --output-on-failure
+```
+
+Para validar também o componente integrado, os presets Rust constroem
+`tradutorlinux_unit_tests`; os testes `RustPathValidationTest.*` comparam o
+resultado Rust com as regras lexicais C++ e verificam limites e rejeição de
+NUL:
+
+```bash
+cmake --build --preset debug-rust --target tradutorlinux_unit_tests
+ctest --preset debug-rust -R '^(rust_ffi_probe|RustPathValidationTest\.)' \
+  --output-on-failure
 ```
 
 O CI instala explicitamente `1.97.1` via rustup antes da matriz dos três
@@ -82,6 +96,7 @@ Os códigos são estáveis e não dependem de `errno` ou de detalhes Rust:
 | `4` | Buffer de erro insuficiente |
 | `5` | Entrada acima do limite |
 | `6` | Falha interna, incluindo panic capturado |
+| `7` | Caminho lexical inválido |
 
 Todas as funções exportadas capturam panics antes de retornar. Nenhuma
 exceção ou unwind Rust atravessa a ABI.
@@ -94,12 +109,37 @@ seus próprios buffers de erro. Não existe estado global, cache mutável ou
 serialização implícita. O probe valida chamadas concorrentes de leitura e
 handles independentes.
 
+## Validação lexical de caminhos
+
+A B20.3 adiciona duas funções ao mesmo contrato FFI:
+`tl_rust_validator_validate_relative_path` para fontes em `compat/files` e
+`compat/dlls`, e `tl_rust_validator_validate_c_drive_path` para destinos
+`C:\\...`. Ambas recebem bytes e aplicam o limite de 1 MiB do handle; não
+exigem UTF-8, mas rejeitam NUL.
+
+A validação relativa replica as regras C++ atuais: caminho não vazio, sem raiz
+ou caminho absoluto, sem componentes `.`/`..` e sem barra invertida. A
+validação de `C:` exige a unidade C, separador inicial, nome de arquivo e
+impede que componentes `..` escapem da raiz. Os separadores `/` e `\\` são
+aceitos conforme o contrato existente.
+
+O Rust é uma pré-validação lexical sem acesso ao filesystem. O C++ continua
+verificando existência, tipo regular, symlinks, colisões, permissões e
+confinamento físico em `drive_c`. O Rust é chamado durante o carregamento do
+perfil e novamente pelo materializador para proteger `Profile` construído
+diretamente. Qualquer erro do Rust ou do adaptador falha fechado e impede
+criação de diretórios ou cópia.
+
+O teste diferencial usa um corpus fixo e exige equivalência com as regras C++
+para os casos existentes; a rejeição adicional de NUL é intencional e coberta
+separadamente. Não há estado global: os handles são locais à operação e podem
+ser usados por chamadas concorrentes somente com buffers de erro próprios.
+
 ## Evidência
 
 `rust_ffi_probe` cobre criação/destruição, limites, UTF-8, UTF-16, argumentos
-nulos, mensagens truncadas, tamanhos necessários, concorrência e destruição
-nula. O teste roda somente quando `TL_BUILD_RUST=ON`; os builds padrão com
-`TL_BUILD_RUST=OFF` continuam sem requisito Rust. A B20.2 protege o mesmo
-probe nos presets Debug, Sanitize e Release por Cargo. A capacidade permanece
-um contrato experimental: a B20.3 ainda deverá escolher e migrar um
-componente de produção por benefício mensurável.
+nulos, mensagens truncadas, tamanhos necessários, concorrência, caminhos
+relativos, destinos `C:` e rejeição de NUL. Os testes de perfil e materializador
+protegem a integração opt-in. Todos esses testes rodam somente quando
+`TL_BUILD_RUST=ON`; os builds padrão com `TL_BUILD_RUST=OFF` continuam sem
+requisito Rust.

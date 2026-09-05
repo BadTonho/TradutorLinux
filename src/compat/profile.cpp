@@ -2,6 +2,12 @@
 
 #include "tradutorlinux/prefix/prefix.hpp"
 
+#include "path_rules.hpp"
+
+#if defined(TRADUTORLINUX_RUST_PATH_VALIDATOR)
+#include "rust_path_validator.hpp"
+#endif
+
 #include <algorithm>
 #include <cctype>
 #include <cstdint>
@@ -367,16 +373,6 @@ private:
     return value;
 }
 
-[[nodiscard]] bool is_relative_source(const std::filesystem::path& source) noexcept {
-    if (source.empty() || source.is_absolute() || source.has_root_name() || source.has_root_directory()) {
-        return false;
-    }
-    for (const auto& component : source) {
-        if (component == "." || component == "..") return false;
-    }
-    return source.native().find('\\') == std::string::npos;
-}
-
 [[nodiscard]] bool normalize_dll_module(std::string& module) {
     if (module.empty() || module.size() > 255U || module.find_first_of("/\\:") != std::string::npos) {
         return false;
@@ -390,17 +386,6 @@ private:
     module = lowercase(std::move(module));
     if (!module.ends_with(".dll")) module += ".dll";
     return module.size() > 4U && module != ".dll";
-}
-
-[[nodiscard]] bool is_c_drive_target(const std::string_view target) noexcept {
-    return target.size() >= 3U &&
-           (target[0] == 'C' || target[0] == 'c') && target[1] == ':' &&
-           (target[2] == '\\' || target[2] == '/');
-}
-
-[[nodiscard]] bool has_target_filename(const std::string_view target) noexcept {
-    if (target.empty() || target.back() == '\\' || target.back() == '/') return false;
-    return true;
 }
 
 [[nodiscard]] bool same_target(const std::string_view first,
@@ -517,7 +502,14 @@ ProfileLoadResult load_profile(const std::filesystem::path& prefix_root,
             return invalid_result("mapeamento de DLL duplicado");
         }
         normalized_dll_modules.push_back(mapping.module);
-        if (!is_relative_source(mapping.source)) {
+#if defined(TRADUTORLINUX_RUST_PATH_VALIDATOR)
+        std::string rust_error;
+        if (!detail::validate_relative_path_with_rust(mapping.source.string(), rust_error)) {
+            return invalid_result("origem de DLL deve ser relativa e usar apenas '/' " +
+                                  std::string{"(validação Rust): "} + std::move(rust_error));
+        }
+#endif
+        if (!path_rules::is_relative_source(mapping.source)) {
             return invalid_result("origem de DLL deve ser relativa e usar apenas '/'");
         }
         const std::filesystem::path source = paths.compat_dlls_dir / mapping.source;
@@ -532,7 +524,18 @@ ProfileLoadResult load_profile(const std::filesystem::path& prefix_root,
         }
     }
     for (const FileMapping& mapping : profile.files) {
-        if (!is_relative_source(mapping.source)) {
+#if defined(TRADUTORLINUX_RUST_PATH_VALIDATOR)
+        std::string rust_error;
+        if (!detail::validate_relative_path_with_rust(mapping.source.string(), rust_error)) {
+            return invalid_result("origem de arquivo deve ser relativa e usar apenas '/' " +
+                                  std::string{"(validação Rust): "} + std::move(rust_error));
+        }
+        if (!detail::validate_c_drive_path_with_rust(mapping.target, rust_error)) {
+            return invalid_result("destino de arquivo fora de drive_c (validação Rust): " +
+                                  std::move(rust_error));
+        }
+#endif
+        if (!path_rules::is_relative_source(mapping.source)) {
             return invalid_result("origem de arquivo deve ser relativa e usar apenas '/' ");
         }
         const std::filesystem::path source = paths.compat_files_dir / mapping.source;
@@ -540,7 +543,8 @@ ProfileLoadResult load_profile(const std::filesystem::path& prefix_root,
             !prefix::is_path_within(source, paths.compat_files_dir)) {
             return invalid_result("arquivo de origem ausente ou fora de compat/files");
         }
-        if (!is_c_drive_target(mapping.target) || !has_target_filename(mapping.target)) {
+        if (!path_rules::is_c_drive_target(mapping.target) ||
+            !path_rules::has_target_filename(mapping.target)) {
             return invalid_result("destino deve ser um arquivo dentro de C:\\");
         }
         const std::filesystem::path target =

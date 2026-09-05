@@ -118,6 +118,18 @@ TEST_F(FileExposureTest, RejectsSourceSymlink) {
     EXPECT_FALSE(std::filesystem::exists(root_ / "drive_c" / "Fixture"));
 }
 
+TEST_F(FileExposureTest, RejectsSourceContainingNulBeforeMaterialization) {
+    const std::string source_name{"bad\0name", 8U};
+    Profile profile;
+    profile.files.push_back(
+        {std::filesystem::path{source_name}, "C:\\Fixture\\nul.dat"});
+
+    FileExposure exposure = FileExposure::materialize(root_, profile);
+
+    EXPECT_EQ(exposure.status(), FileExposureStatus::Rejected);
+    EXPECT_FALSE(std::filesystem::exists(root_ / "drive_c" / "Fixture"));
+}
+
 TEST_F(FileExposureTest, RejectsDestinationSymlink) {
     const auto destination_dir = root_ / "drive_c" / "Fixture";
     ASSERT_TRUE(std::filesystem::create_directories(destination_dir));

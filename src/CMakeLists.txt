@@ -6,6 +6,7 @@ add_library(tradutorlinux_core STATIC
     cli/report.cpp
     cli/runner.cpp
     compat/profile.cpp
+    compat/path_rules.cpp
     diagnostics/trace.cpp
     diagnostics/crash_context.cpp
     loader/dll_overrides.cpp
@@ -78,6 +79,16 @@ add_library(tradutorlinux_core STATIC
     gui/wayland.cpp
     gui/x11.cpp
 )
+
+if(TL_BUILD_RUST)
+    target_sources(tradutorlinux_core PRIVATE
+        compat/rust_path_validator.cpp
+    )
+    target_compile_definitions(tradutorlinux_core PRIVATE
+        TRADUTORLINUX_RUST_PATH_VALIDATOR=1
+    )
+    target_link_libraries(tradutorlinux_core PRIVATE tl_rust_validator)
+endif()
 
 target_include_directories(tradutorlinux_core
     PUBLIC

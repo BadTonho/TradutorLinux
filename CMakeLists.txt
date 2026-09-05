@@ -16,13 +16,9 @@ find_package(ZLIB REQUIRED)
 option(TL_ENABLE_SANITIZERS "Enable AddressSanitizer and UndefinedBehaviorSanitizer" OFF)
 option(TL_BUILD_SAMPLES "Build PE32+ integration fixtures" ON)
 option(TL_BUILD_TARGET_APPS "Cross-compile real target applications (downloads pinned sources)" OFF)
-option(TL_BUILD_RUST "Build the opt-in Rust FFI probe" OFF)
-set(TL_RUST_TOOLCHAIN "1.97.1" CACHE STRING "Pinned rustup toolchain for the Rust FFI probe")
+option(TL_BUILD_RUST "Build and use the opt-in Rust validators" OFF)
+set(TL_RUST_TOOLCHAIN "1.97.1" CACHE STRING "Pinned rustup toolchain for the Rust validators")
 set(TL_PROTON_ROOT "" CACHE PATH "Proton root for optional real backend integration tests")
-
-if(TL_BUILD_RUST AND NOT BUILD_TESTING)
-    message(FATAL_ERROR "TL_BUILD_RUST=ON requer BUILD_TESTING=ON para construir o probe FFI")
-endif()
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -34,6 +30,11 @@ set(FETCHCONTENT_UPDATES_DISCONNECTED ON CACHE BOOL "Do not update fetched depen
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 include(CompilerWarnings)
 include(Sanitizers)
+
+if(TL_BUILD_RUST)
+    include(RustValidator)
+    tl_configure_rust_validator()
+endif()
 
 add_subdirectory(src)
 

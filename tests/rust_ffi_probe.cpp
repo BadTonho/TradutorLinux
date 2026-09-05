@@ -136,6 +136,69 @@ int main() {
         return 1;
     }
 
+    const std::array<std::string_view, 3> valid_relative_paths{
+        "fixture.dat", "nested/arquivo-\xc3\xa9.dat", "C:/compat-as-relative.dat"};
+    for (const std::string_view path : valid_relative_paths) {
+        required = 0;
+        if (!expect_status(tl_rust_validator_validate_relative_path(
+                               validator, reinterpret_cast<const std::uint8_t*>(path.data()),
+                               path.size(), error.data(), error.size(), &required),
+                           TL_RUST_STATUS_OK, "valid-relative-path") ||
+            required != 1U) {
+            tl_rust_validator_destroy(small_validator);
+            tl_rust_validator_destroy(validator);
+            return 1;
+        }
+    }
+
+    const std::array<std::string_view, 5> invalid_relative_paths{
+        "", "/absolute.dat", "nested/../outside.dat", "nested\\outside.dat",
+        std::string_view{"bad\0name", 8U}};
+    for (const std::string_view path : invalid_relative_paths) {
+        required = 0;
+        if (!expect_status(tl_rust_validator_validate_relative_path(
+                               validator, reinterpret_cast<const std::uint8_t*>(path.data()),
+                               path.size(), error.data(), error.size(), &required),
+                           TL_RUST_STATUS_INVALID_PATH, "invalid-relative-path") ||
+            !check_error_buffer(error.data(), error.size(), required, "relative")) {
+            tl_rust_validator_destroy(small_validator);
+            tl_rust_validator_destroy(validator);
+            return 1;
+        }
+    }
+
+    const std::array<std::string_view, 4> valid_c_drive_paths{
+        "C:\\Fixture\\compat.dat", "c:/Fixture/compat.dat", "C:\\a\\..\\b.dat",
+        "C:\\a//b.dat"};
+    for (const std::string_view path : valid_c_drive_paths) {
+        required = 0;
+        if (!expect_status(tl_rust_validator_validate_c_drive_path(
+                               validator, reinterpret_cast<const std::uint8_t*>(path.data()),
+                               path.size(), error.data(), error.size(), &required),
+                           TL_RUST_STATUS_OK, "valid-c-drive-path") ||
+            required != 1U) {
+            tl_rust_validator_destroy(small_validator);
+            tl_rust_validator_destroy(validator);
+            return 1;
+        }
+    }
+
+    const std::array<std::string_view, 6> invalid_c_drive_paths{
+        "", "D:\\Fixture\\file.dat", "C:", "C:\\", "C:\\..\\outside.dat",
+        std::string_view{"C:\\bad\0name", 11U}};
+    for (const std::string_view path : invalid_c_drive_paths) {
+        required = 0;
+        if (!expect_status(tl_rust_validator_validate_c_drive_path(
+                               validator, reinterpret_cast<const std::uint8_t*>(path.data()),
+                               path.size(), error.data(), error.size(), &required),
+                           TL_RUST_STATUS_INVALID_PATH, "invalid-c-drive-path") ||
+            !check_error_buffer(error.data(), error.size(), required, "path")) {
+            tl_rust_validator_destroy(small_validator);
+            tl_rust_validator_destroy(validator);
+            return 1;
+        }
+    }
+
     required = 0;
     if (!expect_status(tl_rust_validator_validate_utf8(
                            validator, nullptr, 0U, error.data(), error.size(), &required),

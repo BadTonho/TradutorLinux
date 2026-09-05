@@ -88,11 +88,24 @@ jobs:
       - name: Configurar ${{ matrix.preset }}
         run: cmake --preset ${{ matrix.preset }}
 
-      - name: Compilar probe Rust
-        run: cmake --build --preset ${{ matrix.preset }} --target tl_rust_ffi_probe --parallel 2
+      - name: Compilar probe e runtime Rust
+        run: |
+          cmake --build --preset ${{ matrix.preset }} \
+            --target tl_rust_ffi_probe tl_rust_path_validation --parallel 2
+          if [ "${{ matrix.preset }}" != "release-rust" ]; then
+            cmake --build --preset ${{ matrix.preset }} \
+              --target tradutorlinux_unit_tests --parallel 2
+          fi
 
-      - name: Executar probe Rust
-        run: ctest --preset ${{ matrix.preset }} -R '^rust_ffi_probe$' --output-on-failure
+      - name: Executar validações Rust
+        run: |
+          ctest --preset ${{ matrix.preset }} \
+            -R '^(rust_ffi_probe|rust_path_validation)$' \
+            --output-on-failure
+          if [ "${{ matrix.preset }}" != "release-rust" ]; then
+            ctest --preset ${{ matrix.preset }} \
+              -R '^RustPathValidationTest\.' --output-on-failure
+          fi
 
   target-apps:
     name: Aplicativos-alvo reais (cross-build e imports)

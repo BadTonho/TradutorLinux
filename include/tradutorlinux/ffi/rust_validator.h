@@ -17,6 +17,7 @@ typedef uint32_t tl_rust_status_t;
 #define TL_RUST_STATUS_BUFFER_TOO_SMALL UINT32_C(4)
 #define TL_RUST_STATUS_INPUT_TOO_LARGE UINT32_C(5)
 #define TL_RUST_STATUS_INTERNAL UINT32_C(6)
+#define TL_RUST_STATUS_INVALID_PATH UINT32_C(7)
 
 /* The handle is allocated and released only by the Rust library. */
 tl_rust_status_t tl_rust_validator_create(
@@ -43,6 +44,22 @@ tl_rust_status_t tl_rust_validator_validate_utf8(
 tl_rust_status_t tl_rust_validator_validate_utf16(
     const tl_rust_validator_t* validator,
     const uint16_t* input,
+    uint64_t input_length,
+    char* error_buffer,
+    uint64_t error_capacity,
+    uint64_t* error_required);
+
+tl_rust_status_t tl_rust_validator_validate_relative_path(
+    const tl_rust_validator_t* validator,
+    const uint8_t* input,
+    uint64_t input_length,
+    char* error_buffer,
+    uint64_t error_capacity,
+    uint64_t* error_required);
+
+tl_rust_status_t tl_rust_validator_validate_c_drive_path(
+    const tl_rust_validator_t* validator,
+    const uint8_t* input,
     uint64_t input_length,
     char* error_buffer,
     uint64_t error_capacity,

@@ -2,6 +2,12 @@
 
 #include "tradutorlinux/prefix/prefix.hpp"
 
+#include "path_rules.hpp"
+
+#if defined(TRADUTORLINUX_RUST_PATH_VALIDATOR)
+#include "rust_path_validator.hpp"
+#endif
+
 #include <algorithm>
 #include <array>
 #include <cerrno>
@@ -93,10 +99,13 @@ struct PendingMapping {
     const std::filesystem::path& prefix_root,
     const std::string_view target,
     std::string& error) {
-    if (target.size() < 3U ||
-        (target[0] != 'C' && target[0] != 'c') || target[1] != ':' ||
-        (target[2] != '\\' && target[2] != '/')) {
+    if (!path_rules::is_c_drive_target(target) ||
+        !path_rules::has_target_filename(target)) {
         error = "destino não começa por C:\\";
+        return std::nullopt;
+    }
+    if (!path_rules::is_c_drive_path_lexically_confined(target)) {
+        error = "destino de arquivo fora de drive_c";
         return std::nullopt;
     }
 
@@ -343,6 +352,18 @@ FileExposure FileExposure::materialize_into(
             std::filesystem::weakly_canonical(target_paths.drive_c);
 
         for (const FileMapping& mapping : profile.files) {
+#if defined(TRADUTORLINUX_RUST_PATH_VALIDATOR)
+            if (!detail::validate_relative_path_with_rust(mapping.source.string(),
+                                                          result.error_)) {
+                result.error_ = "origem de arquivo rejeitada (validação Rust): " + result.error_;
+                return result;
+            }
+            if (!detail::validate_c_drive_path_with_rust(mapping.target, result.error_)) {
+                result.error_ = "destino de arquivo fora de drive_c (validação Rust): " +
+                                 result.error_;
+                return result;
+            }
+#endif
             const std::filesystem::path source = source_paths.compat_files_dir / mapping.source;
             if (!regular_source(source, source_paths.compat_files_dir, result.error_)) return result;
 

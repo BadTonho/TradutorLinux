@@ -1323,11 +1323,20 @@ imports não encerra B5.
     esperam `unknown-symbol`, enquanto o runtime atual informa `unknown-dll`.
     Elas não foram misturadas nesta etapa nem são atribuíveis à integração
     Cargo. Nenhum componente de produção foi migrado.
-  - [ ] **B20.3 — Primeiro componente de segurança.** Migrar ou implementar
-    um componente isolado de parsing/validação de dados hostis, começando por
-    perfil, pacote ou caminho confinado; preservar o contrato público atual e
-    comparar o resultado com a implementação C++ existente antes de remover
-    qualquer código.
+  - [x] **B20.3 — Validação lexical de caminhos com Rust.** O validador Rust
+    agora cobre, de forma opt-in (`TL_BUILD_RUST=ON`), as fontes relativas dos
+    perfis e os destinos `C:\\...` do materializador. O FFI adiciona status de
+    caminho inválido, rejeição explícita de NUL, limite de 1 MiB, handles locais
+    e falha fechada; o C++ continua verificando filesystem, symlinks, colisões
+    e confinamento físico. O parser, loader, APIs Win32 e runtime não foram
+    migrados, e o build padrão (`TL_BUILD_RUST=OFF`) continua sem Rust.
+    `rust_ffi_probe`, o corpus diferencial Rust↔C++, os testes de perfil e
+    materialização passaram em Debug e Sanitize; o probe e o corpus isolado
+    também passaram em Release. O Cargo passou com `--locked --offline`, e a
+    regressão C++ sem Rust passou. A suíte unitária global Release permanece
+    bloqueada por um `-Werror` preexistente para `write_le_u32` não usado em
+    `src/loader/image_mapper.cpp`; esse bloqueio não altera a validação isolada
+    desta etapa nem foi misturado à mudança.
   - [ ] **B20.4 — Testes e robustez.** Adicionar testes de unidade, casos
     limite, fuzzing ou testes property-based quando aplicável, além de
     regressões para traversal, overflow, truncamento, UTF-8/UTF-16 e falhas de
