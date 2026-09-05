@@ -181,8 +181,15 @@ herdado sem transformação; o stderr recebe o contexto `[tl][proton]`.
 O piloto `integration_proton_backend` usa `tl_proton_probe.exe` e um launcher
 mockado para reproduzir argv, ambiente, staging, limpeza, exit code e rejeição
 sem fallback quando o Proton é inválido. Isso valida o adaptador, mas não
-declara suporte a uma instalação Proton real nem ao Roblox. DXVK, VKD3D-Proton,
-Vulkan, áudio e entrada continuam condicionados a um alvo real reproduzível.
+declara suporte a uma instalação Proton real nem ao Roblox.
+
+O primeiro alvo gráfico controlado é `tl_graphics_probe.exe`. A integração
+opcional `integration_proton_graphics`, registrada quando
+`TL_PROTON_ROOT` aponta para uma instalação real, executa sob Xvfb e valida
+janela X11, criação de dispositivo D3D11, swap chain, render target e
+`Present`, com stdout preservado e exit code `0`. Essa evidência cobre somente
+D3D11→DXVK/Vulkan em X11; VKD3D-Proton/D3D12, áudio, entrada e jogos ainda
+dependem de alvos reproduzíveis próprios.
 
 ## Auditoria do 7-Zip — sem regra específica
 

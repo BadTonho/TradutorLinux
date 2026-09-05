@@ -100,6 +100,21 @@ mensagens do launcher são encaminhadas ao stderr com o contexto
 `[tl][proton]`. Sinal, timeout, limite de recurso e falha interna mantêm,
 respectivamente, os códigos `71`, `72`, `73` e `70` definidos pelo runtime.
 
+Quando a integração real está configurada com
+`-DTL_PROTON_ROOT=/caminho/para/Proton`, o CTest
+`integration_proton_graphics` executa `tl_graphics_probe.exe` sob Xvfb. A
+fixture cria uma janela, inicializa D3D11 e apresenta um frame; a saída
+esperada é `D3D11 frame presented` com exit code `0`. A evidência é restrita ao
+caminho D3D11→DXVK/Vulkan em X11. O trace do adaptador continua no stderr:
+
+```text
+[tl][proton][info] provider-selected kind="proton" version="..."
+[tl][proton][info] staging-complete source="..." target="..."
+[tl][proton][info] launch launcher=".../proton" working-directory="..."
+[tl][proton][info] files-cleanup removed-files="0" removed-directories="0" retained="0"
+[tl][proton][info] exit exit-code="0"
+```
+
 ## Eventos do grafo de DLLs por perfil
 
 Quando `app run --trace` usa um perfil v2, o componente `loader` registra o

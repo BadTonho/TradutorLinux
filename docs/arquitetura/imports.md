@@ -99,6 +99,13 @@ carrega nem executa o Proton. A seleção explícita, a versão validada, o
 staging, o launcher, o stderr prefixado e o resultado do processo aparecem no
 componente `proton` de `app run --trace`.
 
+A fixture `tl_graphics_probe.exe` exerce, pelo backend externo, o primeiro
+componente gráfico validado: uma janela X11 e uma apresentação D3D11 sob
+Proton Experimental. O teste `integration_proton_graphics` é opcional e só é
+registrado quando `TL_PROTON_ROOT` aponta para uma instalação real; ele valida
+o caminho D3D11→DXVK/Vulkan em X11, sem alterar a resolução de imports do
+`GuestModuleGraph` e sem declarar suporte a D3D12, áudio, entrada ou jogos.
+
 ## Fronteira de ABI (`ms_abi`)
 
 `include/tradutorlinux/runtime/winapi.hpp` define `TL_MSABI` como `__attribute__((ms_abi))` em GCC/Clang x86-64 e declara as funções hospedeiras com vinculação C (`extern "C"`), `noexcept` e a convenção Microsoft x64. Tipos mínimos Win32 usados nas assinaturas ficam em `tradutorlinux::abi` (`Handle`, `Bool`, `Dword`, `Uint` e as constantes de handle padrão).

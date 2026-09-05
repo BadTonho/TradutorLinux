@@ -239,4 +239,21 @@ if(TARGET tradutorlinux_samples AND TARGET tradutorlinux)
         LABELS "runtime;pe32plus;backend;proton;mock"
         TIMEOUT 60
     )
+
+    if(TL_PROTON_ROOT AND IS_DIRECTORY "${TL_PROTON_ROOT}")
+        add_test(
+            NAME integration_proton_graphics
+            COMMAND "${CMAKE_COMMAND}"
+                "-DRUNTIME=$<TARGET_FILE:tradutorlinux>"
+                "-DFIXTURE=${CMAKE_CURRENT_BINARY_DIR}/samples/generated/tl_graphics_probe.exe"
+                "-DPROTON_ROOT=${TL_PROTON_ROOT}"
+                "-DWORK=${CMAKE_CURRENT_BINARY_DIR}/proton_graphics_work"
+                -P "${CMAKE_CURRENT_SOURCE_DIR}/samples/verify_proton_graphics.cmake"
+        )
+        set_tests_properties(integration_proton_graphics PROPERTIES
+            DEPENDS fixture_tl_graphics_probe_metadata
+            LABELS "runtime;pe32plus;backend;proton;graphics;dxvk"
+            TIMEOUT 240
+        )
+    endif()
 endif()

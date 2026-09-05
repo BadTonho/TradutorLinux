@@ -16,6 +16,7 @@ find_package(ZLIB REQUIRED)
 option(TL_ENABLE_SANITIZERS "Enable AddressSanitizer and UndefinedBehaviorSanitizer" OFF)
 option(TL_BUILD_SAMPLES "Build PE32+ integration fixtures" ON)
 option(TL_BUILD_TARGET_APPS "Cross-compile real target applications (downloads pinned sources)" OFF)
+set(TL_PROTON_ROOT "" CACHE PATH "Proton root for optional real backend integration tests")
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)

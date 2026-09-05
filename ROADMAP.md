@@ -1192,9 +1192,11 @@ imports não encerra B5.
      exigem uma camada Win32/DirectX maior que o subconjunto próprio, mantendo
      o runtime TradutorLinux como backend padrão e preservando a seleção por
      aplicativo. O contrato, a validação, o staging isolado e o piloto com
-     mock já foram implementados; a promoção final aguarda uma instalação
-     Proton real. O Proton não será reimplementado do zero nem carregado como
-     biblioteca Linux arbitrária a partir de `compat/`.
+     mock já foram implementados. A primeira validação real controlada de
+     D3D11→DXVK/Vulkan em X11 foi adicionada, mas a promoção final ainda aguarda
+     a matriz de componentes e prefixos independentes. O Proton não será
+     reimplementado do zero nem carregado como biblioteca Linux arbitrária a
+     partir de `compat/`.
 
      Subetapas:
 
@@ -1229,16 +1231,22 @@ imports não encerra B5.
      - [ ] **B14.6.5 — Componentes gráficos e dependências.** Validar de forma
        incremental Vulkan, DXVK, VKD3D-Proton, entrada, áudio e demais
        dependências somente quando um aplicativo-alvo exigir cada componente.
-       Não declarar suporte amplo por instalar o backend.
+       O primeiro slice está validado: `tl_graphics_probe.exe` cria uma janela
+       X11, inicializa D3D11, apresenta um frame e retorna `0` no teste real
+       `integration_proton_graphics` com Proton Experimental sob Xvfb. Isso
+       comprova somente D3D11→DXVK/Vulkan em X11; VKD3D-Proton/D3D12, entrada
+       e áudio continuam abertos. Não declarar suporte amplo por instalar o
+       backend.
      - [ ] **B14.6.6 — Piloto real e promoção.** A fixture PE32+
        `tl_proton_probe.exe` e o teste `integration_proton_backend` já cobrem o
        piloto controlado com mock, incluindo seleção, staging, ambiente,
-       limpeza e ausência de fallback. Esta subetapa só será concluída com uma
-       instalação Proton real em `TL_PROTON_ROOT`, execução reproduzível,
-       limitações publicadas e validação de prefixos independentes. Roblox
-       poderá ser avaliado aqui, mas só será marcado como suportado após teste
-       real reproduzível, inclusive de launcher, rede, gráficos e bloqueios do
-       fornecedor.
+       limpeza e ausência de fallback. O teste real
+       `integration_proton_graphics` já prova a execução de uma fixture em uma
+       instalação Proton configurada, mas esta subetapa só será concluída com
+       execução reproduzível e validação de prefixos independentes, além das
+       limitações publicadas. Roblox poderá ser avaliado aqui, mas só será
+       marcado como suportado após teste real reproduzível, inclusive de
+       launcher, rede, gráficos e bloqueios do fornecedor.
 - [x] **B15 — Drives do prefixo como symlinks ou mecanismo equivalente.** O
   prefixo cria `dosdevices/c:` → `../drive_c` e `dosdevices/z:` → `/`; a
   resolução de `C:` canoniza e confina o caminho ao `drive_c`, enquanto `Z:`
