@@ -1,9 +1,9 @@
 if(NOT DEFINED RUNTIME OR NOT DEFINED FIXTURE OR NOT DEFINED DLL_A OR NOT DEFINED DLL_B
-   OR NOT DEFINED WORK)
-    message(FATAL_ERROR "RUNTIME, FIXTURE, DLL_A, DLL_B and WORK are required")
+   OR NOT DEFINED DEP_DLL OR NOT DEFINED WORK)
+    message(FATAL_ERROR "RUNTIME, FIXTURE, DLL_A, DLL_B, DEP_DLL and WORK are required")
 endif()
 
-foreach(input IN ITEMS "${RUNTIME}" "${FIXTURE}" "${DLL_A}" "${DLL_B}")
+foreach(input IN ITEMS "${RUNTIME}" "${FIXTURE}" "${DLL_A}" "${DLL_B}" "${DEP_DLL}")
     if(NOT EXISTS "${input}")
         message(FATAL_ERROR "Required fixture is missing: ${input}")
     endif()
@@ -15,6 +15,8 @@ set(prefix_a "${WORK}/prefix-a")
 set(prefix_b "${WORK}/prefix-b")
 set(dll_source_a "${prefix_a}/compat/dlls/compat-a.dll")
 set(dll_source_b "${prefix_b}/compat/dlls/compat-b.dll")
+set(dep_source_a "${prefix_a}/compat/dlls/compatdep.dll")
+set(dep_source_b "${prefix_b}/compat/dlls/compatdep.dll")
 set(profile_a "${prefix_a}/compat/profile.json")
 set(profile_b "${prefix_b}/compat/profile.json")
 
@@ -39,6 +41,8 @@ tl_add_fixture_app(compat-dll-a "${prefix_a}" added_a)
 tl_add_fixture_app(compat-dll-b "${prefix_b}" added_b)
 file(COPY_FILE "${DLL_A}" "${dll_source_a}")
 file(COPY_FILE "${DLL_B}" "${dll_source_b}")
+file(COPY_FILE "${DEP_DLL}" "${dep_source_a}")
+file(COPY_FILE "${DEP_DLL}" "${dep_source_b}")
 
 set(APP_ID compat-dll-a)
 set(DLL_SOURCE compat-a.dll)
@@ -50,6 +54,10 @@ string(CONFIGURE [=[{
     {
       "module": "compat.dll",
       "source": "@DLL_SOURCE@"
+    },
+    {
+      "module": "compatdep.dll",
+      "source": "compatdep.dll"
     }
   ]
 }
@@ -66,6 +74,10 @@ string(CONFIGURE [=[{
     {
       "module": "compat.dll",
       "source": "@DLL_SOURCE@"
+    },
+    {
+      "module": "compatdep.dll",
+      "source": "compatdep.dll"
     }
   ]
 }
@@ -94,15 +106,30 @@ endfunction()
 tl_run_fixture(compat-dll-a "636f6d7061742d610a" ran_a run_a_stdout run_a_trace)
 foreach(needle
         "provider-selected module=\"compat.dll\""
+        "provider-selected module=\"compatdep.dll\""
         "dll-mapped module=\"compat.dll\""
+        "dll-mapped module=\"compatdep.dll\""
         "import-resolved module=\"KERNEL32.dll\""
+        "tls-callback module=\"compat.dll\""
         "dll-attach module=\"compat.dll\""
-        "dll-detach module=\"compat.dll\"")
+        "dll-attach module=\"compatdep.dll\""
+        "dll-detach module=\"compat.dll\""
+        "dll-detach module=\"compatdep.dll\"")
     if(NOT run_a_trace MATCHES "${needle}")
         message(FATAL_ERROR "A trace did not contain '${needle}':\n${run_a_trace}")
     endif()
 endforeach()
-if(NOT EXISTS "${dll_source_a}" OR EXISTS "${prefix_a}/drive_c/compat.dll"
+string(FIND "${run_a_trace}" "dll-attach module=\"compatdep.dll\"" dep_attach_position)
+string(FIND "${run_a_trace}" "dll-attach module=\"compat.dll\"" main_attach_position)
+string(FIND "${run_a_trace}" "dll-detach module=\"compat.dll\"" main_detach_position)
+string(FIND "${run_a_trace}" "dll-detach module=\"compatdep.dll\"" dep_detach_position)
+if(dep_attach_position GREATER main_attach_position OR
+   main_detach_position GREATER dep_detach_position)
+    message(FATAL_ERROR "DLL dependency lifecycle order is invalid:\n${run_a_trace}")
+endif()
+if(NOT EXISTS "${dll_source_a}" OR NOT EXISTS "${dep_source_a}"
+   OR EXISTS "${prefix_a}/drive_c/compat.dll"
+   OR EXISTS "${prefix_a}/drive_c/compatdep.dll"
    OR EXISTS "${prefix_a}/drive_c/compat")
     message(FATAL_ERROR "A DLL source was lost or leaked into drive_c")
 endif()
@@ -112,7 +139,9 @@ if(NOT run_b_trace MATCHES "provider-selected module=\"compat.dll\"" OR
    NOT run_b_trace MATCHES "provider=\"profile\"")
     message(FATAL_ERROR "B profile provider was not selected:\n${run_b_trace}")
 endif()
-if(NOT EXISTS "${dll_source_b}" OR EXISTS "${prefix_b}/drive_c/compat.dll"
+if(NOT EXISTS "${dll_source_b}" OR NOT EXISTS "${dep_source_b}"
+   OR EXISTS "${prefix_b}/drive_c/compat.dll"
+   OR EXISTS "${prefix_b}/drive_c/compatdep.dll"
    OR EXISTS "${prefix_b}/drive_c/compat")
     message(FATAL_ERROR "B DLL source was lost or leaked into drive_c")
 endif()

@@ -296,9 +296,12 @@ void GuestModuleGraph::trace_event(const std::string_view event,
                                    const std::string_view detail) const noexcept {
     if (!trace_enabled_) return;
     try {
+        const bool is_provider = detail == "profile" || detail == "drive_c" ||
+                                 detail == "builtin";
         const std::array fields{
             diagnostics::TraceField{"module", std::string{module}},
-            diagnostics::TraceField{"provider", detail.empty() ? std::string{} : std::string{detail}},
+            diagnostics::TraceField{"provider", is_provider ? std::string{detail} : std::string{}},
+            diagnostics::TraceField{"detail", is_provider ? std::string{} : std::string{detail}},
         };
         diagnostics::write_trace(std::cerr, diagnostics::TraceComponent::Loader,
                                  diagnostics::TraceLevel::Info, event, fields);
@@ -763,6 +766,7 @@ bool GuestModuleGraph::attach_module(const std::size_t index) noexcept {
             module.state = LoadedState::Rejected;
             return false;
         }
+        trace_event("tls-callback", module.name, "process-attach");
         reinterpret_cast<TlsCallback>(address)(module.image.memory, 1U, nullptr);
     }
     if (module.info.address_of_entry_point != 0) {
@@ -799,6 +803,7 @@ void GuestModuleGraph::detach_module(const std::size_t index) noexcept {
         const std::uintptr_t address = static_cast<std::uintptr_t>(
             relocate_va(*callback, module.info, module.image));
         if (is_guest_executable(address)) {
+            trace_event("tls-callback", module.name, "process-detach");
             reinterpret_cast<TlsCallback>(address)(module.image.memory, 0U, nullptr);
         }
     }
@@ -855,8 +860,11 @@ bool GuestModuleGraph::process_attach() noexcept {
 }
 
 void GuestModuleGraph::process_detach() noexcept {
-    for (std::size_t index = modules_.size(); index > 0; --index) {
-        detach_module(index - 1U);
+    // O proprietário é inserido no grafo antes de suas dependências. Ao
+    // desmontá-lo primeiro, release_dependency pode desmontar a dependência
+    // somente depois do DllMain(DLL_PROCESS_DETACH) do proprietário.
+    for (std::size_t index = 0; index < modules_.size(); ++index) {
+        detach_module(index);
     }
 }
 
@@ -869,6 +877,7 @@ void GuestModuleGraph::thread_attach() noexcept {
             const std::uintptr_t address = static_cast<std::uintptr_t>(
                 relocate_va(callback, module.info, module.image));
             if (is_guest_executable(address)) {
+                trace_event("tls-callback", module.name, "thread-attach");
                 reinterpret_cast<TlsCallback>(address)(module.image.memory, 2U, nullptr);
             }
         }
@@ -885,6 +894,7 @@ void GuestModuleGraph::thread_detach() noexcept {
             const std::uintptr_t address = static_cast<std::uintptr_t>(
                 relocate_va(*callback, module.info, module.image));
             if (is_guest_executable(address)) {
+                trace_event("tls-callback", module.name, "thread-detach");
                 reinterpret_cast<TlsCallback>(address)(module.image.memory, 3U, nullptr);
             }
         }

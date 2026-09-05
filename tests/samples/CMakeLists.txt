@@ -487,9 +487,31 @@ tl_add_pe_fixture(tl_compat_file src/tl_compat_file.c manifests/tl_compat_file.j
 set(TL_COMPAT_DLL_A "${TL_FIXTURE_OUTPUT_DIRECTORY}/tl_compat_dll_a.dll")
 set(TL_COMPAT_DLL_B "${TL_FIXTURE_OUTPUT_DIRECTORY}/tl_compat_dll_b.dll")
 set(TL_COMPAT_DLL_IMPORT_LIB "${TL_FIXTURE_OUTPUT_DIRECTORY}/tl_compat_dll.imports.a")
+set(TL_COMPAT_DEP_DLL "${TL_FIXTURE_OUTPUT_DIRECTORY}/tl_compat_dep.dll")
+set(TL_COMPAT_DEP_IMPORT_LIB "${TL_FIXTURE_OUTPUT_DIRECTORY}/tl_compat_dep.imports.a")
 find_program(TL_MINGW_DLLTOOL
     NAMES x86_64-w64-mingw32-dlltool
     REQUIRED
+)
+add_custom_command(
+    OUTPUT "${TL_COMPAT_DEP_DLL}" "${TL_COMPAT_DEP_IMPORT_LIB}"
+    COMMAND "${CMAKE_COMMAND}" -E make_directory "${TL_FIXTURE_OUTPUT_DIRECTORY}"
+    COMMAND "${TL_MINGW_CC}"
+        -std=c17 -ffreestanding -fno-stack-protector
+        -fno-asynchronous-unwind-tables -fno-unwind-tables
+        -nostdlib -shared
+        -Wl,--entry=DllMain -Wl,--subsystem,console
+        -Wl,--no-insert-timestamp -Wl,--dynamicbase
+        -o "${TL_COMPAT_DEP_DLL}"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/tl_compat_dep.c"
+    COMMAND "${TL_MINGW_DLLTOOL}" -m i386:x86-64
+        -d "${CMAKE_CURRENT_SOURCE_DIR}/defs/tl_compat_dep.def"
+        -l "${TL_COMPAT_DEP_IMPORT_LIB}"
+    DEPENDS
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/tl_compat_dep.c"
+        "${CMAKE_CURRENT_SOURCE_DIR}/defs/tl_compat_dep.def"
+    VERBATIM
+    COMMENT "Generating PE32+ compatibility dependency DLL"
 )
 add_custom_command(
     OUTPUT "${TL_COMPAT_DLL_A}" "${TL_COMPAT_DLL_IMPORT_LIB}"
@@ -502,6 +524,7 @@ add_custom_command(
         -Wl,--no-insert-timestamp -Wl,--dynamicbase
         -o "${TL_COMPAT_DLL_A}"
         "${CMAKE_CURRENT_SOURCE_DIR}/src/tl_compat_dll_a.c"
+        "${TL_COMPAT_DEP_IMPORT_LIB}"
         -lkernel32
     COMMAND "${TL_MINGW_DLLTOOL}" -m i386:x86-64
         -d "${CMAKE_CURRENT_SOURCE_DIR}/defs/tl_compat_dll.def"
@@ -510,6 +533,7 @@ add_custom_command(
         "${CMAKE_CURRENT_SOURCE_DIR}/src/tl_compat_dll.c"
         "${CMAKE_CURRENT_SOURCE_DIR}/src/tl_compat_dll_a.c"
         "${CMAKE_CURRENT_SOURCE_DIR}/defs/tl_compat_dll.def"
+        "${TL_COMPAT_DEP_IMPORT_LIB}"
     VERBATIM
     COMMENT "Generating PE32+ compatibility DLL variant A"
 )
@@ -524,10 +548,12 @@ add_custom_command(
         -Wl,--no-insert-timestamp -Wl,--dynamicbase
         -o "${TL_COMPAT_DLL_B}"
         "${CMAKE_CURRENT_SOURCE_DIR}/src/tl_compat_dll_b.c"
+        "${TL_COMPAT_DEP_IMPORT_LIB}"
         -lkernel32
     DEPENDS
         "${CMAKE_CURRENT_SOURCE_DIR}/src/tl_compat_dll.c"
         "${CMAKE_CURRENT_SOURCE_DIR}/src/tl_compat_dll_b.c"
+        "${TL_COMPAT_DEP_IMPORT_LIB}"
     VERBATIM
     COMMENT "Generating PE32+ compatibility DLL variant B"
 )
@@ -553,6 +579,8 @@ add_custom_command(
 )
 add_custom_target(tl_compat_dll_fixture
     DEPENDS
+        "${TL_COMPAT_DEP_DLL}"
+        "${TL_COMPAT_DEP_IMPORT_LIB}"
         "${TL_COMPAT_DLL_A}"
         "${TL_COMPAT_DLL_B}"
         "${TL_FIXTURE_OUTPUT_DIRECTORY}/tl_compat_dll_app.exe"
