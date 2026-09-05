@@ -380,8 +380,16 @@ std::optional<std::size_t> GuestModuleGraph::ensure_profile_module(
         return existing;
     }
     const auto paths = prefix::get_environment_paths(prefix_root_);
-    return load_pe_module(std::string{module_name}, ModuleProvider::Profile,
-                          paths.compat_dlls_dir / mapping->source, owner_index);
+    const std::filesystem::path source = paths.compat_dlls_dir / mapping->source;
+    std::error_code ec;
+    if (std::filesystem::is_symlink(source, ec)) {
+        trace_event("provider-rejected", module_name, "profile source is symlink");
+        return std::nullopt;
+    }
+    if (std::filesystem::is_regular_file(source, ec)) {
+        trace_event("dll-found", module_name, provider_name(ModuleProvider::Profile));
+    }
+    return load_pe_module(std::string{module_name}, ModuleProvider::Profile, source, owner_index);
 }
 
 std::optional<std::size_t> GuestModuleGraph::ensure_drive_module(
@@ -778,18 +786,21 @@ bool GuestModuleGraph::attach_module(const std::size_t index) noexcept {
     module.state = LoadedState::Attaching;
     for (const std::size_t dependency : module.dependencies) {
         if (!attach_module(dependency)) {
-            module.state = LoadedState::Rejected;
+            reject_loaded_module(index, "dependência não anexada");
             return false;
         }
     }
+    const auto fail_attach = [&](const std::string_view reason) {
+        reject_loaded_module(index, reason);
+        return false;
+    };
     using TlsCallback = TL_MSABI void (*)(void*, std::uint32_t, void*);
     using DllMain = TL_MSABI int (*)(void*, std::uint32_t, void*);
     for (const std::uint64_t callback : module.info.tls_info.callback_vas) {
         const std::uintptr_t address = static_cast<std::uintptr_t>(
             relocate_va(callback, module.info, module.image));
         if (!is_guest_executable(address)) {
-            module.state = LoadedState::Rejected;
-            return false;
+            return fail_attach("TLS callback fora de seção executável");
         }
         trace_event("tls-callback", module.name, "process-attach");
         reinterpret_cast<TlsCallback>(address)(module.image.memory, 1U, nullptr);
@@ -799,9 +810,7 @@ bool GuestModuleGraph::attach_module(const std::size_t index) noexcept {
             module.image.base + module.info.address_of_entry_point);
         if (!is_guest_executable(address) || reinterpret_cast<DllMain>(address)(
                                                   module.image.memory, 1U, nullptr) == 0) {
-            trace_event("provider-rejected", module.name, "DllMain(PROCESS_ATTACH)");
-            module.state = LoadedState::Rejected;
-            return false;
+            return fail_attach("DllMain(PROCESS_ATTACH)");
         }
     }
     module.process_attached = true;
@@ -837,7 +846,23 @@ void GuestModuleGraph::detach_module(const std::size_t index) noexcept {
     trace_event("dll-detach", module.name, provider_name(module.provider));
     unmap_image(module.image);
     runtime::invalidate_memory_map_cache();
+    trace_event("dll-unload", module.name, provider_name(module.provider));
     for (const std::size_t dependency : module.dependencies) release_dependency(dependency);
+}
+
+void GuestModuleGraph::reject_loaded_module(const std::size_t index,
+                                             const std::string_view reason) noexcept {
+    if (index >= modules_.size()) return;
+    LoadedModule& module = *modules_[index];
+    trace_event("provider-rejected", module.name, reason);
+    for (const std::size_t dependency : module.dependencies) release_dependency(dependency);
+    module.dependencies.clear();
+    module.process_attached = false;
+    module.state = LoadedState::Rejected;
+    if (module.image.memory != nullptr) {
+        unmap_image(module.image);
+        runtime::invalidate_memory_map_cache();
+    }
 }
 
 bool GuestModuleGraph::process_attach() noexcept {

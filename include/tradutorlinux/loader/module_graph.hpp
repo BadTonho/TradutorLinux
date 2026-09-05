@@ -110,6 +110,7 @@ private:
     [[nodiscard]] bool attach_module(std::size_t index) noexcept;
     void detach_module(std::size_t index) noexcept;
     void discard_loaded_modules() noexcept;
+    void reject_loaded_module(std::size_t index, std::string_view reason) noexcept;
     void release_dependency(std::size_t index) noexcept;
     void reject_profile_module(std::string_view module_name) noexcept;
     [[nodiscard]] bool is_guest_executable(std::uintptr_t address) const noexcept;
