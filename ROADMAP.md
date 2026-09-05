@@ -951,9 +951,10 @@ marcam itens condicionais como concluídos; definem os gates para retomá-los.
 
 - **Direção do produto:** a prioridade continua sendo o runtime Win32, o
   loader, a ABI, memória, imports, diagnóstico e fluxos reproduzíveis do
-  portfólio. **B2** fica adiada e não terá implementação até existir uma
-  decisão explícita de produto para tradução de interface, incluindo formato,
-  diretório, identificação, idioma, precedência e fallback.
+  portfólio. **B2 — decisão confirmada pelo usuário em 2026-09-05:** fica
+  adiada e não terá implementação até existir uma decisão explícita de produto
+  para tradução de interface, incluindo formato, diretório, identificação,
+  idioma, precedência e fallback.
 - **B6 e Roblox:** o runtime não declara `Roblox` como `supported`. A fixture
   `tl_worker_rsl.exe` não substitui o executável comercial `Worker`/`RSL`.
   B6 só será reaberta com a amostra exata, hash registrado, `install --prefix`,
