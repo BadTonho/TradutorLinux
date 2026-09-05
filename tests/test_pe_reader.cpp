@@ -4,6 +4,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iterator>
+#include <cstring>
 #include <string>
 
 #include <gtest/gtest.h>
@@ -77,6 +78,41 @@ std::vector<std::byte> make_delay_import_pe() {
     spec.section_data = {std::vector<std::byte>(0x10), data};
     spec.delay_import_rva = kImportDataRva;
     spec.delay_import_size = 64;
+    return build(spec);
+}
+
+std::vector<std::byte> make_export_pe() {
+    constexpr std::uint32_t kExportRva = 0x2000;
+    std::vector<std::byte> data(0xA0, std::byte{0});
+    // IMAGE_EXPORT_DIRECTORY: dois exports, um nomeado e um ordinal-only
+    // forwarder para KERNEL32.ExitProcess.
+    write_u32(data, 12, kExportRva + 0x54);  // DLL name
+    write_u32(data, 16, 1);                  // ordinal base
+    write_u32(data, 20, 2);                  // number of functions
+    write_u32(data, 24, 1);                  // number of names
+    write_u32(data, 28, kExportRva + 0x40);  // functions
+    write_u32(data, 32, kExportRva + 0x48);  // names
+    write_u32(data, 36, kExportRva + 0x4C);  // name ordinals
+    write_u32(data, 0x40, 0x1000);           // ordinal 1 -> .text
+    write_u32(data, 0x44, kExportRva + 0x70);  // ordinal 2 -> forwarder
+    write_u32(data, 0x48, kExportRva + 0x60); // name pointer
+    write_u16(data, 0x4C, 0);                 // name maps to ordinal index 0
+    const auto put_string = [&data](const std::size_t offset, const char* value) {
+        const std::size_t length = std::strlen(value) + 1U;
+        ASSERT_LE(offset + length, data.size());
+        std::copy_n(reinterpret_cast<const std::byte*>(value), length,
+                    data.begin() + static_cast<std::ptrdiff_t>(offset));
+    };
+    put_string(0x54, "custom.dll");
+    put_string(0x60, "CustomEntry");
+    put_string(0x70, "KERNEL32.ExitProcess");
+
+    BuildSpec spec;
+    spec.coff_characteristics = 0x2022;  // EXECUTABLE_IMAGE | LARGE_ADDRESS_AWARE | DLL
+    spec.section_names = {".text", ".edata"};
+    spec.section_data = {std::vector<std::byte>(0x10), data};
+    spec.export_rva = kExportRva;
+    spec.export_size = 0xA0;
     return build(spec);
 }
 
@@ -259,6 +295,21 @@ TEST(PeReaderTest, ParsesImportsByNameAndOrdinal) {
     EXPECT_EQ(dll.symbols[0].name, "PrintA");
     EXPECT_TRUE(dll.symbols[1].by_ordinal);
     EXPECT_EQ(dll.symbols[1].ordinal, 5);
+}
+
+TEST(PeReaderTest, ParsesDllExportsByNameOrdinalAndForwarder) {
+    const ParseResult result = parse_pe(make_export_pe());
+
+    ASSERT_EQ(result.status, ParseStatus::Success) << result.error_message;
+    EXPECT_TRUE(result.info.is_dll);
+    ASSERT_EQ(result.info.exports.size(), 2U);
+    EXPECT_TRUE(result.info.exports[0].by_name);
+    EXPECT_EQ(result.info.exports[0].name, "CustomEntry");
+    EXPECT_EQ(result.info.exports[0].ordinal, 1U);
+    EXPECT_EQ(result.info.exports[0].rva, 0x1000U);
+    EXPECT_FALSE(result.info.exports[1].by_name);
+    EXPECT_EQ(result.info.exports[1].ordinal, 2U);
+    EXPECT_EQ(result.info.exports[1].forwarder, "KERNEL32.ExitProcess");
 }
 
 TEST(PeReaderTest, ParsesDelayImportsByNameAndOrdinal) {

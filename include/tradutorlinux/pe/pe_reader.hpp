@@ -38,6 +38,17 @@ struct ImportedDll {
     std::vector<ImportedSymbol> symbols;
 };
 
+// Um símbolo exportado de uma imagem PE32+ AMD64. `rva` aponta para o código
+// quando o export é direto. Quando o export é um forwarder, `forwarder`
+// contém o texto DLL.Funcao ou DLL.#Ordinal e `rva` aponta para essa string.
+struct ExportedSymbol {
+    bool by_name{};
+    std::string name;
+    std::uint16_t ordinal{};
+    std::uint32_t rva{};
+    std::string forwarder;
+};
+
 struct BaseRelocEntry {
     std::uint16_t type{};
     std::uint16_t offset{};
@@ -116,6 +127,7 @@ struct TlsDirectoryInfo {
 
 struct PeInfo {
     bool is_pe32_plus{};
+    bool is_dll{};
     std::uint16_t machine{};
     std::uint16_t number_of_sections{};
     std::uint32_t address_of_entry_point{};
@@ -126,6 +138,9 @@ struct PeInfo {
     std::uint16_t subsystem{};
     std::uint32_t import_directory_rva{};
     std::uint32_t import_directory_size{};
+    std::uint32_t export_directory_rva{};
+    std::uint32_t export_directory_size{};
+    std::uint32_t export_ordinal_base{};
     std::uint32_t resource_directory_rva{};
     std::uint32_t resource_directory_size{};
     std::uint32_t exception_directory_rva{};
@@ -139,6 +154,7 @@ struct PeInfo {
     TlsDirectoryInfo tls_info;
     std::vector<SectionInfo> sections;
     std::vector<ImportedDll> imports;
+    std::vector<ExportedSymbol> exports;
     // Imports descritos por IMAGE_DIRECTORY_ENTRY_DELAY_IMPORT. Eles mantêm
     // o mesmo contrato de símbolo/IAT dos imports estáticos, mas são
     // identificados separadamente pelo resolvedor e pelo diagnóstico.

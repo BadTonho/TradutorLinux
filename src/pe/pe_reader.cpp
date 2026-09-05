@@ -30,6 +30,7 @@ constexpr std::size_t kThunkEntrySize = 8;
 constexpr std::size_t kBaseRelocBlockHeaderSize = 8;
 constexpr std::size_t kBaseRelocEntrySize = 2;
 constexpr std::size_t kImportByNameHintSize = 2;
+constexpr std::size_t kExportDirectorySize = 40;
 
 constexpr std::uint16_t kDosMagic = 0x5A4D;
 constexpr std::uint32_t kPeSignature = 0x00004550;
@@ -45,6 +46,7 @@ constexpr std::uint64_t kOrdinalFlag64 = 0x8000000000000000ULL;
 constexpr std::uint32_t kDelayImportAttrRva = 0x1;
 
 constexpr std::size_t kDirImport = 1;
+constexpr std::size_t kDirExport = 0;
 constexpr std::size_t kDirResource = 2;
 constexpr std::size_t kDirException = 3;
 constexpr std::size_t kDirBaseReloc = 5;
@@ -56,6 +58,10 @@ constexpr std::size_t kMaxSymbolsPerDll = 4096;
 constexpr std::size_t kMaxRelocBlocks = 4096;
 constexpr std::size_t kMaxRuntimeFunctions = 65536;
 constexpr std::size_t kMaxCString = 65535;
+constexpr std::size_t kMaxExportFunctions = 65536;
+constexpr std::size_t kMaxExportNames = 65536;
+
+constexpr std::uint16_t kImageFileDll = 0x2000;
 
 constexpr std::uint8_t kUnwindVersion1 = 1;
 constexpr std::uint8_t kUnwindVersion2 = 2;
@@ -192,10 +198,12 @@ public:
         const std::size_t coff_offset = nt_offset + kPeSignatureOffset;
         std::uint16_t machine{};
         std::uint16_t section_count{};
+        std::uint16_t characteristics{};
         std::uint16_t optional_size{};
         reader_.read_u16(coff_offset, machine);
         reader_.read_u16(coff_offset + 2, section_count);
         reader_.read_u16(coff_offset + 16, optional_size);
+        reader_.read_u16(coff_offset + 18, characteristics);
 
         if (machine != kMachineAmd64) {
             return fail(ParseStatus::UnsupportedArchitecture,
@@ -230,6 +238,7 @@ public:
 
         PeInfo info;
         info.is_pe32_plus = true;
+        info.is_dll = (characteristics & kImageFileDll) != 0;
         info.machine = machine;
         info.number_of_sections = section_count;
         reader_.read_u32(opt_offset + 16, info.address_of_entry_point);
@@ -258,6 +267,12 @@ public:
         }
         const std::size_t directory_offset = opt_offset + kOptionalHeader64BaseSize;
 
+        if (directory_count > kDirExport) {
+            reader_.read_u32(directory_offset + kDirExport * kDataDirectoryEntrySize,
+                             info.export_directory_rva);
+            reader_.read_u32(directory_offset + kDirExport * kDataDirectoryEntrySize + 4,
+                             info.export_directory_size);
+        }
         if (directory_count > kDirImport) {
             reader_.read_u32(directory_offset + kDirImport * kDataDirectoryEntrySize,
                              info.import_directory_rva);
@@ -338,6 +353,9 @@ public:
         }
 
         parser_state_ = std::move(info);
+        if (auto error = parse_exports()) {
+            return *error;
+        }
         if (auto error = parse_imports()) {
             return *error;
         }
@@ -384,6 +402,145 @@ private:
                 }
                 return static_cast<std::size_t>(file_offset);
             }
+        }
+        return std::nullopt;
+    }
+
+    [[nodiscard]] std::optional<ParseResult> parse_exports() {
+        if (parser_state_.export_directory_rva == 0 &&
+            parser_state_.export_directory_size == 0) {
+            return std::nullopt;
+        }
+        if (parser_state_.export_directory_size < kExportDirectorySize) {
+            return fail(ParseStatus::Malformed,
+                        "diretório de exports menor que o descritor IMAGE_EXPORT_DIRECTORY");
+        }
+        const std::optional<std::size_t> directory = rva_to_file_offset(
+            {parser_state_.export_directory_rva, parser_state_.export_directory_size});
+        if (!directory.has_value()) {
+            return fail(ParseStatus::Malformed,
+                        "diretório de exports fora da imagem");
+        }
+
+        std::uint32_t name_rva{};
+        std::uint32_t ordinal_base{};
+        std::uint32_t function_count{};
+        std::uint32_t name_count{};
+        std::uint32_t functions_rva{};
+        std::uint32_t names_rva{};
+        std::uint32_t name_ordinals_rva{};
+        reader_.read_u32(*directory + 12, name_rva);
+        reader_.read_u32(*directory + 16, ordinal_base);
+        reader_.read_u32(*directory + 20, function_count);
+        reader_.read_u32(*directory + 24, name_count);
+        reader_.read_u32(*directory + 28, functions_rva);
+        reader_.read_u32(*directory + 32, names_rva);
+        reader_.read_u32(*directory + 36, name_ordinals_rva);
+
+        if (name_rva != 0 && !rva_to_file_offset({name_rva, 1}).has_value()) {
+            return fail(ParseStatus::Malformed, "nome da DLL exportadora fora da imagem");
+        }
+        if (function_count > kMaxExportFunctions || name_count > kMaxExportNames ||
+            name_count > function_count) {
+            return fail(ParseStatus::Malformed, "tabelas de exports excedem os limites suportados");
+        }
+        if (function_count > 0 && functions_rva == 0) {
+            return fail(ParseStatus::Malformed, "tabela de endereços de exports ausente");
+        }
+        if (name_count > 0 && (names_rva == 0 || name_ordinals_rva == 0)) {
+            return fail(ParseStatus::Malformed, "tabelas de nomes de exports ausentes");
+        }
+        if (ordinal_base > std::numeric_limits<std::uint16_t>::max() ||
+            function_count > static_cast<std::uint32_t>(std::numeric_limits<std::uint16_t>::max()) -
+                                 ordinal_base + 1U) {
+            return fail(ParseStatus::Malformed, "ordinais de exports excedem 16 bits");
+        }
+
+        std::vector<std::uint32_t> function_rvas(function_count, 0);
+        if (function_count > 0) {
+            const std::uint64_t bytes = static_cast<std::uint64_t>(function_count) * 4U;
+            if (bytes > std::numeric_limits<std::uint32_t>::max() ||
+                !rva_to_file_offset({functions_rva, static_cast<std::uint32_t>(bytes)}).has_value()) {
+                return fail(ParseStatus::Malformed, "tabela de endereços de exports fora da imagem");
+            }
+            const std::size_t table = *rva_to_file_offset(
+                {functions_rva, static_cast<std::uint32_t>(bytes)});
+            for (std::size_t index = 0; index < function_rvas.size(); ++index) {
+                if (!reader_.read_u32(table + index * 4U, function_rvas[index])) {
+                    return fail(ParseStatus::Truncated, "tabela de endereços de exports truncada");
+                }
+            }
+        }
+
+        std::vector<std::string> export_names(function_count);
+        std::vector<bool> has_name(function_count, false);
+        if (name_count > 0) {
+            const std::uint64_t name_bytes = static_cast<std::uint64_t>(name_count) * 4U;
+            const std::uint64_t ordinal_bytes = static_cast<std::uint64_t>(name_count) * 2U;
+            if (name_bytes > std::numeric_limits<std::uint32_t>::max() ||
+                ordinal_bytes > std::numeric_limits<std::uint32_t>::max()) {
+                return fail(ParseStatus::Malformed, "tabelas de nomes de exports muito grandes");
+            }
+            const auto names_table = rva_to_file_offset(
+                {names_rva, static_cast<std::uint32_t>(name_bytes)});
+            const auto ordinals_table = rva_to_file_offset(
+                {name_ordinals_rva, static_cast<std::uint32_t>(ordinal_bytes)});
+            if (!names_table.has_value() || !ordinals_table.has_value()) {
+                return fail(ParseStatus::Malformed, "tabelas de nomes de exports fora da imagem");
+            }
+            for (std::size_t index = 0; index < name_count; ++index) {
+                std::uint32_t export_name_rva{};
+                std::uint16_t function_index{};
+                if (!reader_.read_u32(*names_table + index * 4U, export_name_rva) ||
+                    !reader_.read_u16(*ordinals_table + index * 2U, function_index) ||
+                    function_index >= function_count) {
+                    return fail(ParseStatus::Malformed, "índice de nome de export inválido");
+                }
+                const auto name_offset = rva_to_file_offset({export_name_rva, 1});
+                if (!name_offset.has_value()) {
+                    return fail(ParseStatus::Malformed, "nome de export fora da imagem");
+                }
+                const auto export_name = reader_.read_cstring(*name_offset);
+                if (!export_name.has_value() || export_name->empty() ||
+                    has_name[function_index]) {
+                    return fail(ParseStatus::Malformed, "nome de export inválido ou repetido");
+                }
+                export_names[function_index] = *export_name;
+                has_name[function_index] = true;
+            }
+        }
+
+        const std::uint64_t export_end = static_cast<std::uint64_t>(
+            parser_state_.export_directory_rva) + parser_state_.export_directory_size;
+        parser_state_.export_ordinal_base = ordinal_base;
+        parser_state_.exports.reserve(function_count);
+        for (std::size_t index = 0; index < function_rvas.size(); ++index) {
+            const std::uint32_t function_rva = function_rvas[index];
+            if (function_rva == 0) continue;
+            if (function_rva >= parser_state_.size_of_image) {
+                return fail(ParseStatus::Malformed, "RVA de export fora da imagem");
+            }
+            ExportedSymbol export_{
+                .by_name = has_name[index],
+                .name = std::move(export_names[index]),
+                .ordinal = static_cast<std::uint16_t>(ordinal_base + index),
+                .rva = function_rva,
+                .forwarder = {},
+            };
+            if (static_cast<std::uint64_t>(function_rva) >=
+                    parser_state_.export_directory_rva &&
+                static_cast<std::uint64_t>(function_rva) < export_end) {
+                const auto forwarder_offset = rva_to_file_offset({function_rva, 1});
+                if (!forwarder_offset.has_value()) {
+                    return fail(ParseStatus::Malformed, "forwarder de export fora do arquivo");
+                }
+                const auto forwarder = reader_.read_cstring(*forwarder_offset);
+                if (!forwarder.has_value() || forwarder->empty()) {
+                    return fail(ParseStatus::Malformed, "forwarder de export inválido");
+                }
+                export_.forwarder = *forwarder;
+            }
+            parser_state_.exports.push_back(std::move(export_));
         }
         return std::nullopt;
     }

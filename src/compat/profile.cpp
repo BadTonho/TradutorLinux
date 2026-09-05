@@ -29,6 +29,7 @@ public:
         bool app_sha256_seen = false;
         bool app_version_seen = false;
         bool files_seen = false;
+        bool dlls_seen = false;
 
         skip_whitespace();
         if (consume_raw('}')) return fail(error, "o perfil não pode ser vazio");
@@ -64,6 +65,11 @@ public:
                     return fail(error, "campo files inválido ou repetido");
                 }
                 files_seen = true;
+            } else if (key == "dlls") {
+                if (dlls_seen || !parse_dlls(profile.dlls)) {
+                    return fail(error, "campo dlls inválido ou repetido");
+                }
+                dlls_seen = true;
             } else {
                 return fail(error, "campo desconhecido: " + key);
             }
@@ -201,6 +207,54 @@ private:
         }
     }
 
+    [[nodiscard]] bool parse_dlls(std::vector<DllMapping>& dlls) {
+        skip_whitespace();
+        if (!consume_raw('[')) return false;
+        skip_whitespace();
+        if (consume_raw(']')) return true;
+
+        while (true) {
+            if (!consume_raw('{')) return false;
+            DllMapping mapping;
+            bool module_seen = false;
+            bool source_seen = false;
+            skip_whitespace();
+            if (peek_raw('}')) return false;
+
+            while (true) {
+                std::string key;
+                if (!parse_string(key)) return false;
+                skip_whitespace();
+                if (!consume_raw(':')) return false;
+                if (key == "module") {
+                    if (module_seen || !parse_string(mapping.module)) return false;
+                    module_seen = true;
+                } else if (key == "source") {
+                    std::string source;
+                    if (source_seen || !parse_string(source)) return false;
+                    mapping.source = std::filesystem::path{source};
+                    source_seen = true;
+                } else {
+                    return false;
+                }
+
+                skip_whitespace();
+                if (consume_raw('}')) break;
+                if (!consume_raw(',')) return false;
+                skip_whitespace();
+                if (peek_raw('}')) return false;
+            }
+            if (!module_seen || !source_seen) return false;
+            dlls.push_back(std::move(mapping));
+
+            skip_whitespace();
+            if (consume_raw(']')) return true;
+            if (!consume_raw(',')) return false;
+            skip_whitespace();
+            if (peek_raw(']')) return false;
+        }
+    }
+
     [[nodiscard]] bool fail(std::string& error, std::string message) {
         error = std::move(message) + " (posição " + std::to_string(position_) + ")";
         return false;
@@ -256,6 +310,21 @@ private:
     return source.native().find('\\') == std::string::npos;
 }
 
+[[nodiscard]] bool normalize_dll_module(std::string& module) {
+    if (module.empty() || module.size() > 255U || module.find_first_of("/\\:") != std::string::npos) {
+        return false;
+    }
+    for (const char character : module) {
+        if (std::isalnum(static_cast<unsigned char>(character)) == 0 && character != '-' &&
+            character != '_' && character != '.') {
+            return false;
+        }
+    }
+    module = lowercase(std::move(module));
+    if (!module.ends_with(".dll")) module += ".dll";
+    return module.size() > 4U && module != ".dll";
+}
+
 [[nodiscard]] bool is_c_drive_target(const std::string_view target) noexcept {
     return target.size() >= 3U &&
            (target[0] == 'C' || target[0] == 'c') && target[1] == ':' &&
@@ -296,6 +365,10 @@ std::filesystem::path files_directory(const std::filesystem::path& prefix_root) 
     return prefix::get_environment_paths(prefix_root).compat_files_dir;
 }
 
+std::filesystem::path dlls_directory(const std::filesystem::path& prefix_root) {
+    return prefix::get_environment_paths(prefix_root).compat_dlls_dir;
+}
+
 ProfileLoadResult load_profile(const std::filesystem::path& prefix_root,
                                const std::string_view expected_app_id,
                                const std::string_view expected_app_sha256,
@@ -331,7 +404,12 @@ ProfileLoadResult load_profile(const std::filesystem::path& prefix_root,
     if (!JsonParser{contents}.parse(profile, parse_error)) {
         return invalid_result(parse_error);
     }
-    if (profile.schema != 1U) return invalid_result("schema de perfil não suportado");
+    if (profile.schema != 1U && profile.schema != 2U) {
+        return invalid_result("schema de perfil não suportado");
+    }
+    if (profile.schema == 1U && !profile.dlls.empty()) {
+        return invalid_result("campo dlls requer schema 2");
+    }
     if (!is_safe_app_id(profile.app_id) || profile.app_id != expected_app_id) {
         return invalid_result("app_id do perfil não corresponde ao aplicativo");
     }
@@ -350,6 +428,31 @@ ProfileLoadResult load_profile(const std::filesystem::path& prefix_root,
     }
 
     const auto paths = prefix::get_environment_paths(prefix_root);
+    std::vector<std::string> normalized_dll_modules;
+    normalized_dll_modules.reserve(profile.dlls.size());
+    for (DllMapping& mapping : profile.dlls) {
+        if (!normalize_dll_module(mapping.module)) {
+            return invalid_result("módulo de DLL inválido");
+        }
+        if (std::find(normalized_dll_modules.begin(), normalized_dll_modules.end(), mapping.module) !=
+            normalized_dll_modules.end()) {
+            return invalid_result("mapeamento de DLL duplicado");
+        }
+        normalized_dll_modules.push_back(mapping.module);
+        if (!is_relative_source(mapping.source)) {
+            return invalid_result("origem de DLL deve ser relativa e usar apenas '/'");
+        }
+        const std::filesystem::path source = paths.compat_dlls_dir / mapping.source;
+        if (!prefix::is_path_within(source, paths.compat_dlls_dir)) {
+            return invalid_result("origem de DLL fora de compat/dlls");
+        }
+        const bool source_is_symlink = std::filesystem::is_symlink(source, ec);
+        if (source_is_symlink ||
+            (std::filesystem::exists(source, ec) &&
+             !std::filesystem::is_regular_file(source, ec))) {
+            return invalid_result("origem de DLL deve ser um arquivo regular sem symlink");
+        }
+    }
     for (const FileMapping& mapping : profile.files) {
         if (!is_relative_source(mapping.source)) {
             return invalid_result("origem de arquivo deve ser relativa e usar apenas '/' ");

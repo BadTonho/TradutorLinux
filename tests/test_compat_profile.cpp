@@ -40,6 +40,13 @@ protected:
         output << "compatibility fixture\n";
     }
 
+    void write_dll_source(const std::string_view name = "compat.dll") {
+        std::ofstream output(dlls_directory(root_) / std::filesystem::path{name},
+                             std::ios::binary | std::ios::trunc);
+        ASSERT_TRUE(output);
+        output << "not a PE yet\n";
+    }
+
     std::filesystem::path root_;
 };
 
@@ -48,7 +55,71 @@ TEST_F(CompatProfileTest, PrefixCreatesPrivateCompatibilityTree) {
 
     EXPECT_TRUE(std::filesystem::is_directory(paths.compat_dir));
     EXPECT_TRUE(std::filesystem::is_directory(paths.compat_files_dir));
+    EXPECT_TRUE(std::filesystem::is_directory(paths.compat_dlls_dir));
     EXPECT_FALSE(std::filesystem::is_directory(paths.drive_c / "compat"));
+}
+
+TEST_F(CompatProfileTest, LoadsSchema2WithExplicitDllMapping) {
+    write_dll_source("shim.bin");
+    write_profile(R"json({
+  "schema": 2,
+  "app_id": "fixture",
+  "files": [],
+  "dlls": [{"module": "KERNEL32", "source": "shim.bin"}]
+})json");
+
+    const ProfileLoadResult result = load_profile(root_, "fixture");
+
+    ASSERT_EQ(result.status, ProfileStatus::Loaded);
+    ASSERT_EQ(result.profile.schema, 2U);
+    ASSERT_EQ(result.profile.dlls.size(), 1U);
+    EXPECT_EQ(result.profile.dlls[0].module, "kernel32.dll");
+    EXPECT_EQ(result.profile.dlls[0].source, std::filesystem::path{"shim.bin"});
+}
+
+TEST_F(CompatProfileTest, Schema1CannotDeclareDlls) {
+    write_profile(R"json({
+  "schema": 1,
+  "app_id": "fixture",
+  "files": [],
+  "dlls": [{"module": "compat.dll", "source": "compat.dll"}]
+})json");
+
+    const ProfileLoadResult result = load_profile(root_, "fixture");
+
+    EXPECT_EQ(result.status, ProfileStatus::Invalid);
+    EXPECT_NE(result.error.find("schema 2"), std::string::npos);
+}
+
+TEST_F(CompatProfileTest, DuplicateDllModulesAreRejectedCaseInsensitively) {
+    write_profile(R"json({
+  "schema": 2,
+  "app_id": "fixture",
+  "files": [],
+  "dlls": [
+    {"module": "compat.dll", "source": "one.dll"},
+    {"module": "COMPAT", "source": "two.dll"}
+  ]
+})json");
+
+    const ProfileLoadResult result = load_profile(root_, "fixture");
+
+    EXPECT_EQ(result.status, ProfileStatus::Invalid);
+    EXPECT_NE(result.error.find("DLL duplicado"), std::string::npos);
+}
+
+TEST_F(CompatProfileTest, MissingDllSourceRemainsAProviderFailure) {
+    write_profile(R"json({
+  "schema": 2,
+  "app_id": "fixture",
+  "files": [],
+  "dlls": [{"module": "compat.dll", "source": "missing.dll"}]
+})json");
+
+    const ProfileLoadResult result = load_profile(root_, "fixture");
+
+    ASSERT_EQ(result.status, ProfileStatus::Loaded);
+    ASSERT_EQ(result.profile.dlls.size(), 1U);
 }
 
 TEST_F(CompatProfileTest, MissingProfileFallsBackWithoutLoading) {

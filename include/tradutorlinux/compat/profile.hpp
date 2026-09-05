@@ -13,12 +13,18 @@ struct FileMapping {
     std::string target;
 };
 
+struct DllMapping {
+    std::string module;
+    std::filesystem::path source;
+};
+
 struct Profile {
     std::uint32_t schema{0};
     std::string app_id;
     std::string app_sha256;
     std::string app_version;
     std::vector<FileMapping> files;
+    std::vector<DllMapping> dlls;
 };
 
 enum class ProfileStatus {
@@ -36,6 +42,8 @@ struct ProfileLoadResult {
 [[nodiscard]] std::filesystem::path profile_path(
     const std::filesystem::path& prefix_root);
 [[nodiscard]] std::filesystem::path files_directory(
+    const std::filesystem::path& prefix_root);
+[[nodiscard]] std::filesystem::path dlls_directory(
     const std::filesystem::path& prefix_root);
 
 [[nodiscard]] ProfileLoadResult load_profile(

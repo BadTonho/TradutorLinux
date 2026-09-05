@@ -45,6 +45,7 @@ EnvironmentPaths get_environment_paths(const std::filesystem::path& prefix_root)
     paths.temp_dir = paths.windows_dir / "temp";
     paths.compat_dir = prefix_root / "compat";
     paths.compat_files_dir = paths.compat_dir / "files";
+    paths.compat_dlls_dir = paths.compat_dir / "dlls";
     return paths;
 }
 
@@ -69,6 +70,8 @@ bool initialize_prefix(const std::filesystem::path& prefix_root) {
     std::filesystem::create_directories(paths.temp_dir, ec);
     if (ec) return false;
     std::filesystem::create_directories(paths.compat_files_dir, ec);
+    if (ec) return false;
+    std::filesystem::create_directories(paths.compat_dlls_dir, ec);
     if (ec) return false;
 
     // Criar symlinks de compatibilidade de caixa (Windows / System32)

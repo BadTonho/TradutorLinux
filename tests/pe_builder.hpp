@@ -70,6 +70,7 @@ inline void write_u64(std::vector<std::byte>& bytes, const std::size_t offset,
 
 struct BuildSpec {
     std::uint16_t machine{kMachineAmd64};
+    std::uint16_t coff_characteristics{0x22};
     std::uint16_t section_count{2};
     std::uint16_t optional_size{240};
     std::uint32_t entry_point{0x1000};
@@ -80,6 +81,8 @@ struct BuildSpec {
     std::uint32_t number_of_rva_and_sizes{16};
     std::uint32_t import_rva{};
     std::uint32_t import_size{};
+    std::uint32_t export_rva{};
+    std::uint32_t export_size{};
     std::uint32_t exception_rva{};
     std::uint32_t exception_size{};
     std::uint32_t delay_import_rva{};
@@ -103,7 +106,7 @@ inline std::vector<std::byte> build(const BuildSpec& spec) {
     push_u32(out, 0);
     push_u32(out, 0);
     push_u16(out, spec.optional_size);
-    push_u16(out, 0x22);
+    push_u16(out, spec.coff_characteristics);
 
     const std::size_t opt_start = out.size();
     push_u16(out, 0x20B);
@@ -141,6 +144,10 @@ inline std::vector<std::byte> build(const BuildSpec& spec) {
     if (spec.import_rva != 0 || spec.import_size != 0) {
         write_u32(out, opt_start + 112 + 8, spec.import_rva);
         write_u32(out, opt_start + 112 + 8 + 4, spec.import_size);
+    }
+    if (spec.export_rva != 0 || spec.export_size != 0) {
+        write_u32(out, opt_start + 112, spec.export_rva);
+        write_u32(out, opt_start + 112 + 4, spec.export_size);
     }
     if (spec.exception_rva != 0 || spec.exception_size != 0) {
         constexpr std::size_t kExceptionDirectory = 3;

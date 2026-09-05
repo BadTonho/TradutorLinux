@@ -20,6 +20,7 @@ struct EnvironmentPaths {
     std::filesystem::path temp_dir;
     std::filesystem::path compat_dir;
     std::filesystem::path compat_files_dir;
+    std::filesystem::path compat_dlls_dir;
 };
 
 // Retorna o caminho padrão do prefixo do TradutorLinux (~/.tradutorlinux)
