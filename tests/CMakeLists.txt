@@ -321,5 +321,19 @@ if(TARGET tradutorlinux_samples AND TARGET tradutorlinux)
                 TIMEOUT 240
             )
         endif()
+        add_test(
+            NAME integration_proton_isolation
+            COMMAND "${CMAKE_COMMAND}"
+                "-DRUNTIME=$<TARGET_FILE:tradutorlinux>"
+                "-DFIXTURE=${CMAKE_CURRENT_BINARY_DIR}/samples/generated/tl_compat_file.exe"
+                "-DPROTON_ROOT=${TL_PROTON_ROOT}"
+                "-DWORK=${CMAKE_CURRENT_BINARY_DIR}/proton_isolation_work"
+                -P "${CMAKE_CURRENT_SOURCE_DIR}/samples/verify_proton_isolation.cmake"
+        )
+        set_tests_properties(integration_proton_isolation PROPERTIES
+            DEPENDS "fixture_tl_compat_file_metadata;report_tl_compat_file_support"
+            LABELS "runtime;pe32plus;backend;proton;compat;files;isolation"
+            TIMEOUT 420
+        )
     endif()
 endif()

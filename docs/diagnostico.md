@@ -115,6 +115,18 @@ Para o slice de áudio, `integration_proton_audio` usa
 prova a cadeia de engine/vozes no host de teste, não a qualidade do som nem a
 compatibilidade de todo dispositivo ou codec.
 
+O piloto real de isolamento usa `integration_proton_isolation` com
+`tl_compat_file.exe`, os IDs `proton-isolation-a` e `proton-isolation-b` e
+prefixos separados. Ambos os perfis podem declarar o mesmo destino Windows;
+os marcadores diferentes permitem confirmar pelo stdout que cada execução leu
+somente sua fonte. O teste exige, para cada ID, os eventos `provider-selected`,
+`staging-complete`, `launch`, `files-cleanup` e `exit`, além de confirmar que o
+destino temporário foi removido, a fonte nativa permaneceu e nenhum diretório
+`compat/` foi copiado para o `drive_c` Proton. Os manifestos e executáveis
+estagiados continuam separados. Essa integração passou em Debug e Sanitize
+com Proton Experimental real; ela promove o backend como opcional, não declara
+suporte a aplicativos do catálogo e mantém Roblox como alvo exploratório.
+
 O componente `proton` pode ser selecionado com `--trace=proton` ou incluído
 em `--trace=proton,process`. Um backend solicitado sem launcher, componentes,
 arquitetura, hash ou versão mínima válidos registra `provider-rejected` e

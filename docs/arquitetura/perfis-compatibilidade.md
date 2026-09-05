@@ -303,3 +303,22 @@ rejeição do perfil mantém o fallback genérico, preserva o exit code do
 convidado e não permite vazamento de dados entre aplicativos ou prefixos. O
 7-Zip continua sem regra declarativa específica; a B14.4 trata apenas da
 extensão PE documentada acima.
+
+## Piloto real e isolamento entre prefixos na B14.6.6
+
+A promoção da B14.6.6 usa a integração real `integration_proton_isolation` com
+`tl_compat_file.exe` e a instalação Proton configurada por `TL_PROTON_ROOT`.
+O mesmo binário é cadastrado nos IDs `proton-isolation-a` e
+`proton-isolation-b`, cada um com seu próprio prefixo, perfil e
+`compat/files/injected.dat`. Os perfis declaram o mesmo destino Windows, mas
+as fontes contêm marcadores diferentes (`proton profile a` e `proton profile b`).
+
+As execuções sequenciais passam em Debug e Sanitize: cada fixture lê somente o
+marcador do seu prefixo, retorna `0`, altera o arquivo materializado e deixa o
+adaptador removê-lo sem apagar a fonte nativa. O executável estagiado, o
+manifesto e o prefixo Proton permanecem independentes; `compat/` não aparece em
+nenhuma árvore `drive_c`. A validação complementa o piloto mockado de
+`tl_proton_probe.exe` e preserva o fallback nativo para perfis sem backend
+Proton. Ela não constitui suporte a aplicativos do catálogo, especialmente
+Roblox, que continua dependendo de um teste real próprio e de limitações
+publicadas.

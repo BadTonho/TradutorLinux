@@ -1187,16 +1187,18 @@ imports não encerra B5.
      validadas por testes reproduzíveis, a base de perfis foi integrada e
      promovida; o runtime usa comportamento genérico quando não houver extensão
      aplicável.
-  6. [ ] **B14.6 — Backend Proton opcional (em progresso).** Integrar uma
+  6. [x] **B14.6 — Backend Proton opcional.** Integrar uma
      distribuição Proton versionada como backend separado para aplicativos que
      exigem uma camada Win32/DirectX maior que o subconjunto próprio, mantendo
      o runtime TradutorLinux como backend padrão e preservando a seleção por
      aplicativo. O contrato, a validação, o staging isolado e o piloto com
-     mock já foram implementados. A matriz de componentes reais controlados
+     mock foram implementados e o piloto real foi promovido. A matriz de
+     componentes reais controlados
      agora cobre D3D11→DXVK/Vulkan, D3D12→VKD3D-Proton/Vulkan, entrada de
      janela e XAudio2, todos validados em Debug e Sanitize com Proton
-     Experimental. A promoção final ainda aguarda a B14.6.6, com piloto real
-     de prefixos independentes e critérios de aplicação-alvo. O Proton não
+     Experimental. A B14.6.6 também confirmou dois aplicativos cadastrados em
+     prefixos independentes, com fallback nativo preservado e sem vazamento de
+     arquivos. O Proton não
      será reimplementado do zero nem carregado como biblioteca Linux
      arbitrária a partir de `compat/`.
 
@@ -1249,16 +1251,21 @@ imports não encerra B5.
        Proton Experimental e o servidor de áudio do host. A evidência cobre
        somente esses slices controlados, não fidelidade perceptual, codecs,
        raw input, gamepad/XInput ou suporte amplo por instalar o backend.
-     - [ ] **B14.6.6 — Piloto real e promoção.** A fixture PE32+
+     - [x] **B14.6.6 — Piloto real e promoção.** A fixture PE32+
        `tl_proton_probe.exe` e o teste `integration_proton_backend` já cobrem o
        piloto controlado com mock, incluindo seleção, staging, ambiente,
        limpeza e ausência de fallback. O teste real
        `integration_proton_graphics` já prova a execução de uma fixture em uma
-       instalação Proton configurada, mas esta subetapa só será concluída com
-       execução reproduzível e validação de prefixos independentes, além das
-       limitações publicadas. Roblox poderá ser avaliado aqui, mas só será
-       marcado como suportado após teste real reproduzível, inclusive de
-       launcher, rede, gráficos e bloqueios do fornecedor.
+       instalação Proton configurada. A integração real
+       `integration_proton_isolation` reutiliza `tl_compat_file.exe` com os IDs
+       `proton-isolation-a` e `proton-isolation-b`, dois prefixos independentes
+       e conteúdos distintos para o mesmo destino Windows; em Debug e Sanitize
+       cada execução observou somente sua fonte, retornou `0`, preservou a
+       origem, removeu o destino temporário e manteve staging/manifesto isolados.
+       As limitações do backend e dos componentes estão publicadas na matriz e
+       no diagnóstico. Roblox continua apenas exploratório e não é marcado como
+       suportado: ainda exige execução reproduzível de launcher, rede, gráficos
+       e bloqueios do fornecedor.
 - [x] **B15 — Drives do prefixo como symlinks ou mecanismo equivalente.** O
   prefixo cria `dosdevices/c:` → `../drive_c` e `dosdevices/z:` → `/`; a
   resolução de `C:` canoniza e confina o caminho ao `drive_c`, enquanto `Z:`
