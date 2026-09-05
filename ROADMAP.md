@@ -610,8 +610,10 @@ compatibilidade imediata com qualquer executável, jogo ou mecanismo protegido.
 - [x] Fixar o núcleo reproduzível do portfólio com fontes, versões, hashes,
   manifests e regressões para `xxd`, `bzip2`, `dos2unix`/`unix2dos` e
   `simple-todo`, além das fixtures de instalador e rede;
-- [ ] Completar o portfólio versionado com representantes reais adicionais de
-  instalador, GUI de produtividade e ferramenta de rede autorizada (item `B5`).
+- [x] Completar o portfólio versionado com representantes reais adicionais de
+  instalador (`WinRAR`), GUI de produtividade (`7zFM`/`Notepad++`) e ferramenta
+  de rede (`PuTTY`); os níveis funcionais continuam separados da existência
+  do registro e permanecem publicados na matriz (item `B5`).
 - [x] **Prioridade 13.1 — instaladores x64 nativos:** usar as amostras WinRAR,
   Logitech G HUB, Rockstar e Roblox como evidência de cobertura, mas escolher
   um instalador PE32+ x86-64 reproduzível como alvo de regressão inicial.
@@ -879,9 +881,10 @@ quantidade de APIs declaradas sem uso real.
 - [x] Implementar famílias de DLLs por demanda: `KERNEL32`, `NTDLL` limitada, `ADVAPI32`, `USER32`, `GDI32`, `SHELL32`, `OLE32`, `COMDLG32`, `WS2_32`, `WININET`, `WINTRUST`, `CRYPT32` e CRTs (23 módulos `tests/test_module.cpp:87`).
 - [x] Criar testes de integração por aplicativo e uma matriz pública de limitações (`docs/compatibilidade.md` + `tests/samples` 36 fixtures).
 - [x] Adicionar execução isolada, timeout e diagnóstico para que aplicativos grandes não derrubem o host (`process/isolate.cpp` `71`/`72`).
-- [ ] Definir e implementar limites efetivos de CPU/RAM por aplicativo; o
-  isolamento de processo e o timeout não equivalem a contenção de recursos
-  (item `B1`).
+- [x] Definir e implementar limites efetivos de CPU/RAM por aplicativo; o
+  isolamento de processo e o timeout não equivalem a contenção de recursos.
+  `--cpu`/`--memory`, `RLIMIT_CPU`/`RLIMIT_AS` e a herança em processos-filhos
+  são validados pela B1.
 - [x] Avaliar compatibilidade por versões e builds específicos, sem assumir que
   duas versões do mesmo aplicativo usam as mesmas APIs; os targets reproduzíveis
   são fixados por versão, commit/hash, arquitetura e toolchain.
