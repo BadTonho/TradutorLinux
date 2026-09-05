@@ -29,6 +29,9 @@ as referências nas fases não criem listas paralelas.
 - **Próximo ciclo:** B2 fica estacionada até uma decisão de produto específica
   sobre tradução de interface; B6 e B9 continuam condicionadas a evidência
   externa. B1, B8, B10, B12, B15 e B16 deste ciclo foram concluídas.
+- **Decisões vigentes:** a triagem dos itens condicionais está registrada em
+  [Decisões registradas](#decisões-registradas--2026-09-05); nenhuma API ou
+  capacidade será ampliada apenas para eliminar uma caixa desmarcada.
 - **Último incremento:** a Fase 13.14 concluiu TLS genérico e a fixture
   reutilizável Worker/RSL. O caso comercial do Roblox continua como benchmark:
   imports resolvidos, mas execução interrompida em `RBXCRASH`/`ExitProcess 3`.
@@ -940,6 +943,49 @@ Este inventário reúne as pendências de `PROXIMAS-ETAPAS.md`,
 `ANALISE-CRITICA.md`, `ideia.md`, `docs/propostas-evolucao.md` e da proposta de
 reorganização. Ele é a única lista de trabalho aberta do projeto. Uma tarefa
 fica pronta somente com a evidência exigida na definição de pronto abaixo.
+
+### Decisões registradas — 2026-09-05
+
+Estas decisões encerram a triagem do ciclo e orientam o backlog. Elas não
+marcam itens condicionais como concluídos; definem os gates para retomá-los.
+
+- **Direção do produto:** a prioridade continua sendo o runtime Win32, o
+  loader, a ABI, memória, imports, diagnóstico e fluxos reproduzíveis do
+  portfólio. **B2** fica adiada e não terá implementação até existir uma
+  decisão explícita de produto para tradução de interface, incluindo formato,
+  diretório, identificação, idioma, precedência e fallback.
+- **B6 e Roblox:** o runtime não declara `Roblox` como `supported`. A fixture
+  `tl_worker_rsl.exe` não substitui o executável comercial `Worker`/`RSL`.
+  B6 só será reaberta com a amostra exata, hash registrado, `install --prefix`,
+  `app run`, trace e efeitos observáveis reproduzíveis.
+- **B9 e unwind:** não será criada uma exceção exclusiva para Roblox. A forma
+  não canônica de `UWOP_SET_FPREG` só entra após outra aplicação confirmar a
+  mesma semântica e uma fixture determinística proteger o comportamento.
+- **B11 e objetos:** as tabelas separadas de arquivos, sincronização, threads
+  e mapeamentos permanecem. O cabeçalho comum só será iniciado por uma
+  regressão de handle misturado ou por uma medição concreta de benefício de
+  manutenção.
+- **B13 e codepages:** permanecem como dados estáticos os codepages já exigidos
+  pelo portfólio (`0`, `1252`, `437` e `65001`). A extração para dados gerados
+  só será feita quando um alvo exigir outra página, com fonte versionada e
+  testes de conversão e erro.
+- **B14 e overrides:** `TL_DLL_OVERRIDES` continua sendo um mecanismo técnico
+  de override de DLL. Não haverá política divergente por aplicativo/API sem
+  alvo, configuração, precedência, isolamento, diagnóstico e regressão
+  definidos antes.
+- **B17 e processos:** o protocolo atual de `fork`/`waitpid`/pipe é suficiente
+  para o portfólio conhecido. Um supervisor só será criado se um aplicativo
+  exigir estado compartilhado além desse protocolo.
+- **B18 e SEH:** permanece o subconjunto atual de exceções/unwind x64. C++,
+  `__finally` e outras extensões só entram com aplicativo-alvo, contrato e
+  fixture; sinais Linux continuam sendo tratados pelo isolamento do processo.
+- **B19 e novas famílias:** threadpool, ALPC e outras famílias abundantes não
+  entram por antecipação. Cada uma exigirá um alvo, um subconjunto pequeno,
+  trace, matriz e regressão.
+- **Gate comum:** toda retomada de item condicionado precisa registrar no
+  roadmap o alvo ou fixture, o contrato, a limitação, os testes unitários e de
+  integração, a atualização da matriz e a validação relevante antes de ser
+  marcada como concluída e receber seu commit.
 
 ### B4 — etapa concluída
 
