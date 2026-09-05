@@ -964,10 +964,10 @@ marcam itens condicionais como concluídos; definem os gates para retomá-los.
   etapa adiada. Não será criada uma exceção exclusiva para Roblox. A forma não
   canônica de `UWOP_SET_FPREG` só entra após outra aplicação confirmar a mesma
   semântica e uma fixture determinística proteger o comportamento.
-- **B11 e objetos:** as tabelas separadas de arquivos, sincronização, threads
-  e mapeamentos permanecem. O cabeçalho comum só será iniciado por uma
-  regressão de handle misturado ou por uma medição concreta de benefício de
-  manutenção.
+- **B11 e objetos — opção 1 confirmada pelo usuário em 2026-09-05:** manter a
+  etapa adiada. As tabelas separadas de arquivos, sincronização, threads e
+  mapeamentos permanecem. O cabeçalho comum só será iniciado por uma regressão
+  de handle misturado ou por uma medição concreta de benefício de manutenção.
 - **B13 e codepages:** permanecem como dados estáticos os codepages já exigidos
   pelo portfólio (`0`, `1252`, `437` e `65001`). A extração para dados gerados
   só será feita quando um alvo exigir outra página, com fonte versionada e
