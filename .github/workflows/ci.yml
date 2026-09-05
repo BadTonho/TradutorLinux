@@ -65,6 +65,35 @@ jobs:
       - name: Executar testes Sanitizers
         run: ctest --preset sanitize --output-on-failure
 
+  rust-ffi:
+    name: Rust FFI (${{ matrix.preset }})
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        preset: [debug-rust, sanitize-rust, release-rust]
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      - name: Instalar dependências
+        run: |
+          sudo apt update
+          sudo apt install --yes \
+            build-essential cmake ninja-build llvm gcc-mingw-w64-x86-64-win32 \
+            libx11-dev xvfb qt6-base-dev
+
+      - name: Instalar toolchain Rust fixada
+        run: rustup toolchain install 1.97.1 --profile minimal --no-self-update
+
+      - name: Configurar ${{ matrix.preset }}
+        run: cmake --preset ${{ matrix.preset }}
+
+      - name: Compilar probe Rust
+        run: cmake --build --preset ${{ matrix.preset }} --target tl_rust_ffi_probe --parallel 2
+
+      - name: Executar probe Rust
+        run: ctest --preset ${{ matrix.preset }} -R '^rust_ffi_probe$' --output-on-failure
+
   target-apps:
     name: Aplicativos-alvo reais (cross-build e imports)
     runs-on: ubuntu-24.04

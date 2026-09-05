@@ -1312,10 +1312,17 @@ imports não encerra B5.
     argumentos nulos, truncamento, múltiplos handles e chamadas concorrentes e
     passou em Debug, Sanitize e Release; `TL_BUILD_RUST=OFF` continua sem
     requisito Rust. Nenhum componente de produção foi migrado.
-  - [ ] **B20.2 — Toolchain reproduzível.** Integrar Cargo e CMake com versão
-    fixada, lockfile, builds Debug/Sanitize/Release e política para crates
-    externas, sem quebrar o build C++ nem aumentar o custo de desenvolvimento
-    além do benefício medido.
+  - [x] **B20.2 — Toolchain reproduzível.** Cargo e CMake agora usam a
+    toolchain Rust `1.97.1` fixada em `rust-toolchain.toml`, com `Cargo.toml`,
+    `Cargo.lock` versionado e builds `--locked --offline` sem crates externas.
+    Os presets `debug-rust`, `sanitize-rust` e `release-rust` preservam os
+    presets C++ normais sem Rust; o CI instala a versão fixa e executa o probe
+    nos três perfis. O probe passou nos três builds locais e o runtime C++ foi
+    compilado com `TL_BUILD_RUST=OFF`. A suíte local isolada por prefixo passou
+    em 653/655 testes; duas expectativas preexistentes de fixtures ainda
+    esperam `unknown-symbol`, enquanto o runtime atual informa `unknown-dll`.
+    Elas não foram misturadas nesta etapa nem são atribuíveis à integração
+    Cargo. Nenhum componente de produção foi migrado.
   - [ ] **B20.3 — Primeiro componente de segurança.** Migrar ou implementar
     um componente isolado de parsing/validação de dados hostis, começando por
     perfil, pacote ou caminho confinado; preservar o contrato público atual e

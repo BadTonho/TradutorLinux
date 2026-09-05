@@ -37,6 +37,30 @@
       "cacheVariables": {
         "TL_ENABLE_SANITIZERS": "ON"
       }
+    },
+    {
+      "name": "debug-rust",
+      "displayName": "Debug with Rust FFI",
+      "inherits": "debug",
+      "cacheVariables": {
+        "TL_BUILD_RUST": "ON"
+      }
+    },
+    {
+      "name": "release-rust",
+      "displayName": "Release with Rust FFI",
+      "inherits": "release",
+      "cacheVariables": {
+        "TL_BUILD_RUST": "ON"
+      }
+    },
+    {
+      "name": "sanitize-rust",
+      "displayName": "Sanitize with Rust FFI",
+      "inherits": "sanitize",
+      "cacheVariables": {
+        "TL_BUILD_RUST": "ON"
+      }
     }
   ],
   "buildPresets": [
@@ -51,6 +75,18 @@
     {
       "name": "sanitize",
       "configurePreset": "sanitize"
+    },
+    {
+      "name": "debug-rust",
+      "configurePreset": "debug-rust"
+    },
+    {
+      "name": "release-rust",
+      "configurePreset": "release-rust"
+    },
+    {
+      "name": "sanitize-rust",
+      "configurePreset": "sanitize-rust"
     }
   ],
   "testPresets": [
@@ -71,6 +107,32 @@
     {
       "name": "sanitize",
       "configurePreset": "sanitize",
+      "environment": {
+        "ASAN_OPTIONS": "detect_leaks=0:halt_on_error=1",
+        "LSAN_OPTIONS": "detect_leaks=0",
+        "UBSAN_OPTIONS": "halt_on_error=1:print_stacktrace=1"
+      },
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "debug-rust",
+      "configurePreset": "debug-rust",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "release-rust",
+      "configurePreset": "release-rust",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "sanitize-rust",
+      "configurePreset": "sanitize-rust",
       "environment": {
         "ASAN_OPTIONS": "detect_leaks=0:halt_on_error=1",
         "LSAN_OPTIONS": "detect_leaks=0",

@@ -7,12 +7,43 @@ compatibilidade foi migrado para Rust.
 ## Build e escopo
 
 O build C++ normal não depende de Rust. `TL_BUILD_RUST` é `OFF` por padrão. Ao
-usar `-DTL_BUILD_RUST=ON`, o CMake exige `rustup` e executa o `rustc` de uma
-toolchain fixa (`TL_RUST_TOOLCHAIN`, padrão `1.97.1`). A integração completa de
-Cargo, lockfile, política de crates e CI pertence à B20.2.
+usar `-DTL_BUILD_RUST=ON`, o CMake exige `rustup` e executa o Cargo da
+toolchain fixa em `rust-toolchain.toml` (`1.97.1`). O `TL_RUST_TOOLCHAIN` do
+CMake mantém o mesmo valor como override explícito para diagnóstico e testes
+negativos; os presets e o CI usam a versão fixada.
 
-A biblioteca é uma `staticlib` sem crates externos e só é ligada ao
-`tl_rust_ffi_probe`. O probe não é instalado nem carregado pelo runtime.
+A biblioteca é uma `staticlib` Cargo sem crates externos e só é ligada ao
+`tl_rust_ffi_probe`. O probe não é instalado nem carregado pelo runtime. Cargo
+recebe `--locked --offline`: o build não altera o lockfile nem consulta o
+registro de crates. Os artefatos e o `target/` Cargo ficam dentro do diretório
+de build CMake e não são versionados.
+
+Os presets opt-in são:
+
+```bash
+cmake --preset debug-rust
+cmake --build --preset debug-rust --target tl_rust_ffi_probe
+ctest --preset debug-rust -R '^rust_ffi_probe$' --output-on-failure
+
+cmake --preset sanitize-rust
+cmake --build --preset sanitize-rust --target tl_rust_ffi_probe
+ctest --preset sanitize-rust -R '^rust_ffi_probe$' --output-on-failure
+
+cmake --preset release-rust
+cmake --build --preset release-rust --target tl_rust_ffi_probe
+ctest --preset release-rust -R '^rust_ffi_probe$' --output-on-failure
+```
+
+O CI instala explicitamente `1.97.1` via rustup antes da matriz dos três
+presets. Em uma máquina de desenvolvimento, a toolchain deve ser instalada
+com `rustup toolchain install 1.97.1 --profile minimal`; o configure falha
+com uma mensagem orientando essa instalação quando ela estiver ausente.
+
+`Cargo.lock` é obrigatório e pertence ao repositório mesmo sem dependências,
+para impedir que a entrada de crates altere o grafo silenciosamente. A B20.2
+não adiciona crates externas. Uma etapa futura só poderá fazê-lo com versão e
+fonte fixadas, lockfile revisado, justificativa técnica, revisão de licença e
+segurança e validação offline no CI.
 
 ## Ownership e ABI
 
@@ -68,7 +99,7 @@ handles independentes.
 `rust_ffi_probe` cobre criação/destruição, limites, UTF-8, UTF-16, argumentos
 nulos, mensagens truncadas, tamanhos necessários, concorrência e destruição
 nula. O teste roda somente quando `TL_BUILD_RUST=ON`; os builds padrão com
-`TL_BUILD_RUST=OFF` continuam sem requisito Rust. A B20.1 será promovida após
-o probe passar em Debug, Sanitize e Release. A capacidade permanece um
-contrato experimental: a B20.3 ainda deverá escolher e migrar um componente
-de produção por benefício mensurável.
+`TL_BUILD_RUST=OFF` continuam sem requisito Rust. A B20.2 protege o mesmo
+probe nos presets Debug, Sanitize e Release por Cargo. A capacidade permanece
+um contrato experimental: a B20.3 ainda deverá escolher e migrar um
+componente de produção por benefício mensurável.
