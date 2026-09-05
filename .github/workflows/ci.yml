@@ -100,7 +100,7 @@ jobs:
       - name: Executar validações Rust
         run: |
           ctest --preset ${{ matrix.preset }} \
-            -R '^(rust_ffi_probe|rust_path_validation)$' \
+            -R '^(rust_ffi_probe|rust_path_validation|rust_cargo_tests|rust_cargo_clippy)$' \
             --output-on-failure
           if [ "${{ matrix.preset }}" != "release-rust" ]; then
             ctest --preset ${{ matrix.preset }} \

@@ -15,6 +15,11 @@ using ValidateFunction = tl_rust_status_t (*)(
     const tl_rust_validator_t*, const std::uint8_t*, std::uint64_t, char*, std::uint64_t,
     std::uint64_t*);
 
+std::uint8_t next_byte(std::uint64_t& state) {
+    state = state * UINT64_C(6364136223846793005) + UINT64_C(1442695040888963407);
+    return static_cast<std::uint8_t>(state >> 32U);
+}
+
 class RustPathValidationTest : public ::testing::Test {
 protected:
     void SetUp() override {
@@ -62,6 +67,27 @@ TEST_F(RustPathValidationTest, RelativeCorpusMatchesCppExceptIntentionalNulHarde
     tl_rust_status_t status = TL_RUST_STATUS_INTERNAL;
     EXPECT_FALSE(rust_accepts(tl_rust_validator_validate_relative_path, nul_path, status));
     EXPECT_EQ(status, TL_RUST_STATUS_INVALID_PATH);
+
+    std::uint64_t state = UINT64_C(0x6c65786963616c31);
+    for (std::size_t iteration = 0; iteration < 2048U; ++iteration) {
+        const std::size_t length = static_cast<std::size_t>(next_byte(state)) % 96U;
+        std::string generated;
+        generated.reserve(length);
+        for (std::size_t index = 0; index < length; ++index) {
+            std::uint8_t byte = next_byte(state);
+            if (byte == 0U) byte = static_cast<std::uint8_t>('x');
+            generated.push_back(static_cast<char>(byte));
+        }
+
+        const bool rust_accepts_path = rust_accepts(
+            tl_rust_validator_validate_relative_path, generated, status);
+        const bool cpp_accepts_path = tradutorlinux::compat::path_rules::is_relative_source(
+            std::filesystem::path{generated});
+        EXPECT_EQ(rust_accepts_path, cpp_accepts_path) << "generated relative case: "
+                                                       << iteration;
+        EXPECT_EQ(status, cpp_accepts_path ? TL_RUST_STATUS_OK : TL_RUST_STATUS_INVALID_PATH)
+            << "generated relative case: " << iteration;
+    }
 }
 
 TEST_F(RustPathValidationTest, CDriveCorpusMatchesCppLexicalRules) {
@@ -85,6 +111,26 @@ TEST_F(RustPathValidationTest, CDriveCorpusMatchesCppLexicalRules) {
     tl_rust_status_t status = TL_RUST_STATUS_INTERNAL;
     EXPECT_FALSE(rust_accepts(tl_rust_validator_validate_c_drive_path, nul_path, status));
     EXPECT_EQ(status, TL_RUST_STATUS_INVALID_PATH);
+
+    std::uint64_t state = UINT64_C(0x6c65786963616c32);
+    for (std::size_t iteration = 0; iteration < 2048U; ++iteration) {
+        const std::size_t length = static_cast<std::size_t>(next_byte(state)) % 96U;
+        std::string generated{"C:\\"};
+        generated.reserve(3U + length);
+        for (std::size_t index = 0; index < length; ++index) {
+            std::uint8_t byte = next_byte(state);
+            if (byte == 0U) byte = static_cast<std::uint8_t>('x');
+            generated.push_back(static_cast<char>(byte));
+        }
+
+        const bool rust_accepts_path = rust_accepts(
+            tl_rust_validator_validate_c_drive_path, generated, status);
+        const bool cpp_accepts_path =
+            tradutorlinux::compat::path_rules::is_c_drive_path_lexically_confined(generated);
+        EXPECT_EQ(rust_accepts_path, cpp_accepts_path) << "generated C case: " << iteration;
+        EXPECT_EQ(status, cpp_accepts_path ? TL_RUST_STATUS_OK : TL_RUST_STATUS_INVALID_PATH)
+            << "generated C case: " << iteration;
+    }
 }
 
 TEST_F(RustPathValidationTest, PathInputUsesTheConfiguredLimit) {
@@ -101,6 +147,18 @@ TEST_F(RustPathValidationTest, PathInputUsesTheConfiguredLimit) {
               TL_RUST_STATUS_INPUT_TOO_LARGE);
     EXPECT_NE(std::string_view{error.data()}.find("limit"), std::string_view::npos);
     tl_rust_validator_destroy(small_validator);
+
+    const std::string exact_limit(1024U * 1024U, 'x');
+    const std::string over_limit = exact_limit + 'x';
+    tl_rust_status_t status = TL_RUST_STATUS_INTERNAL;
+    EXPECT_TRUE(rust_accepts(tl_rust_validator_validate_relative_path, exact_limit, status));
+    EXPECT_EQ(status, TL_RUST_STATUS_OK);
+    EXPECT_FALSE(rust_accepts(tl_rust_validator_validate_relative_path, over_limit, status));
+    EXPECT_EQ(status, TL_RUST_STATUS_INPUT_TOO_LARGE);
+
+    const std::string max_c_drive = "C:\\" + std::string(1024U * 1024U - 3U, 'x');
+    EXPECT_TRUE(rust_accepts(tl_rust_validator_validate_c_drive_path, max_c_drive, status));
+    EXPECT_EQ(status, TL_RUST_STATUS_OK);
 }
 
 TEST_F(RustPathValidationTest, PathFunctionsKeepTheCommonFfiPointerContract) {

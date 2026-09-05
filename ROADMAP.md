@@ -1337,10 +1337,17 @@ imports não encerra B5.
     bloqueada por um `-Werror` preexistente para `write_le_u32` não usado em
     `src/loader/image_mapper.cpp`; esse bloqueio não altera a validação isolada
     desta etapa nem foi misturado à mudança.
-  - [ ] **B20.4 — Testes e robustez.** Adicionar testes de unidade, casos
-    limite, fuzzing ou testes property-based quando aplicável, além de
-    regressões para traversal, overflow, truncamento, UTF-8/UTF-16 e falhas de
-    alocação. Validar a fronteira FFI sob Sanitizers e ferramentas Rust.
+  - [x] **B20.4 — Testes e robustez.** A fronteira FFI agora possui testes
+    unitários Rust para UTF-8/UTF-16, paths, limites, overflow, panic e falha
+    de alocação simulada, além de geração property-based determinística sem
+    crates externas. O probe C++ cobre ponteiros nulos, precedência de erros,
+    todas as capacidades de diagnóstico e regiões sentinela; o corpus
+    diferencial amplia a equivalência Rust↔C++ e mantém NUL como única
+    rejeição adicional intencional. `rust_cargo_tests`, `rust_cargo_clippy`,
+    `rust_ffi_probe` e `rust_path_validation` passaram nos três perfis Rust;
+    `RustPathValidationTest.*` passou nos perfis Debug e Sanitize, e o core C++
+    também passou com `TL_BUILD_RUST=OFF`. A documentação registra os limites
+    e a ausência de migração de produção.
   - [ ] **B20.5 — Integração operacional.** Exercitar o componente Rust nos
     fluxos reais de catálogo, perfis, materialização ou pacotes, verificando
     desempenho, logs, códigos de erro, cancelamento e limpeza sem exceção

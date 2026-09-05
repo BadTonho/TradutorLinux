@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <cstring>
 #include <iostream>
+#include <limits>
 #include <string_view>
 #include <thread>
 
@@ -34,6 +35,104 @@ bool check_error_buffer(const char* buffer, const std::uint64_t capacity,
     }
     if (!contains(buffer, needle)) {
         std::cerr << "rust ffi probe: error message did not contain '" << needle << "'\n";
+        return false;
+    }
+    return true;
+}
+
+template <typename Input>
+using ValidateFunction = tl_rust_status_t (*)(
+    const tl_rust_validator_t*, const Input*, std::uint64_t, char*, std::uint64_t,
+    std::uint64_t*);
+
+template <typename Input>
+bool check_error_buffer_boundaries(
+    const tl_rust_validator_t* validator, const ValidateFunction<Input> function,
+    const Input* input, const std::uint64_t input_length,
+    const tl_rust_status_t expected_status, const std::string_view operation) {
+    std::array<char, 64> complete_error{};
+    std::uint64_t required = 0;
+    if (!expect_status(function(validator, input, input_length, complete_error.data(),
+                                complete_error.size(), &required),
+                       expected_status, operation)) {
+        return false;
+    }
+    if (required == 0 || required > complete_error.size() ||
+        complete_error[required - 1U] != '\0') {
+        std::cerr << "rust ffi probe: " << operation
+                  << " returned an invalid required size\n";
+        return false;
+    }
+
+    for (std::uint64_t capacity = 0; capacity <= required + 1U; ++capacity) {
+        std::array<unsigned char, 128> guarded;
+        guarded.fill(0xa5U);
+        char* buffer = nullptr;
+        if (capacity != 0) {
+            buffer = reinterpret_cast<char*>(guarded.data() + 16U);
+        }
+        std::uint64_t observed_required = 0;
+        const tl_rust_status_t status = function(
+            validator, input, input_length, buffer, capacity, &observed_required);
+        const tl_rust_status_t expected = capacity < required
+                                               ? TL_RUST_STATUS_BUFFER_TOO_SMALL
+                                               : expected_status;
+        if (!expect_status(status, expected, operation) || observed_required != required) {
+            std::cerr << "rust ffi probe: " << operation
+                      << " changed required size at capacity " << capacity << '\n';
+            return false;
+        }
+        const std::uint64_t written = capacity < required ? capacity : required;
+        if (capacity != 0 && guarded[16U + static_cast<std::size_t>(written) - 1U] != 0U) {
+            std::cerr << "rust ffi probe: " << operation
+                      << " did not terminate its bounded output\n";
+            return false;
+        }
+        for (std::size_t index = 0; index < 16U; ++index) {
+            if (guarded[index] != 0xa5U) {
+                std::cerr << "rust ffi probe: " << operation
+                          << " wrote before its error buffer\n";
+                return false;
+            }
+        }
+        for (std::size_t index = 16U + static_cast<std::size_t>(capacity);
+             index < guarded.size(); ++index) {
+            if (guarded[index] != 0xa5U) {
+                std::cerr << "rust ffi probe: " << operation
+                          << " wrote past its error buffer\n";
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+bool check_length_and_pointer_boundaries(const tl_rust_validator_t* validator) {
+    const std::array<std::uint8_t, 1> byte_input{static_cast<std::uint8_t>('x')};
+    const std::array<std::uint16_t, 1> utf16_input{0x0041U};
+    std::array<char, 64> error{};
+    std::uint64_t required = 0;
+
+    if (!expect_status(tl_rust_validator_validate_utf8(
+                           validator, byte_input.data(), std::numeric_limits<std::uint64_t>::max(),
+                           error.data(), error.size(), &required),
+                       TL_RUST_STATUS_INPUT_TOO_LARGE, "utf8-u64-max") ||
+        !expect_status(tl_rust_validator_validate_utf8(
+                           validator, nullptr, 0U, error.data(), error.size(), &required),
+                       TL_RUST_STATUS_OK, "utf8-null-zero") ||
+        !expect_status(tl_rust_validator_validate_utf8(
+                           validator, nullptr, 1U, error.data(), error.size(), &required),
+                       TL_RUST_STATUS_INVALID_ARGUMENT, "utf8-null-nonzero") ||
+        !expect_status(tl_rust_validator_validate_utf16(
+                           validator, utf16_input.data(), std::numeric_limits<std::uint64_t>::max(),
+                           error.data(), error.size(), &required),
+                       TL_RUST_STATUS_INPUT_TOO_LARGE, "utf16-u64-max") ||
+        !expect_status(tl_rust_validator_validate_utf16(
+                           validator, nullptr, 0U, error.data(), error.size(), &required),
+                       TL_RUST_STATUS_OK, "utf16-null-zero") ||
+        !expect_status(tl_rust_validator_validate_utf16(
+                           validator, nullptr, 1U, error.data(), error.size(), &required),
+                       TL_RUST_STATUS_INVALID_ARGUMENT, "utf16-null-nonzero")) {
         return false;
     }
     return true;
@@ -118,6 +217,17 @@ int main() {
                            error.size(), &required),
                        TL_RUST_STATUS_INVALID_UTF16, "invalid-utf16") ||
         !check_error_buffer(error.data(), error.size(), required, "UTF-16")) {
+        tl_rust_validator_destroy(validator);
+        return 1;
+    }
+
+    if (!check_error_buffer_boundaries(
+            validator, tl_rust_validator_validate_utf8, invalid_utf8.data(), invalid_utf8.size(),
+            TL_RUST_STATUS_INVALID_UTF8, "utf8-error-boundaries") ||
+        !check_error_buffer_boundaries(validator, tl_rust_validator_validate_utf16,
+                                       invalid_utf16.data(), invalid_utf16.size(),
+                                       TL_RUST_STATUS_INVALID_UTF16, "utf16-error-boundaries") ||
+        !check_length_and_pointer_boundaries(validator)) {
         tl_rust_validator_destroy(validator);
         return 1;
     }

@@ -14,6 +14,34 @@ if(TL_BUILD_RUST)
         TIMEOUT 30
     )
 
+    find_program(TL_RUSTUP_TEST_EXECUTABLE NAMES rustup REQUIRED)
+    set(TL_RUST_CARGO_TEST_TARGET_DIRECTORY
+        "${CMAKE_BINARY_DIR}/rust_ffi/cargo-target")
+    add_test(
+        NAME rust_cargo_tests
+        COMMAND "${TL_RUSTUP_TEST_EXECUTABLE}" run "${TL_RUST_TOOLCHAIN}" cargo test
+            --manifest-path "${PROJECT_SOURCE_DIR}/Cargo.toml"
+            --target-dir "${TL_RUST_CARGO_TEST_TARGET_DIRECTORY}"
+            --locked --offline
+    )
+    set_tests_properties(rust_cargo_tests PROPERTIES
+        LABELS "ffi;rust;toolchain"
+        TIMEOUT 120
+        ENVIRONMENT "CARGO_TERM_COLOR=never"
+    )
+    add_test(
+        NAME rust_cargo_clippy
+        COMMAND "${TL_RUSTUP_TEST_EXECUTABLE}" run "${TL_RUST_TOOLCHAIN}" cargo clippy
+            --manifest-path "${PROJECT_SOURCE_DIR}/Cargo.toml"
+            --target-dir "${TL_RUST_CARGO_TEST_TARGET_DIRECTORY}"
+            --locked --offline --all-targets -- -D warnings
+    )
+    set_tests_properties(rust_cargo_clippy PROPERTIES
+        LABELS "ffi;rust;toolchain;static-analysis"
+        TIMEOUT 120
+        ENVIRONMENT "CARGO_TERM_COLOR=never"
+    )
+
     add_executable(tl_rust_path_validation
         test_rust_path_validation.cpp
         ../src/compat/path_rules.cpp

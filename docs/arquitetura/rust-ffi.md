@@ -1,9 +1,10 @@
 # Fronteira FFI Rust↔C++
 
-Este documento descreve as B20.1–B20.3. A biblioteca Rust continua opt-in:
+Este documento descreve as B20.1–B20.4. A biblioteca Rust continua opt-in:
 além do probe, a B20.3 usa Rust somente para a validação lexical dos caminhos
-de perfis e materialização. Nenhum parser, loader, runtime Win32 ou API pública
-de compatibilidade foi migrado para Rust.
+de perfis e materialização. A B20.4 endurece essa fronteira com testes e
+tratamento de limites. Nenhum parser, loader, runtime Win32 ou API pública de
+compatibilidade foi migrado para Rust.
 
 ## Build e escopo
 
@@ -44,7 +45,15 @@ NUL:
 
 ```bash
 cmake --build --preset debug-rust --target tradutorlinux_unit_tests
-ctest --preset debug-rust -R '^(rust_ffi_probe|RustPathValidationTest\.)' \
+ctest --preset debug-rust -R '^(rust_ffi_probe|rust_cargo_tests|rust_cargo_clippy|RustPathValidationTest\.)' \
+  --output-on-failure
+
+ctest --preset sanitize-rust -R \
+  '^(rust_ffi_probe|rust_cargo_tests|rust_cargo_clippy|RustPathValidationTest\.)' \
+  --output-on-failure
+
+ctest --preset release-rust -R \
+  '^(rust_ffi_probe|rust_cargo_tests|rust_cargo_clippy|RustPathValidationTest\.)' \
   --output-on-failure
 ```
 
@@ -135,11 +144,58 @@ para os casos existentes; a rejeição adicional de NUL é intencional e coberta
 separadamente. Não há estado global: os handles são locais à operação e podem
 ser usados por chamadas concorrentes somente com buffers de erro próprios.
 
+## Testes de robustez
+
+A B20.4 usa testes property-based determinísticos sem crates externas. O
+gerador possui uma semente fixa e produz entradas bounded, permitindo que uma
+falha seja reproduzida localmente e no CI sem ferramenta adicional. Os testes
+verificam invariantes de caminhos e o corpus C++ amplia a comparação direta
+com `path_rules`, mantendo a equivalência obrigatória; NUL continua sendo a
+única rejeição adicional intencional do validador Rust.
+
+Os casos cobertos incluem UTF-8 truncado, overlong, surrogate e continuations;
+UTF-16 com surrogate isolado ou pares invertidos; raízes, separadores e
+traversal; limites exatos de 1 MiB; `u64::MAX`; overflow da contagem UTF-16;
+ponteiros nulos; e todas as capacidades de buffer de erro ao redor de
+`error_required`. O probe C++ usa regiões sentinela para confirmar que Rust
+não escreve antes ou depois do buffer e que toda mensagem permanece terminada
+em NUL quando há capacidade.
+
+A criação do handle usa alocação fallible e converte falha em
+`TL_RUST_STATUS_INTERNAL` sem publicar um ponteiro parcial. Um failpoint
+thread-local existe somente nos testes Rust para reproduzir esse caminho; ele
+não é uma API de produção nem simula uma sandbox. As funções de validação não
+alocam durante a análise UTF-8, UTF-16 ou de caminhos. Um teste unitário também
+força um panic interno e confirma a conversão para erro interno, sem unwind
+atravessando a ABI.
+
+Os testes de Cargo e Clippy são registrados no CTest somente quando
+`TL_BUILD_RUST=ON`:
+
+```bash
+ctest --preset debug-rust -R '^(rust_cargo_tests|rust_cargo_clippy)$' \
+  --output-on-failure
+
+rustup run 1.97.1 cargo test --target-dir build/debug-rust/rust_ffi/cargo-target \
+  --locked --offline
+rustup run 1.97.1 cargo clippy --target-dir build/debug-rust/rust_ffi/cargo-target \
+  --locked --offline --all-targets -- -D warnings
+```
+
+Os presets `sanitize-rust` executam o probe e os testes C++ com ASan/UBSan/LSan
+conforme o ambiente do projeto. O Cargo continua sendo executado com
+`--locked --offline`; a validação de memória do Rust usa os testes da própria
+toolchain e a fronteira linkada aos probes sanitizados. Builds com
+`TL_BUILD_RUST=OFF` não criam os testes Rust, não linkam a staticlib e não
+exigem toolchain Rust.
+
 ## Evidência
 
 `rust_ffi_probe` cobre criação/destruição, limites, UTF-8, UTF-16, argumentos
-nulos, mensagens truncadas, tamanhos necessários, concorrência, caminhos
-relativos, destinos `C:` e rejeição de NUL. Os testes de perfil e materializador
-protegem a integração opt-in. Todos esses testes rodam somente quando
-`TL_BUILD_RUST=ON`; os builds padrão com `TL_BUILD_RUST=OFF` continuam sem
-requisito Rust.
+nulos, mensagens truncadas, tamanhos necessários, sentinelas de memória,
+concorrência, caminhos relativos, destinos `C:` e rejeição de NUL. Os testes
+de perfil e materializador protegem a integração opt-in. A B20.4 foi validada
+com os testes direcionados dos presets Debug, Sanitize e Release Rust, Cargo
+offline, Clippy sem warnings e o build C++ com `TL_BUILD_RUST=OFF`. Todos os
+testes Rust rodam somente quando `TL_BUILD_RUST=ON`; os builds padrão continuam
+sem requisito Rust.
