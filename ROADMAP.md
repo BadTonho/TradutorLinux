@@ -972,10 +972,11 @@ marcam itens condicionais como concluídos; definem os gates para retomá-los.
   como estão os codepages já exigidos pelo portfólio (`0`, `1252`, `437` e
   `65001`). A extração para dados gerados só será feita quando um alvo exigir
   outra página, com fonte versionada e testes de conversão e erro.
-- **B14 e overrides:** `TL_DLL_OVERRIDES` continua sendo um mecanismo técnico
-  de override de DLL. Não haverá política divergente por aplicativo/API sem
-  alvo, configuração, precedência, isolamento, diagnóstico e regressão
-  definidos antes.
+- **B14 e overrides — opção 1 confirmada pelo usuário em 2026-09-05:** manter
+  adiados os comportamentos específicos por aplicativo. `TL_DLL_OVERRIDES`
+  continua sendo um mecanismo técnico de override de DLL. Não haverá política
+  divergente por aplicativo/API sem alvo, configuração, precedência, isolamento,
+  diagnóstico e regressão definidos antes.
 - **B17 e processos:** o protocolo atual de `fork`/`waitpid`/pipe é suficiente
   para o portfólio conhecido. Um supervisor só será criado se um aplicativo
   exigir estado compartilhado além desse protocolo.
