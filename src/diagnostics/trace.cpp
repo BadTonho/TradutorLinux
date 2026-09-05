@@ -425,6 +425,8 @@ std::string_view failure_category_name(const FailureCategory category) {
             return "guest-signal";
         case FailureCategory::GuestTimeout:
             return "guest-timeout";
+        case FailureCategory::GuestResourceLimit:
+            return "guest-resource-limit";
         case FailureCategory::InternalError:
             return "internal-error";
     }

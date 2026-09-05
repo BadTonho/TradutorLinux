@@ -15,6 +15,7 @@
 #include <csignal>
 #include <limits>
 #include <poll.h>
+#include <sys/resource.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <time.h>
@@ -25,7 +26,12 @@
 namespace tradutorlinux::process {
 namespace {
 
-constexpr std::size_t kProtocolSize = 5;  // [explicit:1][exit-code:4 LE]
+constexpr std::size_t kProtocolSize = 7;  // [kind:1][resource:1][explicit:1][exit-code:4 LE]
+
+enum class ChildMessageKind : unsigned char {
+    Exited = 0,
+    ResourceSetupFailed = 1,
+};
 
 // Registro de falha escrito pelo handler de sinais do filho quando o convidado
 // morre por sinal fatal: [signal:1][si_addr:8 LE][rip:8 LE].
@@ -150,6 +156,73 @@ std::uint64_t monotonic_ms() noexcept {
            static_cast<std::uint64_t>(now.tv_nsec) / 1000000U;
 }
 
+[[nodiscard]] bool set_cpu_limit(const std::uint64_t seconds) noexcept {
+    if (seconds == 0) {
+        return true;
+    }
+    struct ::rlimit current {};
+    if (::getrlimit(RLIMIT_CPU, &current) != 0 ||
+        seconds > static_cast<std::uint64_t>(RLIM_INFINITY)) {
+        return false;
+    }
+    const rlim_t soft = static_cast<rlim_t>(seconds);
+    rlim_t hard = soft;
+    if (seconds < static_cast<std::uint64_t>(RLIM_INFINITY)) {
+        hard = static_cast<rlim_t>(seconds + 1U);
+    }
+    if (current.rlim_max != RLIM_INFINITY && hard > current.rlim_max) {
+        hard = current.rlim_max;
+    }
+    if (hard < soft) {
+        return false;
+    }
+    const struct ::rlimit requested{soft, hard};
+    return ::setrlimit(RLIMIT_CPU, &requested) == 0;
+}
+
+[[nodiscard]] bool set_memory_limit(const std::uint64_t memory_mib) noexcept {
+    if (memory_mib == 0) {
+        return true;
+    }
+    constexpr std::uint64_t kMib = 1024U * 1024U;
+    if (memory_mib > static_cast<std::uint64_t>(RLIM_INFINITY) / kMib) {
+        return false;
+    }
+    const rlim_t bytes = static_cast<rlim_t>(memory_mib * kMib);
+    struct ::rlimit current {};
+    if (::getrlimit(RLIMIT_AS, &current) != 0 ||
+        (current.rlim_max != RLIM_INFINITY && bytes > current.rlim_max)) {
+        return false;
+    }
+    const struct ::rlimit requested{bytes, bytes};
+    return ::setrlimit(RLIMIT_AS, &requested) == 0;
+}
+
+[[nodiscard]] ResourceLimitKind apply_resource_limits(const ResourceLimits& limits) noexcept {
+    if (!set_cpu_limit(limits.cpu_seconds)) {
+        return ResourceLimitKind::Cpu;
+    }
+    if (!set_memory_limit(limits.memory_mib)) {
+        return ResourceLimitKind::Memory;
+    }
+    return ResourceLimitKind::None;
+}
+
+void write_child_message(const int fd, const ChildMessageKind kind,
+                         const ResourceLimitKind resource, const bool explicit_exit,
+                         const std::uint32_t exit_code) noexcept {
+    const std::array<std::byte, kProtocolSize> message{
+        std::byte{static_cast<unsigned char>(kind)},
+        std::byte{static_cast<unsigned char>(resource)},
+        std::byte{static_cast<unsigned char>(explicit_exit ? 1U : 0U)},
+        std::byte{static_cast<unsigned char>(exit_code & 0xFFU)},
+        std::byte{static_cast<unsigned char>((exit_code >> 8U) & 0xFFU)},
+        std::byte{static_cast<unsigned char>((exit_code >> 16U) & 0xFFU)},
+        std::byte{static_cast<unsigned char>((exit_code >> 24U) & 0xFFU)},
+    };
+    static_cast<void>(write_exact(fd, message.data(), message.size()));
+}
+
 }  // namespace
 
 SignalDescription describe_signal(const int signal_number) noexcept {
@@ -176,15 +249,30 @@ SignalDescription describe_signal(const int signal_number) noexcept {
             return {"SIGTERM", "terminado por SIGTERM"};
         case SIGQUIT:
             return {"SIGQUIT", "terminado por SIGQUIT"};
+        case SIGXCPU:
+            return {"SIGXCPU", "limite de CPU excedido"};
         default:
             return {"sinal", "término inesperado por sinal"};
     }
+}
+
+std::string_view resource_limit_name(const ResourceLimitKind resource) noexcept {
+    switch (resource) {
+        case ResourceLimitKind::Cpu:
+            return "cpu";
+        case ResourceLimitKind::Memory:
+            return "memory";
+        case ResourceLimitKind::None:
+            return "none";
+    }
+    return "none";
 }
 
 __attribute__((no_instrument_function))
 GuestOutcome run_guest_isolated(const std::uintptr_t entry_point,
                                 const std::uintptr_t stack_top,
                                 const std::uint64_t timeout_ms,
+                                const ResourceLimits& resource_limits,
                                 const std::filesystem::path& working_directory) noexcept {
     int pipe_fds[2] = {-1, -1};
     if (::pipe2(pipe_fds, O_CLOEXEC) != 0) {
@@ -217,11 +305,21 @@ GuestOutcome run_guest_isolated(const std::uintptr_t entry_point,
             ::close(fault_fds[1]);
             ::_exit(126);
         }
+        const ResourceLimitKind resource_setup_failure = apply_resource_limits(resource_limits);
+        if (resource_setup_failure != ResourceLimitKind::None) {
+            write_child_message(pipe_fds[1], ChildMessageKind::ResourceSetupFailed,
+                                resource_setup_failure, false, 0);
+            ::close(pipe_fds[1]);
+            ::close(fault_fds[1]);
+            ::_exit(0);
+        }
         install_crash_reporter(fault_fds[1]);
         ignore_broken_pipe();
         const GuestExecutionResult result = execute_guest_entry(entry_point, stack_top);
         const std::array<std::byte, kProtocolSize> message{
-            result.exited_explicitly ? std::byte{1} : std::byte{0},
+            std::byte{static_cast<unsigned char>(ChildMessageKind::Exited)},
+            std::byte{static_cast<unsigned char>(ResourceLimitKind::None)},
+            std::byte{static_cast<unsigned char>(result.exited_explicitly ? 1U : 0U)},
             std::byte{static_cast<unsigned char>(result.exit_code & 0xFFU)},
             std::byte{static_cast<unsigned char>((result.exit_code >> 8) & 0xFFU)},
             std::byte{static_cast<unsigned char>((result.exit_code >> 16) & 0xFFU)},
@@ -298,12 +396,21 @@ GuestOutcome run_guest_isolated(const std::uintptr_t entry_point,
             ::close(fault_fds[0]);
             return {.kind = GuestOutcomeKind::SpawnFailed};
         }
-        if (message[0] != std::byte{0} && message[0] != std::byte{1}) {
+        if (message[0] == std::byte{static_cast<unsigned char>(ChildMessageKind::ResourceSetupFailed)}) {
+            outcome.kind = GuestOutcomeKind::ResourceSetupFailed;
+            outcome.resource = static_cast<ResourceLimitKind>(std::to_integer<unsigned>(message[1]));
+            ::close(pipe_fds[0]);
+            ::close(fault_fds[0]);
+            return outcome;
+        }
+        if (message[0] != std::byte{static_cast<unsigned char>(ChildMessageKind::Exited)} ||
+            message[1] != std::byte{static_cast<unsigned char>(ResourceLimitKind::None)} ||
+            (message[2] != std::byte{0} && message[2] != std::byte{1})) {
             ::close(pipe_fds[0]);
             ::close(fault_fds[0]);
             return {.kind = GuestOutcomeKind::SpawnFailed};
         }
-        outcome.exited_explicitly = message[0] == std::byte{1};
+        outcome.exited_explicitly = message[2] == std::byte{1};
         std::uint32_t code = 0;
         for (std::uint32_t shift = 0; shift < 4; ++shift) {
             const std::uint32_t byte =
@@ -315,8 +422,12 @@ GuestOutcome run_guest_isolated(const std::uintptr_t entry_point,
     } else {
         // Sem WUNTRACED/WCONTINUED o waitpid só relata WIFEXITED ou
         // WIFSIGNALED; qualquer outro caso é término por sinal.
-        outcome.kind = GuestOutcomeKind::Signaled;
         outcome.signal_number = WTERMSIG(status);
+        outcome.kind = outcome.signal_number == SIGXCPU ? GuestOutcomeKind::ResourceLimited
+                                                         : GuestOutcomeKind::Signaled;
+        if (outcome.kind == GuestOutcomeKind::ResourceLimited) {
+            outcome.resource = ResourceLimitKind::Cpu;
+        }
 
         // O handler do filho publica o registro antes de reentregar o sinal,
         // então os dados já estão no buffer do pipe. Se o filho morreu sem

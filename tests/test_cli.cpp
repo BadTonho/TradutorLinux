@@ -88,6 +88,45 @@ TEST(CommandLineTest, AcceptsTimeoutOption) {
     EXPECT_TRUE(result.command_line->timeout_set);
 }
 
+TEST(CommandLineTest, AcceptsCpuAndMemoryLimits) {
+    const std::vector<const char*> arguments{
+        "tradutorlinux", "--cpu", "3", "--memory", "128", "programa.exe"};
+
+    const ParseResult result = parse_arguments(arguments);
+
+    ASSERT_TRUE(result.command_line.has_value());
+    EXPECT_EQ(result.command_line->cpu_limit_seconds, 3U);
+    EXPECT_TRUE(result.command_line->cpu_limit_set);
+    EXPECT_EQ(result.command_line->memory_limit_mib, 128U);
+    EXPECT_TRUE(result.command_line->memory_limit_set);
+}
+
+TEST(CommandLineTest, AcceptsResourceLimitsForCatalogRun) {
+    const std::vector<const char*> arguments{
+        "tradutorlinux", "app", "run", "app-id", "--cpu", "2", "--memory", "64", "argument"};
+
+    const ParseResult result = parse_arguments(arguments);
+
+    ASSERT_TRUE(result.command_line.has_value());
+    EXPECT_EQ(result.command_line->mode, CommandMode::AppRun);
+    EXPECT_EQ(result.command_line->cpu_limit_seconds, 2U);
+    EXPECT_TRUE(result.command_line->cpu_limit_set);
+    EXPECT_EQ(result.command_line->memory_limit_mib, 64U);
+    EXPECT_TRUE(result.command_line->memory_limit_set);
+    ASSERT_EQ(result.command_line->guest_arguments.size(), 1U);
+    EXPECT_EQ(result.command_line->guest_arguments.front(), "argument");
+}
+
+TEST(CommandLineTest, RejectsRepeatedResourceLimit) {
+    const std::vector<const char*> arguments{
+        "tradutorlinux", "--memory", "64", "--memory", "128", "programa.exe"};
+
+    const ParseResult result = parse_arguments(arguments);
+
+    EXPECT_FALSE(result.command_line.has_value());
+    EXPECT_NE(result.error_message.find("foi repetida"), std::string::npos);
+}
+
 TEST(CommandLineTest, AcceptsZeroTimeoutAsUnlimited) {
     const std::vector<const char*> arguments{"tradutorlinux", "--timeout", "0", "programa.exe"};
 

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include <filesystem>
 #include <optional>
 #include <string>
@@ -17,6 +18,8 @@ struct AppEntry {
     std::string working_directory;   // Diretório de trabalho
     std::vector<std::string> args;   // Argumentos padrão
     std::string created_at;          // Data/hora de cadastro ISO8601
+    std::uint64_t cpu_limit_seconds{0}; // Limite padrão; 0 = sem limite
+    std::uint64_t memory_limit_mib{0};  // Limite padrão em MiB; 0 = sem limite
 };
 
 class AppCatalog {

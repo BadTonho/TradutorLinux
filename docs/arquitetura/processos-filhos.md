@@ -15,6 +15,14 @@ inicialização separada permanecem fora do subconjunto e falham com
 `ERROR_INVALID_PARAMETER`. Falha de parse/import não executa o entry point e
 vira código de falha do processo filho.
 
+Quando configurados por `--cpu <segundos>` ou `--memory <MiB>`, os limites são
+instalados no filho isolado antes do entry point usando `RLIMIT_CPU` e
+`RLIMIT_AS`; zero desativa cada limite. Um processo criado pelo convidado com
+`CreateProcessA/W` nasce por `fork` e herda essas restrições. Excesso de CPU é
+classificado como `guest-resource-limit`/`GuestResourceLimit 73`; uma falha de
+instalação é erro interno. Esse mecanismo limita recursos, mas não oferece
+sandbox ou isolamento de segurança.
+
 O contexto de console da Fase 13.8 é comum às threads de um processo, mas cada
 processo convidado começa com stdin/stdout/stderr associados aos descritores
 Linux herdados no `fork`. Como a herança Win32 explícita ainda não é aceita,

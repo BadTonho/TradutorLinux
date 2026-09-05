@@ -81,6 +81,30 @@ e `timeout-ms`, e retorna `72` (`GuestTimeout`):
 [tl][process][error] terminated category="guest-timeout" timeout-ms="1000"
 ```
 
+O CLI também aceita `--cpu <segundos>` e `--memory <MiB>` para instalar limites
+opcionais no filho isolado; `0` significa sem limite. `--cpu` mede tempo de CPU
+(`RLIMIT_CPU`) e `--memory` limita o espaço de endereçamento virtual
+(`RLIMIT_AS`). Os limites são herdados por processos Win32 criados pelo
+convidado porque o launcher usa `fork`; isso é contenção de recursos, não uma
+sandbox. O evento de instalação identifica a herança:
+
+```text
+[tl][process][info] resource-limits inheritance="fork" cpu-seconds="1" memory-mib="128"
+```
+
+Quando o limite de CPU é excedido, o Linux entrega `SIGXCPU`; o runtime preserva
+o host, emite `guest-resource-limit` e retorna `73` (`GuestResourceLimit`):
+
+```text
+[tl][process][error] terminated category="guest-resource-limit" resource="cpu" signal="SIGXCPU" limit-seconds="1"
+```
+
+Se um limite não puder ser instalado, o runtime emite
+`resource-limit-setup-failed` com `category="internal-error"` e retorna `70`.
+Falhas de alocação sob `RLIMIT_AS` continuam sendo reportadas pela API Win32
+convidada — por exemplo, `VirtualAlloc` retorna nulo e `GetLastError` informa
+`ERROR_NOT_ENOUGH_MEMORY` — e não são confundidas com OOM global do hospedeiro.
+
 O filho ignora `SIGPIPE` antes do entry point: uma escrita do convidado em um
 pipe sem leitor (ex.: `tradutorlinux prog.exe | head -c 0`) falha com
 `errno=32` e `win32-error="109"` (`ERROR_BROKEN_PIPE`) no evento
@@ -278,6 +302,7 @@ Eventos de erro podem incluir o campo `category`:
 | `linux-error` | Operação Linux falhou; pode incluir `operation`, `errno` e `win32-error`. |
 | `guest-signal` | Término do convidado por sinal Linux. |
 | `guest-timeout` | O convidado não terminou dentro do limite de `--timeout` e foi morto pelo hospedeiro. |
+| `guest-resource-limit` | O convidado excedeu um limite configurado de CPU ou memória. |
 | `internal-error` | Falha inesperada do runtime. |
 
 Exemplo de falha Linux em uma API:
@@ -486,5 +511,6 @@ Quando a imagem é mapeada fora do endereço preferencial e não possui diretór
 | 70 | `InternalError` | Erro interno inesperado do runtime. |
 | 71 | `GuestFault` | O programa convidado terminou por um sinal Linux (`guest-signal`). |
 | 72 | `GuestTimeout` | O programa convidado não terminou dentro do limite informado em `--timeout` e foi morto pelo hospedeiro (`guest-timeout`). |
+| 73 | `GuestResourceLimit` | O programa convidado excedeu um limite de CPU ou memória configurado (`guest-resource-limit`). |
 
 Na Fase 1, um arquivo regular que não é PE válido retorna `4`, e um PE válido porém incompatível (arquitetura ou formato não suportado) retorna `5`. A partir da Fase 2, uma imagem válida porém não mapeável por inconsistência estrutural retorna `4`, e uma falha de mapeamento por memória insuficiente retorna `70`. A partir da Fase 3, um PE válido com dependências não suportadas (DLL, símbolo, ordinal ou mecanismo desconhecidos) também retorna `5`, com diagnóstico completo no trace e o entry point nunca executado. Na Fase 4, `ExitProcess` gera `[tl][runtime][info]` com o código bruto e `[tl][process][info] exit`; esse código é propagado como status do processo Linux. Com o isolamento em processo filho, o convidado que termina por sinal (`SIGSEGV`, `SIGILL`, `SIGBUS`, etc.) não derruba o hospedeiro: o pai observa o sinal via `waitpid`, emite `terminated category="guest-signal"` e retorna `71`.

@@ -83,6 +83,11 @@ tradutorlinux app run <id> --trace
 tradutorlinux app run <id> --trace --report
 ```
 
+Quando o item possui `cpu_limit_seconds` ou `memory_limit_mib` em
+`library.json`, `app run` aplica esses limites automaticamente; a janela mostra
+o trace resultante, mas não oferece edição desses campos. Para alterar os
+limites, use `app add`/`install` ou `app run --cpu ... --memory ...` pelo CLI.
+
 Um caminho digitado ou escolhido fora da biblioteca usa a forma direta:
 
 ```text

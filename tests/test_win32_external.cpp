@@ -594,5 +594,28 @@ TEST(AppCatalogTest, RejectsPathTraversalAndReadsUnicodeEscapes) {
     std::filesystem::remove(path, error);
 }
 
+TEST(AppCatalogTest, PersistsResourceLimits) {
+    const std::filesystem::path path = "_tl_catalog_resource_limits.json";
+    catalog::AppCatalog original;
+    catalog::AppEntry entry{};
+    entry.id = "limited_app";
+    entry.name = "Limited app";
+    entry.executable_path = "/tmp/app.exe";
+    entry.cpu_limit_seconds = 7;
+    entry.memory_limit_mib = 256;
+    ASSERT_TRUE(original.add_app(entry));
+    ASSERT_TRUE(original.save_to_file(path));
+
+    catalog::AppCatalog loaded;
+    ASSERT_TRUE(loaded.load_from_file(path));
+    const auto restored = loaded.find_app("limited_app");
+    ASSERT_TRUE(restored.has_value());
+    EXPECT_EQ(restored->cpu_limit_seconds, 7U);
+    EXPECT_EQ(restored->memory_limit_mib, 256U);
+
+    std::error_code error;
+    std::filesystem::remove(path, error);
+}
+
 }  // namespace
 }  // namespace tradutorlinux

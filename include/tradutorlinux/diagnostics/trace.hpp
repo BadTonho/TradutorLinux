@@ -43,6 +43,7 @@ enum class FailureCategory {
     LinuxError,
     GuestSignal,
     GuestTimeout,
+    GuestResourceLimit,
     InternalError,
 };
 

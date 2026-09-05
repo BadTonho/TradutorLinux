@@ -6,10 +6,23 @@
 
 namespace tradutorlinux::process {
 
+struct ResourceLimits {
+    std::uint64_t cpu_seconds{0};
+    std::uint64_t memory_mib{0};
+};
+
+enum class ResourceLimitKind {
+    None,
+    Cpu,
+    Memory,
+};
+
 enum class GuestOutcomeKind {
     Exited,       // o guest retornou do entry point ou chamou ExitProcess
     Signaled,     // o guest terminou por um sinal Linux (ex.: SIGSEGV)
     TimedOut,     // o guest não terminou dentro de timeout_ms e foi morto
+    ResourceLimited,       // um limite configurado terminou o guest
+    ResourceSetupFailed,   // o limite não pôde ser instalado no filho
     SpawnFailed,  // não foi possível criar o processo filho
 };
 
@@ -25,6 +38,7 @@ struct GuestOutcome {
     bool fault_recorded{};
     std::uint64_t fault_address{};
     std::uint64_t fault_rip{};
+    ResourceLimitKind resource{ResourceLimitKind::None};
 };
 
 struct SignalDescription {
@@ -33,6 +47,7 @@ struct SignalDescription {
 };
 
 [[nodiscard]] SignalDescription describe_signal(int signal_number) noexcept;
+[[nodiscard]] std::string_view resource_limit_name(ResourceLimitKind resource) noexcept;
 
 // Executes the guest entry point in a freshly forked child process and waits
 // for it. The parent keeps both streams (guest stdout, diagnostics stderr);
@@ -41,10 +56,15 @@ struct SignalDescription {
 // waitpid and the caller can publish a controlled guest-signal diagnosis.
 // timeout_ms > 0 limits how long the guest may run; on expiry the child is
 // SIGKILLed and GuestOutcomeKind::TimedOut is returned (timeout_ms == 0 means
-// no limit). Must not be called while the process has other running threads.
+// no limit). Nonzero resource limits are installed in the isolated child
+// before the entry point and inherited by its POSIX descendants; they are
+// containment controls, not a security sandbox. SIGXCPU from ResourceLimits
+// is reported as GuestOutcomeKind::ResourceLimited. Must not be called while
+// the process has other running threads.
 [[nodiscard]] GuestOutcome run_guest_isolated(std::uintptr_t entry_point,
                                               std::uintptr_t stack_top,
                                               std::uint64_t timeout_ms,
+                                              const ResourceLimits& resource_limits = {},
                                               const std::filesystem::path& working_directory = {}) noexcept;
 
 }  // namespace tradutorlinux::process

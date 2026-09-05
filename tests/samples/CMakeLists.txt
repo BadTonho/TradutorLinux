@@ -630,6 +630,14 @@ endif()
 
 tl_add_pe_fixture(tl_hang src/tl_hang.c manifests/tl_hang.json RELOCATABLE NO_RUNTIME_CHECK)
 
+tl_add_pe_fixture(tl_memory_limit src/tl_memory_limit.c manifests/tl_memory_limit.json
+    LINK_KERNEL32 EXPECT_RESOLVED CONSOLE REPORT RELOCATABLE NO_RUNTIME_CHECK)
+
+tl_add_pe_fixture(tl_process_limit_parent src/tl_process_limit_parent.c
+    manifests/tl_process_limit_parent.json
+    LINK_KERNEL32 EXPECT_RESOLVED CONSOLE REPORT RELOCATABLE NO_RUNTIME_CHECK
+    REPORT_SYMBOL "CreateProcessW")
+
 tl_add_pe_fixture(tl_thread src/tl_thread.c manifests/tl_thread.json
     LINK_KERNEL32 EXPECT_RESOLVED CONSOLE RELOCATABLE)
 
@@ -929,6 +937,49 @@ if(TARGET tradutorlinux)
     set_tests_properties(runtime_tl_hang_timeout PROPERTIES
         DEPENDS fixture_tl_hang_metadata
         LABELS "runtime;pe32plus"
+    )
+
+    add_test(
+        NAME runtime_tl_hang_cpu_limit
+        COMMAND "${CMAKE_COMMAND}"
+            "-DINPUT=${TL_FIXTURE_OUTPUT_DIRECTORY}/tl_hang.exe"
+            "-DRUNTIME=$<TARGET_FILE:tradutorlinux>"
+            "-DEXPECTED_EXIT=73"
+            "-DREQUIRED_TRACE=terminated category=\"guest-resource-limit\" resource=\"cpu\""
+            "-DEXTRA_ARGS=--cpu;1"
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/verify_runtime_rejection.cmake"
+    )
+    set_tests_properties(runtime_tl_hang_cpu_limit PROPERTIES
+        DEPENDS fixture_tl_hang_metadata
+        LABELS "runtime;pe32plus;resource-limit"
+    )
+
+    add_test(
+        NAME runtime_tl_memory_limit
+        COMMAND "${CMAKE_COMMAND}"
+            "-DINPUT=${TL_FIXTURE_OUTPUT_DIRECTORY}/tl_memory_limit.exe"
+            "-DRUNTIME=$<TARGET_FILE:tradutorlinux>"
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/verify_memory_limit.cmake"
+    )
+    set_tests_properties(runtime_tl_memory_limit PROPERTIES
+        DEPENDS fixture_tl_memory_limit_metadata
+        WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"
+        LABELS "runtime;pe32plus;resource-limit"
+    )
+
+    add_test(
+        NAME runtime_tl_process_cpu_limit_inherited
+        COMMAND "${CMAKE_COMMAND}"
+            "-DINPUT=${TL_FIXTURE_OUTPUT_DIRECTORY}/tl_process_limit_parent.exe"
+            "-DRUNTIME=$<TARGET_FILE:tradutorlinux>"
+            "-DEXTRA_ARGS=--cpu;1;--timeout;4"
+            "-DEXPECTED_HEX=70726f636573732d6c696d69742d696e686572697465640a"
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/verify_console_output.cmake"
+    )
+    set_tests_properties(runtime_tl_process_cpu_limit_inherited PROPERTIES
+        DEPENDS "fixture_tl_process_limit_parent_metadata;fixture_tl_process_hang_metadata"
+        WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"
+        LABELS "runtime;pe32plus;resource-limit;process"
     )
 
     add_test(

@@ -14,11 +14,11 @@ namespace tradutorlinux::cli_detail {
 
 constexpr std::string_view kUsage =
     "Uso:\n"
-    "  tradutorlinux [--trace[=canais]] [--report] [--timeout <segundos>] <arquivo.exe> [argumentos...]\n"
-    "  tradutorlinux install <setup.exe> [--name <Nome>] [--prefix <dir>] [--app-exe <caminho>]\n"
+    "  tradutorlinux [--trace[=canais]] [--report] [--timeout <segundos>] [--cpu <segundos>] [--memory <MiB>] <arquivo.exe> [argumentos...]\n"
+    "  tradutorlinux install <setup.exe> [--name <Nome>] [--prefix <dir>] [--app-exe <caminho>] [--cpu <segundos>] [--memory <MiB>]\n"
     "  tradutorlinux app list\n"
-    "  tradutorlinux app run <id_ou_nome> [argumentos...]\n"
-    "  tradutorlinux app add <arquivo.exe> [--name <Nome>] [--prefix <dir>] [--id <id>]\n"
+    "  tradutorlinux app run <id_ou_nome> [--cpu <segundos>] [--memory <MiB>] [argumentos...]\n"
+    "  tradutorlinux app add <arquivo.exe> [--name <Nome>] [--prefix <dir>] [--id <id>] [--cpu <segundos>] [--memory <MiB>]\n"
     "  tradutorlinux app remove <id>\n";
 
 [[nodiscard]] const char* status_label(pe::ParseStatus status);

@@ -21,6 +21,7 @@ enum class ExitCode : int {
     InternalError = 70,
     GuestFault = 71,
     GuestTimeout = 72,
+    GuestResourceLimit = 73,
 };
 
 enum class CommandMode {
@@ -43,6 +44,11 @@ struct CommandLine {
     // Tempo máximo de execução do convidado, em milissegundos; 0 = sem limite.
     std::uint64_t timeout_ms{0};
     bool timeout_set{false};
+    // Limites de recursos do convidado; zero = sem limite. A memória usa MiB.
+    std::uint64_t cpu_limit_seconds{0};
+    bool cpu_limit_set{false};
+    std::uint64_t memory_limit_mib{0};
+    bool memory_limit_set{false};
     std::optional<std::filesystem::path> executable_path;
     // Executável final de uma instalação, relativo a C:\\ ou absoluto dentro
     // do drive_c do prefixo escolhido.

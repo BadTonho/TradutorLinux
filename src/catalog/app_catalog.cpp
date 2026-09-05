@@ -7,6 +7,7 @@
 #include <cstdlib>
 #include <fstream>
 #include <iomanip>
+#include <limits>
 #include <sstream>
 #include <system_error>
 
@@ -178,6 +179,23 @@ std::optional<std::string> parse_json_string(std::string_view& src) {
     return unescape_json_string(raw);
 }
 
+std::optional<std::uint64_t> parse_json_uint64(std::string_view& src) {
+    skip_whitespace(src);
+    if (src.empty() || src.front() < '0' || src.front() > '9') {
+        return std::nullopt;
+    }
+    std::uint64_t value = 0;
+    while (!src.empty() && src.front() >= '0' && src.front() <= '9') {
+        const std::uint64_t digit = static_cast<std::uint64_t>(src.front() - '0');
+        if (value > (std::numeric_limits<std::uint64_t>::max() - digit) / 10U) {
+            return std::nullopt;
+        }
+        value = value * 10U + digit;
+        src.remove_prefix(1);
+    }
+    return value;
+}
+
 }  // namespace
 
 std::filesystem::path AppCatalog::default_catalog_path() {
@@ -298,6 +316,8 @@ bool AppCatalog::save_to_file(const std::filesystem::path& path) const {
         file << "      \"icon_path\": \"" << escape_json_string(app.icon_path) << "\",\n";
         file << "      \"working_directory\": \"" << escape_json_string(app.working_directory) << "\",\n";
         file << "      \"created_at\": \"" << escape_json_string(app.created_at) << "\",\n";
+        file << "      \"cpu_limit_seconds\": " << app.cpu_limit_seconds << ",\n";
+        file << "      \"memory_limit_mib\": " << app.memory_limit_mib << ",\n";
         file << "      \"args\": [";
         for (std::size_t j = 0; j < app.args.size(); ++j) {
             file << "\"" << escape_json_string(app.args[j]) << "\"";
@@ -395,6 +415,15 @@ bool AppCatalog::load_from_file(const std::filesystem::path& path) {
                         } else {
                             break;
                         }
+                    }
+                }
+            } else if (*key_opt == "cpu_limit_seconds" || *key_opt == "memory_limit_mib") {
+                const auto value = parse_json_uint64(view);
+                if (value.has_value()) {
+                    if (*key_opt == "cpu_limit_seconds") {
+                        entry.cpu_limit_seconds = *value;
+                    } else {
+                        entry.memory_limit_mib = *value;
                     }
                 }
             } else {

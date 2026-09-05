@@ -26,8 +26,8 @@ as referências nas fases não criem listas paralelas.
 ## Estado atual
 
 - **Fase atual:** Fase 13 — compatibilidade ampla por portfólio.
-- **Próximo ciclo:** B1 é a próxima etapa operacional, seguida de B10. B2 fica
-  estacionada até uma decisão de produto específica sobre tradução de interface.
+- **Próximo ciclo:** B10 é a próxima etapa operacional. B2 fica estacionada até
+  uma decisão de produto específica sobre tradução de interface.
 - **Último incremento:** a Fase 13.14 concluiu TLS genérico e a fixture
   reutilizável Worker/RSL. O caso comercial do Roblox continua como benchmark:
   imports resolvidos, mas execução interrompida em `RBXCRASH`/`ExitProcess 3`.
@@ -36,6 +36,12 @@ as referências nas fases não criem listas paralelas.
   `Copy` (`546`), verifica a cópia dentro da raiz e encerra o runtime com exit
   `0`; a execução direta sem interação continua sujeita a timeout, portanto o
   alvo não é declarado de uso diário nem como suporte geral.
+- **Última etapa de infraestrutura:** B1 concluiu limites opcionais de CPU e
+  memória por CLI e catálogo. O runtime aplica `RLIMIT_CPU` e `RLIMIT_AS` no
+  filho isolado, propaga a herança POSIX para `CreateProcessW`, e diferencia
+  contenção (`GuestResourceLimit 73`) de timeout (`GuestTimeout 72`). As
+  fixtures `tl_hang`, `tl_memory_limit` e `tl_process_limit_parent` cobrem
+  CPU, memória e herança, respectivamente.
 
 Os demais bullets desta seção são registro cronológico de marcos já entregues;
 para decidir o próximo trabalho, use somente a ordem do backlog abaixo.
@@ -352,8 +358,9 @@ reutilizáveis por várias classes de aplicativos. As lacunas observadas são:
   temporizadores multimídia e diagnóstico (fixture `tl_gdiex.exe` cobre 3+8+1+1+1); `POWRPROF.dll` e `IPHLPAPI.DLL` permanecem avaliação futura;
 - [x] manter isolamento de processo, timeout, `--report`, mensagens de falha e
   testes de integração para as famílias implementadas;
-- [ ] definir e implementar limites configuráveis de CPU/RAM por aplicativo
-  (item `B1` do backlog consolidado).
+- [x] definir e implementar limites configuráveis de CPU/RAM por aplicativo
+  (item `B1` do backlog consolidado); contrato, catálogo, herança e
+  diagnósticos estão cobertos por fixtures e testes CTest.
 
 A ordem de implementação continua subordinada à fase atual e ao método do
 projeto: cada item precisa de um aplicativo-alvo ou fixture independente,
@@ -941,10 +948,10 @@ sobrescrita e com confinamento à raiz visual. O teste externo versionado
 `build/debug/tests/seven_zip_smoke` confirma a cópia e o encerramento normal;
 as demais operações do File Manager continuam limitadas.
 
-### Próximo ciclo — B1 e B10
+### Próximo ciclo — B10
 
-A ordem operacional agora é tratar **B1** e depois **B10**. B2 é uma trilha de
-produto separada do runtime Win32 e fica estacionada.
+A próxima etapa operacional é tratar **B10**. B2 é uma trilha de produto
+separada do runtime Win32 e fica estacionada.
 
 **Decisão registrada:** o 7-Zip File Manager 24.08 foi escolhido porque já
 possui amostra PE32+ x86-64 local, 298/298 imports resolvidos, classe Win32
@@ -960,13 +967,16 @@ imports não encerra B5.
   idioma, precedência, fallback e comportamento para arquivo ausente ou
   inválido. A aplicação deve ser opt-in, isolada por aplicativo e validada com
   um programa externo de teste; não misturar essa camada ao contrato do runtime.
-- [ ] **B1 — Limites de CPU e RAM por aplicativo.** Depois da reconciliação
-  documental, definir a interface de configuração (CLI, catálogo e launcher),
-  a unidade dos limites, a herança para processos-filhos, o tratamento de
-  `timeout` e os diagnósticos. Escolher um mecanismo Linux efetivo, como
-  `setrlimit` ou cgroup, e implementar limites verificáveis de CPU e memória.
-  Criar uma fixture que exceda cada limite, validar o código/evento de saída e
-  deixar claro que isso é contenção de recursos, não sandbox.
+- [x] **B1 — Limites de CPU e RAM por aplicativo.** O contrato usa `--cpu
+  <segundos>` e `--memory <MiB>` (zero desabilita o limite) no modo direto,
+  `app add`, `app run` e `install`; valores persistentes ficam em
+  `library.json`, com override explícito no `app run`. O filho isolado aplica
+  `RLIMIT_CPU`/`RLIMIT_AS`, e seus processos Win32 descendentes herdam os
+  limites pelo `fork`. `SIGXCPU` retorna `73` e traceia
+  `guest-resource-limit`; falha de instalação retorna `70`. As fixtures
+  `tl_hang.exe`, `tl_memory_limit.exe` e `tl_process_limit_parent.exe`, os
+  testes de CLI/catálogo e o CTest direcionado comprovam CPU, memória, herança
+  e diagnóstico. A contenção não é sandbox.
 - [ ] **B10 — Fechar a validação de recursos X11 com LeakSanitizer.** Reexecutar
   o smoke sob Xvfb com desenho repetido e LeakSanitizer, registrar o resultado
   e manter a liberação de cores, grabs, janelas e displays protegida por

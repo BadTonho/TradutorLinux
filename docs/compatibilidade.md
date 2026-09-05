@@ -11,7 +11,8 @@ Há três dimensões independentes:
   foram resolvidos; `unsupported` significa que ao menos uma dependência ou
   mecanismo não foi resolvido. Isso não comprova execução.
 - **execução:** `not-attempted`, `passed` ou uma falha controlada como
-  `GuestTimeout 72`, `GuestFault 71` ou um código explícito do convidado.
+  `GuestTimeout 72`, `GuestFault 71`, `GuestResourceLimit 73` ou um código
+  explícito do convidado.
 - **nível funcional:** o catálogo usa `inicia`, `fluxo principal restrito`,
   `fluxo principal` e `uso diário` somente quando há fluxo representativo,
   resultado observável e limitações publicadas.
@@ -49,6 +50,8 @@ Assim, um aplicativo pode ter `supported` na resolução de imports e continuar
 | `tl_dialog.exe` | PE32+ AMD64 | Não | `COMCTL32.dll!InitCommonControlsEx`; `KERNEL32.dll!ExitProcess`, `GetModuleHandleW`, `GetStdHandle`, `WriteFile`; `USER32.dll!DialogBoxParamW`, `EndDialog`, `GetDlgItem`, `SetDlgItemTextW`, `SendDlgItemMessageW`, `GetNextDlgTabItem`, `GetWindowRect`, `Get/SetWindowLongW`, `CopyImage`, `DestroyIcon`, `LoadIconW` | **Suportado no subconjunto modal:** recurso `DIALOG` padrão, `WM_INITDIALOG`, controles lógicos, texto por ID, tabulação, ícone copiado e retorno 42; o cenário `dialog` do `runtime_gui_smoke` envia Tab/Enter e espera `dialog\n`, sem `WM_QUIT` modal | Fase 13.11 |
 | `tl_crash.exe` | PE32+ AMD64 | Não | Nenhum | Gerado, verificado, mapeado e executado em processo filho isolado: o convidado acessa o endereço `0`, o hospedeiro observa o `SIGSEGV` via `waitpid`, emite `terminated category="guest-signal" signal="SIGSEGV" fault-address="0x0"` (o crash log captura o `si_addr` no filho e o converte em RVA/seção/importação quando o endereço cai dentro da imagem) e retorna `71` (`GuestFault`) | Diagnóstico de falhas |
 | `tl_hang.exe` | PE32+ AMD64 | Não | Nenhum | Gerado, verificado e executado em processo filho isolado com `--timeout 1`: o convidado entra em loop infinito, o hospedeiro o mata com `SIGKILL`, emite `terminated category="guest-timeout"` e retorna `72` (`GuestTimeout`) | Diagnóstico de falhas |
+| `tl_memory_limit.exe` | PE32+ AMD64 | Não | `KERNEL32.dll!VirtualAlloc`, `VirtualFree`, `GetLastError`, console e `ExitProcess` | Fixture de contenção: solicita 1 GiB com `--memory 128`; `VirtualAlloc` falha com `ERROR_NOT_ENOUGH_MEMORY`, imprime `memory-limit\n` e retorna `0`. O trace registra a instalação do limite no filho isolado | Limites de recursos |
+| `tl_process_limit_parent.exe` / `tl_process_hang.exe` | PE32+ AMD64 | Não | `CreateProcessW`, espera, código de saída, handles e console | O pai cria `tl_process_hang.exe` com `CreateProcessW`; o filho herda `RLIMIT_CPU`, recebe `SIGXCPU` e termina com código observado `1`; o pai imprime `process-limit-inherited\n` e retorna `0` | Herança de limites |
 | `tl_thread.exe` | PE32+ AMD64 | Não | `KERNEL32.dll!CloseHandle`, `CreateThread`, `ExitProcess`, `ExitThread`, `GetStdHandle`, `WaitForSingleObject`, `WriteFile` | **Suportado no escopo da Fase 11**: cria duas threads sequenciais, cada uma escreve "Thread done" e termina via `ExitThread`; a thread principal aguarda cada handle, escreve "Main done" e encerra. Metadata e execução e2e passam em Debug, Release e Sanitize (`LSAN_OPTIONS=detect_leaks=0`); saída esperada: `Thread done\nThread done\nMain done\n` e exit `0` | Fase 11 |
 | `tl_tls_generic.exe` | PE32+ AMD64 | Não | `KERNEL32.dll!ExitProcess`, `GetStdHandle`, `WriteFile` | **Suportado no subconjunto TLS:** valida byte inicializado, zero-fill, slot pointer-backed `0x430` e bloco associado zerado; saída `tls-generic\n`, exit `0`. A fixture declara explicitamente o diretório PE TLS para o build sem CRT; unitário e 4 testes CTest passam no Debug | TLS genérico |
 | `tl_files_wide.exe` | PE32+ AMD64 | Não | `KERNEL32.dll` — arquivos, metadados, tempos e caminhos Unicode | Fixture genérica suportada: cria arquivo com `é`, consulta tamanho/atributos/tempos, copia, move e remove; saída `files\n`, exit `0` | Base de arquivos |
@@ -449,6 +452,12 @@ fluxo principal. Os contratos abaixo são protegidos por
 | `WINMM.dll` | `PlaySoundA/W` e `timeSetEvent` mantêm os retornos de compatibilidade históricos; callbacks multimídia não são agendados e `timeKillEvent` não mantém estado de timer. |
 
 ### Limitações conhecidas
+
+- `--cpu <segundos>` usa `RLIMIT_CPU` e mede tempo de CPU, não tempo de parede;
+  `--memory <MiB>` usa `RLIMIT_AS` e limita o espaço de endereçamento virtual do
+  processo. Ambos aceitam `0` como sem limite. Os limites são instalados no
+  filho isolado, herdados por processos criados via `CreateProcessA/W` e não
+  constituem sandbox.
 
 - `WIN32_FIND_DATAW` tem layout de 592 bytes; enumeração preenche atributos,
   tamanho e tempos. A variante A segue o mesmo estado.

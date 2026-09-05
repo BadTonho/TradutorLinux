@@ -365,6 +365,8 @@ ExitCode run_command(const CommandLine& command_line, std::ostream& stdout_strea
             !executable_parent.empty() && std::filesystem::is_directory(executable_parent)
                 ? executable_parent.string()
                 : paths.drive_c.string();
+        entry.cpu_limit_seconds = command_line.cpu_limit_seconds;
+        entry.memory_limit_mib = command_line.memory_limit_mib;
 
         if (!app_catalog.add_app(entry) || !app_catalog.save_to_file()) {
             stderr_stream << "erro: falha ao salvar aplicativo na biblioteca\n";
@@ -422,6 +424,14 @@ ExitCode run_command(const CommandLine& command_line, std::ostream& stdout_strea
         if (!app_opt->working_directory.empty()) {
             effective_cmd.guest_working_directory =
                 std::filesystem::path(app_opt->working_directory);
+        }
+        if (!command_line.cpu_limit_set) {
+            effective_cmd.cpu_limit_seconds = app_opt->cpu_limit_seconds;
+            effective_cmd.cpu_limit_set = app_opt->cpu_limit_seconds != 0;
+        }
+        if (!command_line.memory_limit_set) {
+            effective_cmd.memory_limit_mib = app_opt->memory_limit_mib;
+            effective_cmd.memory_limit_set = app_opt->memory_limit_mib != 0;
         }
         std::vector<std::string> combined_args = app_opt->args;
         combined_args.insert(combined_args.end(), command_line.guest_arguments.begin(),
@@ -643,6 +653,8 @@ ExitCode run_command(const CommandLine& command_line, std::ostream& stdout_strea
                     entry.executable_path = best_candidate.string();
                     entry.prefix_path = prefix_dir.string();
                     entry.working_directory = best_candidate.parent_path().string();
+                    entry.cpu_limit_seconds = effective_cmd.cpu_limit_seconds;
+                    entry.memory_limit_mib = effective_cmd.memory_limit_mib;
                     if (app_catalog.add_app(entry) && app_catalog.save_to_file()) {
                         write_install_trace(effective_cmd.trace_enabled, stderr_stream,
                                             diagnostics::TraceLevel::Info, "registered",
@@ -801,8 +813,26 @@ ExitCode run_command(const CommandLine& command_line, std::ostream& stdout_strea
         parse_result.info.tls_info.size_of_zero_fill,
         relocated_tls_callbacks(parse_result.info, process.image));
 
+    const process::ResourceLimits resource_limits{
+        effective_cmd.cpu_limit_set ? effective_cmd.cpu_limit_seconds : 0,
+        effective_cmd.memory_limit_set ? effective_cmd.memory_limit_mib : 0,
+    };
+    if (resource_limits.cpu_seconds != 0 || resource_limits.memory_mib != 0) {
+        std::vector<diagnostics::TraceField> fields;
+        fields.reserve(3);
+        fields.emplace_back("inheritance", "fork");
+        if (resource_limits.cpu_seconds != 0) {
+            fields.emplace_back("cpu-seconds", std::to_string(resource_limits.cpu_seconds));
+        }
+        if (resource_limits.memory_mib != 0) {
+            fields.emplace_back("memory-mib", std::to_string(resource_limits.memory_mib));
+        }
+        diagnostics::write_trace(stderr_stream, diagnostics::TraceComponent::Process,
+                                 diagnostics::TraceLevel::Info, "resource-limits", fields);
+    }
     const process::GuestOutcome outcome = process::run_guest_isolated(
         process.thread.entry_point, process.thread.stack_top, effective_cmd.timeout_ms,
+        resource_limits,
         *effective_cmd.guest_working_directory);
 
     // Contexto de falha calculado antes do destroy_process: o evento
@@ -891,6 +921,8 @@ ExitCode run_command(const CommandLine& command_line, std::ostream& stdout_strea
         entry.executable_path = selected_executable->string();
         entry.prefix_path = prefix_dir.string();
         entry.working_directory = selected_executable->parent_path().string();
+        entry.cpu_limit_seconds = effective_cmd.cpu_limit_seconds;
+        entry.memory_limit_mib = effective_cmd.memory_limit_mib;
         if (!app_catalog.add_app(entry) || !app_catalog.save_to_file()) {
             write_install_trace(effective_cmd.trace_enabled, stderr_stream,
                                 diagnostics::TraceLevel::Error, "failed",
@@ -907,6 +939,53 @@ ExitCode run_command(const CommandLine& command_line, std::ostream& stdout_strea
         stderr_stream << "instalação concluída; aplicativo registrado como '" << entry.name
                       << "' [id: " << entry.id << "]\n";
         return ExitCode::Success;
+    }
+
+    if (outcome.kind == process::GuestOutcomeKind::ResourceSetupFailed) {
+        const std::string resource{process::resource_limit_name(outcome.resource)};
+        if (effective_cmd.trace_enabled) {
+            const std::array fields{
+                diagnostics::TraceField{"category",
+                                        std::string{diagnostics::failure_category_name(
+                                            diagnostics::FailureCategory::InternalError)}},
+                diagnostics::TraceField{"resource", resource},
+                diagnostics::TraceField{"detail",
+                                        "não foi possível instalar o limite no processo filho"},
+            };
+            diagnostics::write_trace(stderr_stream, diagnostics::TraceComponent::Process,
+                                     diagnostics::TraceLevel::Error,
+                                     "resource-limit-setup-failed", fields);
+            write_unmap_trace(stderr_stream, unmap_base);
+        } else {
+            stderr_stream << "erro: não foi possível instalar o limite de recurso no processo filho ("
+                          << resource << ")\n";
+        }
+        return ExitCode::InternalError;
+    }
+
+    if (outcome.kind == process::GuestOutcomeKind::ResourceLimited) {
+        const process::SignalDescription signal = process::describe_signal(outcome.signal_number);
+        const std::string resource{process::resource_limit_name(outcome.resource)};
+        if (effective_cmd.trace_enabled) {
+            std::vector<diagnostics::TraceField> fields;
+            fields.reserve(5);
+            fields.emplace_back(
+                "category",
+                std::string{diagnostics::failure_category_name(
+                    diagnostics::FailureCategory::GuestResourceLimit)});
+            fields.emplace_back("resource", resource);
+            fields.emplace_back("signal", std::string{signal.name});
+            if (outcome.resource == process::ResourceLimitKind::Cpu) {
+                fields.emplace_back("limit-seconds",
+                                    std::to_string(resource_limits.cpu_seconds));
+            }
+            diagnostics::write_trace(stderr_stream, diagnostics::TraceComponent::Process,
+                                     diagnostics::TraceLevel::Error, "terminated", fields);
+            write_unmap_trace(stderr_stream, unmap_base);
+        } else {
+            stderr_stream << "erro: o programa convidado excedeu o limite de " << resource << '\n';
+        }
+        return ExitCode::GuestResourceLimit;
     }
 
     if (outcome.kind == process::GuestOutcomeKind::Signaled) {

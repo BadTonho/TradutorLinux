@@ -14,7 +14,11 @@ if(NOT DEFINED PREFIX_DIR)
     set(PREFIX_DIR "${CMAKE_CURRENT_BINARY_DIR}/default-prefix")
 endif()
 file(REMOVE_RECURSE "${PREFIX_DIR}")
-set(runtime_command "${CMAKE_COMMAND}" -E env "TL_PREFIX=${PREFIX_DIR}" "${RUNTIME}" --trace "${INPUT}")
+set(runtime_command "${CMAKE_COMMAND}" -E env "TL_PREFIX=${PREFIX_DIR}" "${RUNTIME}" --trace)
+if(DEFINED EXTRA_ARGS)
+    list(APPEND runtime_command ${EXTRA_ARGS})
+endif()
+list(APPEND runtime_command "${INPUT}")
 
 execute_process(
     COMMAND ${runtime_command}

@@ -25,7 +25,8 @@ teclado ou pela biblioteca `library.json`; também permite filtrar e selecionar
 aplicativos cadastrados. Digite o caminho completo ou relativo, clique em
 **Analisar** para executar `--report`, ou em
 **Executar** para iniciar o programa convidado. O painel inferior mostra o
-trace, imports, erros e código de saída. **Limpar** apaga o formulário e
+trace, imports, erros e código de saída. Aplicativos selecionados usam os
+limites de CPU/memória salvos no catálogo. **Limpar** apaga o formulário e
 **Sair** fecha a aplicação.
 
 O contrato da interface, o fluxo assíncrono e os limites do launcher estão em

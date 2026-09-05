@@ -7,6 +7,7 @@
 #include <array>
 #include <cstdint>
 #include <filesystem>
+#include <limits>
 #include <optional>
 #include <ostream>
 #include <string>
@@ -23,6 +24,63 @@ namespace {
 [[nodiscard]] bool is_option(const std::string_view argument) {
     TL_TRACE_FUNCTION();
     return argument.starts_with('-');
+}
+
+enum class LimitOptionResult {
+    NotMatched,
+    Parsed,
+    Error,
+};
+
+[[nodiscard]] LimitOptionResult parse_resource_limit_option(
+    const std::string_view argument, int& index, const int argc, const char* const argv[],
+    CommandLine& command_line, std::string& error_message) {
+    const bool is_cpu = argument == "--cpu";
+    const bool is_memory = argument == "--memory";
+    if (!is_cpu && !is_memory) {
+        return LimitOptionResult::NotMatched;
+    }
+
+    bool& already_set = is_cpu ? command_line.cpu_limit_set : command_line.memory_limit_set;
+    if (already_set) {
+        error_message = "a opção " + std::string{argument} + " foi repetida";
+        return LimitOptionResult::Error;
+    }
+    if (index + 1 >= argc) {
+        error_message = "a opção " + std::string{argument} +
+                        (is_cpu ? " requer um valor em segundos" : " requer um valor em MiB");
+        return LimitOptionResult::Error;
+    }
+
+    const std::string_view value{argv[index + 1]};
+    if (value.empty()) {
+        error_message = "valor inválido para " + std::string{argument} + ": " + std::string{value};
+        return LimitOptionResult::Error;
+    }
+    std::uint64_t parsed = 0;
+    for (const char digit : value) {
+        if (digit < '0' || digit > '9') {
+            error_message = "valor inválido para " + std::string{argument} + ": " +
+                            std::string{value};
+            return LimitOptionResult::Error;
+        }
+        const std::uint64_t numeric = static_cast<std::uint64_t>(digit - '0');
+        if (parsed > (std::numeric_limits<std::uint64_t>::max() - numeric) / 10U) {
+            error_message = "valor de " + std::string{argument} +
+                            " muito grande: " + std::string{value};
+            return LimitOptionResult::Error;
+        }
+        parsed = parsed * 10U + numeric;
+    }
+
+    already_set = true;
+    if (is_cpu) {
+        command_line.cpu_limit_seconds = parsed;
+    } else {
+        command_line.memory_limit_mib = parsed;
+    }
+    ++index;
+    return LimitOptionResult::Parsed;
 }
 
 }  // namespace
@@ -121,17 +179,28 @@ ParseResult parse_command_line(const int argc, const char* const argv[]) {
                 }
             } else if (arg == "--report") {
                 command_line.report_only = true;
-            } else if (arg == "--trace-json") {
+            } else {
+                std::string resource_error;
+                const LimitOptionResult resource_result =
+                    parse_resource_limit_option(arg, i, argc, argv, command_line, resource_error);
+                if (resource_result == LimitOptionResult::Error) {
+                    return {.command_line = std::nullopt, .error_message = resource_error};
+                }
+                if (resource_result == LimitOptionResult::Parsed) {
+                    continue;
+                }
+                if (arg == "--trace-json") {
                 if (i + 1 >= argc) {
                     return {.command_line = std::nullopt,
                             .error_message = "a opção --trace-json requer um diretório"};
                 }
                 command_line.trace_json_directory = std::filesystem::path{argv[++i]};
-            } else if (!command_line.executable_path.has_value() && !arg.starts_with('-')) {
+                } else if (!command_line.executable_path.has_value() && !arg.starts_with('-')) {
                 command_line.executable_path = std::filesystem::path{std::string{arg}};
-            } else {
+                } else {
                 return {.command_line = std::nullopt,
                         .error_message = "opção desconhecida para 'install': " + std::string{arg}};
+                }
             }
         }
         if (!command_line.executable_path.has_value()) {
@@ -196,6 +265,15 @@ ParseResult parse_command_line(const int argc, const char* const argv[]) {
                 } else if (arg == "--report") {
                     command_line.report_only = true;
                 } else {
+                    std::string resource_error;
+                    const LimitOptionResult resource_result =
+                        parse_resource_limit_option(arg, i, argc, argv, command_line, resource_error);
+                    if (resource_result == LimitOptionResult::Error) {
+                        return {.command_line = std::nullopt, .error_message = resource_error};
+                    }
+                    if (resource_result == LimitOptionResult::Parsed) {
+                        continue;
+                    }
                     command_line.guest_arguments.emplace_back(arg);
                 }
             }
@@ -216,6 +294,14 @@ ParseResult parse_command_line(const int argc, const char* const argv[]) {
                     command_line.custom_prefix = std::filesystem::path{argv[++i]};
                 } else if (arg == "--id" && i + 1 < argc) {
                     command_line.app_id = argv[++i];
+                } else {
+                    std::string resource_error;
+                    const LimitOptionResult resource_result =
+                        parse_resource_limit_option(arg, i, argc, argv, command_line,
+                                                    resource_error);
+                    if (resource_result == LimitOptionResult::Error) {
+                        return {.command_line = std::nullopt, .error_message = resource_error};
+                    }
                 }
             }
             return {.command_line = std::move(command_line), .error_message = {}};
@@ -360,6 +446,19 @@ ParseResult parse_command_line(const int argc, const char* const argv[]) {
             continue;
         }
 
+        if (!options_ended) {
+            std::string resource_error;
+            const LimitOptionResult resource_result =
+                parse_resource_limit_option(argument, index, argc, argv, command_line,
+                                            resource_error);
+            if (resource_result == LimitOptionResult::Error) {
+                return {.command_line = std::nullopt, .error_message = resource_error};
+            }
+            if (resource_result == LimitOptionResult::Parsed) {
+                continue;
+            }
+        }
+
         if (!options_ended && is_option(argument)) {
             return {.command_line = std::nullopt,
                     .error_message = "opção desconhecida: " + std::string{argument}};
@@ -386,13 +485,13 @@ void print_help(std::ostream& stream) {
     stream << kUsage;
     stream << "\n";
     stream << "Comandos de Gerenciamento da Biblioteca e Instalação:\n";
-    stream << "  install <setup.exe> [--name <Nome>] [--prefix <dir>] [--app-exe <caminho>]\n";
+    stream << "  install <setup.exe> [--name <Nome>] [--prefix <dir>] [--app-exe <caminho>] [--cpu <segundos>] [--memory <MiB>]\n";
     stream << "             instala em prefixo próprio e cadastra um único executável detectado\n";
     stream << "             --app-exe escolhe manualmente um .exe dentro de drive_c\n";
     stream << "  app list   lista todos os aplicativos cadastrados na biblioteca\n";
     stream << "  app run <id_ou_nome> [args...]\n";
     stream << "             executa um aplicativo cadastrado na biblioteca\n";
-    stream << "  app add <arquivo.exe> [--name <Nome>] [--prefix <dir>] [--id <id>]\n";
+    stream << "  app add <arquivo.exe> [--name <Nome>] [--prefix <dir>] [--id <id>] [--cpu <segundos>] [--memory <MiB>]\n";
     stream << "             cadastra manualmente um executável na biblioteca\n";
     stream << "  app remove <id>\n";
     stream << "             remove um aplicativo do catálogo da biblioteca\n\n";
@@ -404,6 +503,10 @@ void print_help(std::ostream& stream) {
     stream << "  --report   relata imports suportados sem executar o arquivo\n";
     stream << "  --timeout <segundos>\n";
     stream << "             limita a execução do convidado; 0 = sem limite (padrão)\n";
+    stream << "  --cpu <segundos>\n";
+    stream << "             limita o tempo de CPU do convidado; 0 = sem limite (padrão)\n";
+    stream << "  --memory <MiB>\n";
+    stream << "             limita o espaço virtual do convidado; 0 = sem limite (padrão)\n";
     stream << "  --help     mostra esta ajuda\n";
     stream << "  --version  mostra a versão do TradutorLinux\n";
 }

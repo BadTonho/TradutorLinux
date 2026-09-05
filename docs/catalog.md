@@ -24,6 +24,19 @@ Os níveis abaixo são funcionais e independentes do `result` do `--report`:
 `result: supported` no `--report` significa somente `imports-resolved`. Ele não
 eleva sozinho um aplicativo para qualquer nível funcional acima.
 
+## Limites por aplicativo
+
+Cada entrada de `library.json` pode carregar dois limites opcionais:
+`cpu_limit_seconds` (segundos de CPU) e `memory_limit_mib` (MiB de espaço de
+endereçamento). O valor `0` significa sem limite. `app add` e `install` podem
+gravar esses valores com `--cpu <segundos>` e `--memory <MiB>`; `app run` usa os
+valores do catálogo e aceita os mesmos parâmetros para substituí-los, inclusive
+com `0` para desativar um limite persistido.
+
+Os limites são aplicados no processo convidado isolado e herdados por processos
+criados pelo convidado. Eles são contenção de recursos do runtime, não uma
+sandbox ou uma fronteira de segurança.
+
 ## Console
 
 | Aplicativo | Versão | Imports | Estado | Fixture/Target |
