@@ -226,4 +226,17 @@ if(TARGET tradutorlinux_samples AND TARGET tradutorlinux)
         LABELS "runtime;pe32plus;compat;profile;dll;isolation"
         TIMEOUT 90
     )
+    add_test(
+        NAME integration_proton_backend
+        COMMAND "${CMAKE_COMMAND}"
+            "-DRUNTIME=$<TARGET_FILE:tradutorlinux>"
+            "-DFIXTURE=${CMAKE_CURRENT_BINARY_DIR}/samples/generated/tl_proton_probe.exe"
+            "-DWORK=${CMAKE_CURRENT_BINARY_DIR}/proton_backend_work"
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/samples/verify_proton_backend.cmake"
+    )
+    set_tests_properties(integration_proton_backend PROPERTIES
+        DEPENDS "fixture_tl_proton_probe_metadata;report_tl_proton_probe_support"
+        LABELS "runtime;pe32plus;backend;proton;mock"
+        TIMEOUT 60
+    )
 endif()

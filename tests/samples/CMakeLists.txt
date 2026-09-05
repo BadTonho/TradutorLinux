@@ -483,6 +483,9 @@ tl_add_pe_fixture(tl_file src/tl_file.c manifests/tl_file.json
 tl_add_pe_fixture(tl_compat_file src/tl_compat_file.c manifests/tl_compat_file.json
     LINK_KERNEL32 EXPECT_RESOLVED CONSOLE REPORT RELOCATABLE NO_RUNTIME_CHECK
     REPORT_SYMBOL "CreateFileA")
+tl_add_pe_fixture(tl_proton_probe src/tl_proton_probe.c manifests/tl_proton_probe.json
+    LINK_KERNEL32 EXPECT_RESOLVED CONSOLE REPORT RELOCATABLE NO_RUNTIME_CHECK
+    REPORT_SYMBOL "GetStdHandle")
 
 set(TL_COMPAT_DLL_A "${TL_FIXTURE_OUTPUT_DIRECTORY}/tl_compat_dll_a.dll")
 set(TL_COMPAT_DLL_B "${TL_FIXTURE_OUTPUT_DIRECTORY}/tl_compat_dll_b.dll")
