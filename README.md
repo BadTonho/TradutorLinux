@@ -8,12 +8,16 @@ O objetivo de longo prazo é ampliar esse subconjunto para classes cada vez mais
 
 O estado atual é a **Fase 13**. A subetapa **13.14 (TLS genérico e Worker RSL)**
 foi concluída para as fixtures reutilizáveis; o caso comercial do Roblox
-continua como benchmark com execução não concluída. O próximo ciclo começa pela
-reconciliação do inventário e dos níveis de compatibilidade (`B4` no
-`ROADMAP.md`). Parser, mapeamento, imports, console, runtime básico,
-diagnóstico, relatório de cobertura, instaladores em prefixos e GUI Win32
-experimental já têm entregas validadas. O suporte continua restrito às
-aplicações, APIs e limitações publicadas na matriz de compatibilidade.
+continua como benchmark com execução não concluída. O ciclo de reconciliação,
+portfólio, limites de recursos, instalação MSIX/AppX, validação X11 e
+expectativas de fixtures (`B1`, `B4`, `B5`, `B7`, `B8`, `B10` e `B16` no
+`ROADMAP.md`) já tem entregas validadas. As próximas etapas são condicionadas:
+B2 exige decisão de produto, B6 exige a amostra comercial Worker/RSL, B9 exige
+evidência adicional de unwind e B11–B19 exigem alvo ou benefício medido. Parser,
+mapeamento, imports, console, runtime básico, diagnóstico, relatório de
+cobertura, instaladores em prefixos e GUI Win32 experimental já têm entregas
+validadas. O suporte continua restrito às aplicações, APIs e limitações
+publicadas na matriz de compatibilidade.
 
 Consulte [PROJETO.md](PROJETO.md) para visão e arquitetura e [ROADMAP.md](ROADMAP.md) para os marcos.
 

@@ -12,7 +12,7 @@ O mapeamento atual é:
 - tabelas de codepage versionadas → `B13`;
 - override por aplicativo → `B14`;
 - drives do prefixo e symlinks → `B15`;
-- expectativas `TL_TODO` nos fixtures → `B16`;
+- expectativas explícitas nos fixtures → `B16`;
 - supervisor entre processos → `B17`;
 - SEH estruturado adicional → `B18`;
 - APIs abundantes, como threadpool e ALPC → `B19`.

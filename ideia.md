@@ -6,7 +6,7 @@ de tarefas do projeto.
 
 Os pedidos registrados aqui foram preservados como:
 
-- `B1`: limitação efetiva de CPU e RAM por aplicativo;
+- `B1` (concluído): limitação efetiva de CPU e RAM por aplicativo;
 - `B2`: arquivos de tradução isolados por aplicativo, inclusive para
   programas de terceiros;
 - `B3`: entrada e localização básica do aplicativo por caminho (`path`), já
