@@ -960,9 +960,10 @@ marcam itens condicionais como concluídos; definem os gates para retomá-los.
   `tl_worker_rsl.exe` não substitui o executável comercial `Worker`/`RSL`.
   B6 só será reaberta com a amostra exata, hash registrado, `install --prefix`,
   `app run`, trace e efeitos observáveis reproduzíveis.
-- **B9 e unwind:** não será criada uma exceção exclusiva para Roblox. A forma
-  não canônica de `UWOP_SET_FPREG` só entra após outra aplicação confirmar a
-  mesma semântica e uma fixture determinística proteger o comportamento.
+- **B9 e unwind — opção 1 confirmada pelo usuário em 2026-09-05:** manter a
+  etapa adiada. Não será criada uma exceção exclusiva para Roblox. A forma não
+  canônica de `UWOP_SET_FPREG` só entra após outra aplicação confirmar a mesma
+  semântica e uma fixture determinística proteger o comportamento.
 - **B11 e objetos:** as tabelas separadas de arquivos, sincronização, threads
   e mapeamentos permanecem. O cabeçalho comum só será iniciado por uma
   regressão de handle misturado ou por uma medição concreta de benefício de
