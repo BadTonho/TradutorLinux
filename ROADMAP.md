@@ -977,8 +977,9 @@ marcam itens condicionais como concluídos; definem os gates para retomá-los.
   continua sendo um mecanismo técnico de override de DLL. Não haverá política
   divergente por aplicativo/API sem alvo, configuração, precedência, isolamento,
   diagnóstico e regressão definidos antes.
-- **B17 e processos:** o protocolo atual de `fork`/`waitpid`/pipe é suficiente
-  para o portfólio conhecido. Um supervisor só será criado se um aplicativo
+- **B17 e processos — opção 1 confirmada pelo usuário em 2026-09-05:** manter
+  o supervisor adiado. O protocolo atual de `fork`/`waitpid`/pipe é suficiente
+  para o portfólio conhecido; um supervisor só será criado se um aplicativo
   exigir estado compartilhado além desse protocolo.
 - **B18 e SEH:** permanece o subconjunto atual de exceções/unwind x64. C++,
   `__finally` e outras extensões só entram com aplicativo-alvo, contrato e
