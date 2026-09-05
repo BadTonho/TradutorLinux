@@ -8,11 +8,13 @@
 #include "tradutorlinux/runtime/winapi.hpp"
 
 #include <array>
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 
 #include <cerrno>
 #include <csignal>
+#include <cstring>
 #include <limits>
 #include <poll.h>
 #include <sys/resource.h>
@@ -22,6 +24,12 @@
 #include <unistd.h>
 
 #include <fcntl.h>
+#include <ostream>
+#include <string>
+#include <string_view>
+#include <vector>
+
+extern char** environ;
 
 namespace tradutorlinux::process {
 namespace {
@@ -459,6 +467,261 @@ GuestOutcome run_guest_isolated(const std::uintptr_t entry_point,
     ::close(pipe_fds[0]);
     ::close(fault_fds[0]);
     return outcome;
+}
+
+namespace {
+
+enum class ExternalStatus : unsigned char {
+    SpawnFailed = 1,
+    CpuLimitFailed = 2,
+    MemoryLimitFailed = 3,
+    WorkingDirectoryFailed = 4,
+};
+
+void write_external_status(const int fd, const ExternalStatus status) noexcept {
+    const unsigned char value = static_cast<unsigned char>(status);
+    static_cast<void>(::write(fd, &value, sizeof(value)));
+}
+
+[[nodiscard]] std::vector<std::string> inherited_environment(
+    const std::vector<ExternalEnvironmentVariable>& overrides) {
+    std::vector<std::string> environment;
+    for (char** current = ::environ; current != nullptr && *current != nullptr; ++current) {
+        environment.emplace_back(*current);
+    }
+    for (const ExternalEnvironmentVariable& override_value : overrides) {
+        const std::string prefix = override_value.name + "=";
+        const auto existing = std::find_if(
+            environment.begin(), environment.end(), [&prefix](const std::string& entry) {
+                return entry.starts_with(prefix);
+            });
+        const std::string replacement = prefix + override_value.value;
+        if (existing == environment.end()) {
+            environment.push_back(replacement);
+        } else {
+            *existing = replacement;
+        }
+    }
+    return environment;
+}
+
+void forward_external_stderr(const int fd, std::string& pending,
+                             const std::string_view prefix, std::ostream& stream,
+                             const bool drain) {
+    std::array<char, 4096> buffer{};
+    while (true) {
+        const ssize_t count = ::read(fd, buffer.data(), buffer.size());
+        if (count > 0) {
+            pending.append(buffer.data(), static_cast<std::size_t>(count));
+            std::size_t newline = 0;
+            while ((newline = pending.find('\n')) != std::string::npos) {
+                stream << prefix << pending.substr(0, newline + 1);
+                pending.erase(0, newline + 1);
+            }
+            if (pending.size() >= 64U * 1024U) {
+                stream << prefix << pending;
+                pending.clear();
+            }
+            if (!drain) return;
+            continue;
+        }
+        if (count < 0 && errno == EINTR) continue;
+        if (count < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) return;
+        return;
+    }
+}
+
+void close_if_open(int& fd) noexcept {
+    if (fd >= 0) {
+        ::close(fd);
+        fd = -1;
+    }
+}
+
+void kill_process_group(const ::pid_t child) noexcept {
+    if (::kill(-child, SIGKILL) != 0) {
+        static_cast<void>(::kill(child, SIGKILL));
+    }
+}
+
+}  // namespace
+
+GuestOutcome run_external_isolated(
+    const std::vector<std::string>& argv,
+    const std::vector<ExternalEnvironmentVariable>& environment_overrides,
+    const std::uint64_t timeout_ms,
+    const ResourceLimits& resource_limits,
+    const std::filesystem::path& working_directory,
+    std::ostream& diagnostic_stream,
+    const std::string_view diagnostic_prefix) {
+    if (argv.empty() || argv.front().empty()) {
+        return {.kind = GuestOutcomeKind::SpawnFailed};
+    }
+
+    const std::vector<std::string> environment = inherited_environment(environment_overrides);
+    std::vector<char*> environment_pointers;
+    environment_pointers.reserve(environment.size() + 1U);
+    for (const std::string& entry : environment) {
+        environment_pointers.push_back(const_cast<char*>(entry.c_str()));
+    }
+    environment_pointers.push_back(nullptr);
+
+    std::vector<char*> arguments;
+    arguments.reserve(argv.size() + 1U);
+    for (const std::string& argument : argv) {
+        arguments.push_back(const_cast<char*>(argument.c_str()));
+    }
+    arguments.push_back(nullptr);
+
+    int status_pipe[2] = {-1, -1};
+    int stderr_pipe[2] = {-1, -1};
+    if (::pipe2(status_pipe, O_CLOEXEC) != 0 || ::pipe2(stderr_pipe, O_CLOEXEC) != 0) {
+        close_if_open(status_pipe[0]);
+        close_if_open(status_pipe[1]);
+        close_if_open(stderr_pipe[0]);
+        close_if_open(stderr_pipe[1]);
+        return {.kind = GuestOutcomeKind::SpawnFailed};
+    }
+
+    diagnostics::suspend_trace_json_for_fork();
+    const ::pid_t child = ::fork();
+    if (child < 0) {
+        diagnostics::resume_trace_json_after_fork();
+        close_if_open(status_pipe[0]);
+        close_if_open(status_pipe[1]);
+        close_if_open(stderr_pipe[0]);
+        close_if_open(stderr_pipe[1]);
+        return {.kind = GuestOutcomeKind::SpawnFailed};
+    }
+    if (child == 0) {
+        diagnostics::resume_trace_json_after_fork();
+        close_if_open(status_pipe[0]);
+        close_if_open(stderr_pipe[0]);
+        static_cast<void>(::setpgid(0, 0));
+        if (!working_directory.empty() && ::chdir(working_directory.c_str()) != 0) {
+            write_external_status(status_pipe[1], ExternalStatus::WorkingDirectoryFailed);
+            ::_exit(125);
+        }
+        const ResourceLimitKind resource_failure = apply_resource_limits(resource_limits);
+        if (resource_failure != ResourceLimitKind::None) {
+            write_external_status(
+                status_pipe[1], resource_failure == ResourceLimitKind::Cpu
+                                    ? ExternalStatus::CpuLimitFailed
+                                    : ExternalStatus::MemoryLimitFailed);
+            ::_exit(125);
+        }
+        if (::dup2(stderr_pipe[1], STDERR_FILENO) < 0) {
+            write_external_status(status_pipe[1], ExternalStatus::SpawnFailed);
+            ::_exit(125);
+        }
+        close_if_open(stderr_pipe[1]);
+        ::execve(arguments[0], arguments.data(), environment_pointers.data());
+        write_external_status(status_pipe[1], ExternalStatus::SpawnFailed);
+        ::dprintf(STDERR_FILENO, "falha ao executar launcher externo: %s\\n", std::strerror(errno));
+        ::_exit(127);
+    }
+
+    diagnostics::resume_trace_json_after_fork();
+    close_if_open(status_pipe[1]);
+    close_if_open(stderr_pipe[1]);
+    static_cast<void>(::setpgid(child, child));
+    const int flags = ::fcntl(stderr_pipe[0], F_GETFL, 0);
+    if (flags >= 0) static_cast<void>(::fcntl(stderr_pipe[0], F_SETFL, flags | O_NONBLOCK));
+    const int status_flags = ::fcntl(status_pipe[0], F_GETFL, 0);
+    if (status_flags >= 0) {
+        static_cast<void>(::fcntl(status_pipe[0], F_SETFL, status_flags | O_NONBLOCK));
+    }
+
+    std::string pending_stderr;
+    unsigned char external_status = 0;
+    bool status_received = false;
+    bool timed_out = false;
+    bool child_reaped = false;
+    int wait_status = 0;
+    const std::uint64_t deadline = timeout_ms == 0 ? 0 : monotonic_ms() + timeout_ms;
+    while (!child_reaped) {
+        int poll_timeout = -1;
+        if (timeout_ms != 0) {
+            const std::uint64_t now = monotonic_ms();
+            if (now >= deadline) {
+                timed_out = true;
+                break;
+            }
+            const std::uint64_t remaining = deadline - now;
+            poll_timeout = remaining > static_cast<std::uint64_t>(std::numeric_limits<int>::max())
+                               ? std::numeric_limits<int>::max()
+                               : static_cast<int>(remaining);
+        }
+        struct ::pollfd descriptors[2]{
+            {status_pipe[0], POLLIN | POLLHUP, 0},
+            {stderr_pipe[0], POLLIN | POLLHUP, 0},
+        };
+        const int poll_result = ::poll(descriptors, 2, poll_timeout);
+        if (poll_result < 0 && errno != EINTR) {
+            timed_out = false;
+            kill_process_group(child);
+            break;
+        }
+        if (poll_result > 0) {
+            if ((descriptors[0].revents & (POLLIN | POLLHUP)) != 0) {
+                unsigned char value = 0;
+                const ssize_t count = ::read(status_pipe[0], &value, sizeof(value));
+                if (count == 1) {
+                    external_status = value;
+                    status_received = true;
+                }
+            }
+            if ((descriptors[1].revents & (POLLIN | POLLHUP)) != 0) {
+                forward_external_stderr(stderr_pipe[0], pending_stderr, diagnostic_prefix,
+                                        diagnostic_stream, false);
+            }
+        }
+        const ::pid_t waited = ::waitpid(child, &wait_status, WNOHANG);
+        if (waited == child) {
+            child_reaped = true;
+        } else if (waited < 0 && errno != EINTR) {
+            kill_process_group(child);
+            break;
+        }
+    }
+
+    if (!child_reaped) {
+        if (timed_out) kill_process_group(child);
+        while (::waitpid(child, &wait_status, 0) < 0 && errno == EINTR) {
+        }
+    }
+    forward_external_stderr(stderr_pipe[0], pending_stderr, diagnostic_prefix,
+                            diagnostic_stream, true);
+    if (!pending_stderr.empty()) diagnostic_stream << diagnostic_prefix << pending_stderr;
+    close_if_open(status_pipe[0]);
+    close_if_open(stderr_pipe[0]);
+
+    if (timed_out) return {.kind = GuestOutcomeKind::TimedOut, .signal_number = SIGKILL};
+    if (status_received) {
+        if (external_status == static_cast<unsigned char>(ExternalStatus::CpuLimitFailed)) {
+            return {.kind = GuestOutcomeKind::ResourceSetupFailed,
+                    .resource = ResourceLimitKind::Cpu};
+        }
+        if (external_status == static_cast<unsigned char>(ExternalStatus::MemoryLimitFailed)) {
+            return {.kind = GuestOutcomeKind::ResourceSetupFailed,
+                    .resource = ResourceLimitKind::Memory};
+        }
+        return {.kind = GuestOutcomeKind::SpawnFailed};
+    }
+
+    if (WIFEXITED(wait_status)) {
+        return {.kind = GuestOutcomeKind::Exited,
+                .exit_code = static_cast<std::uint32_t>(WEXITSTATUS(wait_status))};
+    }
+    if (WIFSIGNALED(wait_status)) {
+        const int signal_number = WTERMSIG(wait_status);
+        return {.kind = signal_number == SIGXCPU ? GuestOutcomeKind::ResourceLimited
+                                                  : GuestOutcomeKind::Signaled,
+                .signal_number = signal_number,
+                .resource = signal_number == SIGXCPU ? ResourceLimitKind::Cpu
+                                                      : ResourceLimitKind::None};
+    }
+    return {.kind = GuestOutcomeKind::SpawnFailed};
 }
 
 }  // namespace tradutorlinux::process

@@ -1,5 +1,6 @@
 add_library(tradutorlinux_core STATIC
     backend/proton.cpp
+    backend/proton_runtime.cpp
     catalog/app_catalog.cpp
     cli/options.cpp
     cli/report.cpp

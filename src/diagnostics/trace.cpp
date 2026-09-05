@@ -43,6 +43,8 @@ namespace {
             return "crt";
         case TraceComponent::Install:
             return "install";
+        case TraceComponent::Proton:
+            return "proton";
     }
 
     return "unknown";
@@ -128,6 +130,7 @@ bool trace_component_from_name(const std::string_view name,
     if (iequals(name, "gui")) { out = TraceComponent::Gui; return true; }
     if (iequals(name, "crt")) { out = TraceComponent::Crt; return true; }
     if (iequals(name, "install")) { out = TraceComponent::Install; return true; }
+    if (iequals(name, "proton")) { out = TraceComponent::Proton; return true; }
     return false;
 }
 
@@ -136,7 +139,7 @@ std::string_view trace_component_name(const TraceComponent component) noexcept {
 }
 
 namespace {
-std::array<bool, 9> g_trace_enabled{};
+std::array<bool, 10> g_trace_enabled{};
 bool g_trace_filter_active = false;
 std::mutex g_trace_mutex;
 std::filesystem::path g_trace_json_directory;

@@ -45,6 +45,7 @@ endif()
 
 add_executable(tradutorlinux_unit_tests
     test_abi.cpp
+    test_backend_proton.cpp
     test_cli.cpp
     test_compat_materializer.cpp
     test_compat_profile.cpp

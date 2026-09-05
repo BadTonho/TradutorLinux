@@ -313,11 +313,21 @@ bool FileExposure::copy_file_exclusive(const ExposedFile& exposed,
 
 FileExposure FileExposure::materialize(const std::filesystem::path& prefix_root,
                                        const Profile& profile) {
+    return materialize_into(prefix_root, prefix_root, profile);
+}
+
+FileExposure FileExposure::materialize_into(
+    const std::filesystem::path& source_prefix_root,
+    const std::filesystem::path& target_prefix_root,
+    const Profile& profile) {
     FileExposure result;
     try {
-        const prefix::EnvironmentPaths paths = prefix::get_environment_paths(prefix_root);
+        const prefix::EnvironmentPaths source_paths =
+            prefix::get_environment_paths(source_prefix_root);
+        const prefix::EnvironmentPaths target_paths =
+            prefix::get_environment_paths(target_prefix_root);
         std::filesystem::file_status drive_status;
-        if (!read_status(paths.drive_c, drive_status, result.error_)) {
+        if (!read_status(target_paths.drive_c, drive_status, result.error_)) {
             return result;
         }
         if (std::filesystem::is_symlink(drive_status) ||
@@ -330,14 +340,14 @@ FileExposure FileExposure::materialize(const std::filesystem::path& prefix_root,
         pending.reserve(profile.files.size());
         std::vector<std::filesystem::path> required_directories;
         const std::filesystem::path canonical_drive =
-            std::filesystem::weakly_canonical(paths.drive_c);
+            std::filesystem::weakly_canonical(target_paths.drive_c);
 
         for (const FileMapping& mapping : profile.files) {
-            const std::filesystem::path source = paths.compat_files_dir / mapping.source;
-            if (!regular_source(source, paths.compat_files_dir, result.error_)) return result;
+            const std::filesystem::path source = source_paths.compat_files_dir / mapping.source;
+            if (!regular_source(source, source_paths.compat_files_dir, result.error_)) return result;
 
             std::string target_error;
-            const auto target = target_path(prefix_root, mapping.target, target_error);
+            const auto target = target_path(target_prefix_root, mapping.target, target_error);
             if (!target.has_value()) {
                 result.error_ = std::move(target_error);
                 return result;

@@ -35,6 +35,11 @@ public:
         const std::filesystem::path& prefix_root,
         const Profile& profile);
 
+    [[nodiscard]] static FileExposure materialize_into(
+        const std::filesystem::path& source_prefix_root,
+        const std::filesystem::path& target_prefix_root,
+        const Profile& profile);
+
     FileExposure() = default;
     FileExposure(const FileExposure&) = delete;
     FileExposure& operator=(const FileExposure&) = delete;

@@ -2,6 +2,7 @@
 #include "cli_internal.hpp"
 
 #include "tradutorlinux/catalog/app_catalog.hpp"
+#include "tradutorlinux/backend/proton.hpp"
 #include "tradutorlinux/compat/materializer.hpp"
 #include "tradutorlinux/compat/profile.hpp"
 #include "tradutorlinux/diagnostics/trace.hpp"
@@ -283,6 +284,36 @@ void write_install_trace(const bool enabled, std::ostream& stream,
         diagnostics::write_trace(stream, diagnostics::TraceComponent::Install, level, event,
                                  std::span<const diagnostics::TraceField>{fields.begin(), fields.size()});
     }
+}
+
+[[nodiscard]] ExitCode finish_proton_outcome(const backend::ProtonRunResult& result,
+                                             std::ostream& stderr_stream) {
+    const process::GuestOutcome& outcome = result.outcome;
+    switch (outcome.kind) {
+        case process::GuestOutcomeKind::Exited:
+            return static_cast<ExitCode>(outcome.exit_code);
+        case process::GuestOutcomeKind::TimedOut:
+            stderr_stream << "erro: o processo Proton não terminou dentro do tempo limite\n";
+            return ExitCode::GuestTimeout;
+        case process::GuestOutcomeKind::Signaled: {
+            const process::SignalDescription signal =
+                process::describe_signal(outcome.signal_number);
+            stderr_stream << "erro: o processo Proton terminou por sinal " << signal.name
+                          << " (" << signal.detail << ")\n";
+            return ExitCode::GuestFault;
+        }
+        case process::GuestOutcomeKind::ResourceLimited:
+            stderr_stream << "erro: o processo Proton excedeu o limite de "
+                          << process::resource_limit_name(outcome.resource) << "\n";
+            return ExitCode::GuestResourceLimit;
+        case process::GuestOutcomeKind::ResourceSetupFailed:
+            stderr_stream << "erro: não foi possível instalar limites no processo Proton\n";
+            return ExitCode::InternalError;
+        case process::GuestOutcomeKind::SpawnFailed:
+            stderr_stream << "erro: não foi possível iniciar o launcher Proton\n";
+            return ExitCode::InternalError;
+    }
+    return ExitCode::InternalError;
 }
 
 }  // namespace
@@ -825,6 +856,53 @@ ExitCode run_command(const CommandLine& command_line, std::ostream& stdout_strea
             print_support_report(stdout_stream, parse_result.info);
         return report_result.status == loader::ImportStatus::Resolved ? ExitCode::Success
                                                                        : ExitCode::Unsupported;
+    }
+
+    if (effective_cmd.mode == CommandMode::AppRun && compatibility_profile.has_value() &&
+        compatibility_profile->backend.kind == compat::BackendKind::Proton) {
+        const backend::ProtonConfigResult config = backend::load_config();
+        if (config.status != backend::ConfigStatus::Loaded || !config.config.has_value()) {
+            const std::string detail = config.error.empty()
+                                           ? "configuração do Proton ausente"
+                                           : config.error;
+            if (effective_cmd.trace_enabled) {
+                const std::array fields{
+                    diagnostics::TraceField{"status", "unavailable"},
+                    diagnostics::TraceField{"app-id", compatibility_app_id},
+                    diagnostics::TraceField{"detail", detail},
+                };
+                diagnostics::write_trace(stderr_stream, diagnostics::TraceComponent::Proton,
+                                         diagnostics::TraceLevel::Warning,
+                                         "provider-rejected", fields);
+            }
+            stderr_stream << "erro: backend Proton indisponível: " << detail << '\n';
+            return ExitCode::Unsupported;
+        }
+
+        backend::ProtonRunRequest request;
+        request.prefix_root = prefix_dir;
+        request.executable = *effective_cmd.executable_path;
+        request.working_directory = *effective_cmd.guest_working_directory;
+        request.app_id = compatibility_app_id;
+        request.guest_arguments = effective_cmd.guest_arguments;
+        request.timeout_ms = effective_cmd.timeout_ms;
+        request.resource_limits = process::ResourceLimits{
+            effective_cmd.cpu_limit_set ? effective_cmd.cpu_limit_seconds : 0,
+            effective_cmd.memory_limit_set ? effective_cmd.memory_limit_mib : 0,
+        };
+        request.trace_enabled = effective_cmd.trace_enabled;
+        const backend::ProtonRunResult result = backend::run_proton_application(
+            *config.config, *compatibility_profile, request, stderr_stream);
+        if (result.status == backend::ProtonRunStatus::Unsupported) {
+            stderr_stream << "erro: backend Proton não suportado: " << result.error << '\n';
+            return ExitCode::Unsupported;
+        }
+        if (result.status == backend::ProtonRunStatus::InternalError) {
+            stderr_stream << "erro: falha interna ao preparar o backend Proton: "
+                          << result.error << '\n';
+            return ExitCode::InternalError;
+        }
+        return finish_proton_outcome(result, stderr_stream);
     }
 
     execution_context.module_graph = std::make_unique<loader::GuestModuleGraph>(

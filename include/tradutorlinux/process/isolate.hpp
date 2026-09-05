@@ -2,7 +2,10 @@
 
 #include <cstdint>
 #include <filesystem>
+#include <iosfwd>
+#include <string>
 #include <string_view>
+#include <vector>
 
 namespace tradutorlinux::process {
 
@@ -66,5 +69,22 @@ struct SignalDescription {
                                               std::uint64_t timeout_ms,
                                               const ResourceLimits& resource_limits = {},
                                               const std::filesystem::path& working_directory = {}) noexcept;
+
+struct ExternalEnvironmentVariable {
+    std::string name;
+    std::string value;
+};
+
+// Executa um launcher externo em um grupo de processos próprio. O stdout é
+// herdado sem transformação; o stderr é encaminhado ao stream informado com
+// o prefixo escolhido. O launcher não herda o estado do GuestContext.
+[[nodiscard]] GuestOutcome run_external_isolated(
+    const std::vector<std::string>& argv,
+    const std::vector<ExternalEnvironmentVariable>& environment_overrides,
+    std::uint64_t timeout_ms,
+    const ResourceLimits& resource_limits,
+    const std::filesystem::path& working_directory,
+    std::ostream& diagnostic_stream,
+    std::string_view diagnostic_prefix = "[tl][external] ");
 
 }  // namespace tradutorlinux::process

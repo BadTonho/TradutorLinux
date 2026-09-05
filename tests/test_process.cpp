@@ -1,13 +1,18 @@
 #include "test_support.hpp"
 #include "tradutorlinux/loader/module.hpp"
 #include "tradutorlinux/loader/process.hpp"
+#include "tradutorlinux/process/isolate.hpp"
 
 #include <cstddef>
 #include <cstdint>
 #include <fstream>
+#include <filesystem>
+#include <sstream>
 #include <string>
 #include <vector>
 
+#include <cstdlib>
+#include <csignal>
 #include <unistd.h>
 #include <gtest/gtest.h>
 
@@ -126,6 +131,50 @@ TEST_F(ProcessTest, DestroyProcessClearsState) {
     EXPECT_TRUE(result.process.imports.imports.empty());
     EXPECT_EQ(result.process.thread.stack_top, 0U);
     EXPECT_EQ(result.process.thread.entry_point, 0U);
+}
+
+TEST(ExternalProcessTest, PreservesExitAndForwardsStreamsAndEnvironment) {
+    const auto output_path = std::filesystem::temp_directory_path() /
+                             ("tl-external-output-" +
+                              std::to_string(static_cast<unsigned long long>(::getpid())));
+    std::error_code cleanup_error;
+    std::filesystem::remove(output_path, cleanup_error);
+    std::ostringstream diagnostics;
+    const std::vector<std::string> argv{
+        "/bin/sh", "-c",
+        "printf '%s' \"$TL_EXTERNAL_TEST_VALUE\" > \"$TL_EXTERNAL_TEST_OUTPUT\"; printf 'mock stderr\\n' >&2; exit 37"};
+    const process::GuestOutcome outcome = process::run_external_isolated(
+        argv,
+        {{"TL_EXTERNAL_TEST_VALUE", "environment-ok"},
+         {"TL_EXTERNAL_TEST_OUTPUT", output_path.string()}},
+        1000, {}, {}, diagnostics, "[test] ");
+
+    ASSERT_EQ(outcome.kind, process::GuestOutcomeKind::Exited);
+    EXPECT_EQ(outcome.exit_code, 37U);
+    EXPECT_EQ(diagnostics.str(), "[test] mock stderr\n");
+    std::ifstream output(output_path, std::ios::binary);
+    ASSERT_TRUE(output);
+    const std::string output_contents{std::istreambuf_iterator<char>{output},
+                                      std::istreambuf_iterator<char>()};
+    EXPECT_EQ(output_contents, "environment-ok");
+    std::filesystem::remove(output_path, cleanup_error);
+}
+
+TEST(ExternalProcessTest, TerminatesTimedOutProcessGroup) {
+    std::ostringstream diagnostics;
+    const std::vector<std::string> argv{"/bin/sh", "-c", "sleep 5"};
+    const process::GuestOutcome outcome = process::run_external_isolated(
+        argv, {}, 50, {}, {}, diagnostics);
+    EXPECT_EQ(outcome.kind, process::GuestOutcomeKind::TimedOut);
+}
+
+TEST(ExternalProcessTest, ReportsSignalTermination) {
+    std::ostringstream diagnostics;
+    const std::vector<std::string> argv{"/bin/sh", "-c", "kill -TERM $$"};
+    const process::GuestOutcome outcome = process::run_external_isolated(
+        argv, {}, 1000, {}, {}, diagnostics);
+    EXPECT_EQ(outcome.kind, process::GuestOutcomeKind::Signaled);
+    EXPECT_EQ(outcome.signal_number, SIGTERM);
 }
 
 }  // namespace
