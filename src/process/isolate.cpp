@@ -414,7 +414,7 @@ GuestOutcome run_guest_isolated(const std::uintptr_t entry_point,
         std::uint32_t code = 0;
         for (std::uint32_t shift = 0; shift < 4; ++shift) {
             const std::uint32_t byte =
-                static_cast<std::uint32_t>(static_cast<unsigned char>(message[1 + shift]));
+                static_cast<std::uint32_t>(static_cast<unsigned char>(message[3 + shift]));
             code |= byte << (8U * shift);
         }
         outcome.exit_code = code;
