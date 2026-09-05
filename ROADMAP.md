@@ -1105,7 +1105,7 @@ imports não encerra B5.
   embutidas para dados gerados de fonte pública somente quando um aplicativo
   exigir outra página além de CP 0/1252/437/65001; versionar a fonte e testar
   conversões e erros.
-- [ ] **B14 — Perfil de compatibilidade por aplicativo e overrides
+- [x] **B14 — Perfil de compatibilidade por aplicativo e overrides
   condicionados.** Cada prefixo poderá ter uma área `compat/` ao lado de
   `drive_c`: `drive_c` mantém os arquivos reais do convidado, enquanto
   `compat/` guarda os arquivos auxiliares e o perfil do TradutorLinux daquele
@@ -1154,10 +1154,17 @@ imports não encerra B5.
      teste. A etapa só será reaberta com alvo, justificativa, precedência,
      isolamento, diagnóstico, fixture e regressão; código, scripts e DLLs
      arbitrárias continuam proibidos.
-  5. **B14.5 — Integração e promoção.** Validar isolamento entre dois
-     aplicativos, fallback genérico, `--trace`, fixture de integração e matriz
-     de compatibilidade. A B14 só poderá ser marcada como concluída quando as
-     subetapas aplicáveis tiverem evidência reproduzível.
+  5. [x] **B14.5 — Integração e promoção.** A integração
+     `integration_compat_profile_isolation` reutiliza `tl_compat_file.exe` com
+     dois IDs de catálogo e dois prefixos independentes. Perfis com conteúdos
+     distintos no mesmo destino Windows são executados sequencialmente e
+     confirmam isolamento, conteúdo correto, fontes preservadas, limpeza dos
+     destinos e ausência de `compat/` dentro de `drive_c`. A integração
+     `integration_compat_profile` mantém a evidência de perfil carregado,
+     ausente e inválido com fallback genérico, trace e exit code preservado.
+     A matriz de compatibilidade foi atualizada. Com as subetapas aplicáveis
+     validadas por testes reproduzíveis, a B14 é promovida; a B14.4 permanece
+     adiada e sem regras declarativas.
 - [x] **B15 — Drives do prefixo como symlinks ou mecanismo equivalente.** O
   prefixo cria `dosdevices/c:` → `../drive_c` e `dosdevices/z:` → `/`; a
   resolução de `C:` canoniza e confina o caminho ao `drive_c`, enquanto `Z:`

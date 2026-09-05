@@ -112,3 +112,26 @@ não permitir a ativação do perfil, e o runtime segue o comportamento genéric
 sem sobrescrevê-lo. A exposição vale somente para `app run` de aplicativo
 cadastrado; execução direta, instalação e `TL_DLL_OVERRIDES` permanecem
 separadas. `compat/` nunca é exposta automaticamente como diretório Windows.
+
+## Integração e promoção na B14.5
+
+O ID do catálogo seleciona o aplicativo e, junto com ele, o prefixo que contém
+seu perfil. Portanto, dois aplicativos cadastrados podem declarar o mesmo
+destino Windows sem compartilhar a fonte: cada um lê somente seu próprio
+`compat/files/`, materializa somente em seu próprio `drive_c` e limpa somente
+os caminhos criados naquele prefixo.
+
+A integração `integration_compat_profile_isolation` reutiliza a fixture
+`tl_compat_file.exe` com dois IDs e dois prefixos independentes. Os perfis usam
+conteúdos diferentes para o mesmo destino `C:\\Program Files\\Compat
+Fixture\\injected.dat`; as execuções sequenciais confirmam o conteúdo correto,
+a preservação das duas fontes, a remoção dos dois destinos e a ausência de
+`compat/` dentro de `drive_c`. O trace registra carregamento, aplicação, cópia
+e limpeza para cada ID.
+
+Em conjunto com `integration_compat_profile`, que cobre perfil carregado,
+ausente e inválido, essa integração confirma que a rejeição do perfil mantém o
+fallback genérico, preserva o exit code do convidado e não permite vazamento
+de dados entre aplicativos ou prefixos. Esses testes são a evidência
+reproduzível para a promoção da B14; a B14.4 continua adiada por não haver
+regra declarativa necessária.

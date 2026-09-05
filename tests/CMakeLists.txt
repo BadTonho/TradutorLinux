@@ -195,4 +195,17 @@ if(TARGET tradutorlinux_samples AND TARGET tradutorlinux)
         LABELS "runtime;pe32plus;compat;profile;files"
         TIMEOUT 60
     )
+    add_test(
+        NAME integration_compat_profile_isolation
+        COMMAND "${CMAKE_COMMAND}"
+            "-DRUNTIME=$<TARGET_FILE:tradutorlinux>"
+            "-DFIXTURE=${CMAKE_CURRENT_BINARY_DIR}/samples/generated/tl_compat_file.exe"
+            "-DWORK=${CMAKE_CURRENT_BINARY_DIR}/compat_profile_isolation_work"
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/samples/verify_compat_profile_isolation.cmake"
+    )
+    set_tests_properties(integration_compat_profile_isolation PROPERTIES
+        DEPENDS "fixture_tl_compat_file_metadata;report_tl_compat_file_support"
+        LABELS "runtime;pe32plus;compat;profile;files;isolation"
+        TIMEOUT 60
+    )
 endif()
