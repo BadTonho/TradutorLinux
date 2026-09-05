@@ -1125,10 +1125,12 @@ imports não encerra B5.
      SHA-256 do executável no catálogo, o fallback genérico com aviso e o trace
      têm regressão unitária. A exposição efetiva ao convidado permanece na
      B14.3.
-  2. **B14.2 — Descoberta e validação.** Criar a árvore do perfil no prefixo,
-     carregar o perfil somente para o aplicativo correspondente, validar
-     schema, identidade e caminhos, e emitir o resultado no trace. Nenhum
-     caminho poderá escapar de `compat/` ou de `drive_c`.
+  2. [x] **B14.2 — Descoberta e validação.** A árvore do perfil é criada no
+     prefixo, o perfil é carregado somente para o aplicativo correspondente,
+     schema, identidade e caminhos são validados, e o resultado é emitido no
+     trace. Os testes unitários e a integração de `app run` protegem o
+     fallback para perfil ausente ou inválido e a contenção em `compat/` e
+     `drive_c`. A exposição efetiva dos arquivos permanece na B14.3.
   3. **B14.3 — Exposição controlada de arquivos.** Definir e implementar um
      mecanismo explícito para que um arquivo de `compat/files/` seja visto pelo
      convidado no caminho Windows declarado, com precedência, colisão,
