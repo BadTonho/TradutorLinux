@@ -26,8 +26,9 @@ as referências nas fases não criem listas paralelas.
 ## Estado atual
 
 - **Fase atual:** Fase 13 — compatibilidade ampla por portfólio.
-- **Próximo ciclo:** B10 é a próxima etapa operacional. B2 fica estacionada até
-  uma decisão de produto específica sobre tradução de interface.
+- **Próximo ciclo:** B2 fica estacionada até uma decisão de produto específica
+  sobre tradução de interface; as etapas operacionais B1 e B10 deste ciclo
+  foram concluídas.
 - **Último incremento:** a Fase 13.14 concluiu TLS genérico e a fixture
   reutilizável Worker/RSL. O caso comercial do Roblox continua como benchmark:
   imports resolvidos, mas execução interrompida em `RBXCRASH`/`ExitProcess 3`.
@@ -42,6 +43,10 @@ as referências nas fases não criem listas paralelas.
   contenção (`GuestResourceLimit 73`) de timeout (`GuestTimeout 72`). As
   fixtures `tl_hang`, `tl_memory_limit` e `tl_process_limit_parent` cobrem
   CPU, memória e herança, respectivamente.
+- **Última validação de recursos:** B10 passou no `x11_popup_smoke` do build
+  `sanitize`, executado fora de `ptrace` com Xvfb próprio e
+  `detect_leaks=1`. O smoke repetiu 512 desenhos de cores e cobriu Escape,
+  clique externo, destruição externa e timeout, sem relatório de ASan/LSan.
 
 Os demais bullets desta seção são registro cronológico de marcos já entregues;
 para decidir o próximo trabalho, use somente a ordem do backlog abaixo.
@@ -948,10 +953,11 @@ sobrescrita e com confinamento à raiz visual. O teste externo versionado
 `build/debug/tests/seven_zip_smoke` confirma a cópia e o encerramento normal;
 as demais operações do File Manager continuam limitadas.
 
-### Próximo ciclo — B10
+### Ciclo concluído — B1 e B10
 
-A próxima etapa operacional é tratar **B10**. B2 é uma trilha de produto
-separada do runtime Win32 e fica estacionada.
+B1 e B10 foram concluídas e validadas. B2 é uma trilha de produto separada do
+runtime Win32 e fica estacionada até haver decisão explícita sobre tradução de
+interface; não há outra etapa operacional escolhida neste ciclo.
 
 **Decisão registrada:** o 7-Zip File Manager 24.08 foi escolhido porque já
 possui amostra PE32+ x86-64 local, 298/298 imports resolvidos, classe Win32
@@ -977,10 +983,12 @@ imports não encerra B5.
   `tl_hang.exe`, `tl_memory_limit.exe` e `tl_process_limit_parent.exe`, os
   testes de CLI/catálogo e o CTest direcionado comprovam CPU, memória, herança
   e diagnóstico. A contenção não é sandbox.
-- [ ] **B10 — Fechar a validação de recursos X11 com LeakSanitizer.** Reexecutar
-  o smoke sob Xvfb com desenho repetido e LeakSanitizer, registrar o resultado
-  e manter a liberação de cores, grabs, janelas e displays protegida por
-  regressão.
+- [x] **B10 — Fechar a validação de recursos X11 com LeakSanitizer.** O
+  `x11_popup_smoke` do build `sanitize` foi executado fora de `ptrace`, sob Xvfb
+  próprio, com `detect_leaks=1`; passou com desenho repetido de 512 cores e os
+  caminhos Escape, clique externo, destruição externa e timeout, sem relatório
+  de ASan/LSan. O CTest mantém essa configuração automaticamente para builds
+  com `TL_ENABLE_SANITIZERS`.
 
 ### Estacionadas até haver condição explícita
 

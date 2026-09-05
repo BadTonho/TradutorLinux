@@ -23,6 +23,12 @@ if(TL_XVFB_EXECUTABLE)
         TIMEOUT 20
         SKIP_RETURN_CODE 77
     )
+    if(TL_ENABLE_SANITIZERS)
+        set_tests_properties(x11_popup_smoke PROPERTIES
+            ENVIRONMENT
+                "ASAN_OPTIONS=detect_leaks=1:halt_on_error=1;LSAN_OPTIONS=detect_leaks=1;UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1"
+        )
+    endif()
 
     add_executable(seven_zip_smoke
         gui/seven_zip_smoke.cpp

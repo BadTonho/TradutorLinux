@@ -242,6 +242,10 @@ status="translated"`, `SetTimer`/`GetMessageA(WM_TIMER)`/`KillTimer`,
 `BeginPaint`, `TextOut`, `Rectangle` e `FillRect` — ver
 [`gui-x11.md`](arquitetura/gui-x11.md).
 
+No preset `sanitize`, o CTest executa `x11_popup_smoke` com LeakSanitizer
+habilitado: o cenário inclui 512 desenhos de cores e os quatro caminhos de
+cleanup de popup, sem relatório de ASan/LSan na validação sob Xvfb.
+
 ## Simple Todo C (Fase 12)
 
 O alvo `Efeckc17/simple-todo-c` é baixado por archive pinado e hash SHA-256 em

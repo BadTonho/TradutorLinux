@@ -49,6 +49,12 @@ popup; o timeout é registrado no trace `gui`.
 O teste `x11_popup_smoke` executa esses caminhos sob um Xvfb próprio: Escape,
 clique externo, destruição externa e timeout. O cenário de destruição externa
 também garante que o cleanup não tente destruir a mesma janela duas vezes.
+Em builds com `TL_ENABLE_SANITIZERS`, o CTest configura esse smoke com
+`ASAN_OPTIONS`/`LSAN_OPTIONS` em `detect_leaks=1`. A regressão também repete o
+desenho de 512 cores, protegendo a liberação de cores, grabs, janelas e
+displays. O teste deve rodar fora de ambientes que coloquem LeakSanitizer sob
+`ptrace`; nesses ambientes ele pode ser explicitamente skipado por limitação da
+ferramenta.
 
 ## Afinidade de thread da GUI
 
