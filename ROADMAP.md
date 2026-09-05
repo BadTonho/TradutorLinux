@@ -980,6 +980,12 @@ marcam itens condicionais como concluídos; definem os gates para retomá-los.
   aplicativo. A proposta não autoriza ainda overrides por API nem código,
   scripts ou DLLs arbitrárias; isso só será reaberto com contrato, alvo,
   configuração, precedência, isolamento, diagnóstico e regressão definidos.
+- **B14.4 — auditoria do 7-Zip confirmada pelo usuário em 2026-09-05:** o
+  7-Zip 24.08 não apresentou uma necessidade reproduzível de regra adicional
+  no perfil além dos arquivos auxiliares já cobertos pela B14.3. O tratamento
+  da classe `7-Zip::FM` permanece no shell GUI experimental, e
+  `TL_7ZFM_COPY_DESTINATION` permanece somente como hook de teste; a B14.4
+  continua adiada e não adiciona regras declarativas ao `profile.json`.
 - **B17 e processos — opção 1 confirmada pelo usuário em 2026-09-05:** manter
   o supervisor adiado. O protocolo atual de `fork`/`waitpid`/pipe é suficiente
   para o portfólio conhecido; um supervisor só será criado se um aplicativo
@@ -1140,11 +1146,14 @@ imports não encerra B5.
      novos do convidado. A fixture `tl_compat_file.exe`, os testes unitários,
      o trace e a integração reproduzem cópia, colisão, rollback e limpeza. A
      pasta `compat/` não é exposta automaticamente.
-  4. **B14.4 — Regras de comportamento condicionadas.** Somente se um alvo
-     real exigir, adicionar regras declarativas além dos arquivos, diferenciando
-     esse mecanismo de `TL_DLL_OVERRIDES`. Cada regra precisará de alvo,
-     justificativa, precedência, diagnóstico e regressão; código, scripts e
-     DLLs arbitrárias continuam proibidos.
+  4. [ ] **B14.4 — Regras de comportamento condicionadas (adiada).** A
+     auditoria do 7-Zip 24.08 não encontrou necessidade reproduzível de regra
+     adicional além dos arquivos da B14.3. Não há campo `rules` no perfil, o
+     tratamento da classe `7-Zip::FM` continua separado no shell GUI
+     experimental e `TL_7ZFM_COPY_DESTINATION` continua sendo apenas hook de
+     teste. A etapa só será reaberta com alvo, justificativa, precedência,
+     isolamento, diagnóstico, fixture e regressão; código, scripts e DLLs
+     arbitrárias continuam proibidos.
   5. **B14.5 — Integração e promoção.** Validar isolamento entre dois
      aplicativos, fallback genérico, `--trace`, fixture de integração e matriz
      de compatibilidade. A B14 só poderá ser marcada como concluída quando as

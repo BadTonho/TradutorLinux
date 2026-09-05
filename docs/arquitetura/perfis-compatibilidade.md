@@ -16,7 +16,7 @@ o comportamento de outro aplicativo.
 
 `compat/` não é um drive Windows e não fica visível automaticamente ao
 convidado. Nesta versão, o perfil é colocado manualmente no prefixo. A
-exposição dos arquivos para caminhos de `drive_c` pertence à B14.3.
+exposição dos arquivos para caminhos de `drive_c` está definida na B14.3.
 
 ## Formato v1
 
@@ -45,6 +45,20 @@ runtime valida como pertencente a `drive_c`.
 
 A v1 aceita somente esses campos. Não aceita regras de API, comandos, scripts,
 DLLs arbitrárias ou outros mecanismos executáveis.
+
+## Auditoria B14.4 — 7-Zip
+
+O 7-Zip 24.08 foi auditado como alvo real após a implementação da B14.3. Não
+foi encontrada uma necessidade reproduzível de comportamento adicional no
+perfil: os arquivos auxiliares cobertos pela B14.3 são suficientes para a
+necessidade identificada. Por isso, a v1 não possui campo `rules` e a B14.4
+permanece adiada.
+
+O tratamento da classe `7-Zip::FM` continua pertencendo ao shell GUI
+experimental, separado dos perfis. `TL_7ZFM_COPY_DESTINATION` é um hook de
+teste e não uma configuração de perfil. Uma futura reabertura exigirá um alvo,
+comportamento, justificativa, precedência, isolamento, diagnóstico, fixture e
+regressão reproduzíveis.
 
 ## Fallback e diagnóstico
 
