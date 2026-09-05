@@ -1,0 +1,384 @@
+#include "tradutorlinux/compat/profile.hpp"
+
+#include "tradutorlinux/prefix/prefix.hpp"
+
+#include <algorithm>
+#include <cctype>
+#include <cstdint>
+#include <fstream>
+#include <limits>
+#include <string>
+#include <string_view>
+#include <system_error>
+
+namespace tradutorlinux::compat {
+namespace {
+
+constexpr std::size_t kMaxProfileSize = 1024U * 1024U;
+
+class JsonParser {
+public:
+    explicit JsonParser(const std::string_view input) noexcept : input_(input) {}
+
+    [[nodiscard]] bool parse(Profile& profile, std::string& error) {
+        skip_whitespace();
+        if (!consume_raw('{')) return fail(error, "o perfil deve começar com um objeto JSON");
+
+        bool schema_seen = false;
+        bool app_id_seen = false;
+        bool app_sha256_seen = false;
+        bool app_version_seen = false;
+        bool files_seen = false;
+
+        skip_whitespace();
+        if (consume_raw('}')) return fail(error, "o perfil não pode ser vazio");
+
+        while (true) {
+            std::string key;
+            if (!parse_string(key)) return fail(error, "chave JSON inválida");
+            skip_whitespace();
+            if (!consume_raw(':')) return fail(error, "faltou ':' após chave JSON");
+
+            if (key == "schema") {
+                if (schema_seen || !parse_uint32(profile.schema)) {
+                    return fail(error, "campo schema inválido ou repetido");
+                }
+                schema_seen = true;
+            } else if (key == "app_id") {
+                if (app_id_seen || !parse_string(profile.app_id)) {
+                    return fail(error, "campo app_id inválido ou repetido");
+                }
+                app_id_seen = true;
+            } else if (key == "app_sha256") {
+                if (app_sha256_seen || !parse_string(profile.app_sha256)) {
+                    return fail(error, "campo app_sha256 inválido ou repetido");
+                }
+                app_sha256_seen = true;
+            } else if (key == "app_version") {
+                if (app_version_seen || !parse_string(profile.app_version)) {
+                    return fail(error, "campo app_version inválido ou repetido");
+                }
+                app_version_seen = true;
+            } else if (key == "files") {
+                if (files_seen || !parse_files(profile.files)) {
+                    return fail(error, "campo files inválido ou repetido");
+                }
+                files_seen = true;
+            } else {
+                return fail(error, "campo desconhecido: " + key);
+            }
+
+            skip_whitespace();
+            if (consume_raw('}')) break;
+            if (!consume_raw(',')) return fail(error, "faltou ',' entre campos JSON");
+            skip_whitespace();
+            if (peek_raw('}')) return fail(error, "vírgula final não permitida");
+        }
+
+        skip_whitespace();
+        if (position_ != input_.size()) {
+            return fail(error, "conteúdo após o objeto JSON");
+        }
+        if (!schema_seen || !app_id_seen) {
+            return fail(error, "schema e app_id são obrigatórios");
+        }
+        return true;
+    }
+
+private:
+    [[nodiscard]] bool peek_raw(const char expected) const noexcept {
+        return position_ < input_.size() && input_[position_] == expected;
+    }
+
+    [[nodiscard]] bool consume_raw(const char expected) noexcept {
+        if (!peek_raw(expected)) return false;
+        ++position_;
+        return true;
+    }
+
+    void skip_whitespace() noexcept {
+        while (position_ < input_.size() &&
+               std::isspace(static_cast<unsigned char>(input_[position_])) != 0) {
+            ++position_;
+        }
+    }
+
+    [[nodiscard]] bool parse_string(std::string& output) {
+        skip_whitespace();
+        if (!consume_raw('"')) return false;
+        output.clear();
+        while (position_ < input_.size()) {
+            const char character = input_[position_++];
+            if (character == '"') return true;
+            if (character == '\\') {
+                if (position_ >= input_.size()) return false;
+                const char escaped = input_[position_++];
+                switch (escaped) {
+                    case '"': output.push_back('"'); break;
+                    case '\\': output.push_back('\\'); break;
+                    case '/': output.push_back('/'); break;
+                    case 'b': output.push_back('\b'); break;
+                    case 'f': output.push_back('\f'); break;
+                    case 'n': output.push_back('\n'); break;
+                    case 'r': output.push_back('\r'); break;
+                    case 't': output.push_back('\t'); break;
+                    default: return false;
+                }
+            } else if (static_cast<unsigned char>(character) < 0x20U) {
+                return false;
+            } else {
+                output.push_back(character);
+            }
+        }
+        return false;
+    }
+
+    [[nodiscard]] bool parse_uint32(std::uint32_t& output) {
+        skip_whitespace();
+        if (position_ >= input_.size() ||
+            std::isdigit(static_cast<unsigned char>(input_[position_])) == 0) {
+            return false;
+        }
+        std::uint64_t value = 0;
+        while (position_ < input_.size() &&
+               std::isdigit(static_cast<unsigned char>(input_[position_])) != 0) {
+            const auto digit = static_cast<std::uint32_t>(input_[position_] - '0');
+            if (value > (std::numeric_limits<std::uint32_t>::max() - digit) / 10U) {
+                return false;
+            }
+            value = value * 10U + digit;
+            ++position_;
+        }
+        output = static_cast<std::uint32_t>(value);
+        return true;
+    }
+
+    [[nodiscard]] bool parse_files(std::vector<FileMapping>& files) {
+        skip_whitespace();
+        if (!consume_raw('[')) return false;
+        skip_whitespace();
+        if (consume_raw(']')) return true;
+
+        while (true) {
+            if (!consume_raw('{')) return false;
+            FileMapping mapping;
+            bool source_seen = false;
+            bool target_seen = false;
+            skip_whitespace();
+            if (peek_raw('}')) return false;
+
+            while (true) {
+                std::string key;
+                if (!parse_string(key)) return false;
+                skip_whitespace();
+                if (!consume_raw(':')) return false;
+                if (key == "source") {
+                    std::string source;
+                    if (source_seen || !parse_string(source)) return false;
+                    mapping.source = std::filesystem::path{source};
+                    source_seen = true;
+                } else if (key == "target") {
+                    if (target_seen || !parse_string(mapping.target)) return false;
+                    target_seen = true;
+                } else {
+                    return false;
+                }
+
+                skip_whitespace();
+                if (consume_raw('}')) break;
+                if (!consume_raw(',')) return false;
+                skip_whitespace();
+                if (peek_raw('}')) return false;
+            }
+            if (!source_seen || !target_seen) return false;
+            files.push_back(std::move(mapping));
+
+            skip_whitespace();
+            if (consume_raw(']')) return true;
+            if (!consume_raw(',')) return false;
+            skip_whitespace();
+            if (peek_raw(']')) return false;
+        }
+    }
+
+    [[nodiscard]] bool fail(std::string& error, std::string message) {
+        error = std::move(message) + " (posição " + std::to_string(position_) + ")";
+        return false;
+    }
+
+    std::string_view input_;
+    std::size_t position_{0};
+};
+
+[[nodiscard]] bool is_safe_app_id(const std::string_view value) noexcept {
+    if (value.empty() || value.size() > 128U || value.find("..") != std::string_view::npos) {
+        return false;
+    }
+    for (const char character : value) {
+        if (std::isalnum(static_cast<unsigned char>(character)) == 0 && character != '-' &&
+            character != '_' && character != '.') {
+            return false;
+        }
+    }
+    return true;
+}
+
+[[nodiscard]] bool is_hex_string(const std::string_view value, const std::size_t length) noexcept {
+    if (value.size() != length) return false;
+    for (const char character : value) {
+        if (std::isxdigit(static_cast<unsigned char>(character)) == 0) return false;
+    }
+    return true;
+}
+
+[[nodiscard]] bool is_valid_version(const std::string_view value) noexcept {
+    if (value.empty() || value.size() > 128U) return false;
+    for (const char character : value) {
+        if (static_cast<unsigned char>(character) < 0x20U) return false;
+    }
+    return true;
+}
+
+[[nodiscard]] std::string lowercase(std::string value) {
+    for (char& character : value) {
+        character = static_cast<char>(std::tolower(static_cast<unsigned char>(character)));
+    }
+    return value;
+}
+
+[[nodiscard]] bool is_relative_source(const std::filesystem::path& source) noexcept {
+    if (source.empty() || source.is_absolute() || source.has_root_name() || source.has_root_directory()) {
+        return false;
+    }
+    for (const auto& component : source) {
+        if (component == "." || component == "..") return false;
+    }
+    return source.native().find('\\') == std::string::npos;
+}
+
+[[nodiscard]] bool is_c_drive_target(const std::string_view target) noexcept {
+    return target.size() >= 3U &&
+           (target[0] == 'C' || target[0] == 'c') && target[1] == ':' &&
+           (target[2] == '\\' || target[2] == '/');
+}
+
+[[nodiscard]] bool has_target_filename(const std::string_view target) noexcept {
+    if (target.empty() || target.back() == '\\' || target.back() == '/') return false;
+    return true;
+}
+
+[[nodiscard]] bool same_target(const std::string_view first,
+                               const std::string_view second) {
+    auto normalize = [](std::string value) {
+        for (char& character : value) {
+            if (character == '/') character = '\\';
+            character = static_cast<char>(std::tolower(static_cast<unsigned char>(character)));
+        }
+        return value;
+    };
+    return normalize(std::string{first}) == normalize(std::string{second});
+}
+
+[[nodiscard]] ProfileLoadResult invalid_result(std::string error) {
+    ProfileLoadResult result;
+    result.status = ProfileStatus::Invalid;
+    result.error = std::move(error);
+    return result;
+}
+
+}  // namespace
+
+std::filesystem::path profile_path(const std::filesystem::path& prefix_root) {
+    return prefix::get_environment_paths(prefix_root).compat_dir / "profile.json";
+}
+
+std::filesystem::path files_directory(const std::filesystem::path& prefix_root) {
+    return prefix::get_environment_paths(prefix_root).compat_files_dir;
+}
+
+ProfileLoadResult load_profile(const std::filesystem::path& prefix_root,
+                               const std::string_view expected_app_id,
+                               const std::string_view expected_app_sha256,
+                               const std::string_view expected_app_version) {
+    const std::filesystem::path path = profile_path(prefix_root);
+    std::error_code ec;
+    if (!std::filesystem::exists(path, ec)) {
+        if (ec) return invalid_result("não foi possível consultar profile.json: " + ec.message());
+        ProfileLoadResult result;
+        result.status = ProfileStatus::Missing;
+        return result;
+    }
+    if (ec || !std::filesystem::is_regular_file(path, ec)) {
+        return invalid_result("profile.json não é um arquivo regular");
+    }
+
+    std::ifstream input(path, std::ios::binary);
+    if (!input) return invalid_result("profile.json não pôde ser aberto");
+    input.seekg(0, std::ios::end);
+    const std::streamoff size = input.tellg();
+    if (size < 0 || static_cast<std::uint64_t>(size) > kMaxProfileSize) {
+        return invalid_result("profile.json excede o limite de tamanho");
+    }
+    input.seekg(0, std::ios::beg);
+    std::string contents(static_cast<std::size_t>(size), '\0');
+    if (!contents.empty()) {
+        input.read(contents.data(), static_cast<std::streamsize>(contents.size()));
+        if (!input) return invalid_result("profile.json não pôde ser lido completamente");
+    }
+
+    Profile profile;
+    std::string parse_error;
+    if (!JsonParser{contents}.parse(profile, parse_error)) {
+        return invalid_result(parse_error);
+    }
+    if (profile.schema != 1U) return invalid_result("schema de perfil não suportado");
+    if (!is_safe_app_id(profile.app_id) || profile.app_id != expected_app_id) {
+        return invalid_result("app_id do perfil não corresponde ao aplicativo");
+    }
+    if (!profile.app_sha256.empty() && !is_hex_string(profile.app_sha256, 64U)) {
+        return invalid_result("app_sha256 deve conter 64 dígitos hexadecimais");
+    }
+    if (!profile.app_version.empty() && !is_valid_version(profile.app_version)) {
+        return invalid_result("app_version inválida");
+    }
+    if (!profile.app_sha256.empty() &&
+        lowercase(profile.app_sha256) != lowercase(std::string{expected_app_sha256})) {
+        return invalid_result("hash SHA-256 do perfil não corresponde ao aplicativo");
+    }
+    if (!profile.app_version.empty() && profile.app_version != expected_app_version) {
+        return invalid_result("versão do perfil não corresponde ao aplicativo");
+    }
+
+    const auto paths = prefix::get_environment_paths(prefix_root);
+    for (const FileMapping& mapping : profile.files) {
+        if (!is_relative_source(mapping.source)) {
+            return invalid_result("origem de arquivo deve ser relativa e usar apenas '/' ");
+        }
+        const std::filesystem::path source = paths.compat_files_dir / mapping.source;
+        if (!std::filesystem::is_regular_file(source, ec) ||
+            !prefix::is_path_within(source, paths.compat_files_dir)) {
+            return invalid_result("arquivo de origem ausente ou fora de compat/files");
+        }
+        if (!is_c_drive_target(mapping.target) || !has_target_filename(mapping.target)) {
+            return invalid_result("destino deve ser um arquivo dentro de C:\\");
+        }
+        const std::filesystem::path target =
+            prefix::resolve_windows_path(mapping.target, prefix_root);
+        if (target.empty() || !prefix::is_path_within(target, paths.drive_c)) {
+            return invalid_result("destino de arquivo fora de drive_c");
+        }
+        for (const FileMapping& previous : profile.files) {
+            if (&previous == &mapping) break;
+            if (previous.source == mapping.source || same_target(previous.target, mapping.target)) {
+                return invalid_result("mapeamento de arquivo duplicado");
+            }
+        }
+    }
+
+    ProfileLoadResult result;
+    result.status = ProfileStatus::Loaded;
+    result.profile = std::move(profile);
+    return result;
+}
+
+}  // namespace tradutorlinux::compat

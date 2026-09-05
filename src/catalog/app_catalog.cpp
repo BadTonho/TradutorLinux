@@ -315,6 +315,8 @@ bool AppCatalog::save_to_file(const std::filesystem::path& path) const {
         file << "      \"prefix_path\": \"" << escape_json_string(app.prefix_path) << "\",\n";
         file << "      \"icon_path\": \"" << escape_json_string(app.icon_path) << "\",\n";
         file << "      \"working_directory\": \"" << escape_json_string(app.working_directory) << "\",\n";
+        file << "      \"app_sha256\": \"" << escape_json_string(app.app_sha256) << "\",\n";
+        file << "      \"app_version\": \"" << escape_json_string(app.app_version) << "\",\n";
         file << "      \"created_at\": \"" << escape_json_string(app.created_at) << "\",\n";
         file << "      \"cpu_limit_seconds\": " << app.cpu_limit_seconds << ",\n";
         file << "      \"memory_limit_mib\": " << app.memory_limit_mib << ",\n";
@@ -435,6 +437,8 @@ bool AppCatalog::load_from_file(const std::filesystem::path& path) {
                     else if (*key_opt == "prefix_path") entry.prefix_path = *val_opt;
                     else if (*key_opt == "icon_path") entry.icon_path = *val_opt;
                     else if (*key_opt == "working_directory") entry.working_directory = *val_opt;
+                    else if (*key_opt == "app_sha256") entry.app_sha256 = *val_opt;
+                    else if (*key_opt == "app_version") entry.app_version = *val_opt;
                     else if (*key_opt == "created_at") entry.created_at = *val_opt;
                 }
             }

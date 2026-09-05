@@ -3,6 +3,7 @@ add_library(tradutorlinux_core STATIC
     cli/options.cpp
     cli/report.cpp
     cli/runner.cpp
+    compat/profile.cpp
     diagnostics/trace.cpp
     diagnostics/crash_context.cpp
     loader/dll_overrides.cpp
@@ -67,6 +68,7 @@ add_library(tradutorlinux_core STATIC
     runtime/powrprof.cpp
     runtime/dwmapi.cpp
     runtime/function_trace.cpp
+    util/sha256.cpp
     util/unicode.cpp
     gui/platform.cpp
     gui/wayland.cpp
@@ -107,6 +109,8 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
         runtime/core/memory_validator.cpp runtime/core/environment.cpp runtime/core/guest_context.cpp
         runtime/dialog_template.cpp runtime/seh/unwind.cpp process/isolate.cpp
         runtime/function_trace.cpp
+        compat/profile.cpp
+        util/sha256.cpp
         PROPERTIES COMPILE_OPTIONS "-finstrument-functions")
 endif()
 find_path(TL_X11_INCLUDE_DIR X11/Xlib.h REQUIRED)

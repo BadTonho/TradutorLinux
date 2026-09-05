@@ -1117,10 +1117,14 @@ imports não encerra B5.
 
   Subetapas planejadas, na ordem:
 
-  1. **B14.1 — Contrato e layout.** Fixar a finalidade de `compat/`, o formato
-     mínimo de `profile.json`, a área `compat/files/`, a identificação por ID
-     do catálogo e o uso opcional de hash ou versão. Registrar também o
-     comportamento para perfil ausente, inválido ou incompatível.
+  1. [x] **B14.1 — Contrato e layout.** O contrato v1 está documentado em
+     `docs/arquitetura/perfis-compatibilidade.md`. Cada prefixo cria `compat/`
+     e `compat/files/`; `profile.json` exige schema e ID, aceita hash/versão
+     opcionais e declara arquivos com origem confinada a `compat/files/` e
+     destino `C:\...` confinado a `drive_c`. O parser, a validação estrita, o
+     SHA-256 do executável no catálogo, o fallback genérico com aviso e o trace
+     têm regressão unitária. A exposição efetiva ao convidado permanece na
+     B14.3.
   2. **B14.2 — Descoberta e validação.** Criar a árvore do perfil no prefixo,
      carregar o perfil somente para o aplicativo correspondente, validar
      schema, identidade e caminhos, e emitir o resultado no trace. Nenhum

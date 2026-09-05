@@ -16,6 +16,8 @@ struct AppEntry {
     std::string prefix_path;         // Caminho do prefixo (ex: ~/.tradutorlinux)
     std::string icon_path;           // Caminho para ícone PNG/SVG
     std::string working_directory;   // Diretório de trabalho
+    std::string app_sha256;          // SHA-256 do executável no momento do cadastro
+    std::string app_version;         // Versão opcional informada pelo catálogo
     std::vector<std::string> args;   // Argumentos padrão
     std::string created_at;          // Data/hora de cadastro ISO8601
     std::uint64_t cpu_limit_seconds{0}; // Limite padrão; 0 = sem limite

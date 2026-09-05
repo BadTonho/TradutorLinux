@@ -52,6 +52,20 @@ do código convidado:
 [tl][process][info] exit exit-code="0" explicit="sim"
 ```
 
+Durante `app run`, o runtime também consulta o perfil opcional do aplicativo
+no prefixo. O evento `compat-profile` informa `missing`, `loaded` ou `invalid`;
+um perfil ausente, inválido ou incompatível gera aviso e não muda o exit code
+do convidado:
+
+```text
+[tl][runtime][info] compat-profile status="loaded" prefix="..." app-id="fixture" files="1" detail=""
+[tl][runtime][warning] compat-profile status="invalid" prefix="..." app-id="fixture" files="0" detail="app_id do perfil não corresponde ao aplicativo"
+```
+
+O contrato do arquivo está em
+[perfis de compatibilidade](arquitetura/perfis-compatibilidade.md). A pasta
+`compat/` não é exposta automaticamente ao convidado nesta etapa.
+
 A partir do diagnóstico de falhas, o convidado executa em um processo filho
 isolado (`fork`/`waitpid`). O processo hospedeiro prepara o PE, o mapeamento e
 os imports, inicia o convidado no filho, espera o término e distingue saída

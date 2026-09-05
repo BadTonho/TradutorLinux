@@ -2,6 +2,7 @@
 #include "cli_internal.hpp"
 
 #include "tradutorlinux/catalog/app_catalog.hpp"
+#include "tradutorlinux/compat/profile.hpp"
 #include "tradutorlinux/diagnostics/trace.hpp"
 #include "tradutorlinux/diagnostics/crash_context.hpp"
 #include "tradutorlinux/loader/import_resolver.hpp"
@@ -16,6 +17,7 @@
 #include "tradutorlinux/runtime/unwind.hpp"
 #include "tradutorlinux/runtime/winapi.hpp"
 #include "tradutorlinux/util/basics.hpp"
+#include "tradutorlinux/util/sha256.hpp"
 
 #include <algorithm>
 #include <array>
@@ -262,6 +264,14 @@ using ExecutableSnapshot = std::map<std::filesystem::path, FileSignature>;
     return base + "-overflow";
 }
 
+void record_executable_fingerprint(catalog::AppEntry& entry,
+                                   const std::filesystem::path& executable_path) {
+    const auto hash = util::sha256_file(executable_path);
+    if (hash.has_value()) {
+        entry.app_sha256 = *hash;
+    }
+}
+
 void write_install_trace(const bool enabled, std::ostream& stream,
                          const diagnostics::TraceLevel level, const std::string_view event,
                          const std::initializer_list<diagnostics::TraceField> fields) {
@@ -365,6 +375,7 @@ ExitCode run_command(const CommandLine& command_line, std::ostream& stdout_strea
             !executable_parent.empty() && std::filesystem::is_directory(executable_parent)
                 ? executable_parent.string()
                 : paths.drive_c.string();
+        record_executable_fingerprint(entry, *command_line.executable_path);
         entry.cpu_limit_seconds = command_line.cpu_limit_seconds;
         entry.memory_limit_mib = command_line.memory_limit_mib;
 
@@ -402,6 +413,9 @@ ExitCode run_command(const CommandLine& command_line, std::ostream& stdout_strea
     std::optional<ExecutableSnapshot> installation_before;
     std::string installation_name;
     std::string installation_id;
+    std::string compatibility_app_id;
+    std::string compatibility_app_sha256;
+    std::string compatibility_app_version;
 
     // Modo: Executar aplicativo cadastrado
     if (command_line.mode == CommandMode::AppRun) {
@@ -417,6 +431,9 @@ ExitCode run_command(const CommandLine& command_line, std::ostream& stdout_strea
                           << "' não encontrado na biblioteca\n";
             return ExitCode::InputUnavailable;
         }
+        compatibility_app_id = app_opt->id;
+        compatibility_app_sha256 = app_opt->app_sha256;
+        compatibility_app_version = app_opt->app_version;
         effective_cmd.executable_path = std::filesystem::path(app_opt->executable_path);
         if (!app_opt->prefix_path.empty()) {
             effective_cmd.custom_prefix = std::filesystem::path(app_opt->prefix_path);
@@ -481,6 +498,40 @@ ExitCode run_command(const CommandLine& command_line, std::ostream& stdout_strea
     if (!prefix::initialize_prefix(prefix_dir)) {
         stderr_stream << "erro: não foi possível preparar o prefixo da execução\n";
         return ExitCode::InternalError;
+    }
+
+    if (effective_cmd.mode == CommandMode::AppRun) {
+        const compat::ProfileLoadResult profile = compat::load_profile(
+            prefix_dir, compatibility_app_id, compatibility_app_sha256,
+            compatibility_app_version);
+        const std::string profile_status = [&profile]() {
+            switch (profile.status) {
+                case compat::ProfileStatus::Missing: return std::string{"missing"};
+                case compat::ProfileStatus::Loaded: return std::string{"loaded"};
+                case compat::ProfileStatus::Invalid: return std::string{"invalid"};
+            }
+            return std::string{"unknown"};
+        }();
+        if (effective_cmd.trace_enabled) {
+            const std::array fields{
+                diagnostics::TraceField{"status", profile_status},
+                diagnostics::TraceField{"prefix", prefix_dir.string()},
+                diagnostics::TraceField{"app-id", compatibility_app_id},
+                diagnostics::TraceField{"files", std::to_string(profile.profile.files.size())},
+                diagnostics::TraceField{"detail", profile.error},
+            };
+            diagnostics::write_trace(stderr_stream, diagnostics::TraceComponent::Runtime,
+                                     profile.status == compat::ProfileStatus::Invalid
+                                         ? diagnostics::TraceLevel::Warning
+                                         : diagnostics::TraceLevel::Info,
+                                     "compat-profile", fields);
+        }
+        if (profile.status != compat::ProfileStatus::Loaded) {
+            stderr_stream << "aviso: perfil de compatibilidade " << profile_status
+                          << "; usando comportamento genérico";
+            if (!profile.error.empty()) stderr_stream << ": " << profile.error;
+            stderr_stream << '\n';
+        }
     }
 
     const prefix::EnvironmentPaths active_paths = prefix::get_environment_paths(prefix_dir);
@@ -630,6 +681,7 @@ ExitCode run_command(const CommandLine& command_line, std::ostream& stdout_strea
             entry.executable_path = extracted->string();
             entry.prefix_path = prefix_dir.string();
             entry.working_directory = extracted->parent_path().string();
+            record_executable_fingerprint(entry, *extracted);
             entry.cpu_limit_seconds = effective_cmd.cpu_limit_seconds;
             entry.memory_limit_mib = effective_cmd.memory_limit_mib;
             if (!app_catalog.add_app(entry) || !app_catalog.save_to_file()) {
@@ -714,6 +766,7 @@ ExitCode run_command(const CommandLine& command_line, std::ostream& stdout_strea
                     entry.executable_path = best_candidate.string();
                     entry.prefix_path = prefix_dir.string();
                     entry.working_directory = best_candidate.parent_path().string();
+                    record_executable_fingerprint(entry, best_candidate);
                     entry.cpu_limit_seconds = effective_cmd.cpu_limit_seconds;
                     entry.memory_limit_mib = effective_cmd.memory_limit_mib;
                     if (app_catalog.add_app(entry) && app_catalog.save_to_file()) {
@@ -982,6 +1035,7 @@ ExitCode run_command(const CommandLine& command_line, std::ostream& stdout_strea
         entry.executable_path = selected_executable->string();
         entry.prefix_path = prefix_dir.string();
         entry.working_directory = selected_executable->parent_path().string();
+        record_executable_fingerprint(entry, *selected_executable);
         entry.cpu_limit_seconds = effective_cmd.cpu_limit_seconds;
         entry.memory_limit_mib = effective_cmd.memory_limit_mib;
         if (!app_catalog.add_app(entry) || !app_catalog.save_to_file()) {
