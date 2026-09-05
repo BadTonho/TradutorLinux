@@ -986,6 +986,16 @@ marcam itens condicionais como concluídos; definem os gates para retomá-los.
   da classe `7-Zip::FM` permanece no shell GUI experimental, e
   `TL_7ZFM_COPY_DESTINATION` permanece somente como hook de teste; a B14.4
   continua adiada e não adiciona regras declarativas ao `profile.json`.
+- **B14.4 reaberta pelo usuário em 2026-09-05:** a visão de longo prazo é uma
+  arquitetura híbrida, com DLLs genéricas internas como base e DLLs PE32+
+  personalizadas por aplicativo como extensões distribuíveis por usuários ou
+  pela comunidade. A extensão deverá ser selecionada pelo perfil e isolada por
+  aplicativo/prefixo, com precedência e fallback definidos por módulo ou
+  export. A nova etapa deverá especificar o carregamento de DLLs PE, imports,
+  relocations, exports, dependências, ABI, diagnóstico, confiança e regressões.
+  Não será permitido carregar bibliotecas Linux, scripts ou código nativo
+  arbitrário a partir do perfil; DLLs PE convidadas continuam executando com as
+  permissões do runtime, que não é sandbox.
 - **B17 e processos — opção 1 confirmada pelo usuário em 2026-09-05:** manter
   o supervisor adiado. O protocolo atual de `fork`/`waitpid`/pipe é suficiente
   para o portfólio conhecido; um supervisor só será criado se um aplicativo
@@ -1105,21 +1115,21 @@ imports não encerra B5.
   embutidas para dados gerados de fonte pública somente quando um aplicativo
   exigir outra página além de CP 0/1252/437/65001; versionar a fonte e testar
   conversões e erros.
-- [x] **B14 — Perfil de compatibilidade por aplicativo e overrides
+- [ ] **B14 — Perfil de compatibilidade por aplicativo e overrides
   condicionados.** Cada prefixo poderá ter uma área `compat/` ao lado de
   `drive_c`: `drive_c` mantém os arquivos reais do convidado, enquanto
   `compat/` guarda os arquivos auxiliares e o perfil do TradutorLinux daquele
   aplicativo, por exemplo `compat/profile.json` e `compat/files/`. O perfil
   deverá ser selecionado pelo ID estável do catálogo, com hash ou versão
   opcional quando necessário, e poderá declarar somente recursos validados,
-  como arquivos e mapeamentos explícitos para caminhos que o convidado deve
-  enxergar. A pasta não será automaticamente visível ao aplicativo e não
-  aceitará código, scripts ou DLLs arbitrárias. Sem perfil válido, aplica-se o
-  comportamento genérico; o carregamento e cada regra usada devem aparecer no
-  trace. Diferenciar esse mecanismo do override de DLL já existente
-  (`TL_DLL_OVERRIDES`), definir precedência, isolamento e diagnóstico, e exigir
-  alvo, fixture e regressão antes de permitir qualquer divergência específica
-  por API.
+  como arquivos e, após a B14.4, DLLs PE32+ personalizadas para aquele
+  aplicativo. A pasta não será automaticamente visível ao aplicativo.
+  Bibliotecas Linux, scripts e código nativo arbitrário continuarão proibidos;
+  DLLs PE convidadas exigirão isolamento por prefixo, precedência, fallback,
+  diagnóstico e validação próprios. Sem extensão aplicável, usa-se o
+  comportamento genérico. Diferenciar esse mecanismo do override global já
+  existente (`TL_DLL_OVERRIDES`) e exigir alvo, fixture e regressão antes de
+  permitir qualquer divergência específica por API.
 
   Subetapas planejadas, na ordem:
 
@@ -1146,14 +1156,18 @@ imports não encerra B5.
      novos do convidado. A fixture `tl_compat_file.exe`, os testes unitários,
      o trace e a integração reproduzem cópia, colisão, rollback e limpeza. A
      pasta `compat/` não é exposta automaticamente.
-  4. [ ] **B14.4 — Regras de comportamento condicionadas (adiada).** A
-     auditoria do 7-Zip 24.08 não encontrou necessidade reproduzível de regra
-     adicional além dos arquivos da B14.3. Não há campo `rules` no perfil, o
-     tratamento da classe `7-Zip::FM` continua separado no shell GUI
-     experimental e `TL_7ZFM_COPY_DESTINATION` continua sendo apenas hook de
-     teste. A etapa só será reaberta com alvo, justificativa, precedência,
-     isolamento, diagnóstico, fixture e regressão; código, scripts e DLLs
-     arbitrárias continuam proibidos.
+  4. [ ] **B14.4 — Extensões de DLL por aplicativo (reaberta).** A auditoria
+     do 7-Zip 24.08 continua sem necessidade de regra declarativa específica,
+     mas a visão geral do produto agora exige uma arquitetura híbrida: DLLs
+     genéricas internas permanecem como base e DLLs PE32+ personalizadas podem
+     ser fornecidas por perfil para um aplicativo. A etapa deverá definir o
+     formato em `compat/`, carregamento de DLL PE, imports, relocations,
+     exports, dependências, ABI, precedência por módulo/export, fallback para a
+     implementação genérica, diagnóstico, confiança e regressões. Não haverá
+     carregamento de bibliotecas Linux, scripts ou código nativo arbitrário; a
+     B14.4 só poderá ser concluída com aplicativo-alvo, fixture e integração
+     reproduzíveis. O tratamento da classe `7-Zip::FM` continua separado no
+     shell GUI experimental.
   5. [x] **B14.5 — Integração e promoção.** A integração
      `integration_compat_profile_isolation` reutiliza `tl_compat_file.exe` com
      dois IDs de catálogo e dois prefixos independentes. Perfis com conteúdos
@@ -1163,8 +1177,10 @@ imports não encerra B5.
      `integration_compat_profile` mantém a evidência de perfil carregado,
      ausente e inválido com fallback genérico, trace e exit code preservado.
      A matriz de compatibilidade foi atualizada. Com as subetapas aplicáveis
-     validadas por testes reproduzíveis, a B14 é promovida; a B14.4 permanece
-     adiada e sem regras declarativas.
+     validadas por testes reproduzíveis, a base de perfis foi integrada e
+     promovida. A conclusão da B14 como um todo aguarda a B14.4 reaberta; até
+     lá, o runtime continua usando somente o contrato v1 de arquivos auxiliares
+     e o comportamento genérico quando não houver extensão aplicável.
 - [x] **B15 — Drives do prefixo como symlinks ou mecanismo equivalente.** O
   prefixo cria `dosdevices/c:` → `../drive_c` e `dosdevices/z:` → `/`; a
   resolução de `C:` canoniza e confina o caminho ao `drive_c`, enquanto `Z:`
