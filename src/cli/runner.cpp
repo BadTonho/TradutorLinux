@@ -8,6 +8,7 @@
 #include "tradutorlinux/diagnostics/crash_context.hpp"
 #include "tradutorlinux/loader/import_resolver.hpp"
 #include "tradutorlinux/loader/module.hpp"
+#include "tradutorlinux/loader/module_graph.hpp"
 #include "tradutorlinux/loader/process.hpp"
 #include "tradutorlinux/package/msix.hpp"
 #include "tradutorlinux/pe/pe_reader.hpp"
@@ -32,6 +33,7 @@
 #include <initializer_list>
 #include <limits>
 #include <map>
+#include <memory>
 #include <optional>
 #include <ostream>
 #include <spawn.h>
@@ -825,7 +827,12 @@ ExitCode run_command(const CommandLine& command_line, std::ostream& stdout_strea
                                                                        : ExitCode::Unsupported;
     }
 
-    loader::PrepareResult prepare_result = loader::prepare_process(parse_result.info, *bytes);
+    execution_context.module_graph = std::make_unique<loader::GuestModuleGraph>(
+        prefix_dir, compatibility_profile, *effective_cmd.executable_path,
+        effective_cmd.trace_enabled);
+    loader::PrepareResult prepare_result = loader::prepare_process(
+        parse_result.info, *bytes, execution_context.module_graph.get(),
+        *effective_cmd.executable_path);
     if (prepare_result.status == loader::PrepareStatus::OutOfMemory) {
         if (effective_cmd.trace_enabled) {
             write_map_failed_trace(stderr_stream, "out-of-memory", prepare_result.error_message);

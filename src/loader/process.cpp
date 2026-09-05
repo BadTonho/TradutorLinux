@@ -1,6 +1,7 @@
 #include "tradutorlinux/loader/process.hpp"
 
 #include "tradutorlinux/loader/module.hpp"
+#include "tradutorlinux/loader/module_graph.hpp"
 #include "tradutorlinux/runtime/memory_validator.hpp"
 #include "tradutorlinux/util/basics.hpp"
 
@@ -23,6 +24,13 @@ namespace {
 }  // namespace
 
 PrepareResult prepare_process(const pe::PeInfo& info, const std::span<const std::byte> file_bytes,
+                              const MapOptions& options) {
+    return prepare_process(info, file_bytes, nullptr, {}, options);
+}
+
+PrepareResult prepare_process(const pe::PeInfo& info, const std::span<const std::byte> file_bytes,
+                              GuestModuleGraph* const module_graph,
+                              const std::filesystem::path& requester,
                               const MapOptions& options) {
     MapResult map = map_image(info, file_bytes, options);
     if (map.status == MapStatus::OutOfMemory) {
@@ -47,7 +55,10 @@ PrepareResult prepare_process(const pe::PeInfo& info, const std::span<const std:
     GuestProcess process;
     process.info = info;
     process.image = std::move(map.image);
-    process.imports = resolve_imports(process.image, process.info);
+    process.imports = module_graph != nullptr
+                          ? resolve_imports(process.image, process.info, *module_graph,
+                                            requester)
+                          : resolve_imports(process.image, process.info);
 
     const std::size_t page = util::host_page_size();
     const std::size_t guard_size = page;

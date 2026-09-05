@@ -6,10 +6,13 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <filesystem>
 #include <span>
 #include <string>
 
 namespace tradutorlinux::loader {
+
+class GuestModuleGraph;
 
 constexpr std::size_t kGuestStackSize = 32 << 20;  // 32 MiB usáveis (para suportar buffers estendidos de até 8 MiB)
 
@@ -48,6 +51,12 @@ struct PrepareResult {
 // so the diagnostic can be reported before destroy_process.
 [[nodiscard]] PrepareResult prepare_process(const pe::PeInfo& info,
                                             std::span<const std::byte> file_bytes,
+                                            const MapOptions& options = {});
+
+[[nodiscard]] PrepareResult prepare_process(const pe::PeInfo& info,
+                                            std::span<const std::byte> file_bytes,
+                                            GuestModuleGraph* module_graph,
+                                            const std::filesystem::path& requester,
                                             const MapOptions& options = {});
 
 void destroy_process(GuestProcess& process);

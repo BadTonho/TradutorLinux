@@ -5,10 +5,13 @@
 #include "tradutorlinux/pe/pe_reader.hpp"
 
 #include <cstdint>
+#include <filesystem>
 #include <string>
 #include <vector>
 
 namespace tradutorlinux::loader {
+
+class GuestModuleGraph;
 
 enum class ImportStatus {
     Resolved,
@@ -35,6 +38,7 @@ struct ResolvedImport {
     std::string detail;
     ImportMechanism mechanism{ImportMechanism::Static};
     ExportSupport support{ExportSupport::Full};
+    std::string provider;
 };
 
 struct ResolveResult {
@@ -53,5 +57,11 @@ struct ResolveResult {
 // On failure the overall status reflects the first problem found, but every
 // entry is still reported so the diagnostic is complete.
 [[nodiscard]] ResolveResult resolve_imports(MappedImage& image, const pe::PeInfo& info);
+
+// Variante usada por app run quando há um grafo por execução. O resolvedor
+// antigo permanece responsável pelo --report e pelos chamadores sem perfil.
+[[nodiscard]] ResolveResult resolve_imports(MappedImage& image, const pe::PeInfo& info,
+                                            GuestModuleGraph& graph,
+                                            const std::filesystem::path& requester);
 
 }  // namespace tradutorlinux::loader

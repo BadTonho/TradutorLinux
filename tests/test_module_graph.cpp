@@ -1,0 +1,139 @@
+#include "pe_builder.hpp"
+#include "tradutorlinux/compat/profile.hpp"
+#include "tradutorlinux/loader/image_mapper.hpp"
+#include "tradutorlinux/loader/module.hpp"
+#include "tradutorlinux/loader/module_graph.hpp"
+#include "tradutorlinux/prefix/prefix.hpp"
+#include "tradutorlinux/runtime/guest_context.hpp"
+
+#include <algorithm>
+#include <cstddef>
+#include <cstring>
+#include <filesystem>
+#include <fstream>
+#include <string>
+#include <vector>
+
+#include <gtest/gtest.h>
+#include <unistd.h>
+
+namespace tradutorlinux::loader {
+namespace {
+
+using namespace tradutorlinux::pe::testutil;
+
+std::vector<std::byte> make_export_dll() {
+    constexpr std::uint32_t export_rva = 0x2000;
+    std::vector<std::byte> data(0xA0, std::byte{0});
+    write_u32(data, 12, export_rva + 0x54);
+    write_u32(data, 16, 1);
+    write_u32(data, 20, 2);
+    write_u32(data, 24, 1);
+    write_u32(data, 28, export_rva + 0x40);
+    write_u32(data, 32, export_rva + 0x48);
+    write_u32(data, 36, export_rva + 0x4C);
+    write_u32(data, 0x40, 0x1000);
+    write_u32(data, 0x44, export_rva + 0x70);
+    write_u32(data, 0x48, export_rva + 0x60);
+    write_u16(data, 0x4C, 0);
+    const auto put = [&data](const std::size_t offset, const char* value) {
+        const std::size_t size = std::strlen(value) + 1U;
+        std::copy_n(reinterpret_cast<const std::byte*>(value), size,
+                    data.begin() + static_cast<std::ptrdiff_t>(offset));
+    };
+    put(0x54, "shim.dll");
+    put(0x60, "CustomEntry");
+    put(0x70, "KERNEL32.ExitProcess");
+    write_u32(data, 0x90, 0x2000);
+    write_u32(data, 0x94, 12);
+    write_u16(data, 0x98, 0);
+    write_u16(data, 0x9A, 0);
+
+    BuildSpec spec;
+    spec.coff_characteristics = 0x2022;
+    spec.section_names = {".text", ".edata"};
+    spec.section_data = {std::vector<std::byte>(0x10), data};
+    spec.export_rva = export_rva;
+    spec.export_size = 0xA0;
+    spec.reloc_rva = export_rva + 0x90;
+    spec.reloc_size = 12;
+    return build(spec);
+}
+
+std::vector<std::byte> make_importing_executable() {
+    const std::vector<std::byte> data = make_import_data({
+        {"KERNEL32.dll", {"CustomEntry", "GetStdHandle"}, {}},
+    });
+    BuildSpec spec;
+    spec.section_names = {".text", ".idata"};
+    spec.section_data = {std::vector<std::byte>(0x20), data};
+    spec.import_rva = kImportDataRva;
+    spec.import_size = 40;
+    return build(spec);
+}
+
+class ModuleGraphTest : public ::testing::Test {
+protected:
+    void SetUp() override {
+        root_ = std::filesystem::temp_directory_path() /
+                ("tl-module-graph-" + std::to_string(static_cast<unsigned long long>(::getpid())));
+        std::filesystem::remove_all(root_);
+        ASSERT_TRUE(prefix::initialize_prefix(root_));
+        runtime::GuestContextScope scope(context_);
+        register_builtin_modules();
+        std::ofstream output(compat::dlls_directory(root_) / "shim.dll",
+                             std::ios::binary | std::ios::trunc);
+        ASSERT_TRUE(output);
+        const std::vector<std::byte> bytes = make_export_dll();
+        output.write(reinterpret_cast<const char*>(bytes.data()),
+                     static_cast<std::streamsize>(bytes.size()));
+    }
+
+    void TearDown() override {
+        std::filesystem::remove_all(root_);
+    }
+
+    std::filesystem::path root_;
+    runtime::GuestContext context_;
+};
+
+TEST_F(ModuleGraphTest, ResolvesProfileExportAndFallsBackPerExport) {
+    runtime::GuestContextScope scope(context_);
+    register_builtin_modules();
+    compat::Profile profile;
+    profile.schema = 2;
+    profile.app_id = "fixture";
+    profile.dlls.push_back({"KERNEL32.dll", "shim.dll"});
+    GuestModuleGraph graph(root_, profile, root_ / "app.exe", false);
+
+    const std::vector<std::byte> executable = make_importing_executable();
+    const pe::ParseResult dll_parsed = pe::parse_pe(make_export_dll());
+    ASSERT_EQ(dll_parsed.status, pe::ParseStatus::Success) << dll_parsed.error_message;
+    ASSERT_TRUE(dll_parsed.info.is_dll);
+    ASSERT_TRUE(dll_parsed.info.is_pe32_plus);
+    const pe::ParseResult parsed = pe::parse_pe(executable);
+    ASSERT_EQ(parsed.status, pe::ParseStatus::Success) << parsed.error_message;
+    MapResult mapped = map_image(parsed.info, executable);
+    ASSERT_EQ(mapped.status, MapStatus::Success) << mapped.error_message;
+
+    ResolveResult resolved = graph.resolve_imports(mapped.image, parsed.info, root_ / "app.exe");
+    ASSERT_EQ(resolved.status, ImportStatus::Resolved) << resolved.error_message;
+    ASSERT_EQ(resolved.imports.size(), 2U);
+    EXPECT_EQ(resolved.imports[0].provider, "profile");
+    EXPECT_EQ(resolved.imports[1].provider, "builtin");
+    EXPECT_NE(resolved.imports[0].address, 0U);
+    EXPECT_NE(resolved.imports[1].address, 0U);
+
+    void* const handle = graph.get_module_handle("KERNEL32.dll");
+    ASSERT_NE(handle, nullptr);
+    const GraphExportLookup custom = graph.get_proc_address(handle, "CustomEntry");
+    ASSERT_TRUE(custom.lookup.found);
+    EXPECT_EQ(custom.provider, ModuleProvider::Profile);
+    EXPECT_EQ(custom.lookup.forwarder, "");
+    EXPECT_TRUE(graph.is_valid_module_handle(handle));
+
+    unmap_image(mapped.image);
+}
+
+}  // namespace
+}  // namespace tradutorlinux::loader

@@ -1,5 +1,7 @@
 #include "tradutorlinux/runtime/guest_context.hpp"
 
+#include "tradutorlinux/loader/module_graph.hpp"
+
 namespace tradutorlinux::runtime {
 namespace {
 
@@ -10,6 +12,8 @@ thread_local GuestContext* g_current_context = nullptr;
 GuestContext::GuestContext() noexcept
     : standard_handles{&standard_handle_tokens[0], &standard_handle_tokens[1],
                        &standard_handle_tokens[2]} {}
+
+GuestContext::~GuestContext() noexcept = default;
 
 GuestContext& default_guest_context() noexcept {
     static GuestContext context;

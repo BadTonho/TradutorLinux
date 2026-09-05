@@ -9,11 +9,16 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <memory>
 #include <mutex>
 #include <string>
 #include <sys/types.h>
 #include <thread>
 #include <vector>
+
+namespace tradutorlinux::loader {
+class GuestModuleGraph;
+}
 
 namespace tradutorlinux::runtime {
 
@@ -24,6 +29,7 @@ enum class ContextSyncKind { Mutex, Event, Semaphore, Process };
 // TL_MSABI e consultam o contexto ativo por thread.
 struct GuestContext {
     GuestContext() noexcept;
+    ~GuestContext() noexcept;
     GuestContext(const GuestContext&) = delete;
     GuestContext& operator=(const GuestContext&) = delete;
 
@@ -149,6 +155,10 @@ struct GuestContext {
     };
     std::vector<ContextModule> modules;
     std::mutex modules_mutex;
+
+    // Loader de DLLs PE pertencente exclusivamente a esta execução. O
+    // registry acima continua contendo somente os providers internos.
+    std::unique_ptr<loader::GuestModuleGraph> module_graph;
 
     std::array<bool, 256> tls_indices_used{};
     std::mutex tls_mutex;

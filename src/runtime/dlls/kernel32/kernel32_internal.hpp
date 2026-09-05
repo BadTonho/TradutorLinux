@@ -4,6 +4,7 @@
 #include "../../core/runtime_context.hpp"
 #include "tradutorlinux/loader/import_resolver.hpp"
 #include "tradutorlinux/loader/module.hpp"
+#include "tradutorlinux/loader/module_graph.hpp"
 #include "tradutorlinux/loader/builtin_modules.hpp"
 #include "tradutorlinux/prefix/prefix.hpp"
 #include "tradutorlinux/runtime/error_map.hpp"

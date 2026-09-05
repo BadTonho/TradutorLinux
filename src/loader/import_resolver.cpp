@@ -2,6 +2,7 @@
 
 #include "tradutorlinux/loader/dll_overrides.hpp"
 #include "tradutorlinux/loader/module.hpp"
+#include "tradutorlinux/loader/module_graph.hpp"
 
 #include <array>
 #include <cstdint>
@@ -123,6 +124,12 @@ ResolveResult resolve_imports(MappedImage& image, const pe::PeInfo& info) {
         }
     }
     return result;
+}
+
+ResolveResult resolve_imports(MappedImage& image, const pe::PeInfo& info,
+                              GuestModuleGraph& graph,
+                              const std::filesystem::path& requester) {
+    return graph.resolve_imports(image, info, requester);
 }
 
 }  // namespace tradutorlinux::loader

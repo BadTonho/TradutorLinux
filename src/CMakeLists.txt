@@ -10,6 +10,7 @@ add_library(tradutorlinux_core STATIC
     loader/image_mapper.cpp
     loader/import_resolver.cpp
     loader/module.cpp
+    loader/module_graph.cpp
     loader/process.cpp
     package/msix.cpp
     pe/pe_reader.cpp
@@ -106,7 +107,7 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
         util/unicode.cpp catalog/app_catalog.cpp package/msix.cpp
         diagnostics/crash_context.cpp gui/platform.cpp gui/wayland.cpp gui/x11.cpp
         loader/dll_overrides.cpp loader/image_mapper.cpp loader/import_resolver.cpp
-        loader/module.cpp loader/process.cpp pe/pe_reader.cpp prefix/prefix.cpp
+        loader/module.cpp loader/module_graph.cpp loader/process.cpp pe/pe_reader.cpp prefix/prefix.cpp
         runtime/core/memory_validator.cpp runtime/core/environment.cpp runtime/core/guest_context.cpp
         runtime/dialog_template.cpp runtime/seh/unwind.cpp process/isolate.cpp
         runtime/function_trace.cpp

@@ -4,6 +4,7 @@
 #include "tradutorlinux/diagnostics/trace.hpp"
 #include "tradutorlinux/gui/platform.hpp"
 #include "tradutorlinux/loader/module.hpp"
+#include "tradutorlinux/loader/module_graph.hpp"
 #include "tradutorlinux/loader/builtin_modules.hpp"
 #include "tradutorlinux/loader/process.hpp"
 #include "tradutorlinux/pe/pe_reader.hpp"
@@ -856,6 +857,13 @@ void invoke_thread_tls_callbacks(const std::uint32_t reason) noexcept {
             cb(const_cast<std::byte*>(g_guest_image_base), reason, nullptr);
         }
     }
+    if (runtime::guest_context().module_graph != nullptr) {
+        if (reason == 2U) {
+            runtime::guest_context().module_graph->thread_attach();
+        } else if (reason == 3U) {
+            runtime::guest_context().module_graph->thread_detach();
+        }
+    }
 }
 
 void reset_process_console_state() noexcept {
@@ -894,28 +902,44 @@ GuestExecutionResult execute_guest_entry(const std::uintptr_t entry_point,
         return {};
     }
 
-    // Inicializa template TLS e índice
-    initialize_thread_tls(g_current_teb);
-    if (g_guest_tls_index_addr != 0 &&
-        mapped_guest_range(reinterpret_cast<const void*>(g_guest_tls_index_addr),
-                           sizeof(std::uint32_t), true)) {
-        *reinterpret_cast<std::uint32_t*>(g_guest_tls_index_addr) = 0;
-    }
-
-    // Executa TLS callbacks antes do entry point principal (PROCESS_ATTACH e THREAD_ATTACH para thread 1)
-    invoke_thread_tls_callbacks(1U /* DLL_PROCESS_ATTACH */);
-    invoke_thread_tls_callbacks(2U /* DLL_THREAD_ATTACH */);
-    initialize_pointer_backed_tls_slot(g_current_teb);
-
     g_quit_requested = false;
     g_quit_code = 0;
     g_guest_execution_active = true;
     g_current_thread_id = kMainThreadId;
     static_cast<void>(ensure_fls_thread_values());
     if (setjmp(g_guest_exit_context) == 0) {
+        if (runtime::guest_context().module_graph != nullptr &&
+            !runtime::guest_context().module_graph->process_attach()) {
+            runtime::guest_context().module_graph->process_detach();
+            g_guest_execution_active = false;
+            static_cast<void>(set_guest_gs_base(nullptr));
+            free_guest_teb(teb);
+            reset_fls_process_state();
+            reset_process_console_state();
+            runtime::clear_guest_environment();
+            return GuestExecutionResult{.exited_explicitly = true, .exit_code = 127U};
+        }
+
+        // Inicializa template TLS e índice
+        initialize_thread_tls(g_current_teb);
+        if (g_guest_tls_index_addr != 0 &&
+            mapped_guest_range(reinterpret_cast<const void*>(g_guest_tls_index_addr),
+                               sizeof(std::uint32_t), true)) {
+            *reinterpret_cast<std::uint32_t*>(g_guest_tls_index_addr) = 0;
+        }
+
+        // Executa TLS callbacks antes do entry point principal (PROCESS_ATTACH e THREAD_ATTACH para thread 1)
+        invoke_thread_tls_callbacks(1U /* DLL_PROCESS_ATTACH */);
+        invoke_thread_tls_callbacks(2U /* DLL_THREAD_ATTACH */);
+        initialize_pointer_backed_tls_slot(g_current_teb);
+
         diagnostics::FunctionTraceScope assembly_scope{"tl_call_guest_on_stack"};
         const std::uint32_t natural_code =
             tl_call_guest_on_stack(std::bit_cast<std::uintptr_t>(entry), stack_top);
+        invoke_thread_tls_callbacks(3U /* DLL_THREAD_DETACH */);
+        if (runtime::guest_context().module_graph != nullptr) {
+            runtime::guest_context().module_graph->process_detach();
+        }
         cleanup_current_fls_values();
         g_guest_execution_active = false;
         static_cast<void>(set_guest_gs_base(nullptr));
@@ -924,6 +948,10 @@ GuestExecutionResult execute_guest_entry(const std::uintptr_t entry_point,
         reset_process_console_state();
         runtime::clear_guest_environment();
         return GuestExecutionResult{.exited_explicitly = false, .exit_code = natural_code};
+    }
+    invoke_thread_tls_callbacks(3U /* DLL_THREAD_DETACH */);
+    if (runtime::guest_context().module_graph != nullptr) {
+        runtime::guest_context().module_graph->process_detach();
     }
     cleanup_current_fls_values();
     g_guest_execution_active = false;

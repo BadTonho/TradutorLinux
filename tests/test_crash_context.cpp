@@ -28,13 +28,19 @@ MappedImage make_image() {
 ResolveResult make_imports() {
     ResolveResult imports;
     imports.imports.push_back(
-        ResolvedImport{"KERNEL32.dll", false, "ExitProcess", 0, 0x1030, 0, ImportStatus::Resolved, {}});
+        ResolvedImport{"KERNEL32.dll", false, "ExitProcess", 0, 0x1030, 0, ImportStatus::Resolved, {},
+                       tradutorlinux::loader::ImportMechanism::Static,
+                       tradutorlinux::loader::ExportSupport::Full, "builtin"});
     imports.imports.push_back(
-        ResolvedImport{"USER32.dll", false, "GetMessageA", 0, 0x2040, 0, ImportStatus::Resolved, {}});
+        ResolvedImport{"USER32.dll", false, "GetMessageA", 0, 0x2040, 0, ImportStatus::Resolved, {},
+                       tradutorlinux::loader::ImportMechanism::Static,
+                       tradutorlinux::loader::ExportSupport::Full, "builtin"});
     // Entrada não resolvida não pode virar candidata no diagnóstico.
     imports.imports.push_back(
         ResolvedImport{"KERNEL32.dll", false, "TlUnknownSymbolW", 0, 0x1050, 0,
-                       ImportStatus::UnknownSymbol, "símbolo desconhecido"});
+                       ImportStatus::UnknownSymbol, "símbolo desconhecido",
+                       tradutorlinux::loader::ImportMechanism::Static,
+                       tradutorlinux::loader::ExportSupport::Full, ""});
     return imports;
 }
 
