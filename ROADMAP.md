@@ -1015,6 +1015,14 @@ marcam itens condicionais como concluídos; definem os gates para retomá-los.
 - **B19 e novas famílias — opção 1 confirmada pelo usuário em 2026-09-05:**
   manter threadpool, ALPC e outras famílias abundantes adiadas. Cada uma
   exigirá um alvo, um subconjunto pequeno, trace, matriz e regressão.
+- **Rust — decisão confirmada pelo usuário em 2026-09-05:** adotar Rust
+  seletivamente nas partes de parsing, validação, segurança de caminhos,
+  materialização, pacotes, hashes e assinaturas, sem reescrever o runtime por
+  preferência tecnológica. A execução do convidado, a ABI Microsoft x64, as
+  pontes Win32, callbacks e GUI permanecem em C++ enquanto não houver alvo e
+  benefício medidos. A integração usará uma fronteira C estável, com tipos
+  opacos, códigos de erro e buffers explícitos; não atravessarão a fronteira
+  exceções C++ nem tipos da STL/Rust.
 - **Gate comum:** toda retomada de item condicionado precisa registrar no
   roadmap o alvo ou fixture, o contrato, a limitação, os testes unitários e de
   integração, a atualização da matriz e a validação relevante antes de ser
@@ -1250,6 +1258,39 @@ imports não encerra B5.
 - [ ] **B19 — Novas famílias abundantes de API.** Threadpool, ALPC e qualquer
   outra família só entram quando um alvo justificar o subconjunto, com teste,
   trace e matriz. Fibras já entregues não devem voltar ao backlog.
+- [ ] **B20 — Adoção seletiva de Rust.** Introduzir Rust somente onde a
+  segurança de memória e a validação de entradas não confiáveis trouxerem
+  benefício demonstrável, mantendo o núcleo de execução e ABI em C++. A
+  migração não será feita por substituição ampla nem criará uma dependência
+  implícita sem toolchain e versão reproduzíveis.
+
+  Subetapas:
+
+  - [ ] **B20.1 — Fronteira e contrato FFI.** Definir uma biblioteca Rust
+    pequena, ligada ao C++, com `extern "C"`, `#[repr(C)]`, handles opacos,
+    buffers caller-owned, códigos de erro e liberação no mesmo lado que
+    alocou. Documentar ownership, UTF-8/UTF-16, tamanhos e concorrência.
+  - [ ] **B20.2 — Toolchain reproduzível.** Integrar Cargo e CMake com versão
+    fixada, lockfile, builds Debug/Sanitize/Release e política para crates
+    externas, sem quebrar o build C++ nem aumentar o custo de desenvolvimento
+    além do benefício medido.
+  - [ ] **B20.3 — Primeiro componente de segurança.** Migrar ou implementar
+    um componente isolado de parsing/validação de dados hostis, começando por
+    perfil, pacote ou caminho confinado; preservar o contrato público atual e
+    comparar o resultado com a implementação C++ existente antes de remover
+    qualquer código.
+  - [ ] **B20.4 — Testes e robustez.** Adicionar testes de unidade, casos
+    limite, fuzzing ou testes property-based quando aplicável, além de
+    regressões para traversal, overflow, truncamento, UTF-8/UTF-16 e falhas de
+    alocação. Validar a fronteira FFI sob Sanitizers e ferramentas Rust.
+  - [ ] **B20.5 — Integração operacional.** Exercitar o componente Rust nos
+    fluxos reais de catálogo, perfis, materialização ou pacotes, verificando
+    desempenho, logs, códigos de erro, cancelamento e limpeza sem exceção
+    atravessando a ABI.
+  - [ ] **B20.6 — Promoção por evidência.** Atualizar a documentação técnica
+    e a matriz de componentes, registrar limitações e só marcar a migração
+    como concluída depois de comparação reproduzível, regressões completas e
+    worktree/builds limpos.
 
 ### Itens das listas antigas já absorvidos
 
@@ -1261,8 +1302,11 @@ caminho também já existe em `<app.exe>`, `app add`, `install --app-exe` e no
 launcher; isso corresponde ao item `B3`. Eles não devem ser reabertos por causa
 das versões históricas dos documentos auxiliares.
 
-As restrições de PE32/x86, ARM, WOW64, .NET/Mono, DirectX, áudio, drivers,
-anticheat e serviços Windows continuam limites de escopo, não tarefas abertas.
+As restrições de PE32/x86, ARM, WOW64, .NET/Mono, drivers, anticheat e serviços
+Windows continuam limites de escopo, não tarefas abertas. DirectX e áudio
+continuam fora do runtime próprio; a B14.6 avalia esses recursos somente pelo
+backend Proton opcional e por aplicativo-alvo, sem transformar a avaliação em
+promessa de suporte geral.
 
 ## Definição de pronto
 
