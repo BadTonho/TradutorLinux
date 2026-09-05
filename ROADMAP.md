@@ -27,8 +27,8 @@ as referências nas fases não criem listas paralelas.
 
 - **Fase atual:** Fase 13 — compatibilidade ampla por portfólio.
 - **Próximo ciclo:** B2 fica estacionada até uma decisão de produto específica
-  sobre tradução de interface; as etapas operacionais B1 e B10 deste ciclo
-  foram concluídas.
+  sobre tradução de interface; B6 e B9 continuam condicionadas a evidência
+  externa. B1, B8 e B10 deste ciclo foram concluídas.
 - **Último incremento:** a Fase 13.14 concluiu TLS genérico e a fixture
   reutilizável Worker/RSL. O caso comercial do Roblox continua como benchmark:
   imports resolvidos, mas execução interrompida em `RBXCRASH`/`ExitProcess 3`.
@@ -47,6 +47,12 @@ as referências nas fases não criem listas paralelas.
   `sanitize`, executado fora de `ptrace` com Xvfb próprio e
   `detect_leaks=1`. O smoke repetiu 512 desenhos de cores e cobriu Escape,
   clique externo, destruição externa e timeout, sem relatório de ASan/LSan.
+- **Última validação de distribuição:** B8 instalou a fixture reproduzível
+  `native-fixture.msix` em prefixo exclusivo, extraiu o PE32+ x86-64 declarado
+  no `AppxManifest.xml`, cadastrou-o no catálogo e confirmou `app run` com
+  stdout e exit code esperados. A extração valida central directory, CRC,
+  DEFLATE, limites, traversal, symlinks e colisões; bundles, .NET/Mono e
+  assinaturas Authenticode continuam fora do contrato.
 
 Os demais bullets desta seção são registro cronológico de marcos já entregues;
 para decidir o próximo trabalho, use somente a ordem do backlog abaixo.
@@ -235,7 +241,8 @@ para decidir o próximo trabalho, use somente a ordem do backlog abaixo.
   resolver DTDs ou recursos externos. As regressões cobrem namespaces,
   comentários, CDATA, entidades e XML malformado. No Debug Linux, os oito
   testes `MsixParserTest.*` e o teste de afinidade passaram no unitário e no
-  CTest. Instalação e execução de .NET/MSIX continuam fora do escopo.
+  CTest. A etapa B8 posterior adicionou instalação/execução apenas para
+  pacotes com PE32+ x86-64 nativo; .NET/Mono continua fora do escopo.
 - **Marco concluído (Fase 13.13 — Análise e Bateria de Testes do Portfólio Popular):**
   Bateria automatizada de `--report` e execução controlada no conjunto de aplicativos
   Windows x64 mais demandados pela comunidade:
@@ -622,9 +629,11 @@ compatibilidade imediata com qualquer executável, jogo ou mecanismo protegido.
 - [x] Validar `install -> arquivos no prefixo -> cadastro do executável
   instalado -> app run` com teste de integração e artefatos reproduzíveis.
 - [x] Adicionar descoberta estrutural de formatos de distribuição: distinguir
-  PE direto de pacotes MSIX/AppX, validar o arquivo, ler `AppxManifest.xml` e
-  localizar o PE interno. Instalação e execução do pacote continuam pendentes
-  (item `B8`).
+  PE direto de pacotes MSIX/AppX, validar o arquivo, ler `AppxManifest.xml`,
+  localizar o PE interno e instalar/relançar pacotes que contenham PE32+
+  x86-64 nativo. O teste `integration_msix_install` cobre extração, catálogo
+  e execução; .NET/Mono, bundles e assinatura Authenticode continuam fora do
+  contrato.
 - [x] Registrar imports, versão, hash e fluxo principal dos alvos acompanhados
   no catálogo e em `docs/requisitos-aplicativos.md`, usando recorrência de
   dependências para ordenar o trabalho; o preenchimento de amostras comerciais
@@ -788,8 +797,9 @@ nem declarar os benchmarks comerciais suportados.
 - [x] MSIX/AppX: detectar pacote, ler `AppxManifest.xml` e localizar
   estruturalmente o executável interno; a validação de central directory,
   DEFLATE, CRC e limites está coberta por testes.
-- [ ] Instalação e execução de pacotes MSIX/AppX exigem fase própria e não são
-  cobertas pelo prefixo atual (item `B8`).
+- [x] Instalação e execução de pacotes MSIX/AppX nativos exigiram a fase B8 e
+  agora são cobertas pelo prefixo próprio; bundles, .NET/Mono e assinatura
+  Authenticode continuam fora do contrato.
 - PE32/x86, .NET/Mono, ARM e WOW64 continuam fora do alvo. Não há plano de
   executar esses binários sem uma decisão explícita de arquitetura/emulação.
 - [ ] A forma de `UWOP_SET_FPREG` do Roblox (`OpInfo=10`, `FrameOffset=0`)
@@ -822,9 +832,10 @@ nem declarar os benchmarks comerciais suportados.
   extrair `drive_c` e `app run` completar sem `panic`, após a amostra comercial
   correspondente estar disponível (item `B6`).
 
-PE32/x86, .NET/Mono e MSIX/AppX continuam requisitos separados nesta primeira
-subetapa. Eles ficam registrados no portfólio para a expansão posterior, mas
-não bloqueiam a base de instalação PE32+ x86-64.
+PE32/x86 e .NET/Mono continuam requisitos separados nesta primeira subetapa.
+MSIX/AppX nativo avançou pela B8 somente para PE32+ x86-64; bundles, assinatura
+Authenticode e demais arquiteturas ficam registrados para expansão posterior,
+mas não bloqueiam a base de instalação nativa.
 
 ### Critério de saída
 
@@ -953,11 +964,12 @@ sobrescrita e com confinamento à raiz visual. O teste externo versionado
 `build/debug/tests/seven_zip_smoke` confirma a cópia e o encerramento normal;
 as demais operações do File Manager continuam limitadas.
 
-### Ciclo concluído — B1 e B10
+### Ciclo concluído — B1, B8 e B10
 
-B1 e B10 foram concluídas e validadas. B2 é uma trilha de produto separada do
-runtime Win32 e fica estacionada até haver decisão explícita sobre tradução de
-interface; não há outra etapa operacional escolhida neste ciclo.
+B1, B8 e B10 foram concluídas e validadas. B2 é uma trilha de produto separada
+do runtime Win32 e fica estacionada até haver decisão explícita sobre tradução
+de interface. B6 e B9 permanecem condicionadas, respectivamente, à amostra
+comercial Worker/RSL e a evidência de outra aplicação para o unwind.
 
 **Decisão registrada:** o 7-Zip File Manager 24.08 foi escolhido porque já
 possui amostra PE32+ x86-64 local, 298/298 imports resolvidos, classe Win32
@@ -989,6 +1001,14 @@ imports não encerra B5.
   caminhos Escape, clique externo, destruição externa e timeout, sem relatório
   de ASan/LSan. O CTest mantém essa configuração automaticamente para builds
   com `TL_ENABLE_SANITIZERS`.
+- [x] **B8 — Instalação e execução de MSIX/AppX nativo.** O comando
+  `install` aceita `.msix`/`.appx`, lê o manifesto, extrai somente um pacote
+  ZIP validado para `Program Files/<id>`, seleciona o executável declarado,
+  exige PE32+ x86-64, grava o catálogo e permite `app run`. A fixture
+  `native-fixture.msix` e o teste `integration_msix_install` comprovam
+  `--report`, extração, registro e execução. O extrator rejeita traversal,
+  symlinks, colisões, métodos ZIP desconhecidos, CRC inválido e limites
+  excedidos; .NET/Mono, bundles e assinatura Authenticode continuam fora.
 
 ### Estacionadas até haver condição explícita
 
@@ -999,11 +1019,6 @@ imports não encerra B5.
   observáveis corretos. Esta tarefa está bloqueada nesta cópia porque não há
   executável comercial `Worker`/`RSL`; `tl_worker_rsl.exe` é apenas a fixture
   reutilizável e o exit `77` sem IPv4 continua sendo skip controlado.
-- [ ] **B8 — Instalação e execução de MSIX/AppX.** Criar uma fase própria para
-  instalar o pacote validado no prefixo, selecionar o PE interno, preservar
-  limites de segurança do parser e executar somente PE32+ x86-64 suportado.
-  Não incluir .NET/Mono por consequência; o parser estrutural já entregue
-  continua sendo apenas inspeção.
 - [ ] **B9 — Generalizar `UWOP_SET_FPREG` somente por evidência.** Só aceitar a
   forma não canônica observada no Roblox (`OpInfo=10`, `FrameOffset=0`) após
   outra amostra confirmar a mesma semântica e existir fixture determinística.

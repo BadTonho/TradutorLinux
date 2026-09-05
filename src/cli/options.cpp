@@ -94,7 +94,7 @@ ParseResult parse_command_line(const int argc, const char* const argv[]) {
 
     const std::string_view first_arg{argv[1]};
 
-    // Subcomando: install <setup.exe>
+    // Subcomando: install <setup.exe|package.msix>
     if (first_arg == "install") {
         command_line.mode = CommandMode::Install;
         for (int i = 2; i < argc; ++i) {
@@ -205,7 +205,7 @@ ParseResult parse_command_line(const int argc, const char* const argv[]) {
         }
         if (!command_line.executable_path.has_value()) {
             return {.command_line = std::nullopt,
-                    .error_message = "o comando 'install' requer o caminho do arquivo instalador (.exe)"};
+                    .error_message = "o comando 'install' requer o caminho do instalador (.exe, .msix ou .appx)"};
         }
         return {.command_line = std::move(command_line), .error_message = {}};
     }
@@ -485,8 +485,8 @@ void print_help(std::ostream& stream) {
     stream << kUsage;
     stream << "\n";
     stream << "Comandos de Gerenciamento da Biblioteca e Instalação:\n";
-    stream << "  install <setup.exe> [--name <Nome>] [--prefix <dir>] [--app-exe <caminho>] [--cpu <segundos>] [--memory <MiB>]\n";
-    stream << "             instala em prefixo próprio e cadastra um único executável detectado\n";
+    stream << "  install <setup.exe|package.msix> [--name <Nome>] [--prefix <dir>] [--app-exe <caminho>] [--cpu <segundos>] [--memory <MiB>]\n";
+    stream << "             instala em prefixo próprio; pacotes usam o executável do manifesto\n";
     stream << "             --app-exe escolhe manualmente um .exe dentro de drive_c\n";
     stream << "  app list   lista todos os aplicativos cadastrados na biblioteca\n";
     stream << "  app run <id_ou_nome> [args...]\n";

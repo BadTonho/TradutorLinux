@@ -33,7 +33,7 @@ O nível funcional detalhado fica no catálogo.
 | `winrar-x64-723.exe` | 251/251 | 0 | somente o smoke `sfxcmd`/ambiente foi validado; GUI e uso diário não foram declarados | `supported` no fluxo restrito |
 | `Creative_Cloud_Set-Up_7474.exe` | — | — | PE32 x86 (`0x14c`) | arquitetura não suportada |
 | `officedeploymenttool_20228-20124.exe` | — | — | PE32 x86 (`0x14c`) | arquitetura não suportada |
-| `Affinity x64.msix` | — | — | pacote MSIX; executável interno não localizado | formato não suportado |
+| `Affinity x64.msix` | — | — | pacote MSIX reconhecido; executável interno `App/Affinity.exe` é Mono/.NET | pacote reconhecido, mas formato de execução fora do escopo |
 | `CapCut_7677236283084898320_installer.exe` | — | — | PE32 x86 (`0x14c`) | arquitetura não suportada |
 | `EpicInstaller-20.1.4-831cc1564f92442abc51fdb4a9854359.exe` | — | — | PE32 x86 (`0x14c`) + Mono/.NET | arquitetura/formato não suportados |
 | `lghub_installer.exe` | 114/114 | 0 | execução expira em prefixo temporário (`GuestTimeout 72`) | `execution-failed` |
@@ -70,7 +70,7 @@ trace e timeout quando indicado.
 | `lghub_installer.exe` | 2026.4.919028 | PE32+ x86-64 | `4b2f9903b27c8434afcd52fe65845632fcae47cc50432fb6b3b1637144e811e1` | 2026-09-04 | `tradutorlinux --report` / 0.0.0-dev | 114/114 | `GuestTimeout 72` durante a inicialização |
 | `notepad++.exe` | 8.6.9 | PE32+ x86-64 | `0cac294da853593a8136f1438b6d31da915309034027934a3ec893c2b9f2456b` | 2026-09-04 | `tradutorlinux --report` / 0.0.0-dev | 584/584 | `GuestTimeout 72` sem `Xvfb` |
 | `RTSSHooks64.dll` | não registrada | DLL PE32+ x86-64 | `68c496dea7ded5b8766092f0159f4e9ba3947df0829f594eb6981d2b06352ad5` | 2026-09-04 | `tradutorlinux --report` / 0.0.0-dev | 256/256 | não executada como aplicação |
-| `Affinity x64.msix` | não registrada | MSIX/AppX | `d3baa74d30b7b41655651e6ea58a505a1bafeb33ec7576d52e625c147bae164c` | 2026-09-04 | `tradutorlinux 0.0.0-dev` | pacote reconhecido; PE interno não é alvo funcional | não instalado nem executado |
+| `Affinity x64.msix` | não registrada | MSIX/AppX | `d3baa74d30b7b41655651e6ea58a505a1bafeb33ec7576d52e625c147bae164c` | 2026-09-04 | `tradutorlinux 0.0.0-dev` | pacote reconhecido; `App/Affinity.exe` é Mono/.NET e não é alvo funcional | não instalado nem executado |
 
 Para as entradas com data ou versão ainda não registrada, a próxima coleta deve
 preencher o campo antes de alterar o estado. O hash deve ser calculado sobre o
@@ -86,7 +86,7 @@ arquivo exato usado na execução; não se deve reutilizar o hash de outra vers�
 | Contexto de processo e console | WinRAR, Logitech G HUB, Rockstar | startup W, handles padrão, console UTF-16, diretório lógico, recursos AMD64, encode/decode e SList vazia suportados; alocação de console, herança explícita e operações interlocked pendentes |
 | Segurança, identidade e ACLs | WinRAR, Logitech G HUB, Rockstar | token/SID virtual e DACL persistente para arquivos existentes em `C:\` por prefixo; sem SACL, privilégios, `AccessCheck` ou permissões Linux |
 | Alocação Global/Local | WinRAR, Rockstar + fixture de protocolo | `GlobalAlloc`/`GlobalLock`/`GlobalUnlock`/`GlobalFree` e `LocalAlloc`/`LocalFree` com flags `MOVEABLE`/`ZEROINIT`, tabela lateral e rejeição de handles arbitrários |
-| Pacote MSIX/AppX | Affinity | inspeção estrutural validada (8 testes do parser + afinidade no Debug); instalação/execução .NET não tentada |
+| Pacote MSIX/AppX | Affinity + fixture `native-fixture.msix` | instalação suportada somente para pacote com PE32+ x86-64 nativo; `integration_msix_install` valida extração, catálogo e `app run`; Affinity continua fora por Mono/.NET |
 | `delay-import` | WinRAR, Rockstar | suportado para descritores RVA (`grAttrs=0x1`), com resolução antecipada |
 | Automação OLE | WinRAR, Rockstar | `CreateStreamOnHGlobal` entregue como stream em memória em `tl_stream.exe`; `OLEAUT32`/`IDispatch` pendentes |
 | HTTP WinINet | Rockstar + fixture de protocolo | subconjunto HTTPS direto de loopback entregue em `tl_wininet.exe`; sem execução do Rockstar |
@@ -131,10 +131,15 @@ Ordem de trabalho:
     por `tl_security.exe`. Controles GUI e, em subfases independentes,
     automação, HTTP e confiança seguem na ordem e com os critérios registrados
     em `ROADMAP.md`.
+11. [x] **B8 — instalação de pacote MSIX/AppX nativo**, comprovada por
+    `native-fixture.msix`: manifesto, extração segura, seleção PE32+ x86-64,
+    cadastro e execução no prefixo. Pacotes .NET/Mono e bundles permanecem
+    fora do escopo.
 
-Os instaladores PE32/x86, assemblies .NET/Mono e pacotes MSIX/AppX continuam
-catalogados, mas pertencem a trilhas posteriores: cada um exige uma capacidade
-de base diferente da instalação nativa PE32+ x86-64.
+Os instaladores PE32/x86 e assemblies .NET/Mono continuam catalogados e
+pertencem a trilhas posteriores. Pacotes MSIX/AppX nativos avançaram nesta
+etapa, mas somente quando o executável declarado é PE32+ x86-64; bundles,
+assinatura Authenticode e demais arquiteturas ainda exigem capacidade própria.
 
 ## Inventário Worker/RSL (2026-09-04)
 
@@ -624,26 +629,32 @@ Office Deployment Tool.
 | Arquivo | `Affinity x64.msix` |
 | Contêiner observado | arquivo ZIP (deflate; requer extração compatível com ZIP 4.5+) |
 | SHA-256 | `d3baa74d30b7b41655651e6ea58a505a1bafeb33ec7576d52e625c147bae164c` |
-| Resultado atual | inspeção estrutural validada no Debug; não selecionável como executável PE direto |
+| Resultado atual | pacote reconhecido; não instalável no subconjunto B8 porque o executável interno é Mono/.NET |
 | Fonte | inspeção local de 2026-08-23; validação estrutural em 2026-09-04 |
 
-MSIX/AppX é um pacote de aplicativo, não um PE. Antes de o `--report` poder
-listar imports, o runtime precisa localizar o executável definido pelo manifesto
-do pacote. Portanto esta amostra amplia o portfólio para um formato de
-distribuição, sem ainda afirmar nada sobre as APIs usadas pelo Affinity.
+MSIX/AppX é um pacote de aplicativo, não um PE. O runtime agora localiza o
+executável definido pelo manifesto, extrai com validação estrutural e registra
+o aplicativo quando ele é um PE32+ x86-64 nativo. O Affinity continua apenas
+reconhecido porque `App/Affinity.exe` é Mono/.NET, sem afirmar suporte às APIs
+do aplicativo.
 
-### Capacidade necessária: descoberta e preparação de pacotes MSIX
+### Capacidade entregue e limite: pacotes MSIX nativos
 
-1. Reconhecer `.msix` e `.appx` no launcher/CLI como pacotes, diferenciando-os
+1. [x] Reconhecer `.msix` e `.appx` no launcher/CLI como pacotes, diferenciando-os
    de um `.exe` PE direto.
-2. Validar a estrutura do ZIP e limitar tamanho, número de entradas e caminhos
+2. [x] Validar a estrutura do ZIP e limitar tamanho, número de entradas e caminhos
    antes da extração; nenhuma entrada pode escapar do diretório de destino.
-3. Ler `AppxManifest.xml`, enumerar as aplicações declaradas e resolver o
+3. [x] Ler `AppxManifest.xml`, enumerar as aplicações declaradas e resolver o
    executável de cada uma dentro do pacote.
-4. Extrair para o prefixo próprio do aplicativo e registrar o executável,
+4. [x] Extrair para o prefixo próprio do aplicativo e registrar o executável,
    diretório de trabalho e metadados no catálogo.
-5. Só então executar `--report` no PE interno e registrar imports, arquitetura,
-   dependências de framework e resultado de execução.
+5. [x] Só então executar `app run` no PE interno nativo e validar arquitetura;
+   `--report` permanece uma inspeção estrutural do pacote e não o executa.
+
+O teste reproduzível `integration_msix_install` empacota `tl_hello.exe`,
+confirma o `--report`, instala em prefixo exclusivo, verifica a entrada do
+catálogo e executa o PE extraído. A etapa não interpreta bundles, assemblies
+.NET/Mono ou assinatura Authenticode.
 
 Validação estrutural do pacote é indispensável para tratar a entrada como dado
 hostil. Verificação de assinatura, políticas de confiança e sandbox são

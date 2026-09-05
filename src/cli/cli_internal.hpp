@@ -15,7 +15,7 @@ namespace tradutorlinux::cli_detail {
 constexpr std::string_view kUsage =
     "Uso:\n"
     "  tradutorlinux [--trace[=canais]] [--report] [--timeout <segundos>] [--cpu <segundos>] [--memory <MiB>] <arquivo.exe> [argumentos...]\n"
-    "  tradutorlinux install <setup.exe> [--name <Nome>] [--prefix <dir>] [--app-exe <caminho>] [--cpu <segundos>] [--memory <MiB>]\n"
+    "  tradutorlinux install <setup.exe|package.msix> [--name <Nome>] [--prefix <dir>] [--app-exe <caminho>] [--cpu <segundos>] [--memory <MiB>]\n"
     "  tradutorlinux app list\n"
     "  tradutorlinux app run <id_ou_nome> [--cpu <segundos>] [--memory <MiB>] [argumentos...]\n"
     "  tradutorlinux app add <arquivo.exe> [--name <Nome>] [--prefix <dir>] [--id <id>] [--cpu <segundos>] [--memory <MiB>]\n"

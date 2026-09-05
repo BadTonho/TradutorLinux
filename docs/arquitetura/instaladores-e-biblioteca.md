@@ -87,7 +87,7 @@ O catálogo é persistido em formato JSON em `~/.config/tradutorlinux/library.js
 | Comando | Descrição |
 |---|---|
 | `tradutorlinux <app.exe>` | Execução direta de um executável PE32+. |
-| `tradutorlinux install <setup.exe> [--name <Nome>] [--prefix <dir>] [--app-exe <caminho>]` | Executa o setup no prefixo exclusivo. Só cadastra após o exit `0`; `--app-exe` escolhe explicitamente o executável final dentro do `drive_c`. |
+| `tradutorlinux install <setup.exe|package.msix> [--name <Nome>] [--prefix <dir>] [--app-exe <caminho>]` | Executa um setup PE32+ ou instala um pacote MSIX/AppX nativo no prefixo exclusivo. Só cadastra após o exit `0` do setup; pacotes selecionam o PE declarado no manifesto. |
 | `tradutorlinux app list` | Lista todos os aplicativos cadastrados na biblioteca. |
 | `tradutorlinux app run <id_ou_nome> [args...]` | Executa um aplicativo cadastrado na biblioteca. |
 | `tradutorlinux app add <app.exe> [--name <Nome>] [--prefix <dir>] [--id <id>]` | Cadastra manualmente um executável na biblioteca. Sem `--prefix`, cria prefixo exclusivo. |
@@ -106,7 +106,23 @@ Antes de executar o setup, o CLI registra os PE32+ AMD64 já presentes em
   executável parcial.
 
 Com `--trace`, os eventos `install` em `stderr` publicam `prepared`,
-`candidate`, `registered`, `pending` ou `failed`, sempre com prefixo e ID.
+`extracted`, `candidate`, `registered`, `pending` ou `failed`, sempre com
+prefixo e ID. Para pacotes, `extracted` informa o PE selecionado e os estágios
+`package-parse`, `package-extract` e `package-executable` distinguem as
+falhas de estrutura, extração e arquitetura.
+
+### Pacotes MSIX/AppX
+
+O suporte atual é deliberadamente restrito a `.msix`/`.appx` ZIP que tenham
+`AppxManifest.xml` e um executável PE32+ x86-64 nativo. A extração percorre o
+central directory, verifica tamanhos, CRC, método `stored`/`deflate`, nomes
+relativos, symlinks e colisões antes de escrever no prefixo; o destino precisa
+ser novo ou vazio. O executável indicado por `Application Executable` é
+validado novamente antes do cadastro.
+
+Bundles, assemblies .NET/Mono, assinatura Authenticode e outras arquiteturas
+não fazem parte desse contrato. A fixture `native-fixture.msix` e o CTest
+`integration_msix_install` cobrem relatório, instalação, catálogo e `app run`.
 
 ---
 

@@ -152,3 +152,19 @@ if(TL_XVFB_EXECUTABLE AND TARGET tradutorlinux_samples AND TARGET tradutorlinux)
         SKIP_RETURN_CODE 77
     )
 endif()
+
+if(TARGET tradutorlinux_samples AND TARGET tradutorlinux)
+    add_test(
+        NAME integration_msix_install
+        COMMAND "${CMAKE_COMMAND}"
+            "-DRUNTIME=$<TARGET_FILE:tradutorlinux>"
+            "-DHELLO=${CMAKE_CURRENT_BINARY_DIR}/samples/generated/tl_hello.exe"
+            "-DWORK=${CMAKE_CURRENT_BINARY_DIR}/msix_install_work"
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/samples/verify_msix_install.cmake"
+    )
+    set_tests_properties(integration_msix_install PROPERTIES
+        DEPENDS fixture_tl_hello_metadata
+        LABELS "runtime;pe32plus;package;install"
+        TIMEOUT 60
+    )
+endif()

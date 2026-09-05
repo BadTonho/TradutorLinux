@@ -132,7 +132,11 @@ de integração para avaliar o nível real de suporte:
 - `Rockstar-Games-Launcher.exe`: **338/338 (100%)** imports resolvidos
 - `putty_x64.exe` (PuTTY SSH Client): **348/348 (100%)** imports resolvidos
 - `notepad++.exe` (Notepad++ x64): **584/584 (100%)** imports resolvidos
-- `Affinity x64.msix`: pacote MSIX / AppX reconhecido pelo parser de manifesto
+- `Affinity x64.msix`: pacote MSIX / AppX reconhecido pelo parser de manifesto;
+  instalação B8 é limitada a PE32+ x86-64 nativo, enquanto `App/Affinity.exe`
+  é Mono/.NET e permanece não executado
+- `native-fixture.msix`: fixture reproduzível de pacote MSIX nativo; o CTest
+  `integration_msix_install` valida relatório, extração, catálogo e `app run`
 - `HWiNFO64.exe`: **inicia**; `OpenPrinterW` retorna `ERROR_NOT_SUPPORTED` de forma controlada
 - `Rufus_x64.exe`: **inicia**; o fluxo de uso não foi validado
 - Wrappers 32-bit (NSIS/Inno): rejeitados com segurança pelo filtro de arquitetura x64

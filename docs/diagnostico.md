@@ -278,16 +278,24 @@ em `stdout` pertence exclusivamente ao programa convidado. Os estados são:
 
 | Evento | Campos principais | Significado |
 |---|---|---|
-| `prepared` | `prefix`, `app-id`, `setup` | Prefixo exclusivo preparado antes de iniciar o setup. |
+| `prepared` | `prefix`, `app-id`, `name` | Prefixo exclusivo preparado antes de iniciar um setup ou extrair um pacote. |
+| `extracted` | `prefix`, `app-id`, `path` | Pacote MSIX/AppX foi extraído com segurança e `path` aponta para o PE declarado pelo manifesto. |
 | `candidate` | `prefix`, `app-id`, `path` | PE32+ AMD64 novo ou alterado em `drive_c` após o setup. |
 | `registered` | `prefix`, `app-id`, `path` | Executável escolhido e entrada salva no catálogo. |
 | `pending` | `reason`, `prefix`, `app-id` | Setup terminou, mas o cadastro precisa de escolha ou não há candidato válido. |
-| `failed` | `stage`, `prefix`, `app-id` | Entrada, parse, imports, preparação, setup, timeout/sinal ou persistência do catálogo falhou; o prefixo é preservado. |
+| `failed` | `stage`, `prefix`, `app-id` | Entrada, `package-parse`, `package-extract`, `package-executable`, imports, preparação, setup, timeout/sinal ou persistência do catálogo falhou; o prefixo é preservado. |
 
 `pending reason="selection-required"`, `pending reason="no-candidate"` e
 `pending reason="invalid-app-exe"` retornam `6` (`InstallPending`). Um setup
 que retorna código diferente de zero não cria entrada no catálogo; seu código
 de saída é preservado e há um evento `failed stage="setup"`.
+
+Para `.msix`/`.appx`, `install` não executa um instalador convidado: valida o
+ZIP, lê `AppxManifest.xml`, extrai o conteúdo para `Program Files/<app-id>` e
+registra o PE32+ x86-64 declarado. `failed stage="package-parse"` indica
+manifesto/estrutura inválida, `package-extract` indica falha nas validações ou
+na escrita segura e `package-executable` indica que o executável declarado não
+é PE32+ x86-64. O caminho `--report` continua somente estrutural e não extrai.
 
 ## Categorias de falha
 

@@ -8,7 +8,9 @@
 #include <fstream>
 #include <limits>
 #include <new>
+#include <set>
 #include <string_view>
+#include <system_error>
 #include <utility>
 #include <vector>
 
@@ -477,6 +479,237 @@ struct ZipCentralEntry {
     return decompressed;
 }
 
+struct ZipArchiveEntry {
+    std::string name;
+    ZipCentralEntry metadata;
+};
+
+struct ZipArchive {
+    std::uint64_t file_size{};
+    std::vector<ZipArchiveEntry> entries;
+};
+
+[[nodiscard]] std::string normalized_zip_name(std::string name) {
+    std::replace(name.begin(), name.end(), '\\', '/');
+    return name;
+}
+
+[[nodiscard]] std::optional<ZipArchive> read_zip_archive(
+    const std::filesystem::path& package_path) {
+    try {
+        std::error_code filesystem_error;
+        if (!std::filesystem::is_regular_file(package_path, filesystem_error) ||
+            filesystem_error) {
+            return std::nullopt;
+        }
+        const std::uintmax_t file_size = std::filesystem::file_size(package_path, filesystem_error);
+        if (filesystem_error || file_size < 22U || file_size > kMaxPackageFileSize) {
+            return std::nullopt;
+        }
+
+        std::ifstream stream(package_path, std::ios::binary);
+        if (!stream) return std::nullopt;
+
+        const std::uintmax_t tail_size = std::min<std::uintmax_t>(file_size, 22U + 65535U);
+        std::vector<unsigned char> tail(static_cast<std::size_t>(tail_size));
+        stream.seekg(static_cast<std::streamoff>(file_size - tail_size), std::ios::beg);
+        stream.read(reinterpret_cast<char*>(tail.data()),
+                    static_cast<std::streamsize>(tail.size()));
+        if (!stream) return std::nullopt;
+
+        std::size_t eocd_position = std::string_view::npos;
+        for (std::size_t position = tail.size() - 22U;; --position) {
+            if (read_le32(tail.data() + position) == kZipEndOfCentralDirectoryMagic &&
+                position + 22U + read_le16(tail.data() + position + 20U) <= tail.size()) {
+                eocd_position = position;
+                break;
+            }
+            if (position == 0) break;
+        }
+        if (eocd_position == std::string_view::npos) return std::nullopt;
+
+        const std::uint16_t disk_number = read_le16(tail.data() + eocd_position + 4U);
+        const std::uint16_t central_disk = read_le16(tail.data() + eocd_position + 6U);
+        const std::uint16_t entries_on_disk = read_le16(tail.data() + eocd_position + 8U);
+        const std::uint16_t total_entries = read_le16(tail.data() + eocd_position + 10U);
+        const std::uint32_t central_size = read_le32(tail.data() + eocd_position + 12U);
+        const std::uint32_t central_offset = read_le32(tail.data() + eocd_position + 16U);
+        const std::uint64_t eocd_offset = file_size - tail_size + eocd_position;
+        if (disk_number != 0 || central_disk != 0 || entries_on_disk != total_entries ||
+            total_entries == 0 || total_entries > kMaxZipEntries ||
+            central_offset > file_size || central_size > file_size - central_offset ||
+            static_cast<std::uint64_t>(central_offset) + central_size > eocd_offset) {
+            return std::nullopt;
+        }
+
+        ZipArchive archive;
+        archive.file_size = file_size;
+        archive.entries.reserve(total_entries);
+        std::set<std::string> names;
+        std::uint64_t total_uncompressed_size = 0;
+        stream.clear();
+        stream.seekg(static_cast<std::streamoff>(central_offset), std::ios::beg);
+        if (!stream) return std::nullopt;
+
+        for (std::uint16_t index = 0; index < total_entries; ++index) {
+            std::array<unsigned char, 46> central_header{};
+            stream.read(reinterpret_cast<char*>(central_header.data()),
+                        static_cast<std::streamsize>(central_header.size()));
+            if (!stream || read_le32(central_header.data()) != kZipCentralHeaderMagic) {
+                return std::nullopt;
+            }
+            const std::uint16_t version_made_by = read_le16(central_header.data() + 4U);
+            const std::uint16_t flags = read_le16(central_header.data() + 8U);
+            const std::uint16_t compression_method = read_le16(central_header.data() + 10U);
+            const std::uint32_t entry_crc32 = read_le32(central_header.data() + 16U);
+            const std::uint32_t compressed_size = read_le32(central_header.data() + 20U);
+            const std::uint32_t uncompressed_size = read_le32(central_header.data() + 24U);
+            const std::uint16_t filename_len = read_le16(central_header.data() + 28U);
+            const std::uint16_t extra_len = read_le16(central_header.data() + 30U);
+            const std::uint16_t comment_len = read_le16(central_header.data() + 32U);
+            const std::uint16_t disk_start = read_le16(central_header.data() + 34U);
+            const std::uint32_t external_attributes = read_le32(central_header.data() + 38U);
+            const std::uint32_t local_header_offset = read_le32(central_header.data() + 42U);
+            const std::uint64_t metadata_size = static_cast<std::uint64_t>(filename_len) +
+                                                extra_len + comment_len;
+            const std::streamoff current = stream.tellg();
+            const std::uint32_t unix_mode = external_attributes >> 16U;
+            if (current < 0 || static_cast<std::uint64_t>(current) > eocd_offset ||
+                metadata_size > eocd_offset - static_cast<std::uint64_t>(current) ||
+                filename_len == 0 || filename_len > kMaxZipFilenameSize ||
+                disk_start != 0 || (flags & 0x0001U) != 0U ||
+                (compression_method != 0 && compression_method != 8) ||
+                compressed_size == 0xFFFFFFFFU || uncompressed_size == 0xFFFFFFFFU ||
+                local_header_offset >= central_offset ||
+                static_cast<std::uint64_t>(compressed_size) > kMaxPackageUncompressedSize ||
+                static_cast<std::uint64_t>(uncompressed_size) > kMaxZipEntryUncompressedSize ||
+                total_uncompressed_size > kMaxPackageUncompressedSize -
+                                             std::min<std::uint64_t>(uncompressed_size,
+                                                                     kMaxPackageUncompressedSize) ||
+                ((version_made_by >> 8U) == 3U && (unix_mode & 0170000U) == 0120000U)) {
+                return std::nullopt;
+            }
+
+            std::string filename(filename_len, '\0');
+            stream.read(filename.data(), filename_len);
+            if (!stream || !safe_zip_filename(filename) || !names.insert(filename).second) {
+                return std::nullopt;
+            }
+            if (!skip_bytes(stream, static_cast<std::uint64_t>(extra_len) + comment_len,
+                            file_size)) {
+                return std::nullopt;
+            }
+            total_uncompressed_size += uncompressed_size;
+            archive.entries.push_back(
+                ZipArchiveEntry{std::move(filename),
+                                ZipCentralEntry{flags, compression_method, entry_crc32,
+                                                compressed_size, uncompressed_size,
+                                                local_header_offset}});
+        }
+
+        const std::streamoff central_end = stream.tellg();
+        if (central_end < 0 || static_cast<std::uint64_t>(central_end) !=
+                                   static_cast<std::uint64_t>(central_offset) + central_size) {
+            return std::nullopt;
+        }
+        return archive;
+    } catch (const std::bad_alloc&) {
+        return std::nullopt;
+    } catch (const std::filesystem::filesystem_error&) {
+        return std::nullopt;
+    }
+}
+
+[[nodiscard]] std::optional<std::vector<unsigned char>> read_zip_entry(
+    const std::filesystem::path& package_path, const ZipArchive& archive,
+    const ZipArchiveEntry& archive_entry) {
+    const ZipCentralEntry& entry = archive_entry.metadata;
+    if (entry.compressed_size > kMaxPackageUncompressedSize ||
+        entry.uncompressed_size > kMaxZipEntryUncompressedSize ||
+        entry.local_header_offset >= archive.file_size) {
+        return std::nullopt;
+    }
+    std::ifstream stream(package_path, std::ios::binary);
+    if (!stream) return std::nullopt;
+    stream.seekg(static_cast<std::streamoff>(entry.local_header_offset), std::ios::beg);
+    if (!stream) return std::nullopt;
+    std::uint32_t local_signature = 0;
+    if (!read_u32(stream, local_signature) || local_signature != kZipLocalHeaderMagic) {
+        return std::nullopt;
+    }
+    std::array<unsigned char, 26> local_header{};
+    stream.read(reinterpret_cast<char*>(local_header.data()),
+                static_cast<std::streamsize>(local_header.size()));
+    if (!stream) return std::nullopt;
+    const std::uint16_t local_flags = read_le16(local_header.data() + 2U);
+    const std::uint16_t local_method = read_le16(local_header.data() + 4U);
+    const std::uint16_t local_name_len = read_le16(local_header.data() + 22U);
+    const std::uint16_t local_extra_len = read_le16(local_header.data() + 24U);
+    if (local_method != entry.compression_method ||
+        (local_flags & 0x0001U) != 0U || local_name_len != archive_entry.name.size()) {
+        return std::nullopt;
+    }
+    std::string local_name(local_name_len, '\0');
+    stream.read(local_name.data(), local_name_len);
+    if (!stream || local_name != archive_entry.name ||
+        !skip_bytes(stream, local_extra_len, archive.file_size)) {
+        return std::nullopt;
+    }
+    const std::streamoff data_offset = stream.tellg();
+    if (data_offset < 0 || static_cast<std::uint64_t>(data_offset) > archive.file_size ||
+        entry.compressed_size > archive.file_size - static_cast<std::uint64_t>(data_offset)) {
+        return std::nullopt;
+    }
+
+    std::vector<unsigned char> compressed(entry.compressed_size);
+    if (!compressed.empty()) {
+        stream.read(reinterpret_cast<char*>(compressed.data()),
+                    static_cast<std::streamsize>(compressed.size()));
+        if (!stream) return std::nullopt;
+    }
+    std::optional<std::vector<unsigned char>> result;
+    if (entry.compression_method == 0) {
+        if (entry.compressed_size != entry.uncompressed_size) return std::nullopt;
+        result = std::move(compressed);
+    } else {
+        result = inflate_raw(compressed, entry.uncompressed_size);
+    }
+    if (!result.has_value() || !crc_matches(*result, entry.crc32)) return std::nullopt;
+    return result;
+}
+
+[[nodiscard]] bool path_has_symlink_component(const std::filesystem::path& root,
+                                               const std::filesystem::path& relative) {
+    std::error_code error;
+    std::filesystem::path current = root;
+    for (const auto& component : relative) {
+        current /= component;
+        if (std::filesystem::is_symlink(current, error)) return true;
+        if (error && error != std::make_error_code(std::errc::no_such_file_or_directory)) {
+            return true;
+        }
+        error.clear();
+    }
+    return false;
+}
+
+[[nodiscard]] bool path_is_symlink(const std::filesystem::path& path,
+                                   std::error_code& error) {
+    const bool result = std::filesystem::is_symlink(path, error);
+    if (error == std::make_error_code(std::errc::no_such_file_or_directory)) {
+        error.clear();
+    }
+    return result;
+}
+
+[[nodiscard]] bool path_exists(const std::filesystem::path& path, std::error_code& error) {
+    const bool result = std::filesystem::exists(path, error);
+    if (error == std::make_error_code(std::errc::no_such_file_or_directory)) {
+        error.clear();
+    }
+    return result;
+}
+
 }  // namespace
 
 bool is_msix_or_appx_package(const std::filesystem::path& path) {
@@ -690,6 +923,153 @@ std::optional<AppxPackageInfo> inspect_msix_package(const std::filesystem::path&
     } catch (const std::filesystem::filesystem_error&) {
         return std::nullopt;
     }
+}
+
+std::optional<std::filesystem::path> extract_msix_package(
+    const std::filesystem::path& package_path,
+    const std::filesystem::path& destination) {
+    const std::optional<ZipArchive> archive = read_zip_archive(package_path);
+    if (!archive.has_value()) return std::nullopt;
+
+    const auto manifest_it = std::find_if(
+        archive->entries.begin(), archive->entries.end(), [](const ZipArchiveEntry& entry) {
+            return entry.name == "AppxManifest.xml";
+        });
+    if (manifest_it == archive->entries.end() ||
+        manifest_it->metadata.uncompressed_size > kMaxManifestSize ||
+        manifest_it->metadata.compressed_size > kMaxManifestCompressedSize) {
+        return std::nullopt;
+    }
+    const auto manifest_data = read_zip_entry(package_path, *archive, *manifest_it);
+    if (!manifest_data.has_value()) return std::nullopt;
+    const std::string manifest(reinterpret_cast<const char*>(manifest_data->data()),
+                               manifest_data->size());
+    const std::optional<AppxPackageInfo> package_info = parse_appx_manifest_xml(manifest);
+    if (!package_info.has_value() || !package_info->main_executable.has_value()) {
+        return std::nullopt;
+    }
+
+    std::string executable_name = normalized_zip_name(*package_info->main_executable);
+    if (!safe_zip_filename(executable_name) || executable_name.ends_with('/')) {
+        return std::nullopt;
+    }
+    const auto executable_it = std::find_if(
+        archive->entries.begin(), archive->entries.end(),
+        [&executable_name](const ZipArchiveEntry& entry) {
+            return normalized_zip_name(entry.name) == executable_name &&
+                   !entry.name.ends_with('/') && !entry.name.ends_with('\\');
+        });
+    if (executable_it == archive->entries.end()) return std::nullopt;
+
+    std::error_code filesystem_error;
+    const bool destination_is_symlink = path_is_symlink(destination, filesystem_error);
+    if ((filesystem_error &&
+         filesystem_error != std::make_error_code(std::errc::no_such_file_or_directory)) ||
+        destination_is_symlink) {
+        return std::nullopt;
+    }
+    filesystem_error.clear();
+    const bool destination_exists = path_exists(destination, filesystem_error);
+    if (filesystem_error || (destination_exists &&
+                             (!std::filesystem::is_directory(destination, filesystem_error) ||
+                              filesystem_error))) {
+        return std::nullopt;
+    }
+    if (destination_exists) {
+        std::filesystem::directory_iterator iterator(destination, filesystem_error);
+        const std::filesystem::directory_iterator end;
+        if (filesystem_error || iterator != end) return std::nullopt;
+    }
+    if (!destination_exists && !std::filesystem::create_directories(destination, filesystem_error)) {
+        if (filesystem_error) return std::nullopt;
+    }
+    const auto cleanup = [&]() {
+        if (!destination_exists) {
+            std::error_code ignored;
+            std::filesystem::remove_all(destination, ignored);
+        }
+    };
+
+    const std::filesystem::path normalized_destination = destination.lexically_normal();
+    for (const ZipArchiveEntry& entry : archive->entries) {
+        const bool directory = entry.name.ends_with('/') || entry.name.ends_with('\\');
+        const std::string name = normalized_zip_name(entry.name);
+        const std::string relative_name = directory && name.ends_with('/')
+                                              ? name.substr(0, name.size() - 1U)
+                                              : name;
+        if (relative_name.empty()) {
+            cleanup();
+            return std::nullopt;
+        }
+        const std::filesystem::path relative_path{relative_name};
+        const std::filesystem::path target =
+            (normalized_destination / relative_path).lexically_normal();
+        const std::filesystem::path within = target.lexically_relative(normalized_destination);
+        const std::string within_text = within.generic_string();
+        if (within_text.empty() || within_text == ".." || within_text.starts_with("../") ||
+            path_has_symlink_component(normalized_destination, within.parent_path())) {
+            cleanup();
+            return std::nullopt;
+        }
+
+        std::error_code error;
+        const std::filesystem::path parent = target.parent_path();
+        if (!path_exists(parent, error)) {
+            if (error || !std::filesystem::create_directories(parent, error) || error) {
+                cleanup();
+                return std::nullopt;
+            }
+        }
+        if (path_is_symlink(parent, error) || error ||
+            path_has_symlink_component(normalized_destination, within.parent_path())) {
+            cleanup();
+            return std::nullopt;
+        }
+        if (directory) {
+            if (path_exists(target, error)) {
+                if (error || path_is_symlink(target, error) ||
+                    !std::filesystem::is_directory(target, error) || error) {
+                    cleanup();
+                    return std::nullopt;
+                }
+            } else if (error || !std::filesystem::create_directory(target, error) || error) {
+                cleanup();
+                return std::nullopt;
+            }
+            continue;
+        }
+        if (path_exists(target, error) || error || path_is_symlink(target, error) || error) {
+            cleanup();
+            return std::nullopt;
+        }
+        const auto data = read_zip_entry(package_path, *archive, entry);
+        if (!data.has_value()) {
+            cleanup();
+            return std::nullopt;
+        }
+        std::ofstream output(target, std::ios::binary | std::ios::trunc);
+        if (!output) {
+            cleanup();
+            return std::nullopt;
+        }
+        if (!data->empty()) {
+            output.write(reinterpret_cast<const char*>(data->data()),
+                         static_cast<std::streamsize>(data->size()));
+        }
+        if (!output) {
+            cleanup();
+            return std::nullopt;
+        }
+    }
+
+    const std::filesystem::path executable_path =
+        (normalized_destination / std::filesystem::path{executable_name}).lexically_normal();
+    if (!std::filesystem::is_regular_file(executable_path, filesystem_error) ||
+        filesystem_error) {
+        cleanup();
+        return std::nullopt;
+    }
+    return executable_path;
 }
 
 }  // namespace tradutorlinux::package

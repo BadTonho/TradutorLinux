@@ -33,5 +33,11 @@ struct AppxPackageInfo {
 // Inspeciona um pacote MSIX/AppX e extrai informações do AppxManifest.xml com validação de segurança
 [[nodiscard]] std::optional<AppxPackageInfo> inspect_msix_package(const std::filesystem::path& package_path);
 
-}  // namespace tradutorlinux::package
+// Extrai um pacote validado para um diretório novo e retorna o executável
+// declarado pelo manifesto. A extração rejeita traversal, links simbólicos,
+// colisões de nomes e métodos ZIP fora de stored/deflate.
+[[nodiscard]] std::optional<std::filesystem::path> extract_msix_package(
+    const std::filesystem::path& package_path,
+    const std::filesystem::path& destination);
 
+}  // namespace tradutorlinux::package

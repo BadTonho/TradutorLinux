@@ -442,7 +442,7 @@ ExitCode run_command(const CommandLine& command_line, std::ostream& stdout_strea
     // Modo: Instalar aplicativo
     if (command_line.mode == CommandMode::Install) {
         if (!effective_cmd.executable_path.has_value()) {
-            stderr_stream << "erro: o comando 'install' requer o caminho do arquivo instalador (.exe)\n";
+            stderr_stream << "erro: o comando 'install' requer o caminho do instalador (.exe, .msix ou .appx)\n";
             return ExitCode::Usage;
         }
         if (effective_cmd.report_only) {
@@ -560,35 +560,96 @@ ExitCode run_command(const CommandLine& command_line, std::ostream& stdout_strea
 
     if (package::is_msix_or_appx_package(*effective_cmd.executable_path)) {
         const auto package_info = package::inspect_msix_package(*effective_cmd.executable_path);
+        if (!package_info.has_value()) {
+            if (effective_cmd.trace_enabled) {
+                write_install_trace(effective_cmd.mode == CommandMode::Install,
+                                    stderr_stream, diagnostics::TraceLevel::Error, "failed",
+                                    {{"stage", "package-parse"}, {"prefix", prefix_dir.string()},
+                                     {"app-id", installation_id}});
+            }
+            stderr_stream << "erro: pacote MSIX / AppX inválido ou não suportado\n";
+            return ExitCode::MalformedPe;
+        }
         if (effective_cmd.report_only) {
             stdout_stream << "TradutorLinux package report\n";
             stdout_stream << "format: MSIX / AppX package\n";
-            if (package_info.has_value()) {
-                stdout_stream << "package-name: "
-                              << (package_info->package_name.empty()
-                                      ? effective_cmd.executable_path->stem().string()
-                                      : package_info->package_name)
-                              << '\n';
-                if (!package_info->publisher.empty()) {
-                    stdout_stream << "publisher: " << package_info->publisher << '\n';
-                }
-                if (!package_info->version.empty()) {
-                    stdout_stream << "version: " << package_info->version << '\n';
-                }
-                if (package_info->main_executable.has_value()) {
-                    stdout_stream << "main-executable: " << *package_info->main_executable << '\n';
-                }
-                stdout_stream << "applications: " << package_info->applications.size() << '\n';
-                for (const auto& app : package_info->applications) {
-                    stdout_stream << "  app: id=\"" << app.id << "\" exec=\"" << app.executable
-                                  << "\" name=\"" << app.display_name << "\"\n";
-                }
+            stdout_stream << "package-name: "
+                          << (package_info->package_name.empty()
+                                  ? effective_cmd.executable_path->stem().string()
+                                  : package_info->package_name)
+                          << '\n';
+            if (!package_info->publisher.empty()) {
+                stdout_stream << "publisher: " << package_info->publisher << '\n';
+            }
+            if (!package_info->version.empty()) {
+                stdout_stream << "version: " << package_info->version << '\n';
+            }
+            if (package_info->main_executable.has_value()) {
+                stdout_stream << "main-executable: " << *package_info->main_executable << '\n';
+            }
+            stdout_stream << "applications: " << package_info->applications.size() << '\n';
+            for (const auto& app : package_info->applications) {
+                stdout_stream << "  app: id=\"" << app.id << "\" exec=\"" << app.executable
+                              << "\" name=\"" << app.display_name << "\"\n";
             }
             stdout_stream << "result: package-recognized\n";
             stdout_stream << "execution: not-attempted\n";
             return ExitCode::Success;
         }
-        stderr_stream << "erro: formato de pacote MSIX / AppX reconhecido; use extração de pacote ou especifique o executável interno (.exe)\n";
+        if (effective_cmd.mode == CommandMode::Install) {
+            const std::filesystem::path package_destination =
+                active_paths.program_files / installation_id;
+            const auto extracted = package::extract_msix_package(
+                *effective_cmd.executable_path, package_destination);
+            if (!extracted.has_value()) {
+                write_install_trace(effective_cmd.trace_enabled, stderr_stream,
+                                    diagnostics::TraceLevel::Error, "failed",
+                                    {{"stage", "package-extract"}, {"prefix", prefix_dir.string()},
+                                     {"app-id", installation_id}});
+                stderr_stream << "erro: não foi possível extrair o pacote MSIX / AppX com segurança\n";
+                return ExitCode::MalformedPe;
+            }
+            write_install_trace(effective_cmd.trace_enabled, stderr_stream,
+                                diagnostics::TraceLevel::Info, "extracted",
+                                {{"prefix", prefix_dir.string()}, {"app-id", installation_id},
+                                 {"path", extracted->string()}});
+            if (!is_x64_pe_file(*extracted)) {
+                write_install_trace(effective_cmd.trace_enabled, stderr_stream,
+                                    diagnostics::TraceLevel::Error, "failed",
+                                    {{"stage", "package-executable"}, {"prefix", prefix_dir.string()},
+                                     {"app-id", installation_id}});
+                stderr_stream << "erro: o executável interno do pacote não é PE32+ x86-64\n";
+                return ExitCode::Unsupported;
+            }
+
+            catalog::AppCatalog app_catalog;
+            (void)app_catalog.load_from_file();
+            catalog::AppEntry entry;
+            entry.id = installation_id;
+            entry.name = installation_name;
+            entry.executable_path = extracted->string();
+            entry.prefix_path = prefix_dir.string();
+            entry.working_directory = extracted->parent_path().string();
+            entry.cpu_limit_seconds = effective_cmd.cpu_limit_seconds;
+            entry.memory_limit_mib = effective_cmd.memory_limit_mib;
+            if (!app_catalog.add_app(entry) || !app_catalog.save_to_file()) {
+                write_install_trace(effective_cmd.trace_enabled, stderr_stream,
+                                    diagnostics::TraceLevel::Error, "failed",
+                                    {{"stage", "catalog"}, {"prefix", prefix_dir.string()},
+                                     {"app-id", installation_id}});
+                stderr_stream << "erro: pacote extraído, mas não foi possível salvar o catálogo\n";
+                return ExitCode::InternalError;
+            }
+            (void)catalog::AppCatalog::create_desktop_entry(entry);
+            write_install_trace(effective_cmd.trace_enabled, stderr_stream,
+                                diagnostics::TraceLevel::Info, "registered",
+                                {{"prefix", prefix_dir.string()}, {"app-id", entry.id},
+                                 {"path", entry.executable_path}});
+            stderr_stream << "instalação concluída; aplicativo registrado como '" << entry.name
+                          << "' [id: " << entry.id << "]\n";
+            return ExitCode::Success;
+        }
+        stderr_stream << "erro: formato de pacote MSIX / AppX reconhecido; use 'install' ou especifique o executável interno (.exe)\n";
         return ExitCode::Unsupported;
     }
 

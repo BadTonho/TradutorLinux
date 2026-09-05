@@ -84,6 +84,11 @@ Assim, um aplicativo pode ter `supported` na resolução de imports e continuar
 
 As fontes e manifestos das fixtures ficam em `tests/samples/`. Os binários são produtos de build e ficam em `build/<preset>/tests/samples/generated/`.
 
+A fixture `native-fixture.msix` é gerada pelo teste `integration_msix_install` a
+partir de `tl_hello.exe`. Ela valida o fluxo de pacote nativo: `--report`,
+extração segura para o prefixo, cadastro e `app run`; não representa suporte a
+bundles, .NET/Mono ou assinatura Authenticode.
+
 ## Leitor de PE (Fase 1)
 
 O leitor de PE (`include/tradutorlinux/pe/pe_reader.hpp`, `src/pe/pe_reader.cpp`) valida e interpreta:
@@ -739,7 +744,7 @@ continuam sendo a evidência necessária para registrá-lo como suportado.
 | 10 | `Logitech_GHUB_x64.exe` `lghub_installer.exe` | PE32+ x86-64 | 114/114 (100%) | `supported` | `GuestTimeout 72` durante a inicialização | imports resolvidos; o fluxo do instalador não foi concluído e não é suporte funcional |
 | 11 | `notepad++.exe` | PE32+ x86-64 | 584/584 (100%) | `execution-failed` | `GuestTimeout 72` (GUI `GetMessageW` bloqueado sem `Xvfb`) | precisa `Xvfb :99` `docs/arquitetura/gui-x11.md` |
 | 12 | `RTSSHooks64.dll` | PE32+ DLL x86-64 | 256/256 (100%) | `imports-resolved` | `not-attempted` (DLL) | **Fase 13.RTSS**: imports resolvidos para análise; `CreateRemoteThread` e `WriteProcessMemory` agora falham com `ERROR_NOT_SUPPORTED` (sem fingir execução remota). O restante inclui `GDI32 ...`, `USER32 ...`, `KERNEL32 ...`, `SHLWAPI ...`, `WINMM ...`, `SETUPAPI 7` e `delay DirectX 11`; os stubs DirectX retornam `E_FAIL/S_OK` controlados |
-| 13 | `Affinity x64.msix` | Zip/MSIX | — | `package-recognized` | `not-attempted` | `App/Affinity.exe` é `Mono/.Net entry 0x0 0 imports` — `.NET` fora de escopo `PROJETO.md:22`; o inspector lê central directory, manifesto armazenado/DEFLATE e metadados estruturais. Os 8 testes do parser e o teste de afinidade passaram no Debug; não instala nem executa o pacote |
+| 13 | `Affinity x64.msix` | Zip/MSIX | — | `package-recognized` | `not-attempted` | `App/Affinity.exe` é `Mono/.Net entry 0x0 0 imports` — `.NET` fora de escopo `PROJETO.md:22`; o inspector lê central directory, manifesto armazenado/DEFLATE e metadados estruturais. O suporte B8 instala somente pacotes com PE32+ x86-64 nativo; este pacote continua sem instalação/execução |
 | 14 | `*_x64_Installer.exe` `CapCut/Epic/Creative/Everything/RTSS.exe` | PE32 (x86) | — | `unsupported-architecture` `0x14c` `exit 5` | `parse-failed status="unsupported-architecture"` `src/pe/pe_reader.cpp:685` |
 
 > Detalhe das novas APIs `B`: `GDI32.dll!Arc` `SHLWAPI.dll!PathIsUNCW/PathIsUNCA` `MSIMG32.dll!AlphaBlend/TransparentBlt` `NETAPI32.dll!NetApiBufferFree` `OLEACC.dll!LresultFromObject` `tdh.dll!TdhGetPropertySize` `WINSPOOL.DRV!OpenPrinterW/ClosePrinter` `WTSAPI32.dll!WTSFreeMemory` — todas registradas para resolver imports; `OpenPrinterW` falha com `ERROR_NOT_SUPPORTED` quando a operação é chamada.
