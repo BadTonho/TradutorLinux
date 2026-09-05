@@ -480,6 +480,9 @@ tl_add_pe_fixture(tl_echo src/tl_echo.c manifests/tl_echo.json
     LINK_KERNEL32 EXPECT_RESOLVED CONSOLE RELOCATABLE)
 tl_add_pe_fixture(tl_file src/tl_file.c manifests/tl_file.json
     LINK_KERNEL32 EXPECT_RESOLVED CONSOLE REPORT RELOCATABLE)
+tl_add_pe_fixture(tl_compat_file src/tl_compat_file.c manifests/tl_compat_file.json
+    LINK_KERNEL32 EXPECT_RESOLVED CONSOLE REPORT RELOCATABLE NO_RUNTIME_CHECK
+    REPORT_SYMBOL "CreateFileA")
 tl_add_pe_fixture(tl_virtual_query src/tl_virtual_query.c manifests/tl_virtual_query.json
     LINK_KERNEL32 EXPECT_RESOLVED CONSOLE REPORT RELOCATABLE)
 tl_add_pe_fixture(tl_reloc src/tl_reloc.c manifests/tl_reloc.json RELOCATABLE)

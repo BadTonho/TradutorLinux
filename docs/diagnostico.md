@@ -60,11 +60,20 @@ do convidado:
 ```text
 [tl][runtime][info] compat-profile status="loaded" prefix="..." app-id="fixture" files="1" detail=""
 [tl][runtime][warning] compat-profile status="invalid" prefix="..." app-id="fixture" files="0" detail="app_id do perfil não corresponde ao aplicativo"
+[tl][runtime][info] compat-files status="applied" prefix="..." app-id="fixture" files="1" detail=""
+[tl][runtime][info] compat-file status="copied" source="config.dat" target="C:\\Program Files\\Fixture\\config.dat"
+[tl][runtime][info] compat-files-cleanup status="cleaned" prefix="..." app-id="fixture" removed-files="1" removed-directories="1" retained="0"
 ```
 
 O contrato do arquivo está em
-[perfis de compatibilidade](arquitetura/perfis-compatibilidade.md). A pasta
-`compat/` não é exposta automaticamente ao convidado nesta etapa.
+[perfis de compatibilidade](arquitetura/perfis-compatibilidade.md). Um perfil
+válido expõe os arquivos por cópia temporária antes do entry point. Colisão,
+symlink, falha de permissão ou outro erro de materialização gera
+`compat-files status="rejected"`, aviso e fallback genérico. Falha ao
+desfazer uma cópia parcial gera `status="rollback-failed"` e interrompe a
+execução por segurança. A limpeza ocorre depois do processo convidado; um
+arquivo substituído ou um diretório que ficou não vazio é preservado.
+`compat/` não é exposta automaticamente ao convidado.
 
 A partir do diagnóstico de falhas, o convidado executa em um processo filho
 isolado (`fork`/`waitpid`). O processo hospedeiro prepara o PE, o mapeamento e

@@ -1131,11 +1131,15 @@ imports não encerra B5.
      trace. Os testes unitários e a integração de `app run` protegem o
      fallback para perfil ausente ou inválido e a contenção em `compat/` e
      `drive_c`. A exposição efetiva dos arquivos permanece na B14.3.
-  3. **B14.3 — Exposição controlada de arquivos.** Definir e implementar um
-     mecanismo explícito para que um arquivo de `compat/files/` seja visto pelo
-     convidado no caminho Windows declarado, com precedência, colisão,
-     permissões e limpeza documentadas. A pasta `compat/` não será exposta
-     automaticamente.
+  3. [x] **B14.3 — Exposição controlada de arquivos.** Um perfil válido do
+     `app run` copia cada arquivo regular de `compat/files/` para o destino
+     `C:\\...` dentro de `drive_c`, sem sobrescrever destinos existentes ou
+     seguir symlinks de origem/destino. Diretórios-pai ausentes são criados
+     temporariamente, cópias parciais são desfeitas e a limpeza remove apenas
+     os caminhos criados pela execução, preservando substituições e dados
+     novos do convidado. A fixture `tl_compat_file.exe`, os testes unitários,
+     o trace e a integração reproduzem cópia, colisão, rollback e limpeza. A
+     pasta `compat/` não é exposta automaticamente.
   4. **B14.4 — Regras de comportamento condicionadas.** Somente se um alvo
      real exigir, adicionar regras declarativas além dos arquivos, diferenciando
      esse mecanismo de `TL_DLL_OVERRIDES`. Cada regra precisará de alvo,

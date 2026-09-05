@@ -68,6 +68,7 @@ add_library(tradutorlinux_core STATIC
     runtime/powrprof.cpp
     runtime/dwmapi.cpp
     runtime/function_trace.cpp
+    compat/materializer.cpp
     util/sha256.cpp
     util/unicode.cpp
     gui/platform.cpp
@@ -110,6 +111,7 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
         runtime/dialog_template.cpp runtime/seh/unwind.cpp process/isolate.cpp
         runtime/function_trace.cpp
         compat/profile.cpp
+        compat/materializer.cpp
         util/sha256.cpp
         PROPERTIES COMPILE_OPTIONS "-finstrument-functions")
 endif()

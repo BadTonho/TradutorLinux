@@ -2,6 +2,7 @@
 #include "cli_internal.hpp"
 
 #include "tradutorlinux/catalog/app_catalog.hpp"
+#include "tradutorlinux/compat/materializer.hpp"
 #include "tradutorlinux/compat/profile.hpp"
 #include "tradutorlinux/diagnostics/trace.hpp"
 #include "tradutorlinux/diagnostics/crash_context.hpp"
@@ -416,6 +417,8 @@ ExitCode run_command(const CommandLine& command_line, std::ostream& stdout_strea
     std::string compatibility_app_id;
     std::string compatibility_app_sha256;
     std::string compatibility_app_version;
+    std::optional<compat::Profile> compatibility_profile;
+    std::optional<compat::FileExposure> compatibility_files;
 
     // Modo: Executar aplicativo cadastrado
     if (command_line.mode == CommandMode::AppRun) {
@@ -525,6 +528,9 @@ ExitCode run_command(const CommandLine& command_line, std::ostream& stdout_strea
                                          ? diagnostics::TraceLevel::Warning
                                          : diagnostics::TraceLevel::Info,
                                      "compat-profile", fields);
+        }
+        if (profile.status == compat::ProfileStatus::Loaded) {
+            compatibility_profile = profile.profile;
         }
         if (profile.status != compat::ProfileStatus::Loaded) {
             stderr_stream << "aviso: perfil de compatibilidade " << profile_status
@@ -903,6 +909,66 @@ ExitCode run_command(const CommandLine& command_line, std::ostream& stdout_strea
         return ExitCode::Unsupported;
     }
 
+    if (compatibility_profile.has_value()) {
+        compatibility_files.emplace(
+            compat::FileExposure::materialize(prefix_dir, *compatibility_profile));
+        const auto exposure_status = [](const compat::FileExposureStatus status) {
+            switch (status) {
+                case compat::FileExposureStatus::Rejected: return std::string{"rejected"};
+                case compat::FileExposureStatus::Applied: return std::string{"applied"};
+                case compat::FileExposureStatus::RollbackFailed:
+                    return std::string{"rollback-failed"};
+            }
+            return std::string{"unknown"};
+        };
+        if (effective_cmd.trace_enabled) {
+            const std::array fields{
+                diagnostics::TraceField{"status", exposure_status(compatibility_files->status())},
+                diagnostics::TraceField{"prefix", prefix_dir.string()},
+                diagnostics::TraceField{"app-id", compatibility_app_id},
+                diagnostics::TraceField{"files",
+                                        std::to_string(compatibility_files->files().size())},
+                diagnostics::TraceField{"detail",
+                                        std::string{compatibility_files->error()}},
+            };
+            diagnostics::write_trace(
+                stderr_stream, diagnostics::TraceComponent::Runtime,
+                compatibility_files->rollback_failed()
+                    ? diagnostics::TraceLevel::Error
+                    : compatibility_files->applied()
+                          ? diagnostics::TraceLevel::Info
+                          : diagnostics::TraceLevel::Warning,
+                "compat-files", fields);
+        }
+        if (compatibility_files->rollback_failed()) {
+            const std::uint64_t unmap_base = process.image.base;
+            loader::destroy_process(process);
+            if (effective_cmd.trace_enabled) {
+                write_unmap_trace(stderr_stream, unmap_base);
+            }
+            stderr_stream << "erro: não foi possível desfazer a exposição dos arquivos de compatibilidade\n";
+            return ExitCode::InternalError;
+        }
+        if (!compatibility_files->applied()) {
+            stderr_stream << "aviso: arquivos do perfil não foram expostos; usando comportamento genérico";
+            if (!compatibility_files->error().empty()) {
+                stderr_stream << ": " << compatibility_files->error();
+            }
+            stderr_stream << '\n';
+        } else if (effective_cmd.trace_enabled) {
+            for (std::size_t index = 0; index < compatibility_profile->files.size(); ++index) {
+                const auto& mapping = compatibility_profile->files[index];
+                const std::array fields{
+                    diagnostics::TraceField{"status", "copied"},
+                    diagnostics::TraceField{"source", mapping.source.generic_string()},
+                    diagnostics::TraceField{"target", mapping.target},
+                };
+                diagnostics::write_trace(stderr_stream, diagnostics::TraceComponent::Runtime,
+                                         diagnostics::TraceLevel::Info, "compat-file", fields);
+            }
+        }
+    }
+
     std::vector<std::string> guest_argv;
     guest_argv.reserve(1 + effective_cmd.guest_arguments.size());
     guest_argv.push_back(prefix::to_windows_path(*effective_cmd.executable_path, prefix_dir));
@@ -948,6 +1014,31 @@ ExitCode run_command(const CommandLine& command_line, std::ostream& stdout_strea
         process.thread.entry_point, process.thread.stack_top, effective_cmd.timeout_ms,
         resource_limits,
         *effective_cmd.guest_working_directory);
+
+    if (compatibility_files.has_value() && compatibility_files->applied()) {
+        const bool cleanup_ok = compatibility_files->cleanup();
+        const auto& cleanup = compatibility_files->cleanup_summary();
+        if (effective_cmd.trace_enabled) {
+            const std::array fields{
+                diagnostics::TraceField{"status", cleanup_ok ? "cleaned" : "cleanup-failed"},
+                diagnostics::TraceField{"prefix", prefix_dir.string()},
+                diagnostics::TraceField{"app-id", compatibility_app_id},
+                diagnostics::TraceField{"removed-files",
+                                        std::to_string(cleanup.files_removed)},
+                diagnostics::TraceField{"removed-directories",
+                                        std::to_string(cleanup.directories_removed)},
+                diagnostics::TraceField{"retained",
+                                        std::to_string(cleanup.paths_retained)},
+            };
+            diagnostics::write_trace(stderr_stream, diagnostics::TraceComponent::Runtime,
+                                     cleanup_ok ? diagnostics::TraceLevel::Info
+                                                : diagnostics::TraceLevel::Warning,
+                                     "compat-files-cleanup", fields);
+        }
+        if (!cleanup_ok) {
+            stderr_stream << "aviso: não foi possível limpar completamente os arquivos de compatibilidade\n";
+        }
+    }
 
     // Contexto de falha calculado antes do destroy_process: o evento
     // guest-signal usa a imagem mapeada e as importações ainda vivas.

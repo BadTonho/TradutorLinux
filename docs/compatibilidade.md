@@ -28,6 +28,7 @@ Assim, um aplicativo pode ter `supported` na resolução de imports e continuar
 | `tl_hello.exe` | PE32+ AMD64 | Não | `KERNEL32.dll!ExitProcess`, `GetStdHandle`, `WriteFile` | Suportado no MVP: escreve `Ola do Windows no Linux!` em stdout, retorna `0` e emite trace | Fase 5 |
 | `tl_echo.exe` | PE32+ AMD64 | Não | `KERNEL32.dll!ExitProcess`, `GetStdHandle`, `ReadFile`, `WriteFile` | Suportado no MVP: ecoa stdin para stdout com handles padrão | Fase 5 |
 | `tl_file.exe` | PE32+ AMD64 | Não | `KERNEL32.dll!CloseHandle`, `CreateFileA`, `ExitProcess`, `GetLastError`, `GetStdHandle`, `ReadFile`, `SetLastError`, `VirtualAlloc`, `VirtualFree`, `WriteFile` | Suportado no subconjunto da Fase 5: aloca memória e grava/reabre/lê arquivo relativo | Fase 6 |
+| `tl_compat_file.exe` | PE32+ AMD64 | Não | `KERNEL32.dll!CloseHandle`, `CreateFileA`, `ExitProcess`, `GetStdHandle`, `ReadFile`, `WriteFile` | Fixture B14.3: `app run` copia um arquivo de `compat/files/` para `C:\\Program Files\\Compat Fixture`, lê e altera o destino, mantém a origem e remove o materializado ao terminar; trace e exit `0` são protegidos por integração | B14.3 |
 | `tl_virtual_query.exe` | PE32+ AMD64 | Não | `KERNEL32.dll!VirtualAlloc`, `VirtualFree`, `VirtualProtect`, `VirtualQuery`, console e `ExitProcess` | Fixture de contrato: distingue reserva de commit, preserva `AllocationBase`/`AllocationProtect`, separa as duas páginas após proteger apenas a primeira e consulta a faixa liberada como `MEM_FREE`; imprime `virtual-query\n`, exit `0`. Metadata, `--report` e execução são regressões CTest | B12 |
 | `tl_gui.exe` | PE32+ AMD64 | Não | `KERNEL32.dll!ExitProcess`, `USER32.dll!MessageBoxA` | Protótipo manual: caixa modal X11 mínima; não executado automaticamente por depender de display | Fase 7 |
 | `tl_win.exe` | PE32+ AMD64 | Não | `KERNEL32.dll!ExitProcess`, `USER32.dll!RegisterClassExA`, `CreateWindowExA`, `ShowWindow`, `UpdateWindow`, `GetMessageA`, `TranslateMessage`, `DispatchMessageA`, `DefWindowProcA`, `DestroyWindow`, `PostQuitMessage` | Janela real com message loop X11; fecha via `WM_CLOSE`/autoclose; teclado via `WM_KEYDOWN`/`WM_CHAR`; executado automaticamente sob Xvfb (teste `runtime_gui_smoke`, cenários autoclose, `WM_DELETE_WINDOW` e `KeyPress 'q'`) | Fase 7 |
@@ -406,9 +407,10 @@ Observações que orientam a próxima etapa (Fase 9/10):
 O subsistema de arquivos expande o `CreateFileA`/`ReadFile`/`WriteFile`/
 `CloseHandle` da Fase 5 com APIs de manipulação de diretórios, atributos e
 enumeração. A tradução de caminhos Windows (`\\` → `/`) é reutilizável via
-`translate_windows_path()`; `CreateFileA` rejeita letras de drive e caminhos
-absolutos, enquanto o CRT aceita caminhos absolutos Linux para os aplicativos
-que recebem arquivos do host como argumentos.
+`translate_windows_path()`; `CreateFileA` cobre caminhos relativos e
+`C:\\...` dentro do prefixo ativo, mas rejeita caminhos absolutos Linux,
+enquanto o CRT aceita esses caminhos para os aplicativos que recebem arquivos
+do host como argumentos.
 
 | Módulo | API | Estado | Comportamento suportado |
 |---|---|---|---|
@@ -481,7 +483,8 @@ fluxo principal. Os contratos abaixo são protegidos por
 - `CommandLineToArgvW` cobre aspas e separação por espaço usadas pelos alvos;
   as regras completas de escape com barras invertidas antes de aspas ainda não
   fazem parte do subconjunto publicado.
-- `CreateFileA` continua limitado a caminhos relativos sem letra de drive.
+- `CreateFileA` cobre caminhos relativos e caminhos `C:\\...` dentro do
+  prefixo ativo; caminhos absolutos Linux continuam rejeitados.
 - As APIs wide de arquivo cobrem o subconjunto exercitado por `tl_files_wide`
   e `tl_file_metadata`:
   `CreateFileW`, tamanho/posição, atributos, tempos, cópia/movimentação,
