@@ -284,6 +284,23 @@ if(TARGET tradutorlinux_samples AND TARGET tradutorlinux)
             LABELS "runtime;pe32plus;backend;proton;graphics;vkd3d"
             TIMEOUT 240
         )
+        add_test(
+            NAME integration_proton_audio
+            COMMAND "${CMAKE_COMMAND}"
+                "-DRUNTIME=$<TARGET_FILE:tradutorlinux>"
+                "-DFIXTURE=${CMAKE_CURRENT_BINARY_DIR}/samples/generated/tl_audio_probe.exe"
+                "-DPROTON_ROOT=${TL_PROTON_ROOT}"
+                "-DWORK=${CMAKE_CURRENT_BINARY_DIR}/proton_audio_work"
+                "-DAPP_ID=audioprobe"
+                "-DPROBE_NAME=Audio Probe"
+                "-DEXPECTED_OUTPUT=Proton audio ready"
+                -P "${CMAKE_CURRENT_SOURCE_DIR}/samples/verify_proton_graphics.cmake"
+        )
+        set_tests_properties(integration_proton_audio PROPERTIES
+            DEPENDS fixture_tl_audio_probe_metadata
+            LABELS "runtime;pe32plus;backend;proton;audio;xaudio2"
+            TIMEOUT 240
+        )
         if(TARGET proton_input_driver)
             add_test(
                 NAME integration_proton_input

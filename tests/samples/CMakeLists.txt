@@ -510,6 +510,8 @@ tl_add_pe_fixture(tl_d3d12_probe src/tl_d3d12_probe.c manifests/tl_d3d12_probe.j
     LINK_KERNEL32 LINK_USER32 LINK_D3D12 LINK_DXGUID LINK_DXGI RELOCATABLE NO_RUNTIME_CHECK)
 tl_add_pe_fixture(tl_input_probe src/tl_input_probe.c manifests/tl_input_probe.json
     LINK_KERNEL32 LINK_USER32 RELOCATABLE NO_RUNTIME_CHECK)
+tl_add_pe_fixture(tl_audio_probe src/tl_audio_probe.c manifests/tl_audio_probe.json
+    LINK_KERNEL32 LINK_XAUDIO2_8 RELOCATABLE NO_RUNTIME_CHECK)
 
 set(TL_COMPAT_DLL_A "${TL_FIXTURE_OUTPUT_DIRECTORY}/tl_compat_dll_a.dll")
 set(TL_COMPAT_DLL_B "${TL_FIXTURE_OUTPUT_DIRECTORY}/tl_compat_dll_b.dll")

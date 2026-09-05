@@ -1192,11 +1192,13 @@ imports não encerra B5.
      exigem uma camada Win32/DirectX maior que o subconjunto próprio, mantendo
      o runtime TradutorLinux como backend padrão e preservando a seleção por
      aplicativo. O contrato, a validação, o staging isolado e o piloto com
-     mock já foram implementados. As primeiras validações reais controladas de
-     D3D11→DXVK/Vulkan em X11 e D3D12→VKD3D-Proton/Vulkan foram adicionadas,
-     mas a promoção final ainda aguarda a matriz de componentes e prefixos
-     independentes. O Proton não será reimplementado do zero nem carregado
-     como biblioteca Linux arbitrária a partir de `compat/`.
+     mock já foram implementados. A matriz de componentes reais controlados
+     agora cobre D3D11→DXVK/Vulkan, D3D12→VKD3D-Proton/Vulkan, entrada de
+     janela e XAudio2, todos validados em Debug e Sanitize com Proton
+     Experimental. A promoção final ainda aguarda a B14.6.6, com piloto real
+     de prefixos independentes e critérios de aplicação-alvo. O Proton não
+     será reimplementado do zero nem carregado como biblioteca Linux
+     arbitrária a partir de `compat/`.
 
      Subetapas:
 
@@ -1228,7 +1230,7 @@ imports não encerra B5.
        launcher em `stderr` com `[tl][proton]`. O mock também protege grupo de
        processos e limites herdados. Componentes gráficos não são declarados
        nesta subetapa.
-     - [ ] **B14.6.5 — Componentes gráficos e dependências.** Validar de forma
+     - [x] **B14.6.5 — Componentes gráficos e dependências.** Validar de forma
        incremental Vulkan, DXVK, VKD3D-Proton, entrada, áudio e demais
        dependências somente quando um aplicativo-alvo exigir cada componente.
        Os slices gráficos controlados estão validados: `tl_graphics_probe.exe`
@@ -1240,9 +1242,13 @@ imports não encerra B5.
        controlado D3D12→VKD3D-Proton/Vulkan. A entrada de janela também está
        validada por `tl_input_probe.exe` e `integration_proton_input`, que
        confirma movimento, clique, `WM_KEYDOWN/CHAR/UP`, stdout, exit `0` e
-       limpeza do prefixo com o driver X11/XTest. Áudio continua aberto; não
-       declarar raw input, gamepad/XInput ou suporte amplo por instalar o
-       backend.
+       limpeza do prefixo com o driver X11/XTest. O áudio também está validado
+       por `tl_audio_probe.exe` e `integration_proton_audio`: a fixture cria
+       engine XAudio2, vozes master/source, submete buffer PCM, inicia/paralisa
+       a reprodução e retorna `0`; o teste passa em Debug e Sanitize com o
+       Proton Experimental e o servidor de áudio do host. A evidência cobre
+       somente esses slices controlados, não fidelidade perceptual, codecs,
+       raw input, gamepad/XInput ou suporte amplo por instalar o backend.
      - [ ] **B14.6.6 — Piloto real e promoção.** A fixture PE32+
        `tl_proton_probe.exe` e o teste `integration_proton_backend` já cobrem o
        piloto controlado com mock, incluindo seleção, staging, ambiente,

@@ -205,6 +205,12 @@ esquerdo e `q` são convertidos em mensagens Win32 e a fixture só termina
 após validar a sequência completa. A prova cobre apenas essa entrada de
 janela controlada, não raw input, gamepad/XInput ou jogos.
 
+O áudio é exercido separadamente por `tl_audio_probe.exe` e
+`integration_proton_audio`. O perfil continua selecionando somente o backend;
+o Proton fornece `XAudio2_8.dll` dentro do prefixo isolado. A fixture valida o
+engine, as vozes e o ciclo básico de um buffer PCM, mas não transforma esse
+slice em suporte geral a áudio, codecs, dispositivos ou multimídia.
+
 ## Auditoria do 7-Zip — sem regra específica
 
 O 7-Zip 24.08 foi auditado como alvo real após a implementação da B14.3. Não

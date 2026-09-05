@@ -119,6 +119,13 @@ eventos X11/XTest à árvore da janela; a fixture confirma a conversão para
 altera o `GuestModuleGraph` e não declara suporte a raw input, gamepad/XInput
 ou jogos.
 
+O áudio Win32 é exercido por `tl_audio_probe.exe` e
+`integration_proton_audio`. A fixture resolve `XAudio2_8.dll!XAudio2Create`,
+cria engine, voz master e voz PCM, submete um buffer, inicia/paralisa o
+processamento e libera as vozes. O teste valida o caminho de engine e vozes
+no Proton real, sem alterar o `GuestModuleGraph` e sem declarar fidelidade
+sonora ou suporte multimídia geral.
+
 ## Fronteira de ABI (`ms_abi`)
 
 `include/tradutorlinux/runtime/winapi.hpp` define `TL_MSABI` como `__attribute__((ms_abi))` em GCC/Clang x86-64 e declara as funções hospedeiras com vinculação C (`extern "C"`), `noexcept` e a convenção Microsoft x64. Tipos mínimos Win32 usados nas assinaturas ficam em `tradutorlinux::abi` (`Handle`, `Bool`, `Dword`, `Uint` e as constantes de handle padrão).

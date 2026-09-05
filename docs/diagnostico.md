@@ -108,6 +108,13 @@ observar `WM_CREATE`, `WM_MOUSEMOVE`, `WM_LBUTTONDOWN`, `WM_LBUTTONUP`,
 retorna erro de integração sem deixar o processo Proton continuar em segundo
 plano.
 
+Para o slice de áudio, `integration_proton_audio` usa
+`tl_audio_probe.exe`. A saída esperada é `Proton audio ready` com exit code
+`0`; o teste confirma `XAudio2Create`, criação das vozes master/source,
+`SubmitSourceBuffer`, `Start`, `Stop` e liberação dos recursos. O diagnóstico
+prova a cadeia de engine/vozes no host de teste, não a qualidade do som nem a
+compatibilidade de todo dispositivo ou codec.
+
 O componente `proton` pode ser selecionado com `--trace=proton` ou incluído
 em `--trace=proton,process`. Um backend solicitado sem launcher, componentes,
 arquitetura, hash ou versão mínima válidos registra `provider-rejected` e
