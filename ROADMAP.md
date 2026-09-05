@@ -986,9 +986,9 @@ marcam itens condicionais como concluídos; definem os gates para retomá-los.
   x64. C++, `__finally` e outras extensões só entram com aplicativo-alvo,
   contrato e fixture; sinais Linux continuam sendo tratados pelo isolamento do
   processo.
-- **B19 e novas famílias:** threadpool, ALPC e outras famílias abundantes não
-  entram por antecipação. Cada uma exigirá um alvo, um subconjunto pequeno,
-  trace, matriz e regressão.
+- **B19 e novas famílias — opção 1 confirmada pelo usuário em 2026-09-05:**
+  manter threadpool, ALPC e outras famílias abundantes adiadas. Cada uma
+  exigirá um alvo, um subconjunto pequeno, trace, matriz e regressão.
 - **Gate comum:** toda retomada de item condicionado precisa registrar no
   roadmap o alvo ou fixture, o contrato, a limitação, os testes unitários e de
   integração, a atualização da matriz e a validação relevante antes de ser
