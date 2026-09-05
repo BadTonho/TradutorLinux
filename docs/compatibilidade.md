@@ -28,6 +28,7 @@ Assim, um aplicativo pode ter `supported` na resolução de imports e continuar
 | `tl_hello.exe` | PE32+ AMD64 | Não | `KERNEL32.dll!ExitProcess`, `GetStdHandle`, `WriteFile` | Suportado no MVP: escreve `Ola do Windows no Linux!` em stdout, retorna `0` e emite trace | Fase 5 |
 | `tl_echo.exe` | PE32+ AMD64 | Não | `KERNEL32.dll!ExitProcess`, `GetStdHandle`, `ReadFile`, `WriteFile` | Suportado no MVP: ecoa stdin para stdout com handles padrão | Fase 5 |
 | `tl_file.exe` | PE32+ AMD64 | Não | `KERNEL32.dll!CloseHandle`, `CreateFileA`, `ExitProcess`, `GetLastError`, `GetStdHandle`, `ReadFile`, `SetLastError`, `VirtualAlloc`, `VirtualFree`, `WriteFile` | Suportado no subconjunto da Fase 5: aloca memória e grava/reabre/lê arquivo relativo | Fase 6 |
+| `tl_virtual_query.exe` | PE32+ AMD64 | Não | `KERNEL32.dll!VirtualAlloc`, `VirtualFree`, `VirtualProtect`, `VirtualQuery`, console e `ExitProcess` | Fixture de contrato: distingue reserva de commit, preserva `AllocationBase`/`AllocationProtect`, separa as duas páginas após proteger apenas a primeira e consulta a faixa liberada como `MEM_FREE`; imprime `virtual-query\n`, exit `0`. Metadata, `--report` e execução são regressões CTest | B12 |
 | `tl_gui.exe` | PE32+ AMD64 | Não | `KERNEL32.dll!ExitProcess`, `USER32.dll!MessageBoxA` | Protótipo manual: caixa modal X11 mínima; não executado automaticamente por depender de display | Fase 7 |
 | `tl_win.exe` | PE32+ AMD64 | Não | `KERNEL32.dll!ExitProcess`, `USER32.dll!RegisterClassExA`, `CreateWindowExA`, `ShowWindow`, `UpdateWindow`, `GetMessageA`, `TranslateMessage`, `DispatchMessageA`, `DefWindowProcA`, `DestroyWindow`, `PostQuitMessage` | Janela real com message loop X11; fecha via `WM_CLOSE`/autoclose; teclado via `WM_KEYDOWN`/`WM_CHAR`; executado automaticamente sob Xvfb (teste `runtime_gui_smoke`, cenários autoclose, `WM_DELETE_WINDOW` e `KeyPress 'q'`) | Fase 7 |
 | `tl_win2.exe` | PE32+ AMD64 | Não | `KERNEL32.dll!ExitProcess`, `USER32.dll!RegisterClassExA`, `CreateWindowExA`, `ShowWindow`, `UpdateWindow`, `GetMessageA`, `TranslateMessage`, `DispatchMessageA`, `DefWindowProcA`, `DestroyWindow`, `PostQuitMessage` | Duas janelas simultâneas com `WNDPROC`s independentes; eventos roteados por janela (fila por janela no pump); executado automaticamente sob Xvfb (cenário `janelas` do `runtime_gui_smoke`, `KeyPress 'q'` em A e `'k'` em B) | Fase 7 |
@@ -179,7 +180,7 @@ Os tokens de handles padrão não são handles de arquivo. A entrada e saída s�
 `OPEN_EXISTING`, seguido por `ReadFile`, `WriteFile` e `CloseHandle`. Apenas
 caminhos relativos sem drive são aceitos; `\\` é normalizado para `/`.
 
-`VirtualAlloc` e `VirtualFree` têm o contrato limitado descrito em
+`VirtualAlloc`, `VirtualFree`, `VirtualProtect` e `VirtualQuery` têm o contrato limitado descrito em
 [`runtime-basico.md`](arquitetura/runtime-basico.md).
 
 ## GUI mínima (Fase 7)
@@ -337,8 +338,8 @@ Contratos de ABI em `docs/arquitetura/msvcrt.md` e
 | `msvcrt.dll` | `memmove`/`remove`/`_stat64` | Suportado | `memmove` com tratamento de overlap; `remove` delega ao host; `_stat64` preenche o `struct _stat64` do MinGW (pack 8, `st_mode` em `0x06`, tamanho 56 bytes) a partir do `stat()` do host |
 | `msvcrt.dll` | `localeconv`, `___lc_codepage_func`, `___mb_cur_max_func` | Suportado | Locale C fixo: `lconv` estático, code page `1252`, `mb_cur_max == 1` |
 | `msvcrt.dll` | `signal` | Suportado | Registra handlers em tabela por sinal; nenhuma entrega real ao convidado |
-| `KERNEL32.dll` | `VirtualQuery` | Suportado | Preenche `MEMORY_BASIC_INFORMATION` (48 bytes); alocações privadas do `VirtualAlloc` usam a base/tamanho rastreados pelo runtime, e os demais mapeamentos usam `/proc/self/maps`; `State=MEM_COMMIT`, `Protect`/`AllocationProtect` mapeados de `rwx`, `Type=MEM_IMAGE`/`MEM_PRIVATE` |
-| `KERNEL32.dll` | `VirtualProtect` | Suportado | `mprotect` sobre a página alinhada dentro da região; escreve a proteção antiga em `*lpflOldProtect`; rejeita região que não contém `[address, address+size)` |
+| `KERNEL32.dll` | `VirtualQuery` | Suportado no subconjunto | Preenche `MEMORY_BASIC_INFORMATION` (48 bytes); reservas e commits próprios usam regiões rastreadas pelo runtime, inclusive `AllocationBase`, `AllocationProtect`, `State`, `Protect` e divisão após mudança parcial; os demais mapeamentos usam `/proc/self/maps` |
+| `KERNEL32.dll` | `VirtualProtect` | Suportado no subconjunto | `mprotect` sobre a página alinhada dentro de uma alocação commitada; escreve a proteção antiga em `*lpflOldProtect`, atualiza a tabela de regiões e rejeita reserva ou faixa que não contenha `[address, address+size)` |
 | `KERNEL32.dll` | `MultiByteToWideChar` / `WideCharToMultiByte` | Suportado | CP `0` (ACP → 1252), `1252`, OEM/`437` e `65001` (UTF-8), incluindo tabela CP437 completa; conversões manuais sem locale e `ERROR_INSUFFICIENT_BUFFER` (122) |
 | `KERNEL32.dll` | `Initialize/Enter/Leave/DeleteCriticalSection` | Suportado | No-ops com validação de ponteiro (convidado single-thread → exclusão trivial) |
 | `KERNEL32.dll` | `InitializeCriticalSectionAndSpinCount` / `InitializeCriticalSectionEx` | Suportado no subconjunto | Reutilizam a tabela de seções críticas; spin count é ignorado e `InitializeCriticalSectionEx` aceita somente `CRITICAL_SECTION_NO_DEBUG_INFO` ou flags zero |

@@ -21,6 +21,7 @@ namespace {
 constexpr std::uint32_t kMemCommit = 0x1000U;
 constexpr std::uint32_t kMemReserve = 0x2000U;
 constexpr std::uint32_t kMemRelease = 0x8000U;
+constexpr std::uint32_t kMemFree = 0x10000U;
 
 constexpr std::uint32_t kPageNoAccess = 0x01U;
 constexpr std::uint32_t kPageReadOnly = 0x02U;
@@ -110,6 +111,87 @@ void trace_nt(const char* api, const char* detail, NtStatus st) noexcept {
                              diagnostics::TraceLevel::Info, "ntdll", fields);
 }
 
+[[nodiscard]] bool contains_range(const AllocationSlot& slot,
+                                   const void* address,
+                                   const std::size_t size) noexcept {
+    if (slot.address == nullptr || slot.size == 0 || address == nullptr) {
+        return false;
+    }
+    const auto base = reinterpret_cast<std::uintptr_t>(slot.address);
+    const auto target = reinterpret_cast<std::uintptr_t>(address);
+    if (target < base || target - base > slot.size) {
+        return false;
+    }
+    return size <= slot.size - (target - base);
+}
+
+[[nodiscard]] AllocationSlot* find_private_allocation_locked(const void* address,
+                                                               const std::size_t size) noexcept {
+    for (AllocationSlot& slot : runtime::guest_context().allocations) {
+        if (!slot.view && contains_range(slot, address, size)) {
+            return &slot;
+        }
+    }
+    return nullptr;
+}
+
+[[nodiscard]] AllocationRegion* find_allocation_region_locked(AllocationSlot& slot,
+                                                                const std::uintptr_t address) noexcept {
+    const auto base = reinterpret_cast<std::uintptr_t>(slot.address);
+    if (address < base || address - base >= slot.size) {
+        return nullptr;
+    }
+    const std::size_t offset = static_cast<std::size_t>(address - base);
+    for (AllocationRegion& region : slot.regions) {
+        if (offset >= region.offset && offset - region.offset < region.size) {
+            return &region;
+        }
+    }
+    return nullptr;
+}
+
+[[nodiscard]] bool build_allocation_protection(const AllocationSlot& slot,
+                                                const std::size_t offset,
+                                                const std::size_t size,
+                                                const std::uint32_t protection,
+                                                std::vector<AllocationRegion>& updated) noexcept {
+    try {
+        if (offset > slot.size || size == 0 || size > slot.size - offset) {
+            return false;
+        }
+        const std::size_t end = offset + size;
+        updated.clear();
+        updated.reserve(slot.regions.size() + 2U);
+        bool changed = false;
+        for (const AllocationRegion& region : slot.regions) {
+            if (region.offset > slot.size || region.size > slot.size - region.offset) {
+                return false;
+            }
+            const std::size_t region_end = region.offset + region.size;
+            if (region_end <= offset || region.offset >= end) {
+                updated.push_back(region);
+                continue;
+            }
+            changed = true;
+            if (region.offset < offset) {
+                updated.push_back(AllocationRegion{region.offset, offset - region.offset,
+                                                   region.state, region.protect});
+            }
+            const std::size_t changed_start = std::max(region.offset, offset);
+            const std::size_t changed_end = std::min(region_end, end);
+            updated.push_back(AllocationRegion{changed_start, changed_end - changed_start,
+                                               region.state, protection});
+            if (changed_end < region_end) {
+                updated.push_back(AllocationRegion{changed_end, region_end - changed_end,
+                                                   region.state, region.protect});
+            }
+        }
+        return changed && !updated.empty();
+    } catch (...) {
+        return false;
+    }
+}
+
 }  // namespace
 
 std::uint32_t NtStatusToDosError(NtStatus status) noexcept {
@@ -139,11 +221,9 @@ NtStatus NtAllocateVirtualMemory(void** BaseAddress,
     if (*RegionSize == 0) {
         return NtStatus::InvalidParameter;
     }
-    // Contrato Fase 5: apenas MEM_COMMIT|MEM_RESERVE. Wine aceita separado,
-    // mas mantemos strict e documentamos. Aceita qualquer combinação que inclua
-    // ao menos COMMIT|RESERVE para compatibilidade com alvos que usam 0x3000.
     constexpr std::uint32_t kAllowedAlloc = kMemCommit | kMemReserve | 0x00100000U /* MEM_TOP_DOWN */ | 0x00080000U /* MEM_RESET */ | 0x00020000U /* MEM_WRITE_WATCH */;
-    if ((AllocationType & kAllowedAlloc) == 0) {
+    if ((AllocationType & ~kAllowedAlloc) != 0 ||
+        (AllocationType & (kMemCommit | kMemReserve)) == 0) {
         trace_nt("NtAllocateVirtualMemory", "allocation_type não suportado", NtStatus::InvalidParameter);
         return NtStatus::InvalidParameter;
     }
@@ -153,7 +233,37 @@ NtStatus NtAllocateVirtualMemory(void** BaseAddress,
     }
 
     const std::size_t aligned = align_to_page(*RegionSize);
-    const int prot = prot_to_host(Protect);
+    const bool reserve = (AllocationType & kMemReserve) != 0;
+    const bool commit = (AllocationType & kMemCommit) != 0;
+
+    // MEM_COMMIT sobre uma reserva existente apenas muda o estado e a
+    // proteção da região já registrada. Mantemos o contrato inteiro da região
+    // para não permitir uma VirtualQuery incoerente com a reserva.
+    if (commit && !reserve && *BaseAddress != nullptr) {
+        std::lock_guard<std::mutex> lock(g_allocations_mutex);
+        AllocationSlot* const slot = find_private_allocation_locked(*BaseAddress, aligned);
+        if (slot == nullptr || slot->address != *BaseAddress || slot->state != kMemReserve ||
+            slot->size != aligned) {
+            trace_nt("NtAllocateVirtualMemory", "commit sem reserva compatível", NtStatus::InvalidParameter);
+            return NtStatus::InvalidParameter;
+        }
+        if (::mprotect(slot->address, slot->size, prot_to_host(Protect)) != 0) {
+            const int error = errno;
+            trace_nt("NtAllocateVirtualMemory", "mprotect de commit falhou", NtStatus::NoMemory);
+            return error == ENOMEM ? NtStatus::NoMemory : NtStatus::InvalidParameter;
+        }
+        slot->state = kMemCommit;
+        slot->protect = Protect;
+        if (slot->regions.size() == 1U) {
+            slot->regions.front().state = kMemCommit;
+            slot->regions.front().protect = Protect;
+        }
+        *RegionSize = aligned;
+        runtime::invalidate_memory_map_cache();
+        return NtStatus::Success;
+    }
+
+    const int prot = commit ? prot_to_host(Protect) : PROT_NONE;
     void* result = ::mmap(*BaseAddress, aligned, prot, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
     if (result == MAP_FAILED) {
         result = ::mmap(nullptr, aligned, prot, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
@@ -165,21 +275,43 @@ NtStatus NtAllocateVirtualMemory(void** BaseAddress,
 
     {
         std::lock_guard<std::mutex> lock(g_allocations_mutex);
+        for (AllocationSlot& slot : g_allocations) {
+            if (slot.view || slot.state != kMemFree || slot.address == nullptr) continue;
+            const auto free_base = reinterpret_cast<std::uintptr_t>(slot.address);
+            const auto result_base = reinterpret_cast<std::uintptr_t>(result);
+            const bool result_starts_in_free = result_base >= free_base &&
+                                               result_base - free_base < slot.size;
+            const bool free_starts_in_result = free_base >= result_base &&
+                                               free_base - result_base < aligned;
+            if (result_starts_in_free || free_starts_in_result) {
+                slot = {};
+            }
+        }
         auto it = std::find_if(g_allocations.begin(), g_allocations.end(),
-                               [](const AllocationSlot& s) { return s.address == nullptr; });
-        if (it != g_allocations.end()) {
-            it->address = result;
-            it->size = aligned;
-        } else {
-            // Tabela cheia — ainda retorna memória, mas sem tracking para VirtualQuery.
-            // Wine nunca perde tracking; aqui logamos exaustão como Wine faria em
-            // server/mapping.c com categoria "exhaustion".
-            const std::array<diagnostics::TraceField, 2> fields{
-                diagnostics::TraceField{"category", "exhaustion"},
-                diagnostics::TraceField{"detail", "g_allocations cheia em NtAllocateVirtualMemory"},
-            };
-            diagnostics::write_trace(std::cerr, diagnostics::TraceComponent::Runtime,
-                                     diagnostics::TraceLevel::Error, "resource-exhaustion", fields);
+                               [](const AllocationSlot& s) {
+                                   return s.address == nullptr ||
+                                          (!s.view && s.state == kMemFree);
+                               });
+        if (it == g_allocations.end()) {
+            ::munmap(result, aligned);
+            trace_nt("NtAllocateVirtualMemory", "tabela de alocações cheia", NtStatus::NoMemory);
+            return NtStatus::NoMemory;
+        }
+        it->address = result;
+        it->size = aligned;
+        it->view = false;
+        it->allocation_protect = Protect;
+        it->state = commit ? kMemCommit : kMemReserve;
+        it->protect = commit ? Protect : 0;
+        try {
+            it->regions.clear();
+            it->regions.push_back(AllocationRegion{0, aligned, it->state, it->protect});
+        } catch (...) {
+            it->address = nullptr;
+            it->size = 0;
+            ::munmap(result, aligned);
+            trace_nt("NtAllocateVirtualMemory", "tabela de regiões sem memória", NtStatus::NoMemory);
+            return NtStatus::NoMemory;
         }
     }
     runtime::invalidate_memory_map_cache();
@@ -208,7 +340,8 @@ NtStatus NtFreeVirtualMemory(void* BaseAddress,
         std::lock_guard<std::mutex> lock(g_allocations_mutex);
         auto it = std::find_if(g_allocations.begin(), g_allocations.end(),
                                [BaseAddress](const AllocationSlot& s) {
-                                   return !s.view && s.address == BaseAddress;
+                                   return !s.view && s.address == BaseAddress &&
+                                          s.state != kMemFree;
                                });
         if (it == g_allocations.end()) {
             trace_nt("NtFreeVirtualMemory", "endereço não alocado por NtAllocateVirtualMemory", NtStatus::MemoryNotAllocated);
@@ -216,7 +349,12 @@ NtStatus NtFreeVirtualMemory(void* BaseAddress,
         }
         freed_size = it->size != 0 ? it->size : *RegionSize;
         ::munmap(BaseAddress, freed_size);
-        *it = {};
+        it->view = false;
+        it->allocation_protect = 0;
+        it->state = kMemFree;
+        it->protect = 0;
+        it->regions.clear();
+        it->regions.push_back(AllocationRegion{0, freed_size, kMemFree, 0});
     }
     runtime::invalidate_memory_map_cache();
     // Wine zera *BaseAddress no sucesso; mantemos gesto para caller.
@@ -245,28 +383,70 @@ NtStatus NtProtectVirtualMemory(void* BaseAddress,
     const std::size_t head = start - aligned_start;
     const std::size_t aligned_size = align_to_page(*RegionSize + head);
 
-    // Tenta descobrir proteção antiga via /proc/self/maps (como Wine faz ao
-    // manter VAD tree). Simplificado: lê maps.
+    // A tabela de alocações é a fonte de verdade para regiões criadas pelo
+    // runtime. Reservas não podem ser protegidas antes de serem commitadas.
     std::uint32_t old = kPageReadWrite;
+    std::vector<AllocationRegion> updated_regions;
     {
-        std::ifstream maps{"/proc/self/maps"};
-        std::string line;
-        while (maps && std::getline(maps, line)) {
-            const std::size_t dash = line.find('-');
-            const std::size_t sp = line.find(' ', dash == std::string::npos ? 0 : dash);
-            if (dash == std::string::npos || sp == std::string::npos) continue;
-            std::uintptr_t s = 0, e = 0;
-            try {
-                s = std::stoull(line.substr(0, dash), nullptr, 16);
-                e = std::stoull(line.substr(dash + 1, sp - dash - 1), nullptr, 16);
-            } catch (...) { continue; }
-            if (aligned_start >= s && aligned_start < e) {
-                const std::size_t perm_off = sp + 1;
-                if (line.size() >= perm_off + 3) {
-                    old = host_to_win_protect(line.substr(perm_off, 3));
+        std::lock_guard<std::mutex> lock(g_allocations_mutex);
+        AllocationSlot* slot = find_private_allocation_locked(aligned_base, aligned_size);
+        if (slot == nullptr) {
+            for (AllocationSlot& candidate : runtime::guest_context().allocations) {
+                if (!candidate.view && contains_range(candidate, BaseAddress, 1U)) {
+                    return NtStatus::InvalidParameter;
                 }
-                break;
             }
+        }
+        if (slot != nullptr) {
+            if (!contains_range(*slot, aligned_base, aligned_size)) {
+                return NtStatus::InvalidParameter;
+            }
+            AllocationRegion* const region = find_allocation_region_locked(*slot, aligned_start);
+            if (region == nullptr || region->state != kMemCommit) {
+                return NtStatus::InvalidParameter;
+            }
+            const std::size_t tracked_offset = static_cast<std::size_t>(
+                aligned_start - reinterpret_cast<std::uintptr_t>(slot->address));
+            old = region->protect;
+            if (!build_allocation_protection(*slot, tracked_offset, aligned_size, NewProtect,
+                                              updated_regions)) {
+                return NtStatus::NoMemory;
+            }
+            const int tracked_prot = prot_to_host(NewProtect);
+            if (::mprotect(aligned_base, aligned_size, tracked_prot) != 0) {
+                if (errno == ENOMEM) return NtStatus::NoMemory;
+                if (errno == EACCES) return NtStatus::AccessDenied;
+                return NtStatus::InvalidParameter;
+            }
+            slot->regions = std::move(updated_regions);
+            slot->state = slot->regions.size() == 1U ? slot->regions.front().state : 0U;
+            slot->protect = slot->regions.size() == 1U ? slot->regions.front().protect : 0U;
+            *OldProtect = old;
+            *RegionSize = aligned_size;
+            runtime::invalidate_memory_map_cache();
+            return NtStatus::Success;
+        }
+    }
+
+    // Para regiões externas, tenta descobrir a proteção antiga via
+    // /proc/self/maps (como Wine faz ao manter sua árvore VAD).
+    std::ifstream maps{"/proc/self/maps"};
+    std::string line;
+    while (maps && std::getline(maps, line)) {
+        const std::size_t dash = line.find('-');
+        const std::size_t sp = line.find(' ', dash == std::string::npos ? 0 : dash);
+        if (dash == std::string::npos || sp == std::string::npos) continue;
+        std::uintptr_t s = 0, e = 0;
+        try {
+            s = std::stoull(line.substr(0, dash), nullptr, 16);
+            e = std::stoull(line.substr(dash + 1, sp - dash - 1), nullptr, 16);
+        } catch (...) { continue; }
+        if (aligned_start >= s && aligned_start < e) {
+            const std::size_t perm_off = sp + 1;
+            if (line.size() >= perm_off + 3) {
+                old = host_to_win_protect(line.substr(perm_off, 3));
+            }
+            break;
         }
     }
 
@@ -295,13 +475,24 @@ NtStatus NtQueryVirtualMemory(const void* Address, NtMemoryInformation* Info) no
             const auto end = base + slot.size;
             const auto addr = reinterpret_cast<std::uintptr_t>(Address);
             if (addr >= base && addr < end) {
-                Info->BaseAddress = slot.address;
-                Info->AllocationBase = slot.address;
-                Info->AllocationProtect = kPageReadWrite;
-                Info->RegionSize = slot.size - (addr - base);
-                Info->State = kMemCommit;
-                Info->Protect = kPageReadWrite;
-                Info->Type = 0x20000U;  // MEM_PRIVATE
+                AllocationRegion fallback_region{0, slot.size, slot.state, slot.protect};
+                const AllocationRegion* region = &fallback_region;
+                const std::size_t offset = static_cast<std::size_t>(addr - base);
+                for (const AllocationRegion& candidate : slot.regions) {
+                    if (offset >= candidate.offset &&
+                        offset - candidate.offset < candidate.size) {
+                        region = &candidate;
+                        break;
+                    }
+                }
+                Info->BaseAddress = reinterpret_cast<void*>(base + region->offset);
+                const bool free = region->state == kMemFree;
+                Info->AllocationBase = free ? nullptr : slot.address;
+                Info->AllocationProtect = free ? 0 : slot.allocation_protect;
+                Info->RegionSize = region->size - (offset - region->offset);
+                Info->State = region->state;
+                Info->Protect = region->state == kMemCommit ? region->protect : 0;
+                Info->Type = free ? 0 : (slot.view ? 0x40000U : 0x20000U);  // MEM_MAPPED/MEM_PRIVATE
                 return NtStatus::Success;
             }
         }

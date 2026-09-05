@@ -76,6 +76,7 @@ extern std::atomic<std::uintptr_t> g_pointer_cookie;
 using FileSlot = runtime::GuestContext::ContextFileSlot;
 
 using AllocationSlot = runtime::GuestContext::ContextAllocationSlot;
+using AllocationRegion = runtime::GuestContext::ContextAllocationRegion;
 
 // Blocos devolvidos por Global/LocalAlloc. O endereço do bloco é usado como
 // handle no subconjunto atual; a tabela permite validar GlobalLock/Unlock/Free

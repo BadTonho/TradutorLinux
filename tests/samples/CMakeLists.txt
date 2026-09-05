@@ -210,6 +210,9 @@ function(tl_add_pe_fixture target_name source_file manifest_file)
                 set(runtime_extra_args
                     "-DEXPECTED_HEX=66617365350a"
                     "-DCLEANUP_FILE=tl_phase5_data.bin")
+            elseif(target_name STREQUAL "tl_virtual_query")
+                set(runtime_extra_args
+                    "-DEXPECTED_HEX=7669727475616c2d71756572790a")
             elseif(target_name STREQUAL "tl_thread")
                 set(runtime_extra_args
                     "-DEXPECTED_HEX=54687265616420646f6e650a54687265616420646f6e650a4d61696e20646f6e650a")
@@ -476,6 +479,8 @@ tl_add_pe_fixture(tl_hello src/tl_hello.c manifests/tl_hello.json
 tl_add_pe_fixture(tl_echo src/tl_echo.c manifests/tl_echo.json
     LINK_KERNEL32 EXPECT_RESOLVED CONSOLE RELOCATABLE)
 tl_add_pe_fixture(tl_file src/tl_file.c manifests/tl_file.json
+    LINK_KERNEL32 EXPECT_RESOLVED CONSOLE REPORT RELOCATABLE)
+tl_add_pe_fixture(tl_virtual_query src/tl_virtual_query.c manifests/tl_virtual_query.json
     LINK_KERNEL32 EXPECT_RESOLVED CONSOLE REPORT RELOCATABLE)
 tl_add_pe_fixture(tl_reloc src/tl_reloc.c manifests/tl_reloc.json RELOCATABLE)
 tl_add_pe_fixture(tl_missing_dll src/tl_missing_dll.c manifests/tl_missing_dll.json

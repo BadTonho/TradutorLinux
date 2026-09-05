@@ -12,14 +12,21 @@ Não há ainda tradução completa de `errno` nem suporte a mensagens de erro.
 
 ## Memória
 
-`VirtualAlloc` aceita somente `lpAddress == NULL`, tamanho maior que zero,
-`MEM_COMMIT | MEM_RESERVE` e `PAGE_READONLY` ou `PAGE_READWRITE`. O tamanho é
-arredondado à página Linux e a memória é anônima, privada e não executável.
+`VirtualAlloc` aceita uma nova reserva com `lpAddress == NULL` e tamanho maior
+que zero. O subconjunto também permite `MEM_RESERVE` seguido de `MEM_COMMIT`
+no endereço exato retornado, além de `MEM_COMMIT | MEM_RESERVE` em uma única
+chamada. O tamanho é arredondado à página Linux; a memória é anônima e privada.
+As proteções `PAGE_*` são registradas por região, com W^X aplicado no
+hospedeiro para páginas graváveis.
 
 `VirtualFree` aceita somente `MEM_RELEASE`, `dwSize == 0` e o endereço exato
 retornado por `VirtualAlloc`. O runtime mantém um registro limitado de 64
-alocações. Reserva separada, commit parcial, endereço sugerido e proteção
-executável estão fora do escopo.
+alocações. `VirtualQuery` informa `MEM_RESERVE` com `Protect == 0` antes do
+commit e separa regiões quando `VirtualProtect` altera apenas parte de uma
+alocação. Após `VirtualFree`, a faixa é consultável como `MEM_FREE` enquanto o
+registro puder ser reutilizado; consultas a mapeamentos externos continuam
+usando `/proc/self/maps`. Commit parcial, endereço sugerido e execução efetiva
+de páginas graváveis continuam fora do escopo.
 
 ## Arquivos e caminhos
 

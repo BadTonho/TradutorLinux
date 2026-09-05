@@ -74,6 +74,7 @@ constexpr Dword kFileDispositionFlagIgnoreReadonlyAttribute = 0x00000010U;
 constexpr Dword kMemCommit = 0x1000U;
 constexpr Dword kMemReserve = 0x2000U;
 constexpr Dword kMemRelease = 0x8000U;
+constexpr Dword kMemFree = 0x10000U;
 constexpr Dword kMemImage = 0x1000000U;
 constexpr Dword kMemPrivate = 0x20000U;
 constexpr Dword kGmemMoveable = 0x0002U;

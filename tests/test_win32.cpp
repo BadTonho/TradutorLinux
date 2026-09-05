@@ -119,6 +119,46 @@ TEST(Win32VirtualTest, QueryDescribesAnAnonymousAllocation) {
     EXPECT_EQ(tl_VirtualFree(memory, 0, abi::kMemRelease), 1);
 }
 
+TEST(Win32VirtualTest, QueryTracksReserveCommitAndProtection) {
+    void* memory = tl_VirtualAlloc(nullptr, 0x2000, abi::kMemReserve,
+                                   abi::kPageReadWrite);
+    ASSERT_NE(memory, nullptr);
+
+    GuestMemoryBasicInformation info{};
+    ASSERT_EQ(tl_VirtualQuery(memory, &info, sizeof(info)), sizeof(info));
+    EXPECT_EQ(info.base_address, memory);
+    EXPECT_EQ(info.allocation_base, memory);
+    EXPECT_EQ(info.allocation_protect, abi::kPageReadWrite);
+    EXPECT_EQ(info.region_size, 0x2000U);
+    EXPECT_EQ(info.state, abi::kMemReserve);
+    EXPECT_EQ(info.protect, 0U);
+    EXPECT_EQ(info.type, 0x20000U);
+
+    ASSERT_EQ(tl_VirtualAlloc(memory, 0x2000, abi::kMemCommit,
+                              abi::kPageReadWrite), memory);
+    ASSERT_EQ(tl_VirtualQuery(memory, &info, sizeof(info)), sizeof(info));
+    EXPECT_EQ(info.state, abi::kMemCommit);
+    EXPECT_EQ(info.protect, abi::kPageReadWrite);
+
+    std::uint32_t old_protection = 0;
+    ASSERT_EQ(tl_VirtualProtect(memory, 0x1000, abi::kPageReadOnly,
+                                &old_protection), 1);
+    EXPECT_EQ(old_protection, abi::kPageReadWrite);
+    ASSERT_EQ(tl_VirtualQuery(memory, &info, sizeof(info)), sizeof(info));
+    EXPECT_EQ(info.allocation_protect, abi::kPageReadWrite);
+    EXPECT_EQ(info.protect, abi::kPageReadOnly);
+
+    ASSERT_EQ(tl_VirtualFree(memory, 0, abi::kMemRelease), 1);
+    ASSERT_EQ(tl_VirtualQuery(memory, &info, sizeof(info)), sizeof(info));
+    EXPECT_EQ(info.base_address, memory);
+    EXPECT_EQ(info.allocation_base, nullptr);
+    EXPECT_EQ(info.allocation_protect, 0U);
+    EXPECT_EQ(info.region_size, 0x2000U);
+    EXPECT_EQ(info.state, abi::kMemFree);
+    EXPECT_EQ(info.protect, 0U);
+    EXPECT_EQ(info.type, 0U);
+}
+
 TEST(Win32VirtualTest, QueryRejectsUnmappedAddress) {
     GuestMemoryBasicInformation info{};
     EXPECT_EQ(tl_VirtualQuery(nullptr, &info, sizeof(info)), 0);

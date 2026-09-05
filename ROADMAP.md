@@ -28,7 +28,7 @@ as referências nas fases não criem listas paralelas.
 - **Fase atual:** Fase 13 — compatibilidade ampla por portfólio.
 - **Próximo ciclo:** B2 fica estacionada até uma decisão de produto específica
   sobre tradução de interface; B6 e B9 continuam condicionadas a evidência
-  externa. B1, B8, B10, B15 e B16 deste ciclo foram concluídas.
+  externa. B1, B8, B10, B12, B15 e B16 deste ciclo foram concluídas.
 - **Último incremento:** a Fase 13.14 concluiu TLS genérico e a fixture
   reutilizável Worker/RSL. O caso comercial do Roblox continua como benchmark:
   imports resolvidos, mas execução interrompida em `RBXCRASH`/`ExitProcess 3`.
@@ -37,12 +37,11 @@ as referências nas fases não criem listas paralelas.
   `Copy` (`546`), verifica a cópia dentro da raiz e encerra o runtime com exit
   `0`; a execução direta sem interação continua sujeita a timeout, portanto o
   alvo não é declarado de uso diário nem como suporte geral.
-- **Última etapa de infraestrutura:** B1 concluiu limites opcionais de CPU e
-  memória por CLI e catálogo. O runtime aplica `RLIMIT_CPU` e `RLIMIT_AS` no
-  filho isolado, propaga a herança POSIX para `CreateProcessW`, e diferencia
-  contenção (`GuestResourceLimit 73`) de timeout (`GuestTimeout 72`). As
-  fixtures `tl_hang`, `tl_memory_limit` e `tl_process_limit_parent` cobrem
-  CPU, memória e herança, respectivamente.
+- **Última etapa de infraestrutura:** B12 passou a rastrear regiões privadas de
+  memória como `RESERVE`/`COMMIT`, proteções e divisão por página após
+  `VirtualProtect`; a fixture `tl_virtual_query.exe` valida o contrato
+  completo. B1 continua cobrindo limites opcionais de CPU/RAM e herança POSIX
+  para `CreateProcessW`.
 - **Última validação de recursos:** B10 passou no `x11_popup_smoke` do build
   `sanitize`, executado fora de `ptrace` com Xvfb próprio e
   `detect_leaks=1`. O smoke repetiu 512 desenhos de cores e cobriu Escape,
@@ -967,9 +966,9 @@ sobrescrita e com confinamento à raiz visual. O teste externo versionado
 `build/debug/tests/seven_zip_smoke` confirma a cópia e o encerramento normal;
 as demais operações do File Manager continuam limitadas.
 
-### Ciclo concluído — B1, B8, B10, B15 e B16
+### Ciclo concluído — B1, B8, B10, B12, B15 e B16
 
-B1, B8, B10, B15 e B16 foram concluídas e validadas. B2 é uma trilha de produto separada
+B1, B8, B10, B12, B15 e B16 foram concluídas e validadas. B2 é uma trilha de produto separada
 do runtime Win32 e fica estacionada até haver decisão explícita sobre tradução
 de interface. B6 e B9 permanecem condicionadas, respectivamente, à amostra
 comercial Worker/RSL e a evidência de outra aplicação para o unwind.
@@ -1033,10 +1032,13 @@ imports não encerra B5.
   a ABI pública, tipo, contagem de referências e operação de fechamento das
   tabelas de arquivos, sincronização, threads e mapeamentos. Só iniciar com
   regressão de handle misturado ou benefício mensurável de manutenção.
-- [ ] **B12 — `VirtualQuery` coerente com alocações do runtime.** Representar
-  explicitamente regiões `RESERVE`/`COMMIT`/`FREE` e proteções das alocações
-  próprias, mantendo `/proc/self/maps` apenas para regiões externas. Adicionar
-  fixture de heap/coletor ou aplicativo que exija a distinção.
+- [x] **B12 — `VirtualQuery` coerente com alocações do runtime.** As alocações
+  próprias agora registram `MEM_RESERVE`/`MEM_COMMIT`, `AllocationBase`,
+  `AllocationProtect` e proteções por região; `VirtualProtect` divide a tabela
+  quando altera uma faixa parcial e `/proc/self/maps` fica como fallback para
+  mapeamentos externos. A fixture `tl_virtual_query.exe` valida reserva,
+  commit, mudança de proteção, `RegionSize`, `Type` e liberação; unitário,
+  metadata, `--report` e execução passam em Debug.
 - [ ] **B13 — Tabelas de codepage versionadas como dados.** Extrair as tabelas
   embutidas para dados gerados de fonte pública somente quando um aplicativo
   exigir outra página além de CP 0/1252/437/65001; versionar a fonte e testar

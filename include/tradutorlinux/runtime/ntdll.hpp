@@ -33,9 +33,10 @@ enum class NtStatus : std::uint32_t {
 [[nodiscard]] std::uint32_t NtStatusToDosError(NtStatus status) noexcept;
 
 // Aloca memória virtual anotada como Wine faz em NtAllocateVirtualMemory.
-//  - BaseAddress: in/out ponteiro (nullptr no nosso contrato atual)
+//  - BaseAddress: in/out ponteiro (nullptr para uma nova reserva; endereço exato
+//    de uma reserva existente ao fazer MEM_COMMIT separado)
 //  - RegionSize: in/out tamanho em bytes (arredondado à página na saída)
-//  - AllocationType: MEM_COMMIT|MEM_RESERVE (0x3000) no subconjunto atual
+//  - AllocationType: MEM_RESERVE, MEM_COMMIT ou ambos (0x2000/0x1000/0x3000)
 //  - Protect: PAGE_*
 //
 // Retorna Success e preenche *BaseAddress/*RegionSize em caso de êxito.

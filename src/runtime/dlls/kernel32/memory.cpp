@@ -438,6 +438,9 @@ TL_MSABI void* tl_MapViewOfFile(const void* file_mapping_object, const std::uint
             it->address = result;
             it->size = size;
             it->view = true;
+            it->allocation_protect = (prot & PROT_WRITE) != 0 ? abi::kPageReadWrite : abi::kPageReadOnly;
+            it->state = abi::kMemCommit;
+            it->protect = it->allocation_protect;
             recorded = true;
         }
     }

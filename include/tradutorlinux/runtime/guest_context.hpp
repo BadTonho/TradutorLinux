@@ -66,10 +66,20 @@ struct GuestContext {
     std::array<ContextFileSlot, 256> files{};
     std::mutex files_mutex;
 
+    struct ContextAllocationRegion {
+        std::size_t offset{0};
+        std::size_t size{0};
+        std::uint32_t state{0};
+        std::uint32_t protect{0};
+    };
     struct ContextAllocationSlot {
         void* address{nullptr};
         std::size_t size{0};
         bool view{false};
+        std::uint32_t allocation_protect{0};
+        std::uint32_t state{0};
+        std::uint32_t protect{0};
+        std::vector<ContextAllocationRegion> regions;
     };
     struct ContextFileMappingSlot {
         bool used{false};
