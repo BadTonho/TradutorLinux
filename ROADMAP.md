@@ -973,10 +973,13 @@ marcam itens condicionais como concluídos; definem os gates para retomá-los.
   `65001`). A extração para dados gerados só será feita quando um alvo exigir
   outra página, com fonte versionada e testes de conversão e erro.
 - **B14 e overrides — opção 1 confirmada pelo usuário em 2026-09-05:** manter
-  adiados os comportamentos específicos por aplicativo. `TL_DLL_OVERRIDES`
-  continua sendo um mecanismo técnico de override de DLL. Não haverá política
-  divergente por aplicativo/API sem alvo, configuração, precedência, isolamento,
-  diagnóstico e regressão definidos antes.
+  adiada a implementação de comportamentos divergentes por aplicativo.
+  `TL_DLL_OVERRIDES` continua sendo um mecanismo técnico de override de DLL.
+  Foi aprovada como proposta a pasta `compat/` dentro de cada prefixo, separada
+  de `drive_c`, para guardar perfil e arquivos auxiliares específicos do
+  aplicativo. A proposta não autoriza ainda overrides por API nem código,
+  scripts ou DLLs arbitrárias; isso só será reaberto com contrato, alvo,
+  configuração, precedência, isolamento, diagnóstico e regressão definidos.
 - **B17 e processos — opção 1 confirmada pelo usuário em 2026-09-05:** manter
   o supervisor adiado. O protocolo atual de `fork`/`waitpid`/pipe é suficiente
   para o portfólio conhecido; um supervisor só será criado se um aplicativo
@@ -1096,11 +1099,21 @@ imports não encerra B5.
   embutidas para dados gerados de fonte pública somente quando um aplicativo
   exigir outra página além de CP 0/1252/437/65001; versionar a fonte e testar
   conversões e erros.
-- [ ] **B14 — Override de comportamento por aplicativo.** Diferenciar o
-  override de DLL já existente (`TL_DLL_OVERRIDES`) de uma eventual política
-  por API/aplicativo. Definir configuração, precedência, isolamento e
-  diagnóstico antes de permitir divergências específicas; exigir alvo e
-  regressão para cada override.
+- [ ] **B14 — Perfil de compatibilidade por aplicativo e overrides
+  condicionados.** Cada prefixo poderá ter uma área `compat/` ao lado de
+  `drive_c`: `drive_c` mantém os arquivos reais do convidado, enquanto
+  `compat/` guarda os arquivos auxiliares e o perfil do TradutorLinux daquele
+  aplicativo, por exemplo `compat/profile.json` e `compat/files/`. O perfil
+  deverá ser selecionado pelo ID estável do catálogo, com hash ou versão
+  opcional quando necessário, e poderá declarar somente recursos validados,
+  como arquivos e mapeamentos explícitos para caminhos que o convidado deve
+  enxergar. A pasta não será automaticamente visível ao aplicativo e não
+  aceitará código, scripts ou DLLs arbitrárias. Sem perfil válido, aplica-se o
+  comportamento genérico; o carregamento e cada regra usada devem aparecer no
+  trace. Diferenciar esse mecanismo do override de DLL já existente
+  (`TL_DLL_OVERRIDES`), definir precedência, isolamento e diagnóstico, e exigir
+  alvo, fixture e regressão antes de permitir qualquer divergência específica
+  por API.
 - [x] **B15 — Drives do prefixo como symlinks ou mecanismo equivalente.** O
   prefixo cria `dosdevices/c:` → `../drive_c` e `dosdevices/z:` → `/`; a
   resolução de `C:` canoniza e confina o caminho ao `drive_c`, enquanto `Z:`
