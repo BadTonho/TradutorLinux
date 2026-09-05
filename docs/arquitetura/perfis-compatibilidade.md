@@ -191,6 +191,12 @@ janela X11, criação de dispositivo D3D11, swap chain, render target e
 D3D11→DXVK/Vulkan em X11; VKD3D-Proton/D3D12, áudio, entrada e jogos ainda
 dependem de alvos reproduzíveis próprios.
 
+O slice D3D12 é exercido separadamente por `tl_d3d12_probe.exe` e
+`integration_proton_d3d12`. A fixture cria dispositivo, fila, allocator,
+command list e fence, e confirma a sinalização da fila sob Proton Experimental.
+Isso valida somente a inicialização/submissão básica D3D12→VKD3D-Proton/Vulkan;
+não declara suporte a swap chains, D3D12 completo, áudio, entrada ou jogos.
+
 ## Auditoria do 7-Zip — sem regra específica
 
 O 7-Zip 24.08 foi auditado como alvo real após a implementação da B14.3. Não

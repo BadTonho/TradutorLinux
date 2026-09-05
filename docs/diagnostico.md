@@ -91,6 +91,12 @@ está ausente ou inválida:
 [tl][proton][info] exit exit-code="0"
 ```
 
+Para o slice D3D12, `integration_proton_d3d12` usa a fixture
+`tl_d3d12_probe.exe`. A saída esperada é `D3D12 command path ready` com exit
+code `0`; o teste confirma a criação do dispositivo, fila, command list e
+fence sob Proton Experimental. Essa validação cobre apenas a submissão básica
+D3D12→VKD3D-Proton/Vulkan, não swap chain, D3D12 completo, áudio ou entrada.
+
 O componente `proton` pode ser selecionado com `--trace=proton` ou incluído
 em `--trace=proton,process`. Um backend solicitado sem launcher, componentes,
 arquitetura, hash ou versão mínima válidos registra `provider-rejected` e

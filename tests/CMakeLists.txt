@@ -248,11 +248,31 @@ if(TARGET tradutorlinux_samples AND TARGET tradutorlinux)
                 "-DFIXTURE=${CMAKE_CURRENT_BINARY_DIR}/samples/generated/tl_graphics_probe.exe"
                 "-DPROTON_ROOT=${TL_PROTON_ROOT}"
                 "-DWORK=${CMAKE_CURRENT_BINARY_DIR}/proton_graphics_work"
+                "-DAPP_ID=graphicsprobe"
+                "-DPROBE_NAME=Graphics Probe"
+                "-DEXPECTED_OUTPUT=D3D11 frame presented"
                 -P "${CMAKE_CURRENT_SOURCE_DIR}/samples/verify_proton_graphics.cmake"
         )
         set_tests_properties(integration_proton_graphics PROPERTIES
             DEPENDS fixture_tl_graphics_probe_metadata
             LABELS "runtime;pe32plus;backend;proton;graphics;dxvk"
+            TIMEOUT 240
+        )
+        add_test(
+            NAME integration_proton_d3d12
+            COMMAND "${CMAKE_COMMAND}"
+                "-DRUNTIME=$<TARGET_FILE:tradutorlinux>"
+                "-DFIXTURE=${CMAKE_CURRENT_BINARY_DIR}/samples/generated/tl_d3d12_probe.exe"
+                "-DPROTON_ROOT=${TL_PROTON_ROOT}"
+                "-DWORK=${CMAKE_CURRENT_BINARY_DIR}/proton_d3d12_work"
+                "-DAPP_ID=d3d12probe"
+                "-DPROBE_NAME=D3D12 Probe"
+                "-DEXPECTED_OUTPUT=D3D12 command path ready"
+                -P "${CMAKE_CURRENT_SOURCE_DIR}/samples/verify_proton_graphics.cmake"
+        )
+        set_tests_properties(integration_proton_d3d12 PROPERTIES
+            DEPENDS fixture_tl_d3d12_probe_metadata
+            LABELS "runtime;pe32plus;backend;proton;graphics;vkd3d"
             TIMEOUT 240
         )
     endif()

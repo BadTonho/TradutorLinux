@@ -1192,11 +1192,11 @@ imports não encerra B5.
      exigem uma camada Win32/DirectX maior que o subconjunto próprio, mantendo
      o runtime TradutorLinux como backend padrão e preservando a seleção por
      aplicativo. O contrato, a validação, o staging isolado e o piloto com
-     mock já foram implementados. A primeira validação real controlada de
-     D3D11→DXVK/Vulkan em X11 foi adicionada, mas a promoção final ainda aguarda
-     a matriz de componentes e prefixos independentes. O Proton não será
-     reimplementado do zero nem carregado como biblioteca Linux arbitrária a
-     partir de `compat/`.
+     mock já foram implementados. As primeiras validações reais controladas de
+     D3D11→DXVK/Vulkan em X11 e D3D12→VKD3D-Proton/Vulkan foram adicionadas,
+     mas a promoção final ainda aguarda a matriz de componentes e prefixos
+     independentes. O Proton não será reimplementado do zero nem carregado
+     como biblioteca Linux arbitrária a partir de `compat/`.
 
      Subetapas:
 
@@ -1231,10 +1231,13 @@ imports não encerra B5.
      - [ ] **B14.6.5 — Componentes gráficos e dependências.** Validar de forma
        incremental Vulkan, DXVK, VKD3D-Proton, entrada, áudio e demais
        dependências somente quando um aplicativo-alvo exigir cada componente.
-       O primeiro slice está validado: `tl_graphics_probe.exe` cria uma janela
-       X11, inicializa D3D11, apresenta um frame e retorna `0` no teste real
-       `integration_proton_graphics` com Proton Experimental sob Xvfb. Isso
-       comprova somente D3D11→DXVK/Vulkan em X11; VKD3D-Proton/D3D12, entrada
+       Os primeiros slices estão validados: `tl_graphics_probe.exe` cria uma
+       janela X11, inicializa D3D11, apresenta um frame e retorna `0` em
+       `integration_proton_graphics`; `tl_d3d12_probe.exe` cria dispositivo,
+       fila, command list e fence, sinaliza a fila e retorna `0` em
+       `integration_proton_d3d12`. Ambos passam com Proton Experimental sob
+       Xvfb e comprovam somente D3D11→DXVK/Vulkan e a inicialização/submissão
+       básica D3D12→VKD3D-Proton/Vulkan. Swap chains D3D12 completas, entrada
        e áudio continuam abertos. Não declarar suporte amplo por instalar o
        backend.
      - [ ] **B14.6.6 — Piloto real e promoção.** A fixture PE32+

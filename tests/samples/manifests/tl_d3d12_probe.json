@@ -1,0 +1,17 @@
+{
+  "name": "tl_d3d12_probe",
+  "format": "PE32+",
+  "machine": "AMD64",
+  "entry_point": "tl_entry",
+  "uses_crt": false,
+  "imports": {
+    "d3d12.dll": [
+      "D3D12CreateDevice"
+    ],
+    "KERNEL32.dll": [
+      "ExitProcess",
+      "GetStdHandle",
+      "WriteFile"
+    ]
+  }
+}

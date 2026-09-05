@@ -1,5 +1,6 @@
-if(NOT DEFINED RUNTIME OR NOT DEFINED FIXTURE OR NOT DEFINED PROTON_ROOT OR NOT DEFINED WORK)
-    message(FATAL_ERROR "RUNTIME, FIXTURE, PROTON_ROOT and WORK are required")
+if(NOT DEFINED RUNTIME OR NOT DEFINED FIXTURE OR NOT DEFINED PROTON_ROOT OR NOT DEFINED WORK OR
+   NOT DEFINED APP_ID OR NOT DEFINED PROBE_NAME OR NOT DEFINED EXPECTED_OUTPUT)
+    message(FATAL_ERROR "RUNTIME, FIXTURE, PROTON_ROOT, WORK, APP_ID, PROBE_NAME and EXPECTED_OUTPUT are required")
 endif()
 if(NOT EXISTS "${RUNTIME}" OR NOT EXISTS "${FIXTURE}")
     message(FATAL_ERROR "Runtime or graphics fixture is missing")
@@ -16,11 +17,12 @@ endif()
 file(REMOVE_RECURSE "${WORK}")
 file(MAKE_DIRECTORY "${WORK}/home" "${WORK}/config")
 set(prefix "${WORK}/prefix")
-set(app_dir "${prefix}/drive_c/Program Files/Graphics Probe")
-set(executable "${app_dir}/tl_graphics_probe.exe")
+get_filename_component(fixture_name "${FIXTURE}" NAME)
+set(app_dir "${prefix}/drive_c/Program Files/${PROBE_NAME}")
+set(executable "${app_dir}/${fixture_name}")
 set(profile "${prefix}/compat/profile.json")
 set(proton_prefix "${prefix}/proton/compatdata/pfx")
-set(staged_executable "${proton_prefix}/drive_c/Program Files/Graphics Probe/tl_graphics_probe.exe")
+set(staged_executable "${proton_prefix}/drive_c/Program Files/${PROBE_NAME}/${fixture_name}")
 set(run_wrapper "${WORK}/run_graphics_probe.sh")
 set(run_stdout_file "${WORK}/graphics-stdout.txt")
 set(run_stderr_file "${WORK}/graphics-stderr.txt")
@@ -32,7 +34,7 @@ execute_process(
     COMMAND "${CMAKE_COMMAND}" -E env
         "HOME=${WORK}/home"
         "XDG_CONFIG_HOME=${WORK}/config"
-        "${RUNTIME}" app add "${executable}" --id graphicsprobe --name "Graphics Probe"
+        "${RUNTIME}" app add "${executable}" --id "${APP_ID}" --name "${PROBE_NAME}"
         --prefix "${prefix}"
     RESULT_VARIABLE add_result
     OUTPUT_VARIABLE add_stdout
@@ -45,7 +47,7 @@ endif()
 file(WRITE "${profile}"
     "{\n"
     "  \"schema\": 3,\n"
-    "  \"app_id\": \"graphicsprobe\",\n"
+    "  \"app_id\": \"${APP_ID}\",\n"
     "  \"files\": [],\n"
     "  \"backend\": {\"kind\": \"proton\", \"min_version\": \"11.0\"}\n"
     "}\n"
@@ -63,7 +65,7 @@ file(WRITE "${WORK}/config/tradutorlinux/backends.json"
 # tiny wrapper that separates both streams again so the test can prove that
 # application stdout remains untouched while Proton diagnostics stay on stderr.
 file(WRITE "${run_wrapper}" [=[#!/bin/sh
-exec "$TL_GRAPHICS_RUNTIME" app run graphicsprobe --trace=proton,process >"$TL_GRAPHICS_STDOUT" 2>"$TL_GRAPHICS_STDERR"
+exec "$TL_GRAPHICS_RUNTIME" app run "$TL_GRAPHICS_APP_ID" --trace=proton,process >"$TL_GRAPHICS_STDOUT" 2>"$TL_GRAPHICS_STDERR"
 ]=])
 file(CHMOD "${run_wrapper}"
     PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE)
@@ -77,6 +79,7 @@ execute_process(
         "PROTON_LOG=1"
         "DXVK_LOG_LEVEL=info"
         "TL_GRAPHICS_RUNTIME=${RUNTIME}"
+        "TL_GRAPHICS_APP_ID=${APP_ID}"
         "TL_GRAPHICS_STDOUT=${run_stdout_file}"
         "TL_GRAPHICS_STDERR=${run_stderr_file}"
         "/bin/sh" "${run_wrapper}"
@@ -99,7 +102,7 @@ endif()
 if(NOT xvfb_result EQUAL 0)
     message(FATAL_ERROR "real Proton graphics run returned ${xvfb_result}\nstdout:\n${run_stdout}\nstderr:\n${run_stderr}")
 endif()
-if(NOT run_stdout STREQUAL "D3D11 frame presented\n")
+if(NOT run_stdout STREQUAL "${EXPECTED_OUTPUT}\n")
     message(FATAL_ERROR "graphics fixture stdout was not preserved: '${run_stdout}'\nstderr:\n${run_stderr}")
 endif()
 

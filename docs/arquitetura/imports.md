@@ -106,6 +106,11 @@ registrado quando `TL_PROTON_ROOT` aponta para uma instalação real; ele valida
 o caminho D3D11→DXVK/Vulkan em X11, sem alterar a resolução de imports do
 `GuestModuleGraph` e sem declarar suporte a D3D12, áudio, entrada ou jogos.
 
+A fixture `tl_d3d12_probe.exe` valida separadamente a inicialização e a
+submissão básica de comandos D3D12. `integration_proton_d3d12` usa a mesma
+seleção explícita de Proton e confirma o caminho D3D12→VKD3D-Proton/Vulkan,
+sem transformar essa prova mínima em suporte geral de D3D12 ou de jogos.
+
 ## Fronteira de ABI (`ms_abi`)
 
 `include/tradutorlinux/runtime/winapi.hpp` define `TL_MSABI` como `__attribute__((ms_abi))` em GCC/Clang x86-64 e declara as funções hospedeiras com vinculação C (`extern "C"`), `noexcept` e a convenção Microsoft x64. Tipos mínimos Win32 usados nas assinaturas ficam em `tradutorlinux::abi` (`Handle`, `Bool`, `Dword`, `Uint` e as constantes de handle padrão).
