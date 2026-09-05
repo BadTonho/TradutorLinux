@@ -955,7 +955,8 @@ marcam itens condicionais como concluídos; definem os gates para retomá-los.
   adiada e não terá implementação até existir uma decisão explícita de produto
   para tradução de interface, incluindo formato, diretório, identificação,
   idioma, precedência e fallback.
-- **B6 e Roblox:** o runtime não declara `Roblox` como `supported`. A fixture
+- **B6 e Roblox — decisão confirmada pelo usuário em 2026-09-05:** manter a
+  etapa adiada. O runtime não declara `Roblox` como `supported`; a fixture
   `tl_worker_rsl.exe` não substitui o executável comercial `Worker`/`RSL`.
   B6 só será reaberta com a amostra exata, hash registrado, `install --prefix`,
   `app run`, trace e efeitos observáveis reproduzíveis.
