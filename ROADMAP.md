@@ -968,10 +968,10 @@ marcam itens condicionais como concluídos; definem os gates para retomá-los.
   etapa adiada. As tabelas separadas de arquivos, sincronização, threads e
   mapeamentos permanecem. O cabeçalho comum só será iniciado por uma regressão
   de handle misturado ou por uma medição concreta de benefício de manutenção.
-- **B13 e codepages:** permanecem como dados estáticos os codepages já exigidos
-  pelo portfólio (`0`, `1252`, `437` e `65001`). A extração para dados gerados
-  só será feita quando um alvo exigir outra página, com fonte versionada e
-  testes de conversão e erro.
+- **B13 e codepages — opção 1 confirmada pelo usuário em 2026-09-05:** manter
+  como estão os codepages já exigidos pelo portfólio (`0`, `1252`, `437` e
+  `65001`). A extração para dados gerados só será feita quando um alvo exigir
+  outra página, com fonte versionada e testes de conversão e erro.
 - **B14 e overrides:** `TL_DLL_OVERRIDES` continua sendo um mecanismo técnico
   de override de DLL. Não haverá política divergente por aplicativo/API sem
   alvo, configuração, precedência, isolamento, diagnóstico e regressão
