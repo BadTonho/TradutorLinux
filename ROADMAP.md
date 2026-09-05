@@ -28,7 +28,7 @@ as referências nas fases não criem listas paralelas.
 - **Fase atual:** Fase 13 — compatibilidade ampla por portfólio.
 - **Próximo ciclo:** B2 fica estacionada até uma decisão de produto específica
   sobre tradução de interface; B6 e B9 continuam condicionadas a evidência
-  externa. B1, B8 e B10 deste ciclo foram concluídas.
+  externa. B1, B8, B10 e B16 deste ciclo foram concluídas.
 - **Último incremento:** a Fase 13.14 concluiu TLS genérico e a fixture
   reutilizável Worker/RSL. O caso comercial do Roblox continua como benchmark:
   imports resolvidos, mas execução interrompida em `RBXCRASH`/`ExitProcess 3`.
@@ -967,9 +967,9 @@ sobrescrita e com confinamento à raiz visual. O teste externo versionado
 `build/debug/tests/seven_zip_smoke` confirma a cópia e o encerramento normal;
 as demais operações do File Manager continuam limitadas.
 
-### Ciclo concluído — B1, B8 e B10
+### Ciclo concluído — B1, B8, B10 e B16
 
-B1, B8 e B10 foram concluídas e validadas. B2 é uma trilha de produto separada
+B1, B8, B10 e B16 foram concluídas e validadas. B2 é uma trilha de produto separada
 do runtime Win32 e fica estacionada até haver decisão explícita sobre tradução
 de interface. B6 e B9 permanecem condicionadas, respectivamente, à amostra
 comercial Worker/RSL e a evidência de outra aplicação para o unwind.
@@ -1050,10 +1050,13 @@ imports não encerra B5.
   Avaliar se o mapeamento atual de caminhos atende um alvo real antes de
   expor letras de drive como links no host; preservar a rejeição de traversal
   e documentar que prefixo não é sandbox.
-- [ ] **B16 — Expectativas explícitas nos fixtures.** Avaliar uma macro ou
-  metadado equivalente a `TL_TODO` para registrar divergências conhecidas e
-  exigir atualização da matriz quando deixarem de existir, sem mascarar uma
-  falha como sucesso.
+- [x] **B16 — Expectativas explícitas nos fixtures.** O argumento CMake
+  `KNOWN_LIMITATION` vincula uma expectativa de rejeição à matriz de
+  compatibilidade; `verify_known_limitation.cmake` falha se o fixture ou o
+  marcador desaparecer da matriz. O teste de runtime continua separado e
+  falha quando o caso antes rejeitado passa a ter sucesso, evitando mascarar
+  uma mudança de comportamento. `tl_missing_dll.exe` é a primeira aplicação
+  desse contrato com `unknown-symbol`.
 
 ### Longo prazo, somente com decisão explícita
 

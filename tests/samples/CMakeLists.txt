@@ -19,7 +19,7 @@ set(TL_FIXTURE_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/generated")
 
 function(tl_add_pe_fixture target_name source_file manifest_file)
     set(options LINK_KERNEL32 LINK_USER32 LINK_GDI32 LINK_COMCTL32 LINK_GDIPLUS LINK_UXTHEME LINK_DBGHELP LINK_OLE32 LINK_OLEAUT32 LINK_POWRPROF LINK_IPHLPAPI LINK_WTSAPI32 LINK_WINMM LINK_WS2_32 LINK_WININET LINK_WINTRUST LINK_CRYPT32 LINK_ADVAPI32 LINK_SHELL32 LINK_SHLWAPI LINK_MSVCRT LINK_MPR LINK_COMDLG32 LINK_IMM32 LINK_DWMAPI LINK_VERSION RELOCATABLE UNWIND EXPECT_RESOLVED CONSOLE REPORT REPORT_ONLY NO_RUNTIME_CHECK RUNTIME_FAILURE)
-    set(oneValueArgs REPORT_SYMBOL REPORT_SUPPORT RESOURCE_FILE IMPORT_DEF)
+    set(oneValueArgs REPORT_SYMBOL REPORT_SUPPORT RESOURCE_FILE IMPORT_DEF KNOWN_LIMITATION)
     cmake_parse_arguments(ARG "${options}" "${oneValueArgs}" "" ${ARGN})
 
     set(output_file "${TL_FIXTURE_OUTPUT_DIRECTORY}/${target_name}.exe")
@@ -391,6 +391,26 @@ function(tl_add_pe_fixture target_name source_file manifest_file)
         )
     endif()
 
+    if(ARG_KNOWN_LIMITATION)
+        if(NOT ARG_RUNTIME_FAILURE)
+            message(FATAL_ERROR
+                "KNOWN_LIMITATION for ${target_name} requires RUNTIME_FAILURE"
+            )
+        endif()
+        add_test(
+            NAME fixture_${target_name}_limitation_metadata
+            COMMAND "${CMAKE_COMMAND}"
+                "-DFIXTURE=${target_name}.exe"
+                "-DLIMITATION=${ARG_KNOWN_LIMITATION}"
+                "-DMATRIX=${CMAKE_SOURCE_DIR}/docs/compatibilidade.md"
+                -P "${CMAKE_CURRENT_SOURCE_DIR}/verify_known_limitation.cmake"
+        )
+        set_tests_properties(fixture_${target_name}_limitation_metadata PROPERTIES
+            DEPENDS runtime_${target_name}_rejected
+            LABELS "fixture;pe32plus;expectation"
+        )
+    endif()
+
     if((ARG_REPORT OR ARG_REPORT_ONLY) AND TARGET tradutorlinux)
         set(report_extra_args)
         if(ARG_REPORT_ONLY)
@@ -459,7 +479,8 @@ tl_add_pe_fixture(tl_file src/tl_file.c manifests/tl_file.json
     LINK_KERNEL32 EXPECT_RESOLVED CONSOLE REPORT RELOCATABLE)
 tl_add_pe_fixture(tl_reloc src/tl_reloc.c manifests/tl_reloc.json RELOCATABLE)
 tl_add_pe_fixture(tl_missing_dll src/tl_missing_dll.c manifests/tl_missing_dll.json
-    IMPORT_DEF defs/tl_missing_dll.def RUNTIME_FAILURE RELOCATABLE)
+    IMPORT_DEF defs/tl_missing_dll.def RUNTIME_FAILURE RELOCATABLE
+    KNOWN_LIMITATION "unknown-symbol")
 tl_add_pe_fixture(tl_gui src/tl_gui.c manifests/tl_gui.json
     LINK_KERNEL32 LINK_USER32 EXPECT_RESOLVED REPORT_ONLY RELOCATABLE)
 tl_add_pe_fixture(tl_win src/tl_win.c manifests/tl_win.json
