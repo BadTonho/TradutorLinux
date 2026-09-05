@@ -75,6 +75,28 @@ execução por segurança. A limpeza ocorre depois do processo convidado; um
 arquivo substituído ou um diretório que ficou não vazio é preservado.
 `compat/` não é exposta automaticamente ao convidado.
 
+## Seleção do backend Proton
+
+Na B14.6, `app run` pode selecionar explicitamente o backend Proton por meio de
+um perfil schema 3. Sem `backend`, o runtime próprio continua sendo usado. O
+diagnóstico não substitui um Proton solicitado por `native` quando a instalação
+está ausente ou inválida:
+
+```text
+[tl][runtime][info] backend-selected kind="proton" app-id="fixture" version="11.0"
+[tl][proton][info] validation status="valid" root="..." version="11.0"
+[tl][proton][info] prefix path=".../proton/compatdata"
+[tl][proton][info] launch executable="..." cwd="..."
+[tl][proton][info] exit exit-code="0"
+```
+
+O backend solicitado sem launcher, componentes, arquitetura ou versão mínima
+válidos registra `validation status="invalid"` e retorna `5` (`Unsupported`).
+Perfil Proton com `dlls[]` também é rejeitado antes do lançamento. O stdout do
+processo convidado permanece sem prefixo; mensagens do launcher são encaminhadas
+ao stderr com o contexto `[tl][proton]`. Sinal, timeout e falha interna mantêm,
+respectivamente, os códigos `71`, `72` e `70` definidos pelo runtime.
+
 ## Eventos do grafo de DLLs por perfil
 
 Quando `app run --trace` usa um perfil v2, o componente `loader` registra o

@@ -99,6 +99,13 @@ O catálogo é persistido em formato JSON em `~/.config/tradutorlinux/library.js
 | `tradutorlinux app add <app.exe> [--name <Nome>] [--prefix <dir>] [--id <id>]` | Cadastra manualmente um executável na biblioteca. Sem `--prefix`, cria prefixo exclusivo. |
 | `tradutorlinux app remove <id>` | Remove o aplicativo do catálogo da biblioteca. |
 
+`app run` usa o runtime próprio por padrão. Um perfil schema 3 pode selecionar
+explicitamente `backend.kind="proton"`; nesse caso, o launcher Proton é
+validado pela configuração externa em `backends.json` e o aplicativo é
+executado em um prefixo persistente separado dentro do prefixo cadastrado.
+Ausência ou invalidez do Proton solicitado é erro explícito, não fallback
+silencioso. Execução direta não seleciona Proton.
+
 ### Resultado de `install`
 
 Antes de executar o setup, o CLI registra os PE32+ AMD64 já presentes em

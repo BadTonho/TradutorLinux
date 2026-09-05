@@ -1197,9 +1197,13 @@ imports não encerra B5.
      Subetapas:
 
      - [ ] **B14.6.1 — Contrato de seleção.** Definir no perfil/catálogo a
-       escolha explícita entre runtime próprio, Proton e eventual modo
-       automático, incluindo versão mínima, precedência, fallback e erro
-       quando o backend solicitado não estiver disponível.
+       escolha explícita entre runtime próprio e Proton. O schema 3 aceita
+       `backend.kind` como `native` ou `proton`, sem `auto`; perfil sem o campo
+       mantém `native`. A instalação fica em configuração externa
+       (`backends.json`), com `TL_PROTON_ROOT` somente para testes. `files[]`
+       pode ser usado no Proton, mas `dlls[]` continua exclusivo do loader
+       próprio; Proton ausente, inválido ou incompatível retorna erro explícito
+       sem fallback silencioso.
      - [ ] **B14.6.2 — Descoberta e validação.** Localizar uma instalação
        configurada do Proton, validar executável, arquitetura, versão, hash e
        componentes necessários, sem download silencioso nem dependência

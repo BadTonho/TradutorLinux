@@ -96,6 +96,58 @@ código executável com os privilégios do runtime: não existe sandbox, assinat
 ou verificação de hash nesta versão, e bibliotecas Linux, scripts e campos de
 regras declarativas continuam proibidos.
 
+## Formato v3 e backend Proton
+
+A v3 mantém os campos de arquivos e DLLs da v2 e acrescenta a seleção explícita
+de backend. A ausência de `backend` equivale a `native`; `auto` não faz parte do
+contrato inicial:
+
+```json
+{
+  "schema": 3,
+  "app_id": "meu-aplicativo",
+  "files": [],
+  "dlls": [],
+  "backend": {
+    "kind": "proton",
+    "min_version": "11.0"
+  }
+}
+```
+
+`backend.kind` aceita somente `native` ou `proton`. `min_version` é opcional e
+usa comparação numérica de versão; ele só é válido para `proton`. A seleção é
+consultada por `app run` de aplicativo cadastrado. Execução direta e instalação
+continuam usando o runtime próprio.
+
+Quando `proton` é selecionado, `files[]` continua podendo ser materializado no
+prefixo Proton. `dlls[]` continua sendo uma extensão do loader próprio e não é
+copiada nem injetada no Proton; a combinação será rejeitada antes da execução,
+com diagnóstico explícito. Um Proton solicitado que não esteja disponível ou
+não passe pela validação também falha com `Unsupported`, sem fallback silencioso
+para `native`.
+
+O caminho da instalação fica fora do perfil, em
+`$XDG_CONFIG_HOME/tradutorlinux/backends.json` ou
+`~/.config/tradutorlinux/backends.json`:
+
+```json
+{
+  "schema": 1,
+  "proton": {
+    "root": "/caminho/para/Proton",
+    "sha256": "opcional"
+  }
+}
+```
+
+`TL_PROTON_ROOT` é uma substituição temporária para testes e diagnóstico. Não
+há download automático, descoberta do Steam ou caminho implícito. A validação
+exige o launcher `proton`, o arquivo `version`, Wine ELF x86-64 em
+`files/bin/wine` e `files/bin/wineserver`, `files/share/wine/wine.inf` e o
+prefixo padrão da distribuição; o hash opcional cobre um inventário
+determinístico da instalação.
+
 ## Auditoria do 7-Zip — sem regra específica
 
 O 7-Zip 24.08 foi auditado como alvo real após a implementação da B14.3. Não
