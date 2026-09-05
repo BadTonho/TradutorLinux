@@ -183,4 +183,16 @@ std::optional<std::string> sha256_file(const std::filesystem::path& path) {
     return output.str();
 }
 
+std::string sha256_bytes(const std::span<const std::byte> bytes) {
+    Sha256 hasher;
+    hasher.update(reinterpret_cast<const std::uint8_t*>(bytes.data()), bytes.size());
+    const auto digest = hasher.finish();
+    std::ostringstream output;
+    output << std::hex << std::setfill('0');
+    for (const std::uint8_t byte : digest) {
+        output << std::setw(2) << static_cast<unsigned int>(byte);
+    }
+    return output.str();
+}
+
 }  // namespace tradutorlinux::util

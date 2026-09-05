@@ -30,6 +30,7 @@ public:
         bool app_version_seen = false;
         bool files_seen = false;
         bool dlls_seen = false;
+        bool backend_seen = false;
 
         skip_whitespace();
         if (consume_raw('}')) return fail(error, "o perfil não pode ser vazio");
@@ -70,6 +71,12 @@ public:
                     return fail(error, "campo dlls inválido ou repetido");
                 }
                 dlls_seen = true;
+            } else if (key == "backend") {
+                if (backend_seen || !parse_backend(profile.backend)) {
+                    return fail(error, "campo backend inválido ou repetido");
+                }
+                backend_seen = true;
+                profile.backend_declared = true;
             } else {
                 return fail(error, "campo desconhecido: " + key);
             }
@@ -255,6 +262,46 @@ private:
         }
     }
 
+    [[nodiscard]] bool parse_backend(BackendSelection& backend) {
+        skip_whitespace();
+        if (!consume_raw('{')) return false;
+        bool kind_seen = false;
+        bool min_version_seen = false;
+        skip_whitespace();
+        if (consume_raw('}')) return false;
+
+        while (true) {
+            std::string key;
+            if (!parse_string(key)) return false;
+            skip_whitespace();
+            if (!consume_raw(':')) return false;
+            if (key == "kind") {
+                std::string kind;
+                if (kind_seen || !parse_string(kind)) return false;
+                if (kind == "native") {
+                    backend.kind = BackendKind::Native;
+                } else if (kind == "proton") {
+                    backend.kind = BackendKind::Proton;
+                } else {
+                    return false;
+                }
+                kind_seen = true;
+            } else if (key == "min_version") {
+                if (min_version_seen || !parse_string(backend.min_version)) return false;
+                min_version_seen = true;
+            } else {
+                return false;
+            }
+
+            skip_whitespace();
+            if (consume_raw('}')) break;
+            if (!consume_raw(',')) return false;
+            skip_whitespace();
+            if (peek_raw('}')) return false;
+        }
+        return kind_seen;
+    }
+
     [[nodiscard]] bool fail(std::string& error, std::string message) {
         error = std::move(message) + " (posição " + std::to_string(position_) + ")";
         return false;
@@ -291,6 +338,26 @@ private:
         if (static_cast<unsigned char>(character) < 0x20U) return false;
     }
     return true;
+}
+
+[[nodiscard]] bool is_valid_backend_min_version(const std::string_view value) noexcept {
+    if (value.empty() || value.size() > 64U) return false;
+    bool digit_seen = false;
+    bool component_digit_seen = false;
+    std::size_t components = 0;
+    for (const char character : value) {
+        if (std::isdigit(static_cast<unsigned char>(character)) != 0) {
+            digit_seen = true;
+            component_digit_seen = true;
+        } else if (character == '.') {
+            if (!component_digit_seen) return false;
+            ++components;
+            component_digit_seen = false;
+        } else {
+            return false;
+        }
+    }
+    return digit_seen && component_digit_seen && components >= 1U && components <= 2U;
 }
 
 [[nodiscard]] std::string lowercase(std::string value) {
@@ -404,11 +471,22 @@ ProfileLoadResult load_profile(const std::filesystem::path& prefix_root,
     if (!JsonParser{contents}.parse(profile, parse_error)) {
         return invalid_result(parse_error);
     }
-    if (profile.schema != 1U && profile.schema != 2U) {
+    if (profile.schema != 1U && profile.schema != 2U && profile.schema != 3U) {
         return invalid_result("schema de perfil não suportado");
     }
     if (profile.schema == 1U && !profile.dlls.empty()) {
         return invalid_result("campo dlls requer schema 2");
+    }
+    if (profile.schema != 3U && profile.backend_declared) {
+        return invalid_result("campo backend requer schema 3");
+    }
+    if (profile.backend.kind == BackendKind::Native && !profile.backend.min_version.empty()) {
+        return invalid_result("min_version requer backend proton");
+    }
+    if (profile.backend.kind == BackendKind::Proton &&
+        !profile.backend.min_version.empty() &&
+        !is_valid_backend_min_version(profile.backend.min_version)) {
+        return invalid_result("min_version do Proton inválida");
     }
     if (!is_safe_app_id(profile.app_id) || profile.app_id != expected_app_id) {
         return invalid_result("app_id do perfil não corresponde ao aplicativo");

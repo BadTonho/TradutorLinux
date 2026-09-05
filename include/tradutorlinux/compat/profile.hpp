@@ -18,6 +18,16 @@ struct DllMapping {
     std::filesystem::path source;
 };
 
+enum class BackendKind {
+    Native,
+    Proton,
+};
+
+struct BackendSelection {
+    BackendKind kind{BackendKind::Native};
+    std::string min_version;
+};
+
 struct Profile {
     std::uint32_t schema{0};
     std::string app_id;
@@ -25,6 +35,8 @@ struct Profile {
     std::string app_version;
     std::vector<FileMapping> files;
     std::vector<DllMapping> dlls;
+    BackendSelection backend;
+    bool backend_declared{false};
 };
 
 enum class ProfileStatus {
