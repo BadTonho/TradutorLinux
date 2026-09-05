@@ -1114,6 +1114,31 @@ imports não encerra B5.
   (`TL_DLL_OVERRIDES`), definir precedência, isolamento e diagnóstico, e exigir
   alvo, fixture e regressão antes de permitir qualquer divergência específica
   por API.
+
+  Subetapas planejadas, na ordem:
+
+  1. **B14.1 — Contrato e layout.** Fixar a finalidade de `compat/`, o formato
+     mínimo de `profile.json`, a área `compat/files/`, a identificação por ID
+     do catálogo e o uso opcional de hash ou versão. Registrar também o
+     comportamento para perfil ausente, inválido ou incompatível.
+  2. **B14.2 — Descoberta e validação.** Criar a árvore do perfil no prefixo,
+     carregar o perfil somente para o aplicativo correspondente, validar
+     schema, identidade e caminhos, e emitir o resultado no trace. Nenhum
+     caminho poderá escapar de `compat/` ou de `drive_c`.
+  3. **B14.3 — Exposição controlada de arquivos.** Definir e implementar um
+     mecanismo explícito para que um arquivo de `compat/files/` seja visto pelo
+     convidado no caminho Windows declarado, com precedência, colisão,
+     permissões e limpeza documentadas. A pasta `compat/` não será exposta
+     automaticamente.
+  4. **B14.4 — Regras de comportamento condicionadas.** Somente se um alvo
+     real exigir, adicionar regras declarativas além dos arquivos, diferenciando
+     esse mecanismo de `TL_DLL_OVERRIDES`. Cada regra precisará de alvo,
+     justificativa, precedência, diagnóstico e regressão; código, scripts e
+     DLLs arbitrárias continuam proibidos.
+  5. **B14.5 — Integração e promoção.** Validar isolamento entre dois
+     aplicativos, fallback genérico, `--trace`, fixture de integração e matriz
+     de compatibilidade. A B14 só poderá ser marcada como concluída quando as
+     subetapas aplicáveis tiverem evidência reproduzível.
 - [x] **B15 — Drives do prefixo como symlinks ou mecanismo equivalente.** O
   prefixo cria `dosdevices/c:` → `../drive_c` e `dosdevices/z:` → `/`; a
   resolução de `C:` canoniza e confina o caminho ao `drive_c`, enquanto `Z:`
