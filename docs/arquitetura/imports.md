@@ -107,9 +107,10 @@ o caminho D3D11→DXVK/Vulkan em X11, sem alterar a resolução de imports do
 `GuestModuleGraph` e sem declarar suporte a D3D12, áudio, entrada ou jogos.
 
 A fixture `tl_d3d12_probe.exe` valida separadamente a inicialização e a
-submissão básica de comandos D3D12. `integration_proton_d3d12` usa a mesma
-seleção explícita de Proton e confirma o caminho D3D12→VKD3D-Proton/Vulkan,
-sem transformar essa prova mínima em suporte geral de D3D12 ou de jogos.
+submissão de comandos D3D12, a criação de uma swapchain flip de dois buffers
+e uma chamada `Present`. `integration_proton_d3d12` usa a mesma seleção
+explícita de Proton e confirma esse caminho D3D12→VKD3D-Proton/Vulkan, sem
+transformar a prova controlada em suporte geral de D3D12 ou de jogos.
 
 ## Fronteira de ABI (`ms_abi`)
 

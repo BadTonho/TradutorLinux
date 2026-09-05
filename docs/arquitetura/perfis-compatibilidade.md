@@ -193,9 +193,10 @@ dependem de alvos reproduzíveis próprios.
 
 O slice D3D12 é exercido separadamente por `tl_d3d12_probe.exe` e
 `integration_proton_d3d12`. A fixture cria dispositivo, fila, allocator,
-command list e fence, e confirma a sinalização da fila sob Proton Experimental.
-Isso valida somente a inicialização/submissão básica D3D12→VKD3D-Proton/Vulkan;
-não declara suporte a swap chains, D3D12 completo, áudio, entrada ou jogos.
+command list e fence, cria uma swapchain flip de dois buffers para uma janela
+e confirma `Present` sob Proton Experimental. Isso valida um caminho
+controlado D3D12→VKD3D-Proton/Vulkan, sem declarar suporte geral a D3D12,
+áudio, entrada ou jogos.
 
 ## Auditoria do 7-Zip — sem regra específica
 

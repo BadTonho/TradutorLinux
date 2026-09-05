@@ -8,10 +8,22 @@
     "d3d12.dll": [
       "D3D12CreateDevice"
     ],
+    "dxgi.dll": [
+      "CreateDXGIFactory2"
+    ],
     "KERNEL32.dll": [
       "ExitProcess",
+      "GetModuleHandleA",
       "GetStdHandle",
       "WriteFile"
+    ],
+    "USER32.dll": [
+      "CreateWindowExA",
+      "DefWindowProcA",
+      "DestroyWindow",
+      "RegisterClassA",
+      "ShowWindow",
+      "UnregisterClassA"
     ]
   }
 }

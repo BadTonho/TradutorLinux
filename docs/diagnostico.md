@@ -93,9 +93,11 @@ está ausente ou inválida:
 
 Para o slice D3D12, `integration_proton_d3d12` usa a fixture
 `tl_d3d12_probe.exe`. A saída esperada é `D3D12 command path ready` com exit
-code `0`; o teste confirma a criação do dispositivo, fila, command list e
-fence sob Proton Experimental. Essa validação cobre apenas a submissão básica
-D3D12→VKD3D-Proton/Vulkan, não swap chain, D3D12 completo, áudio ou entrada.
+code `0`; o teste confirma a criação do dispositivo, fila, command list,
+fence, swapchain flip de dois buffers e `Present` sob Proton Experimental.
+Essa validação cobre um caminho controlado D3D12→VKD3D-Proton/Vulkan, não
+D3D12 completo, áudio ou entrada. Em caso de rejeição da descrição da
+swapchain, a fixture escreve o HRESULT no stderr para diagnóstico.
 
 O componente `proton` pode ser selecionado com `--trace=proton` ou incluído
 em `--trace=proton,process`. Um backend solicitado sem launcher, componentes,
