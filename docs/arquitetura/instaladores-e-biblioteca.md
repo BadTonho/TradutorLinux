@@ -45,6 +45,12 @@ externos preservam o diretório original para localizar seus arquivos auxiliares
   `USERPROFILE` usam esse contexto. Isso é isolamento funcional de dados, não
   uma sandbox: `Z:` ainda representa o sistema de arquivos do hospedeiro.
 
+`initialize_prefix` materializa os drives como links explícitos dentro de
+`dosdevices`: `c:` aponta para `../drive_c` e `z:` aponta para `/`. A resolução
+canoniza caminhos `C:` e rejeita qualquer escape; o contrato é protegido por
+`PrefixTest.DriveLinksAreExplicitAndKeepCDriveConfined`. O link `Z:` permanece
+deliberadamente externo e nunca deve ser tratado como mecanismo de segurança.
+
 Em execuções diretas e em aplicativos cadastrados fora do `drive_c`, o processo
 filho usa o diretório do executável como diretório de trabalho. Assim, recursos
 auxiliares relativos (`Lang`, DLLs, ícones e configurações) são procurados ao

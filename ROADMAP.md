@@ -28,7 +28,7 @@ as referências nas fases não criem listas paralelas.
 - **Fase atual:** Fase 13 — compatibilidade ampla por portfólio.
 - **Próximo ciclo:** B2 fica estacionada até uma decisão de produto específica
   sobre tradução de interface; B6 e B9 continuam condicionadas a evidência
-  externa. B1, B8, B10 e B16 deste ciclo foram concluídas.
+  externa. B1, B8, B10, B15 e B16 deste ciclo foram concluídas.
 - **Último incremento:** a Fase 13.14 concluiu TLS genérico e a fixture
   reutilizável Worker/RSL. O caso comercial do Roblox continua como benchmark:
   imports resolvidos, mas execução interrompida em `RBXCRASH`/`ExitProcess 3`.
@@ -967,9 +967,9 @@ sobrescrita e com confinamento à raiz visual. O teste externo versionado
 `build/debug/tests/seven_zip_smoke` confirma a cópia e o encerramento normal;
 as demais operações do File Manager continuam limitadas.
 
-### Ciclo concluído — B1, B8, B10 e B16
+### Ciclo concluído — B1, B8, B10, B15 e B16
 
-B1, B8, B10 e B16 foram concluídas e validadas. B2 é uma trilha de produto separada
+B1, B8, B10, B15 e B16 foram concluídas e validadas. B2 é uma trilha de produto separada
 do runtime Win32 e fica estacionada até haver decisão explícita sobre tradução
 de interface. B6 e B9 permanecem condicionadas, respectivamente, à amostra
 comercial Worker/RSL e a evidência de outra aplicação para o unwind.
@@ -1046,10 +1046,13 @@ imports não encerra B5.
   por API/aplicativo. Definir configuração, precedência, isolamento e
   diagnóstico antes de permitir divergências específicas; exigir alvo e
   regressão para cada override.
-- [ ] **B15 — Drives do prefixo como symlinks ou mecanismo equivalente.**
-  Avaliar se o mapeamento atual de caminhos atende um alvo real antes de
-  expor letras de drive como links no host; preservar a rejeição de traversal
-  e documentar que prefixo não é sandbox.
+- [x] **B15 — Drives do prefixo como symlinks ou mecanismo equivalente.** O
+  prefixo cria `dosdevices/c:` → `../drive_c` e `dosdevices/z:` → `/`; a
+  resolução de `C:` canoniza e confina o caminho ao `drive_c`, enquanto `Z:`
+  representa explicitamente o sistema de arquivos externo e não é sandbox.
+  O fluxo de instalação e o shell visual do 7-Zip exercitam `Z:\...`; a
+  regressão `PrefixTest.DriveLinksAreExplicitAndKeepCDriveConfined` verifica os
+  links, a contenção e a rejeição de traversal.
 - [x] **B16 — Expectativas explícitas nos fixtures.** O argumento CMake
   `KNOWN_LIMITATION` vincula uma expectativa de rejeição à matriz de
   compatibilidade; `verify_known_limitation.cmake` falha se o fixture ou o

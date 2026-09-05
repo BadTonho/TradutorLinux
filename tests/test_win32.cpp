@@ -1087,6 +1087,35 @@ TEST(PrefixTest, RejectsPathsThatEscapeDriveC) {
     std::filesystem::remove_all(root);
 }
 
+TEST(PrefixTest, DriveLinksAreExplicitAndKeepCDriveConfined) {
+    const std::filesystem::path root = std::filesystem::temp_directory_path() /
+        ("tl-prefix-drives-" + std::to_string(static_cast<unsigned long long>(::getpid())));
+    ASSERT_TRUE(prefix::initialize_prefix(root));
+    const prefix::EnvironmentPaths paths = prefix::get_environment_paths(root);
+    const std::filesystem::path c_link = paths.dosdevices_dir / "c:";
+    const std::filesystem::path z_link = paths.dosdevices_dir / "z:";
+
+    ASSERT_TRUE(std::filesystem::is_symlink(c_link));
+    ASSERT_TRUE(std::filesystem::is_symlink(z_link));
+    EXPECT_EQ(std::filesystem::read_symlink(c_link), std::filesystem::path("../drive_c"));
+    EXPECT_EQ(std::filesystem::read_symlink(z_link), std::filesystem::path("/"));
+
+    const std::filesystem::path c_inside =
+        prefix::resolve_windows_path("C:\\Program Files\\fixture.exe", root);
+    ASSERT_FALSE(c_inside.empty());
+    EXPECT_TRUE(prefix::is_path_within(c_inside, paths.drive_c));
+    EXPECT_TRUE(prefix::resolve_windows_path("C:\\..\\outside.txt", root).empty());
+
+    const std::filesystem::path z_external =
+        prefix::resolve_windows_path("Z:\\tmp\\fixture.txt", root);
+    ASSERT_FALSE(z_external.empty());
+    EXPECT_EQ(std::filesystem::weakly_canonical(z_external),
+              std::filesystem::weakly_canonical(std::filesystem::path("/tmp/fixture.txt")));
+    EXPECT_FALSE(prefix::is_path_within(z_external, paths.drive_c));
+
+    std::filesystem::remove_all(root);
+}
+
 TEST(Win32DirTest, GetCurrentDirectoryAReturnsNonEmpty) {
     char buf[4096]{};
     const std::uint32_t needed = tl_GetCurrentDirectoryA(sizeof(buf), buf);
