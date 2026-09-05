@@ -29,6 +29,7 @@ Assim, um aplicativo pode ter `supported` na resolução de imports e continuar
 | `tl_echo.exe` | PE32+ AMD64 | Não | `KERNEL32.dll!ExitProcess`, `GetStdHandle`, `ReadFile`, `WriteFile` | Suportado no MVP: ecoa stdin para stdout com handles padrão | Fase 5 |
 | `tl_file.exe` | PE32+ AMD64 | Não | `KERNEL32.dll!CloseHandle`, `CreateFileA`, `ExitProcess`, `GetLastError`, `GetStdHandle`, `ReadFile`, `SetLastError`, `VirtualAlloc`, `VirtualFree`, `WriteFile` | Suportado no subconjunto da Fase 5: aloca memória e grava/reabre/lê arquivo relativo | Fase 6 |
 | `tl_compat_file.exe` | PE32+ AMD64 | Não | `KERNEL32.dll!CloseHandle`, `CreateFileA`, `ExitProcess`, `GetStdHandle`, `ReadFile`, `WriteFile` | Fixture B14.3/B14.5: `app run` copia um arquivo de `compat/files/` para `C:\\Program Files\\Compat Fixture`, lê e altera o destino, mantém a origem e remove o materializado ao terminar. A integração de isolamento executa dois IDs em prefixos independentes, com conteúdos distintos no mesmo destino Windows, e confirma trace, exit `0` e ausência de vazamento entre perfis | B14.5 |
+| `tl_compat_dll_app.exe` | PE32+ AMD64 | Não | `KERNEL32.dll!LoadLibraryA`, `GetProcAddress`, `FreeLibrary`, `ExitProcess`; DLLs da fixture importam `KERNEL32.dll` e `compatdep.dll` | **Suportado no contrato B14.4:** o perfil v2 seleciona `compat.dll` e sua dependência PE32+ `compatdep.dll` em `compat/dlls/`; as DLLs são mapeadas sem cópia para `drive_c`, executam TLS/`DllMain`, resolvem imports genéricos e são descarregadas em ordem. A integração executa dois IDs/prefixos com variantes A/B, confirma isolamento, fontes preservadas, trace completo, fallback por export e exit `0`; perfil ausente, v1, DLL ausente ou provider rejeitado retornam ao comportamento genérico | B14.4 |
 | `tl_virtual_query.exe` | PE32+ AMD64 | Não | `KERNEL32.dll!VirtualAlloc`, `VirtualFree`, `VirtualProtect`, `VirtualQuery`, console e `ExitProcess` | Fixture de contrato: distingue reserva de commit, preserva `AllocationBase`/`AllocationProtect`, separa as duas páginas após proteger apenas a primeira e consulta a faixa liberada como `MEM_FREE`; imprime `virtual-query\n`, exit `0`. Metadata, `--report` e execução são regressões CTest | B12 |
 | `tl_gui.exe` | PE32+ AMD64 | Não | `KERNEL32.dll!ExitProcess`, `USER32.dll!MessageBoxA` | Protótipo manual: caixa modal X11 mínima; não executado automaticamente por depender de display | Fase 7 |
 | `tl_win.exe` | PE32+ AMD64 | Não | `KERNEL32.dll!ExitProcess`, `USER32.dll!RegisterClassExA`, `CreateWindowExA`, `ShowWindow`, `UpdateWindow`, `GetMessageA`, `TranslateMessage`, `DispatchMessageA`, `DefWindowProcA`, `DestroyWindow`, `PostQuitMessage` | Janela real com message loop X11; fecha via `WM_CLOSE`/autoclose; teclado via `WM_KEYDOWN`/`WM_CHAR`; executado automaticamente sob Xvfb (teste `runtime_gui_smoke`, cenários autoclose, `WM_DELETE_WINDOW` e `KeyPress 'q'`) | Fase 7 |
@@ -160,6 +161,25 @@ Comportamento de rejeição:
 Em qualquer falha o entry point não é executado e todas as entradas são reportadas no trace (ver `docs/diagnostico.md`).
 
 **Forwarders e API Sets (inspirado em Wine `dlls/*/*.spec`):** `KERNELBASE.dll` encaminha para `KERNEL32.dll`; `api-ms-win-*` e `ext-ms-win-*` encaminham para o provedor real (`KERNEL32`, `USER32`, `GDI32`, `ADVAPI32`, `WS2_32`, `SHELL32`, `ole32`, `SHLWAPI`, `version`, `WINMM`, `COMCTL32`, `COMDLG32`, `IMM32`, `PSAPI`, `msvcrt`) — ver `src/loader/module.cpp:52` (`is_api_set_dll`/`is_kernelbase_dll`/`find_export_forwarded`). Falha de símbolo em API Set vira `unknown-symbol`, não `unknown-dll`.
+
+### Extensões de DLL por aplicativo (B14.4)
+
+Perfis v2 podem declarar DLLs PE32+ AMD64 em `compat/dlls/`. A fixture
+`tl_compat_dll_app.exe` e o teste `integration_compat_dll_profile` exercitam o
+contrato com uma DLL personalizada, uma dependência PE, exports, imports para
+`KERNEL32.dll`, TLS callback, `DllMain`, `LoadLibrary`, `GetProcAddress` e
+`FreeLibrary`. O mesmo destino é testado com duas variantes em prefixos
+independentes; cada execução recebe somente o provider do seu perfil e a fonte
+permanece em `compat/dlls/`.
+
+O provider do perfil precede uma DLL PE existente em `drive_c`, que precede o
+provider genérico interno. A precedência também vale por export: um símbolo
+ausente na extensão pode ser resolvido pelo provider seguinte. Provider
+personalizado ausente, inválido, com import não resolvido, dependência ausente,
+ciclo ou attach rejeitado é descartado inteiro e usa fallback quando houver.
+Uma falha depois do attach é falha do convidado e não vira fallback silencioso.
+`compat/` não é pesquisada nem copiada para `drive_c`, e `--report` não carrega
+essas DLLs; o diagnóstico contextual ocorre em `app run --trace`.
 
 ## APIs de console (Fase 4)
 
@@ -356,7 +376,7 @@ Contratos de ABI em `docs/arquitetura/msvcrt.md` e
 | `KERNEL32.dll` | `RaiseException` / `RtlUnwind` / `RtlUnwindEx` | Suportado no SEH explícito | Captura contexto, busca `.pdata/.xdata` V1/V2 fora de epílogo, chama handlers estáticos e transfere sem retorno ao contexto convidado selecionado. |
 | `KERNEL32.dll` | `GetModuleHandleA/W` | Suportado | Retorna handle `0x1000` para módulos registrados (inclui `api-ms-win-*`/`KERNELBASE` via forwarders, extração de filename de caminhos `C:\...`), `NULL` + `ERROR_FILE_NOT_FOUND` caso contrário; `W` converte via `wide_to_utf8` |
 | `KERNEL32.dll` | `GetModuleHandleExA/W` | Suportado | Flags `PIN`/`UNCHANGED_REFCOUNT`/`FROM_ADDRESS`; `FROM_ADDRESS` aceita `0x1000` ou endereço dentro da imagem (`g_guest_image_base/size`); valida `phModule` via `mapped_guest_range`; erro `ERROR_INVALID_PARAMETER`/`FILE_NOT_FOUND` |
-| `KERNEL32.dll` | `LoadLibraryA/W` / `LoadLibraryExA/W` | Suportado | Normaliza caminho (filename após `\/:`), case-insensitive, adiciona `.dll`; verifica `is_module_registered_forwarded`; retorna `0x1000` ou `NULL` + `ERROR_MOD_NOT_FOUND` (126); `Ex` ignora `hFile`/`flags` |
+| `KERNEL32.dll` | `LoadLibraryA/W` / `LoadLibraryExA/W` | Suportado no subconjunto | No `app run`, usa o grafo por execução e a precedência perfil → `drive_c` → genérico; no caminho legado usa módulos internos; normaliza filename case-insensitive e adiciona `.dll`; retorna `ERROR_MOD_NOT_FOUND` (126) quando ausente; `Ex` ignora `hFile`/`flags` |
 | `KERNEL32.dll` | `FreeLibrary` | Suportado | Aceita `0x1000` ou base do exe; `NULL`/inválido → `0` + `ERROR_INVALID_HANDLE` |
 | `KERNEL32.dll` | `GetProcAddress` | Suportado | Busca global (`find_export_global`); suporta ordinal via `MAKEINTRESOURCE` (`addr<=0xFFFF` → `find_export_by_ordinal_global`); valida `proc_name` e `module` (`NULL` permitido); `ERROR_PROC_NOT_FOUND` (127) ou `ERROR_INVALID_HANDLE` |
 | `KERNEL32.dll` | `GetVersionExA/W` | Suportado | Reporta Windows 10 (10.0.19044, `VER_PLATFORM_WIN32_NT=2`, `szCSDVersion` zero, `wServicePackMajor/Minor=0`, `wSuiteMask=0`, `wProductType=1`); valida `lpVersionInformation` e `dwOSVersionInfoSize` (A:148/156, W:276/284); `ERROR_INVALID_PARAMETER` em ponteiro/size inválido |

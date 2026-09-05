@@ -41,7 +41,7 @@ O resolvedor emite um evento `resolved` por importação resolvida (`dll`,
 `import` para a tabela estática e `delay-import` para a tabela atrasada:
 
 ```text
-[tl][imports][info] resolved dll="KERNEL32.dll" symbol="WriteFile" address="0x..." mechanism="import"
+[tl][imports][info] resolved dll="KERNEL32.dll" symbol="WriteFile" address="0x..." mechanism="import" provider="builtin"
 ```
 
 As chamadas de console são registradas pelo componente `runtime` com os
@@ -74,6 +74,44 @@ desfazer uma cópia parcial gera `status="rollback-failed"` e interrompe a
 execução por segurança. A limpeza ocorre depois do processo convidado; um
 arquivo substituído ou um diretório que ficou não vazio é preservado.
 `compat/` não é exposta automaticamente ao convidado.
+
+## Eventos do grafo de DLLs por perfil
+
+Quando `app run --trace` usa um perfil v2, o componente `loader` registra o
+provider escolhido e o ciclo de vida das DLLs PE32+ AMD64. Os eventos usam
+`module` normalizado e, quando aplicável, `provider` com `profile`, `drive_c`
+ou `builtin`:
+
+```text
+[tl][loader][info] dll-found module="compat.dll" provider="profile"
+[tl][loader][info] dll-mapped module="compat.dll" provider="profile"
+[tl][loader][info] provider-selected module="compat.dll" provider="profile"
+[tl][loader][info] import-resolved module="KERNEL32.dll" provider="builtin"
+[tl][loader][info] fallback-export module="compat.dll" provider="drive_c" detail=""
+[tl][loader][info] tls-callback module="compat.dll" detail="process-attach"
+[tl][loader][info] dll-attach module="compat.dll" provider="profile"
+[tl][loader][info] module-refcount module="compat.dll" detail="0"
+[tl][loader][info] dll-detach module="compat.dll" provider="profile"
+[tl][loader][info] dll-unload module="compat.dll" provider="profile"
+```
+
+Os eventos `dll-found`, `dll-mapped`, `provider-selected` e `import-resolved`
+identificam descoberta, mapeamento, provider efetivo e importação resolvida.
+`fallback-export` identifica a continuação de uma exportação ausente no
+provider anterior. `tls-callback`, `dll-attach`, `dll-detach` e
+`dll-unload` mostram a ordem de ciclo de vida; `module-refcount` mostra a soma
+das referências estáticas e dinâmicas. Dependência ausente, ciclo, arquivo
+inválido, import não resolvido ou falha de `DllMain` em uma DLL do perfil usam
+`provider-rejected`, com o motivo em `detail`, e descartam o provider inteiro
+antes de executar o entry point. O runtime então registra o provider de
+fallback quando houver um.
+
+O loader não registra nem expõe a pasta `compat/` ao convidado. Não há evento
+de descoberta automática: dependências de DLLs nessa pasta também precisam ser
+declaradas no `dlls[]`. O código PE personalizado roda com os privilégios do
+processo filho; uma falha depois do attach é `guest-signal`, `guest-fault` ou
+outro erro da execução, sem fallback silencioso. `--report` permanece
+inalterado e não carrega DLLs do perfil.
 
 A partir do diagnóstico de falhas, o convidado executa em um processo filho
 isolado (`fork`/`waitpid`). O processo hospedeiro prepara o PE, o mapeamento e

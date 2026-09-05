@@ -11,7 +11,8 @@ o comportamento de outro aplicativo.
 ├── drive_c/       # arquivos reais visíveis como C:\
 └── compat/
     ├── profile.json
-    └── files/     # fontes dos arquivos auxiliares
+    ├── files/     # fontes dos arquivos auxiliares
+    └── dlls/      # DLLs PE32+ explicitamente declaradas pelo perfil
 ```
 
 `compat/` não é um drive Windows e não fica visível automaticamente ao
@@ -46,19 +47,69 @@ runtime valida como pertencente a `drive_c`.
 A v1 aceita somente esses campos. Não aceita regras de API, comandos, scripts,
 DLLs arbitrárias ou outros mecanismos executáveis.
 
-## Auditoria B14.4 — 7-Zip
+## Formato v2 e extensões de DLL
+
+A v2 mantém todos os campos da v1 e acrescenta `dlls`. Perfis v1 continuam
+válidos e não carregam DLLs personalizadas:
+
+```json
+{
+  "schema": 2,
+  "app_id": "meu-aplicativo",
+  "files": [],
+  "dlls": [
+    {
+      "module": "compat.dll",
+      "source": "compat.dll"
+    }
+  ]
+}
+```
+
+Cada `module` é um nome lógico normalizado sem distinção entre maiúsculas e
+minúsculas; a extensão `.dll` é acrescentada quando ausente. Cada `source` é
+relativo a `compat/dlls/`, sem traversal, symlink ou arquivo não regular. Não
+há descoberta automática: uma DLL só pode ser escolhida se houver uma entrada
+explícita no manifesto. A fonte permanece nessa área e nunca é copiada para
+`drive_c`.
+
+Durante `app run`, a resolução usa esta precedência por módulo e por export:
+
+1. DLL PE32+ AMD64 declarada no perfil;
+2. DLL PE32+ encontrada no `drive_c` do mesmo prefixo;
+3. implementação genérica interna do runtime.
+
+Uma DLL personalizada pode fornecer apenas parte dos exports. Exports ausentes
+continuam procurando o provider seguinte. Um provider de perfil ausente,
+inválido, com imports não resolvidos, ciclo ou attach rejeitado é descartado
+inteiro antes de executar código dependente, e o provider seguinte é usado
+quando existir. Falha produzida pelo código da DLL depois do attach não recebe
+fallback silencioso e é tratada como falha do convidado.
+
+O loader mantém um grafo por execução, sem estado compartilhado entre prefixos.
+Ele mapeia DLLs PE32+ AMD64, aplica relocations, valida exports por nome,
+ordinal e forwarder, resolve imports estáticos e delay imports com política
+eager e controla `LoadLibrary`, `GetProcAddress`, `FreeLibrary`, referências,
+TLS callbacks e `DllMain`. A ordem de attach percorre dependências antes do
+módulo dependente; detach e unload seguem a ordem inversa. DLLs de perfil são
+código executável com os privilégios do runtime: não existe sandbox, assinatura
+ou verificação de hash nesta versão, e bibliotecas Linux, scripts e campos de
+regras declarativas continuam proibidos.
+
+## Auditoria do 7-Zip — sem regra específica
 
 O 7-Zip 24.08 foi auditado como alvo real após a implementação da B14.3. Não
 foi encontrada uma necessidade reproduzível de comportamento adicional no
 perfil: os arquivos auxiliares cobertos pela B14.3 são suficientes para a
 necessidade identificada. Por isso, a v1 não possui campo `rules` e a B14.4
-permanece adiada.
+não adiciona regras condicionais para o 7-Zip. A extensão de DLL da B14.4 é um
+mecanismo geral de perfil; ela não altera o tratamento específico do 7-Zip.
 
 O tratamento da classe `7-Zip::FM` continua pertencendo ao shell GUI
 experimental, separado dos perfis. `TL_7ZFM_COPY_DESTINATION` é um hook de
-teste e não uma configuração de perfil. Uma futura reabertura exigirá um alvo,
-comportamento, justificativa, precedência, isolamento, diagnóstico, fixture e
-regressão reproduzíveis.
+teste e não uma configuração de perfil. Uma futura regra específica exigirá um
+alvo, comportamento, justificativa, precedência, isolamento, diagnóstico,
+fixture e regressão reproduzíveis.
 
 ## Fallback e diagnóstico
 
@@ -130,8 +181,10 @@ a preservação das duas fontes, a remoção dos dois destinos e a ausência de
 e limpeza para cada ID.
 
 Em conjunto com `integration_compat_profile`, que cobre perfil carregado,
-ausente e inválido, essa integração confirma que a rejeição do perfil mantém o
-fallback genérico, preserva o exit code do convidado e não permite vazamento
-de dados entre aplicativos ou prefixos. Esses testes são a evidência
-reproduzível para a promoção da B14; a B14.4 continua adiada por não haver
-regra declarativa necessária.
+ausente e inválido, e `integration_compat_dll_profile`, que cobre a fixture
+`tl_compat_dll_app.exe`, duas DLLs personalizadas, dependência, TLS, attach,
+detach, fallback por provider e isolamento, essa integração confirma que a
+rejeição do perfil mantém o fallback genérico, preserva o exit code do
+convidado e não permite vazamento de dados entre aplicativos ou prefixos. O
+7-Zip continua sem regra declarativa específica; a B14.4 trata apenas da
+extensão PE documentada acima.

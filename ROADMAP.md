@@ -972,30 +972,18 @@ marcam itens condicionais como concluídos; definem os gates para retomá-los.
   como estão os codepages já exigidos pelo portfólio (`0`, `1252`, `437` e
   `65001`). A extração para dados gerados só será feita quando um alvo exigir
   outra página, com fonte versionada e testes de conversão e erro.
-- **B14 e overrides — opção 1 confirmada pelo usuário em 2026-09-05:** manter
-  adiada a implementação de comportamentos divergentes por aplicativo.
-  `TL_DLL_OVERRIDES` continua sendo um mecanismo técnico de override de DLL.
-  Foi aprovada como proposta a pasta `compat/` dentro de cada prefixo, separada
-  de `drive_c`, para guardar perfil e arquivos auxiliares específicos do
-  aplicativo. A proposta não autoriza ainda overrides por API nem código,
-  scripts ou DLLs arbitrárias; isso só será reaberto com contrato, alvo,
-  configuração, precedência, isolamento, diagnóstico e regressão definidos.
-- **B14.4 — auditoria do 7-Zip confirmada pelo usuário em 2026-09-05:** o
-  7-Zip 24.08 não apresentou uma necessidade reproduzível de regra adicional
-  no perfil além dos arquivos auxiliares já cobertos pela B14.3. O tratamento
-  da classe `7-Zip::FM` permanece no shell GUI experimental, e
-  `TL_7ZFM_COPY_DESTINATION` permanece somente como hook de teste; a B14.4
-  continua adiada e não adiciona regras declarativas ao `profile.json`.
-- **B14.4 reaberta pelo usuário em 2026-09-05:** a visão de longo prazo é uma
-  arquitetura híbrida, com DLLs genéricas internas como base e DLLs PE32+
-  personalizadas por aplicativo como extensões distribuíveis por usuários ou
-  pela comunidade. A extensão deverá ser selecionada pelo perfil e isolada por
-  aplicativo/prefixo, com precedência e fallback definidos por módulo ou
-  export. A nova etapa deverá especificar o carregamento de DLLs PE, imports,
-  relocations, exports, dependências, ABI, diagnóstico, confiança e regressões.
-  Não será permitido carregar bibliotecas Linux, scripts ou código nativo
-  arbitrário a partir do perfil; DLLs PE convidadas continuam executando com as
-  permissões do runtime, que não é sandbox.
+- **B14 e extensões por aplicativo — decisão confirmada pelo usuário em
+  2026-09-05:** manter as DLLs genéricas internas como fallback e permitir
+  extensões PE32+ AMD64 selecionadas explicitamente por perfil, isoladas por
+  aplicativo e prefixo. `TL_DLL_OVERRIDES` continua separado do mecanismo de
+  perfis. Não são aceitos bibliotecas Linux, scripts ou código nativo arbitrário
+  no perfil; DLLs PE convidadas executam com os privilégios do runtime, que não
+  é sandbox.
+- **Auditoria do 7-Zip — decisão preservada em 2026-09-05:** o 7-Zip 24.08 não
+  apresentou uma necessidade reproduzível de regra condicional além dos
+  arquivos auxiliares da B14.3. A extensão geral de DLL não cria regra
+  específica para o 7-Zip; `7-Zip::FM` continua no shell GUI experimental e
+  `TL_7ZFM_COPY_DESTINATION` continua somente hook de teste.
 - **Backend Proton — decisão confirmada pelo usuário em 2026-09-05:** registrar
   o Proton como backend opcional do aplicativo, sem reimplementá-lo do zero e
   sem substituir o runtime próprio. O backend será selecionado por aplicativo,
@@ -1130,15 +1118,16 @@ imports não encerra B5.
   embutidas para dados gerados de fonte pública somente quando um aplicativo
   exigir outra página além de CP 0/1252/437/65001; versionar a fonte e testar
   conversões e erros.
-- [ ] **B14 — Perfil de compatibilidade por aplicativo e overrides
+- [x] **B14 — Perfil de compatibilidade por aplicativo e extensões
   condicionados.** Cada prefixo poderá ter uma área `compat/` ao lado de
   `drive_c`: `drive_c` mantém os arquivos reais do convidado, enquanto
   `compat/` guarda os arquivos auxiliares e o perfil do TradutorLinux daquele
   aplicativo, por exemplo `compat/profile.json` e `compat/files/`. O perfil
   deverá ser selecionado pelo ID estável do catálogo, com hash ou versão
   opcional quando necessário, e poderá declarar somente recursos validados,
-  como arquivos, DLLs PE32+ personalizadas após a B14.4 e a seleção de backend
-  Proton após a B14.6. A pasta não será automaticamente visível ao aplicativo.
+  como arquivos e DLLs PE32+ personalizadas. A seleção de backend Proton
+  permanece planejada separadamente na B14.6. A pasta não será automaticamente
+  visível ao aplicativo.
   Bibliotecas Linux, scripts e código nativo arbitrário continuarão proibidos;
   DLLs PE convidadas exigirão isolamento por prefixo, precedência, fallback,
   diagnóstico e validação próprios. Sem extensão aplicável, usa-se o
@@ -1146,7 +1135,7 @@ imports não encerra B5.
   existente (`TL_DLL_OVERRIDES`) e exigir alvo, fixture e regressão antes de
   permitir qualquer divergência específica por API.
 
-  Subetapas planejadas, na ordem:
+  Subetapas executadas, na ordem:
 
   1. [x] **B14.1 — Contrato e layout.** O contrato v1 está documentado em
      `docs/arquitetura/perfis-compatibilidade.md`. Cada prefixo cria `compat/`
@@ -1171,18 +1160,21 @@ imports não encerra B5.
      novos do convidado. A fixture `tl_compat_file.exe`, os testes unitários,
      o trace e a integração reproduzem cópia, colisão, rollback e limpeza. A
      pasta `compat/` não é exposta automaticamente.
-  4. [ ] **B14.4 — Extensões de DLL por aplicativo (reaberta).** A auditoria
-     do 7-Zip 24.08 continua sem necessidade de regra declarativa específica,
-     mas a visão geral do produto agora exige uma arquitetura híbrida: DLLs
-     genéricas internas permanecem como base e DLLs PE32+ personalizadas podem
-     ser fornecidas por perfil para um aplicativo. A etapa deverá definir o
-     formato em `compat/`, carregamento de DLL PE, imports, relocations,
-     exports, dependências, ABI, precedência por módulo/export, fallback para a
-     implementação genérica, diagnóstico, confiança e regressões. Não haverá
-     carregamento de bibliotecas Linux, scripts ou código nativo arbitrário; a
-     B14.4 só poderá ser concluída com aplicativo-alvo, fixture e integração
-     reproduzíveis. O tratamento da classe `7-Zip::FM` continua separado no
-     shell GUI experimental.
+  4. [x] **B14.4 — Extensões de DLL por aplicativo.** O schema v2 mantém
+     perfis v1 válidos e permite apenas mapeamentos explícitos de módulos PE32+
+     AMD64 para `compat/dlls/`, sem descoberta automática, scripts ou
+     bibliotecas Linux. O `GuestModuleGraph` é privado por execução e aplica
+     relocations, W^X, exports por nome/ordinal/forwarder, imports estáticos e
+     delay imports eager, dependências, TLS, `DllMain`, `LoadLibrary`,
+     `GetProcAddress`, `FreeLibrary`, refcounts, ciclos e unload determinístico.
+     A precedência é perfil → `drive_c` → genérico, inclusive por export; um
+     provider inválido ou com attach rejeitado é descartado inteiro e usa
+     fallback disponível. A fixture PE32+ `tl_compat_dll_app.exe`, suas duas
+     variantes, a dependência `compatdep.dll`, TLS callback e a integração
+     `integration_compat_dll_profile` reproduzem execução, fallback, isolamento,
+     fonte preservada, ausência de cópia em `drive_c`, trace e exit code.
+     A auditoria do 7-Zip continua sem regra específica e permanece separada
+     do mecanismo geral.
   5. [x] **B14.5 — Integração e promoção.** A integração
      `integration_compat_profile_isolation` reutiliza `tl_compat_file.exe` com
      dois IDs de catálogo e dois prefixos independentes. Perfis com conteúdos
@@ -1193,9 +1185,8 @@ imports não encerra B5.
      ausente e inválido com fallback genérico, trace e exit code preservado.
      A matriz de compatibilidade foi atualizada. Com as subetapas aplicáveis
      validadas por testes reproduzíveis, a base de perfis foi integrada e
-     promovida. A conclusão da B14 como um todo aguarda a B14.4 reaberta; até
-     lá, o runtime continua usando somente o contrato v1 de arquivos auxiliares
-     e o comportamento genérico quando não houver extensão aplicável.
+     promovida; o runtime usa comportamento genérico quando não houver extensão
+     aplicável.
   6. [ ] **B14.6 — Backend Proton opcional.** Integrar uma distribuição Proton
      versionada como backend separado para aplicativos que exigem uma camada
      Win32/DirectX maior que o subconjunto próprio, mantendo o runtime

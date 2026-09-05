@@ -5,11 +5,11 @@ Este documento descreve o contrato do resolvedor de imports, o registro de módu
 ## Visão geral
 
 1. `pe::parse_pe` lê a import table em `PeInfo::imports` e a delay import table em `PeInfo::delay_imports`. Ambas entregam DLLs com símbolos por nome ou ordinal e o RVA do slot correspondente na IAT (`ImportedSymbol::iat_rva`).
-2. `loader::prepare_process` mapeia a imagem (`map_image`), resolve os imports (`resolve_imports`) e prepara a pilha do thread inicial.
+2. `loader::prepare_process` mapeia a imagem (`map_image`), resolve os imports (`resolve_imports`) e prepara a pilha do thread inicial. Em `app run`, a resolução usa um `GuestModuleGraph` privado da execução para incluir providers de DLL do perfil.
 3. `inspect_imports` classifica as duas tabelas sem alterar a imagem; `--report` usa esse resultado. Para cada símbolo resolvido, `resolve_imports` grava o endereço do export no slot da IAT (`write_image_bytes`), relaxando e restaurando as permissões das páginas cobertoras.
 4. Se qualquer importação falhar, o status geral da resolução falha, o entry point não é executado e o runtime retorna `5` (`Unsupported`).
 
-O registro de módulos é populado por `loader::register_builtin_modules()` antes do `prepare_process`. O CLI o chama automaticamente; os testes de unidade controlam o registro explicitamente (`register_module`/`clear_modules`).
+O registro de módulos genéricos é populado por `loader::register_builtin_modules()` antes do `prepare_process`. O CLI o chama automaticamente; os testes de unidade controlam o registro explicitamente (`register_module`/`clear_modules`). O grafo de DLLs PE não é global: cada execução cria seu próprio `GuestModuleGraph`, que consulta o perfil, `drive_c` e os módulos genéricos sem compartilhar handles ou imagens entre prefixos.
 
 ## Registro de módulos internos
 
@@ -40,6 +40,49 @@ Os módulos internos registram exports com ordinais internos definidos pelo proj
 | `WININET.dll` | HTTPS direto de loopback com CA fornecida pelo host |
 | `WINTRUST.dll` | `WinVerifyTrust` com cadeia DER explícita `TLTC` e `WTHelper*` para consultar o estado criado pela verificação |
 | `CRYPT32.dll` | `CertGetNameStringW` para nomes em blob X.509 DER |
+
+## Grafo de módulos PE por execução
+
+Quando `app run` recebe um perfil v2, `GuestModuleGraph` mantém a árvore de
+DLLs PE32+ AMD64 carregada naquela execução. Cada nó registra a imagem mapeada,
+`PeInfo` com imports/exports, base, provider, contagens de referências,
+dependências e estado de carregamento. O grafo pertence ao `GuestContext` e é
+descartado ao terminar; não há handles, imagens ou contagens compartilhados
+entre prefixos.
+
+Para cada módulo, o loader tenta os providers nesta ordem:
+
+1. mapeamento explícito do perfil em `compat/dlls/`;
+2. arquivo PE regular encontrado no diretório do módulo dentro de `drive_c`,
+   depois `C:\Windows\System32`, `C:\Windows` e a raiz de `C:`;
+3. export da implementação genérica registrada internamente.
+
+A DLL do perfil não é descoberta pela listagem da pasta: inclusive suas
+dependências precisam estar no manifesto para usar `compat/dlls/`. O loader
+valida PE32+ AMD64, limites de seções e diretórios, aplica base relocations,
+preserva W^X e resolve imports estáticos e delay imports eager antes do attach.
+Exports são consultados por nome ou ordinal; forwarders `DLL.Funcao` e
+`DLL.#ordinal` percorrem o mesmo grafo, com detecção de ciclos e limite de
+profundidade.
+
+Se o export não existir no provider personalizado, a consulta continua no
+provider de `drive_c` e depois no genérico. Se o arquivo personalizado for
+ausente, inválido, tiver import não resolvido, dependência ausente, ciclo ou
+falhar no attach, ele é rejeitado inteiro antes do entry point e a resolução
+recomeça com o fallback disponível. Uma falha posterior causada pelo código
+da DLL já anexada é uma falha do convidado, sem fallback silencioso.
+
+O ciclo de vida suporta imports estáticos e `LoadLibrary`/`GetProcAddress`/
+`FreeLibrary`, com handle específico, refcount e unload quando não restarem
+dependências. O attach chama dependências, TLS callbacks e `DllMain` em ordem
+determinística; o detach chama `DllMain`, TLS callbacks e descarrega
+dependências em ordem reversa. Falha de attach desfaz módulos e referências
+parciais. `DLL_THREAD_ATTACH` e `DLL_THREAD_DETACH` são encaminhados às threads
+convidadas. Delay imports continuam eager; carregamento lazy não é declarado.
+
+As DLLs personalizadas são código PE executado com os privilégios do processo
+filho. Esta camada não é sandbox, não verifica assinatura/hash e não carrega
+bibliotecas Linux, scripts ou código nativo fora de uma imagem PE32+ AMD64.
 
 ## Fronteira de ABI (`ms_abi`)
 
@@ -139,9 +182,9 @@ O resolvedor reporta **todas** as entradas: para cada uma, um `ResolvedImport` c
   `find_export_forwarded`, incluindo cadeias de múltiplos saltos e destino por
   ordinal. API Sets continuam sendo aliases de módulo separados de forwarders
   textuais; ciclos, destinos ausentes e profundidade acima de 32 falham de
-  forma controlada. Para carregamento dinâmico, `GetProcAddress` ainda usa a
-  busca global (`find_export_global`) e suporta ordinais via `MAKEINTRESOURCE`;
-  não há identidade de DLL por handle nesta etapa.
+  forma controlada. No grafo de `app run`, `GetProcAddress` usa o handle
+  específico e suporta ordinais via `MAKEINTRESOURCE`; a busca global fica
+  somente no caminho legado sem DLLs PE do perfil.
 - `RtlUnwind`, `RtlUnwindEx`, `RaiseException`, VEH,
   `UnhandledExceptionFilter` e `__C_specific_handler` são exports funcionais
   somente para despacho SEH explícito da imagem ativa: `__try/__except`, V1/V2
@@ -151,7 +194,14 @@ O resolvedor reporta **todas** as entradas: para cada uma, um `ResolvedImport` c
 
 ### Carregamento dinâmico (Fase 12+)
 
-`KERNEL32.dll!LoadLibraryA/W`/`LoadLibraryExA/W`, `FreeLibrary`, `GetModuleHandleA/W`/`GetModuleHandleExA/W` e `GetProcAddress` estão implementados sobre o mesmo registro (`loader::register_builtin_modules`). `LoadLibrary` normaliza o nome (filename após `\/:` , case-insensitive, `+ ".dll"`), aceita caminhos `C:\` e API Sets `api-ms-win-*`/`KERNELBASE` via `is_module_registered_forwarded`; `GetProcAddress` valida `proc_name` (string ou ordinal `<=0xFFFF`) e `module` (`0x1000` ou base do exe), retornando `ERROR_PROC_NOT_FOUND` (127) ou `ERROR_INVALID_HANDLE` conforme contrato. A fixture `tl_dynload.exe` protege o fluxo `LoadLibrary→GetProcAddress→call→FreeLibrary→GetModuleHandleEx`.
+`KERNEL32.dll!LoadLibraryA/W`/`LoadLibraryExA/W`, `FreeLibrary`, `GetModuleHandleA/W`/`GetModuleHandleExA/W` e `GetProcAddress` usam o `GuestModuleGraph` quando a execução foi criada por `app run`. `LoadLibrary` normaliza o nome (filename após `\/:`, case-insensitive, adicionando ".dll"), procura o provider do perfil, `drive_c` ou o módulo genérico, incrementa a referência e executa attach. `GetProcAddress` usa o handle específico do módulo, aceita nome ou ordinal `<=0xFFFF` e ainda permite fallback por export conforme a política do grafo. `FreeLibrary` decrementa a referência e descarrega somente quando não há referências estáticas, dinâmicas ou dependências.
+
+Sem `GuestModuleGraph`, o caminho legado continua restrito às implementações
+genéricas registradas por `loader::register_builtin_modules`. A fixture
+`tl_dynload.exe` protege o fluxo genérico
+`LoadLibrary→GetProcAddress→call→FreeLibrary→GetModuleHandleEx`; a fixture
+`tl_compat_dll_app.exe` protege o fluxo de DLL PE do perfil, incluindo
+dependência, TLS, attach/detach e isolamento entre prefixos.
 
 Antes da execução, o processo valida que o entry point está dentro de uma seção
 `r-x`. A pilha inicial possui uma guard page e é instalada no contexto Microsoft
