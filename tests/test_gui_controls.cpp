@@ -4,6 +4,7 @@
 #include <gtest/gtest.h>
 
 #include <chrono>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <string>
@@ -644,6 +645,50 @@ TEST_F(SevenZipDirectoryRowsTest, SevenZipPanelAddressBarNavigatesWithinVisualRo
     EXPECT_TRUE(parent.address_editing);
     EXPECT_TRUE(parent.address_error);
     EXPECT_EQ(parent.visual_directory, directory_ / "Folder");
+    g_windows = {};
+}
+
+TEST_F(SevenZipDirectoryRowsTest, SevenZipCopyCommandCopiesSelectedFileInsideRoot) {
+    std::ofstream source(directory_ / "selected.txt");
+    source << "7-Zip flow";
+    source.close();
+    ASSERT_TRUE(source);
+    ASSERT_TRUE(std::filesystem::create_directory(directory_ / "output"));
+    ASSERT_EQ(::setenv("TL_7ZFM_COPY_DESTINATION", (directory_ / "output").c_str(), 1), 0);
+
+    g_windows = {};
+    WindowSlot& parent = g_windows[0];
+    parent.used = true;
+    parent.class_name = "7-Zip::FM";
+    parent.width = 800;
+    parent.height = 600;
+    parent.visual_root_directory = directory_;
+    parent.visual_directory = directory_;
+    parent.list_selection = 2;
+
+    WindowSlot& toolbar = g_windows[1];
+    toolbar.used = true;
+    toolbar.is_control = true;
+    toolbar.control_kind = ControlKind::Toolbar;
+    toolbar.parent = &parent;
+    toolbar.visible = true;
+    toolbar.toolbar_buttons = {{546}};
+
+    WindowSlot* focused = nullptr;
+    handle_control_mouse(parent, std::span<WindowSlot>{g_windows}, focused,
+                         gui::WindowEvent{gui::WindowEventType::Press, 20, 45});
+    handle_control_mouse(parent, std::span<WindowSlot>{g_windows}, focused,
+                         gui::WindowEvent{gui::WindowEventType::Release, 20, 45});
+
+    std::ifstream copied(directory_ / "output" / "selected.txt");
+    const std::string copied_contents{std::istreambuf_iterator<char>{copied}, {}};
+    EXPECT_EQ(copied_contents, "7-Zip flow");
+    EXPECT_EQ(parent.last_operation_status, "Copiado: selected.txt");
+    ASSERT_EQ(parent.queued_messages.size(), 1U);
+    EXPECT_EQ(parent.queued_messages.front().message, abi::kWmCommand);
+    EXPECT_EQ(parent.queued_messages.front().wparam & 0xFFFFU, 546U);
+
+    EXPECT_EQ(::unsetenv("TL_7ZFM_COPY_DESTINATION"), 0);
     g_windows = {};
 }
 

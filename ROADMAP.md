@@ -33,6 +33,9 @@ as referências nas fases não criem listas paralelas.
 - **Último incremento:** a Fase 13.14 concluiu TLS genérico e a fixture
   reutilizável Worker/RSL. O caso comercial do Roblox continua como benchmark:
   imports resolvidos, mas execução interrompida em `RBXCRASH`/`ExitProcess 3`.
+- **B7 em andamento:** o shell do 7-Zip já encaminha submenus aninhados e
+  possui cópia opt-in confinada à raiz visual; ainda falta o smoke reproduzível
+  do alvo real e a conclusão do fluxo antes de marcar B5/B7.
 
 Os demais bullets desta seção são registro cronológico de marcos já entregues;
 para decidir o próximo trabalho, use somente a ordem do backlog abaixo.
@@ -973,9 +976,11 @@ imports não encerra B5.
 - [ ] **B7 — Tornar o shell visual do 7-Zip um fluxo funcional.** Só iniciar
   depois de escolher o 7-Zip como representante de `B5`. Com fixture e alvo
   reproduzíveis, ligar comandos de menu/toolbar à navegação do convidado,
-  operações de arquivo e submenus aninhados. Manter a lista, a barra de
-  endereço e a árvore confinadas ao contrato de prefixo e só alterar a matriz
-  após um fluxo representativo concluído; abrir a janela não basta.
+  operações de arquivo e submenus aninhados. Submenus e `Copy` (`546`) já têm
+  regressão; falta o smoke reproduzível do alvo real e a confirmação do fluxo.
+  Manter a lista, a barra de endereço e a árvore confinadas ao contrato de
+  prefixo e só alterar a matriz após um fluxo representativo concluído; abrir a
+  janela não basta.
 - [ ] **B8 — Instalação e execução de MSIX/AppX.** Criar uma fase própria para
   instalar o pacote validado no prefixo, selecionar o PE interno, preservar
   limites de segurança do parser e executar somente PE32+ x86-64 suportado.

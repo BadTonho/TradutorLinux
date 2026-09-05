@@ -250,7 +250,11 @@ mostra somente as entradas imediatas do diretório que contém o executável
 aberto, em ordem determinística, sem seguir links simbólicos e limitada a 128
 linhas; clicar seleciona uma entrada e `Enter` ou duplo clique abre uma pasta no
 diretório Linux correspondente, com `..` retornando ao pai; o caminho visual continua sendo
-`Z:\` e nenhuma operação de arquivo do convidado é disparada pela tela. A
+`Z:\`. O comando `Copy` (`idCommand=546`) tem uma operação verificável no
+backend: com `TL_7ZFM_COPY_DESTINATION` configurado para um diretório existente
+dentro da raiz visual, copia o arquivo selecionado sem sobrescrever destino e
+mostra o resultado no status; sem essa configuração, ou fora da raiz, falha de
+forma controlada. As demais operações ainda não são emuladas. A
 árvore lateral permite retornar à raiz visual por `Computer`/`Local Disk (Z:)`
 e selecionar `Home`, `Desktop` e `Documents` do usuário quando os diretórios
 existem; os nomes `Desktop`/`Documents` também reconhecem as variantes

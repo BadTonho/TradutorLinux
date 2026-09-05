@@ -117,6 +117,120 @@ constexpr std::array<SevenZipToolbarVisual, 7> kSevenZipToolbarVisuals{{
     return std::filesystem::path{home};
 }
 
+[[nodiscard]] bool seven_zip_path_within(const std::filesystem::path& root,
+                                          const std::filesystem::path& candidate) noexcept {
+    if (root.empty() || candidate.empty()) {
+        return false;
+    }
+    try {
+        const std::string relative =
+            candidate.lexically_normal().lexically_relative(root.lexically_normal()).generic_string();
+        return relative.empty() || relative == "." ||
+               (!relative.starts_with("../") && relative != "..");
+    } catch (...) {
+        return false;
+    }
+}
+
+[[nodiscard]] std::filesystem::path seven_zip_copy_destination() noexcept {
+    const char* const configured = std::getenv("TL_7ZFM_COPY_DESTINATION");
+    if (configured == nullptr || configured[0] == '\0') {
+        return {};
+    }
+    try {
+        const std::filesystem::path destination{configured};
+        return destination.is_absolute() ? destination : std::filesystem::path{};
+    } catch (...) {
+        return {};
+    }
+}
+
+[[nodiscard]] std::filesystem::path seven_zip_selected_file(
+    const WindowSlot& parent) noexcept {
+    if (parent.list_selection < 0) {
+        return {};
+    }
+    try {
+        const std::filesystem::path current = seven_zip_current_directory(parent);
+        const std::vector<ListViewRow> rows = collect_seven_zip_directory_rows(current);
+        const std::size_t index = static_cast<std::size_t>(parent.list_selection);
+        if (index >= rows.size() || rows[index].columns.empty() || rows[index].columns[0] == "..") {
+            return {};
+        }
+        const std::filesystem::path candidate = current / rows[index].columns[0];
+        const std::filesystem::file_status status = std::filesystem::symlink_status(candidate);
+        return std::filesystem::is_regular_file(status) ? candidate : std::filesystem::path{};
+    } catch (...) {
+        return {};
+    }
+}
+
+void trace_seven_zip_operation(const std::string_view operation, const std::string_view status,
+                               const std::filesystem::path& source,
+                               const std::filesystem::path& destination) noexcept {
+    const std::string source_name = source.empty() ? std::string{} : source.filename().string();
+    const std::string destination_name =
+        destination.empty() ? std::string{} : destination.filename().string();
+    const std::array<diagnostics::TraceField, 4> fields{
+        diagnostics::TraceField{"operation", std::string{operation}},
+        diagnostics::TraceField{"status", std::string{status}},
+        diagnostics::TraceField{"source-name", source_name},
+        diagnostics::TraceField{"destination-name", destination_name},
+    };
+    runtime_trace("SevenZipOperation", fields, 4);
+}
+
+void perform_seven_zip_copy(WindowSlot& parent) noexcept {
+    const std::filesystem::path source = seven_zip_selected_file(parent);
+    const std::filesystem::path destination_directory = seven_zip_copy_destination();
+    const std::filesystem::path root = seven_zip_root_directory(parent);
+    if (source.empty()) {
+        parent.last_operation_status = "Copiar: selecione um arquivo";
+        trace_seven_zip_operation("copy", "no-selection", source, destination_directory);
+        return;
+    }
+    if (destination_directory.empty() ||
+        !seven_zip_path_within(root, destination_directory)) {
+        parent.last_operation_status = "Copiar: destino nao configurado";
+        trace_seven_zip_operation("copy", "destination-outside-prefix", source,
+                                  destination_directory);
+        return;
+    }
+    std::error_code error;
+    if (!std::filesystem::is_directory(destination_directory, error) || error) {
+        parent.last_operation_status = "Copiar: destino indisponivel";
+        trace_seven_zip_operation("copy", "destination-not-directory", source,
+                                  destination_directory);
+        return;
+    }
+    const std::filesystem::path destination = destination_directory / source.filename();
+    if (!seven_zip_path_within(root, source) || !seven_zip_path_within(root, destination)) {
+        parent.last_operation_status = "Copiar: caminho fora da raiz";
+        trace_seven_zip_operation("copy", "path-outside-root", source, destination);
+        return;
+    }
+    error.clear();
+    const bool copied = std::filesystem::copy_file(source, destination, error);
+    if (!copied || error) {
+        parent.last_operation_status = "Copiar: falha (arquivo ja existe ou inacessivel)";
+        trace_seven_zip_operation("copy", "failed", source, destination);
+        return;
+    }
+    parent.last_operation_status = "Copiado: " + source.filename().string();
+    trace_seven_zip_operation("copy", "success", source, destination);
+}
+
+void perform_seven_zip_command(WindowSlot& parent, const std::uintptr_t command_id) noexcept {
+    switch (command_id) {
+        case 546U:  // Copy, conforme o idCommand da toolbar real do 7-Zip.
+            perform_seven_zip_copy(parent);
+            return;
+        default:
+            trace_seven_zip_operation("command", "not-supported", {}, {});
+            return;
+    }
+}
+
 [[nodiscard]] std::filesystem::path seven_zip_navigation_directory(
     const WindowSlot& parent, const int row) noexcept {
     const std::filesystem::path root = seven_zip_root_directory(parent);
@@ -506,6 +620,7 @@ void activate_seven_zip_menu_item(WindowSlot& parent, const SevenZipPopupGeometr
     }
     const MenuItem& item = geometry.menu->logical_items[static_cast<std::size_t>(index)];
     if (seven_zip_menu_item_selectable(item)) {
+        perform_seven_zip_command(parent, item.command_id);
         queue_window_message(parent, abi::kWmCommand,
                              static_cast<abi::Wparam>(item.command_id), 0);
     }
@@ -962,9 +1077,11 @@ void render_seven_zip_file_manager(WindowSlot& parent,
     gui::platform::fill_rectangle_color(parent.native, 0, status_y, width,
                                         std::max(height - status_y, 1), kStatus);
     gui::platform::fill_rectangle_color(parent.native, 0, status_y, width, 1, kBorder);
-    const char* const status_text = parent.address_error ? "Pasta nao encontrada"
-                                                          : "Visualizacao experimental";
-    gui::platform::draw_text_color(parent.native, status_text, 10,
+    const std::string status_text = !parent.last_operation_status.empty()
+                                        ? parent.last_operation_status
+                                        : parent.address_error ? "Pasta nao encontrada"
+                                                                : "Visualizacao experimental";
+    gui::platform::draw_text_color(parent.native, status_text.c_str(), 10,
                                    std::min(status_y + 17, height - 4), kMuted);
     const int status_address_x = std::max(
         width - static_cast<int>(visual_address.size()) * 8 - 12, 10);
@@ -1634,6 +1751,10 @@ void handle_control_mouse(WindowSlot& parent, const std::span<WindowSlot> window
             }
             if (released_over_pressed_control && index == control->pressed_toolbar_index &&
                 index >= 0 && static_cast<std::size_t>(index) < control->toolbar_buttons.size()) {
+                perform_seven_zip_command(
+                    parent, static_cast<std::uintptr_t>(
+                                control->toolbar_buttons[static_cast<std::size_t>(index)]
+                                    .command_id));
                 queue_command_id(*control, 0,
                                  static_cast<std::uintptr_t>(
                                      control->toolbar_buttons[static_cast<std::size_t>(index)]

@@ -173,6 +173,19 @@ o caminho Linux do hospedeiro:
 [tl][runtime][info] filesystem operation="set-information" status="success" detail="delete-on-close" scope="prefix"
 ```
 
+O shell visual do 7-Zip registra a cópia opt-in com `SevenZipOperation`. O
+evento informa a operação, o estado e somente os nomes dos arquivos; nunca
+expõe o caminho Linux do hospedeiro:
+
+```text
+[tl][runtime][info] SevenZipOperation operation="copy" status="success" source-name="selected.txt" destination-name="selected.txt"
+```
+
+`destination-outside-prefix`, `destination-not-directory`, `path-outside-root`,
+`no-selection` e `failed` são estados controlados; o comando só escreve quando
+`TL_7ZFM_COPY_DESTINATION` aponta para um diretório existente dentro da raiz
+visual e não sobrescreve um arquivo já existente.
+
 ## Eventos de segurança
 
 A Fase 13.10 usa o evento `security` no componente `runtime` para token,

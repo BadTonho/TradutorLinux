@@ -83,6 +83,7 @@ struct WindowSlot {
     bool address_editing{false};
     bool address_error{false};
     std::string address_text;
+    std::string last_operation_status;
     void* user_data{nullptr};
     std::uint32_t style{0};
     std::uint32_t extended_style{0};
