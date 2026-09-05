@@ -122,7 +122,7 @@ TEST_F(ProtonRuntimeTest, StagesRunsAndKeepsApplicationTree) {
     EXPECT_EQ(result.outcome.exit_code, 37U);
     EXPECT_EQ(result.version, "11.0-1");
     EXPECT_EQ(read_file(launcher_output_),
-              "arg1=run\narg2=" + result.staged_executable.string() +
+              "arg1=runinprefix\narg2=" + result.staged_executable.string() +
                   "\ncompat=" + (root_ / "proton" / "compatdata").string() +
                   "\nwineprefix=" + (root_ / "proton" / "compatdata" / "pfx").string() +
                   "\ninstall=" + (root_ / "proton").string() + "\n");

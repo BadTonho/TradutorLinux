@@ -431,6 +431,15 @@ TEST_F(ProtonFixture, ValidatesModernX8664Installation) {
     EXPECT_EQ(result.version, "11.0-1");
 }
 
+TEST_F(ProtonFixture, AcceptsSteamExperimentalVersionFormat) {
+    write_file(root_ / "version", "1788532552 experimental-11.0-20260903b-x86_64\n");
+
+    const ProtonValidationResult result = validate_proton(ProtonConfig{root_, {}}, "11.0");
+
+    ASSERT_TRUE(result.valid) << result.error;
+    EXPECT_EQ(result.version, "1788532552 experimental-11.0-20260903b-x86_64");
+}
+
 TEST_F(ProtonFixture, RejectsMissingRequiredComponent) {
     std::filesystem::remove(root_ / "files" / "bin" / "wineserver");
 

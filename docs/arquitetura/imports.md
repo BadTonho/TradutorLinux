@@ -89,7 +89,7 @@ bibliotecas Linux, scripts ou código nativo fora de uma imagem PE32+ AMD64.
 O backend Proton do schema 3 não participa do `GuestModuleGraph` nem da
 resolução de imports interna. Quando selecionado por `app run`, o runtime
 valida uma instalação Proton configurada, estagia o aplicativo em um prefixo
-separado e entrega o controle ao launcher `proton run`. O Proton resolve os
+separado e entrega o controle ao launcher `proton runinprefix`. O Proton resolve os
 imports PE pelo próprio Wine; portanto, `dlls[]` é rejeitado nesse backend e
 não há mistura entre `TL_DLL_OVERRIDES`, DLLs genéricas do runtime próprio e o
 processo Proton.

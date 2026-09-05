@@ -240,6 +240,30 @@ struct Version {
     return allow_suffix && position < value.size() && value[position] == '-';
 }
 
+// As versões distribuídas pela Steam podem conter um timestamp e o canal antes
+// da versão numérica, por exemplo:
+// "1788532552 experimental-11.0-20260903b-x86_64". A comparação do contrato
+// continua usando somente os componentes numéricos major.minor.patch, enquanto
+// o texto completo permanece disponível no diagnóstico e no manifesto.
+[[nodiscard]] bool parse_installed_version(const std::string_view value,
+                                            Version& version) noexcept {
+    if (parse_version(value, version, true)) return true;
+
+    for (std::size_t position = 0; position < value.size(); ++position) {
+        if (std::isdigit(static_cast<unsigned char>(value[position])) == 0 ||
+            (position != 0U && value[position - 1U] != '-' &&
+             std::isspace(static_cast<unsigned char>(value[position - 1U])) == 0)) {
+            continue;
+        }
+        Version candidate;
+        if (parse_version(value.substr(position), candidate, true)) {
+            version = candidate;
+            return true;
+        }
+    }
+    return false;
+}
+
 [[nodiscard]] bool version_at_least(const Version& actual, const Version& minimum) noexcept {
     for (std::size_t index = 0; index < actual.components.size(); ++index) {
         if (actual.components[index] != minimum.components[index]) {
@@ -447,7 +471,7 @@ ProtonValidationResult validate_proton(const ProtonConfig& config,
     }
 
     Version actual;
-    if (!parse_version(result.version, actual, true)) {
+    if (!parse_installed_version(result.version, actual)) {
         result.error = "versão do Proton inválida";
         return result;
     }

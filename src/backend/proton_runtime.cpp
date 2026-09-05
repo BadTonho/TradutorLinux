@@ -669,7 +669,10 @@ ProtonRunResult run_proton_application(const ProtonConfig& config,
     std::vector<std::string> argv;
     argv.reserve(3U + request.guest_arguments.size());
     argv.push_back((config.root / "proton").string());
-    argv.emplace_back("run");
+    // `run` hands the command to Proton's Steam-compatible steam.exe shim.
+    // The adapter runs arbitrary applications outside the Steam client, so use
+    // Proton's direct launcher mode instead.
+    argv.emplace_back("runinprefix");
     argv.push_back(staged.executable.string());
     argv.insert(argv.end(), request.guest_arguments.begin(), request.guest_arguments.end());
     const std::vector<process::ExternalEnvironmentVariable> environment{

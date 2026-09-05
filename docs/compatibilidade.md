@@ -98,7 +98,7 @@ bundles, .NET/Mono ou assinatura Authenticode.
 `tl_proton_probe.exe` é uma fixture de contrato, não um aplicativo suportado
 por Proton. O teste `integration_proton_backend` usa um launcher mockado para
 validar o caminho `app run` do catálogo: seleção explícita no schema 3,
-`proton run`, variáveis de ambiente, prefixo persistente por aplicativo,
+`proton runinprefix`, variáveis de ambiente, prefixo persistente por aplicativo,
 staging do executável, materialização temporária de `files[]`, stdout intacto,
 stderr contextualizado e propagação do código `23`.
 

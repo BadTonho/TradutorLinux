@@ -173,7 +173,7 @@ Os `files[]` do perfil são materializados temporariamente no `drive_c` do
 prefixo Proton antes do launcher e removidos após o processo. A limpeza usa
 identidade POSIX para não apagar uma substituição feita pelo convidado. A área
 `compat/` do prefixo nativo não é copiada nem fica visível dentro do Proton.
-O launcher recebe `proton run <executável-estagiado>` com
+O launcher recebe `proton runinprefix <executável-estagiado>` com
 `STEAM_COMPAT_DATA_PATH`, `WINEPREFIX`, `STEAM_COMPAT_CLIENT_INSTALL_PATH` e
 `STEAM_COMPAT_INSTALL_PATH` apontando para a árvore isolada. O stdout é
 herdado sem transformação; o stderr recebe o contexto `[tl][proton]`.

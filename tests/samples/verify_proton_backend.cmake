@@ -100,7 +100,7 @@ endforeach()
 
 file(READ "${mock_output}" mock_contents)
 foreach(needle
-        "arg1=run"
+        "arg1=runinprefix"
         "arg2=${prefix}/proton/compatdata/pfx/drive_c/Program Files/Proton Probe/tl_proton_probe.exe"
         "compat=${prefix}/proton/compatdata"
         "wineprefix=${prefix}/proton/compatdata/pfx"
