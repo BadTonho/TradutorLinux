@@ -1,5 +1,66 @@
 add_subdirectory(samples)
 
+if(TL_BUILD_RUST)
+    find_program(TL_RUSTUP_EXECUTABLE NAMES rustup)
+    if(NOT TL_RUSTUP_EXECUTABLE)
+        message(FATAL_ERROR
+            "TL_BUILD_RUST=ON requer rustup; instale o toolchain fixado ${TL_RUST_TOOLCHAIN}")
+    endif()
+    execute_process(
+        COMMAND "${TL_RUSTUP_EXECUTABLE}" run "${TL_RUST_TOOLCHAIN}" rustc --version
+        RESULT_VARIABLE TL_RUST_TOOLCHAIN_RESULT
+        OUTPUT_VARIABLE TL_RUST_TOOLCHAIN_OUTPUT
+        ERROR_VARIABLE TL_RUST_TOOLCHAIN_ERROR
+    )
+    if(NOT TL_RUST_TOOLCHAIN_RESULT EQUAL 0)
+        message(FATAL_ERROR
+            "toolchain Rust ${TL_RUST_TOOLCHAIN} não está disponível via rustup; "
+            "instale com 'rustup toolchain install ${TL_RUST_TOOLCHAIN}'\n"
+            "${TL_RUST_TOOLCHAIN_ERROR}")
+    endif()
+
+    find_package(Threads REQUIRED)
+    set(TL_RUST_LIBRARY_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/rust_ffi")
+    set(TL_RUST_LIBRARY "${TL_RUST_LIBRARY_DIRECTORY}/libtl_rust_validator.a")
+    add_custom_command(
+        OUTPUT "${TL_RUST_LIBRARY}"
+        COMMAND "${CMAKE_COMMAND}" -E make_directory "${TL_RUST_LIBRARY_DIRECTORY}"
+        COMMAND "${CMAKE_COMMAND}" -E env MAKEFLAGS=
+            "${TL_RUSTUP_EXECUTABLE}" run "${TL_RUST_TOOLCHAIN}" rustc
+            --edition=2021
+            --crate-name tl_rust_validator
+            --crate-type staticlib
+            -C panic=unwind
+            -o "${TL_RUST_LIBRARY}"
+            "${PROJECT_SOURCE_DIR}/src/rust/validator.rs"
+        DEPENDS
+            "${PROJECT_SOURCE_DIR}/src/rust/validator.rs"
+            "${PROJECT_SOURCE_DIR}/include/tradutorlinux/ffi/rust_validator.h"
+        VERBATIM
+        COMMENT "Generating Rust FFI static library"
+    )
+    add_custom_target(tl_rust_validator_library DEPENDS "${TL_RUST_LIBRARY}")
+
+    add_executable(tl_rust_ffi_probe rust_ffi_probe.cpp)
+    add_dependencies(tl_rust_ffi_probe tl_rust_validator_library)
+    target_include_directories(tl_rust_ffi_probe PRIVATE
+        "${PROJECT_SOURCE_DIR}/include"
+    )
+    target_link_libraries(tl_rust_ffi_probe PRIVATE
+        "${TL_RUST_LIBRARY}"
+        Threads::Threads
+        ${CMAKE_DL_LIBS}
+        m
+    )
+    tl_enable_warnings(tl_rust_ffi_probe)
+    tl_enable_sanitizers(tl_rust_ffi_probe)
+    add_test(NAME rust_ffi_probe COMMAND tl_rust_ffi_probe)
+    set_tests_properties(rust_ffi_probe PROPERTIES
+        LABELS "ffi;rust"
+        TIMEOUT 30
+    )
+endif()
+
 find_program(TL_XVFB_EXECUTABLE NAMES Xvfb xvfb)
 if(TL_XVFB_EXECUTABLE)
     find_path(TL_X11_INCLUDE_DIR X11/Xlib.h REQUIRED)

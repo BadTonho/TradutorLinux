@@ -1,0 +1,187 @@
+#include "tradutorlinux/ffi/rust_validator.h"
+
+#include <array>
+#include <atomic>
+#include <cstdint>
+#include <cstring>
+#include <iostream>
+#include <string_view>
+#include <thread>
+
+namespace {
+
+bool expect_status(const tl_rust_status_t actual, const tl_rust_status_t expected,
+                   const std::string_view operation) {
+    if (actual == expected) return true;
+    std::cerr << "rust ffi probe: " << operation << " returned " << actual
+              << ", expected " << expected << '\n';
+    return false;
+}
+
+bool contains(const char* buffer, const std::string_view needle) {
+    return std::string_view{buffer}.find(needle) != std::string_view::npos;
+}
+
+bool check_error_buffer(const char* buffer, const std::uint64_t capacity,
+                        const std::uint64_t required, const std::string_view needle) {
+    if (required <= capacity && buffer[required - 1U] != '\0') {
+        std::cerr << "rust ffi probe: complete error is not NUL terminated\n";
+        return false;
+    }
+    if (capacity != 0 && buffer[capacity - 1U] != '\0' && required > capacity) {
+        std::cerr << "rust ffi probe: truncated error is not NUL terminated\n";
+        return false;
+    }
+    if (!contains(buffer, needle)) {
+        std::cerr << "rust ffi probe: error message did not contain '" << needle << "'\n";
+        return false;
+    }
+    return true;
+}
+
+}  // namespace
+
+int main() {
+    tl_rust_validator_t* validator = nullptr;
+    if (!expect_status(tl_rust_validator_create(64U, &validator), TL_RUST_STATUS_OK,
+                       "create") || validator == nullptr) {
+        return 1;
+    }
+    if (!expect_status(tl_rust_validator_create(64U, nullptr),
+                       TL_RUST_STATUS_INVALID_ARGUMENT, "create-null-out") ||
+        !expect_status(tl_rust_validator_create(0U, &validator),
+                       TL_RUST_STATUS_INVALID_ARGUMENT, "create-zero-limit")) {
+        tl_rust_validator_destroy(validator);
+        return 1;
+    }
+
+    const std::array<std::uint8_t, 4> valid_utf8{0x54U, 0x4cU, 0xc3U, 0xa9U};
+    std::array<char, 64> error{};
+    std::uint64_t required = 0;
+    if (!expect_status(tl_rust_validator_validate_utf8(
+                           validator, valid_utf8.data(), valid_utf8.size(), error.data(),
+                           error.size(), &required),
+                       TL_RUST_STATUS_OK, "valid-utf8") ||
+        required != 1U || error[0] != '\0') {
+        std::cerr << "rust ffi probe: successful UTF-8 validation returned a bad message\n";
+        tl_rust_validator_destroy(validator);
+        return 1;
+    }
+
+    const std::array<std::uint8_t, 1> invalid_utf8{0xffU};
+    required = 0;
+    if (!expect_status(tl_rust_validator_validate_utf8(
+                           validator, invalid_utf8.data(), invalid_utf8.size(), error.data(),
+                           error.size(), &required),
+                       TL_RUST_STATUS_INVALID_UTF8, "invalid-utf8") ||
+        !check_error_buffer(error.data(), error.size(), required, "UTF-8")) {
+        tl_rust_validator_destroy(validator);
+        return 1;
+    }
+
+    required = 0;
+    if (!expect_status(tl_rust_validator_validate_utf8(
+                           nullptr, valid_utf8.data(), valid_utf8.size(), error.data(),
+                           error.size(), &required),
+                       TL_RUST_STATUS_INVALID_ARGUMENT, "null-validator") ||
+        !check_error_buffer(error.data(), error.size(), required, "validator")) {
+        tl_rust_validator_destroy(validator);
+        return 1;
+    }
+
+    std::array<char, 4> short_error{'x', 'x', 'x', 'x'};
+    required = 0;
+    if (!expect_status(tl_rust_validator_validate_utf8(
+                           validator, invalid_utf8.data(), invalid_utf8.size(), short_error.data(),
+                           short_error.size(), &required),
+                       TL_RUST_STATUS_BUFFER_TOO_SMALL, "short-error") ||
+        !check_error_buffer(short_error.data(), short_error.size(), required, "inp")) {
+        tl_rust_validator_destroy(validator);
+        return 1;
+    }
+
+    const std::array<std::uint16_t, 3> valid_utf16{0x0054U, 0x004cU, 0x00e9U};
+    required = 0;
+    if (!expect_status(tl_rust_validator_validate_utf16(
+                           validator, valid_utf16.data(), valid_utf16.size(), error.data(),
+                           error.size(), &required),
+                       TL_RUST_STATUS_OK, "valid-utf16") ||
+        required != 1U) {
+        tl_rust_validator_destroy(validator);
+        return 1;
+    }
+
+    const std::array<std::uint16_t, 1> invalid_utf16{0xd800U};
+    required = 0;
+    if (!expect_status(tl_rust_validator_validate_utf16(
+                           validator, invalid_utf16.data(), invalid_utf16.size(), error.data(),
+                           error.size(), &required),
+                       TL_RUST_STATUS_INVALID_UTF16, "invalid-utf16") ||
+        !check_error_buffer(error.data(), error.size(), required, "UTF-16")) {
+        tl_rust_validator_destroy(validator);
+        return 1;
+    }
+
+    const std::array<std::uint8_t, 5> over_limit{1U, 2U, 3U, 4U, 5U};
+    tl_rust_validator_t* small_validator = nullptr;
+    if (!expect_status(tl_rust_validator_create(4U, &small_validator), TL_RUST_STATUS_OK,
+                       "create-small") ||
+        !expect_status(tl_rust_validator_validate_utf8(
+                           small_validator, over_limit.data(), over_limit.size(), error.data(),
+                           error.size(), &required),
+                       TL_RUST_STATUS_INPUT_TOO_LARGE, "input-limit") ||
+        !check_error_buffer(error.data(), error.size(), required, "limit")) {
+        tl_rust_validator_destroy(small_validator);
+        tl_rust_validator_destroy(validator);
+        return 1;
+    }
+
+    required = 0;
+    if (!expect_status(tl_rust_validator_validate_utf8(
+                           validator, nullptr, 0U, error.data(), error.size(), &required),
+                       TL_RUST_STATUS_OK, "empty-null-input") ||
+        !expect_status(tl_rust_validator_validate_utf8(
+                           validator, nullptr, 1U, error.data(), error.size(), &required),
+                       TL_RUST_STATUS_INVALID_ARGUMENT, "null-input") ||
+        !expect_status(tl_rust_validator_validate_utf8(
+                           validator, valid_utf8.data(), valid_utf8.size(), nullptr, 0U, &required),
+                       TL_RUST_STATUS_BUFFER_TOO_SMALL, "zero-error-buffer") ||
+        !expect_status(tl_rust_validator_validate_utf8(
+                           validator, valid_utf8.data(), valid_utf8.size(), nullptr, 1U, &required),
+                       TL_RUST_STATUS_INVALID_ARGUMENT, "null-error-buffer") ||
+        !expect_status(tl_rust_validator_validate_utf8(
+                           validator, valid_utf8.data(), valid_utf8.size(), error.data(), error.size(),
+                           nullptr),
+                       TL_RUST_STATUS_INVALID_ARGUMENT, "null-required")) {
+        tl_rust_validator_destroy(small_validator);
+        tl_rust_validator_destroy(validator);
+        return 1;
+    }
+
+    std::atomic<bool> concurrent_ok{true};
+    const auto validate_concurrently = [&]() {
+        std::array<char, 32> local_error{};
+        std::uint64_t local_required = 0;
+        const auto status = tl_rust_validator_validate_utf8(
+            validator, valid_utf8.data(), valid_utf8.size(), local_error.data(),
+            local_error.size(), &local_required);
+        if (status != TL_RUST_STATUS_OK || local_required != 1U || local_error[0] != '\0') {
+            concurrent_ok.store(false);
+        }
+    };
+    std::array<std::thread, 8> threads;
+    for (auto& thread : threads) thread = std::thread{validate_concurrently};
+    for (auto& thread : threads) thread.join();
+    if (!concurrent_ok.load()) {
+        std::cerr << "rust ffi probe: concurrent read-only calls failed\n";
+        tl_rust_validator_destroy(small_validator);
+        tl_rust_validator_destroy(validator);
+        return 1;
+    }
+
+    tl_rust_validator_destroy(small_validator);
+    tl_rust_validator_destroy(validator);
+    tl_rust_validator_destroy(nullptr);
+    std::cout << "rust ffi probe\n";
+    return 0;
+}

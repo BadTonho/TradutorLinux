@@ -1294,7 +1294,9 @@ imports não encerra B5.
 - [ ] **B19 — Novas famílias abundantes de API.** Threadpool, ALPC e qualquer
   outra família só entram quando um alvo justificar o subconjunto, com teste,
   trace e matriz. Fibras já entregues não devem voltar ao backlog.
-- [ ] **B20 — Adoção seletiva de Rust.** Introduzir Rust somente onde a
+- [ ] **B20 — Adoção seletiva de Rust (em progresso).** A B20.1 definiu e
+  validou a fronteira FFI opt-in; a migração de produção continua condicionada
+  ao benefício mensurável das etapas seguintes. Introduzir Rust somente onde a
   segurança de memória e a validação de entradas não confiáveis trouxerem
   benefício demonstrável, mantendo o núcleo de execução e ABI em C++. A
   migração não será feita por substituição ampla nem criará uma dependência
@@ -1302,10 +1304,14 @@ imports não encerra B5.
 
   Subetapas:
 
-  - [ ] **B20.1 — Fronteira e contrato FFI.** Definir uma biblioteca Rust
-    pequena, ligada ao C++, com `extern "C"`, `#[repr(C)]`, handles opacos,
-    buffers caller-owned, códigos de erro e liberação no mesmo lado que
-    alocou. Documentar ownership, UTF-8/UTF-16, tamanhos e concorrência.
+  - [x] **B20.1 — Fronteira e contrato FFI.** Foi criada uma `staticlib` Rust
+    mínima, ligada ao probe C++ somente quando `TL_BUILD_RUST=ON`, com
+    `extern "C"`, handle opaco, buffers caller-owned, códigos de erro e
+    liberação no mesmo lado que alocou. O contrato documenta ownership,
+    UTF-8/UTF-16, tamanhos, limites, panics e concorrência. O probe cobre
+    argumentos nulos, truncamento, múltiplos handles e chamadas concorrentes e
+    passou em Debug, Sanitize e Release; `TL_BUILD_RUST=OFF` continua sem
+    requisito Rust. Nenhum componente de produção foi migrado.
   - [ ] **B20.2 — Toolchain reproduzível.** Integrar Cargo e CMake com versão
     fixada, lockfile, builds Debug/Sanitize/Release e política para crates
     externas, sem quebrar o build C++ nem aumentar o custo de desenvolvimento
