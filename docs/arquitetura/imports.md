@@ -84,6 +84,21 @@ As DLLs personalizadas são código PE executado com os privilégios do processo
 filho. Esta camada não é sandbox, não verifica assinatura/hash e não carrega
 bibliotecas Linux, scripts ou código nativo fora de uma imagem PE32+ AMD64.
 
+## Backend Proton externo
+
+O backend Proton do schema 3 não participa do `GuestModuleGraph` nem da
+resolução de imports interna. Quando selecionado por `app run`, o runtime
+valida uma instalação Proton configurada, estagia o aplicativo em um prefixo
+separado e entrega o controle ao launcher `proton run`. O Proton resolve os
+imports PE pelo próprio Wine; portanto, `dlls[]` é rejeitado nesse backend e
+não há mistura entre `TL_DLL_OVERRIDES`, DLLs genéricas do runtime próprio e o
+processo Proton.
+
+`--report` continua descrevendo somente a resolução do runtime próprio e não
+carrega nem executa o Proton. A seleção explícita, a versão validada, o
+staging, o launcher, o stderr prefixado e o resultado do processo aparecem no
+componente `proton` de `app run --trace`.
+
 ## Fronteira de ABI (`ms_abi`)
 
 `include/tradutorlinux/runtime/winapi.hpp` define `TL_MSABI` como `__attribute__((ms_abi))` em GCC/Clang x86-64 e declara as funções hospedeiras com vinculação C (`extern "C"`), `noexcept` e a convenção Microsoft x64. Tipos mínimos Win32 usados nas assinaturas ficam em `tradutorlinux::abi` (`Handle`, `Bool`, `Dword`, `Uint` e as constantes de handle padrão).

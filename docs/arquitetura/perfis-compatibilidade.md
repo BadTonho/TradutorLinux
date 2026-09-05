@@ -148,6 +148,42 @@ exige o launcher `proton`, o arquivo `version`, Wine ELF x86-64 em
 prefixo padrão da distribuição; o hash opcional cobre um inventário
 determinístico da instalação.
 
+### Execução e staging do Proton
+
+Quando a seleção é `proton`, o runtime mantém uma árvore persistente e separada
+por aplicativo:
+
+```text
+<prefixo-do-aplicativo>/proton/
+├── compatdata/pfx/drive_c/
+├── client/
+└── application-manifest.json
+```
+
+O executável cadastrado precisa estar dentro do `drive_c` nativo. O runtime
+estagia o diretório do aplicativo no mesmo caminho Windows dentro de
+`compatdata/pfx/drive_c`; somente arquivos regulares e diretórios são aceitos,
+e symlinks são rejeitados. Arquivos novos são copiados com permissões `0644` e
+diretórios novos com `0755`. Um arquivo já existente só é reutilizado quando o
+conteúdo é idêntico; se foi alterado no prefixo Proton, a sincronização falha
+sem sobrescrevê-lo. O manifesto registra o aplicativo, a versão do Proton e
+os hashes das fontes. O `drive_c` nativo nunca é alterado pela sincronização.
+
+Os `files[]` do perfil são materializados temporariamente no `drive_c` do
+prefixo Proton antes do launcher e removidos após o processo. A limpeza usa
+identidade POSIX para não apagar uma substituição feita pelo convidado. A área
+`compat/` do prefixo nativo não é copiada nem fica visível dentro do Proton.
+O launcher recebe `proton run <executável-estagiado>` com
+`STEAM_COMPAT_DATA_PATH`, `WINEPREFIX`, `STEAM_COMPAT_CLIENT_INSTALL_PATH` e
+`STEAM_COMPAT_INSTALL_PATH` apontando para a árvore isolada. O stdout é
+herdado sem transformação; o stderr recebe o contexto `[tl][proton]`.
+
+O piloto `integration_proton_backend` usa `tl_proton_probe.exe` e um launcher
+mockado para reproduzir argv, ambiente, staging, limpeza, exit code e rejeição
+sem fallback quando o Proton é inválido. Isso valida o adaptador, mas não
+declara suporte a uma instalação Proton real nem ao Roblox. DXVK, VKD3D-Proton,
+Vulkan, áudio e entrada continuam condicionados a um alvo real reproduzível.
+
 ## Auditoria do 7-Zip — sem regra específica
 
 O 7-Zip 24.08 foi auditado como alvo real após a implementação da B14.3. Não

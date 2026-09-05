@@ -1187,44 +1187,58 @@ imports não encerra B5.
      validadas por testes reproduzíveis, a base de perfis foi integrada e
      promovida; o runtime usa comportamento genérico quando não houver extensão
      aplicável.
-  6. [ ] **B14.6 — Backend Proton opcional.** Integrar uma distribuição Proton
-     versionada como backend separado para aplicativos que exigem uma camada
-     Win32/DirectX maior que o subconjunto próprio, mantendo o runtime
-     TradutorLinux como backend padrão e preservando a seleção por aplicativo.
-     O Proton não será reimplementado do zero nem carregado como biblioteca
-     Linux arbitrária a partir de `compat/`.
+  6. [ ] **B14.6 — Backend Proton opcional (em progresso).** Integrar uma
+     distribuição Proton versionada como backend separado para aplicativos que
+     exigem uma camada Win32/DirectX maior que o subconjunto próprio, mantendo
+     o runtime TradutorLinux como backend padrão e preservando a seleção por
+     aplicativo. O contrato, a validação, o staging isolado e o piloto com
+     mock já foram implementados; a promoção final aguarda uma instalação
+     Proton real. O Proton não será reimplementado do zero nem carregado como
+     biblioteca Linux arbitrária a partir de `compat/`.
 
      Subetapas:
 
-     - [ ] **B14.6.1 — Contrato de seleção.** Definir no perfil/catálogo a
+     - [x] **B14.6.1 — Contrato de seleção.** Definir no perfil/catálogo a
        escolha explícita entre runtime próprio e Proton. O schema 3 aceita
        `backend.kind` como `native` ou `proton`, sem `auto`; perfil sem o campo
        mantém `native`. A instalação fica em configuração externa
        (`backends.json`), com `TL_PROTON_ROOT` somente para testes. `files[]`
        pode ser usado no Proton, mas `dlls[]` continua exclusivo do loader
        próprio; Proton ausente, inválido ou incompatível retorna erro explícito
-       sem fallback silencioso.
-     - [ ] **B14.6.2 — Descoberta e validação.** Localizar uma instalação
+       sem fallback silencioso. Documentado em
+       `docs/arquitetura/perfis-compatibilidade.md` e protegido pelos testes de
+       parsing de perfil.
+     - [x] **B14.6.2 — Descoberta e validação.** Localizar uma instalação
        configurada do Proton, validar executável, arquitetura, versão, hash e
        componentes necessários, sem download silencioso nem dependência
-       implícita do Steam.
-     - [ ] **B14.6.3 — Execução isolada.** Criar e controlar um prefixo Proton
+       implícita do Steam. `load_config` aceita o arquivo externo, valida o
+       inventário SHA-256 opcional e `TL_PROTON_ROOT` substitui a raiz somente
+       no processo de teste/diagnóstico.
+     - [x] **B14.6.3 — Execução isolada.** Criar e controlar um prefixo Proton
        separado, preparar `WINEPREFIX`, ambiente, diretório de trabalho,
        argumentos, drives e arquivos do aplicativo, sem misturar o processo
-       Proton com o contexto interno do runtime próprio.
-     - [ ] **B14.6.4 — Diagnóstico e ciclo de vida.** Registrar backend, versão,
-       prefixo, componentes gráficos selecionados, início, término, timeout,
-       crash e exit code; preservar `stdout` do convidado e separar os logs do
-       runtime em `stderr`.
+       Proton com o contexto interno do runtime próprio. A árvore do aplicativo
+       é sincronizada somente de `drive_c` para `proton/compatdata/pfx`, sem
+       sobrescrever conflitos e sem alterar o prefixo nativo.
+     - [x] **B14.6.4 — Diagnóstico e ciclo de vida do adaptador.** Registrar
+       seleção, versão, staging, launcher, limpeza, término, timeout, sinal e
+       exit code; preservar `stdout` do convidado e prefixar os logs do
+       launcher em `stderr` com `[tl][proton]`. O mock também protege grupo de
+       processos e limites herdados. Componentes gráficos não são declarados
+       nesta subetapa.
      - [ ] **B14.6.5 — Componentes gráficos e dependências.** Validar de forma
        incremental Vulkan, DXVK, VKD3D-Proton, entrada, áudio e demais
        dependências somente quando um aplicativo-alvo exigir cada componente.
        Não declarar suporte amplo por instalar o backend.
-     - [ ] **B14.6.6 — Piloto e promoção.** Criar fixture PE32+ ou aplicativo
-       alvo com instalação, execução e resultado observável; testar em prefixos
-       independentes, atualizar a matriz e publicar limitações. Roblox poderá
-       ser avaliado aqui, mas só será marcado como suportado após teste real
-       reproduzível, inclusive de eventuais bloqueios do fornecedor.
+     - [ ] **B14.6.6 — Piloto real e promoção.** A fixture PE32+
+       `tl_proton_probe.exe` e o teste `integration_proton_backend` já cobrem o
+       piloto controlado com mock, incluindo seleção, staging, ambiente,
+       limpeza e ausência de fallback. Esta subetapa só será concluída com uma
+       instalação Proton real em `TL_PROTON_ROOT`, execução reproduzível,
+       limitações publicadas e validação de prefixos independentes. Roblox
+       poderá ser avaliado aqui, mas só será marcado como suportado após teste
+       real reproduzível, inclusive de launcher, rede, gráficos e bloqueios do
+       fornecedor.
 - [x] **B15 — Drives do prefixo como symlinks ou mecanismo equivalente.** O
   prefixo cria `dosdevices/c:` → `../drive_c` e `dosdevices/z:` → `/`; a
   resolução de `C:` canoniza e confina o caminho ao `drive_c`, enquanto `Z:`

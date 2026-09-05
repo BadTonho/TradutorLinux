@@ -83,19 +83,22 @@ diagnóstico não substitui um Proton solicitado por `native` quando a instalaç
 está ausente ou inválida:
 
 ```text
-[tl][runtime][info] backend-selected kind="proton" app-id="fixture" version="11.0"
-[tl][proton][info] validation status="valid" root="..." version="11.0"
-[tl][proton][info] prefix path=".../proton/compatdata"
-[tl][proton][info] launch executable="..." cwd="..."
+[tl][proton][info] provider-selected kind="proton" version="11.0-1"
+[tl][proton][info] staging-complete source=".../drive_c/Program Files/App" target=".../compatdata/pfx/drive_c/Program Files/App"
+[tl][proton][info] launch launcher=".../proton" working-directory="..."
+[tl][proton] mock-or-proton-stderr
+[tl][proton][info] files-cleanup removed-files="1" removed-directories="0" retained="0"
 [tl][proton][info] exit exit-code="0"
 ```
 
-O backend solicitado sem launcher, componentes, arquitetura ou versão mínima
-válidos registra `validation status="invalid"` e retorna `5` (`Unsupported`).
-Perfil Proton com `dlls[]` também é rejeitado antes do lançamento. O stdout do
-processo convidado permanece sem prefixo; mensagens do launcher são encaminhadas
-ao stderr com o contexto `[tl][proton]`. Sinal, timeout e falha interna mantêm,
-respectivamente, os códigos `71`, `72` e `70` definidos pelo runtime.
+O componente `proton` pode ser selecionado com `--trace=proton` ou incluído
+em `--trace=proton,process`. Um backend solicitado sem launcher, componentes,
+arquitetura, hash ou versão mínima válidos registra `provider-rejected` e
+retorna `5` (`Unsupported`). Perfil Proton com `dlls[]` também é rejeitado
+antes do lançamento. O stdout do processo convidado permanece sem prefixo;
+mensagens do launcher são encaminhadas ao stderr com o contexto
+`[tl][proton]`. Sinal, timeout, limite de recurso e falha interna mantêm,
+respectivamente, os códigos `71`, `72`, `73` e `70` definidos pelo runtime.
 
 ## Eventos do grafo de DLLs por perfil
 

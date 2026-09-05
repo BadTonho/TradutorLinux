@@ -30,6 +30,7 @@ Assim, um aplicativo pode ter `supported` na resolução de imports e continuar
 | `tl_file.exe` | PE32+ AMD64 | Não | `KERNEL32.dll!CloseHandle`, `CreateFileA`, `ExitProcess`, `GetLastError`, `GetStdHandle`, `ReadFile`, `SetLastError`, `VirtualAlloc`, `VirtualFree`, `WriteFile` | Suportado no subconjunto da Fase 5: aloca memória e grava/reabre/lê arquivo relativo | Fase 6 |
 | `tl_compat_file.exe` | PE32+ AMD64 | Não | `KERNEL32.dll!CloseHandle`, `CreateFileA`, `ExitProcess`, `GetStdHandle`, `ReadFile`, `WriteFile` | Fixture B14.3/B14.5: `app run` copia um arquivo de `compat/files/` para `C:\\Program Files\\Compat Fixture`, lê e altera o destino, mantém a origem e remove o materializado ao terminar. A integração de isolamento executa dois IDs em prefixos independentes, com conteúdos distintos no mesmo destino Windows, e confirma trace, exit `0` e ausência de vazamento entre perfis | B14.5 |
 | `tl_compat_dll_app.exe` | PE32+ AMD64 | Não | `KERNEL32.dll!LoadLibraryA`, `GetProcAddress`, `FreeLibrary`, `ExitProcess`; DLLs da fixture importam `KERNEL32.dll` e `compatdep.dll` | **Suportado no contrato B14.4:** o perfil v2 seleciona `compat.dll` e sua dependência PE32+ `compatdep.dll` em `compat/dlls/`; as DLLs são mapeadas sem cópia para `drive_c`, executam TLS/`DllMain`, resolvem imports genéricos e são descarregadas em ordem. A integração executa dois IDs/prefixos com variantes A/B, confirma isolamento, fontes preservadas, trace completo, fallback por export e exit `0`; perfil ausente, v1, DLL ausente ou provider rejeitado retornam ao comportamento genérico | B14.4 |
+| `tl_proton_probe.exe` | PE32+ AMD64 | Não | `KERNEL32.dll!ExitProcess`, `GetStdHandle`, `WriteFile` | **Piloto do backend Proton B14.6:** `app run` usa um perfil schema 3, estagia o aplicativo em `proton/compatdata/pfx`, materializa `files[]`, encaminha stdout/stderr, preserva o exit code do launcher mockado (`23`) e rejeita um Proton inválido com `Unsupported` (`5`) sem fallback nativo. A fixture valida o adaptador e o contrato de staging; não declara compatibilidade com Proton real ou Roblox | B14.6 |
 | `tl_virtual_query.exe` | PE32+ AMD64 | Não | `KERNEL32.dll!VirtualAlloc`, `VirtualFree`, `VirtualProtect`, `VirtualQuery`, console e `ExitProcess` | Fixture de contrato: distingue reserva de commit, preserva `AllocationBase`/`AllocationProtect`, separa as duas páginas após proteger apenas a primeira e consulta a faixa liberada como `MEM_FREE`; imprime `virtual-query\n`, exit `0`. Metadata, `--report` e execução são regressões CTest | B12 |
 | `tl_gui.exe` | PE32+ AMD64 | Não | `KERNEL32.dll!ExitProcess`, `USER32.dll!MessageBoxA` | Protótipo manual: caixa modal X11 mínima; não executado automaticamente por depender de display | Fase 7 |
 | `tl_win.exe` | PE32+ AMD64 | Não | `KERNEL32.dll!ExitProcess`, `USER32.dll!RegisterClassExA`, `CreateWindowExA`, `ShowWindow`, `UpdateWindow`, `GetMessageA`, `TranslateMessage`, `DispatchMessageA`, `DefWindowProcA`, `DestroyWindow`, `PostQuitMessage` | Janela real com message loop X11; fecha via `WM_CLOSE`/autoclose; teclado via `WM_KEYDOWN`/`WM_CHAR`; executado automaticamente sob Xvfb (teste `runtime_gui_smoke`, cenários autoclose, `WM_DELETE_WINDOW` e `KeyPress 'q'`) | Fase 7 |
@@ -91,6 +92,22 @@ A fixture `native-fixture.msix` é gerada pelo teste `integration_msix_install` 
 partir de `tl_hello.exe`. Ela valida o fluxo de pacote nativo: `--report`,
 extração segura para o prefixo, cadastro e `app run`; não representa suporte a
 bundles, .NET/Mono ou assinatura Authenticode.
+
+## Backend Proton (B14.6)
+
+`tl_proton_probe.exe` é uma fixture de contrato, não um aplicativo suportado
+por Proton. O teste `integration_proton_backend` usa um launcher mockado para
+validar o caminho `app run` do catálogo: seleção explícita no schema 3,
+`proton run`, variáveis de ambiente, prefixo persistente por aplicativo,
+staging do executável, materialização temporária de `files[]`, stdout intacto,
+stderr contextualizado e propagação do código `23`.
+
+O mesmo teste configura uma raiz inexistente e confirma retorno `5`
+(`Unsupported`) sem executar o runtime nativo. A ausência de uma instalação
+Proton real impede a promoção final da B14.6. Nenhum componente DXVK,
+VKD3D-Proton, Vulkan, áudio ou entrada é forçado; Roblox permanece apenas como
+alvo exploratório até existir execução reproduzível com suas limitações
+publicadas.
 
 ## Leitor de PE (Fase 1)
 
