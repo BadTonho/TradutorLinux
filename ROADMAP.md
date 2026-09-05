@@ -26,16 +26,16 @@ as referências nas fases não criem listas paralelas.
 ## Estado atual
 
 - **Fase atual:** Fase 13 — compatibilidade ampla por portfólio.
-- **Próximo ciclo:** B5 foi escolhida como a trilha ativa. O representante é
-  `7zFM_x64.exe` 24.08, com SHA-256 registrado no inventário canônico; B2 fica
-  estacionada até uma decisão de produto específica sobre tradução de
-  interface.
+- **Próximo ciclo:** B1 é a próxima etapa operacional, seguida de B10. B2 fica
+  estacionada até uma decisão de produto específica sobre tradução de interface.
 - **Último incremento:** a Fase 13.14 concluiu TLS genérico e a fixture
   reutilizável Worker/RSL. O caso comercial do Roblox continua como benchmark:
   imports resolvidos, mas execução interrompida em `RBXCRASH`/`ExitProcess 3`.
-- **B7 em andamento:** o shell do 7-Zip já encaminha submenus aninhados e
-  possui cópia opt-in confinada à raiz visual; ainda falta o smoke reproduzível
-  do alvo real e a conclusão do fluxo antes de marcar B5/B7.
+- **Última etapa funcional:** B5/B7 concluíram um fluxo principal restrito do
+  7zFM 24.08. O smoke externo versionado seleciona `input.txt`, aciona
+  `Copy` (`546`), verifica a cópia dentro da raiz e encerra o runtime com exit
+  `0`; a execução direta sem interação continua sujeita a timeout, portanto o
+  alvo não é declarado de uso diário nem como suporte geral.
 
 Os demais bullets desta seção são registro cronológico de marcos já entregues;
 para decidir o próximo trabalho, use somente a ordem do backlog abaixo.
@@ -925,12 +925,26 @@ fica pronta somente com a evidência exigida na definição de pronto abaixo.
   corrige as entradas atuais e alinha `docs/catalog.md`, a matriz e o contrato
   de diagnóstico; nenhuma compatibilidade foi promovida por inferência.
 
-### Próximo ciclo — B5 e robustez
+### B5/B7 — etapas concluídas
 
-A ordem operacional agora é: concluir **B5** no 7-Zip File Manager, depois
-tratar **B1** e **B10**. B2 é uma trilha de produto separada do runtime Win32 e
-fica estacionada; B5 escolhe um único fluxo real para aprofundar, não apenas
-adicionar executáveis.
+[x] **B5 — Aprofundar um fluxo real versionado.** O representante autorizado
+`7zFM_x64.exe` 24.08 tem versão, hash, dependência `7z.dll`, manifest em
+`tests/targets/manifests/7zfm_24.08.json`, entrada na matriz e limitações
+publicadas. O driver externo `seven_zip_smoke` valida o fluxo restrito de
+selecionar um arquivo, copiar para um diretório existente dentro da raiz e
+encerrar com exit `0`.
+
+[x] **B7 — Tornar o shell visual do 7-Zip um fluxo funcional restrito.** A
+fixture cobre submenus aninhados e navegação por teclado; o shell real cobre
+lista, seleção, navegação visual, toolbar e `Copy` (`546`) opt-in, sem
+sobrescrita e com confinamento à raiz visual. O teste externo versionado
+`build/debug/tests/seven_zip_smoke` confirma a cópia e o encerramento normal;
+as demais operações do File Manager continuam limitadas.
+
+### Próximo ciclo — B1 e B10
+
+A ordem operacional agora é tratar **B1** e depois **B10**. B2 é uma trilha de
+produto separada do runtime Win32 e fica estacionada.
 
 **Decisão registrada:** o 7-Zip File Manager 24.08 foi escolhido porque já
 possui amostra PE32+ x86-64 local, 298/298 imports resolvidos, classe Win32
@@ -946,12 +960,6 @@ imports não encerra B5.
   idioma, precedência, fallback e comportamento para arquivo ausente ou
   inválido. A aplicação deve ser opt-in, isolada por aplicativo e validada com
   um programa externo de teste; não misturar essa camada ao contrato do runtime.
-- [ ] **B5 — Aprofundar um fluxo real versionado.** Escolher um único
-  representante autorizado de instalador, produtividade/GUI ou ferramenta de
-  rede e concluir um fluxo principal, com versão, hash, manifest, smoke
-  reproduzível, entrada na matriz e limitações publicadas. **Representante
-  escolhido: 7-Zip File Manager 24.08.** Priorizar dependências compartilhadas;
-  não adicionar APIs apenas para elevar a porcentagem de um binário.
 - [ ] **B1 — Limites de CPU e RAM por aplicativo.** Depois da reconciliação
   documental, definir a interface de configuração (CLI, catálogo e launcher),
   a unidade dos limites, a herança para processos-filhos, o tratamento de
@@ -973,14 +981,6 @@ imports não encerra B5.
   observáveis corretos. Esta tarefa está bloqueada nesta cópia porque não há
   executável comercial `Worker`/`RSL`; `tl_worker_rsl.exe` é apenas a fixture
   reutilizável e o exit `77` sem IPv4 continua sendo skip controlado.
-- [ ] **B7 — Tornar o shell visual do 7-Zip um fluxo funcional.** Só iniciar
-  depois de escolher o 7-Zip como representante de `B5`. Com fixture e alvo
-  reproduzíveis, ligar comandos de menu/toolbar à navegação do convidado,
-  operações de arquivo e submenus aninhados. Submenus e `Copy` (`546`) já têm
-  regressão; falta o smoke reproduzível do alvo real e a confirmação do fluxo.
-  Manter a lista, a barra de endereço e a árvore confinadas ao contrato de
-  prefixo e só alterar a matriz após um fluxo representativo concluído; abrir a
-  janela não basta.
 - [ ] **B8 — Instalação e execução de MSIX/AppX.** Criar uma fase própria para
   instalar o pacote validado no prefixo, selecionar o PE interno, preservar
   limites de segurança do parser e executar somente PE32+ x86-64 suportado.

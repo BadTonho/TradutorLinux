@@ -56,7 +56,18 @@ clicar em `Address`, editar um caminho `Z:\...` e confirmar com `Enter`; somente
 diretórios existentes dentro da raiz visual são aceitos. Passe o mouse sobre um
 botão da toolbar, uma linha ou um item da árvore lateral para ver o hover;
 mantenha o clique pressionado para ver o botão ativo e solte fora dele para
-cancelar.
+cancelar. Para repetir o fluxo restrito de cópia em Xvfb, use a amostra exata
+registrada no inventário:
+
+```bash
+./build/debug/tests/seven_zip_smoke \
+  ./build/debug/src/tradutorlinux \
+  "/caminho/para/Aplicativos_Windows_Populares/7-Zip/7zFM.exe"
+```
+
+O smoke usa uma cópia temporária do executável e de `7z.dll`, cria `input.txt`,
+seleciona o arquivo e aciona `Copy` (`idCommand=546`). O destino é removido ao
+final; a operação não sobrescreve arquivos.
 
 ## Abrir uma janela com message loop
 

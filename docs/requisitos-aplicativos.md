@@ -59,7 +59,7 @@ trace e timeout quando indicado.
 | Amostra | Versão | Formato/arquitetura | SHA-256 | Coleta | Ferramenta/versão | `--report` | Execução observada |
 |---|---|---|---|---|---|---|---|
 | `7z_x64.exe` | 24.08 | PE32+ x86-64 | `707f415d7d581edd9bce99a0429ad4629d3be0316c329e8b9ebd576f7ab50b71` | 2026-09-04 | `tradutorlinux --report` / 0.0.0-dev | 133/133 | `ExitProcess 0`, banner 7-Zip |
-| `7zFM_x64.exe` | 24.08 | PE32+ x86-64 | `028cf2158df45889e9a565c9ce3c6648fb05c286b97f39c33317163e35d6f6be` | 2026-09-04 | `tradutorlinux --report` / 0.0.0-dev | 298/298 | shell visual experimental; fluxo funcional não concluído |
+| `7zFM_x64.exe` | 24.08 | PE32+ x86-64 | `028cf2158df45889e9a565c9ce3c6648fb05c286b97f39c33317163e35d6f6be` | 2026-09-04 | `tradutorlinux --report` / 0.0.0-dev; smoke `seven_zip_smoke` | 298/298 | smoke externo seleciona `input.txt`, conclui `Copy` (`546`) dentro da raiz e encerra com exit `0`; demais operações não concluídas |
 | `7z.dll` | 24.08 | DLL PE32+ x86-64 | `e79ddfb6319dbf9bac6382035d23597dad979db5e71a605d81a61ee817c1e812` | 2026-09-04 | `tradutorlinux --report` / 0.0.0-dev | 86/86 | não executada como aplicação |
 | `putty_x64.exe` | Release 0.85 | PE32+ x86-64 | `d01fdb5aae8f112526040a39b0bfb9e27d813003178645e65f8d1cfdb2a26c87` | 2026-09-04 | `tradutorlinux --report` / 0.0.0-dev | 348/348 | `ExitProcess 1`, sem argumentos |
 | `winrar-x64-723.exe` | 7.23 | PE32+ x86-64 | `f435b24d4c2c5342c4f7c0143ef358f0f425b7b8a0972dd34d9dcf94789e9c4d` | 2026-08-31 | `tradutorlinux --report` / 0.0.0-dev | 251/251 | smoke `sfxcmd`/ambiente, exit `0` |

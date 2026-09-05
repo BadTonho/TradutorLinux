@@ -54,7 +54,7 @@ eleva sozinho um aplicativo para qualquer nível funcional acima.
 | `tl_win.exe` | USER32 A 10 | **fluxo principal** | janela + message loop X11 |
 | `tl_win_w.exe` | USER32 W 12 | **fluxo principal** | W wrappers via `wide_to_utf8` |
 | `simple_todo` | 105 (GDI32/USER32/SHELL32/msvcrt) | **uso diário** | `targetapp_simple_todo_gui_smoke` `105/105` |
-| `7zFM_x64.exe` | 298 | **shell visual experimental** | menu, toolbar, endereço, navegação e lista são desenhados; o menu MENUEX abre submenus aninhados e encaminha itens folha por `WM_COMMAND`; a lista mostra entradas imediatas do diretório do executável, limitada a 128 linhas, permite seleção, hover e abre pastas por Enter ou duplo clique; a árvore lateral oferece hover, retorna à raiz e seleciona diretórios Linux conhecidos; a barra de endereço navega somente dentro da raiz visual; a toolbar mostra hover e pressão; `Copy` (`546`) copia opt-in um arquivo selecionado para destino existente dentro da raiz, sem sobrescrever |
+| `7zFM_x64.exe` | 298 | **fluxo principal restrito** | menu, toolbar, endereço, navegação e lista são desenhados; o menu MENUEX abre submenus aninhados e encaminha itens folha por `WM_COMMAND`; a lista mostra entradas imediatas do diretório do executável, limitada a 128 linhas, permite seleção, hover e abre pastas por Enter ou duplo clique; a árvore lateral oferece hover, retorna à raiz e seleciona diretórios Linux conhecidos; a barra de endereço navega somente dentro da raiz visual; a toolbar mostra hover e pressão; o smoke externo versionado conclui `Copy` (`546`) para arquivo selecionado, dentro da raiz e sem sobrescrever; demais operações continuam limitadas |
 
 Evidência atual do `7zFM_x64.exe`: o runtime em `build/debug` abriu a janela
 real no X11 com `800x600`; o trace registrou a normalização da geometria
@@ -65,9 +65,11 @@ entradas, destacar a linha sob o ponteiro e abrir pastas por Enter ou duplo cliq
 a toolbar também destaca o botão sob o ponteiro; a árvore lateral destaca a
 linha sob o ponteiro e permite
 retornar à raiz visual e selecionar diretórios Linux conhecidos, e a barra de
-endereço aceita caminhos `Z:\...` dentro dessa raiz. A validação complementar de GUI passou em `x11_popup_smoke` e
-`runtime_gui_smoke` (2/2). Isso continua sendo uma validação visual
-experimental, não suporte funcional do fluxo de compactação.
+endereço aceita caminhos `Z:\...` dentro dessa raiz. O smoke externo
+`build/debug/tests/seven_zip_smoke` foi executado com a amostra 24.08, concluiu
+seleção + `Copy` e encerrou o runtime com exit `0`; a execução direta sem
+interação continua sujeita a timeout. Isso eleva o alvo somente a **fluxo
+principal restrito**, não a uso diário nem a suporte geral de compactação.
 
 ## Sistema
 

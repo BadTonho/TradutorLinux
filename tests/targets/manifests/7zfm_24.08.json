@@ -1,0 +1,27 @@
+{
+  "name": "7zFM",
+  "application": "7-Zip File Manager",
+  "version": "24.08",
+  "format": "PE32+",
+  "machine": "AMD64",
+  "sample": "Aplicativos_Windows_Populares/7-Zip/7zFM.exe",
+  "sha256": "028cf2158df45889e9a565c9ce3c6648fb05c286b97f39c33317163e35d6f6be",
+  "dependency": {
+    "name": "7z.dll",
+    "sha256": "e79ddfb6319dbf9bac6382035d23597dad979db5e71a605d81a61ee817c1e812"
+  },
+  "runtime": "TradutorLinux 0.0.0-dev",
+  "imports": {
+    "resolved": 298,
+    "total": 298
+  },
+  "fixture_manifest": "tests/samples/manifests/tl_7zfm_gui.json",
+  "smoke": {
+    "driver": "tests/gui/seven_zip_smoke.cpp",
+    "flow": "select-file-and-copy",
+    "destination": "TL_7ZFM_COPY_DESTINATION",
+    "requires_existing_destination": true,
+    "overwrite_existing": false,
+    "exit_code": 0
+  }
+}

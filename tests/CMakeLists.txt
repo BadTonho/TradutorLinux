@@ -23,6 +23,14 @@ if(TL_XVFB_EXECUTABLE)
         TIMEOUT 20
         SKIP_RETURN_CODE 77
     )
+
+    add_executable(seven_zip_smoke
+        gui/seven_zip_smoke.cpp
+    )
+    target_include_directories(seven_zip_smoke PRIVATE "${TL_X11_INCLUDE_DIR}")
+    target_link_libraries(seven_zip_smoke PRIVATE "${TL_X11_LIBRARY}")
+    tl_enable_warnings(seven_zip_smoke)
+    tl_enable_sanitizers(seven_zip_smoke)
 endif()
 
 if(TL_BUILD_TARGET_APPS)
