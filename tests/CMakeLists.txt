@@ -209,4 +209,19 @@ if(TARGET tradutorlinux_samples AND TARGET tradutorlinux)
         LABELS "runtime;pe32plus;compat;profile;files;isolation"
         TIMEOUT 60
     )
+    add_test(
+        NAME integration_compat_dll_profile
+        COMMAND "${CMAKE_COMMAND}"
+            "-DRUNTIME=$<TARGET_FILE:tradutorlinux>"
+            "-DFIXTURE=${CMAKE_CURRENT_BINARY_DIR}/samples/generated/tl_compat_dll_app.exe"
+            "-DDLL_A=${CMAKE_CURRENT_BINARY_DIR}/samples/generated/tl_compat_dll_a.dll"
+            "-DDLL_B=${CMAKE_CURRENT_BINARY_DIR}/samples/generated/tl_compat_dll_b.dll"
+            "-DWORK=${CMAKE_CURRENT_BINARY_DIR}/compat_dll_profile_work"
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/samples/verify_compat_dll.cmake"
+    )
+    set_tests_properties(integration_compat_dll_profile PROPERTIES
+        DEPENDS fixture_tl_compat_dll_app_metadata
+        LABELS "runtime;pe32plus;compat;profile;dll;isolation"
+        TIMEOUT 90
+    )
 endif()

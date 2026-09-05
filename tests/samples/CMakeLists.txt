@@ -483,6 +483,91 @@ tl_add_pe_fixture(tl_file src/tl_file.c manifests/tl_file.json
 tl_add_pe_fixture(tl_compat_file src/tl_compat_file.c manifests/tl_compat_file.json
     LINK_KERNEL32 EXPECT_RESOLVED CONSOLE REPORT RELOCATABLE NO_RUNTIME_CHECK
     REPORT_SYMBOL "CreateFileA")
+
+set(TL_COMPAT_DLL_A "${TL_FIXTURE_OUTPUT_DIRECTORY}/tl_compat_dll_a.dll")
+set(TL_COMPAT_DLL_B "${TL_FIXTURE_OUTPUT_DIRECTORY}/tl_compat_dll_b.dll")
+set(TL_COMPAT_DLL_IMPORT_LIB "${TL_FIXTURE_OUTPUT_DIRECTORY}/tl_compat_dll.imports.a")
+find_program(TL_MINGW_DLLTOOL
+    NAMES x86_64-w64-mingw32-dlltool
+    REQUIRED
+)
+add_custom_command(
+    OUTPUT "${TL_COMPAT_DLL_A}" "${TL_COMPAT_DLL_IMPORT_LIB}"
+    COMMAND "${CMAKE_COMMAND}" -E make_directory "${TL_FIXTURE_OUTPUT_DIRECTORY}"
+    COMMAND "${TL_MINGW_CC}"
+        -std=c17 -ffreestanding -fno-stack-protector
+        -fno-asynchronous-unwind-tables -fno-unwind-tables
+        -nostdlib -shared
+        -Wl,--entry=DllMain -Wl,--subsystem,console
+        -Wl,--no-insert-timestamp -Wl,--dynamicbase
+        -o "${TL_COMPAT_DLL_A}"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/tl_compat_dll_a.c"
+        -lkernel32
+    COMMAND "${TL_MINGW_DLLTOOL}" -m i386:x86-64
+        -d "${CMAKE_CURRENT_SOURCE_DIR}/defs/tl_compat_dll.def"
+        -l "${TL_COMPAT_DLL_IMPORT_LIB}"
+    DEPENDS
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/tl_compat_dll.c"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/tl_compat_dll_a.c"
+        "${CMAKE_CURRENT_SOURCE_DIR}/defs/tl_compat_dll.def"
+    VERBATIM
+    COMMENT "Generating PE32+ compatibility DLL variant A"
+)
+add_custom_command(
+    OUTPUT "${TL_COMPAT_DLL_B}"
+    COMMAND "${CMAKE_COMMAND}" -E make_directory "${TL_FIXTURE_OUTPUT_DIRECTORY}"
+    COMMAND "${TL_MINGW_CC}"
+        -std=c17 -ffreestanding -fno-stack-protector
+        -fno-asynchronous-unwind-tables -fno-unwind-tables
+        -nostdlib -shared
+        -Wl,--entry=DllMain -Wl,--subsystem,console
+        -Wl,--no-insert-timestamp -Wl,--dynamicbase
+        -o "${TL_COMPAT_DLL_B}"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/tl_compat_dll_b.c"
+        -lkernel32
+    DEPENDS
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/tl_compat_dll.c"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/tl_compat_dll_b.c"
+    VERBATIM
+    COMMENT "Generating PE32+ compatibility DLL variant B"
+)
+add_custom_command(
+    OUTPUT "${TL_FIXTURE_OUTPUT_DIRECTORY}/tl_compat_dll_app.exe"
+    COMMAND "${CMAKE_COMMAND}" -E make_directory "${TL_FIXTURE_OUTPUT_DIRECTORY}"
+    COMMAND "${TL_MINGW_CC}"
+        -std=c17 -ffreestanding -fno-stack-protector
+        -fno-asynchronous-unwind-tables -fno-unwind-tables
+        -nostdlib
+        -Wl,--entry=tl_entry -Wl,--subsystem,console
+        -Wl,--no-insert-timestamp -Wl,--dynamicbase
+        -o "${TL_FIXTURE_OUTPUT_DIRECTORY}/tl_compat_dll_app.exe"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/tl_compat_dll_app.c"
+        "${TL_COMPAT_DLL_IMPORT_LIB}"
+        -lkernel32
+    DEPENDS
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/tl_compat_dll_app.c"
+        "${CMAKE_CURRENT_SOURCE_DIR}/manifests/tl_compat_dll_app.json"
+        "${TL_COMPAT_DLL_IMPORT_LIB}"
+    VERBATIM
+    COMMENT "Generating PE32+ compatibility DLL application"
+)
+add_custom_target(tl_compat_dll_fixture
+    DEPENDS
+        "${TL_COMPAT_DLL_A}"
+        "${TL_COMPAT_DLL_B}"
+        "${TL_FIXTURE_OUTPUT_DIRECTORY}/tl_compat_dll_app.exe"
+)
+add_dependencies(tradutorlinux_samples tl_compat_dll_fixture)
+
+add_test(
+    NAME fixture_tl_compat_dll_app_metadata
+    COMMAND "${CMAKE_COMMAND}"
+        "-DINPUT=${TL_FIXTURE_OUTPUT_DIRECTORY}/tl_compat_dll_app.exe"
+        "-DMANIFEST=${CMAKE_CURRENT_SOURCE_DIR}/manifests/tl_compat_dll_app.json"
+        "-DLLVM_READOBJ=${TL_LLVM_READOBJ}"
+        -P "${CMAKE_CURRENT_SOURCE_DIR}/verify_fixture.cmake"
+)
+set_tests_properties(fixture_tl_compat_dll_app_metadata PROPERTIES LABELS "fixture;pe32plus;compat")
 tl_add_pe_fixture(tl_virtual_query src/tl_virtual_query.c manifests/tl_virtual_query.json
     LINK_KERNEL32 EXPECT_RESOLVED CONSOLE REPORT RELOCATABLE)
 tl_add_pe_fixture(tl_reloc src/tl_reloc.c manifests/tl_reloc.json RELOCATABLE)

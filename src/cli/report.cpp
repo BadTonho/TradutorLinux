@@ -328,6 +328,7 @@ void write_imports_trace(std::ostream& stream, const loader::ResolveResult& impo
                 diagnostics::TraceField{"address", util::format_hex(entry.address)},
                 diagnostics::TraceField{"mechanism", import_mechanism_label(entry.mechanism)},
                 diagnostics::TraceField{"support", export_support_label(entry.support)},
+                diagnostics::TraceField{"provider", entry.provider},
             };
             diagnostics::write_trace(stream, diagnostics::TraceComponent::Imports,
                                      diagnostics::TraceLevel::Info, "resolved", fields);
@@ -338,6 +339,7 @@ void write_imports_trace(std::ostream& stream, const loader::ResolveResult& impo
                 diagnostics::TraceField{"status", import_status_label(entry.status)},
                 diagnostics::TraceField{"detail", entry.detail},
                 diagnostics::TraceField{"mechanism", import_mechanism_label(entry.mechanism)},
+                diagnostics::TraceField{"provider", entry.provider},
             };
             diagnostics::write_trace(stream, diagnostics::TraceComponent::Imports,
                                      diagnostics::TraceLevel::Error, "unresolved", fields);
