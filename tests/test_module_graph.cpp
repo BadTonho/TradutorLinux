@@ -12,6 +12,7 @@
 #include <filesystem>
 #include <fstream>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <gtest/gtest.h>
@@ -51,8 +52,15 @@ std::vector<std::byte> make_export_dll() {
 
     BuildSpec spec;
     spec.coff_characteristics = 0x2022;
+    std::vector<std::byte> text(0x10, std::byte{0});
+    text[0] = std::byte{0xB8};  // mov eax, 1
+    text[1] = std::byte{0x01};
+    text[2] = std::byte{0x00};
+    text[3] = std::byte{0x00};
+    text[4] = std::byte{0x00};
+    text[5] = std::byte{0xC3};  // ret
     spec.section_names = {".text", ".edata"};
-    spec.section_data = {std::vector<std::byte>(0x10), data};
+    spec.section_data = {std::move(text), data};
     spec.export_rva = export_rva;
     spec.export_size = 0xA0;
     spec.reloc_rva = export_rva + 0x90;
@@ -132,6 +140,51 @@ TEST_F(ModuleGraphTest, ResolvesProfileExportAndFallsBackPerExport) {
     EXPECT_EQ(custom.lookup.forwarder, "");
     EXPECT_TRUE(graph.is_valid_module_handle(handle));
 
+    unmap_image(mapped.image);
+}
+
+TEST_F(ModuleGraphTest, LoadsAndUnloadsProfileDllWithReferenceCounting) {
+    runtime::GuestContextScope scope(context_);
+    register_builtin_modules();
+    compat::Profile profile;
+    profile.schema = 2;
+    profile.app_id = "fixture";
+    profile.dlls.push_back({"KERNEL32.dll", "shim.dll"});
+    GuestModuleGraph graph(root_, profile, root_ / "app.exe", false);
+
+    void* const handle = graph.load_library("KERNEL32.dll");
+    ASSERT_NE(handle, nullptr);
+    ASSERT_TRUE(graph.is_valid_module_handle(handle));
+    const GraphExportLookup entry = graph.get_proc_address(handle, "CustomEntry");
+    ASSERT_TRUE(entry.lookup.found);
+    ASSERT_NE(entry.lookup.address, 0U);
+    using EntryPoint = TL_MSABI int (*)();
+    EXPECT_EQ(reinterpret_cast<EntryPoint>(entry.lookup.address)(), 1);
+
+    EXPECT_TRUE(graph.free_library(handle));
+    EXPECT_FALSE(graph.is_valid_module_handle(handle));
+}
+
+TEST_F(ModuleGraphTest, MissingProfileDllFallsBackToBuiltinProvider) {
+    runtime::GuestContextScope scope(context_);
+    register_builtin_modules();
+    compat::Profile profile;
+    profile.schema = 2;
+    profile.app_id = "fixture";
+    profile.dlls.push_back({"KERNEL32.dll", "missing.dll"});
+    GuestModuleGraph graph(root_, profile, root_ / "app.exe", false);
+
+    const std::vector<std::byte> executable = make_importing_executable();
+    const pe::ParseResult parsed = pe::parse_pe(executable);
+    ASSERT_EQ(parsed.status, pe::ParseStatus::Success) << parsed.error_message;
+    MapResult mapped = map_image(parsed.info, executable);
+    ASSERT_EQ(mapped.status, MapStatus::Success) << mapped.error_message;
+
+    const ResolveResult resolved =
+        graph.resolve_imports(mapped.image, parsed.info, root_ / "app.exe");
+    ASSERT_EQ(resolved.status, ImportStatus::UnknownDll);
+    ASSERT_EQ(resolved.imports.size(), 2U);
+    EXPECT_EQ(resolved.imports[1].provider, "builtin");
     unmap_image(mapped.image);
 }
 

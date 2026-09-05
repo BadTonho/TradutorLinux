@@ -188,7 +188,9 @@ struct ForwarderTarget {
     ExportLookup result;
     result.found = true;
     result.ordinal = found->ordinal;
-    result.address = found->forwarder.empty() ? module.image.base + found->rva : 0;
+    result.address = found->forwarder.empty() && found->rva < module.image.size
+                         ? module.image.base + found->rva
+                         : 0;
     result.support = ExportSupport::Full;
     result.forwarder = found->forwarder;
     return result;
@@ -204,7 +206,47 @@ struct ForwarderTarget {
     ExportLookup result;
     result.found = true;
     result.ordinal = found->ordinal;
-    result.address = found->forwarder.empty() ? module.image.base + found->rva : 0;
+    result.address = found->forwarder.empty() && found->rva < module.image.size
+                         ? module.image.base + found->rva
+                         : 0;
+    result.support = ExportSupport::Full;
+    result.forwarder = found->forwarder;
+    return result;
+}
+
+[[nodiscard]] ExportLookup direct_export(const pe::PeInfo& info,
+                                          const MappedImage& image,
+                                          const std::string_view symbol) {
+    const auto found = std::find_if(info.exports.begin(), info.exports.end(),
+                                    [&](const pe::ExportedSymbol& export_) {
+                                        return export_.by_name && export_.name == symbol;
+                                    });
+    if (found == info.exports.end()) return {};
+    ExportLookup result;
+    result.found = true;
+    result.ordinal = found->ordinal;
+    result.address = found->forwarder.empty() && found->rva < image.size
+                         ? image.base + found->rva
+                         : 0;
+    result.support = ExportSupport::Full;
+    result.forwarder = found->forwarder;
+    return result;
+}
+
+[[nodiscard]] ExportLookup direct_export(const pe::PeInfo& info,
+                                          const MappedImage& image,
+                                          const std::uint16_t ordinal) {
+    const auto found = std::find_if(info.exports.begin(), info.exports.end(),
+                                    [&](const pe::ExportedSymbol& export_) {
+                                        return export_.ordinal == ordinal;
+                                    });
+    if (found == info.exports.end()) return {};
+    ExportLookup result;
+    result.found = true;
+    result.ordinal = found->ordinal;
+    result.address = found->forwarder.empty() && found->rva < image.size
+                         ? image.base + found->rva
+                         : 0;
     result.support = ExportSupport::Full;
     result.forwarder = found->forwarder;
     return result;
@@ -385,9 +427,18 @@ std::optional<std::size_t> GuestModuleGraph::load_pe_module(
     const ResolveResult imports = resolve_imports_for_module(
         modules_[index]->image, modules_[index]->info, modules_[index]->source, index);
     if (imports.status != ImportStatus::Resolved) {
-        unmap_image(modules_[index]->image);
-        modules_[index]->state = LoadedState::Rejected;
-        trace_event("provider-rejected", modules_[index]->name, imports.error_message);
+        const std::string rejected_name = modules_[index]->name;
+        for (const std::size_t dependency : modules_[index]->dependencies) {
+            if (dependency < index) release_dependency(dependency);
+        }
+        for (std::size_t cursor = modules_.size(); cursor > index; --cursor) {
+            LoadedModule& candidate = *modules_[cursor - 1U];
+            if (candidate.image.memory != nullptr) unmap_image(candidate.image);
+            candidate.state = LoadedState::Unloaded;
+        }
+        modules_.resize(index);
+        if (provider == ModuleProvider::Profile) reject_profile_module(rejected_name);
+        trace_event("provider-rejected", rejected_name, imports.error_message);
         return std::nullopt;
     }
     modules_[index]->state = LoadedState::Ready;
@@ -753,17 +804,43 @@ void GuestModuleGraph::detach_module(const std::size_t index) noexcept {
 
 bool GuestModuleGraph::process_attach() noexcept {
     try {
-        for (std::size_t index = 0; index < modules_.size(); ++index) {
-            LoadedModule& module = *modules_[index];
-            if (module.static_refs == 0 && module.dynamic_refs == 0) continue;
-            if (!attach_module(index)) {
-                if (module.provider == ModuleProvider::Profile) {
-                    reject_profile_module(module.name);
+        for (;;) {
+            bool retry_with_fallback = false;
+            for (std::size_t index = 0; index < modules_.size(); ++index) {
+                LoadedModule& module = *modules_[index];
+                if (module.state == LoadedState::Rejected ||
+                    module.state == LoadedState::Unloaded ||
+                    (module.static_refs == 0 && module.dynamic_refs == 0)) {
+                    continue;
                 }
-                return false;
+                if (!attach_module(index)) {
+                    if (module.provider != ModuleProvider::Profile) return false;
+                    // Um provider de perfil que falha no attach não pode
+                    // continuar parcialmente no processo. Todas as DLLs do
+                    // perfil carregadas nesta tentativa são descartadas e a
+                    // resolução do executável recomeça usando drive_c/built-in.
+                    for (const auto& candidate : modules_) {
+                        if (candidate->provider == ModuleProvider::Profile) {
+                            reject_profile_module(candidate->name);
+                        }
+                    }
+                    MappedImage* const main_image = main_image_;
+                    const pe::PeInfo* const main_info = main_info_;
+                    const std::filesystem::path main_path = main_path_;
+                    discard_loaded_modules();
+                    if (main_image == nullptr || main_info == nullptr) return false;
+                    main_image_ = main_image;
+                    main_info_ = main_info;
+                    main_path_ = main_path;
+                    const ResolveResult fallback = resolve_imports_for_module(
+                        *main_image_, *main_info_, main_path_, kNoModule);
+                    if (fallback.status != ImportStatus::Resolved) return false;
+                    retry_with_fallback = true;
+                    break;
+                }
             }
+            if (!retry_with_fallback) return true;
         }
-        return true;
     } catch (...) {
         return false;
     }
@@ -919,6 +996,20 @@ GraphExportLookup GuestModuleGraph::get_proc_address(void* const module_handle,
             return {.lookup = builtin, .provider = ModuleProvider::Builtin,
                     .module_index = kNoModule, .provider_name = "builtin"};
         }
+        if (main_image_ != nullptr && main_image_->memory != nullptr && main_info_ != nullptr &&
+            reinterpret_cast<std::uintptr_t>(module_handle) == main_image_->base) {
+            ExportLookup main_export = direct_export(*main_info_, *main_image_, symbol);
+            if (!main_export.found) return {};
+            if (!main_export.forwarder.empty()) {
+                const auto target = parse_forwarder(main_export.forwarder);
+                if (!target.has_value()) return {};
+                return target->by_ordinal
+                           ? resolve_export(target->module, target->ordinal, main_path_, kNoModule)
+                           : resolve_export(target->module, target->symbol, main_path_, kNoModule);
+            }
+            return {.lookup = std::move(main_export), .provider = ModuleProvider::Builtin,
+                    .module_index = kNoModule, .provider_name = "main"};
+        }
         if (const auto index = find_module_for_handle(module_handle)) {
             return resolve_export(modules_[*index]->name, symbol, modules_[*index]->source,
                                   kNoModule);
@@ -941,6 +1032,20 @@ GraphExportLookup GuestModuleGraph::get_proc_address(void* const module_handle,
             return {.lookup = builtin, .provider = ModuleProvider::Builtin,
                     .module_index = kNoModule, .provider_name = "builtin"};
         }
+        if (main_image_ != nullptr && main_image_->memory != nullptr && main_info_ != nullptr &&
+            reinterpret_cast<std::uintptr_t>(module_handle) == main_image_->base) {
+            ExportLookup main_export = direct_export(*main_info_, *main_image_, ordinal);
+            if (!main_export.found) return {};
+            if (!main_export.forwarder.empty()) {
+                const auto target = parse_forwarder(main_export.forwarder);
+                if (!target.has_value()) return {};
+                return target->by_ordinal
+                           ? resolve_export(target->module, target->ordinal, main_path_, kNoModule)
+                           : resolve_export(target->module, target->symbol, main_path_, kNoModule);
+            }
+            return {.lookup = std::move(main_export), .provider = ModuleProvider::Builtin,
+                    .module_index = kNoModule, .provider_name = "main"};
+        }
         if (const auto index = find_module_for_handle(module_handle)) {
             return resolve_export(modules_[*index]->name, ordinal, modules_[*index]->source,
                                   kNoModule);
@@ -961,7 +1066,7 @@ bool GuestModuleGraph::is_valid_module_handle(void* const module_handle) const n
     return std::find(builtin_handles_.begin(), builtin_handles_.end(), value) != builtin_handles_.end();
 }
 
-void GuestModuleGraph::reset() noexcept {
+void GuestModuleGraph::discard_loaded_modules() noexcept {
     process_detach();
     for (const auto& module : modules_) {
         if (module->image.memory != nullptr) unmap_image(module->image);
@@ -971,6 +1076,10 @@ void GuestModuleGraph::reset() noexcept {
     builtin_modules_.clear();
     builtin_handles_.clear();
     builtin_refcounts_.clear();
+}
+
+void GuestModuleGraph::reset() noexcept {
+    discard_loaded_modules();
     main_image_ = nullptr;
     main_info_ = nullptr;
 }
