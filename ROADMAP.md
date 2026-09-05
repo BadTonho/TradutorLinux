@@ -1237,8 +1237,12 @@ imports não encerra B5.
        fila, command list, fence, swapchain flip de dois buffers e `Present`,
        retornando `0` em `integration_proton_d3d12`. Ambos passam com Proton
        Experimental sob Xvfb e comprovam somente D3D11→DXVK/Vulkan e o caminho
-       controlado D3D12→VKD3D-Proton/Vulkan. Entrada e áudio continuam abertos.
-       Não declarar suporte amplo por instalar o backend.
+       controlado D3D12→VKD3D-Proton/Vulkan. A entrada de janela também está
+       validada por `tl_input_probe.exe` e `integration_proton_input`, que
+       confirma movimento, clique, `WM_KEYDOWN/CHAR/UP`, stdout, exit `0` e
+       limpeza do prefixo com o driver X11/XTest. Áudio continua aberto; não
+       declarar raw input, gamepad/XInput ou suporte amplo por instalar o
+       backend.
      - [ ] **B14.6.6 — Piloto real e promoção.** A fixture PE32+
        `tl_proton_probe.exe` e o teste `integration_proton_backend` já cobrem o
        piloto controlado com mock, incluindo seleção, staging, ambiente,

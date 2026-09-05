@@ -1,0 +1,28 @@
+{
+  "name": "tl_input_probe",
+  "format": "PE32+",
+  "machine": "AMD64",
+  "entry_point": "tl_entry",
+  "uses_crt": false,
+  "imports": {
+    "KERNEL32.dll": [
+      "ExitProcess",
+      "GetModuleHandleA",
+      "GetStdHandle",
+      "WriteFile"
+    ],
+    "USER32.dll": [
+      "CreateWindowExA",
+      "DefWindowProcA",
+      "DestroyWindow",
+      "DispatchMessageA",
+      "GetMessageA",
+      "PostQuitMessage",
+      "RegisterClassExA",
+      "ShowWindow",
+      "TranslateMessage",
+      "UnregisterClassA",
+      "UpdateWindow"
+    ]
+  }
+}

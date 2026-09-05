@@ -99,6 +99,15 @@ Essa validação cobre um caminho controlado D3D12→VKD3D-Proton/Vulkan, não
 D3D12 completo, áudio ou entrada. Em caso de rejeição da descrição da
 swapchain, a fixture escreve o HRESULT no stderr para diagnóstico.
 
+Para o slice de entrada, `integration_proton_input` usa
+`tl_input_probe.exe` e o driver `proton_input_driver`. O driver injeta
+movimento, botão esquerdo e `q` com X11/XTest; a saída esperada é
+`Proton input ready` com exit code `0`. A fixture somente encerra após
+observar `WM_CREATE`, `WM_MOUSEMOVE`, `WM_LBUTTONDOWN`, `WM_LBUTTONUP`,
+`WM_KEYDOWN`, `WM_CHAR` e `WM_KEYUP`. Falha do driver ou ausência da janela
+retorna erro de integração sem deixar o processo Proton continuar em segundo
+plano.
+
 O componente `proton` pode ser selecionado com `--trace=proton` ou incluído
 em `--trace=proton,process`. Um backend solicitado sem launcher, componentes,
 arquitetura, hash ou versão mínima válidos registra `provider-rejected` e

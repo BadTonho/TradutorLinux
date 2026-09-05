@@ -112,6 +112,13 @@ e uma chamada `Present`. `integration_proton_d3d12` usa a mesma seleção
 explícita de Proton e confirma esse caminho D3D12→VKD3D-Proton/Vulkan, sem
 transformar a prova controlada em suporte geral de D3D12 ou de jogos.
 
+A entrada Win32 é exercida por `tl_input_probe.exe` e
+`integration_proton_input`. O driver nativo localiza a janela no Xvfb e envia
+eventos X11/XTest à árvore da janela; a fixture confirma a conversão para
+`WM_MOUSEMOVE`, `WM_LBUTTONDOWN/UP` e `WM_KEYDOWN/CHAR/UP`. Esse teste não
+altera o `GuestModuleGraph` e não declara suporte a raw input, gamepad/XInput
+ou jogos.
+
 ## Fronteira de ABI (`ms_abi`)
 
 `include/tradutorlinux/runtime/winapi.hpp` define `TL_MSABI` como `__attribute__((ms_abi))` em GCC/Clang x86-64 e declara as funções hospedeiras com vinculação C (`extern "C"`), `noexcept` e a convenção Microsoft x64. Tipos mínimos Win32 usados nas assinaturas ficam em `tradutorlinux::abi` (`Handle`, `Bool`, `Dword`, `Uint` e as constantes de handle padrão).

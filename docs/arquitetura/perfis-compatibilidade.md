@@ -198,6 +198,13 @@ e confirma `Present` sob Proton Experimental. Isso valida um caminho
 controlado D3D12→VKD3D-Proton/Vulkan, sem declarar suporte geral a D3D12,
 áudio, entrada ou jogos.
 
+A entrada é exercida separadamente por `tl_input_probe.exe`,
+`proton_input_driver` e `integration_proton_input`. O driver usa Xvfb e
+XTest para localizar, mapear e focar a janela Proton; movimento, botão
+esquerdo e `q` são convertidos em mensagens Win32 e a fixture só termina
+após validar a sequência completa. A prova cobre apenas essa entrada de
+janela controlada, não raw input, gamepad/XInput ou jogos.
+
 ## Auditoria do 7-Zip — sem regra específica
 
 O 7-Zip 24.08 foi auditado como alvo real após a implementação da B14.3. Não

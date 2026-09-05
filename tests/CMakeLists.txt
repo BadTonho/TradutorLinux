@@ -155,6 +155,15 @@ if(TL_XVFB_EXECUTABLE AND TARGET tradutorlinux_samples AND TARGET tradutorlinux)
         TIMEOUT 90
         SKIP_RETURN_CODE 77
     )
+
+    add_executable(proton_input_driver
+        gui/proton_input_driver.cpp
+    )
+    find_library(TL_XTEST_LIBRARY Xtst REQUIRED)
+    target_include_directories(proton_input_driver PRIVATE "${TL_X11_INCLUDE_DIR}")
+    target_link_libraries(proton_input_driver PRIVATE "${TL_X11_LIBRARY}" "${TL_XTEST_LIBRARY}")
+    tl_enable_warnings(proton_input_driver)
+    tl_enable_sanitizers(proton_input_driver)
 endif()
 
 if(TARGET tradutorlinux_samples AND TARGET tradutorlinux)
@@ -275,5 +284,25 @@ if(TARGET tradutorlinux_samples AND TARGET tradutorlinux)
             LABELS "runtime;pe32plus;backend;proton;graphics;vkd3d"
             TIMEOUT 240
         )
+        if(TARGET proton_input_driver)
+            add_test(
+                NAME integration_proton_input
+                COMMAND "${CMAKE_COMMAND}"
+                    "-DRUNTIME=$<TARGET_FILE:tradutorlinux>"
+                    "-DFIXTURE=${CMAKE_CURRENT_BINARY_DIR}/samples/generated/tl_input_probe.exe"
+                    "-DPROTON_ROOT=${TL_PROTON_ROOT}"
+                    "-DINPUT_DRIVER=$<TARGET_FILE:proton_input_driver>"
+                    "-DWORK=${CMAKE_CURRENT_BINARY_DIR}/proton_input_work"
+                    "-DAPP_ID=inputprobe"
+                    "-DPROBE_NAME=Proton Input Probe"
+                    "-DEXPECTED_OUTPUT=Proton input ready"
+                    -P "${CMAKE_CURRENT_SOURCE_DIR}/samples/verify_proton_input.cmake"
+            )
+            set_tests_properties(integration_proton_input PROPERTIES
+                DEPENDS fixture_tl_input_probe_metadata
+                LABELS "runtime;pe32plus;backend;proton;input"
+                TIMEOUT 240
+            )
+        endif()
     endif()
 endif()
