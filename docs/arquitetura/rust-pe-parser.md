@@ -1,8 +1,9 @@
 # Contrato FFI do parser PE em Rust
 
-Este documento define o contrato congelado em R21.1 e registra a implementação
-incremental de R21.2. O parser Rust não é integrado ao loader, ao `--report` ou
-ao fluxo `app run` nesta etapa.
+Este documento define o contrato congelado em R21.1, registra a implementação
+de R21.2 e a integração seletiva de R21.3. Com `TL_BUILD_RUST=ON`, o parser
+Rust é canônico somente na execução direta de `--report`; o loader, o fluxo
+`app run` e o build sem Rust continuam usando o parser C++.
 
 O contrato é específico para o alvo atual: PE32+ AMD64 em Linux x86-64. A
 implementação Rust será responsável somente por analisar bytes e construir o
@@ -177,9 +178,32 @@ TLS, relocations e `UNWIND_INFO` V1/V2 com seus códigos, epílogos, handlers e
 encadeamentos. O serializer faz primeiro um plano de tamanho checked e só
 preenche a saída depois de confirmar a capacidade recebida.
 
-O C++ continua sendo o oráculo diferencial e o decoder do TLPE existe somente
-nos testes. Nenhum resultado Rust é consumido pelo loader, `--report` ou
-`app run` nesta etapa.
+O C++ continua sendo o oráculo diferencial. A R21.3 compartilha o decoder TLPE
+entre o adaptador de produção e os testes; ele valida novamente todo o buffer
+antes de convertê-lo em `PeInfo`. Nenhum resultado Rust é consumido pelo
+loader ou por `app run`.
+
+## Integração R21.3 no `--report`
+
+O caminho Rust é selecionado apenas quando `CommandMode::DirectRun` e
+`report_only` são verdadeiros. O adaptador C++ chama `size` e `fill` com
+buffers caller-owned, repete a capacidade da mensagem quando necessário e
+decodifica o TLPE sem expor layout de Rust. A análise é stateless e ocorre
+antes do registro de módulos e da resolução usada para compor o relatório;
+uma falha não mapeia a imagem nem executa o entry point.
+
+Falhas Rust não fazem fallback silencioso para C++. `truncated` e `malformed`
+retornam `MalformedPe` (`4`); arquitetura, formato e mecanismo não suportados
+retornam `Unsupported` (`5`). Argumentos inválidos, buffers, limites,
+inconsistências do wire, panic e falhas internas retornam `InternalError`
+(`70`). O stdout do relatório e as mensagens normais permanecem iguais ao
+relatório C++.
+
+No trace, os eventos derivados do resultado Rust carregam
+`backend="rust"`. Um `parse-failed` Rust também carrega `code`, `phase`,
+`input-offset` e `detail-value`, além de `status` e `detail`. O `app run`
+(inclusive `app run --report`) e todo o caminho `TL_BUILD_RUST=OFF` não usam o
+adaptador nem emitem esse backend.
 
 ## Testes e evolução
 
@@ -197,5 +221,6 @@ Esses testes verificam o contrato e o wire format. A R21.2 acrescenta o
 corpus diferencial e os testes de robustez do parser Rust, incluindo as duas
 chamadas stateless, buffers com sentinelas, erros estruturados, strings
 deduplicadas, concorrência e entradas malformadas bounded. Até a promoção,
-`TL_BUILD_RUST=OFF` permanece o padrão, nenhum símbolo FFI é chamado pelo
-runtime e a matriz de compatibilidade não muda.
+`TL_BUILD_RUST=OFF` permanece o padrão. Com Rust habilitado, somente o
+`--report` direto chama a ABI; o loader e a matriz de compatibilidade de
+execução não mudam.

@@ -324,6 +324,32 @@ de evidência:
 Um `result: supported` sem execução correspondente significa apenas
 `imports-resolved`; não deve ser apresentado como suporte funcional ao usuário.
 
+### Backend Rust no relatório direto
+
+Quando o projeto é construído com `TL_BUILD_RUST=ON`, somente
+`tradutorlinux [--trace] --report arquivo.exe` usa Rust para analisar o PE.
+O evento de parsing identifica o backend:
+
+```text
+[tl][pe][info] image format="PE32+" arch="x86-64" entry="0x1000" image-base="0x140000000" size-of-image="0x5000" sections="4" backend="rust"
+```
+
+Se a análise Rust falhar, não há fallback para o parser C++:
+
+```text
+[tl][pe][error] parse-failed status="malformed" detail="assinatura DOS ausente (esperado MZ)" backend="rust" code="16" phase="2" input-offset="0" detail-value="26915"
+```
+
+`truncated`/`malformed` retornam `4`; `unsupported-architecture`,
+`unsupported-format` e `unsupported-mechanism` retornam `5`. Falhas da ABI,
+limites, buffer, wire inválido, panic ou falha interna retornam `70`.
+`code`, `phase`, `input-offset` e `detail-value` são os campos estruturados
+de `tl_pe_error_v1`; `detail` é apenas diagnóstico humano.
+
+O caminho Rust termina antes de mapear, resolver imports para execução ou
+executar o entry point. `app run --report`, `app run` e qualquer build com
+`TL_BUILD_RUST=OFF` continuam emitindo o trace C++ sem `backend="rust"`.
+
 Quando uma importação não pode ser resolvida, emite um evento `unresolved` com os campos `dll`, `symbol`, `status`, `detail` e `mechanism`:
 
 ```text

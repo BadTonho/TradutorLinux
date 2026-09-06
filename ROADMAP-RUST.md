@@ -62,16 +62,30 @@ Evidência reproduzível em 2026-09-06: `cargo test --locked --offline` passou
 os testes selecionados passaram 55/55 no Debug, 9/9 no Sanitize, e 55/55 no
 Release após construir explicitamente o contrato C. Com `TL_BUILD_RUST=OFF`,
 os 42 testes `PeReaderTest` e o contrato C passaram 43/43. A implementação
-continua fora do `tradutorlinux_core`, do `--report` e do `app run`.
+continua fora do loader e do `app run`; o uso no relatório direto é o escopo
+exclusivo de R21.3.
 
 ### R21.3 — Integração sem risco de execução
 
-- [ ] Integrar primeiro no `--report`, sem alterar o mapeamento ou executar o
-  entry point do convidado.
-- [ ] Confirmar equivalência de arquitetura, imports, exports, relocations,
-  TLS, unwind, status e mensagens de erro.
-- [ ] Executar Debug, Sanitize e Release com corpus diferencial completo.
-- [ ] Registrar limites e falhas no trace e na matriz de compatibilidade.
+- [x] Integrar somente no `--report` direto, sem alterar o mapeamento ou
+  executar o entry point do convidado; `app run --report` permanece em C++.
+- [x] Confirmar equivalência semântica de headers, seções, imports,
+  delay-imports, exports/forwarders, relocations, TLS e unwind, além de status
+  e diagnóstico estruturado.
+- [x] Executar o corpus de relatório em Debug Rust e no baseline C++ com
+  `TL_BUILD_RUST=OFF`, além dos testes afetados em Sanitize e Release.
+- [x] Registrar a política de backend, limites e falhas estruturadas no trace,
+  no diagnóstico e na matriz de compatibilidade.
+
+Evidência reproduzível em 2026-09-06: o conjunto completo do Debug passou
+464/464 testes executados (1 teste ambiental pulado); os testes diferenciais
+do wire format e do caminho `--report` passaram 14/14 em Debug, Sanitize e
+Release. O corpus `report_*_support` passou 60/60 serialmente com Rust e
+60/60 no baseline `TL_BUILD_RUST=OFF`; a comparação do stdout do relatório
+mínimo passou sem diferenças. Cargo test passou 17/17 e Clippy offline com
+`-D warnings` passou. O teste com LeakSanitizer não pôde inicializar neste
+ambiente por restrição de `ptrace`; a rodada Sanitize foi repetida com
+`detect_leaks=0` e passou 14/14.
 
 ### R21.4 — Integração no `app run`
 
