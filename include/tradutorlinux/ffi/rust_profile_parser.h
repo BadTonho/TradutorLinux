@@ -1,0 +1,141 @@
+#ifndef TRADUTORLINUX_FFI_RUST_PROFILE_PARSER_H
+#define TRADUTORLINUX_FFI_RUST_PROFILE_PARSER_H
+
+#include <stdint.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+typedef uint32_t tl_profile_status_t;
+typedef uint32_t tl_profile_error_code_t;
+typedef uint32_t tl_profile_error_phase_t;
+
+#define TL_PROFILE_STATUS_SUCCESS UINT32_C(0)
+#define TL_PROFILE_STATUS_MALFORMED UINT32_C(1)
+#define TL_PROFILE_STATUS_UNSUPPORTED_FORMAT UINT32_C(2)
+#define TL_PROFILE_STATUS_INVALID_ARGUMENT UINT32_C(3)
+#define TL_PROFILE_STATUS_BUFFER_TOO_SMALL UINT32_C(4)
+#define TL_PROFILE_STATUS_INPUT_TOO_LARGE UINT32_C(5)
+#define TL_PROFILE_STATUS_OUTPUT_TOO_LARGE UINT32_C(6)
+#define TL_PROFILE_STATUS_INTERNAL UINT32_C(7)
+
+#define TL_PROFILE_ERROR_NONE UINT32_C(0)
+#define TL_PROFILE_ERROR_INVALID_ARGUMENT UINT32_C(1)
+#define TL_PROFILE_ERROR_BUFFER_TOO_SMALL UINT32_C(2)
+#define TL_PROFILE_ERROR_INPUT_TOO_LARGE UINT32_C(3)
+#define TL_PROFILE_ERROR_OUTPUT_TOO_LARGE UINT32_C(4)
+#define TL_PROFILE_ERROR_INTERNAL UINT32_C(5)
+#define TL_PROFILE_ERROR_JSON_SYNTAX UINT32_C(16)
+#define TL_PROFILE_ERROR_JSON_FIELD UINT32_C(17)
+#define TL_PROFILE_ERROR_SCHEMA UINT32_C(18)
+#define TL_PROFILE_ERROR_IDENTITY UINT32_C(19)
+#define TL_PROFILE_ERROR_PATH UINT32_C(20)
+#define TL_PROFILE_ERROR_BACKEND UINT32_C(21)
+#define TL_PROFILE_ERROR_WIRE_FORMAT UINT32_C(22)
+
+#define TL_PROFILE_ERROR_PHASE_NONE UINT32_C(0)
+#define TL_PROFILE_ERROR_PHASE_INPUT UINT32_C(1)
+#define TL_PROFILE_ERROR_PHASE_JSON UINT32_C(2)
+#define TL_PROFILE_ERROR_PHASE_SCHEMA UINT32_C(3)
+#define TL_PROFILE_ERROR_PHASE_IDENTITY UINT32_C(4)
+#define TL_PROFILE_ERROR_PHASE_PATHS UINT32_C(5)
+#define TL_PROFILE_ERROR_PHASE_SERIALIZE UINT32_C(6)
+#define TL_PROFILE_ERROR_PHASE_WIRE UINT32_C(7)
+
+#define TL_PROFILE_ERROR_OFFSET_UNKNOWN UINT64_MAX
+
+typedef struct tl_profile_identity_v1 {
+    const uint8_t* app_id;
+    uint64_t app_id_length;
+    const uint8_t* app_sha256;
+    uint64_t app_sha256_length;
+    const uint8_t* app_version;
+    uint64_t app_version_length;
+} tl_profile_identity_v1;
+
+typedef struct tl_profile_error_v1 {
+    uint32_t code;
+    uint32_t phase;
+    uint64_t input_offset;
+    uint64_t detail_value;
+} tl_profile_error_v1;
+
+#define TL_PROFILE_WIRE_MAGIC_0 UINT8_C(0x54) /* T */
+#define TL_PROFILE_WIRE_MAGIC_1 UINT8_C(0x4C) /* L */
+#define TL_PROFILE_WIRE_MAGIC_2 UINT8_C(0x50) /* P */
+#define TL_PROFILE_WIRE_MAGIC_3 UINT8_C(0x52) /* R */
+#define TL_PROFILE_WIRE_MAJOR UINT16_C(1)
+#define TL_PROFILE_WIRE_MINOR UINT16_C(0)
+
+#define TL_PROFILE_WIRE_HEADER_SIZE UINT32_C(128)
+#define TL_PROFILE_WIRE_TABLE_DESCRIPTOR_SIZE UINT32_C(24)
+#define TL_PROFILE_WIRE_TABLE_DESCRIPTOR_OFFSET UINT32_C(32)
+#define TL_PROFILE_WIRE_TABLE_COUNT UINT32_C(4)
+#define TL_PROFILE_WIRE_TABLE_FLAG_VARIABLE_RECORDS UINT32_C(1)
+
+#define TL_PROFILE_WIRE_TABLE_INFO UINT32_C(0)
+#define TL_PROFILE_WIRE_TABLE_FILES UINT32_C(1)
+#define TL_PROFILE_WIRE_TABLE_DLLS UINT32_C(2)
+#define TL_PROFILE_WIRE_TABLE_STRINGS UINT32_C(3)
+
+#define TL_PROFILE_WIRE_INFO_STRIDE UINT32_C(96)
+#define TL_PROFILE_WIRE_FILE_STRIDE UINT32_C(32)
+#define TL_PROFILE_WIRE_DLL_STRIDE UINT32_C(32)
+#define TL_PROFILE_WIRE_STRING_RECORD_HEADER_SIZE UINT32_C(8)
+#define TL_PROFILE_WIRE_STRING_REF_SIZE UINT32_C(16)
+
+#define TL_PROFILE_WIRE_INFO_SCHEMA_OFFSET UINT32_C(0)
+#define TL_PROFILE_WIRE_INFO_BACKEND_OFFSET UINT32_C(4)
+#define TL_PROFILE_WIRE_INFO_FLAGS_OFFSET UINT32_C(8)
+#define TL_PROFILE_WIRE_INFO_RESERVED_OFFSET UINT32_C(12)
+#define TL_PROFILE_WIRE_INFO_APP_ID_OFFSET UINT32_C(16)
+#define TL_PROFILE_WIRE_INFO_SHA256_OFFSET UINT32_C(32)
+#define TL_PROFILE_WIRE_INFO_VERSION_OFFSET UINT32_C(48)
+#define TL_PROFILE_WIRE_INFO_MIN_VERSION_OFFSET UINT32_C(64)
+#define TL_PROFILE_WIRE_INFO_TAIL_RESERVED_OFFSET UINT32_C(80)
+#define TL_PROFILE_WIRE_INFO_FLAG_BACKEND_DECLARED UINT32_C(1)
+
+#define TL_PROFILE_WIRE_BACKEND_NATIVE UINT32_C(0)
+#define TL_PROFILE_WIRE_BACKEND_PROTON UINT32_C(1)
+
+#define TL_PROFILE_WIRE_FILE_SOURCE_OFFSET UINT32_C(0)
+#define TL_PROFILE_WIRE_FILE_TARGET_OFFSET UINT32_C(16)
+#define TL_PROFILE_WIRE_DLL_MODULE_OFFSET UINT32_C(0)
+#define TL_PROFILE_WIRE_DLL_SOURCE_OFFSET UINT32_C(16)
+
+#define TL_PROFILE_LIMIT_MAX_INPUT_BYTES UINT64_C(1048576)
+#define TL_PROFILE_LIMIT_MAX_FILES UINT64_C(65535)
+#define TL_PROFILE_LIMIT_MAX_DLLS UINT64_C(65535)
+#define TL_PROFILE_LIMIT_MAX_STRINGS UINT64_C(262144)
+#define TL_PROFILE_LIMIT_MAX_STRING_BYTES UINT64_C(1048576)
+#define TL_PROFILE_LIMIT_MAX_SERIALIZED_BYTES UINT64_C(67108864)
+
+/* All pointers are transient caller-owned memory and are never retained. */
+tl_profile_status_t tl_profile_parse_v1_size(
+    const uint8_t* input,
+    uint64_t input_length,
+    const tl_profile_identity_v1* identity,
+    uint64_t* output_required,
+    tl_profile_error_v1* error,
+    char* error_message,
+    uint64_t error_capacity,
+    uint64_t* error_required);
+
+tl_profile_status_t tl_profile_parse_v1_fill(
+    const uint8_t* input,
+    uint64_t input_length,
+    const tl_profile_identity_v1* identity,
+    uint8_t* output,
+    uint64_t output_capacity,
+    uint64_t* output_required,
+    tl_profile_error_v1* error,
+    char* error_message,
+    uint64_t error_capacity,
+    uint64_t* error_required);
+
+#ifdef __cplusplus
+}  /* extern "C" */
+#endif
+
+#endif  /* TRADUTORLINUX_FFI_RUST_PROFILE_PARSER_H */

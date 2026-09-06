@@ -89,6 +89,7 @@ if(TL_BUILD_RUST)
     tl_enable_sanitizers(tl_rust_msix_deflate)
     target_sources(tradutorlinux_core PRIVATE
         compat/rust_path_validator.cpp
+        compat/rust_profile_parser.cpp
         pe/rust_pe_parser.cpp
         package/rust_msix_parser.cpp
     )
