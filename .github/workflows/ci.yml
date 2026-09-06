@@ -92,7 +92,10 @@ jobs:
         run: |
           cmake --build --preset ${{ matrix.preset }} \
             --target tl_rust_ffi_probe tl_rust_path_validation \
-            tradutorlinux_samples tradutorlinux tradutorlinux_unit_tests --parallel 2
+            tl_rust_pe_contract_c tl_rust_msix_contract_c \
+            tl_rust_msix_contract_cpp tl_rust_profile_contract_c \
+            tl_rust_profile_contract_cpp tradutorlinux_samples tradutorlinux \
+            tradutorlinux_unit_tests --parallel 2
 
       - name: Executar matriz de pacotes MSIX/AppX
         run: ctest --preset ${{ matrix.preset }} -R '^integration_msix_(install|rejections)$' --parallel 2 --output-on-failure
@@ -120,7 +123,12 @@ jobs:
         run: cmake --preset release
 
       - name: Compilar Release
-        run: cmake --build --preset release --target tradutorlinux_samples tradutorlinux tradutorlinux_unit_tests --parallel 2
+        run: |
+          cmake --build --preset release \
+            --target tl_rust_pe_contract_c tl_rust_msix_contract_c \
+            tl_rust_msix_contract_cpp tl_rust_profile_contract_c \
+            tl_rust_profile_contract_cpp tradutorlinux_samples tradutorlinux \
+            tradutorlinux_unit_tests --parallel 2
 
       - name: Executar matriz de pacotes MSIX/AppX sem Rust
         run: ctest --preset release -R '^integration_msix_(install|rejections)$' --parallel 2 --output-on-failure
