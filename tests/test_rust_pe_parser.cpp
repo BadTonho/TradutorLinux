@@ -1,6 +1,7 @@
 #include "pe_builder.hpp"
 #include "tradutorlinux/ffi/rust_pe_parser.h"
 #include "tradutorlinux/pe/pe_reader.hpp"
+#include "../src/pe/rust_pe_parser.hpp"
 
 #include <algorithm>
 #include <array>
@@ -33,11 +34,6 @@ constexpr std::size_t kHeaderSize = TL_PE_WIRE_HEADER_SIZE;
 constexpr std::size_t kDescriptorSize = TL_PE_WIRE_TABLE_DESCRIPTOR_SIZE;
 constexpr std::size_t kDescriptorOffset = TL_PE_WIRE_TABLE_DESCRIPTOR_OFFSET;
 
-std::uint16_t read_u16(const std::vector<std::uint8_t>& bytes, const std::size_t offset) {
-    return static_cast<std::uint16_t>(bytes[offset]) |
-           static_cast<std::uint16_t>(bytes[offset + 1U] << 8U);
-}
-
 std::uint32_t read_u32(const std::vector<std::uint8_t>& bytes, const std::size_t offset) {
     std::uint32_t value = 0;
     for (std::size_t index = 0; index < 4U; ++index) {
@@ -61,16 +57,6 @@ struct Descriptor {
     std::uint32_t flags{};
 };
 
-struct StringRecord {
-    std::uint64_t data_offset{};
-    std::string value;
-};
-
-bool has_range(const std::uint64_t offset, const std::uint64_t length,
-               const std::uint64_t total) {
-    return offset <= total && length <= total - offset;
-}
-
 Descriptor descriptor(const std::vector<std::uint8_t>& bytes, const std::uint32_t table) {
     const std::size_t offset = kDescriptorOffset + static_cast<std::size_t>(table) * kDescriptorSize;
     return {.offset = read_u64(bytes, offset),
@@ -79,261 +65,12 @@ Descriptor descriptor(const std::vector<std::uint8_t>& bytes, const std::uint32_
             .flags = read_u32(bytes, offset + 20U)};
 }
 
-bool read_string(const std::vector<StringRecord>& strings, const std::uint64_t offset,
-                 const std::uint32_t length, std::string& value) {
-    if (offset == 0 && length == 0) {
-        value.clear();
-        return true;
-    }
-    for (const StringRecord& record : strings) {
-        if (record.data_offset == offset && record.value.size() == length) {
-            value = record.value;
-            return true;
-        }
-    }
-    return false;
-}
-
-bool read_ref(const std::vector<std::uint8_t>& bytes, const std::vector<StringRecord>& strings,
-              const std::size_t offset, std::string& value) {
-    return read_string(strings, read_u64(bytes, offset), read_u32(bytes, offset + 8U), value) &&
-           read_u32(bytes, offset + 12U) == 0;
-}
-
 bool decode_wire(const std::vector<std::uint8_t>& bytes, PeInfo& info) {
-    if (bytes.size() < kHeaderSize || bytes.size() > TL_PE_LIMIT_MAX_SERIALIZED_BYTES ||
-        std::memcmp(bytes.data(), "TLPE", 4) != 0 ||
-        read_u16(bytes, 4) != TL_PE_WIRE_MAJOR || read_u16(bytes, 6) != TL_PE_WIRE_MINOR ||
-        read_u32(bytes, 8) != TL_PE_WIRE_HEADER_SIZE ||
-        read_u64(bytes, 12) != bytes.size() || read_u32(bytes, 20) != TL_PE_WIRE_TABLE_COUNT ||
-        read_u64(bytes, 24) != 0) {
-        return false;
-    }
-    std::array<Descriptor, TL_PE_WIRE_TABLE_COUNT> tables{};
-    for (std::uint32_t index = 0; index < TL_PE_WIRE_TABLE_COUNT; ++index) {
-        tables[index] = descriptor(bytes, index);
-        const Descriptor table = tables[index];
-        if (table.count == 0) {
-            if (table.offset != 0 || table.stride != 0 || table.flags != 0) return false;
-            continue;
-        }
-        if (index == TL_PE_WIRE_TABLE_RESERVED || table.offset < kHeaderSize ||
-            table.offset >= bytes.size()) return false;
-        if (index == TL_PE_WIRE_TABLE_STRINGS) {
-            if (table.stride != 0 || table.flags != TL_PE_WIRE_TABLE_FLAG_VARIABLE_RECORDS) return false;
-        } else if (table.stride == 0 || table.flags != 0 ||
-                   table.count > (bytes.size() - table.offset) / table.stride) {
-            return false;
-        }
-    }
-    if (tables[TL_PE_WIRE_TABLE_INFO].count != 1 ||
-        tables[TL_PE_WIRE_TABLE_INFO].stride != TL_PE_WIRE_INFO_STRIDE) return false;
-
-    std::vector<StringRecord> strings;
-    const Descriptor string_table = tables[TL_PE_WIRE_TABLE_STRINGS];
-    std::uint64_t cursor = string_table.offset;
-    for (std::uint64_t index = 0; index < string_table.count; ++index) {
-        if (!has_range(cursor, 8, bytes.size())) return false;
-        const std::uint32_t length = read_u32(bytes, static_cast<std::size_t>(cursor));
-        if (length > TL_PE_LIMIT_MAX_STRING_BYTES ||
-            read_u32(bytes, static_cast<std::size_t>(cursor) + 4U) != 0) return false;
-        const std::uint64_t record_size = 8U + length;
-        const std::uint64_t padding = (8U - (record_size % 8U)) % 8U;
-        if (!has_range(cursor, record_size + padding, bytes.size())) return false;
-        strings.push_back({cursor + 8U,
-                           std::string(reinterpret_cast<const char*>(bytes.data() + cursor + 8U),
-                                       length)});
-        cursor += record_size + padding;
-    }
-
-    const Descriptor info_table = tables[TL_PE_WIRE_TABLE_INFO];
-    const std::size_t info_offset = static_cast<std::size_t>(info_table.offset);
-    const std::uint32_t info_flags = read_u32(bytes, info_offset);
-    if ((info_flags & ~UINT32_C(3)) != 0 || read_u16(bytes, info_offset + 34U) != 0) return false;
-    info = {};
-    info.is_pe32_plus = (info_flags & TL_PE_WIRE_INFO_FLAG_PE32_PLUS) != 0;
-    info.is_dll = (info_flags & TL_PE_WIRE_INFO_FLAG_DLL) != 0;
-    info.machine = read_u16(bytes, info_offset + 4U);
-    info.number_of_sections = read_u16(bytes, info_offset + 6U);
-    info.address_of_entry_point = read_u32(bytes, info_offset + 8U);
-    info.image_base = read_u64(bytes, info_offset + 12U);
-    info.section_alignment = read_u32(bytes, info_offset + 20U);
-    info.size_of_image = read_u32(bytes, info_offset + 24U);
-    info.size_of_headers = read_u32(bytes, info_offset + 28U);
-    info.subsystem = read_u16(bytes, info_offset + 32U);
-    std::size_t directory_offset = info_offset + 36U;
-    const auto read_directory = [&bytes, &directory_offset](std::uint32_t& rva, std::uint32_t& size) {
-        rva = read_u32(bytes, directory_offset);
-        size = read_u32(bytes, directory_offset + 4U);
-        directory_offset += 8U;
-    };
-    read_directory(info.import_directory_rva, info.import_directory_size);
-    read_directory(info.export_directory_rva, info.export_directory_size);
-    read_directory(info.resource_directory_rva, info.resource_directory_size);
-    read_directory(info.exception_directory_rva, info.exception_directory_size);
-    read_directory(info.relocation_directory_rva, info.relocation_directory_size);
-    read_directory(info.delay_import_directory_rva, info.delay_import_directory_size);
-    read_directory(info.tls_directory_rva, info.tls_directory_size);
-    info.export_ordinal_base = read_u32(bytes, info_offset + 92U);
-    info.tls_info.start_address_of_raw_data = read_u64(bytes, info_offset + 96U);
-    info.tls_info.end_address_of_raw_data = read_u64(bytes, info_offset + 104U);
-    info.tls_info.address_of_index = read_u64(bytes, info_offset + 112U);
-    info.tls_info.address_of_callbacks = read_u64(bytes, info_offset + 120U);
-    info.tls_info.size_of_zero_fill = read_u32(bytes, info_offset + 128U);
-    info.tls_info.characteristics = read_u32(bytes, info_offset + 132U);
-
-    const auto read_fixed_range = [&bytes, &tables](const std::uint32_t table,
-                                                     const std::uint64_t index,
-                                                     const std::size_t size) -> std::optional<std::size_t> {
-        if (index >= tables[table].count || tables[table].stride < size) return std::nullopt;
-        const std::uint64_t offset = tables[table].offset + index * tables[table].stride;
-        if (!has_range(offset, size, bytes.size())) return std::nullopt;
-        return static_cast<std::size_t>(offset);
-    };
-    const auto read_index_range = [&tables](const std::uint64_t offset, const std::uint64_t count,
-                                             const std::uint32_t table) {
-        return offset <= tables[table].count && count <= tables[table].count - offset;
-    };
-
-    for (std::uint64_t index = 0; index < tables[TL_PE_WIRE_TABLE_SECTIONS].count; ++index) {
-        const auto offset = read_fixed_range(TL_PE_WIRE_TABLE_SECTIONS, index, TL_PE_WIRE_SECTION_STRIDE);
-        if (!offset.has_value()) return false;
-        tradutorlinux::pe::SectionInfo section;
-        if (!read_ref(bytes, strings, *offset, section.name)) return false;
-        section.virtual_address = read_u32(bytes, *offset + 16U);
-        section.virtual_size = read_u32(bytes, *offset + 20U);
-        section.raw_data_pointer = read_u32(bytes, *offset + 24U);
-        section.raw_data_size = read_u32(bytes, *offset + 28U);
-        section.characteristics = read_u32(bytes, *offset + 32U);
-        if (read_u32(bytes, *offset + 36U) != 0) return false;
-        info.sections.push_back(std::move(section));
-    }
-
-    const auto read_dlls = [&](const std::uint32_t dll_table, const std::uint32_t symbol_table,
-                               std::vector<ImportedDll>& destination) {
-        for (std::uint64_t index = 0; index < tables[dll_table].count; ++index) {
-            const auto offset = read_fixed_range(dll_table, index, 40);
-            if (!offset.has_value()) return false;
-            ImportedDll dll;
-            if (!read_ref(bytes, strings, *offset, dll.name)) return false;
-            const std::uint64_t symbol_offset = read_u64(bytes, *offset + 16U);
-            const std::uint64_t symbol_count = read_u64(bytes, *offset + 24U);
-            if (!read_index_range(symbol_offset, symbol_count, symbol_table)) return false;
-            for (std::uint64_t symbol_index = 0; symbol_index < symbol_count; ++symbol_index) {
-                const auto symbol_record = read_fixed_range(symbol_table, symbol_offset + symbol_index, 32);
-                if (!symbol_record.has_value()) return false;
-                const std::uint32_t flags = read_u32(bytes, *symbol_record);
-                if ((flags & ~UINT32_C(1)) != 0 || read_u32(bytes, *symbol_record + 28U) != 0) return false;
-                tradutorlinux::pe::ImportedSymbol symbol;
-                symbol.by_ordinal = (flags & 1U) != 0;
-                symbol.ordinal = read_u16(bytes, *symbol_record + 4U);
-                if (read_u16(bytes, *symbol_record + 6U) != 0) return false;
-                if (!read_ref(bytes, strings, *symbol_record + 8U, symbol.name)) return false;
-                if (symbol.by_ordinal && !symbol.name.empty()) return false;
-                symbol.iat_rva = read_u32(bytes, *symbol_record + 24U);
-                dll.symbols.push_back(std::move(symbol));
-            }
-            destination.push_back(std::move(dll));
-        }
-        return true;
-    };
-    if (!read_dlls(TL_PE_WIRE_TABLE_IMPORT_DLLS, TL_PE_WIRE_TABLE_IMPORT_SYMBOLS, info.imports) ||
-        !read_dlls(TL_PE_WIRE_TABLE_DELAY_IMPORT_DLLS, TL_PE_WIRE_TABLE_DELAY_IMPORT_SYMBOLS,
-                   info.delay_imports)) return false;
-
-    for (std::uint64_t index = 0; index < tables[TL_PE_WIRE_TABLE_EXPORTS].count; ++index) {
-        const auto offset = read_fixed_range(TL_PE_WIRE_TABLE_EXPORTS, index, 48);
-        if (!offset.has_value()) return false;
-        const std::uint32_t flags = read_u32(bytes, *offset);
-        if ((flags & ~UINT32_C(3)) != 0 || read_u16(bytes, *offset + 6U) != 0 ||
-            read_u32(bytes, *offset + 12U) != 0) return false;
-        ExportedSymbol symbol;
-        symbol.by_name = (flags & 1U) != 0;
-        symbol.ordinal = read_u16(bytes, *offset + 4U);
-        symbol.rva = read_u32(bytes, *offset + 8U);
-        if (!read_ref(bytes, strings, *offset + 16U, symbol.name) ||
-            !read_ref(bytes, strings, *offset + 32U, symbol.forwarder)) return false;
-        if (!symbol.by_name && !symbol.name.empty()) return false;
-        if ((flags & 2U) == 0 && !symbol.forwarder.empty()) return false;
-        info.exports.push_back(std::move(symbol));
-    }
-    for (std::uint64_t index = 0; index < tables[TL_PE_WIRE_TABLE_TLS_CALLBACKS].count; ++index) {
-        const auto offset = read_fixed_range(TL_PE_WIRE_TABLE_TLS_CALLBACKS, index, 8);
-        if (!offset.has_value()) return false;
-        info.tls_info.callback_vas.push_back(read_u64(bytes, *offset));
-    }
-
-    for (std::uint64_t index = 0; index < tables[TL_PE_WIRE_TABLE_UNWIND_INFOS].count; ++index) {
-        const auto offset = read_fixed_range(TL_PE_WIRE_TABLE_UNWIND_INFOS, index, 72);
-        if (!offset.has_value()) return false;
-        UnwindInfo unwind;
-        unwind.version = bytes[*offset];
-        unwind.flags = bytes[*offset + 1U];
-        unwind.prolog_size = bytes[*offset + 2U];
-        unwind.frame_register = bytes[*offset + 3U];
-        unwind.frame_offset = bytes[*offset + 4U];
-        const std::uint8_t wire_flags = bytes[*offset + 5U];
-        if ((wire_flags & ~UINT8_C(3)) != 0 || read_u16(bytes, *offset + 6U) != 0 ||
-            read_u32(bytes, *offset + 60U) != 0 || read_u64(bytes, *offset + 64U) != 0) return false;
-        unwind.has_extended_set_fpreg = (wire_flags & 1U) != 0;
-        unwind.has_chained_function = (wire_flags & 2U) != 0;
-        const std::uint64_t code_offset = read_u64(bytes, *offset + 8U);
-        const std::uint64_t code_count = read_u64(bytes, *offset + 16U);
-        const std::uint64_t epilog_offset = read_u64(bytes, *offset + 24U);
-        const std::uint64_t epilog_count = read_u64(bytes, *offset + 32U);
-        if (!read_index_range(code_offset, code_count, TL_PE_WIRE_TABLE_UNWIND_CODES) ||
-            !read_index_range(epilog_offset, epilog_count, TL_PE_WIRE_TABLE_UNWIND_EPILOGS)) return false;
-        unwind.handler_rva = read_u32(bytes, *offset + 40U);
-        unwind.handler_data_rva = read_u32(bytes, *offset + 44U);
-        unwind.chained_begin_rva = read_u32(bytes, *offset + 48U);
-        unwind.chained_end_rva = read_u32(bytes, *offset + 52U);
-        unwind.chained_unwind_info_rva = read_u32(bytes, *offset + 56U);
-        for (std::uint64_t item = 0; item < code_count; ++item) {
-            const auto code_record = read_fixed_range(TL_PE_WIRE_TABLE_UNWIND_CODES, code_offset + item, 8);
-            if (!code_record.has_value() || bytes[*code_record + 3U] != 0) return false;
-            UnwindCode code;
-            code.code_offset = bytes[*code_record];
-            code.operation = static_cast<tradutorlinux::pe::UnwindOperation>(bytes[*code_record + 1U]);
-            code.operation_info = bytes[*code_record + 2U];
-            code.operand = read_u32(bytes, *code_record + 4U);
-            unwind.codes.push_back(code);
-        }
-        for (std::uint64_t item = 0; item < epilog_count; ++item) {
-            const auto epilog_record = read_fixed_range(TL_PE_WIRE_TABLE_UNWIND_EPILOGS, epilog_offset + item, 8);
-            if (!epilog_record.has_value()) return false;
-            unwind.epilogs.push_back({read_u32(bytes, *epilog_record), read_u32(bytes, *epilog_record + 4U)});
-        }
-        info.runtime_functions.push_back({});
-        info.runtime_functions.back().unwind = std::move(unwind);
-    }
-    for (std::uint64_t index = 0; index < tables[TL_PE_WIRE_TABLE_RUNTIME_FUNCTIONS].count; ++index) {
-        const auto offset = read_fixed_range(TL_PE_WIRE_TABLE_RUNTIME_FUNCTIONS, index, 24);
-        if (!offset.has_value()) return false;
-        const std::uint64_t unwind_index = read_u64(bytes, *offset + 12U);
-        if (unwind_index >= info.runtime_functions.size() || read_u32(bytes, *offset + 20U) != 0) return false;
-        info.runtime_functions[static_cast<std::size_t>(index)].begin_rva = read_u32(bytes, *offset);
-        info.runtime_functions[static_cast<std::size_t>(index)].end_rva = read_u32(bytes, *offset + 4U);
-        info.runtime_functions[static_cast<std::size_t>(index)].unwind_info_rva = read_u32(bytes, *offset + 8U);
-        if (unwind_index != index) return false;
-    }
-    for (std::uint64_t index = 0; index < tables[TL_PE_WIRE_TABLE_RELOC_BLOCKS].count; ++index) {
-        const auto offset = read_fixed_range(TL_PE_WIRE_TABLE_RELOC_BLOCKS, index, 32);
-        if (!offset.has_value() || read_u32(bytes, *offset + 4U) != 0 || read_u64(bytes, *offset + 24U) != 0) return false;
-        BaseRelocBlock block;
-        block.page_rva = read_u32(bytes, *offset);
-        const std::uint64_t entry_offset = read_u64(bytes, *offset + 8U);
-        const std::uint64_t entry_count = read_u64(bytes, *offset + 16U);
-        if (!read_index_range(entry_offset, entry_count, TL_PE_WIRE_TABLE_RELOC_ENTRIES)) return false;
-        for (std::uint64_t item = 0; item < entry_count; ++item) {
-            const auto record = read_fixed_range(TL_PE_WIRE_TABLE_RELOC_ENTRIES, entry_offset + item, 8);
-            if (!record.has_value() || read_u32(bytes, *record + 4U) != 0) return false;
-            block.entries.push_back({read_u16(bytes, *record), read_u16(bytes, *record + 2U)});
-        }
-        info.relocations.push_back(std::move(block));
-    }
-    return true;
+    tl_pe_error_v1 error{};
+    std::string message;
+    return tradutorlinux::pe::decode_tlpe_v1(std::span<const std::uint8_t>{bytes}, info,
+                                             error, message);
 }
-
 struct RustCall {
     std::uint32_t status{};
     std::uint64_t required{};
@@ -802,6 +539,48 @@ TEST(RustPeParserTest, FfiIsSafeForConcurrentIndependentCalls) {
     }
     for (std::thread& worker : workers) worker.join();
     EXPECT_TRUE(std::all_of(passed.begin(), passed.end(), [](bool value) { return value; }));
+}
+
+TEST(RustPeParserTest, ProductionAdapterMatchesCppForEveryWireFixture) {
+    const std::array<ByteVector, 9> fixtures{
+        make_minimal(), make_import_fixture(), make_delay_import_fixture(),
+        make_export_fixture(), make_reloc_fixture(), make_tls_fixture(),
+        make_unwind_fixture(false), make_unwind_fixture(true), make_chained_unwind_fixture(),
+    };
+    for (const ByteVector& input : fixtures) {
+        const ParseResult expected = tradutorlinux::pe::parse_pe(input);
+        const tradutorlinux::pe::RustPeParseResult actual =
+            tradutorlinux::pe::parse_pe_rust(input);
+        ASSERT_EQ(actual.status, tradutorlinux::pe::ParseStatus::Success);
+        ASSERT_FALSE(actual.internal_failure) << actual.error_message;
+        expect_equal(expected.info, actual.info);
+    }
+}
+
+TEST(RustPeParserTest, ProductionDecoderRejectsWireHeaderAndRecordMutations) {
+    const RustCall call = parse_rust(make_minimal());
+    ASSERT_EQ(call.status, TL_PE_STATUS_SUCCESS) << call.message;
+    ASSERT_FALSE(call.output.empty());
+    const auto rejects = [](const std::vector<std::uint8_t>& wire) {
+        PeInfo info;
+        tl_pe_error_v1 error{};
+        std::string message;
+        return !tradutorlinux::pe::decode_tlpe_v1(std::span<const std::uint8_t>{wire}, info,
+                                                   error, message) &&
+               error.code == TL_PE_ERROR_WIRE_FORMAT &&
+               error.phase == TL_PE_ERROR_PHASE_WIRE;
+    };
+    const auto mutate = [&call](const std::size_t offset, const std::uint8_t value) {
+        std::vector<std::uint8_t> wire = call.output;
+        wire[offset] = value;
+        return wire;
+    };
+    EXPECT_TRUE(rejects(mutate(TL_PE_WIRE_HEADER_MAGIC_OFFSET, 0)));
+    EXPECT_TRUE(rejects(mutate(TL_PE_WIRE_HEADER_MAJOR_OFFSET, 2)));
+    EXPECT_TRUE(rejects(mutate(TL_PE_WIRE_TABLE_DESCRIPTOR_OFFSET + 16U, 1)));
+    EXPECT_TRUE(rejects(mutate(TL_PE_WIRE_HEADER_TOTAL_SIZE_OFFSET, 0)));
+    const Descriptor info_table = descriptor(call.output, TL_PE_WIRE_TABLE_INFO);
+    EXPECT_TRUE(rejects(mutate(static_cast<std::size_t>(info_table.offset) + 34U, 1)));
 }
 
 }  // namespace

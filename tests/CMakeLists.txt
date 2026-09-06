@@ -159,6 +159,9 @@ if(TL_BUILD_RUST)
     target_include_directories(tradutorlinux_unit_tests PRIVATE
         "${PROJECT_SOURCE_DIR}/src/compat"
     )
+    target_compile_definitions(tradutorlinux_unit_tests PRIVATE
+        TRADUTORLINUX_RUST_PE_PARSER=1
+    )
     target_link_libraries(tradutorlinux_unit_tests PRIVATE tl_rust_validator)
 endif()
 tl_enable_warnings(tradutorlinux_unit_tests)
