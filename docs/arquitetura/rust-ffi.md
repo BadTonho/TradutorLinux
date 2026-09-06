@@ -7,8 +7,9 @@ de perfis e materialização. A B20.4 endurece essa fronteira com testes e
 tratamento de limites; a B20.5 integra o mesmo validador ao fluxo operacional
 de `app run`; a B20.6 promove essa adoção seletiva após evidência reproduzível.
 R21.3–R21.5 acrescentam a análise Rust do PE na execução direta de `--report` e
-na imagem principal do `app run` nativo; nenhum loader, runtime Win32, DLL
-dependente ou API pública de compatibilidade foi migrado para Rust.
+na imagem principal do `app run` nativo. R22.2 acrescenta a análise Rust de
+pacotes MSIX/AppX ao `--report` direto e ao `install`; nenhum loader, runtime
+Win32, DLL dependente ou API pública de compatibilidade foi migrado para Rust.
 
 ## Build e escopo
 
@@ -370,8 +371,30 @@ vinculada ao projeto. Ela valida limites, exige `Z_STREAM_END`, consome toda a
 entrada e produz exatamente o tamanho anunciado. Não é uma API pública do
 runtime.
 
-R22.1 compila essa ABI somente com `TL_BUILD_RUST=ON` para o parser e o corpus
-diferencial. O C++ continua sendo o backend de produção e o runner não chama
-`parse_msix_rust` nesta etapa. Com `TL_BUILD_RUST=OFF`, não há link operacional
-com a biblioteca Rust nem referência aos símbolos do parser; `Cargo.lock`
-permanece inalterado.
+R22.1 compilou essa ABI somente com `TL_BUILD_RUST=ON` para o parser e o
+corpus diferencial. Em R22.2, `parse_msix_rust` é chamado pelo runner somente
+no relatório direto e na instalação Rust. Com `TL_BUILD_RUST=OFF`, não há link
+operacional com a biblioteca Rust nem referência aos símbolos do parser;
+`Cargo.lock` permanece inalterado.
+
+## Política de produção MSIX/AppX — R22.2
+
+O runner seleciona o backend Rust por extensão nos caminhos promovidos, antes
+de exigir uma assinatura ZIP intacta. Isso permite mapear truncamento, formato
+incompatível e limites para os códigos do CLI sem recorrer ao parser C++.
+`truncated`/`malformed` retornam `4`, formatos ou mecanismos não suportados
+retornam `5`, e argumentos, buffers, limites, wire inválido, panic ou falhas
+internas retornam `70`.
+
+O resultado TLMS decodificado permanece proprietário do C++ e é convertido
+para `AppxPackageInfo`. No `--report`, o C++ apenas imprime o resultado Rust.
+No `install`, Rust valida antes de C++ criar diretórios, extrair arquivos e
+registrar o catálogo; o extrator usa o executável principal validado por Rust.
+Falha ou divergência não dispara fallback e não cria cadastro. O C++ ainda
+valida o PE32+ AMD64 extraído.
+
+Com `--trace`, o caminho Rust emite `package-parse` no componente `cli` para
+relatório e `install` para instalação, com `backend="rust"` e `status`. Em
+falhas, o evento inclui `code`, `phase`, `input-offset` e `detail-value`. Os
+caminhos `app run`, `app run --report`, execução direta normal, Proton, DLLs
+dependentes e o build OFF continuam no C++.

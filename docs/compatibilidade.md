@@ -54,21 +54,37 @@ buffer ou wire inválido. Os vetores e testes diferenciais de imports,
 delay-imports, exports/forwarders, TLS, unwind V1/V2 e relocations são a
 evidência do contrato, não uma declaração de suporte funcional.
 
-## Análise estrutural MSIX/AppX — R22.1
+## Política de backend MSIX/AppX — R22.1–R22.2
 
-R22.1 implementa o parser Rust e o wire `TLMS` v1.0 para testes de contrato e
-comparação diferencial. O C++ permanece o backend de produção para inspeção,
-instalação e execução; não há mudança no estado de compatibilidade de nenhum
-pacote ou aplicativo. A análise Rust aceita somente pacotes simples com ZIP
-stored/raw DEFLATE e manifesto XML limitado; bundles, Zip64, encryption,
-links, traversal, colisões normalizadas, DTD e entidades externas continuam
-fora do escopo.
+R22.1 implementou o parser Rust e o wire `TLMS` v1.0 para testes de contrato e
+comparação diferencial. A partir de R22.2, com `TL_BUILD_RUST=ON`, Rust é
+canônico no `--report` direto e no `install` de pacotes. A seleção usa as
+extensões `.msix`, `.appx`, `.msixbundle` e `.appxbundle` antes da validação
+ZIP, para que entradas truncadas e inválidas recebam o diagnóstico correto.
 
-O parser Rust não acessa o filesystem e não valida o PE interno. A seleção de
-PE32+ AMD64, extração física, permissões, cadastro e execução permanecem no
-C++. `TL_BUILD_RUST=OFF` continua sendo a variante C++ explícita e padrão, sem
-link operacional com Rust. A promoção do parser de pacote para
-`--report`/`install` fica para R22.2 e exigirá nova evidência reproduzível.
+O relatório de um pacote válido mantém stdout, stderr sem trace e exit code.
+Com `--trace`, aparece `package-parse` com `backend="rust"`; falhas incluem
+`status`, `code`, `phase`, `input-offset` e `detail-value`. Não existe fallback
+de produção para o parser C++ quando a análise Rust falha.
+
+No `install`, Rust valida o pacote e C++ continua responsável por criar o
+prefixo, revalidar as condições físicas, extrair os arquivos, verificar o
+executável PE32+ AMD64 e salvar o catálogo. A extração usa o executável
+principal validado por Rust; falha ou divergência encerra a instalação sem
+substituir o resultado Rust e sem cadastro.
+
+Bundles, Zip64, encryption, .NET/Mono, Authenticode, links, traversal, NUL,
+colisões normalizadas, DTD e entidades externas continuam fora do escopo.
+Rust não acessa o filesystem e não valida o PE interno do pacote.
+
+`app run`, `app run --report`, execução direta normal, Proton, DLLs dependentes
+e `TL_BUILD_RUST=OFF` continuam usando C++. O build OFF é uma variante C++
+explícita e padrão, sem link operacional ou símbolos Rust. A promoção não
+altera o nível funcional ou declara suporte a nenhum aplicativo adicional.
+
+O mapeamento de erros Rust para o CLI é `4` para `truncated`/`malformed`, `5`
+para `unsupported-format`/`unsupported-mechanism` e `70` para argumentos,
+buffers, limites, wire inválido, panic ou falha interna.
 
 ## Aplicações de teste
 

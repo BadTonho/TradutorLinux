@@ -201,10 +201,51 @@ Evidência reproduzível em 2026-09-06:
 
 ### R22.2 — Integração
 
-- [ ] Integrar primeiro no inspection/report do pacote.
-- [ ] Integrar depois no fluxo de instalação, mantendo em C++ a criação do
-  prefixo, extração física, permissões e cadastro no catálogo.
-- [ ] Não adicionar suporte a .NET, Mono, bundles ou assinatura Authenticode.
+- [x] Integrar Rust no `--report` direto e no fluxo de instalação quando
+  `TL_BUILD_RUST=ON`, selecionando pacotes por extensão antes da validação ZIP.
+- [x] Manter em C++ a criação do prefixo, extração física, permissões,
+  cadastro no catálogo e validação do PE interno; a extração usa o executável
+  principal validado por Rust e não substitui seus metadados.
+- [x] Rejeitar bundles sem fallback e preservar os caminhos C++ de execução
+  direta normal, `app run`, `app run --report`, Proton, DLLs dependentes e
+  `TL_BUILD_RUST=OFF`.
+- [x] Emitir `package-parse` apenas nos caminhos Rust, com `backend`, `status`
+  e os campos estruturados de falha; mapear erros para os códigos `4`, `5` e
+  `70` sem alterar a saída normal.
+- [x] Expandir a integração de testes e CI para a matriz de pacotes ON/OFF,
+  incluindo instalação, rejeições, diferencial, contratos e verificação de
+  ausência dos símbolos Rust no build OFF.
+- [ ] Fechar o gate de conclusão após evidência local de todos os presets
+  exigidos; Debug Rust não pôde ser executado porque o preset existente usa
+  Ninja, ausente neste ambiente, e o CTest Sanitize completo inclui falhas
+  ambientais nas execuções reais opcionais de Proton/X11.
+
+Implementação concluída para R22.2:
+
+- `select_msix_parser_backend` centraliza a política: Rust só é canônico no
+  relatório direto e no `install`; os demais fluxos continuam no inspector C++.
+- O runner lê o pacote inteiro com limite de 2 GiB e chama `parse_msix_rust`;
+  falhas encerram antes de extração/cadastro e não acionam fallback. O
+  `extract_msix_package` sobrecarregado recebe `main_executable` do resultado
+  Rust, enquanto o extrator mantém as validações físicas e o PE interno C++.
+- `integration_msix_install` e `integration_msix_rejections` verificam
+  `RUST_ENABLED`, stdout, trace, códigos, bundles, pacote truncado, manifesto
+  inválido, instalação e ausência de catálogo após falha.
+
+Evidência reproduzível em 2026-09-06:
+
+- Rust Release: CTest completo `763/763` passou, com quatro skips ambientais;
+  a seleção MSIX, contratos e diferencial passaram.
+- Rust Sanitize: CTest completo com exclusão explícita dos cinco testes Proton
+  reais e do smoke X11 impedidos pelo sandbox passou `762/762`, com três skips
+  opcionais (Iphlpapi, GUI e loopback HTTPS). A execução sem essa exclusão
+  registrou as falhas ambientais reais e não foi promovida a verde.
+- `cargo test --locked --offline` passou `23/23`; Clippy offline com
+  `--all-targets -- -D warnings` passou. O baseline Release OFF passou
+  `732/732`, e `nm` não encontrou símbolos `tl_msix_parse_v1`,
+  `tl_msix_inflate_raw` ou `tl_rust_validator` na biblioteca C++.
+- `git diff --check` passou antes desta atualização; o gate será repetido antes
+  do commit final.
 
 ## Prioridade 3 — Parser de perfis
 

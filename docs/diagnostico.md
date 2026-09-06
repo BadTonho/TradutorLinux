@@ -533,26 +533,42 @@ manifesto/estrutura inválida, `package-extract` indica falha nas validações o
 na escrita segura e `package-executable` indica que o executável declarado não
 é PE32+ x86-64. O caminho `--report` continua somente estrutural e não extrai.
 
-### Análise Rust de MSIX/AppX — R22.1
+### Análise Rust de MSIX/AppX — R22.2
 
-R22.1 não muda os eventos do CLI nem seleciona Rust em `--report`, `install` ou
-`app run`. A ABI `TLMS` é exercitada pelo contrato e pelos testes diferenciais;
-o inspector C++ continua sendo o backend de produção. Portanto, um diagnóstico
-de pacote nesta etapa continua usando `failed stage="package-parse"` ou
-`package-extract` conforme o caminho C++ existente.
+Com `TL_BUILD_RUST=ON`, Rust é canônico no `--report` direto de um pacote e no
+`install`. A seleção usa a extensão `.msix`, `.appx`, `.msixbundle` ou
+`.appxbundle` antes de validar a assinatura ZIP, permitindo diagnosticar
+arquivos truncados ou inválidos. `app run`, `app run --report`, execução direta
+normal, Proton, DLLs dependentes e `TL_BUILD_RUST=OFF` continuam no caminho C++.
 
-Quando a integração for habilitada em R22.2, os status `truncated` e `malformed`
-deverão ser convertidos em falha de pacote; `unsupported-format` e
-`unsupported-mechanism` continuarão distinguíveis no diagnóstico estruturado.
-`invalid-argument`, `buffer-too-small`, `input-too-large`, `output-too-large`,
-wire inválido, panic e `internal` são falhas internas do adaptador. A fonte de
-automação é `status`, `code`, `phase`, `input_offset` e `detail_value`; a
-mensagem caller-owned é somente texto humano.
+O caminho Rust emite um evento novo sem modificar a saída normal:
 
-O contrato rejeita, de forma determinística, bundles, Zip64, multipartes,
-encryption, métodos ZIP desconhecidos, links, traversal, NUL, colisões após
-normalizar `\\` para `/`, DTD e entidades externas. Rust não acessa o
-filesystem e não valida o PE interno do pacote.
+```text
+[tl][cli][info] package-parse format="MSIX / AppX" backend="rust" status="success"
+[tl][install][info] package-parse format="MSIX / AppX" backend="rust" status="success"
+```
+
+Em falhas, o mesmo evento inclui `code`, `phase`, `input-offset` e
+`detail-value`. A fonte de automação continua sendo o status e esses campos; a
+mensagem caller-owned é somente diagnóstico humano.
+
+O mapeamento de falhas Rust é:
+
+- `truncated` e `malformed`: `4` (`MalformedPe`);
+- `unsupported-format` e `unsupported-mechanism`: `5` (`Unsupported`);
+- argumento inválido, buffer, limite, wire inválido, panic ou falha interna:
+  `70` (`InternalError`).
+
+No `--report`, o resultado TLMS é decodificado e impresso sem mapeamento ou
+execução. No `install`, Rust valida antes de C++ abrir o ZIP e extrair; o
+extrator usa o executável principal validado por Rust. Falha ou divergência não
+faz fallback, não inicia o PE e não cria entrada no catálogo. A validação do
+PE32+ AMD64 extraído permanece C++.
+
+O contrato rejeita deterministicamente bundles, Zip64, multipartes, encryption,
+métodos ZIP desconhecidos, links, traversal, NUL, colisões após normalizar
+`\\` para `/`, DTD e entidades externas. Rust não acessa o filesystem e não
+valida o PE interno do pacote.
 
 ## Categorias de falha
 

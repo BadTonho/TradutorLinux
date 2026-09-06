@@ -1,9 +1,9 @@
 # Contrato do analisador MSIX/AppX em Rust
 
-R22.1 adiciona uma análise estrutural opcional de pacotes MSIX/AppX. O
-contrato é usado pela ABI C e pelos testes diferenciais; o backend de produção
-continua sendo `src/package/msix.cpp` até R22.2. Nenhum caminho de `--report`,
-`install`, `app run` ou do loader seleciona Rust nesta etapa.
+R22.1 adiciona uma análise estrutural opcional de pacotes MSIX/AppX. Em R22.2,
+o contrato também é usado pelo backend de produção nos caminhos de relatório
+direto e instalação quando `TL_BUILD_RUST=ON`; o C++ continua responsável pela
+extração física e pelo PE interno.
 
 ## Escopo
 
@@ -145,8 +145,11 @@ fora deste marco.
 `TL_BUILD_RUST=OFF` permanece o padrão e não compila nem liga o módulo Rust.
 Com Rust habilitado, o static library existente inclui os módulos do contrato,
 parser e ponte DEFLATE; nenhum crate externo ou alteração em `Cargo.lock` é
-necessário. O adaptador C++ fica disponível para os testes e para a etapa de
-integração futura, mas não é chamado pelo runner em R22.1.
+necessário. O runner lê o pacote em um buffer limitado a 2 GiB e usa
+`parse_msix_rust` antes de produzir o relatório ou iniciar a extração. O
+adaptador C++ decodifica o mesmo TLMS e converte o resultado diretamente para
+`AppxPackageInfo`; strings continuam sendo bytes e não são convertidas para
+UTF-8.
 
 O contrato é protegido por testes C e C++ de largura, offsets e constantes;
 testes Rust cobrem leitor little-endian, ranges, overflow, normalização,
@@ -156,7 +159,27 @@ stored/DEFLATE, compara semanticamente `inspect_msix_package`, verifica
 produção C++ existentes continuam sendo executados separadamente para
 confirmar que o backend atual não mudou.
 
-R22.2 poderá reutilizar exatamente este header, o wire TLMS e o decoder para
-selecionar Rust no inspection/report e depois na instalação. Essa promoção
-exigirá novo gate de integração; R22.1 não declara compatibilidade adicional
-para nenhum aplicativo.
+## Seleção de backend em R22.2
+
+Rust é canônico somente para `CommandMode::DirectRun` com `--report` e para
+`install`. A seleção por extensão (`.msix`, `.appx`, `.msixbundle` e
+`.appxbundle`) ocorre antes da validação ZIP nesses caminhos, para que entradas
+truncadas ou sem assinatura recebam o diagnóstico do parser. Bundles são
+rejeitados como `unsupported-format`.
+
+Um relatório válido mantém o stdout existente; `stderr` sem trace também não
+muda. Com `--trace`, o caminho Rust emite `package-parse` no componente `cli`
+ou `install`, com `backend="rust"` e `status="success"`. Falhas incluem
+`code`, `phase`, `input-offset` e `detail-value`.
+
+Na instalação, Rust valida o pacote primeiro. Depois, C++ abre o ZIP, verifica
+as condições físicas e extrai usando o executável principal validado por Rust.
+Uma falha ou divergência na extração encerra a operação sem fallback, sem
+substituir os metadados Rust e sem cadastrar o aplicativo. A validação PE32+
+AMD64 do executável extraído continua em C++.
+
+O mapeamento de status para o CLI é `4` para `truncated`/`malformed`, `5` para
+`unsupported-format`/`unsupported-mechanism` e `70` para argumentos, buffers,
+limites, wire inválido, panic ou falha interna. Execução direta normal,
+`app run`, `app run --report`, Proton, DLLs dependentes e
+`TL_BUILD_RUST=OFF` permanecem no caminho C++.
