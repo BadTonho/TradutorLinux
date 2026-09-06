@@ -1,6 +1,7 @@
 if(NOT DEFINED RUNTIME OR NOT DEFINED FIXTURE OR NOT DEFINED DLL_A OR NOT DEFINED DLL_B
-   OR NOT DEFINED DEP_DLL OR NOT DEFINED WORK)
-    message(FATAL_ERROR "RUNTIME, FIXTURE, DLL_A, DLL_B, DEP_DLL and WORK are required")
+   OR NOT DEFINED DEP_DLL OR NOT DEFINED WORK OR NOT DEFINED RUST_ENABLED)
+    message(FATAL_ERROR
+        "RUNTIME, FIXTURE, DLL_A, DLL_B, DEP_DLL, WORK and RUST_ENABLED are required")
 endif()
 
 foreach(input IN ITEMS "${RUNTIME}" "${FIXTURE}" "${DLL_A}" "${DLL_B}" "${DEP_DLL}")
@@ -89,7 +90,7 @@ function(tl_run_fixture id expected_hex result_var stdout_var stderr_var)
         COMMAND "${CMAKE_COMMAND}" -E env
             "HOME=${WORK}/home"
             "XDG_CONFIG_HOME=${WORK}/config"
-            "${RUNTIME}" app run "${id}" --trace
+            "${RUNTIME}" app run "${id}" --trace=pe,loader,imports,runtime,process
         RESULT_VARIABLE run_result
         OUTPUT_VARIABLE run_stdout
         ERROR_VARIABLE run_stderr
@@ -104,6 +105,22 @@ function(tl_run_fixture id expected_hex result_var stdout_var stderr_var)
 endfunction()
 
 tl_run_fixture(compat-dll-a "636f6d7061742d610a" ran_a run_a_stdout run_a_trace)
+string(REGEX MATCH "\\[tl\\]\\[pe\\]\\[info\\] image[^\n]*" pe_image_line "${run_a_trace}")
+if(NOT pe_image_line)
+    message(FATAL_ERROR "The main image PE trace was not emitted:\n${run_a_trace}")
+endif()
+if(RUST_ENABLED)
+    if(NOT pe_image_line MATCHES "backend=\\\"rust\\\"")
+        message(FATAL_ERROR "The native AppRun main image did not use Rust:\n${run_a_trace}")
+    endif()
+else()
+    if(pe_image_line MATCHES "backend=\\\"rust\\\"")
+        message(FATAL_ERROR "TL_BUILD_RUST=OFF used the Rust PE backend:\n${run_a_trace}")
+    endif()
+endif()
+if(run_a_trace MATCHES "\\[tl\\]\\[loader\\][^\n]*backend=\\\"rust\\\"")
+    message(FATAL_ERROR "A dependent DLL loader event used the Rust backend:\n${run_a_trace}")
+endif()
 foreach(needle
         "provider-selected module=\"compat.dll\""
         "provider-selected module=\"compatdep.dll\""

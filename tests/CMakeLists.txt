@@ -351,6 +351,7 @@ if(TARGET tradutorlinux_samples AND TARGET tradutorlinux)
             "-DDLL_A=${CMAKE_CURRENT_BINARY_DIR}/samples/generated/tl_compat_dll_a.dll"
             "-DDLL_B=${CMAKE_CURRENT_BINARY_DIR}/samples/generated/tl_compat_dll_b.dll"
             "-DDEP_DLL=${CMAKE_CURRENT_BINARY_DIR}/samples/generated/tl_compat_dep.dll"
+            "-DRUST_ENABLED=$<BOOL:${TL_BUILD_RUST}>"
             "-DWORK=${CMAKE_CURRENT_BINARY_DIR}/compat_dll_profile_work"
             -P "${CMAKE_CURRENT_SOURCE_DIR}/samples/verify_compat_dll.cmake"
     )
