@@ -163,11 +163,41 @@ análise dos bytes e do manifesto.
 
 ### R22.1 — Análise segura do pacote
 
-- [ ] Migrar a leitura limitada da estrutura ZIP e do manifesto XML.
-- [ ] Validar tamanhos, contagens, compressão, entidades e caminhos no Rust.
-- [ ] Rejeitar traversal, links e entradas ambíguas de forma determinística.
-- [ ] Preservar a seleção exclusiva de PE32+ AMD64 nativo.
-- [ ] Comparar todos os resultados com o parser C++ e fixtures existentes.
+- [x] Migrar a leitura limitada da estrutura ZIP e do manifesto XML para a ABI
+  `TLMS` v1.0, sem alterar a seleção de backend de produção.
+- [x] Validar tamanhos, contagens, compressão, entidades e caminhos no Rust,
+  com ponte C mínima para raw DEFLATE/zlib.
+- [x] Rejeitar traversal, links, NUL, colisões após normalização, bundles,
+  Zip64, multipartes, encryption, DTD e entidades externas de forma
+  determinística; o inspector C++ recebeu a mesma política.
+- [x] Preservar a seleção exclusiva de PE32+ AMD64 nativo no fluxo C++ futuro;
+  R22.1 não valida nem executa o PE interno do pacote.
+- [x] Comparar semanticamente Rust e C++ em pacotes stored/DEFLATE e manter
+  regressões para manifesto, wire, buffers, erros e concorrência.
+
+Implementação concluída em R22.1:
+
+- `include/tradutorlinux/ffi/rust_msix_parser.h` congela a ABI, os status,
+  erros estruturados, limites e layouts do wire; os contratos C/C++ verificam
+  largura, alinhamento, offsets e constantes.
+- `src/rust/msix_parser.rs` implementa leitor LE bounded, EOCD/central/local
+  headers, stored/raw DEFLATE, normalização de nomes, XML limitado e serializer
+  determinístico; `src/package/rust_msix_parser.cpp` valida/decodifica TLMS e
+  adapta `AppxPackageInfo`.
+- `TL_BUILD_RUST=OFF` continua padrão: o runner, `inspect_msix_package`,
+  `install`, `app run` e o loader continuam no backend C++.
+
+Evidência reproduzível em 2026-09-06:
+
+- `cargo test --locked --offline`: `23/23`; Clippy com
+  `--locked --offline --all-targets -- -D warnings`: aprovado.
+- Rust Release: `RustMsixParserTest.*` `6/6`, `MsixParserTest.*` `8/8`,
+  contratos C/C++ `2/2` e CTest `rust_msix_differential` aprovado.
+- C++ Debug com `TL_BUILD_RUST=OFF`: `MsixParserTest.*` `8/8`, contratos C/C++
+  `2/2`; `nm` não encontrou os símbolos `tl_msix_parse_v1`,
+  `tl_msix_inflate_raw` ou `tl_rust_validator` na biblioteca C++.
+- `git diff --check` deve permanecer limpo antes do commit; a execução dos
+  presets Rust Debug/Sanitize depende dos presets já configurados no ambiente.
 
 ### R22.2 — Integração
 

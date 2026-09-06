@@ -54,6 +54,22 @@ buffer ou wire inválido. Os vetores e testes diferenciais de imports,
 delay-imports, exports/forwarders, TLS, unwind V1/V2 e relocations são a
 evidência do contrato, não uma declaração de suporte funcional.
 
+## Análise estrutural MSIX/AppX — R22.1
+
+R22.1 implementa o parser Rust e o wire `TLMS` v1.0 para testes de contrato e
+comparação diferencial. O C++ permanece o backend de produção para inspeção,
+instalação e execução; não há mudança no estado de compatibilidade de nenhum
+pacote ou aplicativo. A análise Rust aceita somente pacotes simples com ZIP
+stored/raw DEFLATE e manifesto XML limitado; bundles, Zip64, encryption,
+links, traversal, colisões normalizadas, DTD e entidades externas continuam
+fora do escopo.
+
+O parser Rust não acessa o filesystem e não valida o PE interno. A seleção de
+PE32+ AMD64, extração física, permissões, cadastro e execução permanecem no
+C++. `TL_BUILD_RUST=OFF` continua sendo a variante C++ explícita e padrão, sem
+link operacional com Rust. A promoção do parser de pacote para
+`--report`/`install` fica para R22.2 e exigirá nova evidência reproduzível.
+
 ## Aplicações de teste
 
 | Fixture | Arquitetura | CRT | Imports esperados | Estado atual | Próximo marco |

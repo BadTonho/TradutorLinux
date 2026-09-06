@@ -533,6 +533,27 @@ manifesto/estrutura inválida, `package-extract` indica falha nas validações o
 na escrita segura e `package-executable` indica que o executável declarado não
 é PE32+ x86-64. O caminho `--report` continua somente estrutural e não extrai.
 
+### Análise Rust de MSIX/AppX — R22.1
+
+R22.1 não muda os eventos do CLI nem seleciona Rust em `--report`, `install` ou
+`app run`. A ABI `TLMS` é exercitada pelo contrato e pelos testes diferenciais;
+o inspector C++ continua sendo o backend de produção. Portanto, um diagnóstico
+de pacote nesta etapa continua usando `failed stage="package-parse"` ou
+`package-extract` conforme o caminho C++ existente.
+
+Quando a integração for habilitada em R22.2, os status `truncated` e `malformed`
+deverão ser convertidos em falha de pacote; `unsupported-format` e
+`unsupported-mechanism` continuarão distinguíveis no diagnóstico estruturado.
+`invalid-argument`, `buffer-too-small`, `input-too-large`, `output-too-large`,
+wire inválido, panic e `internal` são falhas internas do adaptador. A fonte de
+automação é `status`, `code`, `phase`, `input_offset` e `detail_value`; a
+mensagem caller-owned é somente texto humano.
+
+O contrato rejeita, de forma determinística, bundles, Zip64, multipartes,
+encryption, métodos ZIP desconhecidos, links, traversal, NUL, colisões após
+normalizar `\\` para `/`, DTD e entidades externas. Rust não acessa o
+filesystem e não valida o PE interno do pacote.
+
 ## Categorias de falha
 
 Eventos de erro podem incluir o campo `category`:

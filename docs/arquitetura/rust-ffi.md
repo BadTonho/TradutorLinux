@@ -344,3 +344,34 @@ usar `_longjmp` não fortificado; assim o Release voltou a linkar sem mudar o
 mapper. A distinção `unknown-symbol`/`unknown-dll` também possui regressão no
 grafo de módulos. Esta etapa não declara suporte a aplicativos reais nem
 migração ampla da produção para Rust.
+
+## ABI de análise MSIX/AppX — R22.1
+
+[`rust_msix_parser.h`](../../include/tradutorlinux/ffi/rust_msix_parser.h)
+define `tl_msix_parse_v1_size` e `tl_msix_parse_v1_fill`. Essas funções recebem
+o pacote completo em memória, sem acesso Rust ao filesystem, e retornam o
+wire `TLMS` v1.0. O chamador mantém a propriedade da entrada, do buffer de
+saída e da mensagem; `fill` não altera a saída quando a capacidade é
+insuficiente. O erro estruturado `tl_msix_error_v1` usa `code`, `phase`,
+`input_offset` e `detail_value`, e a mensagem sempre é caller-owned e NUL-
+terminada quando há capacidade.
+
+O contrato limita a entrada a 2 GiB e a saída a 64 MiB. Os status de formato,
+ZIP, XML, limites, argumentos, buffers e falhas internas são próprios do
+parser MSIX e não são códigos Win32. Panics são capturados antes do retorno;
+nenhum `String`, `Vec`, ponteiro ou unwind Rust atravessa a ABI. O parser aceita
+somente pacotes simples com ZIP stored/raw DEFLATE e manifesto XML limitado.
+Bundles, Zip64, multipartes, encryption, links, traversal, NUL, colisões de
+nomes normalizados, DTD e entidades externas são rejeitados.
+
+O raw DEFLATE é a única ponte adicional: `tl_msix_inflate_raw` é uma função C
+interna, sem estado, que recebe buffers Rust caller-owned e usa a zlib já
+vinculada ao projeto. Ela valida limites, exige `Z_STREAM_END`, consome toda a
+entrada e produz exatamente o tamanho anunciado. Não é uma API pública do
+runtime.
+
+R22.1 compila essa ABI somente com `TL_BUILD_RUST=ON` para o parser e o corpus
+diferencial. O C++ continua sendo o backend de produção e o runner não chama
+`parse_msix_rust` nesta etapa. Com `TL_BUILD_RUST=OFF`, não há link operacional
+com a biblioteca Rust nem referência aos símbolos do parser; `Cargo.lock`
+permanece inalterado.
