@@ -668,7 +668,9 @@ RustProfileParseResult parse_profile_rust(const std::span<const std::byte> input
                                             error_out, message, capacity, message_required);
         });
         if (sized.status != TL_PROFILE_STATUS_SUCCESS) {
-            if (sized.status > TL_PROFILE_STATUS_UNSUPPORTED_FORMAT) {
+            if (sized.status == TL_PROFILE_STATUS_INVALID_ARGUMENT ||
+                sized.status == TL_PROFILE_STATUS_BUFFER_TOO_SMALL ||
+                sized.status == TL_PROFILE_STATUS_INTERNAL) {
                 return internal_result(sized.error, sized.message.empty()
                                                            ? "falha interna no parser Rust"
                                                            : sized.message);

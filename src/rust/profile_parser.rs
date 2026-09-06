@@ -632,14 +632,24 @@ fn validate_profile(
         }
     }
     for (index, mapping) in profile.files.iter().enumerate() {
-        if !valid_relative_path(&mapping.source) || !valid_c_drive_path(&mapping.target) {
+        if !valid_relative_path(&mapping.source) {
             return Err(Failure::new(
                 STATUS_MALFORMED,
                 ERROR_PATH,
                 PHASE_PATHS,
                 index as u64,
                 0,
-                b"caminho de arquivo invalido",
+                b"origem de arquivo deve ser relativa e usar apenas '/'",
+            ));
+        }
+        if !valid_c_drive_path(&mapping.target) {
+            return Err(Failure::new(
+                STATUS_MALFORMED,
+                ERROR_PATH,
+                PHASE_PATHS,
+                index as u64,
+                0,
+                b"destino de arquivo fora de drive_c",
             ));
         }
         for previous in &profile.files[..index] {

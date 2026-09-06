@@ -4,15 +4,21 @@
 
 #include "path_rules.hpp"
 
+#if defined(TRADUTORLINUX_RUST_PROFILE_PARSER)
+#include "tradutorlinux/compat/rust_profile_parser.hpp"
+#endif
+
 #if defined(TRADUTORLINUX_RUST_PATH_VALIDATOR)
 #include "rust_path_validator.hpp"
 #endif
 
 #include <algorithm>
 #include <cctype>
+#include <cstddef>
 #include <cstdint>
 #include <fstream>
 #include <limits>
+#include <span>
 #include <string>
 #include <string_view>
 #include <system_error>
@@ -423,6 +429,42 @@ private:
     return result;
 }
 
+#if defined(TRADUTORLINUX_RUST_PROFILE_PARSER)
+[[nodiscard]] ProfileParserStatus profile_parser_status(const tl_profile_status_t status) noexcept {
+    switch (status) {
+        case TL_PROFILE_STATUS_SUCCESS: return ProfileParserStatus::Success;
+        case TL_PROFILE_STATUS_MALFORMED: return ProfileParserStatus::Malformed;
+        case TL_PROFILE_STATUS_UNSUPPORTED_FORMAT:
+            return ProfileParserStatus::UnsupportedFormat;
+        case TL_PROFILE_STATUS_INVALID_ARGUMENT:
+            return ProfileParserStatus::InvalidArgument;
+        case TL_PROFILE_STATUS_BUFFER_TOO_SMALL: return ProfileParserStatus::BufferTooSmall;
+        case TL_PROFILE_STATUS_INPUT_TOO_LARGE: return ProfileParserStatus::InputTooLarge;
+        case TL_PROFILE_STATUS_OUTPUT_TOO_LARGE: return ProfileParserStatus::OutputTooLarge;
+        case TL_PROFILE_STATUS_INTERNAL: return ProfileParserStatus::Internal;
+        default: return ProfileParserStatus::Internal;
+    }
+}
+
+void set_parser_diagnostics(ProfileLoadResult& result,
+                            const RustProfileParseResult& parsed) noexcept {
+    result.parser.attempted = true;
+    result.parser.backend = ProfileParserBackend::Rust;
+    result.parser.status = profile_parser_status(parsed.status);
+    result.parser.code = parsed.error.code;
+    result.parser.phase = parsed.error.phase;
+    result.parser.input_offset = parsed.error.input_offset;
+    result.parser.detail_value = parsed.error.detail_value;
+}
+
+[[nodiscard]] bool is_fallback_profile_status(const tl_profile_status_t status) noexcept {
+    return status == TL_PROFILE_STATUS_MALFORMED ||
+           status == TL_PROFILE_STATUS_UNSUPPORTED_FORMAT ||
+           status == TL_PROFILE_STATUS_INPUT_TOO_LARGE ||
+           status == TL_PROFILE_STATUS_OUTPUT_TOO_LARGE;
+}
+#endif
+
 }  // namespace
 
 std::filesystem::path profile_path(const std::filesystem::path& prefix_root) {
@@ -468,6 +510,27 @@ ProfileLoadResult load_profile(const std::filesystem::path& prefix_root,
     }
 
     Profile profile;
+    ProfileParserDiagnostics parser_diagnostics;
+#if defined(TRADUTORLINUX_RUST_PROFILE_PARSER)
+    const auto profile_bytes = std::span<const std::byte>{
+        reinterpret_cast<const std::byte*>(contents.data()), contents.size()};
+    const RustProfileParseResult parsed = parse_profile_rust(
+        profile_bytes, expected_app_id, expected_app_sha256, expected_app_version);
+    ProfileLoadResult parser_result;
+    set_parser_diagnostics(parser_result, parsed);
+    parser_diagnostics = parser_result.parser;
+    if (parsed.status != TL_PROFILE_STATUS_SUCCESS) {
+        parser_result.status = parsed.internal_failure ||
+                                       !is_fallback_profile_status(parsed.status)
+                                   ? ProfileStatus::InternalError
+                                   : ProfileStatus::Invalid;
+        parser_result.error = parsed.error_message.empty()
+                                  ? "parser Rust rejeitou profile.json"
+                                  : parsed.error_message;
+        return parser_result;
+    }
+    profile = parsed.profile;
+#else
     std::string parse_error;
     if (!JsonParser{contents}.parse(profile, parse_error)) {
         return invalid_result(parse_error);
@@ -505,24 +568,50 @@ ProfileLoadResult load_profile(const std::filesystem::path& prefix_root,
     if (!profile.app_version.empty() && profile.app_version != expected_app_version) {
         return invalid_result("versão do perfil não corresponde ao aplicativo");
     }
+#endif
+
+    const auto invalid_profile_result = [&](std::string error) {
+        ProfileLoadResult result = invalid_result(std::move(error));
+        result.parser = parser_diagnostics;
+        return result;
+    };
+#if defined(TRADUTORLINUX_RUST_PATH_VALIDATOR)
+    const auto invalid_profile_result_with_metrics =
+        [&](std::string error, const PathValidationMetrics& metrics) {
+            ProfileLoadResult result = invalid_result(std::move(error), metrics);
+            result.parser = parser_diagnostics;
+            return result;
+        };
+    const auto internal_profile_result = [&](std::string error,
+                                              const PathValidationMetrics& metrics) {
+        ProfileLoadResult result = internal_result(std::move(error), metrics);
+        result.parser = parser_diagnostics;
+        return result;
+    };
+#endif
 
     const auto paths = prefix::get_environment_paths(prefix_root);
 #if defined(TRADUTORLINUX_RUST_PATH_VALIDATOR)
     detail::RustPathValidationSession path_validation;
     if (!path_validation.available()) {
-        return internal_result("não foi possível criar a sessão de validação Rust",
-                               path_validation.metrics());
+        return internal_profile_result("não foi possível criar a sessão de validação Rust",
+                                       path_validation.metrics());
     }
 #endif
     std::vector<std::string> normalized_dll_modules;
     normalized_dll_modules.reserve(profile.dlls.size());
     for (DllMapping& mapping : profile.dlls) {
+#if defined(TRADUTORLINUX_RUST_PROFILE_PARSER)
+        std::string canonical_module = mapping.module;
+        if (!normalize_dll_module(canonical_module)) {
+#else
         if (!normalize_dll_module(mapping.module)) {
-            return invalid_result("módulo de DLL inválido");
+#endif
+            return invalid_profile_result("módulo de DLL inválido");
         }
         if (std::find(normalized_dll_modules.begin(), normalized_dll_modules.end(), mapping.module) !=
             normalized_dll_modules.end()) {
-            return invalid_result("mapeamento de DLL duplicado");
+            return invalid_profile_result("mapeamento de DLL duplicado");
         }
         normalized_dll_modules.push_back(mapping.module);
 #if defined(TRADUTORLINUX_RUST_PATH_VALIDATOR)
@@ -533,23 +622,23 @@ ProfileLoadResult load_profile(const std::filesystem::path& prefix_root,
             const std::string detail = "origem de DLL deve ser relativa e usar apenas '/' " +
                                        std::string{"(validação Rust): "} + rust_error;
             if (validation == detail::RustPathValidationResult::InternalError) {
-                return internal_result(detail, path_validation.metrics());
+                return internal_profile_result(detail, path_validation.metrics());
             }
-            return invalid_result(detail, path_validation.metrics());
+            return invalid_profile_result_with_metrics(detail, path_validation.metrics());
         }
 #endif
         if (!path_rules::is_relative_source(mapping.source)) {
-            return invalid_result("origem de DLL deve ser relativa e usar apenas '/'");
+            return invalid_profile_result("origem de DLL deve ser relativa e usar apenas '/'");
         }
         const std::filesystem::path source = paths.compat_dlls_dir / mapping.source;
         if (!prefix::is_path_within(source, paths.compat_dlls_dir)) {
-            return invalid_result("origem de DLL fora de compat/dlls");
+            return invalid_profile_result("origem de DLL fora de compat/dlls");
         }
         const bool source_is_symlink = std::filesystem::is_symlink(source, ec);
         if (source_is_symlink ||
             (std::filesystem::exists(source, ec) &&
              !std::filesystem::is_regular_file(source, ec))) {
-            return invalid_result("origem de DLL deve ser um arquivo regular sem symlink");
+            return invalid_profile_result("origem de DLL deve ser um arquivo regular sem symlink");
         }
     }
     for (const FileMapping& mapping : profile.files) {
@@ -561,9 +650,9 @@ ProfileLoadResult load_profile(const std::filesystem::path& prefix_root,
             const std::string detail = "origem de arquivo deve ser relativa e usar apenas '/' " +
                                        std::string{"(validação Rust): "} + rust_error;
             if (source_validation == detail::RustPathValidationResult::InternalError) {
-                return internal_result(detail, path_validation.metrics());
+                return internal_profile_result(detail, path_validation.metrics());
             }
-            return invalid_result(detail, path_validation.metrics());
+            return invalid_profile_result_with_metrics(detail, path_validation.metrics());
         }
         const auto target_validation = path_validation.validate_c_drive_path(
             mapping.target, rust_error);
@@ -571,32 +660,32 @@ ProfileLoadResult load_profile(const std::filesystem::path& prefix_root,
             const std::string detail = "destino de arquivo fora de drive_c (validação Rust): " +
                                        rust_error;
             if (target_validation == detail::RustPathValidationResult::InternalError) {
-                return internal_result(detail, path_validation.metrics());
+                return internal_profile_result(detail, path_validation.metrics());
             }
-            return invalid_result(detail, path_validation.metrics());
+            return invalid_profile_result_with_metrics(detail, path_validation.metrics());
         }
 #endif
         if (!path_rules::is_relative_source(mapping.source)) {
-            return invalid_result("origem de arquivo deve ser relativa e usar apenas '/' ");
+            return invalid_profile_result("origem de arquivo deve ser relativa e usar apenas '/' ");
         }
         const std::filesystem::path source = paths.compat_files_dir / mapping.source;
         if (!std::filesystem::is_regular_file(source, ec) ||
             !prefix::is_path_within(source, paths.compat_files_dir)) {
-            return invalid_result("arquivo de origem ausente ou fora de compat/files");
+            return invalid_profile_result("arquivo de origem ausente ou fora de compat/files");
         }
         if (!path_rules::is_c_drive_target(mapping.target) ||
             !path_rules::has_target_filename(mapping.target)) {
-            return invalid_result("destino deve ser um arquivo dentro de C:\\");
+            return invalid_profile_result("destino deve ser um arquivo dentro de C:\\");
         }
         const std::filesystem::path target =
             prefix::resolve_windows_path(mapping.target, prefix_root);
         if (target.empty() || !prefix::is_path_within(target, paths.drive_c)) {
-            return invalid_result("destino de arquivo fora de drive_c");
+            return invalid_profile_result("destino de arquivo fora de drive_c");
         }
         for (const FileMapping& previous : profile.files) {
             if (&previous == &mapping) break;
             if (previous.source == mapping.source || same_target(previous.target, mapping.target)) {
-                return invalid_result("mapeamento de arquivo duplicado");
+                return invalid_profile_result("mapeamento de arquivo duplicado");
             }
         }
     }
@@ -606,6 +695,9 @@ ProfileLoadResult load_profile(const std::filesystem::path& prefix_root,
     result.profile = std::move(profile);
 #if defined(TRADUTORLINUX_RUST_PATH_VALIDATOR)
     result.path_validation = path_validation.metrics();
+#endif
+#if defined(TRADUTORLINUX_RUST_PROFILE_PARSER)
+    result.parser = parser_diagnostics;
 #endif
     return result;
 }

@@ -245,6 +245,22 @@ void write_path_validation_trace(std::ostream& stream, const bool trace_enabled,
         "path-validation", fields);
 }
 
+[[nodiscard]] std::string_view profile_parser_status_name(
+    const compat::ProfileParserStatus status) noexcept {
+    switch (status) {
+        case compat::ProfileParserStatus::NotAttempted: return "not-attempted";
+        case compat::ProfileParserStatus::Success: return "success";
+        case compat::ProfileParserStatus::Malformed: return "malformed";
+        case compat::ProfileParserStatus::UnsupportedFormat: return "unsupported-format";
+        case compat::ProfileParserStatus::InvalidArgument: return "invalid-argument";
+        case compat::ProfileParserStatus::BufferTooSmall: return "buffer-too-small";
+        case compat::ProfileParserStatus::InputTooLarge: return "input-too-large";
+        case compat::ProfileParserStatus::OutputTooLarge: return "output-too-large";
+        case compat::ProfileParserStatus::Internal: return "internal";
+    }
+    return "internal";
+}
+
 enum class PeParserBackend {
     Cpp,
     Rust,
@@ -762,13 +778,28 @@ ExitCode run_command(const CommandLine& command_line, std::ostream& stdout_strea
             return std::string{"unknown"};
         }();
         if (effective_cmd.trace_enabled) {
-            const std::array fields{
+            std::vector<diagnostics::TraceField> fields{
                 diagnostics::TraceField{"status", profile_status},
                 diagnostics::TraceField{"prefix", prefix_dir.string()},
                 diagnostics::TraceField{"app-id", compatibility_app_id},
                 diagnostics::TraceField{"files", std::to_string(profile.profile.files.size())},
                 diagnostics::TraceField{"detail", profile.error},
             };
+            if (profile.parser.attempted) {
+                fields.push_back(diagnostics::TraceField{"backend", "rust"});
+                fields.push_back(diagnostics::TraceField{
+                    "parser-status", std::string{profile_parser_status_name(profile.parser.status)}});
+                if (profile.parser.status != compat::ProfileParserStatus::Success) {
+                    fields.push_back(diagnostics::TraceField{
+                        "code", std::to_string(profile.parser.code)});
+                    fields.push_back(diagnostics::TraceField{
+                        "phase", std::to_string(profile.parser.phase)});
+                    fields.push_back(diagnostics::TraceField{
+                        "input-offset", std::to_string(profile.parser.input_offset)});
+                    fields.push_back(diagnostics::TraceField{
+                        "detail-value", std::to_string(profile.parser.detail_value)});
+                }
+            }
             diagnostics::write_trace(stderr_stream, diagnostics::TraceComponent::Runtime,
                                      profile.status == compat::ProfileStatus::Invalid
                                          ? diagnostics::TraceLevel::Warning

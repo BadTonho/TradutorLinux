@@ -48,11 +48,39 @@ enum class ProfileStatus {
     InternalError,
 };
 
+enum class ProfileParserBackend {
+    NotUsed,
+    Rust,
+};
+
+enum class ProfileParserStatus {
+    NotAttempted,
+    Success,
+    Malformed,
+    UnsupportedFormat,
+    InvalidArgument,
+    BufferTooSmall,
+    InputTooLarge,
+    OutputTooLarge,
+    Internal,
+};
+
+struct ProfileParserDiagnostics {
+    bool attempted{false};
+    ProfileParserBackend backend{ProfileParserBackend::NotUsed};
+    ProfileParserStatus status{ProfileParserStatus::NotAttempted};
+    std::uint32_t code{0};
+    std::uint32_t phase{0};
+    std::uint64_t input_offset{0};
+    std::uint64_t detail_value{0};
+};
+
 struct ProfileLoadResult {
     ProfileStatus status{ProfileStatus::Missing};
     Profile profile;
     std::string error;
     PathValidationMetrics path_validation;
+    ProfileParserDiagnostics parser;
 };
 
 [[nodiscard]] std::filesystem::path profile_path(
