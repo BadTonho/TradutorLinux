@@ -1,9 +1,9 @@
 # Contrato FFI do parser PE em Rust
 
 Este documento define o contrato congelado em R21.1, registra a implementação
-de R21.2 e a integração seletiva de R21.3. Com `TL_BUILD_RUST=ON`, o parser
-Rust é canônico somente na execução direta de `--report`; o loader, o fluxo
-`app run` e o build sem Rust continuam usando o parser C++.
+de R21.2 e as integrações seletivas de R21.3/R21.4. Com `TL_BUILD_RUST=ON`, o
+parser Rust é canônico no `--report` direto e na imagem principal do `app run`
+nativo; o loader e as DLLs dependentes continuam em C++.
 
 O contrato é específico para o alvo atual: PE32+ AMD64 em Linux x86-64. A
 implementação Rust será responsável somente por analisar bytes e construir o
@@ -180,8 +180,9 @@ preenche a saída depois de confirmar a capacidade recebida.
 
 O C++ continua sendo o oráculo diferencial. A R21.3 compartilha o decoder TLPE
 entre o adaptador de produção e os testes; ele valida novamente todo o buffer
-antes de convertê-lo em `PeInfo`. Nenhum resultado Rust é consumido pelo
-loader ou por `app run`.
+antes de convertê-lo em `PeInfo`. Em R21.4, esse `PeInfo` é consumido somente
+pela preparação da imagem principal; o `GuestModuleGraph` continua chamando o
+parser C++ para cada DLL dependente.
 
 ## Integração R21.3 no `--report`
 
@@ -201,9 +202,38 @@ relatório C++.
 
 No trace, os eventos derivados do resultado Rust carregam
 `backend="rust"`. Um `parse-failed` Rust também carrega `code`, `phase`,
-`input-offset` e `detail-value`, além de `status` e `detail`. O `app run`
-(inclusive `app run --report`) e todo o caminho `TL_BUILD_RUST=OFF` não usam o
-adaptador nem emitem esse backend.
+`input-offset` e `detail-value`, além de `status` e `detail`. `app run
+--report` e todo o caminho `TL_BUILD_RUST=OFF` não usam o adaptador nem emitem
+esse backend. A execução nativa de `app run` sem `--report` é a exceção,
+descrita a seguir.
+
+## Integração R21.4 no `app run`
+
+Quando `TL_BUILD_RUST=ON`, o adaptador PE é escolhido somente se o comando for
+`CommandMode::AppRun`, `report_only` for falso e o perfil não selecionar Proton.
+O resultado decodificado é entregue ao fluxo C++ existente de
+`prepare_process`: `map_image`, relocations, `GuestModuleGraph`, imports, TLS,
+unwind, ABI e execução não foram alterados.
+
+A seleção vale apenas para a imagem principal. O `GuestModuleGraph` mantém o
+parser C++ para DLLs carregadas e `app run --report` permanece no parser C++.
+Execução direta normal, instalação, Proton e qualquer build com
+`TL_BUILD_RUST=OFF` também permanecem em C++. Não existe fallback silencioso:
+uma falha Rust encerra antes de registrar/mapear a imagem, resolver imports
+para execução ou iniciar o convidado.
+
+O mapeamento de status para o CLI é `4` para `truncated`/`malformed`, `5` para
+arquitetura, formato ou mecanismo não suportados e `70` para status inesperado,
+erro FFI, wire inválido, limite, panic ou falha interna. O trace de parsing
+Rust usa `backend="rust"`; em `parse-failed`, os campos estruturados da ABI
+continuam sendo `code`, `phase`, `input-offset` e `detail-value`.
+
+Os testes `app_run_*` cadastram cada fixture nativa elegível em um catálogo
+isolado e verificam stdout, exit code, imports, mapeamento, processo e
+diagnósticos. Há casos separados para delay-imports, relocations, TLS,
+unwind V1/V2, imports não resolvidos, entrada inválida, crash, timeout e
+limites de recursos. A mesma matriz é executada com Rust habilitado e no
+baseline C++.
 
 ## Testes e evolução
 
@@ -222,5 +252,6 @@ corpus diferencial e os testes de robustez do parser Rust, incluindo as duas
 chamadas stateless, buffers com sentinelas, erros estruturados, strings
 deduplicadas, concorrência e entradas malformadas bounded. Até a promoção,
 `TL_BUILD_RUST=OFF` permanece o padrão. Com Rust habilitado, somente o
-`--report` direto chama a ABI; o loader e a matriz de compatibilidade de
-execução não mudam.
+`--report` direto e a imagem principal do `app run` nativo chamam a ABI; o
+loader, o Proton, as DLLs dependentes e a matriz de compatibilidade funcional
+continuam em C++.

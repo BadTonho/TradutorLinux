@@ -89,13 +89,36 @@ ambiente por restrição de `ptrace`; a rodada Sanitize foi repetida com
 
 ### R21.4 — Integração no `app run`
 
-- [ ] Usar o resultado Rust para preparar o modelo consumido pelo loader.
-- [ ] Manter em C++ o `mmap`, `mprotect`, relocação aplicada na memória,
+- [x] Usar o resultado Rust para preparar o modelo consumido pelo loader,
+  somente na imagem principal do `app run` nativo com Rust habilitado.
+- [x] Manter em C++ o `mmap`, `mprotect`, relocação aplicada na memória,
   resolução de endereços, ABI Microsoft x64 e execução.
-- [ ] Validar que uma falha de parsing impede o entry point e preserva os
+- [x] Validar que uma falha de parsing impede o entry point e preserva os
   códigos de saída existentes.
-- [ ] Reexecutar todas as fixtures PE32+ e os testes de imports, TLS, unwind e
-  crash.
+- [x] Reexecutar todas as fixtures PE32+ e os testes de imports, TLS, unwind e
+  crash, incluindo o baseline sem Rust e os caminhos Proton/`--report`.
+
+Evidência reproduzível em 2026-09-06:
+
+- Debug com `TL_BUILD_RUST=ON`: matriz `runtime` sem Proton passou 192/192,
+  incluindo 61/61 testes `app-run`; as verificações Rust/contrato passaram
+  4/4 e o teste de DLL dependente confirmou que somente a imagem principal usa
+  `backend="rust"`.
+- Debug com `TL_BUILD_RUST=OFF`: matriz `app-run` passou 61/61 e os testes
+  operacionais, Proton, instalação, relatório, rejeição e DLL dependente
+  passaram 7/7, sem referência ao backend Rust.
+- Release com Rust: matriz `app-run` passou 61/61; os gates Rust, rejeições,
+  delay-imports e unwind passaram 12/12.
+- Sanitize com Rust: os casos estáveis selecionados passaram 12/12 e a
+  dependência DLL passou. A matriz completa passou 54/61; sete casos foram
+  limitados por condições ambientais/fixtures já conhecidas (imagem sem
+  relocations sob a base do sanitizer, UBSan em stores desalinhados de
+  fixtures, limites de memória do ASan e saídas específicas de fixtures).
+  Portanto, não se declara a matriz Sanitize completa como verde.
+- Cargo `test --locked --offline`, Clippy offline com `-D warnings` e os
+  contratos C/C++ passaram nos gates executados. O conjunto de testes não
+  modificou `PeInfo`, o header FFI, o wire format, o loader ou o backend
+  Proton.
 
 ### R21.5 — Promoção
 

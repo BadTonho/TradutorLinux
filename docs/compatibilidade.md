@@ -20,7 +20,7 @@ Há três dimensões independentes:
 Assim, um aplicativo pode ter `supported` na resolução de imports e continuar
 `execution-failed` ou sem nível funcional no catálogo.
 
-## Política de backend do parser PE — R21.3
+## Política de backend do parser PE — R21.3/R21.4
 
 Com `TL_BUILD_RUST=ON`, a execução direta de `--report` usa o resultado Rust
 como canônico e compara sua semântica com o parser C++ nos testes. O adaptador
@@ -30,9 +30,16 @@ strings como bytes. Não existe fallback silencioso: falhas de parsing são
 controladas e aparecem no trace com os campos estruturados da ABI.
 
 Essa promoção não altera o estado de compatibilidade de nenhum aplicativo.
-`app run --report`, `app run`, o loader e `TL_BUILD_RUST=OFF` permanecem no
-parser C++. O relatório Rust também não mapeia imagem nem executa o entry point;
-`execution: not-attempted` continua obrigatório.
+`app run --report`, execução direta normal, instalação, Proton, o loader das
+DLLs dependentes e `TL_BUILD_RUST=OFF` permanecem no parser C++. No `app run`
+nativo sem `--report`, somente a imagem principal usa o resultado Rust; o
+`GuestModuleGraph` continua usando C++ para as DLLs. O `PeInfo` Rust é entregue
+ao mesmo fluxo C++ de mapeamento e execução, sem alteração de `mmap`,
+relocations, imports, ABI ou entry point.
+
+O relatório Rust não mapeia imagem nem executa o entry point;
+`execution: not-attempted` continua obrigatório. Falhas Rust não têm fallback
+silencioso e encerram o `app run` antes de mapear ou executar.
 
 O mapeamento de saída é `4` para `truncated`/`malformed`, `5` para arquitetura,
 formato ou mecanismo não suportados e `70` para falha interna da ABI, limites,

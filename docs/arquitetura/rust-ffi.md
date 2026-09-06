@@ -1,12 +1,14 @@
 # Fronteira FFI Rust↔C++
 
-Este documento descreve as B20.1–B20.6. A biblioteca Rust continua opt-in:
+Este documento descreve as B20.1–B20.6 e a adoção seletiva do parser PE nas
+R21.3/R21.4. A biblioteca Rust continua opt-in:
 além do probe, a B20.3 usa Rust somente para a validação lexical dos caminhos
 de perfis e materialização. A B20.4 endurece essa fronteira com testes e
 tratamento de limites; a B20.5 integra o mesmo validador ao fluxo operacional
 de `app run`; a B20.6 promove essa adoção seletiva após evidência reproduzível.
-Nenhum parser, loader, runtime Win32 ou API pública de compatibilidade foi
-migrado para Rust.
+R21.3/R21.4 acrescentam a análise Rust do PE na execução direta de `--report` e
+na imagem principal do `app run` nativo; nenhum loader, runtime Win32, DLL
+dependente ou API pública de compatibilidade foi migrado para Rust.
 
 ## Build e escopo
 
@@ -17,8 +19,9 @@ CMake mantém o mesmo valor como override explícito para diagnóstico e testes
 negativos; os presets e o CI usam a versão fixada.
 
 A biblioteca é uma `staticlib` Cargo sem crates externos. Com
-`TL_BUILD_RUST=ON`, ela é ligada ao `tradutorlinux_core` e habilita o adaptador
-de validação lexical; o `tl_rust_ffi_probe` também é construído. Com
+`TL_BUILD_RUST=ON`, ela é ligada ao `tradutorlinux_core` e habilita os
+adaptadores de validação lexical e de análise PE; o `tl_rust_ffi_probe` também
+é construído. Com
 `TL_BUILD_RUST=OFF`, o runtime não referencia Rust e mantém o caminho C++.
 Cargo recebe `--locked --offline`: o build não altera o lockfile nem consulta o
 registro de crates. Os artefatos e o `target/` Cargo ficam dentro do diretório
@@ -190,6 +193,32 @@ conforme o ambiente do projeto. O Cargo continua sendo executado com
 toolchain e a fronteira linkada aos probes sanitizados. Builds com
 `TL_BUILD_RUST=OFF` não criam os testes Rust, não linkam a staticlib e não
 exigem toolchain Rust.
+
+## Integração seletiva do parser PE — R21.3/R21.4
+
+O header público `include/tradutorlinux/ffi/rust_pe_parser.h` e o wire format
+TLPE v1.0 continuam congelados. O adaptador C++ é proprietário dos buffers,
+valida o resultado e converte-o para `PeInfo`; nenhum ponteiro, `String`, `Vec`,
+exceção ou panic atravessa a ABI.
+
+Com Rust habilitado, a ABI é usada em dois caminhos bem delimitados:
+
+- `--report` direto, sem mapear nem executar;
+- `app run` nativo sem `--report`, somente para a imagem principal antes do
+  fluxo C++ de `prepare_process`.
+
+Execução direta normal, `app run --report`, instalação, Proton e o parsing das
+DLLs do `GuestModuleGraph` permanecem em C++. `TL_BUILD_RUST=OFF` não liga nem
+referencia o adaptador. Uma falha Rust não faz fallback para C++: no `app run`
+ela termina antes de mapear, resolver imports ou executar o entry point.
+
+O CLI retorna `4` para `truncated`/`malformed`, `5` para arquitetura, formato
+ou mecanismo não suportados e `70` para erro FFI, wire inválido, limites,
+panic, status inesperado ou falha interna. Eventos PE do caminho Rust têm
+`backend="rust"`; `parse-failed` também preserva `code`, `phase`,
+`input-offset` e `detail-value`. O backend Proton pode emitir métricas Rust de
+validação de perfil/arquivos, mas isso não significa que seu parser PE tenha
+sido trocado.
 
 ## Integração operacional e promoção da B20.5/B20.6
 
