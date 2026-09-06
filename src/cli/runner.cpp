@@ -826,7 +826,6 @@ ExitCode run_command(const CommandLine& command_line, std::ostream& stdout_strea
         parse_result = pe::parse_pe(*bytes);
     }
 #else
-    const bool rust_report_backend = false;
     const bool rust_pe_backend = false;
     const bool rust_internal_failure = false;
     parse_result = pe::parse_pe(*bytes);
