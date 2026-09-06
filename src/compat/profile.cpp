@@ -323,6 +323,7 @@ private:
     std::size_t position_{0};
 };
 
+#if !defined(TRADUTORLINUX_RUST_PROFILE_PARSER)
 [[nodiscard]] bool is_safe_app_id(const std::string_view value) noexcept {
     if (value.empty() || value.size() > 128U || value.find("..") != std::string_view::npos) {
         return false;
@@ -371,6 +372,7 @@ private:
     }
     return digit_seen && component_digit_seen && components >= 1U && components <= 2U;
 }
+#endif
 
 [[nodiscard]] std::string lowercase(std::string value) {
     for (char& character : value) {
