@@ -1,12 +1,12 @@
 # Fronteira FFI Rust↔C++
 
 Este documento descreve as B20.1–B20.6 e a adoção seletiva do parser PE nas
-R21.3/R21.4. A biblioteca Rust continua opt-in:
+R21.3–R21.5. A biblioteca Rust continua opt-in:
 além do probe, a B20.3 usa Rust somente para a validação lexical dos caminhos
 de perfis e materialização. A B20.4 endurece essa fronteira com testes e
 tratamento de limites; a B20.5 integra o mesmo validador ao fluxo operacional
 de `app run`; a B20.6 promove essa adoção seletiva após evidência reproduzível.
-R21.3/R21.4 acrescentam a análise Rust do PE na execução direta de `--report` e
+R21.3–R21.5 acrescentam a análise Rust do PE na execução direta de `--report` e
 na imagem principal do `app run` nativo; nenhum loader, runtime Win32, DLL
 dependente ou API pública de compatibilidade foi migrado para Rust.
 
@@ -194,7 +194,7 @@ toolchain e a fronteira linkada aos probes sanitizados. Builds com
 `TL_BUILD_RUST=OFF` não criam os testes Rust, não linkam a staticlib e não
 exigem toolchain Rust.
 
-## Integração seletiva do parser PE — R21.3/R21.4
+## Integração seletiva do parser PE — R21.3–R21.5
 
 O header público `include/tradutorlinux/ffi/rust_pe_parser.h` e o wire format
 TLPE v1.0 continuam congelados. O adaptador C++ é proprietário dos buffers,
@@ -219,6 +219,25 @@ panic, status inesperado ou falha interna. Eventos PE do caminho Rust têm
 `input-offset` e `detail-value`. O backend Proton pode emitir métricas Rust de
 validação de perfil/arquivos, mas isso não significa que seu parser PE tenha
 sido trocado.
+
+### Política final de R21.5
+
+A seleção é centralizada no runner e não depende de decisões duplicadas em
+cada fluxo. Rust é o backend canônico da imagem principal apenas em
+`--report` direto e em `app run` nativo sem `--report` e sem Proton, quando
+`TL_BUILD_RUST=ON`. O adaptador retorna `PeInfo` ao fluxo C++ existente; não há
+fallback silencioso para `parse_pe` C++ se a análise Rust falhar.
+
+O parser C++ continua sendo produção nos caminhos excluídos — DLLs do
+`GuestModuleGraph`, Proton, instalação, `app run --report`, execução direta
+normal e builds `TL_BUILD_RUST=OFF` — e é oráculo diferencial somente nos
+caminhos promovidos. O build OFF é a variante C++ explícita e padrão: não liga
+a staticlib Rust e não contém os símbolos do parser Rust.
+
+Os testes de promoção cobrem a matriz nativa completa, o corpus diferencial,
+falhas antes de mapeamento/execução, trace `backend="rust"`, ausência desse
+campo nos eventos C++, equivalência ON/OFF e contratos C/C++. O estado de
+compatibilidade dos aplicativos não muda com a promoção.
 
 ## Integração operacional e promoção da B20.5/B20.6
 

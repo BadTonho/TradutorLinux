@@ -1,7 +1,7 @@
 # Contrato FFI do parser PE em Rust
 
 Este documento define o contrato congelado em R21.1, registra a implementação
-de R21.2 e as integrações seletivas de R21.3/R21.4. Com `TL_BUILD_RUST=ON`, o
+de R21.2 e as integrações seletivas de R21.3–R21.5. Com `TL_BUILD_RUST=ON`, o
 parser Rust é canônico no `--report` direto e na imagem principal do `app run`
 nativo; o loader e as DLLs dependentes continuam em C++.
 
@@ -235,6 +235,27 @@ unwind V1/V2, imports não resolvidos, entrada inválida, crash, timeout e
 limites de recursos. A mesma matriz é executada com Rust habilitado e no
 baseline C++.
 
+## Promoção R21.5 e seleção canônica
+
+R21.5 consolida uma única seleção interna do parser PE. Com
+`TL_BUILD_RUST=ON`, Rust é canônico somente para o `--report` direto e para a
+imagem principal de `app run` nativo sem `--report` e sem backend Proton. O
+resultado Rust passa pelo mesmo `PeInfo` e pelo fluxo C++ de loader, sem
+alteração de mapeamento, relocations, imports, TLS, unwind, ABI ou execução.
+
+Não há fallback de produção: falha Rust encerra o caminho selecionado antes de
+mapear ou iniciar o convidado. O parser C++ permanece deliberadamente ativo
+para DLLs dependentes, Proton, instalação, `app run --report`, execução direta
+normal e qualquer build `TL_BUILD_RUST=OFF`; nesses caminhos não há evento
+`backend="rust"`. Nos caminhos promovidos, o C++ é usado somente como oráculo
+dos testes diferenciais.
+
+O build `TL_BUILD_RUST=OFF` continua sendo a variante C++ explícita e padrão:
+não liga a staticlib Rust nem referencia seus símbolos. Os testes verificam a
+seleção, a ausência de fallback, os erros estruturados, o wire format, o
+corpus PE completo e a equivalência semântica ON/OFF. A promoção não muda o
+estado de compatibilidade de aplicativos.
+
 ## Testes e evolução
 
 R21.1 protege o contrato com:
@@ -250,8 +271,8 @@ R21.1 protege o contrato com:
 Esses testes verificam o contrato e o wire format. A R21.2 acrescenta o
 corpus diferencial e os testes de robustez do parser Rust, incluindo as duas
 chamadas stateless, buffers com sentinelas, erros estruturados, strings
-deduplicadas, concorrência e entradas malformadas bounded. Até a promoção,
-`TL_BUILD_RUST=OFF` permanece o padrão. Com Rust habilitado, somente o
+deduplicadas, concorrência e entradas malformadas bounded. Após R21.5,
+`TL_BUILD_RUST=OFF` permanece o padrão explícito C++. Com Rust habilitado, somente o
 `--report` direto e a imagem principal do `app run` nativo chamam a ABI; o
 loader, o Proton, as DLLs dependentes e a matriz de compatibilidade funcional
 continuam em C++.

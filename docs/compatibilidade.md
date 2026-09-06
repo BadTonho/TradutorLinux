@@ -20,7 +20,7 @@ Há três dimensões independentes:
 Assim, um aplicativo pode ter `supported` na resolução de imports e continuar
 `execution-failed` ou sem nível funcional no catálogo.
 
-## Política de backend do parser PE — R21.3/R21.4
+## Política de backend do parser PE — R21.3–R21.5
 
 Com `TL_BUILD_RUST=ON`, a execução direta de `--report` usa o resultado Rust
 como canônico e compara sua semântica com o parser C++ nos testes. O adaptador
@@ -40,6 +40,13 @@ relocations, imports, ABI ou entry point.
 O relatório Rust não mapeia imagem nem executa o entry point;
 `execution: not-attempted` continua obrigatório. Falhas Rust não têm fallback
 silencioso e encerram o `app run` antes de mapear ou executar.
+
+Na R21.5, a seleção é uma política única do runner: Rust é canônico somente
+para a imagem principal dos caminhos promovidos com `TL_BUILD_RUST=ON`. O C++
+permanece produção para DLLs dependentes, Proton, instalação, `app run
+--report`, execução direta normal e para o build `TL_BUILD_RUST=OFF`, que é a
+variante C++ explícita e padrão. Nos caminhos promovidos, o C++ é apenas o
+oráculo diferencial; nenhum resultado Rust é substituído silenciosamente.
 
 O mapeamento de saída é `4` para `truncated`/`malformed`, `5` para arquitetura,
 formato ou mecanismo não suportados e `70` para falha interna da ABI, limites,

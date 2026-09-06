@@ -324,7 +324,7 @@ de evidência:
 Um `result: supported` sem execução correspondente significa apenas
 `imports-resolved`; não deve ser apresentado como suporte funcional ao usuário.
 
-### Backend Rust no relatório direto e no `app run` nativo
+### Backend Rust no relatório direto e no `app run` nativo — R21.3–R21.5
 
 Quando o projeto é construído com `TL_BUILD_RUST=ON`, somente
 `tradutorlinux [--trace] --report arquivo.exe` e `app run <id>` nativo sem
@@ -361,6 +361,13 @@ emitido. O status é mapeado para exit `4` (`truncated`/`malformed`), `5`
 ou `70` (erro FFI, wire inválido, limite, panic, status inesperado ou falha
 interna). O evento `parse-failed` mantém `code`, `phase`, `input-offset` e
 `detail-value` para automação.
+
+Essa seleção é centralizada: Rust é canônico somente nos dois caminhos
+promovidos quando `TL_BUILD_RUST=ON`; o parser C++ continua sendo produção em
+DLLs dependentes, Proton, instalação, `app run --report`, execução direta
+normal e builds `TL_BUILD_RUST=OFF`. Nos caminhos promovidos, o C++ serve apenas
+como oráculo diferencial de testes. O build OFF é uma variante C++ explícita,
+sem link ou referência aos símbolos Rust.
 
 Quando uma importação não pode ser resolvida, emite um evento `unresolved` com os campos `dll`, `symbol`, `status`, `detail` e `mechanism`:
 
