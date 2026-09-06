@@ -215,10 +215,9 @@ Evidência reproduzível em 2026-09-06:
 - [x] Expandir a integração de testes e CI para a matriz de pacotes ON/OFF,
   incluindo instalação, rejeições, diferencial, contratos e verificação de
   ausência dos símbolos Rust no build OFF.
-- [ ] Fechar o gate de conclusão após evidência local de todos os presets
-  exigidos; Debug Rust não pôde ser executado porque o preset existente usa
-  Ninja, ausente neste ambiente, e o CTest Sanitize completo inclui falhas
-  ambientais nas execuções reais opcionais de Proton/X11.
+- [x] Fechar o gate de conclusão após evidência local dos presets exigidos,
+  mantendo como skips somente os testes opcionais sem display, rede local ou
+  execução Proton real disponíveis no ambiente.
 
 Implementação concluída para R22.2:
 
@@ -228,6 +227,9 @@ Implementação concluída para R22.2:
   falhas encerram antes de extração/cadastro e não acionam fallback. O
   `extract_msix_package` sobrecarregado recebe `main_executable` do resultado
   Rust, enquanto o extrator mantém as validações físicas e o PE interno C++.
+- As bibliotecas de teste Rust declaram explicitamente a ponte DEFLATE e zlib;
+  isso mantém `tl_rust_ffi_probe` e `tl_rust_path_validation` independentes do
+  link transitivo do `tradutorlinux_core`.
 - `integration_msix_install` e `integration_msix_rejections` verificam
   `RUST_ENABLED`, stdout, trace, códigos, bundles, pacote truncado, manifesto
   inválido, instalação e ausência de catálogo após falha.
@@ -236,6 +238,9 @@ Evidência reproduzível em 2026-09-06:
 
 - Rust Release: CTest completo `763/763` passou, com quatro skips ambientais;
   a seleção MSIX, contratos e diferencial passaram.
+- Rust Debug: após instalar Ninja e reutilizar a cópia local do GoogleTest para
+  manter o configure offline, CTest completo `763/763` passou, com quatro
+  skips ambientais; Cargo/Clippy e os probes FFI também passaram.
 - Rust Sanitize: CTest completo com exclusão explícita dos cinco testes Proton
   reais e do smoke X11 impedidos pelo sandbox passou `762/762`, com três skips
   opcionais (Iphlpapi, GUI e loopback HTTPS). A execução sem essa exclusão
@@ -244,8 +249,8 @@ Evidência reproduzível em 2026-09-06:
   `--all-targets -- -D warnings` passou. O baseline Release OFF passou
   `732/732`, e `nm` não encontrou símbolos `tl_msix_parse_v1`,
   `tl_msix_inflate_raw` ou `tl_rust_validator` na biblioteca C++.
-- `git diff --check` passou antes desta atualização; o gate será repetido antes
-  do commit final.
+- `git diff --check` passou; o worktree será verificado novamente após este
+  registro.
 
 ## Prioridade 3 — Parser de perfis
 
