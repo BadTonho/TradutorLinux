@@ -122,14 +122,38 @@ Evidência reproduzível em 2026-09-06:
 
 ### R21.5 — Promoção
 
-- [ ] Escolher Rust como implementação canônica do parsing PE.
-- [ ] Manter o parser C++ somente como oráculo diferencial ou fallback de
-  compatibilidade durante um período definido.
-- [ ] Não permitir fallback silencioso quando os resultados divergirem.
-- [ ] Decidir explicitamente se o binário de produção passará a exigir a
-  biblioteca Rust; `TL_BUILD_RUST=OFF` não pode fingir usar Rust.
-- [ ] Remover o parser C++ da execução principal somente após a matriz inteira
-  passar e o corpus diferencial permanecer estável.
+- [x] Escolher Rust como implementação canônica do parsing PE no `--report`
+  direto e na imagem principal do `app run` nativo sem `--report` quando
+  `TL_BUILD_RUST=ON`.
+- [x] Centralizar a seleção do backend e manter o parser C++ em produção nos
+  caminhos excluídos: DLLs dependentes, Proton, instalação, `app run
+  --report`, execução direta normal e builds `TL_BUILD_RUST=OFF`.
+- [x] Não permitir fallback silencioso quando a análise Rust falhar ou quando
+  o wire format for inválido; falhas terminam antes de mapeamento e execução.
+- [x] Manter `TL_BUILD_RUST=OFF` como variante C++ explícita e padrão, sem
+  linkar ou referenciar a biblioteca Rust.
+- [x] Preservar o fluxo C++ após o `PeInfo` Rust e manter o parser C++ como
+  oráculo diferencial somente nos caminhos promovidos.
+
+Evidência reproduzível em 2026-09-06:
+
+- Debug Rust, Release Rust e Sanitize Rust passaram `748/748` testes executados
+  cada, incluindo a matriz nativa `app-run`, relatório direto, `app run
+  --report`, DLL dependente, Proton mockado, contratos e corpus diferencial.
+  Em cada rodada, `IphlpapiTest.EnumeratesLinuxAdaptersWithWin32BufferContracts`
+  e `runtime_tl_wininet_https_loopback` foram os únicos skips de ambiente.
+- Os dois testes GUI/X11 opcionais foram executados separadamente e retornaram
+  `SKIPPED` por indisponibilidade do display; o Proton real permanece um teste
+  opcional dependente da instalação local. O Proton mockado passou no Sanitize.
+- O baseline C++ Debug e Release com `TL_BUILD_RUST=OFF` passou `725/725`
+  testes executados cada. `nm` não encontrou símbolos `tl_pe_parse_v1` ou
+  `tl_rust_validator` nos executáveis OFF.
+- `cargo test --locked --offline` passou `17/17` e `cargo clippy --locked
+  --offline --all-targets -- -D warnings` passou. `git diff --check` passou.
+
+R21.5 não altera o estado de compatibilidade de aplicativos nem promove
+suporte funcional; a promoção cobre apenas a seleção do parser e preserva o
+loader, o backend Proton e a separação Rust/C++ definida acima.
 
 ## Prioridade 2 — Parser de pacotes MSIX/AppX
 
