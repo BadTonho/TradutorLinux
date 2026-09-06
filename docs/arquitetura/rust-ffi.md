@@ -8,8 +8,9 @@ tratamento de limites; a B20.5 integra o mesmo validador ao fluxo operacional
 de `app run`; a B20.6 promove essa adoção seletiva após evidência reproduzível.
 R21.3–R21.5 acrescentam a análise Rust do PE na execução direta de `--report` e
 na imagem principal do `app run` nativo. R22.2 acrescenta a análise Rust de
-pacotes MSIX/AppX ao `--report` direto e ao `install`; nenhum loader, runtime
-Win32, DLL dependente ou API pública de compatibilidade foi migrado para Rust.
+pacotes MSIX/AppX ao `--report` direto e ao `install`. R23.2 promove a análise
+Rust de `profile.json` dentro de `load_profile`; nenhum loader, runtime Win32,
+DLL dependente ou API pública de compatibilidade foi migrado para Rust.
 
 ## Build e escopo
 
@@ -399,7 +400,7 @@ falhas, o evento inclui `code`, `phase`, `input-offset` e `detail-value`. Os
 caminhos `app run`, `app run --report`, execução direta normal, Proton, DLLs
 dependentes e o build OFF continuam no C++.
 
-## ABI de perfis — R23.1
+## ABI de perfis — R23.1–R23.2
 
 [`rust_profile_parser.h`](../../include/tradutorlinux/ffi/rust_profile_parser.h)
 define `tl_profile_parse_v1_size`/`fill` e o wire TLPR v1.0 para análise
@@ -414,9 +415,23 @@ strings são bytes deduplicados, length-prefixed e referenciadas por offset e
 tamanho. Reservados, padding, ranges, strides, referências e overflow são
 validados pelo decoder C++. A entrada é limitada a 1 MiB e o wire a 64 MiB.
 
-R23.1 não muda `load_profile` nem promove a seleção Rust: o C++ continua
-canônico em produção e responsável por existência, tipo regular, symlink,
+Em R23.2, `load_profile` chama o adaptador Rust somente depois de o C++
+confirmar que `profile.json` existe, é regular, pode ser lido e está dentro do
+limite de entrada. O resultado TLPR é convertido para o `Profile` público sem
+alterá-lo. Rust é canônico para sintaxe, schema, identidade e validação lexical;
+C++ continua responsável por existência de fontes, regularidade, symlink,
 confinamento, colisões físicas, permissões, materialização e seleção final do
-backend. Rust é ABI/teste diferencial até a R23.2; não há fallback operacional
-a ser alterado nesta etapa. `TL_BUILD_RUST=OFF` permanece a variante C++ padrão,
-sem símbolos Rust.
+backend.
+
+Perfil ausente não chama Rust. `malformed`, `unsupported-format`,
+`input-too-large` e `output-too-large` tornam o perfil `Invalid` e preservam o
+fallback genérico atual. `invalid-argument`, `buffer-too-small`, wire inválido,
+panic, status inesperado e `internal` tornam o resultado `InternalError` sem
+fallback. O evento `compat-profile` informa `backend="rust"` e
+`parser-status`; rejeições também expõem `code`, `phase`, `input-offset` e
+`detail-value`.
+
+`TL_BUILD_RUST=OFF` permanece a variante C++ explícita e padrão: não compila,
+liga nem referencia os símbolos do parser de perfis Rust, e não recebe campos
+Rust no trace. A promoção vale para todos os consumidores atuais de
+`load_profile`, sem alterar PE, TLPR, loader, materializador ou execução.

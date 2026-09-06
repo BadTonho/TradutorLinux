@@ -301,11 +301,52 @@ Evidência reproduzível em 2026-09-06:
 
 ### R23.2 — Promoção
 
-- [ ] Usar Rust como parser canônico somente após a matriz de perfis passar em
-  Debug, Sanitize e Release.
-- [ ] Preservar o fallback genérico para perfil ausente ou lexicalmente
-  inválido.
-- [ ] Não alterar o schema apenas por causa da migração de linguagem.
+- [x] Promover Rust dentro de `load_profile` para perfis existentes em todos os
+  consumidores atuais quando `TL_BUILD_RUST=ON`, mantendo `Profile`, TLPR e a
+  assinatura pública inalterados.
+- [x] Preservar a detecção C++ de perfil ausente e o fallback genérico para
+  rejeições de conteúdo Rust (`malformed`, schema/identidade/caminho inválido,
+  `unsupported-format`, `input-too-large` e `output-too-large`).
+- [x] Encerrar sem fallback em falhas internas da ABI, transporte/decoder TLPR,
+  buffers, panic ou status inesperado, com `ProfileStatus::InternalError` e
+  diagnóstico estruturado no evento `compat-profile`.
+- [x] Manter no C++ as validações físicas, filesystem, materialização, seleção
+  de backend e execução; `TL_BUILD_RUST=OFF` continua a variante C++ explícita,
+  sem link ou símbolos Rust.
+- [x] Atualizar CI, testes diferenciais, diagnóstico, compatibilidade e o
+  contrato arquitetural, sem alterar `Cargo.lock` nem o schema de perfis.
+
+Implementação concluída em R23.2:
+
+- `load_profile` chama `parse_profile_rust` e `decode_tlpr_v1` somente depois
+  dos pré-checks C++ de presença, tipo regular, leitura e limite de entrada;
+  o resultado Rust alimenta diretamente o `Profile` existente.
+- `ProfileLoadResult` preserva diagnósticos do backend, status, código, fase,
+  offset e valor estruturado. O trace `compat-profile` acrescenta os campos
+  Rust somente quando houve tentativa; perfil ausente e build OFF não recebem
+  esses campos.
+- A matriz CI constrói explicitamente os contratos C/C++ e executa o CTest
+  completo serialmente, evitando colisões dos prefixos compartilhados pelos
+  testes.
+
+Evidência reproduzível em 2026-09-06:
+
+- `cargo test --locked --offline`: `28/28`; Clippy com
+  `--locked --offline --all-targets -- -D warnings`: aprovado.
+- Rust Debug: CTest completo passou `768` testes, com quatro skips ambientais;
+  Rust Release teve o mesmo resultado. As matrizes de perfil, contratos,
+  diferenciais e integrações passaram.
+- Rust Sanitize: a matriz reproduzível passou `771/771`, com três skips
+  ambientais. Os cinco testes Proton real e `x11_popup_smoke` foram excluídos
+  explicitamente porque o Proton tentou escrever `dist.lock` em uma instalação
+  somente leitura e o Xvfb não iniciou sob LeakSanitizer/ptrace; a execução
+  completa sem exclusões registrou somente essas limitações ambientais.
+- Baseline `TL_BUILD_RUST=OFF`: Debug e Release passaram `735/735` cada, com
+  quatro skips ambientais; os contratos C/C++ passaram e `nm` não encontrou
+  símbolos `tl_profile_parse_v1`, `tl_rust_profile`, `tl_pe_parse_v1` ou
+  `tl_msix_parse_v1` nas bibliotecas C++.
+- `git diff --check` passou. R23.2 está concluída; R23.3 pode tratar a próxima
+  promoção de componente sem reabrir o contrato TLPR ou o `Profile` público.
 
 ## Regras para todas as migrações
 

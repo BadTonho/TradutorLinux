@@ -570,15 +570,14 @@ métodos ZIP desconhecidos, links, traversal, NUL, colisões após normalizar
 `\\` para `/`, DTD e entidades externas. Rust não acessa o filesystem e não
 valida o PE interno do pacote.
 
-### Análise Rust de perfis — R23.1
+### Análise Rust de perfis — R23.1–R23.2
 
-R23.1 ainda não troca o backend de produção de `load_profile`: o parser C++
-continua selecionando e carregando perfis no runtime. Rust é exercitado pela
-ABI TLPR e pelos testes diferenciais, recebendo somente os bytes do
-`profile.json` e o contexto esperado de `app_id`, SHA-256 e versão. A validação
-Rust cobre JSON, schemas 1/2/3, identidade, backend e regras lexicais de
-caminhos; filesystem, materialização, permissões e condições físicas continuam
-em C++.
+Com `TL_BUILD_RUST=ON`, `load_profile` usa Rust como parser canônico depois de
+o C++ confirmar a presença, regularidade, leitura e limite de
+`profile.json`. Rust recebe somente os bytes do arquivo e o contexto esperado
+de `app_id`, SHA-256 e versão; valida JSON, schemas 1/2/3, identidade, backend
+e regras lexicais de caminhos. O C++ continua responsável por filesystem,
+materialização, permissões e condições físicas.
 
 As funções `tl_profile_parse_v1_size` e `tl_profile_parse_v1_fill` usam buffers
 caller-owned. `fill` não modifica a saída quando a capacidade é insuficiente;
@@ -587,12 +586,19 @@ mensagens usam `error_required` incluindo o NUL. O erro estruturado TLPR tem
 enquanto a mensagem é diagnóstico humano. O decoder rejeita magic, versão,
 offsets, strides, alinhamento, referências, reservados e limites inválidos.
 
-Como não há promoção na R23.1, não existe novo evento de produção nem mudança
-de stdout, stderr ou exit code. O C++ continua sendo a fonte do evento
-`compat-profile`, inclusive para perfil ausente, inválido ou incompatível. A
-R23.2 poderá definir a seleção Rust, mas deverá preservar a ausência de perfil
-e o fallback genérico documentados no schema atual. `TL_BUILD_RUST=OFF` não
-compila nem referencia a ABI TLPR.
+O evento existente `compat-profile` permanece estável. Quando Rust é tentado,
+ele acrescenta `backend="rust" parser-status="success"`; em rejeições,
+acrescenta também `code`, `phase`, `input-offset` e `detail-value`. Perfil
+ausente é detectado antes da chamada e não recebe campos Rust. Rejeição de
+conteúdo (`malformed`, `unsupported-format`, `input-too-large` ou
+`output-too-large`) preserva o fallback genérico; falha interna da ABI,
+decoder, transporte TLPR, panic ou status inesperado retorna `InternalError`
+sem fallback.
+
+Depois de um parsing Rust bem-sucedido, uma falha física de fonte, symlink,
+confinamento ou permissão invalida o perfil no C++ e não materializa arquivos.
+O build `TL_BUILD_RUST=OFF` continua a variante C++ explícita e padrão, sem
+referenciar os símbolos Rust e sem campos Rust no trace.
 
 ## Categorias de falha
 

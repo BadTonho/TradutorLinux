@@ -1,12 +1,20 @@
 # Parser Rust de perfis — TLPR v1.0
 
-## Escopo da R23.1
+## Escopo da R23.2
 
-R23.1 implementa a análise byte-oriented de `profile.json` em Rust e congela
-uma representação TLPR para o adaptador e os testes diferenciais. A seleção de
-produção continua em `load_profile`/`src/compat/profile.cpp`; não há mudança no
-`runner`, na materialização, no filesystem, na seleção final do backend ou na
-execução. A promoção do parser para produção é o escopo separado da R23.2.
+R23.1 congelou a análise byte-oriented de `profile.json`, a representação TLPR
+e o adaptador diferencial. Na R23.2, `load_profile` passa a usar esse parser
+Rust como fonte canônica quando `TL_BUILD_RUST=ON`, em todos os consumidores
+atuais, incluindo `app run` e `app run --report`. O `Profile` público, a
+assinatura de `load_profile`, o materializador, a seleção final de backend e a
+execução permanecem C++.
+
+Um perfil ausente é detectado em C++ antes da chamada Rust. Para um arquivo
+presente, C++ verifica leitura, tamanho e condições físicas; Rust valida JSON,
+schema, identidade e caminhos lexicais. O C++ não executa o `JsonParser` para
+substituir uma resposta Rust: rejeições de conteúdo usam o fallback genérico
+existente, enquanto falhas internas da ABI, do decoder ou do transporte TLPR
+retornam `InternalError` sem fallback.
 
 O parser Rust não abre caminhos nem retém ponteiros. O C++ fornece o conteúdo
 do JSON e o contexto transitório da identidade física esperada (`app_id`,
@@ -131,18 +139,23 @@ como `unsupported-format`. O decoder também verifica magic, tamanho total,
 descritores, offsets, contagens, strides, referências e reservados antes de
 construir o `Profile`.
 
-## Build e evidência
+## Build, produção e evidência
 
 O módulo entra na static library somente quando `TL_BUILD_RUST=ON`, por meio do
 mesmo Cargo sem crates externas e com `--locked --offline`. O build
 `TL_BUILD_RUST=OFF` não compila, liga ou referencia a ABI de perfis; o parser
-C++ e `load_profile` permanecem inalterados.
+C++ e o fluxo original de `load_profile` permanecem intactos.
 
-R23.1 inclui contratos C/C++, testes Rust do leitor/validação/serializer,
-testes de buffers e sentinelas, concorrência e diferencial semântico contra
-`load_profile`. A matriz validada em 2026-09-06 registrou Cargo `28/28`,
-Clippy com `-D warnings`, CTest Rust Debug `771/771`, Release `771/771`, e
-CTest OFF `734/734`. Sanitize passou no subconjunto reproduzível com os cinco
-testes Proton reais e `x11_popup_smoke` excluídos por dependência ambiental;
-Iphlpapi, GUI e HTTPS permaneceram skips opcionais. Essas evidências validam o
-contrato e a equivalência; não constituem promoção de produção.
+Quando Rust é tentado, o evento existente `compat-profile` recebe
+`backend="rust" parser-status="success"`. Em uma rejeição Rust, o mesmo evento
+recebe o status e `code`, `phase`, `input-offset` e `detail-value`. Perfil
+ausente não recebe campos Rust, e o build OFF continua emitindo somente o trace
+C++ existente. Após um sucesso Rust, as validações físicas de existência,
+regularidade, symlink, confinamento, permissões e materialização continuam em
+C++; uma falha nessa etapa invalida o perfil sem alterar o resultado Rust.
+
+R23.2 acrescenta testes de seleção dentro de `load_profile`, trace
+`compat-profile`, equivalência dos perfis carregados, perfil ausente sem chamada
+Rust, fallback de conteúdo inválido, falhas físicas após parsing bem-sucedido e
+ausência dos símbolos no build OFF. A promoção não modifica `Profile`, TLPR,
+`Cargo.lock`, loader, materializador ou seleção de backend.

@@ -86,14 +86,15 @@ O mapeamento de erros Rust para o CLI é `4` para `truncated`/`malformed`, `5`
 para `unsupported-format`/`unsupported-mechanism` e `70` para argumentos,
 buffers, limites, wire inválido, panic ou falha interna.
 
-## Parser Rust de perfis — R23.1
+## Parser Rust de perfis — R23.1–R23.2
 
-R23.1 implementa o contrato TLPR v1.0 e a comparação diferencial do
-`profile.json`, mas não altera a compatibilidade nem a seleção de produção.
-`load_profile` permanece em C++; o Rust recebe somente os bytes do perfil e o
-contexto caller-owned de identidade para validar sintaxe, schemas 1/2/3,
-identidade, backend e caminhos lexicais. Existência, tipo regular, symlink,
-confinamento, colisões físicas, permissões e materialização continuam em C++.
+R23.1 implementou o contrato TLPR v1.0 e a comparação diferencial do
+`profile.json`. Em R23.2, com `TL_BUILD_RUST=ON`, Rust é canônico dentro de
+`load_profile` para todos os consumidores atuais, incluindo `app run` e
+`app run --report`. O C++ verifica antes a presença, o tipo regular, a leitura
+e o limite do arquivo; depois do TLPR, continua responsável por existência,
+tipo regular, symlink, confinamento, colisões físicas, permissões,
+materialização e seleção de backend.
 
 O wire tem cabeçalho de 128 bytes, tabelas `info`/`files`/`dlls`/`strings`,
 inteiros little-endian, alinhamento de 8 bytes, referências por offset/tamanho
@@ -102,11 +103,19 @@ overflow, referências inválidas ou campos reservados não zerados são
 rejeitados. A ABI usa `size`/`fill`, buffers e mensagens caller-owned, e não
 expõe layout Rust.
 
-Não há evento novo, fallback novo ou alteração de stdout/exit code em R23.1.
-`TL_BUILD_RUST=ON` apenas habilita o contrato e os testes; `TL_BUILD_RUST=OFF`
-continua a variante C++ explícita e padrão, sem link ou símbolos Rust. A
-promoção do backend e a preservação do fallback para perfil ausente ou
-lexicalmente inválido ficam para R23.2.
+O perfil ausente continua sendo detectado exclusivamente pelo C++ e não chama
+Rust. Rejeições de conteúdo — JSON/schema/identidade/caminho lexical inválido,
+`unsupported-format`, `input-too-large` ou `output-too-large` — retornam
+`ProfileStatus::Invalid` e preservam o fallback genérico atual. Falhas internas
+da ABI, argumentos, buffers, decoder TLPR, panic ou status inesperado retornam
+`ProfileStatus::InternalError` sem fallback. O evento `compat-profile` recebe
+`backend="rust" parser-status="success"` quando há sucesso Rust; rejeições
+também carregam `code`, `phase`, `input-offset` e `detail-value`.
+
+`TL_BUILD_RUST=OFF` é a variante C++ explícita e padrão: não compila, liga ou
+referencia os símbolos Rust e não recebe campos Rust no trace. A promoção não
+altera `Profile`, TLPR, `Cargo.lock`, loader, materializador ou o nível de
+compatibilidade declarado para qualquer aplicativo.
 
 ## Aplicações de teste
 
