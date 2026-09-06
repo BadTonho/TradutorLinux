@@ -59,9 +59,12 @@ function(tl_configure_rust_validator)
             "${PROJECT_SOURCE_DIR}/Cargo.lock"
             "${PROJECT_SOURCE_DIR}/rust-toolchain.toml"
             "${PROJECT_SOURCE_DIR}/src/rust/validator.rs"
+            "${PROJECT_SOURCE_DIR}/src/rust/msix_contract.rs"
+            "${PROJECT_SOURCE_DIR}/src/rust/msix_parser.rs"
             "${PROJECT_SOURCE_DIR}/src/rust/pe_parser.rs"
             "${PROJECT_SOURCE_DIR}/include/tradutorlinux/ffi/rust_validator.h"
             "${PROJECT_SOURCE_DIR}/include/tradutorlinux/ffi/rust_pe_parser.h"
+            "${PROJECT_SOURCE_DIR}/include/tradutorlinux/ffi/rust_msix_parser.h"
         VERBATIM
         COMMENT "Generating Rust validator static library"
     )
