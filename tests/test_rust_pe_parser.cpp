@@ -8,6 +8,8 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <filesystem>
+#include <fstream>
 #include <limits>
 #include <optional>
 #include <string>
@@ -375,6 +377,51 @@ TEST(RustPeParserTest, DifferentiallyMatchesCppForAllParserTables) {
         ASSERT_TRUE(decode_wire(rust.output, decoded));
         expect_equal(cpp.info, decoded);
     }
+}
+
+TEST(RustPeParserTest, DifferentiallyMatchesGeneratedPeCorpus) {
+#if defined(TL_FIXTURE_OUTPUT_DIRECTORY)
+    const std::filesystem::path fixture_directory{TL_FIXTURE_OUTPUT_DIRECTORY};
+    std::vector<std::filesystem::path> fixtures;
+    std::error_code error;
+    for (const std::filesystem::directory_entry& entry :
+         std::filesystem::directory_iterator(fixture_directory, error)) {
+        if (!error && entry.is_regular_file(error) &&
+            (entry.path().extension() == ".exe" || entry.path().extension() == ".dll")) {
+            fixtures.push_back(entry.path());
+        }
+        error.clear();
+    }
+    ASSERT_FALSE(error) << "não foi possível enumerar " << fixture_directory;
+    ASSERT_FALSE(fixtures.empty()) << "corpus PE gerado vazio em " << fixture_directory;
+    std::sort(fixtures.begin(), fixtures.end());
+
+    for (const std::filesystem::path& fixture : fixtures) {
+        std::ifstream stream{fixture, std::ios::binary};
+        ASSERT_TRUE(stream) << fixture;
+        stream.seekg(0, std::ios::end);
+        const std::streamoff size = stream.tellg();
+        ASSERT_GE(size, 0) << fixture;
+        stream.seekg(0, std::ios::beg);
+        ByteVector input(static_cast<std::size_t>(size));
+        if (!input.empty()) {
+            stream.read(reinterpret_cast<char*>(input.data()),
+                        static_cast<std::streamsize>(input.size()));
+        }
+        ASSERT_TRUE(stream) << fixture;
+
+        const ParseResult expected = tradutorlinux::pe::parse_pe(input);
+        const tradutorlinux::pe::RustPeParseResult actual =
+            tradutorlinux::pe::parse_pe_rust(input);
+        ASSERT_EQ(actual.status, expected.status) << fixture << ": " << actual.error_message;
+        ASSERT_FALSE(actual.internal_failure) << fixture << ": " << actual.error_message;
+        if (expected.status == tradutorlinux::pe::ParseStatus::Success) {
+            expect_equal(expected.info, actual.info);
+        }
+    }
+#else
+    GTEST_SKIP() << "corpus de fixtures não está disponível neste alvo";
+#endif
 }
 
 TEST(RustPeParserTest, FfiReportsRequiredOutputAndDoesNotModifySmallBuffer) {

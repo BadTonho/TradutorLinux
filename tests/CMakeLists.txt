@@ -184,6 +184,18 @@ else()
     gtest_discover_tests(tradutorlinux_unit_tests)
 endif()
 
+if(TL_BUILD_RUST AND TARGET tradutorlinux_samples)
+    add_test(
+        NAME rust_pe_differential_corpus
+        COMMAND tradutorlinux_unit_tests
+            --gtest_filter=RustPeParserTest.DifferentiallyMatchesGeneratedPeCorpus
+    )
+    set_tests_properties(rust_pe_differential_corpus PROPERTIES
+        LABELS "rust;pe32plus;differential;corpus"
+        TIMEOUT 60
+    )
+endif()
+
 add_executable(tradutorlinux_qt_launcher_tests
     gui/qt_launcher_test.cpp
     ../src/gui/main_window.cpp

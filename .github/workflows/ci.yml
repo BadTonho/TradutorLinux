@@ -91,22 +91,33 @@ jobs:
       - name: Compilar probe e runtime Rust
         run: |
           cmake --build --preset ${{ matrix.preset }} \
-            --target tl_rust_ffi_probe tl_rust_path_validation --parallel 2
-          if [ "${{ matrix.preset }}" != "release-rust" ]; then
-            cmake --build --preset ${{ matrix.preset }} \
-              --target tradutorlinux tradutorlinux_unit_tests --parallel 2
-          fi
+            --target tl_rust_ffi_probe tl_rust_path_validation \
+            tradutorlinux tradutorlinux_unit_tests --parallel 2
 
-      - name: Executar validações Rust
+      - name: Executar matriz completa Rust
+        run: ctest --preset ${{ matrix.preset }} --parallel 2 --output-on-failure
+
+  release-baseline:
+    name: Release sem Rust
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      - name: Instalar dependências
         run: |
-          ctest --preset ${{ matrix.preset }} \
-            -R '^(rust_ffi_probe|rust_path_validation|rust_cargo_tests|rust_cargo_clippy)$' \
-            --output-on-failure
-          if [ "${{ matrix.preset }}" != "release-rust" ]; then
-            ctest --preset ${{ matrix.preset }} \
-              -R '^(RustPathValidationTest\.|integration_rust_operational)$' \
-              --output-on-failure
-          fi
+          sudo apt update
+          sudo apt install --yes \
+            build-essential cmake ninja-build llvm gcc-mingw-w64-x86-64-win32 \
+            libx11-dev xvfb qt6-base-dev
+
+      - name: Configurar Release
+        run: cmake --preset release
+
+      - name: Compilar Release
+        run: cmake --build --preset release --parallel 2
+
+      - name: Executar matriz Release sem Rust
+        run: ctest --preset release --parallel 2 --output-on-failure
 
   target-apps:
     name: Aplicativos-alvo reais (cross-build e imports)
