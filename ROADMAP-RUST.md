@@ -399,7 +399,7 @@ Evidência reproduzível em 2026-09-06:
   referência ao parser Rust.
 - `git diff --check` deve ser executado antes do commit final deste marco.
 
-### R24.2 — Decoder e diferencial
+### R24.2 — Decoder e diferencial (concluída)
 
 - [x] Criar `parse_app_catalog_rust` e decoder C++ reutilizável para validar
   magic, versão, cabeçalho, descritores, offsets, contagens, strides,
@@ -428,17 +428,30 @@ Implementação entregue para R24.2:
   mutações de wire, limite de entrada e concorrência. O CMake só adiciona o
   adaptador/teste quando `TL_BUILD_RUST=ON`.
 
-Evidência reproduzível em 2026-09-06:
+**Status: concluída em 2026-09-06.**
+
+Evidência reproduzível:
 
 - `cargo test --locked --offline`: 38/38; Clippy offline com `-D warnings`:
   aprovado.
-- CTest rotulado `rust`: 16/16 em Debug Rust, Release Rust e Sanitize Rust;
-  testes OFF rotulados `rust`: 9/9 em Debug OFF.
-- `nm` não encontrou os símbolos do parser/adaptador TLAC nas bibliotecas
-  Debug/Release OFF; `git diff --check` passou.
-- O CTest completo Debug Rust ainda registra 18 falhas operacionais fora do
-  catálogo (preparação/execução de fixtures e testes de processo), portanto o
-  gate de conclusão integral abaixo permanece aberto e R24.3 não começa.
+- Rust Debug e Rust Release: CTest completo passou, 783/783 testes, com
+  quatro skips ambientais permitidos (Iphlpapi, X11/GUI e HTTPS local).
+- Rust Sanitize: 781/781 testes passaram; `x11_popup_smoke` e
+  `runtime_gui_smoke` foram excluídos explicitamente porque o sandbox não
+  fornece X11 e o LeakSanitizer não pode iniciar nesse ambiente. Restaram
+  dois skips ambientais permitidos (Iphlpapi e HTTPS local).
+- Baseline Debug e Release com `TL_BUILD_RUST=OFF`: CTest serial completo
+  passou, 737/737 testes em cada configuração, com os quatro skips ambientais
+  permitidos. Ambos foram configurados com `TL_PROTON_ROOT` vazio e
+  `TL_BUILD_RUST=OFF`.
+- `nm` não encontrou os símbolos Rust do parser/adaptador TLAC nas bibliotecas
+  OFF; `git diff --check` passou.
+- As matrizes usaram `TL_PREFIX` e `XDG_CONFIG_HOME` temporários e graváveis;
+  a execução anterior que registrava falhas de preparação dependia do HOME
+  somente leitura do sandbox e não é evidência válida contra R24.2.
+
+O gate diferencial e de build de R24.2 está fechado. R24.3 permanece
+pendente e não foi iniciada por esta alteração.
 
 ### R24.3 — Promoção do leitor
 
