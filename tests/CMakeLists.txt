@@ -154,6 +154,7 @@ target_link_libraries(tradutorlinux_unit_tests
 if(TL_BUILD_RUST)
     target_sources(tradutorlinux_unit_tests PRIVATE
         test_rust_path_validation.cpp
+        test_rust_pe_parser.cpp
     )
     target_include_directories(tradutorlinux_unit_tests PRIVATE
         "${PROJECT_SOURCE_DIR}/src/compat"

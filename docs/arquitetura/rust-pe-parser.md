@@ -1,8 +1,8 @@
 # Contrato FFI do parser PE em Rust
 
-Este documento define a R21.1. Ele congela a fronteira entre um futuro parser
-PE em Rust e o C++ do TradutorLinux; não implementa o parser e não altera o
-loader, o `--report` ou o fluxo `app run`.
+Este documento define o contrato congelado em R21.1 e registra a implementação
+incremental de R21.2. O parser Rust não é integrado ao loader, ao `--report` ou
+ao fluxo `app run` nesta etapa.
 
 O contrato é específico para o alvo atual: PE32+ AMD64 em Linux x86-64. A
 implementação Rust será responsável somente por analisar bytes e construir o
@@ -103,13 +103,30 @@ offsets e contagens, nunca por ponteiros:
 | 13 | `reloc_blocks` | 32 |
 | 14 | `reloc_entries` | 8 |
 
-Os campos de cada registro seguem, na ordem e nos tipos, os campos de
-`PeInfo`, `SectionInfo`, `ImportedDll`, `ImportedSymbol`, `ExportedSymbol`,
-`TlsDirectoryInfo`, `RuntimeFunction`, `UnwindInfo`, `UnwindCode`,
-`UnwindEpilog`, `BaseRelocBlock` e `BaseRelocEntry` do parser C++ atual.
-Booleanos são `u8`; flags e campos reservados ocupam posições fixas e devem
-ser zero quando não usados. O registro `info` contém também os sete pares de
-RVA/tamanho dos diretórios e os campos escalares do TLS.
+Os campos de cada registro têm os offsets abaixo. Todos os offsets são dentro
+do registro, não offsets de structs C ou Rust. Campos reservados são zero.
+
+| Registro | Campos little-endian por offset |
+|---|---|
+| `info` | `0:u32 flags`, `4:u16 machine`, `6:u16 sections`, `8:u32 entry`, `12:u64 image_base`, `20:u32 section_alignment`, `24:u32 size_of_image`, `28:u32 size_of_headers`, `32:u16 subsystem`, `34:u16 reserved`, `36..92` sete pares `(rva:u32,size:u32)` na ordem import, export, resource, exception, relocation, delay-import, TLS, `92:u32 export_ordinal_base`, `96:u64 tls_start`, `104:u64 tls_end`, `112:u64 tls_index`, `120:u64 tls_callbacks`, `128:u32 tls_zero_fill`, `132:u32 tls_characteristics` |
+| `sections` | `0:u64 name_offset`, `8:u32 name_length`, `12:u32 reserved`, `16:u32 virtual_address`, `20:u32 virtual_size`, `24:u32 raw_data_pointer`, `28:u32 raw_data_size`, `32:u32 characteristics`, `36:u32 reserved` |
+| import/delay DLL | `0:u64 name_offset`, `8:u32 name_length`, `12:u32 reserved`, `16:u64 symbols_index`, `24:u64 symbols_count`, `32:u64 reserved` |
+| import/delay symbol | `0:u32 flags`, `4:u16 ordinal`, `6:u16 reserved`, `8:u64 name_offset`, `16:u32 name_length`, `20:u32 reserved`, `24:u32 iat_rva`, `28:u32 reserved` |
+| `exports` | `0:u32 flags`, `4:u16 ordinal`, `6:u16 reserved`, `8:u32 rva`, `12:u32 reserved`, `16:u64 name_offset`, `24:u32 name_length`, `28:u32 reserved`, `32:u64 forwarder_offset`, `40:u32 forwarder_length`, `44:u32 reserved` |
+| `tls_callbacks` | `0:u64 callback_va` |
+| `runtime_functions` | `0:u32 begin_rva`, `4:u32 end_rva`, `8:u32 unwind_info_rva`, `12:u64 unwind_info_index`, `20:u32 reserved` |
+| `unwind_infos` | `0:u8 version`, `1:u8 pe_flags`, `2:u8 prolog_size`, `3:u8 frame_register`, `4:u8 frame_offset`, `5:u8 wire_flags`, `6:u16 reserved`, `8:u64 codes_index`, `16:u64 codes_count`, `24:u64 epilogs_index`, `32:u64 epilogs_count`, `40:u32 handler_rva`, `44:u32 handler_data_rva`, `48:u32 chained_begin_rva`, `52:u32 chained_end_rva`, `56:u32 chained_unwind_info_rva`, `60:u32 reserved`, `64:u64 reserved` |
+| `unwind_codes` | `0:u8 code_offset`, `1:u8 operation`, `2:u8 operation_info`, `3:u8 reserved`, `4:u32 operand` |
+| `unwind_epilogs` | `0:u32 begin_rva`, `4:u32 end_rva` |
+| `reloc_blocks` | `0:u32 page_rva`, `4:u32 reserved`, `8:u64 entries_index`, `16:u64 entries_count`, `24:u64 reserved` |
+| `reloc_entries` | `0:u16 type`, `2:u16 offset`, `4:u32 reserved` |
+
+Os flags de `info` são `PE32_PLUS=1` e `DLL=2`. Os flags de importação,
+exportação e unwind são os constantes no header público. `pe_flags` preserva
+os flags PE de `UNWIND_INFO`; `wire_flags` usa
+`EXTENDED_SET_FPREG=1` e `CHAINED_FUNCTION=2`. O registro `info` contém os
+sete pares de RVA/tamanho dos diretórios, o ordinal base de exports e os
+campos escalares do TLS.
 
 Uma referência a string contém `offset:u64`, `length:u32` e `reserved:u32`.
 Offset zero e comprimento zero significam ausência. A tabela de strings é uma
@@ -117,10 +134,18 @@ sequência de registros `[length:u32][reserved:u32][bytes][padding]`, alinhada
 a 8 bytes; a referência aponta para o primeiro byte da string. Os bytes são
 preservados exatamente como aparecem no PE e não precisam ser UTF-8.
 
-`import_dlls` e `delay_import_dlls` apontam para intervalos nas respectivas
-tabelas de símbolos. `runtime_functions` aponta por índice para
+`import_dlls` e `delay_import_dlls` apontam para intervalos, por índice, nas
+respectivas tabelas de símbolos. `runtime_functions` aponta por índice para
 `unwind_infos`; cada `unwind_info` aponta para seus códigos e epílogos.
 `reloc_blocks` aponta para seus `reloc_entries`.
+
+O produtor canônico emite tabelas não vazias na ordem dos IDs, alinhando cada
+início a 8 bytes. A tabela de strings é deduplicada por bytes: a primeira
+ocorrência durante a travessia de seções, imports, delay-imports e exports
+define o registro reutilizado pelas referências seguintes. O registro de
+string é `[length:u32][reserved:u32][bytes][padding]`; uma referência zero
+representa ausência, enquanto uma referência não zero com comprimento zero
+representa uma string vazia.
 
 O consumidor deve validar magic, versão, tamanho total, offsets, strides,
 contagens, alinhamento, intervalos aninhados e overflow antes de ler qualquer
@@ -143,6 +168,19 @@ Diretórios PE continuam limitados pelos campos `u32` do formato e precisam
 caber simultaneamente no arquivo e na imagem lógica. Não há uma conversão de
 strings para UTF-8 nem uma permissão para NUL substituir limites explícitos.
 
+## Implementação R21.2
+
+O parser Rust implementado em `src/rust/pe_parser.rs` mantém um modelo interno
+próprio e só publica o resultado através das funções C acima. A análise cobre
+PE32+ AMD64, headers, seções, imports, delay-imports, exports e forwarders,
+TLS, relocations e `UNWIND_INFO` V1/V2 com seus códigos, epílogos, handlers e
+encadeamentos. O serializer faz primeiro um plano de tamanho checked e só
+preenche a saída depois de confirmar a capacidade recebida.
+
+O C++ continua sendo o oráculo diferencial e o decoder do TLPE existe somente
+nos testes. Nenhum resultado Rust é consumido pelo loader, `--report` ou
+`app run` nesta etapa.
+
 ## Testes e evolução
 
 R21.1 protege o contrato com:
@@ -155,8 +193,9 @@ R21.1 protege o contrato com:
 - rejeição de magic/versão inválidos, offsets fora do buffer, strides
   incompatíveis, multiplicações com overflow e strings truncadas.
 
-Esses testes verificam o contrato e o wire format, não afirmam que o parser
-Rust já funciona. A implementação Rust e a comparação contra
-`parse_pe` começam na R21.2. Até a promoção, `TL_BUILD_RUST=OFF` permanece o
-padrão, nenhum símbolo FFI é chamado pelo runtime e a matriz de
-compatibilidade não muda.
+Esses testes verificam o contrato e o wire format. A R21.2 acrescenta o
+corpus diferencial e os testes de robustez do parser Rust, incluindo as duas
+chamadas stateless, buffers com sentinelas, erros estruturados, strings
+deduplicadas, concorrência e entradas malformadas bounded. Até a promoção,
+`TL_BUILD_RUST=OFF` permanece o padrão, nenhum símbolo FFI é chamado pelo
+runtime e a matriz de compatibilidade não muda.

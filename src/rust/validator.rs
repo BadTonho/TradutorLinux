@@ -6,6 +6,7 @@ use std::str;
 
 #[cfg(test)]
 mod pe_contract;
+mod pe_parser;
 
 const STATUS_OK: u32 = 0;
 const STATUS_INVALID_ARGUMENT: u32 = 1;

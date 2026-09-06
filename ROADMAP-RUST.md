@@ -45,17 +45,24 @@ exports, relocations, TLS, delay imports e unwind sem precisar executar código.
 
 ### R21.2 — Implementação e robustez
 
-- [ ] Implementar no Rust um leitor de bytes com aritmética checked e acesso
+- [x] Implementar no Rust um leitor de bytes com aritmética checked e acesso
   sempre limitado ao arquivo recebido.
-- [ ] Migrar a validação e extração de headers e seções.
-- [ ] Migrar imports estáticos e delay imports.
-- [ ] Migrar exports por nome, ordinal e forwarder textual.
-- [ ] Migrar relocations, TLS e diretório de exceções somente como dados.
-- [ ] Manter zero crates externas inicialmente.
-- [ ] Adicionar testes unitários, property-based determinístico e corpus de
+- [x] Migrar a validação e extração de headers e seções.
+- [x] Migrar imports estáticos e delay imports.
+- [x] Migrar exports por nome, ordinal e forwarder textual.
+- [x] Migrar relocations, TLS e diretório de exceções somente como dados.
+- [x] Manter zero crates externas inicialmente.
+- [x] Adicionar testes unitários, property-based determinístico e corpus de
   arquivos PE válidos, truncados e malformados.
-- [ ] Comparar o resultado com o parser C++ existente sem divergência não
+- [x] Comparar o resultado com o parser C++ existente sem divergência não
   justificada.
+
+Evidência reproduzível em 2026-09-06: `cargo test --locked --offline` passou
+17/17 e `cargo clippy --locked --offline --all-targets -- -D warnings` passou;
+os testes selecionados passaram 55/55 no Debug, 9/9 no Sanitize, e 55/55 no
+Release após construir explicitamente o contrato C. Com `TL_BUILD_RUST=OFF`,
+os 42 testes `PeReaderTest` e o contrato C passaram 43/43. A implementação
+continua fora do `tradutorlinux_core`, do `--report` e do `app run`.
 
 ### R21.3 — Integração sem risco de execução
 
