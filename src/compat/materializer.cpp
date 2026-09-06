@@ -457,12 +457,16 @@ FileExposure FileExposure::materialize_into(
 #endif
         return result;
     } catch (const std::exception& exception) {
+#if defined(TRADUTORLINUX_RUST_PATH_VALIDATOR)
         result.status_ = FileExposureStatus::InternalError;
+#endif
         result.error_ = std::string{"falha interna ao materializar perfil: "} + exception.what();
         if (!result.cleanup()) result.status_ = FileExposureStatus::RollbackFailed;
         return result;
     } catch (...) {
+#if defined(TRADUTORLINUX_RUST_PATH_VALIDATOR)
         result.status_ = FileExposureStatus::InternalError;
+#endif
         result.error_ = "falha interna ao materializar perfil";
         if (!result.cleanup()) result.status_ = FileExposureStatus::RollbackFailed;
         return result;

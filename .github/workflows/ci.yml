@@ -94,7 +94,7 @@ jobs:
             --target tl_rust_ffi_probe tl_rust_path_validation --parallel 2
           if [ "${{ matrix.preset }}" != "release-rust" ]; then
             cmake --build --preset ${{ matrix.preset }} \
-              --target tradutorlinux_unit_tests --parallel 2
+              --target tradutorlinux tradutorlinux_unit_tests --parallel 2
           fi
 
       - name: Executar validações Rust
@@ -104,7 +104,8 @@ jobs:
             --output-on-failure
           if [ "${{ matrix.preset }}" != "release-rust" ]; then
             ctest --preset ${{ matrix.preset }} \
-              -R '^RustPathValidationTest\.' --output-on-failure
+              -R '^(RustPathValidationTest\.|integration_rust_operational)$' \
+              --output-on-failure
           fi
 
   target-apps:
