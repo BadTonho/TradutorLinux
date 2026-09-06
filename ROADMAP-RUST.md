@@ -348,6 +348,79 @@ Evidência reproduzível em 2026-09-06:
 - `git diff --check` passou. R23.2 está concluída; R23.3 pode tratar a próxima
   promoção de componente sem reabrir o contrato TLPR ou o `Profile` público.
 
+## Prioridade 4 — Catálogo persistente de aplicativos
+
+O catálogo em `src/catalog/app_catalog.cpp` é uma fronteira de dados externos
+usada pela CLI, pela GUI, pela instalação e pelo `app run`. O leitor atual é
+permissivo: localiza o campo `"apps"` por texto, pode aceitar objetos
+parcialmente inválidos e não valida de forma estrita a versão nem o conteúdo
+posterior. A migração será limitada à análise dos bytes do `library.json` e
+não ampliará a compatibilidade de aplicativos.
+
+### R24.1 — Contrato e parser Rust do catálogo
+
+- [ ] Criar `rust_app_catalog_parser.h` com as funções
+  `tl_app_catalog_parse_v1_size` e `tl_app_catalog_parse_v1_fill`, status
+  estáveis, erro estruturado e buffers caller-owned.
+- [ ] Definir o wire `TLAC` v1.0 com cabeçalho de 128 bytes, inteiros
+  little-endian, tabelas alinhadas a 8 bytes para `info`, `apps`, `args` e
+  `strings`, registros de stride fixo, campos reservados zerados e strings
+  deduplicadas por bytes.
+- [ ] Limitar entrada, contagens, argumentos, strings e saída serializada;
+  usar aritmética checked em somas, multiplicações, alinhamento e conversões.
+- [ ] Implementar em Rust um modelo interno separado de `AppEntry`, sem
+  filesystem, ponteiros retidos ou tipos Rust atravessando a ABI.
+- [ ] Preservar o schema atual: versão `1`, campos de identidade, caminhos,
+  `args`, `cpu_limit_seconds`, `memory_limit_mib`, SHA-256 e versão opcional,
+  incluindo as regras atuais de escapes e Unicode.
+- [ ] Manter `AppEntry`, `save_to_file`, CLI, GUI, loader, Proton e execução
+  inalterados nesta etapa; Rust ficará restrito à ABI e aos testes.
+
+### R24.2 — Decoder e diferencial
+
+- [ ] Criar `parse_app_catalog_rust` e decoder C++ reutilizável para validar
+  magic, versão, cabeçalho, descritores, offsets, contagens, strides,
+  alinhamento, referências, reservados e limites antes de construir o
+  `AppCatalog`.
+- [ ] Comparar semanticamente Rust e `AppCatalog::load_from_file` em catálogos
+  válidos, Unicode, escapes, argumentos, SHA-256, versões e múltiplas entradas.
+- [ ] Cobrir JSON truncado, campos desconhecidos ou repetidos, trailing comma,
+  conteúdo extra, overflow numérico, IDs inválidos, entradas parciais e
+  limites de quantidade/tamanho.
+- [ ] Cobrir `size`/`fill`, buffers insuficientes, sentinelas de memória,
+  chamadas repetidas e concorrentes, sem alterar a saída quando a capacidade
+  for insuficiente.
+- [ ] Confirmar que o build `TL_BUILD_RUST=OFF` não liga nem referencia a
+  biblioteca ou símbolos do parser Rust.
+
+### R24.3 — Promoção do leitor
+
+- [ ] Somente após o diferencial passar, centralizar a seleção dentro de
+  `AppCatalog::load_from_file`, mantendo sua assinatura pública e o formato
+  persistido.
+- [ ] Com `TL_BUILD_RUST=ON`, usar Rust como fonte canônica para catálogos
+  existentes; arquivo ausente preserva o comportamento atual e conteúdo
+  inválido não pode deixar entradas parciais no catálogo.
+- [ ] Converter falhas internas de ABI, transporte ou decoder em diagnóstico
+  estruturado no trace, sem substituir silenciosamente o resultado Rust por
+  C++.
+- [ ] Manter em C++ a escrita do catálogo, filesystem, permissões, validações
+  físicas, criação de desktop entries, seleção de backend e execução.
+- [ ] Preservar `TL_BUILD_RUST=OFF` como variante C++ explícita e padrão, sem
+  alterar stdout, stderr normal, exit codes ou o comportamento dos caminhos de
+  execução.
+
+Critérios de saída da R24:
+
+- [ ] Cargo test e Clippy com `--locked --offline`.
+- [ ] Contratos C/C++, diferencial completo e testes de robustez do catálogo.
+- [ ] CTest nos presets Rust Debug, Sanitize e Release, além dos baselines
+  Debug e Release com `TL_BUILD_RUST=OFF`.
+- [ ] `nm` sem símbolos Rust nas bibliotecas OFF, `git diff --check` limpo e
+  evidência reproduzível antes de marcar qualquer subetapa como concluída.
+- [ ] Nenhuma alteração em `AppEntry`, no schema persistido, no `Cargo.lock`,
+  no loader, no backend Proton ou na matriz de compatibilidade de aplicativos.
+
 ## Regras para todas as migrações
 
 - [ ] Rust não deve atravessar a ABI com exceções, panics ou ponteiros próprios.
