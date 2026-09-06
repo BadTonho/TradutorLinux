@@ -724,13 +724,7 @@ struct ZipArchive {
 }  // namespace
 
 bool is_msix_or_appx_package(const std::filesystem::path& path) {
-    const std::string ext = path.extension().string();
-    std::string lower_ext;
-    lower_ext.reserve(ext.size());
-    for (const char c : ext) {
-        lower_ext.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(c))));
-    }
-    if (lower_ext != ".msix" && lower_ext != ".appx" && lower_ext != ".msixbundle" && lower_ext != ".appxbundle") {
+    if (!has_msix_or_appx_extension(path)) {
         return false;
     }
     std::ifstream stream(path, std::ios::binary);
@@ -740,6 +734,17 @@ bool is_msix_or_appx_package(const std::filesystem::path& path) {
     std::uint32_t magic = 0;
     stream.read(reinterpret_cast<char*>(&magic), sizeof(magic));
     return stream.good() && magic == kZipLocalHeaderMagic;
+}
+
+bool has_msix_or_appx_extension(const std::filesystem::path& path) {
+    const std::string ext = path.extension().string();
+    std::string lower_ext;
+    lower_ext.reserve(ext.size());
+    for (const char c : ext) {
+        lower_ext.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(c))));
+    }
+    return lower_ext == ".msix" || lower_ext == ".appx" ||
+           lower_ext == ".msixbundle" || lower_ext == ".appxbundle";
 }
 
 std::optional<AppxPackageInfo> parse_appx_manifest_xml(const std::string_view xml_content) {
@@ -959,31 +964,47 @@ std::optional<AppxPackageInfo> inspect_msix_package(const std::filesystem::path&
     }
 }
 
-std::optional<std::filesystem::path> extract_msix_package(
+namespace {
+
+std::optional<std::filesystem::path> extract_msix_package_impl(
     const std::filesystem::path& package_path,
-    const std::filesystem::path& destination) {
+    const std::filesystem::path& destination,
+    const std::optional<std::string_view> validated_main_executable) {
     const std::optional<ZipArchive> archive = read_zip_archive(package_path);
     if (!archive.has_value()) return std::nullopt;
 
-    const auto manifest_it = std::find_if(
-        archive->entries.begin(), archive->entries.end(), [](const ZipArchiveEntry& entry) {
-            return entry.name == "AppxManifest.xml";
-        });
-    if (manifest_it == archive->entries.end() ||
-        manifest_it->metadata.uncompressed_size > kMaxManifestSize ||
-        manifest_it->metadata.compressed_size > kMaxManifestCompressedSize) {
-        return std::nullopt;
-    }
-    const auto manifest_data = read_zip_entry(package_path, *archive, *manifest_it);
-    if (!manifest_data.has_value()) return std::nullopt;
-    const std::string manifest(reinterpret_cast<const char*>(manifest_data->data()),
-                               manifest_data->size());
-    const std::optional<AppxPackageInfo> package_info = parse_appx_manifest_xml(manifest);
-    if (!package_info.has_value() || !package_info->main_executable.has_value()) {
+    if (std::none_of(archive->entries.begin(), archive->entries.end(),
+                     [](const ZipArchiveEntry& entry) {
+                         return entry.name == "AppxManifest.xml";
+                     })) {
         return std::nullopt;
     }
 
-    std::string executable_name = normalized_zip_name(*package_info->main_executable);
+    std::string executable_name;
+    if (validated_main_executable.has_value()) {
+        if (validated_main_executable->empty()) return std::nullopt;
+        executable_name = normalized_zip_name(std::string{*validated_main_executable});
+    } else {
+        const auto manifest_it = std::find_if(
+            archive->entries.begin(), archive->entries.end(), [](const ZipArchiveEntry& entry) {
+                return entry.name == "AppxManifest.xml";
+            });
+        if (manifest_it == archive->entries.end() ||
+            manifest_it->metadata.uncompressed_size > kMaxManifestSize ||
+            manifest_it->metadata.compressed_size > kMaxManifestCompressedSize) {
+            return std::nullopt;
+        }
+        const auto manifest_data = read_zip_entry(package_path, *archive, *manifest_it);
+        if (!manifest_data.has_value()) return std::nullopt;
+        const std::string manifest(reinterpret_cast<const char*>(manifest_data->data()),
+                                   manifest_data->size());
+        const std::optional<AppxPackageInfo> package_info = parse_appx_manifest_xml(manifest);
+        if (!package_info.has_value() || !package_info->main_executable.has_value()) {
+            return std::nullopt;
+        }
+        executable_name = normalized_zip_name(*package_info->main_executable);
+    }
+
     if (!safe_zip_filename(executable_name) || executable_name.ends_with('/')) {
         return std::nullopt;
     }
@@ -1104,6 +1125,23 @@ std::optional<std::filesystem::path> extract_msix_package(
         return std::nullopt;
     }
     return executable_path;
+}
+
+}  // namespace
+
+std::optional<std::filesystem::path> extract_msix_package(
+    const std::filesystem::path& package_path,
+    const std::filesystem::path& destination) {
+    return extract_msix_package_impl(package_path, destination, std::nullopt);
+}
+
+std::optional<std::filesystem::path> extract_msix_package(
+    const std::filesystem::path& package_path,
+    const std::filesystem::path& destination,
+    const AppxPackageInfo& validated_info) {
+    if (!validated_info.main_executable.has_value()) return std::nullopt;
+    return extract_msix_package_impl(package_path, destination,
+                                      std::string_view{*validated_info.main_executable});
 }
 
 }  // namespace tradutorlinux::package

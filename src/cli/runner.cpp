@@ -16,6 +16,9 @@
 #if defined(TRADUTORLINUX_RUST_PE_PARSER)
 #include "../pe/rust_pe_parser.hpp"
 #endif
+#if defined(TRADUTORLINUX_RUST_MSIX_PARSER)
+#include "tradutorlinux/package/rust_msix_parser.hpp"
+#endif
 #include "tradutorlinux/prefix/prefix.hpp"
 #include "tradutorlinux/process/isolate.hpp"
 #include "tradutorlinux/runtime/msvcrt.hpp"
@@ -38,9 +41,11 @@
 #include <limits>
 #include <map>
 #include <memory>
+#include <new>
 #include <optional>
 #include <ostream>
 #include <spawn.h>
+#include <span>
 #include <string>
 #include <string_view>
 #include <sys/wait.h>
@@ -110,6 +115,54 @@ constexpr std::uint64_t kMaxPeFileSize = 512ULL * 1024 * 1024;
     }
     return bytes;
 }
+
+#if defined(TRADUTORLINUX_RUST_MSIX_PARSER)
+struct MsixFileReadResult {
+    std::optional<std::vector<std::uint8_t>> bytes;
+    std::uint64_t size{0};
+    bool too_large{false};
+    bool unavailable{false};
+    bool internal_failure{false};
+};
+
+[[nodiscard]] MsixFileReadResult read_msix_file(
+    const std::filesystem::path& path) {
+    TL_TRACE_FUNCTION();
+    MsixFileReadResult result;
+    std::ifstream stream{path, std::ios::binary};
+    if (!stream) {
+        result.unavailable = true;
+        return result;
+    }
+    stream.seekg(0, std::ios::end);
+    const std::streamoff end = stream.tellg();
+    if (end < 0) {
+        result.unavailable = true;
+        return result;
+    }
+    result.size = static_cast<std::uint64_t>(end);
+    if (result.size > TL_MSIX_LIMIT_MAX_PACKAGE_BYTES) {
+        result.too_large = true;
+        return result;
+    }
+    try {
+        stream.seekg(0, std::ios::beg);
+        std::vector<std::uint8_t> bytes(static_cast<std::size_t>(result.size));
+        if (!bytes.empty()) {
+            stream.read(reinterpret_cast<char*>(bytes.data()),
+                        static_cast<std::streamsize>(bytes.size()));
+            if (!stream) {
+                result.unavailable = true;
+                return result;
+            }
+        }
+        result.bytes = std::move(bytes);
+    } catch (const std::bad_alloc&) {
+        result.internal_failure = true;
+    }
+    return result;
+}
+#endif
 
 [[nodiscard]] bool extract_archive_with_7z(const std::filesystem::path& archive,
                                            const std::filesystem::path& destination) {
@@ -196,6 +249,111 @@ enum class PeParserBackend {
     Cpp,
     Rust,
 };
+
+enum class MsixParserBackend {
+    Cpp,
+    Rust,
+};
+
+[[nodiscard]] MsixParserBackend select_msix_parser_backend(
+    const CommandLine& command) noexcept {
+#if defined(TRADUTORLINUX_RUST_MSIX_PARSER)
+    if ((command.mode == CommandMode::DirectRun && command.report_only) ||
+        command.mode == CommandMode::Install) {
+        return MsixParserBackend::Rust;
+    }
+#else
+    (void)command;
+#endif
+    return MsixParserBackend::Cpp;
+}
+
+#if defined(TRADUTORLINUX_RUST_MSIX_PARSER)
+[[nodiscard]] const char* msix_status_label(const std::uint32_t status) noexcept {
+    switch (status) {
+        case TL_MSIX_STATUS_SUCCESS:
+            return "success";
+        case TL_MSIX_STATUS_TRUNCATED:
+            return "truncated";
+        case TL_MSIX_STATUS_MALFORMED:
+            return "malformed";
+        case TL_MSIX_STATUS_UNSUPPORTED_FORMAT:
+            return "unsupported-format";
+        case TL_MSIX_STATUS_UNSUPPORTED_MECHANISM:
+            return "unsupported-mechanism";
+        case TL_MSIX_STATUS_INVALID_ARGUMENT:
+            return "invalid-argument";
+        case TL_MSIX_STATUS_BUFFER_TOO_SMALL:
+            return "buffer-too-small";
+        case TL_MSIX_STATUS_INPUT_TOO_LARGE:
+            return "input-too-large";
+        case TL_MSIX_STATUS_OUTPUT_TOO_LARGE:
+            return "output-too-large";
+        case TL_MSIX_STATUS_INTERNAL:
+            return "internal";
+    }
+    return "unknown";
+}
+
+[[nodiscard]] ExitCode map_msix_status_to_exit(const std::uint32_t status) noexcept {
+    switch (status) {
+        case TL_MSIX_STATUS_TRUNCATED:
+        case TL_MSIX_STATUS_MALFORMED:
+            return ExitCode::MalformedPe;
+        case TL_MSIX_STATUS_UNSUPPORTED_FORMAT:
+        case TL_MSIX_STATUS_UNSUPPORTED_MECHANISM:
+            return ExitCode::Unsupported;
+        case TL_MSIX_STATUS_SUCCESS:
+            return ExitCode::Success;
+        default:
+            return ExitCode::InternalError;
+    }
+}
+
+void write_msix_parse_trace(std::ostream& stream, const bool enabled,
+                            const diagnostics::TraceComponent component,
+                            const std::uint32_t status,
+                            const tl_msix_error_v1& error) {
+    if (!enabled) return;
+    std::vector<diagnostics::TraceField> fields{
+        {"format", "MSIX / AppX"},
+        {"backend", "rust"},
+        {"status", msix_status_label(status)},
+    };
+    if (status != TL_MSIX_STATUS_SUCCESS) {
+        fields.push_back({"code", std::to_string(error.code)});
+        fields.push_back({"phase", std::to_string(error.phase)});
+        fields.push_back({"input-offset", std::to_string(error.input_offset)});
+        fields.push_back({"detail-value", std::to_string(error.detail_value)});
+    }
+    diagnostics::write_trace(stream, component,
+                             status == TL_MSIX_STATUS_SUCCESS
+                                 ? diagnostics::TraceLevel::Info
+                                 : diagnostics::TraceLevel::Error,
+                             "package-parse", fields);
+}
+
+[[nodiscard]] package::RustMsixParseResult make_msix_input_failure(
+    const MsixFileReadResult& input) {
+    package::RustMsixParseResult result;
+    result.status = input.too_large ? TL_MSIX_STATUS_INPUT_TOO_LARGE
+                                    : TL_MSIX_STATUS_INTERNAL;
+    result.internal_failure = true;
+    result.error = input.too_large
+                       ? tl_msix_error_v1{TL_MSIX_ERROR_INPUT_TOO_LARGE,
+                                          TL_MSIX_ERROR_PHASE_INPUT,
+                                          TL_MSIX_ERROR_OFFSET_UNKNOWN, input.size}
+                       : tl_msix_error_v1{TL_MSIX_ERROR_INTERNAL,
+                                          TL_MSIX_ERROR_PHASE_INPUT,
+                                          TL_MSIX_ERROR_OFFSET_UNKNOWN, input.size};
+    result.error_message = input.too_large
+                               ? "pacote MSIX / AppX excede o limite de entrada"
+                               : (input.internal_failure
+                                      ? "não foi possível alocar o buffer do pacote MSIX / AppX"
+                                      : "não foi possível ler o pacote MSIX / AppX");
+    return result;
+}
+#endif
 
 [[nodiscard]] PeParserBackend select_pe_parser_backend(
     const CommandLine& command,
@@ -719,8 +877,47 @@ ExitCode run_command(const CommandLine& command_line, std::ostream& stdout_strea
                                  diagnostics::TraceLevel::Info, "input", input_fields);
     }
 
-    if (package::is_msix_or_appx_package(*effective_cmd.executable_path)) {
-        const auto package_info = package::inspect_msix_package(*effective_cmd.executable_path);
+    const MsixParserBackend msix_backend = select_msix_parser_backend(effective_cmd);
+    const bool rust_msix_backend = msix_backend == MsixParserBackend::Rust;
+    const bool is_package = rust_msix_backend
+                                ? package::has_msix_or_appx_extension(
+                                      *effective_cmd.executable_path)
+                                : package::is_msix_or_appx_package(
+                                      *effective_cmd.executable_path);
+    if (is_package) {
+        std::optional<package::AppxPackageInfo> package_info;
+#if defined(TRADUTORLINUX_RUST_MSIX_PARSER)
+        if (rust_msix_backend) {
+            const MsixFileReadResult input =
+                read_msix_file(*effective_cmd.executable_path);
+            const package::RustMsixParseResult parsed =
+                input.bytes.has_value()
+                    ? package::parse_msix_rust(std::span<const std::uint8_t>{
+                          input.bytes->data(), input.bytes->size()})
+                    : make_msix_input_failure(input);
+            if (parsed.status != TL_MSIX_STATUS_SUCCESS) {
+                const diagnostics::TraceComponent component =
+                    effective_cmd.mode == CommandMode::Install
+                        ? diagnostics::TraceComponent::Install
+                        : diagnostics::TraceComponent::Cli;
+                write_msix_parse_trace(stderr_stream, effective_cmd.trace_enabled, component,
+                                       parsed.status, parsed.error);
+                stderr_stream << "erro: pacote MSIX / AppX inválido ou não suportado\n";
+                return map_msix_status_to_exit(parsed.status);
+            }
+            package_info = parsed.info;
+            const diagnostics::TraceComponent component =
+                effective_cmd.mode == CommandMode::Install
+                    ? diagnostics::TraceComponent::Install
+                    : diagnostics::TraceComponent::Cli;
+            write_msix_parse_trace(stderr_stream, effective_cmd.trace_enabled, component,
+                                   parsed.status, parsed.error);
+        } else {
+            package_info = package::inspect_msix_package(*effective_cmd.executable_path);
+        }
+#else
+        package_info = package::inspect_msix_package(*effective_cmd.executable_path);
+#endif
         if (!package_info.has_value()) {
             if (effective_cmd.trace_enabled) {
                 write_install_trace(effective_cmd.mode == CommandMode::Install,
@@ -760,8 +957,12 @@ ExitCode run_command(const CommandLine& command_line, std::ostream& stdout_strea
         if (effective_cmd.mode == CommandMode::Install) {
             const std::filesystem::path package_destination =
                 active_paths.program_files / installation_id;
-            const auto extracted = package::extract_msix_package(
-                *effective_cmd.executable_path, package_destination);
+            const auto extracted = rust_msix_backend
+                                       ? package::extract_msix_package(
+                                             *effective_cmd.executable_path, package_destination,
+                                             *package_info)
+                                       : package::extract_msix_package(
+                                             *effective_cmd.executable_path, package_destination);
             if (!extracted.has_value()) {
                 write_install_trace(effective_cmd.trace_enabled, stderr_stream,
                                     diagnostics::TraceLevel::Error, "failed",

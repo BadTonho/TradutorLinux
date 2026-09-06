@@ -94,6 +94,7 @@ if(TL_BUILD_RUST)
     target_compile_definitions(tradutorlinux_core PRIVATE
         TRADUTORLINUX_RUST_PATH_VALIDATOR=1
         TRADUTORLINUX_RUST_PE_PARSER=1
+        TRADUTORLINUX_RUST_MSIX_PARSER=1
     )
     target_link_libraries(tradutorlinux_core PRIVATE
         tl_rust_validator

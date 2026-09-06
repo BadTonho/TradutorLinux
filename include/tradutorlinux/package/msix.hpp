@@ -27,6 +27,10 @@ struct AppxPackageInfo {
 // Verifica se o arquivo é um pacote MSIX ou AppX válido (.msix / .appx com assinatura ZIP)
 [[nodiscard]] bool is_msix_or_appx_package(const std::filesystem::path& path);
 
+// Classifica uma extensão de pacote sem ler o conteúdo. Usado pelos backends
+// que precisam entregar arquivos truncados/inválidos ao parser para diagnóstico.
+[[nodiscard]] bool has_msix_or_appx_extension(const std::filesystem::path& path);
+
 // Parseia o conteúdo de um AppxManifest.xml e extrai os metadados de aplicação
 [[nodiscard]] std::optional<AppxPackageInfo> parse_appx_manifest_xml(std::string_view xml_content);
 
@@ -39,5 +43,13 @@ struct AppxPackageInfo {
 [[nodiscard]] std::optional<std::filesystem::path> extract_msix_package(
     const std::filesystem::path& package_path,
     const std::filesystem::path& destination);
+
+// Variante usada após a validação Rust. A extração continua sendo C++, mas a
+// escolha do executável vem do resultado já validado e não de uma nova análise
+// C++ usada como fallback.
+[[nodiscard]] std::optional<std::filesystem::path> extract_msix_package(
+    const std::filesystem::path& package_path,
+    const std::filesystem::path& destination,
+    const AppxPackageInfo& validated_info);
 
 }  // namespace tradutorlinux::package
