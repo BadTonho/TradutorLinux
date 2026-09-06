@@ -506,7 +506,7 @@ TL_MSABI void tl_ExitProcess(const std::uint32_t exit_code) noexcept {
     }
     g_guest_exit_code = exit_code;
     cleanup_current_fls_values();
-    std::longjmp(g_guest_exit_context, 1);
+    guest_longjmp(g_guest_exit_context, 1);
 }
 
 TL_MSABI std::uint32_t tl_GetCurrentProcessId() noexcept {

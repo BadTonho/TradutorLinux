@@ -198,9 +198,47 @@ TEST_F(ModuleGraphTest, MissingProfileDllFallsBackToBuiltinProvider) {
 
     const ResolveResult resolved =
         graph.resolve_imports(mapped.image, parsed.info, root_ / "app.exe");
-    ASSERT_EQ(resolved.status, ImportStatus::UnknownDll);
+    ASSERT_EQ(resolved.status, ImportStatus::UnknownSymbol);
     ASSERT_EQ(resolved.imports.size(), 2U);
     EXPECT_EQ(resolved.imports[1].provider, "builtin");
+    unmap_image(mapped.image);
+}
+
+TEST_F(ModuleGraphTest, KnownBuiltinMissingExportReportsUnknownSymbol) {
+    runtime::GuestContextScope scope(context_);
+    register_builtin_modules();
+    ASSERT_TRUE(is_module_registered("USER32.dll"));
+    compat::Profile profile;
+    profile.schema = 2;
+    profile.app_id = "fixture";
+    GuestModuleGraph graph(root_, profile, root_ / "app.exe", false);
+
+    const std::vector<std::byte> import_data = make_import_data({
+        {"USER32.dll", {"TlUnknownSymbolW"}, {}},
+    });
+    std::vector<std::byte> relocations(8, std::byte{0});
+    write_u32(relocations, 4, 8);
+    BuildSpec spec;
+    spec.section_count = 3;
+    spec.size_of_image = 0x4000;
+    spec.section_names = {".text", ".idata", ".reloc"};
+    spec.section_data = {std::vector<std::byte>(0x20), import_data, relocations};
+    spec.import_rva = kImportDataRva;
+    spec.import_size = 40;
+    spec.reloc_rva = 0x3000;
+    spec.reloc_size = 8;
+    const std::vector<std::byte> image_bytes = build(spec);
+    const pe::ParseResult parsed = pe::parse_pe(image_bytes);
+    ASSERT_EQ(parsed.status, pe::ParseStatus::Success) << parsed.error_message;
+    MapResult mapped = map_image(parsed.info, image_bytes);
+    ASSERT_EQ(mapped.status, MapStatus::Success) << mapped.error_message;
+
+    const ResolveResult resolved =
+        graph.resolve_imports(mapped.image, parsed.info, root_ / "app.exe");
+    ASSERT_EQ(resolved.status, ImportStatus::UnknownSymbol);
+    ASSERT_EQ(resolved.imports.size(), 1U);
+    EXPECT_EQ(resolved.imports[0].status, ImportStatus::UnknownSymbol);
+    EXPECT_EQ(resolved.imports[0].detail, "símbolo não exportado pelo módulo");
     unmap_image(mapped.image);
 }
 

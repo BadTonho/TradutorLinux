@@ -28,9 +28,9 @@ Assim, um aplicativo pode ter `supported` na resolução de imports e continuar
 | `tl_hello.exe` | PE32+ AMD64 | Não | `KERNEL32.dll!ExitProcess`, `GetStdHandle`, `WriteFile` | Suportado no MVP: escreve `Ola do Windows no Linux!` em stdout, retorna `0` e emite trace | Fase 5 |
 | `tl_echo.exe` | PE32+ AMD64 | Não | `KERNEL32.dll!ExitProcess`, `GetStdHandle`, `ReadFile`, `WriteFile` | Suportado no MVP: ecoa stdin para stdout com handles padrão | Fase 5 |
 | `tl_file.exe` | PE32+ AMD64 | Não | `KERNEL32.dll!CloseHandle`, `CreateFileA`, `ExitProcess`, `GetLastError`, `GetStdHandle`, `ReadFile`, `SetLastError`, `VirtualAlloc`, `VirtualFree`, `WriteFile` | Suportado no subconjunto da Fase 5: aloca memória e grava/reabre/lê arquivo relativo | Fase 6 |
-| `tl_compat_file.exe` | PE32+ AMD64 | Não | `KERNEL32.dll!CloseHandle`, `CreateFileA`, `ExitProcess`, `GetStdHandle`, `ReadFile`, `WriteFile` | Fixture B14.3/B14.5/B20.5: `app run` copia um arquivo de `compat/files/` para `C:\\Program Files\\Compat Fixture`, lê e altera o destino, mantém a origem e remove o materializado ao terminar. A integração operacional repete a execução pelo catálogo com sessões Rust por fase, registra métricas, confirma fallback C++ sem Rust e mantém a origem e os prefixos isolados | B20.5 |
+| `tl_compat_file.exe` | PE32+ AMD64 | Não | `KERNEL32.dll!CloseHandle`, `CreateFileA`, `ExitProcess`, `GetStdHandle`, `ReadFile`, `WriteFile` | Fixture B14.3/B14.5/B20.5/B20.6: `app run` copia um arquivo de `compat/files/` para `C:\\Program Files\\Compat Fixture`, lê e altera o destino, mantém a origem e remove o materializado ao terminar. A integração operacional repete a execução pelo catálogo com sessões Rust por fase, registra métricas, confirma fallback C++ sem Rust e mantém a origem e os prefixos isolados | B20.6 |
 | `tl_compat_dll_app.exe` | PE32+ AMD64 | Não | `KERNEL32.dll!LoadLibraryA`, `GetProcAddress`, `FreeLibrary`, `ExitProcess`; DLLs da fixture importam `KERNEL32.dll` e `compatdep.dll` | **Suportado no contrato B14.4:** o perfil v2 seleciona `compat.dll` e sua dependência PE32+ `compatdep.dll` em `compat/dlls/`; as DLLs são mapeadas sem cópia para `drive_c`, executam TLS/`DllMain`, resolvem imports genéricos e são descarregadas em ordem. A integração executa dois IDs/prefixos com variantes A/B, confirma isolamento, fontes preservadas, trace completo, fallback por export e exit `0`; perfil ausente, v1, DLL ausente ou provider rejeitado retornam ao comportamento genérico | B14.4 |
-| `tl_proton_probe.exe` | PE32+ AMD64 | Não | `KERNEL32.dll!ExitProcess`, `GetStdHandle`, `WriteFile` | **Piloto do backend Proton B14.6/B20.5:** `app run` usa um perfil schema 3, estagia o aplicativo em `proton/compatdata/pfx`, materializa `files[]`, registra a métrica Rust no componente Proton quando habilitado, encaminha stdout/stderr, preserva o exit code do launcher mockado (`23`) e rejeita um Proton inválido com `Unsupported` (`5`) sem fallback nativo. A fixture permanece como prova de contrato do adaptador; isso não declara compatibilidade de um aplicativo real nem do Roblox | B20.5 |
+| `tl_proton_probe.exe` | PE32+ AMD64 | Não | `KERNEL32.dll!ExitProcess`, `GetStdHandle`, `WriteFile` | **Piloto do backend Proton B14.6/B20.5/B20.6:** `app run` usa um perfil schema 3, estagia o aplicativo em `proton/compatdata/pfx`, materializa `files[]`, registra a métrica Rust no componente Proton quando habilitado, encaminha stdout/stderr, preserva o exit code do launcher mockado (`23`) e rejeita um Proton inválido com `Unsupported` (`5`) sem fallback nativo. A fixture permanece como prova de contrato do adaptador; isso não declara compatibilidade de um aplicativo real nem do Roblox | B20.6 |
 | `tl_graphics_probe.exe` | PE32+ AMD64 | Não | `D3D11.dll!D3D11CreateDeviceAndSwapChain`; `KERNEL32.dll!ExitProcess`, `GetModuleHandleA`, `GetStdHandle`, `WriteFile`; `USER32.dll!CreateWindowExA`, `DefWindowProcA`, `DestroyWindow`, `RegisterClassA`, `ShowWindow`, `UnregisterClassA` | **Fixture gráfica controlada da B14.6.5:** cria uma janela X11 via Proton, inicializa D3D11, cria swap chain/RTV, limpa o backbuffer e executa `Present`; `integration_proton_graphics` passa com Proton Experimental real sob Xvfb, preserva stdout (`D3D11 frame presented`) e retorna `0`. Valida somente o caminho D3D11→DXVK/Vulkan em X11; não declara suporte a D3D12/VKD3D-Proton, áudio, entrada ou jogos | B14.6.5 |
 | `tl_d3d12_probe.exe` | PE32+ AMD64 | Não | `D3D12.dll!D3D12CreateDevice`; `DXGI.dll!CreateDXGIFactory2`; `KERNEL32.dll!ExitProcess`, `GetModuleHandleA`, `GetStdHandle`, `WriteFile`; `USER32.dll!CreateWindowExA`, `DefWindowProcA`, `DestroyWindow`, `RegisterClassA`, `ShowWindow`, `UnregisterClassA` | **Fixture VKD3D-Proton controlada da B14.6.5:** cria dispositivo D3D12, fila direta, allocator, command list, fence, swapchain flip de dois buffers e `Present`; `integration_proton_d3d12` passa com Proton Experimental real sob Xvfb, preserva stdout (`D3D12 command path ready`) e retorna `0`. Valida esse caminho controlado D3D12→VKD3D-Proton/Vulkan; não declara suporte geral a D3D12, áudio, entrada ou jogos | B14.6.5 |
 | `tl_input_probe.exe` | PE32+ AMD64 | Não | `KERNEL32.dll!ExitProcess`, `GetModuleHandleA`, `GetStdHandle`, `WriteFile`; `USER32.dll!CreateWindowExA`, `DefWindowProcA`, `DestroyWindow`, `DispatchMessageA`, `GetMessageA`, `PostQuitMessage`, `RegisterClassExA`, `ShowWindow`, `TranslateMessage`, `UnregisterClassA`, `UpdateWindow` | **Fixture de entrada controlada da B14.6.5:** cria uma janela, valida `WM_CREATE`, `WM_MOUSEMOVE`, `WM_LBUTTONDOWN/UP` e `WM_KEYDOWN/CHAR/UP`; `integration_proton_input` injeta movimento, clique e `q` por X11/XTest, confirma stdout (`Proton input ready`), exit `0`, trace e limpeza do prefixo. Não declara raw input, gamepad/XInput ou suporte de jogos | B14.6.5 |
@@ -92,7 +92,7 @@ Assim, um aplicativo pode ter `supported` na resolução de imports e continuar
 
 As fontes e manifestos das fixtures ficam em `tests/samples/`. Os binários são produtos de build e ficam em `build/<preset>/tests/samples/generated/`.
 
-### Validação operacional B20.5
+### Validação operacional B20.5/B20.6
 
 O teste `integration_rust_operational` usa `tl_compat_file.exe` duas vezes
 com o catálogo, um perfil inválido de `tl_hello.exe`, `tl_hang.exe` com
@@ -100,8 +100,30 @@ com o catálogo, um perfil inválido de `tl_hello.exe`, `tl_hang.exe` com
 exige stdout e exit code preservados, trace de perfil/materialização/limpeza,
 remoção dos destinos temporários, fontes preservadas, invisibilidade de
 `compat/` e ausência de eventos Rust no build `TL_BUILD_RUST=OFF`. Ele é uma
-regressão de integração do runtime e não promove nenhuma fixture a aplicativo
-suportado.
+regressão de integração do runtime. A B20.6 promove a adoção seletiva do
+validador lexical Rust, mas não promove nenhuma fixture a aplicativo suportado
+nem altera a matriz de compatibilidade de aplicativos reais.
+
+### Promoção seletiva B20.6
+
+A promoção cobre somente a execução opt-in da validação lexical de caminhos no
+`app run`. O resultado foi comparado com `TL_BUILD_RUST=OFF`: o caminho C++,
+o fallback genérico, stdout, stderr, exit codes, materialização, limpeza e
+isolamento permanecem equivalentes; o modo sem Rust não emite eventos
+`path-validation`. Os testes também preservam a classificação de uma DLL
+conhecida com export ausente como `unknown-symbol`, enquanto uma DLL não
+registrada continua sendo `unknown-dll`.
+
+Como evidência operacional da B20.6, as suítes Rust Debug e Release passaram
+sem falhas entre 668 testes cada (sem os cinco testes opcionais de Proton real;
+quatro testes ambientais foram `skipped`), o gate B20 passou 7/7 em Debug,
+Sanitize e Release, e o baseline C++ Debug com `TL_BUILD_RUST=OFF` passou sem
+falhas entre 659 testes. O piloto do Proton real passou 5/5 em Debug. A suíte
+Sanitize completa foi executada, mas conserva dez falhas
+históricas ou ambientais fora do gate promovido; elas envolvem ASan/UBSan em
+helpers/fixtures, `RLIMIT_AS`, imagens sem relocations e Xvfb/LSan. Isso não
+altera o status das fixtures nem declara suporte automático a aplicativos
+reais.
 
 A fixture `native-fixture.msix` é gerada pelo teste `integration_msix_install` a
 partir de `tl_hello.exe`. Ela valida o fluxo de pacote nativo: `--report`,

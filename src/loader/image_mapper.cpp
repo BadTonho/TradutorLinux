@@ -186,14 +186,6 @@ namespace {
     return true;
 }
 
-void write_le_u32(const std::span<std::byte> bytes, const std::size_t offset,
-                  const std::uint32_t value) {
-    for (std::size_t index = 0; index < 4; ++index) {
-        bytes[offset + index] =
-            static_cast<std::byte>((value >> (8 * index)) & 0xFFU);
-    }
-}
-
 void write_le_u64(const std::span<std::byte> bytes, const std::size_t offset,
                   const std::uint64_t value) {
     for (std::size_t index = 0; index < 8; ++index) {

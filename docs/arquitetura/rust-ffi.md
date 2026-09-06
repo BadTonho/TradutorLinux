@@ -1,11 +1,12 @@
 # Fronteira FFI Rust↔C++
 
-Este documento descreve as B20.1–B20.5. A biblioteca Rust continua opt-in:
+Este documento descreve as B20.1–B20.6. A biblioteca Rust continua opt-in:
 além do probe, a B20.3 usa Rust somente para a validação lexical dos caminhos
 de perfis e materialização. A B20.4 endurece essa fronteira com testes e
 tratamento de limites; a B20.5 integra o mesmo validador ao fluxo operacional
-de `app run`. Nenhum parser, loader, runtime Win32 ou API pública de
-compatibilidade foi migrado para Rust.
+de `app run`; a B20.6 promove essa adoção seletiva após evidência reproduzível.
+Nenhum parser, loader, runtime Win32 ou API pública de compatibilidade foi
+migrado para Rust.
 
 ## Build e escopo
 
@@ -190,7 +191,7 @@ toolchain e a fronteira linkada aos probes sanitizados. Builds com
 `TL_BUILD_RUST=OFF` não criam os testes Rust, não linkam a staticlib e não
 exigem toolchain Rust.
 
-## Integração operacional da B20.5
+## Integração operacional e promoção da B20.5/B20.6
 
 No fluxo `app run`, o adaptador cria uma sessão RAII Rust por fase: uma durante
 `load_profile` e outra durante `FileExposure::materialize` (ou sua variante
@@ -254,19 +255,44 @@ os campos `duration-us` devem ser acompanhados ao comparar builds equivalentes.
 Uma medição futura deve repetir o mesmo teste, fixture, prefixo limpo e
 configuração de otimização nos dois modos.
 
+## Status da promoção B20.6
+
+A B20.6 promove somente o uso opt-in do validador lexical Rust no fluxo real de
+`app run`. O backend nativo C++ continua sendo o padrão quando
+`TL_BUILD_RUST=OFF`, e falhas internas do adaptador continuam sendo tratadas
+com falha fechada (`70`), sem aceitar uma entrada não validada. A promoção não
+adiciona APIs Win32, não muda o schema de perfis e não declara suporte a
+aplicativos reais.
+
+O gate de promoção exige os três presets Rust, o baseline C++ sem Rust, Cargo e
+Clippy offline, a integração operacional, regressões completas, equivalência
+de comportamento e worktree limpo. Os testes de rejeição de
+`tl_missing_dll.exe` preservam a distinção entre DLL ausente (`unknown-dll`) e
+símbolo ausente em DLL conhecida (`unknown-symbol`).
+
 ## Evidência
 
 `rust_ffi_probe` cobre criação/destruição, limites, UTF-8, UTF-16, argumentos
 nulos, mensagens truncadas, tamanhos necessários, sentinelas de memória,
 concorrência, caminhos relativos, destinos `C:` e rejeição de NUL. Os testes
-de perfil e materializador protegem a integração opt-in. A B20.4 foi validada
-com os testes direcionados dos presets Debug, Sanitize e Release Rust, Cargo
-offline, Clippy sem warnings e o build C++ com `TL_BUILD_RUST=OFF`. Todos os
-testes Rust rodam somente quando `TL_BUILD_RUST=ON`; os builds padrão continuam
-sem requisito Rust. A B20.5 acrescenta `integration_rust_operational`, que
-passou em Debug e Sanitize com Rust e no baseline Debug sem Rust; os testes
-direcionados de perfil, materialização, isolamento e Proton também passaram.
-Em Release, Cargo, Clippy, `rust_ffi_probe` e `rust_path_validation` passaram;
-o runtime Release não pôde ser relinkado por causa do warning preexistente de
-`write_le_u32` não usado, já registrado no roadmap. A etapa não declara
-suporte a aplicativos reais nem migração de produção para Rust.
+de perfil e materializador protegem a integração opt-in. Na promoção B20.6,
+Debug Rust e Release Rust passaram na suíte completa sem os cinco testes
+opcionais de Proton real: 0 falhas entre 668 testes em cada perfil (quatro
+testes ambientais foram `skipped`). O gate específico passou 7/7 em Debug,
+Sanitize e Release. Cargo com
+`--locked --offline` e Clippy com `-D warnings` passaram nos três perfis. O
+baseline C++ Debug com `TL_BUILD_RUST=OFF` passou sem falhas entre 659 testes,
+sem staticlib Rust e sem eventos `path-validation`; o piloto real opcional do
+Proton passou 5/5 em Debug. A suíte completa Sanitize foi executada, mas mantém
+dez falhas
+históricas ou ambientais fora do gate B20 (ASan/UBSan em helpers/fixtures,
+`RLIMIT_AS`, imagens sem relocations e Xvfb/LSan). Essas falhas não foram
+introduzidas pela adoção seletiva e nenhuma falha nova apareceu no escopo
+promovido.
+
+O helper `write_le_u32` não utilizado foi removido de `image_mapper.cpp`, os
+retornos de `write()` foram tratados e o salto cross-stack intencional passou a
+usar `_longjmp` não fortificado; assim o Release voltou a linkar sem mudar o
+mapper. A distinção `unknown-symbol`/`unknown-dll` também possui regressão no
+grafo de módulos. Esta etapa não declara suporte a aplicativos reais nem
+migração ampla da produção para Rust.

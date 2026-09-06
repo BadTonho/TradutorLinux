@@ -59,6 +59,12 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
+// A declaração de <setjmp.h> redireciona _longjmp para __longjmp_chk quando
+// _FORTIFY_SOURCE está ativo. O alias abaixo nomeia explicitamente a variante
+// não verificada do glibc, necessária para o salto cross-stack controlado.
+extern "C" [[noreturn]] void tl_raw_guest_longjmp(std::jmp_buf, int) noexcept
+    __asm__("_longjmp");
+
 namespace tradutorlinux {
 
 // ---------------------------------------------------------------------------
@@ -70,6 +76,10 @@ char kStdOutputToken = 0;
 char kStdErrorToken = 0;
 char kStockObjectTokens[24]{};
 std::atomic<std::uintptr_t> g_pointer_cookie{0};
+
+[[noreturn]] void guest_longjmp(std::jmp_buf context, const int value) noexcept {
+    tl_raw_guest_longjmp(context, value);
+}
 
 std::mutex g_threads_mutex;
 std::array<ThreadSlot, 256> g_threads{};

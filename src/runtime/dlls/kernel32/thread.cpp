@@ -238,7 +238,7 @@ TL_MSABI void tl_ExitThread(std::uint32_t exit_code) noexcept {
             slot->exit_code = static_cast<int>(exit_code);
         }
         cleanup_current_fls_values();
-        std::longjmp(*context, 1);
+        guest_longjmp(*context, 1);
     }
     // Thread primária: encerrar a última thread encerra o processo.
     tl_ExitProcess(exit_code);

@@ -62,6 +62,12 @@ using runtime::guest_context;
 using runtime::GuestContext;
 using runtime::GuestContextScope;
 
+// O convidado executa em uma pilha mapeada separadamente. Os saltos usados
+// para implementar ExitProcess/ExitThread retornam deliberadamente dessa
+// pilha para um frame host; a variante fortificada do glibc rejeita esse
+// padrão legítimo como um salto para frame não inicializado.
+[[noreturn]] void guest_longjmp(std::jmp_buf context, int value) noexcept;
+
 // Estado de execução da thread atual
 
 // Caminho do executável convidado

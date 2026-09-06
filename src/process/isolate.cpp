@@ -137,7 +137,8 @@ void install_crash_reporter(const int report_fd) noexcept {
         // são ignoradas de propósito — o diagnóstico sem endereço ainda vale,
         // e o handler não pode depender de nada além de syscalls diretas.
         if (g_crash_report_fd >= 0) {
-            static_cast<void>(::write(g_crash_report_fd, record.data(), record.size()));
+            const ssize_t ignored = ::write(g_crash_report_fd, record.data(), record.size());
+            static_cast<void>(ignored);
         }
     };
     action.sa_flags = SA_SIGINFO;
@@ -480,7 +481,8 @@ enum class ExternalStatus : unsigned char {
 
 void write_external_status(const int fd, const ExternalStatus status) noexcept {
     const unsigned char value = static_cast<unsigned char>(status);
-    static_cast<void>(::write(fd, &value, sizeof(value)));
+    const ssize_t ignored = ::write(fd, &value, sizeof(value));
+    static_cast<void>(ignored);
 }
 
 [[nodiscard]] std::vector<std::string> inherited_environment(

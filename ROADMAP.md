@@ -1294,13 +1294,13 @@ imports não encerra B5.
 - [ ] **B19 — Novas famílias abundantes de API.** Threadpool, ALPC e qualquer
   outra família só entram quando um alvo justificar o subconjunto, com teste,
   trace e matriz. Fibras já entregues não devem voltar ao backlog.
-- [ ] **B20 — Adoção seletiva de Rust (em progresso).** A B20.1 definiu e
-  validou a fronteira FFI opt-in; a migração de produção continua condicionada
-  ao benefício mensurável das etapas seguintes. Introduzir Rust somente onde a
-  segurança de memória e a validação de entradas não confiáveis trouxerem
-  benefício demonstrável, mantendo o núcleo de execução e ABI em C++. A
-  migração não será feita por substituição ampla nem criará uma dependência
-  implícita sem toolchain e versão reproduzíveis.
+- [x] **B20 — Adoção seletiva de Rust (concluída).** A B20 promove somente a
+  validação lexical opt-in de caminhos no fluxo `app run`; parser, loader,
+  APIs Win32, materialização física e runtime continuam em C++. A fronteira
+  FFI, a toolchain reproduzível, os testes de robustez e a integração
+  operacional foram validados sem criar dependência Rust para o build padrão.
+  Não houve migração ampla nem declaração de compatibilidade adicional para
+  aplicativos reais.
 
   Subetapas:
 
@@ -1321,8 +1321,9 @@ imports não encerra B5.
     compilado com `TL_BUILD_RUST=OFF`. A suíte local isolada por prefixo passou
     em 653/655 testes; duas expectativas preexistentes de fixtures ainda
     esperam `unknown-symbol`, enquanto o runtime atual informa `unknown-dll`.
-    Elas não foram misturadas nesta etapa nem são atribuíveis à integração
-    Cargo. Nenhum componente de produção foi migrado.
+    A divergência foi reconciliada posteriormente na B20.6 com uma regressão
+    que distingue `unknown-symbol` de `unknown-dll`. Nenhum componente de
+    produção foi migrado.
   - [x] **B20.3 — Validação lexical de caminhos com Rust.** O validador Rust
     agora cobre, de forma opt-in (`TL_BUILD_RUST=ON`), as fontes relativas dos
     perfis e os destinos `C:\\...` do materializador. O FFI adiciona status de
@@ -1333,10 +1334,9 @@ imports não encerra B5.
     `rust_ffi_probe`, o corpus diferencial Rust↔C++, os testes de perfil e
     materialização passaram em Debug e Sanitize; o probe e o corpus isolado
     também passaram em Release. O Cargo passou com `--locked --offline`, e a
-    regressão C++ sem Rust passou. A suíte unitária global Release permanece
-    bloqueada por um `-Werror` preexistente para `write_le_u32` não usado em
-    `src/loader/image_mapper.cpp`; esse bloqueio não altera a validação isolada
-    desta etapa nem foi misturado à mudança.
+    regressão C++ sem Rust passou. O bloqueio histórico de Release causado pelo
+    `-Werror` sobre `write_le_u32`, não utilizado em `src/loader/image_mapper.cpp`,
+    foi removido na B20.6 sem alterar o comportamento do mapper.
   - [x] **B20.4 — Testes e robustez.** A fronteira FFI agora possui testes
     unitários Rust para UTF-8/UTF-16, paths, limites, overflow, panic e falha
     de alocação simulada, além de geração property-based determinística sem
@@ -1364,18 +1364,33 @@ imports não encerra B5.
     `tl_hang.exe` com limpeza e fonte preservada, e `tl_proton_probe.exe` com
     mock Proton, stdout/stderr, exit code, prefixos, destino temporário e
     invisibilidade de `compat/` verificados. As regressões de perfil,
-    materialização, isolamento e Proton também passaram. Em Release, Cargo,
-    Clippy, `rust_ffi_probe` e `rust_path_validation` passaram, mas o runtime
-    não pôde ser relinkado por causa do warning preexistente de
-    `write_le_u32` não usado em `src/loader/image_mapper.cpp`, já registrado
-    no roadmap. O baseline local do cenário foi aproximadamente 1,42 s com
-    Rust e 1,41 s sem Rust; é medição informativa, não um limite de hardware.
-    Nenhum parser, loader, runtime Win32 ou componente de produção foi
-    migrado.
-  - [ ] **B20.6 — Promoção por evidência.** Atualizar a documentação técnica
-    e a matriz de componentes, registrar limitações e só marcar a migração
-    como concluída depois de comparação reproduzível, regressões completas e
-    worktree/builds limpos.
+    materialização, isolamento e Proton também passaram. Na validação original,
+    o runtime Release ainda não pôde ser relinkado por causa do warning
+    preexistente de `write_le_u32`; a B20.6 removeu o helper, tratou os retornos
+    de `write()` e corrigiu o salto cross-stack intencional para `_longjmp`. O
+    baseline local do cenário foi aproximadamente 1,42 s com Rust e 1,41 s sem
+    Rust; é medição informativa, não um limite de hardware. Nenhum parser,
+    loader, runtime Win32 ou componente de produção foi migrado.
+  - [x] **B20.6 — Promoção por evidência.** A adoção seletiva foi promovida
+    somente para a validação lexical de caminhos integrada ao `app run`.
+    Debug Rust e Release Rust passaram na suíte completa, sem os cinco testes
+    opcionais de Proton real: 0 falhas entre 668 testes em cada perfil (os
+    quatro testes ambientais aplicáveis foram `skipped`). O gate específico B20
+    (probe, Cargo, Clippy, paths, integração operacional, regressão de imports
+    e `tl_missing_dll`) passou 7/7 em Debug, Sanitize e Release. O piloto real
+    opcional do Proton passou 5/5 em Debug com a instalação configurada. O
+    baseline C++ isolado com `TL_BUILD_RUST=OFF` passou sem falhas entre 659
+    testes, sem staticlib nem eventos Rust. A suíte completa Sanitize foi
+    executada; dez falhas
+    históricas ou ambientais fora deste gate permanecem reproduzíveis
+    (ASan/UBSan em helpers e fixtures, `RLIMIT_AS`, imagens sem relocations e
+    Xvfb/LSan) e não foram atribuídas à B20. Nenhuma falha nova apareceu no
+    escopo promovido. A divergência de `tl_missing_dll` foi reconciliada para
+    distinguir `unknown-symbol` de `unknown-dll`, e o bloqueio histórico de
+    Release foi removido. Rust continua opt-in, Cargo/toolchain ficam fora do
+    build padrão, e nenhum parser, loader, API Win32 ou componente de produção
+    foi migrado. A matriz e a documentação foram atualizadas; o worktree foi
+    limpo após o commit desta etapa.
 
 ### Itens das listas antigas já absorvidos
 

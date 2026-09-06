@@ -586,7 +586,13 @@ GraphExportLookup GuestModuleGraph::resolve_export_named_internal(
                                         .module_index = kNoModule,
                                         .provider_name = "builtin"});
     }
-    missing.lookup.detail = builtin.detail;
+    if (is_module_registered_forwarded(module_name)) {
+        missing.provider = ModuleProvider::Builtin;
+        missing.provider_name = provider_name(ModuleProvider::Builtin);
+        missing.lookup.detail = "símbolo não exportado pelo módulo";
+    } else {
+        missing.lookup.detail = builtin.detail;
+    }
     return finish(missing);
 }
 
@@ -668,7 +674,13 @@ GraphExportLookup GuestModuleGraph::resolve_export_ordinal_internal(
                                         .module_index = kNoModule,
                                         .provider_name = "builtin"});
     }
-    missing.lookup.detail = builtin.detail;
+    if (is_module_registered_forwarded(module_name)) {
+        missing.provider = ModuleProvider::Builtin;
+        missing.provider_name = provider_name(ModuleProvider::Builtin);
+        missing.lookup.detail = "ordinal não exportado pelo módulo";
+    } else {
+        missing.lookup.detail = builtin.detail;
+    }
     return finish(missing);
 }
 

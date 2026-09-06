@@ -75,7 +75,7 @@ execução por segurança. A limpeza ocorre depois do processo convidado; um
 arquivo substituído ou um diretório que ficou não vazio é preservado.
 `compat/` não é exposta automaticamente ao convidado.
 
-## Validação lexical operacional com Rust
+## Validação lexical operacional e promoção B20.6 com Rust
 
 Quando o runtime foi compilado com `TL_BUILD_RUST=ON`, `app run --trace` cria
 uma sessão Rust para o carregamento do perfil e outra para a materialização de
@@ -100,6 +100,12 @@ faz todas as verificações físicas depois da pré-validação Rust. Com
 `TL_BUILD_RUST=OFF`, o caminho C++ e os diagnósticos existentes permanecem
 ativos e nenhum evento `path-validation` Rust é emitido.
 
+A B20.6 promove somente essa validação lexical opt-in. Ela não altera os
+diagnósticos de imports nem declara suporte funcional a aplicativos reais. Em
+particular, `unknown-dll` continua significando módulo não registrado e
+`unknown-symbol` significa módulo conhecido sem o export solicitado; ambos
+retornam `5` antes do entry point quando a resolução falha.
+
 No Proton, a métrica da materialização usa o componente `proton`:
 
 ```text
@@ -109,6 +115,13 @@ No Proton, a métrica da materialização usa o componente `proton`:
 O arquivo auxiliar é limpo após o processo, inclusive quando o convidado
 termina por timeout. O evento de limpeza indica `cleaned` ou
 `cleanup-failed`; a origem em `compat/files/` não é removida.
+
+Na promoção B20.6, o gate específico de validação lexical passou 7/7 em
+Debug, Sanitize e Release, e a comparação com `TL_BUILD_RUST=OFF` confirmou
+que o caminho C++ não emite eventos `path-validation`. A suíte completa
+Sanitize ainda registra dez falhas históricas ou ambientais fora desse gate
+(ASan/UBSan em helpers/fixtures, `RLIMIT_AS`, imagens sem relocations e
+Xvfb/LSan); elas não devem ser confundidas com uma falha do adaptador Rust.
 
 ## Seleção do backend Proton
 
