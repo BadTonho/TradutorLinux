@@ -3,6 +3,9 @@
 #include <commctrl.h>
 #include <dwmapi.h>
 
+void tl_entry(void);
+__attribute__((used, section(".rdata"))) void (*const tl_relocation_anchor)(void) = &tl_entry;
+
 void tl_entry(void) {
     HANDLE stdout_h = GetStdHandle(STD_OUTPUT_HANDLE);
     if (stdout_h == INVALID_HANDLE_VALUE) {
@@ -45,4 +48,3 @@ void tl_entry(void) {
 
     ExitProcess(0);
 }
-

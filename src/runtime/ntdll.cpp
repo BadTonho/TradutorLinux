@@ -135,6 +135,23 @@ void trace_nt(const char* api, const char* detail, NtStatus st) noexcept {
     return nullptr;
 }
 
+[[nodiscard]] bool guest_memory_limit_exceeded_locked(const std::size_t requested) noexcept {
+    const std::size_t limit = runtime::guest_context().guest_virtual_memory_limit_bytes;
+    if (limit == 0) return false;
+    std::size_t used = 0;
+    for (const AllocationSlot& slot : runtime::guest_context().allocations) {
+        if (slot.view || slot.address == nullptr || slot.state == kMemFree) continue;
+        if (slot.size > std::numeric_limits<std::size_t>::max() - used) return true;
+        used += slot.size;
+    }
+    return used > limit || requested > limit - used;
+}
+
+[[nodiscard]] bool guest_memory_limit_exceeded(const std::size_t requested) noexcept {
+    std::lock_guard<std::mutex> lock(g_allocations_mutex);
+    return guest_memory_limit_exceeded_locked(requested);
+}
+
 [[nodiscard]] AllocationRegion* find_allocation_region_locked(AllocationSlot& slot,
                                                                 const std::uintptr_t address) noexcept {
     const auto base = reinterpret_cast<std::uintptr_t>(slot.address);
@@ -236,6 +253,11 @@ NtStatus NtAllocateVirtualMemory(void** BaseAddress,
     const bool reserve = (AllocationType & kMemReserve) != 0;
     const bool commit = (AllocationType & kMemCommit) != 0;
 
+    if (guest_memory_limit_exceeded(aligned)) {
+        trace_nt("NtAllocateVirtualMemory", "limite de memória do convidado", NtStatus::NoMemory);
+        return NtStatus::NoMemory;
+    }
+
     // MEM_COMMIT sobre uma reserva existente apenas muda o estado e a
     // proteção da região já registrada. Mantemos o contrato inteiro da região
     // para não permitir uma VirtualQuery incoerente com a reserva.
@@ -275,6 +297,11 @@ NtStatus NtAllocateVirtualMemory(void** BaseAddress,
 
     {
         std::lock_guard<std::mutex> lock(g_allocations_mutex);
+        if (guest_memory_limit_exceeded_locked(aligned)) {
+            ::munmap(result, aligned);
+            trace_nt("NtAllocateVirtualMemory", "limite de memória do convidado", NtStatus::NoMemory);
+            return NtStatus::NoMemory;
+        }
         for (AllocationSlot& slot : g_allocations) {
             if (slot.view || slot.state != kMemFree || slot.address == nullptr) continue;
             const auto free_base = reinterpret_cast<std::uintptr_t>(slot.address);

@@ -35,7 +35,8 @@ RuntimeFunction function(const std::uint32_t begin, const std::uint32_t end,
     return {.begin_rva = begin, .end_rva = end, .unwind_info_rva = 0x180, .unwind = std::move(unwind)};
 }
 
-__attribute__((noinline, ms_abi)) void capture_with_nonvolatile_registers(
+__attribute__((noinline, ms_abi, no_sanitize_address, no_sanitize_undefined))
+void capture_with_nonvolatile_registers(
     ContextAmd64* const context, const runtime::M128A value) {
     asm volatile(
         "movabsq $0x1122334455667788, %%rbx\n\t"

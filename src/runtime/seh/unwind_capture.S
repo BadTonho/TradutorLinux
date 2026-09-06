@@ -47,7 +47,12 @@ tl_RtlCaptureContext:
     movdqu %xmm14, 640(%r11)
     movdqu %xmm15, 656(%r11)
     leaq .Ltl_RtlCaptureContext_name(%rip), %rdi
+    # The caller uses the Microsoft x64 convention, while the trace hook
+    # uses System V AMD64.  Align the stack for that host call without
+    # changing the caller's return address or the captured CONTEXT.
+    subq $8, %rsp
     callq trace_assembly_function_entry
+    addq $8, %rsp
     retq
 .size tl_RtlCaptureContext, .-tl_RtlCaptureContext
 

@@ -121,6 +121,49 @@ void convert_find_data(const Win32FindDataA& source, LegacyFindDataW& target) no
     target.file_name[name_length] = 0;
 }
 
+[[nodiscard]] void* find_first_file_a_impl(const char* const file_name,
+                                            void* const find_data) noexcept {
+    char normalized[4096]{};
+    if (!translate_windows_path(file_name, normalized, sizeof(normalized))) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return kInvalidHandleValue;
+    }
+    std::string path_str{normalized};
+    std::string directory;
+    std::string pattern;
+    const auto slash = path_str.rfind('/');
+    if (slash != std::string::npos) {
+        directory = path_str.substr(0, slash);
+        pattern = path_str.substr(slash + 1);
+    } else {
+        directory = ".";
+        pattern = path_str;
+    }
+    DIR* dir = opendir(directory.c_str());
+    if (dir == nullptr) {
+        set_last_error(errno_to_win32(errno));
+        return kInvalidHandleValue;
+    }
+    auto it = std::find_if(g_find_slots.begin(), g_find_slots.end(),
+                           [](const FindSlot& slot) { return !slot.used; });
+    if (it == g_find_slots.end()) {
+        closedir(dir);
+        set_last_error(abi::kErrorNotEnoughMemory);
+        return kInvalidHandleValue;
+    }
+    it->used = true;
+    it->dir = dir;
+    it->pattern = pattern;
+    it->directory = directory;
+    const void* handle = reinterpret_cast<const void*>(
+        kFindHandleBase + static_cast<std::uintptr_t>(it - g_find_slots.begin()));
+    if (tl_FindNextFileA(handle, find_data) == 0) {
+        tl_FindClose(handle);
+        return kInvalidHandleValue;
+    }
+    return const_cast<void*>(handle);
+}
+
 std::string normalize_windows_path_segments(const std::string& absolute_with_drive) {
     std::string drive;
     std::string_view rest;
@@ -796,44 +839,7 @@ TL_MSABI void* tl_FindFirstFileA(const char* file_name, void* find_data) noexcep
         set_last_error(abi::kErrorInvalidParameter);
         return kInvalidHandleValue;
     }
-    char normalized[4096]{};
-    if (!translate_windows_path(file_name, normalized, sizeof(normalized))) {
-        set_last_error(abi::kErrorInvalidParameter);
-        return kInvalidHandleValue;
-    }
-    std::string path_str{normalized};
-    std::string directory;
-    std::string pattern;
-    const auto slash = path_str.rfind('/');
-    if (slash != std::string::npos) {
-        directory = path_str.substr(0, slash);
-        pattern = path_str.substr(slash + 1);
-    } else {
-        directory = ".";
-        pattern = path_str;
-    }
-    DIR* dir = opendir(directory.c_str());
-    if (dir == nullptr) {
-        set_last_error(errno_to_win32(errno));
-        return kInvalidHandleValue;
-    }
-    auto it = std::find_if(g_find_slots.begin(), g_find_slots.end(), [](const FindSlot& s) { return !s.used; });
-    if (it == g_find_slots.end()) {
-        closedir(dir);
-        set_last_error(abi::kErrorNotEnoughMemory);
-        return kInvalidHandleValue;
-    }
-    it->used = true;
-    it->dir = dir;
-    it->pattern = pattern;
-    it->directory = directory;
-    const void* handle = reinterpret_cast<const void*>(
-        kFindHandleBase + static_cast<std::uintptr_t>(it - g_find_slots.begin()));
-    if (tl_FindNextFileA(handle, find_data) == 0) {
-        tl_FindClose(handle);
-        return kInvalidHandleValue;
-    }
-    return const_cast<void*>(handle);
+    return find_first_file_a_impl(file_name, find_data);
 }
 
 TL_MSABI int tl_FindNextFileA(const void* handle, void* find_data) noexcept {
@@ -1758,7 +1764,7 @@ TL_MSABI void* tl_FindFirstFileW(const std::uint16_t* path, void* find_data) noe
         return reinterpret_cast<void*>(std::numeric_limits<std::uintptr_t>::max());
     }
     Win32FindDataA ansi{};
-    void* const handle = tl_FindFirstFileA(utf8_path.c_str(), &ansi);
+    void* const handle = find_first_file_a_impl(utf8_path.c_str(), &ansi);
     if (handle == reinterpret_cast<void*>(std::numeric_limits<std::uintptr_t>::max())) {
         return handle;
     }

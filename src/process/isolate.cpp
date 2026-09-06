@@ -5,6 +5,7 @@
 #include "tradutorlinux/process/isolate.hpp"
 
 #include "tradutorlinux/diagnostics/trace.hpp"
+#include "tradutorlinux/runtime/guest_context.hpp"
 #include "tradutorlinux/runtime/winapi.hpp"
 
 #include <array>
@@ -203,8 +204,18 @@ std::uint64_t monotonic_ms() noexcept {
         (current.rlim_max != RLIM_INFINITY && bytes > current.rlim_max)) {
         return false;
     }
+#if defined(TRADUTORLINUX_HOST_SANITIZED)
+    // AddressSanitizer reserves a very large shadow mapping before the child
+    // is forked.  Lowering RLIMIT_AS below that inherited mapping makes the
+    // child fail before guest code starts.  Keep the same guest-facing limit
+    // through the runtime's private allocation accounting instead.
+    ::tradutorlinux::runtime::guest_context().guest_virtual_memory_limit_bytes =
+        static_cast<std::size_t>(bytes);
+    return true;
+#else
     const struct ::rlimit requested{bytes, bytes};
     return ::setrlimit(RLIMIT_AS, &requested) == 0;
+#endif
 }
 
 [[nodiscard]] ResourceLimitKind apply_resource_limits(const ResourceLimits& limits) noexcept {

@@ -405,6 +405,24 @@ bool read_guest_file_for_process(const char* path, std::vector<std::byte>& bytes
     return false;
 }
 
+[[nodiscard]] void* load_library_normalized(const std::string& normalized) noexcept {
+    if (normalized.empty()) return nullptr;
+    if (runtime::guest_context().module_graph != nullptr) {
+        return runtime::guest_context().module_graph->load_library(normalized);
+    }
+    if (!is_module_available(normalized)) return nullptr;
+    return reinterpret_cast<void*>(0x1000U);
+}
+
+[[nodiscard]] void* get_module_handle_normalized(const std::string& normalized) noexcept {
+    if (normalized.empty()) return nullptr;
+    if (runtime::guest_context().module_graph != nullptr) {
+        return runtime::guest_context().module_graph->get_module_handle(normalized);
+    }
+    if (!is_module_available(normalized)) return nullptr;
+    return reinterpret_cast<void*>(0x1000U);
+}
+
 bool read_proc_status_field(const std::uint32_t pid, const char* field, std::string& value) {
     char path[64];
     std::snprintf(path, sizeof(path), "/proc/%u/status", pid);
@@ -709,21 +727,13 @@ TL_MSABI void* tl_GetModuleHandleA(const char* module_name) noexcept {
         set_last_error(abi::kErrorInvalidParameter);
         return nullptr;
     }
-    if (runtime::guest_context().module_graph != nullptr) {
-        void* const handle = runtime::guest_context().module_graph->get_module_handle(normalized);
-        if (handle == nullptr) {
-            set_last_error(abi::kErrorFileNotFound);
-            return nullptr;
-        }
-        set_last_error(abi::kErrorSuccess);
-        return handle;
-    }
-    if (!is_module_available(normalized)) {
+    void* const handle = get_module_handle_normalized(normalized);
+    if (handle == nullptr) {
         set_last_error(abi::kErrorFileNotFound);
         return nullptr;
     }
     set_last_error(abi::kErrorSuccess);
-    return reinterpret_cast<void*>(0x1000U);
+    return handle;
 }
 
 TL_MSABI void* tl_GetModuleHandleW(const std::uint16_t* module_name) noexcept {
@@ -743,10 +753,18 @@ TL_MSABI void* tl_GetModuleHandleW(const std::uint16_t* module_name) noexcept {
         set_last_error(abi::kErrorInvalidParameter);
         return nullptr;
     }
-    // Delegar sem re-normalizar erro: tl_GetModuleHandleA já define FileNotFound.
-    void* result = tl_GetModuleHandleA(utf8.c_str());
-    // tl_GetModuleHandleA já setou o erro correto; preservar.
-    return result;
+    const std::string normalized = normalize_module_name(utf8.c_str());
+    if (normalized.empty()) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return nullptr;
+    }
+    void* const handle = get_module_handle_normalized(normalized);
+    if (handle == nullptr) {
+        set_last_error(abi::kErrorFileNotFound);
+        return nullptr;
+    }
+    set_last_error(abi::kErrorSuccess);
+    return handle;
 }
 
 TL_MSABI int tl_GetModuleHandleExA(std::uint32_t flags, const char* module_name, void** module) noexcept {
@@ -936,21 +954,13 @@ TL_MSABI void* tl_LoadLibraryA(const char* file_name) noexcept {
         set_last_error(abi::kErrorModNotFound);
         return nullptr;
     }
-    if (runtime::guest_context().module_graph != nullptr) {
-        void* const handle = runtime::guest_context().module_graph->load_library(normalized);
-        if (handle == nullptr) {
-            set_last_error(abi::kErrorModNotFound);
-            return nullptr;
-        }
-        set_last_error(abi::kErrorSuccess);
-        return handle;
-    }
-    if (!is_module_available(normalized)) {
+    void* const handle = load_library_normalized(normalized);
+    if (handle == nullptr) {
         set_last_error(abi::kErrorModNotFound);
         return nullptr;
     }
     set_last_error(abi::kErrorSuccess);
-    return reinterpret_cast<void*>(0x1000U);
+    return handle;
 }
 
 TL_MSABI void* tl_LoadLibraryW(const std::uint16_t* file_name) noexcept {
@@ -963,7 +973,18 @@ TL_MSABI void* tl_LoadLibraryW(const std::uint16_t* file_name) noexcept {
         set_last_error(abi::kErrorInvalidParameter);
         return nullptr;
     }
-    return tl_LoadLibraryA(utf8.c_str());
+    const std::string normalized = normalize_module_name(utf8.c_str());
+    if (normalized.empty()) {
+        set_last_error(abi::kErrorModNotFound);
+        return nullptr;
+    }
+    void* const handle = load_library_normalized(normalized);
+    if (handle == nullptr) {
+        set_last_error(abi::kErrorModNotFound);
+        return nullptr;
+    }
+    set_last_error(abi::kErrorSuccess);
+    return handle;
 }
 
 TL_MSABI void* tl_LoadLibraryExA(const char* file_name, void* file, std::uint32_t flags) noexcept {

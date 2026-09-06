@@ -158,14 +158,16 @@ TL_MSABI int tl_WSAStartup(const std::uint16_t version_requested, void* data) no
     }
     std::memset(data, 0, 400);
     // WSADATA: wVersion(0), wHighVersion(2), szDescription(4,257), szSystemStatus(261,128), iMaxSockets(389,2), iMaxUdpDg(391,2), lpVendorInfo(393,8)
-    *static_cast<std::uint16_t*>(data) = version_requested;
-    *reinterpret_cast<std::uint16_t*>(static_cast<char*>(data) + 2) = 0x0202U;
+    const std::uint16_t high_version = 0x0202U;
+    std::memcpy(static_cast<char*>(data), &version_requested, sizeof(version_requested));
+    std::memcpy(static_cast<char*>(data) + 2, &high_version, sizeof(high_version));
     const char desc[] = "WinSock 2.0";
     const char status[] = "Running";
     std::memcpy(static_cast<char*>(data) + 4, desc, sizeof(desc));
     std::memcpy(static_cast<char*>(data) + 261, status, sizeof(status));
-    *reinterpret_cast<std::uint16_t*>(static_cast<char*>(data) + 389) = 0;
-    *reinterpret_cast<std::uint16_t*>(static_cast<char*>(data) + 391) = 0;
+    const std::uint16_t zero = 0;
+    std::memcpy(static_cast<char*>(data) + 389, &zero, sizeof(zero));
+    std::memcpy(static_cast<char*>(data) + 391, &zero, sizeof(zero));
     g_wsa_last_error = 0;
     return 0;
 }

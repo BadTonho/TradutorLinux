@@ -50,6 +50,12 @@ struct GuestContext {
     std::uint32_t resource_rva{0};
     std::uint32_t resource_size{0};
 
+    // Sanitizer builds cannot enforce a small RLIMIT_AS after reserving their
+    // own shadow address space.  The isolated child uses this guest-only
+    // accounting limit in that configuration; normal builds retain the OS
+    // address-space limit.
+    std::size_t guest_virtual_memory_limit_bytes{0};
+
     std::uint64_t tls_start_raw{0};
     std::uint64_t tls_end_raw{0};
     std::uint64_t tls_index_address{0};

@@ -407,14 +407,14 @@ private:
     return result;
 }
 
-[[nodiscard]] ProfileLoadResult invalid_result(
+[[maybe_unused]] [[nodiscard]] ProfileLoadResult invalid_result(
     std::string error, const PathValidationMetrics& path_validation) {
     ProfileLoadResult result = invalid_result(std::move(error));
     result.path_validation = path_validation;
     return result;
 }
 
-[[nodiscard]] ProfileLoadResult internal_result(
+[[maybe_unused]] [[nodiscard]] ProfileLoadResult internal_result(
     std::string error, const PathValidationMetrics& path_validation) {
     ProfileLoadResult result;
     result.status = ProfileStatus::InternalError;

@@ -123,7 +123,7 @@ TEST(RockstarCoverageTest, NamedPipesClipboardAndRegistry) {
     std::uint16_t pt[2]{};
     EXPECT_EQ(tl_ClientToScreen(nullptr, pt), 1);
 
-    std::uint16_t sz[2]{};
+    std::int32_t sz[2]{};
     EXPECT_EQ(tl_GetTextExtentPoint32W(nullptr, pipe_name, 8, sz), 1);
     EXPECT_EQ(tl_StartDocW(nullptr, nullptr), 1);
     EXPECT_EQ(tl_EndDoc(nullptr), 1);

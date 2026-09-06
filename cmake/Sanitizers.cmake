@@ -11,5 +11,8 @@ function(tl_enable_sanitizers target_name)
         -fsanitize=address,undefined
         -fno-omit-frame-pointer
     )
+    target_compile_definitions(${target_name} PRIVATE
+        TRADUTORLINUX_HOST_SANITIZED=1
+    )
     target_link_options(${target_name} PRIVATE -fsanitize=address,undefined)
 endfunction()
