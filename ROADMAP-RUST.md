@@ -401,20 +401,44 @@ Evidência reproduzível em 2026-09-06:
 
 ### R24.2 — Decoder e diferencial
 
-- [ ] Criar `parse_app_catalog_rust` e decoder C++ reutilizável para validar
+- [x] Criar `parse_app_catalog_rust` e decoder C++ reutilizável para validar
   magic, versão, cabeçalho, descritores, offsets, contagens, strides,
   alinhamento, referências, reservados e limites antes de construir o
   `AppCatalog`.
-- [ ] Comparar semanticamente Rust e `AppCatalog::load_from_file` em catálogos
+- [x] Comparar semanticamente Rust e `AppCatalog::load_from_file` em catálogos
   válidos, Unicode, escapes, argumentos, SHA-256, versões e múltiplas entradas.
-- [ ] Cobrir JSON truncado, campos desconhecidos ou repetidos, trailing comma,
+- [x] Cobrir JSON truncado, campos desconhecidos ou repetidos, trailing comma,
   conteúdo extra, overflow numérico, IDs inválidos, entradas parciais e
   limites de quantidade/tamanho.
-- [ ] Cobrir `size`/`fill`, buffers insuficientes, sentinelas de memória,
+- [x] Cobrir `size`/`fill`, buffers insuficientes, sentinelas de memória,
   chamadas repetidas e concorrentes, sem alterar a saída quando a capacidade
   for insuficiente.
-- [ ] Confirmar que o build `TL_BUILD_RUST=OFF` não liga nem referencia a
+- [x] Confirmar que o build `TL_BUILD_RUST=OFF` não liga nem referencia a
   biblioteca ou símbolos do parser Rust.
+
+Implementação entregue para R24.2:
+
+- `rust_app_catalog_parser.hpp/.cpp` expõe o adaptador interno e o decoder
+  TLAC sem alterar `AppCatalog::load_from_file` ou qualquer caminho de
+  produção. O decoder usa leitores little-endian, valida ranges checked,
+  descritores vazios canônicos, padding, reservas, strings, referências,
+  contagens, intervalos de argumentos e IDs antes de publicar o vetor.
+- `test_rust_app_catalog_parser.cpp` cobre equivalência semântica, strings
+  binárias, JSON inválido, mensagens caller-owned, `size`/`fill`, sentinelas,
+  mutações de wire, limite de entrada e concorrência. O CMake só adiciona o
+  adaptador/teste quando `TL_BUILD_RUST=ON`.
+
+Evidência reproduzível em 2026-09-06:
+
+- `cargo test --locked --offline`: 38/38; Clippy offline com `-D warnings`:
+  aprovado.
+- CTest rotulado `rust`: 16/16 em Debug Rust, Release Rust e Sanitize Rust;
+  testes OFF rotulados `rust`: 9/9 em Debug OFF.
+- `nm` não encontrou os símbolos do parser/adaptador TLAC nas bibliotecas
+  Debug/Release OFF; `git diff --check` passou.
+- O CTest completo Debug Rust ainda registra 18 falhas operacionais fora do
+  catálogo (preparação/execução de fixtures e testes de processo), portanto o
+  gate de conclusão integral abaixo permanece aberto e R24.3 não começa.
 
 ### R24.3 — Promoção do leitor
 

@@ -11,8 +11,9 @@ na imagem principal do `app run` nativo. R22.2 acrescenta a análise Rust de
 pacotes MSIX/AppX ao `--report` direto e ao `install`. R23.2 promove a análise
 Rust de `profile.json` dentro de `load_profile`; nenhum loader, runtime Win32,
 DLL dependente ou API pública de compatibilidade foi migrado para Rust.
-R24.1 acrescenta o contrato TLAC e a análise Rust do catálogo persistente,
-somente para a ABI e testes; `AppCatalog` continua em C++ até R24.3.
+R24.1 acrescenta o contrato TLAC e a análise Rust do catálogo persistente.
+R24.2 acrescenta o adaptador/decoder C++ para o diferencial; `AppCatalog`
+continua em C++ até R24.3.
 
 ## Build e escopo
 
@@ -454,7 +455,14 @@ referências apontam para bytes length-prefixed e strings são deduplicadas de
 forma determinística. O layout completo está em
 [`rust-app-catalog-parser.md`](rust-app-catalog-parser.md).
 
+Descritores vazios mantêm os parâmetros canônicos da tabela: `apps` conserva
+stride 192, `args` conserva stride 16 e `strings` conserva a flag de registros
+variáveis; somente offset e contagem ficam zero. O decoder rejeita referências
+fora de payload, padding não zerado, sobreposição, ordem inválida e qualquer
+divergência de `size`/`fill`.
+
 O parser aceita apenas o schema atual do catálogo, de forma estrita, e
 preserva strings como bytes. Não acessa filesystem e não substitui as
-validações físicas do C++. Nesta etapa não há decoder C++ nem integração com
-`load_from_file`; esses itens pertencem à R24.2/R24.3.
+validações físicas do C++. R24.2 acrescenta `parse_app_catalog_rust` e
+`decode_tlac_v1` como adaptador e decoder internos para o diferencial; ainda
+não há integração de produção com `load_from_file`, que permanece para R24.3.

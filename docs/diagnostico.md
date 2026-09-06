@@ -600,7 +600,7 @@ confinamento ou permissão invalida o perfil no C++ e não materializa arquivos.
 O build `TL_BUILD_RUST=OFF` continua a variante C++ explícita e padrão, sem
 referenciar os símbolos Rust e sem campos Rust no trace.
 
-### Contrato Rust do catálogo — R24.1
+### Contrato e decoder Rust do catálogo — R24.1/R24.2
 
 R24.1 implementa somente a ABI TLAC para analisar os bytes do `library.json`.
 O `AppCatalog`, `load_from_file`, a CLI, a GUI e os fluxos de execução seguem
@@ -615,8 +615,13 @@ faz validações físicas.
 As funções `tl_app_catalog_parse_v1_size` e `fill` usam erro estruturado com
 `code`, `phase`, `input-offset` e `detail-value`, além de mensagem caller-owned.
 As chamadas são stateless; `fill` não escreve em capacidade insuficiente e
-panics são convertidos em `internal`. A promoção, o decoder TLAC e o
-diferencial contra `AppCatalog::load_from_file` ficam para R24.2/R24.3.
+panics são convertidos em `internal`. R24.2 valida o TLAC com decoder C++
+little-endian, sem casts de layout, rejeitando offsets, strides, referências,
+padding, reservas, contagens e sobreposições inválidos. O resultado só é
+publicado após a validação completa e o adaptador não chama `add_app`.
+
+O decoder e o diferencial permanecem fora de `load_from_file` nesta etapa;
+R24.3 tratará a promoção de produção.
 
 ## Categorias de falha
 

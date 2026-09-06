@@ -1,9 +1,9 @@
 # Parser Rust do catálogo de aplicativos — TLAC v1.0
 
-R24.1 define a análise Rust do `library.json` usado pelo `AppCatalog`. Nesta
-etapa o parser Rust é acessível somente pela ABI e pelos testes. `AppCatalog`,
-`load_from_file`, a CLI, a GUI, o loader, o Proton e a execução continuam em
-C++.
+R24.1 define a análise Rust do `library.json` usado pelo `AppCatalog`. R24.2
+acrescenta um adaptador C++ interno e um decoder TLAC reutilizável somente para
+testes diferenciais. `AppCatalog`, `load_from_file`, a CLI, a GUI, o loader, o
+Proton e a execução continuam em C++.
 
 ## ABI
 
@@ -76,9 +76,11 @@ Todos os inteiros usam little-endian. O cabeçalho tem 128 bytes:
 
 Cada descritor contém `offset:u64`, `count:u64`, `stride:u32` e `flags:u32`.
 Os IDs fixos são `info=0`, `apps=1`, `args=2` e `strings=3`. Tabelas não
-vazias começam em offsets alinhados a 8 bytes; descritores de tabelas vazias
-usam offset e contagem zero. `strings` usa `stride=0` e a flag de registros
-variáveis; as demais tabelas usam flags zero.
+vazias começam em offsets alinhados a 8 bytes. Em uma tabela vazia, offset e
+contagem são zero, mas o descritor mantém o stride e as flags canônicos:
+`apps` mantém stride 192 e flags zero, `args` mantém stride 16 e flags zero, e
+`strings` mantém stride zero e a flag de registros variáveis. `info` nunca é
+vazio.
 
 `info` tem um registro de 32 bytes, com versão do catálogo em 0, flags em 4,
 contagem de aplicativos em 8, contagem total de argumentos em 16 e oito bytes
@@ -107,9 +109,35 @@ O serializer inicia todos os registros zerados e valida que cada referência
 aponte para payload dentro de `total_size`. O modelo interno Rust é separado
 do wire e usa `Vec<u8>` e índices apenas durante o parsing/serialização.
 
+## Decoder C++ e diferencial — R24.2
+
+`decode_tlac_v1` lê o buffer apenas com acessores little-endian; casts para
+estruturas host não são usados. Antes de construir qualquer `AppEntry`, o
+decoder verifica magic, versão, tamanho total, descritores, strides, flags,
+alinhamento, limites, overflow, ordem e sobreposição das tabelas.
+
+As tabelas fixas devem seguir `info`, `apps`, `args` e `strings`. As lacunas
+entre tabelas e o padding dos registros de strings precisam estar zerados.
+Cada registro de string é não vazio, único por bytes e termina dentro do
+buffer; uma referência não vazia deve coincidir exatamente com um payload
+registrado. O decoder também confirma contagens do `info`, intervalos
+contíguos de argumentos, IDs válidos e IDs únicos.
+
+O adaptador `parse_app_catalog_rust` chama `size` e `fill` com buffers
+caller-owned, repete a chamada quando `error_required` excede a capacidade,
+exige NUL na mensagem e trata divergência entre `size` e `fill` como falha
+interna. O resultado é materializado em um vetor temporário e só é publicado
+após toda a validação; `AppCatalog::add_app` não é chamado.
+
+R24.2 não altera `AppCatalog::load_from_file` nem cria fallback de produção.
+Nos vetores válidos, o decoder compara semanticamente todos os campos com o
+oráculo C++ `AppCatalog::load_from_file`. Entradas JSON inválidas e mutações
+TLAC são verificadas por rejeição estruturada e atomicidade, sem exigir que o
+parser C++ permissivo reproduza a mesma rejeição.
+
 ## Build e escopo
 
-`TL_BUILD_RUST=ON` inclui `catalog_contract.rs` e `catalog_parser.rs` no
-static library existente. `TL_BUILD_RUST=OFF` continua sendo o caminho C++
-sem link, referência operacional ou seleção do parser Rust. R24.2 adicionará o
-decoder/adaptador C++ e o diferencial semântico; R24.3 decidirá a promoção.
+`TL_BUILD_RUST=ON` inclui `catalog_contract.rs`, `catalog_parser.rs` e o
+adaptador/decoder C++ no static library existente. `TL_BUILD_RUST=OFF`
+continua sendo o caminho C++ sem link, referência operacional ou seleção do
+parser Rust. R24.3 decidirá a promoção.
