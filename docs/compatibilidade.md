@@ -86,6 +86,28 @@ O mapeamento de erros Rust para o CLI é `4` para `truncated`/`malformed`, `5`
 para `unsupported-format`/`unsupported-mechanism` e `70` para argumentos,
 buffers, limites, wire inválido, panic ou falha interna.
 
+## Parser Rust de perfis — R23.1
+
+R23.1 implementa o contrato TLPR v1.0 e a comparação diferencial do
+`profile.json`, mas não altera a compatibilidade nem a seleção de produção.
+`load_profile` permanece em C++; o Rust recebe somente os bytes do perfil e o
+contexto caller-owned de identidade para validar sintaxe, schemas 1/2/3,
+identidade, backend e caminhos lexicais. Existência, tipo regular, symlink,
+confinamento, colisões físicas, permissões e materialização continuam em C++.
+
+O wire tem cabeçalho de 128 bytes, tabelas `info`/`files`/`dlls`/`strings`,
+inteiros little-endian, alinhamento de 8 bytes, referências por offset/tamanho
+e strings binárias deduplicadas. Entrada acima de 1 MiB, saída acima de 64 MiB,
+overflow, referências inválidas ou campos reservados não zerados são
+rejeitados. A ABI usa `size`/`fill`, buffers e mensagens caller-owned, e não
+expõe layout Rust.
+
+Não há evento novo, fallback novo ou alteração de stdout/exit code em R23.1.
+`TL_BUILD_RUST=ON` apenas habilita o contrato e os testes; `TL_BUILD_RUST=OFF`
+continua a variante C++ explícita e padrão, sem link ou símbolos Rust. A
+promoção do backend e a preservação do fallback para perfil ausente ou
+lexicalmente inválido ficam para R23.2.
+
 ## Aplicações de teste
 
 | Fixture | Arquitetura | CRT | Imports esperados | Estado atual | Próximo marco |

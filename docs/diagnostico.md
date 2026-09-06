@@ -570,6 +570,30 @@ métodos ZIP desconhecidos, links, traversal, NUL, colisões após normalizar
 `\\` para `/`, DTD e entidades externas. Rust não acessa o filesystem e não
 valida o PE interno do pacote.
 
+### Análise Rust de perfis — R23.1
+
+R23.1 ainda não troca o backend de produção de `load_profile`: o parser C++
+continua selecionando e carregando perfis no runtime. Rust é exercitado pela
+ABI TLPR e pelos testes diferenciais, recebendo somente os bytes do
+`profile.json` e o contexto esperado de `app_id`, SHA-256 e versão. A validação
+Rust cobre JSON, schemas 1/2/3, identidade, backend e regras lexicais de
+caminhos; filesystem, materialização, permissões e condições físicas continuam
+em C++.
+
+As funções `tl_profile_parse_v1_size` e `tl_profile_parse_v1_fill` usam buffers
+caller-owned. `fill` não modifica a saída quando a capacidade é insuficiente;
+mensagens usam `error_required` incluindo o NUL. O erro estruturado TLPR tem
+`code`, `phase`, `input-offset` e `detail-value`; ele é a fonte para automação,
+enquanto a mensagem é diagnóstico humano. O decoder rejeita magic, versão,
+offsets, strides, alinhamento, referências, reservados e limites inválidos.
+
+Como não há promoção na R23.1, não existe novo evento de produção nem mudança
+de stdout, stderr ou exit code. O C++ continua sendo a fonte do evento
+`compat-profile`, inclusive para perfil ausente, inválido ou incompatível. A
+R23.2 poderá definir a seleção Rust, mas deverá preservar a ausência de perfil
+e o fallback genérico documentados no schema atual. `TL_BUILD_RUST=OFF` não
+compila nem referencia a ABI TLPR.
+
 ## Categorias de falha
 
 Eventos de erro podem incluir o campo `category`:

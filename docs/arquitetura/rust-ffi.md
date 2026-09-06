@@ -398,3 +398,25 @@ relatório e `install` para instalação, com `backend="rust"` e `status`. Em
 falhas, o evento inclui `code`, `phase`, `input-offset` e `detail-value`. Os
 caminhos `app run`, `app run --report`, execução direta normal, Proton, DLLs
 dependentes e o build OFF continuam no C++.
+
+## ABI de perfis — R23.1
+
+[`rust_profile_parser.h`](../../include/tradutorlinux/ffi/rust_profile_parser.h)
+define `tl_profile_parse_v1_size`/`fill` e o wire TLPR v1.0 para análise
+diferencial de `profile.json`. O contrato recebe, além da entrada, um contexto
+caller-owned com `app_id`, SHA-256 e versão esperados. Rust compara a identidade
+e valida sintaxe, schema, backend e caminhos lexicalmente; não abre arquivos,
+não consulta o filesystem e não retém os ponteiros recebidos.
+
+O TLPR tem cabeçalho de 128 bytes, quatro descritores e tabelas alinhadas a 8
+para `info`, `files`, `dlls` e `strings`. Registros fixos são 96/32/32 bytes;
+strings são bytes deduplicados, length-prefixed e referenciadas por offset e
+tamanho. Reservados, padding, ranges, strides, referências e overflow são
+validados pelo decoder C++. A entrada é limitada a 1 MiB e o wire a 64 MiB.
+
+R23.1 não muda `load_profile` nem promove a seleção Rust: o C++ continua
+canônico em produção e responsável por existência, tipo regular, symlink,
+confinamento, colisões físicas, permissões, materialização e seleção final do
+backend. Rust é ABI/teste diferencial até a R23.2; não há fallback operacional
+a ser alterado nesta etapa. `TL_BUILD_RUST=OFF` permanece a variante C++ padrão,
+sem símbolos Rust.

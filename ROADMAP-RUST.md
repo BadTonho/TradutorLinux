@@ -260,13 +260,44 @@ entrada, não melhorar o runtime em si.
 
 ### R23.1 — Schema e validação
 
-- [ ] Migrar a leitura dos schemas de perfil já documentados.
-- [ ] Preservar rejeição de campos desconhecidos, duplicidades, fontes ausentes,
+- [x] Implementar a análise byte-oriented dos schemas de perfil já
+  documentados e o contrato TLPR v1.0 sem alterar `Profile` público.
+- [x] Preservar rejeição de campos desconhecidos, duplicidades, fontes ausentes,
   traversal, identidades incompatíveis e backend inválido.
-- [ ] Manter a materialização, o acesso ao filesystem e a seleção final do
+- [x] Manter a materialização, o acesso ao filesystem e a seleção final do
   backend em C++.
-- [ ] Comparar perfis válidos, ausentes, inválidos e incompatíveis com o
+- [x] Comparar perfis válidos, ausentes, inválidos e incompatíveis com o
   parser C++ atual.
+
+Implementação concluída em R23.1:
+
+- `include/tradutorlinux/ffi/rust_profile_parser.h` congela a ABI C, o contexto
+  de identidade, status, erros estruturados, limites e layouts TLPR.
+- `src/rust/profile_parser.rs` implementa o modelo proprietário, leitor JSON
+  byte-oriented para schemas 1/2/3, validação de identidade/caminhos e
+  serializer determinístico com aritmética checked.
+- `src/compat/rust_profile_parser.cpp` valida e decodifica TLPR para o
+  `Profile` existente; `load_profile`, produção, materialização e seleção de
+  backend continuam em C++.
+- Os testes cobrem ABI C/C++, magic/versão/offsets/strides/reservados,
+  buffers/sentinelas, limites, concorrência e diferencial contra
+  `load_profile`. O build OFF não liga a staticlib nem referencia símbolos Rust.
+
+Evidência reproduzível em 2026-09-06:
+
+- `cargo test --locked --offline`: `28/28`; Clippy com
+  `--locked --offline --all-targets -- -D warnings`: aprovado.
+- Rust Debug: CTest completo `771/771`; Rust Release: CTest completo
+  `771/771`; em ambos, quatro skips ambientais opcionais.
+- Rust Sanitize: subconjunto reproduzível passou sem falhas nos testes de
+  produto; os cinco Proton reais e `x11_popup_smoke` foram excluídos por
+  dependências ambientais, e Iphlpapi, GUI e HTTPS permaneceram skips
+  opcionais. A execução sem exclusões registrou somente essas limitações.
+- Baseline `TL_BUILD_RUST=OFF`: CTest `734/734`; os contratos C/C++ passaram e
+  `nm` não encontrou símbolos do parser Rust na biblioteca C++.
+- `git diff --check` foi executado antes do commit final. R23.2 permanece
+  limitada à promoção do backend e ao fallback genérico para perfil ausente ou
+  lexicalmente inválido.
 
 ### R23.2 — Promoção
 
