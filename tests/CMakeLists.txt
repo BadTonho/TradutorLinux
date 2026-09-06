@@ -41,6 +41,7 @@ if(TL_BUILD_RUST)
     add_dependencies(tl_rust_ffi_probe tl_rust_validator_library)
     target_link_libraries(tl_rust_ffi_probe PRIVATE
         tl_rust_validator
+        tl_rust_msix_deflate
     )
     tl_enable_warnings(tl_rust_ffi_probe)
     tl_enable_sanitizers(tl_rust_ffi_probe)
@@ -89,6 +90,7 @@ if(TL_BUILD_RUST)
     )
     target_link_libraries(tl_rust_path_validation PRIVATE
         tl_rust_validator
+        tl_rust_msix_deflate
         GTest::gtest_main
     )
     tl_enable_warnings(tl_rust_path_validation)

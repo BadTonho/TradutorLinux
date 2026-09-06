@@ -84,6 +84,7 @@ if(TL_BUILD_RUST)
     add_library(tl_rust_msix_deflate STATIC
         package/rust_msix_deflate.cpp
     )
+    target_link_libraries(tl_rust_msix_deflate PRIVATE ZLIB::ZLIB)
     tl_enable_warnings(tl_rust_msix_deflate)
     tl_enable_sanitizers(tl_rust_msix_deflate)
     target_sources(tradutorlinux_core PRIVATE
