@@ -1,11 +1,14 @@
 #include "tradutorlinux/cli.hpp"
+#include "tradutorlinux/catalog/app_catalog.hpp"
 
+#include <cstdlib>
 #include <filesystem>
 #include <sstream>
 #include <string>
 #include <vector>
 
 #include <gtest/gtest.h>
+#include <unistd.h>
 
 namespace tradutorlinux {
 namespace {
@@ -255,9 +258,91 @@ TEST(CommandRunTest, RejectsReadableNonPeInputAsMalformed) {
     EXPECT_NE(stderr_stream.str().find("assinatura DOS ausente"), std::string::npos);
 }
 
+#if defined(TRADUTORLINUX_RUST_PE_PARSER)
+TEST(CommandRunTest, DirectRustReportPreservesStructuredParseFailure) {
+    CommandLine command_line;
+    command_line.report_only = true;
+    command_line.trace_enabled = true;
+    command_line.executable_path = std::filesystem::path{__FILE__};
+    std::ostringstream stdout_stream;
+    std::ostringstream stderr_stream;
+
+    const ExitCode exit_code = run_command(command_line, stdout_stream, stderr_stream);
+
+    EXPECT_EQ(exit_code, ExitCode::MalformedPe);
+    EXPECT_TRUE(stdout_stream.str().empty());
+    const std::string trace = stderr_stream.str();
+    EXPECT_NE(trace.find("[tl][pe][error] parse-failed"), std::string::npos);
+    EXPECT_NE(trace.find("backend=\"rust\""), std::string::npos);
+    EXPECT_NE(trace.find("code=\"16\""), std::string::npos);
+    EXPECT_NE(trace.find("phase=\"2\""), std::string::npos);
+    EXPECT_NE(trace.find("input-offset=\"0\""), std::string::npos);
+    EXPECT_NE(trace.find("detail-value=\""), std::string::npos);
+}
+
+TEST(CommandRunTest, AppRunReportRemainsOnCppParserPath) {
+    const std::filesystem::path root =
+        std::filesystem::temp_directory_path() /
+        ("tradutorlinux-r21-3-app-run-report-" + std::to_string(static_cast<long long>(getpid())));
+    const std::filesystem::path config_home = root / "config";
+    const std::filesystem::path prefix_root = root / "prefix";
+    std::error_code cleanup_error;
+    std::filesystem::remove_all(root, cleanup_error);
+    std::filesystem::create_directories(config_home, cleanup_error);
+
+    const char* old_prefix_value = std::getenv("TL_PREFIX");
+    const char* old_config_value = std::getenv("XDG_CONFIG_HOME");
+    const std::string old_prefix = old_prefix_value == nullptr ? "" : old_prefix_value;
+    const std::string old_config = old_config_value == nullptr ? "" : old_config_value;
+    const bool had_prefix = old_prefix_value != nullptr;
+    const bool had_config = old_config_value != nullptr;
+    setenv("TL_PREFIX", prefix_root.c_str(), 1);
+    setenv("XDG_CONFIG_HOME", config_home.c_str(), 1);
+
+    catalog::AppCatalog app_catalog;
+    catalog::AppEntry app;
+    app.id = "r21-3-app-run-report";
+    app.name = "R21.3 app run report";
+    app.executable_path =
+        (std::filesystem::path{TL_FIXTURE_OUTPUT_DIRECTORY} / "tl_file.exe").string();
+    app.prefix_path = prefix_root.string();
+    app.working_directory = std::filesystem::path{TL_FIXTURE_OUTPUT_DIRECTORY}.string();
+    EXPECT_TRUE(app_catalog.add_app(app));
+    EXPECT_TRUE(app_catalog.save_to_file());
+
+    CommandLine command_line;
+    command_line.mode = CommandMode::AppRun;
+    command_line.app_id = app.id;
+    command_line.report_only = true;
+    command_line.trace_enabled = true;
+    std::ostringstream stdout_stream;
+    std::ostringstream stderr_stream;
+    const ExitCode exit_code = run_command(command_line, stdout_stream, stderr_stream);
+
+    if (had_prefix) {
+        setenv("TL_PREFIX", old_prefix.c_str(), 1);
+    } else {
+        unsetenv("TL_PREFIX");
+    }
+    if (had_config) {
+        setenv("XDG_CONFIG_HOME", old_config.c_str(), 1);
+    } else {
+        unsetenv("XDG_CONFIG_HOME");
+    }
+    std::filesystem::remove_all(root, cleanup_error);
+
+    EXPECT_EQ(exit_code, ExitCode::Success);
+    EXPECT_NE(stdout_stream.str().find("result: supported"), std::string::npos);
+    EXPECT_NE(stderr_stream.str().find("[tl][pe][info] image"), std::string::npos);
+    EXPECT_EQ(stderr_stream.str().find("backend=\"rust\""), std::string::npos);
+    EXPECT_EQ(stderr_stream.str().find("mapped"), std::string::npos);
+}
+#endif
+
 TEST(CommandRunTest, ReportsSupportWithoutExecutingEntryPoint) {
     CommandLine command_line;
     command_line.report_only = true;
+    command_line.trace_enabled = true;
     command_line.executable_path =
         std::filesystem::path{TL_FIXTURE_OUTPUT_DIRECTORY} / "tl_file.exe";
     std::ostringstream stdout_stream;
@@ -276,6 +361,10 @@ TEST(CommandRunTest, ReportsSupportWithoutExecutingEntryPoint) {
     EXPECT_NE(output.find("dll: KERNEL32.dll"), std::string::npos);
     EXPECT_EQ(output.find("fase5"), std::string::npos);
     EXPECT_EQ(stderr_stream.str().find("mapped"), std::string::npos);
+#if defined(TRADUTORLINUX_RUST_PE_PARSER)
+    EXPECT_NE(stderr_stream.str().find("[tl][pe][info] image"), std::string::npos);
+    EXPECT_NE(stderr_stream.str().find("backend=\"rust\""), std::string::npos);
+#endif
 }
 
 TEST(CommandRunTest, ReportsUnsupportedWhenDllNotRegistered) {

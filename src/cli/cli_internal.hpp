@@ -22,7 +22,8 @@ constexpr std::string_view kUsage =
     "  tradutorlinux app remove <id>\n";
 
 [[nodiscard]] const char* status_label(pe::ParseStatus status);
-void write_pe_trace(std::ostream& stream, const pe::PeInfo& info);
+void write_pe_trace(std::ostream& stream, const pe::PeInfo& info,
+                    std::string_view backend = {});
 void print_pe_summary(std::ostream& stream, const pe::PeInfo& info);
 void write_map_trace(std::ostream& stream, const loader::MappedImage& image);
 void write_unmap_trace(std::ostream& stream, std::uint64_t base);

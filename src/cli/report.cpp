@@ -13,6 +13,23 @@
 
 namespace tradutorlinux::cli_detail {
 
+namespace {
+
+void write_pe_trace_event(std::ostream& stream, const std::string_view backend,
+                          const diagnostics::TraceLevel level,
+                          const std::string_view event,
+                          const std::span<const diagnostics::TraceField> fields) {
+    if (backend.empty()) {
+        diagnostics::write_trace(stream, diagnostics::TraceComponent::Pe, level, event, fields);
+        return;
+    }
+    std::vector<diagnostics::TraceField> enriched(fields.begin(), fields.end());
+    enriched.push_back({"backend", std::string{backend}});
+    diagnostics::write_trace(stream, diagnostics::TraceComponent::Pe, level, event, enriched);
+}
+
+}  // namespace
+
 [[nodiscard]] std::string symbol_label(const pe::ImportedSymbol& symbol) {
     TL_TRACE_FUNCTION();
     if (symbol.by_ordinal) {
@@ -40,7 +57,8 @@ namespace tradutorlinux::cli_detail {
     return "unknown";
 }
 
-void write_pe_trace(std::ostream& stream, const pe::PeInfo& info) {
+void write_pe_trace(std::ostream& stream, const pe::PeInfo& info,
+                    const std::string_view backend) {
     TL_TRACE_FUNCTION();
     const std::string format = info.is_pe32_plus ? "PE32+" : "PE32";
     const std::string arch = info.machine == 0x8664 ? "x86-64" : "desconhecida";
@@ -52,8 +70,7 @@ void write_pe_trace(std::ostream& stream, const pe::PeInfo& info) {
         diagnostics::TraceField{"size-of-image", util::format_hex(info.size_of_image)},
         diagnostics::TraceField{"sections", std::to_string(info.number_of_sections)},
     };
-    diagnostics::write_trace(stream, diagnostics::TraceComponent::Pe,
-                             diagnostics::TraceLevel::Info, "image", image_fields);
+    write_pe_trace_event(stream, backend, diagnostics::TraceLevel::Info, "image", image_fields);
 
     for (std::size_t index = 0; index < info.sections.size(); ++index) {
         const pe::SectionInfo& section = info.sections[index];
@@ -66,8 +83,7 @@ void write_pe_trace(std::ostream& stream, const pe::PeInfo& info) {
             diagnostics::TraceField{"raw-size", util::format_hex(section.raw_data_size)},
             diagnostics::TraceField{"characteristics", util::format_hex(section.characteristics)},
         };
-        diagnostics::write_trace(stream, diagnostics::TraceComponent::Pe,
-                                 diagnostics::TraceLevel::Info, "section", fields);
+        write_pe_trace_event(stream, backend, diagnostics::TraceLevel::Info, "section", fields);
     }
 
     for (const pe::ImportedDll& dll : info.imports) {
@@ -82,8 +98,7 @@ void write_pe_trace(std::ostream& stream, const pe::PeInfo& info) {
             diagnostics::TraceField{"dll", dll.name},
             diagnostics::TraceField{"symbols", symbols},
         };
-        diagnostics::write_trace(stream, diagnostics::TraceComponent::Pe,
-                                 diagnostics::TraceLevel::Info, "import", fields);
+        write_pe_trace_event(stream, backend, diagnostics::TraceLevel::Info, "import", fields);
     }
     for (const pe::ImportedDll& dll : info.delay_imports) {
         std::string symbols;
@@ -97,8 +112,7 @@ void write_pe_trace(std::ostream& stream, const pe::PeInfo& info) {
             diagnostics::TraceField{"dll", dll.name},
             diagnostics::TraceField{"symbols", symbols},
         };
-        diagnostics::write_trace(stream, diagnostics::TraceComponent::Pe,
-                                 diagnostics::TraceLevel::Info, "delay-import", fields);
+        write_pe_trace_event(stream, backend, diagnostics::TraceLevel::Info, "delay-import", fields);
     }
 
     std::size_t unwind_handlers = 0;
@@ -133,8 +147,7 @@ void write_pe_trace(std::ostream& stream, const pe::PeInfo& info) {
         diagnostics::TraceField{"handlers", std::to_string(unwind_handlers)},
         diagnostics::TraceField{"chained", std::to_string(unwind_chained)},
     };
-    diagnostics::write_trace(stream, diagnostics::TraceComponent::Pe,
-                             diagnostics::TraceLevel::Info, "unwind", unwind_fields);
+    write_pe_trace_event(stream, backend, diagnostics::TraceLevel::Info, "unwind", unwind_fields);
 
     std::size_t relocation_entries = 0;
     for (const pe::BaseRelocBlock& block : info.relocations) {
@@ -143,15 +156,14 @@ void write_pe_trace(std::ostream& stream, const pe::PeInfo& info) {
             diagnostics::TraceField{"page", util::format_hex(block.page_rva)},
             diagnostics::TraceField{"entries", std::to_string(block.entries.size())},
         };
-        diagnostics::write_trace(stream, diagnostics::TraceComponent::Pe,
-                                 diagnostics::TraceLevel::Debug, "reloc-block", fields);
+        write_pe_trace_event(stream, backend, diagnostics::TraceLevel::Debug, "reloc-block", fields);
     }
     const std::array relocation_fields{
         diagnostics::TraceField{"blocks", std::to_string(info.relocations.size())},
         diagnostics::TraceField{"entries", std::to_string(relocation_entries)},
     };
-    diagnostics::write_trace(stream, diagnostics::TraceComponent::Pe,
-                             diagnostics::TraceLevel::Info, "relocations", relocation_fields);
+    write_pe_trace_event(stream, backend, diagnostics::TraceLevel::Info, "relocations",
+                         relocation_fields);
 }
 
 void print_pe_summary(std::ostream& stream, const pe::PeInfo& info) {

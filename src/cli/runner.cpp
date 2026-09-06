@@ -13,6 +13,9 @@
 #include "tradutorlinux/loader/process.hpp"
 #include "tradutorlinux/package/msix.hpp"
 #include "tradutorlinux/pe/pe_reader.hpp"
+#if defined(TRADUTORLINUX_RUST_PE_PARSER)
+#include "../pe/rust_pe_parser.hpp"
+#endif
 #include "tradutorlinux/prefix/prefix.hpp"
 #include "tradutorlinux/process/isolate.hpp"
 #include "tradutorlinux/runtime/msvcrt.hpp"
@@ -801,7 +804,27 @@ ExitCode run_command(const CommandLine& command_line, std::ostream& stdout_strea
         return ExitCode::InputUnavailable;
     }
 
-    const pe::ParseResult parse_result = pe::parse_pe(*bytes);
+    pe::ParseResult parse_result;
+#if defined(TRADUTORLINUX_RUST_PE_PARSER)
+    bool rust_report_backend = false;
+    bool rust_internal_failure = false;
+    tl_pe_error_v1 rust_error{};
+    if (effective_cmd.mode == CommandMode::DirectRun && effective_cmd.report_only) {
+        const pe::RustPeParseResult rust_result = pe::parse_pe_rust(*bytes);
+        rust_report_backend = true;
+        rust_internal_failure = rust_result.internal_failure;
+        rust_error = rust_result.error;
+        parse_result.status = rust_result.status;
+        parse_result.error_message = rust_result.error_message;
+        parse_result.info = rust_result.info;
+    } else {
+        parse_result = pe::parse_pe(*bytes);
+    }
+#else
+    const bool rust_report_backend = false;
+    const bool rust_internal_failure = false;
+    parse_result = pe::parse_pe(*bytes);
+#endif
     if (parse_result.status != pe::ParseStatus::Success) {
         if (effective_cmd.mode == CommandMode::Install) {
             const auto target_prog_dir = prefix_dir / "drive_c" / "Program Files" / installation_name;
@@ -865,12 +888,32 @@ ExitCode run_command(const CommandLine& command_line, std::ostream& stdout_strea
             }
         }
         if (effective_cmd.trace_enabled) {
+#if defined(TRADUTORLINUX_RUST_PE_PARSER)
+            if (rust_report_backend) {
+                const std::array fields{
+                    diagnostics::TraceField{"status", rust_internal_failure
+                                                       ? "internal"
+                                                       : status_label(parse_result.status)},
+                    diagnostics::TraceField{"detail", parse_result.error_message},
+                    diagnostics::TraceField{"backend", "rust"},
+                    diagnostics::TraceField{"code", std::to_string(rust_error.code)},
+                    diagnostics::TraceField{"phase", std::to_string(rust_error.phase)},
+                    diagnostics::TraceField{"input-offset", std::to_string(rust_error.input_offset)},
+                    diagnostics::TraceField{"detail-value", std::to_string(rust_error.detail_value)},
+                };
+                diagnostics::write_trace(stderr_stream, diagnostics::TraceComponent::Pe,
+                                         diagnostics::TraceLevel::Error, "parse-failed", fields);
+            } else {
+#endif
             const std::array fields{
                 diagnostics::TraceField{"status", status_label(parse_result.status)},
                 diagnostics::TraceField{"detail", parse_result.error_message},
             };
             diagnostics::write_trace(stderr_stream, diagnostics::TraceComponent::Pe,
                                      diagnostics::TraceLevel::Error, "parse-failed", fields);
+#if defined(TRADUTORLINUX_RUST_PE_PARSER)
+            }
+#endif
         }
         stderr_stream << "erro: " << parse_result.error_message << '\n';
         if (effective_cmd.mode == CommandMode::Install) {
@@ -878,6 +921,9 @@ ExitCode run_command(const CommandLine& command_line, std::ostream& stdout_strea
                                 diagnostics::TraceLevel::Error, "failed",
                                 {{"stage", "parse"}, {"prefix", prefix_dir.string()},
                                  {"app-id", installation_id}});
+        }
+        if (rust_internal_failure) {
+            return ExitCode::InternalError;
         }
         if (parse_result.status == pe::ParseStatus::UnsupportedArchitecture ||
             parse_result.status == pe::ParseStatus::UnsupportedFormat ||
@@ -888,7 +934,8 @@ ExitCode run_command(const CommandLine& command_line, std::ostream& stdout_strea
     }
 
     if (effective_cmd.trace_enabled) {
-        write_pe_trace(stderr_stream, parse_result.info);
+        write_pe_trace(stderr_stream, parse_result.info,
+                       rust_report_backend ? std::string_view{"rust"} : std::string_view{});
     } else {
         print_pe_summary(stderr_stream, parse_result.info);
     }
