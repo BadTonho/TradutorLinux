@@ -1300,7 +1300,8 @@ imports não encerra B5.
   FFI, a toolchain reproduzível, os testes de robustez e a integração
   operacional foram validados sem criar dependência Rust para o build padrão.
   Não houve migração ampla nem declaração de compatibilidade adicional para
-  aplicativos reais.
+  aplicativos reais. O plano específico dos próximos candidatos está em
+  [ROADMAP-RUST.md](ROADMAP-RUST.md).
 
   Subetapas:
 
