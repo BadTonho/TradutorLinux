@@ -117,6 +117,18 @@ referencia os símbolos Rust e não recebe campos Rust no trace. A promoção n�
 altera `Profile`, TLPR, `Cargo.lock`, loader, materializador ou o nível de
 compatibilidade declarado para qualquer aplicativo.
 
+## Parser Rust do catálogo — R24.1
+
+R24.1 define e testa o contrato TLAC v1.0 para `library.json`, sem alterar
+`AppEntry`, `AppCatalog`, `load_from_file`, o formato persistido ou qualquer
+fluxo operacional. O parser Rust aceita o schema atual estritamente, preserva
+strings como bytes, aplica limites checked e não acessa o filesystem.
+
+O Rust ainda não é backend de produção do catálogo. `TL_BUILD_RUST=OFF`
+continua sendo a variante C++ explícita e padrão; R24.2 tratará o decoder e o
+diferencial, e R24.3 tratará eventual promoção. Nenhum aplicativo ou nível de
+compatibilidade é promovido por este contrato.
+
 ## Aplicações de teste
 
 | Fixture | Arquitetura | CRT | Imports esperados | Estado atual | Próximo marco |

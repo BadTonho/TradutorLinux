@@ -600,6 +600,24 @@ confinamento ou permissão invalida o perfil no C++ e não materializa arquivos.
 O build `TL_BUILD_RUST=OFF` continua a variante C++ explícita e padrão, sem
 referenciar os símbolos Rust e sem campos Rust no trace.
 
+### Contrato Rust do catálogo — R24.1
+
+R24.1 implementa somente a ABI TLAC para analisar os bytes do `library.json`.
+O `AppCatalog`, `load_from_file`, a CLI, a GUI e os fluxos de execução seguem
+em C++; não há evento de produção nem seleção de backend Rust nesta etapa.
+
+O parser é estrito para o schema atual (`version=1`, `apps`), rejeita campos
+desconhecidos ou repetidos, JSON incompleto, trailing comma, IDs inválidos ou
+repetidos, tipos incorretos, escapes inválidos e limites excedidos. Strings são
+preservadas como bytes e não exigem UTF-8. O Rust não acessa filesystem nem
+faz validações físicas.
+
+As funções `tl_app_catalog_parse_v1_size` e `fill` usam erro estruturado com
+`code`, `phase`, `input-offset` e `detail-value`, além de mensagem caller-owned.
+As chamadas são stateless; `fill` não escreve em capacidade insuficiente e
+panics são convertidos em `internal`. A promoção, o decoder TLAC e o
+diferencial contra `AppCatalog::load_from_file` ficam para R24.2/R24.3.
+
 ## Categorias de falha
 
 Eventos de erro podem incluir o campo `category`:

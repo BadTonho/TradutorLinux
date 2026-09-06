@@ -11,6 +11,8 @@ na imagem principal do `app run` nativo. R22.2 acrescenta a análise Rust de
 pacotes MSIX/AppX ao `--report` direto e ao `install`. R23.2 promove a análise
 Rust de `profile.json` dentro de `load_profile`; nenhum loader, runtime Win32,
 DLL dependente ou API pública de compatibilidade foi migrado para Rust.
+R24.1 acrescenta o contrato TLAC e a análise Rust do catálogo persistente,
+somente para a ABI e testes; `AppCatalog` continua em C++ até R24.3.
 
 ## Build e escopo
 
@@ -435,3 +437,24 @@ fallback. O evento `compat-profile` informa `backend="rust"` e
 liga nem referencia os símbolos do parser de perfis Rust, e não recebe campos
 Rust no trace. A promoção vale para todos os consumidores atuais de
 `load_profile`, sem alterar PE, TLPR, loader, materializador ou execução.
+
+## Contrato do catálogo de aplicativos — R24.1
+
+[`rust_app_catalog_parser.h`](../../include/tradutorlinux/ffi/rust_app_catalog_parser.h)
+define `tl_app_catalog_parse_v1_size`/`fill` e o wire TLAC v1.0. A ABI recebe
+somente os bytes do `library.json`, tem entrada máxima de 4 MiB e saída máxima
+de 64 MiB. Entrada, saída, erro e mensagem são caller-owned; as chamadas são
+stateless, concorrentes e não expõem layout Rust. `fill` nunca altera a saída
+quando a capacidade é insuficiente, e panic vira `internal`.
+
+O TLAC possui cabeçalho de 128 bytes, quatro descritores e tabelas alinhadas a
+8 bytes: `info` (stride 32), `apps` (stride 192), `args` (stride 16) e
+`strings` variável. Inteiros são little-endian; campos reservados são zero;
+referências apontam para bytes length-prefixed e strings são deduplicadas de
+forma determinística. O layout completo está em
+[`rust-app-catalog-parser.md`](rust-app-catalog-parser.md).
+
+O parser aceita apenas o schema atual do catálogo, de forma estrita, e
+preserva strings como bytes. Não acessa filesystem e não substitui as
+validações físicas do C++. Nesta etapa não há decoder C++ nem integração com
+`load_from_file`; esses itens pertencem à R24.2/R24.3.

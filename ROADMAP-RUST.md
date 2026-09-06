@@ -359,22 +359,45 @@ não ampliará a compatibilidade de aplicativos.
 
 ### R24.1 — Contrato e parser Rust do catálogo
 
-- [ ] Criar `rust_app_catalog_parser.h` com as funções
+- [x] Criar `rust_app_catalog_parser.h` com as funções
   `tl_app_catalog_parse_v1_size` e `tl_app_catalog_parse_v1_fill`, status
   estáveis, erro estruturado e buffers caller-owned.
-- [ ] Definir o wire `TLAC` v1.0 com cabeçalho de 128 bytes, inteiros
+- [x] Definir o wire `TLAC` v1.0 com cabeçalho de 128 bytes, inteiros
   little-endian, tabelas alinhadas a 8 bytes para `info`, `apps`, `args` e
   `strings`, registros de stride fixo, campos reservados zerados e strings
   deduplicadas por bytes.
-- [ ] Limitar entrada, contagens, argumentos, strings e saída serializada;
+- [x] Limitar entrada, contagens, argumentos, strings e saída serializada;
   usar aritmética checked em somas, multiplicações, alinhamento e conversões.
-- [ ] Implementar em Rust um modelo interno separado de `AppEntry`, sem
+- [x] Implementar em Rust um modelo interno separado de `AppEntry`, sem
   filesystem, ponteiros retidos ou tipos Rust atravessando a ABI.
-- [ ] Preservar o schema atual: versão `1`, campos de identidade, caminhos,
+- [x] Preservar o schema atual: versão `1`, campos de identidade, caminhos,
   `args`, `cpu_limit_seconds`, `memory_limit_mib`, SHA-256 e versão opcional,
   incluindo as regras atuais de escapes e Unicode.
-- [ ] Manter `AppEntry`, `save_to_file`, CLI, GUI, loader, Proton e execução
+- [x] Manter `AppEntry`, `save_to_file`, CLI, GUI, loader, Proton e execução
   inalterados nesta etapa; Rust ficará restrito à ABI e aos testes.
+
+Implementação concluída para R24.1:
+
+- `rust_app_catalog_parser.h` congela a ABI C, os status, erros, limites e o
+  wire TLAC v1.0; os contratos C e C++ confirmam largura, alinhamento, magic,
+  strides e constantes.
+- `src/rust/catalog_parser.rs` implementa o parser JSON byte-oriented estrito,
+  o modelo interno, validação de schema/IDs, serializer determinístico e as
+  funções `size`/`fill` com panics capturados e buffers caller-owned.
+- O C++ de produção não foi alterado: não há decoder, adaptador ou promoção
+  de `AppCatalog` nesta etapa. R24.2 continua responsável pelo diferencial.
+- A documentação do contrato, da ABI, do diagnóstico e da compatibilidade foi
+  atualizada sem alterar `AppEntry`, `Cargo.lock` ou o formato persistido.
+
+Evidência reproduzível em 2026-09-06:
+
+- `cargo test --locked --offline`: 38/38 testes passaram; Clippy com
+  `--locked --offline --all-targets -- -D warnings` passou.
+- Rust Debug: build do static library, contratos C/C++ e Cargo/Clippy via
+  CTest passaram.
+- Baseline Debug `TL_BUILD_RUST=OFF`: contratos C/C++ passaram sem link ou
+  referência ao parser Rust.
+- `git diff --check` deve ser executado antes do commit final deste marco.
 
 ### R24.2 — Decoder e diferencial
 
