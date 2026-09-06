@@ -35,6 +35,7 @@ constexpr std::size_t kMaxXmlAttributesPerElement = 256;
 
 [[nodiscard]] bool safe_zip_filename(const std::string_view filename) noexcept {
     if (filename.empty() || filename.size() > kMaxZipFilenameSize ||
+        filename.find('\0') != std::string_view::npos ||
         filename.front() == '/' || filename.front() == '\\' ||
         (filename.size() >= 2 && std::isalpha(static_cast<unsigned char>(filename[0])) != 0 &&
          filename[1] == ':')) {
@@ -46,7 +47,15 @@ constexpr std::size_t kMaxXmlAttributesPerElement = 256;
         const std::size_t segment_length = separator == std::string_view::npos
                                                ? filename.size() - segment_start
                                                : separator - segment_start;
-        if (filename.substr(segment_start, segment_length) == "..") {
+        const bool final_empty_segment = separator == std::string_view::npos &&
+                                         segment_start == filename.size() &&
+                                         !filename.empty() &&
+                                         (filename.back() == '/' || filename.back() == '\\');
+        if (segment_length == 0 && !final_empty_segment) {
+            return false;
+        }
+        if (filename.substr(segment_start, segment_length) == "." ||
+            filename.substr(segment_start, segment_length) == "..") {
             return false;
         }
         if (separator == std::string_view::npos) {
@@ -592,7 +601,9 @@ struct ZipArchive {
 
             std::string filename(filename_len, '\0');
             stream.read(filename.data(), filename_len);
-            if (!stream || !safe_zip_filename(filename) || !names.insert(filename).second) {
+            const std::string normalized_name = normalized_zip_name(filename);
+            if (!stream || !safe_zip_filename(filename) ||
+                !names.insert(normalized_name).second) {
                 return std::nullopt;
             }
             if (!skip_bytes(stream, static_cast<std::uint64_t>(extra_len) + comment_len,
@@ -804,6 +815,7 @@ std::optional<AppxPackageInfo> inspect_msix_package(const std::filesystem::path&
         std::uint64_t total_uncompressed_size = 0;
         std::optional<ZipCentralEntry> manifest_entry;
         std::string manifest_name;
+        std::set<std::string> names;
         stream.clear();
         stream.seekg(static_cast<std::streamoff>(central_offset), std::ios::beg);
         if (!stream) return std::nullopt;
@@ -815,6 +827,7 @@ std::optional<AppxPackageInfo> inspect_msix_package(const std::filesystem::path&
             if (!stream || read_le32(central_header.data()) != kZipCentralHeaderMagic) {
                 return std::nullopt;
             }
+            const std::uint16_t version_made_by = read_le16(central_header.data() + 4U);
             const std::uint16_t flags = read_le16(central_header.data() + 8U);
             const std::uint16_t compression_method = read_le16(central_header.data() + 10U);
             const std::uint32_t entry_crc32 = read_le32(central_header.data() + 16U);
@@ -824,6 +837,7 @@ std::optional<AppxPackageInfo> inspect_msix_package(const std::filesystem::path&
             const std::uint16_t extra_len = read_le16(central_header.data() + 30U);
             const std::uint16_t comment_len = read_le16(central_header.data() + 32U);
             const std::uint16_t disk_start = read_le16(central_header.data() + 34U);
+            const std::uint32_t external_attributes = read_le32(central_header.data() + 38U);
             const std::uint32_t local_header_offset = read_le32(central_header.data() + 42U);
             const std::uint64_t metadata_size = static_cast<std::uint64_t>(filename_len) +
                                                 extra_len + comment_len;
@@ -832,23 +846,34 @@ std::optional<AppxPackageInfo> inspect_msix_package(const std::filesystem::path&
                 metadata_size > central_end - static_cast<std::uint64_t>(current) ||
                 filename_len == 0 || filename_len > kMaxZipFilenameSize ||
                 disk_start != 0 || (flags & 0x0001U) != 0U ||
+                (compression_method != 0 && compression_method != 8) ||
                 uncompressed_size == 0xFFFFFFFFU || compressed_size == 0xFFFFFFFFU ||
                 local_header_offset >= central_offset ||
+                static_cast<std::uint64_t>(compressed_size) > kMaxPackageUncompressedSize ||
                 static_cast<std::uint64_t>(uncompressed_size) > kMaxZipEntryUncompressedSize ||
                 static_cast<std::uint64_t>(uncompressed_size) >
-                    kMaxPackageUncompressedSize - total_uncompressed_size) {
+                    kMaxPackageUncompressedSize - total_uncompressed_size ||
+                ((version_made_by >> 8U) == 3U &&
+                 ((external_attributes >> 16U) & 0170000U) == 0120000U)) {
                 return std::nullopt;
             }
             total_uncompressed_size += uncompressed_size;
 
             std::string filename(filename_len, '\0');
             stream.read(filename.data(), filename_len);
-            if (!stream || !safe_zip_filename(filename)) return std::nullopt;
+            const std::string normalized_name = normalized_zip_name(filename);
+            if (!stream || !safe_zip_filename(filename) ||
+                !names.insert(normalized_name).second) {
+                return std::nullopt;
+            }
             if (!skip_bytes(stream, static_cast<std::uint64_t>(extra_len) + comment_len,
                             file_size)) {
                 return std::nullopt;
             }
-            if (filename == "AppxManifest.xml") {
+            if (normalized_name == "AppxBundleManifest.xml") {
+                return std::nullopt;
+            }
+            if (normalized_name == "AppxManifest.xml") {
                 if (manifest_entry.has_value()) return std::nullopt;
                 manifest_name = filename;
                 manifest_entry = ZipCentralEntry{flags, compression_method, entry_crc32,
@@ -917,7 +942,16 @@ std::optional<AppxPackageInfo> inspect_msix_package(const std::filesystem::path&
         }
         const std::string xml_data(reinterpret_cast<const char*>(manifest_data->data()),
                                    manifest_data->size());
-        return parse_appx_manifest_xml(xml_data);
+        const std::optional<AppxPackageInfo> package_info = parse_appx_manifest_xml(xml_data);
+        if (!package_info.has_value()) return std::nullopt;
+        for (const AppxApplication& application : package_info->applications) {
+            if (application.executable.empty()) continue;
+            const std::string executable_name = normalized_zip_name(application.executable);
+            if (!safe_zip_filename(executable_name) || executable_name.ends_with('/')) {
+                return std::nullopt;
+            }
+        }
+        return package_info;
     } catch (const std::bad_alloc&) {
         return std::nullopt;
     } catch (const std::filesystem::filesystem_error&) {

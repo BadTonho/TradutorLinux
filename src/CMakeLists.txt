@@ -81,15 +81,24 @@ add_library(tradutorlinux_core STATIC
 )
 
 if(TL_BUILD_RUST)
+    add_library(tl_rust_msix_deflate STATIC
+        package/rust_msix_deflate.cpp
+    )
+    tl_enable_warnings(tl_rust_msix_deflate)
+    tl_enable_sanitizers(tl_rust_msix_deflate)
     target_sources(tradutorlinux_core PRIVATE
         compat/rust_path_validator.cpp
         pe/rust_pe_parser.cpp
+        package/rust_msix_parser.cpp
     )
     target_compile_definitions(tradutorlinux_core PRIVATE
         TRADUTORLINUX_RUST_PATH_VALIDATOR=1
         TRADUTORLINUX_RUST_PE_PARSER=1
     )
-    target_link_libraries(tradutorlinux_core PRIVATE tl_rust_validator)
+    target_link_libraries(tradutorlinux_core PRIVATE
+        tl_rust_validator
+        tl_rust_msix_deflate
+    )
 endif()
 
 target_include_directories(tradutorlinux_core

@@ -12,6 +12,30 @@ set_tests_properties(rust_pe_contract_c PROPERTIES
     TIMEOUT 30
 )
 
+add_executable(tl_rust_msix_contract_c rust_msix_contract_c.c)
+target_include_directories(tl_rust_msix_contract_c PRIVATE
+    "${PROJECT_SOURCE_DIR}/include"
+)
+tl_enable_warnings(tl_rust_msix_contract_c)
+tl_enable_sanitizers(tl_rust_msix_contract_c)
+add_test(NAME rust_msix_contract_c COMMAND tl_rust_msix_contract_c)
+set_tests_properties(rust_msix_contract_c PROPERTIES
+    LABELS "ffi;rust;contract;msix"
+    TIMEOUT 30
+)
+
+add_executable(tl_rust_msix_contract_cpp rust_msix_contract_cpp.cpp)
+target_include_directories(tl_rust_msix_contract_cpp PRIVATE
+    "${PROJECT_SOURCE_DIR}/include"
+)
+tl_enable_warnings(tl_rust_msix_contract_cpp)
+tl_enable_sanitizers(tl_rust_msix_contract_cpp)
+add_test(NAME rust_msix_contract_cpp COMMAND tl_rust_msix_contract_cpp)
+set_tests_properties(rust_msix_contract_cpp PROPERTIES
+    LABELS "ffi;rust;contract;msix"
+    TIMEOUT 30
+)
+
 if(TL_BUILD_RUST)
     add_executable(tl_rust_ffi_probe rust_ffi_probe.cpp)
     add_dependencies(tl_rust_ffi_probe tl_rust_validator_library)
@@ -155,6 +179,7 @@ if(TL_BUILD_RUST)
     target_sources(tradutorlinux_unit_tests PRIVATE
         test_rust_path_validation.cpp
         test_rust_pe_parser.cpp
+        test_rust_msix_parser.cpp
     )
     target_include_directories(tradutorlinux_unit_tests PRIVATE
         "${PROJECT_SOURCE_DIR}/src/compat"
@@ -192,6 +217,15 @@ if(TL_BUILD_RUST AND TARGET tradutorlinux_samples)
     )
     set_tests_properties(rust_pe_differential_corpus PROPERTIES
         LABELS "rust;pe32plus;differential;corpus"
+        TIMEOUT 60
+    )
+    add_test(
+        NAME rust_msix_differential
+        COMMAND tradutorlinux_unit_tests
+            --gtest_filter=RustMsixParserTest.*
+    )
+    set_tests_properties(rust_msix_differential PROPERTIES
+        LABELS "rust;msix;differential;corpus"
         TIMEOUT 60
     )
 endif()
