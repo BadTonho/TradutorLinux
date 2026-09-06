@@ -117,6 +117,19 @@ TEST(CommandLineTest, AcceptsResourceLimitsForCatalogRun) {
     EXPECT_EQ(result.command_line->guest_arguments.front(), "argument");
 }
 
+TEST(CommandLineTest, AcceptsTimeoutForCatalogRun) {
+    const std::vector<const char*> arguments{
+        "tradutorlinux", "app", "run", "app-id", "--timeout", "1"};
+
+    const ParseResult result = parse_arguments(arguments);
+
+    ASSERT_TRUE(result.command_line.has_value());
+    EXPECT_EQ(result.command_line->mode, CommandMode::AppRun);
+    EXPECT_EQ(result.command_line->timeout_ms, 1000U);
+    EXPECT_TRUE(result.command_line->timeout_set);
+    EXPECT_TRUE(result.command_line->guest_arguments.empty());
+}
+
 TEST(CommandLineTest, RejectsRepeatedResourceLimit) {
     const std::vector<const char*> arguments{
         "tradutorlinux", "--memory", "64", "--memory", "128", "programa.exe"};

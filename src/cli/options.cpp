@@ -264,6 +264,34 @@ ParseResult parse_command_line(const int argc, const char* const argv[]) {
                     }
                 } else if (arg == "--report") {
                     command_line.report_only = true;
+                } else if (arg == "--timeout") {
+                    if (command_line.timeout_set) {
+                        return {.command_line = std::nullopt,
+                                .error_message = "a opção --timeout foi repetida"};
+                    }
+                    if (i + 1 >= argc) {
+                        return {.command_line = std::nullopt,
+                                .error_message = "a opção --timeout requer um valor em segundos"};
+                    }
+                    const std::string_view value{argv[++i]};
+                    if (value.empty() || value.size() > 9) {
+                        return {.command_line = std::nullopt,
+                                .error_message = "valor inválido para --timeout: " + std::string{value}};
+                    }
+                    std::uint64_t seconds = 0;
+                    for (const char digit : value) {
+                        if (digit < '0' || digit > '9') {
+                            return {.command_line = std::nullopt,
+                                    .error_message = "valor inválido para --timeout: " + std::string{value}};
+                        }
+                        seconds = seconds * 10U + static_cast<std::uint64_t>(digit - '0');
+                    }
+                    if (seconds > std::numeric_limits<std::uint64_t>::max() / 1000U) {
+                        return {.command_line = std::nullopt,
+                                .error_message = "valor de --timeout muito grande: " + std::string{value}};
+                    }
+                    command_line.timeout_ms = seconds * 1000U;
+                    command_line.timeout_set = true;
                 } else {
                     std::string resource_error;
                     const LimitOptionResult resource_result =

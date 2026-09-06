@@ -293,6 +293,23 @@ if(TARGET tradutorlinux_samples AND TARGET tradutorlinux)
         TIMEOUT 60
     )
     add_test(
+        NAME integration_rust_operational
+        COMMAND "${CMAKE_COMMAND}"
+            "-DRUNTIME=$<TARGET_FILE:tradutorlinux>"
+            "-DCOMPAT_FILE=${CMAKE_CURRENT_BINARY_DIR}/samples/generated/tl_compat_file.exe"
+            "-DHELLO=${CMAKE_CURRENT_BINARY_DIR}/samples/generated/tl_hello.exe"
+            "-DHANG=${CMAKE_CURRENT_BINARY_DIR}/samples/generated/tl_hang.exe"
+            "-DPROTON_FIXTURE=${CMAKE_CURRENT_BINARY_DIR}/samples/generated/tl_proton_probe.exe"
+            "-DRUST_ENABLED=$<BOOL:${TL_BUILD_RUST}>"
+            "-DWORK=${CMAKE_CURRENT_BINARY_DIR}/rust_operational_work"
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/samples/verify_rust_operational.cmake"
+    )
+    set_tests_properties(integration_rust_operational PROPERTIES
+        DEPENDS "fixture_tl_compat_file_metadata;fixture_tl_hello_metadata;fixture_tl_hang_metadata;fixture_tl_proton_probe_metadata;report_tl_compat_file_support;report_tl_proton_probe_support"
+        LABELS "runtime;pe32plus;rust;compat;profile;files;backend;proton;operational"
+        TIMEOUT 180
+    )
+    add_test(
         NAME integration_compat_dll_profile
         COMMAND "${CMAKE_COMMAND}"
             "-DRUNTIME=$<TARGET_FILE:tradutorlinux>"
