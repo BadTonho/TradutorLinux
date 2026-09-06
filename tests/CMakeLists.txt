@@ -231,6 +231,7 @@ if(TL_BUILD_RUST)
         test_rust_pe_parser.cpp
         test_rust_msix_parser.cpp
         test_rust_profile_parser.cpp
+        test_rust_app_catalog_parser.cpp
     )
     target_include_directories(tradutorlinux_unit_tests PRIVATE
         "${PROJECT_SOURCE_DIR}/src/compat"
@@ -238,6 +239,7 @@ if(TL_BUILD_RUST)
     target_compile_definitions(tradutorlinux_unit_tests PRIVATE
         TRADUTORLINUX_RUST_PE_PARSER=1
         TRADUTORLINUX_RUST_PROFILE_PARSER=1
+        TRADUTORLINUX_RUST_APP_CATALOG_PARSER=1
     )
     target_link_libraries(tradutorlinux_unit_tests PRIVATE tl_rust_validator)
 endif()
@@ -278,6 +280,15 @@ if(TL_BUILD_RUST AND TARGET tradutorlinux_samples)
     )
     set_tests_properties(rust_msix_differential PROPERTIES
         LABELS "rust;msix;differential;corpus"
+        TIMEOUT 60
+    )
+    add_test(
+        NAME rust_app_catalog_differential
+        COMMAND tradutorlinux_unit_tests
+            --gtest_filter=RustAppCatalogParserTest.*
+    )
+    set_tests_properties(rust_app_catalog_differential PROPERTIES
+        LABELS "rust;catalog;differential;contract"
         TIMEOUT 60
     )
 endif()
