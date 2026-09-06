@@ -806,12 +806,17 @@ ExitCode run_command(const CommandLine& command_line, std::ostream& stdout_strea
 
     pe::ParseResult parse_result;
 #if defined(TRADUTORLINUX_RUST_PE_PARSER)
-    bool rust_report_backend = false;
+    const bool rust_report_backend =
+        effective_cmd.mode == CommandMode::DirectRun && effective_cmd.report_only;
+    const bool rust_app_run_backend =
+        effective_cmd.mode == CommandMode::AppRun && !effective_cmd.report_only &&
+        !(compatibility_profile.has_value() &&
+          compatibility_profile->backend.kind == compat::BackendKind::Proton);
+    const bool rust_pe_backend = rust_report_backend || rust_app_run_backend;
     bool rust_internal_failure = false;
     tl_pe_error_v1 rust_error{};
-    if (effective_cmd.mode == CommandMode::DirectRun && effective_cmd.report_only) {
+    if (rust_pe_backend) {
         const pe::RustPeParseResult rust_result = pe::parse_pe_rust(*bytes);
-        rust_report_backend = true;
         rust_internal_failure = rust_result.internal_failure;
         rust_error = rust_result.error;
         parse_result.status = rust_result.status;
@@ -822,6 +827,7 @@ ExitCode run_command(const CommandLine& command_line, std::ostream& stdout_strea
     }
 #else
     const bool rust_report_backend = false;
+    const bool rust_pe_backend = false;
     const bool rust_internal_failure = false;
     parse_result = pe::parse_pe(*bytes);
 #endif
@@ -889,7 +895,7 @@ ExitCode run_command(const CommandLine& command_line, std::ostream& stdout_strea
         }
         if (effective_cmd.trace_enabled) {
 #if defined(TRADUTORLINUX_RUST_PE_PARSER)
-            if (rust_report_backend) {
+            if (rust_pe_backend) {
                 const std::array fields{
                     diagnostics::TraceField{"status", rust_internal_failure
                                                        ? "internal"
@@ -935,7 +941,7 @@ ExitCode run_command(const CommandLine& command_line, std::ostream& stdout_strea
 
     if (effective_cmd.trace_enabled) {
         write_pe_trace(stderr_stream, parse_result.info,
-                       rust_report_backend ? std::string_view{"rust"} : std::string_view{});
+                       rust_pe_backend ? std::string_view{"rust"} : std::string_view{});
     } else {
         print_pe_summary(stderr_stream, parse_result.info);
     }
