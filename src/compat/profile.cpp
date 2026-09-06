@@ -407,6 +407,22 @@ private:
     return result;
 }
 
+[[nodiscard]] ProfileLoadResult invalid_result(
+    std::string error, const PathValidationMetrics& path_validation) {
+    ProfileLoadResult result = invalid_result(std::move(error));
+    result.path_validation = path_validation;
+    return result;
+}
+
+[[nodiscard]] ProfileLoadResult internal_result(
+    std::string error, const PathValidationMetrics& path_validation) {
+    ProfileLoadResult result;
+    result.status = ProfileStatus::InternalError;
+    result.error = std::move(error);
+    result.path_validation = path_validation;
+    return result;
+}
+
 }  // namespace
 
 std::filesystem::path profile_path(const std::filesystem::path& prefix_root) {
@@ -491,6 +507,13 @@ ProfileLoadResult load_profile(const std::filesystem::path& prefix_root,
     }
 
     const auto paths = prefix::get_environment_paths(prefix_root);
+#if defined(TRADUTORLINUX_RUST_PATH_VALIDATOR)
+    detail::RustPathValidationSession path_validation;
+    if (!path_validation.available()) {
+        return internal_result("não foi possível criar a sessão de validação Rust",
+                               path_validation.metrics());
+    }
+#endif
     std::vector<std::string> normalized_dll_modules;
     normalized_dll_modules.reserve(profile.dlls.size());
     for (DllMapping& mapping : profile.dlls) {
@@ -504,9 +527,15 @@ ProfileLoadResult load_profile(const std::filesystem::path& prefix_root,
         normalized_dll_modules.push_back(mapping.module);
 #if defined(TRADUTORLINUX_RUST_PATH_VALIDATOR)
         std::string rust_error;
-        if (!detail::validate_relative_path_with_rust(mapping.source.string(), rust_error)) {
-            return invalid_result("origem de DLL deve ser relativa e usar apenas '/' " +
-                                  std::string{"(validação Rust): "} + std::move(rust_error));
+        const auto validation = path_validation.validate_relative_path(
+            mapping.source.string(), rust_error);
+        if (validation != detail::RustPathValidationResult::Accepted) {
+            const std::string detail = "origem de DLL deve ser relativa e usar apenas '/' " +
+                                       std::string{"(validação Rust): "} + rust_error;
+            if (validation == detail::RustPathValidationResult::InternalError) {
+                return internal_result(detail, path_validation.metrics());
+            }
+            return invalid_result(detail, path_validation.metrics());
         }
 #endif
         if (!path_rules::is_relative_source(mapping.source)) {
@@ -526,13 +555,25 @@ ProfileLoadResult load_profile(const std::filesystem::path& prefix_root,
     for (const FileMapping& mapping : profile.files) {
 #if defined(TRADUTORLINUX_RUST_PATH_VALIDATOR)
         std::string rust_error;
-        if (!detail::validate_relative_path_with_rust(mapping.source.string(), rust_error)) {
-            return invalid_result("origem de arquivo deve ser relativa e usar apenas '/' " +
-                                  std::string{"(validação Rust): "} + std::move(rust_error));
+        const auto source_validation = path_validation.validate_relative_path(
+            mapping.source.string(), rust_error);
+        if (source_validation != detail::RustPathValidationResult::Accepted) {
+            const std::string detail = "origem de arquivo deve ser relativa e usar apenas '/' " +
+                                       std::string{"(validação Rust): "} + rust_error;
+            if (source_validation == detail::RustPathValidationResult::InternalError) {
+                return internal_result(detail, path_validation.metrics());
+            }
+            return invalid_result(detail, path_validation.metrics());
         }
-        if (!detail::validate_c_drive_path_with_rust(mapping.target, rust_error)) {
-            return invalid_result("destino de arquivo fora de drive_c (validação Rust): " +
-                                  std::move(rust_error));
+        const auto target_validation = path_validation.validate_c_drive_path(
+            mapping.target, rust_error);
+        if (target_validation != detail::RustPathValidationResult::Accepted) {
+            const std::string detail = "destino de arquivo fora de drive_c (validação Rust): " +
+                                       rust_error;
+            if (target_validation == detail::RustPathValidationResult::InternalError) {
+                return internal_result(detail, path_validation.metrics());
+            }
+            return invalid_result(detail, path_validation.metrics());
         }
 #endif
         if (!path_rules::is_relative_source(mapping.source)) {
@@ -563,6 +604,9 @@ ProfileLoadResult load_profile(const std::filesystem::path& prefix_root,
     ProfileLoadResult result;
     result.status = ProfileStatus::Loaded;
     result.profile = std::move(profile);
+#if defined(TRADUTORLINUX_RUST_PATH_VALIDATOR)
+    result.path_validation = path_validation.metrics();
+#endif
     return result;
 }
 

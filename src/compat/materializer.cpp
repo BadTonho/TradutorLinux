@@ -350,19 +350,40 @@ FileExposure FileExposure::materialize_into(
         std::vector<std::filesystem::path> required_directories;
         const std::filesystem::path canonical_drive =
             std::filesystem::weakly_canonical(target_paths.drive_c);
+#if defined(TRADUTORLINUX_RUST_PATH_VALIDATOR)
+        detail::RustPathValidationSession path_validation;
+        if (!path_validation.available()) {
+            result.status_ = FileExposureStatus::InternalError;
+            result.path_validation_ = path_validation.metrics();
+            result.error_ = "não foi possível criar a sessão de validação Rust";
+            return result;
+        }
+#endif
 
         for (const FileMapping& mapping : profile.files) {
 #if defined(TRADUTORLINUX_RUST_PATH_VALIDATOR)
-            if (!detail::validate_relative_path_with_rust(mapping.source.string(),
-                                                          result.error_)) {
+            const auto source_validation = path_validation.validate_relative_path(
+                mapping.source.string(), result.error_);
+            if (source_validation != detail::RustPathValidationResult::Accepted) {
+                result.path_validation_ = path_validation.metrics();
+                if (source_validation == detail::RustPathValidationResult::InternalError) {
+                    result.status_ = FileExposureStatus::InternalError;
+                }
                 result.error_ = "origem de arquivo rejeitada (validação Rust): " + result.error_;
                 return result;
             }
-            if (!detail::validate_c_drive_path_with_rust(mapping.target, result.error_)) {
+            const auto target_validation = path_validation.validate_c_drive_path(
+                mapping.target, result.error_);
+            if (target_validation != detail::RustPathValidationResult::Accepted) {
+                result.path_validation_ = path_validation.metrics();
+                if (target_validation == detail::RustPathValidationResult::InternalError) {
+                    result.status_ = FileExposureStatus::InternalError;
+                }
                 result.error_ = "destino de arquivo fora de drive_c (validação Rust): " +
                                  result.error_;
                 return result;
             }
+            result.path_validation_ = path_validation.metrics();
 #endif
             const std::filesystem::path source = source_paths.compat_files_dir / mapping.source;
             if (!regular_source(source, source_paths.compat_files_dir, result.error_)) return result;
@@ -431,12 +452,17 @@ FileExposure FileExposure::materialize_into(
         }
 
         result.status_ = FileExposureStatus::Applied;
+#if defined(TRADUTORLINUX_RUST_PATH_VALIDATOR)
+        result.path_validation_ = path_validation.metrics();
+#endif
         return result;
     } catch (const std::exception& exception) {
+        result.status_ = FileExposureStatus::InternalError;
         result.error_ = std::string{"falha interna ao materializar perfil: "} + exception.what();
         if (!result.cleanup()) result.status_ = FileExposureStatus::RollbackFailed;
         return result;
     } catch (...) {
+        result.status_ = FileExposureStatus::InternalError;
         result.error_ = "falha interna ao materializar perfil";
         if (!result.cleanup()) result.status_ = FileExposureStatus::RollbackFailed;
         return result;
@@ -449,6 +475,7 @@ FileExposure::FileExposure(FileExposure&& other) noexcept
       files_(std::move(other.files_)),
       staged_files_(std::move(other.staged_files_)),
       staged_directories_(std::move(other.staged_directories_)),
+      path_validation_(other.path_validation_),
       cleanup_summary_(other.cleanup_summary_),
       cleanup_done_(other.cleanup_done_) {
     other.cleanup_done_ = true;
@@ -462,6 +489,7 @@ FileExposure& FileExposure::operator=(FileExposure&& other) noexcept {
     files_ = std::move(other.files_);
     staged_files_ = std::move(other.staged_files_);
     staged_directories_ = std::move(other.staged_directories_);
+    path_validation_ = other.path_validation_;
     cleanup_summary_ = other.cleanup_summary_;
     cleanup_done_ = other.cleanup_done_;
     other.cleanup_done_ = true;

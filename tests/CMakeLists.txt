@@ -45,6 +45,7 @@ if(TL_BUILD_RUST)
     add_executable(tl_rust_path_validation
         test_rust_path_validation.cpp
         ../src/compat/path_rules.cpp
+        ../src/compat/rust_path_validator.cpp
     )
     target_include_directories(tl_rust_path_validation PRIVATE
         "${PROJECT_SOURCE_DIR}/include"

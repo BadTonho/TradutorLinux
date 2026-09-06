@@ -1,4 +1,5 @@
 #include "path_rules.hpp"
+#include "rust_path_validator.hpp"
 
 #include "tradutorlinux/ffi/rust_validator.h"
 
@@ -181,6 +182,26 @@ TEST_F(RustPathValidationTest, PathFunctionsKeepTheCommonFfiPointerContract) {
                   validator_, reinterpret_cast<const std::uint8_t*>("C:\\Fixture\\file.dat"),
                   19U, error.data(), error.size(), nullptr),
               TL_RUST_STATUS_INVALID_ARGUMENT);
+}
+
+TEST(RustPathValidationSessionTest, ReusesOneHandleAndCollectsPhaseMetrics) {
+    tradutorlinux::compat::detail::RustPathValidationSession session;
+    ASSERT_TRUE(session.available());
+
+    std::string error;
+    EXPECT_EQ(session.validate_relative_path("fixture.dat", error),
+              tradutorlinux::compat::detail::RustPathValidationResult::Accepted);
+    EXPECT_EQ(session.validate_c_drive_path("C:\\Fixture\\compat.dat", error),
+              tradutorlinux::compat::detail::RustPathValidationResult::Accepted);
+    EXPECT_EQ(session.validate_relative_path("nested/../outside.dat", error),
+              tradutorlinux::compat::detail::RustPathValidationResult::InvalidInput);
+
+    const auto& metrics = session.metrics();
+    EXPECT_EQ(metrics.backend, tradutorlinux::compat::PathValidationBackend::Rust);
+    EXPECT_EQ(metrics.handle_count, 1U);
+    EXPECT_EQ(metrics.checks, 3U);
+    EXPECT_EQ(metrics.rejected, 1U);
+    EXPECT_FALSE(metrics.infrastructure_error);
 }
 
 }  // namespace

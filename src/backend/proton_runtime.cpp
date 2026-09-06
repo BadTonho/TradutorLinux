@@ -56,6 +56,29 @@ void write_proton_trace(const ProtonRunRequest& request, std::ostream& stream,
                              std::span<const diagnostics::TraceField>{fields.begin(), fields.size()});
 }
 
+void write_path_validation_trace(const ProtonRunRequest& request, std::ostream& stream,
+                                 const compat::PathValidationMetrics& metrics,
+                                 const std::string_view status,
+                                 const std::string_view detail = {}) {
+    if (!request.trace_enabled || metrics.backend != compat::PathValidationBackend::Rust ||
+        (metrics.checks == 0U && !metrics.infrastructure_error)) {
+        return;
+    }
+    write_proton_trace(
+        request, stream,
+        status == "internal-error" ? diagnostics::TraceLevel::Error
+                                    : diagnostics::TraceLevel::Info,
+        "path-validation",
+        { {"phase", "files"},
+          {"backend", "rust"},
+          {"handle-count", std::to_string(metrics.handle_count)},
+          {"checks", std::to_string(metrics.checks)},
+          {"rejected", std::to_string(metrics.rejected)},
+          {"duration-us", std::to_string(metrics.duration_us)},
+          {"status", std::string{status}},
+          {"detail", std::string{detail}} });
+}
+
 [[nodiscard]] std::string errno_message(const std::string_view operation, const int error) {
     return std::string{operation} + ": " + std::strerror(error);
 }
@@ -641,6 +664,12 @@ ProtonRunResult run_proton_application(const ProtonConfig& config,
 
     compat::FileExposure exposure =
         compat::FileExposure::materialize_into(prefix_root, pfx_root, profile);
+    write_path_validation_trace(
+        request, diagnostic_stream, exposure.path_validation(),
+        exposure.internal_error() ? "internal-error"
+                                  : exposure.path_validation().rejected != 0U ? "invalid-input"
+                                                                               : "completed",
+        exposure.error());
     if (!exposure.applied()) {
         error = exposure.error().empty() ? "não foi possível materializar files[] no Proton"
                                          : std::string{exposure.error()};

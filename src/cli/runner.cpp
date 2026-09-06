@@ -162,6 +162,33 @@ using ExecutableSnapshot = std::map<std::filesystem::path, FileSignature>;
     return value;
 }
 
+void write_path_validation_trace(std::ostream& stream, const bool trace_enabled,
+                                 const diagnostics::TraceComponent component,
+                                 const std::string_view phase,
+                                 const compat::PathValidationMetrics& metrics,
+                                 const std::string_view status,
+                                 const std::string_view detail = {}) {
+    if (!trace_enabled || metrics.backend != compat::PathValidationBackend::Rust ||
+        (metrics.checks == 0U && !metrics.infrastructure_error)) {
+        return;
+    }
+    const std::array fields{
+        diagnostics::TraceField{"phase", std::string{phase}},
+        diagnostics::TraceField{"backend", "rust"},
+        diagnostics::TraceField{"handle-count", std::to_string(metrics.handle_count)},
+        diagnostics::TraceField{"checks", std::to_string(metrics.checks)},
+        diagnostics::TraceField{"rejected", std::to_string(metrics.rejected)},
+        diagnostics::TraceField{"duration-us", std::to_string(metrics.duration_us)},
+        diagnostics::TraceField{"status", std::string{status}},
+        diagnostics::TraceField{"detail", std::string{detail}},
+    };
+    diagnostics::write_trace(
+        stream, component,
+        status == "internal-error" ? diagnostics::TraceLevel::Error
+                                    : diagnostics::TraceLevel::Info,
+        "path-validation", fields);
+}
+
 [[nodiscard]] bool is_x64_pe_file(const std::filesystem::path& path) {
     TL_TRACE_FUNCTION();
     const std::optional<std::vector<std::byte>> bytes = read_file(path);
@@ -545,6 +572,7 @@ ExitCode run_command(const CommandLine& command_line, std::ostream& stdout_strea
                 case compat::ProfileStatus::Missing: return std::string{"missing"};
                 case compat::ProfileStatus::Loaded: return std::string{"loaded"};
                 case compat::ProfileStatus::Invalid: return std::string{"invalid"};
+                case compat::ProfileStatus::InternalError: return std::string{"internal-error"};
             }
             return std::string{"unknown"};
         }();
@@ -559,8 +587,24 @@ ExitCode run_command(const CommandLine& command_line, std::ostream& stdout_strea
             diagnostics::write_trace(stderr_stream, diagnostics::TraceComponent::Runtime,
                                      profile.status == compat::ProfileStatus::Invalid
                                          ? diagnostics::TraceLevel::Warning
-                                         : diagnostics::TraceLevel::Info,
+                                         : profile.status == compat::ProfileStatus::InternalError
+                                               ? diagnostics::TraceLevel::Error
+                                               : diagnostics::TraceLevel::Info,
                                      "compat-profile", fields);
+        }
+        write_path_validation_trace(
+            stderr_stream, effective_cmd.trace_enabled, diagnostics::TraceComponent::Runtime,
+            "profile", profile.path_validation,
+            profile.status == compat::ProfileStatus::InternalError ? "internal-error"
+                                                                     : profile.path_validation.rejected != 0U
+                                                                           ? "invalid-input"
+                                                                           : "completed",
+            profile.error);
+        if (profile.status == compat::ProfileStatus::InternalError) {
+            stderr_stream << "erro: falha interna ao validar o perfil de compatibilidade";
+            if (!profile.error.empty()) stderr_stream << ": " << profile.error;
+            stderr_stream << '\n';
+            return ExitCode::InternalError;
         }
         if (profile.status == compat::ProfileStatus::Loaded) {
             compatibility_profile = profile.profile;
@@ -1007,6 +1051,8 @@ ExitCode run_command(const CommandLine& command_line, std::ostream& stdout_strea
                 case compat::FileExposureStatus::Applied: return std::string{"applied"};
                 case compat::FileExposureStatus::RollbackFailed:
                     return std::string{"rollback-failed"};
+                case compat::FileExposureStatus::InternalError:
+                    return std::string{"internal-error"};
             }
             return std::string{"unknown"};
         };
@@ -1024,11 +1070,21 @@ ExitCode run_command(const CommandLine& command_line, std::ostream& stdout_strea
                 stderr_stream, diagnostics::TraceComponent::Runtime,
                 compatibility_files->rollback_failed()
                     ? diagnostics::TraceLevel::Error
-                    : compatibility_files->applied()
-                          ? diagnostics::TraceLevel::Info
-                          : diagnostics::TraceLevel::Warning,
+                    : compatibility_files->internal_error()
+                          ? diagnostics::TraceLevel::Error
+                          : compatibility_files->applied()
+                                ? diagnostics::TraceLevel::Info
+                                : diagnostics::TraceLevel::Warning,
                 "compat-files", fields);
         }
+        write_path_validation_trace(
+            stderr_stream, effective_cmd.trace_enabled, diagnostics::TraceComponent::Runtime,
+            "files", compatibility_files->path_validation(),
+            compatibility_files->internal_error()
+                ? "internal-error"
+                : compatibility_files->path_validation().rejected != 0U ? "invalid-input"
+                                                                          : "completed",
+            compatibility_files->error());
         if (compatibility_files->rollback_failed()) {
             const std::uint64_t unmap_base = process.image.base;
             loader::destroy_process(process);
@@ -1036,6 +1092,19 @@ ExitCode run_command(const CommandLine& command_line, std::ostream& stdout_strea
                 write_unmap_trace(stderr_stream, unmap_base);
             }
             stderr_stream << "erro: não foi possível desfazer a exposição dos arquivos de compatibilidade\n";
+            return ExitCode::InternalError;
+        }
+        if (compatibility_files->internal_error()) {
+            const std::uint64_t unmap_base = process.image.base;
+            loader::destroy_process(process);
+            if (effective_cmd.trace_enabled) {
+                write_unmap_trace(stderr_stream, unmap_base);
+            }
+            stderr_stream << "erro: falha interna ao validar os arquivos de compatibilidade";
+            if (!compatibility_files->error().empty()) {
+                stderr_stream << ": " << compatibility_files->error();
+            }
+            stderr_stream << '\n';
             return ExitCode::InternalError;
         }
         if (!compatibility_files->applied()) {

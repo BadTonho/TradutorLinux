@@ -15,6 +15,7 @@ enum class FileExposureStatus {
     Rejected,
     Applied,
     RollbackFailed,
+    InternalError,
 };
 
 struct ExposedFile {
@@ -54,8 +55,14 @@ public:
     [[nodiscard]] bool rollback_failed() const noexcept {
         return status_ == FileExposureStatus::RollbackFailed;
     }
+    [[nodiscard]] bool internal_error() const noexcept {
+        return status_ == FileExposureStatus::InternalError;
+    }
     [[nodiscard]] std::string_view error() const noexcept { return error_; }
     [[nodiscard]] const std::vector<ExposedFile>& files() const noexcept { return files_; }
+    [[nodiscard]] const PathValidationMetrics& path_validation() const noexcept {
+        return path_validation_;
+    }
     [[nodiscard]] const FileCleanupSummary& cleanup_summary() const noexcept {
         return cleanup_summary_;
     }
@@ -87,6 +94,7 @@ private:
     std::vector<ExposedFile> files_;
     std::vector<StagedFile> staged_files_;
     std::vector<StagedDirectory> staged_directories_;
+    PathValidationMetrics path_validation_;
     FileCleanupSummary cleanup_summary_{};
     bool cleanup_done_{false};
 };

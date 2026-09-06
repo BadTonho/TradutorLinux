@@ -1,5 +1,7 @@
 #pragma once
 
+#include "tradutorlinux/compat/path_validation.hpp"
+
 #include <cstdint>
 #include <filesystem>
 #include <string>
@@ -43,12 +45,14 @@ enum class ProfileStatus {
     Missing,
     Loaded,
     Invalid,
+    InternalError,
 };
 
 struct ProfileLoadResult {
     ProfileStatus status{ProfileStatus::Missing};
     Profile profile;
     std::string error;
+    PathValidationMetrics path_validation;
 };
 
 [[nodiscard]] std::filesystem::path profile_path(
