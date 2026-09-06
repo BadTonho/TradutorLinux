@@ -4,6 +4,9 @@ use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::slice;
 use std::str;
 
+#[cfg(test)]
+mod pe_contract;
+
 const STATUS_OK: u32 = 0;
 const STATUS_INVALID_ARGUMENT: u32 = 1;
 const STATUS_INVALID_UTF8: u32 = 2;

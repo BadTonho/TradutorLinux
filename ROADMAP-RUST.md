@@ -33,15 +33,15 @@ exports, relocations, TLS, delay imports e unwind sem precisar executar código.
 
 ### R21.1 — Contrato do parser Rust
 
-- [ ] Definir uma representação normalizada e versionada para o resultado do
+- [x] Definir uma representação normalizada e versionada para o resultado do
   parsing PE32+ AMD64.
-- [ ] Manter todos os buffers de entrada e saída sob propriedade do C++.
-- [ ] Não devolver ponteiros, `String`, `Vec` ou referências Rust pela ABI.
-- [ ] Definir códigos para arquivo truncado, malformado, arquitetura/formato
+- [x] Manter todos os buffers de entrada e saída sob propriedade do C++.
+- [x] Não devolver ponteiros, `String`, `Vec` ou referências Rust pela ABI.
+- [x] Definir códigos para arquivo truncado, malformado, arquitetura/formato
   incompatível e mecanismo não suportado.
-- [ ] Definir limites para seções, diretórios, strings, imports, exports,
+- [x] Definir limites para seções, diretórios, strings, imports, exports,
   relocations, runtime functions e callbacks TLS.
-- [ ] Provar que o contrato não depende de layout interno do Rust.
+- [x] Provar que o contrato não depende de layout interno do Rust.
 
 ### R21.2 — Implementação e robustez
 

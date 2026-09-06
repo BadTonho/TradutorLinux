@@ -1,5 +1,17 @@
 add_subdirectory(samples)
 
+add_executable(tl_rust_pe_contract_c rust_pe_contract_c.c)
+target_include_directories(tl_rust_pe_contract_c PRIVATE
+    "${PROJECT_SOURCE_DIR}/include"
+)
+tl_enable_warnings(tl_rust_pe_contract_c)
+tl_enable_sanitizers(tl_rust_pe_contract_c)
+add_test(NAME rust_pe_contract_c COMMAND tl_rust_pe_contract_c)
+set_tests_properties(rust_pe_contract_c PROPERTIES
+    LABELS "ffi;rust;contract"
+    TIMEOUT 30
+)
+
 if(TL_BUILD_RUST)
     add_executable(tl_rust_ffi_probe rust_ffi_probe.cpp)
     add_dependencies(tl_rust_ffi_probe tl_rust_validator_library)
@@ -123,6 +135,7 @@ add_executable(tradutorlinux_unit_tests
     test_pe_reader.cpp
     test_process.cpp
     test_runtime.cpp
+    test_rust_pe_contract.cpp
     test_trace.cpp
     test_unwind.cpp
     test_win32.cpp
