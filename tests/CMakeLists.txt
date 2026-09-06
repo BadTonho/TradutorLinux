@@ -213,6 +213,7 @@ if(TL_BUILD_RUST)
     )
     target_compile_definitions(tradutorlinux_unit_tests PRIVATE
         TRADUTORLINUX_RUST_PE_PARSER=1
+        TRADUTORLINUX_RUST_PROFILE_PARSER=1
     )
     target_link_libraries(tradutorlinux_unit_tests PRIVATE tl_rust_validator)
 endif()
@@ -364,6 +365,7 @@ if(TARGET tradutorlinux_samples AND TARGET tradutorlinux)
             "-DRUNTIME=$<TARGET_FILE:tradutorlinux>"
             "-DHELLO=${CMAKE_CURRENT_BINARY_DIR}/samples/generated/tl_hello.exe"
             "-DWORK=${CMAKE_CURRENT_BINARY_DIR}/compat_profile_work"
+            "-DRUST_ENABLED=$<BOOL:${TL_BUILD_RUST}>"
             -P "${CMAKE_CURRENT_SOURCE_DIR}/samples/verify_compat_profile.cmake"
     )
     set_tests_properties(integration_compat_profile PROPERTIES

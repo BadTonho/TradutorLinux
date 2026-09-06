@@ -52,6 +52,43 @@ protected:
     std::filesystem::path root_;
 };
 
+void expect_rust_profile_success(const ProfileLoadResult& result) {
+#if defined(TRADUTORLINUX_RUST_PROFILE_PARSER)
+    EXPECT_TRUE(result.parser.attempted);
+    EXPECT_EQ(result.parser.backend, ProfileParserBackend::Rust);
+    EXPECT_EQ(result.parser.status, ProfileParserStatus::Success);
+#else
+    EXPECT_FALSE(result.parser.attempted);
+#endif
+}
+
+void expect_rust_profile_malformed(const ProfileLoadResult& result) {
+#if defined(TRADUTORLINUX_RUST_PROFILE_PARSER)
+    EXPECT_TRUE(result.parser.attempted);
+    EXPECT_EQ(result.parser.backend, ProfileParserBackend::Rust);
+    EXPECT_EQ(result.parser.status, ProfileParserStatus::Malformed);
+    EXPECT_NE(result.parser.code, 0U);
+#else
+    EXPECT_FALSE(result.parser.attempted);
+#endif
+}
+
+void expect_rust_profile_unsupported(const ProfileLoadResult& result) {
+#if defined(TRADUTORLINUX_RUST_PROFILE_PARSER)
+    EXPECT_TRUE(result.parser.attempted);
+    EXPECT_EQ(result.parser.backend, ProfileParserBackend::Rust);
+    EXPECT_EQ(result.parser.status, ProfileParserStatus::UnsupportedFormat);
+#else
+    EXPECT_FALSE(result.parser.attempted);
+#endif
+}
+
+void expect_rust_profile_not_attempted(const ProfileLoadResult& result) {
+    EXPECT_FALSE(result.parser.attempted);
+    EXPECT_EQ(result.parser.backend, ProfileParserBackend::NotUsed);
+    EXPECT_EQ(result.parser.status, ProfileParserStatus::NotAttempted);
+}
+
 TEST_F(CompatProfileTest, PrefixCreatesPrivateCompatibilityTree) {
     const auto paths = prefix::get_environment_paths(root_);
 
@@ -77,6 +114,7 @@ TEST_F(CompatProfileTest, LoadsSchema2WithExplicitDllMapping) {
     ASSERT_EQ(result.profile.dlls.size(), 1U);
     EXPECT_EQ(result.profile.dlls[0].module, "kernel32.dll");
     EXPECT_EQ(result.profile.dlls[0].source, std::filesystem::path{"shim.bin"});
+    expect_rust_profile_success(result);
 }
 
 TEST_F(CompatProfileTest, LoadsSchema3WithExplicitProtonBackend) {
@@ -94,6 +132,7 @@ TEST_F(CompatProfileTest, LoadsSchema3WithExplicitProtonBackend) {
     EXPECT_EQ(result.profile.schema, 3U);
     EXPECT_EQ(result.profile.backend.kind, BackendKind::Proton);
     EXPECT_EQ(result.profile.backend.min_version, "11.0");
+    expect_rust_profile_success(result);
 }
 
 TEST_F(CompatProfileTest, Schema2CannotDeclareBackend) {
@@ -108,6 +147,7 @@ TEST_F(CompatProfileTest, Schema2CannotDeclareBackend) {
 
     EXPECT_EQ(result.status, ProfileStatus::Invalid);
     EXPECT_NE(result.error.find("schema 3"), std::string::npos);
+    expect_rust_profile_malformed(result);
 }
 
 TEST_F(CompatProfileTest, Schema3RejectsAutomaticBackend) {
@@ -118,7 +158,22 @@ TEST_F(CompatProfileTest, Schema3RejectsAutomaticBackend) {
   "backend": {"kind": "auto"}
 })json");
 
-    EXPECT_EQ(load_profile(root_, "fixture").status, ProfileStatus::Invalid);
+    const ProfileLoadResult result = load_profile(root_, "fixture");
+    EXPECT_EQ(result.status, ProfileStatus::Invalid);
+    expect_rust_profile_malformed(result);
+}
+
+TEST_F(CompatProfileTest, UnknownSchemaUsesGenericFallback) {
+    write_profile(R"json({
+  "schema": 99,
+  "app_id": "fixture",
+  "files": []
+})json");
+
+    const ProfileLoadResult result = load_profile(root_, "fixture");
+
+    EXPECT_EQ(result.status, ProfileStatus::Invalid);
+    expect_rust_profile_unsupported(result);
 }
 
 TEST_F(CompatProfileTest, NativeBackendRejectsMinimumVersion) {
@@ -133,6 +188,7 @@ TEST_F(CompatProfileTest, NativeBackendRejectsMinimumVersion) {
 
     EXPECT_EQ(result.status, ProfileStatus::Invalid);
     EXPECT_NE(result.error.find("backend proton"), std::string::npos);
+    expect_rust_profile_malformed(result);
 }
 
 TEST_F(CompatProfileTest, Schema1CannotDeclareDlls) {
@@ -147,6 +203,7 @@ TEST_F(CompatProfileTest, Schema1CannotDeclareDlls) {
 
     EXPECT_EQ(result.status, ProfileStatus::Invalid);
     EXPECT_NE(result.error.find("schema 2"), std::string::npos);
+    expect_rust_profile_malformed(result);
 }
 
 TEST_F(CompatProfileTest, DuplicateDllModulesAreRejectedCaseInsensitively) {
@@ -163,7 +220,8 @@ TEST_F(CompatProfileTest, DuplicateDllModulesAreRejectedCaseInsensitively) {
     const ProfileLoadResult result = load_profile(root_, "fixture");
 
     EXPECT_EQ(result.status, ProfileStatus::Invalid);
-    EXPECT_NE(result.error.find("DLL duplicado"), std::string::npos);
+    EXPECT_NE(result.error.find("duplicado"), std::string::npos);
+    expect_rust_profile_malformed(result);
 }
 
 TEST_F(CompatProfileTest, MissingDllSourceRemainsAProviderFailure) {
@@ -178,6 +236,7 @@ TEST_F(CompatProfileTest, MissingDllSourceRemainsAProviderFailure) {
 
     ASSERT_EQ(result.status, ProfileStatus::Loaded);
     ASSERT_EQ(result.profile.dlls.size(), 1U);
+    expect_rust_profile_success(result);
 }
 
 TEST_F(CompatProfileTest, MissingProfileFallsBackWithoutLoading) {
@@ -186,6 +245,7 @@ TEST_F(CompatProfileTest, MissingProfileFallsBackWithoutLoading) {
     EXPECT_EQ(result.status, ProfileStatus::Missing);
     EXPECT_TRUE(result.error.empty());
     EXPECT_TRUE(result.profile.files.empty());
+    expect_rust_profile_not_attempted(result);
 }
 
 TEST_F(CompatProfileTest, LoadsStrictProfileWithOptionalIdentity) {
@@ -215,6 +275,7 @@ TEST_F(CompatProfileTest, LoadsStrictProfileWithOptionalIdentity) {
     ASSERT_EQ(result.profile.files.size(), 1U);
     EXPECT_EQ(result.profile.files[0].source, std::filesystem::path{"fixture.dat"});
     EXPECT_EQ(result.profile.files[0].target, "C:\\Program Files\\Fixture\\compat.dat");
+    expect_rust_profile_success(result);
 }
 
 TEST_F(CompatProfileTest, UnknownFieldInvalidatesWholeProfile) {
@@ -230,6 +291,7 @@ TEST_F(CompatProfileTest, UnknownFieldInvalidatesWholeProfile) {
 
     EXPECT_EQ(result.status, ProfileStatus::Invalid);
     EXPECT_NE(result.error.find("desconhecido"), std::string::npos);
+    expect_rust_profile_malformed(result);
 }
 
 TEST_F(CompatProfileTest, MissingSourceInvalidatesWholeProfile) {
@@ -243,6 +305,7 @@ TEST_F(CompatProfileTest, MissingSourceInvalidatesWholeProfile) {
 
     EXPECT_EQ(result.status, ProfileStatus::Invalid);
     EXPECT_NE(result.error.find("ausente"), std::string::npos);
+    expect_rust_profile_success(result);
 }
 
 TEST_F(CompatProfileTest, SourceTraversalInvalidatesWholeProfile) {
@@ -262,6 +325,7 @@ TEST_F(CompatProfileTest, SourceTraversalInvalidatesWholeProfile) {
 
     EXPECT_EQ(result.status, ProfileStatus::Invalid);
     EXPECT_NE(result.error.find("relativa"), std::string::npos);
+    expect_rust_profile_malformed(result);
     std::filesystem::remove(outside);
 }
 
@@ -277,6 +341,7 @@ TEST_F(CompatProfileTest, TargetOutsideDriveCInvalidatesWholeProfile) {
 
     EXPECT_EQ(result.status, ProfileStatus::Invalid);
     EXPECT_NE(result.error.find("drive_c"), std::string::npos);
+    expect_rust_profile_malformed(result);
 }
 
 TEST_F(CompatProfileTest, DuplicateMappingsInvalidatesWholeProfile) {
@@ -295,6 +360,7 @@ TEST_F(CompatProfileTest, DuplicateMappingsInvalidatesWholeProfile) {
 
     EXPECT_EQ(result.status, ProfileStatus::Invalid);
     EXPECT_NE(result.error.find("duplicado"), std::string::npos);
+    expect_rust_profile_malformed(result);
 }
 
 TEST_F(CompatProfileTest, IdentityMismatchFallsBackToGenericProfile) {
@@ -307,11 +373,17 @@ TEST_F(CompatProfileTest, IdentityMismatchFallsBackToGenericProfile) {
   "files": [{"source": "fixture.dat", "target": "C:\\Fixture\\file.dat"}]
 })json");
 
-    EXPECT_EQ(load_profile(root_, "other").status, ProfileStatus::Invalid);
-    EXPECT_EQ(load_profile(root_, "fixture", std::string(64, 'b'), "1.2.3").status,
-              ProfileStatus::Invalid);
-    EXPECT_EQ(load_profile(root_, "fixture", std::string(64, 'a'), "9.9.9").status,
-              ProfileStatus::Invalid);
+    const ProfileLoadResult wrong_id = load_profile(root_, "other");
+    const ProfileLoadResult wrong_hash = load_profile(
+        root_, "fixture", std::string(64, 'b'), "1.2.3");
+    const ProfileLoadResult wrong_version = load_profile(
+        root_, "fixture", std::string(64, 'a'), "9.9.9");
+    EXPECT_EQ(wrong_id.status, ProfileStatus::Invalid);
+    EXPECT_EQ(wrong_hash.status, ProfileStatus::Invalid);
+    EXPECT_EQ(wrong_version.status, ProfileStatus::Invalid);
+    expect_rust_profile_malformed(wrong_id);
+    expect_rust_profile_malformed(wrong_hash);
+    expect_rust_profile_malformed(wrong_version);
 }
 
 TEST(Sha256Test, ProducesKnownDigest) {

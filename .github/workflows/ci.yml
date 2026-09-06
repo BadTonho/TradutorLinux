@@ -97,6 +97,9 @@ jobs:
       - name: Executar matriz de pacotes MSIX/AppX
         run: ctest --preset ${{ matrix.preset }} -R '^integration_msix_(install|rejections)$' --parallel 2 --output-on-failure
 
+      - name: Executar matriz de perfis de compatibilidade
+        run: ctest --preset ${{ matrix.preset }} -R '^(integration_compat_profile|integration_rust_operational)$' --parallel 2 --output-on-failure
+
       - name: Executar matriz completa Rust
         run: ctest --preset ${{ matrix.preset }} --parallel 2 --output-on-failure
 
@@ -121,6 +124,9 @@ jobs:
 
       - name: Executar matriz de pacotes MSIX/AppX sem Rust
         run: ctest --preset release -R '^integration_msix_(install|rejections)$' --parallel 2 --output-on-failure
+
+      - name: Executar matriz de perfis de compatibilidade sem Rust
+        run: ctest --preset release -R '^(integration_compat_profile|integration_rust_operational)$' --parallel 2 --output-on-failure
 
       - name: Executar matriz Release sem Rust
         run: ctest --preset release --parallel 2 --output-on-failure
