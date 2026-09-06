@@ -309,11 +309,26 @@ if(TARGET tradutorlinux_samples AND TARGET tradutorlinux)
             "-DRUNTIME=$<TARGET_FILE:tradutorlinux>"
             "-DHELLO=${CMAKE_CURRENT_BINARY_DIR}/samples/generated/tl_hello.exe"
             "-DWORK=${CMAKE_CURRENT_BINARY_DIR}/msix_install_work"
+            "-DRUST_ENABLED=$<BOOL:${TL_BUILD_RUST}>"
             -P "${CMAKE_CURRENT_SOURCE_DIR}/samples/verify_msix_install.cmake"
     )
     set_tests_properties(integration_msix_install PROPERTIES
         DEPENDS fixture_tl_hello_metadata
         LABELS "runtime;pe32plus;package;install"
+        TIMEOUT 60
+    )
+    add_test(
+        NAME integration_msix_rejections
+        COMMAND "${CMAKE_COMMAND}"
+            "-DRUNTIME=$<TARGET_FILE:tradutorlinux>"
+            "-DHELLO=${CMAKE_CURRENT_BINARY_DIR}/samples/generated/tl_hello.exe"
+            "-DWORK=${CMAKE_CURRENT_BINARY_DIR}/msix_rejection_work"
+            "-DRUST_ENABLED=$<BOOL:${TL_BUILD_RUST}>"
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/samples/verify_msix_rejections.cmake"
+    )
+    set_tests_properties(integration_msix_rejections PROPERTIES
+        DEPENDS fixture_tl_hello_metadata
+        LABELS "runtime;pe32plus;package;robustness"
         TIMEOUT 60
     )
     add_test(
