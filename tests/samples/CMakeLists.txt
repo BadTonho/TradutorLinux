@@ -393,6 +393,41 @@ function(tl_add_pe_fixture target_name source_file manifest_file)
             WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"
             LABELS "runtime;pe32plus"
         )
+
+        # The catalog path is the production AppRun path.  Keep the direct
+        # runtime test above as the C++/loader oracle, and run the same native
+        # fixture through an isolated catalog so the selected PE backend is
+        # exercised before the unchanged loader pipeline.
+        set(app_runtime_extra_args)
+        set(app_expected_hex_present FALSE)
+        foreach(runtime_arg IN LISTS runtime_extra_args)
+            if(runtime_arg MATCHES "^-D(INPUT_TEXT|CLEANUP_FILE|SKIP_EXIT|EXPECTED_EXIT|REQUIRED_TRACE)=")
+                list(APPEND app_runtime_extra_args "${runtime_arg}")
+            elseif(runtime_arg MATCHES "^-DEXPECTED_HEX=")
+                list(APPEND app_runtime_extra_args "${runtime_arg}")
+                set(app_expected_hex_present TRUE)
+            endif()
+        endforeach()
+        if(NOT app_expected_hex_present)
+            list(APPEND app_runtime_extra_args "-DEXPECTED_HEX=")
+        endif()
+        add_test(
+            NAME app_run_${target_name}
+            COMMAND "${CMAKE_COMMAND}"
+                "-DINPUT=${output_file}"
+                "-DRUNTIME=$<TARGET_FILE:tradutorlinux>"
+                "-DAPP_ID=r21-4-${target_name}"
+                "-DWORK=${CMAKE_CURRENT_BINARY_DIR}/app-run-${target_name}"
+                "-DRUST_ENABLED=$<BOOL:${TL_BUILD_RUST}>"
+                ${runtime_manifest_args}
+                ${app_runtime_extra_args}
+                -P "${CMAKE_CURRENT_SOURCE_DIR}/verify_app_run.cmake"
+        )
+        set_tests_properties(app_run_${target_name} PROPERTIES
+            DEPENDS fixture_${target_name}_metadata
+            WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"
+            LABELS "runtime;app-run;pe32plus"
+        )
     endif()
 
     if(ARG_RUNTIME_FAILURE AND TARGET tradutorlinux)
@@ -409,6 +444,23 @@ function(tl_add_pe_fixture target_name source_file manifest_file)
             DEPENDS fixture_${target_name}_metadata
             WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"
             LABELS "runtime;pe32plus"
+        )
+        add_test(
+            NAME app_run_${target_name}_rejected
+            COMMAND "${CMAKE_COMMAND}"
+                "-DINPUT=${output_file}"
+                "-DRUNTIME=$<TARGET_FILE:tradutorlinux>"
+                "-DAPP_ID=r21-4-${target_name}"
+                "-DWORK=${CMAKE_CURRENT_BINARY_DIR}/app-run-${target_name}-rejected"
+                "-DEXPECTED_EXIT=5"
+                "-DREQUIRED_TRACE=unknown-symbol"
+                "-DRUST_ENABLED=$<BOOL:${TL_BUILD_RUST}>"
+                -P "${CMAKE_CURRENT_SOURCE_DIR}/verify_app_run_rejection.cmake"
+        )
+        set_tests_properties(app_run_${target_name}_rejected PROPERTIES
+            DEPENDS fixture_${target_name}_metadata
+            WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"
+            LABELS "runtime;app-run;pe32plus"
         )
     endif()
 
@@ -490,6 +542,43 @@ add_test(
         -P "${CMAKE_CURRENT_SOURCE_DIR}/verify_delay_import_fixture.cmake"
 )
 set_tests_properties(fixture_tl_delay_import_metadata PROPERTIES LABELS "fixture;pe32plus")
+
+if(TARGET tradutorlinux)
+    add_test(
+        NAME app_run_tl_delay_import
+        COMMAND "${CMAKE_COMMAND}"
+            "-DINPUT=${TL_DELAY_IMPORT_FIXTURE}"
+            "-DRUNTIME=$<TARGET_FILE:tradutorlinux>"
+            "-DAPP_ID=r21-4-tl-delay-import"
+            "-DWORK=${CMAKE_CURRENT_BINARY_DIR}/app-run-tl-delay-import"
+            "-DEXPECTED_HEX="
+            "-DRUST_ENABLED=$<BOOL:${TL_BUILD_RUST}>"
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/verify_app_run.cmake"
+    )
+    set_tests_properties(app_run_tl_delay_import PROPERTIES
+        DEPENDS fixture_tl_delay_import_metadata
+        WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"
+        LABELS "runtime;app-run;pe32plus;imports;delay-import"
+    )
+
+    add_test(
+        NAME app_run_tl_delay_import_missing
+        COMMAND "${CMAKE_COMMAND}"
+            "-DINPUT=${TL_DELAY_IMPORT_MISSING_FIXTURE}"
+            "-DRUNTIME=$<TARGET_FILE:tradutorlinux>"
+            "-DAPP_ID=r21-4-tl-delay-import-missing"
+            "-DWORK=${CMAKE_CURRENT_BINARY_DIR}/app-run-tl-delay-import-missing"
+            "-DEXPECTED_EXIT=5"
+            "-DREQUIRED_TRACE=unknown-symbol"
+            "-DRUST_ENABLED=$<BOOL:${TL_BUILD_RUST}>"
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/verify_app_run_rejection.cmake"
+    )
+    set_tests_properties(app_run_tl_delay_import_missing PROPERTIES
+        DEPENDS fixture_tl_delay_import_metadata
+        WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"
+        LABELS "runtime;app-run;pe32plus;imports;delay-import"
+    )
+endif()
 
 tl_add_pe_fixture(tl_nop src/tl_nop.c manifests/tl_nop.json RELOCATABLE)
 tl_add_pe_fixture(tl_hello src/tl_hello.c manifests/tl_hello.json
@@ -797,6 +886,42 @@ if(TARGET tradutorlinux)
         WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"
         LABELS "runtime;pe32plus"
     )
+
+    add_test(
+        NAME app_run_tl_unwind_v2
+        COMMAND "${CMAKE_COMMAND}"
+            "-DINPUT=${TL_UNWIND_V2_FIXTURE}"
+            "-DRUNTIME=$<TARGET_FILE:tradutorlinux>"
+            "-DAPP_ID=r21-4-tl-unwind-v2"
+            "-DWORK=${CMAKE_CURRENT_BINARY_DIR}/app-run-tl-unwind-v2"
+            "-DEXPECTED_HEX=756e77696e642d76320a"
+            "-DMANIFEST=${CMAKE_CURRENT_SOURCE_DIR}/manifests/tl_unwind_v2.json"
+            "-DRUST_ENABLED=$<BOOL:${TL_BUILD_RUST}>"
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/verify_app_run.cmake"
+    )
+    set_tests_properties(app_run_tl_unwind_v2 PROPERTIES
+        DEPENDS fixture_tl_unwind_v2_metadata
+        WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"
+        LABELS "runtime;app-run;pe32plus;unwind"
+    )
+
+    add_test(
+        NAME app_run_tl_seh_v2
+        COMMAND "${CMAKE_COMMAND}"
+            "-DINPUT=${TL_SEH_V2_FIXTURE}"
+            "-DRUNTIME=$<TARGET_FILE:tradutorlinux>"
+            "-DAPP_ID=r21-4-tl-seh-v2"
+            "-DWORK=${CMAKE_CURRENT_BINARY_DIR}/app-run-tl-seh-v2"
+            "-DEXPECTED_HEX=7365680a"
+            "-DMANIFEST=${CMAKE_CURRENT_SOURCE_DIR}/manifests/tl_seh.json"
+            "-DRUST_ENABLED=$<BOOL:${TL_BUILD_RUST}>"
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/verify_app_run.cmake"
+    )
+    set_tests_properties(app_run_tl_seh_v2 PROPERTIES
+        DEPENDS fixture_tl_seh_v2_metadata
+        WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"
+        LABELS "runtime;app-run;pe32plus;unwind;seh"
+    )
 endif()
 
 tl_add_pe_fixture(tl_hang src/tl_hang.c manifests/tl_hang.json RELOCATABLE NO_RUNTIME_CHECK)
@@ -1078,6 +1203,23 @@ if(TARGET tradutorlinux)
         LABELS "runtime;pe32plus"
     )
 
+    add_test(
+        NAME app_run_tl_crash_guest_signal
+        COMMAND "${CMAKE_COMMAND}"
+            "-DINPUT=${TL_FIXTURE_OUTPUT_DIRECTORY}/tl_crash.exe"
+            "-DRUNTIME=$<TARGET_FILE:tradutorlinux>"
+            "-DAPP_ID=r21-4-tl-crash-guest-signal"
+            "-DWORK=${CMAKE_CURRENT_BINARY_DIR}/app-run-tl-crash-guest-signal"
+            "-DEXPECTED_EXIT=71"
+            "-DREQUIRED_TRACE=terminated category=\"guest-signal\""
+            "-DRUST_ENABLED=$<BOOL:${TL_BUILD_RUST}>"
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/verify_app_run_rejection.cmake"
+    )
+    set_tests_properties(app_run_tl_crash_guest_signal PROPERTIES
+        DEPENDS fixture_tl_crash_metadata
+        LABELS "runtime;app-run;pe32plus"
+    )
+
     # O crash log enriquecido reporta o si_addr capturado no filho; a fixture
     # desreferencia o endereço 0, então o campo aparece com valor 0x0 e os
     # campos de contexto PE (rva/seção/importação) ficam ausentes.
@@ -1096,6 +1238,23 @@ if(TARGET tradutorlinux)
     )
 
     add_test(
+        NAME app_run_tl_crash_fault_address
+        COMMAND "${CMAKE_COMMAND}"
+            "-DINPUT=${TL_FIXTURE_OUTPUT_DIRECTORY}/tl_crash.exe"
+            "-DRUNTIME=$<TARGET_FILE:tradutorlinux>"
+            "-DAPP_ID=r21-4-tl-crash-fault-address"
+            "-DWORK=${CMAKE_CURRENT_BINARY_DIR}/app-run-tl-crash-fault-address"
+            "-DEXPECTED_EXIT=71"
+            "-DREQUIRED_TRACE=fault-address=\"0x0\""
+            "-DRUST_ENABLED=$<BOOL:${TL_BUILD_RUST}>"
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/verify_app_run_rejection.cmake"
+    )
+    set_tests_properties(app_run_tl_crash_fault_address PROPERTIES
+        DEPENDS fixture_tl_crash_metadata
+        LABELS "runtime;app-run;pe32plus"
+    )
+
+    add_test(
         NAME runtime_tl_hang_timeout
         COMMAND "${CMAKE_COMMAND}"
             "-DINPUT=${TL_FIXTURE_OUTPUT_DIRECTORY}/tl_hang.exe"
@@ -1108,6 +1267,24 @@ if(TARGET tradutorlinux)
     set_tests_properties(runtime_tl_hang_timeout PROPERTIES
         DEPENDS fixture_tl_hang_metadata
         LABELS "runtime;pe32plus"
+    )
+
+    add_test(
+        NAME app_run_tl_hang_timeout
+        COMMAND "${CMAKE_COMMAND}"
+            "-DINPUT=${TL_FIXTURE_OUTPUT_DIRECTORY}/tl_hang.exe"
+            "-DRUNTIME=$<TARGET_FILE:tradutorlinux>"
+            "-DAPP_ID=r21-4-tl-hang-timeout"
+            "-DWORK=${CMAKE_CURRENT_BINARY_DIR}/app-run-tl-hang-timeout"
+            "-DEXPECTED_EXIT=72"
+            "-DREQUIRED_TRACE=terminated category=\"guest-timeout\""
+            "-DEXTRA_ARGS=--timeout;1"
+            "-DRUST_ENABLED=$<BOOL:${TL_BUILD_RUST}>"
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/verify_app_run_rejection.cmake"
+    )
+    set_tests_properties(app_run_tl_hang_timeout PROPERTIES
+        DEPENDS fixture_tl_hang_metadata
+        LABELS "runtime;app-run;pe32plus"
     )
 
     add_test(
@@ -1126,6 +1303,24 @@ if(TARGET tradutorlinux)
     )
 
     add_test(
+        NAME app_run_tl_hang_cpu_limit
+        COMMAND "${CMAKE_COMMAND}"
+            "-DINPUT=${TL_FIXTURE_OUTPUT_DIRECTORY}/tl_hang.exe"
+            "-DRUNTIME=$<TARGET_FILE:tradutorlinux>"
+            "-DAPP_ID=r21-4-tl-hang-cpu-limit"
+            "-DWORK=${CMAKE_CURRENT_BINARY_DIR}/app-run-tl-hang-cpu-limit"
+            "-DEXPECTED_EXIT=73"
+            "-DREQUIRED_TRACE=terminated category=\"guest-resource-limit\" resource=\"cpu\""
+            "-DEXTRA_ARGS=--cpu;1"
+            "-DRUST_ENABLED=$<BOOL:${TL_BUILD_RUST}>"
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/verify_app_run_rejection.cmake"
+    )
+    set_tests_properties(app_run_tl_hang_cpu_limit PROPERTIES
+        DEPENDS fixture_tl_hang_metadata
+        LABELS "runtime;app-run;pe32plus;resource-limit"
+    )
+
+    add_test(
         NAME runtime_tl_memory_limit
         COMMAND "${CMAKE_COMMAND}"
             "-DINPUT=${TL_FIXTURE_OUTPUT_DIRECTORY}/tl_memory_limit.exe"
@@ -1136,6 +1331,25 @@ if(TARGET tradutorlinux)
         DEPENDS fixture_tl_memory_limit_metadata
         WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"
         LABELS "runtime;pe32plus;resource-limit"
+    )
+
+    add_test(
+        NAME app_run_tl_memory_limit
+        COMMAND "${CMAKE_COMMAND}"
+            "-DINPUT=${TL_FIXTURE_OUTPUT_DIRECTORY}/tl_memory_limit.exe"
+            "-DRUNTIME=$<TARGET_FILE:tradutorlinux>"
+            "-DAPP_ID=r21-4-tl-memory-limit"
+            "-DWORK=${CMAKE_CURRENT_BINARY_DIR}/app-run-tl-memory-limit"
+            "-DEXPECTED_HEX=6d656d6f72792d6c696d69740a"
+            "-DEXTRA_ARGS=--memory;128"
+            "-DREQUIRED_TRACE_CONTAINS=resource-limits inheritance=\"fork\" memory-mib=\"128\""
+            "-DRUST_ENABLED=$<BOOL:${TL_BUILD_RUST}>"
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/verify_app_run.cmake"
+    )
+    set_tests_properties(app_run_tl_memory_limit PROPERTIES
+        DEPENDS fixture_tl_memory_limit_metadata
+        WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"
+        LABELS "runtime;app-run;pe32plus;resource-limit"
     )
 
     add_test(
@@ -1151,6 +1365,24 @@ if(TARGET tradutorlinux)
         DEPENDS "fixture_tl_process_limit_parent_metadata;fixture_tl_process_hang_metadata"
         WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"
         LABELS "runtime;pe32plus;resource-limit;process"
+    )
+
+    add_test(
+        NAME app_run_tl_process_cpu_limit_inherited
+        COMMAND "${CMAKE_COMMAND}"
+            "-DINPUT=${TL_FIXTURE_OUTPUT_DIRECTORY}/tl_process_limit_parent.exe"
+            "-DRUNTIME=$<TARGET_FILE:tradutorlinux>"
+            "-DAPP_ID=r21-4-tl-process-cpu-limit-inherited"
+            "-DWORK=${CMAKE_CURRENT_BINARY_DIR}/app-run-tl-process-cpu-limit-inherited"
+            "-DEXTRA_ARGS=--cpu;1;--timeout;4"
+            "-DEXPECTED_HEX=70726f636573732d6c696d69742d696e686572697465640a"
+            "-DRUST_ENABLED=$<BOOL:${TL_BUILD_RUST}>"
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/verify_app_run.cmake"
+    )
+    set_tests_properties(app_run_tl_process_cpu_limit_inherited PROPERTIES
+        DEPENDS "fixture_tl_process_limit_parent_metadata;fixture_tl_process_hang_metadata"
+        WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"
+        LABELS "runtime;app-run;pe32plus;resource-limit;process"
     )
 
     add_test(

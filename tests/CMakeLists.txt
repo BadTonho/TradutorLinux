@@ -327,6 +327,23 @@ if(TARGET tradutorlinux_samples AND TARGET tradutorlinux)
         TIMEOUT 180
     )
     add_test(
+        NAME integration_rust_app_run_malformed
+        COMMAND "${CMAKE_COMMAND}"
+            "-DINPUT=${CMAKE_SOURCE_DIR}/src/cli/report.cpp"
+            "-DRUNTIME=$<TARGET_FILE:tradutorlinux>"
+            "-DAPP_ID=r21-4-malformed"
+            "-DWORK=${CMAKE_CURRENT_BINARY_DIR}/rust-app-run-malformed"
+            "-DEXPECTED_EXIT=4"
+            "-DREQUIRED_TRACE=parse-failed"
+            "-DEXPECT_NO_LOADER=1"
+            "-DRUST_ENABLED=$<BOOL:${TL_BUILD_RUST}>"
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/samples/verify_app_run_rejection.cmake"
+    )
+    set_tests_properties(integration_rust_app_run_malformed PROPERTIES
+        LABELS "runtime;app-run;pe32plus;rust;robustness"
+        TIMEOUT 60
+    )
+    add_test(
         NAME integration_compat_dll_profile
         COMMAND "${CMAKE_COMMAND}"
             "-DRUNTIME=$<TARGET_FILE:tradutorlinux>"

@@ -27,6 +27,29 @@ function(tl_assert_no_path_validation trace description)
     endif()
 endfunction()
 
+function(tl_assert_pe_backend trace expected_backend description)
+    string(REGEX MATCH "\\[tl\\]\\[pe\\]\\[info\\] image[^\n]*" pe_image_line
+        "${trace}")
+    if(NOT pe_image_line)
+        message(FATAL_ERROR "${description}: PE image trace was not emitted:\n${trace}")
+    endif()
+    if(expected_backend STREQUAL "rust")
+        if(NOT pe_image_line MATCHES "backend=\\\"rust\\\"")
+            message(FATAL_ERROR "${description}: Rust PE backend was not selected:\n${trace}")
+        endif()
+    elseif(pe_image_line MATCHES "backend=\\\"rust\\\"")
+        message(FATAL_ERROR "${description}: Rust PE backend leaked into a C++ path:\n${trace}")
+    endif()
+endfunction()
+
+function(tl_assert_native_pe_backend trace description)
+    if(RUST_ENABLED)
+        tl_assert_pe_backend("${trace}" "rust" "${description}")
+    else()
+        tl_assert_pe_backend("${trace}" "cpp" "${description}")
+    endif()
+endfunction()
+
 function(tl_add_app fixture id prefix)
     execute_process(
         COMMAND "${CMAKE_COMMAND}" -E env
@@ -76,7 +99,7 @@ function(tl_run_native output_var error_var result_var)
         COMMAND "${CMAKE_COMMAND}" -E env
             "HOME=${WORK}/home"
             "XDG_CONFIG_HOME=${WORK}/config"
-            "${RUNTIME}" app run rust-compat-file --trace=runtime,process
+            "${RUNTIME}" app run rust-compat-file --trace=pe,runtime,process
         RESULT_VARIABLE run_result
         OUTPUT_VARIABLE run_stdout
         ERROR_VARIABLE run_stderr
@@ -96,6 +119,7 @@ foreach(needle
         "compat-files-cleanup status=\"cleaned\"")
     tl_assert_contains("${native_trace_a}" "${needle}" "native run A trace")
 endforeach()
+tl_assert_native_pe_backend("${native_trace_a}" "native run A")
 tl_assert_path_validation("${native_trace_a}" "profile" "2" "0" "completed" "runtime")
 tl_assert_path_validation("${native_trace_a}" "files" "2" "0" "completed" "runtime")
 if(NOT EXISTS "${native_source}" OR EXISTS "${native_target}" OR EXISTS "${native_parent}")
@@ -110,6 +134,7 @@ if(NOT native_result_b EQUAL 0 OR NOT native_stdout_b STREQUAL "operational nati
     message(FATAL_ERROR "native operational run B failed (${native_result_b})\nstdout:\n${native_stdout_b}\nstderr:\n${native_trace_b}")
 endif()
 tl_assert_contains("${native_trace_b}" "compat-files-cleanup status=\"cleaned\"" "native run B cleanup")
+tl_assert_native_pe_backend("${native_trace_b}" "native run B")
 tl_assert_path_validation("${native_trace_b}" "profile" "2" "0" "completed" "runtime")
 tl_assert_path_validation("${native_trace_b}" "files" "2" "0" "completed" "runtime")
 if(NOT EXISTS "${native_source}" OR EXISTS "${native_target}" OR EXISTS "${native_parent}")
@@ -135,7 +160,7 @@ execute_process(
     COMMAND "${CMAKE_COMMAND}" -E env
         "HOME=${WORK}/home"
         "XDG_CONFIG_HOME=${WORK}/config"
-        "${RUNTIME}" app run rust-invalid-profile --trace=runtime,process
+        "${RUNTIME}" app run rust-invalid-profile --trace=pe,runtime,process
     RESULT_VARIABLE invalid_result
     OUTPUT_VARIABLE invalid_stdout
     ERROR_VARIABLE invalid_trace
@@ -144,6 +169,7 @@ if(NOT invalid_result EQUAL 0 OR NOT invalid_stdout MATCHES "Ola do Windows no L
     message(FATAL_ERROR "invalid profile did not use generic fallback (${invalid_result})\nstdout:\n${invalid_stdout}\nstderr:\n${invalid_trace}")
 endif()
 tl_assert_contains("${invalid_trace}" "compat-profile status=\"invalid\"" "invalid profile status")
+tl_assert_native_pe_backend("${invalid_trace}" "invalid profile")
 tl_assert_contains("${invalid_trace}" "aviso: perfil de compatibilidade invalid" "invalid profile warning")
 if(RUST_ENABLED)
     tl_assert_contains("${invalid_trace}" "path-validation phase=\"profile\"" "invalid profile Rust trace")
@@ -174,7 +200,7 @@ execute_process(
     COMMAND "${CMAKE_COMMAND}" -E env
         "HOME=${WORK}/home"
         "XDG_CONFIG_HOME=${WORK}/config"
-        "${RUNTIME}" app run rust-hang --timeout 1 --trace=runtime,process
+        "${RUNTIME}" app run rust-hang --timeout 1 --trace=pe,runtime,process
     RESULT_VARIABLE hang_result
     OUTPUT_VARIABLE hang_stdout
     ERROR_VARIABLE hang_trace
@@ -183,6 +209,7 @@ if(NOT hang_result EQUAL 72 OR NOT hang_stdout STREQUAL "")
     message(FATAL_ERROR "hang fixture did not return timeout 72 (${hang_result})\nstdout:\n${hang_stdout}\nstderr:\n${hang_trace}")
 endif()
 tl_assert_contains("${hang_trace}" "compat-files-cleanup status=\"cleaned\"" "timeout cleanup")
+tl_assert_native_pe_backend("${hang_trace}" "hang fixture")
 tl_assert_contains("${hang_trace}" "category=\"guest-timeout\"" "timeout diagnosis")
 tl_assert_path_validation("${hang_trace}" "profile" "2" "0" "completed" "runtime")
 tl_assert_path_validation("${hang_trace}" "files" "2" "0" "completed" "runtime")
@@ -237,7 +264,7 @@ execute_process(
         "XDG_CONFIG_HOME=${WORK}/config"
         "TL_PROTON_ROOT=${proton_root}"
         "TL_PROTON_MOCK_OUTPUT=${proton_mock_output}"
-        "${RUNTIME}" app run rust-proton --trace=runtime,proton,process
+        "${RUNTIME}" app run rust-proton --trace=pe,runtime,proton,process
     RESULT_VARIABLE proton_result
     OUTPUT_VARIABLE proton_stdout
     ERROR_VARIABLE proton_trace
@@ -246,6 +273,7 @@ if(NOT proton_result EQUAL 23 OR NOT proton_stdout STREQUAL "OPERATIONAL_PROTON_
     message(FATAL_ERROR "operational Proton mock failed (${proton_result})\nstdout:\n${proton_stdout}\nstderr:\n${proton_trace}")
 endif()
 tl_assert_contains("${proton_trace}" "[tl][runtime][info] compat-profile status=\"loaded\"" "Proton profile trace")
+tl_assert_pe_backend("${proton_trace}" "cpp" "Proton PE parser")
 if(RUST_ENABLED)
     tl_assert_contains("${proton_trace}" "[tl][proton][info] path-validation phase=\"files\"" "Proton Rust materialization trace")
 endif()
