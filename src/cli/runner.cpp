@@ -192,6 +192,30 @@ void write_path_validation_trace(std::ostream& stream, const bool trace_enabled,
         "path-validation", fields);
 }
 
+enum class PeParserBackend {
+    Cpp,
+    Rust,
+};
+
+[[nodiscard]] PeParserBackend select_pe_parser_backend(
+    const CommandLine& command,
+    const std::optional<compat::Profile>& compatibility_profile) noexcept {
+#if defined(TRADUTORLINUX_RUST_PE_PARSER)
+    const bool direct_report = command.mode == CommandMode::DirectRun && command.report_only;
+    const bool native_app_run =
+        command.mode == CommandMode::AppRun && !command.report_only &&
+        !(compatibility_profile.has_value() &&
+          compatibility_profile->backend.kind == compat::BackendKind::Proton);
+    if (direct_report || native_app_run) {
+        return PeParserBackend::Rust;
+    }
+#else
+    (void)command;
+    (void)compatibility_profile;
+#endif
+    return PeParserBackend::Cpp;
+}
+
 [[nodiscard]] bool is_x64_pe_file(const std::filesystem::path& path) {
     TL_TRACE_FUNCTION();
     const std::optional<std::vector<std::byte>> bytes = read_file(path);
@@ -804,16 +828,12 @@ ExitCode run_command(const CommandLine& command_line, std::ostream& stdout_strea
         return ExitCode::InputUnavailable;
     }
 
+    const PeParserBackend pe_backend =
+        select_pe_parser_backend(effective_cmd, compatibility_profile);
+    const bool rust_pe_backend = pe_backend == PeParserBackend::Rust;
     pe::ParseResult parse_result;
-#if defined(TRADUTORLINUX_RUST_PE_PARSER)
-    const bool rust_report_backend =
-        effective_cmd.mode == CommandMode::DirectRun && effective_cmd.report_only;
-    const bool rust_app_run_backend =
-        effective_cmd.mode == CommandMode::AppRun && !effective_cmd.report_only &&
-        !(compatibility_profile.has_value() &&
-          compatibility_profile->backend.kind == compat::BackendKind::Proton);
-    const bool rust_pe_backend = rust_report_backend || rust_app_run_backend;
     bool rust_internal_failure = false;
+#if defined(TRADUTORLINUX_RUST_PE_PARSER)
     tl_pe_error_v1 rust_error{};
     if (rust_pe_backend) {
         const pe::RustPeParseResult rust_result = pe::parse_pe_rust(*bytes);
@@ -826,8 +846,6 @@ ExitCode run_command(const CommandLine& command_line, std::ostream& stdout_strea
         parse_result = pe::parse_pe(*bytes);
     }
 #else
-    const bool rust_pe_backend = false;
-    const bool rust_internal_failure = false;
     parse_result = pe::parse_pe(*bytes);
 #endif
     if (parse_result.status != pe::ParseStatus::Success) {
