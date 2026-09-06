@@ -11,6 +11,8 @@ mod msix_parser;
 mod pe_parser;
 mod profile_contract;
 mod profile_parser;
+mod catalog_contract;
+mod catalog_parser;
 
 const STATUS_OK: u32 = 0;
 const STATUS_INVALID_ARGUMENT: u32 = 1;
