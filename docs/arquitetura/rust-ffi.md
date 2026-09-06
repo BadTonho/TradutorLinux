@@ -1,9 +1,10 @@
 # Fronteira FFI Rust↔C++
 
-Este documento descreve as B20.1–B20.4. A biblioteca Rust continua opt-in:
+Este documento descreve as B20.1–B20.5. A biblioteca Rust continua opt-in:
 além do probe, a B20.3 usa Rust somente para a validação lexical dos caminhos
 de perfis e materialização. A B20.4 endurece essa fronteira com testes e
-tratamento de limites. Nenhum parser, loader, runtime Win32 ou API pública de
+tratamento de limites; a B20.5 integra o mesmo validador ao fluxo operacional
+de `app run`. Nenhum parser, loader, runtime Win32 ou API pública de
 compatibilidade foi migrado para Rust.
 
 ## Build e escopo
@@ -189,6 +190,70 @@ toolchain e a fronteira linkada aos probes sanitizados. Builds com
 `TL_BUILD_RUST=OFF` não criam os testes Rust, não linkam a staticlib e não
 exigem toolchain Rust.
 
+## Integração operacional da B20.5
+
+No fluxo `app run`, o adaptador cria uma sessão RAII Rust por fase: uma durante
+`load_profile` e outra durante `FileExposure::materialize` (ou sua variante
+`materialize_into` no Proton). Cada sessão cria um único handle, reutiliza-o
+para todos os caminhos da fase e destrói-o ao sair do escopo. Não há handle
+global, cache compartilhado ou estado entre prefixos. A execução Proton usa a
+mesma regra para a fase de materialização do prefixo Proton.
+
+Os resultados distinguem três situações:
+
+- entrada aceita: a validação lexical passou e o C++ continua as verificações
+  físicas de existência, tipo, symlink, colisão e confinamento;
+- entrada lexical inválida: o perfil ou a exposição é rejeitado e o fluxo
+  nativo preserva o fallback genérico já existente;
+- falha interna do adaptador: sessão não criada, status inesperado ou erro de
+  infraestrutura; o runtime falha fechado, não executa o convidado e retorna
+  `70` (`InternalError`).
+
+As métricas vivem nos resultados C++ de carregamento e materialização, sem
+alterar a ABI C. Elas registram backend, handles criados, verificações,
+rejeições e duração acumulada em microssegundos medida com `steady_clock`.
+Com Rust desligado, os resultados permanecem no caminho C++ e nenhum evento
+Rust é produzido.
+
+Quando `--trace` inclui `runtime`, uma sessão Rust com verificações produz um
+evento por fase. Rejeições usam `status="invalid-input"`; falhas do adaptador
+usam `status="internal-error"` e nível `error`:
+
+```text
+[tl][runtime][info] path-validation phase="profile" backend="rust" handle-count="1" checks="2" rejected="0" duration-us="..." status="completed" detail=""
+[tl][runtime][info] path-validation phase="files" backend="rust" handle-count="1" checks="2" rejected="0" duration-us="..." status="completed" detail=""
+```
+
+No backend Proton, a sessão de arquivos usa o componente `proton` e conserva
+o contexto `[tl][proton]`:
+
+```text
+[tl][proton][info] path-validation phase="files" backend="rust" handle-count="1" checks="2" rejected="0" duration-us="..." status="completed" detail=""
+```
+
+O trace registra a falha contextualizada com fase, status e detalhe. O perfil
+inválido não chega ao materializador; se a materialização nativa rejeitar um
+mapeamento, nenhuma criação ou cópia parcial é promovida ao convidado. Em
+timeout, o hospedeiro espera o filho ser encerrado e executa a limpeza RAII dos
+arquivos expostos antes de retornar `72` (`GuestTimeout`); a fonte em
+`compat/files/` permanece preservada.
+
+O CTest `integration_rust_operational` executa o mesmo cenário no catálogo:
+duas execuções de `tl_compat_file.exe`, um perfil lexicalmente inválido de
+`tl_hello.exe`, um timeout de `tl_hang.exe` com arquivo auxiliar e o mock do
+backend Proton com `tl_proton_probe.exe`. Ele verifica stdout, exit codes,
+trace, isolamento, fonte preservada, destino removido, invisibilidade de
+`compat/`, repetição sem vazamento de estado e ambiente Proton. O teste é
+registrado também em `TL_BUILD_RUST=OFF`; nesse modo ele serve como baseline e
+exige a ausência de `path-validation` Rust.
+
+Para comparação local, o cenário completo levou aproximadamente `1,42 s` no
+Debug com Rust e `1,41 s` no Debug sem Rust neste ambiente. Esses valores são
+apenas baseline da máquina e do build atual, não são um limite de desempenho;
+os campos `duration-us` devem ser acompanhados ao comparar builds equivalentes.
+Uma medição futura deve repetir o mesmo teste, fixture, prefixo limpo e
+configuração de otimização nos dois modos.
+
 ## Evidência
 
 `rust_ffi_probe` cobre criação/destruição, limites, UTF-8, UTF-16, argumentos
@@ -198,4 +263,10 @@ de perfil e materializador protegem a integração opt-in. A B20.4 foi validada
 com os testes direcionados dos presets Debug, Sanitize e Release Rust, Cargo
 offline, Clippy sem warnings e o build C++ com `TL_BUILD_RUST=OFF`. Todos os
 testes Rust rodam somente quando `TL_BUILD_RUST=ON`; os builds padrão continuam
-sem requisito Rust.
+sem requisito Rust. A B20.5 acrescenta `integration_rust_operational`, que
+passou em Debug e Sanitize com Rust e no baseline Debug sem Rust; os testes
+direcionados de perfil, materialização, isolamento e Proton também passaram.
+Em Release, Cargo, Clippy, `rust_ffi_probe` e `rust_path_validation` passaram;
+o runtime Release não pôde ser relinkado por causa do warning preexistente de
+`write_le_u32` não usado, já registrado no roadmap. A etapa não declara
+suporte a aplicativos reais nem migração de produção para Rust.

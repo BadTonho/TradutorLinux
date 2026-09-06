@@ -75,6 +75,41 @@ execução por segurança. A limpeza ocorre depois do processo convidado; um
 arquivo substituído ou um diretório que ficou não vazio é preservado.
 `compat/` não é exposta automaticamente ao convidado.
 
+## Validação lexical operacional com Rust
+
+Quando o runtime foi compilado com `TL_BUILD_RUST=ON`, `app run --trace` cria
+uma sessão Rust para o carregamento do perfil e outra para a materialização de
+`files[]`. Cada sessão reutiliza um handle local e emite uma métrica ao final
+da fase:
+
+```text
+[tl][runtime][info] path-validation phase="profile" backend="rust" handle-count="1" checks="2" rejected="0" duration-us="..." status="completed" detail=""
+[tl][runtime][info] path-validation phase="files" backend="rust" handle-count="1" checks="2" rejected="0" duration-us="..." status="completed" detail=""
+```
+
+`checks` conta as entradas examinadas, `rejected` conta rejeições lexicais e
+`duration-us` é a duração acumulada da fase. O campo `status` é
+`completed`, `invalid-input` ou `internal-error`. Um caminho lexicalmente
+inválido mantém o fallback genérico do runtime nativo e aparece junto de
+`compat-profile status="invalid"` ou `compat-files status="rejected"`.
+
+Uma falha interna do adaptador, um status inesperado ou a impossibilidade de
+criar o handle é falha fechada: o convidado não é iniciado, o erro é emitido
+com a fase e o detalhe e o comando retorna `70` (`InternalError`). O C++ ainda
+faz todas as verificações físicas depois da pré-validação Rust. Com
+`TL_BUILD_RUST=OFF`, o caminho C++ e os diagnósticos existentes permanecem
+ativos e nenhum evento `path-validation` Rust é emitido.
+
+No Proton, a métrica da materialização usa o componente `proton`:
+
+```text
+[tl][proton][info] path-validation phase="files" backend="rust" handle-count="1" checks="2" rejected="0" duration-us="..." status="completed" detail=""
+```
+
+O arquivo auxiliar é limpo após o processo, inclusive quando o convidado
+termina por timeout. O evento de limpeza indica `cleaned` ou
+`cleanup-failed`; a origem em `compat/files/` não é removida.
+
 ## Seleção do backend Proton
 
 Na B14.6, `app run` pode selecionar explicitamente o backend Proton por meio de
@@ -217,6 +252,12 @@ e `timeout-ms`, e retorna `72` (`GuestTimeout`):
 ```text
 [tl][process][error] terminated category="guest-timeout" timeout-ms="1000"
 ```
+
+Em `app run`, a opção pode ser informada depois do ID do catálogo, por
+exemplo `app run meu-id --timeout 1`. A exposição de compatibilidade é limpa
+antes de o comando devolver `72`; se a limpeza não puder remover algum caminho
+alterado pelo convidado, o diagnóstico conserva esse caminho para evitar
+apagamento indevido.
 
 O CLI também aceita `--cpu <segundos>` e `--memory <MiB>` para instalar limites
 opcionais no filho isolado; `0` significa sem limite. `--cpu` mede tempo de CPU

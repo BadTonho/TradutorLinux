@@ -1348,10 +1348,30 @@ imports não encerra B5.
     `RustPathValidationTest.*` passou nos perfis Debug e Sanitize, e o core C++
     também passou com `TL_BUILD_RUST=OFF`. A documentação registra os limites
     e a ausência de migração de produção.
-  - [ ] **B20.5 — Integração operacional.** Exercitar o componente Rust nos
-    fluxos reais de catálogo, perfis, materialização ou pacotes, verificando
-    desempenho, logs, códigos de erro, cancelamento e limpeza sem exceção
-    atravessando a ABI.
+  - [x] **B20.5 — Integração operacional.** O fluxo `app run` agora cria uma
+    sessão RAII Rust por fase (`load_profile` e materialização), reutiliza um
+    handle local para todos os caminhos, registra checks/rejeições/duração e
+    distingue entrada lexical inválida de falha interna. Perfil ou
+    materialização lexicalmente inválidos preservam o fallback genérico; falha
+    interna do adaptador impede o convidado e retorna `70`, sem fallback
+    silencioso. O trace emite `path-validation` no componente `runtime` e,
+    para a materialização Proton, no componente `proton`; `TL_BUILD_RUST=OFF`
+    mantém o caminho C++ sem esses eventos.
+
+    `integration_rust_operational` passou em Debug e Sanitize Rust e no mesmo
+    cenário Debug sem Rust: duas execuções catalogadas de
+    `tl_compat_file.exe`, perfil inválido de `tl_hello.exe`, timeout `72` de
+    `tl_hang.exe` com limpeza e fonte preservada, e `tl_proton_probe.exe` com
+    mock Proton, stdout/stderr, exit code, prefixos, destino temporário e
+    invisibilidade de `compat/` verificados. As regressões de perfil,
+    materialização, isolamento e Proton também passaram. Em Release, Cargo,
+    Clippy, `rust_ffi_probe` e `rust_path_validation` passaram, mas o runtime
+    não pôde ser relinkado por causa do warning preexistente de
+    `write_le_u32` não usado em `src/loader/image_mapper.cpp`, já registrado
+    no roadmap. O baseline local do cenário foi aproximadamente 1,42 s com
+    Rust e 1,41 s sem Rust; é medição informativa, não um limite de hardware.
+    Nenhum parser, loader, runtime Win32 ou componente de produção foi
+    migrado.
   - [ ] **B20.6 — Promoção por evidência.** Atualizar a documentação técnica
     e a matriz de componentes, registrar limitações e só marcar a migração
     como concluída depois de comparação reproduzível, regressões completas e
