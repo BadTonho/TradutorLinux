@@ -186,7 +186,9 @@ int main(const int argc, char** argv) {
     if (!std::filesystem::create_directories(staging / "extracted-stored", error) || error ||
         !std::filesystem::create_directories(staging / "extracted-stored-final", error) || error ||
         !std::filesystem::create_directories(staging / "extracted-deflate", error) || error ||
-        !std::filesystem::create_directories(staging / "extracted-7z", error) || error) {
+        !std::filesystem::create_directories(staging / "extracted-7z", error) || error ||
+        !std::filesystem::create_directories(staging / "extracted-overwrite" / "input-data", error) ||
+            error) {
         std::cerr << "falha ao criar staging: " << staging << '\n';
         return 1;
     }
@@ -232,7 +234,10 @@ int main(const int argc, char** argv) {
     constexpr std::string_view kArchivePassword = "TradutorLinux-7z";
     if (!std::filesystem::create_directories(unicode_directory, error) || error ||
         !write_input(input, kPayload) || !write_input(updated_input, "updated payload\n") ||
-        !write_input(unicode_input, kUnicodePayload) || !write_input(stdin_payload, kPayload)) {
+        !write_input(unicode_input, kUnicodePayload) || !write_input(stdin_payload, kPayload) ||
+        !write_input(staging / "extracted-overwrite" / "input.txt", "stale payload\n") ||
+        !write_input(staging / "extracted-overwrite" / "input-data" / "café-日本.txt",
+                     "stale unicode\n")) {
         std::cerr << "falha ao criar a entrada do smoke\n";
         std::filesystem::remove_all(staging, error);
         return 1;
@@ -323,6 +328,12 @@ int main(const int argc, char** argv) {
         {"x", password_archive_name, "-p" + std::string{kArchivePassword},
          "-oextracted-password", "-y"},
         staging / "extract-password.stdout", staging / "extract-password.stderr");
+    const auto extract_password_overwrite = run_runtime(
+        runtime, staged_executable, prefix,
+        {"x", password_archive_name, "-p" + std::string{kArchivePassword},
+         "-oextracted-overwrite", "-aoa", "-y"},
+        staging / "extract-password-overwrite.stdout",
+        staging / "extract-password-overwrite.stderr");
     const auto extract_password_wrong = run_runtime(
         runtime, staged_executable, prefix,
         {"x", password_archive_name, "-pTradutorLinux-wrong", "-oextracted-password-wrong", "-y"},
@@ -356,6 +367,9 @@ int main(const int argc, char** argv) {
         read_text(staging / "extracted-password" / "input.txt") == kPayload;
     const bool extracted_password_unicode =
         read_text(staging / "extracted-password" / unicode_relative) == kUnicodePayload;
+    const bool overwritten_password =
+        read_text(staging / "extracted-overwrite" / "input.txt") == kPayload &&
+        read_text(staging / "extracted-overwrite" / unicode_relative) == kUnicodePayload;
     const bool wrong_password_payload_absent =
         read_text(staging / "extracted-password-wrong" / "input.txt") != kPayload &&
         read_text(staging / "extracted-password-wrong" / unicode_relative) != kUnicodePayload;
@@ -405,7 +419,9 @@ int main(const int argc, char** argv) {
                     extract_stdin.stdout_text == kPayload &&
                     contains_loader_lifecycle(create_password, "Archive size:") &&
                     contains_loader_lifecycle(extract_password, "Everything is Ok") &&
-                    extracted_password && extracted_password_unicode && wrong_password_rejected;
+                    extracted_password && extracted_password_unicode &&
+                    contains_loader_lifecycle(extract_password_overwrite, "Everything is Ok") &&
+                    overwritten_password && wrong_password_rejected;
     if (!ok) {
         std::cerr << "smoke do 7-Zip CLI falhou em " << staging << '\n';
         std::cerr << "create exit=" << create.exit_code << " timeout=" << create.timed_out << '\n';
@@ -455,6 +471,9 @@ int main(const int argc, char** argv) {
                   << " timeout=" << extract_password.timed_out
                   << " extracted-password=" << extracted_password
                   << " extracted-password-unicode=" << extracted_password_unicode << '\n';
+        std::cerr << "extract-password-overwrite exit=" << extract_password_overwrite.exit_code
+                  << " timeout=" << extract_password_overwrite.timed_out
+                  << " overwritten-password=" << overwritten_password << '\n';
         std::cerr << "extract-password-wrong exit=" << extract_password_wrong.exit_code
                   << " timeout=" << extract_password_wrong.timed_out
                   << " rejected=" << wrong_password_rejected
@@ -465,7 +484,7 @@ int main(const int argc, char** argv) {
         return 1;
     }
 
-    std::cout << "7-Zip CLI stored test/delete/update/rename/deflate/7z/stdin/password/wrong-password lifecycle: ok\n";
+    std::cout << "7-Zip CLI stored test/delete/update/rename/deflate/7z/stdin/password/overwrite/wrong-password lifecycle: ok\n";
     std::filesystem::remove_all(staging, error);
     return 0;
 }

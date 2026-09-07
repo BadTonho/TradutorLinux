@@ -1668,6 +1668,38 @@ Evidência reproduzível de 2026-09-07:
 - [x] O build OFF não emitiu `backend="rust"`; ambos os stagings foram
   removidos depois da verificação de ausência de arquivos e cadastro.
 
+### E24 — Sobrescrita controlada no 7-Zip CLI
+
+Objetivo: validar a semântica genérica de extração sobre arquivos existentes,
+sem aceitar que o staging antigo mascare bytes incorretos ou nomes Unicode.
+
+Tarefas:
+
+- [x] Preparar `input.txt` e `input-data/café-日本.txt` com conteúdo antigo
+  antes de extrair o arquivo `7z/LZMA2` protegido.
+- [x] Executar `7z x -aoa` com a senha correta e comparar os dois payloads
+  byte a byte após a substituição.
+- [x] Manter a extração normal, a senha incorreta, stdin/stdout e os ciclos de
+  manutenção anteriores, repetindo tudo em Rust ON e C++ OFF.
+
+Aceitação:
+
+- [x] A extração com `-aoa` termina com `0` e `Everything is Ok`, substitui o
+  conteúdo binário e Unicode e mantém o ciclo da `7z.dll` completo.
+- [x] A rejeição de senha incorreta continua não produzindo payload válido; o
+  caso novo não altera stdout nem os resultados anteriores.
+- [x] Nenhuma regra, DLL ou tratamento específico de 7-Zip foi adicionado ao
+  runtime; a cobertura permanece no smoke de aplicativo.
+
+Evidência reproduzível de 2026-09-07:
+
+- [x] O filtro `^seven_zip_cli_smoke$` passou em `build/debug-rust` após
+  compilar o alvo (1/1, 8,72 s de CTest).
+- [x] O mesmo filtro passou em `build/debug` após compilar o alvo (1/1,
+  10,58 s de CTest).
+- [x] Ambos emitiram `7-Zip CLI stored test/delete/update/rename/deflate/7z/stdin/password/overwrite/wrong-password
+  lifecycle: ok` e removeram o staging temporário.
+
 ### E11 — Matriz CTest dos smokes GUI do corpus
 
 Objetivo: tornar os cenários GUI reais já validados em D2/E1/E2 descobríveis e
