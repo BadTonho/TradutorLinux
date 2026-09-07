@@ -734,6 +734,9 @@ Tarefas:
   startup wide, mutação/cópia do bloco de ambiente, liberação do bloco
   original, `SHGetFolderPathW`, `HeapSize`, `HeapReAlloc` de 512 para 1024
   bytes e alocações posteriores, sem copiar código do Notepad++.
+- [x] Criar a fixture agregada `tl_notepad_startup_probe`, sem CRT, com a
+  sequência observada de startup, handles, locale, SList, FLS, ambiente,
+  realloc e `SHGetFolderPathW`, mantendo o probe independente do aplicativo.
 - [x] Executar a fixture em Debug Rust ON e C++ OFF; os testes de metadados,
   report, runtime e `app run` passaram em ambos, com exit `0` e stdout igual.
 - [ ] Executar a fixture no preset Sanitizer compatível com o parser
@@ -771,6 +774,14 @@ Evidência inicial D1 de 2026-09-07:
   e `ASAN_OPTIONS=detect_leaks=0`, retornando `0` e sem relatório de memória;
   o ASan emitiu somente o aviso conhecido sobre `__asan_handle_no_return` na
   troca de stack do convidado.
+- [x] O probe agregado passou em Debug C++ OFF e Rust ON nos testes de
+  metadados, report, runtime e `app run`; a execução direta nos dois builds
+  retornou `0`, stdout byte-a-byte igual (`notepad-startup-probe`) e traces
+  semanticamente iguais para startup, locale, FLS, ambiente e `ExitProcess`.
+- [x] O probe agregado também retornou `0` no binário Sanitizer existente, sem
+  erro ASan/LSan além do aviso conhecido de troca de stack; isso amplia a
+  evidência contra uma corrupção genérica nessa sequência, mas não substitui
+  o Sanitizer reconstruído após a correção de unwind.
 - [ ] O Sanitizer compatível e a primeira escrita causadora ainda precisam ser
   isolados; a descoberta automática do CTest também não foi aceita porque o
   LSan falhou sob ptrace durante a enumeração dos testes, e o binário Sanitizer

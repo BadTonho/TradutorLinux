@@ -1,0 +1,36 @@
+{
+  "name": "tl_notepad_startup_probe",
+  "format": "PE32+",
+  "machine": "AMD64",
+  "entry_point": "tl_entry",
+  "uses_crt": false,
+  "imports": {
+    "KERNEL32.dll": [
+      "ExitProcess",
+      "FlsAlloc",
+      "FlsFree",
+      "FlsGetValue",
+      "FlsSetValue",
+      "FreeEnvironmentStringsW",
+      "GetACP",
+      "GetCPInfo",
+      "GetEnvironmentStringsW",
+      "GetFileType",
+      "GetOEMCP",
+      "GetProcessHeap",
+      "GetStartupInfoW",
+      "GetStdHandle",
+      "GetStringTypeW",
+      "HeapAlloc",
+      "HeapFree",
+      "HeapReAlloc",
+      "HeapSize",
+      "InitializeSListHead",
+      "IsValidCodePage",
+      "WriteFile"
+    ],
+    "SHELL32.dll": [
+      "SHGetFolderPathW"
+    ]
+  }
+}

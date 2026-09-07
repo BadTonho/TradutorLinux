@@ -285,6 +285,10 @@ function(tl_add_pe_fixture target_name source_file manifest_file)
             elseif(target_name STREQUAL "tl_shell_heap_probe")
                 set(runtime_extra_args
                     "-DEXPECTED_HEX=7368656c6c2d686561702d70726f62650a")
+            elseif(target_name STREQUAL "tl_notepad_startup_probe")
+                set(runtime_extra_args
+                    "-DEXPECTED_HEX=6e6f74657061642d737461727475702d70726f62650a"
+                    "-DREQUIRED_TRACE=process-context,environment,locale,fls")
             elseif(target_name STREQUAL "tl_gdiex")
                 set(runtime_extra_args
                     "-DEXPECTED_HEX=67646965780a")
@@ -1152,6 +1156,11 @@ tl_add_pe_fixture(tl_shell src/tl_shell.c manifests/tl_shell.json
     IMPORT_DEF defs/tl_shell.def)
 
 tl_add_pe_fixture(tl_shell_heap_probe src/tl_shell_heap_probe.c manifests/tl_shell_heap_probe.json
+    LINK_KERNEL32 LINK_SHELL32 EXPECT_RESOLVED CONSOLE REPORT RELOCATABLE
+    REPORT_SYMBOL "SHGetFolderPathW")
+
+tl_add_pe_fixture(tl_notepad_startup_probe src/tl_notepad_startup_probe.c
+    manifests/tl_notepad_startup_probe.json
     LINK_KERNEL32 LINK_SHELL32 EXPECT_RESOLVED CONSOLE REPORT RELOCATABLE
     REPORT_SYMBOL "SHGetFolderPathW")
 
