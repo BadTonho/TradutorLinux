@@ -812,8 +812,9 @@ amplo.
 
 Tarefas:
 
-- [ ] Reutilizar o smoke Xvfb do 7-Zip para validar abertura, ação mínima e
-  encerramento em Rust ON/OFF.
+- [x] Reutilizar o smoke Xvfb do 7-Zip para validar abertura, ação mínima e
+  encerramento em Rust ON/OFF; a ação `Copy` foi confirmada nos dois builds
+  com exit `0`, arquivo copiado e trace de operação bem-sucedida.
 - [ ] Criar um cenário PuTTY que abra a janela configurável, envie somente
   eventos seguros e encerre por comando/fechamento controlado.
 - [ ] Comparar janelas, eventos X11, stdout, exit code, limpeza e trace; manter
@@ -822,7 +823,20 @@ Tarefas:
 Aceitação:
 
 - [ ] Cada cenário possui ação e critério de encerramento reproduzíveis.
-- [ ] Nenhuma GUI é promovida além das operações realmente exercitadas.
+- [x] Nenhuma GUI foi promovida além da operação `Copy` já exercitada no
+  7-Zip; PuTTY permanece não concluído.
+
+Evidência parcial D2 de 2026-09-07:
+
+- [x] `tests/gui/seven_zip_smoke.cpp` passou em `build/debug` e
+  `build/debug-rust`, com Xvfb escolhendo displays livres por `-displayfd`.
+  O harness não fixa `:99`, evitando locks residuais do ambiente.
+- [ ] O cenário PuTTY encontrou somente a janela `PuTTY: hidden timing window`;
+  o fechamento X11 dessa janela a destrói, mas o processo não encerra e termina
+  por timeout controlado. Não houve janela de configuração nem critério de
+  interação/encerramento limpo para registrar como sucesso.
+- [x] A tentativa PuTTY não alterou runtime, loader, rede, prefixo ou
+  classificação de compatibilidade; o bloqueio continua explícito.
 
 ### D3 — Diagnóstico dos instaladores e pacote x64
 

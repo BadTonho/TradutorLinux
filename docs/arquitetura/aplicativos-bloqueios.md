@@ -41,3 +41,19 @@ a causa na largura host incorreta das APIs `lstr*W`, não em
 `SHGetFolderPathW`. A correção usa `std::uint16_t`, preserva W^X, isolamento e
 limites, e foi repetida em Rust ON/C++ OFF e Sanitizer. O timeout restante é
 uma limitação de interação GUI, não uma promoção de suporte.
+
+## Evidência D2 — cenários GUI
+
+O smoke externo do 7-Zip File Manager passou nos builds C++ OFF e Rust ON. Ele
+abre a janela, seleciona `input.txt`, aciona `Copy`, verifica o arquivo em
+`output/`, valida o evento de operação no trace e fecha a janela; os dois
+processos terminaram com exit `0`. O harness agora usa `Xvfb -displayfd`, para
+que a escolha do display não dependa do lock fixo `:99`.
+
+PuTTY continua pendente. Sob Xvfb válido, a árvore X11 contém somente
+`PuTTY: hidden timing window`; o trace registra a classe `PuTTYConfigBox`, mas
+nenhuma janela de configuração utilizável. Um `WM_DELETE_WINDOW` enviado à
+janela oculta a destrói, porém o processo continua até o timeout controlado.
+Esse resultado não é um encerramento limpo, portanto não promove GUI nem
+justifica um patch de produção sem isolar o caminho modeless/diálogo usado pelo
+aplicativo.
