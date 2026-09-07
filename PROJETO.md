@@ -153,10 +153,17 @@ TradutorLinux/
 │   ├── main.cpp
 │   └── (pe/, loader/, runtime/ e abi/ nas fases posteriores)
 └── tests/
+    ├── apps/
+    │   └── (smokes e fixtures isolados por aplicativo)
     ├── samples/
     ├── test_cli.cpp
     ├── test_trace.cpp
     └── (malformed-pe/ a partir da Fase 1)
+
+Extensões específicas de aplicativos, quando autorizadas em uma etapa futura,
+ficarão separadas em `compat/apps/<app-id>/`. Essa árvore não é ligada ao
+runtime geral por padrão e permanece sem DLLs enquanto não houver um contrato,
+um alvo e testes que justifiquem a extensão.
 ```
 
 ## 8. Stack inicial

@@ -832,7 +832,7 @@ Evidência D2 de 2026-09-07:
 - [x] `tests/gui/seven_zip_smoke.cpp` passou em `build/debug` e
   `build/debug-rust`, com Xvfb escolhendo displays livres por `-displayfd`.
   O harness não fixa `:99`, evitando locks residuais do ambiente.
-- [x] `tests/gui/putty_smoke.cpp` inicia PuTTY sob Xvfb próprio, encontra
+- [x] `tests/apps/putty/putty_smoke.cpp` inicia PuTTY sob Xvfb próprio, encontra
   `PuTTY Configuration`, envia somente `WM_DELETE_WINDOW` pela conexão X11 e
   exige saída limpa (`exit 0`) em `build/debug` e `build/debug-rust`.
 - [x] O trace do cenário confirma `CreateDialogParamA`, as captions `About

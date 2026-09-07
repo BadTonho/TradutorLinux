@@ -50,7 +50,7 @@ abre a janela, seleciona `input.txt`, aciona `Copy`, verifica o arquivo em
 processos terminaram com exit `0`. O harness agora usa `Xvfb -displayfd`, para
 que a escolha do display não dependa do lock fixo `:99`.
 
-O cenário PuTTY foi isolado em `tests/gui/putty_smoke.cpp`. Sob Xvfb iniciado
+O cenário PuTTY foi isolado em `tests/apps/putty/putty_smoke.cpp`. Sob Xvfb iniciado
 com `-displayfd`, o trace registra `CreateDialogParamA`, `About PuTTY` e
 `PuTTY Configuration`; o harness localiza a janela configurável e envia apenas
 `WM_DELETE_WINDOW` por X11. O processo termina com exit `0` em `build/debug` e

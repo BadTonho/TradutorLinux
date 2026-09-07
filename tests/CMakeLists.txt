@@ -189,7 +189,7 @@ if(TL_XVFB_EXECUTABLE)
     tl_enable_sanitizers(seven_zip_smoke)
 
     add_executable(putty_smoke
-        gui/putty_smoke.cpp
+        apps/putty/putty_smoke.cpp
     )
     target_include_directories(putty_smoke PRIVATE "${TL_X11_INCLUDE_DIR}")
     target_link_libraries(putty_smoke PRIVATE "${TL_X11_LIBRARY}")
