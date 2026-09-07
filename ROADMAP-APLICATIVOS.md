@@ -1227,6 +1227,42 @@ Evidência E9 de 2026-09-07:
 - [x] O resultado do smoke foi `7-Zip CLI create/list/extract: ok` nos dois
   builds, com `7z.dll` carregada do diretório do executável.
 
+### E10 — Round-trip comprimido do 7-Zip CLI
+
+Objetivo: ampliar a evidência do fluxo genérico de arquivos sem confundir o
+ZIP `stored` com o caminho de compressão usado pelo 7-Zip em arquivos reais.
+
+Tarefas:
+
+- [x] Manter um caso `stored` explícito e adicionar criação de ZIP com
+  `DEFLATE`, listagem técnica que confirma `Method = Deflate` e extração dos
+  dois arquivos em diretórios separados.
+- [x] Reutilizar o mesmo staging, prefixo temporário, timeout externo e
+  verificação de ciclo da `7z.dll`, sem alterar o corpus original.
+- [x] Executar a matriz Rust ON/C++ OFF e exigir bytes idênticos após as duas
+  extrações.
+
+Aceitação:
+
+- [x] O smoke confirma seis comandos reais do `7z_x64.exe`: criação, listagem
+  e extração para `stored` e `DEFLATE`, todos com exit `0`.
+- [x] A listagem técnica confirma `Method = Deflate`, e os dois arquivos
+  extraídos coincidem byte a byte com a entrada repetitiva.
+- [x] Nenhuma DLL, shim, regra de seleção ou mudança específica do aplicativo
+  foi adicionada ao runtime.
+
+Evidência E10 de 2026-09-07:
+
+- [x] O executável `build/debug-rust/tests/seven_zip_cli_smoke` passou com
+  `7-Zip CLI stored/deflate create/list/extract: ok` e carregou `7z.dll` em
+  cada operação.
+- [x] `ctest --test-dir build/debug-rust -R '^seven_zip_cli_smoke$'` e o mesmo
+  filtro em `build/debug` passaram separadamente; o staging único evita colisão
+  quando os processos de teste recebem o mesmo PID lógico no ambiente.
+- [x] A expansão do payload tornou o método `Deflate` observável; a execução
+  anterior que produzia `Method = Store` para um arquivo pequeno foi corrigida
+  no teste, não mascarada no critério.
+
 ## Regras de validação
 
 - Cada correção começa com uma fixture mínima e termina com testes automatizados.
