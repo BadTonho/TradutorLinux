@@ -94,7 +94,8 @@ jobs:
             --target tl_rust_ffi_probe tl_rust_path_validation \
             tl_rust_pe_contract_c tl_rust_msix_contract_c \
             tl_rust_msix_contract_cpp tl_rust_profile_contract_c \
-            tl_rust_profile_contract_cpp tradutorlinux_samples tradutorlinux \
+            tl_rust_profile_contract_cpp tl_rust_app_catalog_contract_c \
+            tl_rust_app_catalog_contract_cpp tradutorlinux_samples tradutorlinux \
             tradutorlinux_unit_tests --parallel 2
 
       - name: Executar matriz de pacotes MSIX/AppX
@@ -102,6 +103,9 @@ jobs:
 
       - name: Executar matriz de perfis de compatibilidade
         run: ctest --preset ${{ matrix.preset }} -R '^(integration_compat_profile|integration_rust_operational)$' --parallel 2 --output-on-failure
+
+      - name: Executar promoção do catálogo Rust
+        run: ctest --preset ${{ matrix.preset }} -R '^(integration_catalog_parser|rust_app_catalog_differential)$' --parallel 2 --output-on-failure
 
       - name: Executar matriz completa Rust
         run: ctest --preset ${{ matrix.preset }} --parallel 1 --output-on-failure
@@ -127,7 +131,8 @@ jobs:
           cmake --build --preset release \
             --target tl_rust_pe_contract_c tl_rust_msix_contract_c \
             tl_rust_msix_contract_cpp tl_rust_profile_contract_c \
-            tl_rust_profile_contract_cpp tradutorlinux_samples tradutorlinux \
+            tl_rust_profile_contract_cpp tl_rust_app_catalog_contract_c \
+            tl_rust_app_catalog_contract_cpp tradutorlinux_samples tradutorlinux \
             tradutorlinux_unit_tests --parallel 2
 
       - name: Executar matriz de pacotes MSIX/AppX sem Rust
@@ -135,6 +140,9 @@ jobs:
 
       - name: Executar matriz de perfis de compatibilidade sem Rust
         run: ctest --preset release -R '^(integration_compat_profile|integration_rust_operational)$' --parallel 2 --output-on-failure
+
+      - name: Executar catálogo sem Rust
+        run: ctest --preset release -R '^integration_catalog_parser$' --parallel 2 --output-on-failure
 
       - name: Executar matriz Release sem Rust
         run: ctest --preset release --parallel 1 --output-on-failure

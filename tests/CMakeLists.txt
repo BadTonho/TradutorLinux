@@ -409,6 +409,18 @@ if(TARGET tradutorlinux_samples AND TARGET tradutorlinux)
         TIMEOUT 60
     )
     add_test(
+        NAME integration_catalog_parser
+        COMMAND "${CMAKE_COMMAND}"
+            "-DRUNTIME=$<TARGET_FILE:tradutorlinux>"
+            "-DWORK=${CMAKE_CURRENT_BINARY_DIR}/catalog_parser_work"
+            "-DRUST_ENABLED=$<BOOL:${TL_BUILD_RUST}>"
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/samples/verify_catalog_parser.cmake"
+    )
+    set_tests_properties(integration_catalog_parser PROPERTIES
+        LABELS "runtime;catalog;rust;differential"
+        TIMEOUT 60
+    )
+    add_test(
         NAME integration_compat_file_exposure
         COMMAND "${CMAKE_COMMAND}"
             "-DRUNTIME=$<TARGET_FILE:tradutorlinux>"

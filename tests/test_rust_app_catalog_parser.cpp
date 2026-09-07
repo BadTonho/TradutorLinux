@@ -1,5 +1,6 @@
 #include "tradutorlinux/catalog/app_catalog.hpp"
 #include "tradutorlinux/catalog/rust_app_catalog_parser.hpp"
+#include "tradutorlinux/diagnostics/trace.hpp"
 
 #include <algorithm>
 #include <array>
@@ -144,6 +145,18 @@ void expect_entries_equal(const std::vector<AppEntry>& expected,
     return catalog.list_apps();
 }
 
+[[nodiscard]] std::filesystem::path write_catalog_file(const std::string_view text,
+                                                        const std::string_view suffix) {
+    const auto path = std::filesystem::temp_directory_path() /
+                      ("tl-rust-app-catalog-" +
+                       std::to_string(static_cast<unsigned long long>(::getpid())) + "-" +
+                       std::string{suffix} + ".json");
+    std::ofstream output(path, std::ios::binary | std::ios::trunc);
+    if (!output) return {};
+    output.write(text.data(), static_cast<std::streamsize>(text.size()));
+    return path;
+}
+
 TEST(RustAppCatalogParserTest, ValidCatalogMatchesCppSemantics) {
     const RustAppCatalogParseResult rust = parse_app_catalog_rust(as_bytes(kFullCatalog));
     ASSERT_EQ(rust.status, TL_APP_CATALOG_STATUS_SUCCESS)
@@ -154,6 +167,105 @@ TEST(RustAppCatalogParserTest, ValidCatalogMatchesCppSemantics) {
     ASSERT_EQ(rust.apps.size(), 2U);
     EXPECT_EQ(rust.apps[0].args.back().size(), 7U);
     EXPECT_EQ(static_cast<unsigned char>(rust.apps[0].args.back()[0]), 0U);
+}
+
+TEST(RustAppCatalogParserTest, PromotedLoadPublishesDecodedCatalog) {
+    const auto path = write_catalog_file(kFullCatalog, "promoted");
+    ASSERT_FALSE(path.empty());
+
+    AppCatalog catalog;
+    ASSERT_TRUE(catalog.load_from_file(path));
+    const auto loaded = catalog.list_apps();
+    ASSERT_EQ(loaded.size(), 2U);
+    EXPECT_EQ(loaded[0].id, "editor");
+    EXPECT_EQ(loaded[0].name, "Editor é");
+    EXPECT_EQ(loaded[0].executable_path, "bin/editor.exe");
+    EXPECT_EQ(loaded[0].args,
+              (std::vector<std::string>{"--safe", "--name=á", std::string{"\0binary", 7}}));
+    EXPECT_EQ(loaded[0].cpu_limit_seconds, 12U);
+    EXPECT_EQ(loaded[0].memory_limit_mib, 256U);
+    EXPECT_EQ(loaded[1].id, "viewer-2");
+    EXPECT_TRUE(loaded[1].prefix_path.empty());
+    EXPECT_TRUE(loaded[1].args == std::vector<std::string>{"--safe"});
+    std::filesystem::remove(path);
+}
+
+TEST(RustAppCatalogParserTest, PromotedLoadRejectsCppPermissiveInputAtomically) {
+    const auto path = write_catalog_file(
+        R"json({"apps":[{"id":"legacy","executable_path":"legacy.exe"}]})json",
+        "no-fallback");
+    ASSERT_FALSE(path.empty());
+
+    AppCatalog catalog;
+    AppEntry sentinel;
+    sentinel.id = "sentinel";
+    sentinel.executable_path = "sentinel.exe";
+    ASSERT_TRUE(catalog.add_app(sentinel));
+    EXPECT_FALSE(catalog.load_from_file(path));
+    EXPECT_TRUE(catalog.list_apps().empty());
+    std::filesystem::remove(path);
+}
+
+TEST(RustAppCatalogParserTest, PromotedLoadRejectsInputAboveWireLimit) {
+    const auto path = std::filesystem::temp_directory_path() /
+                      ("tl-rust-app-catalog-" +
+                       std::to_string(static_cast<unsigned long long>(::getpid())) +
+                       "-limit.json");
+    {
+        std::ofstream output(path, std::ios::binary | std::ios::trunc);
+        ASSERT_TRUE(output);
+        const std::string block(1024U * 1024U, 'x');
+        for (std::size_t index = 0; index < 4U; ++index) {
+            output.write(block.data(), static_cast<std::streamsize>(block.size()));
+        }
+        output.put('x');
+    }
+
+    AppCatalog catalog;
+    EXPECT_FALSE(catalog.load_from_file(path));
+    EXPECT_TRUE(catalog.list_apps().empty());
+    std::filesystem::remove(path);
+}
+
+TEST(RustAppCatalogParserTest, CatalogParseTraceIsOptInAndStructured) {
+    const auto valid_path = write_catalog_file(R"json({"version":1,"apps":[]})json", "trace");
+    const auto invalid_path = write_catalog_file(R"json({"version":1,"apps":[)json", "trace-invalid");
+    const auto missing_path = std::filesystem::temp_directory_path() /
+                              ("tl-rust-app-catalog-" +
+                               std::to_string(static_cast<unsigned long long>(::getpid())) +
+                               "-trace-missing.json");
+    std::filesystem::remove(missing_path);
+
+    diagnostics::set_trace_requested(true);
+    diagnostics::configure_trace_filter({diagnostics::TraceComponent::Runtime});
+    testing::internal::CaptureStderr();
+    AppCatalog valid;
+    ASSERT_TRUE(valid.load_from_file(valid_path));
+    const std::string valid_trace = testing::internal::GetCapturedStderr();
+    EXPECT_NE(valid_trace.find("catalog-parse"), std::string::npos);
+    EXPECT_NE(valid_trace.find("backend=\"rust\""), std::string::npos);
+    EXPECT_NE(valid_trace.find("parser-status=\"success\""), std::string::npos);
+
+    testing::internal::CaptureStderr();
+    AppCatalog invalid;
+    EXPECT_FALSE(invalid.load_from_file(invalid_path));
+    const std::string invalid_trace = testing::internal::GetCapturedStderr();
+    EXPECT_NE(invalid_trace.find("parser-status=\"malformed\""), std::string::npos);
+    for (const std::string_view field : {"code=\"", "phase=\"", "input-offset=\"",
+                                         "detail-value=\""}) {
+        EXPECT_NE(invalid_trace.find(field), std::string::npos);
+    }
+
+    testing::internal::CaptureStderr();
+    AppCatalog missing;
+    EXPECT_FALSE(missing.load_from_file(missing_path));
+    const std::string missing_trace = testing::internal::GetCapturedStderr();
+    EXPECT_EQ(missing_trace.find("catalog-parse"), std::string::npos);
+
+    diagnostics::set_trace_requested(false);
+    diagnostics::configure_trace_all();
+    std::filesystem::remove(valid_path);
+    std::filesystem::remove(invalid_path);
 }
 
 TEST(RustAppCatalogParserTest, EmptyCatalogUsesCanonicalEmptyDescriptors) {
