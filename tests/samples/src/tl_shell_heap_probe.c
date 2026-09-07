@@ -50,13 +50,29 @@ void tl_entry(void) {
     GetStartupInfoW(&startup);
     if (startup.cb == 0U) fail();
 
+    void* const heap = GetProcessHeap();
     wchar16_t* const environment = GetEnvironmentStringsW();
-    if (environment == (wchar16_t*)0 || !FreeEnvironmentStringsW(environment)) fail();
+    if (environment == (wchar16_t*)0) fail();
+    unsigned long long environment_units = 0;
+    for (;;) {
+        if (environment[environment_units] == 0U &&
+            environment[environment_units + 1U] == 0U) {
+            environment_units += 2U;
+            break;
+        }
+        ++environment_units;
+    }
+    wchar16_t* const environment_copy =
+        (wchar16_t*)HeapAlloc(heap, 0U, environment_units * sizeof(wchar16_t));
+    if (environment_copy == (wchar16_t*)0) fail();
+    for (unsigned long long index = 0; index < environment_units; ++index) {
+        environment_copy[index] = environment[index];
+    }
+    if (!FreeEnvironmentStringsW(environment)) fail();
 
     GetStartupInfoW(&startup);
     if (startup.cb == 0U) fail();
 
-    void* const heap = GetProcessHeap();
     unsigned char* const first = (unsigned char*)HeapAlloc(heap, 0U, 64U);
     unsigned char* const second = (unsigned char*)HeapAlloc(heap, 0U, 4096U);
     if (first == (unsigned char*)0 || second == (unsigned char*)0) fail();
@@ -66,7 +82,10 @@ void tl_entry(void) {
     wchar16_t path[260] = {0};
     if (SHGetFolderPathW((void*)0, 0x1A, (void*)0, 0U, path) != 0 || path[0] == 0) fail();
 
-    if (!HeapFree(heap, 0U, first) || !HeapFree(heap, 0U, second)) fail();
+    if (!HeapFree(heap, 0U, first) || !HeapFree(heap, 0U, second) ||
+        !HeapFree(heap, 0U, environment_copy)) {
+        fail();
+    }
 
     wchar16_t second_path[260] = {0};
     if (SHGetFolderPathW((void*)0, 0x1A, (void*)0, 0U, second_path) != 0 ||

@@ -731,8 +731,9 @@ convenção de memória Win32 ainda incompleta ou do próprio aplicativo.
 Tarefas:
 
 - [x] Criar a fixture PE32+ mínima `tl_shell_heap_probe`, sem CRT, cobrindo
-  startup wide, bloco de ambiente, `SHGetFolderPathW` e alocações posteriores,
-  sem copiar código do Notepad++.
+  startup wide, cópia do bloco de ambiente para heap própria, liberação do
+  bloco original, `SHGetFolderPathW` e alocações posteriores, sem copiar
+  código do Notepad++.
 - [x] Executar a fixture em Debug Rust ON e C++ OFF; os testes de metadados,
   report, runtime e `app run` passaram em ambos, com exit `0` e stdout igual.
 - [ ] Executar a fixture no preset Sanitizer compatível com o parser
@@ -761,7 +762,8 @@ Evidência inicial D1 de 2026-09-07:
 - [x] A execução direta com `--trace` está em `/tmp/tl-d1-shell-heap`:
   Rust ON e C++ OFF retornaram `0`, stdout byte-a-byte igual e registraram
   startup wide, ambiente, startup wide e `ExitProcess(0)` sem corrupção.
-- [x] A fixture existente `tl_shell` continua passando; o Notepad++ continua
+- [x] A fixture existente `tl_shell` continua passando; o probe com cópia do
+  ambiente também passa; o Notepad++ continua
   reproduzindo a corrupção de heap após `startup-info` wide, portanto o probe
   reduz a hipótese para uma interação posterior específica do aplicativo ou
   para uma API ainda não exercitada pelo probe.
