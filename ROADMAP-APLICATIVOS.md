@@ -765,8 +765,15 @@ Evidência inicial D1 de 2026-09-07:
   reproduzindo a corrupção de heap após `startup-info` wide, portanto o probe
   reduz a hipótese para uma interação posterior específica do aplicativo ou
   para uma API ainda não exercitada pelo probe.
+- [x] A fixture foi executada diretamente com `build/sanitize/src/tradutorlinux`
+  e `ASAN_OPTIONS=detect_leaks=0`, retornando `0` e sem relatório de memória;
+  o ASan emitiu somente o aviso conhecido sobre `__asan_handle_no_return` na
+  troca de stack do convidado.
 - [ ] O Sanitizer compatível e a primeira escrita causadora ainda precisam ser
-  isolados; nenhum patch de runtime foi aplicado nesta etapa.
+  isolados; a descoberta automática do CTest também não foi aceita porque o
+  LSan falhou sob ptrace durante a enumeração dos testes, e o binário Sanitizer
+  existente ainda precede a correção de unwind. Nenhum patch de runtime foi
+  aplicado nesta etapa.
 
 ### D2 — Cenários interativos para GUIs x64
 
