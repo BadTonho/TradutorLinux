@@ -7,6 +7,7 @@
 #include <cerrno>
 #include <charconv>
 #include <chrono>
+#include <cstdio>
 #include <cstring>
 #include <fstream>
 #include <limits>
@@ -875,6 +876,48 @@ TL_MSABI int tl_inet_pton(const int af, const char* src, void* dst) noexcept {
     return res;
 }
 
+TL_MSABI int tl_WSAAddressToStringA(const void* const address, const std::uint32_t address_length,
+                                    const void* const protocol_info, char* const address_string,
+                                    std::uint32_t* const address_string_length) noexcept {
+    (void)protocol_info;
+    if (address == nullptr || address_length < sizeof(sockaddr_in) ||
+        !mapped_range(address, sizeof(sockaddr_in), false) || address_string_length == nullptr ||
+        !mapped_range(address_string_length, sizeof(*address_string_length), true)) {
+        g_wsa_last_error = kWsaEInvalidArgument;
+        return -1;
+    }
+    sockaddr_in socket_address{};
+    std::memcpy(&socket_address, address, sizeof(socket_address));
+    if (socket_address.sin_family != AF_INET) {
+        g_wsa_last_error = kWsaEInvalidArgument;
+        return -1;
+    }
+    char address_text[INET_ADDRSTRLEN]{};
+    if (::inet_ntop(AF_INET, &socket_address.sin_addr, address_text, sizeof(address_text)) == nullptr) {
+        g_wsa_last_error = errno_to_wsa(errno);
+        return -1;
+    }
+    char formatted[INET_ADDRSTRLEN + 1U + 5U]{};
+    const int written = std::snprintf(formatted, sizeof(formatted), "%s:%u", address_text,
+                                      static_cast<unsigned>(ntohs(socket_address.sin_port)));
+    if (written < 0 || static_cast<std::size_t>(written) >= sizeof(formatted)) {
+        g_wsa_last_error = kWsaEInvalidArgument;
+        return -1;
+    }
+    const std::uint32_t required = static_cast<std::uint32_t>(written) + 1U;
+    const std::uint32_t capacity = *address_string_length;
+    if (address_string == nullptr || capacity < required ||
+        !mapped_range(address_string, capacity, true)) {
+        *address_string_length = required;
+        g_wsa_last_error = kWsaEFault;
+        return -1;
+    }
+    std::memcpy(address_string, formatted, required);
+    *address_string_length = required;
+    g_wsa_last_error = 0;
+    return 0;
+}
+
 TL_MSABI int tl_getpeername(const std::uintptr_t socket, void* const name, int* const name_length) noexcept {
     if (name == nullptr || name_length == nullptr) {
         g_wsa_last_error = kWsaEFault;
@@ -1279,6 +1322,7 @@ void register_ws2_32_module() {
         {"WSAIoctl", 1015, reinterpret_cast<std::uintptr_t>(&tl_WSAIoctl)},
         {"getnameinfo", 1016, reinterpret_cast<std::uintptr_t>(&tl_getnameinfo)},
         {"WSASocketA", 1017, reinterpret_cast<std::uintptr_t>(&tl_WSASocketA)},
+        {"WSAAddressToStringA", 1018, reinterpret_cast<std::uintptr_t>(&tl_WSAAddressToStringA)},
     };
     static const InternalModule kWs2_32Module{"WS2_32.dll", kWs2_32Exports};
     register_module(kWs2_32Module);

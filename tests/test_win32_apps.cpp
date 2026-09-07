@@ -407,6 +407,31 @@ TEST(PuttyCoverageTest, AllApisAndModules) {
     EXPECT_EQ(tl_RegDeleteKeyA(nullptr, "test"), 0);
 }
 
+TEST(WinSockTest, AddressToStringValidatesCapacityAndFormatsIpv4) {
+    std::array<std::uint8_t, 16> address{};
+    address[0] = 2;
+    address[2] = 0;
+    address[3] = 22;
+    address[4] = 127;
+    address[7] = 1;
+
+    char output[64]{};
+    std::uint32_t output_length = sizeof(output);
+    EXPECT_EQ(tl_WSAAddressToStringA(address.data(), address.size(), nullptr, output, &output_length), 0);
+    EXPECT_STREQ(output, "127.0.0.1:22");
+    EXPECT_EQ(output_length, 13U);
+
+    std::array<char, 4> short_output{};
+    short_output.fill('X');
+    output_length = short_output.size();
+    EXPECT_EQ(tl_WSAAddressToStringA(address.data(), address.size(), nullptr, short_output.data(),
+                                     &output_length), -1);
+    EXPECT_EQ(tl_WSAGetLastError(), 10014);
+    EXPECT_EQ(output_length, 13U);
+    EXPECT_EQ(short_output[0], 'X');
+    EXPECT_EQ(short_output[3], 'X');
+}
+
 TEST(NotepadPlusPlusCoverageTest, AllApisAndModules) {
     // DWMAPI
     int comp_enabled = 0;

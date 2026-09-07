@@ -8,6 +8,7 @@
 #include "tradutorlinux/runtime/wintrust.hpp"
 #include "tradutorlinux/runtime/crypt32.hpp"
 #include "tradutorlinux/runtime/guest_context.hpp"
+#include "tradutorlinux/runtime/ws2_32.hpp"
 
 #include <cstdint>
 #include <string_view>
@@ -193,6 +194,8 @@ TEST_F(ModuleTest, RegistersBuiltinKernel32Exports) {
               reinterpret_cast<std::uintptr_t>(&tl_WriteFile));
     EXPECT_EQ(find_export(ExportQuery{"KERNEL32.dll", "ExitProcess"}).address,
               reinterpret_cast<std::uintptr_t>(&tl_ExitProcess));
+    EXPECT_EQ(find_export(ExportQuery{"WS2_32.dll", "WSAAddressToStringA"}).address,
+              reinterpret_cast<std::uintptr_t>(&tl_WSAAddressToStringA));
     EXPECT_EQ(find_export(ExportQuery{"CRYPT32.dll", "CertGetNameStringW"}).address,
               reinterpret_cast<std::uintptr_t>(&tl_CertGetNameStringW));
     EXPECT_EQ(find_export(ExportQuery{"WINMM.dll", "timeSetEvent"}).support,

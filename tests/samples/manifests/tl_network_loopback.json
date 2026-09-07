@@ -40,7 +40,8 @@
       "send",
       "sendto",
       "shutdown",
-      "socket"
+      "socket",
+      "WSAAddressToStringA"
     ]
   }
 }

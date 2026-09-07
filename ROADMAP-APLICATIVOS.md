@@ -1740,6 +1740,45 @@ Evidência reproduzível de 2026-09-07:
   paralelismo 2; a sondagem manual sob Xvfb e listener em `127.0.0.1` foi
   encerrada e deixou apenas artefatos temporários em `/tmp`.
 
+### E26 — Formatação segura de endpoints IPv4 no Winsock
+
+Objetivo: completar uma operação genérica de `WS2_32.dll` usada por clientes
+de rede Win32, mantendo o runtime sem regras específicas de aplicativo.
+
+Tarefas:
+
+- [x] Expor `WSAAddressToStringA` com validação de `sockaddr_in`, memória do
+  convidado, capacidade de saída e comprimento retornado, sem sobrescrever
+  buffers curtos.
+- [x] Exercitar a API na fixture `tl_network_loopback`, que agora verifica a
+  conversão de um endpoint após `getsockname`, além do teste unitário de
+  formatação e sentinelas.
+- [x] Confirmar o registro pelo nome no módulo `WS2_32.dll` e preservar o
+  comportamento no build Rust ON e no baseline C++ OFF.
+
+Aceitação:
+
+- [x] O teste unitário valida `127.0.0.1:22`, o tamanho incluindo NUL,
+  `WSAEFAULT` em capacidade insuficiente e a preservação do buffer-sentinela.
+- [x] A matriz `tl_network_loopback` passou nos quatro cenários em
+  `build/debug-rust` e `build/debug`; nenhum acesso externo foi usado.
+- [x] A sondagem do `putty_x64.exe` sob Xvfb com listener local continua
+  terminando com `exit 1` e zero bytes recebidos. A API genérica não é tratada
+  como suporte ao PuTTY nem altera sua classificação na matriz.
+
+Evidência reproduzível de 2026-09-07:
+
+- [x] `WinSockTest.AddressToStringValidatesCapacityAndFormatsIpv4`,
+  `PuttyCoverageTest.AllApisAndModules` e
+  `ModuleTest.RegistersBuiltinKernel32Exports` passaram nos presets Rust ON e
+  C++ OFF.
+- [x] `fixture_tl_network_loopback_metadata`,
+  `runtime_tl_network_loopback_matches_readobj`, `app_run_tl_network_loopback`
+  e `report_tl_network_loopback_support` passaram nos dois presets.
+- [x] A execução manual com listener local recebeu `0` bytes e retornou `1`;
+  o resultado permanece uma limitação de integração GUI/SSH, não um skip
+  funcional.
+
 ### E11 — Matriz CTest dos smokes GUI do corpus
 
 Objetivo: tornar os cenários GUI reais já validados em D2/E1/E2 descobríveis e

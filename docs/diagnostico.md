@@ -44,6 +44,12 @@ O resolvedor emite um evento `resolved` por importação resolvida (`dll`,
 [tl][imports][info] resolved dll="KERNEL32.dll" symbol="WriteFile" address="0x..." mechanism="import" provider="builtin"
 ```
 
+No subconjunto de rede, `WSAAddressToStringA` retorna erro controlado quando
+o endereço ou o buffer caller-owned é inválido. Em buffer curto, a API deixa
+intacto o conteúdo fornecido, atualiza o tamanho necessário e usa
+`WSAEFAULT`; isso permite distinguir erro de capacidade de uma falha de
+resolução sem produzir diagnóstico parcial.
+
 As chamadas de console são registradas pelo componente `runtime` com os
 tamanhos e resultados relevantes. O componente `process` registra o retorno
 do código convidado:

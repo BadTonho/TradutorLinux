@@ -44,6 +44,9 @@ TL_MSABI int tl_ioctlsocket(std::uintptr_t socket, std::int32_t cmd, std::uint32
 TL_MSABI int tl_gethostname(char* name, int namelen) noexcept;
 TL_MSABI const char* tl_inet_ntop(int af, const void* src, char* dst, std::size_t size) noexcept;
 TL_MSABI int tl_inet_pton(int af, const char* src, void* dst) noexcept;
+TL_MSABI int tl_WSAAddressToStringA(const void* address, std::uint32_t address_length,
+                                    const void* protocol_info, char* address_string,
+                                    std::uint32_t* address_string_length) noexcept;
 TL_MSABI int tl_getpeername(std::uintptr_t socket, void* name, int* name_length) noexcept;
 TL_MSABI int tl_setsockopt(std::uintptr_t socket, int level, int optname, const char* optval, int optlen) noexcept;
 TL_MSABI int tl_getsockopt(std::uintptr_t socket, int level, int optname, char* optval, int* optlen) noexcept;

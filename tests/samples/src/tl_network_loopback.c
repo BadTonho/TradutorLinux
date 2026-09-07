@@ -39,6 +39,9 @@ __attribute__((dllimport)) int sendto(socket_t socket, const char* buffer, int l
 __attribute__((dllimport)) int recvfrom(socket_t socket, char* buffer, int length, int flags,
                                         void* from, int* from_length);
 __attribute__((dllimport)) int getsockname(socket_t socket, void* name, int* name_length);
+__attribute__((dllimport)) int WSAAddressToStringA(const void* address, dword_t address_length,
+                                                   const void* protocol_info, char* address_string,
+                                                   dword_t* address_string_length);
 __attribute__((dllimport)) int shutdown(socket_t socket, int how);
 __attribute__((dllimport)) int getaddrinfo(const char* node, const char* service,
                                            const void* hints, void* result);
@@ -136,6 +139,16 @@ void tl_entry(void) {
     }
     if (getsockname(listener, &g_client_address, &address_length) != 0) {
         fail(output, &written, 32U);
+    }
+    char address_text[64] = {0};
+    dword_t address_text_length = sizeof(address_text);
+    if (WSAAddressToStringA(&g_client_address, sizeof(g_client_address), (void*)0, address_text,
+                            &address_text_length) != 0 || address_text_length < 12U ||
+        address_text[0] != '1' || address_text[1] != '2' || address_text[2] != '7' ||
+        address_text[3] != '.' || address_text[4] != '0' || address_text[5] != '.' ||
+        address_text[6] != '0' || address_text[7] != '.' || address_text[8] != '1' ||
+        address_text[9] != ':' || address_text[address_text_length - 1U] != '\0') {
+        fail(output, &written, 37U);
     }
     if (listen(listener, 1) != 0) {
         fail(output, &written, 33U);
