@@ -1508,6 +1508,38 @@ Evidência reproduzível de 2026-09-07:
 - [x] Ambos emitiram `7-Zip CLI stored test/delete/update/rename/deflate/7z/stdin
   lifecycle: ok` e removeram o staging temporário.
 
+### E19 — Arquivo 7z protegido por senha
+
+Objetivo: validar o caminho de criptografia de arquivo do 7‑Zip CLI em um
+cenário isolado, sem armazenar senha ou artefato fora do staging temporário.
+
+Tarefas:
+
+- [x] Criar um arquivo `7z/LZMA2` com senha explícita e entradas binárias e
+  Unicode já usadas pelos ciclos anteriores.
+- [x] Extrair o arquivo com a senha correta usando um nome de arquivo relativo
+  e verificar os dois payloads byte a byte.
+- [x] Reexecutar o cenário completo em Rust ON e C++ OFF, mantendo timeout,
+  limites de recurso, ciclo da `7z.dll` e limpeza do staging.
+
+Aceitação:
+
+- [x] Criação e extração protegidas terminam com exit `0` e `Everything is Ok`;
+  o nome Unicode e os bytes do payload são preservados.
+- [x] A senha existe somente como dado do smoke, não é persistida no catálogo,
+  no runtime ou em uma DLL específica do aplicativo.
+- [x] Os ciclos anteriores de manutenção, stdin/stdout e caminhos relativos
+  continuam passando nos dois backends.
+
+Evidência reproduzível de 2026-09-07:
+
+- [x] O filtro `^seven_zip_cli_smoke$` passou em `build/debug-rust` após
+  compilar o alvo (1/1, 7,92 s de CTest).
+- [x] O mesmo filtro passou em `build/debug` após compilar o alvo (1/1,
+  9,59 s de CTest).
+- [x] Ambos emitiram `7-Zip CLI stored test/delete/update/rename/deflate/7z/stdin/password
+  lifecycle: ok` e removeram o staging temporário.
+
 ### E11 — Matriz CTest dos smokes GUI do corpus
 
 Objetivo: tornar os cenários GUI reais já validados em D2/E1/E2 descobríveis e

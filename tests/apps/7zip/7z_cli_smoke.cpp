@@ -7,6 +7,7 @@
 #include <iterator>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <thread>
 #include <vector>
 
@@ -218,10 +219,13 @@ int main(const int argc, char** argv) {
     const std::filesystem::path seven_zip_archive = staging / "payload.7z";
     const std::filesystem::path stdin_payload = staging / "stdin-input.txt";
     const std::filesystem::path stdin_archive = staging / "payload-stdin.zip";
+    const std::filesystem::path password_archive = staging / "payload-password.7z";
     const std::string stored_archive_name = stored_archive.filename().string();
     const std::string deflate_archive_name = deflate_archive.filename().string();
     const std::string seven_zip_archive_name = seven_zip_archive.filename().string();
     const std::string stdin_archive_name = stdin_archive.filename().string();
+    const std::string password_archive_name = password_archive.filename().string();
+    constexpr std::string_view kArchivePassword = "TradutorLinux-7z";
     if (!std::filesystem::create_directories(unicode_directory, error) || error ||
         !write_input(input, kPayload) || !write_input(updated_input, "updated payload\n") ||
         !write_input(unicode_input, kUnicodePayload) || !write_input(stdin_payload, kPayload)) {
@@ -305,6 +309,16 @@ int main(const int argc, char** argv) {
     const auto extract_stdin = run_runtime(
         runtime, staged_executable, prefix, {"e", stdin_archive_name, "-so"},
         staging / "extract-stdin.stdout", staging / "extract-stdin.stderr");
+    const auto create_password = run_runtime(
+        runtime, staged_executable, prefix,
+        {"a", "-t7z", "-m0=LZMA2", "-mx=1", "-p" + std::string{kArchivePassword},
+         to_guest_path(password_archive), to_guest_path(input), to_guest_path(unicode_directory)},
+        staging / "create-password.stdout", staging / "create-password.stderr");
+    const auto extract_password = run_runtime(
+        runtime, staged_executable, prefix,
+        {"x", password_archive_name, "-p" + std::string{kArchivePassword},
+         "-oextracted-password", "-y"},
+        staging / "extract-password.stdout", staging / "extract-password.stderr");
 
     const bool extracted_stored =
         read_text(staging / "extracted-stored" / "input.txt") == kPayload;
@@ -330,6 +344,10 @@ int main(const int argc, char** argv) {
     const bool extracted_7z_unicode =
         read_text(staging / "extracted-7z" / unicode_relative) ==
         kUnicodePayload;
+    const bool extracted_password =
+        read_text(staging / "extracted-password" / "input.txt") == kPayload;
+    const bool extracted_password_unicode =
+        read_text(staging / "extracted-password" / unicode_relative) == kUnicodePayload;
     const bool ok = contains_loader_lifecycle(create, "Archive size:") &&
                     !list.timed_out && list.exit_code == 0 &&
                     list.stdout_text.find("input.txt") != std::string::npos &&
@@ -370,7 +388,10 @@ int main(const int argc, char** argv) {
                     extracted_7z_unicode &&
                     contains_loader_lifecycle(create_stdin, "Archive size:") &&
                     contains_loader_events(extract_stdin) &&
-                    extract_stdin.stdout_text == kPayload;
+                    extract_stdin.stdout_text == kPayload &&
+                    contains_loader_lifecycle(create_password, "Archive size:") &&
+                    contains_loader_lifecycle(extract_password, "Everything is Ok") &&
+                    extracted_password && extracted_password_unicode;
     if (!ok) {
         std::cerr << "smoke do 7-Zip CLI falhou em " << staging << '\n';
         std::cerr << "create exit=" << create.exit_code << " timeout=" << create.timed_out << '\n';
@@ -414,13 +435,19 @@ int main(const int argc, char** argv) {
         std::cerr << "extract-stdin exit=" << extract_stdin.exit_code
                   << " timeout=" << extract_stdin.timed_out
                   << " exact-stdout=" << (extract_stdin.stdout_text == kPayload) << '\n';
+        std::cerr << "create-password exit=" << create_password.exit_code
+                  << " timeout=" << create_password.timed_out << '\n';
+        std::cerr << "extract-password exit=" << extract_password.exit_code
+                  << " timeout=" << extract_password.timed_out
+                  << " extracted-password=" << extracted_password
+                  << " extracted-password-unicode=" << extracted_password_unicode << '\n';
         std::cerr << "list-deflate stdout:\n" << list_deflate.stdout_text;
         std::cerr << "list-7z stdout:\n" << list_7z.stdout_text;
         std::filesystem::remove_all(staging, error);
         return 1;
     }
 
-    std::cout << "7-Zip CLI stored test/delete/update/rename/deflate/7z/stdin lifecycle: ok\n";
+    std::cout << "7-Zip CLI stored test/delete/update/rename/deflate/7z/stdin/password lifecycle: ok\n";
     std::filesystem::remove_all(staging, error);
     return 0;
 }

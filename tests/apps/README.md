@@ -9,7 +9,8 @@ os limites externos e a evidência ON/OFF quando aplicável.
 
 O `7zip/7z_cli_smoke.cpp` é executado somente quando recebe explicitamente o
 runtime e o `7z_x64.exe` do corpus. O cenário cobre arquivos `stored`,
-`DEFLATE`, `7z/LZMA2`, caminhos relativos e o filtro stdin/stdout (`-si`/`-so`).
+`DEFLATE`, `7z/LZMA2` normal e protegido por senha, caminhos relativos e o
+filtro stdin/stdout (`-si`/`-so`).
 O CMake registra o teste automaticamente quando `TL_POPULAR_APPS_DIR` aponta
 para `Aplicativos_Windows_Populares/`.
 
