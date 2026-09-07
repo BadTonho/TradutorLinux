@@ -1871,6 +1871,50 @@ Evidência reproduzível de 2026-09-07:
   `popular_apps_install_matrix` passou (15,50 s).
 - [x] As configurações confirmam `TL_BUILD_RUST=ON` em `build/debug-rust` e
   `TL_BUILD_RUST=OFF` em `build/debug`, ambas apontando para o mesmo corpus.
+- [x] A execução completa do rótulo `apps` passou nos dois builds: no Rust ON,
+  report 27/27, nativa 5/5 e instalação 4/4; no C++ OFF, os mesmos resultados.
+  Os quatro smokes GUI foram `Skipped` com retorno 77 somente porque não havia
+  Xvfb disponível nessa execução; a validação funcional com Xvfb próprio está
+  registrada na E11.
+
+### E28 — Fluxo SSH local determinístico do PuTTY
+
+Objetivo: transformar o bloqueio restante do PuTTY em um cenário reproduzível
+de rede e GUI, exercitando apenas capacidades genéricas do runtime. Esta etapa
+não cria DLL, shim ou regra específica para o aplicativo.
+
+Escopo:
+
+- manter PE32/x86, HWiNFO empacotado, Rufus com entry point `RWX`, instaladores
+  e serviços externos fora da execução;
+- iniciar um servidor TCP local controlado pelo teste, sem Internet, para
+  separar conexão, troca inicial de versão, prompt e encerramento;
+- usar somente `tests/apps/putty/` para o harness e fixtures do cenário;
+- investigar o trace ON/OFF antes de qualquer API nova e só implementar uma
+  capacidade genérica quando houver contrato, fixture mínima e regressão;
+- preservar o smoke atual de abertura/fechamento da configuração como
+  regressão independente.
+
+Tarefas:
+
+- [ ] Definir o protocolo mínimo do servidor local e os critérios observáveis
+  de sucesso, rejeição e encerramento, com timeout externo e prefixo isolado.
+- [ ] Criar o smoke interativo que configure o PuTTY sem depender de cliques
+  por coordenadas frágeis, valide o trace de socket/eventos e compare Rust ON
+  com C++ OFF.
+- [ ] Capturar a primeira falha genérica após a conexão e criar uma fixture
+  mínima antes de alterar `src/runtime/` ou módulos compartilhados.
+- [ ] Repetir `--report`, execução, limpeza e ausência de processos residuais;
+  não promover o PuTTY a suporte geral por um handshake parcial.
+
+Critérios de saída:
+
+- [ ] O cenário local termina com stdout, exit code e trace determinísticos em
+  Rust ON e C++ OFF, ou falha controladamente com a limitação identificada.
+- [ ] Não há acesso externo, fallback silencioso, DLL específica ou alteração
+  do caminho de outros aplicativos.
+- [ ] A matriz de compatibilidade registra separadamente conexão parcial,
+  configuração GUI e SSH completo.
 
 ## Regras de validação
 
