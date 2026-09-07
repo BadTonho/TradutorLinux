@@ -19,6 +19,12 @@ selecionados e o MSIX do corpus e verifica os exit codes esperados sem mapear
 ou executar os arquivos. O caso é repetido no build Rust ON e no baseline C++
 OFF.
 
+`popular_apps_native_matrix` executa somente os cinco PE32+ com ação direta já
+documentada: 7-Zip, os dois binários WinRAR, Rockstar e Rufus. Cada caso usa
+prefixo temporário, `--timeout 3`, limites de CPU/memória e verifica o exit code
+e o diagnóstico esperado; instaladores, DLLs e cenários interativos de GUI
+permanecem nos testes específicos.
+
 Com o mesmo parâmetro e Xvfb disponível, os smokes GUI reais de 7-Zip File
 Manager, PuTTY, WinRAR SFX e Notepad++ também são registrados separadamente no
 CTest. Cada cenário cria seu próprio Xvfb/staging e mantém seu resultado

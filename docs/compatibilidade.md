@@ -27,6 +27,12 @@ sucesso (`0`), rejeição estrutural (`4`) e formato/arquitetura não suportados
 (`5`) sem mapear ou executar os arquivos; a mesma matriz é executada nos
 builds Rust ON e C++ OFF.
 
+O teste `popular_apps_native_matrix` cobre os cinco casos de execução direta já
+selecionados no B2: 7-Zip e os dois WinRAR terminam com `0`, Rockstar preserva
+seu `ExitProcess(3)` e Rufus é rejeitado com `4` por `map-failed`. Cada caso
+recebe prefixo temporário, limites de CPU/memória e timeout; isso é evidência
+de comportamento controlado, não uma promoção geral de compatibilidade.
+
 ## Política de backend do parser PE — R21.3–R21.5
 
 Com `TL_BUILD_RUST=ON`, a execução direta de `--report` usa o resultado Rust

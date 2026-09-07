@@ -1605,6 +1605,37 @@ Evidência reproduzível de 2026-09-07:
 - [x] O teste foi registrado com os labels `runtime;apps;report;corpus` e
   permanece condicional ao diretório externo do corpus.
 
+### E22 — Matriz automatizada de execução direta do corpus
+
+Objetivo: repetir automaticamente os cenários nativos controlados já
+observados no B2, sem iniciar instaladores, DLLs ou fluxos GUI interativos.
+
+Tarefas:
+
+- [x] Registrar `popular_apps_native_matrix` para 7-Zip, os dois binários
+  WinRAR, Rockstar e Rufus, que possuem resultados diretos documentados.
+- [x] Executar cada caso com prefixo e `APPDATA` temporários, `--timeout 3`,
+  limite de três CPUs, memória de 512 MiB e timeout externo de 30 s.
+- [x] Verificar o exit code e o marcador de trace esperado, incluindo
+  `ExitProcess(0)`, `ExitProcess(3)` e `map-failed`, repetindo ON/OFF.
+
+Aceitação:
+
+- [x] 7-Zip e os dois WinRAR terminam com `0`; Rockstar termina com `3`; Rufus
+  termina com `4` por `map-failed`, sem timeout ou sinal inesperado.
+- [x] Instaladores, DLLs e GUIs com interação continuam fora desta matriz e
+  permanecem cobertos somente por seus cenários específicos.
+- [x] Nenhuma regra, shim ou DLL específica de aplicativo foi adicionada ao
+  runtime; o teste apenas executa o caminho geral já existente.
+
+Evidência reproduzível de 2026-09-07:
+
+- [x] `ctest --test-dir build/debug-rust --output-on-failure -R
+  '^popular_apps_native_matrix$'` passou com 5/5 casos em 1,09 s.
+- [x] O mesmo filtro em `build/debug` passou com 5/5 casos em 1,07 s.
+- [x] O staging criado no build para prefixos temporários foi removido pelo
+  próprio verificador após cada matriz.
+
 ### E11 — Matriz CTest dos smokes GUI do corpus
 
 Objetivo: tornar os cenários GUI reais já validados em D2/E1/E2 descobríveis e
