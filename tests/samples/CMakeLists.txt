@@ -282,6 +282,9 @@ function(tl_add_pe_fixture target_name source_file manifest_file)
             elseif(target_name STREQUAL "tl_shell")
                 set(runtime_extra_args
                     "-DEXPECTED_HEX=7368656c6c0a")
+            elseif(target_name STREQUAL "tl_shell_heap_probe")
+                set(runtime_extra_args
+                    "-DEXPECTED_HEX=7368656c6c2d686561702d70726f62650a")
             elseif(target_name STREQUAL "tl_gdiex")
                 set(runtime_extra_args
                     "-DEXPECTED_HEX=67646965780a")
@@ -1147,6 +1150,10 @@ tl_add_pe_fixture(tl_shell src/tl_shell.c manifests/tl_shell.json
     LINK_KERNEL32 EXPECT_RESOLVED CONSOLE REPORT RELOCATABLE
     REPORT_SYMBOL "SHGetKnownFolderPath"
     IMPORT_DEF defs/tl_shell.def)
+
+tl_add_pe_fixture(tl_shell_heap_probe src/tl_shell_heap_probe.c manifests/tl_shell_heap_probe.json
+    LINK_KERNEL32 LINK_SHELL32 EXPECT_RESOLVED CONSOLE REPORT RELOCATABLE
+    REPORT_SYMBOL "SHGetFolderPathW")
 
 tl_add_pe_fixture(tl_gdiex src/tl_gdiex.c manifests/tl_gdiex.json
     LINK_KERNEL32 LINK_USER32 LINK_GDI32 LINK_GDIPLUS LINK_UXTHEME LINK_WINMM LINK_DBGHELP EXPECT_RESOLVED CONSOLE REPORT RELOCATABLE

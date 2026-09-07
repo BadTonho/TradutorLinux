@@ -730,12 +730,14 @@ convenção de memória Win32 ainda incompleta ou do próprio aplicativo.
 
 Tarefas:
 
-- [ ] Criar uma fixture PE32+ mínima que reproduza a sequência observada:
+- [x] Criar a fixture PE32+ mínima `tl_shell_heap_probe`, sem CRT, cobrindo
   startup wide, bloco de ambiente, `SHGetFolderPathW` e alocações posteriores,
   sem copiar código do Notepad++.
-- [ ] Executar a fixture em Debug e no preset Sanitizer compatível com o parser
+- [x] Executar a fixture em Debug Rust ON e C++ OFF; os testes de metadados,
+  report, runtime e `app run` passaram em ambos, com exit `0` e stdout igual.
+- [ ] Executar a fixture no preset Sanitizer compatível com o parser
   atual, com sentinelas e backtrace; separar corrupção do host de falha guest.
-- [ ] Comparar a fixture com `tl_shell` e com o Notepad++ sob Xvfb válido;
+- [x] Comparar a fixture com `tl_shell` e com o Notepad++ sob Xvfb válido;
   registrar a primeira operação divergente antes de mudar o runtime.
 - [ ] Se a causa for do runtime, aplicar somente a correção mínima, criar teste
   de regressão e repetir a matriz ON/OFF; se for específica do aplicativo,
@@ -748,6 +750,23 @@ Aceitação:
 - [ ] Nenhuma correção relaxa isolamento, W^X, validação de memória ou limites.
 - [ ] O Notepad++ só muda de classificação depois de execução reproduzível
   sem corrupção e com stdout/exit/trace comparados nos dois backends.
+
+Evidência inicial D1 de 2026-09-07:
+
+- [x] `tests/samples/src/tl_shell_heap_probe.c` reproduz a sequência mínima;
+  `fixture_tl_shell_heap_probe_metadata`,
+  `runtime_tl_shell_heap_probe_matches_readobj`,
+  `app_run_tl_shell_heap_probe` e `report_tl_shell_heap_probe_support`
+  passaram nos builds `build/debug` e `build/debug-rust`.
+- [x] A execução direta com `--trace` está em `/tmp/tl-d1-shell-heap`:
+  Rust ON e C++ OFF retornaram `0`, stdout byte-a-byte igual e registraram
+  startup wide, ambiente, startup wide e `ExitProcess(0)` sem corrupção.
+- [x] A fixture existente `tl_shell` continua passando; o Notepad++ continua
+  reproduzindo a corrupção de heap após `startup-info` wide, portanto o probe
+  reduz a hipótese para uma interação posterior específica do aplicativo ou
+  para uma API ainda não exercitada pelo probe.
+- [ ] O Sanitizer compatível e a primeira escrita causadora ainda precisam ser
+  isolados; nenhum patch de runtime foi aplicado nesta etapa.
 
 ### D2 — Cenários interativos para GUIs x64
 

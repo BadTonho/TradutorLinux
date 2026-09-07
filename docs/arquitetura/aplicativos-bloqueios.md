@@ -15,7 +15,7 @@ Este documento registra a triagem C1 da matriz em
 | `HWiNFO64.exe` | parser PE: export RVA sem intervalo file-backed | `PeReaderTest.RejectsExportDirectoryWithoutFileBackedSection`; `malformed` exit `4` em ambos | manter rejeição até existir fase explícita de desempacotamento |
 | `Rockstar-Games-Launcher.exe` | convidado: `ExitProcess(3)` explícito | loader, imports, TLS e contexto inicial registrados como sucesso antes do término; stdout vazio e exit `3` em ambos | não converter código do convidado em sucesso e não alterar o loader por enquanto |
 | `PuTTY` | GUI inicia `PuTTYTimerWindow`, mas permanece em execução até o timeout controlado | `/tmp/tl-matrix-c2-x11/*/6/stderr`; `xdpyinfo` confirmou Xvfb `:99` antes dos testes; sem `x11/connect-failed` | não promover como suporte concluído; tratar como cenário interativo ainda sem critério de encerramento |
-| `Notepad++` | corrupção de heap após `startup-info` wide, observada como SIGSEGV ou SIGABRT controlado, mesmo com X11 válido | `/tmp/tl-matrix-c2-x11/*/5/stderr` e `/tmp/tl-matrix-c4/run/*/5.stderr`; `xdpyinfo` confirmou Xvfb antes dos testes | classificar como bloqueio real do runtime/aplicativo; investigar a primeira operação após o startup, sem relaxar isolamento |
+| `Notepad++` | corrupção de heap após `startup-info` wide, observada como SIGSEGV ou SIGABRT controlado, mesmo com X11 válido | `/tmp/tl-matrix-c2-x11/*/5/stderr`, `/tmp/tl-matrix-c4/run/*/5.stderr` e o probe `/tmp/tl-d1-shell-heap`; `xdpyinfo` confirmou Xvfb antes dos testes | classificar como bloqueio real do runtime/aplicativo; o probe mínimo passa, então investigar a primeira API adicional do aplicativo sem relaxar isolamento |
 
 ## Invariantes preservados
 
