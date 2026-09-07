@@ -731,9 +731,9 @@ convenção de memória Win32 ainda incompleta ou do próprio aplicativo.
 Tarefas:
 
 - [x] Criar a fixture PE32+ mínima `tl_shell_heap_probe`, sem CRT, cobrindo
-  startup wide, cópia do bloco de ambiente para heap própria, liberação do
-  bloco original, `SHGetFolderPathW` e alocações posteriores, sem copiar
-  código do Notepad++.
+  startup wide, mutação/cópia do bloco de ambiente, liberação do bloco
+  original, `SHGetFolderPathW`, `HeapSize`, `HeapReAlloc` e alocações
+  posteriores, sem copiar código do Notepad++.
 - [x] Executar a fixture em Debug Rust ON e C++ OFF; os testes de metadados,
   report, runtime e `app run` passaram em ambos, com exit `0` e stdout igual.
 - [ ] Executar a fixture no preset Sanitizer compatível com o parser

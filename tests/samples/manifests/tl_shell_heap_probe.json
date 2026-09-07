@@ -13,7 +13,10 @@
       "GetStartupInfoW",
       "GetStdHandle",
       "HeapAlloc",
+      "HeapReAlloc",
+      "HeapSize",
       "HeapFree",
+      "SetEnvironmentVariableW",
       "WriteFile"
     ],
     "SHELL32.dll": [

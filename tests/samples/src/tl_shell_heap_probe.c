@@ -34,7 +34,13 @@ __attribute__((dllimport)) wchar16_t* GetEnvironmentStringsW(void);
 __attribute__((dllimport)) bool_t FreeEnvironmentStringsW(wchar16_t* block);
 __attribute__((dllimport)) void* GetProcessHeap(void);
 __attribute__((dllimport)) void* HeapAlloc(void* heap, dword_t flags, unsigned long long size);
+__attribute__((dllimport)) void* HeapReAlloc(void* heap, dword_t flags, void* memory,
+                                             unsigned long long size);
+__attribute__((dllimport)) unsigned long long HeapSize(void* heap, dword_t flags,
+                                                       const void* memory);
 __attribute__((dllimport)) bool_t HeapFree(void* heap, dword_t flags, void* memory);
+__attribute__((dllimport)) bool_t SetEnvironmentVariableW(const wchar16_t* name,
+                                                           const wchar16_t* value);
 __attribute__((dllimport)) long SHGetFolderPathW(void* hwnd, int csidl, void* token,
                                                   dword_t flags, wchar16_t* path);
 
@@ -51,6 +57,11 @@ void tl_entry(void) {
     if (startup.cb == 0U) fail();
 
     void* const heap = GetProcessHeap();
+    const wchar16_t variable_name[] = {
+        'T', 'L', '_', 'H', 'E', 'A', 'P', '_', 'P', 'R', 'O', 'B', 'E', 0
+    };
+    const wchar16_t variable_value[] = {'1', 0};
+    if (!SetEnvironmentVariableW(variable_name, variable_value)) fail();
     wchar16_t* const environment = GetEnvironmentStringsW();
     if (environment == (wchar16_t*)0) fail();
     unsigned long long environment_units = 0;
@@ -73,11 +84,14 @@ void tl_entry(void) {
     GetStartupInfoW(&startup);
     if (startup.cb == 0U) fail();
 
-    unsigned char* const first = (unsigned char*)HeapAlloc(heap, 0U, 64U);
+    unsigned char* first = (unsigned char*)HeapAlloc(heap, 0U, 64U);
     unsigned char* const second = (unsigned char*)HeapAlloc(heap, 0U, 4096U);
     if (first == (unsigned char*)0 || second == (unsigned char*)0) fail();
     for (unsigned long long index = 0; index < 64U; ++index) first[index] = (unsigned char)index;
     for (unsigned long long index = 0; index < 4096U; ++index) second[index] = (unsigned char)(index ^ 0x5AU);
+    if (HeapSize(heap, 0U, first) < 64U) fail();
+    first = (unsigned char*)HeapReAlloc(heap, 0U, first, 128U);
+    if (first == (unsigned char*)0 || first[0] != 0U || HeapSize(heap, 0U, first) < 128U) fail();
 
     wchar16_t path[260] = {0};
     if (SHGetFolderPathW((void*)0, 0x1A, (void*)0, 0U, path) != 0 || path[0] == 0) fail();
@@ -86,6 +100,7 @@ void tl_entry(void) {
         !HeapFree(heap, 0U, environment_copy)) {
         fail();
     }
+    if (!SetEnvironmentVariableW(variable_name, (const wchar16_t*)0)) fail();
 
     wchar16_t second_path[260] = {0};
     if (SHGetFolderPathW((void*)0, 0x1A, (void*)0, 0U, second_path) != 0 ||
