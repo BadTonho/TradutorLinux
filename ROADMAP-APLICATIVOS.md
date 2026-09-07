@@ -1333,6 +1333,40 @@ Evidência E13 de 2026-09-07:
 - [x] `seven_zip_cli_smoke` passou manualmente nos dois builds com
   `7-Zip CLI stored/deflate/7z create/list/extract: ok`.
 
+### E14 — Ciclo de manutenção de arquivos no 7-Zip CLI
+
+Objetivo: cobrir operações de manutenção de um arquivo existente, além do
+round-trip inicial, mantendo o cenário isolado e o runtime genérico.
+
+Tarefas:
+
+- [x] Testar integridade do ZIP `stored` com o comando `t` e exigir
+  `Everything is Ok`, exit `0` e o ciclo completo da `7z.dll`.
+- [x] Remover `input.txt` com o comando `d`, atualizar o mesmo ZIP com
+  `updated.txt` usando `DEFLATE` e validar o arquivo resultante com listagem
+  técnica UTF-8 e extração em staging separado.
+- [x] Confirmar que o caminho Unicode permanece no arquivo, que `input.txt`
+  não reaparece e que `updated.txt` preserva os bytes esperados.
+- [x] Reexecutar a matriz CTest Rust ON/C++ OFF, sem alterar o corpus
+  original nem criar DLL, shim ou regra específica do aplicativo.
+
+Aceitação:
+
+- [x] O smoke cobre criação, integridade, remoção, atualização, listagem e
+  extração para ZIP `stored`, ZIP `DEFLATE` e `7z/LZMA2`.
+- [x] A operação de manutenção termina com exit `0` nos dois backends e não
+  altera a declaração além do subconjunto testado.
+- [x] A saída continua determinística, o staging é removido e os bytes do
+  caminho Unicode e de `updated.txt` são verificados após a extração.
+
+Evidência E14 de 2026-09-07:
+
+- [x] `ctest --test-dir build/debug-rust --output-on-failure -R
+  '^seven_zip_cli_smoke$'` passou em 5,61 s.
+- [x] O mesmo filtro em `build/debug` passou em 7,11 s.
+- [x] Os binários manuais ON/OFF emitiram
+  `7-Zip CLI stored test/delete/update/deflate/7z lifecycle: ok`.
+
 ### E11 — Matriz CTest dos smokes GUI do corpus
 
 Objetivo: tornar os cenários GUI reais já validados em D2/E1/E2 descobríveis e
