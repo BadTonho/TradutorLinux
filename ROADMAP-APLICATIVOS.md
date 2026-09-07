@@ -2,10 +2,10 @@
 
 Este documento transforma os resultados da primeira rodada de testes do diretório
 `Aplicativos_Windows_Populares/` em uma fila de trabalho verificável. Ele
-complementa os roadmaps de produto e Rust ([ROADMAP.md](ROADMAP.md) e
-[ROADMAP-RUST.md](ROADMAP-RUST.md)); não substitui suas fases nem autoriza
-declarar compatibilidade sem testes de integração e registro em
-[`docs/compatibilidade.md`](../docs/compatibilidade.md).
+complementa os roadmaps de produto e Rust ([ROADMAP.md](feitos/ROADMAP.md) e
+[ROADMAP-RUST.md](feitos/ROADMAP-RUST.md)); não substitui suas fases nem
+autoriza declarar compatibilidade sem testes de integração e registro em
+[`docs/compatibilidade.md`](docs/compatibilidade.md).
 
 ## Estado inicial — 2026-09-07
 

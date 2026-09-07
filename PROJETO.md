@@ -134,10 +134,10 @@ Cada marco deve ser reproduzível sem Windows. `mingw-w64` pode gerar os binári
 ```text
 TradutorLinux/
 ├── PROJETO.md
+├── ROADMAP-APLICATIVOS.md
 ├── feitos/
 │   ├── PROXIMAS-ETAPAS.md
 │   ├── ROADMAP.md
-│   ├── ROADMAP-APLICATIVOS.md
 │   └── ROADMAP-RUST.md
 ├── README.md
 ├── CMakeLists.txt
