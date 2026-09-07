@@ -14,8 +14,8 @@ Este documento registra a triagem C1 da matriz em
 | `Rufus_x64.exe` | loader: `entry point fora de uma página executável` | `UPX1` tem `rwx`; `map-failed` exit `4` em ambos os backends; fixtures `ImageMapperTest.DowngradesWritableExecutableSectionToReadWrite` e `ImageMapperTest.RejectsEntryPointOutsideExecutablePage` | manter W^X e a rejeição; não criar página `RWX` nem desempacotar em runtime nesta etapa |
 | `HWiNFO64.exe` | parser PE: export RVA sem intervalo file-backed | `PeReaderTest.RejectsExportDirectoryWithoutFileBackedSection`; `malformed` exit `4` em ambos | manter rejeição até existir fase explícita de desempacotamento |
 | `Rockstar-Games-Launcher.exe` | convidado: `ExitProcess(3)` explícito | loader, imports, TLS e contexto inicial registrados como sucesso antes do término; stdout vazio e exit `3` em ambos | não converter código do convidado em sucesso e não alterar o loader por enquanto |
-| `PuTTY` | ambiente GUI: `x11/connect-failed` em `CreateWindowExA`, seguido de timeout | `/tmp/tl-matrix-b2/*/6/stderr`; o Xvfb B2 falhou antes dos aplicativos | classificar como skip ambiental; repetir com Xvfb válido antes de atribuir falha ao runtime |
-| `Notepad++` | ambiente GUI não validado; SIGSEGV controlado após startup wide | `/tmp/tl-matrix-b2/*/5/stderr`; Xvfb B2 falhou antes dos aplicativos | não promover nem corrigir ainda; repetir sob Xvfb válido e isolar o primeiro evento GUI |
+| `PuTTY` | GUI inicia `PuTTYTimerWindow`, mas permanece em execução até o timeout controlado | `/tmp/tl-matrix-c2-x11/*/6/stderr`; `xdpyinfo` confirmou Xvfb `:99` antes dos testes; sem `x11/connect-failed` | não promover como suporte concluído; tratar como cenário interativo ainda sem critério de encerramento |
+| `Notepad++` | SIGSEGV controlado em endereço nulo após `startup-info` wide, mesmo com X11 válido | `/tmp/tl-matrix-c2-x11/*/5/stderr`; `xdpyinfo` confirmou Xvfb `:99` antes dos testes | classificar como bloqueio real do runtime/aplicativo; investigar a primeira operação após o startup, sem relaxar isolamento |
 
 ## Invariantes preservados
 
@@ -30,8 +30,10 @@ Este documento registra a triagem C1 da matriz em
 
 Para uma nova triagem, repetir primeiro B1 e B2 com os binários já construídos.
 Para casos GUI, o teste só é válido quando `xdpyinfo` confirma um Xvfb próprio
-antes de iniciar o convidado. Se o servidor gráfico falhar, o resultado deve
-ser registrado como skip ambiental e não como regressão funcional.
+antes de iniciar o convidado. A rodada C2 confirmou esse requisito: PuTTY e
+Notepad++ foram executados com X11 funcional, preservando os mesmos resultados
+em Rust ON e C++ OFF. Portanto, o timeout do PuTTY e o SIGSEGV do Notepad++ não
+devem ser classificados como falhas de conexão X11.
 
 Nenhuma API nova ou mudança de loader é justificada por esta triagem. A C2
 precisa de um display válido e de uma hipótese específica antes de alterar

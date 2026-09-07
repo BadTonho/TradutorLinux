@@ -412,10 +412,12 @@ Evidência reproduzível de 2026-09-07:
   `WinRAR_x64.exe`, `winrar-x64-723.exe`, `notepad++.exe` e `putty_x64.exe`.
 - [x] Rust e C++ produziram stdout e exit code iguais nos casos válidos:
   7-Zip CLI/WinRAR `0`, Rockstar `3` e Rufus `4` (`map-failed` por entry
-  point não executável). As tentativas GUI 7-Zip File Manager, Notepad++ e
-  PuTTY terminaram controladamente, mas o log `/tmp/tl-matrix-b2/xvfb.log`
-  prova que o Xvfb não iniciou; elas são skips ambientais, não evidência de
-  compatibilidade GUI.
+  point não executável). A tentativa inicial de GUI foi invalidada porque o
+  Xvfb não iniciou; ela foi repetida em C2 com `xdpyinfo` confirmando Xvfb
+  funcional. Nessa rodada, 7-Zip File Manager e PuTTY terminaram por timeout
+  controlado (`72`), e Notepad++ por SIGSEGV controlado (`71`), com resultados
+  iguais nos dois backends. Esses resultados são evidência de execução sob
+  X11, mas não de compatibilidade concluída.
 - [x] As execuções usaram timeout externo de 15 s, `--timeout 3`,
   `--cpu 3`, `--memory 512` e `APPDATA` isolado por caso. Nenhum diretório
   temporário recebeu arquivos persistentes e nenhum processo Xvfb ficou ativo.
@@ -499,7 +501,7 @@ deliberadamente não executada.
 | --- | --- | --- | --- | --- | --- |
 | `7-Zip_x64_Installer.exe` | PE32 x86 | 5/5 | — | — | análise; arquitetura não suportada |
 | `7z.dll` | PE32+ DLL | 0/0 | — | — | DLL analisada; não executada como aplicativo |
-| `7zFM_x64.exe` | PE32+ GUI | 0/0 | tentativa 0/0, X11 indisponível | — | skip ambiental na B2; A5 tem evidência Xvfb válida |
+| `7zFM_x64.exe` | PE32+ GUI | 0/0 | 72/72 sob Xvfb válido | — | GUI iniciou; timeout controlado sem cenário de interação; A5 mantém smoke funcional |
 | `7z_x64.exe` | PE32+ CLI | 0/0 | 0/0 | — | execução controlada |
 | `CPU-Z_2.18_en.exe` | PE32 x86 | 5/5 | — | — | análise; arquitetura não suportada |
 | `CapCut_7677236283084898320_installer.exe` | PE32 x86 | 5/5 | — | — | análise; arquitetura não suportada |
@@ -519,9 +521,9 @@ deliberadamente não executada.
 | `Rufus_x64.exe` | PE32+ aplicativo empacotado | 0/0 | 4/4 | — | `map-failed` por W^X/entry point |
 | `WinRAR_x64.exe` | PE32+ aplicativo | 0/0 | 0/0 | — | execução controlada |
 | `lghub_installer.exe` | PE32+ instalador | 0/0 | — | 1/1 | alias byte-a-byte do G HUB |
-| `notepad++.exe` | PE32+ GUI | 0/0 | tentativa 71/71, X11 indisponível | — | diagnóstico controlado, não compatibilidade GUI |
+| `notepad++.exe` | PE32+ GUI | 0/0 | 71/71 sob Xvfb válido | — | SIGSEGV controlado após `startup-info` wide; bloqueio real a investigar |
 | `officedeploymenttool_20228-20124.exe` | PE32 x86 | 5/5 | — | — | análise; arquitetura não suportada |
-| `putty_x64.exe` | PE32+ GUI | 0/0 | tentativa 72/72, X11 indisponível | — | skip ambiental e timeout controlado |
+| `putty_x64.exe` | PE32+ GUI | 0/0 | 72/72 sob Xvfb válido | — | `PuTTYTimerWindow` foi criada; timeout controlado sem cenário de interação |
 | `winrar-x64-723.exe` | PE32+ aplicativo | 0/0 | 0/0 | — | execução controlada; duplicata do WinRAR |
 | `Affinity x64.msix` | MSIX/ZIP64 | 4/4 | — | 4/4 | pacote rejeitado antes da extração |
 
@@ -576,11 +578,12 @@ matriz ON/OFF e a execução controlada.
 
 Tarefas:
 
-- [ ] Reproduzir `Notepad++` e `PuTTY` com Xvfb e traces reduzidos, isolando
-  a primeira API ou evento divergente.
-- [ ] Reproduzir `Rockstar` com stdout/stderr e imports já resolvidos, sem
+- [x] Reproduzir `Notepad++` e `PuTTY` com Xvfb e traces reduzidos, isolando
+  o primeiro resultado relevante: PuTTY cria `PuTTYTimerWindow` e aguarda;
+  Notepad++ alcança `startup-info` wide e termina com SIGSEGV em endereço nulo.
+- [x] Reproduzir `Rockstar` com stdout/stderr e imports já resolvidos, sem
   transformar `ExitProcess 3` em sucesso artificial.
-- [ ] Manter `Rufus` bloqueado por W^X até existir um modelo seguro para a
+- [x] Manter `Rufus` bloqueado por W^X até existir um modelo seguro para a
   imagem empacotada; não permitir página `RWX` como atalho.
 - [ ] Se surgir uma correção, criar fixture unitária, aplicar ON/OFF e
   repetir B2 antes de atualizar a compatibilidade.
@@ -589,7 +592,22 @@ Aceitação:
 
 - [ ] A correção, se autorizada, passa Debug e Sanitize afetados, sem
   regressão nos aplicativos já verificados.
-- [ ] Falhas restantes continuam com exit code e diagnóstico controlados.
+- [x] Falhas restantes continuam com exit code e diagnóstico controlados.
+
+Evidência C2 de 2026-09-07:
+
+- [x] `xdpyinfo` confirmou um Xvfb próprio em `:99` antes das execuções; os
+  resultados foram salvos em `/tmp/tl-matrix-c2-x11`.
+- [x] `7zFM_x64.exe`, `putty_x64.exe` e `notepad++.exe` foram executados em
+  Rust ON e C++ OFF com `--trace --timeout 3 --cpu 3 --memory 512` e timeout
+  externo de 15 segundos. stdout e exit code coincidiram: `72`, `72` e `71`,
+  respectivamente.
+- [x] PuTTY não registrou `x11/connect-failed`: registrou
+  `RegisterClassExA`/`CreateWindowExA` de `PuTTYTimerWindow` e permaneceu até
+  `guest-timeout`. Notepad++ reproduziu `guest-signal`/SIGSEGV em endereço
+  nulo após `startup-info` wide.
+- [ ] Ainda não há correção autorizada para o bloqueio do Notepad++, nem um
+  cenário automatizado de interação para promover PuTTY ou 7-Zip GUI.
 
 ### C3 — Diagnóstico dos instaladores aprovados
 
