@@ -84,14 +84,14 @@ void tl_entry(void) {
     GetStartupInfoW(&startup);
     if (startup.cb == 0U) fail();
 
-    unsigned char* first = (unsigned char*)HeapAlloc(heap, 0U, 64U);
+    unsigned char* first = (unsigned char*)HeapAlloc(heap, 0U, 512U);
     unsigned char* const second = (unsigned char*)HeapAlloc(heap, 0U, 4096U);
     if (first == (unsigned char*)0 || second == (unsigned char*)0) fail();
-    for (unsigned long long index = 0; index < 64U; ++index) first[index] = (unsigned char)index;
+    for (unsigned long long index = 0; index < 512U; ++index) first[index] = (unsigned char)index;
     for (unsigned long long index = 0; index < 4096U; ++index) second[index] = (unsigned char)(index ^ 0x5AU);
-    if (HeapSize(heap, 0U, first) < 64U) fail();
-    first = (unsigned char*)HeapReAlloc(heap, 0U, first, 128U);
-    if (first == (unsigned char*)0 || first[0] != 0U || HeapSize(heap, 0U, first) < 128U) fail();
+    if (HeapSize(heap, 0U, first) < 512U) fail();
+    first = (unsigned char*)HeapReAlloc(heap, 0U, first, 1024U);
+    if (first == (unsigned char*)0 || first[0] != 0U || HeapSize(heap, 0U, first) < 1024U) fail();
 
     wchar16_t path[260] = {0};
     if (SHGetFolderPathW((void*)0, 0x1A, (void*)0, 0U, path) != 0 || path[0] == 0) fail();

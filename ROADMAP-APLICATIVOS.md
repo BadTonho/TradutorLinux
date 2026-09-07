@@ -732,8 +732,8 @@ Tarefas:
 
 - [x] Criar a fixture PE32+ mínima `tl_shell_heap_probe`, sem CRT, cobrindo
   startup wide, mutação/cópia do bloco de ambiente, liberação do bloco
-  original, `SHGetFolderPathW`, `HeapSize`, `HeapReAlloc` e alocações
-  posteriores, sem copiar código do Notepad++.
+  original, `SHGetFolderPathW`, `HeapSize`, `HeapReAlloc` de 512 para 1024
+  bytes e alocações posteriores, sem copiar código do Notepad++.
 - [x] Executar a fixture em Debug Rust ON e C++ OFF; os testes de metadados,
   report, runtime e `app run` passaram em ambos, com exit `0` e stdout igual.
 - [ ] Executar a fixture no preset Sanitizer compatível com o parser
