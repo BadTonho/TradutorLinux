@@ -25,6 +25,12 @@ prefixo temporário, `--timeout 3`, limites de CPU/memória e verifica o exit co
 e o diagnóstico esperado; instaladores, DLLs e cenários interativos de GUI
 permanecem nos testes específicos.
 
+`popular_apps_install_matrix` cobre somente os quatro candidatos aprovados
+para instalação controlada: Roblox, G HUB, o alias byte-a-byte e Affinity. Cada
+caso usa `HOME`, `XDG_CONFIG_HOME`, `APPDATA` e prefixo temporários, verifica o
+estágio/erro esperado e exige ausência de arquivos, extração e cadastro após a
+rejeição. Instaladores PE32/x86 permanecem fora.
+
 Com o mesmo parâmetro e Xvfb disponível, os smokes GUI reais de 7-Zip File
 Manager, PuTTY, WinRAR SFX e Notepad++ também são registrados separadamente no
 CTest. Cada cenário cria seu próprio Xvfb/staging e mantém seu resultado

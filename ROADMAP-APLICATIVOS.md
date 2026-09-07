@@ -1636,6 +1636,38 @@ Evidência reproduzível de 2026-09-07:
 - [x] O staging criado no build para prefixos temporários foi removido pelo
   próprio verificador após cada matriz.
 
+### E23 — Matriz automatizada de instalação controlada
+
+Objetivo: repetir os cenários de instalação real já autorizados sem executar
+indiscriminadamente os instaladores do corpus e sem permitir cadastro parcial.
+
+Tarefas:
+
+- [x] Registrar `popular_apps_install_matrix` para Roblox, Logitech G HUB,
+  seu alias byte-a-byte e o pacote Affinity já analisados.
+- [x] Isolar `HOME`, `XDG_CONFIG_HOME`, `APPDATA`, prefixo e staging por caso,
+  com `--cpu 3`, `--memory 512` e timeout externo de 30 s.
+- [x] Verificar exit code, estágio e marcador do diagnóstico; exigir ausência
+  de stdout, arquivos residuais, extração e registro após cada rejeição.
+- [x] Manter instaladores PE32/x86, .NET/Mono e demais setups fora da execução.
+
+Aceitação:
+
+- [x] Roblox termina com `3`/`RBXCRASH`; G HUB e o alias terminam com `1`;
+  Affinity termina com `4` antes da extração.
+- [x] Rust ON registra o evento estruturado do parser MSIX; C++ OFF mantém o
+  estágio C++ sem campos Rust; ambos deixam o ambiente sem cadastro parcial.
+- [x] Nenhuma DLL específica, regra de aplicativo ou alteração do runtime foi
+  adicionada; a matriz apenas repete o fluxo geral de instalação.
+
+Evidência reproduzível de 2026-09-07:
+
+- [x] `ctest --test-dir build/debug-rust --output-on-failure -R
+  '^popular_apps_install_matrix$'` passou com 4/4 casos em 12,24 s.
+- [x] O mesmo filtro em `build/debug` passou com 4/4 casos em 15,59 s.
+- [x] O build OFF não emitiu `backend="rust"`; ambos os stagings foram
+  removidos depois da verificação de ausência de arquivos e cadastro.
+
 ### E11 — Matriz CTest dos smokes GUI do corpus
 
 Objetivo: tornar os cenários GUI reais já validados em D2/E1/E2 descobríveis e
