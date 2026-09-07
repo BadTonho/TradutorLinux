@@ -1816,8 +1816,18 @@ Evidência E11 de 2026-09-07:
   de sockets tinha proprietário incompatível; `xdpyinfo :0` não conectou e não
   havia processo Xvfb vivo. O CTest não classificou isso como sucesso funcional.
 - [x] O mesmo ambiente já havia produzido evidência funcional dos quatro
-  cenários em Xvfb válido; a repetição funcional fica pendente de um ambiente
-  gráfico corrigido, não de uma falha do aplicativo.
+  cenários em Xvfb válido; a repetição funcional foi concluída abaixo com
+  Xvfb próprio e acesso gráfico permitido.
+- [x] A repetição funcional de 2026-09-07 passou os quatro cenários em
+  `build/debug-rust`: `seven_zip_gui_smoke` (2,67 s),
+  `putty_real_gui_smoke` (11,40 s), `winrar_sfx_real_smoke` (0,65 s) e
+  `notepadpp_real_gui_smoke` (2,86 s), sem skips.
+- [x] A mesma matriz passou em `build/debug`: `seven_zip_gui_smoke` (2,70 s),
+  `putty_real_gui_smoke` (11,41 s), `winrar_sfx_real_smoke` (0,52 s) e
+  `notepadpp_real_gui_smoke` (2,29 s), sem skips.
+- [x] Os smokes mantiveram seus contratos individuais de interação e
+  encerramento nos dois backends; isso não promove compatibilidade geral dos
+  aplicativos nem autoriza DLLs específicas.
 
 ## Regras de validação
 
