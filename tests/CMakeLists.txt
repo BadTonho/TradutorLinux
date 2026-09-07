@@ -195,6 +195,14 @@ if(TL_XVFB_EXECUTABLE)
     target_link_libraries(putty_smoke PRIVATE "${TL_X11_LIBRARY}")
     tl_enable_warnings(putty_smoke)
     tl_enable_sanitizers(putty_smoke)
+
+    add_executable(winrar_sfx_smoke
+        apps/winrar/winrar_sfx_smoke.cpp
+    )
+    target_include_directories(winrar_sfx_smoke PRIVATE "${TL_X11_INCLUDE_DIR}")
+    target_link_libraries(winrar_sfx_smoke PRIVATE "${TL_X11_LIBRARY}")
+    tl_enable_warnings(winrar_sfx_smoke)
+    tl_enable_sanitizers(winrar_sfx_smoke)
 endif()
 
 if(TL_BUILD_TARGET_APPS)

@@ -916,6 +916,45 @@ Evidência D4 de 2026-09-07:
   executável nem na biblioteca estática C++ OFF. As evidências estão em
   `/tmp/tl-d4-report.qUWazS`, `/tmp/tl-d4-run-valid.7XWPLv` e `/tmp/tl-d3-*`.
 
+### E1 — Encerramento controlado do WinRAR SFX
+
+Objetivo: transformar a limitação observada no cenário sem interação em uma
+regressão reproduzível de GUI, usando somente uma ação externa segura e sem
+introduzir comportamento específico do WinRAR no runtime.
+
+Tarefas:
+
+- [x] Criar `tests/apps/winrar/winrar_sfx_smoke.cpp` para iniciar o SFX sob
+  Xvfb próprio, localizar `WinRAR self-extracting archive` e enviar
+  `WM_DELETE_WINDOW` como cancelamento externo seguro.
+- [x] Registrar o smoke como alvo separado no CMake, sem ligá-lo ao runtime ou
+  criar DLL específica do aplicativo.
+- [x] Executar o smoke nos builds Rust ON e C++ OFF e comparar saída, exit code,
+  trace, limpeza e ausência de timeout.
+- [x] Repetir a regressão D4 relevante depois do novo cenário.
+
+Aceitação:
+
+- [x] O WinRAR SFX cria e mapeia a janela, encerra com exit `3` após o
+  cancelamento controlado e não registra `guest-timeout`.
+- [x] Rust ON e C++ OFF produzem o mesmo comportamento no smoke.
+- [x] A matriz de compatibilidade distingue o cenário SFX controlado da
+  execução sem interação e não declara suporte geral ao WinRAR.
+
+Evidência E1 de 2026-09-07:
+
+- [x] `build/debug-rust/tests/winrar_sfx_smoke` e
+  `build/debug/tests/winrar_sfx_smoke`, usando `WinRAR_x64.exe`, passaram sob
+  Xvfb próprio. Ambos localizaram e mapearam `WinRAR self-extracting archive`,
+  enviaram `WM_DELETE_WINDOW`, observaram `EndDialog(result=2)` e terminaram
+  com `ExitProcess(3)` sem `guest-timeout`.
+- [x] O `--report` de `WinRAR_x64.exe` continuou equivalente nos builds ON/OFF;
+  o cenário sem interação permanece `guest-timeout 72` e não foi promovido.
+- [x] Uma tentativa separada de `Return` confirmou `IsDialogMessageW`/`IDOK`
+  e o início de `environment expand`/`filesystem enumerate`, mas não concluiu
+  a extração dentro dos limites externos; esse fluxo continua explicitamente
+  não suportado e não altera o runtime.
+
 ## Regras de validação
 
 - Cada correção começa com uma fixture mínima e termina com testes automatizados.

@@ -448,8 +448,12 @@ contrato, fixture e regressão antes de ser promovido a suporte.
 | Fonte | análise local de 2026-08-31 |
 
 O `--report` atual classifica os 251 imports e o smoke `sfxcmd`/ambiente encerra
-com exit `0`. Isso valida somente esse fluxo restrito; GUI, operações de
-compactação interativas e uso diário continuam fora da declaração de suporte.
+com exit `0`. Sob Xvfb, o smoke específico de GUI localiza a janela
+`WinRAR self-extracting archive` e confirma o cancelamento por
+`WM_DELETE_WINDOW`, com `EndDialog(result=2)` e exit `3` nos builds Rust ON e
+C++ OFF. Isso valida somente os fluxos restritos de análise, SFX sem GUI e
+cancelamento controlado; a extração acionada por `IDOK`, compactação interativa
+e uso diário continuam fora da declaração de suporte.
 
 As listas de lacunas abaixo são mantidas como histórico das reanálises de
 2026-08-26. Elas não devem ser usadas para calcular o estado atual.
