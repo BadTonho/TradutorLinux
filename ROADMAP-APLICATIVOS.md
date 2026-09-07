@@ -551,21 +551,23 @@ sem alterar o loader por tentativa.
 
 Tarefas:
 
-- [ ] Preservar fixtures mínimas para `Rufus`/W^X, `Notepad++`/SIGSEGV,
-  `PuTTY`/timeout e `Rockstar`/exit `3`.
-- [ ] Comparar traces Rust ON/C++ OFF por etapa: parsing, mapeamento,
+- [x] Preservar fixtures ou logs mínimos para `Rufus`/W^X,
+  `Notepad++`/SIGSEGV, `PuTTY`/timeout e `Rockstar`/exit `3`.
+- [x] Comparar traces Rust ON/C++ OFF por etapa: parsing, mapeamento,
   imports, TLS, GUI, processo e término.
-- [ ] Mapear cada bloqueio a uma API, mecanismo ou política já existente;
+- [x] Mapear cada bloqueio a uma API, mecanismo ou política já existente;
   não adicionar uma API sem alvo e teste de regressão.
-- [ ] Confirmar se o bloqueio ocorre antes ou depois do entry point e se há
+- [x] Confirmar se o bloqueio ocorre antes ou depois do entry point e se há
   risco de relaxar W^X, limites ou isolamento.
+
+Evidência: [triagem dos bloqueios do corpus](docs/arquitetura/aplicativos-bloqueios.md).
 
 Aceitação:
 
-- [ ] Cada bloqueio tem uma hipótese testável, uma fixture ou log mínimo e
+- [x] Cada bloqueio tem uma hipótese testável, uma fixture ou log mínimo e
   uma decisão explícita: corrigir, manter rejeitado ou pedir autorização de
   escopo.
-- [ ] Nenhum aplicativo é promovido a suportado durante a triagem.
+- [x] Nenhum aplicativo é promovido a suportado durante a triagem.
 
 ### C2 — Lacunas de execução e GUI
 
