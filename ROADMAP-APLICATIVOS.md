@@ -1540,6 +1540,38 @@ Evidência reproduzível de 2026-09-07:
 - [x] Ambos emitiram `7-Zip CLI stored test/delete/update/rename/deflate/7z/stdin/password
   lifecycle: ok` e removeram o staging temporário.
 
+### E20 — Rejeição controlada de senha incorreta no 7-Zip CLI
+
+Objetivo: verificar o erro do 7-Zip ao abrir um arquivo protegido com senha
+incorreta, sem aceitar dados parciais como uma extração válida e sem adicionar
+tratamento específico ao runtime.
+
+Tarefas:
+
+- [x] Tentar extrair o arquivo `7z/LZMA2` protegido usando uma senha incorreta
+  e exigir término não-zero, sem timeout.
+- [x] Confirmar que a tentativa ainda carrega e descarrega `7z.dll`, mas não
+  produz os payloads binário e Unicode esperados.
+- [x] Reexecutar o cenário completo em Rust ON e C++ OFF, mantendo os checks
+  de sucesso com a senha correta e a limpeza do staging.
+
+Aceitação:
+
+- [x] A senha correta continua terminando com exit `0`, `Everything is Ok` e
+  os dois payloads byte a byte.
+- [x] A senha incorreta termina com exit diferente de `0`, sem timeout e sem
+  payload válido; não há fallback nem regra específica no runtime.
+- [x] O mesmo comportamento é reproduzido nos builds Rust ON e C++ OFF.
+
+Evidência reproduzível de 2026-09-07:
+
+- [x] O filtro `^seven_zip_cli_smoke$` passou em `build/debug-rust` após
+  compilar o alvo (1/1, 8,17 s de CTest).
+- [x] O mesmo filtro passou em `build/debug` após compilar o alvo (1/1,
+  10,11 s de CTest).
+- [x] Ambos emitiram `7-Zip CLI stored test/delete/update/rename/deflate/7z/stdin/password/wrong-password
+  lifecycle: ok` e removeram o staging temporário.
+
 ### E11 — Matriz CTest dos smokes GUI do corpus
 
 Objetivo: tornar os cenários GUI reais já validados em D2/E1/E2 descobríveis e

@@ -132,11 +132,15 @@ void stop_process(const pid_t pid) {
     return result;
 }
 
-[[nodiscard]] bool contains_loader_events(const CommandResult& result) {
-    return !result.timed_out && result.exit_code == 0 &&
+[[nodiscard]] bool contains_loader_modules(const CommandResult& result) {
+    return !result.timed_out &&
            result.stderr_text.find("dll-mapped module=\"7z.dll\"") != std::string::npos &&
            result.stderr_text.find("dll-attach module=\"7z.dll\"") != std::string::npos &&
            result.stderr_text.find("dll-unload module=\"7z.dll\"") != std::string::npos;
+}
+
+[[nodiscard]] bool contains_loader_events(const CommandResult& result) {
+    return result.exit_code == 0 && contains_loader_modules(result);
 }
 
 [[nodiscard]] bool contains_loader_lifecycle(const CommandResult& result,
@@ -319,6 +323,10 @@ int main(const int argc, char** argv) {
         {"x", password_archive_name, "-p" + std::string{kArchivePassword},
          "-oextracted-password", "-y"},
         staging / "extract-password.stdout", staging / "extract-password.stderr");
+    const auto extract_password_wrong = run_runtime(
+        runtime, staged_executable, prefix,
+        {"x", password_archive_name, "-pTradutorLinux-wrong", "-oextracted-password-wrong", "-y"},
+        staging / "extract-password-wrong.stdout", staging / "extract-password-wrong.stderr");
 
     const bool extracted_stored =
         read_text(staging / "extracted-stored" / "input.txt") == kPayload;
@@ -348,6 +356,12 @@ int main(const int argc, char** argv) {
         read_text(staging / "extracted-password" / "input.txt") == kPayload;
     const bool extracted_password_unicode =
         read_text(staging / "extracted-password" / unicode_relative) == kUnicodePayload;
+    const bool wrong_password_payload_absent =
+        read_text(staging / "extracted-password-wrong" / "input.txt") != kPayload &&
+        read_text(staging / "extracted-password-wrong" / unicode_relative) != kUnicodePayload;
+    const bool wrong_password_rejected =
+        contains_loader_modules(extract_password_wrong) &&
+        extract_password_wrong.exit_code != 0 && wrong_password_payload_absent;
     const bool ok = contains_loader_lifecycle(create, "Archive size:") &&
                     !list.timed_out && list.exit_code == 0 &&
                     list.stdout_text.find("input.txt") != std::string::npos &&
@@ -391,7 +405,7 @@ int main(const int argc, char** argv) {
                     extract_stdin.stdout_text == kPayload &&
                     contains_loader_lifecycle(create_password, "Archive size:") &&
                     contains_loader_lifecycle(extract_password, "Everything is Ok") &&
-                    extracted_password && extracted_password_unicode;
+                    extracted_password && extracted_password_unicode && wrong_password_rejected;
     if (!ok) {
         std::cerr << "smoke do 7-Zip CLI falhou em " << staging << '\n';
         std::cerr << "create exit=" << create.exit_code << " timeout=" << create.timed_out << '\n';
@@ -441,13 +455,17 @@ int main(const int argc, char** argv) {
                   << " timeout=" << extract_password.timed_out
                   << " extracted-password=" << extracted_password
                   << " extracted-password-unicode=" << extracted_password_unicode << '\n';
+        std::cerr << "extract-password-wrong exit=" << extract_password_wrong.exit_code
+                  << " timeout=" << extract_password_wrong.timed_out
+                  << " rejected=" << wrong_password_rejected
+                  << " payload-absent=" << wrong_password_payload_absent << '\n';
         std::cerr << "list-deflate stdout:\n" << list_deflate.stdout_text;
         std::cerr << "list-7z stdout:\n" << list_7z.stdout_text;
         std::filesystem::remove_all(staging, error);
         return 1;
     }
 
-    std::cout << "7-Zip CLI stored test/delete/update/rename/deflate/7z/stdin/password lifecycle: ok\n";
+    std::cout << "7-Zip CLI stored test/delete/update/rename/deflate/7z/stdin/password/wrong-password lifecycle: ok\n";
     std::filesystem::remove_all(staging, error);
     return 0;
 }
