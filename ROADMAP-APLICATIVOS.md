@@ -1367,6 +1367,42 @@ Evidência E14 de 2026-09-07:
 - [x] Os binários manuais ON/OFF emitiram
   `7-Zip CLI stored test/delete/update/deflate/7z lifecycle: ok`.
 
+### E15 — Caminhos com espaços no 7-Zip CLI
+
+Objetivo: validar a passagem de caminhos com espaços pela linha de comando
+Windows, sem reduzir a cobertura de Unicode, manutenção de arquivos ou
+formatos já exercitados.
+
+Tarefas:
+
+- [x] Executar o ciclo completo do smoke em um staging cujo nome contém
+  espaço, incluindo o prefixo, os arquivos, os três arquivos compactados e os
+  diretórios de extração.
+- [x] Confirmar que o CRT convidado preserva cada argumento `Z:\...` e a
+  opção `-o...` como uma unidade, sem truncar no espaço.
+- [x] Reexecutar Rust ON/C++ OFF e verificar os mesmos bytes, exit codes,
+  ciclo da `7z.dll` e limpeza do staging.
+
+Aceitação:
+
+- [x] Criação, listagem, teste, remoção, atualização e extração de ZIP
+  `stored`, ZIP `DEFLATE` e `7z/LZMA2` continuam terminando com exit `0` nos
+  dois backends quando todos os caminhos contêm espaço.
+- [x] O nome Unicode `input-data/café-日本.txt`, `updated.txt` e a ausência
+  de `input.txt` no arquivo atualizado continuam verificados byte a byte.
+- [x] Nenhuma DLL, shim, regra de seleção ou comportamento específico do
+  aplicativo foi adicionado ao runtime.
+
+Evidência reproduzível de 2026-09-07:
+
+- [x] `cmake --build build/debug-rust --target seven_zip_cli_smoke --parallel 2`
+  e o binário do smoke passaram com staging contendo espaço.
+- [x] `cmake --build build/debug --target seven_zip_cli_smoke --parallel 2`
+  e o binário equivalente passaram com o mesmo resultado.
+- [x] Os filtros CTest ON/OFF do `seven_zip_cli_smoke` passaram; a saída foi
+  `7-Zip CLI stored test/delete/update/deflate/7z lifecycle: ok` e os stagings
+  foram removidos.
+
 ### E11 — Matriz CTest dos smokes GUI do corpus
 
 Objetivo: tornar os cenários GUI reais já validados em D2/E1/E2 descobríveis e

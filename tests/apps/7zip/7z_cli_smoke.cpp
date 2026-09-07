@@ -158,7 +158,7 @@ int main(const int argc, char** argv) {
 
     const auto stamp = std::chrono::steady_clock::now().time_since_epoch().count();
     const std::filesystem::path staging = std::filesystem::temp_directory_path() /
-                                          ("tradutorlinux-7z-cli-smoke-" +
+                                          ("tradutorlinux-7z cli-smoke-" +
                                            std::to_string(static_cast<unsigned long long>(::getpid())) +
                                            "-" + std::to_string(stamp));
     std::filesystem::remove_all(staging, error);
