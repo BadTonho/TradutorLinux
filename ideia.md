@@ -1,7 +1,7 @@
 # Ideias — arquivo histórico
 
 As ideias deste arquivo foram consolidadas no
-[backlog do `ROADMAP.md`](ROADMAP.md#backlog-consolidado), que é a fonte única
+[backlog do `feitos/ROADMAP.md`](feitos/ROADMAP.md#backlog-consolidado), que é a fonte única
 de tarefas do projeto.
 
 Os pedidos registrados aqui foram preservados como:
@@ -14,4 +14,4 @@ Os pedidos registrados aqui foram preservados como:
 
 O diagnóstico por processo filho e a política de linguagens descritos na
 versão anterior já foram absorvidos pelo runtime e pela documentação técnica.
-Não adicione novas tarefas aqui; registre-as diretamente no `ROADMAP.md`.
+Não adicione novas tarefas aqui; registre-as diretamente no `feitos/ROADMAP.md`.

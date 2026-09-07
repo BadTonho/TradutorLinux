@@ -1,7 +1,7 @@
 # Propostas de evolução — arquivo histórico
 
 As propostas de organização e comportamento desta análise foram incorporadas
-ao [backlog consolidado do `ROADMAP.md`](../ROADMAP.md#backlog-consolidado).
+ao [backlog consolidado do `feitos/ROADMAP.md`](../feitos/ROADMAP.md#backlog-consolidado).
 Este documento permanece para preservar a origem das ideias, mas não é um
 backlog paralelo.
 
@@ -22,5 +22,5 @@ os fixtures PE e o catálogo já foram implementados ou documentados; por isso
 não retornam como tarefas abertas. Fibras também já foram entregues e não
 devem voltar ao backlog.
 
-Toda proposta nova deve passar a existir somente no `ROADMAP.md`, com alvo ou
+Toda proposta nova deve passar a existir somente no `feitos/ROADMAP.md`, com alvo ou
 fixture, critério de aceite e evidência esperada.

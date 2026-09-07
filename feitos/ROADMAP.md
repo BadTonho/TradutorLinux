@@ -1,6 +1,6 @@
 # Roadmap do TradutorLinux
 
-Este arquivo acompanha a execução do projeto. O documento de visão, escopo e arquitetura está em [PROJETO.md](PROJETO.md).
+Este arquivo acompanha a execução do projeto. O documento de visão, escopo e arquitetura está em [PROJETO.md](../PROJETO.md).
 
 ## Como usar este roadmap
 

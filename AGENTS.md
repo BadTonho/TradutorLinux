@@ -6,7 +6,7 @@ O TradutorLinux é um runtime de compatibilidade **sério e de produção** para
 
 O alvo inicial é estrito: **executáveis PE32+ x86-64 em Linux x86-64**. A meta estratégica é tornar o runtime útil para o portfólio real `Aplicativos_Windows_Populares/` (`Roblox`, `WinRAR`, `HWiNFO64`, `7-Zip`, `putty`, `RTSSHooks`) avançando por classes de uso com `--report`/`--trace` e `exit code` reproduzíveis, sem prometer compatibilidade universal imediata.
 
-Antes de iniciar qualquer trabalho, leia `PROJETO.md`, `ROADMAP.md`, `docs/compatibilidade.md` e os contratos técnicos relevantes em `docs/`.
+Antes de iniciar qualquer trabalho, leia `PROJETO.md`, `feitos/ROADMAP.md`, `docs/compatibilidade.md` e os contratos técnicos relevantes em `docs/`.
 
 ## O que mantém o projeto no rumo
 
@@ -19,7 +19,7 @@ Antes de iniciar qualquer trabalho, leia `PROJETO.md`, `ROADMAP.md`, `docs/compa
 
 ## Escopo atual
 
-Em cada momento, `ROADMAP.md` é a fonte de verdade para a fase em andamento. As restrições de cada fase são gates reais: uma capacidade só pode ser usada ou declarada quando a fase correspondente e seus testes a autorizarem. Na Fase 0, por exemplo, o projeto fornecia apenas infraestrutura; o carregamento e a execução de PE só começaram nas fases seguintes.
+Em cada momento, `feitos/ROADMAP.md` é a fonte de verdade para a fase em andamento. As restrições de cada fase são gates reais: uma capacidade só pode ser usada ou declarada quando a fase correspondente e seus testes a autorizarem. Na Fase 0, por exemplo, o projeto fornecia apenas infraestrutura; o carregamento e a execução de PE só começaram nas fases seguintes.
 
 O primeiro marco funcional do projeto foi um `tl_hello.exe` próprio, sem CRT, que importa somente:
 
@@ -57,7 +57,7 @@ Compatibilidade ampla é o objetivo de longo prazo, não uma autorização para 
 - Preserve `stdout` para a saída do futuro programa convidado; logs do runtime usam `stderr` e o formato de `docs/diagnostico.md`.
 - Atualize `docs/compatibilidade.md` quando uma fixture, aplicação ou API mudar de estado.
 - Atualize documentos de ABI, API ou diagnóstico sempre que um contrato mudar.
-- Marque itens no `ROADMAP.md` somente depois de haver evidência reproduzível: código, teste e validação no ambiente Linux/CI.
+- Marque itens no `feitos/ROADMAP.md` somente depois de haver evidência reproduzível: código, teste e validação no ambiente Linux/CI.
 
 ## Custo de build — máquina do usuário limitada
 
