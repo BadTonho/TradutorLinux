@@ -12,8 +12,9 @@ pacotes MSIX/AppX ao `--report` direto e ao `install`. R23.2 promove a análise
 Rust de `profile.json` dentro de `load_profile`; nenhum loader, runtime Win32,
 DLL dependente ou API pública de compatibilidade foi migrado para Rust.
 R24.1 acrescenta o contrato TLAC e a análise Rust do catálogo persistente.
-R24.2 acrescenta o adaptador/decoder C++ para o diferencial; `AppCatalog`
-continua em C++ até R24.3.
+R24.2 acrescenta o adaptador/decoder C++ para o diferencial. R24.3 promove
+esse adaptador para `AppCatalog::load_from_file` quando Rust está habilitado;
+o build OFF continua integralmente em C++.
 
 ## Build e escopo
 
@@ -439,7 +440,7 @@ liga nem referencia os símbolos do parser de perfis Rust, e não recebe campos
 Rust no trace. A promoção vale para todos os consumidores atuais de
 `load_profile`, sem alterar PE, TLPR, loader, materializador ou execução.
 
-## Contrato do catálogo de aplicativos — R24.1
+## Contrato do catálogo de aplicativos — R24.1–R24.3
 
 [`rust_app_catalog_parser.h`](../../include/tradutorlinux/ffi/rust_app_catalog_parser.h)
 define `tl_app_catalog_parse_v1_size`/`fill` e o wire TLAC v1.0. A ABI recebe
@@ -464,5 +465,21 @@ divergência de `size`/`fill`.
 O parser aceita apenas o schema atual do catálogo, de forma estrita, e
 preserva strings como bytes. Não acessa filesystem e não substitui as
 validações físicas do C++. R24.2 acrescenta `parse_app_catalog_rust` e
-`decode_tlac_v1` como adaptador e decoder internos para o diferencial; ainda
-não há integração de produção com `load_from_file`, que permanece para R24.3.
+`decode_tlac_v1` como adaptador e decoder internos para o diferencial.
+
+Em R24.3, `AppCatalog::load_from_file` usa esse adaptador como única ponte de
+produção quando `TL_BUILD_RUST=ON`: após limpar o catálogo, o C++ verifica
+presença, abertura, leitura e o limite de 4 MiB; em seguida o Rust analisa o
+arquivo e o decoder publica o vetor somente após validação completa. Conteúdo
+inválido retorna `false` com catálogo vazio e não chama o parser C++ como
+fallback. Falhas internas de ABI, transporte, status, panic ou wire inválido
+também retornam `false` sem fallback. Arquivo ausente ou falha de abertura/
+leitura não chama Rust.
+
+O C++ continua responsável pela escrita de `library.json`, filesystem e todas
+as operações físicas dos consumidores. Com `TL_BUILD_RUST=OFF`, o ramo C++
+original é mantido isolado, sem link ou símbolos operacionais Rust. Quando o
+trace é solicitado, o sucesso Rust e suas rejeições são reportados no evento
+`catalog-parse` do componente `runtime`, com os campos estruturados definidos
+em `docs/diagnostico.md`; sem trace o comportamento observável permanece
+inalterado.

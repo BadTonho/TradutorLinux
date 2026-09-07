@@ -450,36 +450,76 @@ Evidência reproduzível:
   a execução anterior que registrava falhas de preparação dependia do HOME
   somente leitura do sandbox e não é evidência válida contra R24.2.
 
-O gate diferencial e de build de R24.2 está fechado. R24.3 permanece
-pendente e não foi iniciada por esta alteração.
+O gate diferencial e de build de R24.2 está fechado. A promoção de R24.3 foi
+implementada e validada abaixo.
 
-### R24.3 — Promoção do leitor
+### R24.3 — Promoção do leitor (concluída)
 
-- [ ] Somente após o diferencial passar, centralizar a seleção dentro de
+- [x] Somente após o diferencial passar, centralizar a seleção dentro de
   `AppCatalog::load_from_file`, mantendo sua assinatura pública e o formato
   persistido.
-- [ ] Com `TL_BUILD_RUST=ON`, usar Rust como fonte canônica para catálogos
+- [x] Com `TL_BUILD_RUST=ON`, usar Rust como fonte canônica para catálogos
   existentes; arquivo ausente preserva o comportamento atual e conteúdo
   inválido não pode deixar entradas parciais no catálogo.
-- [ ] Converter falhas internas de ABI, transporte ou decoder em diagnóstico
+- [x] Converter falhas internas de ABI, transporte ou decoder em diagnóstico
   estruturado no trace, sem substituir silenciosamente o resultado Rust por
   C++.
-- [ ] Manter em C++ a escrita do catálogo, filesystem, permissões, validações
+- [x] Manter em C++ a escrita do catálogo, filesystem, permissões, validações
   físicas, criação de desktop entries, seleção de backend e execução.
-- [ ] Preservar `TL_BUILD_RUST=OFF` como variante C++ explícita e padrão, sem
+- [x] Preservar `TL_BUILD_RUST=OFF` como variante C++ explícita e padrão, sem
   alterar stdout, stderr normal, exit codes ou o comportamento dos caminhos de
   execução.
 
 Critérios de saída da R24:
 
-- [ ] Cargo test e Clippy com `--locked --offline`.
-- [ ] Contratos C/C++, diferencial completo e testes de robustez do catálogo.
-- [ ] CTest nos presets Rust Debug, Sanitize e Release, além dos baselines
+- [x] Cargo test e Clippy com `--locked --offline`.
+- [x] Contratos C/C++, diferencial completo e testes de robustez do catálogo.
+- [x] CTest nos presets Rust Debug, Sanitize e Release, além dos baselines
   Debug e Release com `TL_BUILD_RUST=OFF`.
-- [ ] `nm` sem símbolos Rust nas bibliotecas OFF, `git diff --check` limpo e
+- [x] `nm` sem símbolos Rust nas bibliotecas OFF, `git diff --check` limpo e
   evidência reproduzível antes de marcar qualquer subetapa como concluída.
-- [ ] Nenhuma alteração em `AppEntry`, no schema persistido, no `Cargo.lock`,
+- [x] Nenhuma alteração em `AppEntry`, no schema persistido, no `Cargo.lock`,
   no loader, no backend Proton ou na matriz de compatibilidade de aplicativos.
+
+Implementação concluída para R24.3:
+
+- `AppCatalog::load_from_file` seleciona o parser Rust somente no build
+  `TL_BUILD_RUST=ON`, depois de limpar o estado, confirmar abertura e aplicar o
+  limite de 4 MiB. O adaptador `parse_app_catalog_rust` e o decoder TLAC são a
+  única ponte de produção; o vetor só é publicado após a validação completa.
+  Rejeições e falhas internas retornam `false`, deixam o catálogo vazio e não
+  acionam fallback para o parser C++.
+- O arquivo ausente ou indisponível não chama Rust. O C++ continua responsável
+  pela escrita, filesystem e demais operações físicas. O build
+  `TL_BUILD_RUST=OFF` mantém o leitor C++ original sem símbolos Rust.
+- A tentativa Rust emite `catalog-parse` no componente `runtime` apenas com
+  trace solicitado. Sucessos usam `Info`; rejeições de conteúdo/limite,
+  `Warning`; falhas internas, `Error`. Rejeições incluem `code`, `phase`,
+  `input-offset` e `detail-value`, sem alterar stdout/stderr normal sem trace.
+
+Evidência reproduzível em 2026-09-06:
+
+- Rust Debug: CTest completo passou, `788/788`, com quatro skips ambientais
+  permitidos (Iphlpapi, X11/GUI e HTTPS local). A matriz incluiu contratos,
+  diferencial TLAC e `integration_catalog_parser`.
+- Rust Release: CTest completo passou, `788/788`, com os mesmos quatro skips
+  ambientais permitidos.
+- Rust Sanitize: `786/786` passou com `x11_popup_smoke` e
+  `runtime_gui_smoke` excluídos explicitamente pela limitação de X11/LeakSanitizer
+  do ambiente; permaneceram apenas os skips ambientais de Iphlpapi e HTTPS
+  local.
+- Baseline C++ Debug e Release (`TL_BUILD_RUST=OFF`): CTest completo passou,
+  `738/738` em cada configuração, com quatro skips ambientais permitidos.
+  Os testes de integração confirmaram que o caminho OFF continua aceitando o
+  comportamento C++ e que o ON publica o mesmo catálogo válido sem fallback.
+- `cargo test --locked --offline` e Clippy offline com `-D warnings` passaram
+  via CTest Rust; contratos C/C++, diferencial, concorrência, buffers,
+  sentinelas e trace passaram. `nm` não encontrou símbolos do parser/adaptador
+  Rust nas bibliotecas OFF, `Cargo.lock` permaneceu inalterado e
+  `git diff --check` passou.
+
+R24.3 está concluída. A promoção não altera `AppEntry`, o schema persistido,
+o loader, Proton, execução ou a matriz de compatibilidade de aplicativos.
 
 ## Regras para todas as migrações
 

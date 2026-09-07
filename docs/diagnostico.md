@@ -600,11 +600,13 @@ confinamento ou permissão invalida o perfil no C++ e não materializa arquivos.
 O build `TL_BUILD_RUST=OFF` continua a variante C++ explícita e padrão, sem
 referenciar os símbolos Rust e sem campos Rust no trace.
 
-### Contrato e decoder Rust do catálogo — R24.1/R24.2
+### Contrato, decoder e promoção Rust do catálogo — R24.1–R24.3
 
-R24.1 implementa somente a ABI TLAC para analisar os bytes do `library.json`.
-O `AppCatalog`, `load_from_file`, a CLI, a GUI e os fluxos de execução seguem
-em C++; não há evento de produção nem seleção de backend Rust nesta etapa.
+R24.1 implementa a ABI TLAC para analisar os bytes do `library.json` e R24.2
+adiciona o decoder/adaptador diferencial. Em R24.3, com
+`TL_BUILD_RUST=ON`, `AppCatalog::load_from_file` usa esse adaptador como
+backend canônico para arquivos existentes; a escrita, o filesystem e os
+demais fluxos continuam em C++.
 
 O parser é estrito para o schema atual (`version=1`, `apps`), rejeita campos
 desconhecidos ou repetidos, JSON incompleto, trailing comma, IDs inválidos ou
@@ -620,8 +622,26 @@ little-endian, sem casts de layout, rejeitando offsets, strides, referências,
 padding, reservas, contagens e sobreposições inválidos. O resultado só é
 publicado após a validação completa e o adaptador não chama `add_app`.
 
-O decoder e o diferencial permanecem fora de `load_from_file` nesta etapa;
-R24.3 tratará a promoção de produção.
+No ramo Rust, `load_from_file` limpa primeiro o catálogo, aplica o limite de
+4 MiB antes de alocar, lê o arquivo em buffer caller-owned e publica apenas o
+vetor completamente validado pelo TLAC. Conteúdo inválido, limites excedidos
+ou identidade lexical inválida retornam `false` e deixam o catálogo vazio;
+nenhum resultado é substituído pelo parser C++. Falhas de ABI, transporte,
+wire, status inesperado, divergência de `size`/`fill` ou panic também retornam
+`false` sem fallback. Arquivo ausente ou erro de abertura/leitura é detectado
+antes da chamada Rust e não gera evento Rust.
+
+Quando `--trace` solicita o componente `runtime`, o sucesso emite, por
+exemplo:
+
+`[tl][runtime][info] catalog-parse path="..." backend="rust" parser-status="success" apps="1"`
+
+Rejeições de conteúdo/limite usam nível `warning`; falhas internas usam
+`error`. Em ambos os casos o evento contém `backend="rust"`,
+`parser-status`, `code`, `phase`, `input-offset`, `detail-value` e `detail`.
+Sucesso também informa `apps`. Sem `--trace`, stderr e stdout normais não
+recebem campos Rust. O build `TL_BUILD_RUST=OFF` segue emitindo o trace C++
+existente, sem evento Rust ou campos Rust.
 
 ## Categorias de falha
 

@@ -117,18 +117,27 @@ referencia os símbolos Rust e não recebe campos Rust no trace. A promoção n�
 altera `Profile`, TLPR, `Cargo.lock`, loader, materializador ou o nível de
 compatibilidade declarado para qualquer aplicativo.
 
-## Parser Rust do catálogo — R24.1/R24.2
+## Parser Rust do catálogo — R24.1–R24.3
 
-R24.1 define e testa o contrato TLAC v1.0 para `library.json`, sem alterar
-`AppEntry`, `AppCatalog`, `load_from_file`, o formato persistido ou qualquer
-fluxo operacional. O parser Rust aceita o schema atual estritamente, preserva
-strings como bytes, aplica limites checked e não acessa o filesystem.
+R24.1 define e testa o contrato TLAC v1.0 para `library.json`; R24.2 adiciona
+o adaptador e decoder C++ para o diferencial semântico. Em R24.3, com
+`TL_BUILD_RUST=ON`, Rust é o parser canônico de catálogos existentes dentro de
+`AppCatalog::load_from_file`. A assinatura pública, `AppEntry`, o formato
+persistido e o nível de compatibilidade dos aplicativos não mudam.
 
-R24.2 adiciona o adaptador e o decoder TLAC C++ para o diferencial semântico
-contra `AppCatalog::load_from_file`. O Rust ainda não é backend de produção do
-catálogo. `TL_BUILD_RUST=OFF` continua sendo a variante C++ explícita e padrão;
-R24.3 tratará eventual promoção. Nenhum aplicativo ou nível de compatibilidade
-é promovido por este contrato.
+O arquivo é lido e limitado em C++, o resultado Rust é validado pelo decoder e
+somente então publicado. Conteúdo inválido, limites ou falhas internas deixam
+o catálogo vazio e retornam `false`; não há fallback Rust→C++. Arquivo ausente
+continua sendo detectado antes da chamada Rust. Escrita do catálogo,
+filesystem, permissões, materialização, seleção de backend e execução seguem
+em C++. `TL_BUILD_RUST=OFF` é a variante C++ explícita e padrão, sem link ou
+referência operacional ao parser Rust.
+
+Com trace, o componente `runtime` emite `catalog-parse` para tentativas Rust,
+com `backend`, `parser-status` e, em rejeições, `code`, `phase`,
+`input-offset` e `detail-value`. Sem trace o stdout/stderr normal permanece
+inalterado; nenhum aplicativo ou nível de compatibilidade é promovido por
+esta mudança.
 
 ## Aplicações de teste
 

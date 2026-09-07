@@ -1,9 +1,11 @@
 # Parser Rust do catálogo de aplicativos — TLAC v1.0
 
 R24.1 define a análise Rust do `library.json` usado pelo `AppCatalog`. R24.2
-acrescenta um adaptador C++ interno e um decoder TLAC reutilizável somente para
-testes diferenciais. `AppCatalog`, `load_from_file`, a CLI, a GUI, o loader, o
-Proton e a execução continuam em C++.
+acrescenta o adaptador C++ interno e o decoder TLAC reutilizável. Em R24.3,
+com `TL_BUILD_RUST=ON`, `AppCatalog::load_from_file` usa Rust como parser
+canônico para catálogos existentes, sem fallback para o parser C++. A escrita,
+filesystem, CLI, GUI, loader, Proton e execução continuam em C++. O build
+`TL_BUILD_RUST=OFF` permanece explicitamente C++.
 
 ## ABI
 
@@ -129,15 +131,38 @@ exige NUL na mensagem e trata divergência entre `size` e `fill` como falha
 interna. O resultado é materializado em um vetor temporário e só é publicado
 após toda a validação; `AppCatalog::add_app` não é chamado.
 
-R24.2 não altera `AppCatalog::load_from_file` nem cria fallback de produção.
 Nos vetores válidos, o decoder compara semanticamente todos os campos com o
 oráculo C++ `AppCatalog::load_from_file`. Entradas JSON inválidas e mutações
 TLAC são verificadas por rejeição estruturada e atomicidade, sem exigir que o
 parser C++ permissivo reproduza a mesma rejeição.
+
+## Integração em `AppCatalog` — R24.3
+
+`load_from_file` limpa o catálogo antes de iniciar. Arquivo ausente, erro de
+abertura ou falha de leitura continuam sendo tratados pelo C++ e não chamam o
+parser Rust. Quando o arquivo está disponível, o ramo Rust verifica o limite
+de 4 MiB antes de alocar, lê o conteúdo integralmente em buffer caller-owned,
+chama `parse_app_catalog_rust` e só move o vetor para `apps_` depois de o TLAC,
+as referências, os limites e todos os registros estarem validados. Conteúdo
+inválido ou falha interna retorna `false` e deixa o catálogo vazio; o parser
+C++ não é executado como fallback no build ON.
+
+Falhas de transporte, status desconhecido, divergência de `size`/`fill`,
+decoder ou wire inválido são falhas internas. Rejeições de conteúdo e limites
+seguem o retorno booleano existente. O caminho C++ original fica isolado no
+build `TL_BUILD_RUST=OFF`, sem referência operacional ao adaptador Rust.
+
+Quando o trace é solicitado e o componente `runtime` está habilitado, o ramo
+Rust emite `catalog-parse` com `backend="rust"`, `parser-status` e a contagem
+de aplicativos. Sucesso usa nível `Info`; rejeições de conteúdo/limite usam
+`Warning`; falhas internas usam `Error`. Rejeições também incluem `code`,
+`phase`, `input-offset`, `detail-value` e uma mensagem diagnóstica. Sem
+`--trace` a saída normal não muda, e arquivo inexistente não gera evento Rust.
 
 ## Build e escopo
 
 `TL_BUILD_RUST=ON` inclui `catalog_contract.rs`, `catalog_parser.rs` e o
 adaptador/decoder C++ no static library existente. `TL_BUILD_RUST=OFF`
 continua sendo o caminho C++ sem link, referência operacional ou seleção do
-parser Rust. R24.3 decidirá a promoção.
+parser Rust. A promoção R24.3 não altera `AppEntry`, o schema persistido,
+`Cargo.lock`, loader ou Proton.
