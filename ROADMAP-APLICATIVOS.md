@@ -715,6 +715,96 @@ equivalente nos caminhos testados. Nenhum aplicativo adicional é promovido a
 suportado; as limitações de PE32/x86, empacotamento, interação GUI, heap do
 Notepad++, término dos setups e MSIX/.NET continuam explícitas.
 
+## Rodada D — aprofundamento controlado dos bloqueios x64
+
+Esta rodada reinicia o ciclo depois da matriz completa. Cada marco deve começar
+com uma hipótese específica, uma fixture ou reprodução mínima e uma comparação
+Rust ON/C++ OFF. Nenhum resultado negativo será convertido em suporte apenas
+porque o parsing ou a resolução de imports passou.
+
+### D1 — Isolamento da corrupção de heap do Notepad++
+
+Objetivo: descobrir se a corrupção observada depois de `GetStartupInfoW` e no
+primeiro `SHGetFolderPathW(CSIDL_APPDATA)` vem de uma API do runtime, de uma
+convenção de memória Win32 ainda incompleta ou do próprio aplicativo.
+
+Tarefas:
+
+- [ ] Criar uma fixture PE32+ mínima que reproduza a sequência observada:
+  startup wide, bloco de ambiente, `SHGetFolderPathW` e alocações posteriores,
+  sem copiar código do Notepad++.
+- [ ] Executar a fixture em Debug e no preset Sanitizer compatível com o parser
+  atual, com sentinelas e backtrace; separar corrupção do host de falha guest.
+- [ ] Comparar a fixture com `tl_shell` e com o Notepad++ sob Xvfb válido;
+  registrar a primeira operação divergente antes de mudar o runtime.
+- [ ] Se a causa for do runtime, aplicar somente a correção mínima, criar teste
+  de regressão e repetir a matriz ON/OFF; se for específica do aplicativo,
+  manter exit `71` controlado e documentar a limitação.
+
+Aceitação:
+
+- [ ] Há uma fixture reproduzível ou uma decisão comprovada de que o bloqueio
+  é específico do aplicativo.
+- [ ] Nenhuma correção relaxa isolamento, W^X, validação de memória ou limites.
+- [ ] O Notepad++ só muda de classificação depois de execução reproduzível
+  sem corrupção e com stdout/exit/trace comparados nos dois backends.
+
+### D2 — Cenários interativos para GUIs x64
+
+Objetivo: transformar os timeouts controlados de 7-Zip File Manager e PuTTY em
+cenários automatizados de interação e encerramento, sem declarar suporte GUI
+amplo.
+
+Tarefas:
+
+- [ ] Reutilizar o smoke Xvfb do 7-Zip para validar abertura, ação mínima e
+  encerramento em Rust ON/OFF.
+- [ ] Criar um cenário PuTTY que abra a janela configurável, envie somente
+  eventos seguros e encerre por comando/fechamento controlado.
+- [ ] Comparar janelas, eventos X11, stdout, exit code, limpeza e trace; manter
+  timeout como resultado quando a interação não for determinística.
+
+Aceitação:
+
+- [ ] Cada cenário possui ação e critério de encerramento reproduzíveis.
+- [ ] Nenhuma GUI é promovida além das operações realmente exercitadas.
+
+### D3 — Diagnóstico dos instaladores e pacote x64
+
+Objetivo: avançar a identificação de Roblox, G HUB e Affinity sem executar
+instaladores x86, ampliar limites MSIX ou prometer .NET/Mono.
+
+Tarefas:
+
+- [ ] Separar, com fixtures e traces, setup convidado, materialização,
+  catálogo, executável principal e falha de validação PE interno.
+- [ ] Verificar se Roblox/G HUB têm uma etapa controlada que possa ser testada
+  sem cadastrar ou deixar arquivos persistentes.
+- [ ] Registrar Affinity como limite de pacote/.NET e testar somente rejeições,
+  limpeza e diagnósticos estruturados.
+
+Aceitação:
+
+- [ ] Nenhum instalador deixa prefixo ou catálogo parcial.
+- [ ] Qualquer mudança passa ON/OFF e preserva os códigos de erro existentes.
+
+### D4 — Regressão e fechamento da rodada D
+
+Objetivo: repetir a matriz completa depois de cada alteração de D1–D3.
+
+Tarefas:
+
+- [ ] Reexecutar `--report` nos 27 arquivos em Rust ON/C++ OFF.
+- [ ] Reexecutar a matriz nativa sob Xvfb válido e a instalação seletiva em
+  prefixos temporários.
+- [ ] Comparar stdout, stderr, exit codes, traces, limpeza e símbolos OFF;
+  atualizar a matriz sem promover limitações não resolvidas.
+
+Aceitação:
+
+- [ ] Todos os marcos alterados possuem commit separado e evidência em `/tmp`.
+- [ ] `git diff --check` passa e o worktree fica limpo antes da próxima rodada.
+
 ## Regras de validação
 
 - Cada correção começa com uma fixture mínima e termina com testes automatizados.
