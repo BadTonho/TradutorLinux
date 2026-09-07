@@ -64,3 +64,22 @@ liberações. `DestroyWindow` mantém o slot lógico válido durante `WM_DESTROY
 somente depois o libera, evitando callback posterior com `GWLP` inválido.
 Isso valida somente a abertura/fechamento da configuração; o fluxo SSH e a
 compatibilidade GUI geral do PuTTY continuam fora da declaração de suporte.
+
+## Evidência D3 — instaladores e pacote x64
+
+Em 2026-09-07, a instalação seletiva foi repetida com Rust ON
+(`build/debug-rust`) e C++ OFF (`build/debug`), sempre com prefixo e `APPDATA`
+temporários, `--timeout 4`, `--cpu 3` e `--memory 512`.
+
+- `RobloxPlayerInstaller.exe`: exit `3` nos dois builds, `RBXCRASH` seguido de
+  `ExitProcess(3)` e `failed stage="setup"`; nenhum arquivo foi materializado.
+- `Logitech_GHUB_x64.exe`: exit `1` nos dois builds, `ExitProcess(1)` e
+  `failed stage="setup"`; nenhum catálogo ou arquivo foi criado.
+- `Affinity x64.msix`: exit `4` nos dois builds antes da extração; Rust
+  registrou `package-parse` `malformed` com `code=19`, `phase=3`, e o C++ OFF
+  manteve a falha de `package-parse` sem campos Rust.
+
+Os três pares tiveram stdout igual, zero arquivos no prefixo e no APPDATA e
+nenhum evento `extracted` ou `registered`. O resultado confirma diagnóstico
+controlado, não suporte funcional dos instaladores nem do conteúdo .NET/Mono do
+Affinity. As capturas ficam em `/tmp/tl-d3-*`.

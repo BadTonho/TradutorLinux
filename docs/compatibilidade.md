@@ -1003,6 +1003,13 @@ etapa. stdout foi vazio e idêntico nos oito casos, sem eventos `extracted` ou
 `registered`; nenhum prefixo recebeu arquivo. Isso diagnostica término do
 setup e limite seguro do pacote, não suporte funcional de instalação.
 
+A validação D3 repetiu os mesmos três casos após a reorganização das extensões
+por aplicativo. Os pares Rust ON/C++ OFF preservaram stdout e exit code:
+Roblox `3`, G HUB `1` e Affinity `4`. Todos os prefixos e diretórios APPDATA
+isolados ficaram sem arquivos, e nenhum trace registrou `extracted` ou
+`registered`; a diferença esperada ficou restrita ao diagnóstico estruturado
+`package-parse` do backend Rust para o Affinity.
+
 Esses resultados são uma atualização da matriz de evidência, não uma promoção
 geral de compatibilidade: `exit 0` em uma execução controlada indica apenas
 que aquele cenário terminou, e falhas `3`, `4`, `71` e `72` permanecem

@@ -849,17 +849,36 @@ instaladores x86, ampliar limites MSIX ou prometer .NET/Mono.
 
 Tarefas:
 
-- [ ] Separar, com fixtures e traces, setup convidado, materialização,
+- [x] Separar, com fixtures e traces, setup convidado, materialização,
   catálogo, executável principal e falha de validação PE interno.
-- [ ] Verificar se Roblox/G HUB têm uma etapa controlada que possa ser testada
+- [x] Verificar se Roblox/G HUB têm uma etapa controlada que possa ser testada
   sem cadastrar ou deixar arquivos persistentes.
-- [ ] Registrar Affinity como limite de pacote/.NET e testar somente rejeições,
+- [x] Registrar Affinity como limite de pacote/.NET e testar somente rejeições,
   limpeza e diagnósticos estruturados.
 
 Aceitação:
 
-- [ ] Nenhum instalador deixa prefixo ou catálogo parcial.
-- [ ] Qualquer mudança passa ON/OFF e preserva os códigos de erro existentes.
+- [x] Nenhum instalador deixa prefixo ou catálogo parcial.
+- [x] Qualquer mudança passa ON/OFF e preserva os códigos de erro existentes.
+
+Evidência D3 de 2026-09-07:
+
+- [x] `RobloxPlayerInstaller.exe` foi executado com `install --trace
+  --timeout 4 --cpu 3 --memory 512` nos builds `build/debug-rust` e
+  `build/debug`. Ambos retornaram `3`, registraram `RBXCRASH`/`ExitProcess(3)`
+  e `failed stage="setup"`; stdout foi igual e os diretórios temporários não
+  receberam arquivos.
+- [x] `Logitech_GHUB_x64.exe` foi executado nos dois builds com os mesmos
+  limites. Ambos retornaram `1`, registraram `ExitProcess(1)` e
+  `failed stage="setup"`; não houve extração, registro ou arquivos persistentes.
+- [x] `Affinity x64.msix` foi rejeitado com exit `4` antes da extração nos dois
+  builds. Rust registrou `package-parse format="MSIX / AppX"
+  status="malformed" code="19" phase="3"`, enquanto o build C++ OFF manteve
+  `failed stage="package-parse"`; stdout foi igual e ambos deixaram zero
+  arquivos no prefixo e no APPDATA isolados.
+- [x] As evidências completas ficaram em `/tmp/tl-d3-*`; nenhum caso exibiu
+  `extracted` ou `registered`. A etapa não alterou o runtime, não ampliou o
+  limite MSIX e não criou suporte para .NET/Mono.
 
 ### D4 — Regressão e fechamento da rodada D
 
