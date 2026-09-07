@@ -312,6 +312,17 @@ TEST(PeReaderTest, ParsesDllExportsByNameOrdinalAndForwarder) {
     EXPECT_EQ(result.info.exports[1].forwarder, "KERNEL32.ExitProcess");
 }
 
+TEST(PeReaderTest, RejectsExportDirectoryWithoutFileBackedSection) {
+    std::vector<std::byte> bytes = make_export_pe();
+    constexpr std::size_t kSection1RawSizeOffset = kSection0RawSizeOffset + 40U;
+    write_u32(bytes, kSection1RawSizeOffset, 0);
+
+    const ParseResult result = parse_pe(bytes);
+
+    EXPECT_EQ(result.status, ParseStatus::Malformed);
+    EXPECT_NE(result.error_message.find("exports"), std::string::npos);
+}
+
 TEST(PeReaderTest, ParsesDelayImportsByNameAndOrdinal) {
     const std::vector<std::byte> bytes = make_delay_import_pe();
 

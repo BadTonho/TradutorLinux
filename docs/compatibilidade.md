@@ -968,7 +968,7 @@ continuam sendo a evidência necessária para registrá-lo como suportado.
 | 4 | `putty_x64.exe` | PE32+ x86-64 | 348/348 (100%) | `supported` | `ExitProcess 1` (sem args) | FLS 0/1 ok |
 | 5 | `WinRAR_x64.exe` `winrar-x64-723.exe` | PE32+ x86-64 | 251/251 (100%) | `supported` | `ExitProcess 0` `sfxcmd` env | delay `GDI32/ADVAPI32/SHELL32/ole32` |
 | 6 | `Rufus_x64.exe` | PE32+ x86-64 | 14/14 (100%) | `supported` | `ExitProcess 56832` | `UPX0` possui 3 seções marcadas `rwx`; o loader aplica W^X e mapeia a combinação como `RW`, sem página `RWX` |
-| 7 | `HWiNFO64.exe` | PE32+ x86-64 | 28/28 (100%) | `supported` | `ExitProcess 44544 (0xAE00 → shell 0)` | **Fase 13.B**: imports fechados `20/28→28/28`; `OpenPrinterW` resolve o import, mas a operação de impressão retorna `ERROR_NOT_SUPPORTED` de forma controlada |
+| 7 | `HWiNFO64.exe` | PE32+ x86-64 | — | `malformed` (PE empacotado) | `not-attempted` | `UPX0` tem `SizeOfRawData=0`, enquanto o diretório de exports aponta para RVA sem bytes no arquivo; o desempacotamento permanece fora do escopo |
 | 8 | `RobloxPlayerInstaller.exe` | PE32+ x86-64 | 430/430 (100%) | `execution-failed` | `RBXCRASH FatalRuntimeError Worker,28` `ExitProcess 3` (antes `SIGSEGV 0x68 rva 0x39ab exit 71`) | **Fase 13.D**: imports resolvidos, mas o fluxo ainda não conclui com sucesso; o slot TLS específico continua sendo benchmark, não suporte declarado |
 | 9 | `Rockstar-Games-Launcher.exe` | PE32+ x86-64 | 338/338 (100%) | `execution-failed` | `ExitProcess 3` | imports resolvidos; fluxo principal ainda não validado como concluído |
 | 10 | `Logitech_GHUB_x64.exe` `lghub_installer.exe` | PE32+ x86-64 | 114/114 (100%) | `supported` | `GuestTimeout 72` durante a inicialização | imports resolvidos; o fluxo do instalador não foi concluído e não é suporte funcional |
@@ -987,7 +987,7 @@ continuam sendo a evidência necessária para registrá-lo como suportado.
 | **7-Zip CLI (`7z_x64.exe`)** | PE32+ x86-64 | 100% (133/133) | Suportado | Executou e imprimiu o banner oficial completo do 7-Zip no terminal |
 | **PuTTY SSH Client (`putty_x64.exe`)** | PE32+ x86-64 | 100% (348/348) | Suportado | Executou entry point, inicializou FLS (slots 0 e 1) e loop de eventos de interface e rede |
 | **WinRAR (`WinRAR_x64.exe`)** | PE32+ x86-64 | 100% (251/251) | Suportado | Inicializou FLS, subsistema CRT e APIs do Shell/OLE com sucesso |
-| **HWiNFO64 (`HWiNFO64.exe`)** | PE32+ x86-64 | 100% (28/28) | Fluxo principal restrito | Fase 13.B — exec `ExitProcess 44544`; `OpenPrinterW` retorna `ERROR_NOT_SUPPORTED` |
+| **HWiNFO64 (`HWiNFO64.exe`)** | PE32+ x86-64 | — | Análise estrutural rejeitada | `UPX0` não tem dados crus para o RVA do diretório de exports; desempacotamento não é implementado |
 | **Roblox Player Installer (`RobloxPlayerInstaller.exe`)** | PE32+ x86-64 | 100% (430/430) | Não suportado como fluxo concluído | Fase 13.D — `RBXCRASH` + `ExitProcess 3` (antes `SIGSEGV`); resolução de imports e correção TLS não equivalem a suporte |
 | **Notepad++ (`notepad++.exe`)** | PE32+ x86-64 | 100% (584/584) | Não suportado como fluxo concluído | Histórico de resolução; execução registrada terminou em `GuestTimeout 72` sem Xvfb |
 | **Rufus (`Rufus_x64.exe`)** | PE32+ x86-64 | 100% (14/14) | Inicia | UPX marca seções `rwx`; o loader mantém W^X, exec `ExitProcess 56832`; fluxo de uso não validado |

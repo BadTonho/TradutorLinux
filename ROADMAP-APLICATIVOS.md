@@ -32,7 +32,7 @@ teste e registro reproduzível.
 | GUI | `7zFM_x64.exe` chegou à execução, mas não havia X11 funcional | Repetir em ambiente gráfico controlado |
 | PE32/x86 | 12 arquivos rejeitados por arquitetura não suportada | Manter fora do escopo até decisão própria |
 | Unwind x64 | 6 executáveis agora passam no `--report`; o trace registra V1/V2, cadeias e `extended-set-fpreg` | Avaliar as limitações de execução de cada aplicativo |
-| HWiNFO64 | Falha estrutural em exports/RVA | Confirmar se é layout legítimo ou imagem inválida |
+| HWiNFO64 | Imagem empacotada: diretório de exports em região sem dados crus | Manter rejeição segura e registrar UPX0/UPX1 |
 | Rufus | Report passou; execução parou por entry point fora de página executável | Investigar imagem empacotada e política de execução |
 | MSIX Affinity | ZIP64 de disco único válido com 1.284 entradas; rejeitado pelo limite agregado descompactado de 512 MiB | Manter limite seguro e registrar a limitação do pacote |
 
@@ -85,6 +85,30 @@ Aceitação:
 - [x] `--report` e execução têm resultado controlado e documentado.
 - [x] A matriz ON/OFF não apresenta fallback silencioso nem regressão.
 
+### A2 concluído — estrutura de exports do HWiNFO64
+
+Evidência reproduzível de 2026-09-07:
+
+- [x] O `--report` Rust retornou exit `4`, `status="malformed"`,
+  `code="24"`, `phase="6"`, `input-offset="10007328"` e
+  `detail-value="4492"`; o build C++ OFF retornou a mesma categoria com
+  `diretório de exports fora da imagem`.
+- [x] A inspeção PE confirmou `UPX0` com `VirtualSize=0x1496000` e
+  `SizeOfRawData=0`, `UPX1` como região empacotada com os dados crus, e o
+  diretório de exports em RVA `0x98b320`, dentro da região sem representação
+  no arquivo. O entry point fica em `UPX1`; a imagem depende do desempacotamento
+  em runtime para materializar esse layout.
+- [x] Foi adicionada a fixture `PeReaderTest.RejectsExportDirectoryWithoutFileBackedSection`,
+  que protege a rejeição quando uma diretiva aponta para uma seção sem dados
+  crus. Nenhum range RVA foi relaxado.
+- [x] Não houve mapeamento ou execução após a rejeição; a matriz ON/OFF mantém
+  exit `4` e não há fallback Rust→C++.
+
+Conclusão: o arquivo é um PE empacotado legítimo para execução Windows, mas seu
+diretório de exports não existe como bytes no arquivo estático. O parser deve
+rejeitá-lo como entrada estruturalmente não analisável sem um desempacotador,
+que permanece fora do escopo.
+
 ### A2 — Estrutura de exports do HWiNFO64
 
 Objetivo: distinguir uma imagem PE legítima de uma imagem malformada sem
@@ -92,16 +116,17 @@ enfraquecer a validação de RVA.
 
 Tarefas:
 
-- [ ] Reproduzir o erro de diretório de exports fora da imagem.
-- [ ] Inspecionar seções, diretório de dados, ranges e conversões RVA/offset.
-- [ ] Se houver layout legítimo, implementar a menor correção segura e criar
-  uma fixture de regressão.
-- [ ] Se a imagem for inválida, manter a rejeição e melhorar o diagnóstico.
+- [x] Reproduzir o erro de diretório de exports fora da imagem.
+- [x] Inspecionar seções, diretório de dados, ranges e conversões RVA/offset.
+- [x] Confirmar a menor decisão segura: não relaxar o mapeamento RVA e criar
+  uma fixture de regressão para seção sem dados crus.
+- [x] Manter a rejeição e documentar que a imagem exige desempacotamento.
 
 Aceitação:
 
-- [ ] A decisão é sustentada por fixture e trace estruturado.
-- [ ] Não há acesso fora da entrada nem relaxamento genérico de limites.
+- [x] A decisão é sustentada por fixture, trace estruturado e inspeção das
+  seções reais.
+- [x] Não há acesso fora da entrada nem relaxamento genérico de limites.
 
 ### A3 — Rufus e imagens PE empacotadas
 
