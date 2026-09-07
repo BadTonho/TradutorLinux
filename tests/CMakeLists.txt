@@ -235,6 +235,69 @@ if(TL_XVFB_EXECUTABLE)
     target_link_libraries(notepadpp_smoke PRIVATE "${TL_X11_LIBRARY}")
     tl_enable_warnings(notepadpp_smoke)
     tl_enable_sanitizers(notepadpp_smoke)
+
+    if(TL_POPULAR_APPS_DIR AND TARGET tradutorlinux)
+        set(TL_7ZFM_EXECUTABLE "${TL_POPULAR_APPS_DIR}/7zFM_x64.exe")
+        set(TL_PUTTY_EXECUTABLE "${TL_POPULAR_APPS_DIR}/putty_x64.exe")
+        set(TL_WINRAR_EXECUTABLE "${TL_POPULAR_APPS_DIR}/WinRAR_x64.exe")
+        set(TL_NOTEPADPP_EXECUTABLE "${TL_POPULAR_APPS_DIR}/Notepad++/notepad++.exe")
+
+        if(EXISTS "${TL_7ZFM_EXECUTABLE}")
+            add_test(
+                NAME seven_zip_gui_smoke
+                COMMAND seven_zip_smoke
+                    "$<TARGET_FILE:tradutorlinux>"
+                    "${TL_7ZFM_EXECUTABLE}"
+            )
+            set_tests_properties(seven_zip_gui_smoke PROPERTIES
+                LABELS "runtime;apps;gui;7zip"
+                TIMEOUT 60
+                SKIP_RETURN_CODE 77
+            )
+        endif()
+
+        if(EXISTS "${TL_PUTTY_EXECUTABLE}")
+            add_test(
+                NAME putty_real_gui_smoke
+                COMMAND putty_smoke
+                    "$<TARGET_FILE:tradutorlinux>"
+                    "${TL_PUTTY_EXECUTABLE}"
+            )
+            set_tests_properties(putty_real_gui_smoke PROPERTIES
+                LABELS "runtime;apps;gui;putty"
+                TIMEOUT 60
+                SKIP_RETURN_CODE 77
+            )
+        endif()
+
+        if(EXISTS "${TL_WINRAR_EXECUTABLE}")
+            add_test(
+                NAME winrar_sfx_real_smoke
+                COMMAND winrar_sfx_smoke
+                    "$<TARGET_FILE:tradutorlinux>"
+                    "${TL_WINRAR_EXECUTABLE}"
+            )
+            set_tests_properties(winrar_sfx_real_smoke PROPERTIES
+                LABELS "runtime;apps;gui;winrar"
+                TIMEOUT 60
+                SKIP_RETURN_CODE 77
+            )
+        endif()
+
+        if(EXISTS "${TL_NOTEPADPP_EXECUTABLE}")
+            add_test(
+                NAME notepadpp_real_gui_smoke
+                COMMAND notepadpp_smoke
+                    "$<TARGET_FILE:tradutorlinux>"
+                    "${TL_NOTEPADPP_EXECUTABLE}"
+            )
+            set_tests_properties(notepadpp_real_gui_smoke PROPERTIES
+                LABELS "runtime;apps;gui;notepadpp"
+                TIMEOUT 90
+                SKIP_RETURN_CODE 77
+            )
+        endif()
+    endif()
 endif()
 
 if(TL_BUILD_TARGET_APPS)

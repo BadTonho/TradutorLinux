@@ -1263,6 +1263,46 @@ Evidência E10 de 2026-09-07:
   anterior que produzia `Method = Store` para um arquivo pequeno foi corrigida
   no teste, não mascarada no critério.
 
+### E11 — Matriz CTest dos smokes GUI do corpus
+
+Objetivo: tornar os cenários GUI reais já validados em D2/E1/E2 descobríveis e
+repetíveis por CTest, sem executar instaladores automaticamente e sem colocar
+regras de aplicativo no runtime.
+
+Tarefas:
+
+- [x] Registrar, somente com `TL_POPULAR_APPS_DIR` e Xvfb disponível,
+  `7zFM_x64.exe`, `putty_x64.exe`, `WinRAR_x64.exe` e
+  `Notepad++/notepad++.exe` nos alvos separados já existentes.
+- [x] Manter um staging/Xvfb por cenário, timeout e `SKIP_RETURN_CODE 77` para
+  a ausência real do servidor gráfico; falhas depois da inicialização do Xvfb
+  continuam sendo falhas de teste.
+- [x] Registrar labels por aplicativo e manter o build padrão sem downloads ou
+  dependência do corpus.
+
+Aceitação:
+
+- [x] Os quatro testes são descobertos em Rust ON e C++ OFF quando o diretório
+  do corpus é fornecido.
+- [x] Cada smoke mantém o contrato funcional já documentado: Copy do 7-Zip,
+  configuração do PuTTY, cancelamento do SFX do WinRAR e bloqueio controlado
+  do Notepad++.
+- [x] Nenhuma DLL, shim, regra de seleção ou mudança específica do aplicativo
+  foi adicionada ao runtime.
+
+Evidência E11 de 2026-09-07:
+
+- [x] Após a configuração com
+  `-DTL_POPULAR_APPS_DIR='/home/tonho/Área de trabalho/Aplicativos_Windows_Populares'`,
+  `ctest -N` listou os quatro smokes em `build/debug-rust` e `build/debug`.
+- [x] Os quatro testes foram executados nos dois builds e terminaram como
+  `Skipped`, exit `77`, porque `/tmp/.X11-unix/X0` estava órfão e o diretório
+  de sockets tinha proprietário incompatível; `xdpyinfo :0` não conectou e não
+  havia processo Xvfb vivo. O CTest não classificou isso como sucesso funcional.
+- [x] O mesmo ambiente já havia produzido evidência funcional dos quatro
+  cenários em Xvfb válido; a repetição funcional fica pendente de um ambiente
+  gráfico corrigido, não de uma falha do aplicativo.
+
 ## Regras de validação
 
 - Cada correção começa com uma fixture mínima e termina com testes automatizados.

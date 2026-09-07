@@ -25,6 +25,8 @@ struct XvfbProcess {
     std::string display;
 };
 
+enum class SmokeResult { Passed, Failed, Skipped };
+
 [[nodiscard]] bool wait_for_exit(const pid_t pid, const std::chrono::milliseconds timeout,
                                   int* const exit_status = nullptr) {
     const auto deadline = std::chrono::steady_clock::now() + timeout;
@@ -60,6 +62,11 @@ void stop_process(const pid_t pid) {
     const pid_t pid = ::fork();
     if (pid == 0) {
         ::close(display_pipe[0]);
+        const int null_fd = ::open("/dev/null", O_WRONLY);
+        if (null_fd >= 0) {
+            (void)::dup2(null_fd, STDERR_FILENO);
+            ::close(null_fd);
+        }
         if (::dup2(display_pipe[1], 3) < 0) {
             ::_exit(127);
         }
@@ -199,8 +206,8 @@ void stop_runtime_process(const pid_t pid) {
     return input.good();
 }
 
-[[nodiscard]] bool run_smoke(const std::filesystem::path& runtime,
-                             const std::filesystem::path& target) {
+[[nodiscard]] SmokeResult run_smoke(const std::filesystem::path& runtime,
+                                    const std::filesystem::path& target) {
     const auto stamp = std::chrono::steady_clock::now().time_since_epoch().count();
     const std::filesystem::path staging = std::filesystem::temp_directory_path() /
                                            ("tradutorlinux-7zfm-smoke-" +
@@ -210,14 +217,15 @@ void stop_runtime_process(const pid_t pid) {
     if (!copy_runtime_sample(target, staging)) {
         std::cerr << "falha ao preparar a amostra 7-Zip em " << staging << '\n';
         std::filesystem::remove_all(staging, error);
-        return false;
+        return SmokeResult::Failed;
     }
 
     const XvfbProcess xvfb = start_xvfb();
     if (xvfb.pid <= 0 || xvfb.display.empty()) {
         std::cerr << "falha ao iniciar Xvfb\n";
         std::filesystem::remove_all(staging, error);
-        return false;
+        std::cerr << "smoke do 7-Zip GUI ignorado: Xvfb indisponível\n";
+        return SmokeResult::Skipped;
     }
 
     const std::filesystem::path trace_path = staging / "trace.log";
@@ -246,7 +254,7 @@ void stop_runtime_process(const pid_t pid) {
         stop_process(xvfb.pid);
         std::cerr << "falha ao iniciar o runtime\n";
         std::filesystem::remove_all(staging, error);
-        return false;
+        return SmokeResult::Failed;
     }
     (void)::setpgid(runtime_pid, runtime_pid);
 
@@ -312,7 +320,7 @@ void stop_runtime_process(const pid_t pid) {
         }
     }
     std::filesystem::remove_all(staging, error);
-    return passed;
+    return passed ? SmokeResult::Passed : SmokeResult::Failed;
 }
 
 }  // namespace
@@ -330,5 +338,6 @@ int main(const int argc, char** const argv) {
         std::cerr << "runtime ou amostra 7-Zip inexistente\n";
         return 2;
     }
-    return run_smoke(runtime, target) ? 0 : 1;
+    const SmokeResult result = run_smoke(runtime, target);
+    return result == SmokeResult::Passed ? 0 : result == SmokeResult::Skipped ? 77 : 1;
 }

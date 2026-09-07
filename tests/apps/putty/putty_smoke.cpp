@@ -24,6 +24,8 @@ struct XvfbProcess {
     std::string display;
 };
 
+enum class SmokeResult { Passed, Failed, Skipped };
+
 [[nodiscard]] bool wait_for_exit(const pid_t pid, const std::chrono::milliseconds timeout,
                                   int* const exit_status = nullptr) {
     const auto deadline = std::chrono::steady_clock::now() + timeout;
@@ -56,6 +58,11 @@ void stop_process(const pid_t pid) {
     const pid_t pid = ::fork();
     if (pid == 0) {
         ::close(display_pipe[0]);
+        const int null_fd = ::open("/dev/null", O_WRONLY);
+        if (null_fd >= 0) {
+            (void)::dup2(null_fd, STDERR_FILENO);
+            ::close(null_fd);
+        }
         if (::dup2(display_pipe[1], 3) < 0) {
             ::_exit(127);
         }
@@ -135,8 +142,8 @@ void stop_process(const pid_t pid) {
     return sent;
 }
 
-[[nodiscard]] bool run_smoke(const std::filesystem::path& runtime,
-                             const std::filesystem::path& target) {
+[[nodiscard]] SmokeResult run_smoke(const std::filesystem::path& runtime,
+                                    const std::filesystem::path& target) {
     const auto stamp = std::chrono::steady_clock::now().time_since_epoch().count();
     const std::filesystem::path staging = std::filesystem::temp_directory_path() /
                                           ("tradutorlinux-putty-smoke-" +
@@ -145,12 +152,13 @@ void stop_process(const pid_t pid) {
     std::error_code error;
     std::filesystem::create_directories(staging, error);
     if (error) {
-        return false;
+        return SmokeResult::Failed;
     }
     const XvfbProcess xvfb = start_xvfb();
     if (xvfb.pid <= 0 || xvfb.display.empty()) {
         std::filesystem::remove_all(staging, error);
-        return false;
+        std::cerr << "smoke do PuTTY: Xvfb indisponível; cenário ignorado\n";
+        return SmokeResult::Skipped;
     }
     const std::filesystem::path trace_path = staging / "trace.log";
     const int trace_fd = ::open(trace_path.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0600);
@@ -170,7 +178,7 @@ void stop_process(const pid_t pid) {
     if (runtime_pid < 0) {
         stop_process(xvfb.pid);
         std::filesystem::remove_all(staging, error);
-        return false;
+        return SmokeResult::Failed;
     }
     (void)::setpgid(runtime_pid, runtime_pid);
 
@@ -227,7 +235,7 @@ void stop_process(const pid_t pid) {
         std::cerr << trace;
     }
     std::filesystem::remove_all(staging, error);
-    return passed;
+    return passed ? SmokeResult::Passed : SmokeResult::Failed;
 }
 
 }  // namespace
@@ -245,5 +253,6 @@ int main(const int argc, char** const argv) {
         std::cerr << "runtime ou amostra PuTTY inexistente\n";
         return 2;
     }
-    return run_smoke(runtime, target) ? 0 : 1;
+    const SmokeResult result = run_smoke(runtime, target);
+    return result == SmokeResult::Passed ? 0 : result == SmokeResult::Skipped ? 77 : 1;
 }
