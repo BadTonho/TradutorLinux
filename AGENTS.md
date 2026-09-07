@@ -27,6 +27,9 @@ Antes de iniciar qualquer trabalho, leia `PROJETO.md`, `feitos/ROADMAP.md`, `doc
   `tradutorlinux_core`.
 - Fixtures, smokes e cenários de interação específicos devem ficar em
   `tests/apps/<app-id>/`, separados dos testes genéricos do runtime.
+- Não colocar arquivos específicos de aplicativo em `src/runtime/`,
+  `src/cli/`, `include/tradutorlinux/` ou nos diretórios de DLLs comuns;
+  esses locais permanecem reservados ao comportamento genérico compartilhado.
 - Uma extensão por aplicativo só pode ser usada depois de possuir contrato,
   manifesto ou seleção explícita de prefixo, teste de integração e registro
   na matriz de compatibilidade. Ela nunca deve alterar o comportamento global
@@ -34,6 +37,9 @@ Antes de iniciar qualquer trabalho, leia `PROJETO.md`, `feitos/ROADMAP.md`, `doc
 - Os diretórios de extensões podem existir como estrutura reservada, mas não
   devem conter DLLs binárias geradas ou baixadas até que uma etapa autorize sua
   implementação e forneça evidência reproduzível.
+- Criar a estrutura isolada ou um teste de regressão não autoriza, por si só,
+  criar DLLs, shims ou código de compatibilidade exclusivo; isso exige uma
+  etapa explícita do roadmap e aprovação correspondente.
 
 ## Escopo atual
 
