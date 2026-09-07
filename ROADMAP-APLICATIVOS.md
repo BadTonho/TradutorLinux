@@ -1829,6 +1829,49 @@ Evidência E11 de 2026-09-07:
   encerramento nos dois backends; isso não promove compatibilidade geral dos
   aplicativos nem autoriza DLLs específicas.
 
+### E27 — Rodada geral do tradutor no corpus
+
+Objetivo: usar o TradutorLinux para identificar todo o corpus e repetir, de
+forma controlada, os únicos fluxos de execução e instalação autorizados pelos
+marcos anteriores.
+
+Tarefas:
+
+- [x] Analisar todos os 26 arquivos PE e o pacote MSIX com `--report`,
+  preservando as rejeições esperadas de arquitetura, formato e estrutura.
+- [x] Executar a matriz nativa autorizada para 7-Zip, os dois binários
+  WinRAR, Rockstar Games Launcher e Rufus, com prefixo temporário, limites de
+  CPU/memória e timeout.
+- [x] Executar a matriz de instalação autorizada para Roblox, Logitech G HUB,
+  o alias byte-a-byte e Affinity, verificando limpeza, ausência de cadastro
+  parcial e diagnóstico Rust/C++.
+- [x] Manter os instaladores PE32/x86, .NET/Mono, DLLs e demais aplicativos
+  sem cenário autorizado fora da execução; eles continuam analisados e
+  classificados, não iniciados indiscriminadamente.
+
+Aceitação:
+
+- [x] A matriz `popular_apps_report_matrix` passou 27/27 em Rust ON e C++
+  OFF, usando respectivamente `build/debug-rust` e `build/debug`.
+- [x] A matriz `popular_apps_native_matrix` passou 5/5 nos dois builds, sem
+  timeout inesperado, sinal não controlado ou staging persistente.
+- [x] A matriz `popular_apps_install_matrix` passou 4/4 nos dois builds; o
+  MSIX inválido foi rejeitado antes da extração e o build OFF não emitiu
+  campos de backend Rust.
+- [x] A matriz GUI E11 passou separadamente nos dois builds com Xvfb próprio;
+  nenhuma etapa alterou o corpus original ou criou DLL específica.
+
+Evidência reproduzível de 2026-09-07:
+
+- [x] `ctest --test-dir build/debug-rust -R '^popular_apps_report_matrix$'`
+  passou (25,27 s), `popular_apps_native_matrix` passou (3,76 s) e
+  `popular_apps_install_matrix` passou (16,93 s).
+- [x] `ctest --test-dir build/debug -R '^popular_apps_report_matrix$'` passou
+  (23,08 s), `popular_apps_native_matrix` passou (1,10 s) e
+  `popular_apps_install_matrix` passou (15,50 s).
+- [x] As configurações confirmam `TL_BUILD_RUST=ON` em `build/debug-rust` e
+  `TL_BUILD_RUST=OFF` em `build/debug`, ambas apontando para o mesmo corpus.
+
 ## Regras de validação
 
 - Cada correção começa com uma fixture mínima e termina com testes automatizados.
