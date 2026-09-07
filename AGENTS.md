@@ -17,6 +17,24 @@ Antes de iniciar qualquer trabalho, leia `PROJETO.md`, `feitos/ROADMAP.md`, `doc
 - Cada API nova precisa ter um aplicativo-alvo ou fixture que justifique sua existência e um teste de regressão que a proteja.
 - Priorize correção do loader, ABI, memória, imports e diagnósticos antes de ampliar a cobertura de APIs, famílias de DLL ou GUI.
 
+## Runtime genérico e extensões por aplicativo
+
+- O TradutorLinux é um runtime genérico: `src/runtime/`, o loader e os
+  módulos comuns não podem incorporar regras, DLLs, shims ou hacks exclusivos
+  de um aplicativo.
+- Código específico deve ficar isolado em `compat/apps/<app-id>/` e ser
+  construído como alvo separado, sem ligação automática com o
+  `tradutorlinux_core`.
+- Fixtures, smokes e cenários de interação específicos devem ficar em
+  `tests/apps/<app-id>/`, separados dos testes genéricos do runtime.
+- Uma extensão por aplicativo só pode ser usada depois de possuir contrato,
+  manifesto ou seleção explícita de prefixo, teste de integração e registro
+  na matriz de compatibilidade. Ela nunca deve alterar o comportamento global
+  nem ser aplicada silenciosamente a outros aplicativos.
+- Os diretórios de extensões podem existir como estrutura reservada, mas não
+  devem conter DLLs binárias geradas ou baixadas até que uma etapa autorize sua
+  implementação e forneça evidência reproduzível.
+
 ## Escopo atual
 
 Em cada momento, `feitos/ROADMAP.md` é a fonte de verdade para a fase em andamento. As restrições de cada fase são gates reais: uma capacidade só pode ser usada ou declarada quando a fase correspondente e seus testes a autorizarem. Na Fase 0, por exemplo, o projeto fornecia apenas infraestrutura; o carregamento e a execução de PE só começaram nas fases seguintes.
