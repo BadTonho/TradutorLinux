@@ -850,7 +850,7 @@ processo filho; cada thread convidada recebe seu próprio TEB/GS, stack e
 
 | Módulo | API | Estado | Comportamento suportado |
 |---|---|---|---|
-| `KERNEL32.dll` | `CreateThread` | Suportado | Aloca stack com guard page, TEB, `arch_prctl(GS)`, cria `std::thread` com wrapper que preserva GS; retorna handle de thread |
+| `KERNEL32.dll` | `CreateThread` | Suportado | Aloca stack com guard page, TEB, `arch_prctl(GS)`, cria `std::thread` com wrapper que preserva GS; retorna handle de thread; falhas de recurso do host retornam `NULL`/`ERROR_NOT_ENOUGH_MEMORY` sem exceção atravessar a ABI |
 | `KERNEL32.dll` | `ExitThread` | Suportado | `longjmp` para o `setjmp` do wrapper; thread termina sem encerrar o processo |
 | `KERNEL32.dll` | `WaitForSingleObject` | Suportado | Thread, evento, mutex, semáforo, processo e arquivo síncrono; suporta `INFINITE` e timeout |
 | `KERNEL32.dll` | `WaitForMultipleObjects` | Suportado | Até 64 handles válidos, espera any/all e retorno por índice; polling controlado para o subconjunto atual |
@@ -927,7 +927,8 @@ processo filho; cada thread convidada recebe seu próprio TEB/GS, stack e
 - Handles nomeados não são compartilhados entre processos; o nome é validado,
   mas a tabela é local ao processo host.
 - `CreateThread` não suporta `CREATE_SUSPENDED`; `stack_size == 0` usa o
-  tamanho padrão (1 MiB).
+  tamanho padrão (1 MiB). Se o host não puder reservar a stack, o TEB ou a
+  thread POSIX, a API falha de forma controlada e libera o estado parcial.
 - `ExitThread` termina somente a thread corrente; não limpa destructors C++.
 - O fim de vida de threads convidadas usa trampolim `setjmp`/`longjmp`
   (`thread_local`): `ExitThread` nunca atravessa `pthread_exit`; o `join` real

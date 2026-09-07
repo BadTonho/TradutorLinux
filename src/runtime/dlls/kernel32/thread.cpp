@@ -10,6 +10,29 @@ namespace {
 thread_local std::jmp_buf* t_thread_exit_context = nullptr;
 thread_local ThreadSlot* t_thread_exit_slot = nullptr;
 
+void clear_unstarted_thread_slot(ThreadSlot& slot) noexcept {
+    if (slot.teb != nullptr) {
+        free_guest_teb(slot.teb);
+    }
+    if (slot.stack != nullptr && slot.stack_size > 0) {
+        munmap(slot.stack, slot.stack_size);
+    }
+    slot.used = false;
+    slot.thread_id = 0;
+    slot.teb = nullptr;
+    slot.stack = nullptr;
+    slot.stack_size = 0;
+    slot.stack_top = 0;
+    slot.unwind_view = {};
+    slot.fls_values.reset();
+    slot.thread_func = {};
+    slot.finished = false;
+    slot.joined = false;
+    slot.handle_closed = false;
+    slot.exit_code = 0;
+    runtime::invalidate_memory_map_cache();
+}
+
 void trace_fls(const char* const operation, const std::string& detail) noexcept {
     const std::array<diagnostics::TraceField, 4> fields{
         diagnostics::TraceField{"operation", operation},
@@ -145,89 +168,96 @@ TL_MSABI void* tl_CreateThread(const void* thread_attributes, const std::uintptr
     it->stack_size = real_stack_size;
     it->stack_top = stack_top;
     it->unwind_view = runtime::current_guest_unwind_view();
-    it->fls_values = std::make_shared<FlsThreadValues>();
     it->finished = false;
     it->joined = false;
     it->handle_closed = false;
     it->exit_code = 0;
     // A pilha e o TEB novos alteram o mapa de memória visível ao validador.
     runtime::invalidate_memory_map_cache();
-    if (thread_id != nullptr) {
-        *thread_id = it->thread_id;
-    }
     using ThreadProc = TL_MSABI std::uint32_t (*)(const void*);
     auto proc = reinterpret_cast<ThreadProc>(start_address);
     runtime::GuestContext* const guest_context = &runtime::guest_context();
-    it->host_thread = std::thread([slot_ptr = &*it, proc, parameter, teb, guest_context,
-                                   unwind_view = it->unwind_view]() {
-        // O contexto ativo é thread-local. Uma thread host nova começa no
-        // contexto padrão, portanto precisa herdar explicitamente o contexto
-        // do processo convidado antes de consultar imagem, TLS, handles ou
-        // qualquer outra tabela pertencente à execução.
-        runtime::GuestContextScope context_scope(*guest_context);
-        g_current_thread_id = slot_ptr->thread_id;
-        set_guest_gs_base(teb);
-        initialize_thread_tls(static_cast<runtime::GuestTeb*>(teb));
-        set_current_fls_thread_values(slot_ptr->fls_values);
-        runtime::restore_guest_unwind_view(unwind_view);
-        invoke_thread_tls_callbacks(2U /* DLL_THREAD_ATTACH */);
-        initialize_pointer_backed_tls_slot(static_cast<runtime::GuestTeb*>(teb));
-        std::jmp_buf exit_point{};
-        t_thread_exit_context = &exit_point;
-        t_thread_exit_slot = slot_ptr;
-        if (setjmp(exit_point) == 0) {
-            diagnostics::FunctionTraceScope assembly_scope{"tl_call_guest_thread_on_stack"};
-            slot_ptr->exit_code = static_cast<int>(tl_call_guest_thread_on_stack(
-                reinterpret_cast<std::uintptr_t>(proc), parameter, slot_ptr->stack_top));
-        }
-        invoke_thread_tls_callbacks(3U /* DLL_THREAD_DETACH */);
-        // O bloco pointer-backed pertence à vida útil da thread convidada,
-        // não à vida útil posterior do handle retornado por CreateThread.
-        free_tls_dynamic_blocks(teb);
-        // Após longjmp, ler o slot pelo TLS (não depender de registradores).
-        ThreadSlot* const finished_slot = t_thread_exit_slot;
-        t_thread_exit_context = nullptr;
-        t_thread_exit_slot = nullptr;
-        cleanup_current_fls_values();
-        set_current_fls_thread_values({});
-        runtime::clear_guest_unwind_view();
-        set_guest_gs_base(nullptr);
-        bool should_cleanup = false;
-        {
-            std::lock_guard<std::mutex> join_lock(finished_slot->join_mutex);
-            std::lock_guard<std::mutex> threads_lock(g_threads_mutex);
-            finished_slot->finished = true;
-            if (finished_slot->handle_closed && !finished_slot->joined) {
-                finished_slot->joined = true;
-                should_cleanup = true;
+    try {
+        it->fls_values = std::make_shared<FlsThreadValues>();
+        it->host_thread = std::thread([slot_ptr = &*it, proc, parameter, teb, guest_context,
+                                       unwind_view = it->unwind_view]() {
+            // O contexto ativo é thread-local. Uma thread host nova começa no
+            // contexto padrão, portanto precisa herdar explicitamente o contexto
+            // do processo convidado antes de consultar imagem, TLS, handles ou
+            // qualquer outra tabela pertencente à execução.
+            runtime::GuestContextScope context_scope(*guest_context);
+            g_current_thread_id = slot_ptr->thread_id;
+            set_guest_gs_base(teb);
+            initialize_thread_tls(static_cast<runtime::GuestTeb*>(teb));
+            set_current_fls_thread_values(slot_ptr->fls_values);
+            runtime::restore_guest_unwind_view(unwind_view);
+            invoke_thread_tls_callbacks(2U /* DLL_THREAD_ATTACH */);
+            initialize_pointer_backed_tls_slot(static_cast<runtime::GuestTeb*>(teb));
+            std::jmp_buf exit_point{};
+            t_thread_exit_context = &exit_point;
+            t_thread_exit_slot = slot_ptr;
+            if (setjmp(exit_point) == 0) {
+                diagnostics::FunctionTraceScope assembly_scope{"tl_call_guest_thread_on_stack"};
+                slot_ptr->exit_code = static_cast<int>(tl_call_guest_thread_on_stack(
+                    reinterpret_cast<std::uintptr_t>(proc), parameter, slot_ptr->stack_top));
             }
-        }
-        finished_slot->finish_cv.notify_all();
-        if (should_cleanup) {
-            if (finished_slot->host_thread.joinable()) {
-                finished_slot->host_thread.detach();
+            invoke_thread_tls_callbacks(3U /* DLL_THREAD_DETACH */);
+            // O bloco pointer-backed pertence à vida útil da thread convidada,
+            // não à vida útil posterior do handle retornado por CreateThread.
+            free_tls_dynamic_blocks(teb);
+            // Após longjmp, ler o slot pelo TLS (não depender de registradores).
+            ThreadSlot* const finished_slot = t_thread_exit_slot;
+            t_thread_exit_context = nullptr;
+            t_thread_exit_slot = nullptr;
+            cleanup_current_fls_values();
+            set_current_fls_thread_values({});
+            runtime::clear_guest_unwind_view();
+            set_guest_gs_base(nullptr);
+            bool should_cleanup = false;
+            {
+                std::lock_guard<std::mutex> join_lock(finished_slot->join_mutex);
+                std::lock_guard<std::mutex> threads_lock(g_threads_mutex);
+                finished_slot->finished = true;
+                if (finished_slot->handle_closed && !finished_slot->joined) {
+                    finished_slot->joined = true;
+                    should_cleanup = true;
+                }
             }
-            std::lock_guard<std::mutex> threads_lock(g_threads_mutex);
-            if (finished_slot->teb != nullptr) {
-                free_guest_teb(finished_slot->teb);
+            finished_slot->finish_cv.notify_all();
+            if (should_cleanup) {
+                if (finished_slot->host_thread.joinable()) {
+                    finished_slot->host_thread.detach();
+                }
+                std::lock_guard<std::mutex> threads_lock(g_threads_mutex);
+                if (finished_slot->teb != nullptr) {
+                    free_guest_teb(finished_slot->teb);
+                }
+                if (finished_slot->stack != nullptr && finished_slot->stack_size > 0) {
+                    munmap(finished_slot->stack, finished_slot->stack_size);
+                }
+                finished_slot->used = false;
+                finished_slot->thread_id = 0;
+                finished_slot->teb = nullptr;
+                finished_slot->stack = nullptr;
+                finished_slot->stack_size = 0;
+                finished_slot->stack_top = 0;
+                finished_slot->thread_func = {};
+                finished_slot->finished = false;
+                finished_slot->joined = false;
+                finished_slot->handle_closed = false;
+                finished_slot->exit_code = 0;
+                runtime::invalidate_memory_map_cache();
             }
-            if (finished_slot->stack != nullptr && finished_slot->stack_size > 0) {
-                munmap(finished_slot->stack, finished_slot->stack_size);
-            }
-            finished_slot->used = false;
-            finished_slot->thread_id = 0;
-            finished_slot->teb = nullptr;
-            finished_slot->stack = nullptr;
-            finished_slot->stack_size = 0;
-            finished_slot->stack_top = 0;
-            finished_slot->thread_func = {};
-            finished_slot->finished = false;
-            finished_slot->joined = false;
-            finished_slot->handle_closed = false;
-            finished_slot->exit_code = 0;
-            runtime::invalidate_memory_map_cache();
-        }
-    });
+        });
+    } catch (...) {
+        clear_unstarted_thread_slot(*it);
+        trace_guest_failure("CreateThread", "host-resource", "thread creation failed");
+        set_last_error(abi::kErrorNotEnoughMemory);
+        return nullptr;
+    }
+    if (thread_id != nullptr) {
+        *thread_id = it->thread_id;
+    }
     set_last_error(abi::kErrorSuccess);
     return thread_slot_to_handle(*it);
 }

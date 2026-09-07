@@ -1389,6 +1389,13 @@ TEST(Win32ConcurrencyTest, GetCurrentThreadIdReturnsNonZero) {
     EXPECT_NE(tid, 0U);
 }
 
+TEST(Win32ConcurrencyTest, CreateThreadRejectsInvalidStartWithoutPartialHandle) {
+    std::uint32_t thread_id = 0xA5A5U;
+    EXPECT_EQ(tl_CreateThread(nullptr, 0, 0, nullptr, 0, &thread_id), nullptr);
+    EXPECT_EQ(thread_id, 0xA5A5U);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+}
+
 TEST(Win32ConcurrencyTest, GetCurrentProcessIdMatchesHost) {
     const std::uint32_t pid = tl_GetCurrentProcessId();
     EXPECT_EQ(pid, static_cast<std::uint32_t>(getpid()));

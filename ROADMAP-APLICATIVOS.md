@@ -1113,6 +1113,39 @@ Evidência E6 de 2026-09-07:
 - [x] A política está documentada em `docs/compatibilidade.md`; o bit
   consultivo não é falsamente exposto por `GetFileAttributesW`.
 
+### E7 — Falha controlada na criação de threads host
+
+Objetivo: impedir que uma falha de recurso do host durante `CreateThread`
+escape por uma função `noexcept` e aborte o processo convidado, mantendo a
+criação de threads como comportamento genérico compartilhado.
+
+Tarefas:
+
+- [x] Capturar falhas de alocação e de construção de `std::thread` dentro de
+  `tl_CreateThread`.
+- [x] Liberar TEB, stack, referências FLS e slot reservado quando a thread não
+  puder ser iniciada; não publicar `thread_id` nem handle parcial.
+- [x] Retornar `ERROR_NOT_ENOUGH_MEMORY` e emitir diagnóstico `api-failure`
+  para a falha de recurso do host.
+- [x] Adicionar regressão de argumentos inválidos e repetir a sondagem real que
+  reproduzia `std::system_error`/`SIGABRT`.
+
+Aceitação:
+
+- [x] A fixture unitária continua sem handle parcial para uma criação inválida.
+- [x] O cenário WinRAR deixa de terminar em `std::system_error`/`SIGABRT` e
+  passa a terminar no bloqueio convidado posterior, com `guest-signal`/
+  `SIGTRAP` controlado.
+- [x] Nenhum tratamento específico, DLL ou shim do WinRAR foi adicionado.
+
+Evidência E7 de 2026-09-07:
+
+- [x] A compilação do runtime Rust e o teste de concorrência passaram após a
+  captura da exceção.
+- [x] A sondagem `IDOK` sob Xvfb não contém mais `terminate called`,
+  `std::system_error` ou `SIGABRT`; o trace termina no `cxx-throw`/`SIGTRAP`
+  posterior do convidado.
+
 ## Regras de validação
 
 - Cada correção começa com uma fixture mínima e termina com testes automatizados.

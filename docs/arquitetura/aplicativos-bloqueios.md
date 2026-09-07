@@ -176,3 +176,17 @@ semântica POSIX; bits desconhecidos e atributos ainda não implementados
 continuam retornando falha controlada. O teste de metadados passou em Rust ON
 e C++ OFF, e `GetFileAttributesW` não anuncia um bit que o runtime não
 persiste.
+
+## Evidência E7 — criação de thread host sem abortar o processo
+
+O `CreateThread` usava `std::thread` dentro de uma função `noexcept`. Quando o
+host recusava uma nova thread por falta de recurso, a exceção
+`std::system_error` escapava e terminava o processo com `SIGABRT`. A fronteira
+agora captura a falha, libera TEB, stack e slot, retorna
+`ERROR_NOT_ENOUGH_MEMORY` e registra `api-failure`; nenhum handle parcial é
+publicado.
+
+O teste unitário cobre rejeição sem estado parcial, e a sondagem `IDOK` do
+WinRAR deixou de produzir `std::system_error`/`SIGABRT`, avançando para o
+bloqueio posterior do convidado (`cxx-throw`/`SIGTRAP`). A mudança permanece
+genérica e não adiciona código específico de aplicativo.
