@@ -1403,6 +1403,42 @@ Evidência reproduzível de 2026-09-07:
   `7-Zip CLI stored test/delete/update/deflate/7z lifecycle: ok` e os stagings
   foram removidos.
 
+### E16 — Diretório de trabalho e caminhos relativos no 7-Zip CLI
+
+Objetivo: validar que o 7-Zip CLI resolve arquivos e diretórios relativos a
+partir do diretório de trabalho do processo convidado, preservando a cobertura
+anterior de staging com espaços, Unicode e formatos de arquivo.
+
+Tarefas:
+
+- [x] Manter a criação dos arquivos compactados com caminhos absolutos em um
+  staging cujo nome contém espaço, para conservar a cobertura de argumentos
+  Windows com espaços.
+- [x] Executar listagem, teste, remoção, atualização e extração usando nomes de
+  arquivo e opções `-o` relativos ao diretório de trabalho do `7z_x64.exe`.
+- [x] Confirmar que o ciclo continua usando a `7z.dll` do diretório do
+  aplicativo, preserva bytes Unicode e termina com o mesmo resultado em Rust
+  ON e C++ OFF.
+
+Aceitação:
+
+- [x] ZIP `stored`, ZIP `DEFLATE` e arquivo `7z/LZMA2` passam pelo ciclo de
+  listagem/extração com caminhos relativos e exit `0` nos dois backends.
+- [x] A atualização relativa mantém `updated.txt`, remove `input.txt` e
+  preserva `input-data/café-日本.txt` byte a byte.
+- [x] Nenhuma regra, shim ou DLL específica foi adicionada ao runtime; o
+  comportamento é exercitado somente pelo smoke isolado do aplicativo.
+
+Evidência reproduzível de 2026-09-07:
+
+- [x] `cmake --build build/debug-rust --target seven_zip_cli_smoke --parallel 2`
+  seguido de `ctest --test-dir build/debug-rust --output-on-failure -R
+  '^seven_zip_cli_smoke$'` passou (1/1).
+- [x] `cmake --build build/debug --target seven_zip_cli_smoke --parallel 2`
+  seguido do mesmo filtro em `build/debug` passou (1/1).
+- [x] Ambos emitiram `7-Zip CLI stored test/delete/update/deflate/7z
+  lifecycle: ok` e removeram o staging temporário.
+
 ### E11 — Matriz CTest dos smokes GUI do corpus
 
 Objetivo: tornar os cenários GUI reais já validados em D2/E1/E2 descobríveis e

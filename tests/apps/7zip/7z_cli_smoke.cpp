@@ -200,6 +200,9 @@ int main(const int argc, char** argv) {
     const std::filesystem::path stored_archive = staging / "payload-stored.zip";
     const std::filesystem::path deflate_archive = staging / "payload-deflate.zip";
     const std::filesystem::path seven_zip_archive = staging / "payload.7z";
+    const std::string stored_archive_name = stored_archive.filename().string();
+    const std::string deflate_archive_name = deflate_archive.filename().string();
+    const std::string seven_zip_archive_name = seven_zip_archive.filename().string();
     if (!std::filesystem::create_directories(unicode_directory, error) || error ||
         !write_input(input, kPayload) || !write_input(updated_input, "updated payload\n") ||
         !write_input(unicode_input, kUnicodePayload)) {
@@ -216,33 +219,30 @@ int main(const int argc, char** argv) {
         staging / "create.stdout", staging / "create.stderr");
     const auto list = run_runtime(
         runtime, staged_executable, prefix,
-        {"l", "-sccUTF-8", to_guest_path(stored_archive)}, staging / "list.stdout",
+        {"l", "-sccUTF-8", stored_archive_name}, staging / "list.stdout",
         staging / "list.stderr");
     const auto extract = run_runtime(
         runtime, staged_executable, prefix,
-        {"x", to_guest_path(stored_archive),
-         "-o" + to_guest_path(staging / "extracted-stored"), "-y"},
+        {"x", stored_archive_name, "-oextracted-stored", "-y"},
         staging / "extract.stdout", staging / "extract.stderr");
     const auto test_stored = run_runtime(
-        runtime, staged_executable, prefix, {"t", to_guest_path(stored_archive)},
+        runtime, staged_executable, prefix, {"t", stored_archive_name},
         staging / "test-stored.stdout", staging / "test-stored.stderr");
     const auto delete_stored = run_runtime(
         runtime, staged_executable, prefix,
-        {"d", "-y", to_guest_path(stored_archive), "input.txt"},
+        {"d", "-y", stored_archive_name, "input.txt"},
         staging / "delete-stored.stdout", staging / "delete-stored.stderr");
     const auto update_stored = run_runtime(
         runtime, staged_executable, prefix,
-        {"u", "-tzip", "-mm=Deflate", "-mx=1", to_guest_path(stored_archive),
-         to_guest_path(updated_input)},
+        {"u", "-tzip", "-mm=Deflate", "-mx=1", stored_archive_name, "updated.txt"},
         staging / "update-stored.stdout", staging / "update-stored.stderr");
     const auto list_stored_final = run_runtime(
         runtime, staged_executable, prefix,
-        {"l", "-slt", "-sccUTF-8", to_guest_path(stored_archive)},
+        {"l", "-slt", "-sccUTF-8", stored_archive_name},
         staging / "list-stored-final.stdout", staging / "list-stored-final.stderr");
     const auto extract_stored_final = run_runtime(
         runtime, staged_executable, prefix,
-        {"x", to_guest_path(stored_archive),
-         "-o" + to_guest_path(staging / "extracted-stored-final"), "-y"},
+        {"x", stored_archive_name, "-oextracted-stored-final", "-y"},
         staging / "extract-stored-final.stdout", staging / "extract-stored-final.stderr");
 
     const auto create_deflate = run_runtime(
@@ -252,13 +252,12 @@ int main(const int argc, char** argv) {
         staging / "create-deflate.stdout", staging / "create-deflate.stderr");
     const auto list_deflate = run_runtime(
         runtime, staged_executable, prefix,
-        {"l", "-slt", "-sccUTF-8", to_guest_path(deflate_archive)},
+        {"l", "-slt", "-sccUTF-8", deflate_archive_name},
         staging / "list-deflate.stdout",
         staging / "list-deflate.stderr");
     const auto extract_deflate = run_runtime(
         runtime, staged_executable, prefix,
-        {"x", to_guest_path(deflate_archive),
-         "-o" + to_guest_path(staging / "extracted-deflate"), "-y"},
+        {"x", deflate_archive_name, "-oextracted-deflate", "-y"},
         staging / "extract-deflate.stdout", staging / "extract-deflate.stderr");
 
     const auto create_7z = run_runtime(
@@ -268,13 +267,12 @@ int main(const int argc, char** argv) {
         staging / "create-7z.stdout", staging / "create-7z.stderr");
     const auto list_7z = run_runtime(
         runtime, staged_executable, prefix,
-        {"l", "-slt", "-sccUTF-8", to_guest_path(seven_zip_archive)},
+        {"l", "-slt", "-sccUTF-8", seven_zip_archive_name},
         staging / "list-7z.stdout",
         staging / "list-7z.stderr");
     const auto extract_7z = run_runtime(
         runtime, staged_executable, prefix,
-        {"x", to_guest_path(seven_zip_archive),
-         "-o" + to_guest_path(staging / "extracted-7z"), "-y"},
+        {"x", seven_zip_archive_name, "-oextracted-7z", "-y"},
         staging / "extract-7z.stdout", staging / "extract-7z.stderr");
 
     const bool extracted_stored =
