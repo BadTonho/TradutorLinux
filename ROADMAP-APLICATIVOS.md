@@ -1193,6 +1193,40 @@ Evidência E8 de 2026-09-07:
   `52efd5e3a6b52adc449a1f7702b9cafb4bf53784b19104aa0fd250bc433c0f19` e
   registraram onze descobertas de `7z.dll`.
 
+### E9 — Smoke automatizado de operações do 7-Zip CLI
+
+Objetivo: proteger as operações de arquivo que já foram observadas no 7-Zip
+real sem colocar o aplicativo, a DLL ou regras de seleção dentro do runtime.
+
+Tarefas:
+
+- [x] Criar `tests/apps/7zip/7z_cli_smoke.cpp` como alvo separado, sem DLL
+  específica e sem dependência do corpus no build padrão.
+- [x] Isolar cada execução em staging e prefixo temporários, copiar o
+  `7z_x64.exe` e `7z.dll` irmãos e aplicar timeout externo de 15 segundos.
+- [x] Exercitar criação, listagem e extração de ZIP `stored`, verificando
+  `Everything is Ok`, ciclo `dll-mapped`/`dll-attach`/`dll-unload` e bytes do
+  arquivo extraído.
+- [x] Registrar o smoke no CTest quando `TL_POPULAR_APPS_DIR` for fornecido,
+  mantendo o build padrão independente dos downloads externos.
+- [x] Executar a matriz em Rust ON e C++ OFF.
+
+Aceitação:
+
+- [x] `seven_zip_cli_smoke` passa em Rust ON e C++ OFF com exit `0`.
+- [x] O smoke não modifica o corpus original, não cria DLLs específicas e
+  remove o staging ao terminar.
+- [x] A tabela de compatibilidade declara somente o subconjunto de criação,
+  listagem e extração coberto; compressão, formatos adicionais, senha,
+  volumes e GUI continuam não validados.
+
+Evidência E9 de 2026-09-07:
+
+- [x] `ctest --test-dir build/debug-rust -R '^seven_zip_cli_smoke$'` passou.
+- [x] `ctest --test-dir build/debug -R '^seven_zip_cli_smoke$'` passou.
+- [x] O resultado do smoke foi `7-Zip CLI create/list/extract: ok` nos dois
+  builds, com `7z.dll` carregada do diretório do executável.
+
 ## Regras de validação
 
 - Cada correção começa com uma fixture mínima e termina com testes automatizados.

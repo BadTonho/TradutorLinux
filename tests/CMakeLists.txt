@@ -1,5 +1,29 @@
 add_subdirectory(samples)
 
+add_executable(seven_zip_cli_smoke
+    apps/7zip/7z_cli_smoke.cpp
+)
+tl_enable_warnings(seven_zip_cli_smoke)
+tl_enable_sanitizers(seven_zip_cli_smoke)
+
+set(TL_POPULAR_APPS_DIR "" CACHE PATH
+    "Diretório opcional do corpus Aplicativos_Windows_Populares")
+if(TL_POPULAR_APPS_DIR AND TARGET tradutorlinux)
+    set(TL_7Z_EXECUTABLE "${TL_POPULAR_APPS_DIR}/7z_x64.exe")
+    if(EXISTS "${TL_7Z_EXECUTABLE}" AND EXISTS "${TL_POPULAR_APPS_DIR}/7z.dll")
+        add_test(
+            NAME seven_zip_cli_smoke
+            COMMAND seven_zip_cli_smoke
+                "$<TARGET_FILE:tradutorlinux>"
+                "${TL_7Z_EXECUTABLE}"
+        )
+        set_tests_properties(seven_zip_cli_smoke PROPERTIES
+            LABELS "runtime;apps;7zip;dll;archive"
+            TIMEOUT 60
+        )
+    endif()
+endif()
+
 add_executable(tl_rust_pe_contract_c rust_pe_contract_c.c)
 target_include_directories(tl_rust_pe_contract_c PRIVATE
     "${PROJECT_SOURCE_DIR}/include"
