@@ -1020,6 +1020,31 @@ Aceitação:
   nenhum DLL, shim, regra ou caminho específico de WinRAR foi adicionado ao
   runtime.
 
+### E4 — Rejeição segura de consultas de certificado
+
+Objetivo: remover um stub permissivo de `CryptQueryObject` que fabricava
+handles de loja/mensagem e um contexto nulo, mantendo a fronteira de
+Authenticode/CMS explicitamente fora do escopo.
+
+Tarefas:
+
+- [x] Validar ponteiros de saída antes de escrever qualquer resultado.
+- [x] Zerar saídas válidas e retornar `ERROR_NOT_SUPPORTED` para formatos ainda
+  não implementados; nunca devolver tokens que o runtime não rastreia.
+- [x] Adicionar regressão unitária para rejeição, erro estruturado e ausência
+  de handles fictícios.
+- [x] Repetir o smoke do Notepad++ e confirmar que o bloqueio controlado não
+  regrediu.
+
+Aceitação:
+
+- [x] O teste `Crypt32Test.CryptQueryObjectRejectsUnsupportedInputWithoutFabricatedHandles`
+  passa em Rust ON e C++ OFF.
+- [x] Notepad++ continua com a mesma falha controlada pós-interação; nenhum
+  caminho de certificado passa a acessar ponteiros inválidos.
+- [x] Authenticode, CMS, loja do sistema e suporte específico de aplicativo
+  continuam fora do contrato.
+
 ## Regras de validação
 
 - Cada correção começa com uma fixture mínima e termina com testes automatizados.

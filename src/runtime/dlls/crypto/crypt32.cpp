@@ -873,14 +873,27 @@ TL_CRYPT32_MSABI int tl_CryptQueryObject(const std::uint32_t dwObjectType, const
     (void)dwExpectedContentTypeFlags;
     (void)dwExpectedFormatTypeFlags;
     (void)dwFlags;
-    if (pdwMsgAndCertEncodingType != nullptr) *pdwMsgAndCertEncodingType = 1;
-    if (pdwContentType != nullptr) *pdwContentType = 1;
-    if (pdwFormatType != nullptr) *pdwFormatType = 1;
-    if (phCertStore != nullptr) *phCertStore = reinterpret_cast<void*>(0x43455254ULL);
-    if (phMsg != nullptr) *phMsg = reinterpret_cast<void*>(0x4D534731ULL);
+    const auto valid_output = [](const void* const pointer, const std::size_t size,
+                                 const bool writable) noexcept {
+        return pointer == nullptr || runtime::validate_mapped_range(pointer, size, writable);
+    };
+    if (!valid_output(pdwMsgAndCertEncodingType, sizeof(*pdwMsgAndCertEncodingType), true) ||
+        !valid_output(pdwContentType, sizeof(*pdwContentType), true) ||
+        !valid_output(pdwFormatType, sizeof(*pdwFormatType), true) ||
+        !valid_output(phCertStore, sizeof(*phCertStore), true) ||
+        !valid_output(phMsg, sizeof(*phMsg), true) ||
+        !valid_output(ppvContext, sizeof(*ppvContext), true)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    if (pdwMsgAndCertEncodingType != nullptr) *pdwMsgAndCertEncodingType = 0;
+    if (pdwContentType != nullptr) *pdwContentType = 0;
+    if (pdwFormatType != nullptr) *pdwFormatType = 0;
+    if (phCertStore != nullptr) *phCertStore = nullptr;
+    if (phMsg != nullptr) *phMsg = nullptr;
     if (ppvContext != nullptr) *ppvContext = nullptr;
-    set_last_error(abi::kErrorSuccess);
-    return 1;
+    set_last_error(abi::kErrorNotSupported);
+    return 0;
 }
 
 TL_CRYPT32_MSABI std::uint32_t tl_CertNameToStrW(const std::uint32_t dwCertEncodingType, void* const pName, const std::uint32_t dwStrType, wchar_t* const psz, const std::uint32_t cchName) noexcept {

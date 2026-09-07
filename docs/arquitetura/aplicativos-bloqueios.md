@@ -140,3 +140,14 @@ SFX do WinRAR confirmou no trace a criação e liberação do stream (`status="s
 mas a sondagem de `IDOK` ainda não concluiu a extração dentro dos limites
 externos. A mudança é uma capacidade OLE genérica; não há código específico de
 WinRAR no runtime, nem promoção do fluxo de extração.
+
+## Evidência E4 — rejeição segura de CryptQueryObject
+
+O contrato anterior de `CryptQueryObject` retornava sucesso com tokens fixos para
+loja/mensagem e contexto nulo. Isso expunha handles que não pertenciam ao
+runtime e fazia o convidado avançar sobre um `CERT_CONTEXT` inexistente. O
+subconjunto agora valida os ponteiros de saída, zera as saídas válidas e retorna
+`ERROR_NOT_SUPPORTED` até que haja um contrato real para blob, CMS ou
+Authenticode. O teste `Crypt32Test.CryptQueryObjectRejectsUnsupportedInputWithoutFabricatedHandles`
+passa nos builds ON/OFF; o smoke do Notepad++ continua reproduzindo o bloqueio
+controlado já documentado, sem regressão nem suporte falso a certificados.

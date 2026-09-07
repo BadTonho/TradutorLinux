@@ -244,6 +244,30 @@ TEST(Crypt32Test, CertContextAndStoreManagement) {
     EXPECT_EQ(tl_CertCloseStore(sys_w, 0), 1U);
 }
 
+TEST(Crypt32Test, CryptQueryObjectRejectsUnsupportedInputWithoutFabricatedHandles) {
+    std::uint32_t encoding = 0xFFFFFFFFU;
+    std::uint32_t content = 0xFFFFFFFFU;
+    std::uint32_t format = 0xFFFFFFFFU;
+    void* store = reinterpret_cast<void*>(1);
+    void* message = reinterpret_cast<void*>(1);
+    const void* context = reinterpret_cast<const void*>(1);
+
+    EXPECT_EQ(tl_CryptQueryObject(1U, nullptr, 0U, 0U, 0U, &encoding, &content, &format,
+                                  &store, &message, &context), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorNotSupported);
+    EXPECT_EQ(encoding, 0U);
+    EXPECT_EQ(content, 0U);
+    EXPECT_EQ(format, 0U);
+    EXPECT_EQ(store, nullptr);
+    EXPECT_EQ(message, nullptr);
+    EXPECT_EQ(context, nullptr);
+
+    EXPECT_EQ(tl_CryptQueryObject(1U, nullptr, 0U, 0U, 0U,
+                                  reinterpret_cast<std::uint32_t*>(1), nullptr, nullptr,
+                                  nullptr, nullptr, nullptr), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+}
+
 TEST(User32ExtTest, DesktopCaptureAndRectOperations) {
     EXPECT_NE(tl_GetDesktopWindow(), nullptr);
     EXPECT_NE(tl_MonitorFromWindow(nullptr, 0), nullptr);
