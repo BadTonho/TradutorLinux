@@ -291,10 +291,27 @@ artefatos apenas disponíveis localmente.
 
 Tarefas:
 
-- [ ] Registrar origem e SHA-256 oficial do CPU-Z, HWMonitor e HWiNFO64.
-- [ ] Registrar a origem e o SHA-256 do GPU-Z já verificado:
-  `6cb0ef29682452de81a9576808881685161411a1fad00938ba04131159979c29`.
-- [ ] Preservar versão, arquitetura e data de cada arquivo no inventário.
+- [x] Registrar origem e SHA-256 do CPU-Z, HWMonitor e GPU-Z, incluindo a
+  fonte do hash quando o fornecedor não o exibe na página de download.
+- [ ] Confirmar o SHA-256 oficial do HWiNFO64 8.52 e a reprodução byte a byte
+  do arquivo local.
+- [x] Preservar versão, arquitetura e data de cada arquivo no inventário.
+
+Auditoria realizada em 2026-09-07:
+
+| Arquivo | Versão/arquitetura | Data local | Fonte declarada | SHA-256 local | Evidência |
+| --- | --- | --- | --- | --- | --- |
+| `CPU-Z_2.18_en.exe` | 2.18 / PE32 x86 | 2026-09-07 | [CPUID](https://download.cpuid.com/cpu-z/cpu-z_2.18-en.exe) | `3999dad2516dbc9afdd51defc2447d940aa78a88bcf93655186c856b326e3821` | download oficial reproduzido byte a byte; também coincide com o manifesto `CPUID.CPU-Z/2.18` do [WinGet](https://github.com/microsoft/winget-pkgs/tree/master/manifests/c/CPUID/CPU-Z/2.18) |
+| `GPU-Z_2.70.0.exe` | 2.70.0 / PE32 x86 | 2026-09-07 | [TechPowerUp](https://www.techpowerup.com/gpuz/) | `6cb0ef29682452de81a9576808881685161411a1fad00938ba04131159979c29` | coincide com o hash publicado no manifesto `TechPowerUp.GPU-Z/2.70.0` do [WinGet](https://github.com/microsoft/winget-pkgs/tree/master/manifests/t/TechPowerUp/GPU-Z/2.70.0) |
+| `HWMonitor_1.67.exe` | 1.67 / PE32 x86 | 2026-09-07 | [CPUID](https://download.cpuid.com/hwmonitor/hwmonitor_1.67.exe) | `8c6799f8ece4ab5846cc8beddcf52bd887a5ae896279652960ef8d943d453473` | coincide com o hash publicado no manifesto `CPUID.HWMonitor/1.67` do [WinGet](https://github.com/microsoft/winget-pkgs/tree/master/manifests/c/CPUID/HWMonitor/1.67), mas o endpoint oficial consultado em 2026-09-07 entregou outro PE32 de 2.555.904 bytes, hash `e7cb1f99f0fb4758161335075762c142c98955faa22e8dba358de8549cfa89e0` |
+| `HWiNFO64.exe` | 8.52 / PE32+ x86-64 | 2026-08-25 | [HWiNFO](https://www.hwinfo.com/download/) — endpoint declarado `https://www.hwinfo.com/files/hwi64_852.exe` | `39292da56747eaed8b6025ba5e231e096e5792708bf4671308c2e700ed059cc0` | página oficial confirma a versão 8.52 e o endpoint, mas o servidor retornou `403` e não foi possível obter hash oficial/reprodução nesta sessão |
+
+Os arquivos locais foram baixados originalmente de um artefato identificado
+apenas por `downloaded_from_www.guru3d.com.txt`; esse marcador não contém uma
+URL individual por arquivo. O inventário, portanto, distingue explicitamente
+proveniência verificável, divergência do endpoint atual e origem local não
+reconstruível. O hash é calculado localmente e não é tratado como prova de
+autenticidade quando a fonte publicada não pode ser reproduzida.
 
 Aceitação:
 
