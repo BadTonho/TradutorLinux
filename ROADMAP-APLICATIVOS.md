@@ -15,8 +15,9 @@ autoriza declarar compatibilidade sem testes de integração e registro em
   e prefixo temporário.
 - [x] Revalidados os downloads de CPU-Z, GPU-Z e HWMonitor como PE; o HWiNFO64
   existente foi preservado.
-- [x] Analisado o pacote MSIX, que foi classificado como
-  `unsupported-format` pelo parser Rust.
+- [x] Analisado o pacote MSIX, incluindo EOCD/central directory ZIP64 e extras
+  de entrada; ele é rejeitado de forma controlada pelo limite agregado de
+  512 MiB, não por formato ZIP desconhecido.
 
 Os logs detalhados dessa rodada foram temporários e não fazem parte do contrato
 de evidência do projeto. Cada marco abaixo deve produzir sua própria fixture,
@@ -33,7 +34,7 @@ teste e registro reproduzível.
 | Unwind x64 | 6 executáveis agora passam no `--report`; o trace registra V1/V2, cadeias e `extended-set-fpreg` | Avaliar as limitações de execução de cada aplicativo |
 | HWiNFO64 | Falha estrutural em exports/RVA | Confirmar se é layout legítimo ou imagem inválida |
 | Rufus | Report passou; execução parou por entry point fora de página executável | Investigar imagem empacotada e política de execução |
-| MSIX Affinity | ZIP válido com 1.284 entradas, mas rejeitado como formato não suportado | Isolar a convenção ZIP/MSIX não coberta |
+| MSIX Affinity | ZIP64 de disco único válido com 1.284 entradas; rejeitado pelo limite agregado descompactado de 512 MiB | Manter limite seguro e registrar a limitação do pacote |
 
 ## Ordem de execução
 
@@ -121,26 +122,46 @@ Aceitação:
 - [ ] O report continua distinto da execução.
 - [ ] Falhas ocorrem antes de execução quando as pré-condições não são válidas.
 
-### A4 — Pacote MSIX do Affinity
+### A4 concluído — pacote MSIX do Affinity
+
+Evidência reproduzível de 2026-09-07:
+
+- [x] O parser Rust e o inspector C++ passaram a reconhecer EOCD ZIP64,
+  localizador, entradas de disco único e o extra `0x0001` para os campos
+  sentinela, com aritmética checked e rejeição de multipartes.
+- [x] Fixture mínima com manifesto DEFLATE e executável armazenado passou no
+  diferencial Rust/C++, na extração e nos testes de `size`/`fill`; as oito
+  verificações `RustMsixParserTest.*` passaram.
+- [x] O arquivo real `Affinity x64.msix` foi analisado pelo TradutorLinux no
+  build Rust e no build C++ OFF. Ambos retornaram exit `4` e mantiveram o
+  stdout normal; Rust emitiu `code="19" phase="3" input-offset="672836042"`
+  e `detail-value="18527752"`, identificando o limite de tamanho, enquanto o
+  caminho OFF permaneceu sem campos Rust.
+- [x] Cargo test (38 testes) e Clippy offline com `-D warnings` passaram.
+
+A rejeição do Affinity é intencional: o pacote possui 1.560.716.440 bytes
+descompactados, acima do limite agregado de 512 MiB. O manifesto também aponta
+para um executável .NET/Mono, que continua fora do escopo. Portanto não há
+instalação ou execução declarada para esse pacote.
 
 Objetivo: identificar por que um ZIP estruturalmente válido é rejeitado pelo
 parser MSIX Rust.
 
 Tarefas:
 
-- [ ] Reproduzir `unsupported-format`, código `16`, fase `2`, offset
-  `672846681` e valor `65535`.
-- [ ] Comparar central directory, EOCD, flags, extra fields, timestamps,
-  compressão, atributos e possíveis estruturas Zip64.
-- [ ] Verificar descriptor, multi-disco, encryption, links e convenções de
-  bundle sem presumir que todo ZIP é MSIX simples.
-- [ ] Criar uma fixture mínima representativa e um caso de rejeição.
+- [x] Reproduzir o diagnóstico inicial de EOCD clássico com sentinela ZIP64 e
+  confirmar que o valor `65535` não representava corrupção.
+- [x] Comparar central directory, EOCD, flags, extra fields, timestamps,
+  compressão, atributos e estruturas Zip64 no arquivo real.
+- [x] Verificar disco único, encryption, links e convenções de bundle sem
+  presumir que todo ZIP é MSIX simples.
+- [x] Criar uma fixture mínima representativa e um caso de rejeição por limite.
 
 Aceitação:
 
-- [ ] O formato é aceito somente com validações completas, ou a rejeição fica
-  documentada como limitação precisa.
-- [ ] Extração, PE interno e catálogo continuam fora da análise do parser sem
+- [x] O formato é aceito com validações completas quando ZIP64 é de disco único
+  e está dentro dos limites; o pacote real fica rejeitado por limite preciso.
+- [x] Extração, PE interno e catálogo continuam fora da análise do parser sem
   integração não planejada.
 
 ### A5 — GUI e ambiente X11

@@ -23,6 +23,9 @@ namespace {
 constexpr std::uint32_t kZipLocalHeaderMagic = 0x04034b50;
 constexpr std::uint32_t kZipCentralHeaderMagic = 0x02014b50;
 constexpr std::uint32_t kZipEndOfCentralDirectoryMagic = 0x06054b50;
+constexpr std::uint32_t kZip64EndOfCentralDirectoryMagic = 0x06064b50;
+constexpr std::uint32_t kZip64LocatorMagic = 0x07064b50;
+constexpr std::uint16_t kZip64ExtraFieldId = 0x0001;
 constexpr std::uint64_t kMaxPackageFileSize = 2ULL * 1024 * 1024 * 1024; // 2 GiB
 constexpr std::size_t kMaxManifestSize = 16U * 1024U * 1024U; // 16 MiB
 constexpr std::size_t kMaxManifestCompressedSize = 64U * 1024U * 1024U; // 64 MiB
@@ -76,6 +79,120 @@ constexpr std::size_t kMaxXmlAttributesPerElement = 256;
            (static_cast<std::uint32_t>(data[1]) << 8U) |
            (static_cast<std::uint32_t>(data[2]) << 16U) |
            (static_cast<std::uint32_t>(data[3]) << 24U);
+}
+
+[[nodiscard]] std::uint64_t read_le64(const unsigned char* const data) noexcept {
+    std::uint64_t value = 0;
+    for (std::size_t index = 0; index < 8U; ++index) {
+        value |= static_cast<std::uint64_t>(data[index]) << (index * 8U);
+    }
+    return value;
+}
+
+struct ZipDirectoryInfo {
+    std::uint64_t disk_number{};
+    std::uint64_t central_disk{};
+    std::uint64_t entries_on_disk{};
+    std::uint64_t total_entries{};
+    std::uint64_t central_size{};
+    std::uint64_t central_offset{};
+};
+
+[[nodiscard]] std::optional<ZipDirectoryInfo> parse_zip_directory_info(
+    const std::vector<unsigned char>& tail, const std::uint64_t tail_base,
+    const std::size_t eocd_position, const std::uint64_t eocd_offset) {
+    const unsigned char* const eocd = tail.data() + eocd_position;
+    const std::uint16_t classic_disk = read_le16(eocd + 4U);
+    const std::uint16_t classic_central_disk = read_le16(eocd + 6U);
+    const std::uint16_t classic_entries_on_disk = read_le16(eocd + 8U);
+    const std::uint16_t classic_total_entries = read_le16(eocd + 10U);
+    const std::uint32_t classic_central_size = read_le32(eocd + 12U);
+    const std::uint32_t classic_central_offset = read_le32(eocd + 16U);
+    if (classic_total_entries != 0xFFFFU && classic_central_size != 0xFFFFFFFFU &&
+        classic_central_offset != 0xFFFFFFFFU) {
+        return ZipDirectoryInfo{classic_disk, classic_central_disk, classic_entries_on_disk,
+                                 classic_total_entries, classic_central_size,
+                                 classic_central_offset};
+    }
+
+    if (eocd_position < 20U) return std::nullopt;
+    const std::size_t locator_position = eocd_position - 20U;
+    const unsigned char* const locator = tail.data() + locator_position;
+    if (read_le32(locator) != kZip64LocatorMagic || read_le32(locator + 4U) != 0U ||
+        read_le32(locator + 16U) != 1U) {
+        return std::nullopt;
+    }
+    const std::uint64_t zip64_offset = read_le64(locator + 8U);
+    if (tail.size() < 56U || tail_base > std::numeric_limits<std::uint64_t>::max() -
+                                   static_cast<std::uint64_t>(tail.size())) {
+        return std::nullopt;
+    }
+    const std::uint64_t tail_end = tail_base + static_cast<std::uint64_t>(tail.size());
+    if (zip64_offset < tail_base || zip64_offset > tail_end - 56U) {
+        return std::nullopt;
+    }
+    const std::size_t zip64_position = static_cast<std::size_t>(zip64_offset - tail_base);
+    if (zip64_position > tail.size() || tail.size() - zip64_position < 56U) {
+        return std::nullopt;
+    }
+    const unsigned char* const zip64 = tail.data() + zip64_position;
+    const std::uint64_t record_size = read_le64(zip64 + 4U);
+    if (read_le32(zip64) != kZip64EndOfCentralDirectoryMagic || record_size < 44U ||
+        eocd_offset < 20U || zip64_offset > std::numeric_limits<std::uint64_t>::max() - 12U ||
+        record_size > std::numeric_limits<std::uint64_t>::max() - (zip64_offset + 12U) ||
+        zip64_offset + 12U + record_size > eocd_offset - 20U) {
+        return std::nullopt;
+    }
+    return ZipDirectoryInfo{read_le32(zip64 + 16U),
+                            read_le32(zip64 + 20U),
+                            read_le64(zip64 + 24U),
+                            read_le64(zip64 + 32U),
+                            read_le64(zip64 + 40U),
+                            read_le64(zip64 + 48U)};
+}
+
+struct Zip64ExtraValues {
+    std::optional<std::uint64_t> compressed_size;
+    std::optional<std::uint64_t> uncompressed_size;
+    std::optional<std::uint64_t> local_header_offset;
+    std::optional<std::uint64_t> disk_start;
+};
+
+[[nodiscard]] bool parse_zip64_extra(const std::vector<unsigned char>& extra,
+                                     const bool need_uncompressed_size,
+                                     const bool need_compressed_size,
+                                     const bool need_local_header_offset,
+                                     const bool need_disk_start,
+                                     Zip64ExtraValues& values) noexcept {
+    std::size_t cursor = 0;
+    while (cursor < extra.size()) {
+        if (extra.size() - cursor < 4U) return false;
+        const std::uint16_t field_id = read_le16(extra.data() + cursor);
+        const std::size_t field_size = read_le16(extra.data() + cursor + 2U);
+        const std::size_t field_start = cursor + 4U;
+        if (field_size > extra.size() - field_start) return false;
+        const std::size_t field_end = field_start + field_size;
+        if (field_id == kZip64ExtraFieldId &&
+            (need_uncompressed_size || need_compressed_size || need_local_header_offset ||
+             need_disk_start)) {
+            std::size_t value_cursor = field_start;
+            const auto take = [&](const bool needed,
+                                  std::optional<std::uint64_t>& destination) noexcept {
+                if (!needed) return true;
+                if (value_cursor > field_end || field_end - value_cursor < 8U) return false;
+                destination = read_le64(extra.data() + value_cursor);
+                value_cursor += 8U;
+                return true;
+            };
+            return take(need_uncompressed_size, values.uncompressed_size) &&
+                   take(need_compressed_size, values.compressed_size) &&
+                   take(need_local_header_offset, values.local_header_offset) &&
+                   take(need_disk_start, values.disk_start);
+        }
+        cursor = field_end;
+    }
+    return !(need_uncompressed_size || need_compressed_size || need_local_header_offset ||
+             need_disk_start);
 }
 
 bool read_u32(std::ifstream& stream, std::uint32_t& value) {
@@ -455,9 +572,9 @@ struct ZipCentralEntry {
     std::uint16_t flags = 0;
     std::uint16_t compression_method = 0;
     std::uint32_t crc32 = 0;
-    std::uint32_t compressed_size = 0;
-    std::uint32_t uncompressed_size = 0;
-    std::uint32_t local_header_offset = 0;
+    std::uint64_t compressed_size = 0;
+    std::uint64_t uncompressed_size = 0;
+    std::uint64_t local_header_offset = 0;
 };
 
 [[nodiscard]] bool crc_matches(const std::vector<unsigned char>& data,
@@ -537,30 +654,29 @@ struct ZipArchive {
         }
         if (eocd_position == std::string_view::npos) return std::nullopt;
 
-        const std::uint16_t disk_number = read_le16(tail.data() + eocd_position + 4U);
-        const std::uint16_t central_disk = read_le16(tail.data() + eocd_position + 6U);
-        const std::uint16_t entries_on_disk = read_le16(tail.data() + eocd_position + 8U);
-        const std::uint16_t total_entries = read_le16(tail.data() + eocd_position + 10U);
-        const std::uint32_t central_size = read_le32(tail.data() + eocd_position + 12U);
-        const std::uint32_t central_offset = read_le32(tail.data() + eocd_position + 16U);
         const std::uint64_t eocd_offset = file_size - tail_size + eocd_position;
-        if (disk_number != 0 || central_disk != 0 || entries_on_disk != total_entries ||
-            total_entries == 0 || total_entries > kMaxZipEntries ||
-            central_offset > file_size || central_size > file_size - central_offset ||
-            static_cast<std::uint64_t>(central_offset) + central_size > eocd_offset) {
+        const auto directory = parse_zip_directory_info(
+            tail, file_size - tail_size, eocd_position, eocd_offset);
+        if (!directory.has_value() || directory->disk_number != 0 ||
+            directory->central_disk != 0 ||
+            directory->entries_on_disk != directory->total_entries ||
+            directory->total_entries == 0 || directory->total_entries > kMaxZipEntries ||
+            directory->central_offset > file_size ||
+            directory->central_size > file_size - directory->central_offset ||
+            directory->central_offset + directory->central_size > eocd_offset) {
             return std::nullopt;
         }
 
         ZipArchive archive;
         archive.file_size = file_size;
-        archive.entries.reserve(total_entries);
+        archive.entries.reserve(static_cast<std::size_t>(directory->total_entries));
         std::set<std::string> names;
         std::uint64_t total_uncompressed_size = 0;
         stream.clear();
-        stream.seekg(static_cast<std::streamoff>(central_offset), std::ios::beg);
+        stream.seekg(static_cast<std::streamoff>(directory->central_offset), std::ios::beg);
         if (!stream) return std::nullopt;
 
-        for (std::uint16_t index = 0; index < total_entries; ++index) {
+        for (std::uint64_t index = 0; index < directory->total_entries; ++index) {
             std::array<unsigned char, 46> central_header{};
             stream.read(reinterpret_cast<char*>(central_header.data()),
                         static_cast<std::streamsize>(central_header.size()));
@@ -571,14 +687,14 @@ struct ZipArchive {
             const std::uint16_t flags = read_le16(central_header.data() + 8U);
             const std::uint16_t compression_method = read_le16(central_header.data() + 10U);
             const std::uint32_t entry_crc32 = read_le32(central_header.data() + 16U);
-            const std::uint32_t compressed_size = read_le32(central_header.data() + 20U);
-            const std::uint32_t uncompressed_size = read_le32(central_header.data() + 24U);
+            const std::uint32_t compressed_size_32 = read_le32(central_header.data() + 20U);
+            const std::uint32_t uncompressed_size_32 = read_le32(central_header.data() + 24U);
             const std::uint16_t filename_len = read_le16(central_header.data() + 28U);
             const std::uint16_t extra_len = read_le16(central_header.data() + 30U);
             const std::uint16_t comment_len = read_le16(central_header.data() + 32U);
             const std::uint16_t disk_start = read_le16(central_header.data() + 34U);
             const std::uint32_t external_attributes = read_le32(central_header.data() + 38U);
-            const std::uint32_t local_header_offset = read_le32(central_header.data() + 42U);
+            const std::uint32_t local_header_offset_32 = read_le32(central_header.data() + 42U);
             const std::uint64_t metadata_size = static_cast<std::uint64_t>(filename_len) +
                                                 extra_len + comment_len;
             const std::streamoff current = stream.tellg();
@@ -586,28 +702,42 @@ struct ZipArchive {
             if (current < 0 || static_cast<std::uint64_t>(current) > eocd_offset ||
                 metadata_size > eocd_offset - static_cast<std::uint64_t>(current) ||
                 filename_len == 0 || filename_len > kMaxZipFilenameSize ||
-                disk_start != 0 || (flags & 0x0001U) != 0U ||
                 (compression_method != 0 && compression_method != 8) ||
-                compressed_size == 0xFFFFFFFFU || uncompressed_size == 0xFFFFFFFFU ||
-                local_header_offset >= central_offset ||
-                static_cast<std::uint64_t>(compressed_size) > kMaxPackageUncompressedSize ||
-                static_cast<std::uint64_t>(uncompressed_size) > kMaxZipEntryUncompressedSize ||
-                total_uncompressed_size > kMaxPackageUncompressedSize -
-                                             std::min<std::uint64_t>(uncompressed_size,
-                                                                     kMaxPackageUncompressedSize) ||
                 ((version_made_by >> 8U) == 3U && (unix_mode & 0170000U) == 0120000U)) {
                 return std::nullopt;
             }
 
             std::string filename(filename_len, '\0');
             stream.read(filename.data(), filename_len);
+            std::vector<unsigned char> extra(extra_len);
+            if (extra_len != 0U) {
+                stream.read(reinterpret_cast<char*>(extra.data()), extra_len);
+            }
+            Zip64ExtraValues resolved;
+            if (!stream ||
+                !parse_zip64_extra(extra, uncompressed_size_32 == 0xFFFFFFFFU,
+                                   compressed_size_32 == 0xFFFFFFFFU,
+                                   local_header_offset_32 == 0xFFFFFFFFU,
+                                   disk_start == 0xFFFFU, resolved)) {
+                return std::nullopt;
+            }
+            const std::uint64_t compressed_size =
+                resolved.compressed_size.value_or(compressed_size_32);
+            const std::uint64_t uncompressed_size =
+                resolved.uncompressed_size.value_or(uncompressed_size_32);
+            const std::uint64_t local_header_offset =
+                resolved.local_header_offset.value_or(local_header_offset_32);
+            const std::uint64_t resolved_disk_start = resolved.disk_start.value_or(disk_start);
             const std::string normalized_name = normalized_zip_name(filename);
-            if (!stream || !safe_zip_filename(filename) ||
+            if (!safe_zip_filename(filename) || resolved_disk_start != 0U ||
+                (flags & 0x0001U) != 0U || compressed_size > kMaxPackageUncompressedSize ||
+                uncompressed_size > kMaxZipEntryUncompressedSize ||
+                uncompressed_size > kMaxPackageUncompressedSize - total_uncompressed_size ||
+                local_header_offset >= directory->central_offset ||
                 !names.insert(normalized_name).second) {
                 return std::nullopt;
             }
-            if (!skip_bytes(stream, static_cast<std::uint64_t>(extra_len) + comment_len,
-                            file_size)) {
+            if (!skip_bytes(stream, comment_len, file_size)) {
                 return std::nullopt;
             }
             total_uncompressed_size += uncompressed_size;
@@ -620,7 +750,7 @@ struct ZipArchive {
 
         const std::streamoff central_end = stream.tellg();
         if (central_end < 0 || static_cast<std::uint64_t>(central_end) !=
-                                   static_cast<std::uint64_t>(central_offset) + central_size) {
+                                   directory->central_offset + directory->central_size) {
             return std::nullopt;
         }
         return archive;
@@ -638,6 +768,10 @@ struct ZipArchive {
     if (entry.compressed_size > kMaxPackageUncompressedSize ||
         entry.uncompressed_size > kMaxZipEntryUncompressedSize ||
         entry.local_header_offset >= archive.file_size) {
+        return std::nullopt;
+    }
+    if (entry.compressed_size > std::numeric_limits<std::size_t>::max() ||
+        entry.uncompressed_size > std::numeric_limits<std::size_t>::max()) {
         return std::nullopt;
     }
     std::ifstream stream(package_path, std::ios::binary);
@@ -672,7 +806,7 @@ struct ZipArchive {
         return std::nullopt;
     }
 
-    std::vector<unsigned char> compressed(entry.compressed_size);
+    std::vector<unsigned char> compressed(static_cast<std::size_t>(entry.compressed_size));
     if (!compressed.empty()) {
         stream.read(reinterpret_cast<char*>(compressed.data()),
                     static_cast<std::streamsize>(compressed.size()));
@@ -683,7 +817,7 @@ struct ZipArchive {
         if (entry.compressed_size != entry.uncompressed_size) return std::nullopt;
         result = std::move(compressed);
     } else {
-        result = inflate_raw(compressed, entry.uncompressed_size);
+        result = inflate_raw(compressed, static_cast<std::size_t>(entry.uncompressed_size));
     }
     if (!result.has_value() || !crc_matches(*result, entry.crc32)) return std::nullopt;
     return result;
@@ -803,29 +937,29 @@ std::optional<AppxPackageInfo> inspect_msix_package(const std::filesystem::path&
             return std::nullopt;
         }
 
-        const std::uint16_t disk_number = read_le16(tail.data() + eocd_position + 4U);
-        const std::uint16_t central_disk = read_le16(tail.data() + eocd_position + 6U);
-        const std::uint16_t entries_on_disk = read_le16(tail.data() + eocd_position + 8U);
-        const std::uint16_t total_entries = read_le16(tail.data() + eocd_position + 10U);
-        const std::uint32_t central_size = read_le32(tail.data() + eocd_position + 12U);
-        const std::uint32_t central_offset = read_le32(tail.data() + eocd_position + 16U);
         const std::uint64_t eocd_offset = file_size - tail_size + eocd_position;
-        const std::uint64_t central_end = static_cast<std::uint64_t>(central_offset) + central_size;
-        if (disk_number != 0 || central_disk != 0 || entries_on_disk != total_entries ||
-            total_entries == 0 || total_entries > kMaxZipEntries ||
-            central_end > file_size || central_end > eocd_offset) {
+        const auto directory = parse_zip_directory_info(
+            tail, file_size - tail_size, eocd_position, eocd_offset);
+        if (!directory.has_value() || directory->disk_number != 0 ||
+            directory->central_disk != 0 ||
+            directory->entries_on_disk != directory->total_entries ||
+            directory->total_entries == 0 || directory->total_entries > kMaxZipEntries ||
+            directory->central_offset > file_size ||
+            directory->central_size > file_size - directory->central_offset ||
+            directory->central_offset + directory->central_size > eocd_offset) {
             return std::nullopt;
         }
+        const std::uint64_t central_end = directory->central_offset + directory->central_size;
 
         std::uint64_t total_uncompressed_size = 0;
         std::optional<ZipCentralEntry> manifest_entry;
         std::string manifest_name;
         std::set<std::string> names;
         stream.clear();
-        stream.seekg(static_cast<std::streamoff>(central_offset), std::ios::beg);
+        stream.seekg(static_cast<std::streamoff>(directory->central_offset), std::ios::beg);
         if (!stream) return std::nullopt;
 
-        for (std::uint16_t index = 0; index < total_entries; ++index) {
+        for (std::uint64_t index = 0; index < directory->total_entries; ++index) {
             std::array<unsigned char, 46> central_header{};
             stream.read(reinterpret_cast<char*>(central_header.data()),
                         static_cast<std::streamsize>(central_header.size()));
@@ -836,43 +970,61 @@ std::optional<AppxPackageInfo> inspect_msix_package(const std::filesystem::path&
             const std::uint16_t flags = read_le16(central_header.data() + 8U);
             const std::uint16_t compression_method = read_le16(central_header.data() + 10U);
             const std::uint32_t entry_crc32 = read_le32(central_header.data() + 16U);
-            const std::uint32_t compressed_size = read_le32(central_header.data() + 20U);
-            const std::uint32_t uncompressed_size = read_le32(central_header.data() + 24U);
+            const std::uint32_t compressed_size_32 = read_le32(central_header.data() + 20U);
+            const std::uint32_t uncompressed_size_32 = read_le32(central_header.data() + 24U);
             const std::uint16_t filename_len = read_le16(central_header.data() + 28U);
             const std::uint16_t extra_len = read_le16(central_header.data() + 30U);
             const std::uint16_t comment_len = read_le16(central_header.data() + 32U);
             const std::uint16_t disk_start = read_le16(central_header.data() + 34U);
             const std::uint32_t external_attributes = read_le32(central_header.data() + 38U);
-            const std::uint32_t local_header_offset = read_le32(central_header.data() + 42U);
+            const std::uint32_t local_header_offset_32 = read_le32(central_header.data() + 42U);
             const std::uint64_t metadata_size = static_cast<std::uint64_t>(filename_len) +
                                                 extra_len + comment_len;
             const std::streamoff current = stream.tellg();
             if (current < 0 || static_cast<std::uint64_t>(current) > central_end ||
                 metadata_size > central_end - static_cast<std::uint64_t>(current) ||
                 filename_len == 0 || filename_len > kMaxZipFilenameSize ||
-                disk_start != 0 || (flags & 0x0001U) != 0U ||
-                (compression_method != 0 && compression_method != 8) ||
-                uncompressed_size == 0xFFFFFFFFU || compressed_size == 0xFFFFFFFFU ||
-                local_header_offset >= central_offset ||
-                static_cast<std::uint64_t>(compressed_size) > kMaxPackageUncompressedSize ||
-                static_cast<std::uint64_t>(uncompressed_size) > kMaxZipEntryUncompressedSize ||
-                static_cast<std::uint64_t>(uncompressed_size) >
-                    kMaxPackageUncompressedSize - total_uncompressed_size ||
                 ((version_made_by >> 8U) == 3U &&
                  ((external_attributes >> 16U) & 0170000U) == 0120000U)) {
                 return std::nullopt;
             }
-            total_uncompressed_size += uncompressed_size;
 
             std::string filename(filename_len, '\0');
             stream.read(filename.data(), filename_len);
+            std::vector<unsigned char> extra(extra_len);
+            if (extra_len != 0U) {
+                stream.read(reinterpret_cast<char*>(extra.data()), extra_len);
+            }
+            Zip64ExtraValues resolved;
+            if (!stream ||
+                !parse_zip64_extra(extra, uncompressed_size_32 == 0xFFFFFFFFU,
+                                   compressed_size_32 == 0xFFFFFFFFU,
+                                   local_header_offset_32 == 0xFFFFFFFFU,
+                                   disk_start == 0xFFFFU, resolved)) {
+                return std::nullopt;
+            }
+            const std::uint64_t compressed_size =
+                resolved.compressed_size.value_or(compressed_size_32);
+            const std::uint64_t uncompressed_size =
+                resolved.uncompressed_size.value_or(uncompressed_size_32);
+            const std::uint64_t local_header_offset =
+                resolved.local_header_offset.value_or(local_header_offset_32);
+            const std::uint64_t resolved_disk_start = resolved.disk_start.value_or(disk_start);
+            if (resolved_disk_start != 0U || (flags & 0x0001U) != 0U ||
+                (compression_method != 0 && compression_method != 8) ||
+                compressed_size > kMaxPackageUncompressedSize ||
+                uncompressed_size > kMaxZipEntryUncompressedSize ||
+                uncompressed_size > kMaxPackageUncompressedSize - total_uncompressed_size ||
+                local_header_offset >= directory->central_offset) {
+                return std::nullopt;
+            }
+            total_uncompressed_size += uncompressed_size;
             const std::string normalized_name = normalized_zip_name(filename);
             if (!stream || !safe_zip_filename(filename) ||
                 !names.insert(normalized_name).second) {
                 return std::nullopt;
             }
-            if (!skip_bytes(stream, static_cast<std::uint64_t>(extra_len) + comment_len,
-                            file_size)) {
+            if (!skip_bytes(stream, comment_len, file_size)) {
                 return std::nullopt;
             }
             if (normalized_name == "AppxBundleManifest.xml") {
@@ -929,7 +1081,11 @@ std::optional<AppxPackageInfo> inspect_msix_package(const std::filesystem::path&
             return std::nullopt;
         }
 
-        std::vector<unsigned char> compressed(entry.compressed_size);
+        if (entry.compressed_size > std::numeric_limits<std::size_t>::max() ||
+            entry.uncompressed_size > std::numeric_limits<std::size_t>::max()) {
+            return std::nullopt;
+        }
+        std::vector<unsigned char> compressed(static_cast<std::size_t>(entry.compressed_size));
         if (!compressed.empty()) {
             stream.read(reinterpret_cast<char*>(compressed.data()),
                         static_cast<std::streamsize>(compressed.size()));
@@ -940,7 +1096,8 @@ std::optional<AppxPackageInfo> inspect_msix_package(const std::filesystem::path&
             if (entry.compressed_size != entry.uncompressed_size) return std::nullopt;
             manifest_data = std::move(compressed);
         } else {
-            manifest_data = inflate_raw(compressed, entry.uncompressed_size);
+            manifest_data = inflate_raw(compressed,
+                                         static_cast<std::size_t>(entry.uncompressed_size));
         }
         if (!manifest_data.has_value() || !crc_matches(*manifest_data, entry.crc32)) {
             return std::nullopt;

@@ -28,6 +28,7 @@ struct ZipEntrySpec {
     std::uint16_t flags = 0;
     std::uint16_t version_made_by = 20;
     std::uint32_t external_attributes = 0;
+    bool force_zip64 = false;
 };
 
 struct ZipImage {
@@ -44,6 +45,11 @@ void append_le16(std::vector<std::uint8_t>& output, const std::uint16_t value) {
 void append_le32(std::vector<std::uint8_t>& output, const std::uint32_t value) {
     append_le16(output, static_cast<std::uint16_t>(value));
     append_le16(output, static_cast<std::uint16_t>(value >> 16U));
+}
+
+void append_le64(std::vector<std::uint8_t>& output, const std::uint64_t value) {
+    append_le32(output, static_cast<std::uint32_t>(value));
+    append_le32(output, static_cast<std::uint32_t>(value >> 32U));
 }
 
 void put_le16(std::vector<std::uint8_t>& output, const std::size_t offset,
@@ -75,6 +81,12 @@ void put_le64(std::vector<std::uint8_t>& output, const std::size_t offset,
            (static_cast<std::uint32_t>(input[offset + 1U]) << 8U) |
            (static_cast<std::uint32_t>(input[offset + 2U]) << 16U) |
            (static_cast<std::uint32_t>(input[offset + 3U]) << 24U);
+}
+
+[[nodiscard]] std::uint16_t read_le16(const std::vector<std::uint8_t>& input,
+                                       const std::size_t offset) {
+    return static_cast<std::uint16_t>(input[offset]) |
+           (static_cast<std::uint16_t>(input[offset + 1U]) << 8U);
 }
 
 [[nodiscard]] std::uint64_t read_le64(const std::vector<std::uint8_t>& input,
@@ -162,16 +174,27 @@ void append_string(std::vector<std::uint8_t>& output, const std::string_view val
         append_le16(image.bytes, 0);
         append_le16(image.bytes, 0);
         append_le32(image.bytes, crc32_of(entry.data));
-        append_le32(image.bytes, static_cast<std::uint32_t>(compressed_size));
-        append_le32(image.bytes, static_cast<std::uint32_t>(entry.data.size()));
+        append_le32(image.bytes, entry.force_zip64 ? 0xFFFFFFFFU
+                                                   : static_cast<std::uint32_t>(compressed_size));
+        append_le32(image.bytes, entry.force_zip64 ? 0xFFFFFFFFU
+                                                   : static_cast<std::uint32_t>(entry.data.size()));
         append_le16(image.bytes, static_cast<std::uint16_t>(entry.name.size()));
-        append_le16(image.bytes, 0);
+        append_le16(image.bytes, entry.force_zip64 ? 28U : 0U);
         append_le16(image.bytes, 0);
         append_le16(image.bytes, 0);
         append_le16(image.bytes, 0);
         append_le32(image.bytes, entry.external_attributes);
-        append_le32(image.bytes, static_cast<std::uint32_t>(image.local_offsets[index]));
+        append_le32(image.bytes, entry.force_zip64
+                                  ? 0xFFFFFFFFU
+                                  : static_cast<std::uint32_t>(image.local_offsets[index]));
         append_string(image.bytes, entry.name);
+        if (entry.force_zip64) {
+            append_le16(image.bytes, 0x0001U);
+            append_le16(image.bytes, 24U);
+            append_le64(image.bytes, static_cast<std::uint64_t>(entry.data.size()));
+            append_le64(image.bytes, static_cast<std::uint64_t>(compressed_size));
+            append_le64(image.bytes, static_cast<std::uint64_t>(image.local_offsets[index]));
+        }
     }
     const std::uint32_t central_size = static_cast<std::uint32_t>(image.bytes.size() - central_start);
     append_le32(image.bytes, 0x06054B50U);
@@ -182,6 +205,39 @@ void append_string(std::vector<std::uint8_t>& output, const std::string_view val
     append_le32(image.bytes, central_size);
     append_le32(image.bytes, static_cast<std::uint32_t>(central_start));
     append_le16(image.bytes, 0);
+    return image;
+}
+
+[[nodiscard]] ZipImage make_zip64(ZipImage image) {
+    const std::size_t eocd = image.bytes.size() - 22U;
+    const std::uint32_t central_size = read_le32(image.bytes, eocd + 12U);
+    const std::uint32_t central_offset = read_le32(image.bytes, eocd + 16U);
+    const std::uint64_t zip64_offset = eocd;
+    const auto eocd_difference = static_cast<std::vector<std::uint8_t>::difference_type>(eocd);
+    std::vector<std::uint8_t> bytes(image.bytes.begin(), image.bytes.begin() + eocd_difference);
+    append_le32(bytes, 0x06064B50U);
+    append_le64(bytes, 44U);
+    append_le16(bytes, 45U);
+    append_le16(bytes, 45U);
+    append_le32(bytes, 0U);
+    append_le32(bytes, 0U);
+    append_le64(bytes, read_le16(image.bytes, eocd + 8U));
+    append_le64(bytes, read_le16(image.bytes, eocd + 10U));
+    append_le64(bytes, central_size);
+    append_le64(bytes, central_offset);
+    append_le32(bytes, 0x07064B50U);
+    append_le32(bytes, 0U);
+    append_le64(bytes, zip64_offset);
+    append_le32(bytes, 1U);
+    append_le32(bytes, 0x06054B50U);
+    append_le16(bytes, 0U);
+    append_le16(bytes, 0U);
+    append_le16(bytes, 0xFFFFU);
+    append_le16(bytes, 0xFFFFU);
+    append_le32(bytes, 0xFFFFFFFFU);
+    append_le32(bytes, 0xFFFFFFFFU);
+    append_le16(bytes, 0U);
+    image.bytes = std::move(bytes);
     return image;
 }
 
@@ -248,6 +304,37 @@ TEST(RustMsixParserTest, StoredAndDeflatedPackagesMatchCppSemantics) {
         ASSERT_FALSE(rust_result.internal_failure);
         expect_semantically_equal(*cpp_info, rust_result.info);
     }
+}
+
+TEST(RustMsixParserTest, Zip64SingleDiskAndEntryExtrasMatchCppSemantics) {
+    TempDirFixture fixture;
+    const ZipImage image = make_zip64(make_zip({
+        {"AppxManifest.xml", kManifest, 8, 0, 45, 0, true},
+        {"bin/Example.exe", "MZ", 0, 0},
+    }));
+    const std::filesystem::path path = fixture.path("zip64.msix");
+    std::ofstream output(path, std::ios::binary | std::ios::trunc);
+    ASSERT_TRUE(output.good());
+    output.write(reinterpret_cast<const char*>(image.bytes.data()),
+                 static_cast<std::streamsize>(image.bytes.size()));
+    output.close();
+
+    const RustMsixParseResult rust = parse_msix_rust(image.bytes);
+    ASSERT_EQ(rust.status, TL_MSIX_STATUS_SUCCESS) << rust.error_message;
+    const auto cpp = inspect_msix_package(path);
+    ASSERT_TRUE(cpp.has_value());
+    expect_semantically_equal(*cpp, rust.info);
+
+    const std::filesystem::path destination = fixture.path("extracted");
+    std::error_code cleanup_error;
+    std::filesystem::remove_all(destination, cleanup_error);
+    ASSERT_FALSE(cleanup_error);
+    const auto extracted = extract_msix_package(path, destination);
+    ASSERT_TRUE(extracted.has_value());
+    EXPECT_EQ(extracted->filename(), "Example.exe");
+    EXPECT_TRUE(std::filesystem::is_regular_file(*extracted));
+    std::filesystem::remove_all(destination, cleanup_error);
+    EXPECT_FALSE(cleanup_error);
 }
 
 TEST(RustMsixParserTest, FfiSizeFillAndInsufficientOutputPreserveSentinel) {
@@ -347,6 +434,11 @@ TEST(RustMsixParserTest, RejectsInvalidZipAndManifestWithoutFallback) {
     expect_rejected(make_zip({{"AppxManifest.xml", kManifest, 0, 1U}}), "encrypted.msix");
     expect_rejected(make_zip({{"AppxManifest.xml", kManifest, 0, 0, 0x0314U, 0120000U << 16U}}),
                     "symlink.msix");
+
+    ZipImage multi_disk = make_zip64(make_zip({{"AppxManifest.xml", kManifest, 0, 0, 45, 0, true}}));
+    const std::size_t classic_eocd = multi_disk.bytes.size() - 22U;
+    put_le32(multi_disk.bytes, classic_eocd - 20U + 4U, 1U);
+    expect_rejected(std::move(multi_disk), "zip64-multi-disk.msix");
 }
 
 TEST(RustMsixParserTest, DecoderRejectsWireHeaderAndReferenceMutations) {

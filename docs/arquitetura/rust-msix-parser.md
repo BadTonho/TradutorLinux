@@ -12,7 +12,9 @@ buffer fornecido pelo chamador. Rust não abre arquivos, não resolve caminhos e
 não valida o PE interno. O resultado preserva a identidade do pacote, as
 aplicações e o primeiro executável não vazio do manifesto como
 `main_executable`. Bundles (`AppxBundleManifest.xml`), .NET/Mono, assinatura
-Authenticode e formatos ZIP além de `stored` e raw DEFLATE são rejeitados.
+Authenticode e formatos ZIP além de `stored` e raw DEFLATE são rejeitados. O
+leitor aceita ZIP64 de disco único, incluindo o EOCD ZIP64, seu localizador e
+o extra `0x0001` nas entradas; arquivos multipartes continuam rejeitados.
 
 O parser trata o pacote como entrada hostil: todos os offsets, tamanhos,
 contagens e conversões para `usize` usam aritmética limitada. O limite do
@@ -118,13 +120,17 @@ de converter para `AppxPackageInfo`.
 
 ## ZIP e manifesto
 
-Rust localiza o EOCD dentro da janela de comentário ZIP, rejeita EOCD/central
-directory truncados, Zip64, multipartes, encryption, data fora do pacote,
-CRC inválido, links simbólicos e métodos diferentes de `stored`/raw DEFLATE.
-Tamanhos comprimidos e descompactados, soma dos tamanhos, contagem e nomes
-passam pelos limites fixados no header. O DEFLATE usa uma ponte C mínima para a
-zlib já vinculada pelo projeto; Rust continua dono do modelo e do buffer de
-saída.
+Rust localiza o EOCD dentro da janela de comentário ZIP e valida EOCD/central
+directory clássicos ou ZIP64 de disco único. No ZIP64, o EOCD e o localizador
+precisam estar completos, os números de disco devem ser zero e os campos
+sentinela das entradas devem ser resolvidos pelo extra `0x0001`, na ordem
+definida pelo formato. Multipartes, encryption, data fora do pacote, CRC
+inválido, links simbólicos e métodos diferentes de `stored`/raw DEFLATE são
+rejeitados. Tamanhos comprimidos e descompactados, soma dos tamanhos, contagem
+e nomes passam pelos limites fixados no header; a soma descompactada permanece
+limitada a 512 MiB, portanto um ZIP64 pode ser estruturalmente válido e ainda
+ser rejeitado por limite. O DEFLATE usa uma ponte C mínima para a zlib já
+vinculada pelo projeto; Rust continua dono do modelo e do buffer de saída.
 
 Nomes ZIP são bytes: NUL, nomes absolutos, prefixo de unidade, `.`/`..`,
 segmentos vazios ambíguos e colisões após trocar `\` por `/` são rejeitados.

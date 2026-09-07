@@ -73,8 +73,10 @@ executável PE32+ AMD64 e salvar o catálogo. A extração usa o executável
 principal validado por Rust; falha ou divergência encerra a instalação sem
 substituir o resultado Rust e sem cadastro.
 
-Bundles, Zip64, encryption, .NET/Mono, Authenticode, links, traversal, NUL,
-colisões normalizadas, DTD e entidades externas continuam fora do escopo.
+Bundles, ZIP64 multipartes, encryption, .NET/Mono, Authenticode, links,
+traversal, NUL, colisões normalizadas, DTD e entidades externas continuam fora
+do escopo. ZIP64 de disco único é lido dentro dos limites de segurança; o
+limite agregado descompactado de 512 MiB continua valendo.
 Rust não acessa o filesystem e não valida o PE interno do pacote.
 
 `app run`, `app run --report`, execução direta normal, Proton, DLLs dependentes

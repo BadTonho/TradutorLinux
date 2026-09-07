@@ -565,10 +565,12 @@ extrator usa o executável principal validado por Rust. Falha ou divergência n�
 faz fallback, não inicia o PE e não cria entrada no catálogo. A validação do
 PE32+ AMD64 extraído permanece C++.
 
-O contrato rejeita deterministicamente bundles, Zip64, multipartes, encryption,
+O contrato rejeita deterministicamente bundles, ZIP64 multipartes, encryption,
 métodos ZIP desconhecidos, links, traversal, NUL, colisões após normalizar
-`\\` para `/`, DTD e entidades externas. Rust não acessa o filesystem e não
-valida o PE interno do pacote.
+`\\` para `/`, DTD e entidades externas. ZIP64 de disco único, com EOCD,
+localizador e extras `0x0001` válidos, é aceito dentro do limite agregado
+descompactado de 512 MiB. Rust não acessa o filesystem e não valida o PE
+interno do pacote.
 
 ### Análise Rust de perfis — R23.1–R23.2
 

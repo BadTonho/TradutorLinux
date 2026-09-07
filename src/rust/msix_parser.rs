@@ -8,10 +8,15 @@ use std::slice;
 const ZIP_LOCAL_HEADER_MAGIC: u32 = 0x0403_4b50;
 const ZIP_CENTRAL_HEADER_MAGIC: u32 = 0x0201_4b50;
 const ZIP_EOCD_MAGIC: u32 = 0x0605_4b50;
+const ZIP64_EOCD_MAGIC: u32 = 0x0606_4b50;
+const ZIP64_LOCATOR_MAGIC: u32 = 0x0706_4b50;
+const ZIP64_EXTRA_FIELD_ID: u16 = 0x0001;
 
 const ZIP_LOCAL_HEADER_SIZE: usize = 30;
 const ZIP_CENTRAL_HEADER_SIZE: usize = 46;
 const ZIP_EOCD_SIZE: usize = 22;
+const ZIP64_LOCATOR_SIZE: usize = 20;
+const ZIP64_EOCD_MIN_SIZE: usize = 56;
 
 const XML_BOM: &[u8] = b"\xef\xbb\xbf";
 
@@ -191,6 +196,40 @@ fn read_u32(bytes: &[u8], position: usize, code: u32, phase: u32) -> Result<u32,
     ]))
 }
 
+fn read_u64(bytes: &[u8], position: usize, code: u32, phase: u32) -> Result<u64, Failure> {
+    let end = match position.checked_add(8) {
+        Some(end) => end,
+        None => {
+            return Err(truncated(
+                code,
+                phase,
+                offset(position),
+                8,
+                b"range ZIP truncado",
+            ))
+        }
+    };
+    if end > bytes.len() {
+        return Err(truncated(
+            code,
+            phase,
+            offset(position),
+            8,
+            b"range ZIP truncado",
+        ));
+    }
+    Ok(u64::from_le_bytes([
+        bytes[position],
+        bytes[position + 1],
+        bytes[position + 2],
+        bytes[position + 3],
+        bytes[position + 4],
+        bytes[position + 5],
+        bytes[position + 6],
+        bytes[position + 7],
+    ]))
+}
+
 fn range(
     bytes: &[u8],
     position: usize,
@@ -236,10 +275,129 @@ struct ZipEntry {
     normalized_name: Vec<u8>,
     compression_method: u16,
     crc32: u32,
-    compressed_size: u32,
-    uncompressed_size: u32,
-    local_header_offset: u32,
+    compressed_size: u64,
+    uncompressed_size: u64,
+    local_header_offset: u64,
     central_offset: usize,
+}
+
+#[derive(Default)]
+struct Zip64ExtraValues {
+    compressed_size: Option<u64>,
+    uncompressed_size: Option<u64>,
+    local_header_offset: Option<u64>,
+    disk_start: Option<u64>,
+}
+
+fn parse_zip64_extra(
+    extra: &[u8],
+    base_offset: usize,
+    need_uncompressed_size: bool,
+    need_compressed_size: bool,
+    need_local_header_offset: bool,
+    need_disk_start: bool,
+) -> Result<Zip64ExtraValues, Failure> {
+    let mut cursor = 0usize;
+    while cursor < extra.len() {
+        if extra.len() - cursor < 4 {
+            return Err(malformed(
+                ERROR_ZIP_ENTRY,
+                PHASE_ZIP_CENTRAL_DIRECTORY,
+                offset(base_offset + cursor),
+                4,
+                b"extra field ZIP64 truncado",
+            ));
+        }
+        let field_id = u16::from_le_bytes([extra[cursor], extra[cursor + 1]]);
+        let field_length = usize::from(u16::from_le_bytes([
+            extra[cursor + 2],
+            extra[cursor + 3],
+        ]));
+        let field_start = cursor + 4;
+        let field_end = field_start.checked_add(field_length).ok_or_else(|| {
+            truncated(
+                ERROR_ZIP_ENTRY,
+                PHASE_ZIP_CENTRAL_DIRECTORY,
+                offset(base_offset + cursor),
+                u64::MAX,
+                b"extra field ZIP64 excede o pacote",
+            )
+        })?;
+        if field_end > extra.len() {
+            return Err(truncated(
+                ERROR_ZIP_ENTRY,
+                PHASE_ZIP_CENTRAL_DIRECTORY,
+                offset(base_offset + cursor),
+                u64::try_from(field_length).unwrap_or(u64::MAX),
+                b"extra field ZIP64 truncado",
+            ));
+        }
+        if field_id == ZIP64_EXTRA_FIELD_ID {
+            let mut value_cursor = field_start;
+            let mut values = Zip64ExtraValues::default();
+            let mut take = |required: bool, destination: &mut Option<u64>| -> Result<(), Failure> {
+                if !required {
+                    return Ok(());
+                }
+                let value_end = value_cursor.checked_add(8).ok_or_else(|| {
+                    truncated(
+                        ERROR_ZIP_ENTRY,
+                        PHASE_ZIP_CENTRAL_DIRECTORY,
+                        offset(base_offset + value_cursor),
+                        8,
+                        b"valor ZIP64 excede o pacote",
+                    )
+                })?;
+                if value_end > field_end {
+                    return Err(truncated(
+                        ERROR_ZIP_ENTRY,
+                        PHASE_ZIP_CENTRAL_DIRECTORY,
+                        offset(base_offset + value_cursor),
+                        8,
+                        b"valor ZIP64 truncado",
+                    ));
+                }
+                *destination = Some(u64::from_le_bytes([
+                    extra[value_cursor],
+                    extra[value_cursor + 1],
+                    extra[value_cursor + 2],
+                    extra[value_cursor + 3],
+                    extra[value_cursor + 4],
+                    extra[value_cursor + 5],
+                    extra[value_cursor + 6],
+                    extra[value_cursor + 7],
+                ]));
+                value_cursor = value_end;
+                Ok(())
+            };
+            take(need_uncompressed_size, &mut values.uncompressed_size)?;
+            take(need_compressed_size, &mut values.compressed_size)?;
+            take(need_local_header_offset, &mut values.local_header_offset)?;
+            take(need_disk_start, &mut values.disk_start)?;
+            if need_uncompressed_size
+                || need_compressed_size
+                || need_local_header_offset
+                || need_disk_start
+            {
+                return Ok(values);
+            }
+        }
+        cursor = field_end;
+    }
+    if need_uncompressed_size
+        || need_compressed_size
+        || need_local_header_offset
+        || need_disk_start
+    {
+        return Err(malformed(
+            ERROR_ZIP_ENTRY,
+            PHASE_ZIP_CENTRAL_DIRECTORY,
+            offset(base_offset),
+            0,
+            b"extra field ZIP64 ausente",
+        ));
+    }
+    Ok(Zip64ExtraValues::default())
 }
 
 struct ZipArchive {
@@ -395,37 +553,136 @@ fn parse_zip(input: &[u8]) -> Result<ZipArchive, Failure> {
         )
     })?;
 
-    let disk_number = read_u16(input, eocd + 4, ERROR_ZIP_EOCD, PHASE_ZIP_EOCD)?;
-    let central_disk = read_u16(input, eocd + 6, ERROR_ZIP_EOCD, PHASE_ZIP_EOCD)?;
-    let entries_on_disk = read_u16(input, eocd + 8, ERROR_ZIP_EOCD, PHASE_ZIP_EOCD)?;
-    let total_entries = read_u16(input, eocd + 10, ERROR_ZIP_EOCD, PHASE_ZIP_EOCD)?;
-    let central_size = read_u32(input, eocd + 12, ERROR_ZIP_EOCD, PHASE_ZIP_EOCD)?;
-    let central_offset = read_u32(input, eocd + 16, ERROR_ZIP_EOCD, PHASE_ZIP_EOCD)?;
+    let classic_disk_number = read_u16(input, eocd + 4, ERROR_ZIP_EOCD, PHASE_ZIP_EOCD)?;
+    let classic_central_disk = read_u16(input, eocd + 6, ERROR_ZIP_EOCD, PHASE_ZIP_EOCD)?;
+    let classic_entries_on_disk = read_u16(input, eocd + 8, ERROR_ZIP_EOCD, PHASE_ZIP_EOCD)?;
+    let classic_total_entries = read_u16(input, eocd + 10, ERROR_ZIP_EOCD, PHASE_ZIP_EOCD)?;
+    let classic_central_size = read_u32(input, eocd + 12, ERROR_ZIP_EOCD, PHASE_ZIP_EOCD)?;
+    let classic_central_offset = read_u32(input, eocd + 16, ERROR_ZIP_EOCD, PHASE_ZIP_EOCD)?;
 
-    if total_entries == u16::MAX || central_size == u32::MAX || central_offset == u32::MAX {
-        return Err(unsupported_format(
-            ERROR_ZIP_EOCD,
-            PHASE_ZIP_EOCD,
-            offset(eocd),
-            u64::from(total_entries),
-            b"Zip64 nao e suportado",
-        ));
-    }
+    let (disk_number, central_disk, entries_on_disk, total_entries, central_size, central_offset) =
+        if classic_total_entries == u16::MAX
+            || classic_central_size == u32::MAX
+            || classic_central_offset == u32::MAX
+        {
+            let locator = eocd.checked_sub(ZIP64_LOCATOR_SIZE).ok_or_else(|| {
+                malformed(
+                    ERROR_ZIP_EOCD,
+                    PHASE_ZIP_EOCD,
+                    offset(eocd),
+                    0,
+                    b"localizador ZIP64 ausente",
+                )
+            })?;
+            if read_u32(input, locator, ERROR_ZIP_EOCD, PHASE_ZIP_EOCD)?
+                != ZIP64_LOCATOR_MAGIC
+            {
+                return Err(malformed(
+                    ERROR_ZIP_EOCD,
+                    PHASE_ZIP_EOCD,
+                    offset(locator),
+                    ZIP64_LOCATOR_MAGIC as u64,
+                    b"assinatura do localizador ZIP64 invalida",
+                ));
+            }
+            let zip64_disk = read_u32(input, locator + 4, ERROR_ZIP_EOCD, PHASE_ZIP_EOCD)?;
+            let zip64_offset = read_u64(input, locator + 8, ERROR_ZIP_EOCD, PHASE_ZIP_EOCD)?;
+            let zip64_disks = read_u32(input, locator + 16, ERROR_ZIP_EOCD, PHASE_ZIP_EOCD)?;
+            if zip64_disk != 0 || zip64_disks != 1 {
+                return Err(unsupported_format(
+                    ERROR_ZIP_EOCD,
+                    PHASE_ZIP_EOCD,
+                    offset(locator),
+                    u64::from(zip64_disks),
+                    b"pacote ZIP64 dividido em multiplos discos",
+                ));
+            }
+            let zip64_start = usize::try_from(zip64_offset).map_err(|_| {
+                truncated(
+                    ERROR_ZIP_EOCD,
+                    PHASE_ZIP_EOCD,
+                    offset(locator + 8),
+                    zip64_offset,
+                    b"offset do registro ZIP64 nao cabe no host",
+                )
+            })?;
+            let zip64_header = range(
+                input,
+                zip64_start,
+                ZIP64_EOCD_MIN_SIZE,
+                ERROR_ZIP_EOCD,
+                PHASE_ZIP_EOCD,
+            )?;
+            if u32::from_le_bytes([
+                zip64_header[0],
+                zip64_header[1],
+                zip64_header[2],
+                zip64_header[3],
+            ]) != ZIP64_EOCD_MAGIC
+            {
+                return Err(malformed(
+                    ERROR_ZIP_EOCD,
+                    PHASE_ZIP_EOCD,
+                    offset(zip64_start),
+                    ZIP64_EOCD_MAGIC as u64,
+                    b"assinatura do registro ZIP64 invalida",
+                ));
+            }
+            let record_size = read_u64(input, zip64_start + 4, ERROR_ZIP_EOCD, PHASE_ZIP_EOCD)?;
+            if record_size < 44
+                || zip64_offset
+                    .checked_add(12)
+                    .and_then(|value| value.checked_add(record_size))
+                    .is_none_or(|end| end > u64::try_from(locator).unwrap_or(u64::MAX))
+            {
+                return Err(malformed(
+                    ERROR_ZIP_EOCD,
+                    PHASE_ZIP_EOCD,
+                    offset(zip64_start + 4),
+                    record_size,
+                    b"tamanho do registro ZIP64 invalido",
+                ));
+            }
+            let zip64_disk_number = read_u32(input, zip64_start + 16, ERROR_ZIP_EOCD, PHASE_ZIP_EOCD)?;
+            let zip64_central_disk = read_u32(input, zip64_start + 20, ERROR_ZIP_EOCD, PHASE_ZIP_EOCD)?;
+            let zip64_entries_on_disk = read_u64(input, zip64_start + 24, ERROR_ZIP_EOCD, PHASE_ZIP_EOCD)?;
+            let zip64_total_entries = read_u64(input, zip64_start + 32, ERROR_ZIP_EOCD, PHASE_ZIP_EOCD)?;
+            let zip64_central_size = read_u64(input, zip64_start + 40, ERROR_ZIP_EOCD, PHASE_ZIP_EOCD)?;
+            let zip64_central_offset = read_u64(input, zip64_start + 48, ERROR_ZIP_EOCD, PHASE_ZIP_EOCD)?;
+            (
+                u64::from(zip64_disk_number),
+                u64::from(zip64_central_disk),
+                zip64_entries_on_disk,
+                zip64_total_entries,
+                zip64_central_size,
+                zip64_central_offset,
+            )
+        } else {
+            (
+                u64::from(classic_disk_number),
+                u64::from(classic_central_disk),
+                u64::from(classic_entries_on_disk),
+                u64::from(classic_total_entries),
+                u64::from(classic_central_size),
+                u64::from(classic_central_offset),
+            )
+        };
+
     if disk_number != 0 || central_disk != 0 || entries_on_disk != total_entries {
         return Err(unsupported_format(
             ERROR_ZIP_EOCD,
             PHASE_ZIP_EOCD,
             offset(eocd),
-            u64::from(disk_number),
+            disk_number,
             b"pacote ZIP dividido em multiplos discos",
         ));
     }
-    if total_entries == 0 || u64::from(total_entries) > LIMIT_MAX_ZIP_ENTRIES {
+    if total_entries == 0 || total_entries > LIMIT_MAX_ZIP_ENTRIES {
         return Err(malformed(
             ERROR_ZIP_CENTRAL_DIRECTORY,
             PHASE_ZIP_CENTRAL_DIRECTORY,
             offset(eocd + 10),
-            u64::from(total_entries),
+            total_entries,
             b"quantidade de entradas ZIP invalida",
         ));
     }
@@ -435,7 +692,7 @@ fn parse_zip(input: &[u8]) -> Result<ZipArchive, Failure> {
             ERROR_ZIP_CENTRAL_DIRECTORY,
             PHASE_ZIP_CENTRAL_DIRECTORY,
             offset(eocd + 16),
-            u64::from(central_offset),
+            central_offset,
             b"offset da central directory nao cabe no host",
         )
     })?;
@@ -444,7 +701,7 @@ fn parse_zip(input: &[u8]) -> Result<ZipArchive, Failure> {
             ERROR_ZIP_CENTRAL_DIRECTORY,
             PHASE_ZIP_CENTRAL_DIRECTORY,
             offset(eocd + 12),
-            u64::from(central_size),
+            central_size,
             b"tamanho da central directory nao cabe no host",
         )
     })?;
@@ -453,7 +710,7 @@ fn parse_zip(input: &[u8]) -> Result<ZipArchive, Failure> {
             ERROR_ZIP_CENTRAL_DIRECTORY,
             PHASE_ZIP_CENTRAL_DIRECTORY,
             offset(central_start),
-            u64::from(central_size),
+            central_size,
             b"central directory excede o pacote",
         )
     })?;
@@ -462,19 +719,22 @@ fn parse_zip(input: &[u8]) -> Result<ZipArchive, Failure> {
             ERROR_ZIP_CENTRAL_DIRECTORY,
             PHASE_ZIP_CENTRAL_DIRECTORY,
             offset(central_start),
-            u64::from(central_size),
+            central_size,
             b"central directory excede o pacote",
         ));
     }
 
     let mut entries = Vec::new();
+    let total_entries_usize = usize::try_from(total_entries).map_err(|_| {
+        internal_failure(b"quantidade de entradas ZIP nao cabe no host")
+    })?;
     entries
-        .try_reserve_exact(total_entries as usize)
+        .try_reserve_exact(total_entries_usize)
         .map_err(|_| internal_failure(b"falha ao reservar entradas ZIP"))?;
     let mut names = HashSet::new();
     let mut total_uncompressed = 0u64;
     let mut cursor = central_start;
-    for _ in 0..total_entries {
+    for _ in 0..total_entries_usize {
         if cursor.checked_add(ZIP_CENTRAL_HEADER_SIZE).is_none()
             || cursor + ZIP_CENTRAL_HEADER_SIZE > central_end
         {
@@ -583,58 +843,6 @@ fn parse_zip(input: &[u8]) -> Result<ZipArchive, Failure> {
                 b"nome de entrada ZIP invalido",
             ));
         }
-        if compressed_size == u32::MAX || uncompressed_size == u32::MAX {
-            return Err(unsupported_format(
-                ERROR_ZIP_ENTRY,
-                PHASE_ZIP_CENTRAL_DIRECTORY,
-                offset(cursor + 20),
-                u64::from(compressed_size),
-                b"entrada ZIP usa Zip64",
-            ));
-        }
-        if disk_start != 0 || (flags & 1) != 0 {
-            return Err(unsupported_mechanism(
-                ERROR_ZIP_COMPRESSION,
-                PHASE_ZIP_CENTRAL_DIRECTORY,
-                offset(cursor + 8),
-                u64::from(flags),
-                b"entrada ZIP criptografada ou multipartes",
-            ));
-        }
-        if compression_method != 0 && compression_method != 8 {
-            return Err(unsupported_mechanism(
-                ERROR_ZIP_COMPRESSION,
-                PHASE_ZIP_CENTRAL_DIRECTORY,
-                offset(cursor + 10),
-                u64::from(compression_method),
-                b"metodo de compressao ZIP nao suportado",
-            ));
-        }
-        if u64::from(compressed_size) > LIMIT_MAX_PACKAGE_UNCOMPRESSED_BYTES
-            || u64::from(uncompressed_size) > LIMIT_MAX_ENTRY_UNCOMPRESSED_BYTES
-            || total_uncompressed
-                .checked_add(u64::from(uncompressed_size))
-                .is_none_or(|value| value > LIMIT_MAX_PACKAGE_UNCOMPRESSED_BYTES)
-        {
-            return Err(malformed(
-                ERROR_ZIP_ENTRY,
-                PHASE_ZIP_CENTRAL_DIRECTORY,
-                offset(cursor + 20),
-                u64::from(uncompressed_size),
-                b"tamanho descompactado do pacote excede o limite",
-            ));
-        }
-        let unix_mode = external_attributes >> 16;
-        if (version_made_by >> 8) == 3 && (unix_mode & 0o170000) == 0o120000 {
-            return Err(malformed(
-                ERROR_ZIP_LINK,
-                PHASE_ZIP_CENTRAL_DIRECTORY,
-                offset(cursor + 38),
-                u64::from(unix_mode),
-                b"links simbolicos nao sao permitidos no pacote",
-            ));
-        }
-
         let metadata_length = filename_length
             .checked_add(extra_length)
             .and_then(|value| value.checked_add(comment_length))
@@ -669,6 +877,68 @@ fn parse_zip(input: &[u8]) -> Result<ZipArchive, Failure> {
             ));
         }
         let name_start = cursor + ZIP_CENTRAL_HEADER_SIZE;
+        let extra_start = name_start + filename_length;
+        let extra_end = extra_start + extra_length;
+        let zip64 = parse_zip64_extra(
+            &input[extra_start..extra_end],
+            extra_start,
+            uncompressed_size == u32::MAX,
+            compressed_size == u32::MAX,
+            local_header_offset == u32::MAX,
+            disk_start == u16::MAX,
+        )?;
+        let compressed_size = zip64
+            .compressed_size
+            .unwrap_or(u64::from(compressed_size));
+        let uncompressed_size = zip64
+            .uncompressed_size
+            .unwrap_or(u64::from(uncompressed_size));
+        let local_header_offset = zip64
+            .local_header_offset
+            .unwrap_or(u64::from(local_header_offset));
+        let disk_start = zip64.disk_start.unwrap_or(u64::from(disk_start));
+        if disk_start != 0 || (flags & 1) != 0 {
+            return Err(unsupported_mechanism(
+                ERROR_ZIP_COMPRESSION,
+                PHASE_ZIP_CENTRAL_DIRECTORY,
+                offset(cursor + 8),
+                u64::from(flags),
+                b"entrada ZIP criptografada ou multipartes",
+            ));
+        }
+        if compression_method != 0 && compression_method != 8 {
+            return Err(unsupported_mechanism(
+                ERROR_ZIP_COMPRESSION,
+                PHASE_ZIP_CENTRAL_DIRECTORY,
+                offset(cursor + 10),
+                u64::from(compression_method),
+                b"metodo de compressao ZIP nao suportado",
+            ));
+        }
+        if compressed_size > LIMIT_MAX_PACKAGE_UNCOMPRESSED_BYTES
+            || uncompressed_size > LIMIT_MAX_ENTRY_UNCOMPRESSED_BYTES
+            || total_uncompressed
+                .checked_add(uncompressed_size)
+                .is_none_or(|value| value > LIMIT_MAX_PACKAGE_UNCOMPRESSED_BYTES)
+        {
+            return Err(malformed(
+                ERROR_ZIP_ENTRY,
+                PHASE_ZIP_CENTRAL_DIRECTORY,
+                offset(cursor + 20),
+                uncompressed_size,
+                b"tamanho descompactado do pacote excede o limite",
+            ));
+        }
+        let unix_mode = external_attributes >> 16;
+        if (version_made_by >> 8) == 3 && (unix_mode & 0o170000) == 0o120000 {
+            return Err(malformed(
+                ERROR_ZIP_LINK,
+                PHASE_ZIP_CENTRAL_DIRECTORY,
+                offset(cursor + 38),
+                u64::from(unix_mode),
+                b"links simbolicos nao sao permitidos no pacote",
+            ));
+        }
         let name = owned(&input[name_start..name_start + filename_length])?;
         let (normalized_name, _) = normalize_zip_name(&name, name_start)?;
         if !names.insert(normalized_name.clone()) {
@@ -685,11 +955,11 @@ fn parse_zip(input: &[u8]) -> Result<ZipArchive, Failure> {
                 ERROR_ZIP_LOCAL_HEADER,
                 PHASE_ZIP_ENTRY,
                 offset(name_start),
-                u64::from(local_header_offset),
+                local_header_offset,
                 b"local header ZIP fora da area de dados",
             ));
         }
-        total_uncompressed += u64::from(uncompressed_size);
+        total_uncompressed += uncompressed_size;
         entries.push(ZipEntry {
             name,
             normalized_name,
@@ -784,7 +1054,7 @@ fn read_zip_entry(input: &[u8], entry: &ZipEntry) -> Result<Vec<u8>, Failure> {
         truncated(
             ERROR_ZIP_LOCAL_HEADER,
             PHASE_ZIP_ENTRY,
-            u64::from(entry.local_header_offset),
+            entry.local_header_offset,
             ZIP_LOCAL_HEADER_SIZE as u64,
             b"local header ZIP nao cabe no host",
         )
@@ -855,7 +1125,7 @@ fn read_zip_entry(input: &[u8], entry: &ZipEntry) -> Result<Vec<u8>, Failure> {
             ERROR_ZIP_ENTRY,
             PHASE_ZIP_ENTRY,
             offset(data_start),
-            u64::from(entry.compressed_size),
+            entry.compressed_size,
             b"entrada comprimida nao cabe no host",
         )
     })?;
@@ -864,7 +1134,7 @@ fn read_zip_entry(input: &[u8], entry: &ZipEntry) -> Result<Vec<u8>, Failure> {
             ERROR_ZIP_ENTRY,
             PHASE_ZIP_ENTRY,
             offset(data_start),
-            u64::from(entry.compressed_size),
+            entry.compressed_size,
             b"dados da entrada ZIP excedem o pacote",
         )
     })?;
@@ -873,7 +1143,7 @@ fn read_zip_entry(input: &[u8], entry: &ZipEntry) -> Result<Vec<u8>, Failure> {
             ERROR_ZIP_ENTRY,
             PHASE_ZIP_ENTRY,
             offset(data_start),
-            u64::from(entry.compressed_size),
+            entry.compressed_size,
             b"dados da entrada ZIP truncados",
         ));
     }
@@ -883,7 +1153,7 @@ fn read_zip_entry(input: &[u8], entry: &ZipEntry) -> Result<Vec<u8>, Failure> {
             ERROR_ZIP_ENTRY,
             PHASE_ZIP_ENTRY,
             offset(data_start),
-            u64::from(entry.uncompressed_size),
+            entry.uncompressed_size,
             b"saida ZIP nao cabe no host",
         )
     })?;
@@ -893,7 +1163,7 @@ fn read_zip_entry(input: &[u8], entry: &ZipEntry) -> Result<Vec<u8>, Failure> {
                 ERROR_ZIP_ENTRY,
                 PHASE_ZIP_ENTRY,
                 offset(data_start),
-                u64::from(entry.uncompressed_size),
+                entry.uncompressed_size,
                 b"tamanho stored nao corresponde ao tamanho descompactado",
             ));
         }
@@ -2110,8 +2380,8 @@ fn parse_and_plan(input: &[u8]) -> Result<WirePlan, Failure> {
             b"AppxManifest.xml nao foi encontrado",
         )
     })?;
-    let manifest_compressed = u64::from(manifest_entry.compressed_size);
-    let manifest_uncompressed = u64::from(manifest_entry.uncompressed_size);
+    let manifest_compressed = manifest_entry.compressed_size;
+    let manifest_uncompressed = manifest_entry.uncompressed_size;
     if manifest_compressed > LIMIT_MAX_MANIFEST_COMPRESSED_BYTES
         || manifest_uncompressed > LIMIT_MAX_MANIFEST_BYTES
     {
