@@ -354,25 +354,42 @@ com prefixo temporário, timeout externo, limite de memória e limpeza verificad
 Arquivos que já falham por arquitetura, formato ou análise estrutural serão
 registrados pelo `--report` e não serão executados indiscriminadamente.
 
-### B1 — Análise completa Rust/C++
+### B1 concluído — análise completa Rust/C++
 
 Objetivo: produzir uma matriz reproduzível de `--report` para todos os PE e
 para o MSIX, comparando Rust ON com o baseline C++ OFF.
 
 Tarefas:
 
-- [ ] Inventariar novamente nome, SHA-256, tipo PE/MSIX e arquitetura.
-- [ ] Executar `--report` em Rust ON para os 24 executáveis e as 2 DLLs.
-- [ ] Executar o mesmo corpus em Rust OFF e comparar status, categoria,
+- [x] Inventariar novamente nome, SHA-256, tipo PE/MSIX e arquitetura.
+- [x] Executar `--report` em Rust ON para os 24 executáveis e as 2 DLLs.
+- [x] Executar o mesmo corpus em Rust OFF e comparar status, categoria,
   diagnóstico, imports, seções e ausência de fallback.
-- [ ] Executar `--report` do MSIX com trace, registrando o limite ou formato
+- [x] Executar `--report` do MSIX com trace, registrando o limite ou formato
   que determinar o resultado.
+
+Evidência reproduzível de 2026-09-07:
+
+- [x] Foram analisados 26 arquivos PE e 1 MSIX em
+  `/tmp/tl-matrix-b1/results.tsv`, com Rust ON em `build/debug-rust` e
+  C++ OFF em `build/debug`.
+- [x] Os dois backends produziram a mesma distribuição: 13 entradas com
+  exit `0`, 12 com `Unsupported`/exit `5` e 2 com `Malformed`/exit `4`.
+- [x] O stdout foi byte-a-byte igual nas 27 entradas. Nos sucessos, os
+  diagnósticos foram semanticamente iguais após remover somente
+  `backend="rust"`; as mensagens de erro continuam podendo diferir sem
+  alterar categoria ou exit code.
+- [x] Os 12 PE32/x86 foram rejeitados por arquitetura, HWiNFO64 foi rejeitado
+  por export empacotado sem bytes crus e o MSIX Affinity foi rejeitado pelo
+  limite/estrutura já documentado.
+- [x] O trace Rust registrou `backend="rust"` em 891 eventos e os quatro
+  casos de rejeição verificados não registraram mapeamento ou execução.
 
 Aceitação:
 
-- [ ] Cada arquivo tem exit code, status, trace e diagnóstico salvos fora do
+- [x] Cada arquivo tem exit code, status, trace e diagnóstico salvos fora do
   repositório e resumidos no roadmap.
-- [ ] Nenhum arquivo é classificado como suportado sem equivalência ON/OFF e
+- [x] Nenhum arquivo é classificado como suportado sem equivalência ON/OFF e
   sem registro em `docs/compatibilidade.md`.
 
 ### B2 — Execução controlada de PE32+ nativo
