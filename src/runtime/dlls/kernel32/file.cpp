@@ -11,6 +11,16 @@ std::uint64_t current_file_size(const FileSlot& slot) noexcept {
     return 0;
 }
 
+void synchronize_file_position(FileSlot* const slot, const int fd) noexcept {
+    if (slot == nullptr) {
+        return;
+    }
+    const off_t position = ::lseek(fd, 0, SEEK_CUR);
+    if (position >= 0 && position <= std::numeric_limits<std::int64_t>::max()) {
+        slot->position = static_cast<std::int64_t>(position);
+    }
+}
+
 bool normalize_wide_path(const std::uint16_t* path, std::string& result) noexcept {
     char normalized[4096]{};
     if (!normalized_wide_path(path, normalized)) {
@@ -326,7 +336,8 @@ TL_MSABI int tl_WriteFile(const void* const handle, const void* const buffer,
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
-    const int fd = handle_fd(handle);
+    FileSlot* const slot = find_file_slot(handle);
+    const int fd = slot != nullptr ? slot->fd : handle_fd(handle);
     if (fd < 0) {
         if (bytes_written != nullptr) {
             *bytes_written = 0;
@@ -351,6 +362,7 @@ TL_MSABI int tl_WriteFile(const void* const handle, const void* const buffer,
         set_last_error(win32_error);
         return 0;
     }
+    synchronize_file_position(slot, fd);
     if (bytes_written != nullptr) {
         *bytes_written = static_cast<std::uint32_t>(written);
     }
@@ -374,7 +386,8 @@ TL_MSABI int tl_ReadFile(const void* const handle, void* const buffer,
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
-    const int fd = handle_fd(handle);
+    FileSlot* const slot = find_file_slot(handle);
+    const int fd = slot != nullptr ? slot->fd : handle_fd(handle);
     if (fd < 0) {
         if (bytes_read != nullptr) {
             *bytes_read = 0;
@@ -399,6 +412,7 @@ TL_MSABI int tl_ReadFile(const void* const handle, void* const buffer,
         set_last_error(win32_error);
         return 0;
     }
+    synchronize_file_position(slot, fd);
     if (bytes_read != nullptr) {
         *bytes_read = static_cast<std::uint32_t>(read_bytes);
     }

@@ -151,3 +151,18 @@ subconjunto agora valida os ponteiros de saída, zera as saídas válidas e reto
 Authenticode. O teste `Crypt32Test.CryptQueryObjectRejectsUnsupportedInputWithoutFabricatedHandles`
 passa nos builds ON/OFF; o smoke do Notepad++ continua reproduzindo o bloqueio
 controlado já documentado, sem regressão nem suporte falso a certificados.
+
+## Evidência E5 — posição de arquivo após I/O
+
+O `FileSlot` agora sincroniza sua posição com o descritor Linux depois de cada
+`ReadFile` ou `WriteFile` bem-sucedido. Antes, um `SetFilePointer` relativo ao
+deslocamento atual podia reutilizar uma posição obsoleta mantida pelo runtime;
+isso fazia um consumidor genérico reler ou reescrever uma região incorreta.
+
+Os testes de leitura, escrita, seek e metadados wide passaram sequencialmente
+nos builds Rust ON e C++ OFF. A sondagem de `IDOK` do WinRAR deixou de repetir
+leituras no mesmo deslocamento e avançou até enumeração, criação de janela e
+chamadas de atributos; o bloqueio posterior (`set-attributes` fora do
+subconjunto e exceção C++ ignorada no worker) continua sendo uma limitação
+controlada. Nenhum código específico de WinRAR, DLL ou shim foi adicionado ao
+runtime.

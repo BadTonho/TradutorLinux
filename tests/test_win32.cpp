@@ -718,6 +718,48 @@ TEST(Win32FileTest, SetFilePointerSeeksToBeginning) {
     tl_CloseHandle(handle);
 }
 
+TEST(Win32FileTest, ReadFileAdvancesCurrentPosition) {
+    TempDirFixture ctx;
+    const std::string fpath = ctx.path("read_current_test.bin");
+    FILE* f = std::fopen(fpath.c_str(), "wb");
+    ASSERT_NE(f, nullptr);
+    const char data[] = "0123456789";
+    std::fwrite(data, 1, sizeof(data) - 1, f);
+    std::fclose(f);
+
+    void* const handle = tl_CreateFileA(fpath.c_str(), abi::kGenericRead, 0, nullptr,
+                                        abi::kOpenExisting, 0, nullptr);
+    ASSERT_NE(handle, nullptr);
+    char first[4]{};
+    std::uint32_t bytes_read = 0;
+    ASSERT_EQ(tl_ReadFile(handle, first, sizeof(first), &bytes_read, nullptr), 1);
+    ASSERT_EQ(bytes_read, sizeof(first));
+
+    const std::int32_t position = tl_SetFilePointer(handle, 0, nullptr, 1);
+    EXPECT_EQ(position, 4);
+    char second[4]{};
+    ASSERT_EQ(tl_ReadFile(handle, second, sizeof(second), &bytes_read, nullptr), 1);
+    EXPECT_EQ(std::string(second, sizeof(second)), "4567");
+    tl_CloseHandle(handle);
+}
+
+TEST(Win32FileTest, WriteFileAdvancesCurrentPosition) {
+    TempDirFixture ctx;
+    const std::string fpath = ctx.path("write_current_test.bin");
+    void* const handle = tl_CreateFileA(fpath.c_str(), abi::kGenericRead | abi::kGenericWrite,
+                                        0, nullptr, abi::kCreateAlways, 0, nullptr);
+    ASSERT_NE(handle, nullptr);
+    const char data[] = "payload";
+    std::uint32_t bytes_written = 0;
+    ASSERT_EQ(tl_WriteFile(handle, data, sizeof(data) - 1, &bytes_written, nullptr), 1);
+    ASSERT_EQ(bytes_written, sizeof(data) - 1);
+
+    std::int64_t position = -1;
+    ASSERT_EQ(tl_SetFilePointerEx(handle, 0, &position, 1), 1);
+    EXPECT_EQ(position, static_cast<std::int64_t>(sizeof(data) - 1));
+    tl_CloseHandle(handle);
+}
+
 TEST(Win32FileTest, SetFilePointerSeekFromEnd) {
     TempDirFixture ctx;
     const std::string fpath = ctx.path("seek_end_test.bin");

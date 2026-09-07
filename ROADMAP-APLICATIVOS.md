@@ -1045,6 +1045,44 @@ Aceitação:
 - [x] Authenticode, CMS, loja do sistema e suporte específico de aplicativo
   continuam fora do contrato.
 
+### E5 — Posição de arquivo consistente após I/O
+
+Objetivo: corrigir uma divergência genérica entre o deslocamento mantido pelo
+runtime e o deslocamento real do descritor Linux, observada durante a
+investigação do fluxo de arquivos do WinRAR, sem introduzir qualquer regra
+específica de aplicativo.
+
+Tarefas:
+
+- [x] Sincronizar `FileSlot::position` depois de leituras e escritas bem-
+  sucedidas, mantendo handles especiais e descritores host sem estado global.
+- [x] Adicionar regressões para `ReadFile`/`WriteFile` seguidos de
+  `SetFilePointer(FILE_CURRENT)` e `SetFilePointerEx(FILE_CURRENT)`.
+- [x] Repetir os testes relevantes nos builds Rust ON e C++ OFF.
+- [x] Repetir a sondagem do WinRAR SFX sem transformar a exploração em suporte
+  declarado nem adicionar DLL, shim ou regra específica.
+
+Aceitação:
+
+- [x] As posições observadas após I/O coincidem com o deslocamento host nos
+  dois builds, e os testes existentes de seek e metadados continuam passando.
+- [x] A sondagem do WinRAR deixa de repetir leituras no mesmo deslocamento e
+  avança para chamadas posteriores; o bloqueio seguinte permanece controlado
+  e não é tratado nesta etapa.
+- [x] O runtime continua genérico e a matriz não promove o WinRAR para uso
+  diário ou extração interativa.
+
+Evidência E5 de 2026-09-07:
+
+- [x] O filtro unitário com cinco casos passou sequencialmente em
+  `build/debug-rust` e `build/debug`: posição após leitura, posição após
+  escrita, seeks existentes e metadados wide.
+- [x] A sondagem de `IDOK` do WinRAR avançou de leituras repetidas para
+  enumeração, criação de `RarHtmlClassName` e chamadas posteriores. O cenário
+  ainda terminou em falha controlada após `set-attributes` não suportado e
+  exceção C++ ignorada no worker (`guest-signal`/`SIGTRAP`); não houve
+  alteração específica do aplicativo.
+
 ## Regras de validação
 
 - Cada correção começa com uma fixture mínima e termina com testes automatizados.
