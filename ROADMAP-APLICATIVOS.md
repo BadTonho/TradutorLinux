@@ -325,15 +325,25 @@ por acidente.
 
 Tarefas:
 
-- [ ] Manter a rejeição `Unsupported` para PE32/x86 enquanto não houver decisão.
-- [ ] Avaliar custo, arquitetura e impacto no loader em documento separado.
-- [ ] Só iniciar implementação após atualizar `ROADMAP.md`, contratos,
-  compatibilidade e testes, com autorização explícita.
+- [x] Manter a rejeição `Unsupported` para PE32/x86 enquanto não houver fase
+  própria ou autorização explícita.
+- [x] Avaliar custo, arquitetura e impacto no loader em
+  `docs/arquitetura/pe32-x86-decision.md`.
+- [x] Registrar que nenhuma implementação será iniciada antes de atualizar
+  `ROADMAP.md`, contratos, compatibilidade e testes, com autorização explícita.
+
+Decisão registrada em 2026-09-07:
+
+- PE32/x86 continua fora do escopo operacional;
+- o parser deve rejeitar a arquitetura antes de mapear ou executar;
+- a abertura de uma fase x86 exige desenho de execução, ABI, fixtures e
+  autorização própria;
+- PE32+ AMD64, Proton e os caminhos já suportados não mudam.
 
 Aceitação:
 
-- [ ] Existe uma decisão registrada: manter fora do escopo ou abrir uma fase
-  própria com critérios técnicos.
+- [x] Existe uma decisão registrada para manter PE32/x86 fora do escopo, com
+  critérios técnicos de reabertura.
 
 ## Regras de validação
 
