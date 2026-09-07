@@ -886,16 +886,35 @@ Objetivo: repetir a matriz completa depois de cada alteração de D1–D3.
 
 Tarefas:
 
-- [ ] Reexecutar `--report` nos 27 arquivos em Rust ON/C++ OFF.
-- [ ] Reexecutar a matriz nativa sob Xvfb válido e a instalação seletiva em
+- [x] Reexecutar `--report` nos 27 arquivos em Rust ON/C++ OFF.
+- [x] Reexecutar a matriz nativa sob Xvfb válido e a instalação seletiva em
   prefixos temporários.
-- [ ] Comparar stdout, stderr, exit codes, traces, limpeza e símbolos OFF;
+- [x] Comparar stdout, stderr, exit codes, traces, limpeza e símbolos OFF;
   atualizar a matriz sem promover limitações não resolvidas.
 
 Aceitação:
 
-- [ ] Todos os marcos alterados possuem commit separado e evidência em `/tmp`.
-- [ ] `git diff --check` passa e o worktree fica limpo antes da próxima rodada.
+- [x] Todos os marcos alterados possuem commit separado e evidência em `/tmp`.
+- [x] `git diff --check` passa e o worktree fica limpo antes da próxima rodada.
+
+Evidência D4 de 2026-09-07:
+
+- [x] O `--report` foi repetido nos 27 arquivos listados no corpus, usando
+  `build/debug-rust` e `build/debug`. Os dois backends produziram 13 exits `0`,
+  12 exits `5` e 2 exits `4`; exit code e stdout coincidiram em 27/27. Nenhum
+  caso de report registrou eventos de loader, runtime ou processo.
+- [x] A matriz nativa foi repetida para `7z_x64.exe`, os dois WinRAR, Rockstar,
+  Rufus, Notepad++, PuTTY e 7zFM, sob Xvfb próprio, `--timeout 3`, `--cpu 3`
+  e `--memory 512`. Exit code e stdout coincidiram em 8/8; os campos
+  semânticos dos traces coincidiram em 8/8 e todos os APPDATA isolados ficaram
+  sem arquivos. `7z_x64.exe` retornou `0`, Rockstar `3`, Rufus `4` e os
+  cenários sem interação retornaram `72` por timeout controlado.
+- [x] A instalação seletiva D3 foi a regressão pós-D1/D2/D3 para Roblox, G HUB
+  e Affinity: pares ON/OFF preservaram exits `3/1/4`, stdout vazio e zero
+  arquivos, sem `extracted` ou `registered`.
+- [x] O `nm` com nomes exatos não encontrou símbolos dos adaptadores Rust no
+  executável nem na biblioteca estática C++ OFF. As evidências estão em
+  `/tmp/tl-d4-report.qUWazS`, `/tmp/tl-d4-run-valid.7XWPLv` e `/tmp/tl-d3-*`.
 
 ## Regras de validação
 

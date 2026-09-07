@@ -83,3 +83,21 @@ Os três pares tiveram stdout igual, zero arquivos no prefixo e no APPDATA e
 nenhum evento `extracted` ou `registered`. O resultado confirma diagnóstico
 controlado, não suporte funcional dos instaladores nem do conteúdo .NET/Mono do
 Affinity. As capturas ficam em `/tmp/tl-d3-*`.
+
+## Evidência D4 — regressão ON/OFF
+
+Após D3, o `--report` foi repetido nos 27 arquivos do corpus. Rust ON e C++
+OFF coincidiram em exit code e stdout em todos os casos: 13 sucessos, 12
+rejeições PE32/x86 e 2 rejeições estruturais. O modo report não registrou
+loader, runtime ou processo.
+
+A matriz nativa repetiu oito PE32+ sob Xvfb próprio, com limites de CPU/memória
+e timeout interno. Os exits e stdout coincidiram em todos, assim como os
+campos semânticos dos traces. O cenário sem interação de WinRAR e das GUIs
+terminou com `guest-timeout` `72`; isso é uma limitação controlada do cenário,
+não uma promoção de suporte. Os diretórios APPDATA isolados permaneceram
+vazios e os Xvfb foram encerrados ao final.
+
+As capturas reproduzíveis estão em `/tmp/tl-d4-report.qUWazS` e
+`/tmp/tl-d4-run-valid.7XWPLv`. A verificação de símbolos exatos não encontrou
+adaptadores Rust no binário C++ OFF.
