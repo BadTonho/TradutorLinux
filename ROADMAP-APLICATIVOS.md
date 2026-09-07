@@ -1439,6 +1439,43 @@ Evidência reproduzível de 2026-09-07:
 - [x] Ambos emitiram `7-Zip CLI stored test/delete/update/deflate/7z
   lifecycle: ok` e removeram o staging temporário.
 
+### E17 — I/O padrão do 7-Zip CLI
+
+Objetivo: cobrir o uso do 7-Zip como filtro de linha de comando, alimentando
+um arquivo por stdin e extraindo o conteúdo por stdout, sem depender de um
+arquivo intermediário para a segunda metade do ciclo.
+
+Tarefas:
+
+- [x] Criar um ZIP `stored` com `7z a -si...`, encaminhando um payload
+  controlado pelo smoke para o stdin do processo convidado.
+- [x] Extrair o item com `7z e -so` e comparar stdout byte a byte com o
+  payload original, mantendo os limites externos e a captura separada de
+  stderr/trace.
+- [x] Reexecutar o ciclo completo existente e o cenário de I/O padrão em
+  Rust ON e C++ OFF, sem adicionar lógica específica ao runtime.
+
+Aceitação:
+
+- [x] A criação via stdin e a extração via stdout terminam com exit `0`,
+  carregam/descartam `7z.dll` corretamente e não contaminam o payload com
+  diagnóstico do runtime.
+- [x] O ciclo anterior de ZIP `stored`, ZIP `DEFLATE`, `7z/LZMA2`, Unicode,
+  espaços, manutenção e caminhos relativos continua passando nos dois
+  backends.
+- [x] A cobertura permanece em `tests/apps/7zip/`, sem DLL, shim ou regra de
+  compatibilidade específica do aplicativo.
+
+Evidência reproduzível de 2026-09-07:
+
+- [x] `cmake --build build/debug-rust --target seven_zip_cli_smoke --parallel 2`
+  seguido de `ctest --test-dir build/debug-rust --output-on-failure -R
+  '^seven_zip_cli_smoke$'` passou (1/1) em 6,51 s.
+- [x] `cmake --build build/debug --target seven_zip_cli_smoke --parallel 2`
+  seguido do mesmo filtro em `build/debug` passou (1/1) em 7,97 s.
+- [x] Ambos emitiram `7-Zip CLI stored test/delete/update/deflate/7z/stdin
+  lifecycle: ok` e removeram o staging temporário.
+
 ### E11 — Matriz CTest dos smokes GUI do corpus
 
 Objetivo: tornar os cenários GUI reais já validados em D2/E1/E2 descobríveis e

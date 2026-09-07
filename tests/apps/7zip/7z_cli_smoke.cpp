@@ -5,6 +5,7 @@
 #include <fstream>
 #include <iostream>
 #include <iterator>
+#include <optional>
 #include <string>
 #include <thread>
 #include <vector>
@@ -66,10 +67,18 @@ void stop_process(const pid_t pid) {
                                          const std::filesystem::path& prefix,
                                          const std::vector<std::string>& guest_arguments,
                                          const std::filesystem::path& output_path,
-                                         const std::filesystem::path& error_path) {
+                                         const std::filesystem::path& error_path,
+                                         const std::optional<std::filesystem::path>& input_path =
+                                             std::nullopt) {
+    int input_fd = -1;
+    if (input_path.has_value()) {
+        input_fd = ::open(input_path->c_str(), O_RDONLY);
+        if (input_fd < 0) return {};
+    }
     const int output_fd = ::open(output_path.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0600);
     const int error_fd = ::open(error_path.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0600);
     if (output_fd < 0 || error_fd < 0) {
+        if (input_fd >= 0) ::close(input_fd);
         if (output_fd >= 0) ::close(output_fd);
         if (error_fd >= 0) ::close(error_fd);
         return {};
@@ -92,14 +101,17 @@ void stop_process(const pid_t pid) {
     const pid_t pid = ::fork();
     if (pid == 0) {
         (void)::setpgid(0, 0);
+        if (input_fd >= 0) (void)::dup2(input_fd, STDIN_FILENO);
         (void)::dup2(output_fd, STDOUT_FILENO);
         (void)::dup2(error_fd, STDERR_FILENO);
+        if (input_fd >= 0) ::close(input_fd);
         ::close(output_fd);
         ::close(error_fd);
         (void)::setenv("TL_PREFIX", prefix.c_str(), 1);
         ::execv(runtime.c_str(), argv.data());
         ::_exit(127);
     }
+    if (input_fd >= 0) ::close(input_fd);
     ::close(output_fd);
     ::close(error_fd);
     if (pid < 0) return {};
@@ -119,12 +131,16 @@ void stop_process(const pid_t pid) {
     return result;
 }
 
-[[nodiscard]] bool contains_loader_lifecycle(const CommandResult& result,
-                                              const std::string& operation) {
+[[nodiscard]] bool contains_loader_events(const CommandResult& result) {
     return !result.timed_out && result.exit_code == 0 &&
            result.stderr_text.find("dll-mapped module=\"7z.dll\"") != std::string::npos &&
            result.stderr_text.find("dll-attach module=\"7z.dll\"") != std::string::npos &&
-           result.stderr_text.find("dll-unload module=\"7z.dll\"") != std::string::npos &&
+           result.stderr_text.find("dll-unload module=\"7z.dll\"") != std::string::npos;
+}
+
+[[nodiscard]] bool contains_loader_lifecycle(const CommandResult& result,
+                                              const std::string& operation) {
+    return contains_loader_events(result) &&
            result.stdout_text.find("Everything is Ok") != std::string::npos &&
            (operation.empty() || result.stdout_text.find(operation) != std::string::npos);
 }
@@ -200,12 +216,15 @@ int main(const int argc, char** argv) {
     const std::filesystem::path stored_archive = staging / "payload-stored.zip";
     const std::filesystem::path deflate_archive = staging / "payload-deflate.zip";
     const std::filesystem::path seven_zip_archive = staging / "payload.7z";
+    const std::filesystem::path stdin_payload = staging / "stdin-input.txt";
+    const std::filesystem::path stdin_archive = staging / "payload-stdin.zip";
     const std::string stored_archive_name = stored_archive.filename().string();
     const std::string deflate_archive_name = deflate_archive.filename().string();
     const std::string seven_zip_archive_name = seven_zip_archive.filename().string();
+    const std::string stdin_archive_name = stdin_archive.filename().string();
     if (!std::filesystem::create_directories(unicode_directory, error) || error ||
         !write_input(input, kPayload) || !write_input(updated_input, "updated payload\n") ||
-        !write_input(unicode_input, kUnicodePayload)) {
+        !write_input(unicode_input, kUnicodePayload) || !write_input(stdin_payload, kPayload)) {
         std::cerr << "falha ao criar a entrada do smoke\n";
         std::filesystem::remove_all(staging, error);
         return 1;
@@ -274,6 +293,14 @@ int main(const int argc, char** argv) {
         runtime, staged_executable, prefix,
         {"x", seven_zip_archive_name, "-oextracted-7z", "-y"},
         staging / "extract-7z.stdout", staging / "extract-7z.stderr");
+    const auto create_stdin = run_runtime(
+        runtime, staged_executable, prefix,
+        {"a", "-tzip", "-mm=Store", to_guest_path(stdin_archive),
+         "-siinput-from-stdin.txt"},
+        staging / "create-stdin.stdout", staging / "create-stdin.stderr", stdin_payload);
+    const auto extract_stdin = run_runtime(
+        runtime, staged_executable, prefix, {"e", stdin_archive_name, "-so"},
+        staging / "extract-stdin.stdout", staging / "extract-stdin.stderr");
 
     const bool extracted_stored =
         read_text(staging / "extracted-stored" / "input.txt") == kPayload;
@@ -332,7 +359,10 @@ int main(const int argc, char** argv) {
                     list_7z.stderr_text.find("dll-mapped module=\"7z.dll\"") !=
                         std::string::npos &&
                     contains_loader_lifecycle(extract_7z, "Size:") && extracted_7z &&
-                    extracted_7z_unicode;
+                    extracted_7z_unicode &&
+                    contains_loader_lifecycle(create_stdin, "Archive size:") &&
+                    contains_loader_events(extract_stdin) &&
+                    extract_stdin.stdout_text == kPayload;
     if (!ok) {
         std::cerr << "smoke do 7-Zip CLI falhou em " << staging << '\n';
         std::cerr << "create exit=" << create.exit_code << " timeout=" << create.timed_out << '\n';
@@ -368,13 +398,18 @@ int main(const int argc, char** argv) {
         std::cerr << "extract-7z exit=" << extract_7z.exit_code
                   << " timeout=" << extract_7z.timed_out << " extracted-7z=" << extracted_7z
                   << " extracted-7z-unicode=" << extracted_7z_unicode << '\n';
+        std::cerr << "create-stdin exit=" << create_stdin.exit_code
+                  << " timeout=" << create_stdin.timed_out << '\n';
+        std::cerr << "extract-stdin exit=" << extract_stdin.exit_code
+                  << " timeout=" << extract_stdin.timed_out
+                  << " exact-stdout=" << (extract_stdin.stdout_text == kPayload) << '\n';
         std::cerr << "list-deflate stdout:\n" << list_deflate.stdout_text;
         std::cerr << "list-7z stdout:\n" << list_7z.stdout_text;
         std::filesystem::remove_all(staging, error);
         return 1;
     }
 
-    std::cout << "7-Zip CLI stored test/delete/update/deflate/7z lifecycle: ok\n";
+    std::cout << "7-Zip CLI stored test/delete/update/deflate/7z/stdin lifecycle: ok\n";
     std::filesystem::remove_all(staging, error);
     return 0;
 }
