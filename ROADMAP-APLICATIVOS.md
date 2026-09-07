@@ -238,25 +238,51 @@ Aceitação:
   X11 é ambiental e que o cenário Xvfb cria a GUI e chega ao loop.
 - [x] Nenhuma conclusão de compatibilidade depende de uma sessão gráfica ausente.
 
-### A6 — Instaladores e fluxo de instalação
+### A6 concluído — instaladores e fluxo de instalação
+
+Evidência reproduzível de 2026-09-07:
+
+- [x] O `--report` analisou oito candidatos. `7-Zip_x64_Installer.exe`,
+  `CapCut_..._installer.exe`, `Creative_Cloud_Set-Up_7474.exe`,
+  `EpicInstaller-...exe`, `Notepad++_x64_Installer.exe` e `RTSSSetup737.exe`
+  retornaram exit `5`, `unsupported-architecture`, máquina `0x14c`.
+  `RobloxPlayerInstaller.exe` e `lghub_installer.exe` passaram a análise PE32+
+  x86-64.
+- [x] O comando `install` testou Roblox e G HUB em prefixos próprios, com
+  `--cpu 3`, `--memory 512` e timeout externo de 15 segundos. Roblox encerrou
+  com exit `3` após `RBXCRASH`; G HUB encerrou com exit `1` por `ExitProcess`.
+  Nenhum dos dois deixou arquivos do prefixo ou catálogo fora do diretório
+  temporário.
+- [x] O `install` do Affinity foi testado separadamente no prefixo temporário
+  e terminou com exit `4` antes da extração, pela rejeição ZIP64/limite já
+  documentada em A4.
+- [x] Não foram executados indiscriminadamente os instaladores x86 ou setups
+  que já falham na arquitetura; cada falha permaneceu controlada e sem
+  cadastro de aplicação.
+
+Conclusão: o fluxo de instalação mantém análise, execução e materialização
+separadas. Nenhum instalador testado nesta rodada foi promovido como suporte
+funcional; os próximos ganhos exigem primeiro PE32/x86, APIs faltantes ou
+fluxos específicos dos instaladores.
 
 Objetivo: validar instalação de forma isolada, sem executar indiscriminadamente
 instaladores obtidos da internet.
 
 Tarefas:
 
-- [ ] Selecionar instaladores por classe e analisar primeiro com `--report`.
-- [ ] Executar apenas com prefixo temporário, timeout externo, limite de
+- [x] Selecionar instaladores por classe e analisar primeiro com `--report`.
+- [x] Executar apenas com prefixo temporário, timeout externo, limite de
   memória e limpeza garantida.
-- [ ] Verificar catálogo, permissões, extração, PE interno e `app run` quando
-  aplicável.
-- [ ] Cobrir o caminho MSIX com parse, extração e validação separados.
+- [x] Verificar catálogo, permissões, extração, PE interno e `app run` quando
+  aplicável; as falhas ocorreram antes de cadastrar uma aplicação.
+- [x] Cobrir o caminho MSIX com parse, extração e validação separados.
 
 Aceitação:
 
-- [ ] Cada instalador testado tem fixture, comando, resultado e trace
-  registrados.
-- [ ] Falhas não deixam arquivos, catálogo ou prefixo parcial.
+- [x] Cada instalador testado tem comando, resultado e diagnóstico registrados;
+  fixtures do parser permanecem cobrindo as decisões estruturais.
+- [x] Falhas não deixaram arquivos, catálogo ou prefixo parcial nos diretórios
+  temporários observados.
 
 ### A7 — Proveniência e integridade dos downloads
 
