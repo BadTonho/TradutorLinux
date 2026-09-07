@@ -955,6 +955,40 @@ Evidência E1 de 2026-09-07:
   a extração dentro dos limites externos; esse fluxo continua explicitamente
   não suportado e não altera o runtime.
 
+### E2 — Bloqueio controlado de exceções C++ no Notepad++
+
+Objetivo: transformar o bloqueio observado depois da correção da ABI UTF-16
+em uma regressão negativa reproduzível, sem declarar suporte geral ao
+Notepad++ e sem criar código específico no runtime.
+
+Tarefas:
+
+- [x] Criar `tests/apps/notepadpp/notepadpp_smoke.cpp` para iniciar o programa
+  sob Xvfb próprio, fechar `Configurator` e o diálogo de `stylers.xml`, e
+  verificar o bloqueio de exceção C++ como falha controlada.
+- [x] Registrar o smoke como alvo separado no CMake, sem DLL, shim ou regra
+  específica do aplicativo.
+- [x] Executar o smoke nos builds Rust ON e C++ OFF e comparar saída, exit code,
+  trace, limpeza e ausência de timeout.
+- [x] Repetir a regressão relevante de `--report` e da matriz nativa.
+
+Aceitação:
+
+- [x] Notepad++ cria e mapeia `Configurator`, reproduz o diálogo de
+  `stylers.xml` e termina com `guest-signal`/exit `71`, sem `guest-timeout`.
+- [x] Rust ON e C++ OFF produzem o mesmo comportamento.
+- [x] A matriz mantém o Notepad++ fora da declaração de suporte geral enquanto
+  o fluxo principal e a interação de edição não forem validados.
+
+Evidência E2 de 2026-09-07:
+
+- [x] Os smokes ON/OFF reproduziram `Configurator`, `Load stylers.xml failed`,
+  cinco eventos `cxx-throw ignored` do worker e `guest-signal`, com exit `71`;
+  não houve `guest-timeout` nem alteração no runtime comum.
+- [x] O `--report` continuou equivalente nos dois builds: 584/584 imports e
+  stdout/exit idênticos. A execução sem interação continua no timeout já
+  registrado; o smoke E2 apenas torna o bloqueio pós-interação determinístico.
+
 ## Regras de validação
 
 - Cada correção começa com uma fixture mínima e termina com testes automatizados.

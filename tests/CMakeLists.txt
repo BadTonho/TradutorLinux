@@ -203,6 +203,14 @@ if(TL_XVFB_EXECUTABLE)
     target_link_libraries(winrar_sfx_smoke PRIVATE "${TL_X11_LIBRARY}")
     tl_enable_warnings(winrar_sfx_smoke)
     tl_enable_sanitizers(winrar_sfx_smoke)
+
+    add_executable(notepadpp_smoke
+        apps/notepadpp/notepadpp_smoke.cpp
+    )
+    target_include_directories(notepadpp_smoke PRIVATE "${TL_X11_INCLUDE_DIR}")
+    target_link_libraries(notepadpp_smoke PRIVATE "${TL_X11_LIBRARY}")
+    tl_enable_warnings(notepadpp_smoke)
+    tl_enable_sanitizers(notepadpp_smoke)
 endif()
 
 if(TL_BUILD_TARGET_APPS)

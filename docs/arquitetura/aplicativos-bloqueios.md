@@ -116,3 +116,16 @@ trace confirmou `IsDialogMessageW action="enter"`, expansão do ambiente e
 enumeração do arquivo SFX, mas a extração não terminou dentro dos limites
 externos. Por isso, a etapa registra apenas o cancelamento controlado; não há
 promoção da extração interativa nem do uso diário do WinRAR.
+
+## Evidência E2 — bloqueio C++/SEH do Notepad++
+
+O alvo separado `tests/apps/notepadpp/notepadpp_smoke.cpp` confirma primeiro a
+janela `Configurator` e o diálogo `Load stylers.xml failed`, fechando ambos por
+`WM_DELETE_WINDOW`. Em seguida, os builds Rust ON e C++ OFF produzem o mesmo
+trace: cinco eventos `cxx-throw ignored` do worker, `guest-signal` e exit `71`,
+sem `guest-timeout`. O resultado é uma falha controlada do convidado, não uma
+alegação de compatibilidade.
+
+O código `0xE06D7363` é a exceção C++ do aplicativo. O suporte atual cobre o
+subconjunto SEH explicitamente documentado, não despacho geral de exceções C++;
+por isso nenhum tratamento específico do Notepad++ foi adicionado ao runtime.
