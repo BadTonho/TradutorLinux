@@ -22,6 +22,18 @@ if(TL_POPULAR_APPS_DIR AND TARGET tradutorlinux)
             TIMEOUT 60
         )
     endif()
+
+    add_test(
+        NAME popular_apps_report_matrix
+        COMMAND ${CMAKE_COMMAND}
+            "-DTL_RUNTIME=$<TARGET_FILE:tradutorlinux>"
+            "-DTL_CORPUS=${TL_POPULAR_APPS_DIR}"
+            -P "${PROJECT_SOURCE_DIR}/tests/apps/verify_popular_apps_report.cmake"
+    )
+    set_tests_properties(popular_apps_report_matrix PROPERTIES
+        LABELS "runtime;apps;report;corpus"
+        TIMEOUT 900
+    )
 endif()
 
 add_executable(tl_rust_pe_contract_c rust_pe_contract_c.c)

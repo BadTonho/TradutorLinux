@@ -14,6 +14,11 @@ sem payload válido, caminhos relativos e o filtro stdin/stdout (`-si`/`-so`).
 O CMake registra o teste automaticamente quando `TL_POPULAR_APPS_DIR` aponta
 para `Aplicativos_Windows_Populares/`.
 
+O mesmo parâmetro registra `popular_apps_report_matrix`, que analisa os 26 PE
+selecionados e o MSIX do corpus e verifica os exit codes esperados sem mapear
+ou executar os arquivos. O caso é repetido no build Rust ON e no baseline C++
+OFF.
+
 Com o mesmo parâmetro e Xvfb disponível, os smokes GUI reais de 7-Zip File
 Manager, PuTTY, WinRAR SFX e Notepad++ também são registrados separadamente no
 CTest. Cada cenário cria seu próprio Xvfb/staging e mantém seu resultado

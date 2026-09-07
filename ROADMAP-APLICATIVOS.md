@@ -1572,6 +1572,39 @@ Evidência reproduzível de 2026-09-07:
 - [x] Ambos emitiram `7-Zip CLI stored test/delete/update/rename/deflate/7z/stdin/password/wrong-password
   lifecycle: ok` e removeram o staging temporário.
 
+### E21 — Matriz automatizada de análise do corpus
+
+Objetivo: transformar a identificação estrutural de cada solicitação do corpus
+em um teste CTest repetível, sem confundir `--report` com execução.
+
+Tarefas:
+
+- [x] Registrar um verificador CMake que execute `--report` nos 26 PE
+  selecionados e no `Affinity x64.msix`, cobrindo executáveis, DLLs,
+  instaladores, aplicativos x64 e candidatos PE32/x86.
+- [x] Fixar os exit codes esperados: `0` para análises concluídas, `4` para
+  rejeições estruturais e `5` para arquitetura/formato não suportado; casos
+  ausentes, timeout ou código inesperado fazem o teste falhar.
+- [x] Registrar o caso somente quando `TL_POPULAR_APPS_DIR` for fornecido,
+  mantendo o build padrão sem depender do corpus e sem executar entry points.
+
+Aceitação:
+
+- [x] CPU-Z, GPU-Z e HWMonitor são identificados automaticamente como PE32/x86
+  não suportados, em vez de serem executados indiscriminadamente.
+- [x] DLLs, instaladores, aplicativos PE32+ e MSIX recebem o resultado esperado
+  da matriz B4, com timeout individual e diagnóstico de caso em falha.
+- [x] A matriz passa nos builds Rust ON e C++ OFF sem alterar o runtime, o
+  loader ou o comportamento de execução.
+
+Evidência reproduzível de 2026-09-07:
+
+- [x] `ctest --test-dir build/debug-rust --output-on-failure -R
+  '^popular_apps_report_matrix$'` passou com 27/27 casos em 23,73 s.
+- [x] O mesmo filtro em `build/debug` passou com 27/27 casos em 20,10 s.
+- [x] O teste foi registrado com os labels `runtime;apps;report;corpus` e
+  permanece condicional ao diretório externo do corpus.
+
 ### E11 — Matriz CTest dos smokes GUI do corpus
 
 Objetivo: tornar os cenários GUI reais já validados em D2/E1/E2 descobríveis e

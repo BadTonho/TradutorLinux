@@ -20,6 +20,13 @@ Há três dimensões independentes:
 Assim, um aplicativo pode ter `supported` na resolução de imports e continuar
 `execution-failed` ou sem nível funcional no catálogo.
 
+O teste CTest `popular_apps_report_matrix`, habilitado quando
+`TL_POPULAR_APPS_DIR` aponta para o corpus pinado, repete a análise estrutural
+dos 26 PE selecionados e do pacote MSIX. Ele verifica os códigos esperados de
+sucesso (`0`), rejeição estrutural (`4`) e formato/arquitetura não suportados
+(`5`) sem mapear ou executar os arquivos; a mesma matriz é executada nos
+builds Rust ON e C++ OFF.
+
 ## Política de backend do parser PE — R21.3–R21.5
 
 Com `TL_BUILD_RUST=ON`, a execução direta de `--report` usa o resultado Rust
