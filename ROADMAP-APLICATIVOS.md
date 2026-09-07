@@ -1944,6 +1944,48 @@ Evidência reproduzível de 2026-09-07:
   `configuration reached, no bytes sent, guest-timeout 72`; o servidor foi
   encerrado com resultado inválido e nenhum processo de teste permaneceu.
 
+### E29 — WinSock carregado dinamicamente
+
+Objetivo: separar a capacidade genérica de carregar `WS2_32.dll` em tempo de
+execução da interação ainda bloqueada do PuTTY. Esta etapa não adiciona regra,
+DLL ou shim específico para aplicativo.
+
+Tarefas:
+
+- [x] Criar a fixture PE32+ `tl_dynamic_ws2.exe`, que importa somente APIs
+  básicas de `KERNEL32.dll`, carrega `ws2_32.dll` com `LoadLibraryA`, resolve
+  `WSAStartup`, `WSACleanup`, `socket` e `closesocket` com `GetProcAddress` e
+  abre/fecha um socket `AF_INET`/`SOCK_STREAM`.
+- [x] Cadastrar metadata, `--report` e execução da fixture na matriz CTest,
+  com saída `dynamic-ws2\n` e comparação Rust ON/C++ OFF.
+- [x] Repetir o cenário nos dois builds. Rust ON e C++ OFF passaram em
+  metadata, report e execução; o trace confirmou quatro seleções do provedor
+  builtin de `ws2_32.dll`, sem alterar o runtime.
+- [x] Registrar que a primeira execução dentro do sandbox retornou erro 13 ao
+  criar o socket por política ambiental. A repetição fora do sandbox passou;
+  a diferença é limitação de ambiente, não um skip funcional nem uma falha do
+  contrato WinSock.
+
+Critérios de saída:
+
+- [x] A carga dinâmica e a resolução de exports são exercitadas sem imports
+  estáticos de `WS2_32.dll` e sem código específico do PuTTY.
+- [x] stdout, exit code, metadata e report coincidem em Rust ON e C++ OFF.
+- [ ] O probe SSH do PuTTY ainda precisa alcançar a ação genérica de abertura
+  da sessão; a investigação seguinte deve verificar ativação de diálogo antes
+  de ampliar qualquer API de rede.
+
+Evidência reproduzível de 2026-09-07:
+
+- [x] `runtime_tl_dynamic_ws2_matches_readobj`, `app_run_tl_dynamic_ws2` e
+  `report_tl_dynamic_ws2_support` passaram em `build/debug-rust`.
+- [x] Os mesmos três testes, além de `fixture_tl_dynamic_ws2_metadata`,
+  passaram em `build/debug`.
+- [x] O arquivo real do PuTTY não possui imports estáticos de `WS2_32.dll`,
+  mas contém referências a `ws2_32.dll`/WinSock e usa `LoadLibraryA` e
+  `GetProcAddress`; portanto o próximo diagnóstico é a ativação da sessão,
+  não uma nova implementação app-specific.
+
 ## Regras de validação
 
 - Cada correção começa com uma fixture mínima e termina com testes automatizados.

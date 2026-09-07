@@ -59,6 +59,27 @@ fallback, alteração de loader, API nova, DLL específica ou shim. A matriz dev
 continuar distinguindo configuração GUI validada, conexão/handshake não
 alcançado e SSH completo fora do suporte declarado.
 
+## Evidência E29 — WinSock carregado dinamicamente
+
+A fixture genérica `tests/samples/src/tl_dynamic_ws2.c` cobre o caso que o
+relatório estático do PuTTY não revela: o convidado importa apenas
+`LoadLibraryA`/`GetProcAddress` de `KERNEL32.dll`, carrega `ws2_32.dll`, resolve
+`WSAStartup`, `WSACleanup`, `socket` e `closesocket`, abre um socket IPv4 TCP e
+o fecha. Ela não contém nome, regra ou export específico do PuTTY.
+
+`fixture_tl_dynamic_ws2_metadata`, `runtime_tl_dynamic_ws2_matches_readobj`,
+`app_run_tl_dynamic_ws2` e `report_tl_dynamic_ws2_support` passaram em Rust ON
+e C++ OFF em 2026-09-07. A execução inicial dentro do sandbox foi rejeitada no
+socket com código WinSock `13`; a repetição fora do sandbox passou nos dois
+builds. O trace confirmou a seleção do provedor builtin quatro vezes e a
+saída `dynamic-ws2\n`, demonstrando que o carregamento dinâmico já funciona.
+
+Essa evidência não promove o PuTTY nem altera o diagnóstico E28: como o
+listener SSH ainda recebe zero bytes, o próximo bloqueio é determinar se a
+ação `Open` da configuração chega ao diálogo genérico. Só depois de uma
+fixture mínima para esse evento será considerada qualquer alteração em
+`src/runtime/`.
+
 ## Evidência D2 — cenários GUI
 
 O smoke externo do 7-Zip File Manager passou nos builds C++ OFF e Rust ON. Ele

@@ -267,6 +267,9 @@ function(tl_add_pe_fixture target_name source_file manifest_file)
             elseif(target_name STREQUAL "tl_dynload")
                 set(runtime_extra_args
                     "-DEXPECTED_HEX=64796e6c6f61640a")
+            elseif(target_name STREQUAL "tl_dynamic_ws2")
+                set(runtime_extra_args
+                    "-DEXPECTED_HEX=64796e616d69632d7773320a")
             elseif(target_name STREQUAL "tl_version")
                 set(runtime_extra_args
                     "-DEXPECTED_HEX=76657273696f6e0a")
@@ -1125,6 +1128,10 @@ tl_add_pe_fixture(tl_registry_unicode src/tl_registry_unicode.c manifests/tl_reg
     REPORT_SYMBOL "RegCreateKeyExW")
 
 tl_add_pe_fixture(tl_dynload src/tl_dynload.c manifests/tl_dynload.json
+    LINK_KERNEL32 EXPECT_RESOLVED CONSOLE REPORT RELOCATABLE
+    REPORT_SYMBOL "LoadLibraryA")
+
+tl_add_pe_fixture(tl_dynamic_ws2 src/tl_dynamic_ws2.c manifests/tl_dynamic_ws2.json
     LINK_KERNEL32 EXPECT_RESOLVED CONSOLE REPORT RELOCATABLE
     REPORT_SYMBOL "LoadLibraryA")
 
