@@ -259,6 +259,14 @@ if(TL_XVFB_EXECUTABLE)
     tl_enable_warnings(putty_smoke)
     tl_enable_sanitizers(putty_smoke)
 
+    add_executable(putty_ssh_smoke
+        apps/putty/putty_ssh_smoke.cpp
+    )
+    target_include_directories(putty_ssh_smoke PRIVATE "${TL_X11_INCLUDE_DIR}")
+    target_link_libraries(putty_ssh_smoke PRIVATE "${TL_X11_LIBRARY}")
+    tl_enable_warnings(putty_ssh_smoke)
+    tl_enable_sanitizers(putty_ssh_smoke)
+
     add_executable(winrar_sfx_smoke
         apps/winrar/winrar_sfx_smoke.cpp
     )
@@ -305,6 +313,17 @@ if(TL_XVFB_EXECUTABLE)
             set_tests_properties(putty_real_gui_smoke PROPERTIES
                 LABELS "runtime;apps;gui;putty"
                 TIMEOUT 60
+                SKIP_RETURN_CODE 77
+            )
+            add_test(
+                NAME putty_ssh_local_probe
+                COMMAND putty_ssh_smoke
+                    "$<TARGET_FILE:tradutorlinux>"
+                    "${TL_PUTTY_EXECUTABLE}"
+            )
+            set_tests_properties(putty_ssh_local_probe PROPERTIES
+                LABELS "runtime;apps;gui;network;putty"
+                TIMEOUT 45
                 SKIP_RETURN_CODE 77
             )
         endif()

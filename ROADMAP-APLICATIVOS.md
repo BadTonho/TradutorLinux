@@ -1897,24 +1897,52 @@ Escopo:
 
 Tarefas:
 
-- [ ] Definir o protocolo mínimo do servidor local e os critérios observáveis
+- [x] Definir o protocolo mínimo do servidor local e os critérios observáveis
   de sucesso, rejeição e encerramento, com timeout externo e prefixo isolado.
-- [ ] Criar o smoke interativo que configure o PuTTY sem depender de cliques
-  por coordenadas frágeis, valide o trace de socket/eventos e compare Rust ON
-  com C++ OFF.
-- [ ] Capturar a primeira falha genérica após a conexão e criar uma fixture
-  mínima antes de alterar `src/runtime/` ou módulos compartilhados.
-- [ ] Repetir `--report`, execução, limpeza e ausência de processos residuais;
-  não promover o PuTTY a suporte geral por um handshake parcial.
+  O probe abre um listener TCP em `127.0.0.1` numa porta efêmera, aceita no
+  máximo uma conexão, lê uma linha limitada a 256 bytes e só considera válido
+  um banner `SSH-*` terminado em `\r\n`; o servidor encerra em 10 s.
+- [x] Criar o smoke interativo que configure o PuTTY sem depender de cliques
+  por coordenadas frágeis, valide a criação da configuração, a seleção do
+  provedor `WS2_32.dll`, o timeout controlado e compare Rust ON com C++ OFF.
+  A entrada é enviada por `KeyPress`/`KeyRelease` X11 direcionados à janela,
+  usando foco inicial, Tab e Return; o cenário não acessa a Internet.
+- [x] Capturar a primeira falha genérica após a conexão e criar uma fixture
+  mínima antes de alterar `src/runtime/` ou módulos compartilhados. O primeiro
+  bloqueio continua anterior ao handshake: o servidor recebeu zero bytes e o
+  trace não registrou chamada de socket/conexão; portanto nenhuma API nova foi
+  justificada nesta rodada.
+- [x] Repetir `--report`, execução, limpeza e ausência de processos residuais;
+  não promover o PuTTY a suporte geral por um handshake parcial. O novo
+  `putty_ssh_local_probe` e a matriz anterior de `--report` foram repetidos nos
+  builds Rust ON e C++ OFF, com prefixo temporário e Xvfb encerrado ao final.
 
 Critérios de saída:
 
-- [ ] O cenário local termina com stdout, exit code e trace determinísticos em
+- [x] O cenário local termina com stdout, exit code e trace determinísticos em
   Rust ON e C++ OFF, ou falha controladamente com a limitação identificada.
-- [ ] Não há acesso externo, fallback silencioso, DLL específica ou alteração
-  do caminho de outros aplicativos.
-- [ ] A matriz de compatibilidade registra separadamente conexão parcial,
-  configuração GUI e SSH completo.
+  Nos dois builds, a configuração é criada, o listener recebe zero bytes e o
+  processo termina com `guest-timeout 72`; o probe registra esse estado como
+  limitação esperada e retorna sucesso ao CTest.
+- [x] Não há acesso externo, fallback silencioso, DLL específica ou alteração
+  do caminho de outros aplicativos. O código novo está isolado em
+  `tests/apps/putty/` e no cadastro CTest; o runtime geral não foi alterado.
+- [x] A matriz de compatibilidade registra separadamente conexão parcial,
+  configuração GUI e SSH completo: a configuração permanece validada, a
+  conexão/handshake permanece não alcançada e o SSH completo segue fora do
+  suporte declarado.
+
+Evidência reproduzível de 2026-09-07:
+
+- [x] `cmake --build build/debug-rust --target putty_ssh_smoke --parallel 2`
+  e `cmake --build build/debug --target putty_ssh_smoke --parallel 2` passaram.
+- [x] `ctest --test-dir build/debug-rust -R '^putty_ssh_local_probe$'
+  --output-on-failure` passou em 10,17 s.
+- [x] `ctest --test-dir build/debug -R '^putty_ssh_local_probe$'
+  --output-on-failure` passou em 10,33 s.
+- [x] As execuções manuais ON/OFF emitiram a mesma conclusão:
+  `configuration reached, no bytes sent, guest-timeout 72`; o servidor foi
+  encerrado com resultado inválido e nenhum processo de teste permaneceu.
 
 ## Regras de validação
 

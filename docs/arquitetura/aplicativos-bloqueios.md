@@ -42,6 +42,23 @@ a causa na largura host incorreta das APIs `lstr*W`, não em
 limites, e foi repetida em Rust ON/C++ OFF e Sanitizer. O timeout restante é
 uma limitação de interação GUI, não uma promoção de suporte.
 
+## Evidência E28 — probe SSH local do PuTTY
+
+O teste `putty_ssh_local_probe` usa `tests/apps/putty/putty_ssh_smoke.cpp` para
+separar a configuração GUI do primeiro passo de rede. Ele inicia um servidor
+TCP somente em `127.0.0.1`, em porta efêmera, envia host e porta à janela
+`PuTTY Configuration` por eventos `KeyPress`/`KeyRelease` X11 e aceita no
+máximo uma linha de banner de 256 bytes. O critério de handshake exige
+`SSH-*` seguido por `\r\n`; nenhuma conexão externa é permitida.
+
+Em 2026-09-07, o alvo passou nos builds Rust ON (`build/debug-rust`) e C++ OFF
+(`build/debug`). Nos dois casos a janela foi configurada, o listener recebeu
+zero bytes e o processo terminou de forma controlada com `guest-timeout 72`;
+o teste aceitou esse resultado somente como limitação reproduzível. Não houve
+fallback, alteração de loader, API nova, DLL específica ou shim. A matriz deve
+continuar distinguindo configuração GUI validada, conexão/handshake não
+alcançado e SSH completo fora do suporte declarado.
+
 ## Evidência D2 — cenários GUI
 
 O smoke externo do 7-Zip File Manager passou nos builds C++ OFF e Rust ON. Ele

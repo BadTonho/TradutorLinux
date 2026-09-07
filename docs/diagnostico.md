@@ -286,6 +286,13 @@ antes de o comando devolver `72`; se a limpeza não puder remover algum caminho
 alterado pelo convidado, o diagnóstico conserva esse caminho para evitar
 apagamento indevido.
 
+O probe local do PuTTY usa o mesmo diagnóstico de processo para registrar uma
+limitação de rede sem introduzir um evento específico no runtime: depois de
+configurar `PuTTY Configuration`, o servidor privado pode receber zero bytes e
+o convidado terminar com `category="guest-timeout"` (`72`). Esse resultado é
+distinto de um handshake SSH válido e não promove o aplicativo a suporte geral;
+o cenário não acessa a Internet e compara Rust ON com C++ OFF.
+
 O CLI também aceita `--cpu <segundos>` e `--memory <MiB>` para instalar limites
 opcionais no filho isolado; `0` significa sem limite. `--cpu` mede tempo de CPU
 (`RLIMIT_CPU`) e `--memory` limita o espaço de endereçamento virtual
