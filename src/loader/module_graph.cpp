@@ -406,8 +406,10 @@ std::optional<std::size_t> GuestModuleGraph::ensure_drive_module(
     const std::filesystem::path module_path{std::string{module_name}};
     // A profile DLL is deliberately not searched by directory. Its imports
     // must name another profile mapping explicitly; otherwise compat/ remains
-    // invisible and the normal drive_c search is used.
-    if (!requester.empty() && prefix::is_path_within(requester, paths.drive_c)) {
+    // invisible and the normal application-directory/drive_c search is used.
+    // The application directory is also required for direct runs whose
+    // executable is outside the prefix (the normal side-by-side DLL case).
+    if (!requester.empty() && !requester.parent_path().empty()) {
         candidates.push_back(requester.parent_path() / module_path);
     }
     candidates.push_back(paths.system32_dir / module_path);

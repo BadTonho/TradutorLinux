@@ -1151,6 +1151,48 @@ Evidência E7 de 2026-09-07:
   `std::system_error` ou `SIGABRT`; o trace termina no `cxx-throw`/`SIGTRAP`
   posterior do convidado.
 
+### E8 — DLLs lado a lado em execuções nativas
+
+Objetivo: corrigir a descoberta genérica de DLLs PE32+ AMD64 colocadas no
+diretório do executável, inclusive quando o aplicativo é executado diretamente
+fora de `drive_c`. Essa é a forma usada por aplicativos portáteis e pelo
+`7z_x64.exe`/`7z.dll`; não há regra específica do 7-Zip no runtime.
+
+Tarefas:
+
+- [x] Procurar primeiro o diretório do executável solicitante antes das pastas
+  do prefixo e dos módulos internos.
+- [x] Manter validação de arquivo regular sem symlink, parsing PE32+ AMD64,
+  mapeamento, relocations, imports, attach/detach, refcount e W^X.
+- [x] Adicionar regressão unitária do `GuestModuleGraph` para um executável
+  externo e uma DLL irmã.
+- [x] Repetir a fixture `tl_dynload` e a matriz relevante em Rust ON e C++ OFF.
+- [x] Executar o 7-Zip real com `7z.dll` ao lado, listar um ZIP `stored` por
+  `Z:\...` e comparar stdout, exit code e trace de carregamento nos dois builds.
+
+Aceitação:
+
+- [x] DLLs PE ao lado do executável são encontradas sem entrar em
+  `compat/apps/` e sem alterar módulos compartilhados por aplicativo.
+- [x] A fixture unitária passa em Rust ON e C++ OFF; `tl_dynload` continua
+  passando nos dois builds.
+- [x] O 7-Zip real mapeia/anexa/descarrega `7z.dll`, lista o ZIP e termina com
+  exit `0`; stdout Rust/C++ é byte a byte igual.
+- [x] Operações não exercitadas além da listagem e o suporte a DLL como
+  aplicativo independente permanecem fora da declaração de compatibilidade.
+
+Evidência E8 de 2026-09-07:
+
+- [x] `ModuleGraphTest.LoadsDriveDllFromExternalApplicationDirectory` passou
+  em `build/debug-rust` e `build/debug`.
+- [x] `runtime_tl_dynload_matches_readobj` e `app_run_tl_dynload` passaram nos
+  dois builds.
+- [x] Com `7z_x64.exe` e `7z.dll` no corpus original, um ZIP temporário foi
+  listado por `Z:\tmp\...\payload.zip`: ambos os builds retornaram `0`,
+  produziram SHA-256 de stdout
+  `52efd5e3a6b52adc449a1f7702b9cafb4bf53784b19104aa0fd250bc433c0f19` e
+  registraram onze descobertas de `7z.dll`.
+
 ## Regras de validação
 
 - Cada correção começa com uma fixture mínima e termina com testes automatizados.

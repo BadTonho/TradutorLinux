@@ -201,7 +201,7 @@ caminho D3D11→DXVK/Vulkan em X11. O trace do adaptador continua no stderr:
 
 ## Eventos do grafo de DLLs por perfil
 
-Quando `app run --trace` usa um perfil v2, o componente `loader` registra o
+Quando uma execução nativa usa um perfil v2, o componente `loader` registra o
 provider escolhido e o ciclo de vida das DLLs PE32+ AMD64. Os eventos usam
 `module` normalizado e, quando aplicável, `provider` com `profile`, `drive_c`
 ou `builtin`:
@@ -229,6 +229,14 @@ inválido, import não resolvido ou falha de `DllMain` em uma DLL do perfil usam
 `provider-rejected`, com o motivo em `detail`, e descartam o provider inteiro
 antes de executar o entry point. O runtime então registra o provider de
 fallback quando houver um.
+
+Para a busca normal de DLLs PE, o primeiro diretório de arquivo é o diretório
+da aplicação solicitante, inclusive quando o executável foi chamado diretamente
+fora do prefixo. Depois dele vêm `drive_c`, `C:\Windows\System32`,
+`C:\Windows` e a raiz de `C:`. O trace mantém os eventos de descoberta,
+mapeamento, attach e unload; a execução de código encontrado ao lado do
+aplicativo continua sujeita às mesmas validações PE32+ AMD64, relocations,
+imports, W^X e isolamento do convidado.
 
 O loader não registra nem expõe a pasta `compat/` ao convidado. Não há evento
 de descoberta automática: dependências de DLLs nessa pasta também precisam ser

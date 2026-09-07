@@ -181,6 +181,30 @@ TEST_F(ModuleGraphTest, LoadsAndUnloadsProfileDllWithReferenceCounting) {
     EXPECT_FALSE(graph.is_valid_module_handle(handle));
 }
 
+TEST_F(ModuleGraphTest, LoadsDriveDllFromExternalApplicationDirectory) {
+    runtime::GuestContextScope scope(context_);
+    register_builtin_modules();
+    const std::filesystem::path application = root_ / "external" / "app.exe";
+    ASSERT_TRUE(std::filesystem::create_directories(application.parent_path()));
+    std::ofstream output(application.parent_path() / "shim.dll",
+                         std::ios::binary | std::ios::trunc);
+    ASSERT_TRUE(output);
+    const std::vector<std::byte> bytes = make_export_dll();
+    output.write(reinterpret_cast<const char*>(bytes.data()),
+                 static_cast<std::streamsize>(bytes.size()));
+    output.close();
+
+    GuestModuleGraph graph(root_, std::nullopt, application, false);
+    void* const handle = graph.load_library("shim.dll");
+    ASSERT_NE(handle, nullptr);
+    EXPECT_TRUE(graph.is_valid_module_handle(handle));
+    const GraphExportLookup entry = graph.get_proc_address(handle, "CustomEntry");
+    ASSERT_TRUE(entry.lookup.found);
+    EXPECT_NE(entry.lookup.address, 0U);
+    EXPECT_TRUE(graph.free_library(handle));
+    EXPECT_FALSE(graph.is_valid_module_handle(handle));
+}
+
 TEST_F(ModuleGraphTest, MissingProfileDllFallsBackToBuiltinProvider) {
     runtime::GuestContextScope scope(context_);
     register_builtin_modules();

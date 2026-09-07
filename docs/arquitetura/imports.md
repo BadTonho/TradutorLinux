@@ -5,11 +5,11 @@ Este documento descreve o contrato do resolvedor de imports, o registro de módu
 ## Visão geral
 
 1. `pe::parse_pe` lê a import table em `PeInfo::imports` e a delay import table em `PeInfo::delay_imports`. Ambas entregam DLLs com símbolos por nome ou ordinal e o RVA do slot correspondente na IAT (`ImportedSymbol::iat_rva`).
-2. `loader::prepare_process` mapeia a imagem (`map_image`), resolve os imports (`resolve_imports`) e prepara a pilha do thread inicial. Em `app run`, a resolução usa um `GuestModuleGraph` privado da execução para incluir providers de DLL do perfil.
+2. `loader::prepare_process` mapeia a imagem (`map_image`), resolve os imports (`resolve_imports`) e prepara a pilha do thread inicial. Nas execuções nativas não-Proton, a resolução usa um `GuestModuleGraph` privado da execução para incluir providers de DLL do perfil e DLLs PE ao lado do executável.
 3. `inspect_imports` classifica as duas tabelas sem alterar a imagem; `--report` usa esse resultado. Para cada símbolo resolvido, `resolve_imports` grava o endereço do export no slot da IAT (`write_image_bytes`), relaxando e restaurando as permissões das páginas cobertoras.
 4. Se qualquer importação falhar, o status geral da resolução falha, o entry point não é executado e o runtime retorna `5` (`Unsupported`).
 
-O registro de módulos genéricos é populado por `loader::register_builtin_modules()` antes do `prepare_process`. O CLI o chama automaticamente; os testes de unidade controlam o registro explicitamente (`register_module`/`clear_modules`). O grafo de DLLs PE não é global: cada execução cria seu próprio `GuestModuleGraph`, que consulta o perfil, `drive_c` e os módulos genéricos sem compartilhar handles ou imagens entre prefixos.
+O registro de módulos genéricos é populado por `loader::register_builtin_modules()` antes do `prepare_process`. O CLI o chama automaticamente; os testes de unidade controlam o registro explicitamente (`register_module`/`clear_modules`). O grafo de DLLs PE não é global: cada execução cria seu próprio `GuestModuleGraph`, que consulta o perfil, o diretório da aplicação, `drive_c` e os módulos genéricos sem compartilhar handles ou imagens entre prefixos.
 
 ## Registro de módulos internos
 
@@ -43,7 +43,7 @@ Os módulos internos registram exports com ordinais internos definidos pelo proj
 
 ## Grafo de módulos PE por execução
 
-Quando `app run` recebe um perfil v2, `GuestModuleGraph` mantém a árvore de
+Em uma execução nativa, `GuestModuleGraph` mantém a árvore de
 DLLs PE32+ AMD64 carregada naquela execução. Cada nó registra a imagem mapeada,
 `PeInfo` com imports/exports, base, provider, contagens de referências,
 dependências e estado de carregamento. O grafo pertence ao `GuestContext` e é
@@ -53,9 +53,10 @@ entre prefixos.
 Para cada módulo, o loader tenta os providers nesta ordem:
 
 1. mapeamento explícito do perfil em `compat/dlls/`;
-2. arquivo PE regular encontrado no diretório do módulo dentro de `drive_c`,
-   depois `C:\Windows\System32`, `C:\Windows` e a raiz de `C:`;
-3. export da implementação genérica registrada internamente.
+2. arquivo PE regular encontrado no diretório da aplicação solicitante;
+3. arquivo PE regular encontrado em `drive_c`, depois `C:\Windows\System32`,
+   `C:\Windows` e a raiz de `C:`;
+4. export da implementação genérica registrada internamente.
 
 A DLL do perfil não é descoberta pela listagem da pasta: inclusive suas
 dependências precisam estar no manifesto para usar `compat/dlls/`. O loader
@@ -236,7 +237,12 @@ O resolvedor reporta **todas** as entradas: para cada uma, um `ResolvedImport` c
 
 ### Carregamento dinâmico (Fase 12+)
 
-`KERNEL32.dll!LoadLibraryA/W`/`LoadLibraryExA/W`, `FreeLibrary`, `GetModuleHandleA/W`/`GetModuleHandleExA/W` e `GetProcAddress` usam o `GuestModuleGraph` quando a execução foi criada por `app run`. `LoadLibrary` normaliza o nome (filename após `\/:`, case-insensitive, adicionando ".dll"), procura o provider do perfil, `drive_c` ou o módulo genérico, incrementa a referência e executa attach. `GetProcAddress` usa o handle específico do módulo, aceita nome ou ordinal `<=0xFFFF` e ainda permite fallback por export conforme a política do grafo. `FreeLibrary` decrementa a referência e descarrega somente quando não há referências estáticas, dinâmicas ou dependências.
+`KERNEL32.dll!LoadLibraryA/W`/`LoadLibraryExA/W`, `FreeLibrary`, `GetModuleHandleA/W`/`GetModuleHandleExA/W` e `GetProcAddress` usam o `GuestModuleGraph` em execuções nativas não-Proton. `LoadLibrary` normaliza o nome (filename após `\/:`, case-insensitive, adicionando ".dll"), procura o provider do perfil, o diretório da aplicação, `drive_c` ou o módulo genérico, incrementa a referência e executa attach. `GetProcAddress` usa o handle específico do módulo, aceita nome ou ordinal `<=0xFFFF` e ainda permite fallback por export conforme a política do grafo. `FreeLibrary` decrementa a referência e descarrega somente quando não há referências estáticas, dinâmicas ou dependências.
+
+Em execuções nativas não-Proton, a busca do grafo inclui o diretório da
+aplicação antes das pastas do prefixo. Isso permite carregar uma DLL PE32+
+AMD64 lado a lado com um executável chamado diretamente, sem transformar essa
+DLL em módulo compartilhado do runtime.
 
 Sem `GuestModuleGraph`, o caminho legado continua restrito às implementações
 genéricas registradas por `loader::register_builtin_modules`. A fixture
