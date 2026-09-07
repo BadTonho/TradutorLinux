@@ -904,7 +904,9 @@ TL_MSABI int tl_GetDateFormatEx(const wchar_t* const lpLocaleName, const std::ui
     return len;
 }
 
-TL_MSABI wchar_t* tl_lstrcpynW(wchar_t* const lpString1, const wchar_t* const lpString2, const int iMaxLength) noexcept {
+TL_MSABI std::uint16_t* tl_lstrcpynW(std::uint16_t* const lpString1,
+                                     const std::uint16_t* const lpString2,
+                                     const int iMaxLength) noexcept {
     if (lpString1 == nullptr || iMaxLength <= 0) return lpString1;
     if (lpString2 == nullptr) {
         lpString1[0] = 0;
@@ -976,7 +978,8 @@ TL_MSABI int tl_GetStringTypeExA(const std::uint32_t Locale, const std::uint32_t
     return 1;
 }
 
-TL_MSABI wchar_t* tl_lstrcpyW(wchar_t* const lpString1, const wchar_t* const lpString2) noexcept {
+TL_MSABI std::uint16_t* tl_lstrcpyW(std::uint16_t* const lpString1,
+                                    const std::uint16_t* const lpString2) noexcept {
     if (lpString1 == nullptr) return nullptr;
     if (lpString2 == nullptr) {
         lpString1[0] = 0;
@@ -991,7 +994,8 @@ TL_MSABI wchar_t* tl_lstrcpyW(wchar_t* const lpString1, const wchar_t* const lpS
     return lpString1;
 }
 
-TL_MSABI int tl_lstrcmpW(const wchar_t* const lpString1, const wchar_t* const lpString2) noexcept {
+TL_MSABI int tl_lstrcmpW(const std::uint16_t* const lpString1,
+                         const std::uint16_t* const lpString2) noexcept {
     if (lpString1 == lpString2) return 0;
     if (lpString1 == nullptr) return -1;
     if (lpString2 == nullptr) return 1;
@@ -1006,7 +1010,8 @@ TL_MSABI int tl_lstrcmpW(const wchar_t* const lpString1, const wchar_t* const lp
     return lpString1[i] < lpString2[i] ? -1 : 1;
 }
 
-TL_MSABI int tl_lstrcmpiW(const wchar_t* const lpString1, const wchar_t* const lpString2) noexcept {
+TL_MSABI int tl_lstrcmpiW(const std::uint16_t* const lpString1,
+                          const std::uint16_t* const lpString2) noexcept {
     if (lpString1 == lpString2) return 0;
     if (lpString1 == nullptr) return -1;
     if (lpString2 == nullptr) return 1;

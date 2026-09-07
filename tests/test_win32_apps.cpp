@@ -288,6 +288,22 @@ TEST(SevenZipGuiCoverageTest, AllApisAndModules) {
     EXPECT_EQ(tl_LsaClose(policy), 0);
 }
 
+TEST(Win32LocaleTest, WideStringApisUseGuestUtf16Units) {
+    constexpr std::uint16_t source[] = {'C', ':', '\\', 'T', 'e', 'm', 'p', 0};
+    constexpr std::uint16_t other_case[] = {'c', ':', '\\', 't', 'e', 'm', 'p', 0};
+    std::uint16_t copied[16]{};
+    std::uint16_t bounded[16]{};
+
+    EXPECT_EQ(tl_lstrcpyW(copied, source), copied);
+    EXPECT_EQ(tl_lstrcpynW(bounded, source, 16), bounded);
+    EXPECT_EQ(tl_lstrcmpW(copied, source), 0);
+    EXPECT_EQ(tl_lstrcmpiW(copied, other_case), 0);
+    for (std::size_t index = 0; index < sizeof(source) / sizeof(source[0]); ++index) {
+        EXPECT_EQ(copied[index], source[index]);
+        EXPECT_EQ(bounded[index], source[index]);
+    }
+}
+
 TEST(PuttyCoverageTest, AllApisAndModules) {
     // WS2_32
     char wsa_data[512]{};

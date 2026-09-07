@@ -555,7 +555,8 @@ TL_MSABI int tl_SetHandleInformation(void* object, std::uint32_t mask, std::uint
 TL_MSABI int tl_WaitNamedPipeA(const char* name, std::uint32_t timeout) noexcept;
 TL_MSABI int tl_GetTimeFormatEx(const wchar_t* lpLocaleName, std::uint32_t dwFlags, const void* lpTime, const wchar_t* lpFormat, wchar_t* lpTimeStr, int cchTime) noexcept;
 TL_MSABI int tl_GetDateFormatEx(const wchar_t* lpLocaleName, std::uint32_t dwFlags, const void* lpDate, const wchar_t* lpFormat, wchar_t* lpDateStr, int cchDate, const wchar_t* lpCalendar) noexcept;
-TL_MSABI wchar_t* tl_lstrcpynW(wchar_t* lpString1, const wchar_t* lpString2, int iMaxLength) noexcept;
+TL_MSABI std::uint16_t* tl_lstrcpynW(std::uint16_t* lpString1, const std::uint16_t* lpString2,
+                                     int iMaxLength) noexcept;
 TL_MSABI int tl_GetApplicationRestartSettings(void* hProcess, wchar_t* pwzCommandLine, std::uint32_t* pcchSize, std::uint32_t* pdwFlags) noexcept;
 TL_MSABI int tl_UnregisterApplicationRestart() noexcept;
 TL_MSABI int tl_lstrcmpiA(const char* lpString1, const char* lpString2) noexcept;
@@ -567,11 +568,14 @@ TL_MSABI int tl_GetStringTypeExW(std::uint32_t Locale, std::uint32_t dwInfoType,
 TL_MSABI int tl_LCMapStringA(std::uint32_t Locale, std::uint32_t dwMapFlags, const char* lpSrcStr, int cchSrc, char* lpDestStr, int cchDest) noexcept;
 TL_MSABI int tl_GetStringTypeExA(std::uint32_t Locale, std::uint32_t dwInfoType, const char* lpSrcStr, int cchSrc, std::uint16_t* lpCharType) noexcept;
 TL_MSABI void tl_FreeLibraryWhenCallbackReturns(void* pci, void* module) noexcept;
-TL_MSABI wchar_t* tl_lstrcpyW(wchar_t* lpString1, const wchar_t* lpString2) noexcept;
+TL_MSABI std::uint16_t* tl_lstrcpyW(std::uint16_t* lpString1,
+                                    const std::uint16_t* lpString2) noexcept;
 TL_MSABI int tl_ReplaceFileW(const wchar_t* lpReplacedFileName, const wchar_t* lpReplacementFileName, const wchar_t* lpBackupFileName, std::uint32_t dwReplaceFlags, void* lpExclude, void* lpReserved) noexcept;
 TL_MSABI std::uint32_t tl_QueueUserAPC(void* pfnAPC, void* hThread, std::uintptr_t dwData) noexcept;
-TL_MSABI int tl_lstrcmpW(const wchar_t* lpString1, const wchar_t* lpString2) noexcept;
-TL_MSABI int tl_lstrcmpiW(const wchar_t* lpString1, const wchar_t* lpString2) noexcept;
+TL_MSABI int tl_lstrcmpW(const std::uint16_t* lpString1,
+                         const std::uint16_t* lpString2) noexcept;
+TL_MSABI int tl_lstrcmpiW(const std::uint16_t* lpString1,
+                          const std::uint16_t* lpString2) noexcept;
 TL_MSABI void* tl_CreateRemoteThread(void* process, void* attr, std::size_t stack, void* start, void* param, std::uint32_t flags, std::uint32_t* tid) noexcept;
 TL_MSABI void* tl_VirtualAllocEx(void* process, void* addr, std::size_t size, std::uint32_t type, std::uint32_t protect) noexcept;
 TL_MSABI int tl_VirtualFreeEx(void* process, void* addr, std::size_t size, std::uint32_t type) noexcept;

@@ -27,6 +27,10 @@
       "HeapSize",
       "InitializeSListHead",
       "IsValidCodePage",
+      "lstrcmpW",
+      "lstrcmpiW",
+      "lstrcpyW",
+      "lstrcpynW",
       "WriteFile"
     ],
     "SHELL32.dll": [

@@ -62,6 +62,13 @@ __attribute__((dllimport)) void* HeapReAlloc(void* heap, dword_t flags, void* me
 __attribute__((dllimport)) size_t_guest HeapSize(void* heap, dword_t flags,
                                                   const void* memory);
 __attribute__((dllimport)) bool_t HeapFree(void* heap, dword_t flags, void* memory);
+__attribute__((dllimport)) wchar16_t* lstrcpyW(wchar16_t* destination,
+                                               const wchar16_t* source);
+__attribute__((dllimport)) wchar16_t* lstrcpynW(wchar16_t* destination,
+                                                const wchar16_t* source,
+                                                int max_length);
+__attribute__((dllimport)) int lstrcmpW(const wchar16_t* left, const wchar16_t* right);
+__attribute__((dllimport)) int lstrcmpiW(const wchar16_t* left, const wchar16_t* right);
 __attribute__((dllimport)) long SHGetFolderPathW(void* hwnd, int csidl, void* token,
                                                   dword_t flags, wchar16_t* path);
 __attribute__((dllimport)) bool_t WriteFile(void* handle, const void* buffer,
@@ -130,30 +137,39 @@ void tl_entry(void) {
 
     GetStartupInfoW(&startup);
     if (startup.cb != sizeof(startup)) fail(10U);
+    static const wchar16_t copy_source[] = {'C', ':', '\\', 'T', 'e', 'm', 'p', 0};
+    static const wchar16_t compare_source[] = {'c', ':', '\\', 't', 'e', 'm', 'p', 0};
+    wchar16_t copied[32] = {0};
+    wchar16_t bounded[32] = {0};
+    if (lstrcpyW(copied, copy_source) != copied) fail(11U);
+    if (lstrcpynW(bounded, copy_source, 32) != bounded) fail(12U);
+    if (lstrcmpW(copied, copy_source) != 0) fail(13U);
+    const int insensitive_result = lstrcmpiW(copied, compare_source);
+    if (insensitive_result != 0) fail(insensitive_result < 0 ? 14U : 15U);
     unsigned char* first = (unsigned char*)HeapAlloc(heap, 0U, 512U);
     unsigned char* const second = (unsigned char*)HeapAlloc(heap, 0U, 4096U);
-    if (first == (unsigned char*)0 || second == (unsigned char*)0) fail(11U);
+    if (first == (unsigned char*)0 || second == (unsigned char*)0) fail(16U);
     for (size_t_guest index = 0U; index < 512U; ++index) first[index] = (unsigned char)index;
     for (size_t_guest index = 0U; index < 4096U; ++index) {
         second[index] = (unsigned char)(index ^ 0x5AU);
     }
-    if (HeapSize(heap, 0U, first) < 512U) fail(12U);
+    if (HeapSize(heap, 0U, first) < 512U) fail(17U);
     first = (unsigned char*)HeapReAlloc(heap, 0U, first, 1024U);
     if (first == (unsigned char*)0 || first[0] != 0U ||
-        HeapSize(heap, 0U, first) < 1024U) fail(13U);
+        HeapSize(heap, 0U, first) < 1024U) fail(18U);
 
     wchar16_t path[260] = {0};
-    if (SHGetFolderPathW((void*)0, 0x1A, (void*)0, 0U, path) != 0 || path[0] == 0) fail(14U);
+    if (SHGetFolderPathW((void*)0, 0x1A, (void*)0, 0U, path) != 0 || path[0] == 0) fail(19U);
     if (!HeapFree(heap, 0U, first) || !HeapFree(heap, 0U, second) ||
         !HeapFree(heap, 0U, environment_copy)) {
-        fail(15U);
+        fail(20U);
     }
 
     static const char message[] = "notepad-startup-probe\n";
     dword_t written = 0U;
     if (!WriteFile(output, message, (dword_t)(sizeof(message) - 1U), &written, (void*)0) ||
         written != (dword_t)(sizeof(message) - 1U)) {
-        fail(16U);
+        fail(21U);
     }
     ExitProcess(0U);
 }
