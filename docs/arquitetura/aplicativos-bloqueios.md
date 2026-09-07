@@ -35,6 +35,8 @@ Notepad++ foram executados com X11 funcional, preservando os mesmos resultados
 em Rust ON e C++ OFF. Portanto, o timeout do PuTTY e o SIGSEGV do Notepad++ não
 devem ser classificados como falhas de conexão X11.
 
-Nenhuma API nova ou mudança de loader é justificada por esta triagem. A C2
-precisa de um display válido e de uma hipótese específica antes de alterar
-qualquer caminho de execução.
+Nenhuma API nova ou mudança de loader foi justificada por esta triagem. A C2
+confirmou o comportamento sob display válido; a hipótese de corrupção de heap
+associada a `SHGetFolderPathW` ainda exige uma fixture mínima antes de qualquer
+alteração, porque `tl_shell` já cobre o caminho básico e passa. Não se deve
+relaxar W^X, isolamento ou limites para contornar os bloqueios.

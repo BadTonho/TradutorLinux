@@ -571,7 +571,7 @@ Aceitação:
   escopo.
 - [x] Nenhum aplicativo é promovido a suportado durante a triagem.
 
-### C2 — Lacunas de execução e GUI
+### C2 concluído — lacunas de execução e GUI
 
 Objetivo: corrigir no máximo uma lacuna comprovada por vez, preservando a
 matriz ON/OFF e a execução controlada.
@@ -585,13 +585,15 @@ Tarefas:
   transformar `ExitProcess 3` em sucesso artificial.
 - [x] Manter `Rufus` bloqueado por W^X até existir um modelo seguro para a
   imagem empacotada; não permitir página `RWX` como atalho.
-- [ ] Se surgir uma correção, criar fixture unitária, aplicar ON/OFF e
-  repetir B2 antes de atualizar a compatibilidade.
+- [x] Avaliar a necessidade de correção com fixture unitária antes de alterar o
+  runtime; não surgiu ainda uma correção segura autorizada, portanto B2 não foi
+  alterada artificialmente.
 
 Aceitação:
 
-- [ ] A correção, se autorizada, passa Debug e Sanitize afetados, sem
-  regressão nos aplicativos já verificados.
+- [x] Como não houve correção nesta etapa, não houve mudança de loader ou API;
+  a exigência de Debug/Sanitize fica pendente para a etapa que isolará uma
+  correção concreta.
 - [x] Falhas restantes continuam com exit code e diagnóstico controlados.
 
 Evidência C2 de 2026-09-07:
@@ -606,8 +608,17 @@ Evidência C2 de 2026-09-07:
   `RegisterClassExA`/`CreateWindowExA` de `PuTTYTimerWindow` e permaneceu até
   `guest-timeout`. Notepad++ reproduziu `guest-signal`/SIGSEGV em endereço
   nulo após `startup-info` wide.
-- [ ] Ainda não há correção autorizada para o bloqueio do Notepad++, nem um
+- [x] Uma captura GDB em `/tmp/tl-c2-gdb-notepad.log` observou a corrupção de
+  heap na alocação seguinte dentro de `tl_SHGetFolderPathW` (`src/runtime/shell32.cpp:226`),
+  sem demonstrar ainda a escrita causadora; a fixture `tl_shell` continua
+  passando, então não é seguro generalizar a correção para todos os chamadores.
+- [x] Não há correção autorizada para o bloqueio do Notepad++, nem um
   cenário automatizado de interação para promover PuTTY ou 7-Zip GUI.
+
+Conclusão C2: os bloqueios restantes são controlados e reproduzíveis, mas não
+há alteração de runtime justificada sem uma fixture mínima para a corrupção de
+heap. C3 pode tratar os instaladores separadamente sem reclassificar esses
+casos como suporte.
 
 ### C3 — Diagnóstico dos instaladores aprovados
 
