@@ -255,6 +255,10 @@ int main(const int argc, char** argv) {
         runtime, staged_executable, prefix,
         {"u", "-tzip", "-mm=Deflate", "-mx=1", stored_archive_name, "updated.txt"},
         staging / "update-stored.stdout", staging / "update-stored.stderr");
+    const auto rename_stored = run_runtime(
+        runtime, staged_executable, prefix,
+        {"rn", stored_archive_name, "updated.txt", "renamed.txt"},
+        staging / "rename-stored.stdout", staging / "rename-stored.stderr");
     const auto list_stored_final = run_runtime(
         runtime, staged_executable, prefix,
         {"l", "-slt", "-sccUTF-8", stored_archive_name},
@@ -311,10 +315,12 @@ int main(const int argc, char** argv) {
         read_text(staging / "extracted-stored-final" / unicode_relative) ==
         kUnicodePayload;
     const bool extracted_stored_final_updated =
-        read_text(staging / "extracted-stored-final" / "updated.txt") ==
+        read_text(staging / "extracted-stored-final" / "renamed.txt") ==
         "updated payload\n";
     const bool removed_stored_input =
         !std::filesystem::exists(staging / "extracted-stored-final" / "input.txt");
+    const bool renamed_stored_entry =
+        !std::filesystem::exists(staging / "extracted-stored-final" / "updated.txt");
     const bool extracted_deflate =
         read_text(staging / "extracted-deflate" / "input.txt") == kPayload;
     const bool extracted_deflate_unicode =
@@ -334,16 +340,18 @@ int main(const int argc, char** argv) {
                     contains_loader_lifecycle(test_stored, "Everything is Ok") &&
                     contains_loader_lifecycle(delete_stored, "Everything is Ok") &&
                     contains_loader_lifecycle(update_stored, "Everything is Ok") &&
+                    contains_loader_lifecycle(rename_stored, "Everything is Ok") &&
                     !list_stored_final.timed_out && list_stored_final.exit_code == 0 &&
                     list_stored_final.stdout_text.find("café-日本.txt") != std::string::npos &&
-                    list_stored_final.stdout_text.find("Path = updated.txt") !=
+                    list_stored_final.stdout_text.find("Path = renamed.txt") !=
                         std::string::npos &&
+                    list_stored_final.stdout_text.find("Path = updated.txt") == std::string::npos &&
                     list_stored_final.stdout_text.find("Path = input.txt") == std::string::npos &&
                     list_stored_final.stderr_text.find("dll-mapped module=\"7z.dll\"") !=
                         std::string::npos &&
                     contains_loader_lifecycle(extract_stored_final, "Everything is Ok") &&
                     extracted_stored_final_unicode && extracted_stored_final_updated &&
-                    removed_stored_input &&
+                    removed_stored_input && renamed_stored_entry &&
                     contains_loader_lifecycle(create_deflate, "Archive size:") &&
                     !list_deflate.timed_out && list_deflate.exit_code == 0 &&
                     list_deflate.stdout_text.find("Method = Deflate") != std::string::npos &&
@@ -376,12 +384,15 @@ int main(const int argc, char** argv) {
                   << " timeout=" << delete_stored.timed_out << '\n';
         std::cerr << "update-stored exit=" << update_stored.exit_code
                   << " timeout=" << update_stored.timed_out << '\n';
+        std::cerr << "rename-stored exit=" << rename_stored.exit_code
+                  << " timeout=" << rename_stored.timed_out << '\n';
         std::cerr << "list-stored-final exit=" << list_stored_final.exit_code
                   << " timeout=" << list_stored_final.timed_out << '\n';
         std::cerr << "extract-stored-final exit=" << extract_stored_final.exit_code
                   << " timeout=" << extract_stored_final.timed_out
                   << " extracted-stored-final-unicode=" << extracted_stored_final_unicode
                   << " extracted-stored-final-updated=" << extracted_stored_final_updated
+                  << " renamed-stored-entry=" << renamed_stored_entry
                   << " removed-stored-input=" << removed_stored_input << '\n';
         std::cerr << "create-deflate exit=" << create_deflate.exit_code
                   << " timeout=" << create_deflate.timed_out << '\n';
@@ -409,7 +420,7 @@ int main(const int argc, char** argv) {
         return 1;
     }
 
-    std::cout << "7-Zip CLI stored test/delete/update/deflate/7z/stdin lifecycle: ok\n";
+    std::cout << "7-Zip CLI stored test/delete/update/rename/deflate/7z/stdin lifecycle: ok\n";
     std::filesystem::remove_all(staging, error);
     return 0;
 }

@@ -1476,6 +1476,38 @@ Evidência reproduzível de 2026-09-07:
 - [x] Ambos emitiram `7-Zip CLI stored test/delete/update/deflate/7z/stdin
   lifecycle: ok` e removeram o staging temporário.
 
+### E18 — Renomeação de entradas no 7-Zip CLI
+
+Objetivo: ampliar o ciclo de manutenção de arquivos existentes com a operação
+`rn`, verificando que a alteração do nome permanece consistente entre a
+listagem técnica e a extração.
+
+Tarefas:
+
+- [x] Renomear `updated.txt` para `renamed.txt` dentro do ZIP `stored` depois
+  da remoção e atualização já cobertas pelo smoke.
+- [x] Exigir `Everything is Ok`, exit `0`, ciclo completo da `7z.dll` e
+  ausência do nome antigo na listagem e no diretório extraído.
+- [x] Reexecutar todo o ciclo em Rust ON e C++ OFF, preservando os cenários de
+  Unicode, espaços, caminhos relativos e stdin/stdout.
+
+Aceitação:
+
+- [x] `renamed.txt` aparece no `-slt`, `updated.txt` e `input.txt` não
+  aparecem, e os bytes extraídos de `renamed.txt` permanecem iguais ao
+  payload atualizado.
+- [x] A operação não introduz DLL, shim, regra de aplicativo ou estado
+  persistente no runtime.
+
+Evidência reproduzível de 2026-09-07:
+
+- [x] O filtro `^seven_zip_cli_smoke$` passou após compilar o alvo em
+  `build/debug-rust` (1/1, 6,90 s de CTest).
+- [x] O mesmo filtro passou após compilar o alvo em `build/debug` (1/1,
+  8,42 s de CTest).
+- [x] Ambos emitiram `7-Zip CLI stored test/delete/update/rename/deflate/7z/stdin
+  lifecycle: ok` e removeram o staging temporário.
+
 ### E11 — Matriz CTest dos smokes GUI do corpus
 
 Objetivo: tornar os cenários GUI reais já validados em D2/E1/E2 descobríveis e
