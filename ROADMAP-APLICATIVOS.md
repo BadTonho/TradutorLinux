@@ -580,7 +580,8 @@ Tarefas:
 
 - [x] Reproduzir `Notepad++` e `PuTTY` com Xvfb e traces reduzidos, isolando
   o primeiro resultado relevante: PuTTY cria `PuTTYTimerWindow` e aguarda;
-  Notepad++ alcança `startup-info` wide e termina com SIGSEGV em endereço nulo.
+  Notepad++ alcança `startup-info` wide e termina com sinal fatal controlado
+  durante a corrupção de heap (SIGSEGV ou SIGABRT, exit `71`).
 - [x] Reproduzir `Rockstar` com stdout/stderr e imports já resolvidos, sem
   transformar `ExitProcess 3` em sucesso artificial.
 - [x] Manter `Rufus` bloqueado por W^X até existir um modelo seguro para a
@@ -606,8 +607,9 @@ Evidência C2 de 2026-09-07:
   respectivamente.
 - [x] PuTTY não registrou `x11/connect-failed`: registrou
   `RegisterClassExA`/`CreateWindowExA` de `PuTTYTimerWindow` e permaneceu até
-  `guest-timeout`. Notepad++ reproduziu `guest-signal`/SIGSEGV em endereço
-  nulo após `startup-info` wide.
+  `guest-timeout`. Notepad++ reproduziu `guest-signal` após `startup-info`
+  wide; a falha de heap foi observada como SIGSEGV ou SIGABRT, sempre exit
+  `71`.
 - [x] Uma captura GDB em `/tmp/tl-c2-gdb-notepad.log` observou a corrupção de
   heap na alocação seguinte dentro de `tl_SHGetFolderPathW` (`src/runtime/shell32.cpp:226`),
   sem demonstrar ainda a escrita causadora; a fixture `tl_shell` continua
@@ -670,25 +672,48 @@ de materializar uma instalação. O pacote Affinity continua rejeitado com
 segurança por limite de análise, sem ampliar limites nem prometer suporte
 .NET/MSIX.
 
-### C4 — Regressão da matriz completa
+### C4 concluído — regressão da matriz completa
 
 Objetivo: repetir B1–B4 depois de cada correção da rodada C e manter o corpus
 como gate de compatibilidade.
 
 Tarefas:
 
-- [ ] Reexecutar análise Rust ON/C++ OFF nos 27 arquivos.
-- [ ] Reexecutar execução nativa e instalação seletiva com os mesmos limites.
-- [ ] Comparar stdout, stderr normal, exit codes, trace, limpeza e backend.
-- [ ] Atualizar `docs/compatibilidade.md` e este roadmap somente com
+- [x] Reexecutar análise Rust ON/C++ OFF nos 27 arquivos.
+- [x] Reexecutar execução nativa e instalação seletiva com os mesmos limites.
+- [x] Comparar stdout, stderr normal, exit codes, trace, limpeza e backend.
+- [x] Atualizar `docs/compatibilidade.md` e este roadmap somente com
   evidência reproduzível.
 
 Aceitação:
 
-- [ ] Nenhuma correção altera silenciosamente o comportamento dos caminhos
+- [x] Nenhuma correção altera silenciosamente o comportamento dos caminhos
   não promovidos ou do build Rust OFF.
-- [ ] Os resultados podem ser repetidos em um ambiente limpo e cada commit
+- [x] Os resultados podem ser repetidos em um ambiente limpo e cada commit
   identifica exatamente o bloco validado.
+
+Evidência C4 de 2026-09-07:
+
+- [x] O `--report` foi repetido nos 27 arquivos em Rust ON e C++ OFF. As
+  distribuições coincidiram: `13` sucessos, `12` rejeições PE32/x86 com exit
+  `5` e `3` rejeições estruturais com exit `4`; stdout foi byte-a-byte igual.
+  Diferenças de stderr ficaram limitadas aos campos estruturados do backend
+  Rust e a textos humanos equivalentes (HWiNFO/Affinity).
+- [x] A execução foi repetida em Xvfb válido para os oito PE32+ não-DLL
+  selecionados. Rust/C++ coincidiram em stdout e exit: 7-Zip GUI `72`, 7-Zip
+  CLI `0`, Rockstar `3`, Rufus `4`, WinRAR `0`, Notepad++ `71`, PuTTY `72` e
+  WinRAR SFX `0`. As GUIs que chegaram ao X11 registraram conexão e janela.
+- [x] A instalação seletiva ON/OFF foi repetida em C3 com prefixos temporários:
+  Roblox `3`, G HUB/alias `1` e Affinity `4`, sem eventos de extração/registro
+  e sem arquivos nos prefixos.
+- [x] Os resultados estão em `/tmp/tl-matrix-c4/report`,
+  `/tmp/tl-matrix-c4/run` e `/tmp/tl-matrix-c3`; `git diff --check` passa e
+  nenhum artefato desses diretórios foi adicionado ao repositório.
+
+Conclusão C4: a matriz do corpus está reproduzível e ON/OFF permanece
+equivalente nos caminhos testados. Nenhum aplicativo adicional é promovido a
+suportado; as limitações de PE32/x86, empacotamento, interação GUI, heap do
+Notepad++, término dos setups e MSIX/.NET continuam explícitas.
 
 ## Regras de validação
 
