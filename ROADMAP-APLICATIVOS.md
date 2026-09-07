@@ -427,27 +427,45 @@ Aceitação:
 - [x] O trace demonstra que falhas de parsing ocorrem antes de mapeamento e
   execução.
 
-### B3 — Instalação seletiva e segura
+### B3 concluído — instalação seletiva e segura
 
 Objetivo: testar instalação somente depois da análise e sem executar
 indiscriminadamente instaladores obtidos da internet.
 
 Tarefas:
 
-- [ ] Classificar instaladores por arquitetura, tipo e risco antes de chamar
+- [x] Classificar instaladores por arquitetura, tipo e risco antes de chamar
   `install`.
-- [ ] Testar somente candidatos PE32+ ou pacotes MSIX aprovados, sempre em
+- [x] Testar somente candidatos PE32+ ou pacotes MSIX aprovados, sempre em
   prefixo temporário com timeout, memória limitada e limpeza.
-- [ ] Confirmar extração, catálogo, permissões, executável principal e
+- [x] Confirmar extração, catálogo, permissões, executável principal e
   ausência de cadastro parcial após erro.
-- [ ] Manter instaladores PE32/x86, .NET/Mono e pacotes rejeitados como
+- [x] Manter instaladores PE32/x86, .NET/Mono e pacotes rejeitados como
   `unsupported`/`malformed`, sem fallback implícito.
+
+Evidência reproduzível de 2026-09-07:
+
+- [x] Foram executados em Rust ON e C++ OFF `RobloxPlayerInstaller.exe`,
+  `Logitech_GHUB_x64.exe`, `lghub_installer.exe` e `Affinity x64.msix`, com
+  `install`, timeout externo de 20 s, `--cpu 3`, `--memory 512`, prefixo e
+  `APPDATA` isolados.
+- [x] Os resultados foram iguais nos dois backends: Roblox exit `3` após
+  `RBXCRASH`, G HUB exit `1` por término do convidado e Affinity exit `4`
+  antes da extração por rejeição MSIX/limite documentado.
+- [x] Cada caso registrou `prefix_files=0` e `appdata_files=0` antes da
+  limpeza; não houve catálogo, executável principal ou cadastro parcial.
+- [x] `Logitech_GHUB_x64.exe` e `lghub_installer.exe` têm o mesmo SHA-256
+  `4b2f9903b27c8434afcd52fe65845632fcae47cc50432fb6b3b1637144e811e1` e são
+  byte-a-byte iguais.
+- [x] Os 12 instaladores PE32/x86 foram mantidos fora da execução e continuam
+  rejeitados por `Unsupported`/exit `5` no B1; nenhum instalador .NET/Mono ou
+  PE32 foi usado como atalho para ampliar o escopo.
 
 Aceitação:
 
-- [ ] Cada instalação tem resultado de análise, extração, catálogo, limpeza,
+- [x] Cada instalação tem resultado de análise, extração, catálogo, limpeza,
   stdout, stderr e exit code documentados.
-- [ ] Nenhuma falha de instalação é promovida a suporte sem execução do
+- [x] Nenhuma falha de instalação é promovida a suporte sem execução do
   aplicativo instalado.
 
 ### B4 — Matriz de solicitações e compatibilidade
