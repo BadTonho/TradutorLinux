@@ -530,6 +530,102 @@ Aceitação:
   nomes ambíguos ou execução manual não registrada.
 - [x] O roadmap contém um resumo verificável para todos os arquivos do corpus.
 
+## Rodada C — redução das limitações observadas
+
+A rodada C começa somente depois da matriz completa B1–B4. O objetivo é
+transformar falhas reproduzíveis em trabalho técnico pequeno, com fixture e
+regressão antes de qualquer alteração no runtime. PE32/x86, .NET/Mono,
+desempacotamento de HWiNFO e compatibilidade universal continuam fora do
+escopo.
+
+### C1 — Triagem fixture-driven dos bloqueios nativos
+
+Objetivo: distinguir limitação conhecida, falha de API e falha do aplicativo
+sem alterar o loader por tentativa.
+
+Tarefas:
+
+- [ ] Preservar fixtures mínimas para `Rufus`/W^X, `Notepad++`/SIGSEGV,
+  `PuTTY`/timeout e `Rockstar`/exit `3`.
+- [ ] Comparar traces Rust ON/C++ OFF por etapa: parsing, mapeamento,
+  imports, TLS, GUI, processo e término.
+- [ ] Mapear cada bloqueio a uma API, mecanismo ou política já existente;
+  não adicionar uma API sem alvo e teste de regressão.
+- [ ] Confirmar se o bloqueio ocorre antes ou depois do entry point e se há
+  risco de relaxar W^X, limites ou isolamento.
+
+Aceitação:
+
+- [ ] Cada bloqueio tem uma hipótese testável, uma fixture ou log mínimo e
+  uma decisão explícita: corrigir, manter rejeitado ou pedir autorização de
+  escopo.
+- [ ] Nenhum aplicativo é promovido a suportado durante a triagem.
+
+### C2 — Lacunas de execução e GUI
+
+Objetivo: corrigir no máximo uma lacuna comprovada por vez, preservando a
+matriz ON/OFF e a execução controlada.
+
+Tarefas:
+
+- [ ] Reproduzir `Notepad++` e `PuTTY` com Xvfb e traces reduzidos, isolando
+  a primeira API ou evento divergente.
+- [ ] Reproduzir `Rockstar` com stdout/stderr e imports já resolvidos, sem
+  transformar `ExitProcess 3` em sucesso artificial.
+- [ ] Manter `Rufus` bloqueado por W^X até existir um modelo seguro para a
+  imagem empacotada; não permitir página `RWX` como atalho.
+- [ ] Se surgir uma correção, criar fixture unitária, aplicar ON/OFF e
+  repetir B2 antes de atualizar a compatibilidade.
+
+Aceitação:
+
+- [ ] A correção, se autorizada, passa Debug e Sanitize afetados, sem
+  regressão nos aplicativos já verificados.
+- [ ] Falhas restantes continuam com exit code e diagnóstico controlados.
+
+### C3 — Diagnóstico dos instaladores aprovados
+
+Objetivo: entender por que Roblox, G HUB e Affinity não concluem instalação,
+sem executar instaladores x86 nem substituir metadados Rust por C++.
+
+Tarefas:
+
+- [ ] Separar falha do setup convidado, extração ZIP/MSIX, catálogo,
+  executável principal e validação PE interno.
+- [ ] Capturar trace de instalação quando o CLI permitir e preservar os
+  resultados ON/OFF sem cadastrar entradas parciais.
+- [ ] Avaliar Affinity somente como pacote MSIX/.NET fora do escopo; não
+  aumentar limites de segurança sem evidência de necessidade e autorização.
+- [ ] Repetir instalação somente em prefixos temporários e remover artefatos
+  após cada caso.
+
+Aceitação:
+
+- [ ] Cada instalador tem uma causa de término ou uma limitação ambiental
+  reproduzível.
+- [ ] Nenhuma instalação falha silenciosamente nem deixa catálogo/prefixo
+  residual.
+
+### C4 — Regressão da matriz completa
+
+Objetivo: repetir B1–B4 depois de cada correção da rodada C e manter o corpus
+como gate de compatibilidade.
+
+Tarefas:
+
+- [ ] Reexecutar análise Rust ON/C++ OFF nos 27 arquivos.
+- [ ] Reexecutar execução nativa e instalação seletiva com os mesmos limites.
+- [ ] Comparar stdout, stderr normal, exit codes, trace, limpeza e backend.
+- [ ] Atualizar `docs/compatibilidade.md` e este roadmap somente com
+  evidência reproduzível.
+
+Aceitação:
+
+- [ ] Nenhuma correção altera silenciosamente o comportamento dos caminhos
+  não promovidos ou do build Rust OFF.
+- [ ] Os resultados podem ser repetidos em um ambiente limpo e cada commit
+  identifica exatamente o bloco validado.
+
 ## Regras de validação
 
 - Cada correção começa com uma fixture mínima e termina com testes automatizados.
