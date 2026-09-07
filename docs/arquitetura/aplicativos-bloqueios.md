@@ -166,3 +166,13 @@ chamadas de atributos; o bloqueio posterior (`set-attributes` fora do
 subconjunto e exceção C++ ignorada no worker) continua sendo uma limitação
 controlada. Nenhum código específico de WinRAR, DLL ou shim foi adicionado ao
 runtime.
+
+## Evidência E6 — atributo consultivo sem equivalente POSIX
+
+`SetFileAttributesW` agora trata o valor zero como o estado normal e aceita
+`FILE_ATTRIBUTE_NOT_CONTENT_INDEXED` sem criar uma representação falsa no
+filesystem Linux. O bit é removido antes da aplicação dos atributos que têm
+semântica POSIX; bits desconhecidos e atributos ainda não implementados
+continuam retornando falha controlada. O teste de metadados passou em Rust ON
+e C++ OFF, e `GetFileAttributesW` não anuncia um bit que o runtime não
+persiste.

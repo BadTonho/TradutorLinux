@@ -60,6 +60,7 @@ constexpr Dword kFileAttributeReadOnly = 0x00000001U;
 constexpr Dword kFileAttributeDirectory = 0x00000010U;
 constexpr Dword kFileAttributeArchive = 0x00000020U;
 constexpr Dword kFileAttributeNormal = 0x00000080U;
+constexpr Dword kFileAttributeNotContentIndexed = 0x00002000U;
 constexpr Dword kFindExInfoStandard = 0;
 constexpr Dword kFindExInfoBasic = 1;
 constexpr Dword kFindExSearchNameMatch = 0;

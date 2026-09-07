@@ -772,7 +772,18 @@ TL_MSABI int tl_SetFileAttributesW(const std::uint16_t* const path,
         trace_filesystem("set-attributes", "failed", "invalid-path");
         return 0;
     }
-    const std::uint32_t error = apply_win32_file_attributes(normalized, attributes);
+    constexpr std::uint32_t kAdvisoryOnly = abi::kFileAttributeNotContentIndexed;
+    std::uint32_t effective_attributes = attributes;
+    if (effective_attributes == 0) {
+        effective_attributes = abi::kFileAttributeNormal;
+    }
+    // There is no content-indexing service in the runtime. Accept this
+    // advisory Windows bit while keeping the POSIX-backed attributes strict.
+    effective_attributes &= ~kAdvisoryOnly;
+    if (effective_attributes == 0) {
+        effective_attributes = abi::kFileAttributeNormal;
+    }
+    const std::uint32_t error = apply_win32_file_attributes(normalized, effective_attributes);
     set_last_error(error);
     trace_filesystem("set-attributes", error == abi::kErrorSuccess ? "success" : "failed",
                      std::to_string(attributes));

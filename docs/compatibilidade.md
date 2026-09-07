@@ -654,7 +654,7 @@ do host como argumentos.
 | `KERNEL32.dll` | `FindNextFileW` | Suportado | Continua enumeração wide e converte o nome encontrado para UTF-16 |
 | `KERNEL32.dll` | `FindClose` | Suportado | Fecha `DIR*` e libera slot |
 | `KERNEL32.dll` | `GetFileAttributesW` | Suportado | Converte o caminho UTF-16 e delega ao mesmo `stat()` da variante A |
-| `KERNEL32.dll` | `SetFileAttributesW` | Suportado no subconjunto | `READONLY` altera bits de escrita Linux; `NORMAL`, `ARCHIVE` e `DIRECTORY` são validados contra o tipo; atributos sem representação retornam `ERROR_INVALID_PARAMETER` |
+| `KERNEL32.dll` | `SetFileAttributesW` | Suportado no subconjunto | `READONLY` altera bits de escrita Linux; `NORMAL`, `ARCHIVE` e `DIRECTORY` são validados contra o tipo; `NOT_CONTENT_INDEXED` é aceito como atributo consultivo sem serviço de indexação; demais atributos sem representação retornam `ERROR_INVALID_PARAMETER` |
 | `KERNEL32.dll` | `SetFileInformationByHandle` | Suportado no subconjunto | `FileBasicInfo` aplica tempos de acesso/escrita e atributos; `FileDispositionInfo` marca exclusão no fechamento; `FileDispositionInfoEx` cobre `DELETE`, `POSIX_SEMANTICS`, `ON_CLOSE` e `IGNORE_READONLY_ATTRIBUTE` |
 | `KERNEL32.dll` | `GetCurrentDirectoryA/W` | Suportado | Retorna o diretório de execução convertido para caminho Windows lógico: `C:\\...` dentro do prefixo, `Z:\\...` para arquivo/diretório externo |
 | `KERNEL32.dll` | `GetModuleFileNameA/W` | Suportado | Retorna o módulo definido via `set_guest_module_path()` como caminho Windows lógico: aplicação instalada no prefixo usa `C:\\...`; setup externo usa `Z:\\...` |
@@ -704,7 +704,8 @@ fluxo principal. Os contratos abaixo são protegidos por
   em ASCII; classes de caracteres, locale de arquivos e case-fold Unicode amplo
   ficam fora.
 - `FindFirstFileExW` rejeita níveis, operações, filtros e flags fora do
-  subconjunto publicado. `SetFileAttributesW` não representa `HIDDEN`,
+  subconjunto publicado. `SetFileAttributesW` aceita `NOT_CONTENT_INDEXED`
+  sem persistir um bit POSIX equivalente, mas não representa `HIDDEN`,
   `SYSTEM`, `COMPRESSED`, ADS ou atributos de nuvem; `SetFileInformationByHandle`
   não cobre rename, EOF, allocation, links nem outras classes.
 - `CommandLineToArgvW` cobre aspas e separação por espaço usadas pelos alvos;

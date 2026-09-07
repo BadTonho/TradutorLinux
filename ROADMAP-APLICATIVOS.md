@@ -1083,6 +1083,36 @@ Evidência E5 de 2026-09-07:
   exceção C++ ignorada no worker (`guest-signal`/`SIGTRAP`); não houve
   alteração específica do aplicativo.
 
+### E6 — Atributos consultivos de arquivo
+
+Objetivo: aceitar o subconjunto de atributos que aplicações Win32 usam como
+metadados consultivos, sem fingir uma representação Linux inexistente e sem
+afrouxar a validação dos atributos que alteram permissões ou tipo.
+
+Tarefas:
+
+- [x] Tratar `SetFileAttributesW(..., 0)` como o estado normal do arquivo.
+- [x] Aceitar `FILE_ATTRIBUTE_NOT_CONTENT_INDEXED` como atributo consultivo,
+  removendo-o somente antes da aplicação dos bits POSIX suportados.
+- [x] Manter bits desconhecidos, `HIDDEN`, `SYSTEM` e combinações inválidas
+  como falha controlada.
+- [x] Adicionar regressões unitárias e repetir os builds ON/OFF.
+
+Aceitação:
+
+- [x] O contrato de `SetFileAttributesW` cobre as chamadas genéricas `0` e
+  `ARCHIVE | NOT_CONTENT_INDEXED` sem alterar a política dos demais bits.
+- [x] O comportamento foi validado sem código, DLL ou shim específico de
+  aplicativo; a matriz do WinRAR continua sem promoção de suporte.
+
+Evidência E6 de 2026-09-07:
+
+- [x] O teste `Win32FileMetadataTest.SetFileAttributesWControlsReadonlyAndValidatesBits`
+  passou nos builds Rust ON e C++ OFF após incluir os casos `0` e
+  `ARCHIVE | NOT_CONTENT_INDEXED`.
+- [x] A política está documentada em `docs/compatibilidade.md`; o bit
+  consultivo não é falsamente exposto por `GetFileAttributesW`.
+
 ## Regras de validação
 
 - Cada correção começa com uma fixture mínima e termina com testes automatizados.

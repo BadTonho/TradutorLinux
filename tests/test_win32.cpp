@@ -1060,6 +1060,12 @@ TEST(Win32FileMetadataTest, SetFileAttributesWControlsReadonlyAndValidatesBits) 
     EXPECT_NE(tl_GetFileAttributesW(wide) & abi::kFileAttributeReadOnly, 0U);
     ASSERT_EQ(tl_SetFileAttributesW(wide, abi::kFileAttributeNormal), 1);
     EXPECT_EQ(tl_GetFileAttributesW(wide) & abi::kFileAttributeReadOnly, 0U);
+    ASSERT_EQ(tl_SetFileAttributesW(wide, 0), 1);
+    EXPECT_EQ(tl_GetFileAttributesW(wide) & abi::kFileAttributeReadOnly, 0U);
+    ASSERT_EQ(tl_SetFileAttributesW(
+                  wide, abi::kFileAttributeArchive | abi::kFileAttributeNotContentIndexed),
+              1);
+    EXPECT_NE(tl_GetFileAttributesW(wide) & abi::kFileAttributeArchive, 0U);
     EXPECT_EQ(tl_SetFileAttributesW(wide, 0x2U), 0);
     EXPECT_EQ(tl_SetFileAttributesW(
                   wide, abi::kFileAttributeNormal | abi::kFileAttributeArchive),
