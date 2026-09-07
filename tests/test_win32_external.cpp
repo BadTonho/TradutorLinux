@@ -1,4 +1,5 @@
 #include "test_win32_common.hpp"
+#include "tradutorlinux/win32/kernel32.hpp"
 
 namespace tradutorlinux {
 namespace {
@@ -82,6 +83,37 @@ TEST(OleStreamTest, InMemoryStreamRoundTripsAndReportsSize) {
     EXPECT_EQ(read, sizeof(payload) - 1);
     EXPECT_STREQ(round_trip, payload);
     EXPECT_EQ(stream->vtable->release(stream), 0U);
+}
+
+TEST(OleStreamTest, UsesValidGlobalHGlobalAsInitialBackingStore) {
+    constexpr char payload[] = "global-ole-stream";
+    void* const memory = tl_GlobalAlloc(0, sizeof(payload) - 1U);
+    ASSERT_NE(memory, nullptr);
+    std::memcpy(memory, payload, sizeof(payload) - 1U);
+
+    GuestIStream* stream = nullptr;
+    ASSERT_EQ(tl_CreateStreamOnHGlobal(memory, 0, &stream), kSOk);
+    ASSERT_NE(stream, nullptr);
+
+    char round_trip[sizeof(payload)]{};
+    std::uint32_t read = 0;
+    ASSERT_EQ(stream->vtable->read(stream, round_trip, sizeof(payload) - 1U, &read), kSOk);
+    EXPECT_EQ(read, sizeof(payload) - 1U);
+    EXPECT_STREQ(round_trip, payload);
+    EXPECT_EQ(stream->vtable->release(stream), 0U);
+    EXPECT_NE(tl_GlobalLock(memory), nullptr);
+    EXPECT_EQ(tl_GlobalFree(memory), nullptr);
+}
+
+TEST(OleStreamTest, DeleteOnReleaseReleasesGlobalHGlobalBackingStore) {
+    void* const memory = tl_GlobalAlloc(0, 4U);
+    ASSERT_NE(memory, nullptr);
+
+    GuestIStream* stream = nullptr;
+    ASSERT_EQ(tl_CreateStreamOnHGlobal(memory, 1, &stream), kSOk);
+    ASSERT_NE(stream, nullptr);
+    EXPECT_EQ(stream->vtable->release(stream), 0U);
+    EXPECT_EQ(tl_GlobalLock(memory), nullptr);
 }
 
 TEST(OleStreamTest, RejectsExternalHGlobalAndUnknownInterface) {

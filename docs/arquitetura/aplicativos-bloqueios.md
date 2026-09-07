@@ -129,3 +129,14 @@ alegação de compatibilidade.
 O código `0xE06D7363` é a exceção C++ do aplicativo. O suporte atual cobre o
 subconjunto SEH explicitamente documentado, não despacho geral de exceções C++;
 por isso nenhum tratamento específico do Notepad++ foi adicionado ao runtime.
+
+## Evidência E3 — backing store OLE genérico
+
+`CreateStreamOnHGlobal` agora aceita um bloco válido produzido por `GlobalAlloc`
+e mantém a propriedade indicada por `delete-on-release`. Os testes unitários
+`OleStreamTest.*` passaram nos builds Rust ON e C++ OFF, incluindo leitura do
+conteúdo, preservação do bloco e rejeição de handles desconhecidos. O smoke
+SFX do WinRAR confirmou no trace a criação e liberação do stream (`status="success"`),
+mas a sondagem de `IDOK` ainda não concluiu a extração dentro dos limites
+externos. A mudança é uma capacidade OLE genérica; não há código específico de
+WinRAR no runtime, nem promoção do fluxo de extração.

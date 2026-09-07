@@ -1,6 +1,8 @@
 #include "tradutorlinux/runtime/ole32.hpp"
 #include "tradutorlinux/loader/module.hpp"
 #include "tradutorlinux/loader/builtin_modules.hpp"
+#include "tradutorlinux/win32/kernel32.hpp"
+#include "../../core/runtime_context.hpp"
 
 #include <algorithm>
 #include <array>
@@ -10,6 +12,7 @@
 #include <iostream>
 #include <limits>
 #include <mutex>
+#include <optional>
 #include <unordered_set>
 
 #include "tradutorlinux/diagnostics/trace.hpp"
@@ -36,6 +39,9 @@ struct StreamState {
     std::size_t capacity{0};
     std::size_t position{0};
     std::uint32_t references{1};
+    void* global_handle{nullptr};
+    bool global_backing{false};
+    bool delete_global_on_release{false};
 };
 
 std::array<StreamState*, kMaxStreams> g_streams{};
@@ -73,9 +79,26 @@ bool register_stream(StreamState* const stream) noexcept {
     return false;
 }
 
+[[nodiscard]] std::optional<GlobalMemorySlot> global_memory_snapshot(
+    const void* const handle) noexcept {
+    if (handle == nullptr) {
+        return std::nullopt;
+    }
+    std::lock_guard lock(g_global_memory_mutex);
+    for (const GlobalMemorySlot& slot : g_global_memory) {
+        if (slot.used && slot.global && slot.address == handle) {
+            return slot;
+        }
+    }
+    return std::nullopt;
+}
+
 bool resize_stream(StreamState& stream, const std::size_t size) noexcept {
     if (size > std::numeric_limits<std::size_t>::max() - 4095U) return false;
     if (size > stream.capacity) {
+        if (stream.global_backing) {
+            return false;
+        }
         const std::size_t capacity = (size + 4095U) & ~static_cast<std::size_t>(4095U);
         void* resized = std::realloc(stream.data, capacity);
         if (resized == nullptr) return false;
@@ -188,7 +211,13 @@ TL_OLE_MSABI std::uint32_t stream_release(GuestIStream* const self) noexcept {
             }
         }
     }
-    std::free(stream->data);
+    if (stream->global_backing) {
+        if (stream->delete_global_on_release) {
+            (void)tl_GlobalFree(stream->global_handle);
+        }
+    } else {
+        std::free(stream->data);
+    }
     std::free(stream);
     trace_stream("release", "destroyed");
     return 0;
@@ -499,9 +528,12 @@ TL_OLE_MSABI std::int32_t tl_CoGetMalloc(const std::uint32_t context, void** con
 TL_OLE_MSABI std::int32_t tl_CreateStreamOnHGlobal(const OleHGlobal hglobal,
                                                    const std::int32_t delete_on_release,
                                                    GuestIStream** stream) noexcept {
-    (void)delete_on_release;
-    if (hglobal != nullptr || stream == nullptr ||
-        !mapped_range(stream, sizeof(*stream), true)) {
+    if (stream == nullptr || !mapped_range(stream, sizeof(*stream), true)) {
+        trace_stream("create", "invalid");
+        return kEInvalidArg;
+    }
+    const std::optional<GlobalMemorySlot> global = global_memory_snapshot(hglobal);
+    if (hglobal != nullptr && !global.has_value()) {
         trace_stream("create", "invalid");
         return kEInvalidArg;
     }
@@ -513,6 +545,14 @@ TL_OLE_MSABI std::int32_t tl_CreateStreamOnHGlobal(const OleHGlobal hglobal,
     }
     state->references = 1;
     state->interface.vtable = const_cast<GuestIStreamVtable*>(&kStreamVtable);
+    if (global.has_value()) {
+        state->data = static_cast<std::uint8_t*>(global->address);
+        state->size = global->size;
+        state->capacity = global->size;
+        state->global_handle = hglobal;
+        state->global_backing = true;
+        state->delete_global_on_release = delete_on_release != 0;
+    }
     *stream = &state->interface;
     trace_stream("create", "success");
     return kSOk;

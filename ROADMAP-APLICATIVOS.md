@@ -989,6 +989,37 @@ Evidência E2 de 2026-09-07:
   stdout/exit idênticos. A execução sem interação continua no timeout já
   registrado; o smoke E2 apenas torna o bloqueio pós-interação determinístico.
 
+### E3 — Backing store HGLOBAL genérico para streams OLE
+
+Objetivo: corrigir a rejeição genérica de `CreateStreamOnHGlobal` quando o
+convidado fornece um bloco válido de `GlobalAlloc`, sem adicionar qualquer
+tratamento específico para WinRAR ou outro aplicativo.
+
+Tarefas:
+
+- [x] Aceitar somente blocos registrados por `GlobalAlloc` e manter a rejeição
+  de HGLOBALs externos/desconhecidos.
+- [x] Preservar a política `delete-on-release`: o bloco permanece vivo quando
+  zero e é liberado pelo `Release` final quando diferente de zero.
+- [x] Manter a capacidade inicial de blocos `GlobalAlloc`; expansões além dela
+  falham de forma controlada, enquanto streams anônimos mantêm o crescimento
+  existente.
+- [x] Adicionar testes unitários ON/OFF para leitura do backing store,
+  propriedade do bloco e rejeição de handles desconhecidos.
+- [x] Repetir o smoke SFX do WinRAR após a alteração, mantendo o cenário de
+  cancelamento como a única evidência de execução GUI aprovada.
+
+Aceitação:
+
+- [x] Os testes `OleStreamTest.*` passaram em Rust ON e C++ OFF, quatro casos
+  em cada build.
+- [x] O trace do WinRAR SFX passou de `ole-stream ... invalid` para criação e
+  liberação bem-sucedidas sob Rust ON; a tentativa de `IDOK`/extração ainda
+  não concluiu dentro dos limites e não foi promovida.
+- [x] O smoke original de cancelamento continua sendo a regressão de execução;
+  nenhum DLL, shim, regra ou caminho específico de WinRAR foi adicionado ao
+  runtime.
+
 ## Regras de validação
 
 - Cada correção começa com uma fixture mínima e termina com testes automatizados.

@@ -88,7 +88,7 @@ arquivo exato usado na execução; não se deve reutilizar o hash de outra vers�
 | Alocação Global/Local | WinRAR, Rockstar + fixture de protocolo | `GlobalAlloc`/`GlobalLock`/`GlobalUnlock`/`GlobalFree` e `LocalAlloc`/`LocalFree` com flags `MOVEABLE`/`ZEROINIT`, tabela lateral e rejeição de handles arbitrários |
 | Pacote MSIX/AppX | Affinity + fixture `native-fixture.msix` | instalação suportada somente para pacote com PE32+ x86-64 nativo; `integration_msix_install` valida extração, catálogo e `app run`; Affinity continua fora por Mono/.NET |
 | `delay-import` | WinRAR, Rockstar | suportado para descritores RVA (`grAttrs=0x1`), com resolução antecipada |
-| Automação OLE | WinRAR, Rockstar | `CreateStreamOnHGlobal` entregue como stream em memória em `tl_stream.exe`; `OLEAUT32`/`IDispatch` pendentes |
+| Automação OLE | WinRAR, Rockstar | `CreateStreamOnHGlobal` entregue como stream em memória, incluindo backing store válido de `GlobalAlloc`, em `tl_stream.exe`; `OLEAUT32`/`IDispatch` pendentes |
 | HTTP WinINet | Rockstar + fixture de protocolo | subconjunto HTTPS direto de loopback entregue em `tl_wininet.exe`; sem execução do Rockstar |
 | Certificados/WinTrust | Rockstar + fixtures de protocolo | `CertGetNameStringW` extrai nomes de blob DER em `tl_crypt32.exe`; cadeia explícita em `tl_trust.exe`; `WTHelper*` percorre estado/signer/folha-raiz em `tl_wthelper.exe`; `CertOpenStore` cobre somente loja em memória e wrappers de nome; Authenticode e trust store Windows pendentes |
 

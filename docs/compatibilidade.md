@@ -826,7 +826,7 @@ do contrato. As DACLs não bloqueiam `CreateFile` e não constituem sandbox. Ver
 
 ## COM mínimo e streams em memória (ole32)
 
-`ole32.dll` expõe `CoInitialize`/`CoUninitialize`/`CoTaskMemAlloc` e camada COM mínima para testes de inicialização. `CoCreateInstance`/`CoGetClassObject` validam `rclsid`/`riid`/`ppv` via `mapped_guest_range` e retornam `REGDB_E_CLASSNOTREG` (`0x80040154`) ou `CLASS_E_NOAGGREGATION` (`0x80040110`); `OleInitialize`/`OleUninitialize` são stubs `S_OK`. `CreateStreamOnHGlobal` acrescenta um `IStream` volátil, com vtable Microsoft x64 explícita e somente backing store anônimo do runtime. O contrato detalhado está em [`ole-streams.md`](arquitetura/ole-streams.md).
+`ole32.dll` expõe `CoInitialize`/`CoUninitialize`/`CoTaskMemAlloc` e camada COM mínima para testes de inicialização. `CoCreateInstance`/`CoGetClassObject` validam `rclsid`/`riid`/`ppv` via `mapped_guest_range` e retornam `REGDB_E_CLASSNOTREG` (`0x80040154`) ou `CLASS_E_NOAGGREGATION` (`0x80040110`); `OleInitialize`/`OleUninitialize` são stubs `S_OK`. `CreateStreamOnHGlobal` acrescenta um `IStream` volátil, com vtable Microsoft x64 explícita, backing store anônimo do runtime ou um bloco válido de `GlobalAlloc`. O contrato detalhado está em [`ole-streams.md`](arquitetura/ole-streams.md).
 
 | Módulo | API | Estado | Comportamento suportado |
 |---|---|---|---|
@@ -835,7 +835,7 @@ do contrato. As DACLs não bloqueiam `CreateFile` e não constituem sandbox. Ver
 | `ole32.dll` | `OleInitialize` | Suportado | Retorna `S_OK` |
 | `ole32.dll` | `CoCreateInstance` / `CoGetClassObject` | Suportado | Valida `rclsid`/`riid`/`ppv`, `unkOuter==nullptr` senão `CLASS_E_NOAGGREGATION`, senão `REGDB_E_CLASSNOTREG`, `*ppv=nullptr` |
 | `ole32.dll` | `CoTaskMemAlloc` / `CoTaskMemFree` / `CoTaskMemRealloc` | Suportado | `malloc`/`free`/`realloc` do host |
-| `ole32.dll` | `CreateStreamOnHGlobal` | Suportado no subconjunto | Aceita somente `hGlobal=NULL`; cria `IStream` em memória. `Read`/`Write`/`Seek`/`SetSize`/`Stat`, `QueryInterface` e referência são cobertos por `tl_stream.exe`; cópia, clone e lock de região permanecem fora do contrato |
+| `ole32.dll` | `CreateStreamOnHGlobal` | Suportado no subconjunto | Aceita `hGlobal=NULL` ou um bloco válido de `GlobalAlloc`; cria `IStream` em memória e preserva o bloco conforme `delete-on-release`. Backing store externo desconhecido e expansão além da capacidade de `GlobalAlloc` são rejeitados. `Read`/`Write`/`Seek`/`SetSize`/`Stat`, `QueryInterface` e referência são cobertos pelos testes; cópia, clone e lock de região permanecem fora do contrato |
 
 ## Concorrência (Fase 11)
 
