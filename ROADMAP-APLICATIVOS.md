@@ -128,24 +128,42 @@ Aceitação:
   seções reais.
 - [x] Não há acesso fora da entrada nem relaxamento genérico de limites.
 
-### A3 — Rufus e imagens PE empacotadas
+### A3 concluído — Rufus e imagens PE empacotadas
+
+Evidência reproduzível de 2026-09-07:
+
+- [x] `--report` Rust e C++ OFF passaram com exit `0`, descrevendo as três
+  seções `UPX0`, `UPX1` e `.rsrc`, relocations e imports.
+- [x] A execução Rust e C++ OFF terminou antes do convidado com exit `4` e
+  `map-failed status="invalid-image" detail="entry point fora de uma página
+  executável"`.
+- [x] A causa é a política W^X existente: `UPX1` é marcada como
+  `READ|WRITE|EXECUTE`, o mapper a reduz a `ReadWrite`, e o processo não
+  executa uma página sem permissão de execução. O entry point está em `UPX1`.
+- [x] Os testes existentes de `DowngradesWritableExecutableSectionToReadWrite`
+  e permissões efetivas protegem essa decisão; nenhuma permissão `RWX` foi
+  reintroduzida e não há execução após a falha.
+
+Conclusão: Rufus é analisável como PE, mas a execução exige desempacotamento
+ou transição controlada de permissões que não faz parte do loader atual. A
+limitação é intencional e não é promovida como suporte funcional.
 
 Objetivo: separar suporte de análise de suporte de execução para imagens com
 seções como `UPX0`/`UPX1`.
 
 Tarefas:
 
-- [ ] Inspecionar entry point, seções, permissões e relocations.
-- [ ] Determinar se o erro ocorre no parser, no mapeamento ou na política de
-  execução.
-- [ ] Definir uma política segura para imagens empacotadas e registrar a
-  limitação quando não houver suporte.
-- [ ] Criar regressão para análise aprovada sem prometer execução.
+- [x] Inspecionar entry point, seções, permissões e relocations.
+- [x] Determinar que o erro ocorre no mapeamento/política W^X, após o parser.
+- [x] Manter a política segura para imagens empacotadas e registrar a
+  limitação sem desempacotador.
+- [x] Usar as regressões existentes de W^X e permissões para proteger a
+  análise aprovada sem prometer execução.
 
 Aceitação:
 
-- [ ] O report continua distinto da execução.
-- [ ] Falhas ocorrem antes de execução quando as pré-condições não são válidas.
+- [x] O report continua distinto da execução.
+- [x] A falha ocorre antes da execução quando as pré-condições não são válidas.
 
 ### A4 concluído — pacote MSIX do Affinity
 

@@ -967,7 +967,7 @@ continuam sendo a evidência necessária para registrá-lo como suportado.
 | 3 | `7z.dll` | PE32+ DLL x86-64 | 86/86 (100%) | `imports-resolved` | `not-attempted` (DLL) | **Fase 13.A**: imports resolvidos; a DLL não foi executada como aplicação independente |
 | 4 | `putty_x64.exe` | PE32+ x86-64 | 348/348 (100%) | `supported` | `ExitProcess 1` (sem args) | FLS 0/1 ok |
 | 5 | `WinRAR_x64.exe` `winrar-x64-723.exe` | PE32+ x86-64 | 251/251 (100%) | `supported` | `ExitProcess 0` `sfxcmd` env | delay `GDI32/ADVAPI32/SHELL32/ole32` |
-| 6 | `Rufus_x64.exe` | PE32+ x86-64 | 14/14 (100%) | `supported` | `ExitProcess 56832` | `UPX0` possui 3 seções marcadas `rwx`; o loader aplica W^X e mapeia a combinação como `RW`, sem página `RWX` |
+| 6 | `Rufus_x64.exe` | PE32+ x86-64 | 14/14 (100%) | `supported` | `map-failed` exit `4` | `UPX1` é marcada `rwx`; o loader aplica W^X, mapeia a combinação como `RW` e rejeita o entry point antes da execução, sem página `RWX` |
 | 7 | `HWiNFO64.exe` | PE32+ x86-64 | — | `malformed` (PE empacotado) | `not-attempted` | `UPX0` tem `SizeOfRawData=0`, enquanto o diretório de exports aponta para RVA sem bytes no arquivo; o desempacotamento permanece fora do escopo |
 | 8 | `RobloxPlayerInstaller.exe` | PE32+ x86-64 | 430/430 (100%) | `execution-failed` | `RBXCRASH FatalRuntimeError Worker,28` `ExitProcess 3` (antes `SIGSEGV 0x68 rva 0x39ab exit 71`) | **Fase 13.D**: imports resolvidos, mas o fluxo ainda não conclui com sucesso; o slot TLS específico continua sendo benchmark, não suporte declarado |
 | 9 | `Rockstar-Games-Launcher.exe` | PE32+ x86-64 | 338/338 (100%) | `execution-failed` | `ExitProcess 3` | imports resolvidos; fluxo principal ainda não validado como concluído |
@@ -990,5 +990,5 @@ continuam sendo a evidência necessária para registrá-lo como suportado.
 | **HWiNFO64 (`HWiNFO64.exe`)** | PE32+ x86-64 | — | Análise estrutural rejeitada | `UPX0` não tem dados crus para o RVA do diretório de exports; desempacotamento não é implementado |
 | **Roblox Player Installer (`RobloxPlayerInstaller.exe`)** | PE32+ x86-64 | 100% (430/430) | Não suportado como fluxo concluído | Fase 13.D — `RBXCRASH` + `ExitProcess 3` (antes `SIGSEGV`); resolução de imports e correção TLS não equivalem a suporte |
 | **Notepad++ (`notepad++.exe`)** | PE32+ x86-64 | 100% (584/584) | Não suportado como fluxo concluído | Histórico de resolução; execução registrada terminou em `GuestTimeout 72` sem Xvfb |
-| **Rufus (`Rufus_x64.exe`)** | PE32+ x86-64 | 100% (14/14) | Inicia | UPX marca seções `rwx`; o loader mantém W^X, exec `ExitProcess 56832`; fluxo de uso não validado |
+| **Rufus (`Rufus_x64.exe`)** | PE32+ x86-64 | 100% (14/14) | Análise aprovada; execução rejeitada | UPX marca `UPX1` como `rwx`; o loader mantém W^X e retorna `map-failed` antes do entry point |
 | **7-Zip Installer / Notepad++ Installer / Everything Search** | PE32 (x86) | — | Unsupported | Rejeitados controladamente como arquitetura x86 32-bit (0x14c) |
