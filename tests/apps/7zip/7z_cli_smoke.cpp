@@ -190,11 +190,16 @@ int main(const int argc, char** argv) {
         }
         return value;
     }();
+    const std::string kUnicodePayload = "TradutorLinux Unicode path smoke\n";
     const std::filesystem::path input = staging / "input.txt";
+    const std::filesystem::path unicode_directory = staging / "input-data";
+    const std::filesystem::path unicode_input = unicode_directory / "café-日本.txt";
+    const std::filesystem::path unicode_relative = unicode_input.lexically_relative(staging);
     const std::filesystem::path stored_archive = staging / "payload-stored.zip";
     const std::filesystem::path deflate_archive = staging / "payload-deflate.zip";
     const std::filesystem::path seven_zip_archive = staging / "payload.7z";
-    if (!write_input(input, std::string{kPayload})) {
+    if (!std::filesystem::create_directories(unicode_directory, error) || error ||
+        !write_input(input, kPayload) || !write_input(unicode_input, kUnicodePayload)) {
         std::cerr << "falha ao criar a entrada do smoke\n";
         std::filesystem::remove_all(staging, error);
         return 1;
@@ -203,11 +208,13 @@ int main(const int argc, char** argv) {
     const std::filesystem::path prefix = staging / "prefix";
     const auto create = run_runtime(
         runtime, staged_executable, prefix,
-        {"a", "-tzip", "-mm=Store", to_guest_path(stored_archive), to_guest_path(input)},
+        {"a", "-tzip", "-mm=Store", to_guest_path(stored_archive), to_guest_path(input),
+         to_guest_path(unicode_directory)},
         staging / "create.stdout", staging / "create.stderr");
     const auto list = run_runtime(
         runtime, staged_executable, prefix,
-        {"l", to_guest_path(stored_archive)}, staging / "list.stdout", staging / "list.stderr");
+        {"l", "-sccUTF-8", to_guest_path(stored_archive)}, staging / "list.stdout",
+        staging / "list.stderr");
     const auto extract = run_runtime(
         runtime, staged_executable, prefix,
         {"x", to_guest_path(stored_archive),
@@ -217,11 +224,12 @@ int main(const int argc, char** argv) {
     const auto create_deflate = run_runtime(
         runtime, staged_executable, prefix,
         {"a", "-tzip", "-mm=Deflate", "-mx=1", to_guest_path(deflate_archive),
-         to_guest_path(input)},
+         to_guest_path(input), to_guest_path(unicode_directory)},
         staging / "create-deflate.stdout", staging / "create-deflate.stderr");
     const auto list_deflate = run_runtime(
         runtime, staged_executable, prefix,
-        {"l", "-slt", to_guest_path(deflate_archive)}, staging / "list-deflate.stdout",
+        {"l", "-slt", "-sccUTF-8", to_guest_path(deflate_archive)},
+        staging / "list-deflate.stdout",
         staging / "list-deflate.stderr");
     const auto extract_deflate = run_runtime(
         runtime, staged_executable, prefix,
@@ -232,11 +240,12 @@ int main(const int argc, char** argv) {
     const auto create_7z = run_runtime(
         runtime, staged_executable, prefix,
         {"a", "-t7z", "-m0=LZMA2", "-mx=1", to_guest_path(seven_zip_archive),
-         to_guest_path(input)},
+         to_guest_path(input), to_guest_path(unicode_directory)},
         staging / "create-7z.stdout", staging / "create-7z.stderr");
     const auto list_7z = run_runtime(
         runtime, staged_executable, prefix,
-        {"l", "-slt", to_guest_path(seven_zip_archive)}, staging / "list-7z.stdout",
+        {"l", "-slt", "-sccUTF-8", to_guest_path(seven_zip_archive)},
+        staging / "list-7z.stdout",
         staging / "list-7z.stderr");
     const auto extract_7z = run_runtime(
         runtime, staged_executable, prefix,
@@ -246,46 +255,63 @@ int main(const int argc, char** argv) {
 
     const bool extracted_stored =
         read_text(staging / "extracted-stored" / "input.txt") == kPayload;
+    const bool extracted_stored_unicode =
+        read_text(staging / "extracted-stored" / unicode_relative) ==
+        kUnicodePayload;
     const bool extracted_deflate =
         read_text(staging / "extracted-deflate" / "input.txt") == kPayload;
+    const bool extracted_deflate_unicode =
+        read_text(staging / "extracted-deflate" / unicode_relative) ==
+        kUnicodePayload;
     const bool extracted_7z = read_text(staging / "extracted-7z" / "input.txt") == kPayload;
+    const bool extracted_7z_unicode =
+        read_text(staging / "extracted-7z" / unicode_relative) ==
+        kUnicodePayload;
     const bool ok = contains_loader_lifecycle(create, "Archive size:") &&
                     !list.timed_out && list.exit_code == 0 &&
                     list.stdout_text.find("input.txt") != std::string::npos &&
+                    list.stdout_text.find("café-日本.txt") != std::string::npos &&
                     list.stderr_text.find("dll-mapped module=\"7z.dll\"") != std::string::npos &&
                     contains_loader_lifecycle(extract, "Size:") && extracted_stored &&
+                    extracted_stored_unicode &&
                     contains_loader_lifecycle(create_deflate, "Archive size:") &&
                     !list_deflate.timed_out && list_deflate.exit_code == 0 &&
                     list_deflate.stdout_text.find("Method = Deflate") != std::string::npos &&
+                    list_deflate.stdout_text.find("café-日本.txt") != std::string::npos &&
                     list_deflate.stderr_text.find("dll-mapped module=\"7z.dll\"") !=
                         std::string::npos &&
                     contains_loader_lifecycle(extract_deflate, "Size:") && extracted_deflate &&
+                    extracted_deflate_unicode &&
                     contains_loader_lifecycle(create_7z, "Archive size:") &&
                     !list_7z.timed_out && list_7z.exit_code == 0 &&
                     list_7z.stdout_text.find("Method = LZMA2") != std::string::npos &&
+                    list_7z.stdout_text.find("café-日本.txt") != std::string::npos &&
                     list_7z.stderr_text.find("dll-mapped module=\"7z.dll\"") !=
                         std::string::npos &&
-                    contains_loader_lifecycle(extract_7z, "Size:") && extracted_7z;
+                    contains_loader_lifecycle(extract_7z, "Size:") && extracted_7z &&
+                    extracted_7z_unicode;
     if (!ok) {
         std::cerr << "smoke do 7-Zip CLI falhou em " << staging << '\n';
         std::cerr << "create exit=" << create.exit_code << " timeout=" << create.timed_out << '\n';
         std::cerr << "list exit=" << list.exit_code << " timeout=" << list.timed_out << '\n';
         std::cerr << "extract exit=" << extract.exit_code << " timeout=" << extract.timed_out
-                  << " extracted-stored=" << extracted_stored << '\n';
+                  << " extracted-stored=" << extracted_stored
+                  << " extracted-stored-unicode=" << extracted_stored_unicode << '\n';
         std::cerr << "create-deflate exit=" << create_deflate.exit_code
                   << " timeout=" << create_deflate.timed_out << '\n';
         std::cerr << "list-deflate exit=" << list_deflate.exit_code
                   << " timeout=" << list_deflate.timed_out << '\n';
         std::cerr << "extract-deflate exit=" << extract_deflate.exit_code
                   << " timeout=" << extract_deflate.timed_out
-                  << " extracted-deflate=" << extracted_deflate << '\n';
+                  << " extracted-deflate=" << extracted_deflate
+                  << " extracted-deflate-unicode=" << extracted_deflate_unicode << '\n';
         std::cerr << "create-7z exit=" << create_7z.exit_code
                   << " timeout=" << create_7z.timed_out << '\n';
         std::cerr << "list-7z exit=" << list_7z.exit_code << " timeout=" << list_7z.timed_out
                   << '\n';
         std::cerr << "extract-7z exit=" << extract_7z.exit_code
                   << " timeout=" << extract_7z.timed_out << " extracted-7z=" << extracted_7z
-                  << '\n';
+                  << " extracted-7z-unicode=" << extracted_7z_unicode << '\n';
         std::cerr << "list-deflate stdout:\n" << list_deflate.stdout_text;
         std::cerr << "list-7z stdout:\n" << list_7z.stdout_text;
         std::filesystem::remove_all(staging, error);

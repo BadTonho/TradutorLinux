@@ -37,6 +37,8 @@ using GuestVaList = char*;
 // Fronteira de ABI do msvcrt mínimo: funções hospedeiras chamadas por código
 // PE32+ x86-64. Usam a convenção Microsoft x64 (TL_CRT_MSABI) e não propagam
 // exceções C++.
+using GuestBeginThreadProc = unsigned (TL_CRT_MSABI *)(void*);
+
 extern "C" {
 
 TL_CRT_MSABI int tl___getmainargs(int* argc, char*** argv, char*** envp, int* glob,
@@ -148,7 +150,7 @@ TL_CRT_MSABI void tl__exit(int exit_code) noexcept;
 TL_CRT_MSABI int tl__XcptFilter(unsigned long xcpt, void* pinfo) noexcept;
 TL_CRT_MSABI void* tl___dllonexit(void (*func)(void), void** pbegin, void** pend) noexcept;
 TL_CRT_MSABI std::uintptr_t tl__beginthreadex(void* security, unsigned stack_size,
-                                              unsigned (*start_address)(void*), void* arg_list,
+                                              GuestBeginThreadProc start_address, void* arg_list,
                                               unsigned init_flag, unsigned* thread_id) noexcept;
 TL_CRT_MSABI int tl_memcmp(const void* ptr1, const void* ptr2, std::size_t num) noexcept;
 TL_CRT_MSABI int tl_wcscmp(const std::uint16_t* string1, const std::uint16_t* string2) noexcept;

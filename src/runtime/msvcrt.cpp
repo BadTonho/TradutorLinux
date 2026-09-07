@@ -8,6 +8,7 @@
 #include "tradutorlinux/runtime/error_map.hpp"
 #include "tradutorlinux/runtime/winapi.hpp"
 #include "tradutorlinux/runtime/environment.hpp"
+#include "tradutorlinux/win32/kernel32.hpp"
 #include "tradutorlinux/util/unicode.hpp"
 
 #include <algorithm>
@@ -1962,45 +1963,23 @@ TL_CRT_MSABI void* tl___dllonexit(void (*func)(void), void** pbegin, void** pend
     return reinterpret_cast<void*>(1);
 }
 
-struct BeginThreadData {
-    unsigned (*start_address)(void*);
-    void* arg_list;
-};
-
-static void* crt_thread_trampoline(void* arg) {
-    auto* data = static_cast<BeginThreadData*>(arg);
-    unsigned (*func)(void*) = data->start_address;
-    void* param = data->arg_list;
-    delete data;
-    unsigned res = func(param);
-    return reinterpret_cast<void*>(static_cast<std::uintptr_t>(res));
-}
-
 TL_CRT_MSABI std::uintptr_t tl__beginthreadex(void* security, unsigned stack_size,
-                                              unsigned (*start_address)(void*), void* arg_list,
+                                              GuestBeginThreadProc start_address, void* arg_list,
                                               unsigned init_flag, unsigned* thread_id) noexcept {
     (void)security;
-    (void)stack_size;
-    (void)init_flag;
     if (start_address == nullptr) {
         set_error(EINVAL);
         return 0;
     }
-    auto* data = new (std::nothrow) BeginThreadData{start_address, arg_list};
-    if (data == nullptr) {
-        set_error(ENOMEM);
-        return 0;
-    }
-    pthread_t thread{};
-    if (::pthread_create(&thread, nullptr, crt_thread_trampoline, data) != 0) {
-        delete data;
+    const void* const thread = tl_CreateThread(
+        nullptr, static_cast<std::uintptr_t>(stack_size),
+        reinterpret_cast<std::uintptr_t>(start_address), arg_list, init_flag, thread_id);
+    if (thread == nullptr) {
         set_error(EAGAIN);
         return 0;
     }
-    if (thread_id != nullptr) {
-        *thread_id = static_cast<unsigned>(thread);
-    }
-    return static_cast<std::uintptr_t>(thread);
+    set_error(0);
+    return reinterpret_cast<std::uintptr_t>(thread);
 }
 
 TL_CRT_MSABI int tl_memcmp(const void* ptr1, const void* ptr2, std::size_t num) noexcept {

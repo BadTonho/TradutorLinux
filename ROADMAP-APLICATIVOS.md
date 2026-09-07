@@ -1295,6 +1295,44 @@ Evidência E12 de 2026-09-07:
 - [x] `ctest --test-dir build/debug-rust -R '^seven_zip_cli_smoke$'` passou
   em 3,47 s, e o mesmo filtro em `build/debug` passou em 4,40 s.
 
+### E13 — Múltiplos arquivos e caminhos Unicode no 7-Zip CLI
+
+Objetivo: cobrir a combinação de entradas múltiplas, compressão `DEFLATE`,
+diretórios aninhados e nomes Unicode sem introduzir suporte específico ao
+7-Zip no runtime.
+
+Tarefas:
+
+- [x] Corrigir `_beginthreadex` para encaminhar a função convidada com a
+  convenção Microsoft x64, a pilha convidada e o contexto de thread do
+  runtime, reutilizando `tl_CreateThread` em vez de chamar o endereço PE por
+  uma thread POSIX crua.
+- [x] Ampliar o smoke para criar, listar e extrair `input-data/café-日本.txt`
+  junto com `input.txt` nos ZIP `stored`, ZIP `DEFLATE` e `7z/LZMA2`.
+- [x] Solicitar `UTF-8` explicitamente nas listagens técnicas, para que a
+  verificação do nome seja independente da página OEM do terminal.
+- [x] Executar a matriz Rust ON/C++ OFF e os testes de CRT/concurrency
+  associados ao caminho de threads.
+
+Aceitação:
+
+- [x] Os três formatos criam, listam e extraem os dois arquivos, preservando
+  byte a byte o conteúdo e o caminho aninhado Unicode.
+- [x] O caso DEFLATE com múltiplas entradas não termina mais em
+  `guest-signal`/`SIGSEGV`; ambos os builds terminam com `Everything is Ok` e
+  exit `0`.
+- [x] Nenhuma DLL, shim, regra de seleção ou mudança específica do aplicativo
+  foi adicionada ao runtime.
+
+Evidência E13 de 2026-09-07:
+
+- [x] `ctest --test-dir build/debug-rust --output-on-failure -R
+  '(^seven_zip_cli_smoke$|Msvcrt|Win32Concurrency|runtime_tl_7z_cli|app_run_tl_7z_cli)'`
+  passou: 55/55 testes.
+- [x] O mesmo filtro em `build/debug` passou: 55/55 testes.
+- [x] `seven_zip_cli_smoke` passou manualmente nos dois builds com
+  `7-Zip CLI stored/deflate/7z create/list/extract: ok`.
+
 ### E11 — Matriz CTest dos smokes GUI do corpus
 
 Objetivo: tornar os cenários GUI reais já validados em D2/E1/E2 descobríveis e
