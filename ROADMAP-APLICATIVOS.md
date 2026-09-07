@@ -620,28 +620,55 @@ há alteração de runtime justificada sem uma fixture mínima para a corrupçã
 heap. C3 pode tratar os instaladores separadamente sem reclassificar esses
 casos como suporte.
 
-### C3 — Diagnóstico dos instaladores aprovados
+### C3 concluído — diagnóstico dos instaladores aprovados
 
 Objetivo: entender por que Roblox, G HUB e Affinity não concluem instalação,
 sem executar instaladores x86 nem substituir metadados Rust por C++.
 
 Tarefas:
 
-- [ ] Separar falha do setup convidado, extração ZIP/MSIX, catálogo,
-  executável principal e validação PE interno.
-- [ ] Capturar trace de instalação quando o CLI permitir e preservar os
+- [x] Separar falha do setup convidado, extração ZIP/MSIX, catálogo,
+  executável principal e validação PE interno: Roblox/G HUB terminam no setup;
+  Affinity falha no parsing do pacote antes da extração.
+- [x] Capturar trace de instalação quando o CLI permitir e preservar os
   resultados ON/OFF sem cadastrar entradas parciais.
-- [ ] Avaliar Affinity somente como pacote MSIX/.NET fora do escopo; não
+- [x] Avaliar Affinity somente como pacote MSIX/.NET fora do escopo; não
   aumentar limites de segurança sem evidência de necessidade e autorização.
-- [ ] Repetir instalação somente em prefixos temporários e remover artefatos
+- [x] Repetir instalação somente em prefixos temporários e remover artefatos
   após cada caso.
 
 Aceitação:
 
-- [ ] Cada instalador tem uma causa de término ou uma limitação ambiental
+- [x] Cada instalador tem uma causa de término ou uma limitação ambiental
   reproduzível.
-- [ ] Nenhuma instalação falha silenciosamente nem deixa catálogo/prefixo
+- [x] Nenhuma instalação falha silenciosamente nem deixa catálogo/prefixo
   residual.
+
+Evidência C3 de 2026-09-07:
+
+- [x] Rust ON (`build/debug-rust`) e C++ OFF (`build/debug`) foram executados
+  com `install --trace --timeout 4 --cpu 3 --memory 512` em prefixos isolados;
+  resultados completos estão em `/tmp/tl-matrix-c3`.
+- [x] `RobloxPlayerInstaller.exe` terminou com `ExitProcess(3)` e os dois
+  builds retornaram `3`, com `failed stage="setup"`; não houve extração,
+  validação de PE interno ou cadastro.
+- [x] `Logitech_GHUB_x64.exe` e `lghub_installer.exe` terminaram com
+  `ExitProcess(1)` e os dois builds retornaram `1`, com
+  `failed stage="setup"`; o alias teve o mesmo comportamento e nenhum
+  catálogo foi alterado.
+- [x] `Affinity x64.msix` retornou `4` nos dois builds antes da extração.
+  Rust emitiu `package-parse status="malformed" code="19" phase="3"`
+  com o limite agregado excedido; C++ registrou a mesma etapa sem fallback.
+  O conteúdo interno .NET permanece fora do escopo.
+- [x] stdout foi vazio e idêntico nos oito casos; nenhum trace registrou
+  `extracted`, `registered` ou cadastro parcial, e os oito prefixos
+  temporários ficaram sem arquivos.
+
+Conclusão C3: os instaladores PE32+ não falharam em parsing, extração ou
+validação do PE interno; os setups convidados encerraram explicitamente antes
+de materializar uma instalação. O pacote Affinity continua rejeitado com
+segurança por limite de análise, sem ampliar limites nem prometer suporte
+.NET/MSIX.
 
 ### C4 — Regressão da matriz completa
 

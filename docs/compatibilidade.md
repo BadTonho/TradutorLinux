@@ -990,6 +990,15 @@ A B3 testou apenas os candidatos PE32+ e MSIX em prefixos temporários. Os
 instaladores PE32/x86, DLLs e o HWiNFO empacotado não foram executados como
 aplicativos.
 
+A C3 repetiu a instalação dos três candidatos PE32+ e do MSIX em Rust ON e
+C++ OFF, com `--trace`, prefixos temporários e limites controlados. Roblox
+terminou no setup com `ExitProcess(3)`; G HUB e seu alias terminaram no setup
+com `ExitProcess(1)`. Affinity foi rejeitado no `package-parse` antes da
+extração, com Rust registrando o limite estruturado e C++ mantendo a mesma
+etapa. stdout foi vazio e idêntico nos oito casos, sem eventos `extracted` ou
+`registered`; nenhum prefixo recebeu arquivo. Isso diagnostica término do
+setup e limite seguro do pacote, não suporte funcional de instalação.
+
 Esses resultados são uma atualização da matriz de evidência, não uma promoção
 geral de compatibilidade: `exit 0` em uma execução controlada indica apenas
 que aquele cenário terminou, e falhas `3`, `4`, `71` e `72` permanecem
