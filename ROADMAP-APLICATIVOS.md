@@ -776,6 +776,12 @@ Evidência inicial D1 de 2026-09-07:
   LSan falhou sob ptrace durante a enumeração dos testes, e o binário Sanitizer
   existente ainda precede a correção de unwind. Nenhum patch de runtime foi
   aplicado nesta etapa.
+- [x] Um GDB seguindo o processo convidado registrou duas sequências de
+  `HeapSize`/`HeapReAlloc` nos PCs convidados `0x14043aaa1`/`0x14043a989`,
+  depois um segundo `GetStartupInfoW` e a chamada
+  `SHGetFolderPathW(CSIDL_APPDATA)`. A execução instrumentada expirou sem
+  reproduzir a corrupção; portanto a primeira escrita causadora continua
+  desconhecida e nenhuma dessas APIs foi alterada por hipótese.
 
 ### D2 — Cenários interativos para GUIs x64
 
