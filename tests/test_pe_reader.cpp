@@ -520,6 +520,16 @@ TEST(PeReaderTest, ValidatesV2EpilogDescriptorsAndExtendedSetFpReg) {
     const ParseResult extended2 = parse_pe(bytes);
     EXPECT_EQ(extended2.status, ParseStatus::Success);
     EXPECT_TRUE(extended2.info.runtime_functions[0].unwind.has_extended_set_fpreg);
+
+    bytes = make_all_unwind_opcodes_pe();
+    // FrameOffset=4 é permitido na forma estendida, mesmo que 4 (RSP) não
+    // seja um registrador de frame válido.
+    bytes[kUnwindFileOffset + 3] = std::byte{0x45};
+    bytes[kUnwindFileOffset + 13] = std::byte{0x43};
+    const ParseResult extended_rsp_offset = parse_pe(bytes);
+    ASSERT_EQ(extended_rsp_offset.status, ParseStatus::Success)
+        << extended_rsp_offset.error_message;
+    EXPECT_TRUE(extended_rsp_offset.info.runtime_functions[0].unwind.has_extended_set_fpreg);
 }
 
 TEST(PeReaderTest, RejectsDelayImportDirectoryWithoutTerminator) {

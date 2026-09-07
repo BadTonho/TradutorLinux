@@ -1437,7 +1437,11 @@ impl<'a> Parser<'a> {
                 2 => {}
                 3 => {
                     if info != 0 {
-                        if !valid_gpr(info) {
+                        // Imagens reais usam tanto um GPR em OpInfo quanto a
+                        // repetição de FrameOffset. O valor 4 é válido nesse
+                        // segundo papel, embora RSP não seja um registrador
+                        // de frame; outros valores continuam fora do contrato.
+                        if !valid_gpr(info) && info != frame_offset {
                             return Err(error(
                                 STATUS_UNSUPPORTED_MECHANISM,
                                 ERROR_UNWIND_DIRECTORY,

@@ -379,6 +379,40 @@ TEST(RustPeParserTest, DifferentiallyMatchesCppForAllParserTables) {
     }
 }
 
+TEST(RustPeParserTest, ExtendedSetFpRegRepeatsFrameOffset) {
+    constexpr std::size_t kUnwindFileOffset = 0x400U + 12U;
+
+    ByteVector accepted = make_all_unwind_fixture();
+    accepted[kUnwindFileOffset + 3U] = std::byte{0x45};
+    accepted[kUnwindFileOffset + 13U] = std::byte{0x43};
+    const ParseResult cpp = tradutorlinux::pe::parse_pe(accepted);
+    ASSERT_EQ(cpp.status, tradutorlinux::pe::ParseStatus::Success) << cpp.error_message;
+    const RustCall rust = parse_rust(accepted);
+    ASSERT_EQ(rust.status, TL_PE_STATUS_SUCCESS) << rust.message;
+    PeInfo decoded;
+    ASSERT_TRUE(decode_wire(rust.output, decoded));
+    expect_equal(cpp.info, decoded);
+    ASSERT_FALSE(decoded.runtime_functions.empty());
+    EXPECT_TRUE(decoded.runtime_functions[0].unwind.has_extended_set_fpreg);
+
+    ByteVector mismatched = make_all_unwind_fixture();
+    mismatched[kUnwindFileOffset + 3U] = std::byte{0x35};
+    mismatched[kUnwindFileOffset + 13U] = std::byte{0x23};
+    EXPECT_EQ(tradutorlinux::pe::parse_pe(mismatched).status,
+              tradutorlinux::pe::ParseStatus::Success);
+    const RustCall accepted_gpr = parse_rust(mismatched);
+    EXPECT_EQ(accepted_gpr.status, TL_PE_STATUS_SUCCESS) << accepted_gpr.message;
+
+    ByteVector rejected = make_all_unwind_fixture();
+    rejected[kUnwindFileOffset + 3U] = std::byte{0x35};
+    rejected[kUnwindFileOffset + 13U] = std::byte{0x43};
+    EXPECT_EQ(tradutorlinux::pe::parse_pe(rejected).status,
+              tradutorlinux::pe::ParseStatus::UnsupportedMechanism);
+    const RustCall rejected_rust = parse_rust(rejected);
+    EXPECT_EQ(rejected_rust.status, TL_PE_STATUS_UNSUPPORTED_MECHANISM);
+    EXPECT_EQ(rejected_rust.error.code, TL_PE_ERROR_UNWIND_DIRECTORY);
+}
+
 TEST(RustPeParserTest, DifferentiallyMatchesGeneratedPeCorpus) {
 #if defined(TL_FIXTURE_OUTPUT_DIRECTORY)
     const std::filesystem::path fixture_directory{TL_FIXTURE_OUTPUT_DIRECTORY};

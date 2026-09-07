@@ -1092,7 +1092,14 @@ private:
                 case 3:
                     code.operation = UnwindOperation::SetFpReg;
                     if (code.operation_info != 0U) {
-                        if (!is_valid_gpr(code.operation_info)) {
+                        // Imagens reais do corpus usam tanto um GPR no nibble
+                        // estendido quanto a repetição de FrameOffset. Nesse
+                        // segundo formato o valor 4 é legítimo como
+                        // deslocamento, embora RSP não seja um registrador de
+                        // frame válido. Os demais valores continuam limitados
+                        // a GPRs válidos.
+                        if (!is_valid_gpr(code.operation_info) &&
+                            code.operation_info != unwind.frame_offset) {
                             return fail(ParseStatus::UnsupportedMechanism,
                                         "UWOP_SET_FPREG com OpInfo não suportado em RVA " +
                                             util::format_hex(unwind_rva));

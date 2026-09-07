@@ -33,10 +33,12 @@ ausente/truncado, tamanho zero, offset fora da função ou epílogos sobrepostos
 são rejeitados.
 
 `UWOP_SET_FPREG` canônico usa `OpInfo == 0`. A extensão observada em imagens
-reais é aceita somente quando `OpInfo == FrameOffset` do cabeçalho; ela é
-marcada em `has_extended_set_fpreg` para trace e relatório e conserva a
-semântica já usada para o frame pointer. Qualquer outra combinação falha como
-mecanismo não suportado.
+reais é aceita quando `OpInfo` identifica um GPR válido ou quando repete
+`FrameOffset` do cabeçalho; esta última forma cobre o valor 4, que é válido
+como deslocamento embora RSP não seja um registrador de frame. Ela é marcada
+em `has_extended_set_fpreg` para trace e relatório e conserva a semântica já
+usada para o frame pointer. Qualquer outra combinação falha como mecanismo não
+suportado.
 
 ## CONTEXT e APIs
 

@@ -30,7 +30,7 @@ teste e registro reproduzível.
 | Execução | `7z_x64.exe`, `WinRAR_x64.exe` e `winrar-x64-723.exe` terminaram com código 0 | Regressão em matriz ON/OFF |
 | GUI | `7zFM_x64.exe` chegou à execução, mas não havia X11 funcional | Repetir em ambiente gráfico controlado |
 | PE32/x86 | 12 arquivos rejeitados por arquitetura não suportada | Manter fora do escopo até decisão própria |
-| Unwind x64 | 6 executáveis rejeitados por `UWOP_SET_FPREG` estendido | Investigar e criar fixtures antes de alterar o parser |
+| Unwind x64 | 6 executáveis agora passam no `--report`; o trace registra V1/V2, cadeias e `extended-set-fpreg` | Avaliar as limitações de execução de cada aplicativo |
 | HWiNFO64 | Falha estrutural em exports/RVA | Confirmar se é layout legítimo ou imagem inválida |
 | Rufus | Report passou; execução parou por entry point fora de página executável | Investigar imagem empacotada e política de execução |
 | MSIX Affinity | ZIP válido com 1.284 entradas, mas rejeitado como formato não suportado | Isolar a convenção ZIP/MSIX não coberta |
@@ -41,6 +41,28 @@ Os marcos são independentes, mas devem ser tratados nesta ordem: unwind x64,
 MSIX, HWiNFO, Rufus, GUI e instaladores. A decisão sobre PE32/x86 fica
 separada e não deve ser introduzida como efeito colateral de outra correção.
 
+### A1 concluído — evidência de 2026-09-07
+
+O parser agora aceita as duas formas estendidas observadas no corpus: um GPR
+válido em `OpInfo` e a repetição de `FrameOffset`, inclusive o valor `4`.
+Qualquer valor que não seja GPR válido nem `FrameOffset` continua sendo
+`unsupported-mechanism`. C++ e Rust compartilham essa regra e o diferencial
+continua sem fallback.
+
+Evidência reproduzível:
+
+- [x] Fixture C++ e fixture diferencial Rust cobrem `FrameOffset=4`, GPR
+  estendido e valor inválido.
+- [x] Suíte unitária Rust Debug: 493 testes aprovados e 1 skip ambiental
+  previamente definido, usando prefixo temporário.
+- [x] `--report` Rust e C++ OFF passaram para Logitech G HUB, G HUB Installer,
+  Roblox, Rockstar Games Launcher, Notepad++ e PuTTY.
+- [x] Execução Rust controlada: Logitech/G HUB terminaram com código 1;
+  Roblox/Rockstar com código 3; Notepad++ terminou por `SIGABRT` controlado
+  (71); PuTTY terminou por timeout controlado (72).
+- [x] Nenhuma dessas execuções falhou no parsing de unwind; o trace confirma
+  mapeamento posterior e os limites de execução permaneceram ativos.
+
 ### A1 — Unwind x64 estendido
 
 Objetivo: ampliar a análise somente se a semântica dos encadeamentos reais for
@@ -48,19 +70,19 @@ compatível com o modelo do loader.
 
 Tarefas:
 
-- [ ] Localizar a validação que rejeita `UWOP_SET_FPREG` com `OpInfo` estendido.
-- [ ] Comparar os casos de Logitech G HUB, Roblox, Rockstar Games Launcher,
+- [x] Localizar a validação que rejeita `UWOP_SET_FPREG` com `OpInfo` estendido.
+- [x] Comparar os casos de Logitech G HUB, Roblox, Rockstar Games Launcher,
   Notepad++ e PuTTY com fixtures mínimas.
-- [ ] Definir a semântica suportada para unwind e encadeamentos, sem relaxar
+- [x] Definir a semântica suportada para unwind e encadeamentos, sem relaxar
   ranges, offsets ou permissões.
-- [ ] Preservar diagnóstico estruturado e ausência de mapeamento/execução nas
+- [x] Preservar diagnóstico estruturado e ausência de mapeamento/execução nas
   rejeições.
 
 Aceitação:
 
-- [ ] Testes diferenciais C++/Rust passam para todos os casos cobertos.
-- [ ] `--report` e execução têm resultado controlado e documentado.
-- [ ] A matriz ON/OFF não apresenta fallback silencioso nem regressão.
+- [x] Testes diferenciais C++/Rust passam para todos os casos cobertos.
+- [x] `--report` e execução têm resultado controlado e documentado.
+- [x] A matriz ON/OFF não apresenta fallback silencioso nem regressão.
 
 ### A2 — Estrutura de exports do HWiNFO64
 
