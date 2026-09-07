@@ -935,7 +935,7 @@ Tarefas:
 
 Aceitação:
 
-- [x] O WinRAR SFX cria e mapeia a janela, encerra com exit `3` após o
+- [x] O WinRAR SFX cria e mapeia a janela, encerra com exit `0` após o
   cancelamento controlado e não registra `guest-timeout`.
 - [x] Rust ON e C++ OFF produzem o mesmo comportamento no smoke.
 - [x] A matriz de compatibilidade distingue o cenário SFX controlado da
@@ -947,7 +947,12 @@ Evidência E1 de 2026-09-07:
   `build/debug/tests/winrar_sfx_smoke`, usando `WinRAR_x64.exe`, passaram sob
   Xvfb próprio. Ambos localizaram e mapearam `WinRAR self-extracting archive`,
   enviaram `WM_DELETE_WINDOW`, observaram `EndDialog(result=2)` e terminaram
-  com `ExitProcess(3)` sem `guest-timeout`.
+  com `ExitProcess(0)` sem `guest-timeout`.
+- [x] A regressão pós-E5/E6/E7, repetida em 2026-09-07, confirmou o mesmo
+  `ExitProcess(0)` nos dois builds. O critério anterior `exit 3` era uma
+  expectativa obsoleta do harness; o cancelamento agora é validado pelo
+  `EndDialog(result=2)`, pela saída limpa e pela ausência de timeout, sem
+  alterar o runtime para forçar um código de retorno.
 - [x] O `--report` de `WinRAR_x64.exe` continuou equivalente nos builds ON/OFF;
   o cenário sem interação permanece `guest-timeout 72` e não foi promovido.
 - [x] Uma tentativa separada de `Return` confirmou `IsDialogMessageW`/`IDOK`

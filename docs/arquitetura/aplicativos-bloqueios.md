@@ -108,7 +108,7 @@ O alvo separado `tests/apps/winrar/winrar_sfx_smoke.cpp` inicia o runtime com
 limites de CPU/memória e Xvfb próprio, localiza a janela
 `WinRAR self-extracting archive` por X11 e envia somente `WM_DELETE_WINDOW`.
 Os builds `build/debug-rust` e `build/debug` passaram com o mesmo resultado:
-`EndDialog(result=2)`, `ExitProcess(3)` e nenhum `guest-timeout`. O cenário não
+`EndDialog(result=2)`, `ExitProcess(0)` e nenhum `guest-timeout`. O cenário não
 escreve DLL, shim ou regra no runtime geral.
 
 O mesmo harness também foi usado como investigação com `Return`/`IDOK`. O

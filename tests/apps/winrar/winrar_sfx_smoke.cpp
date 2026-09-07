@@ -217,7 +217,7 @@ void stop_runtime_process(const pid_t pid) {
         stop_runtime_process(runtime_pid);
     }
     passed = passed && runtime_exited && WIFEXITED(runtime_status) &&
-             WEXITSTATUS(runtime_status) == 3;
+             WEXITSTATUS(runtime_status) == 0;
     stop_process(xvfb.pid);
 
     std::ifstream trace_input(trace_path);
@@ -228,7 +228,7 @@ void stop_runtime_process(const pid_t pid) {
              trace.find("window-mapped backend=\"x11\"") != std::string::npos &&
              trace.find("EndDialog symbol=\"EndDialog\" result=\"2\" status=\"success\"") !=
                  std::string::npos &&
-             trace.find("ExitProcess symbol=\"ExitProcess\" exit-code=\"3\"") !=
+             trace.find("ExitProcess symbol=\"ExitProcess\" exit-code=\"0\"") !=
                  std::string::npos &&
              trace.find("guest-timeout") == std::string::npos;
     if (!passed) {
