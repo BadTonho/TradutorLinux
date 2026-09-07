@@ -284,7 +284,7 @@ Aceitação:
 - [x] Falhas não deixaram arquivos, catálogo ou prefixo parcial nos diretórios
   temporários observados.
 
-### A7 — Proveniência e integridade dos downloads
+### A7 concluído — proveniência e integridade dos downloads
 
 Objetivo: tornar o corpus reproduzível e distinguir arquivos oficiais de
 artefatos apenas disponíveis localmente.
@@ -293,7 +293,7 @@ Tarefas:
 
 - [x] Registrar origem e SHA-256 do CPU-Z, HWMonitor e GPU-Z, incluindo a
   fonte do hash quando o fornecedor não o exibe na página de download.
-- [ ] Reproduzir o `HWiNFO64.exe` local a partir do pacote portátil HWiNFO
+- [x] Reproduzir o `HWiNFO64.exe` local a partir do pacote portátil HWiNFO
   8.52 e confirmar a igualdade byte a byte.
 - [x] Preservar versão, arquitetura e data de cada arquivo no inventário.
 
@@ -304,18 +304,19 @@ Auditoria realizada em 2026-09-07:
 | `CPU-Z_2.18_en.exe` | 2.18 / PE32 x86 | 2026-09-07 | [CPUID](https://download.cpuid.com/cpu-z/cpu-z_2.18-en.exe) | `3999dad2516dbc9afdd51defc2447d940aa78a88bcf93655186c856b326e3821` | download oficial reproduzido byte a byte; também coincide com o manifesto `CPUID.CPU-Z/2.18` do [WinGet](https://github.com/microsoft/winget-pkgs/tree/master/manifests/c/CPUID/CPU-Z/2.18) |
 | `GPU-Z_2.70.0.exe` | 2.70.0 / PE32 x86 | 2026-09-07 | [TechPowerUp](https://www.techpowerup.com/gpuz/) | `6cb0ef29682452de81a9576808881685161411a1fad00938ba04131159979c29` | coincide com o hash publicado no manifesto `TechPowerUp.GPU-Z/2.70.0` do [WinGet](https://github.com/microsoft/winget-pkgs/tree/master/manifests/t/TechPowerUp/GPU-Z/2.70.0) |
 | `HWMonitor_1.67.exe` | 1.67 / PE32 x86 | 2026-09-07 | [CPUID](https://download.cpuid.com/hwmonitor/hwmonitor_1.67.exe) e [SAC](https://www.sac.sk/download/utildiag/hwm167.exe) | `8c6799f8ece4ab5846cc8beddcf52bd887a5ae896279652960ef8d943d453473` | `hwm167.exe` do SAC tem 3.631.600 bytes e é byte-a-byte igual ao local; o hash também coincide com o manifesto `CPUID.HWMonitor/1.67` do [WinGet](https://github.com/microsoft/winget-pkgs/tree/master/manifests/c/CPUID/HWMonitor/1.67). O endpoint CPUID consultado em 2026-09-07 entregou outro PE32 de 2.555.904 bytes, hash `e7cb1f99f0fb4758161335075762c142c98955faa22e8dba358de8549cfa89e0` |
-| `HWiNFO64.exe` | 8.52 / PE32+ x86-64 | 2026-08-25 | [HWiNFO](https://www.hwinfo.com/download/) e pacote portátil [SAC](https://www.sac.sk/download/utildiag/hwi_852.zip) | `39292da56747eaed8b6025ba5e231e096e5792708bf4671308c2e700ed059cc0` | o catálogo SAC confirma o pacote portátil de 20.828.120 bytes; o manifesto [Scoop](https://github.com/ScoopInstaller/Extras/blob/master/bucket/hwinfo.json) publica SHA-256 `0ce80064422e128a0f4257733c41e02970b5997a04361accc1f7f2f4b059f1ed`. A comparação do executável extraído ainda não foi concluída |
+| `HWiNFO64.exe` | 8.52 / PE32+ x86-64 | 2026-08-25 | [HWiNFO](https://www.hwinfo.com/download/) e pacote portátil [SAC](https://www.sac.sk/download/utildiag/hwi_852.zip) | `39292da56747eaed8b6025ba5e231e096e5792708bf4671308c2e700ed059cc0` | o ZIP de 20.828.120 bytes tem SHA-256 `0ce80064422e128a0f4257733c41e02970b5997a04361accc1f7f2f4b059f1ed`, coincide com o manifesto [Scoop](https://github.com/ScoopInstaller/Extras/blob/master/bucket/hwinfo.json), passa `unzip -t` e produz um executável byte-a-byte igual ao local |
 
 Os arquivos locais foram baixados originalmente de um artefato identificado
 apenas por `downloaded_from_www.guru3d.com.txt`; esse marcador não contém uma
-URL individual por arquivo. O inventário distingue explicitamente
-proveniência verificável, divergência do endpoint atual e origem local ainda
-não reproduzida. O hash é calculado localmente e não é tratado como prova de
-autenticidade quando a fonte publicada não pode ser reproduzida.
+URL individual por arquivo. A reconstrução foi feita pelos URLs pinados acima:
+CPU-Z, GPU-Z, HWMonitor e o ZIP portátil HWiNFO. O endpoint CPUID atual do
+HWMonitor entregou um binário diferente, mas o artefato SAC reproduziu o
+arquivo local e preservou o hash publicado no manifesto. O inventário mantém
+essa divergência registrada em vez de ocultá-la.
 
 Aceitação:
 
-- [ ] O corpus usado nos testes pode ser reconstruído sem depender de nomes
+- [x] O corpus usado nos testes pode ser reconstruído sem depender de nomes
   ambíguos ou downloads não documentados.
 
 ### A8 — Decisão independente sobre PE32/x86
