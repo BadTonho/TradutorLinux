@@ -25,6 +25,13 @@ __attribute__((dllimport)) int bind(socket_t socket, const void* name, int name_
 __attribute__((dllimport)) int listen(socket_t socket, int backlog);
 __attribute__((dllimport)) socket_t accept(socket_t socket, void* name, int* name_length);
 __attribute__((dllimport)) int connect(socket_t socket, const void* name, int name_length);
+__attribute__((dllimport)) void* WSACreateEvent(void);
+__attribute__((dllimport)) int WSACloseEvent(void* event_handle);
+__attribute__((dllimport)) int WSAEventSelect(socket_t socket, void* event_handle, long network_events);
+__attribute__((dllimport)) dword_t WSAWaitForMultipleEvents(dword_t count, const void* const* events,
+                                                             int wait_all, dword_t timeout, int alertable);
+__attribute__((dllimport)) int WSAEnumNetworkEvents(socket_t socket, void* event_handle,
+                                                     void* network_events);
 __attribute__((dllimport)) int send(socket_t socket, const char* buffer, int length, int flags);
 __attribute__((dllimport)) int recv(socket_t socket, char* buffer, int length, int flags);
 __attribute__((dllimport)) int sendto(socket_t socket, const char* buffer, int length, int flags,
@@ -64,6 +71,11 @@ typedef struct pollfd_guest {
     short events;
     short revents;
 } pollfd_guest;
+
+typedef struct wsa_network_events_guest {
+    dword_t network_events;
+    dword_t error_codes[10];
+} wsa_network_events_guest;
 
 static socket_t g_client_socket = ~0ULL;
 static sockaddr_in_guest g_client_address;
@@ -128,9 +140,22 @@ void tl_entry(void) {
     if (listen(listener, 1) != 0) {
         fail(output, &written, 33U);
     }
+    void* listener_event = WSACreateEvent();
+    if (listener_event == (void*)0 || WSAEventSelect(listener, listener_event, 0x0008L | 0x0020L) != 0) {
+        fail(output, &written, 34U);
+    }
     void* thread = CreateThread((void*)0, 0, (void*)client_thread, (void*)0, 0, (dword_t*)0);
     if (thread == (void*)0) {
         fail(output, &written, 4U);
+    }
+    const void* listener_events[] = {listener_event};
+    if (WSAWaitForMultipleEvents(1U, listener_events, 0, 5000U, 0) != 0U) {
+        fail(output, &written, 35U);
+    }
+    wsa_network_events_guest network_events = {0};
+    if (WSAEnumNetworkEvents(listener, listener_event, &network_events) != 0 ||
+        (network_events.network_events & 0x0008U) == 0U) {
+        fail(output, &written, 36U);
     }
     socket_t accepted = accept(listener, (void*)0, (int*)0);
     char tcp_buffer[4] = {0};
@@ -139,6 +164,7 @@ void tl_entry(void) {
         fail(output, &written, 5U);
     }
     closesocket(accepted);
+    WSACloseEvent(listener_event);
     closesocket(listener);
     WaitForSingleObject(thread, 5000U);
     CloseHandle(thread);

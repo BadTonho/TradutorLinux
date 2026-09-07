@@ -311,10 +311,16 @@ TEST(PuttyCoverageTest, AllApisAndModules) {
     void* wsa_ev = tl_WSACreateEvent();
     EXPECT_NE(wsa_ev, nullptr);
     EXPECT_EQ(tl_WSASetEvent(wsa_ev), 1);
-    EXPECT_EQ(tl_WSAResetEvent(wsa_ev), 1);
     const void* ev_array[] = {wsa_ev};
     EXPECT_EQ(tl_WSAWaitForMultipleEvents(1, ev_array, 0, 10, 0), 0U);
+    EXPECT_EQ(tl_WSAWaitForMultipleEvents(1, ev_array, 0, 0, 0), 0U);
+    EXPECT_EQ(tl_WSAResetEvent(wsa_ev), 1);
+    EXPECT_EQ(tl_WSAWaitForMultipleEvents(1, ev_array, 0, 10, 0), 258U);
     EXPECT_EQ(tl_WSACloseEvent(wsa_ev), 1);
+    EXPECT_EQ(tl_WSASetEvent(wsa_ev), 0);
+    EXPECT_EQ(tl_WSAGetLastError(), 10022);
+    EXPECT_EQ(tl_WSAWaitForMultipleEvents(1, ev_array, 0, 0, 0), 0xFFFFFFFFU);
+    EXPECT_EQ(tl_WSAGetLastError(), 10022);
     EXPECT_NE(tl_gethostbyname("localhost"), nullptr);
     EXPECT_NE(tl_getservbyname("ssh", "tcp"), nullptr);
     tl_WSASetLastError(0);

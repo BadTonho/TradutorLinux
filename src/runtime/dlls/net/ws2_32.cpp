@@ -6,11 +6,13 @@
 #include <array>
 #include <cerrno>
 #include <charconv>
+#include <chrono>
 #include <cstring>
 #include <fstream>
 #include <limits>
 #include <mutex>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include <arpa/inet.h>
@@ -43,6 +45,19 @@ constexpr int kWsaENetUnreachable = 10051;
 constexpr int kWsaENoData = 11004;
 constexpr int kWsaEAIFlags = 10022;
 constexpr std::uintptr_t kSocketHandleBase = 0x0000B00000000000ULL;
+constexpr std::uintptr_t kWsaEventHandleBase = 0x0000B10000000000ULL;
+constexpr std::size_t kMaxWsaEvents = 64;
+constexpr std::uint32_t kWsaWaitEvent0 = 0U;
+constexpr std::uint32_t kWsaWaitTimeout = 258U;
+constexpr std::uint32_t kWsaWaitFailed = 0xFFFFFFFFU;
+
+constexpr long kFdRead = 0x0001L;
+constexpr long kFdWrite = 0x0002L;
+constexpr long kFdOob = 0x0004L;
+constexpr long kFdAccept = 0x0008L;
+constexpr long kFdConnect = 0x0010L;
+constexpr long kFdClose = 0x0020L;
+constexpr long kSupportedNetworkEvents = kFdRead | kFdWrite | kFdOob | kFdAccept | kFdConnect | kFdClose;
 
 thread_local int g_wsa_last_error = 0;
 
@@ -50,9 +65,23 @@ struct SocketSlot {
     bool used{false};
     int fd{-1};
     int type{0};
+    bool listening{false};
+    bool connecting{false};
+    void* event_handle{nullptr};
+    long network_events{0};
+    long pending_events{0};
+    std::array<int, 10> event_errors{};
 };
 std::array<SocketSlot, 256> g_sockets{};
 std::mutex g_sockets_mutex;
+
+struct WsaEventSlot {
+    bool used{false};
+    bool signaled{false};
+};
+std::array<WsaEventSlot, kMaxWsaEvents> g_wsa_events{};
+
+int errno_to_wsa(int error) noexcept;
 
 struct GuestAddrInfo {
     int flags{};
@@ -97,6 +126,97 @@ SocketSlot* find_socket(const std::uintptr_t handle) noexcept {
 
 std::uintptr_t socket_handle(SocketSlot& slot) noexcept {
     return kSocketHandleBase + static_cast<std::uintptr_t>(&slot - g_sockets.data());
+}
+
+WsaEventSlot* find_wsa_event(void* const handle) noexcept {
+    const std::uintptr_t raw = reinterpret_cast<std::uintptr_t>(handle);
+    if (raw < kWsaEventHandleBase || raw >= kWsaEventHandleBase + g_wsa_events.size()) {
+        return nullptr;
+    }
+    WsaEventSlot& event = g_wsa_events[raw - kWsaEventHandleBase];
+    return event.used ? &event : nullptr;
+}
+
+void* wsa_event_handle(WsaEventSlot& event) noexcept {
+    return reinterpret_cast<void*>(kWsaEventHandleBase +
+                                   static_cast<std::uintptr_t>(&event - g_wsa_events.data()));
+}
+
+int event_index(const long event) noexcept {
+    switch (event) {
+        case kFdRead: return 0;
+        case kFdWrite: return 1;
+        case kFdOob: return 2;
+        case kFdAccept: return 3;
+        case kFdConnect: return 4;
+        case kFdClose: return 5;
+        default: return -1;
+    }
+}
+
+void set_pending_event(SocketSlot& slot, const long event, const int error = 0) noexcept {
+    if ((slot.network_events & event) == 0) {
+        return;
+    }
+    slot.pending_events |= event;
+    if (const int index = event_index(event); index >= 0) {
+        slot.event_errors[static_cast<std::size_t>(index)] = error;
+    }
+    if (WsaEventSlot* const event_slot = find_wsa_event(slot.event_handle)) {
+        event_slot->signaled = true;
+    }
+}
+
+void refresh_wsa_events_locked() noexcept {
+    for (SocketSlot& slot : g_sockets) {
+        if (!slot.used || slot.event_handle == nullptr || slot.network_events == 0) {
+            continue;
+        }
+
+        pollfd descriptor{};
+        descriptor.fd = slot.fd;
+        if ((slot.network_events & (kFdRead | kFdAccept | kFdClose)) != 0) {
+            descriptor.events |= POLLIN;
+        }
+        if ((slot.network_events & (kFdWrite | kFdConnect)) != 0) {
+            descriptor.events |= POLLOUT;
+        }
+        if ((slot.network_events & kFdOob) != 0) {
+            descriptor.events |= POLLPRI;
+        }
+        if (::poll(&descriptor, 1, 0) < 0) {
+            if (errno != EINTR) {
+                set_pending_event(slot, kFdClose, errno_to_wsa(errno));
+            }
+            continue;
+        }
+
+        if (slot.connecting && (descriptor.revents & (POLLOUT | POLLERR | POLLHUP)) != 0) {
+            int error = 0;
+            socklen_t error_length = sizeof(error);
+            int wsa_error = 0;
+            if (::getsockopt(slot.fd, SOL_SOCKET, SO_ERROR, &error, &error_length) != 0) {
+                wsa_error = errno_to_wsa(errno);
+            } else if (error != 0) {
+                wsa_error = errno_to_wsa(error);
+            }
+            slot.connecting = false;
+            set_pending_event(slot, kFdConnect, wsa_error);
+        }
+        if ((descriptor.revents & POLLPRI) != 0) {
+            set_pending_event(slot, kFdOob);
+        }
+        if ((descriptor.revents & POLLOUT) != 0 && !slot.connecting) {
+            set_pending_event(slot, kFdWrite);
+        }
+        if ((descriptor.revents & POLLIN) != 0) {
+            set_pending_event(slot, slot.listening ? kFdAccept : kFdRead);
+        }
+        if ((descriptor.revents & (POLLERR | POLLHUP | POLLNVAL)) != 0) {
+            set_pending_event(slot, kFdClose,
+                              (descriptor.revents & POLLNVAL) != 0 ? kWsaENotSocket : 0);
+        }
+    }
 }
 
 int errno_to_wsa(const int error) noexcept {
@@ -249,6 +369,7 @@ TL_MSABI int tl_listen(const std::uintptr_t socket, const int backlog) noexcept 
         g_wsa_last_error = slot == nullptr ? kWsaENotSocket : errno_to_wsa(errno);
         return -1;
     }
+    slot->listening = true;
     g_wsa_last_error = 0;
     return 0;
 }
@@ -290,13 +411,19 @@ TL_MSABI int tl_connect(const std::uintptr_t socket, const void* name,
         g_wsa_last_error = kWsaENotSocket;
         return -1;
     }
-    if (!copy_guest_sockaddr(name, name_length, address) ||
-        ::connect(slot->fd, reinterpret_cast<const sockaddr*>(&address), sizeof(address)) != 0) {
+    if (!copy_guest_sockaddr(name, name_length, address)) {
+        return -1;
+    }
+    if (::connect(slot->fd, reinterpret_cast<const sockaddr*>(&address), sizeof(address)) != 0) {
+        if (errno == EINPROGRESS || errno == EALREADY) {
+            slot->connecting = true;
+        }
         if (g_wsa_last_error == 0) {
             g_wsa_last_error = errno_to_wsa(errno);
         }
         return -1;
     }
+    slot->connecting = false;
     g_wsa_last_error = 0;
     return 0;
 }
@@ -827,32 +954,87 @@ TL_MSABI int tl_WSAAsyncSelect(const std::uintptr_t socket, void* const hwnd,
 
 TL_MSABI int tl_WSAEventSelect(const std::uintptr_t socket, void* const event_handle,
                               const long network_events) noexcept {
-    (void)socket;
-    (void)event_handle;
-    (void)network_events;
+    std::lock_guard<std::mutex> lock(g_sockets_mutex);
+    SocketSlot* const slot = find_socket(socket);
+    WsaEventSlot* const event = event_handle != nullptr ? find_wsa_event(event_handle) : nullptr;
+    if (slot == nullptr || network_events < 0 || (network_events & ~kSupportedNetworkEvents) != 0 ||
+        (event_handle != nullptr && event == nullptr) ||
+        (event_handle == nullptr && network_events != 0)) {
+        g_wsa_last_error = slot == nullptr ? kWsaENotSocket : kWsaEInvalidArgument;
+        return -1;
+    }
+    if (network_events != 0) {
+        const int flags = fcntl(slot->fd, F_GETFL, 0);
+        if (flags < 0 || fcntl(slot->fd, F_SETFL, flags | O_NONBLOCK) < 0) {
+            g_wsa_last_error = errno_to_wsa(errno);
+            return -1;
+        }
+    }
+    slot->event_handle = event_handle;
+    slot->network_events = network_events;
+    slot->pending_events = 0;
+    slot->event_errors.fill(0);
+    if (event != nullptr) {
+        event->signaled = false;
+    }
     g_wsa_last_error = 0;
     return 0;
 }
 
 TL_MSABI void* tl_WSACreateEvent() noexcept {
+    std::lock_guard<std::mutex> lock(g_sockets_mutex);
+    auto free_it = std::find_if(g_wsa_events.begin(), g_wsa_events.end(),
+                                [](const WsaEventSlot& event) { return !event.used; });
+    if (free_it == g_wsa_events.end()) {
+        g_wsa_last_error = ENOBUFS;
+        return nullptr;
+    }
+    free_it->used = true;
+    free_it->signaled = false;
     g_wsa_last_error = 0;
-    return reinterpret_cast<void*>(0x57534145ULL); // 'WSAE'
+    return wsa_event_handle(*free_it);
 }
 
 TL_MSABI int tl_WSACloseEvent(void* const event_handle) noexcept {
-    (void)event_handle;
+    std::lock_guard<std::mutex> lock(g_sockets_mutex);
+    WsaEventSlot* const event = find_wsa_event(event_handle);
+    if (event == nullptr) {
+        g_wsa_last_error = kWsaEInvalidArgument;
+        return 0;
+    }
+    for (SocketSlot& slot : g_sockets) {
+        if (slot.event_handle == event_handle) {
+            slot.event_handle = nullptr;
+            slot.network_events = 0;
+            slot.pending_events = 0;
+            slot.event_errors.fill(0);
+        }
+    }
+    *event = {};
     g_wsa_last_error = 0;
     return 1;
 }
 
 TL_MSABI int tl_WSASetEvent(void* const event_handle) noexcept {
-    (void)event_handle;
+    std::lock_guard<std::mutex> lock(g_sockets_mutex);
+    WsaEventSlot* const event = find_wsa_event(event_handle);
+    if (event == nullptr) {
+        g_wsa_last_error = kWsaEInvalidArgument;
+        return 0;
+    }
+    event->signaled = true;
     g_wsa_last_error = 0;
     return 1;
 }
 
 TL_MSABI int tl_WSAResetEvent(void* const event_handle) noexcept {
-    (void)event_handle;
+    std::lock_guard<std::mutex> lock(g_sockets_mutex);
+    WsaEventSlot* const event = find_wsa_event(event_handle);
+    if (event == nullptr) {
+        g_wsa_last_error = kWsaEInvalidArgument;
+        return 0;
+    }
+    event->signaled = false;
     g_wsa_last_error = 0;
     return 1;
 }
@@ -860,21 +1042,86 @@ TL_MSABI int tl_WSAResetEvent(void* const event_handle) noexcept {
 TL_MSABI std::uint32_t tl_WSAWaitForMultipleEvents(const std::uint32_t count, const void* const* const events,
                                                   const int wait_all, const std::uint32_t timeout,
                                                   const int alertable) noexcept {
-    (void)count;
-    (void)events;
-    (void)wait_all;
-    (void)timeout;
     (void)alertable;
+    if (count == 0 || count > kMaxWsaEvents || events == nullptr ||
+        !mapped_range(events, static_cast<std::size_t>(count) * sizeof(*events), false) ||
+        (wait_all != 0 && wait_all != 1)) {
+        g_wsa_last_error = kWsaEInvalidArgument;
+        return kWsaWaitFailed;
+    }
+    const auto start = std::chrono::steady_clock::now();
+    const bool infinite = timeout == 0xFFFFFFFFU;
+    for (;;) {
+        {
+            std::lock_guard<std::mutex> lock(g_sockets_mutex);
+            refresh_wsa_events_locked();
+            bool all_signaled = true;
+            std::uint32_t first_signaled = count;
+            for (std::uint32_t index = 0; index < count; ++index) {
+                WsaEventSlot* const event = find_wsa_event(const_cast<void*>(events[index]));
+                if (event == nullptr) {
+                    g_wsa_last_error = kWsaEInvalidArgument;
+                    return kWsaWaitFailed;
+                }
+                if (event->signaled) {
+                    if (first_signaled == count) {
+                        first_signaled = index;
+                    }
+                } else {
+                    all_signaled = false;
+                }
+            }
+            if ((wait_all && all_signaled) || (!wait_all && first_signaled != count)) {
+                g_wsa_last_error = 0;
+                return kWsaWaitEvent0 + (wait_all ? 0U : first_signaled);
+            }
+        }
+
+        if (timeout == 0) {
+            g_wsa_last_error = 0;
+            return kWsaWaitTimeout;
+        }
+        if (!infinite) {
+            const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::steady_clock::now() - start);
+            if (elapsed.count() >= timeout) {
+                g_wsa_last_error = 0;
+                return kWsaWaitTimeout;
+            }
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
     g_wsa_last_error = 0;
-    return 0; // WSA_WAIT_EVENT_0
+    return kWsaWaitTimeout;
 }
 
 TL_MSABI int tl_WSAEnumNetworkEvents(const std::uintptr_t socket, void* const event_handle,
                                     void* const network_events) noexcept {
-    (void)socket;
-    (void)event_handle;
-    if (network_events != nullptr && mapped_range(network_events, 4 + 10 * 4, true)) {
-        std::memset(network_events, 0, 4 + 10 * 4);
+    constexpr std::size_t kNetworkEventsSize = 4U + 10U * 4U;
+    if (network_events == nullptr || !mapped_range(network_events, kNetworkEventsSize, true)) {
+        g_wsa_last_error = kWsaEFault;
+        return -1;
+    }
+    std::lock_guard<std::mutex> lock(g_sockets_mutex);
+    SocketSlot* const slot = find_socket(socket);
+    WsaEventSlot* const event = event_handle != nullptr ? find_wsa_event(event_handle) : nullptr;
+    if (slot == nullptr || (event_handle != nullptr && event == nullptr) ||
+        (event_handle != nullptr && slot->event_handle != event_handle)) {
+        g_wsa_last_error = slot == nullptr ? kWsaENotSocket : kWsaEInvalidArgument;
+        return -1;
+    }
+    std::memset(network_events, 0, kNetworkEventsSize);
+    const std::int32_t pending = static_cast<std::int32_t>(slot->pending_events);
+    std::memcpy(network_events, &pending, sizeof(pending));
+    auto* const errors = static_cast<std::byte*>(network_events) + sizeof(pending);
+    for (int index = 0; index < 10; ++index) {
+        std::memcpy(errors + static_cast<std::size_t>(index) * sizeof(std::int32_t),
+                    &slot->event_errors[static_cast<std::size_t>(index)], sizeof(std::int32_t));
+    }
+    slot->pending_events = 0;
+    slot->event_errors.fill(0);
+    if (event != nullptr) {
+        event->signaled = false;
     }
     g_wsa_last_error = 0;
     return 0;

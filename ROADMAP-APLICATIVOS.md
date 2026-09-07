@@ -1700,6 +1700,46 @@ Evidência reproduzível de 2026-09-07:
 - [x] Ambos emitiram `7-Zip CLI stored test/delete/update/rename/deflate/7z/stdin/password/overwrite/wrong-password
   lifecycle: ok` e removeram o staging temporário.
 
+### E25 — Eventos WSA para clientes de rede genéricos
+
+Objetivo: cobrir o modelo de eventos usado por clientes Win32 como o PuTTY,
+sem criar código, DLL ou regra específica de aplicativo.
+
+Tarefas:
+
+- [x] Substituir os stubs de `WSACreateEvent`, `WSACloseEvent`,
+  `WSASetEvent`, `WSAResetEvent`, `WSAEventSelect`,
+  `WSAWaitForMultipleEvents` e `WSAEnumNetworkEvents` por objetos opacos
+  manuais limitados, associação de sockets e tradução de prontidão Linux.
+- [x] Preservar limites e falhas controladas: no máximo 64 eventos ativos,
+  handles inválidos retornam `WSA_WAIT_FAILED`/`WSAEINVAL`, espera sem sinal
+  retorna `WSA_WAIT_TIMEOUT` e a enumeração escreve somente o registro de
+  44 bytes validado.
+- [x] Expandir `tl_network_loopback` com TCP orientado a evento, `FD_ACCEPT`,
+  timeout e `WSAEnumNetworkEvents`, mantendo UDP/`WSAPoll` e o cenário somente
+  loopback.
+
+Aceitação:
+
+- [x] O teste unitário confirma sinalização manual, reset, espera imediata e
+  timeout sem sinal.
+- [x] `app_run_tl_network_loopback` passou em `build/debug-rust` depois da
+  alteração, demonstrando associação real com socket, `FD_ACCEPT` e leitura
+  do registro de eventos.
+- [x] O smoke de configuração do PuTTY continua separado; uma sondagem real
+  com servidor TCP local terminou com `exit 1` e zero bytes recebidos, portanto
+  o SSH completo não foi declarado suportado nem mascarado por fallback.
+
+Evidência reproduzível de 2026-09-07:
+
+- [x] `build/debug-rust/tests/tradutorlinux_unit_tests
+  --gtest_filter='PuttyCoverageTest.AllApisAndModules'` passou (1/1).
+- [x] `ctest --test-dir build/debug-rust --output-on-failure -R
+  '^app_run_tl_network_loopback$'` passou (1/1, 0,13 s).
+- [x] O runtime foi recompilado somente como alvo `tradutorlinux`, com
+  paralelismo 2; a sondagem manual sob Xvfb e listener em `127.0.0.1` foi
+  encerrada e deixou apenas artefatos temporários em `/tmp`.
+
 ### E11 — Matriz CTest dos smokes GUI do corpus
 
 Objetivo: tornar os cenários GUI reais já validados em D2/E1/E2 descobríveis e
