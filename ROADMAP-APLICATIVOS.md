@@ -346,6 +346,100 @@ Aceitação:
 - [x] Existe uma decisão registrada para manter PE32/x86 fora do escopo, com
   critérios técnicos de reabertura.
 
+## Rodada B — matriz completa do corpus após A1–A8
+
+Esta rodada usa o corpus atual de `/home/tonho/Área de trabalho/Aplicativos_Windows_Populares/`,
+com 24 executáveis PE, 2 DLLs PE e 1 pacote MSIX. Cada cenário será executado
+com prefixo temporário, timeout externo, limite de memória e limpeza verificada.
+Arquivos que já falham por arquitetura, formato ou análise estrutural serão
+registrados pelo `--report` e não serão executados indiscriminadamente.
+
+### B1 — Análise completa Rust/C++
+
+Objetivo: produzir uma matriz reproduzível de `--report` para todos os PE e
+para o MSIX, comparando Rust ON com o baseline C++ OFF.
+
+Tarefas:
+
+- [ ] Inventariar novamente nome, SHA-256, tipo PE/MSIX e arquitetura.
+- [ ] Executar `--report` em Rust ON para os 24 executáveis e as 2 DLLs.
+- [ ] Executar o mesmo corpus em Rust OFF e comparar status, categoria,
+  diagnóstico, imports, seções e ausência de fallback.
+- [ ] Executar `--report` do MSIX com trace, registrando o limite ou formato
+  que determinar o resultado.
+
+Aceitação:
+
+- [ ] Cada arquivo tem exit code, status, trace e diagnóstico salvos fora do
+  repositório e resumidos no roadmap.
+- [ ] Nenhum arquivo é classificado como suportado sem equivalência ON/OFF e
+  sem registro em `docs/compatibilidade.md`.
+
+### B2 — Execução controlada de PE32+ nativo
+
+Objetivo: separar análise aprovada de execução efetivamente verificada.
+
+Tarefas:
+
+- [ ] Selecionar somente executáveis PE32+ não-DLL que passaram no report.
+- [ ] Executar cada candidato com prefixo temporário, timeout externo,
+  `--cpu`, `--memory` e captura separada de stdout/stderr.
+- [ ] Repetir a matriz com Rust ON e Rust OFF quando o caminho existir.
+- [ ] Registrar `supported`, `execution-failed`, `timeout`, `signal` ou
+  `map-failed` sem promover compatibilidade por semelhança.
+
+Aceitação:
+
+- [ ] Toda execução termina de forma controlada ou é interrompida pelo limite
+  externo, sem deixar prefixos ou catálogos persistentes.
+- [ ] O trace demonstra que falhas de parsing ocorrem antes de mapeamento e
+  execução.
+
+### B3 — Instalação seletiva e segura
+
+Objetivo: testar instalação somente depois da análise e sem executar
+indiscriminadamente instaladores obtidos da internet.
+
+Tarefas:
+
+- [ ] Classificar instaladores por arquitetura, tipo e risco antes de chamar
+  `install`.
+- [ ] Testar somente candidatos PE32+ ou pacotes MSIX aprovados, sempre em
+  prefixo temporário com timeout, memória limitada e limpeza.
+- [ ] Confirmar extração, catálogo, permissões, executável principal e
+  ausência de cadastro parcial após erro.
+- [ ] Manter instaladores PE32/x86, .NET/Mono e pacotes rejeitados como
+  `unsupported`/`malformed`, sem fallback implícito.
+
+Aceitação:
+
+- [ ] Cada instalação tem resultado de análise, extração, catálogo, limpeza,
+  stdout, stderr e exit code documentados.
+- [ ] Nenhuma falha de instalação é promovida a suporte sem execução do
+  aplicativo instalado.
+
+### B4 — Matriz de solicitações e compatibilidade
+
+Objetivo: garantir que o TradutorLinux identifique cada solicitação do corpus
+como análise, execução, instalação ou arquivo não executável, com diagnóstico
+consistente.
+
+Tarefas:
+
+- [ ] Criar uma tabela por arquivo com ação solicitada, backend, arquitetura,
+  status, exit code, limitação e próxima ação.
+- [ ] Atualizar `docs/compatibilidade.md` somente com evidência reproduzível.
+- [ ] Registrar no trace as diferenças Rust/C++ e os skips ambientais
+  permitidos, sem reclassificar falha funcional como skip.
+- [ ] Criar fixtures ou testes de regressão para cada correção que surgir da
+  matriz, antes de alterar o runtime.
+
+Aceitação:
+
+- [ ] A matriz completa pode ser repetida sem depender de estado persistente,
+  nomes ambíguos ou execução manual não registrada.
+- [ ] O roadmap contém um resumo verificável para todos os arquivos do corpus.
+
 ## Regras de validação
 
 - Cada correção começa com uma fixture mínima e termina com testes automatizados.
