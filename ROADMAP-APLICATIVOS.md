@@ -468,7 +468,7 @@ Aceitação:
 - [x] Nenhuma falha de instalação é promovida a suporte sem execução do
   aplicativo instalado.
 
-### B4 — Matriz de solicitações e compatibilidade
+### B4 concluído — matriz de solicitações e compatibilidade
 
 Objetivo: garantir que o TradutorLinux identifique cada solicitação do corpus
 como análise, execução, instalação ou arquivo não executável, com diagnóstico
@@ -476,19 +476,59 @@ consistente.
 
 Tarefas:
 
-- [ ] Criar uma tabela por arquivo com ação solicitada, backend, arquitetura,
+- [x] Criar uma tabela por arquivo com ação solicitada, backend, arquitetura,
   status, exit code, limitação e próxima ação.
-- [ ] Atualizar `docs/compatibilidade.md` somente com evidência reproduzível.
-- [ ] Registrar no trace as diferenças Rust/C++ e os skips ambientais
+- [x] Atualizar `docs/compatibilidade.md` somente com evidência reproduzível.
+- [x] Registrar no trace as diferenças Rust/C++ e os skips ambientais
   permitidos, sem reclassificar falha funcional como skip.
-- [ ] Criar fixtures ou testes de regressão para cada correção que surgir da
+- [x] Criar fixtures ou testes de regressão para cada correção que surgir da
   matriz, antes de alterar o runtime.
+
+Matriz consolidada de 2026-09-07:
+
+`ON/OFF` indica Rust ON e C++ OFF; `—` indica que a ação não se aplica ou foi
+deliberadamente não executada.
+
+| Arquivo | Tipo/arquitetura | `--report` ON/OFF | Execução ON/OFF | `install` ON/OFF | Classificação |
+| --- | --- | --- | --- | --- | --- |
+| `7-Zip_x64_Installer.exe` | PE32 x86 | 5/5 | — | — | análise; arquitetura não suportada |
+| `7z.dll` | PE32+ DLL | 0/0 | — | — | DLL analisada; não executada como aplicativo |
+| `7zFM_x64.exe` | PE32+ GUI | 0/0 | 0/0 em Xvfb | — | execução controlada |
+| `7z_x64.exe` | PE32+ CLI | 0/0 | 0/0 | — | execução controlada |
+| `CPU-Z_2.18_en.exe` | PE32 x86 | 5/5 | — | — | análise; arquitetura não suportada |
+| `CapCut_7677236283084898320_installer.exe` | PE32 x86 | 5/5 | — | — | análise; arquitetura não suportada |
+| `Creative_Cloud_Set-Up_7474.exe` | PE32 x86 | 5/5 | — | — | análise; arquitetura não suportada |
+| `EpicInstaller-20.1.4-831cc1564f92442abc51fdb4a9854359.exe` | PE32 x86/.NET | 5/5 | — | — | análise; arquitetura/formato fora do escopo |
+| `Everything_Search_x64.exe` | PE32 x86 | 5/5 | — | — | análise; arquitetura não suportada |
+| `GPU-Z_2.70.0.exe` | PE32 x86 | 5/5 | — | — | análise; arquitetura não suportada |
+| `HWMonitor_1.67.exe` | PE32 x86 | 5/5 | — | — | análise; arquitetura não suportada |
+| `HWiNFO64.exe` | PE32+ x86-64 empacotado | 4/4 | — | — | malformado para análise estática; sem desempacotador |
+| `Logitech_GHUB_x64.exe` | PE32+ instalador | 0/0 | — | 1/1 | instalação controlada; convidado encerrou com 1 |
+| `Notepad++_x64_Installer.exe` | PE32 x86 | 5/5 | — | — | análise; arquitetura não suportada |
+| `RTSS.exe` | PE32 x86 | 5/5 | — | — | análise; arquitetura não suportada |
+| `RTSSHooks64.dll` | PE32+ DLL | 0/0 | — | — | DLL analisada; não executada como aplicativo |
+| `RTSSSetup737.exe` | PE32 x86 | 5/5 | — | — | análise; arquitetura não suportada |
+| `RobloxPlayerInstaller.exe` | PE32+ instalador | 0/0 | — | 3/3 | instalação controlada; `RBXCRASH` |
+| `Rockstar-Games-Launcher.exe` | PE32+ aplicativo | 0/0 | 3/3 | — | execução controlada; `ExitProcess 3` |
+| `Rufus_x64.exe` | PE32+ aplicativo empacotado | 0/0 | 4/4 | — | `map-failed` por W^X/entry point |
+| `WinRAR_x64.exe` | PE32+ aplicativo | 0/0 | 0/0 | — | execução controlada |
+| `lghub_installer.exe` | PE32+ instalador | 0/0 | — | 1/1 | alias byte-a-byte do G HUB |
+| `notepad++.exe` | PE32+ GUI | 0/0 | 71/71 em Xvfb | — | SIGSEGV controlado |
+| `officedeploymenttool_20228-20124.exe` | PE32 x86 | 5/5 | — | — | análise; arquitetura não suportada |
+| `putty_x64.exe` | PE32+ GUI | 0/0 | 72/72 em Xvfb | — | timeout controlado |
+| `winrar-x64-723.exe` | PE32+ aplicativo | 0/0 | 0/0 | — | execução controlada; duplicata do WinRAR |
+| `Affinity x64.msix` | MSIX/ZIP64 | 4/4 | — | 4/4 | pacote rejeitado antes da extração |
+
+Os resultados de B1–B3 foram gravados em `/tmp/tl-matrix-b1`,
+`/tmp/tl-matrix-b2` e `/tmp/tl-matrix-b3`. Eles não são dependências do
+runtime e podem ser regenerados a partir do corpus pinado e dos comandos do
+roadmap.
 
 Aceitação:
 
-- [ ] A matriz completa pode ser repetida sem depender de estado persistente,
+- [x] A matriz completa pode ser repetida sem depender de estado persistente,
   nomes ambíguos ou execução manual não registrada.
-- [ ] O roadmap contém um resumo verificável para todos os arquivos do corpus.
+- [x] O roadmap contém um resumo verificável para todos os arquivos do corpus.
 
 ## Regras de validação
 
