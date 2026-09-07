@@ -15,7 +15,7 @@ Este documento registra a triagem C1 da matriz em
 | `HWiNFO64.exe` | parser PE: export RVA sem intervalo file-backed | `PeReaderTest.RejectsExportDirectoryWithoutFileBackedSection`; `malformed` exit `4` em ambos | manter rejeição até existir fase explícita de desempacotamento |
 | `Rockstar-Games-Launcher.exe` | convidado: `ExitProcess(3)` explícito | loader, imports, TLS e contexto inicial registrados como sucesso antes do término; stdout vazio e exit `3` em ambos | não converter código do convidado em sucesso e não alterar o loader por enquanto |
 | `PuTTY` | GUI inicia `PuTTYTimerWindow`, mas permanece em execução até o timeout controlado | `/tmp/tl-matrix-c2-x11/*/6/stderr`; `xdpyinfo` confirmou Xvfb `:99` antes dos testes; sem `x11/connect-failed` | não promover como suporte concluído; tratar como cenário interativo ainda sem critério de encerramento |
-| `Notepad++` | corrupção de heap após `startup-info` wide, observada como SIGSEGV ou SIGABRT controlado, mesmo com X11 válido | `/tmp/tl-matrix-c2-x11/*/5/stderr`, `/tmp/tl-matrix-c4/run/*/5.stderr` e o probe `/tmp/tl-d1-shell-heap`; `xdpyinfo` confirmou Xvfb antes dos testes | classificar como bloqueio real do runtime/aplicativo; o probe mínimo passa, então investigar a primeira API adicional do aplicativo sem relaxar isolamento |
+| `Notepad++` | histórico C2: corrupção de heap após `startup-info` wide, observada como SIGSEGV ou SIGABRT controlado, mesmo com X11 válido | `/tmp/tl-matrix-c2-x11/*/5/stderr`, `/tmp/tl-matrix-c4/run/*/5.stderr`; ASan D1 identificou `tl_lstrcpyW` escrevendo 4 bytes em região guest de 2 bytes | corrigir a ABI das APIs `lstr*W` para UTF-16 de 16 bits; manter o aplicativo sem suporte funcional até haver interação/encerramento GUI reproduzíveis |
 
 ## Invariantes preservados
 
@@ -36,7 +36,8 @@ em Rust ON e C++ OFF. Portanto, o timeout do PuTTY e o SIGSEGV do Notepad++ não
 devem ser classificados como falhas de conexão X11.
 
 Nenhuma API nova ou mudança de loader foi justificada por esta triagem. A C2
-confirmou o comportamento sob display válido; a hipótese de corrupção de heap
-associada a `SHGetFolderPathW` ainda exige uma fixture mínima antes de qualquer
-alteração, porque `tl_shell` já cobre o caminho básico e passa. Não se deve
-relaxar W^X, isolamento ou limites para contornar os bloqueios.
+confirmou o comportamento sob display válido; a fixture D1 e o ASan localizaram
+a causa na largura host incorreta das APIs `lstr*W`, não em
+`SHGetFolderPathW`. A correção usa `std::uint16_t`, preserva W^X, isolamento e
+limites, e foi repetida em Rust ON/C++ OFF e Sanitizer. O timeout restante é
+uma limitação de interação GUI, não uma promoção de suporte.

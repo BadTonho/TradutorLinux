@@ -521,7 +521,7 @@ deliberadamente não executada.
 | `Rufus_x64.exe` | PE32+ aplicativo empacotado | 0/0 | 4/4 | — | `map-failed` por W^X/entry point |
 | `WinRAR_x64.exe` | PE32+ aplicativo | 0/0 | 0/0 | — | execução controlada |
 | `lghub_installer.exe` | PE32+ instalador | 0/0 | — | 1/1 | alias byte-a-byte do G HUB |
-| `notepad++.exe` | PE32+ GUI | 0/0 | 71/71 sob Xvfb válido | — | SIGSEGV controlado após `startup-info` wide; bloqueio real a investigar |
+| `notepad++.exe` | PE32+ GUI | 0/0 | 124/124 sob Xvfb válido após D1 | — | APIs `lstr*W` corrigidas para UTF-16 guest; janela criada e timeout controlado, ainda sem cenário de interação |
 | `officedeploymenttool_20228-20124.exe` | PE32 x86 | 5/5 | — | — | análise; arquitetura não suportada |
 | `putty_x64.exe` | PE32+ GUI | 0/0 | 72/72 sob Xvfb válido | — | `PuTTYTimerWindow` foi criada; timeout controlado sem cenário de interação |
 | `winrar-x64-723.exe` | PE32+ aplicativo | 0/0 | 0/0 | — | execução controlada; duplicata do WinRAR |
@@ -725,7 +725,7 @@ porque o parsing ou a resolução de imports passou.
 ### D1 — Isolamento da corrupção de heap do Notepad++
 
 Objetivo: descobrir se a corrupção observada depois de `GetStartupInfoW` e no
-primeiro `SHGetFolderPathW(CSIDL_APPDATA)` vem de uma API do runtime, de uma
+primeiro `SHGetFolderPathW(CSIDL_APPDATA)` vinha de uma API do runtime, de uma
 convenção de memória Win32 ainda incompleta ou do próprio aplicativo.
 
 Tarefas:
@@ -739,21 +739,23 @@ Tarefas:
   realloc e `SHGetFolderPathW`, mantendo o probe independente do aplicativo.
 - [x] Executar a fixture em Debug Rust ON e C++ OFF; os testes de metadados,
   report, runtime e `app run` passaram em ambos, com exit `0` e stdout igual.
-- [ ] Executar a fixture no preset Sanitizer compatível com o parser
+- [x] Executar a fixture no preset Sanitizer compatível com o parser
   atual, com sentinelas e backtrace; separar corrupção do host de falha guest.
 - [x] Comparar a fixture com `tl_shell` e com o Notepad++ sob Xvfb válido;
   registrar a primeira operação divergente antes de mudar o runtime.
-- [ ] Se a causa for do runtime, aplicar somente a correção mínima, criar teste
-  de regressão e repetir a matriz ON/OFF; se for específica do aplicativo,
-  manter exit `71` controlado e documentar a limitação.
+- [x] A causa foi isolada no runtime: as APIs `lstrcpyW`, `lstrcpynW`,
+  `lstrcmpW` e `lstrcmpiW` usavam `wchar_t` host de 4 bytes para buffers
+  guest UTF-16 de 2 bytes. A correção usa `std::uint16_t`, tem teste unitário,
+  fixture guest e matriz ON/OFF repetida.
 
 Aceitação:
 
-- [ ] Há uma fixture reproduzível ou uma decisão comprovada de que o bloqueio
-  é específico do aplicativo.
-- [ ] Nenhuma correção relaxa isolamento, W^X, validação de memória ou limites.
-- [ ] O Notepad++ só muda de classificação depois de execução reproduzível
-  sem corrupção e com stdout/exit/trace comparados nos dois backends.
+- [x] Há uma fixture reproduzível, um diagnóstico ASan da primeira escrita e
+  uma correção mínima da convenção de memória guest/host.
+- [x] Nenhuma correção relaxa isolamento, W^X, validação de memória ou limites.
+- [x] O Notepad++ foi reclassificado somente quanto ao bloqueio de heap: a
+  execução agora termina em timeout controlado, com stdout/exit/trace
+  comparados nos dois backends; ele continua sem suporte funcional GUI.
 
 Evidência inicial D1 de 2026-09-07:
 
@@ -766,10 +768,9 @@ Evidência inicial D1 de 2026-09-07:
   Rust ON e C++ OFF retornaram `0`, stdout byte-a-byte igual e registraram
   startup wide, ambiente, startup wide e `ExitProcess(0)` sem corrupção.
 - [x] A fixture existente `tl_shell` continua passando; o probe com cópia do
-  ambiente também passa; o Notepad++ continua
-  reproduzindo a corrupção de heap após `startup-info` wide, portanto o probe
-  reduz a hipótese para uma interação posterior específica do aplicativo ou
-  para uma API ainda não exercitada pelo probe.
+  ambiente também passa. Antes da correção, o Notepad++ reproduzia corrupção
+  de heap após `startup-info` wide; isso foi reduzido à ABI incorreta das APIs
+  `lstr*W`, e não a uma necessidade de relaxar o heap ou o isolamento.
 - [x] A fixture foi executada diretamente com `build/sanitize/src/tradutorlinux`
   e `ASAN_OPTIONS=detect_leaks=0`, retornando `0` e sem relatório de memória;
   o ASan emitiu somente o aviso conhecido sobre `__asan_handle_no_return` na
@@ -779,20 +780,29 @@ Evidência inicial D1 de 2026-09-07:
   retornou `0`, stdout byte-a-byte igual (`notepad-startup-probe`) e traces
   semanticamente iguais para startup, locale, FLS, ambiente e `ExitProcess`.
 - [x] O probe agregado também retornou `0` no binário Sanitizer existente, sem
-  erro ASan/LSan além do aviso conhecido de troca de stack; isso amplia a
-  evidência contra uma corrupção genérica nessa sequência, mas não substitui
-  o Sanitizer reconstruído após a correção de unwind.
-- [ ] O Sanitizer compatível e a primeira escrita causadora ainda precisam ser
-  isolados; a descoberta automática do CTest também não foi aceita porque o
-  LSan falhou sob ptrace durante a enumeração dos testes, e o binário Sanitizer
-  existente ainda precede a correção de unwind. Nenhum patch de runtime foi
-  aplicado nesta etapa.
+  erro ASan/LSan além do aviso conhecido de troca de stack. Depois da correção,
+  a fixture de regressão exercita explicitamente as quatro APIs wide.
+- [x] O Sanitizer reconstruído executou o Notepad++ sob Xvfb válido, chegou à
+  janela `Configurator` e terminou em `124` pelo timeout externo, sem
+  `AddressSanitizer`, `LeakSanitizer`, `heap-buffer-overflow`, `SIGABRT` ou
+  `SIGSEGV` em `/tmp/tl-d1-notepad-sanitize-xvfb-fixed.err`. A descoberta
+  automática do CTest continua limitada pelo LSan sob ptrace, então a
+  evidência aceita é a execução direta do alvo Sanitizer.
 - [x] Um GDB seguindo o processo convidado registrou duas sequências de
   `HeapSize`/`HeapReAlloc` nos PCs convidados `0x14043aaa1`/`0x14043a989`,
   depois um segundo `GetStartupInfoW` e a chamada
   `SHGetFolderPathW(CSIDL_APPDATA)`. A execução instrumentada expirou sem
-  reproduzir a corrupção; portanto a primeira escrita causadora continua
-  desconhecida e nenhuma dessas APIs foi alterada por hipótese.
+  reproduzir a corrupção; a escrita causadora foi identificada posteriormente
+  pelo ASan em `tl_lstrcpyW`, com `WRITE of size 4` em região guest de 2 bytes.
+
+Evidência final D1 de 2026-09-07:
+
+- [x] O teste unitário `Win32LocaleTest.WideStringApisUseGuestUtf16Units` e a
+  fixture `tl_notepad_startup_probe` cobrem cópia, cópia limitada, comparação
+  sensível e comparação sem distinção de maiúsculas das quatro APIs wide.
+- [x] Debug C++ OFF e Rust ON retornaram `124` sob o mesmo Xvfb, com stdout
+  byte-a-byte igual, trace semântico igual, conexão X11, criação/mapeamento da
+  janela e nenhuma ocorrência de corrupção, ASan ou sinal fatal.
 
 ### D2 — Cenários interativos para GUIs x64
 

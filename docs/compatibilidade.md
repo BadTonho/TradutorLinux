@@ -972,7 +972,7 @@ continuam sendo a evidência necessária para registrá-lo como suportado.
 | 8 | `RobloxPlayerInstaller.exe` | PE32+ x86-64 | 430/430 (100%) | `execution-failed` | `RBXCRASH FatalRuntimeError Worker,28` `ExitProcess 3` (antes `SIGSEGV 0x68 rva 0x39ab exit 71`) | **Fase 13.D**: imports resolvidos, mas o fluxo ainda não conclui com sucesso; o slot TLS específico continua sendo benchmark, não suporte declarado |
 | 9 | `Rockstar-Games-Launcher.exe` | PE32+ x86-64 | 338/338 (100%) | `execution-failed` | `ExitProcess 3` | imports resolvidos; fluxo principal ainda não validado como concluído |
 | 10 | `Logitech_GHUB_x64.exe` `lghub_installer.exe` | PE32+ x86-64 | 114/114 (100%) | `supported` | `GuestTimeout 72` durante a inicialização | imports resolvidos; o fluxo do instalador não foi concluído e não é suporte funcional |
-| 11 | `notepad++.exe` | PE32+ x86-64 | 584/584 (100%) | `guest-signal` exit `71` sob Xvfb válido | a execução alcançou `startup-info` wide e encontrou corrupção de heap, observada como SIGSEGV ou SIGABRT controlado; o resultado com X11 válido é um bloqueio real a investigar | não declarar suporte GUI até isolar a primeira operação após o startup |
+| 11 | `notepad++.exe` | PE32+ x86-64 | 584/584 (100%) | `guest-timeout` exit `124` sob Xvfb válido | a corrupção de heap observada na C2 foi corrigida na D1: `lstrcpyW`/`lstrcpynW`/`lstrcmpW`/`lstrcmpiW` agora usam unidades guest UTF-16 de 16 bits; Rust ON e C++ OFF chegam à janela `Configurator` e têm stdout/trace equivalentes | não declarar suporte GUI: o cenário ainda termina por timeout e não possui interação/encerramento automatizados |
 | 12 | `RTSSHooks64.dll` | PE32+ DLL x86-64 | 256/256 (100%) | `imports-resolved` | `not-attempted` (DLL) | **Fase 13.RTSS**: imports resolvidos para análise; `CreateRemoteThread` e `WriteProcessMemory` agora falham com `ERROR_NOT_SUPPORTED` (sem fingir execução remota). O restante inclui `GDI32 ...`, `USER32 ...`, `KERNEL32 ...`, `SHLWAPI ...`, `WINMM ...`, `SETUPAPI 7` e `delay DirectX 11`; os stubs DirectX retornam `E_FAIL/S_OK` controlados |
 | 13 | `Affinity x64.msix` | Zip/MSIX ZIP64 | — | `malformed` exit `4` | `not-attempted` | Rust e C++ rejeitam o pacote no limite agregado de 512 MiB antes da extração; não houve instalação, cadastro ou execução. O conteúdo interno `.NET` continua fora do escopo e o pacote permanece sem suporte funcional |
 | 14 | `*_x64_Installer.exe` `CapCut/Epic/Creative/Everything/RTSS.exe` | PE32 (x86) | — | `unsupported-architecture` `0x14c` `exit 5` | `parse-failed status="unsupported-architecture"` `src/pe/pe_reader.cpp:685` |
@@ -985,7 +985,10 @@ e o stdout foi byte-a-byte igual. A B2 executou somente PE32+ não-DLL
 selecionados com limites controlados; a tentativa inicial de Xvfb falhou antes
 dos casos GUI e foi registrada como skip ambiental. A C2 repetiu 7-Zip File
 Manager, PuTTY e Notepad++ sob Xvfb válido, com resultados ON/OFF iguais:
-timeouts controlados para os dois primeiros e SIGSEGV controlado para o último.
+timeouts controlados para os dois primeiros e o bloqueio de heap então observado
+para o último. A D1 corrigiu a largura guest/host das quatro APIs `lstr*W` e
+repetiu o Notepad++ com Rust ON/C++ OFF: ambos agora terminam em timeout
+controlado `124`, com stdout e trace semântico iguais e sem corrupção de heap.
 A B3 testou apenas os candidatos PE32+ e MSIX em prefixos temporários. Os
 instaladores PE32/x86, DLLs e o HWiNFO empacotado não foram executados como
 aplicativos.
@@ -1016,6 +1019,6 @@ limitações explícitas.
 | **WinRAR (`WinRAR_x64.exe`)** | PE32+ x86-64 | 100% (251/251) | Suportado | Inicializou FLS, subsistema CRT e APIs do Shell/OLE com sucesso |
 | **HWiNFO64 (`HWiNFO64.exe`)** | PE32+ x86-64 | — | Análise estrutural rejeitada | `UPX0` não tem dados crus para o RVA do diretório de exports; desempacotamento não é implementado |
 | **Roblox Player Installer (`RobloxPlayerInstaller.exe`)** | PE32+ x86-64 | 100% (430/430) | Não suportado como fluxo concluído | Fase 13.D — `RBXCRASH` + `ExitProcess 3` (antes `SIGSEGV`); resolução de imports e correção TLS não equivalem a suporte |
-| **Notepad++ (`notepad++.exe`)** | PE32+ x86-64 | 100% (584/584) | Não suportado como fluxo concluído | C2/C4 reproduziram corrupção de heap após `startup-info` wide, como SIGSEGV ou SIGABRT controlado `71` sob Xvfb válido; bloqueio real a investigar |
+| **Notepad++ (`notepad++.exe`)** | PE32+ x86-64 | 100% (584/584) | Não suportado como fluxo concluído | D1 corrigiu a ABI guest UTF-16 das APIs `lstr*W`; sob Xvfb válido Rust ON/C++ OFF chegam à janela `Configurator` e terminam em timeout controlado `124`; ainda falta interação/encerramento GUI |
 | **Rufus (`Rufus_x64.exe`)** | PE32+ x86-64 | 100% (14/14) | Análise aprovada; execução rejeitada | UPX marca `UPX1` como `rwx`; o loader mantém W^X e retorna `map-failed` antes do entry point |
 | **7-Zip Installer / Notepad++ Installer / Everything Search** | PE32 (x86) | — | Unsupported | Rejeitados controladamente como arquitetura x86 32-bit (0x14c) |
