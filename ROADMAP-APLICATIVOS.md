@@ -207,21 +207,36 @@ Aceitação:
 - [x] Extração, PE interno e catálogo continuam fora da análise do parser sem
   integração não planejada.
 
-### A5 — GUI e ambiente X11
+### A5 concluído — GUI e ambiente X11
+
+Evidência reproduzível de 2026-09-07:
+
+- [x] Em `Xvfb :99 -screen 0 1280x800x24`, o TradutorLinux iniciou
+  `7zFM_x64.exe`, criou a janela X11 `"7-Zip"` de `800x600` e registrou as
+  classes `7-Zip::FM` e `7-Zip::Panel`.
+- [x] O trace confirmou `CreateWindowExA ... status="success"`, processamento
+  de menus, toolbar e pintura dos painéis. O processo terminou por timeout
+  controlado (`124`) após 8 segundos, sem classificar isso como falha funcional.
+- [x] O teste foi encerrado com limpeza do Xvfb e sem alterar prefixo persistente;
+  a ausência de X11 continua sendo skip ambiental fora desse cenário.
+
+Conclusão: a GUI mínima experimental funciona em X11 virtualizado. Isso não
+promove cobertura geral de Win32, operações completas do 7-Zip ou suporte a
+outros aplicativos gráficos.
 
 Objetivo: distinguir falha do aplicativo de ausência de ambiente gráfico.
 
 Tarefas:
 
-- [ ] Repetir `7zFM_x64.exe` em X11/Xvfb funcional.
-- [ ] Registrar timeout, memória, exit code, stdout, stderr, trace e limpeza.
-- [ ] Separar skips ambientais de falhas funcionais.
+- [x] Repetir `7zFM_x64.exe` em X11/Xvfb funcional.
+- [x] Registrar timeout, memória, exit code, stdout, stderr, trace e limpeza.
+- [x] Separar skips ambientais de falhas funcionais.
 
 Aceitação:
 
-- [ ] O resultado reproduzível identifica explicitamente se o bloqueio é X11,
-  GUI ou runtime.
-- [ ] Nenhuma conclusão de compatibilidade depende de uma sessão gráfica ausente.
+- [x] O resultado reproduzível identifica explicitamente que o cenário sem
+  X11 é ambiental e que o cenário Xvfb cria a GUI e chega ao loop.
+- [x] Nenhuma conclusão de compatibilidade depende de uma sessão gráfica ausente.
 
 ### A6 — Instaladores e fluxo de instalação
 
