@@ -392,24 +392,39 @@ Aceitação:
 - [x] Nenhum arquivo é classificado como suportado sem equivalência ON/OFF e
   sem registro em `docs/compatibilidade.md`.
 
-### B2 — Execução controlada de PE32+ nativo
+### B2 concluído — execução controlada de PE32+ nativo
 
 Objetivo: separar análise aprovada de execução efetivamente verificada.
 
 Tarefas:
 
-- [ ] Selecionar somente executáveis PE32+ não-DLL que passaram no report.
-- [ ] Executar cada candidato com prefixo temporário, timeout externo,
+- [x] Selecionar somente executáveis PE32+ não-DLL que passaram no report.
+- [x] Executar cada candidato com prefixo temporário, timeout externo,
   `--cpu`, `--memory` e captura separada de stdout/stderr.
-- [ ] Repetir a matriz com Rust ON e Rust OFF quando o caminho existir.
-- [ ] Registrar `supported`, `execution-failed`, `timeout`, `signal` ou
+- [x] Repetir a matriz com Rust ON e Rust OFF quando o caminho existir.
+- [x] Registrar `supported`, `execution-failed`, `timeout`, `signal` ou
   `map-failed` sem promover compatibilidade por semelhança.
+
+Evidência reproduzível de 2026-09-07:
+
+- [x] Foram executados em Rust ON e C++ OFF, sob Xvfb, `7zFM_x64.exe`,
+  `7z_x64.exe`, `Rockstar-Games-Launcher.exe`, `Rufus_x64.exe`,
+  `WinRAR_x64.exe`, `winrar-x64-723.exe`, `notepad++.exe` e `putty_x64.exe`.
+- [x] Rust e C++ produziram stdout e exit code iguais: 7-Zip/WinRAR `0`,
+  Rockstar `3`, Rufus `4` (`map-failed` por entry point não executável),
+  Notepad++ `71` (SIGSEGV controlado) e PuTTY `72` (timeout de 3 s).
+- [x] As execuções usaram timeout externo de 15 s, `--timeout 3`,
+  `--cpu 3`, `--memory 512` e `APPDATA` isolado por caso. Nenhum diretório
+  temporário recebeu arquivos persistentes e nenhum processo Xvfb ficou ativo.
+- [x] Os instaladores PE32+ `RobloxPlayerInstaller.exe`,
+  `Logitech_GHUB_x64.exe` e `lghub_installer.exe` não foram executados como
+  aplicativos; foram reservados para a validação de instalação B3.
 
 Aceitação:
 
-- [ ] Toda execução termina de forma controlada ou é interrompida pelo limite
+- [x] Toda execução termina de forma controlada ou é interrompida pelo limite
   externo, sem deixar prefixos ou catálogos persistentes.
-- [ ] O trace demonstra que falhas de parsing ocorrem antes de mapeamento e
+- [x] O trace demonstra que falhas de parsing ocorrem antes de mapeamento e
   execução.
 
 ### B3 — Instalação seletiva e segura
