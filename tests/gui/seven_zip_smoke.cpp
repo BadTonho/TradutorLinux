@@ -14,6 +14,7 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#include <poll.h>
 
 namespace {
 
@@ -52,30 +53,48 @@ void stop_process(const pid_t pid) {
 }
 
 [[nodiscard]] XvfbProcess start_xvfb() {
-    // displayfd pode escolher :0 quando há um lock residual no host. O smoke
-    // é externo e não entra no CTest, então usa o display reservado :99, como
-    // os procedimentos manuais documentados para esta amostra.
-    const std::string display = ":99";
+    int display_pipe[2]{};
+    if (::pipe(display_pipe) != 0) {
+        return {};
+    }
     const pid_t pid = ::fork();
     if (pid == 0) {
-        const int null_fd = ::open("/dev/null", O_WRONLY);
-        if (null_fd >= 0) {
-            (void)::dup2(null_fd, STDERR_FILENO);
-            ::close(null_fd);
+        ::close(display_pipe[0]);
+        if (::dup2(display_pipe[1], 3) < 0) {
+            ::_exit(127);
         }
-        ::execlp("Xvfb", "Xvfb", display.c_str(), "-screen", "0", "800x600x24", "-nolisten",
-                 "tcp", static_cast<char*>(nullptr));
+        ::close(display_pipe[1]);
+        ::execlp("Xvfb", "Xvfb", "-displayfd", "3", "-screen", "0", "800x600x24",
+                 "-nolisten", "tcp", static_cast<char*>(nullptr));
         ::_exit(127);
     }
+    ::close(display_pipe[1]);
     if (pid < 0) {
+        ::close(display_pipe[0]);
         return {};
     }
-    std::this_thread::sleep_for(500ms);
-    int status = 0;
-    if (::waitpid(pid, &status, WNOHANG) == pid) {
+
+    std::string display_number;
+    const auto deadline = std::chrono::steady_clock::now() + 3s;
+    while (std::chrono::steady_clock::now() < deadline && display_number.empty()) {
+        struct pollfd descriptor{display_pipe[0], POLLIN | POLLHUP, 0};
+        if (::poll(&descriptor, 1, 100) <= 0) {
+            continue;
+        }
+        char character = '\0';
+        const ::ssize_t count = ::read(display_pipe[0], &character, 1);
+        if (count == 1 && character != '\n') {
+            display_number.push_back(character);
+        } else if (count <= 0) {
+            break;
+        }
+    }
+    ::close(display_pipe[0]);
+    if (display_number.empty()) {
+        stop_process(pid);
         return {};
     }
-    return XvfbProcess{pid, display};
+    return XvfbProcess{pid, ":" + display_number};
 }
 
 void stop_runtime_process(const pid_t pid) {
