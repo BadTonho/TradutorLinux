@@ -407,18 +407,24 @@ Tarefas:
 
 Evidência reproduzível de 2026-09-07:
 
-- [x] Foram executados em Rust ON e C++ OFF, sob Xvfb, `7zFM_x64.exe`,
+- [x] Foram tentados em Rust ON e C++ OFF `7zFM_x64.exe`,
   `7z_x64.exe`, `Rockstar-Games-Launcher.exe`, `Rufus_x64.exe`,
   `WinRAR_x64.exe`, `winrar-x64-723.exe`, `notepad++.exe` e `putty_x64.exe`.
-- [x] Rust e C++ produziram stdout e exit code iguais: 7-Zip/WinRAR `0`,
-  Rockstar `3`, Rufus `4` (`map-failed` por entry point não executável),
-  Notepad++ `71` (SIGSEGV controlado) e PuTTY `72` (timeout de 3 s).
+- [x] Rust e C++ produziram stdout e exit code iguais nos casos válidos:
+  7-Zip CLI/WinRAR `0`, Rockstar `3` e Rufus `4` (`map-failed` por entry
+  point não executável). As tentativas GUI 7-Zip File Manager, Notepad++ e
+  PuTTY terminaram controladamente, mas o log `/tmp/tl-matrix-b2/xvfb.log`
+  prova que o Xvfb não iniciou; elas são skips ambientais, não evidência de
+  compatibilidade GUI.
 - [x] As execuções usaram timeout externo de 15 s, `--timeout 3`,
   `--cpu 3`, `--memory 512` e `APPDATA` isolado por caso. Nenhum diretório
   temporário recebeu arquivos persistentes e nenhum processo Xvfb ficou ativo.
 - [x] Os instaladores PE32+ `RobloxPlayerInstaller.exe`,
   `Logitech_GHUB_x64.exe` e `lghub_installer.exe` não foram executados como
   aplicativos; foram reservados para a validação de instalação B3.
+- [x] A evidência funcional anterior de GUI continua sendo somente a A5,
+  que validou `7zFM_x64.exe` sob Xvfb iniciado com sucesso; a rodada B não
+  substitui esse resultado por uma execução em display indisponível.
 
 Aceitação:
 
@@ -493,7 +499,7 @@ deliberadamente não executada.
 | --- | --- | --- | --- | --- | --- |
 | `7-Zip_x64_Installer.exe` | PE32 x86 | 5/5 | — | — | análise; arquitetura não suportada |
 | `7z.dll` | PE32+ DLL | 0/0 | — | — | DLL analisada; não executada como aplicativo |
-| `7zFM_x64.exe` | PE32+ GUI | 0/0 | 0/0 em Xvfb | — | execução controlada |
+| `7zFM_x64.exe` | PE32+ GUI | 0/0 | tentativa 0/0, X11 indisponível | — | skip ambiental na B2; A5 tem evidência Xvfb válida |
 | `7z_x64.exe` | PE32+ CLI | 0/0 | 0/0 | — | execução controlada |
 | `CPU-Z_2.18_en.exe` | PE32 x86 | 5/5 | — | — | análise; arquitetura não suportada |
 | `CapCut_7677236283084898320_installer.exe` | PE32 x86 | 5/5 | — | — | análise; arquitetura não suportada |
@@ -513,9 +519,9 @@ deliberadamente não executada.
 | `Rufus_x64.exe` | PE32+ aplicativo empacotado | 0/0 | 4/4 | — | `map-failed` por W^X/entry point |
 | `WinRAR_x64.exe` | PE32+ aplicativo | 0/0 | 0/0 | — | execução controlada |
 | `lghub_installer.exe` | PE32+ instalador | 0/0 | — | 1/1 | alias byte-a-byte do G HUB |
-| `notepad++.exe` | PE32+ GUI | 0/0 | 71/71 em Xvfb | — | SIGSEGV controlado |
+| `notepad++.exe` | PE32+ GUI | 0/0 | tentativa 71/71, X11 indisponível | — | diagnóstico controlado, não compatibilidade GUI |
 | `officedeploymenttool_20228-20124.exe` | PE32 x86 | 5/5 | — | — | análise; arquitetura não suportada |
-| `putty_x64.exe` | PE32+ GUI | 0/0 | 72/72 em Xvfb | — | timeout controlado |
+| `putty_x64.exe` | PE32+ GUI | 0/0 | tentativa 72/72, X11 indisponível | — | skip ambiental e timeout controlado |
 | `winrar-x64-723.exe` | PE32+ aplicativo | 0/0 | 0/0 | — | execução controlada; duplicata do WinRAR |
 | `Affinity x64.msix` | MSIX/ZIP64 | 4/4 | — | 4/4 | pacote rejeitado antes da extração |
 
