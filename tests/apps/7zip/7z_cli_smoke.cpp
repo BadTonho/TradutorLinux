@@ -163,7 +163,8 @@ int main(const int argc, char** argv) {
                                            "-" + std::to_string(stamp));
     std::filesystem::remove_all(staging, error);
     if (!std::filesystem::create_directories(staging / "extracted-stored", error) || error ||
-        !std::filesystem::create_directories(staging / "extracted-deflate", error) || error) {
+        !std::filesystem::create_directories(staging / "extracted-deflate", error) || error ||
+        !std::filesystem::create_directories(staging / "extracted-7z", error) || error) {
         std::cerr << "falha ao criar staging: " << staging << '\n';
         return 1;
     }
@@ -192,6 +193,7 @@ int main(const int argc, char** argv) {
     const std::filesystem::path input = staging / "input.txt";
     const std::filesystem::path stored_archive = staging / "payload-stored.zip";
     const std::filesystem::path deflate_archive = staging / "payload-deflate.zip";
+    const std::filesystem::path seven_zip_archive = staging / "payload.7z";
     if (!write_input(input, std::string{kPayload})) {
         std::cerr << "falha ao criar a entrada do smoke\n";
         std::filesystem::remove_all(staging, error);
@@ -227,10 +229,26 @@ int main(const int argc, char** argv) {
          "-o" + to_guest_path(staging / "extracted-deflate"), "-y"},
         staging / "extract-deflate.stdout", staging / "extract-deflate.stderr");
 
+    const auto create_7z = run_runtime(
+        runtime, staged_executable, prefix,
+        {"a", "-t7z", "-m0=LZMA2", "-mx=1", to_guest_path(seven_zip_archive),
+         to_guest_path(input)},
+        staging / "create-7z.stdout", staging / "create-7z.stderr");
+    const auto list_7z = run_runtime(
+        runtime, staged_executable, prefix,
+        {"l", "-slt", to_guest_path(seven_zip_archive)}, staging / "list-7z.stdout",
+        staging / "list-7z.stderr");
+    const auto extract_7z = run_runtime(
+        runtime, staged_executable, prefix,
+        {"x", to_guest_path(seven_zip_archive),
+         "-o" + to_guest_path(staging / "extracted-7z"), "-y"},
+        staging / "extract-7z.stdout", staging / "extract-7z.stderr");
+
     const bool extracted_stored =
         read_text(staging / "extracted-stored" / "input.txt") == kPayload;
     const bool extracted_deflate =
         read_text(staging / "extracted-deflate" / "input.txt") == kPayload;
+    const bool extracted_7z = read_text(staging / "extracted-7z" / "input.txt") == kPayload;
     const bool ok = contains_loader_lifecycle(create, "Archive size:") &&
                     !list.timed_out && list.exit_code == 0 &&
                     list.stdout_text.find("input.txt") != std::string::npos &&
@@ -241,7 +259,13 @@ int main(const int argc, char** argv) {
                     list_deflate.stdout_text.find("Method = Deflate") != std::string::npos &&
                     list_deflate.stderr_text.find("dll-mapped module=\"7z.dll\"") !=
                         std::string::npos &&
-                    contains_loader_lifecycle(extract_deflate, "Size:") && extracted_deflate;
+                    contains_loader_lifecycle(extract_deflate, "Size:") && extracted_deflate &&
+                    contains_loader_lifecycle(create_7z, "Archive size:") &&
+                    !list_7z.timed_out && list_7z.exit_code == 0 &&
+                    list_7z.stdout_text.find("Method = LZMA2") != std::string::npos &&
+                    list_7z.stderr_text.find("dll-mapped module=\"7z.dll\"") !=
+                        std::string::npos &&
+                    contains_loader_lifecycle(extract_7z, "Size:") && extracted_7z;
     if (!ok) {
         std::cerr << "smoke do 7-Zip CLI falhou em " << staging << '\n';
         std::cerr << "create exit=" << create.exit_code << " timeout=" << create.timed_out << '\n';
@@ -255,12 +279,20 @@ int main(const int argc, char** argv) {
         std::cerr << "extract-deflate exit=" << extract_deflate.exit_code
                   << " timeout=" << extract_deflate.timed_out
                   << " extracted-deflate=" << extracted_deflate << '\n';
+        std::cerr << "create-7z exit=" << create_7z.exit_code
+                  << " timeout=" << create_7z.timed_out << '\n';
+        std::cerr << "list-7z exit=" << list_7z.exit_code << " timeout=" << list_7z.timed_out
+                  << '\n';
+        std::cerr << "extract-7z exit=" << extract_7z.exit_code
+                  << " timeout=" << extract_7z.timed_out << " extracted-7z=" << extracted_7z
+                  << '\n';
         std::cerr << "list-deflate stdout:\n" << list_deflate.stdout_text;
+        std::cerr << "list-7z stdout:\n" << list_7z.stdout_text;
         std::filesystem::remove_all(staging, error);
         return 1;
     }
 
-    std::cout << "7-Zip CLI stored/deflate create/list/extract: ok\n";
+    std::cout << "7-Zip CLI stored/deflate/7z create/list/extract: ok\n";
     std::filesystem::remove_all(staging, error);
     return 0;
 }

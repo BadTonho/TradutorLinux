@@ -1263,6 +1263,38 @@ Evidência E10 de 2026-09-07:
   anterior que produzia `Method = Store` para um arquivo pequeno foi corrigida
   no teste, não mascarada no critério.
 
+### E12 — Round-trip do formato 7z com LZMA2
+
+Objetivo: validar o formato nativo mais comum do 7-Zip, mantendo a mesma
+fronteira genérica de processo, arquivo e DLL lado a lado usada pelos casos
+ZIP.
+
+Tarefas:
+
+- [x] Adicionar criação de `payload.7z` com `LZMA2`, listagem técnica que
+  confirma `Method = LZMA2` e extração em staging separado.
+- [x] Preservar os casos ZIP `stored` e `DEFLATE`, com payload repetitivo,
+  verificação byte a byte e ciclo `7z.dll` em cada operação.
+- [x] Executar o smoke manual e o filtro CTest nos builds Rust ON e C++ OFF,
+  sem alterar o corpus original.
+
+Aceitação:
+
+- [x] O smoke confirma nove comandos reais do `7z_x64.exe`: criação, listagem
+  e extração para ZIP `stored`, ZIP `DEFLATE` e `7z/LZMA2`, todos com exit `0`.
+- [x] A listagem técnica confirma `Method = LZMA2`, e os três arquivos
+  extraídos coincidem byte a byte com a entrada.
+- [x] Nenhuma DLL, shim, regra de seleção ou mudança específica do aplicativo
+  foi adicionada ao runtime.
+
+Evidência E12 de 2026-09-07:
+
+- [x] `build/debug-rust/tests/seven_zip_cli_smoke` e o binário equivalente
+  de `build/debug` passaram com
+  `7-Zip CLI stored/deflate/7z create/list/extract: ok`.
+- [x] `ctest --test-dir build/debug-rust -R '^seven_zip_cli_smoke$'` passou
+  em 3,47 s, e o mesmo filtro em `build/debug` passou em 4,40 s.
+
 ### E11 — Matriz CTest dos smokes GUI do corpus
 
 Objetivo: tornar os cenários GUI reais já validados em D2/E1/E2 descobríveis e
