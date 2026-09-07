@@ -815,28 +815,32 @@ Tarefas:
 - [x] Reutilizar o smoke Xvfb do 7-Zip para validar abertura, ação mínima e
   encerramento em Rust ON/OFF; a ação `Copy` foi confirmada nos dois builds
   com exit `0`, arquivo copiado e trace de operação bem-sucedida.
-- [ ] Criar um cenário PuTTY que abra a janela configurável, envie somente
+- [x] Criar um cenário PuTTY que abra a janela configurável, envie somente
   eventos seguros e encerre por comando/fechamento controlado.
-- [ ] Comparar janelas, eventos X11, stdout, exit code, limpeza e trace; manter
+- [x] Comparar janelas, eventos X11, stdout, exit code, limpeza e trace; manter
   timeout como resultado quando a interação não for determinística.
 
 Aceitação:
 
-- [ ] Cada cenário possui ação e critério de encerramento reproduzíveis.
+- [x] Cada cenário possui ação e critério de encerramento reproduzíveis.
 - [x] Nenhuma GUI foi promovida além da operação `Copy` já exercitada no
-  7-Zip; PuTTY permanece não concluído.
+  7-Zip; o cenário PuTTY valida apenas a abertura/fechamento da configuração,
+  não o fluxo SSH completo.
 
-Evidência parcial D2 de 2026-09-07:
+Evidência D2 de 2026-09-07:
 
 - [x] `tests/gui/seven_zip_smoke.cpp` passou em `build/debug` e
   `build/debug-rust`, com Xvfb escolhendo displays livres por `-displayfd`.
   O harness não fixa `:99`, evitando locks residuais do ambiente.
-- [ ] O cenário PuTTY encontrou somente a janela `PuTTY: hidden timing window`;
-  o fechamento X11 dessa janela a destrói, mas o processo não encerra e termina
-  por timeout controlado. Não houve janela de configuração nem critério de
-  interação/encerramento limpo para registrar como sucesso.
-- [x] A tentativa PuTTY não alterou runtime, loader, rede, prefixo ou
-  classificação de compatibilidade; o bloqueio continua explícito.
+- [x] `tests/gui/putty_smoke.cpp` inicia PuTTY sob Xvfb próprio, encontra
+  `PuTTY Configuration`, envia somente `WM_DELETE_WINDOW` pela conexão X11 e
+  exige saída limpa (`exit 0`) em `build/debug` e `build/debug-rust`.
+- [x] O trace do cenário confirma `CreateDialogParamA`, as captions `About
+  PuTTY`/`PuTTY Configuration` e a criação dos controles dinâmicos; o harness
+  não depende da janela temporária de sincronização.
+- [x] A correção ficou limitada ao parser de templates de diálogo, suporte ao
+  diálogo modeless e invalidação segura do cache de alocações guest; não altera
+  loader, rede, prefixo ou a classificação geral de compatibilidade.
 
 ### D3 — Diagnóstico dos instaladores e pacote x64
 

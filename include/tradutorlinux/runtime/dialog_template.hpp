@@ -33,10 +33,11 @@ struct __attribute__((packed)) GuestDialogItemTemplate {
 };
 static_assert(sizeof(GuestDialogItemTemplate) == 18);
 
-enum class DialogControlClass : std::uint8_t { Button, Edit, Static, ComboBox };
+enum class DialogControlClass : std::uint8_t { Button, Edit, Static, ComboBox, Generic };
 
 struct DialogControl {
     DialogControlClass control_class{};
+    std::u16string class_name;
     std::uint32_t style{};
     std::uint32_t extended_style{};
     std::int16_t x{};

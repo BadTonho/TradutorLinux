@@ -605,6 +605,11 @@ TL_MSABI int tl_DestroyWindow(const void* const window) noexcept {
         set_last_error(abi::kErrorInvalidHandle);
         return 0;
     }
+    if (slot->destroying) {
+        set_last_error(abi::kErrorSuccess);
+        return 1;
+    }
+    slot->destroying = true;
     // Child controls are logical side-table entries.  Destroy them with the
     // parent so a modal dialog cannot leave stale HWND tokens behind.
     for (WindowSlot& child : g_windows) {
@@ -626,10 +631,10 @@ TL_MSABI int tl_DestroyWindow(const void* const window) noexcept {
     slot->mapped = false;
     const abi::HWnd hwnd = const_cast<abi::HWnd>(window);
     const std::uintptr_t wndproc = slot->wndproc;
-    *slot = {};
     if (wndproc != 0) {
         call_wndproc(wndproc, hwnd, abi::kWmDestroy, 0, 0);
     }
+    *slot = {};
     if (parent != nullptr) {
         render_controls(*parent);
     }

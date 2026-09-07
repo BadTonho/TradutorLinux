@@ -199,22 +199,40 @@ TEST(Win32DialogTemplateTest, ParsesAlignedStandardTemplateAndRejectsBounds) {
               runtime::DialogTemplateStatus::DialogEx);
 }
 
-TEST(Win32DialogTemplateTest, RejectsUnsupportedMenuClassFontAndControl) {
+TEST(Win32DialogTemplateTest, RejectsUnsupportedMenuAndParsesGenericControlsAndFont) {
     runtime::DialogTemplate parsed{};
     std::vector<std::byte> custom_menu = valid_dialog_template();
     custom_menu[18] = std::byte{1};
     EXPECT_EQ(runtime::parse_dialog_template(custom_menu, parsed),
               runtime::DialogTemplateStatus::Unsupported);
 
+    std::vector<std::byte> custom_class = valid_dialog_template();
+    custom_class.erase(custom_class.begin() + 20, custom_class.begin() + 22);
+    std::vector<std::byte> class_field;
+    for (const char16_t character : std::u16string_view{u"PuTTYConfigBox"}) {
+        append_u16(class_field, static_cast<std::uint16_t>(character));
+    }
+    append_u16(class_field, 0);
+    custom_class.insert(custom_class.begin() + 20, class_field.begin(), class_field.end());
+    EXPECT_EQ(runtime::parse_dialog_template(custom_class, parsed),
+              runtime::DialogTemplateStatus::Success);
+    EXPECT_EQ(parsed.title, u"D");
+
     std::vector<std::byte> font = valid_dialog_template();
     font[0] = std::byte{0x40};
-    EXPECT_EQ(runtime::parse_dialog_template(font, parsed),
-              runtime::DialogTemplateStatus::Unsupported);
+    font.insert(font.begin() + 26,
+                {std::byte{9}, std::byte{0}, std::byte{'M'}, std::byte{0}, std::byte{'S'},
+                 std::byte{0}, std::byte{0}, std::byte{0}});
+    EXPECT_EQ(runtime::parse_dialog_template(font, parsed), runtime::DialogTemplateStatus::Success);
+    ASSERT_EQ(parsed.controls.size(), 1U);
+    EXPECT_EQ(parsed.controls[0].title, u"OK");
 
     std::vector<std::byte> custom_control = valid_dialog_template();
     custom_control[48] = std::byte{0x83};
     EXPECT_EQ(runtime::parse_dialog_template(custom_control, parsed),
-              runtime::DialogTemplateStatus::Unsupported);
+              runtime::DialogTemplateStatus::Success);
+    ASSERT_EQ(parsed.controls.size(), 1U);
+    EXPECT_EQ(parsed.controls[0].control_class, runtime::DialogControlClass::Generic);
 }
 
 TEST(Win32DialogTest, LogicalChildrenTabTextGeometryAndWindowLongWrappers) {

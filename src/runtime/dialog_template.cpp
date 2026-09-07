@@ -82,9 +82,12 @@ constexpr std::size_t kMaxDialogControls = 64;
         return true;
     }
     if (first == 0xFFFFU) {
-        // Ordinal titles (icons and predefined resources) are deliberately
-        // outside this standard-text dialog subset.
-        return false;
+        std::uint16_t ordinal = 0;
+        if (!read_u16(bytes, offset, ordinal)) {
+            return false;
+        }
+        value.clear();
+        return true;
     }
     value.assign(1, static_cast<char16_t>(first));
     std::u16string tail;
@@ -131,7 +134,11 @@ constexpr std::size_t kMaxDialogControls = 64;
         control_class = DialogControlClass::ComboBox;
         return true;
     }
-    return false;
+    // A dialog resource may contain a registered or common-control class for
+    // which this runtime has no specialised renderer. Keep its class name in
+    // the model and let the GUI layer render it as a bounded generic control.
+    control_class = DialogControlClass::Generic;
+    return true;
 }
 
 }  // namespace
@@ -161,7 +168,7 @@ DialogTemplateStatus parse_dialog_template(const std::span<const std::byte> byte
         !read_i16(bytes, offset, output.height)) {
         return DialogTemplateStatus::Malformed;
     }
-    if (item_count > kMaxDialogControls || (output.style & kDsSetFont) != 0U) {
+    if (item_count > kMaxDialogControls) {
         return DialogTemplateStatus::Unsupported;
     }
 
@@ -172,16 +179,21 @@ DialogTemplateStatus parse_dialog_template(const std::span<const std::byte> byte
     if (marker != 0) {
         return DialogTemplateStatus::Unsupported;
     }
-    if (!read_u16(bytes, offset, marker)) {
+    std::u16string dialog_class;
+    if (!read_field(bytes, offset, dialog_class)) {
         return DialogTemplateStatus::Malformed;
-    }
-    if (marker != 0) {
-        return DialogTemplateStatus::Unsupported;
     }
     if (!read_utf16z(bytes, offset, output.title)) {
         return DialogTemplateStatus::Malformed;
     }
-    if (!align_dword(bytes, offset)) {
+    if ((output.style & kDsSetFont) != 0U) {
+        std::uint16_t point_size = 0;
+        std::u16string typeface;
+        if (!read_u16(bytes, offset, point_size) || !read_utf16z(bytes, offset, typeface)) {
+            return DialogTemplateStatus::Malformed;
+        }
+    }
+    if (item_count != 0U && !align_dword(bytes, offset)) {
         return DialogTemplateStatus::Malformed;
     }
 
@@ -204,11 +216,34 @@ DialogTemplateStatus parse_dialog_template(const std::span<const std::byte> byte
                 return DialogTemplateStatus::Malformed;
             }
             switch (class_ordinal) {
-                case 0x0080U: control.control_class = DialogControlClass::Button; break;
-                case 0x0081U: control.control_class = DialogControlClass::Edit; break;
-                case 0x0082U: control.control_class = DialogControlClass::Static; break;
-                case 0x0085U: control.control_class = DialogControlClass::ComboBox; break;
-                default: return DialogTemplateStatus::Unsupported;
+                case 0x0080U:
+                    control.control_class = DialogControlClass::Button;
+                    control.class_name = u"BUTTON";
+                    break;
+                case 0x0081U:
+                    control.control_class = DialogControlClass::Edit;
+                    control.class_name = u"EDIT";
+                    break;
+                case 0x0082U:
+                    control.control_class = DialogControlClass::Static;
+                    control.class_name = u"STATIC";
+                    break;
+                case 0x0085U:
+                    control.control_class = DialogControlClass::ComboBox;
+                    control.class_name = u"COMBOBOX";
+                    break;
+                case 0x0083U:
+                    control.control_class = DialogControlClass::Generic;
+                    control.class_name = u"LISTBOX";
+                    break;
+                case 0x0084U:
+                    control.control_class = DialogControlClass::Generic;
+                    control.class_name = u"SCROLLBAR";
+                    break;
+                default:
+                    control.control_class = DialogControlClass::Generic;
+                    control.class_name = u"#ORDINAL";
+                    break;
             }
         } else {
             std::u16string class_name(1, static_cast<char16_t>(marker));
@@ -217,15 +252,17 @@ DialogTemplateStatus parse_dialog_template(const std::span<const std::byte> byte
                 return DialogTemplateStatus::Malformed;
             }
             class_name += tail;
-            if (!classify_control_name(class_name, control.control_class)) {
-                return DialogTemplateStatus::Unsupported;
-            }
+            control.class_name = std::move(class_name);
+            (void)classify_control_name(control.class_name, control.control_class);
         }
         if (!read_field(bytes, offset, control.title) || !read_u16(bytes, offset, marker)) {
             return DialogTemplateStatus::Malformed;
         }
         if (marker != 0) {
-            return DialogTemplateStatus::Unsupported;
+            if (offset > bytes.size() || bytes.size() - offset < marker) {
+                return DialogTemplateStatus::Malformed;
+            }
+            offset += marker;
         }
         output.controls.push_back(std::move(control));
     }

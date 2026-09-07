@@ -58,6 +58,7 @@ struct WindowSlot {
     bool visible{true};
     bool enabled{true};
     bool focused{false};
+    bool destroying{false};
     bool pressed{false};
     int hovered_toolbar_index{-1};
     int pressed_toolbar_index{-1};

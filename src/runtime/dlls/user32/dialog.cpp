@@ -1,5 +1,174 @@
 #include "user32_internal.hpp"
 namespace tradutorlinux {
+
+namespace {
+
+[[nodiscard]] WindowSlot* create_modeless_dialog(const void* const instance,
+                                                 const std::uint16_t* const template_name,
+                                                 const void* const parent,
+                                                 const std::uintptr_t dialog_proc,
+                                                 const abi::Lparam init_param) noexcept {
+    const auto trace_failure = [](const char* const stage, const char* const detail) noexcept {
+        const std::array<diagnostics::TraceField, 4> fields{
+            diagnostics::TraceField{"symbol", "CreateDialogParamA"},
+            diagnostics::TraceField{"stage", stage},
+            diagnostics::TraceField{"detail", detail},
+            diagnostics::TraceField{"status", "failure"},
+        };
+        runtime_trace("CreateDialogParamA", fields, 4);
+    };
+    if (!user32_gui_thread_allowed("CreateDialogParamA")) {
+        trace_failure("thread-policy", "GUI thread não permitido");
+        return nullptr;
+    }
+    if ((instance != nullptr && reinterpret_cast<std::uintptr_t>(instance) != 0x1000U &&
+         reinterpret_cast<std::uintptr_t>(instance) !=
+         reinterpret_cast<std::uintptr_t>(g_guest_image_base)) ||
+        template_name == nullptr || !guest_callback_address_valid(dialog_proc)) {
+        trace_failure("arguments", "instância, template ou callback inválido");
+        set_last_error(abi::kErrorInvalidParameter);
+        return nullptr;
+    }
+    WindowSlot* parent_slot = nullptr;
+    if (parent != nullptr) {
+        parent_slot = find_window_slot(parent);
+        if (parent_slot == nullptr || parent_slot->is_control) {
+            trace_failure("parent", "janela pai inválida");
+            set_last_error(abi::kErrorInvalidHandle);
+            return nullptr;
+        }
+    }
+
+    const auto* const resource_type = reinterpret_cast<const std::uint16_t*>(5U);
+    void* const resource = tl_FindResourceW(nullptr, template_name, resource_type);
+    void* const loaded = resource == nullptr ? nullptr : tl_LoadResource(nullptr, resource);
+    const std::uint32_t resource_size = loaded == nullptr ? 0 : tl_SizeofResource(nullptr, resource);
+    const void* const resource_data = loaded == nullptr ? nullptr : tl_LockResource(loaded);
+    if (resource_data == nullptr || resource_size == 0) {
+        trace_failure("resource", "recurso de diálogo ausente");
+        set_last_error(abi::kErrorResourceNotFound);
+        return nullptr;
+    }
+    runtime::DialogTemplate parsed{};
+    const auto status = runtime::parse_dialog_template(
+        std::span<const std::byte>{static_cast<const std::byte*>(resource_data), resource_size}, parsed);
+    if (status != runtime::DialogTemplateStatus::Success) {
+        const char* status_name = "unknown";
+        switch (status) {
+            case runtime::DialogTemplateStatus::Malformed: status_name = "malformed"; break;
+            case runtime::DialogTemplateStatus::Unsupported: status_name = "unsupported"; break;
+            case runtime::DialogTemplateStatus::DialogEx: status_name = "dialog-ex"; break;
+            case runtime::DialogTemplateStatus::Success: status_name = "success"; break;
+        }
+        trace_failure("template", status_name);
+        set_last_error(status == runtime::DialogTemplateStatus::DialogEx
+                           ? abi::kErrorNotSupported
+                           : abi::kErrorInvalidParameter);
+        return nullptr;
+    }
+
+    const std::string title = util::wide_to_utf8(
+        reinterpret_cast<const std::uint16_t*>(parsed.title.c_str()));
+    gui::NativeWindow native = gui::platform::create_window(title.c_str(), parsed.width, parsed.height);
+    if (native == nullptr) {
+        trace_failure("window", "janela nativa não criada");
+        set_last_error(abi::kErrorAccessDenied);
+        return nullptr;
+    }
+    const auto free_it = std::find_if(g_windows.begin(), g_windows.end(),
+                                      [](const WindowSlot& slot) { return !slot.used; });
+    if (free_it == g_windows.end()) {
+        gui::platform::destroy_window(native);
+        trace_failure("window-pool", "pool de janelas esgotado");
+        set_last_error(abi::kErrorNotEnoughMemory);
+        return nullptr;
+    }
+    WindowSlot& dialog = *free_it;
+    dialog = {};
+    dialog.used = true;
+    dialog.wndproc = dialog_proc;
+    dialog.class_name = "#32770";
+    dialog.window_title = title;
+    dialog.text = title;
+    dialog.native = native;
+    dialog.mapped = gui::platform::map_window(native);
+    dialog.width = parsed.width > 0 ? parsed.width : 1;
+    dialog.height = parsed.height > 0 ? parsed.height : 1;
+    dialog.x = parsed.x;
+    dialog.y = parsed.y;
+    dialog.style = parsed.style;
+    dialog.extended_style = parsed.extended_style;
+    dialog.is_dialog = true;
+    dialog.parent = parent_slot;
+    for (const runtime::DialogControl& item : parsed.controls) {
+        const auto child_it = std::find_if(g_windows.begin(), g_windows.end(),
+                                           [](const WindowSlot& slot) { return !slot.used; });
+        if (child_it == g_windows.end()) {
+            tl_DestroyWindow(&dialog);
+            trace_failure("control-pool", "pool de controles esgotado");
+            set_last_error(abi::kErrorNotEnoughMemory);
+            return nullptr;
+        }
+        WindowSlot& child = *child_it;
+        child = {};
+        child.used = true;
+        child.is_control = true;
+        child.parent = &dialog;
+        child.control_id = item.id;
+        child.x = item.x;
+        child.y = item.y;
+        child.width = item.width > 0 ? item.width : 1;
+        child.height = item.height > 0 ? item.height : 1;
+        child.style = item.style;
+        child.extended_style = item.extended_style;
+        child.visible = (item.style & kWsVisible) != 0U || item.style == 0U;
+        child.enabled = (item.style & kWsDisabled) == 0U;
+        child.combo_selection = -1;
+        child.class_name = util::wide_to_utf8(
+            reinterpret_cast<const std::uint16_t*>(item.class_name.c_str()));
+        child.text = util::wide_to_utf8(reinterpret_cast<const std::uint16_t*>(item.title.c_str()));
+        switch (item.control_class) {
+            case runtime::DialogControlClass::Button:
+                child.class_name = "BUTTON";
+                child.control_kind = ControlKind::Button;
+                break;
+            case runtime::DialogControlClass::Edit:
+                child.class_name = "EDIT";
+                child.control_kind = ControlKind::Edit;
+                break;
+            case runtime::DialogControlClass::Static:
+                child.class_name = "STATIC";
+                child.control_kind = ControlKind::Static;
+                break;
+            case runtime::DialogControlClass::ComboBox:
+                child.control_kind = ControlKind::ComboBox;
+                break;
+            case runtime::DialogControlClass::Generic:
+                child.control_kind = runtime_gui::is_builtin_control(child.class_name.c_str())
+                                         ? runtime_gui::control_kind_for(child.class_name.c_str())
+                                         : ControlKind::Generic;
+                break;
+        }
+        dialog.dialog_children.push_back(&child);
+    }
+    render_controls(dialog);
+    if (next_dialog_tab_item(dialog, nullptr, false) != nullptr) {
+        set_focus_control(next_dialog_tab_item(dialog, nullptr, false));
+    }
+    static_cast<void>(call_wndproc(dialog.wndproc, &dialog, 0x0110U, 0, init_param)); // WM_INITDIALOG
+    const std::array<diagnostics::TraceField, 4> fields{
+        diagnostics::TraceField{"symbol", "CreateDialogParamA"},
+        diagnostics::TraceField{"template", std::to_string(reinterpret_cast<std::uintptr_t>(template_name))},
+        diagnostics::TraceField{"controls", std::to_string(parsed.controls.size())},
+        diagnostics::TraceField{"status", "created"},
+    };
+    runtime_trace("CreateDialogParamA", fields, 4);
+    set_last_error(abi::kErrorSuccess);
+    return &dialog;
+}
+
+}  // namespace
+
 extern "C" {
 
 TL_MSABI int tl_MessageBoxA(const void* const window, const char* const text,
@@ -310,12 +479,31 @@ TL_MSABI std::intptr_t tl_DialogBoxParamW(const void* const instance,
         child.visible = (item.style & kWsVisible) != 0U || item.style == 0U;
         child.enabled = (item.style & kWsDisabled) == 0U;
         child.combo_selection = -1;
+        child.class_name = util::wide_to_utf8(
+            reinterpret_cast<const std::uint16_t*>(item.class_name.c_str()));
         child.text = util::wide_to_utf8(reinterpret_cast<const std::uint16_t*>(item.title.c_str()));
         switch (item.control_class) {
-            case runtime::DialogControlClass::Button: child.class_name = "BUTTON"; child.control_kind = ControlKind::Button; break;
-            case runtime::DialogControlClass::Edit: child.class_name = "EDIT"; child.control_kind = ControlKind::Edit; break;
-            case runtime::DialogControlClass::Static: child.class_name = "STATIC"; child.control_kind = ControlKind::Static; break;
-            case runtime::DialogControlClass::ComboBox: child.class_name = "COMBOBOX"; child.control_kind = ControlKind::ComboBox; break;
+            case runtime::DialogControlClass::Button:
+                child.class_name = "BUTTON";
+                child.control_kind = ControlKind::Button;
+                break;
+            case runtime::DialogControlClass::Edit:
+                child.class_name = "EDIT";
+                child.control_kind = ControlKind::Edit;
+                break;
+            case runtime::DialogControlClass::Static:
+                child.class_name = "STATIC";
+                child.control_kind = ControlKind::Static;
+                break;
+            case runtime::DialogControlClass::ComboBox:
+                child.class_name = "COMBOBOX";
+                child.control_kind = ControlKind::ComboBox;
+                break;
+            case runtime::DialogControlClass::Generic:
+                child.control_kind = runtime_gui::is_builtin_control(child.class_name.c_str())
+                                         ? runtime_gui::control_kind_for(child.class_name.c_str())
+                                         : ControlKind::Generic;
+                break;
         }
         dialog.dialog_children.push_back(&child);
     }
@@ -451,13 +639,14 @@ TL_MSABI std::uint32_t tl_GetDialogBaseUnits() noexcept {
 }
 
 TL_MSABI void* tl_CreateDialogParamA(void* const instance, const char* const template_name, void* const wnd_parent, void* const dialog_func, const std::intptr_t init_param) noexcept {
-    (void)instance;
-    (void)template_name;
-    (void)wnd_parent;
-    (void)dialog_func;
-    (void)init_param;
-    set_last_error(abi::kErrorSuccess);
-    return reinterpret_cast<void*>(0x444C4731ULL); // 'DLG1'
+    const std::uintptr_t raw_template = reinterpret_cast<std::uintptr_t>(template_name);
+    if (raw_template > 0xFFFFU || template_name == nullptr) {
+        set_last_error(abi::kErrorNotSupported);
+        return nullptr;
+    }
+    return create_modeless_dialog(instance, reinterpret_cast<const std::uint16_t*>(template_name),
+                                  wnd_parent, reinterpret_cast<std::uintptr_t>(dialog_func),
+                                  init_param);
 }
 
 TL_MSABI std::intptr_t tl_DefDlgProcA(void* const hwnd, const std::uint32_t msg, const std::uintptr_t wparam, const std::intptr_t lparam) noexcept {

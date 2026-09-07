@@ -162,16 +162,23 @@ TL_MSABI void* tl_GetProcessHeap() noexcept {
 
 TL_MSABI void* tl_HeapAlloc(void* heap, std::uint32_t flags, std::uintptr_t size) noexcept {
     (void)heap;
+    void* memory = nullptr;
     if ((flags & 0x0008) != 0) {
-        return std::calloc(1, size);
+        memory = std::calloc(1, size);
+    } else {
+        memory = std::malloc(size);
     }
-    return std::malloc(size);
+    if (memory != nullptr) {
+        bump_guest_allocation_generation();
+    }
+    return memory;
 }
 
 TL_MSABI int tl_HeapFree(void* heap, std::uint32_t flags, void* memory) noexcept {
     (void)heap;
     (void)flags;
     std::free(memory);
+    bump_guest_allocation_generation();
     return 1;
 }
 
@@ -179,7 +186,11 @@ TL_MSABI void* tl_HeapReAlloc(void* heap, std::uint32_t flags, void* memory,
                               std::uintptr_t new_size) noexcept {
     (void)heap;
     (void)flags;
-    return std::realloc(memory, new_size);
+    void* const result = std::realloc(memory, new_size);
+    if (result != nullptr) {
+        bump_guest_allocation_generation();
+    }
+    return result;
 }
 
 TL_MSABI void* tl_GlobalAlloc(const std::uint32_t flags, const std::size_t bytes) noexcept {
@@ -208,6 +219,7 @@ TL_MSABI void* tl_GlobalAlloc(const std::uint32_t flags, const std::size_t bytes
         }
         *it = GlobalMemorySlot{true, memory, allocation_size, flags, 0, true};
     }
+    bump_guest_allocation_generation();
     set_last_error(abi::kErrorSuccess);
     return memory;
 }
@@ -253,6 +265,7 @@ TL_MSABI void* tl_GlobalFree(void* const memory) noexcept {
     }
     std::free(slot->address);
     *slot = GlobalMemorySlot{};
+    bump_guest_allocation_generation();
     set_last_error(abi::kErrorSuccess);
     return nullptr;
 }
@@ -283,6 +296,7 @@ TL_MSABI void* tl_LocalAlloc(const std::uint32_t flags, const std::size_t bytes)
         }
         *it = GlobalMemorySlot{true, memory, allocation_size, flags, 0, false};
     }
+    bump_guest_allocation_generation();
     set_last_error(abi::kErrorSuccess);
     return memory;
 }
@@ -302,12 +316,14 @@ TL_MSABI void* tl_LocalFree(void* memory) noexcept {
             }
             std::free(slot->address);
             *slot = GlobalMemorySlot{};
+            bump_guest_allocation_generation();
             set_last_error(abi::kErrorSuccess);
             return nullptr;
         }
     }
     if (take_local_free_block(memory)) {
         std::free(memory);
+        bump_guest_allocation_generation();
         set_last_error(abi::kErrorSuccess);
         return nullptr;
     }

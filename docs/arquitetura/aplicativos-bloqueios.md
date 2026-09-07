@@ -50,10 +50,17 @@ abre a janela, seleciona `input.txt`, aciona `Copy`, verifica o arquivo em
 processos terminaram com exit `0`. O harness agora usa `Xvfb -displayfd`, para
 que a escolha do display não dependa do lock fixo `:99`.
 
-PuTTY continua pendente. Sob Xvfb válido, a árvore X11 contém somente
-`PuTTY: hidden timing window`; o trace registra a classe `PuTTYConfigBox`, mas
-nenhuma janela de configuração utilizável. Um `WM_DELETE_WINDOW` enviado à
-janela oculta a destrói, porém o processo continua até o timeout controlado.
-Esse resultado não é um encerramento limpo, portanto não promove GUI nem
-justifica um patch de produção sem isolar o caminho modeless/diálogo usado pelo
-aplicativo.
+O cenário PuTTY foi isolado em `tests/gui/putty_smoke.cpp`. Sob Xvfb iniciado
+com `-displayfd`, o trace registra `CreateDialogParamA`, `About PuTTY` e
+`PuTTY Configuration`; o harness localiza a janela configurável e envia apenas
+`WM_DELETE_WINDOW` por X11. O processo termina com exit `0` em `build/debug` e
+`build/debug-rust`, sem depender da janela temporária `PuTTY: hidden timing
+window`.
+
+A correção necessária ficou restrita ao parsing de templates padrão/customizados
+de diálogo, à criação de diálogos modeless com controles genéricos e à
+invalidação da geração de alocações guest após `Heap/Global/LocalAlloc` e
+liberações. `DestroyWindow` mantém o slot lógico válido durante `WM_DESTROY` e
+somente depois o libera, evitando callback posterior com `GWLP` inválido.
+Isso valida somente a abertura/fechamento da configuração; o fluxo SSH e a
+compatibilidade GUI geral do PuTTY continuam fora da declaração de suporte.
