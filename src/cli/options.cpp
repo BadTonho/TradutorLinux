@@ -219,6 +219,44 @@ ParseResult parse_command_line(const int argc, const char* const argv[]) {
         const std::string_view action{argv[2]};
         if (action == "list") {
             command_line.mode = CommandMode::AppList;
+            for (int i = 3; i < argc; ++i) {
+                const std::string_view arg{argv[i]};
+                if (arg != "--trace" && !arg.starts_with("--trace=")) {
+                    return {.command_line = std::nullopt,
+                            .error_message = "opção desconhecida para 'app list': " +
+                                             std::string{arg}};
+                }
+                if (command_line.trace_enabled) {
+                    return {.command_line = std::nullopt,
+                            .error_message = "a opção --trace foi repetida"};
+                }
+                command_line.trace_enabled = true;
+                if (arg.size() <= 7) continue;
+                const std::string_view list = arg.substr(8);
+                if (list.empty() || list.front() == ',' || list.back() == ',' ||
+                    list.find(",,") != std::string_view::npos) {
+                    return {.command_line = std::nullopt,
+                            .error_message = "valor inválido para --trace: " +
+                                             std::string{list}};
+                }
+                std::string_view remaining = list;
+                while (!remaining.empty()) {
+                    const std::size_t comma = remaining.find(',');
+                    const std::string_view token = comma == std::string_view::npos
+                                                       ? remaining
+                                                       : remaining.substr(0, comma);
+                    diagnostics::TraceComponent dummy;
+                    if (token.empty() ||
+                        !diagnostics::trace_component_from_name(token, dummy)) {
+                        return {.command_line = std::nullopt,
+                                .error_message = "canal de trace desconhecido: " +
+                                                 std::string{token}};
+                    }
+                    command_line.trace_channels_raw.emplace_back(std::string{token});
+                    if (comma == std::string_view::npos) break;
+                    remaining = remaining.substr(comma + 1);
+                }
+            }
             return {.command_line = std::move(command_line), .error_message = {}};
         }
         if (action == "run") {

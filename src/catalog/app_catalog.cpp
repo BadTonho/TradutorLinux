@@ -1,15 +1,25 @@
 #include "tradutorlinux/catalog/app_catalog.hpp"
 
+#if defined(TRADUTORLINUX_RUST_APP_CATALOG_PARSER)
+#include "tradutorlinux/catalog/rust_app_catalog_parser.hpp"
+#include "tradutorlinux/diagnostics/trace.hpp"
+#endif
+
 #include <algorithm>
 #include <cctype>
 #include <chrono>
+#include <cstddef>
 #include <cstdint>
 #include <cstdlib>
+#include <exception>
 #include <fstream>
 #include <iomanip>
+#include <iostream>
 #include <limits>
 #include <sstream>
 #include <system_error>
+#include <utility>
+#include <vector>
 
 namespace tradutorlinux::catalog {
 namespace {
@@ -41,6 +51,7 @@ std::string escape_json_string(std::string_view input) {
     return output;
 }
 
+#if !defined(TRADUTORLINUX_RUST_APP_CATALOG_PARSER)
 std::string unescape_json_string(std::string_view input) {
     const auto hex_digit = [](const char value) -> int {
         if (value >= '0' && value <= '9') return value - '0';
@@ -130,6 +141,7 @@ std::string unescape_json_string(std::string_view input) {
     }
     return output;
 }
+#endif
 
 [[nodiscard]] bool is_safe_app_id(std::string_view id) noexcept {
     if (id.empty() || id.size() > 128 || id == "." || id == "..") {
@@ -144,6 +156,7 @@ std::string unescape_json_string(std::string_view input) {
     });
 }
 
+#if !defined(TRADUTORLINUX_RUST_APP_CATALOG_PARSER)
 void skip_whitespace(std::string_view& src) {
     while (!src.empty() && std::isspace(static_cast<unsigned char>(src.front())) != 0) {
         src.remove_prefix(1);
@@ -195,6 +208,62 @@ std::optional<std::uint64_t> parse_json_uint64(std::string_view& src) {
     }
     return value;
 }
+#endif
+
+#if defined(TRADUTORLINUX_RUST_APP_CATALOG_PARSER)
+[[nodiscard]] std::string rust_catalog_status_name(
+    const tl_app_catalog_status_t status) noexcept {
+    switch (status) {
+        case TL_APP_CATALOG_STATUS_SUCCESS: return "success";
+        case TL_APP_CATALOG_STATUS_MALFORMED: return "malformed";
+        case TL_APP_CATALOG_STATUS_UNSUPPORTED_FORMAT: return "unsupported-format";
+        case TL_APP_CATALOG_STATUS_INVALID_ARGUMENT: return "invalid-argument";
+        case TL_APP_CATALOG_STATUS_BUFFER_TOO_SMALL: return "buffer-too-small";
+        case TL_APP_CATALOG_STATUS_INPUT_TOO_LARGE: return "input-too-large";
+        case TL_APP_CATALOG_STATUS_OUTPUT_TOO_LARGE: return "output-too-large";
+        case TL_APP_CATALOG_STATUS_INTERNAL: return "internal";
+        default: return "internal";
+    }
+}
+
+void write_rust_catalog_trace(const std::filesystem::path& path,
+                              const RustAppCatalogParseResult& parsed) {
+    if (!diagnostics::is_trace_requested() ||
+        !diagnostics::is_trace_enabled(diagnostics::TraceComponent::Runtime)) {
+        return;
+    }
+    std::vector<diagnostics::TraceField> fields;
+    fields.reserve(parsed.status == TL_APP_CATALOG_STATUS_SUCCESS ? 4U : 9U);
+    fields.push_back({"path", path.string()});
+    fields.push_back({"backend", "rust"});
+    fields.push_back({"parser-status", rust_catalog_status_name(parsed.status)});
+    fields.push_back({"apps", std::to_string(parsed.apps.size())});
+    if (parsed.status != TL_APP_CATALOG_STATUS_SUCCESS) {
+        fields.push_back({"code", std::to_string(parsed.error.code)});
+        fields.push_back({"phase", std::to_string(parsed.error.phase)});
+        fields.push_back({"input-offset", std::to_string(parsed.error.input_offset)});
+        fields.push_back({"detail-value", std::to_string(parsed.error.detail_value)});
+        fields.push_back({"detail", parsed.error_message});
+    }
+    const diagnostics::TraceLevel level =
+        parsed.internal_failure || parsed.status == TL_APP_CATALOG_STATUS_INTERNAL
+            ? diagnostics::TraceLevel::Error
+            : parsed.status == TL_APP_CATALOG_STATUS_SUCCESS ? diagnostics::TraceLevel::Info
+                                                              : diagnostics::TraceLevel::Warning;
+    diagnostics::write_trace(std::cerr, diagnostics::TraceComponent::Runtime, level,
+                             "catalog-parse", fields);
+}
+
+[[nodiscard]] RustAppCatalogParseResult rust_catalog_input_limit_result(
+    const std::uint64_t input_size) {
+    RustAppCatalogParseResult result;
+    result.status = TL_APP_CATALOG_STATUS_INPUT_TOO_LARGE;
+    result.error = {TL_APP_CATALOG_ERROR_INPUT_TOO_LARGE, TL_APP_CATALOG_ERROR_PHASE_INPUT,
+                    TL_APP_CATALOG_ERROR_OFFSET_UNKNOWN, input_size};
+    result.error_message = "library.json excede o limite de entrada TLAC";
+    return result;
+}
+#endif
 
 }  // namespace
 
@@ -348,6 +417,52 @@ bool AppCatalog::load_from_file(const std::filesystem::path& path) {
         return false;
     }
 
+#if defined(TRADUTORLINUX_RUST_APP_CATALOG_PARSER)
+    file.seekg(0, std::ios::end);
+    const std::streamoff file_size = file.tellg();
+    if (file_size < 0) {
+        return false;
+    }
+    const auto input_size = static_cast<std::uint64_t>(file_size);
+    if (input_size > TL_APP_CATALOG_LIMIT_MAX_INPUT_BYTES ||
+        input_size > std::numeric_limits<std::size_t>::max()) {
+        const RustAppCatalogParseResult parsed = rust_catalog_input_limit_result(input_size);
+        write_rust_catalog_trace(path, parsed);
+        return false;
+    }
+    file.seekg(0, std::ios::beg);
+    std::vector<std::byte> content(static_cast<std::size_t>(input_size));
+    if (!content.empty()) {
+        file.read(reinterpret_cast<char*>(content.data()),
+                  static_cast<std::streamsize>(content.size()));
+        if (!file) {
+            return false;
+        }
+    }
+
+    RustAppCatalogParseResult parsed;
+    try {
+        parsed = parse_app_catalog_rust(content);
+    } catch (const std::exception& exception) {
+        parsed.status = TL_APP_CATALOG_STATUS_INTERNAL;
+        parsed.internal_failure = true;
+        parsed.error = {TL_APP_CATALOG_ERROR_INTERNAL, TL_APP_CATALOG_ERROR_PHASE_INPUT,
+                        TL_APP_CATALOG_ERROR_OFFSET_UNKNOWN, 0};
+        parsed.error_message = exception.what();
+    } catch (...) {
+        parsed.status = TL_APP_CATALOG_STATUS_INTERNAL;
+        parsed.internal_failure = true;
+        parsed.error = {TL_APP_CATALOG_ERROR_INTERNAL, TL_APP_CATALOG_ERROR_PHASE_INPUT,
+                        TL_APP_CATALOG_ERROR_OFFSET_UNKNOWN, 0};
+        parsed.error_message = "falha desconhecida ao carregar catalogo TLAC";
+    }
+    write_rust_catalog_trace(path, parsed);
+    if (parsed.status != TL_APP_CATALOG_STATUS_SUCCESS || parsed.internal_failure) {
+        return false;
+    }
+    apps_ = std::move(parsed.apps);
+    return true;
+#else
     std::stringstream buffer;
     buffer << file.rdbuf();
     std::string content = buffer.str();
@@ -460,6 +575,7 @@ bool AppCatalog::load_from_file(const std::filesystem::path& path) {
     }
 
     return true;
+#endif
 }
 
 std::filesystem::path AppCatalog::default_desktop_entries_dir() {

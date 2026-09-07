@@ -141,6 +141,7 @@ std::string_view trace_component_name(const TraceComponent component) noexcept {
 namespace {
 std::array<bool, 10> g_trace_enabled{};
 bool g_trace_filter_active = false;
+std::atomic<bool> g_trace_requested{false};
 std::mutex g_trace_mutex;
 std::filesystem::path g_trace_json_directory;
 std::uint64_t g_trace_json_sequence = 0;
@@ -403,6 +404,14 @@ void configure_trace_all() noexcept {
     std::lock_guard<std::mutex> lock(g_trace_mutex);
     g_trace_enabled.fill(true);
     g_trace_filter_active = false;
+}
+
+void set_trace_requested(const bool requested) noexcept {
+    g_trace_requested.store(requested, std::memory_order_release);
+}
+
+bool is_trace_requested() noexcept {
+    return g_trace_requested.load(std::memory_order_acquire);
 }
 
 bool is_trace_enabled(const TraceComponent component) noexcept {

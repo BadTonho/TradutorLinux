@@ -548,6 +548,7 @@ void write_install_trace(const bool enabled, std::ostream& stream,
 
 ExitCode run_command(const CommandLine& command_line, std::ostream& stdout_stream,
                      std::ostream& stderr_stream) {
+    diagnostics::set_trace_requested(command_line.trace_enabled);
     // Configura filtro de trace (inspirado em WINEDEBUG): --trace sozinho = tudo,
     // --trace=pe,loader filtra apenas esses componentes.
     if (command_line.trace_enabled) {
