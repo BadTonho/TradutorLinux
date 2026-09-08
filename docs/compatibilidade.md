@@ -40,11 +40,13 @@ seu `ExitProcess(3)` e Rufus é rejeitado com `4` por `map-failed`. Cada caso
 recebe prefixo temporário, limites de CPU/memória e timeout; isso é evidência
 de comportamento controlado, não uma promoção geral de compatibilidade.
 
-O teste `popular_apps_install_matrix` repete as rejeições de instalação já
-autorizadas para Roblox (`3` após `RBXCRASH`), G HUB e seu alias (`1` após
-`ExitProcess(1)`) e Affinity (`4` antes da extração). Ele isola prefixo,
-`HOME`, configuração e `APPDATA`, e exige que não haja arquivos, extração ou
-cadastro parcial; instaladores PE32/x86 continuam sem execução.
+O teste `popular_apps_install_matrix` cobre as instalações autorizadas de
+Roblox (`3` após `RBXCRASH`), G HUB e seu alias (`1` após `ExitProcess(1)`) e
+Affinity (`4` antes da extração), além das rejeições pré-extração de CPU-Z,
+GPU-Z, HWMonitor e HWiNFO (`5`, `5`, `5` e `4`). Ele isola prefixo, `HOME`,
+configuração e `APPDATA`, exige que não haja arquivos, extração ou cadastro
+parcial e preserva o fallback genérico somente para instaladores cujo payload
+PE32+ seja validado antes do cadastro.
 
 ## Política de backend do parser PE — R21.3–R21.5
 

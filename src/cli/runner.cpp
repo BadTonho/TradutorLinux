@@ -1085,6 +1085,9 @@ ExitCode run_command(const CommandLine& command_line, std::ostream& stdout_strea
         if (effective_cmd.mode == CommandMode::Install) {
             const auto target_prog_dir = prefix_dir / "drive_c" / "Program Files" / installation_name;
             std::error_code ec;
+            const bool target_prog_dir_was_absent =
+                !std::filesystem::exists(target_prog_dir, ec) && !ec;
+            ec.clear();
             std::filesystem::create_directories(target_prog_dir, ec);
             if (extract_archive_with_7z(*effective_cmd.executable_path, target_prog_dir)) {
                 // Instaladores NSIS descompactados trazem langs.model.xml e stylers.model.xml.
@@ -1141,6 +1144,10 @@ ExitCode run_command(const CommandLine& command_line, std::ostream& stdout_strea
                         return ExitCode::Success;
                     }
                 }
+            }
+            if (target_prog_dir_was_absent) {
+                std::error_code cleanup_error;
+                (void)std::filesystem::remove_all(target_prog_dir, cleanup_error);
             }
         }
         if (effective_cmd.trace_enabled) {

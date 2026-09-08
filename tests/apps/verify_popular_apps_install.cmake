@@ -11,13 +11,18 @@ if(NOT IS_DIRECTORY "${TL_CORPUS}")
     message(FATAL_ERROR "corpus inexistente: ${TL_CORPUS}")
 endif()
 
-# Somente candidatos PE32+ ou MSIX que já foram analisados e autorizados pela
-# matriz B3/D3. PE32/x86, .NET/Mono e instaladores não aprovados não entram.
+# Os quatro primeiros casos são instalações autorizadas. Os quatro últimos
+# exercitam somente a rejeição pré-extração dos novos aplicativos x86 ou
+# empacotados; nenhum deles é iniciado nem cadastrado.
 set(CASES
     "RobloxPlayerInstaller.exe|roblox|3"
     "Logitech_GHUB_x64.exe|ghub|1"
     "lghub_installer.exe|ghub_alias|1"
     "Affinity x64.msix|affinity|4"
+    "CPU-Z_2.18_en.exe|cpuz|5"
+    "GPU-Z_2.70.0.exe|gpuz|5"
+    "HWMonitor_1.67.exe|hwmonitor|5"
+    "HWiNFO64.exe|hwinfo|4"
 )
 
 file(REMOVE_RECURSE "${TL_STAGING_ROOT}")
@@ -74,6 +79,9 @@ foreach(case IN LISTS CASES)
 
     if("${app_id}" STREQUAL "affinity")
         set(expected_stage "package-parse")
+    elseif("${app_id}" STREQUAL "cpuz" OR "${app_id}" STREQUAL "gpuz" OR
+           "${app_id}" STREQUAL "hwmonitor" OR "${app_id}" STREQUAL "hwinfo")
+        set(expected_stage "parse")
     else()
         set(expected_stage "setup")
     endif()
@@ -102,6 +110,9 @@ foreach(case IN LISTS CASES)
         else()
             set(expected_marker "failed stage=\"package-parse\"")
         endif()
+    elseif("${app_id}" STREQUAL "cpuz" OR "${app_id}" STREQUAL "gpuz" OR
+           "${app_id}" STREQUAL "hwmonitor" OR "${app_id}" STREQUAL "hwinfo")
+        set(expected_marker "failed stage=\"parse\"")
     endif()
     string(FIND "${install_trace}" "${expected_marker}" marker_position)
     if(marker_position EQUAL -1)

@@ -2604,6 +2604,39 @@ Critério de saída:
 - [ ] A promoção não relaxa W^X, não converte sinais Linux em exceções
   convidadas e não usa o parser C++ como fallback de produção.
 
+### E43 — Rodada controlada de CPU-Z, GPU-Z, HWMonitor e HWiNFO
+
+Objetivo: analisar os novos aplicativos do corpus com o Tradutor, confirmar
+que cada solicitação recebe uma classificação explícita e impedir que uma
+tentativa de instalação rejeitada deixe staging parcial.
+
+Problema reproduzido em 2026-09-08:
+
+- [x] `--report` Rust ON/C++ OFF identificou CPU-Z, GPU-Z e HWMonitor como
+  `PE32`/`machine=0x14c`, retornando `Unsupported`/exit `5`; nenhum deles foi
+  executado ou cadastrado. HWiNFO64 foi identificado como PE32+ empacotado,
+  retornando `Malformed`/exit `4` por RVA sem faixa crua.
+- [x] A primeira tentativa controlada de `install` preservou o exit correto,
+  mas o fallback genérico de arquivo `7z` deixava 31, 386, 31 e 1338 arquivos
+  no diretório de instalação após CPU-Z, GPU-Z, HWMonitor e HWiNFO,
+  respectivamente. Não houve cadastro, mas a rejeição não era transacional.
+
+Correção e evidência:
+
+- [x] O fallback de instaladores continua disponível para encontrar um payload
+  PE32+ válido, mas remove o diretório de staging criado pela própria tentativa
+  quando nenhum executável é registrado. Prefixos preexistentes não são
+  removidos.
+- [x] `popular_apps_install_matrix` foi ampliada de 4 para 8 casos e passou
+  8/8 em `build/debug-rust` e 8/8 em `build/debug`; os quatro novos casos
+  retornaram `5, 5, 5 e 4` e terminaram com zero arquivos residuais.
+- [x] Probes diretos ON/OFF confirmaram CPU-Z/GPU-Z/HWMonitor exit `5`, HWiNFO
+  exit `4` e `residual-files=0`. As matrizes `--report` simples e recursiva
+  também passaram em ambos os backends (27/27 e 64/64, respectivamente).
+- [x] Nenhuma DLL, shim, regra por aplicativo ou etapa PE32/x86 foi adicionada;
+  a execução permanece não tentada para arquiteturas fora do escopo e o
+  desempacotamento genérico de HWiNFO continua uma limitação publicada.
+
 ## Regras de validação
 
 - Cada correção começa com uma fixture mínima e termina com testes automatizados.
