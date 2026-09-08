@@ -36,6 +36,18 @@ if(TL_POPULAR_APPS_DIR AND TARGET tradutorlinux)
     )
 
     add_test(
+        NAME popular_apps_recursive_report_matrix
+        COMMAND ${CMAKE_COMMAND}
+            "-DTL_RUNTIME=$<TARGET_FILE:tradutorlinux>"
+            "-DTL_CORPUS=${TL_POPULAR_APPS_DIR}"
+            -P "${PROJECT_SOURCE_DIR}/tests/apps/verify_popular_apps_recursive_report.cmake"
+    )
+    set_tests_properties(popular_apps_recursive_report_matrix PROPERTIES
+        LABELS "runtime;apps;report;corpus;recursive"
+        TIMEOUT 300
+    )
+
+    add_test(
         NAME popular_apps_native_matrix
         COMMAND ${CMAKE_COMMAND}
             "-DTL_RUNTIME=$<TARGET_FILE:tradutorlinux>"

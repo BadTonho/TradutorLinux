@@ -20,6 +20,13 @@ selecionados e o MSIX do corpus e verifica os exit codes esperados sem mapear
 ou executar os arquivos. O caso é repetido no build Rust ON e no baseline C++
 OFF.
 
+`popular_apps_recursive_report_matrix` complementa essa seleção com todos os
+64 PE/DLL/MSIX encontrados recursivamente no corpus atual, incluindo cópias
+extraídas de 7-Zip e Notepad++. Ela continua sendo somente análise: DLLs,
+pacotes e instaladores rejeitados nunca são iniciados, e cada exit esperado é
+fixado no catálogo do teste para que uma mudança de formato ou arquitetura
+falhe de forma visível.
+
 `popular_apps_native_matrix` executa somente os cinco PE32+ com ação direta já
 documentada: 7-Zip, os dois binários WinRAR, Rockstar e Rufus. Cada caso usa
 prefixo temporário, `--timeout 3`, limites de CPU/memória e verifica o exit code

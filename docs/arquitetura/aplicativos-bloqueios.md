@@ -98,6 +98,29 @@ recebe zero bytes e termina no `guest-timeout 72`; isso é uma limitação de
 interação, não suporte ao SSH. Toda a implementação permanece genérica e não
 contém nome, ID, DLL ou regra de seleção do PuTTY.
 
+## Evidência E31 — matriz recursiva e ação `Open` do PuTTY
+
+`popular_apps_recursive_report_matrix` foi adicionada ao catálogo CTest para
+analisar todos os 64 arquivos PE/DLL/MSIX encontrados recursivamente em
+`Aplicativos_Windows_Populares/`. Ela cobre também as cópias extraídas de
+7-Zip e Notepad++, mas não inicia DLLs, pacotes ou instaladores. Rust ON e C++
+OFF passaram 64/64 com a mesma distribuição: 25 análises concluídas, 2
+formatos rejeitados e 37 arquiteturas/mecanismos não suportados.
+
+O smoke `putty_ssh_local_probe` passou a preencher host/porta e enviar um
+clique controlado ao botão `Open`, usando somente o harness em
+`tests/apps/putty/`. Nos dois builds, o comando é aceito e a janela principal
+`PuTTY` é criada. O listener de loopback ainda recebe zero bytes e o processo
+termina no `guest-timeout 72`; uma observação com `strace` confirmou que não
+há `socket`/`connect` do convidado depois dessa ação. Portanto a etapa valida
+configuração e ativação da janela, não o handshake SSH.
+
+As matrizes nativas e de instalação controlada continuam separadas: 5/5
+execuções e 4/4 instalações passaram nos dois builds. PE32/x86, imagens
+empacotadas e pacotes incompatíveis continuam sendo rejeitados antes de
+execução, e não há fallback, DLL ou tratamento específico de aplicativo no
+runtime.
+
 ## Evidência D2 — cenários GUI
 
 O smoke externo do 7-Zip File Manager passou nos builds C++ OFF e Rust ON. Ele

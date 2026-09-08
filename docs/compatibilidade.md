@@ -27,6 +27,13 @@ sucesso (`0`), rejeição estrutural (`4`) e formato/arquitetura não suportados
 (`5`) sem mapear ou executar os arquivos; a mesma matriz é executada nos
 builds Rust ON e C++ OFF.
 
+O teste `popular_apps_recursive_report_matrix` amplia essa verificação para
+todos os 64 arquivos PE, DLL e MSIX encontrados recursivamente no corpus
+pinado, incluindo os diretórios extraídos de 7-Zip e Notepad++. Ele executa
+somente `--report`, sem iniciar DLLs, instaladores ou pacotes rejeitados; os
+builds Rust ON e C++ OFF retornaram `25` sucessos, `2` rejeições estruturais e
+`37` formatos/arquiteturas não suportados em ambos os casos.
+
 O teste `popular_apps_native_matrix` cobre os cinco casos de execução direta já
 selecionados no B2: 7-Zip e os dois WinRAR terminam com `0`, Rockstar preserva
 seu `ExitProcess(3)` e Rufus é rejeitado com `4` por `map-failed`. Cada caso
@@ -992,7 +999,7 @@ continuam sendo a evidência necessária para registrá-lo como suportado.
 | 1 | `7z_x64.exe` | PE32+ x86-64 | 133/133 (100%) | `supported` | smoke CTest cria, lista e extrai ZIP por `7z.dll`, com exit `0` em Rust/C++ | DLL PE ao lado do executável é encontrada, mapeada, anexada e descarregada; criação/listagem/extração do smoke são o subconjunto validado |
 | 2 | `7zFM_x64.exe` | PE32+ x86-64 | 298/298 (100%) | smoke Xvfb da A5 com exit `0`; tentativa B2 não revalidada por X11 indisponível | smoke externo `seven_zip_smoke` seleciona `input.txt`, aciona `Copy` (`idCommand=546`), verifica o arquivo copiado e encerra o runtime com exit `0` | janela X11 abre com shell visual experimental na evidência A5; a tentativa B2 registrou falha de inicialização do Xvfb antes do aplicativo e não altera essa conclusão; menu de classe `RT_MENU`/MENUEX real (6 itens de nível superior), dropdowns aninhados e seleção básica por mouse/teclado de itens folha encaminham `WM_COMMAND`; lista imediata do diretório do executável é selecionável, recebe hover e permite navegação visual por pastas com Enter ou duplo clique; árvore lateral recebe hover, retorna à raiz e seleciona diretórios Linux conhecidos; barra `Address` permite navegar somente dentro da raiz visual; toolbar segue os `idCommand` reais, recebe hover, mostra pressão e cancela soltura fora do botão; `Copy` (`idCommand=546`) copia, de forma opt-in, um arquivo selecionado para destino existente dentro da raiz, sem sobrescrever | geometria inválida normalizada para `800x600`; limite da lista em 128 linhas; delay `MPR.dll 6/6`; demais operações ainda não concluídas |
 | 3 | `7z.dll` | PE32+ DLL x86-64 | 86/86 (100%) | `imports-resolved` | carregada como dependência do `7z_x64.exe`; não executada como aplicação independente | **Fase 13.A**: o módulo é validado e executado somente como DLL dependente no grafo da execução |
-| 4 | `putty_x64.exe` | PE32+ x86-64 | 348/348 (100%) | `guest-timeout` exit `72` no fluxo geral e no probe SSH local | D2 abre/fecha `PuTTY Configuration`; E28 configura host/porta por teclado, mas o listener local recebe zero bytes em Rust ON/C++ OFF. O SSH completo continua não validado; FLS 0/1 ok; não promover como suporte geral |
+| 4 | `putty_x64.exe` | PE32+ x86-64 | 348/348 (100%) | `guest-timeout` exit `72` no fluxo geral e no probe SSH local | D2 abre/fecha `PuTTY Configuration`; E31 preenche host/porta, aciona `Open` e alcança a janela principal `PuTTY`, mas o listener local recebe zero bytes em Rust ON/C++ OFF. O SSH completo continua não validado; FLS 0/1 ok; não promover como suporte geral |
 | 5 | `WinRAR_x64.exe` `winrar-x64-723.exe` | PE32+ x86-64 | 251/251 (100%) | `supported` | `ExitProcess 0` no cenário SFX sem GUI; sob Xvfb, o smoke de cancelamento termina com `ExitProcess 0` após `WM_DELETE_WINDOW`, enquanto a execução sem interação termina em `guest-timeout 72` | delay `GDI32/ADVAPI32/SHELL32/ole32`; extração acionada por `IDOK` e uso diário continuam não validados |
 | 6 | `Rufus_x64.exe` | PE32+ x86-64 | 14/14 (100%) | `supported` | `map-failed` exit `4` | `UPX1` é marcada `rwx`; o loader aplica W^X, mapeia a combinação como `RW` e rejeita o entry point antes da execução, sem página `RWX` |
 | 7 | `HWiNFO64.exe` | PE32+ x86-64 | — | `malformed` (PE empacotado) | `not-attempted` | `UPX0` tem `SizeOfRawData=0`, enquanto o diretório de exports aponta para RVA sem bytes no arquivo; o desempacotamento permanece fora do escopo |
@@ -1060,13 +1067,28 @@ não como sucesso SSH. O prefixo, o servidor local, o Xvfb e os processos do
 próprio cenário são limpos ao final; nenhum código de runtime, DLL, shim ou
 regra específica do PuTTY foi adicionado.
 
+### Evidência E31 — matriz recursiva e ação `Open` do PuTTY (2026-09-07)
+
+`popular_apps_recursive_report_matrix` percorre o corpus pinado e analisou 64
+arquivos PE, DLL e MSIX nos builds Rust ON e C++ OFF. Os dois resultados foram
+idênticos: 25 sucessos, 2 rejeições estruturais e 37 formatos/arquiteturas não
+suportados. A matriz usa somente `--report`; não inicia DLLs, instaladores ou
+pacotes rejeitados.
+
+O `putty_ssh_local_probe` passou nos dois builds com o mesmo resultado
+controlado: preencheu host e porta, acionou `Open` e confirmou a janela
+principal `PuTTY`, mas o listener TCP local recebeu zero bytes; o convidado
+terminou com `guest-timeout` `72`. A inspeção de rede não observou `socket` ou
+`connect` do convidado. Isso confirma o alcance da ação genérica de abertura,
+não um handshake SSH nem suporte funcional ao PuTTY.
+
 ## Aplicativos Windows Populares (histórico)
 
 | Aplicativo | Arquitetura | Imports Resolvidos | Compatibilidade | Estado de Execução |
 |---|---|---:|---|---|
 | **7-Zip File Manager (`7zFM_x64.exe`)** | PE32+ x86-64 | 100% (298/298) | Fluxo principal restrito | Menu de classe MENUEX real, dropdowns aninhados, seleção básica por mouse/teclado de itens folha, toolbar orientada pelos `idCommand` reais com captura de pressão e hover, endereço editável restrito à raiz visual, navegação lateral interativa com hover, lista selecionável com hover e navegação visual por pastas via Enter ou duplo clique e status aparecem; `WM_COMMAND` básico pode ser encaminhado; o smoke externo versionado seleciona um arquivo e conclui `Copy` (`546`) dentro da raiz, sem sobrescrever; o CTest pode registrá-lo com o corpus; demais operações continuam limitadas |
 | **7-Zip CLI (`7z_x64.exe`)** | PE32+ x86-64 | 100% (133/133) | Suportado no subconjunto | Smoke isolado cria, testa, remove, atualiza e renomeia entradas no ZIP `stored`, além de criar/listar/extrair ZIP `DEFLATE` e arquivos `7z` com `LZMA2` normal e protegido por senha, pela `7z.dll` carregada do diretório da aplicação; preserva `input-data/café-日本.txt`, verifica `renamed.txt`, exercita staging com espaços, caminhos relativos ao diretório de trabalho, o filtro stdin/stdout (`-si`/`-so`) e sobrescrita existente com `-aoa`, confirma rejeição controlada de senha incorreta sem payload válido e termina com exit `0` nos fluxos válidos em Rust ON/OFF |
-| **PuTTY SSH Client (`putty_x64.exe`)** | PE32+ x86-64 | 100% (348/348) | Parcial: configuração; conexão não alcançada | C2 do fluxo geral e E28/E30 terminam em `GuestTimeout 72`; D2 abre/fecha `PuTTY Configuration`, enquanto o probe E28/E30 configura uma porta TCP local e observa zero bytes enviados em Rust ON/C++ OFF; SSH completo ainda não é suportado |
+| **PuTTY SSH Client (`putty_x64.exe`)** | PE32+ x86-64 | 100% (348/348) | Parcial: configuração e janela de sessão; conexão não alcançada | C2 do fluxo geral e E31 terminam em `GuestTimeout 72`; D2 abre/fecha `PuTTY Configuration`, enquanto o probe preenche host/porta, aciona `Open`, alcança a janela `PuTTY` e observa zero bytes enviados em Rust ON/C++ OFF; SSH completo ainda não é suportado |
 | **WinRAR (`WinRAR_x64.exe`)** | PE32+ x86-64 | 100% (251/251) | Suportado | Inicializou FLS, subsistema CRT e APIs do Shell/OLE com sucesso; o smoke SFX de cancelamento pode ser registrado no CTest com o corpus |
 | **HWiNFO64 (`HWiNFO64.exe`)** | PE32+ x86-64 | — | Análise estrutural rejeitada | `UPX0` não tem dados crus para o RVA do diretório de exports; desempacotamento não é implementado |
 | **Roblox Player Installer (`RobloxPlayerInstaller.exe`)** | PE32+ x86-64 | 100% (430/430) | Não suportado como fluxo concluído | Fase 13.D — `RBXCRASH` + `ExitProcess 3` (antes `SIGSEGV`); resolução de imports e correção TLS não equivalem a suporte |

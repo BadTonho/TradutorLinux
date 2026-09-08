@@ -1971,9 +1971,9 @@ Critérios de saída:
 - [x] A carga dinâmica e a resolução de exports são exercitadas sem imports
   estáticos de `WS2_32.dll` e sem código específico do PuTTY.
 - [x] stdout, exit code, metadata e report coincidem em Rust ON e C++ OFF.
-- [ ] O probe SSH do PuTTY ainda precisa alcançar a ação genérica de abertura
-  da sessão; a investigação seguinte deve verificar ativação de diálogo antes
-  de ampliar qualquer API de rede.
+- [x] O probe SSH do PuTTY alcança a ação genérica de abertura da sessão e cria
+  a janela principal `PuTTY`; o listener ainda recebe zero bytes, então a
+  investigação de rede permanece separada e não amplia APIs sem nova evidência.
 
 Evidência reproduzível de 2026-09-07:
 
@@ -2032,6 +2032,67 @@ Evidência reproduzível de 2026-09-07:
 - [x] `putty_ssh_local_probe` passou fora do sandbox com a limitação esperada
   e stdout `configuration reached, no bytes sent, guest-timeout 72`; o mesmo
   smoke foi mantido no harness sem instrumentação temporária.
+
+### E31 — Matriz recursiva do corpus e ativação da sessão PuTTY
+
+Objetivo: fechar a cobertura de análise do diretório real de aplicativos e
+registrar a ação GUI de abertura da sessão do PuTTY, sem iniciar DLLs ou
+instaladores rejeitados e sem criar tratamento específico no runtime.
+
+Tarefas:
+
+- [x] Repetir `--report` para os 27 arquivos de primeiro nível já catalogados
+  nos builds Rust ON e C++ OFF: 27/27 passaram em cada build, com os mesmos
+  códigos para PE válido, arquitetura não suportada e formato rejeitado.
+- [x] Criar `popular_apps_recursive_report_matrix`, cobrindo os 64
+  PE/DLL/MSIX encontrados recursivamente, inclusive cópias extraídas de
+  7-Zip/Notepad++; a matriz permanece somente de análise e fixa o exit
+  esperado por arquivo.
+- [x] Repetir a matriz recursiva nos dois backends: Rust ON e C++ OFF passaram
+  64/64, com a mesma distribuição `success=25`, `malformed=2` e
+  `unsupported=37`.
+- [x] Alterar somente o smoke em `tests/apps/putty/` para enviar um clique
+  controlado ao botão `Open` após preencher host/porta, confirmar a criação
+  da janela `PuTTY` e manter o servidor limitado a loopback.
+- [x] Repetir a ativação nos dois builds: a configuração e a janela de sessão
+  são alcançadas, o servidor recebe zero bytes e o processo termina no
+  `guest-timeout 72`; nenhuma syscall de `socket`/`connect` do convidado foi
+  observada depois do `Open`.
+
+Critérios de saída:
+
+- [x] O corpus recursivo possui uma análise automatizada reproduzível, sem
+  transformar DLLs, pacotes ou instaladores incompatíveis em casos de
+  execução.
+- [x] O fluxo do PuTTY separa configuração, ativação da janela e conexão:
+  somente as duas primeiras etapas foram alcançadas nos builds ON/OFF.
+- [x] Nenhum arquivo específico do aplicativo foi adicionado ao runtime; a
+  alteração fica no harness de teste e preserva stdout, timeout e limpeza.
+
+Evidência reproduzível de 2026-09-07:
+
+- [x] `ctest --test-dir build/debug-rust -R '^popular_apps_report_matrix$'`
+  e `'^popular_apps_recursive_report_matrix$'` passaram; a matriz recursiva
+  terminou em 64/64 casos.
+- [x] Os mesmos dois testes passaram em `build/debug` (C++ OFF), com saída e
+  classificação equivalentes.
+- [x] `popular_apps_native_matrix` e `popular_apps_install_matrix` passaram
+  em Rust ON e C++ OFF: 5/5 execuções controladas e 4/4 instalações
+  controladas por build.
+- [x] `putty_ssh_local_probe` passou em ambos os builds após o clique em
+  `Open`, sem bytes no listener e sem processo residual.
+
+Limites mantidos:
+
+- CPU-Z, GPU-Z, HWMonitor, RTSS e os demais PE32/x86 continuam rejeitados
+  antes da execução; HWiNFO continua rejeitado por imagem empacotada e
+  Affinity por pacote fora do limite estrutural.
+- DLLs e instaladores não são iniciados indiscriminadamente. Instalação só é
+  exercitada pelos quatro candidatos com staging, timeout, memória e limpeza
+  controlados já aprovados pela matriz.
+- A criação da janela de sessão não é handshake SSH nem suporte funcional do
+  PuTTY; o próximo bloqueio exige evidência nova do fluxo interno antes de
+  qualquer API adicional.
 
 ## Regras de validação
 

@@ -196,6 +196,30 @@ void stop_process(const pid_t pid) {
            send_key_event(display, window, key, KeyRelease);
 }
 
+[[nodiscard]] bool send_button_click(Display* const display, const Window window,
+                                     const int x, const int y) {
+    for (const int type : {ButtonPress, ButtonRelease}) {
+        XEvent event{};
+        event.xbutton.type = type;
+        event.xbutton.display = display;
+        event.xbutton.window = window;
+        event.xbutton.root = DefaultRootWindow(display);
+        event.xbutton.subwindow = 0;
+        event.xbutton.time = CurrentTime;
+        event.xbutton.x = x;
+        event.xbutton.y = y;
+        event.xbutton.x_root = x;
+        event.xbutton.y_root = y;
+        event.xbutton.state = type == ButtonPress ? 0U : Button1Mask;
+        event.xbutton.button = Button1;
+        event.xbutton.same_screen = True;
+        const long mask = type == ButtonPress ? ButtonPressMask : ButtonReleaseMask;
+        if (::XSendEvent(display, window, False, mask, &event) == 0) return false;
+    }
+    (void)::XFlush(display);
+    return true;
+}
+
 [[nodiscard]] bool send_ascii(Display* const display, const Window window,
                               const std::string_view text) {
     for (const char raw_character : text) {
@@ -232,7 +256,7 @@ void stop_process(const pid_t pid) {
         !send_key_pair(display, configuration, XK_Tab) ||
         !send_backspaces(display, configuration, 16) ||
         !send_ascii(display, configuration, std::to_string(port)) ||
-        !send_key_pair(display, configuration, XK_Return)) {
+        !send_button_click(display, configuration, 207, 242)) {
         return false;
     }
     (void)::XSync(display, False);
@@ -519,15 +543,22 @@ int main(const int argc, char** const argv) {
     const bool configured = display_open && configuration != 0 &&
                             configure_session(display, configuration, server.port);
 
+    bool session_reached = false;
     bool banner_received = false;
     bool server_result_available = false;
     if (configured) {
         for (int attempt = 0; attempt < 100 && !server_result_available; ++attempt) {
+            if (!session_reached) {
+                session_reached = find_window_by_name(display, DefaultRootWindow(display), "PuTTY") != 0;
+            }
             server_result_available = take_server_result(server, 100, &banner_received);
             if (server_result_available) break;
             std::this_thread::sleep_for(50ms);
         }
         if (banner_received) close_session_windows(display);
+    }
+    if (!session_reached && display != nullptr) {
+        session_reached = find_window_by_name(display, DefaultRootWindow(display), "PuTTY") != 0;
     }
     if (display != nullptr) ::XCloseDisplay(display);
 
@@ -540,11 +571,13 @@ int main(const int argc, char** const argv) {
     if (!server_exited) stop_process(server.pid);
     stop_process(xvfb.pid);
 
-    const bool successful_exchange = configured && banner_received && server_result_available &&
+    const bool successful_exchange = configured && session_reached && banner_received &&
+                    server_result_available &&
                     server_exited &&
                     WIFEXITED(server_status) && WEXITSTATUS(server_status) == 0 &&
                     has_controlled_exit(runtime_result) && runtime_result.stdout_text.empty();
-    const bool controlled_limitation = configured && !banner_received && server_result_available &&
+    const bool controlled_limitation = configured && session_reached && !banner_received &&
+                                       server_result_available &&
                                        server_exited && WIFEXITED(server_status) &&
                                        WEXITSTATUS(server_status) == 1 && runtime_result.exited &&
                                        runtime_result.exit_code == 72 &&
@@ -558,7 +591,8 @@ int main(const int argc, char** const argv) {
                   << "display-open=" << display_open << " about-found=" << about_found
                   << " about-closed=" << about_closed
                   << " configuration=" << (configuration != 0)
-                  << " configured=" << configured << " banner=" << banner_received
+                  << " configured=" << configured << " session=" << session_reached
+                  << " banner=" << banner_received
                   << " server-exited=" << server_exited << " runtime-exited="
                   << runtime_result.exited << " runtime-timeout=" << runtime_result.timed_out
                   << " runtime-exit=" << runtime_result.exit_code << '\n';
