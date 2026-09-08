@@ -65,6 +65,18 @@ TEST(Win32CodePageTest, InvalidUtf8WithStrictFlagFails) {
     EXPECT_EQ(tl_GetLastError(), abi::kErrorNoUnicodeTranslation);
 }
 
+TEST(Win32CodePageTest, Cp437MapsGlyphCharactersWithUseGlyphChars) {
+    const char input[] = {1, 2, 0x1E, 0x1F};
+    std::uint16_t output[4]{};
+    const int written = tl_MultiByteToWideChar(
+        abi::kCp437, abi::kMbUseGlyphChars | abi::kMbErrInvalidChars, input, 4, output, 4);
+    ASSERT_EQ(written, 4);
+    EXPECT_EQ(output[0], 0x263A);
+    EXPECT_EQ(output[1], 0x263B);
+    EXPECT_EQ(output[2], 0x25B2);
+    EXPECT_EQ(output[3], 0x25BC);
+}
+
 TEST(Win32CodePageTest, WideToUtf8EncodesEuroSignInThreeBytes) {
     const std::uint16_t input[] = {0x20AC, 0};
     char output[8]{};

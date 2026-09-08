@@ -385,7 +385,9 @@ FindSlot* find_slot_for_handle(const void* handle) noexcept;
 int stock_object_index(const void* token) noexcept;
 std::uint32_t stat_to_win32_attributes(const char* path, const struct stat& st) noexcept;
 std::uint32_t apply_win32_file_attributes(const char* path, std::uint32_t attributes) noexcept;
-std::uint32_t decode_multibyte(std::uint32_t code_page, const std::uint8_t* bytes, std::size_t length, std::size_t& pos) noexcept;
+std::uint32_t decode_multibyte(std::uint32_t code_page, const std::uint8_t* bytes,
+                               std::size_t length, std::size_t& pos,
+                               bool use_glyph_chars = false) noexcept;
 
 bool set_guest_gs_base(const void* base) noexcept;
 void* allocate_guest_teb(std::uintptr_t stack_top, std::uintptr_t stack_size,

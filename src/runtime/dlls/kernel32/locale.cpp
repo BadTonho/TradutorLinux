@@ -1040,7 +1040,8 @@ TL_MSABI int tl_MultiByteToWideChar(std::uint32_t code_page, std::uint32_t flags
                                 code_page == abi::kCpOem || code_page == abi::kCp437 ||
                                 code_page == abi::kCpUtf8;
     if (mb_str == nullptr || mb_count == 0 || mb_count < -1 || !supported_page ||
-        (flags & ~(abi::kMbPrecomposed | abi::kMbErrInvalidChars)) != 0U ||
+        (flags & ~(abi::kMbPrecomposed | abi::kMbUseGlyphChars |
+                   abi::kMbErrInvalidChars)) != 0U ||
         (wide_count != 0 && wide_str == nullptr)) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
@@ -1059,7 +1060,8 @@ TL_MSABI int tl_MultiByteToWideChar(std::uint32_t code_page, std::uint32_t flags
     std::size_t index = 0;
     std::size_t needed = null_terminated ? 1U : 0U;
     while (index < byte_count) {
-        std::uint32_t codepoint = decode_multibyte(code_page, bytes, byte_count, index);
+        std::uint32_t codepoint = decode_multibyte(
+            code_page, bytes, byte_count, index, (flags & abi::kMbUseGlyphChars) != 0U);
         if (codepoint > 0x10FFFFU) {
             if ((flags & abi::kMbErrInvalidChars) != 0U) {
                 set_last_error(abi::kErrorNoUnicodeTranslation);
@@ -1086,7 +1088,8 @@ TL_MSABI int tl_MultiByteToWideChar(std::uint32_t code_page, std::uint32_t flags
     index = 0;
     std::size_t written = 0;
     while (index < byte_count) {
-        std::uint32_t codepoint = decode_multibyte(code_page, bytes, byte_count, index);
+        std::uint32_t codepoint = decode_multibyte(
+            code_page, bytes, byte_count, index, (flags & abi::kMbUseGlyphChars) != 0U);
         if (codepoint > 0x10FFFFU) {
             codepoint = '?';
         }

@@ -186,6 +186,7 @@ static_assert(sizeof(GuestCpInfo) == 20);
 
 // Flags aceitas por MultiByteToWideChar / WideCharToMultiByte.
 constexpr Dword kMbPrecomposed = 0x01U;
+constexpr Dword kMbUseGlyphChars = 0x04U;
 constexpr Dword kMbErrInvalidChars = 0x08U;
 constexpr Dword kWcCompositeCheck = 0x200U;
 constexpr Dword kWcNoBestFitChars = 0x400U;

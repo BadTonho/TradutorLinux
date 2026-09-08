@@ -716,8 +716,20 @@ std::uint32_t apply_win32_file_attributes(const char* const path,
 std::uint32_t decode_multibyte(const std::uint32_t code_page,
                                const std::uint8_t* const bytes,
                                const std::size_t length,
-                               std::size_t& pos) noexcept {
+                               std::size_t& pos,
+                               const bool use_glyph_chars) noexcept {
     const std::uint8_t first = bytes[pos];
+    if (use_glyph_chars && (code_page == abi::kCpOem || code_page == abi::kCp437) &&
+        first < 0x20U) {
+        constexpr std::array<std::uint32_t, 32> kCp437Glyphs{
+            0x0000, 0x263A, 0x263B, 0x2665, 0x2666, 0x2663, 0x2660, 0x2022,
+            0x25D8, 0x25CB, 0x25D9, 0x2642, 0x2640, 0x266A, 0x266B, 0x263C,
+            0x25BA, 0x25C4, 0x2195, 0x203C, 0x00B6, 0x00A7, 0x25AC, 0x21A8,
+            0x2191, 0x2193, 0x2192, 0x2190, 0x221F, 0x2194, 0x25B2, 0x25BC,
+        };
+        pos += 1;
+        return kCp437Glyphs[first];
+    }
     if (first < 0x80U) {
         pos += 1;
         return static_cast<std::uint32_t>(first);

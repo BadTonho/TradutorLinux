@@ -2094,6 +2094,62 @@ Limites mantidos:
   PuTTY; o próximo bloqueio exige evidência nova do fluxo interno antes de
   qualquer API adicional.
 
+### E32 — Conversão OEM com `MB_USEGLYPHCHARS`
+
+Objetivo: corrigir um contrato Win32 genérico usado pelo PuTTY durante a
+inicialização da sessão, sem introduzir código, DLL, shim ou regra específica
+do aplicativo.
+
+Evidência inicial:
+
+- [x] O trace do PuTTY mostrou 256 chamadas a
+  `MultiByteToWideChar(437, 0xC, ..., 1, ..., 1)`; o runtime rejeitava
+  `0x4` (`MB_USEGLYPHCHARS`) como parâmetro inválido.
+- [x] A chamada era repetida durante a construção da tabela de conversão OEM,
+  antes do fluxo de conexão, e por isso foi registrada como limitação real do
+  runtime, não como comportamento específico do harness.
+
+Correção genérica:
+
+- [x] Adicionar `kMbUseGlyphChars` ao contrato Win32 compartilhado e aceitar a
+  combinação com `MB_ERR_INVALID_CHARS`.
+- [x] Mapear os caracteres de controle OEM CP437 para seus glyphs quando a
+  flag estiver presente, mantendo a conversão anterior para as demais flags e
+  páginas suportadas.
+- [x] Adicionar teste unitário para os glyphs CP437 e preservar os testes de
+  validação de buffers, UTF-8, CP1252 e páginas não suportadas.
+- [x] Manter a alteração em `src/runtime/` genérico; nenhum tratamento do
+  PuTTY foi adicionado ao runtime ou ao loader.
+
+Critérios de saída:
+
+- [x] Os 17 testes `Win32CodePageTest.*`/`Win32LocaleTest.*` relevantes
+  passaram no build Rust ON.
+- [x] O smoke GUI real do PuTTY foi repetido após a correção. A etapa de
+  conversão OEM deixou de falhar, a configuração e a janela da sessão ainda
+  são alcançadas, mas o listener continua recebendo zero bytes e o processo
+  termina no `guest-timeout 72`.
+- [x] O resultado não promove suporte SSH: a correção removeu uma limitação
+  genérica, enquanto o próximo bloqueio continua sendo a ativação da conexão.
+
+Evidência reproduzível de 2026-09-08:
+
+- [x] `cmake --build build/debug-rust --target tradutorlinux
+  tradutorlinux_unit_tests putty_ssh_smoke --parallel 2` passou.
+- [x] `build/debug-rust/tests/tradutorlinux_unit_tests
+  --gtest_filter='Win32CodePageTest.*:Win32LocaleTest.*'` passou com 17/17.
+- [x] `build/debug-rust/tests/putty_ssh_smoke
+  build/debug-rust/src/tradutorlinux
+  '/home/tonho/Área de trabalho/Aplicativos_Windows_Populares/putty_x64.exe'`
+  reproduziu `configuration reached, no bytes sent, guest-timeout 72` sem
+  processo residual.
+
+Próximo bloqueio:
+
+- O PuTTY ainda não executa `socket`/`connect` depois de `Open`; qualquer
+  próxima correção deve começar por nova evidência do fluxo interno ou por uma
+  fixture genérica, sem adicionar APIs especulativas.
+
 ## Regras de validação
 
 - Cada correção começa com uma fixture mínima e termina com testes automatizados.
