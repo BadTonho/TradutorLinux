@@ -2177,6 +2177,19 @@ Evidência coletada:
   temporária do staging foram removidas; não houve alteração permanente no
   runtime, no loader ou no teste específico.
 
+Evidência adicional reproduzível de 2026-09-08:
+
+- [x] Uma amostra temporária do contexto no timeout, solicitada pelo handler
+  de sinais do processo isolado, capturou `RIP` no hospedeiro e o resolveu
+  para `tradutorlinux::set_last_error`. A amostra ocorreu depois do evento
+  `GetOEMCP(CP437)` e da criação da janela `PuTTY`, antes de qualquer evento
+  de `getaddrinfo`, `socket` ou `connect`; o endereço não era um `RIP` do PE
+  em `0x140...`.
+- [x] A instrumentação de amostragem e a impressão temporária do trace foram
+  removidas, os alvos `tradutorlinux` e `putty_ssh_smoke` foram recompilados e
+  o smoke continuou com a mesma limitação controlada. Nenhuma alteração de
+  produção ou do contrato Win32 foi mantida.
+
 Conclusão:
 
 - [x] A evidência não justifica alterar WinSock, adicionar uma API especulativa
@@ -2187,9 +2200,13 @@ Conclusão:
 
 Próximo passo permitido:
 
-- [ ] Obter nova evidência do ponto interno em que o convidado permanece após
-  `init_ucs`/a criação da sessão e, se o comportamento reproduzir numa fixture
-  genérica, corrigir o contrato compartilhado com teste ON/OFF.
+- [x] Obter nova evidência do ponto interno em que o convidado permanece após
+  `init_ucs`/a criação da sessão: o último ponto observável é o helper
+  hospedeiro `set_last_error`, sem identificação ainda da API convidada que o
+  chama repetidamente.
+- [ ] Reproduzir o comportamento em uma fixture genérica ou obter um contrato
+  Win32 específico antes de corrigir o runtime; sem isso, não implementar
+  APIs especulativas nem tratar o PuTTY como suportado.
 
 ### E34 — Determinismo da matriz nativa e do smoke do Notepad++
 
