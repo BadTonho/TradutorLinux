@@ -30,6 +30,10 @@ constexpr std::int32_t kMaxState = 4095;
 constexpr std::uint32_t kMaxTryBlocks = 256U;
 constexpr std::uint32_t kMaxHandlersPerTry = 64U;
 constexpr std::uint32_t kMaxIpEntries = 4096U;
+constexpr std::uint32_t kMaxCatchableTypes = 64U;
+constexpr std::size_t kThrowInfoSize = 16U;
+constexpr std::size_t kCatchableTypeSize = 28U;
+constexpr std::size_t kTypeDescriptorNameOffset = 16U;
 constexpr std::size_t kMaxCleanupActions = 64U;
 
 thread_local ContextAmd64 g_cxx_catch_context{};
@@ -295,11 +299,60 @@ void trace_cxx_eh_state(const diagnostics::TraceLevel level, const char* const d
 struct CatchTarget {
     std::uint32_t handler_rva{};
     std::uint32_t scope_index{};
+    bool catch_all{};
 };
 
-[[nodiscard]] bool find_catch_all(const ImageReader& image, const FuncInfo& info,
-                                  const std::int32_t state,
-                                  CatchTarget& target) noexcept {
+[[nodiscard]] bool thrown_type_matches(const ImageReader& image,
+                                       const ExceptionRecordAmd64& record,
+                                       const std::uint32_t handler_type_rva) noexcept {
+    if (record.parameter_count < 3U) {
+        return false;
+    }
+    std::uint32_t throw_info_rva{};
+    if (!image.rva_of(reinterpret_cast<void*>(static_cast<std::uintptr_t>(
+                          record.parameters[2])), throw_info_rva) ||
+        !image.range(throw_info_rva, kThrowInfoSize)) {
+        return false;
+    }
+
+    std::uint32_t catchable_array_rva{};
+    if (!image.add_rva(throw_info_rva, 12U, catchable_array_rva) ||
+        !image.read_u32(catchable_array_rva, catchable_array_rva) ||
+        !image.range(catchable_array_rva, sizeof(std::uint32_t))) {
+        return false;
+    }
+    std::uint32_t catchable_count{};
+    std::uint32_t entries_rva{};
+    if (!image.read_u32(catchable_array_rva, catchable_count) ||
+        catchable_count > kMaxCatchableTypes ||
+        !image.add_rva(catchable_array_rva, sizeof(std::uint32_t), entries_rva) ||
+        !image.range_for_count(entries_rva, catchable_count, sizeof(std::uint32_t))) {
+        return false;
+    }
+
+    for (std::uint32_t index = 0; index < catchable_count; ++index) {
+        std::uint32_t entry_rva{};
+        std::uint32_t catchable_type_rva{};
+        std::uint32_t type_descriptor_rva{};
+        if (!image.add_rva(entries_rva, static_cast<std::size_t>(index) * sizeof(std::uint32_t),
+                           entry_rva) ||
+            !image.read_u32(entry_rva, catchable_type_rva) ||
+            !image.range(catchable_type_rva, kCatchableTypeSize) ||
+            !image.add_rva(catchable_type_rva, sizeof(std::uint32_t), entry_rva) ||
+            !image.read_u32(entry_rva, type_descriptor_rva) ||
+            !image.range(type_descriptor_rva, kTypeDescriptorNameOffset + 1U)) {
+            return false;
+        }
+        if (type_descriptor_rva == handler_type_rva) {
+            return true;
+        }
+    }
+    return false;
+}
+
+[[nodiscard]] bool find_catch(const ImageReader& image, const FuncInfo& info,
+                              const ExceptionRecordAmd64& record, const std::int32_t state,
+                              CatchTarget& target) noexcept {
     for (std::uint32_t index = 0; index < info.try_block_count; ++index) {
         std::uint32_t entry{};
         std::uint32_t try_high_entry{};
@@ -352,7 +405,13 @@ struct CatchTarget {
                 if (type_rva != 0U) {
                     return false;
                 }
-                target = {.handler_rva = handler_rva, .scope_index = index};
+                target = {.handler_rva = handler_rva, .scope_index = index, .catch_all = true};
+                return true;
+            }
+            if (type_rva != 0U &&
+                image.range(type_rva, kTypeDescriptorNameOffset + 1U) &&
+                thrown_type_matches(image, record, type_rva)) {
+                target = {.handler_rva = handler_rva, .scope_index = index, .catch_all = false};
                 return true;
             }
         }
@@ -458,7 +517,7 @@ std::int32_t cxx_frame_handler3(
         return kExceptionExecuteHandler;
     }
     CatchTarget target{};
-    if (!find_catch_all(image, info, state, target)) {
+    if (!find_catch(image, info, *exception_record, state, target)) {
         trace_cxx_eh_state(
             diagnostics::TraceLevel::Info, "no-supported-catch",
             static_cast<std::uint32_t>(dispatcher_context->control_pc - base), state);
@@ -468,7 +527,8 @@ std::int32_t cxx_frame_handler3(
     dispatcher_context->scope_index = target.scope_index;
     dispatcher_context->target_ip = base + target.handler_rva;
     g_cxx_catch_target = dispatcher_context->target_ip;
-    trace_cxx_eh(diagnostics::TraceLevel::Info, "matched", "catch-all");
+    trace_cxx_eh(diagnostics::TraceLevel::Info, "matched",
+                 target.catch_all ? "catch-all" : "catch-typed");
     return kExceptionExecuteHandler;
 }
 

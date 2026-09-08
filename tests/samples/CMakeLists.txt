@@ -620,6 +620,59 @@ if(TARGET tradutorlinux)
     )
 endif()
 
+set(TL_CXX_EH_TYPED_OBJECT "${TL_FIXTURE_OUTPUT_DIRECTORY}/tl_cxx_eh_typed.o")
+set(TL_CXX_EH_TYPED_FIXTURE "${TL_FIXTURE_OUTPUT_DIRECTORY}/tl_cxx_eh_typed.exe")
+add_custom_command(
+    OUTPUT "${TL_CXX_EH_TYPED_OBJECT}"
+    COMMAND "${CMAKE_COMMAND}" -E make_directory "${TL_FIXTURE_OUTPUT_DIRECTORY}"
+    COMMAND "${TL_LLVM_LLC}" -mtriple=x86_64-pc-windows-msvc -filetype=obj
+        -o "${TL_CXX_EH_TYPED_OBJECT}"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/tl_cxx_eh_typed.ll"
+    DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/tl_cxx_eh_typed.ll"
+    VERBATIM
+    COMMENT "Generating MSVC WinEH typed-catch object tl_cxx_eh_typed.o"
+)
+add_custom_command(
+    OUTPUT "${TL_CXX_EH_TYPED_FIXTURE}"
+    COMMAND "${CMAKE_COMMAND}" -E make_directory "${TL_FIXTURE_OUTPUT_DIRECTORY}"
+    COMMAND "${TL_MINGW_CC}" -nostdlib
+        -Wl,--entry=tl_entry -Wl,--subsystem,console
+        -Wl,--no-insert-timestamp -Wl,--dynamicbase -Wl,--image-base=0x10000000
+        -o "${TL_CXX_EH_TYPED_FIXTURE}"
+        "${TL_CXX_EH_TYPED_OBJECT}" "${TL_CXX_EH_IMPORT_LIB}" -lkernel32
+    DEPENDS "${TL_CXX_EH_TYPED_OBJECT}" "${TL_CXX_EH_IMPORT_LIB}"
+    VERBATIM
+    COMMENT "Linking PE32+ MSVC C++ EH typed-catch fixture"
+)
+add_custom_target(tl_cxx_eh_typed_fixture DEPENDS "${TL_CXX_EH_TYPED_FIXTURE}")
+add_dependencies(tradutorlinux_samples tl_cxx_eh_typed_fixture)
+add_test(
+    NAME fixture_tl_cxx_eh_typed_metadata
+    COMMAND "${CMAKE_COMMAND}"
+        "-DINPUT=${TL_CXX_EH_TYPED_FIXTURE}"
+        "-DMANIFEST=${CMAKE_CURRENT_SOURCE_DIR}/manifests/tl_cxx_eh_typed.json"
+        "-DLLVM_READOBJ=${TL_LLVM_READOBJ}"
+        -P "${CMAKE_CURRENT_SOURCE_DIR}/verify_fixture.cmake"
+)
+set_tests_properties(fixture_tl_cxx_eh_typed_metadata PROPERTIES
+    DEPENDS tl_cxx_eh_typed_fixture
+    LABELS "fixture;pe32plus;cxx-eh"
+)
+if(TARGET tradutorlinux)
+    add_test(
+        NAME runtime_tl_cxx_eh_typed
+        COMMAND "${CMAKE_COMMAND}"
+            "-DINPUT=${TL_CXX_EH_TYPED_FIXTURE}"
+            "-DRUNTIME=$<TARGET_FILE:tradutorlinux>"
+            "-DEXPECTED_EXIT=0"
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/verify_cxx_eh_typed.cmake"
+    )
+    set_tests_properties(runtime_tl_cxx_eh_typed PROPERTIES
+        DEPENDS fixture_tl_cxx_eh_typed_metadata
+        LABELS "runtime;pe32plus;cxx-eh"
+    )
+endif()
+
 set(TL_CXX_EH_CLEANUP_OBJECT "${TL_FIXTURE_OUTPUT_DIRECTORY}/tl_cxx_eh_cleanup.o")
 set(TL_CXX_EH_CLEANUP_FIXTURE "${TL_FIXTURE_OUTPUT_DIRECTORY}/tl_cxx_eh_cleanup.exe")
 add_custom_command(

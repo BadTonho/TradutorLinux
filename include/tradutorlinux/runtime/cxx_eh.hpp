@@ -8,8 +8,8 @@ namespace tradutorlinux::runtime {
 
 // Subconjunto seguro do handler MSVC x64. O parser aceita somente FuncInfo v3
 // relativo à imagem, cleanups de término com funclets retornáveis e handlers
-// catch-all; metadados desconhecidos continuam em busca de outro handler e
-// acabam no caminho controlado de exceção não tratada.
+// catch-all ou de tipo exato; conversões e metadados desconhecidos continuam
+// em busca de outro handler e acabam no caminho controlado de exceção não tratada.
 [[nodiscard]] std::int32_t cxx_frame_handler3(
     ExceptionRecordAmd64* exception_record, void* establisher_frame,
     ContextAmd64* context_record, DispatcherContextAmd64* dispatcher_context) noexcept;

@@ -2535,7 +2535,8 @@ Evidência reproduzível de 2026-09-08:
 - [x] O runtime mantém o escopo documentado: o legado
   `__CxxFrameHandler` não interpreta `FuncInfo`, `_CxxThrowException` não
   fabrica estado de exceção e `__CxxFrameHandler3` só aceita o subconjunto
-  checked de `catch(...)` descrito abaixo. Exceções C++ fora desse contrato
+  checked de `catch(...)` e captura tipada exata descrito abaixo. Exceções C++
+  fora desse contrato
   seguem para o encerramento controlado; não há mais um `ignored` global para
   `0xE06D7363`.
 - [x] Após o registro deste marco, a validação foi reiniciada nos dois
@@ -2563,6 +2564,15 @@ Evidência reproduzível de 2026-09-08:
   e C++ OFF uma cadeia de dois cleanups do `stateUnwindMap`. O runtime limita a
   cadeia a 64 estados, rejeita ciclos e só entrega o catch depois de ambos os
   funclets retornarem com seus marcadores preservados.
+- [x] A fixture genérica `tl_cxx_eh_typed` comprova nos builds Rust ON e C++
+  OFF a correspondência exata entre `ThrowInfo`/`CatchableTypeArray` e o
+  `type descriptor` do handler. A captura é selecionada sem fallback para
+  `catch(...)`; conversões, herança e ajustes de objeto permanecem fora do
+  contrato.
+- [x] Os testes `fixture_tl_cxx_eh_typed_metadata` e
+  `runtime_tl_cxx_eh_typed` passaram 2/2 nos builds Rust ON e C++ OFF; o trace
+  registra `cxx-eh detail="catch-typed"` e a continuação termina em
+  `ExitProcess(0)`.
 
 Próximo bloco de trabalho, ainda aberto:
 
@@ -2575,16 +2585,18 @@ Próximo bloco de trabalho, ainda aberto:
   controlada para versões, ponteiros, ranges e disposições desconhecidos.
 - [x] Adicionar testes genéricos ON/OFF para o primeiro caso de unwind de
   término e destrutor, com metadata e execução da fixture `tl_cxx_eh_cleanup`.
-- [ ] Adicionar testes para captura tipada, rethrow, exceção não tratada e
-  ausência de mapeamento posterior a uma rejeição; só então repetir o cenário
-  de extração do WinRAR.
+- [ ] Adicionar testes para rethrow, exceção não tratada e ausência de
+  mapeamento posterior a uma rejeição; só então repetir o cenário de extração
+  do WinRAR.
 
 Critério de saída:
 
 - [x] A fixture genérica de captura passa nos builds Rust ON e C++ OFF sem
   código ou nomes de aplicativo no runtime.
-- [ ] O corpus existente não apresenta regressão e a matriz mantém timeout,
-  memória, prefixo temporário e comparação de trace/exit code.
+- [x] O corpus existente não apresentou regressão após a captura tipada: as
+  quatro matrizes `popular_apps_*_matrix` passaram nos dois backends, cobrindo
+  report, report recursivo, execução nativa e instalação, com timeout, memória,
+  prefixos temporários e comparação de trace/exit code preservados.
 - [ ] A promoção não relaxa W^X, não converte sinais Linux em exceções
   convidadas e não usa o parser C++ como fallback de produção.
 
