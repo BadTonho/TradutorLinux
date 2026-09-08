@@ -2222,7 +2222,7 @@ Próximo passo permitido:
   `init_ucs`/a criação da sessão: o último ponto observável é o helper
   hospedeiro `set_last_error`, sem identificação ainda da API convidada que o
   chama repetidamente.
-- [ ] Reproduzir o comportamento em uma fixture genérica ou obter um contrato
+- [x] Reproduzir o comportamento em uma fixture genérica ou obter um contrato
   Win32 específico antes de corrigir o runtime; sem isso, não implementar
   APIs especulativas nem tratar o PuTTY como suportado.
 
@@ -2366,6 +2366,39 @@ Conclusão:
 - [x] O bloqueio do PuTTY permanece específico do fluxo interno observado
   após a configuração; qualquer nova mudança precisa de outra evidência
   reproduzível ou de um contrato Win32, sem código específico do aplicativo.
+
+### E38 — Localização do loop convidado após o comando Open do PuTTY
+
+Objetivo: localizar no PE o ponto que continua ativo depois da criação da
+janela principal e verificar se o bloqueio corresponde a uma API genérica
+ausente no runtime.
+
+Evidência reproduzível de 2026-09-08:
+
+- [x] Uma sondagem temporária de `DispatchMessageA` registrou o retorno do
+  convidado `0x140052d78`, equivalente ao RVA `0x52d78` no `.text` do PuTTY.
+  A desmontagem do PE mostra o laço esperado: `GetMessageA`, teste do retorno,
+  `IsDialogMessageW`, `DispatchMessageA` e salto de volta ao início.
+- [x] O cenário de interação entregou os eventos de teclado, o clique e o
+  `WM_COMMAND` final com `wparam=1009`; esse comando criou a janela principal
+  `PuTTY` e o `WM_CREATE` retornou `0`.
+- [x] Depois da criação da janela principal, não foram observadas chamadas
+  convidadas a `CreateThread`, `PostMessageA`, `SetTimer`, `timeSetEvent`,
+  `socket` ou `connect`. O processo permaneceu no laço de mensagens até o
+  `guest-timeout 72` e o servidor local recebeu zero bytes.
+- [x] As sondagens de `DispatchMessageA`, `PostMessageA`, `SetTimer` e
+  `CreateThread`, bem como a preservação temporária do staging, foram
+  removidas. O código e o teste voltaram ao comportamento anterior, sem
+  diagnóstico permanente ou regra específica de aplicativo.
+
+Conclusão:
+
+- [x] O novo ponto observado é código convidado do próprio PuTTY que retorna
+  ao laço de mensagens; não há evidência de uma API genérica rejeitada que
+  justifique uma correção no runtime.
+- [x] O problema permanece uma limitação de ativação interna da sessão, não
+  uma falha demonstrada do transporte WinSock. PuTTY continua sem suporte
+  SSH declarado e sem fallback ou tratamento específico.
 
 ## Regras de validação
 
