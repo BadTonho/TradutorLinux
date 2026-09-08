@@ -81,9 +81,10 @@ Não há tradução de `SIGSEGV`/`SIGFPE`, `__finally`, function tables dinâmic
 VEH em DLLs externas. O suporte C++ x64 é deliberadamente limitado ao
 `__CxxFrameHandler3` com `FuncInfo` v3 relativo à imagem, um cleanup de término
 do frame-alvo emitido por `stateUnwindMap`, `catch(...)` sem tipo e transferência
-para funclets LLVM. A ação de cleanup é executada uma vez e retorna por
-trampoline para o catch; cadeias de múltiplas ações, cleanups de frames
-intermediários, tipos de exceção, captura tipada, rethrow e
+para funclets LLVM. A cadeia de ações do frame-alvo é percorrida com limite de
+64 estados, rejeição de ciclos e `RVA=0`/`0xffffffff` como fim sem ação; cada
+funclet retorna pelo trampoline para o próximo cleanup ou para o catch. Cleanups
+de frames intermediários, tipos de exceção, captura tipada, rethrow e
 `__CxxFrameHandler` legado ainda seguem a busca controlada e não são declarados
 suportados. Se o PC estiver num epílogo V2, o despacho falha como mecanismo
 ainda não interpretado, preservando o contexto.
@@ -138,8 +139,9 @@ um ponteiro externo à imagem.
 
 A fixture `tl_cxx_eh` cobre a busca e a captura de `catch(...)`; a fixture
 `tl_cxx_eh_cleanup` adiciona `stateUnwindMap`, um destrutor executado durante o
-unwind e `cleanupret`. Os testes de metadata e execução terminam em
-`ExitProcess(0)` nos builds Rust ON e C++ OFF, e o marcador da fixture só deixa
-o catch prosseguir quando o destrutor foi executado. Captura tipada, rethrow,
-cadeias de cleanup e o caminho sem handler continuam sendo extensões futuras
-antes de repetir o cenário de extração do WinRAR.
+unwind e `cleanupret`; `tl_cxx_eh_cleanup_chain` adiciona dois funclets em
+cadeia e só permite a continuação quando ambos os marcadores foram executados.
+Os testes de metadata e execução terminam em `ExitProcess(0)` nos builds Rust
+ON e C++ OFF. Captura tipada, rethrow, cleanups de frames intermediários e o
+caminho sem handler continuam sendo extensões futuras antes de repetir o
+cenário de extração do WinRAR.

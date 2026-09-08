@@ -4,6 +4,7 @@
 #include "tradutorlinux/runtime/memory_validator.hpp"
 #include "tradutorlinux/win32/kernel32.hpp"
 
+#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -29,12 +30,17 @@ constexpr std::int32_t kMaxState = 4095;
 constexpr std::uint32_t kMaxTryBlocks = 256U;
 constexpr std::uint32_t kMaxHandlersPerTry = 64U;
 constexpr std::uint32_t kMaxIpEntries = 4096U;
+constexpr std::size_t kMaxCleanupActions = 64U;
 
 thread_local ContextAmd64 g_cxx_catch_context{};
 thread_local bool g_cxx_catch_context_ready = false;
 thread_local std::uint64_t g_cxx_catch_target = 0U;
 thread_local bool g_cxx_cleanup_context_ready = false;
 thread_local std::uint64_t g_cxx_cleanup_target = 0U;
+thread_local std::uint64_t g_cxx_cleanup_establisher = 0U;
+thread_local std::array<std::uint32_t, kMaxCleanupActions> g_cxx_cleanup_actions{};
+thread_local std::size_t g_cxx_cleanup_count = 0U;
+thread_local std::size_t g_cxx_cleanup_index = 0U;
 
 struct ImageReader {
     GuestUnwindView view{};
@@ -115,6 +121,11 @@ struct FuncInfo {
 struct UnwindAction {
     std::int32_t to_state{kInvalidState};
     std::uint32_t action_rva{0xFFFFFFFFU};
+};
+
+struct CleanupPlan {
+    std::array<std::uint32_t, kMaxCleanupActions> actions{};
+    std::size_t count{};
 };
 
 void trace_cxx_eh(const diagnostics::TraceLevel level, const char* const state,
@@ -220,8 +231,45 @@ void trace_cxx_eh_state(const diagnostics::TraceLevel level, const char* const d
         return false;
     }
     // LLVM usa tanto RVA zero quanto -1 como entrada sem ação, dependendo
-    // da versão do WinEH que produziu a tabela.
-    return action.action_rva != 0U && action.action_rva != 0xFFFFFFFFU;
+    // da versão do WinEH que produziu a tabela. A entrada continua válida;
+    // o construtor da cadeia decide quando não há mais uma ação executável.
+    return true;
+}
+
+[[nodiscard]] bool build_cleanup_plan(const ImageReader& image, const FuncInfo& info,
+                                      const std::int32_t initial_state,
+                                      CleanupPlan& plan) noexcept {
+    std::array<std::int32_t, kMaxCleanupActions> visited{};
+    std::size_t visited_count = 0U;
+    std::int32_t state = initial_state;
+    while (state != kInvalidState) {
+        if (!valid_state(state, info) || visited_count >= visited.size()) {
+            return false;
+        }
+        if (std::find(visited.begin(), visited.begin() +
+                                      static_cast<std::ptrdiff_t>(visited_count), state) !=
+            visited.begin() + static_cast<std::ptrdiff_t>(visited_count)) {
+            return false;
+        }
+        visited[visited_count++] = state;
+
+        UnwindAction action{};
+        if (!read_unwind_action(image, info, state, action)) {
+            return false;
+        }
+        // Uma entrada sem ação encerra a cadeia relevante para o handler
+        // selecionado. Estados anteriores podem representar outra região do
+        // mesmo FuncInfo (por exemplo, o caminho de terminação do catch).
+        if (action.action_rva == 0U || action.action_rva == 0xFFFFFFFFU) {
+            break;
+        }
+        if (plan.count >= plan.actions.size()) {
+            return false;
+        }
+        plan.actions[plan.count++] = action.action_rva;
+        state = action.to_state;
+    }
+    return true;
 }
 
 [[nodiscard]] bool validate_ip_map(const ImageReader& image, const FuncInfo& info) noexcept {
@@ -394,14 +442,17 @@ std::int32_t cxx_frame_handler3(
         if (dispatcher_context->target_ip == 0U) {
             return kExceptionContinueSearch;
         }
-        UnwindAction action{};
-        if (!read_unwind_action(image, info, state, action)) {
+        CleanupPlan plan{};
+        if (!build_cleanup_plan(image, info, state, plan) || plan.count == 0U) {
             trace_cxx_eh_state(diagnostics::TraceLevel::Info, "no-supported-cleanup",
                                static_cast<std::uint32_t>(dispatcher_context->control_pc - base),
                                state);
             return kExceptionContinueSearch;
         }
-        dispatcher_context->target_ip = base + action.action_rva;
+        dispatcher_context->target_ip = base + plan.actions[0];
+        g_cxx_cleanup_actions = plan.actions;
+        g_cxx_cleanup_count = plan.count;
+        g_cxx_cleanup_index = 0U;
         g_cxx_cleanup_target = dispatcher_context->target_ip;
         trace_cxx_eh(diagnostics::TraceLevel::Info, "matched", "termination-cleanup");
         return kExceptionExecuteHandler;
@@ -468,6 +519,7 @@ bool prepare_cxx_cleanup_transfer(ContextAmd64& action_context,
         reinterpret_cast<std::uintptr_t>(&tl_cxx_catch_return_trampoline);
     g_cxx_catch_context_ready = true;
     g_cxx_cleanup_context_ready = true;
+    g_cxx_cleanup_establisher = reinterpret_cast<std::uintptr_t>(establisher_frame);
     g_cxx_cleanup_target = 0U;
     return true;
 }
@@ -479,12 +531,38 @@ extern "C" [[noreturn]] void tl_cxx_cleanup_return_from_asm(
     if (view.image_base == nullptr ||
         !validate_mapped_range(reinterpret_cast<void*>(stack_pointer), 1U, false) ||
         !g_cxx_cleanup_context_ready || !g_cxx_catch_context_ready ||
+        g_cxx_cleanup_count == 0U || g_cxx_cleanup_index >= g_cxx_cleanup_count ||
         g_cxx_catch_context.rip < base ||
         g_cxx_catch_context.rip - base >= view.image_size) {
         trace_cxx_eh(diagnostics::TraceLevel::Error, "rejected", "invalid-cleanupret-target");
         tl_ExitThread(kCxxException);
         std::abort();
     }
+
+    if (g_cxx_cleanup_index + 1U < g_cxx_cleanup_count) {
+        const std::size_t next_index = g_cxx_cleanup_index + 1U;
+        const std::uint32_t next_rva = g_cxx_cleanup_actions[next_index];
+        if (next_rva >= view.image_size ||
+            base > std::numeric_limits<std::uintptr_t>::max() - next_rva ||
+            !validate_mapped_range(reinterpret_cast<void*>(stack_pointer),
+                                   sizeof(std::uint64_t), true)) {
+            trace_cxx_eh(diagnostics::TraceLevel::Error, "rejected",
+                         "invalid-chained-cleanup-target");
+            tl_ExitThread(kCxxException);
+            std::abort();
+        }
+        ContextAmd64 next_context = g_cxx_catch_context;
+        next_context.rip = base + next_rva;
+        next_context.rsp = stack_pointer;
+        next_context.rdx = g_cxx_cleanup_establisher;
+        *reinterpret_cast<std::uint64_t*>(next_context.rsp) =
+            reinterpret_cast<std::uintptr_t>(&tl_cxx_cleanup_return_trampoline);
+        g_cxx_cleanup_index = next_index;
+        g_cxx_cleanup_target = next_context.rip;
+        g_cxx_cleanup_context_ready = true;
+        tl_restore_guest_context_and_jump(&next_context);
+    }
+
     g_cxx_cleanup_context_ready = false;
     // O cleanup funclet chamou este callback usando temporariamente a pilha
     // convidada. O prólogo/locals do callback podem ter coberto a palavra de
@@ -498,6 +576,11 @@ extern "C" [[noreturn]] void tl_cxx_cleanup_return_from_asm(
     }
     *reinterpret_cast<std::uint64_t*>(g_cxx_catch_context.rsp) =
         reinterpret_cast<std::uintptr_t>(&tl_cxx_catch_return_trampoline);
+    g_cxx_cleanup_target = 0U;
+    g_cxx_cleanup_establisher = 0U;
+    g_cxx_cleanup_actions.fill(0U);
+    g_cxx_cleanup_count = 0U;
+    g_cxx_cleanup_index = 0U;
     tl_restore_guest_context_and_jump(&g_cxx_catch_context);
 }
 

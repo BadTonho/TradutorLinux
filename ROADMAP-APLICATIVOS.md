@@ -2559,6 +2559,10 @@ Evidência reproduzível de 2026-09-08:
   `catchret`, preservando o marcador e terminando com `ExitProcess(0)`. A ponte
   revalida o slot de retorno do catch depois da chamada host para não deixar a
   pilha convidada corromper a continuação.
+- [x] A fixture genérica `tl_cxx_eh_cleanup_chain` comprova nos builds Rust ON
+  e C++ OFF uma cadeia de dois cleanups do `stateUnwindMap`. O runtime limita a
+  cadeia a 64 estados, rejeita ciclos e só entrega o catch depois de ambos os
+  funclets retornarem com seus marcadores preservados.
 
 Próximo bloco de trabalho, ainda aberto:
 
@@ -2571,9 +2575,9 @@ Próximo bloco de trabalho, ainda aberto:
   controlada para versões, ponteiros, ranges e disposições desconhecidos.
 - [x] Adicionar testes genéricos ON/OFF para o primeiro caso de unwind de
   término e destrutor, com metadata e execução da fixture `tl_cxx_eh_cleanup`.
-- [ ] Adicionar testes para cadeias de múltiplos cleanups, captura tipada,
-  rethrow, exceção não tratada e ausência de mapeamento posterior a uma
-  rejeição; só então repetir o cenário de extração do WinRAR.
+- [ ] Adicionar testes para captura tipada, rethrow, exceção não tratada e
+  ausência de mapeamento posterior a uma rejeição; só então repetir o cenário
+  de extração do WinRAR.
 
 Critério de saída:
 
