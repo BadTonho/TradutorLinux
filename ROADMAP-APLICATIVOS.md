@@ -2478,6 +2478,40 @@ Evidência reproduzível de 2026-09-08:
   enquanto Authenticode, CMS e exceções C++ continuam explicitamente fora do
   suporte funcional.
 
+### E41 — Reabertura controlada da extração do WinRAR SFX
+
+Objetivo: reavaliar o fluxo de extração depois das correções genéricas de OLE,
+posição de arquivo, atributos, threads e handles `CRYPT32`, sem transformar a
+sondagem em suporte declarado ao WinRAR.
+
+Evidência reproduzível de 2026-09-08:
+
+- [x] Uma sondagem temporária enviou `Return` à janela do SFX sob Xvfb próprio.
+  O convidado passou por `environment expand`, criou a classe
+  `RarHtmlClassName`, enumerou `WinRAR_x64.exe`, `Descript.ion`, `ReadMe.txt`,
+  `License.txt` e `Rar.txt`, e executou todas as chamadas observadas de
+  `SetFileAttributesW` com `status="success"`.
+- [x] Com o comportamento seguro atual, a sequência termina no
+  `cxx-throw ignored` e em `guest-signal`/`SIGTRAP`; não foi introduzido um
+  atalho novo nem uma regra específica de aplicativo.
+- [x] Em uma segunda experiência temporária, o dispatcher deixou o código
+  `0xE06D7363` alcançar os handlers convidados. O tipo lançado foi
+  `.?AW4RAR_EXIT@@`; o unwind encontrou handlers e um alvo, mas o SFX entrou
+  em repetição de expansão de ambiente até o timeout, sem concluir a
+  extração. A alteração foi revertida.
+- [x] A sondagem e as mudanças de teste foram removidas. O smoke oficial de
+  cancelamento voltou a passar em Rust ON e C++ OFF, ambos com saída `0`.
+
+Conclusão:
+
+- [x] As correções anteriores eliminaram os bloqueios genéricos de atributos,
+  streams OLE e handles inválidos; o próximo bloqueio é a semântica completa
+  de exceções C++/destrutores do fluxo de extração.
+- [x] Não há correção segura de uma API isolada para aplicar nesta etapa.
+  Implementar esse caminho exige fixture PE32+ de exceção C++, contrato de
+  `__CxxFrameHandler*`/unwind e testes ON/OFF antes de qualquer promoção do
+  WinRAR.
+
 ## Regras de validação
 
 - Cada correção começa com uma fixture mínima e termina com testes automatizados.
