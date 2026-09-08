@@ -10,6 +10,10 @@ find_program(TL_LLVM_READOBJ
     NAMES llvm-readobj llvm-readobj-19 llvm-readobj-18 llvm-readobj-17
     REQUIRED
 )
+find_program(TL_LLVM_LLC
+    NAMES llc-19 llc-18 llc-17 llc
+    REQUIRED
+)
 find_program(TL_MINGW_WINDRES
     NAMES x86_64-w64-mingw32-windres windres
     REQUIRED
@@ -546,6 +550,76 @@ add_custom_command(
 add_custom_target(tl_delay_import_fixture DEPENDS
     "${TL_DELAY_IMPORT_FIXTURE}" "${TL_DELAY_IMPORT_MISSING_FIXTURE}")
 add_dependencies(tradutorlinux_samples tl_delay_import_fixture)
+
+# Fixture generated from LLVM WinEH IR.  MinGW's C++ frontend uses the GCC
+# personality, so it cannot stand in for the MSVC ABI needed by this contract.
+set(TL_CXX_EH_OBJECT "${TL_FIXTURE_OUTPUT_DIRECTORY}/tl_cxx_eh.o")
+set(TL_CXX_EH_IMPORT_LIB "${TL_FIXTURE_OUTPUT_DIRECTORY}/tl_cxx_eh.imports.a")
+set(TL_CXX_EH_FIXTURE "${TL_FIXTURE_OUTPUT_DIRECTORY}/tl_cxx_eh.exe")
+find_program(TL_MINGW_DLLTOOL
+    NAMES x86_64-w64-mingw32-dlltool
+    REQUIRED
+)
+add_custom_command(
+    OUTPUT "${TL_CXX_EH_OBJECT}"
+    COMMAND "${CMAKE_COMMAND}" -E make_directory "${TL_FIXTURE_OUTPUT_DIRECTORY}"
+    COMMAND "${TL_LLVM_LLC}" -mtriple=x86_64-pc-windows-msvc -filetype=obj
+        -o "${TL_CXX_EH_OBJECT}" "${CMAKE_CURRENT_SOURCE_DIR}/src/tl_cxx_eh.ll"
+    DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/tl_cxx_eh.ll"
+    VERBATIM
+    COMMENT "Generating MSVC WinEH object tl_cxx_eh.o"
+)
+add_custom_command(
+    OUTPUT "${TL_CXX_EH_IMPORT_LIB}"
+    COMMAND "${CMAKE_COMMAND}" -E make_directory "${TL_FIXTURE_OUTPUT_DIRECTORY}"
+    COMMAND "${TL_MINGW_DLLTOOL}" -m i386:x86-64
+        -d "${CMAKE_CURRENT_SOURCE_DIR}/defs/tl_cxx_eh.def"
+        -l "${TL_CXX_EH_IMPORT_LIB}"
+    DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/defs/tl_cxx_eh.def"
+    VERBATIM
+    COMMENT "Generating MSVC C++ EH import library"
+)
+add_custom_command(
+    OUTPUT "${TL_CXX_EH_FIXTURE}"
+    COMMAND "${CMAKE_COMMAND}" -E make_directory "${TL_FIXTURE_OUTPUT_DIRECTORY}"
+    COMMAND "${TL_MINGW_CC}" -nostdlib
+        -Wl,--entry=tl_entry -Wl,--subsystem,console
+        -Wl,--no-insert-timestamp -Wl,--dynamicbase
+        -o "${TL_CXX_EH_FIXTURE}"
+        "${TL_CXX_EH_OBJECT}" "${TL_CXX_EH_IMPORT_LIB}" -lkernel32
+    DEPENDS "${TL_CXX_EH_OBJECT}" "${TL_CXX_EH_IMPORT_LIB}"
+    VERBATIM
+    COMMENT "Linking PE32+ MSVC C++ EH fixture"
+)
+add_custom_target(tl_cxx_eh_fixture DEPENDS "${TL_CXX_EH_FIXTURE}")
+add_dependencies(tradutorlinux_samples tl_cxx_eh_fixture)
+add_test(
+    NAME fixture_tl_cxx_eh_metadata
+    COMMAND "${CMAKE_COMMAND}"
+        "-DINPUT=${TL_CXX_EH_FIXTURE}"
+        "-DMANIFEST=${CMAKE_CURRENT_SOURCE_DIR}/manifests/tl_cxx_eh.json"
+        "-DLLVM_READOBJ=${TL_LLVM_READOBJ}"
+        -P "${CMAKE_CURRENT_SOURCE_DIR}/verify_fixture.cmake"
+)
+set_tests_properties(fixture_tl_cxx_eh_metadata PROPERTIES
+    DEPENDS tl_cxx_eh_fixture
+    LABELS "fixture;pe32plus;cxx-eh"
+)
+if(TARGET tradutorlinux)
+    add_test(
+        NAME runtime_tl_cxx_eh_rejected
+        COMMAND "${CMAKE_COMMAND}"
+            "-DINPUT=${TL_CXX_EH_FIXTURE}"
+            "-DRUNTIME=$<TARGET_FILE:tradutorlinux>"
+            "-DEXPECTED_EXIT=5"
+            "-DREQUIRED_TRACE=unknown-symbol"
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/verify_runtime_rejection.cmake"
+    )
+    set_tests_properties(runtime_tl_cxx_eh_rejected PROPERTIES
+        DEPENDS fixture_tl_cxx_eh_metadata
+        LABELS "runtime;pe32plus;cxx-eh;unsupported"
+    )
+endif()
 
 add_test(
     NAME fixture_tl_delay_import_metadata

@@ -2544,10 +2544,15 @@ Evidência reproduzível de 2026-09-08:
   dados do handler e o índice da função; a fixture `tl_seh` valida esses
   campos nos builds Rust ON e C++ OFF. Nenhum metadado é dereferenciado por
   causa desse diagnóstico.
+- [x] Foi criada a fixture genérica `tl_cxx_eh` pelo backend WinEH do LLVM,
+  com `__CxxFrameHandler3`, `FuncInfo`, mapas de `try/catch` e funclet de
+  captura. Os testes de metadados e de rejeição controlada passaram nos dois
+  builds; a fixture termina em `unknown-symbol` antes de mapeamento porque o
+  handler ainda não existe no runtime.
 
 Próximo bloco de trabalho, ainda aberto:
 
-- [ ] Obter ou gerar uma fixture PE32+ mínima e redistribuível com a ABI MSVC,
+- [x] Obter ou gerar uma fixture PE32+ mínima e redistribuível com a ABI MSVC,
   contendo `FuncInfo`, `try/catch`, unwind de término e pelo menos um destrutor;
   uma fixture MinGW não atende este contrato.
 - [ ] Documentar o layout aceito de `DISPATCHER_CONTEXT`, `FuncInfo`, mapas de

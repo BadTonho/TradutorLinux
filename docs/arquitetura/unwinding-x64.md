@@ -100,3 +100,20 @@ As fixtures `tl_seh.exe` e `tl_seh_v2.exe` registram/removem VEH, lançam uma
 exceção explícita numa thread convidada, selecionam um `__except` por
 `__C_specific_handler` e imprimem `seh\n`. A segunda promove
 deterministicamente o frame que lança para `UNWIND_INFO` V2.
+
+## Fixture MSVC C++ EH em preparação
+
+O projeto mantém `tests/samples/src/tl_cxx_eh.ll` como fixture genérica de
+contrato. Ela é gerada pelo backend WinEH do LLVM com a personalidade
+`__CxxFrameHandler3`, `catchswitch`, `catchpad` e `catchret`, e ligada como
+PE32+ com uma importação explícita de `msvcrt.dll!__CxxFrameHandler3`. O teste
+de metadados confirma `.pdata`, `.xdata`, os flags de exceção/terminação e as
+importações nos builds Rust ON e C++ OFF.
+
+No estado atual, o runtime rejeita essa fixture antes do mapeamento com
+`unknown-symbol`, porque o handler MSVC ainda não é implementado. Isso é
+intencional: a fixture serve para congelar o contrato e impedir que a
+implementação seja inferida de um aplicativo real. A próxima etapa deve
+interpretar, com ranges checked, o `FuncInfo` relativo à imagem, os mapas de
+unwind/try e os funclets; somente depois o teste poderá exigir captura e
+destrutor executados.
