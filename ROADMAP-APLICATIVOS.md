@@ -2451,6 +2451,33 @@ Conclusão:
   funcional exigirá uma fixture e contrato próprios para CMS/Authenticode ou
   outra decisão explícita de escopo.
 
+### E40 — Fechamento seguro de CryptMsgClose
+
+Objetivo: completar a rejeição fechada do subconjunto `CRYPT32.dll` enquanto
+CMS/Authenticode não possuem implementação, sem devolver sucesso para um
+handle que o runtime não controla.
+
+Problema e correção:
+
+- [x] `CryptMsgClose` aceitava `NULL` e ponteiros arbitrários como se fossem
+  mensagens válidas, retornando sucesso mesmo sem existir estado CMS emitido.
+- [x] A API agora retorna `FALSE` + `ERROR_INVALID_HANDLE` para handles nulos
+  ou desconhecidos. Nenhum estado, memória ou certificado é fabricado.
+- [x] Foi adicionada a regressão
+  `Crypt32Test.CryptMsgCloseRejectsUnknownHandles`, mantendo a regra genérica
+  em `src/runtime/dlls/crypto/crypt32.cpp`.
+
+Evidência reproduzível de 2026-09-08:
+
+- [x] Rust ON e C++ OFF: os cinco testes `Crypt32Test.*` passaram, cobrindo
+  certificados, stores, `CryptQueryObject`, `CryptMsgGetParam` e
+  `CryptMsgClose`.
+- [x] A matriz de análise, execução e instalação do corpus continua passando
+  nos dois backends; nenhum instalador deixa arquivos ou cadastro parcial.
+- [x] `CryptMsgClose` e `CryptMsgGetParam` permanecem rejeições controladas,
+  enquanto Authenticode, CMS e exceções C++ continuam explicitamente fora do
+  suporte funcional.
+
 ## Regras de validação
 
 - Cada correção começa com uma fixture mínima e termina com testes automatizados.

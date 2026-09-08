@@ -850,9 +850,12 @@ TL_CRYPT32_MSABI int tl_CertGetIntendedKeyUsage(const std::uint32_t cert_encodin
 }
 
 TL_CRYPT32_MSABI int tl_CryptMsgClose(void* const hCryptMsg) noexcept {
-    (void)hCryptMsg;
-    set_last_error(abi::kErrorSuccess);
-    return 1;
+    if (hCryptMsg == nullptr) {
+        set_last_error(abi::kErrorInvalidHandle);
+        return 0;
+    }
+    set_last_error(abi::kErrorInvalidHandle);
+    return 0;
 }
 
 TL_CRYPT32_MSABI int tl_CryptMsgGetParam(void* const hCryptMsg, const std::uint32_t dwParamType, const std::uint32_t dwIndex, void* const pvData, std::uint32_t* const pcbData) noexcept {

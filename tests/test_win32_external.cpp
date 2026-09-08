@@ -285,6 +285,14 @@ TEST(Crypt32Test, CryptMsgGetParamRejectsUnknownHandles) {
     EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
 }
 
+TEST(Crypt32Test, CryptMsgCloseRejectsUnknownHandles) {
+    EXPECT_EQ(tl_CryptMsgClose(nullptr), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidHandle);
+
+    EXPECT_EQ(tl_CryptMsgClose(reinterpret_cast<void*>(1)), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidHandle);
+}
+
 TEST(User32ExtTest, DesktopCaptureAndRectOperations) {
     EXPECT_NE(tl_GetDesktopWindow(), nullptr);
     EXPECT_NE(tl_MonitorFromWindow(nullptr, 0), nullptr);
