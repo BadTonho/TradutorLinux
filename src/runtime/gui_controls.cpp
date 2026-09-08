@@ -18,6 +18,68 @@ namespace {
     return util::ascii_iequals(parent.class_name, "7-Zip::FM");
 }
 
+constexpr std::uint32_t kWsTabStop = 0x00010000U;
+constexpr std::uint32_t kBsDefPushButton = 0x00000001U;
+
+[[nodiscard]] WindowSlot* default_button(const WindowSlot& parent,
+                                          const std::span<WindowSlot> windows) noexcept {
+    WindowSlot* first = nullptr;
+    WindowSlot* tab_stop = nullptr;
+    for (WindowSlot& child : windows) {
+        if (!child.used || !child.is_control || child.parent != &parent ||
+            child.control_kind != ControlKind::Button || !child.visible || !child.enabled) {
+            continue;
+        }
+        if (first == nullptr) {
+            first = &child;
+        }
+        if ((child.style & 0x0FU) == kBsDefPushButton) {
+            return &child;
+        }
+        if (tab_stop == nullptr && (child.style & kWsTabStop) != 0U) {
+            tab_stop = &child;
+        }
+    }
+    return tab_stop != nullptr ? tab_stop : first;
+}
+
+[[nodiscard]] bool control_accepts_focus(const WindowSlot& child,
+                                         const WindowSlot& parent) noexcept {
+    if (!child.used || !child.is_control || child.parent != &parent || !child.visible ||
+        !child.enabled) {
+        return false;
+    }
+    if ((child.style & kWsTabStop) != 0U) {
+        return true;
+    }
+    return child.control_kind == ControlKind::Edit ||
+           child.control_kind == ControlKind::Button ||
+           child.control_kind == ControlKind::ComboBox ||
+           child.control_kind == ControlKind::ListView;
+}
+
+[[nodiscard]] WindowSlot* next_control_tab_item(const WindowSlot& parent,
+                                                const std::span<WindowSlot> windows,
+                                                WindowSlot* const current) noexcept {
+    WindowSlot* first = nullptr;
+    bool after_current = current == nullptr;
+    for (WindowSlot& child : windows) {
+        if (!control_accepts_focus(child, parent)) {
+            continue;
+        }
+        if (first == nullptr) {
+            first = &child;
+        }
+        if (after_current) {
+            return &child;
+        }
+        if (&child == current) {
+            after_current = true;
+        }
+    }
+    return first;
+}
+
 struct SevenZipDirectoryEntry {
     std::string name;
     std::string size;
@@ -1636,6 +1698,27 @@ void handle_control_key(WindowSlot& parent, const std::span<WindowSlot> windows,
             // A falha de leitura do diretório não pode derrubar o convidado.
         }
         return;
+    }
+    if (!parent.is_dialog && event.type == gui::WindowEventType::KeyDown &&
+        event.keysym == 0xFF09UL) {
+        WindowSlot* const next = next_control_tab_item(parent, windows, focused_control);
+        if (next != nullptr) {
+            set_focus_control(next, focused_control);
+        }
+        return;
+    }
+    if (!parent.is_dialog && event.type == gui::WindowEventType::KeyDown &&
+        event.keysym == 0xFF0DUL) {
+        WindowSlot* target = focused_control;
+        if (target == nullptr || target->parent != &parent || !target->used ||
+            !target->is_control || !target->visible || !target->enabled ||
+            target->control_kind != ControlKind::Button) {
+            target = default_button(parent, windows);
+        }
+        if (target != nullptr) {
+            queue_command(*target, abi::kBnClicked);
+            return;
+        }
     }
     (void)windows;
     WindowSlot* control = focused_control;

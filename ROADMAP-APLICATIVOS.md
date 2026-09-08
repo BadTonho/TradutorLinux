@@ -1986,6 +1986,53 @@ Evidência reproduzível de 2026-09-07:
   `GetProcAddress`; portanto o próximo diagnóstico é a ativação da sessão,
   não uma nova implementação app-specific.
 
+### E30 — Contratos genéricos de controles na configuração GUI
+
+Objetivo: estabilizar os contratos comuns usados pela janela de configuração do
+PuTTY sem introduzir código, DLL, shim ou regra específica do aplicativo. O
+handshake SSH continua fora do escopo; esta etapa cobre somente a preparação
+genérica da interface e a identificação do próximo bloqueio.
+
+Tarefas:
+
+- [x] Manter controles criados dinamicamente por `CreateWindowExA` no índice
+  lógico do diálogo, permitindo `GetDlgItem` e o ciclo de vida correto durante
+  `WM_DESTROY`.
+- [x] Implementar o subconjunto genérico de `SysTreeView32` necessário para
+  inserir, excluir, selecionar, expandir, navegar e consultar itens por
+  `SendMessageA/W`, com referências lógicas estáveis e notificações básicas.
+- [x] Implementar foco inicial, Tab e ativação de botão padrão para janelas
+  regulares, sem processar duas vezes as teclas que já pertencem a
+  `IsDialogMessageW` em diálogos modais.
+- [x] Proteger cada comportamento com testes unitários de controles e repetir
+  os smokes de GUI, 7-Zip, PuTTY e WinSock nos caminhos Rust ON/C++ OFF.
+
+Critérios de saída:
+
+- [x] `CommonControls.*` passou com 14 testes, incluindo o modelo de TreeView,
+  seleção, foco e navegação por Tab.
+- [x] `runtime_gui_smoke`, os fluxos GUI de 7-Zip/PuTTY e os fixtures
+  `tl_dynamic_ws2` passaram no build Rust ON; o baseline C++ OFF recompilou os
+  alvos afetados sem alteração de seleção de backend.
+- [x] O PuTTY alcança a configuração sem o abort de inicialização e termina no
+  limite controlado `guest-timeout 72`; o listener local ainda recebe zero
+  bytes, portanto o SSH completo não é declarado como suportado.
+- [x] Nenhum tratamento específico do PuTTY foi adicionado ao runtime; a
+  correção fica em contratos genéricos de janela, diálogo, foco e TreeView.
+
+Evidência reproduzível de 2026-09-07:
+
+- [x] `cmake --build build/debug-rust --target tradutorlinux_unit_tests
+  tradutorlinux putty_ssh_smoke --parallel 2` passou, seguido por 14 testes
+  `CommonControls` e `runtime_gui_smoke`.
+- [x] `ctest --test-dir build/debug-rust -R
+  'runtime_tl_7zfm_gui_matches_readobj|app_run_tl_7zfm_gui|runtime_tl_putty_matches_readobj|app_run_tl_putty|report_tl_putty_support'`
+  passou; os dois testes `tl_dynamic_ws2` passaram fora do sandbox por
+  exigirem socket local.
+- [x] `putty_ssh_local_probe` passou fora do sandbox com a limitação esperada
+  e stdout `configuration reached, no bytes sent, guest-timeout 72`; o mesmo
+  smoke foi mantido no harness sem instrumentação temporária.
+
 ## Regras de validação
 
 - Cada correção começa com uma fixture mínima e termina com testes automatizados.

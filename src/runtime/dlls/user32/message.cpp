@@ -1,5 +1,7 @@
 #include "user32_internal.hpp"
 
+#include <cstddef>
+#include <cstring>
 #include <limits>
 
 namespace tradutorlinux {
@@ -52,6 +54,686 @@ namespace {
         default: return "unknown";
     }
 }
+
+constexpr std::uint32_t kTreeFirstMessage = 0x1100U;
+constexpr std::uint32_t kTreeInsertItemA = kTreeFirstMessage + 0U;
+constexpr std::uint32_t kTreeDeleteItem = kTreeFirstMessage + 1U;
+constexpr std::uint32_t kTreeExpand = kTreeFirstMessage + 2U;
+constexpr std::uint32_t kTreeGetCount = kTreeFirstMessage + 5U;
+constexpr std::uint32_t kTreeGetNextItem = kTreeFirstMessage + 10U;
+constexpr std::uint32_t kTreeSelectItem = kTreeFirstMessage + 11U;
+constexpr std::uint32_t kTreeGetItemA = kTreeFirstMessage + 12U;
+constexpr std::uint32_t kTreeSetItemA = kTreeFirstMessage + 13U;
+constexpr std::uint32_t kTreeInsertItemW = kTreeFirstMessage + 50U;
+constexpr std::uint32_t kTreeGetItemW = kTreeFirstMessage + 62U;
+constexpr std::uint32_t kTreeSetItemW = kTreeFirstMessage + 63U;
+
+constexpr std::uint32_t kTreeGetRoot = 0U;
+constexpr std::uint32_t kTreeGetNext = 1U;
+constexpr std::uint32_t kTreeGetPrevious = 2U;
+constexpr std::uint32_t kTreeGetParent = 3U;
+constexpr std::uint32_t kTreeGetChild = 4U;
+constexpr std::uint32_t kTreeGetNextVisible = 6U;
+constexpr std::uint32_t kTreeGetPreviousVisible = 7U;
+constexpr std::uint32_t kTreeGetCaret = 9U;
+
+constexpr std::uint32_t kTreeCollapse = 1U;
+constexpr std::uint32_t kTreeExpandAction = 2U;
+constexpr std::uint32_t kTreeToggle = 3U;
+constexpr std::uint32_t kTreeCollapseReset = 0x8000U;
+
+constexpr std::uint32_t kTreeItemText = 0x0001U;
+constexpr std::uint32_t kTreeItemParam = 0x0004U;
+constexpr std::uint32_t kTreeNotifySelectionChanged = 1U;
+constexpr std::int32_t kTreeNotifySelectedChangedCode = -402;
+constexpr std::size_t kTreeItemBufferSize = 56U;
+constexpr std::size_t kTreeInsertBufferSize = 72U;
+constexpr std::size_t kTreeNotificationSize = 152U;
+constexpr std::size_t kTreeItemLimit = 4096U;
+
+constexpr std::uintptr_t kTreeRootHandle =
+    std::numeric_limits<std::uintptr_t>::max() - static_cast<std::uintptr_t>(0xFFFFU);
+constexpr std::uintptr_t kTreeFirstHandle =
+    std::numeric_limits<std::uintptr_t>::max() - static_cast<std::uintptr_t>(0xFFFEU);
+constexpr std::uintptr_t kTreeLastHandle =
+    std::numeric_limits<std::uintptr_t>::max() - static_cast<std::uintptr_t>(0xFFFDU);
+constexpr std::uintptr_t kTreeSortHandle =
+    std::numeric_limits<std::uintptr_t>::max() - static_cast<std::uintptr_t>(0xFFFCU);
+
+struct GuestTreeItemNotification {
+    std::uint32_t mask{};
+    std::uint32_t padding{};
+    void* h_item{};
+    std::uint32_t state{};
+    std::uint32_t state_mask{};
+    char* text{};
+    std::int32_t text_capacity{};
+    std::int32_t image{};
+    std::int32_t selected_image{};
+    std::int32_t children{};
+    std::intptr_t item_data{};
+};
+static_assert(sizeof(GuestTreeItemNotification) == kTreeItemBufferSize);
+static_assert(offsetof(GuestTreeItemNotification, h_item) == 8U);
+static_assert(offsetof(GuestTreeItemNotification, text) == 24U);
+static_assert(offsetof(GuestTreeItemNotification, item_data) == 48U);
+
+struct GuestTreeNotificationHeader {
+    void* hwnd_from{};
+    std::uintptr_t id_from{};
+    std::int32_t code{};
+    std::int32_t padding{};
+};
+static_assert(sizeof(GuestTreeNotificationHeader) == 24U);
+
+struct GuestTreeNotification {
+    GuestTreeNotificationHeader header{};
+    std::uint32_t action{};
+    std::uint32_t padding{};
+    GuestTreeItemNotification old_item{};
+    GuestTreeItemNotification new_item{};
+    std::int32_t point_x{};
+    std::int32_t point_y{};
+};
+static_assert(sizeof(GuestTreeNotification) == kTreeNotificationSize);
+
+[[nodiscard]] std::uint32_t tree_u32(const std::byte* const bytes,
+                                     const std::size_t offset) noexcept {
+    std::uint32_t value{};
+    std::memcpy(&value, bytes + offset, sizeof(value));
+    return value;
+}
+
+[[nodiscard]] std::int32_t tree_i32(const std::byte* const bytes,
+                                    const std::size_t offset) noexcept {
+    std::int32_t value{};
+    std::memcpy(&value, bytes + offset, sizeof(value));
+    return value;
+}
+
+[[nodiscard]] std::uintptr_t tree_pointer(const std::byte* const bytes,
+                                           const std::size_t offset) noexcept {
+    std::uintptr_t value{};
+    std::memcpy(&value, bytes + offset, sizeof(value));
+    return value;
+}
+
+[[nodiscard]] bool tree_is_special_handle(const std::uintptr_t handle) noexcept {
+    return handle >= kTreeRootHandle && handle <= kTreeSortHandle;
+}
+
+[[nodiscard]] TreeItem* tree_find_item(WindowSlot& tree,
+                                       const std::uintptr_t handle) noexcept {
+    const auto found = std::find_if(tree.tree_items.begin(), tree.tree_items.end(),
+                                    [handle](const TreeItem& item) {
+                                        return item.handle == handle;
+                                    });
+    return found == tree.tree_items.end() ? nullptr : &*found;
+}
+
+[[nodiscard]] const TreeItem* tree_find_item(const WindowSlot& tree,
+                                             const std::uintptr_t handle) noexcept {
+    const auto found = std::find_if(tree.tree_items.begin(), tree.tree_items.end(),
+                                    [handle](const TreeItem& item) {
+                                        return item.handle == handle;
+                                    });
+    return found == tree.tree_items.end() ? nullptr : &*found;
+}
+
+[[nodiscard]] std::size_t tree_item_index(const WindowSlot& tree,
+                                          const std::uintptr_t handle) noexcept {
+    for (std::size_t index = 0; index < tree.tree_items.size(); ++index) {
+        if (tree.tree_items[index].handle == handle) {
+            return index;
+        }
+    }
+    return tree.tree_items.size();
+}
+
+[[nodiscard]] bool read_tree_text(const std::uintptr_t pointer, const std::int32_t cch,
+                                  const bool wide, std::string& output) {
+    output.clear();
+    if (pointer == 0U) {
+        return true;
+    }
+    constexpr std::size_t kTreeTextLimit = 1U << 20U;
+    if (cch > static_cast<std::int32_t>(kTreeTextLimit)) {
+        return false;
+    }
+
+    if (!wide) {
+        const auto* const text = reinterpret_cast<const char*>(pointer);
+        std::size_t length = 0;
+        if (cch > 0) {
+            const std::size_t capacity = static_cast<std::size_t>(cch);
+            if (!mapped_guest_range(text, capacity, false)) {
+                return false;
+            }
+            const void* const terminator = std::memchr(text, '\0', capacity);
+            if (terminator == nullptr) {
+                return false;
+            }
+            length = static_cast<std::size_t>(
+                reinterpret_cast<std::uintptr_t>(terminator) -
+                reinterpret_cast<std::uintptr_t>(text));
+        } else {
+            if (!runtime::validate_mapped_cstring(text, kTreeTextLimit + 1U)) {
+                return false;
+            }
+            while (length < kTreeTextLimit && text[length] != '\0') {
+                ++length;
+            }
+            if (length == kTreeTextLimit && text[length] != '\0') {
+                return false;
+            }
+        }
+        output.assign(text, length);
+        return true;
+    }
+
+    const auto* const text = reinterpret_cast<const std::uint16_t*>(pointer);
+    std::size_t length = 0;
+    if (cch > 0) {
+        const std::size_t capacity = static_cast<std::size_t>(cch);
+        if (capacity > std::numeric_limits<std::size_t>::max() / sizeof(std::uint16_t) ||
+            !mapped_guest_range(text, capacity * sizeof(std::uint16_t), false)) {
+            return false;
+        }
+        while (length < capacity && text[length] != 0U) {
+            ++length;
+        }
+        if (length == capacity) {
+            return false;
+        }
+    } else {
+        if (!runtime::validate_mapped_wstring(text, kTreeTextLimit + 1U)) {
+            return false;
+        }
+        while (length < kTreeTextLimit && text[length] != 0U) {
+            ++length;
+        }
+        if (length == kTreeTextLimit && text[length] != 0U) {
+            return false;
+        }
+    }
+    output = util::wide_to_utf8(text, length + 1U);
+    return true;
+}
+
+[[nodiscard]] std::uintptr_t tree_parent_handle(const std::uintptr_t raw) noexcept {
+    return raw == 0U || tree_is_special_handle(raw) ? 0U : raw;
+}
+
+[[nodiscard]] std::size_t tree_insert_position(const WindowSlot& tree,
+                                               const std::uintptr_t parent,
+                                               const std::uintptr_t insert_after) noexcept {
+    std::size_t first_sibling = tree.tree_items.size();
+    std::size_t last_sibling = tree.tree_items.size();
+    std::size_t parent_index = tree.tree_items.size();
+    std::size_t after_index = tree.tree_items.size();
+    for (std::size_t index = 0; index < tree.tree_items.size(); ++index) {
+        const TreeItem& item = tree.tree_items[index];
+        if (item.handle == parent) {
+            parent_index = index;
+        }
+        if (item.parent != parent) {
+            continue;
+        }
+        if (first_sibling == tree.tree_items.size()) {
+            first_sibling = index;
+        }
+        last_sibling = index;
+        if (item.handle == insert_after) {
+            after_index = index;
+        }
+    }
+
+    if (insert_after == kTreeFirstHandle) {
+        if (first_sibling != tree.tree_items.size()) {
+            return first_sibling;
+        }
+    } else if (insert_after != 0U && insert_after != kTreeLastHandle &&
+               insert_after != kTreeSortHandle) {
+        if (after_index != tree.tree_items.size()) {
+            return after_index + 1U;
+        }
+        return tree.tree_items.size();
+    }
+    if (last_sibling != tree.tree_items.size()) {
+        return last_sibling + 1U;
+    }
+    if (parent != 0U && parent_index != tree.tree_items.size()) {
+        return parent_index + 1U;
+    }
+    return tree.tree_items.size();
+}
+
+[[nodiscard]] int tree_insert_item(WindowSlot& tree, const abi::Lparam lparam,
+                                   const bool wide) {
+    if (lparam == 0 || !mapped_guest_range(reinterpret_cast<const void*>(lparam),
+                                           kTreeInsertBufferSize, false) ||
+        tree.tree_items.size() >= kTreeItemLimit) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    const auto* const bytes = reinterpret_cast<const std::byte*>(lparam);
+    const std::uint32_t mask = tree_u32(bytes, 16U);
+    const std::uintptr_t raw_parent = tree_pointer(bytes, 0U);
+    const std::uintptr_t parent = tree_parent_handle(raw_parent);
+    const std::uintptr_t insert_after = tree_pointer(bytes, 8U);
+    if (parent != 0U && tree_find_item(tree, parent) == nullptr) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    if (insert_after != 0U && insert_after != kTreeFirstHandle &&
+        insert_after != kTreeLastHandle && insert_after != kTreeSortHandle) {
+        const TreeItem* const after = tree_find_item(tree, insert_after);
+        if (after == nullptr || after->parent != parent) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
+        }
+    }
+
+    std::string text;
+    if ((mask & kTreeItemText) != 0U &&
+        !read_tree_text(tree_pointer(bytes, 40U), tree_i32(bytes, 48U), wide, text)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    const std::uintptr_t item_data = (mask & kTreeItemParam) != 0U
+                                         ? tree_pointer(bytes, 64U)
+                                         : 0U;
+    if (tree.tree_next_handle == 0U ||
+        tree.tree_next_handle > static_cast<std::uintptr_t>(std::numeric_limits<int>::max())) {
+        set_last_error(abi::kErrorNotEnoughMemory);
+        return 0;
+    }
+    const std::uintptr_t handle = tree.tree_next_handle++;
+    const std::size_t position = tree_insert_position(tree, parent, insert_after);
+    tree.tree_items.insert(tree.tree_items.begin() +
+                               static_cast<std::vector<TreeItem>::difference_type>(position),
+                           TreeItem{handle, parent, item_data, std::move(text), false});
+    set_last_error(abi::kErrorSuccess);
+    return static_cast<int>(handle);
+}
+
+void fill_tree_notification_item(GuestTreeItemNotification& output,
+                                  const TreeItem* const item) noexcept {
+    output = {};
+    if (item == nullptr) {
+        return;
+    }
+    output.mask = kTreeItemText | kTreeItemParam;
+    output.h_item = reinterpret_cast<void*>(item->handle);
+    output.text = const_cast<char*>(item->text.c_str());
+    output.text_capacity = static_cast<std::int32_t>(
+        std::min<std::size_t>(item->text.size() + 1U,
+                              static_cast<std::size_t>(std::numeric_limits<int>::max())));
+    output.item_data = static_cast<std::intptr_t>(item->item_data);
+}
+
+void notify_tree_selection(WindowSlot& tree, const std::uintptr_t old_handle,
+                           const std::uintptr_t new_handle) noexcept {
+    if (tree.parent == nullptr || tree.parent->wndproc == 0U) {
+        return;
+    }
+    static thread_local GuestTreeNotification notification{};
+    notification = {};
+    notification.header.hwnd_from = &tree;
+    notification.header.id_from = tree.control_id;
+    notification.header.code = kTreeNotifySelectedChangedCode;
+    notification.action = kTreeNotifySelectionChanged;
+    fill_tree_notification_item(notification.old_item, tree_find_item(tree, old_handle));
+    fill_tree_notification_item(notification.new_item, tree_find_item(tree, new_handle));
+    static_cast<void>(call_wndproc(tree.parent->wndproc, tree.parent, abi::kWmNotify, 0,
+                                   reinterpret_cast<abi::Lparam>(&notification)));
+}
+
+[[nodiscard]] std::vector<std::uintptr_t> tree_visible_items(const WindowSlot& tree) {
+    std::vector<std::uintptr_t> result;
+    result.reserve(tree.tree_items.size());
+    std::vector<std::size_t> pending;
+    pending.reserve(tree.tree_items.size());
+    for (std::size_t index = tree.tree_items.size(); index > 0U; --index) {
+        if (tree.tree_items[index - 1U].parent == 0U) {
+            pending.push_back(index - 1U);
+        }
+    }
+    while (!pending.empty()) {
+        const std::size_t index = pending.back();
+        pending.pop_back();
+        const TreeItem& item = tree.tree_items[index];
+        result.push_back(item.handle);
+        if (!item.expanded) {
+            continue;
+        }
+        for (std::size_t child = tree.tree_items.size(); child > 0U; --child) {
+            if (tree.tree_items[child - 1U].parent == item.handle) {
+                pending.push_back(child - 1U);
+            }
+        }
+    }
+    return result;
+}
+
+[[nodiscard]] int tree_next_item(WindowSlot& tree, const abi::Wparam relation,
+                                 const abi::Lparam lparam) {
+    const std::uintptr_t handle = static_cast<std::uintptr_t>(lparam);
+    if (relation == kTreeGetCaret) {
+        set_last_error(abi::kErrorSuccess);
+        return static_cast<int>(tree.tree_selected);
+    }
+    if (relation == kTreeGetRoot) {
+        if (handle == 0U) {
+            for (const TreeItem& item : tree.tree_items) {
+                if (item.parent == 0U) {
+                    set_last_error(abi::kErrorSuccess);
+                    return static_cast<int>(item.handle);
+                }
+            }
+            return 0;
+        }
+        const TreeItem* item = tree_find_item(tree, handle);
+        if (item == nullptr) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
+        }
+        while (item->parent != 0U) {
+            item = tree_find_item(tree, item->parent);
+            if (item == nullptr) {
+                set_last_error(abi::kErrorInvalidParameter);
+                return 0;
+            }
+        }
+        set_last_error(abi::kErrorSuccess);
+        return static_cast<int>(item->handle);
+    }
+    if (relation == kTreeGetChild) {
+        const std::uintptr_t parent = handle;
+        if (parent != 0U && tree_find_item(tree, parent) == nullptr) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
+        }
+        for (const TreeItem& item : tree.tree_items) {
+            if (item.parent == parent) {
+                set_last_error(abi::kErrorSuccess);
+                return static_cast<int>(item.handle);
+            }
+        }
+        return 0;
+    }
+    if (relation == kTreeGetParent) {
+        const TreeItem* const item = tree_find_item(tree, handle);
+        if (item == nullptr) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
+        }
+        set_last_error(abi::kErrorSuccess);
+        return static_cast<int>(item->parent);
+    }
+    if (relation == kTreeGetNextVisible || relation == kTreeGetPreviousVisible) {
+        const std::vector<std::uintptr_t> visible = tree_visible_items(tree);
+        const auto found = std::find(visible.begin(), visible.end(), handle);
+        if (found == visible.end()) {
+            set_last_error(handle == 0U ? abi::kErrorSuccess : abi::kErrorInvalidParameter);
+            return 0;
+        }
+        if (relation == kTreeGetNextVisible) {
+            if (found + 1 == visible.end()) return 0;
+            set_last_error(abi::kErrorSuccess);
+            return static_cast<int>(*(found + 1));
+        }
+        if (found == visible.begin()) return 0;
+        set_last_error(abi::kErrorSuccess);
+        return static_cast<int>(*(found - 1));
+    }
+    const TreeItem* const item = tree_find_item(tree, handle);
+    if (item == nullptr) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    if (relation != kTreeGetNext && relation != kTreeGetPrevious) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    const std::size_t index = tree_item_index(tree, handle);
+    if (relation == kTreeGetNext) {
+        for (std::size_t next = index + 1U; next < tree.tree_items.size(); ++next) {
+            if (tree.tree_items[next].parent == item->parent) {
+                set_last_error(abi::kErrorSuccess);
+                return static_cast<int>(tree.tree_items[next].handle);
+            }
+        }
+    } else {
+        for (std::size_t previous = index; previous > 0U; --previous) {
+            if (tree.tree_items[previous - 1U].parent == item->parent) {
+                set_last_error(abi::kErrorSuccess);
+                return static_cast<int>(tree.tree_items[previous - 1U].handle);
+            }
+        }
+    }
+    set_last_error(abi::kErrorSuccess);
+    return 0;
+}
+
+[[nodiscard]] int tree_select_item(WindowSlot& tree, const abi::Lparam lparam) noexcept {
+    const std::uintptr_t selected = static_cast<std::uintptr_t>(lparam);
+    if (selected != 0U && tree_find_item(tree, selected) == nullptr) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    const std::uintptr_t previous = tree.tree_selected;
+    if (previous != selected) {
+        tree.tree_selected = selected;
+        notify_tree_selection(tree, previous, selected);
+    }
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+[[nodiscard]] int tree_expand_item(WindowSlot& tree, const abi::Wparam action,
+                                   const abi::Lparam lparam) noexcept {
+    TreeItem* const item = tree_find_item(tree, static_cast<std::uintptr_t>(lparam));
+    if (item == nullptr) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    const std::uint32_t operation = static_cast<std::uint32_t>(action) & 0xFFFFU;
+    if (operation == kTreeCollapse || operation == kTreeCollapseReset) {
+        item->expanded = false;
+    } else if (operation == kTreeExpandAction) {
+        item->expanded = true;
+    } else if (operation == kTreeToggle) {
+        item->expanded = !item->expanded;
+    } else {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+[[nodiscard]] bool read_tree_item_request(const abi::Lparam lparam,
+                                          std::array<std::byte, kTreeItemBufferSize>& bytes) noexcept {
+    if (lparam == 0 || !mapped_guest_range(reinterpret_cast<const void*>(lparam),
+                                           kTreeItemBufferSize, false)) {
+        return false;
+    }
+    std::memcpy(bytes.data(), reinterpret_cast<const void*>(lparam), bytes.size());
+    return true;
+}
+
+[[nodiscard]] int tree_get_item(WindowSlot& tree, const abi::Lparam lparam, const bool wide) {
+    std::array<std::byte, kTreeItemBufferSize> bytes{};
+    if (!read_tree_item_request(lparam, bytes) ||
+        !mapped_guest_range(reinterpret_cast<const void*>(lparam), kTreeItemBufferSize, true)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    const std::uint32_t mask = tree_u32(bytes.data(), 0U);
+    const TreeItem* const item = tree_find_item(tree, tree_pointer(bytes.data(), 8U));
+    if (item == nullptr) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+
+    std::u16string wide_text;
+    const std::uintptr_t output_pointer = tree_pointer(bytes.data(), 24U);
+    const std::int32_t output_capacity = tree_i32(bytes.data(), 32U);
+    if ((mask & kTreeItemText) != 0U) {
+        if (output_pointer == 0U || output_capacity <= 0 ||
+            output_capacity > static_cast<std::int32_t>(1U << 20U)) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
+        }
+        const std::size_t byte_count = wide
+                                            ? static_cast<std::size_t>(output_capacity) *
+                                                  sizeof(std::uint16_t)
+                                            : static_cast<std::size_t>(output_capacity);
+        if (!mapped_guest_range(reinterpret_cast<const void*>(output_pointer), byte_count, true)) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
+        }
+        if (wide) {
+            wide_text = util::utf8_to_wide(item->text);
+        }
+    }
+    const std::uintptr_t item_data = item->item_data;
+    if ((mask & kTreeItemText) != 0U) {
+        if (!wide) {
+            auto* const output = reinterpret_cast<char*>(output_pointer);
+            const std::size_t count = std::min<std::size_t>(
+                item->text.size(), static_cast<std::size_t>(output_capacity - 1));
+            std::memcpy(output, item->text.data(), count);
+            output[count] = '\0';
+        } else {
+            auto* const output = reinterpret_cast<std::uint16_t*>(output_pointer);
+            const std::size_t count = std::min<std::size_t>(
+                wide_text.size(), static_cast<std::size_t>(output_capacity - 1));
+            std::memcpy(output, wide_text.data(), count * sizeof(std::uint16_t));
+            output[count] = 0U;
+        }
+    }
+    if ((mask & kTreeItemParam) != 0U) {
+        const std::intptr_t parameter = static_cast<std::intptr_t>(item_data);
+        std::memcpy(reinterpret_cast<std::byte*>(reinterpret_cast<void*>(lparam)) + 48U,
+                    &parameter, sizeof(parameter));
+    }
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+[[nodiscard]] int tree_set_item(WindowSlot& tree, const abi::Lparam lparam, const bool wide) {
+    std::array<std::byte, kTreeItemBufferSize> bytes{};
+    if (!read_tree_item_request(lparam, bytes)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    TreeItem* const item = tree_find_item(tree, tree_pointer(bytes.data(), 8U));
+    if (item == nullptr) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    const std::uint32_t mask = tree_u32(bytes.data(), 0U);
+    std::string text;
+    if ((mask & kTreeItemText) != 0U &&
+        !read_tree_text(tree_pointer(bytes.data(), 24U), tree_i32(bytes.data(), 32U), wide,
+                        text)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    if ((mask & kTreeItemText) != 0U) {
+        item->text = std::move(text);
+    }
+    if ((mask & kTreeItemParam) != 0U) {
+        item->item_data = tree_pointer(bytes.data(), 48U);
+    }
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+[[nodiscard]] int handle_tree_message(WindowSlot& tree, const std::uint32_t message,
+                                      const abi::Wparam wparam, const abi::Lparam lparam,
+                                      const bool wide) noexcept {
+    try {
+        switch (message) {
+            case kTreeInsertItemA:
+                return wide ? 0 : tree_insert_item(tree, lparam, false);
+            case kTreeInsertItemW:
+                return wide ? tree_insert_item(tree, lparam, true) : 0;
+            case kTreeDeleteItem: {
+                if (lparam == 0) {
+                    tree.tree_items.clear();
+                    tree.tree_selected = 0;
+                    set_last_error(abi::kErrorSuccess);
+                    return 1;
+                }
+                const std::uintptr_t deleted_handle = static_cast<std::uintptr_t>(lparam);
+                if (tree_find_item(tree, deleted_handle) == nullptr) {
+                    set_last_error(abi::kErrorInvalidParameter);
+                    return 0;
+                }
+                std::vector<std::uintptr_t> deleted_handles;
+                deleted_handles.reserve(tree.tree_items.size());
+                for (const TreeItem& candidate : tree.tree_items) {
+                    if (candidate.handle == deleted_handle) {
+                        deleted_handles.push_back(candidate.handle);
+                        continue;
+                    }
+                    std::uintptr_t parent = candidate.parent;
+                    for (std::size_t depth = 0; depth < tree.tree_items.size() && parent != 0U;
+                         ++depth) {
+                        if (parent == deleted_handle) {
+                            deleted_handles.push_back(candidate.handle);
+                            break;
+                        }
+                        const TreeItem* const ancestor = tree_find_item(tree, parent);
+                        if (ancestor == nullptr) break;
+                        parent = ancestor->parent;
+                    }
+                }
+                tree.tree_items.erase(
+                    std::remove_if(tree.tree_items.begin(), tree.tree_items.end(),
+                                   [&deleted_handles](const TreeItem& candidate) {
+                                       return std::find(deleted_handles.begin(),
+                                                        deleted_handles.end(), candidate.handle) !=
+                                              deleted_handles.end();
+                                   }),
+                    tree.tree_items.end());
+                if (std::find(deleted_handles.begin(), deleted_handles.end(), tree.tree_selected) !=
+                    deleted_handles.end()) {
+                    tree.tree_selected = 0;
+                }
+                set_last_error(abi::kErrorSuccess);
+                return 1;
+            }
+            case kTreeExpand:
+                return tree_expand_item(tree, wparam, lparam);
+            case kTreeGetCount:
+                set_last_error(abi::kErrorSuccess);
+                return static_cast<int>(tree.tree_items.size());
+            case kTreeGetNextItem:
+                return tree_next_item(tree, wparam, lparam);
+            case kTreeSelectItem:
+                return tree_select_item(tree, lparam);
+            case kTreeGetItemA:
+                return wide ? 0 : tree_get_item(tree, lparam, false);
+            case kTreeSetItemA:
+                return wide ? 0 : tree_set_item(tree, lparam, false);
+            case kTreeGetItemW:
+                return wide ? tree_get_item(tree, lparam, true) : 0;
+            case kTreeSetItemW:
+                return wide ? tree_set_item(tree, lparam, true) : 0;
+            default:
+                set_last_error(abi::kErrorSuccess);
+                return 0;
+        }
+    } catch (...) {
+        set_last_error(abi::kErrorNotEnoughMemory);
+        return 0;
+    }
+}
+
 
 }  // namespace
 
@@ -365,6 +1047,9 @@ TL_MSABI int tl_SendMessageA(const void* window, const std::uint32_t message,
         return 0;
     }
     if (slot->is_control) {
+        if (util::ascii_iequals(slot->class_name, "SysTreeView32")) {
+            return handle_tree_message(*slot, message, wparam, lparam, false);
+        }
         if (message == abi::kWmSetFont) {
             return 0;
         }
@@ -668,6 +1353,9 @@ TL_MSABI int tl_SendMessageW(const void* window, const std::uint32_t message,
         return 0;
     }
     if (slot->is_control) {
+        if (util::ascii_iequals(slot->class_name, "SysTreeView32")) {
+            return handle_tree_message(*slot, message, wparam, lparam, true);
+        }
         if (slot->control_kind == ControlKind::StatusBar && message == abi::kSbSetTextW) {
             if (lparam == 0) {
                 return tl_SendMessageA(window, abi::kSbSetTextA, wparam, 0);

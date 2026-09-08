@@ -5,6 +5,7 @@
 
 #include <chrono>
 #include <cstdlib>
+#include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <string>
@@ -13,6 +14,38 @@
 
 namespace tradutorlinux::runtime_gui {
 namespace {
+
+struct TestTreeItemA {
+    std::uint32_t mask{};
+    std::uint32_t padding{};
+    void* h_item{};
+    std::uint32_t state{};
+    std::uint32_t state_mask{};
+    char* text{};
+    std::int32_t text_capacity{};
+    std::int32_t image{};
+    std::int32_t selected_image{};
+    std::int32_t children{};
+    std::intptr_t item_data{};
+};
+static_assert(sizeof(TestTreeItemA) == 56U);
+
+struct TestTreeInsertA {
+    void* parent{};
+    void* insert_after{};
+    TestTreeItemA item{};
+};
+static_assert(sizeof(TestTreeInsertA) == 72U);
+
+constexpr std::uint32_t kTestTreeInsertItemA = 0x1100U;
+constexpr std::uint32_t kTestTreeGetCount = 0x1105U;
+constexpr std::uint32_t kTestTreeGetNextItem = 0x110AU;
+constexpr std::uint32_t kTestTreeSelectItem = 0x110BU;
+constexpr std::uint32_t kTestTreeGetItemA = 0x110CU;
+constexpr std::uint32_t kTestTreeGetNext = 1U;
+constexpr std::uint32_t kTestTreeGetCaret = 9U;
+constexpr std::uint32_t kTestTreeItemText = 0x0001U;
+constexpr std::uint32_t kTestTreeItemParam = 0x0004U;
 
 class SevenZipDirectoryRowsTest : public ::testing::Test {
 protected:
@@ -396,6 +429,201 @@ TEST(CommonControls, SevenZipMenuClickQueuesLeafCommand) {
     EXPECT_EQ(parent.queued_messages.front().lparam, 0U);
     EXPECT_EQ(parent.open_menu_index, -1);
     g_menus = {};
+    g_windows = {};
+    g_focused_control = nullptr;
+}
+
+TEST(CommonControls, EnterActivatesDefaultButtonForRegularWindow) {
+    g_windows = {};
+    g_focused_control = nullptr;
+
+    WindowSlot& parent = g_windows[0];
+    parent.used = true;
+
+    WindowSlot& edit = g_windows[1];
+    edit.used = true;
+    edit.is_control = true;
+    edit.parent = &parent;
+    edit.control_kind = ControlKind::Edit;
+    edit.visible = true;
+    edit.enabled = true;
+
+    WindowSlot& secondary = g_windows[2];
+    secondary.used = true;
+    secondary.is_control = true;
+    secondary.parent = &parent;
+    secondary.control_kind = ControlKind::Button;
+    secondary.control_id = 200;
+    secondary.visible = true;
+    secondary.enabled = true;
+    secondary.style = 0x00010000U;
+
+    WindowSlot& primary = g_windows[3];
+    primary.used = true;
+    primary.is_control = true;
+    primary.parent = &parent;
+    primary.control_kind = ControlKind::Button;
+    primary.control_id = 100;
+    primary.visible = true;
+    primary.enabled = true;
+    primary.style = 0x00000001U;
+
+    WindowSlot* focused = &edit;
+    handle_control_key(parent, std::span<WindowSlot>{g_windows}, focused,
+                       gui::WindowEvent{gui::WindowEventType::KeyDown, 0, 0, '\0', 0xFF0DUL});
+
+    ASSERT_EQ(parent.queued_messages.size(), 1U);
+    EXPECT_EQ(parent.queued_messages.front().message, abi::kWmCommand);
+    EXPECT_EQ(parent.queued_messages.front().wparam & 0xFFFFU, 100U);
+    EXPECT_EQ(parent.queued_messages.front().wparam >> 16U, 0U);
+    EXPECT_EQ(parent.queued_messages.front().lparam,
+              reinterpret_cast<abi::Lparam>(&primary));
+
+    parent.queued_messages.clear();
+    focused = &secondary;
+    handle_control_key(parent, std::span<WindowSlot>{g_windows}, focused,
+                       gui::WindowEvent{gui::WindowEventType::KeyDown, 0, 0, '\0', 0xFF0DUL});
+    ASSERT_EQ(parent.queued_messages.size(), 1U);
+    EXPECT_EQ(parent.queued_messages.front().wparam & 0xFFFFU, 200U);
+    EXPECT_EQ(parent.queued_messages.front().lparam,
+              reinterpret_cast<abi::Lparam>(&secondary));
+
+    g_windows = {};
+    g_focused_control = nullptr;
+}
+
+TEST(CommonControls, TabCyclesFocusableRegularControls) {
+    g_windows = {};
+    g_focused_control = nullptr;
+
+    WindowSlot& parent = g_windows[0];
+    parent.used = true;
+
+    WindowSlot& edit = g_windows[1];
+    edit.used = true;
+    edit.is_control = true;
+    edit.parent = &parent;
+    edit.control_kind = ControlKind::Edit;
+    edit.visible = true;
+    edit.enabled = true;
+    edit.focused = true;
+
+    WindowSlot& combo = g_windows[2];
+    combo.used = true;
+    combo.is_control = true;
+    combo.parent = &parent;
+    combo.control_kind = ControlKind::ComboBox;
+    combo.visible = true;
+    combo.enabled = true;
+
+    WindowSlot& static_control = g_windows[3];
+    static_control.used = true;
+    static_control.is_control = true;
+    static_control.parent = &parent;
+    static_control.control_kind = ControlKind::Static;
+    static_control.visible = true;
+    static_control.enabled = true;
+
+    WindowSlot& button = g_windows[4];
+    button.used = true;
+    button.is_control = true;
+    button.parent = &parent;
+    button.control_kind = ControlKind::Button;
+    button.visible = true;
+    button.enabled = true;
+    button.style = 0x00010000U;
+
+    WindowSlot* focused = &edit;
+    const gui::WindowEvent tab{gui::WindowEventType::KeyDown, 0, 0, '\0', 0xFF09UL};
+    handle_control_key(parent, std::span<WindowSlot>{g_windows}, focused, tab);
+    EXPECT_EQ(focused, &combo);
+    EXPECT_FALSE(edit.focused);
+    EXPECT_TRUE(combo.focused);
+
+    handle_control_key(parent, std::span<WindowSlot>{g_windows}, focused, tab);
+    EXPECT_EQ(focused, &button);
+    EXPECT_FALSE(combo.focused);
+    EXPECT_TRUE(button.focused);
+
+    handle_control_key(parent, std::span<WindowSlot>{g_windows}, focused, tab);
+    EXPECT_EQ(focused, &edit);
+    EXPECT_FALSE(button.focused);
+    EXPECT_TRUE(edit.focused);
+    EXPECT_EQ(parent.queued_messages.size(), 6U);
+
+    g_windows = {};
+    g_focused_control = nullptr;
+}
+
+TEST(CommonControls, TreeViewMaintainsItemsAndSelection) {
+    g_windows = {};
+    g_focused_control = nullptr;
+
+    WindowSlot& parent = g_windows[0];
+    parent.used = true;
+    WindowSlot& tree = g_windows[1];
+    tree.used = true;
+    tree.is_control = true;
+    tree.class_name = "SysTreeView32";
+    tree.control_kind = ControlKind::Generic;
+    tree.parent = &parent;
+    tree.control_id = 1008;
+
+    char session_text[] = "Session";
+    TestTreeInsertA session{};
+    session.item.mask = kTestTreeItemText | kTestTreeItemParam;
+    session.item.text = session_text;
+    session.item.item_data = 0x1111;
+    const int session_handle = tl_SendMessageA(
+        &tree, kTestTreeInsertItemA, 0,
+        reinterpret_cast<abi::Lparam>(&session));
+    ASSERT_GT(session_handle, 0);
+
+    char ssh_text[] = "SSH";
+    TestTreeInsertA ssh{};
+    ssh.parent = nullptr;
+    ssh.insert_after = reinterpret_cast<void*>(static_cast<std::uintptr_t>(session_handle));
+    ssh.item.mask = kTestTreeItemText | kTestTreeItemParam;
+    ssh.item.text = ssh_text;
+    ssh.item.item_data = 0x2222;
+    const int ssh_handle = tl_SendMessageA(
+        &tree, kTestTreeInsertItemA, 0,
+        reinterpret_cast<abi::Lparam>(&ssh));
+    ASSERT_GT(ssh_handle, session_handle);
+
+    ASSERT_EQ(tl_SendMessageA(&tree, kTestTreeGetCount, 0, 0), 2);
+    EXPECT_EQ(tl_SendMessageA(&tree, kTestTreeGetNextItem, 0, 0), session_handle);
+    EXPECT_EQ(tl_SendMessageA(&tree, kTestTreeGetNextItem, kTestTreeGetNext,
+                              static_cast<abi::Lparam>(session_handle)),
+              ssh_handle);
+    EXPECT_EQ(tl_SendMessageA(&tree, kTestTreeSelectItem, 0,
+                              static_cast<abi::Lparam>(session_handle)),
+              1);
+    EXPECT_EQ(tree.tree_selected, static_cast<std::uintptr_t>(session_handle));
+    EXPECT_EQ(tl_SendMessageA(&tree, kTestTreeSelectItem, 0,
+                              static_cast<abi::Lparam>(ssh_handle)),
+              1);
+    EXPECT_EQ(tl_SendMessageA(&tree, kTestTreeGetNextItem, kTestTreeGetCaret, 0),
+              ssh_handle);
+
+    ASSERT_EQ(tree.tree_items.size(), 2U);
+    EXPECT_EQ(tree.tree_items[0].text, "Session");
+    EXPECT_EQ(tree.tree_items[0].item_data, 0x1111U);
+    EXPECT_EQ(tree.tree_items[1].text, "SSH");
+    EXPECT_EQ(tree.tree_items[1].item_data, 0x2222U);
+
+    char output[16]{};
+    TestTreeItemA item_query{};
+    item_query.mask = kTestTreeItemText | kTestTreeItemParam;
+    item_query.h_item = reinterpret_cast<void*>(static_cast<std::uintptr_t>(ssh_handle));
+    item_query.text = output;
+    item_query.text_capacity = static_cast<std::int32_t>(sizeof(output));
+    ASSERT_EQ(tl_SendMessageA(&tree, kTestTreeGetItemA, 0,
+                              reinterpret_cast<abi::Lparam>(&item_query)),
+              1);
+    EXPECT_STREQ(output, "SSH");
+    EXPECT_EQ(item_query.item_data, 0x2222);
+
     g_windows = {};
     g_focused_control = nullptr;
 }

@@ -80,6 +80,24 @@ ação `Open` da configuração chega ao diálogo genérico. Só depois de uma
 fixture mínima para esse evento será considerada qualquer alteração em
 `src/runtime/`.
 
+## Evidência E30 — contratos genéricos da configuração GUI
+
+A investigação isolou um abort causado por `GetDlgItem` não encontrar controles
+criados dinamicamente depois que o TreeView recebeu itens. A correção mantém
+esses controles no índice lógico do diálogo até o fim de `WM_DESTROY` e adiciona
+um modelo genérico limitado para `SysTreeView32`: itens, hierarquia, seleção,
+expansão, navegação, texto, `lParam` e notificação básica ao parent. Também há
+foco inicial, Tab e botão padrão para janelas regulares; diálogos modais seguem
+exclusivamente `IsDialogMessageW` para não processar a mesma tecla duas vezes.
+
+Os testes `CommonControls.*` (14 casos), `runtime_gui_smoke`, os fluxos GUI de
+7-Zip e PuTTY e os fixtures de WinSock dinâmico passaram no Rust ON. O baseline
+C++ OFF recompilou os alvos afetados e manteve a matriz de execução existente.
+O probe SSH local do PuTTY agora alcança a configuração sem o abort, mas ainda
+recebe zero bytes e termina no `guest-timeout 72`; isso é uma limitação de
+interação, não suporte ao SSH. Toda a implementação permanece genérica e não
+contém nome, ID, DLL ou regra de seleção do PuTTY.
+
 ## Evidência D2 — cenários GUI
 
 O smoke externo do 7-Zip File Manager passou nos builds C++ OFF e Rust ON. Ele

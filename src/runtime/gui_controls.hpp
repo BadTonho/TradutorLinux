@@ -24,6 +24,14 @@ struct ListViewRow {
     std::intptr_t param{};
 };
 
+struct TreeItem {
+    std::uintptr_t handle{0};
+    std::uintptr_t parent{0};
+    std::uintptr_t item_data{0};
+    std::string text;
+    bool expanded{false};
+};
+
 inline constexpr std::size_t kSevenZipDirectoryRowLimit = 128;
 
 struct GuestTimer {
@@ -75,6 +83,9 @@ struct WindowSlot {
     std::vector<ListViewRow> list_rows;
     int list_selection{-1};
     int hovered_list_row{-1};
+    std::vector<TreeItem> tree_items;
+    std::uintptr_t tree_next_handle{1};
+    std::uintptr_t tree_selected{0};
     int last_list_press_row{-1};
     std::chrono::steady_clock::time_point last_list_press_time{};
     int navigation_selection{1};

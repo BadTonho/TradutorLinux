@@ -185,6 +185,7 @@ struct ClassSlot {
 using runtime_gui::ControlKind;
 using runtime_gui::GuestTimer;
 using runtime_gui::ListViewRow;
+using runtime_gui::TreeItem;
 using runtime_gui::ToolbarButton;
 using runtime_gui::WindowSlot;
 

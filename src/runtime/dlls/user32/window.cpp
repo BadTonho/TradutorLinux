@@ -334,6 +334,13 @@ TL_MSABI abi::HWnd tl_CreateWindowExA(const std::uint32_t ex_style,
                 return nullptr;
             }
         }
+        if ((g_focused_control == nullptr || g_focused_control->parent != parent_slot) &&
+            slot.control_kind == runtime_gui::ControlKind::Edit && slot.visible && slot.enabled) {
+            set_focus_control(&slot);
+        }
+        if (parent_slot->is_dialog) {
+            parent_slot->dialog_children.push_back(&slot);
+        }
         if (generic_child) {
             const std::array<diagnostics::TraceField, 4> fields{
                 diagnostics::TraceField{"class", class_name},
@@ -633,6 +640,11 @@ TL_MSABI int tl_DestroyWindow(const void* const window) noexcept {
     const std::uintptr_t wndproc = slot->wndproc;
     if (wndproc != 0) {
         call_wndproc(wndproc, hwnd, abi::kWmDestroy, 0, 0);
+    }
+    if (parent != nullptr && parent->is_dialog) {
+        const auto child_it = std::remove(parent->dialog_children.begin(),
+                                          parent->dialog_children.end(), slot);
+        parent->dialog_children.erase(child_it, parent->dialog_children.end());
     }
     *slot = {};
     if (parent != nullptr) {
