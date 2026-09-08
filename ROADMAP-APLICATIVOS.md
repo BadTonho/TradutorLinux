@@ -2253,6 +2253,40 @@ Evidência reproduzível de 2026-09-08:
   esses casos: x86 exige uma etapa de arquitetura própria e HWiNFO exige
   análise de desempacotamento, ambas fora do marco atual.
 
+### E36 — Diagnóstico do callback multimídia no Roblox
+
+Objetivo: verificar se o `timeSetEvent` stub é a causa imediata do
+`RBXCRASH` do instalador Roblox, sem promover callbacks assíncronos nem
+adicionar uma regra específica ao runtime.
+
+Evidência reproduzível de 2026-09-08:
+
+- [x] O instalador foi executado em prefixo e `APPDATA` temporários, com
+  `--trace`, `--cpu 3`, `--memory 512` e timeout externo de 25 segundos. O
+  cenário normal continua terminando com `RBXCRASH: FatalRuntimeError
+  (RSL - panic: e374e9c-Worker,28)`, `ExitProcess(3)` e `failed
+  stage="setup"`; o prefixo não recebeu arquivos.
+- [x] Um experimento temporário, removido imediatamente depois, invocou uma
+  única vez o callback convidado recebido por `timeSetEvent`. O callback
+  retornou normalmente, mas o processo produziu o mesmo `RBXCRASH`, exit `3`
+  e ausência de arquivos. O experimento não foi mantido no código nem no
+  binário validado.
+- [x] O alvo Rust foi recompilado após a remoção do experimento; `git status`
+  e `git diff --check` ficaram limpos. Não houve alteração no build C++, no
+  loader, no instalador, no catálogo ou na política de execução.
+
+Conclusão:
+
+- [x] A evidência não sustenta substituir o stub por um agendador síncrono ou
+  assíncrono. O bloqueio permanece no fluxo interno `Worker/RSL` do setup,
+  não em uma falha demonstrada de retorno do callback.
+- [x] `timeSetEvent` continua explicitamente classificado como stub genérico;
+  qualquer implementação futura exige contrato de ciclo de vida, fixture
+  independente de aplicativo, teste ON/OFF e evidência de que o contrato é
+  usado por mais de um cenário.
+- [x] Roblox continua como instalação controlada com exit `3`, sem suporte
+  funcional declarado e sem cadastro parcial.
+
 ## Regras de validação
 
 - Cada correção começa com uma fixture mínima e termina com testes automatizados.
