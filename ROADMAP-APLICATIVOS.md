@@ -2154,6 +2154,43 @@ Próximo bloqueio:
   próxima correção deve começar por nova evidência do fluxo interno ou por uma
   fixture genérica, sem adicionar APIs especulativas.
 
+### E33 — Isolamento do bloqueio pós-ativação do PuTTY
+
+Objetivo: separar um defeito de contrato Win32 genérico de um loop interno do
+binário depois da criação da sessão, sem transformar o harness do PuTTY em
+regra de produção.
+
+Evidência coletada:
+
+- [x] Instrumentação temporária confirmou que o `WM_COMMAND` do botão `Open`
+  chega ao `DispatchMessageA`, a janela `PuTTY` é criada e seu `WM_CREATE`
+  retorna normalmente.
+- [x] Depois de `GetOEMCP`, as 256 chamadas de
+  `MultiByteToWideChar(CP437, MB_USEGLYPHCHARS | MB_ERR_INVALID_CHARS, ...)`
+  completam, inclusive o último byte da tabela OEM; não há loop infinito no
+  contrato de conversão corrigido em E32.
+- [x] Após a conversão, não foram observadas chamadas convidadas a
+  `getaddrinfo`, `socket`, `connect`, eventos WinSock ou outra API de runtime
+  antes do `guest-timeout 72`; o resultado continua idêntico nos builds Rust
+  ON e C++ OFF.
+- [x] A instrumentação de `DispatchMessageA`, da conversão OEM e a retenção
+  temporária do staging foram removidas; não houve alteração permanente no
+  runtime, no loader ou no teste específico.
+
+Conclusão:
+
+- [x] A evidência não justifica alterar WinSock, adicionar uma API especulativa
+  ou criar um tratamento específico do PuTTY.
+- [x] O bloqueio permanece classificado como investigação pendente do fluxo
+  interno pós-conversão; uma próxima mudança só será aceita com backtrace,
+  fixture genérica reproduzível ou contrato Win32 documentado que a sustente.
+
+Próximo passo permitido:
+
+- [ ] Obter nova evidência do ponto interno em que o convidado permanece após
+  `init_ucs`/a criação da sessão e, se o comportamento reproduzir numa fixture
+  genérica, corrigir o contrato compartilhado com teste ON/OFF.
+
 ## Regras de validação
 
 - Cada correção começa com uma fixture mínima e termina com testes automatizados.
