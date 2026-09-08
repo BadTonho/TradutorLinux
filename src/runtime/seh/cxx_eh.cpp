@@ -19,7 +19,7 @@ namespace {
 constexpr std::uint32_t kCxxException = 0xE06D7363U;
 constexpr std::uint32_t kFuncInfoMagicV3 = 0x19930522U;
 constexpr std::uint32_t kCatchAll = 0x40U;
-constexpr std::size_t kFuncInfoWords = 11U;
+constexpr std::size_t kFuncInfoWords = 10U;
 constexpr std::size_t kUnwindMapEntrySize = 8U;
 constexpr std::size_t kTryBlockEntrySize = 20U;
 constexpr std::size_t kHandlerMapEntrySize = 20U;
@@ -33,6 +33,8 @@ constexpr std::uint32_t kMaxIpEntries = 4096U;
 thread_local ContextAmd64 g_cxx_catch_context{};
 thread_local bool g_cxx_catch_context_ready = false;
 thread_local std::uint64_t g_cxx_catch_target = 0U;
+thread_local bool g_cxx_cleanup_context_ready = false;
+thread_local std::uint64_t g_cxx_cleanup_target = 0U;
 
 struct ImageReader {
     GuestUnwindView view{};
@@ -107,6 +109,12 @@ struct FuncInfo {
     std::uint32_t try_block_map{};
     std::uint32_t ip_map_count{};
     std::uint32_t ip_map{};
+    std::uint32_t eh_flags{};
+};
+
+struct UnwindAction {
+    std::int32_t to_state{kInvalidState};
+    std::uint32_t action_rva{0xFFFFFFFFU};
 };
 
 void trace_cxx_eh(const diagnostics::TraceLevel level, const char* const state,
@@ -158,12 +166,13 @@ void trace_cxx_eh_state(const diagnostics::TraceLevel level, const char* const d
     info.try_block_map = words[4];
     info.ip_map_count = words[5];
     info.ip_map = words[6];
+    info.eh_flags = words[9];
     if (info.max_state < kInvalidState || info.max_state > kMaxState ||
         info.try_block_count > kMaxTryBlocks || info.ip_map_count > kMaxIpEntries) {
         return false;
     }
     const std::uint32_t unwind_count =
-        info.max_state < 0 ? 0U : static_cast<std::uint32_t>(info.max_state) + 1U;
+        info.max_state < 0 ? 0U : static_cast<std::uint32_t>(info.max_state);
     return image.range_for_count(info.unwind_map, unwind_count, kUnwindMapEntrySize) &&
            image.range_for_count(info.try_block_map, info.try_block_count,
                                  kTryBlockEntrySize) &&
@@ -172,12 +181,12 @@ void trace_cxx_eh_state(const diagnostics::TraceLevel level, const char* const d
 
 [[nodiscard]] bool valid_state(const std::int32_t state, const FuncInfo& info) noexcept {
     return state == kInvalidState ||
-           (state >= 0 && state <= info.max_state);
+           (state >= 0 && state < info.max_state);
 }
 
 [[nodiscard]] bool validate_unwind_map(const ImageReader& image, const FuncInfo& info) noexcept {
     const std::uint32_t count =
-        info.max_state < 0 ? 0U : static_cast<std::uint32_t>(info.max_state) + 1U;
+        info.max_state < 0 ? 0U : static_cast<std::uint32_t>(info.max_state);
     for (std::uint32_t index = 0; index < count; ++index) {
         std::uint32_t entry{};
         std::int32_t state{};
@@ -192,6 +201,27 @@ void trace_cxx_eh_state(const diagnostics::TraceLevel level, const char* const d
         }
     }
     return true;
+}
+
+[[nodiscard]] bool read_unwind_action(const ImageReader& image, const FuncInfo& info,
+                                      const std::int32_t state,
+                                      UnwindAction& action) noexcept {
+    if (state == kInvalidState || !valid_state(state, info)) {
+        return false;
+    }
+    std::uint32_t entry{};
+    std::uint32_t action_entry{};
+    if (!image.add_rva(info.unwind_map,
+                       static_cast<std::size_t>(state) * kUnwindMapEntrySize, entry) ||
+        !image.add_rva(entry, 4U, action_entry) || !image.read_i32(entry, action.to_state) ||
+        !image.read_u32(action_entry, action.action_rva) ||
+        !valid_state(action.to_state, info) ||
+        (action.action_rva != 0xFFFFFFFFU && !image.range(action.action_rva, 1U))) {
+        return false;
+    }
+    // LLVM usa tanto RVA zero quanto -1 como entrada sem ação, dependendo
+    // da versão do WinEH que produziu a tabela.
+    return action.action_rva != 0U && action.action_rva != 0xFFFFFFFFU;
 }
 
 [[nodiscard]] bool validate_ip_map(const ImageReader& image, const FuncInfo& info) noexcept {
@@ -321,10 +351,10 @@ std::int32_t cxx_frame_handler3(
         trace_cxx_eh(diagnostics::TraceLevel::Error, "rejected", "invalid-dispatcher-data");
         return kExceptionContinueSearch;
     }
-    if (exception_record->code != kCxxException ||
-        (exception_record->flags & kExceptionUnwinding) != 0U) {
+    if (exception_record->code != kCxxException) {
         return kExceptionContinueSearch;
     }
+    const bool unwinding = (exception_record->flags & kExceptionUnwinding) != 0U;
 
     const GuestUnwindView view = current_guest_unwind_view();
     ImageReader image{view};
@@ -356,6 +386,26 @@ std::int32_t cxx_frame_handler3(
         trace_cxx_eh(diagnostics::TraceLevel::Warning, "rejected", "invalid-ip-state");
         return kExceptionContinueSearch;
     }
+    if (unwinding) {
+        // Para frames intermediários a rotina de unwind continua a procura
+        // sem transferir para um funclet. A etapa atual executa o cleanup do
+        // frame-alvo antes do catch; isso mantém a continuação em um único
+        // contexto convidado validado.
+        if (dispatcher_context->target_ip == 0U) {
+            return kExceptionContinueSearch;
+        }
+        UnwindAction action{};
+        if (!read_unwind_action(image, info, state, action)) {
+            trace_cxx_eh_state(diagnostics::TraceLevel::Info, "no-supported-cleanup",
+                               static_cast<std::uint32_t>(dispatcher_context->control_pc - base),
+                               state);
+            return kExceptionContinueSearch;
+        }
+        dispatcher_context->target_ip = base + action.action_rva;
+        g_cxx_cleanup_target = dispatcher_context->target_ip;
+        trace_cxx_eh(diagnostics::TraceLevel::Info, "matched", "termination-cleanup");
+        return kExceptionExecuteHandler;
+    }
     CatchTarget target{};
     if (!find_catch_all(image, info, state, target)) {
         trace_cxx_eh_state(
@@ -384,8 +434,71 @@ bool prepare_cxx_catch_transfer(ContextAmd64& context, void* const establisher_f
     *reinterpret_cast<std::uint64_t*>(context.rsp) =
         reinterpret_cast<std::uintptr_t>(&tl_cxx_catch_return_trampoline);
     g_cxx_catch_context_ready = true;
+    g_cxx_cleanup_context_ready = false;
     g_cxx_catch_target = 0U;
     return true;
+}
+
+bool prepare_cxx_cleanup_transfer(ContextAmd64& action_context,
+                                  const ContextAmd64& catch_context,
+                                  void* const establisher_frame,
+                                  void* const cleanup_ip,
+                                  void* const catch_ip) noexcept {
+    const std::uint64_t cleanup_target = reinterpret_cast<std::uintptr_t>(cleanup_ip);
+    const std::uint64_t catch_target = reinterpret_cast<std::uintptr_t>(catch_ip);
+    if (cleanup_target == 0U || cleanup_target != g_cxx_cleanup_target ||
+        catch_target == 0U || catch_target != g_cxx_catch_target ||
+        !validate_mapped_range(reinterpret_cast<void*>(action_context.rsp),
+                               sizeof(std::uint64_t), true) ||
+        !validate_mapped_range(reinterpret_cast<void*>(catch_context.rsp),
+                               sizeof(std::uint64_t), true)) {
+        trace_cxx_eh(diagnostics::TraceLevel::Error, "rejected", "invalid-cleanup-transfer");
+        return false;
+    }
+
+    action_context.rip = cleanup_target;
+    action_context.rdx = reinterpret_cast<std::uintptr_t>(establisher_frame);
+    *reinterpret_cast<std::uint64_t*>(action_context.rsp) =
+        reinterpret_cast<std::uintptr_t>(&tl_cxx_cleanup_return_trampoline);
+
+    g_cxx_catch_context = catch_context;
+    g_cxx_catch_context.rip = catch_target;
+    g_cxx_catch_context.rdx = reinterpret_cast<std::uintptr_t>(establisher_frame);
+    *reinterpret_cast<std::uint64_t*>(g_cxx_catch_context.rsp) =
+        reinterpret_cast<std::uintptr_t>(&tl_cxx_catch_return_trampoline);
+    g_cxx_catch_context_ready = true;
+    g_cxx_cleanup_context_ready = true;
+    g_cxx_cleanup_target = 0U;
+    return true;
+}
+
+extern "C" [[noreturn]] void tl_cxx_cleanup_return_from_asm(
+    const std::uint64_t stack_pointer) noexcept {
+    const GuestUnwindView view = current_guest_unwind_view();
+    const auto base = reinterpret_cast<std::uintptr_t>(view.image_base);
+    if (view.image_base == nullptr ||
+        !validate_mapped_range(reinterpret_cast<void*>(stack_pointer), 1U, false) ||
+        !g_cxx_cleanup_context_ready || !g_cxx_catch_context_ready ||
+        g_cxx_catch_context.rip < base ||
+        g_cxx_catch_context.rip - base >= view.image_size) {
+        trace_cxx_eh(diagnostics::TraceLevel::Error, "rejected", "invalid-cleanupret-target");
+        tl_ExitThread(kCxxException);
+        std::abort();
+    }
+    g_cxx_cleanup_context_ready = false;
+    // O cleanup funclet chamou este callback usando temporariamente a pilha
+    // convidada. O prólogo/locals do callback podem ter coberto a palavra de
+    // retorno reservada no frame original; reescreva-a antes do salto para o
+    // catch, sem confiar no conteúdo que atravessou a fronteira host/guest.
+    if (!validate_mapped_range(reinterpret_cast<void*>(g_cxx_catch_context.rsp),
+                               sizeof(std::uint64_t), true)) {
+        trace_cxx_eh(diagnostics::TraceLevel::Error, "rejected", "invalid-catch-return-slot");
+        tl_ExitThread(kCxxException);
+        std::abort();
+    }
+    *reinterpret_cast<std::uint64_t*>(g_cxx_catch_context.rsp) =
+        reinterpret_cast<std::uintptr_t>(&tl_cxx_catch_return_trampoline);
+    tl_restore_guest_context_and_jump(&g_cxx_catch_context);
 }
 
 extern "C" [[noreturn]] void tl_cxx_catch_return_from_asm(

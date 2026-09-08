@@ -528,6 +528,37 @@ std::int32_t c_specific_handler(ExceptionRecordAmd64* const exception_record,
                       "unwind");
         }
         if (frame.has_function && reinterpret_cast<void*>(frame.establisher_frame) == target_frame) {
+            if (exception_record != nullptr && exception_record->code == 0xE06D7363U &&
+                frame.handler != nullptr) {
+                DispatcherContextAmd64 dispatcher{
+                    .control_pc = before.rip,
+                    .image_base = reinterpret_cast<std::uintptr_t>(g_unwind_image.base),
+                    .function_entry = static_cast<std::uint32_t*>(raw_function_entry(frame.index)),
+                    .establisher_frame = frame.establisher_frame,
+                    .target_ip = reinterpret_cast<std::uintptr_t>(target_ip),
+                    .context_record = &cursor,
+                    .language_handler = frame.handler,
+                    .handler_data = frame.handler_data};
+                trace_seh_handler("handler", exception_record->code, "termination", frame.handler,
+                                  frame.handler_data, frame.index);
+                const std::int32_t disposition = invoke_language_handler(
+                    frame.handler, exception_record, frame.establisher_frame, &cursor, &dispatcher);
+                if (disposition == kExceptionExecuteHandler && dispatcher.target_ip != 0U) {
+                    ContextAmd64 action_context = cursor;
+                    if (!prepare_cxx_cleanup_transfer(
+                            action_context, before,
+                            reinterpret_cast<void*>(frame.establisher_frame),
+                            reinterpret_cast<void*>(dispatcher.target_ip), target_ip)) {
+                        fail_seh(exception_record->code, "transferência de cleanup inválida");
+                    }
+                    trace_seh("unwind", exception_record->code, "cxx-cleanup");
+                    tl_restore_guest_context_and_jump(&action_context);
+                }
+                if (disposition != kExceptionContinueSearch) {
+                    fail_seh(exception_record->code,
+                             "disposição de termination handler C++ inválida");
+                }
+            }
             ContextAmd64 result = before;
             result.rip = reinterpret_cast<std::uintptr_t>(target_ip);
             result.rax = reinterpret_cast<std::uintptr_t>(return_value);
@@ -543,7 +574,10 @@ std::int32_t c_specific_handler(ExceptionRecordAmd64* const exception_record,
                                               .image_base = reinterpret_cast<std::uintptr_t>(g_unwind_image.base),
                                               .function_entry = static_cast<std::uint32_t*>(raw_function_entry(frame.index)),
                                               .establisher_frame = frame.establisher_frame,
-                                              .target_ip = reinterpret_cast<std::uintptr_t>(target_ip),
+                                              .target_ip = exception_record != nullptr &&
+                                                               exception_record->code == 0xE06D7363U
+                                                           ? 0U
+                                                           : reinterpret_cast<std::uintptr_t>(target_ip),
                                               .context_record = &cursor,
                                               .language_handler = frame.handler,
                                               .handler_data = frame.handler_data};

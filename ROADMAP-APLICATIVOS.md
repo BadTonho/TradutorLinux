@@ -2549,12 +2549,16 @@ Evidência reproduzível de 2026-09-08:
 - [x] Foi criada a fixture genérica `tl_cxx_eh` pelo backend WinEH do LLVM,
   com `__CxxFrameHandler3`, `FuncInfo`, mapas de `try/catch` e funclet de
   captura. Após o primeiro bloco do handler, os testes de metadados e captura
-  passam nos dois builds e terminam em `ExitProcess(0)`; a fixture não declara
-  ainda suporte a cleanups de término.
+  passam nos dois builds e terminam em `ExitProcess(0)`.
 - [x] O contrato mínimo foi documentado: `FuncInfo` v3 relativo à imagem,
   mapas checked e limitados, catch-all sem RTTI e trampoline de `catchret` com
   validação do alvo. A transferência não usa mais o antigo no-op global para
   `0xE06D7363`.
+- [x] A fixture genérica `tl_cxx_eh_cleanup` comprova nos builds Rust ON e
+  C++ OFF que a ação do `stateUnwindMap` executa o destrutor antes do
+  `catchret`, preservando o marcador e terminando com `ExitProcess(0)`. A ponte
+  revalida o slot de retorno do catch depois da chamada host para não deixar a
+  pilha convidada corromper a continuação.
 
 Próximo bloco de trabalho, ainda aberto:
 
@@ -2565,9 +2569,11 @@ Próximo bloco de trabalho, ainda aberto:
   unwind/try e a regra de catch-all sem informação de tipo.
 - [x] Implementar validação checked e limites para esse subconjunto, com busca
   controlada para versões, ponteiros, ranges e disposições desconhecidos.
-- [ ] Adicionar testes genéricos ON/OFF para unwind de término, destrutores,
-  captura tipada, rethrow, exceção não tratada e ausência de mapeamento
-  posterior a uma rejeição; só então repetir o cenário de extração do WinRAR.
+- [x] Adicionar testes genéricos ON/OFF para o primeiro caso de unwind de
+  término e destrutor, com metadata e execução da fixture `tl_cxx_eh_cleanup`.
+- [ ] Adicionar testes para cadeias de múltiplos cleanups, captura tipada,
+  rethrow, exceção não tratada e ausência de mapeamento posterior a uma
+  rejeição; só então repetir o cenário de extração do WinRAR.
 
 Critério de saída:
 

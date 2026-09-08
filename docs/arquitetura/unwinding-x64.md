@@ -77,14 +77,16 @@ código fora da imagem ativa.
 
 ## Limites explícitos
 
-Não há tradução de `SIGSEGV`/`SIGFPE`, `__finally`, destrutores C++ durante
-unwind, function tables dinâmicas ou VEH em DLLs externas. O suporte C++ x64 é
-deliberadamente limitado ao `__CxxFrameHandler3` com `FuncInfo` v3 relativo à
-imagem, `catch(...)` sem tipo e transferência para um catch funclet LLVM. Tipos
-de exceção, rethrow, cleanups de término e `__CxxFrameHandler` legado ainda
-seguem a busca controlada e não são declarados suportados. Se o PC estiver
-num epílogo V2, o despacho falha como mecanismo ainda não interpretado,
-preservando o contexto.
+Não há tradução de `SIGSEGV`/`SIGFPE`, `__finally`, function tables dinâmicas ou
+VEH em DLLs externas. O suporte C++ x64 é deliberadamente limitado ao
+`__CxxFrameHandler3` com `FuncInfo` v3 relativo à imagem, um cleanup de término
+do frame-alvo emitido por `stateUnwindMap`, `catch(...)` sem tipo e transferência
+para funclets LLVM. A ação de cleanup é executada uma vez e retorna por
+trampoline para o catch; cadeias de múltiplas ações, cleanups de frames
+intermediários, tipos de exceção, captura tipada, rethrow e
+`__CxxFrameHandler` legado ainda seguem a busca controlada e não são declarados
+suportados. Se o PC estiver num epílogo V2, o despacho falha como mecanismo
+ainda não interpretado, preservando o contexto.
 
 ## Diagnóstico e validação
 
@@ -114,23 +116,30 @@ PE32+ com uma importação explícita de `msvcrt.dll!__CxxFrameHandler3`. O test
 de metadados confirma `.pdata`, `.xdata`, os flags de exceção/terminação e as
 importações nos builds Rust ON e C++ OFF.
 
-O contrato aceito pelo primeiro bloco é estrito: magic `0x19930522`, contagens
-limitadas, offsets RVA relativos à imagem ativa, `tryLow <= tryHigh`, mapas de
-IP ordenados, handlers dentro da imagem e handler catch-all com descritor de
-tipo nulo. O leitor usa `memcpy` e aritmética checked; versões, ponteiros,
-contagens ou ranges desconhecidos retornam `ContinueSearch` e deixam a decisão
-no dispatcher controlado. Nenhum `FuncInfo` ou ponteiro do convidado é mantido
-fora da chamada.
+O contrato aceito é estrito: magic `0x19930522`, `MaxState` interpretado como
+a quantidade de entradas do `stateUnwindMap`, contagens limitadas, offsets RVA
+relativos à imagem ativa, `tryLow <= tryHigh`, mapas de IP ordenados, handlers
+dentro da imagem e handler catch-all com descritor de tipo nulo. Cada entrada
+de unwind valida `toState`; RVA zero e `0xffffffff` significam ausência de
+ação, e qualquer outra ação precisa estar dentro da imagem. O leitor usa
+`memcpy` e aritmética checked; versões, ponteiros, contagens ou ranges
+desconhecidos retornam `ContinueSearch` e deixam a decisão no dispatcher
+controlado. Nenhum `FuncInfo` ou ponteiro do convidado é mantido fora da
+chamada.
 
 Durante a transferência, o contexto Microsoft x64 é salvo por thread, o frame
-é passado no `RDX` exigido pelo funclet e o retorno do `catchret` passa por um
+é passado no `RDX` exigido pelo funclet e o retorno de `cleanupret` passa por um
+trampoline que restaura o contexto original do frame. O endereço de retorno do
+catch é revalidado e reescrito depois da chamada host, pois a ponte pode usar
+temporariamente a pilha convidada. O retorno do `catchret` passa por outro
 trampoline que valida o destino na imagem antes de restaurar o contexto. Isso
 evita saltar diretamente para um endereço devolvido pelo funclet ou executar
 um ponteiro externo à imagem.
 
-A fixture `tl_cxx_eh` agora cobre a busca e a captura de `catch(...)` com uma
-chamada a uma rotina chamada `tl_destructor` no caminho normal; ela termina em
-`ExitProcess(0)` nos builds Rust ON e C++ OFF. Ela ainda não modela a execução
-do destrutor durante unwind: a próxima extensão precisa cobrir `stateUnwindMap`,
-`cleanupret`, captura tipada, rethrow e o caminho sem handler antes de repetir
-o cenário de extração do WinRAR.
+A fixture `tl_cxx_eh` cobre a busca e a captura de `catch(...)`; a fixture
+`tl_cxx_eh_cleanup` adiciona `stateUnwindMap`, um destrutor executado durante o
+unwind e `cleanupret`. Os testes de metadata e execução terminam em
+`ExitProcess(0)` nos builds Rust ON e C++ OFF, e o marcador da fixture só deixa
+o catch prosseguir quando o destrutor foi executado. Captura tipada, rethrow,
+cadeias de cleanup e o caminho sem handler continuam sendo extensões futuras
+antes de repetir o cenário de extração do WinRAR.

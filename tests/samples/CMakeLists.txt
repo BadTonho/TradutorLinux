@@ -620,6 +620,58 @@ if(TARGET tradutorlinux)
     )
 endif()
 
+set(TL_CXX_EH_CLEANUP_OBJECT "${TL_FIXTURE_OUTPUT_DIRECTORY}/tl_cxx_eh_cleanup.o")
+set(TL_CXX_EH_CLEANUP_FIXTURE "${TL_FIXTURE_OUTPUT_DIRECTORY}/tl_cxx_eh_cleanup.exe")
+add_custom_command(
+    OUTPUT "${TL_CXX_EH_CLEANUP_OBJECT}"
+    COMMAND "${CMAKE_COMMAND}" -E make_directory "${TL_FIXTURE_OUTPUT_DIRECTORY}"
+    COMMAND "${TL_LLVM_LLC}" -mtriple=x86_64-pc-windows-msvc -filetype=obj
+        -o "${TL_CXX_EH_CLEANUP_OBJECT}"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/tl_cxx_eh_cleanup.ll"
+    DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/tl_cxx_eh_cleanup.ll"
+    VERBATIM
+    COMMENT "Generating MSVC WinEH cleanup object tl_cxx_eh_cleanup.o"
+)
+add_custom_command(
+    OUTPUT "${TL_CXX_EH_CLEANUP_FIXTURE}"
+    COMMAND "${TL_MINGW_CC}" -nostdlib
+        -Wl,--entry=tl_entry -Wl,--subsystem,console
+        -Wl,--no-insert-timestamp -Wl,--dynamicbase
+        -o "${TL_CXX_EH_CLEANUP_FIXTURE}"
+        "${TL_CXX_EH_CLEANUP_OBJECT}" "${TL_CXX_EH_IMPORT_LIB}" -lkernel32
+    DEPENDS "${TL_CXX_EH_CLEANUP_OBJECT}" "${TL_CXX_EH_IMPORT_LIB}"
+    VERBATIM
+    COMMENT "Linking PE32+ MSVC C++ EH cleanup fixture"
+)
+add_custom_target(tl_cxx_eh_cleanup_fixture DEPENDS "${TL_CXX_EH_CLEANUP_FIXTURE}")
+add_dependencies(tradutorlinux_samples tl_cxx_eh_cleanup_fixture)
+add_test(
+    NAME fixture_tl_cxx_eh_cleanup_metadata
+    COMMAND "${CMAKE_COMMAND}"
+        "-DINPUT=${TL_CXX_EH_CLEANUP_FIXTURE}"
+        "-DMANIFEST=${CMAKE_CURRENT_SOURCE_DIR}/manifests/tl_cxx_eh_cleanup.json"
+        "-DLLVM_READOBJ=${TL_LLVM_READOBJ}"
+        -P "${CMAKE_CURRENT_SOURCE_DIR}/verify_fixture.cmake"
+)
+set_tests_properties(fixture_tl_cxx_eh_cleanup_metadata PROPERTIES
+    DEPENDS tl_cxx_eh_cleanup_fixture
+    LABELS "fixture;pe32plus;cxx-eh"
+)
+if(TARGET tradutorlinux)
+    add_test(
+        NAME runtime_tl_cxx_eh_cleanup
+        COMMAND "${CMAKE_COMMAND}"
+            "-DINPUT=${TL_CXX_EH_CLEANUP_FIXTURE}"
+            "-DRUNTIME=$<TARGET_FILE:tradutorlinux>"
+            "-DEXPECTED_EXIT=0"
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/verify_cxx_eh_cleanup.cmake"
+    )
+    set_tests_properties(runtime_tl_cxx_eh_cleanup PROPERTIES
+        DEPENDS fixture_tl_cxx_eh_cleanup_metadata
+        LABELS "runtime;pe32plus;cxx-eh"
+    )
+endif()
+
 add_test(
     NAME fixture_tl_delay_import_metadata
     COMMAND "${CMAKE_COMMAND}"
