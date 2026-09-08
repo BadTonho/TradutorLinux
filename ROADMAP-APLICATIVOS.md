@@ -2191,6 +2191,43 @@ Próximo passo permitido:
   `init_ucs`/a criação da sessão e, se o comportamento reproduzir numa fixture
   genérica, corrigir o contrato compartilhado com teste ON/OFF.
 
+### E34 — Determinismo da matriz nativa e do smoke do Notepad++
+
+Objetivo: corrigir falhas do próprio harness que dependiam do ambiente gráfico
+ou da carga paralela, sem transformar esses sintomas em mudanças no runtime.
+
+Problemas reproduzidos:
+
+- [x] `popular_apps_native_matrix` falhava quando herdava `DISPLAY`: os dois
+  nomes do mesmo WinRAR SFX abriam a janela `WinRAR self-extracting archive` e
+  aguardavam interação, terminando em `guest-timeout 72` em vez de `exit 0`.
+- [x] Com `DISPLAY` removido, o mesmo binário completou o cenário headless com
+  `ExitProcess` código `0`, confirmando que a falha era ambiental e não uma
+  regressão do loader ou do aplicativo.
+- [x] `notepadpp_real_gui_smoke` passou isoladamente, mas sob carga paralela a
+  margem interna de 3 segundos podia terminar em timeout antes do diagnóstico
+  C++/SEH esperado.
+
+Correção do harness:
+
+- [x] `verify_popular_apps_native.cmake` agora remove `DISPLAY` e
+  `WAYLAND_DISPLAY` antes da matriz nativa, tornando o cenário sem interação
+  determinístico.
+- [x] O smoke do Notepad++ usa 8 segundos e 8 segundos de CPU, mantendo os
+  mesmos requisitos de janela, `cxx-throw`, `guest-signal` e ausência de
+  `guest-timeout`; nenhum erro é convertido em skip.
+- [x] Nenhuma DLL, shim, regra de aplicativo, loader ou API de produção foi
+  alterada.
+
+Evidência reproduzível de 2026-09-08:
+
+- [x] Rust ON: os 10 casos selecionados de análise, execução, instalação,
+  MSIX, GUI e catálogo passaram com `ctest -j2`.
+- [x] C++ OFF: os mesmos 10 casos passaram com `ctest -j2`, incluindo a
+  matriz nativa headless e o smoke do Notepad++.
+- [x] `git diff --check` permaneceu limpo após a alteração e as falhas
+  originais não reapareceram na repetição completa.
+
 ## Regras de validação
 
 - Cada correção começa com uma fixture mínima e termina com testes automatizados.

@@ -29,9 +29,9 @@ falhe de forma visível.
 
 `popular_apps_native_matrix` executa somente os cinco PE32+ com ação direta já
 documentada: 7-Zip, os dois binários WinRAR, Rockstar e Rufus. Cada caso usa
-prefixo temporário, `--timeout 3`, limites de CPU/memória e verifica o exit code
-e o diagnóstico esperado; instaladores, DLLs e cenários interativos de GUI
-permanecem nos testes específicos.
+prefixo temporário, ambiente headless, `--timeout 3`, limites de CPU/memória e
+verifica o exit code e o diagnóstico esperado; instaladores, DLLs e cenários
+interativos de GUI permanecem nos testes específicos.
 
 `popular_apps_install_matrix` cobre somente os quatro candidatos aprovados
 para instalação controlada: Roblox, G HUB, o alias byte-a-byte e Affinity. Cada

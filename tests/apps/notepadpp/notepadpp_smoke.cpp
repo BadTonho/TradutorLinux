@@ -186,7 +186,7 @@ void stop_runtime_process(const pid_t pid) {
         (void)::dup2(trace_fd, STDERR_FILENO);
         ::close(trace_fd);
         ::execl(runtime.c_str(), runtime.c_str(), "--trace", "--timeout",
-                "3", "--cpu", "3", "--memory", "512", target.c_str(),
+                "8", "--cpu", "8", "--memory", "512", target.c_str(),
                 static_cast<char*>(nullptr));
         ::_exit(127);
     }
@@ -233,7 +233,7 @@ void stop_runtime_process(const pid_t pid) {
     }
 
     int runtime_status = 0;
-    const bool runtime_exited = wait_for_exit(runtime_pid, 3000ms, &runtime_status);
+    const bool runtime_exited = wait_for_exit(runtime_pid, 8000ms, &runtime_status);
     if (!runtime_exited) {
         stop_runtime_process(runtime_pid);
     }

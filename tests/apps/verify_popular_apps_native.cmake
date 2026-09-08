@@ -9,6 +9,12 @@ if(NOT IS_DIRECTORY "${TL_CORPUS}")
     message(FATAL_ERROR "corpus inexistente: ${TL_CORPUS}")
 endif()
 
+# A matriz nativa não interage com janelas. Não herdar a sessão gráfica do
+# desenvolvedor evita que um SFX GUI permaneça aguardando ação humana e torne o
+# resultado dependente do ambiente que executou o CTest.
+set(ENV{DISPLAY})
+set(ENV{WAYLAND_DISPLAY})
+
 # Estes são somente os PE32+ com uma ação direta segura já documentada no B2.
 # Instaladores, DLLs e cenários que exigem interação GUI têm smokes próprios e
 # não são iniciados por esta matriz.
