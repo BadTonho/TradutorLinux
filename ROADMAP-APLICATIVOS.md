@@ -2536,6 +2536,10 @@ Evidência reproduzível de 2026-09-08:
   `__CxxFrameHandler` não interpreta `FuncInfo`, `_CxxThrowException` não
   fabrica estado de exceção e o dispatcher mantém o tratamento controlado de
   `0xE06D7363`. Nenhuma dessas decisões foi promovida como suporte geral.
+- [x] Após o registro deste marco, a validação foi reiniciada nos dois
+  backends: Rust ON e C++ OFF passaram `report`, análise recursiva, execução
+  nativa e instalação, com 4/4 testes em cada build. A repetição não alterou
+  os exits nem criou arquivos residuais no corpus/prefixos temporários.
 
 Próximo bloco de trabalho, ainda aberto:
 
