@@ -2228,6 +2228,31 @@ Evidência reproduzível de 2026-09-08:
 - [x] `git diff --check` permaneceu limpo após a alteração e as falhas
   originais não reapareceram na repetição completa.
 
+### E35 — Retomada da execução do 7-Zip e limites do corpus
+
+Objetivo: ampliar a evidência de execução real depois da correção dos
+harnesses e manter explícitas as classes que ainda não podem ser executadas
+no alvo PE32+ AMD64 atual.
+
+Evidência reproduzível de 2026-09-08:
+
+- [x] Rust ON: `seven_zip_cli_smoke` passou cobrindo o ciclo CLI de arquivos
+  `stored`, `DEFLATE`, `7z/LZMA2`, senha, sobrescrita e stdin/stdout; o
+  `seven_zip_gui_smoke` também passou com a janela do File Manager e a cópia
+  controlada.
+- [x] C++ OFF: os mesmos dois smokes passaram isoladamente, preservando a
+  equivalência do caminho operacional.
+- [x] A análise individual confirmou que `Everything_Search_x64.exe`,
+  `CPU-Z_2.18_en.exe`, `GPU-Z_2.70.0.exe`, `HWMonitor_1.67.exe` e o instalador
+  CapCut são PE32/x86 (`machine=0x14c`) e permanecem rejeitados antes da
+  execução, conforme o escopo do runtime.
+- [x] `HWiNFO64.exe` é PE32+ mas possui imagem empacotada com `UPX0` sem dados
+  crus correspondentes ao RVA de export; Rust e C++ rejeitam a estrutura sem
+  mapear ou executar o arquivo (`exit 4`).
+- [x] Não foi adicionada tentativa de instalar ou executar indiscriminadamente
+  esses casos: x86 exige uma etapa de arquitetura própria e HWiNFO exige
+  análise de desempacotamento, ambas fora do marco atual.
+
 ## Regras de validação
 
 - Cada correção começa com uma fixture mínima e termina com testes automatizados.
