@@ -673,6 +673,114 @@ if(TARGET tradutorlinux)
     )
 endif()
 
+set(TL_CXX_EH_NESTED_OBJECT "${TL_FIXTURE_OUTPUT_DIRECTORY}/tl_cxx_eh_nested.o")
+set(TL_CXX_EH_NESTED_FIXTURE "${TL_FIXTURE_OUTPUT_DIRECTORY}/tl_cxx_eh_nested.exe")
+add_custom_command(
+    OUTPUT "${TL_CXX_EH_NESTED_OBJECT}"
+    COMMAND "${CMAKE_COMMAND}" -E make_directory "${TL_FIXTURE_OUTPUT_DIRECTORY}"
+    COMMAND "${TL_LLVM_LLC}" -mtriple=x86_64-pc-windows-msvc -filetype=obj
+        -o "${TL_CXX_EH_NESTED_OBJECT}"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/tl_cxx_eh_nested.ll"
+    DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/tl_cxx_eh_nested.ll"
+    VERBATIM
+    COMMENT "Generating MSVC WinEH nested-catch rejection object tl_cxx_eh_nested.o"
+)
+add_custom_command(
+    OUTPUT "${TL_CXX_EH_NESTED_FIXTURE}"
+    COMMAND "${CMAKE_COMMAND}" -E make_directory "${TL_FIXTURE_OUTPUT_DIRECTORY}"
+    COMMAND "${TL_MINGW_CC}" -nostdlib
+        -Wl,--entry=tl_entry -Wl,--subsystem,console
+        -Wl,--no-insert-timestamp -Wl,--dynamicbase -Wl,--image-base=0x10000000
+        -o "${TL_CXX_EH_NESTED_FIXTURE}"
+        "${TL_CXX_EH_NESTED_OBJECT}" "${TL_CXX_EH_IMPORT_LIB}" -lkernel32
+    DEPENDS "${TL_CXX_EH_NESTED_OBJECT}" "${TL_CXX_EH_IMPORT_LIB}"
+    VERBATIM
+    COMMENT "Linking PE32+ MSVC nested-catch rejection fixture"
+)
+add_custom_target(tl_cxx_eh_nested_fixture DEPENDS "${TL_CXX_EH_NESTED_FIXTURE}")
+add_dependencies(tradutorlinux_samples tl_cxx_eh_nested_fixture)
+add_test(
+    NAME fixture_tl_cxx_eh_nested_metadata
+    COMMAND "${CMAKE_COMMAND}"
+        "-DINPUT=${TL_CXX_EH_NESTED_FIXTURE}"
+        "-DMANIFEST=${CMAKE_CURRENT_SOURCE_DIR}/manifests/tl_cxx_eh_nested.json"
+        "-DLLVM_READOBJ=${TL_LLVM_READOBJ}"
+        -P "${CMAKE_CURRENT_SOURCE_DIR}/verify_fixture.cmake"
+)
+set_tests_properties(fixture_tl_cxx_eh_nested_metadata PROPERTIES
+    DEPENDS tl_cxx_eh_nested_fixture
+    LABELS "fixture;pe32plus;cxx-eh"
+)
+if(TARGET tradutorlinux)
+    add_test(
+        NAME runtime_tl_cxx_eh_nested
+        COMMAND "${CMAKE_COMMAND}"
+            "-DINPUT=${TL_CXX_EH_NESTED_FIXTURE}"
+            "-DRUNTIME=$<TARGET_FILE:tradutorlinux>"
+            "-DEXPECTED_EXIT=99"
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/verify_cxx_eh_nested.cmake"
+    )
+    set_tests_properties(runtime_tl_cxx_eh_nested PROPERTIES
+        DEPENDS fixture_tl_cxx_eh_nested_metadata
+        LABELS "runtime;pe32plus;cxx-eh;robustness"
+        TIMEOUT 15
+    )
+endif()
+
+set(TL_CXX_EH_UNHANDLED_OBJECT "${TL_FIXTURE_OUTPUT_DIRECTORY}/tl_cxx_eh_unhandled.o")
+set(TL_CXX_EH_UNHANDLED_FIXTURE "${TL_FIXTURE_OUTPUT_DIRECTORY}/tl_cxx_eh_unhandled.exe")
+add_custom_command(
+    OUTPUT "${TL_CXX_EH_UNHANDLED_OBJECT}"
+    COMMAND "${CMAKE_COMMAND}" -E make_directory "${TL_FIXTURE_OUTPUT_DIRECTORY}"
+    COMMAND "${TL_LLVM_LLC}" -mtriple=x86_64-pc-windows-msvc -filetype=obj
+        -o "${TL_CXX_EH_UNHANDLED_OBJECT}"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/tl_cxx_eh_unhandled.ll"
+    DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/tl_cxx_eh_unhandled.ll"
+    VERBATIM
+    COMMENT "Generating MSVC C++ EH unhandled object tl_cxx_eh_unhandled.o"
+)
+add_custom_command(
+    OUTPUT "${TL_CXX_EH_UNHANDLED_FIXTURE}"
+    COMMAND "${CMAKE_COMMAND}" -E make_directory "${TL_FIXTURE_OUTPUT_DIRECTORY}"
+    COMMAND "${TL_MINGW_CC}" -nostdlib
+        -Wl,--entry=tl_entry -Wl,--subsystem,console
+        -Wl,--no-insert-timestamp -Wl,--dynamicbase -Wl,--image-base=0x10000000
+        -o "${TL_CXX_EH_UNHANDLED_FIXTURE}"
+        "${TL_CXX_EH_UNHANDLED_OBJECT}" "${TL_CXX_EH_IMPORT_LIB}" -lkernel32
+    DEPENDS "${TL_CXX_EH_UNHANDLED_OBJECT}" "${TL_CXX_EH_IMPORT_LIB}"
+    VERBATIM
+    COMMENT "Linking PE32+ MSVC unhandled C++ EH fixture"
+)
+add_custom_target(tl_cxx_eh_unhandled_fixture DEPENDS "${TL_CXX_EH_UNHANDLED_FIXTURE}")
+add_dependencies(tradutorlinux_samples tl_cxx_eh_unhandled_fixture)
+add_test(
+    NAME fixture_tl_cxx_eh_unhandled_metadata
+    COMMAND "${CMAKE_COMMAND}"
+        "-DINPUT=${TL_CXX_EH_UNHANDLED_FIXTURE}"
+        "-DMANIFEST=${CMAKE_CURRENT_SOURCE_DIR}/manifests/tl_cxx_eh_unhandled.json"
+        "-DLLVM_READOBJ=${TL_LLVM_READOBJ}"
+        -P "${CMAKE_CURRENT_SOURCE_DIR}/verify_fixture.cmake"
+)
+set_tests_properties(fixture_tl_cxx_eh_unhandled_metadata PROPERTIES
+    DEPENDS tl_cxx_eh_unhandled_fixture
+    LABELS "fixture;pe32plus;cxx-eh;robustness"
+)
+if(TARGET tradutorlinux)
+    add_test(
+        NAME runtime_tl_cxx_eh_unhandled
+        COMMAND "${CMAKE_COMMAND}"
+            "-DINPUT=${TL_CXX_EH_UNHANDLED_FIXTURE}"
+            "-DRUNTIME=$<TARGET_FILE:tradutorlinux>"
+            "-DEXPECTED_EXIT=99"
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/verify_cxx_eh_unhandled.cmake"
+    )
+    set_tests_properties(runtime_tl_cxx_eh_unhandled PROPERTIES
+        DEPENDS fixture_tl_cxx_eh_unhandled_metadata
+        LABELS "runtime;pe32plus;cxx-eh;robustness"
+        TIMEOUT 15
+    )
+endif()
+
 set(TL_CXX_EH_CLEANUP_OBJECT "${TL_FIXTURE_OUTPUT_DIRECTORY}/tl_cxx_eh_cleanup.o")
 set(TL_CXX_EH_CLEANUP_FIXTURE "${TL_FIXTURE_OUTPUT_DIRECTORY}/tl_cxx_eh_cleanup.exe")
 add_custom_command(

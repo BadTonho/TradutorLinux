@@ -38,6 +38,7 @@ constexpr std::size_t kMaxCleanupActions = 64U;
 
 thread_local ContextAmd64 g_cxx_catch_context{};
 thread_local bool g_cxx_catch_context_ready = false;
+thread_local bool g_cxx_funclet_active = false;
 thread_local std::uint64_t g_cxx_catch_target = 0U;
 thread_local bool g_cxx_cleanup_context_ready = false;
 thread_local std::uint64_t g_cxx_cleanup_target = 0U;
@@ -545,6 +546,7 @@ bool prepare_cxx_catch_transfer(ContextAmd64& context, void* const establisher_f
     *reinterpret_cast<std::uint64_t*>(context.rsp) =
         reinterpret_cast<std::uintptr_t>(&tl_cxx_catch_return_trampoline);
     g_cxx_catch_context_ready = true;
+    g_cxx_funclet_active = true;
     g_cxx_cleanup_context_ready = false;
     g_cxx_catch_target = 0U;
     return true;
@@ -579,6 +581,7 @@ bool prepare_cxx_cleanup_transfer(ContextAmd64& action_context,
         reinterpret_cast<std::uintptr_t>(&tl_cxx_catch_return_trampoline);
     g_cxx_catch_context_ready = true;
     g_cxx_cleanup_context_ready = true;
+    g_cxx_funclet_active = true;
     g_cxx_cleanup_establisher = reinterpret_cast<std::uintptr_t>(establisher_frame);
     g_cxx_cleanup_target = 0U;
     return true;
@@ -624,6 +627,7 @@ extern "C" [[noreturn]] void tl_cxx_cleanup_return_from_asm(
     }
 
     g_cxx_cleanup_context_ready = false;
+    g_cxx_funclet_active = false;
     // O cleanup funclet chamou este callback usando temporariamente a pilha
     // convidada. O prólogo/locals do callback podem ter coberto a palavra de
     // retorno reservada no frame original; reescreva-a antes do salto para o
@@ -658,7 +662,12 @@ extern "C" [[noreturn]] void tl_cxx_catch_return_from_asm(
     g_cxx_catch_context.rip = target_ip;
     g_cxx_catch_context.rsp = stack_pointer;
     g_cxx_catch_context_ready = false;
+    g_cxx_funclet_active = false;
     tl_restore_guest_context_and_jump(&g_cxx_catch_context);
+}
+
+bool cxx_eh_funclet_active() noexcept {
+    return g_cxx_funclet_active;
 }
 
 }  // namespace tradutorlinux::runtime

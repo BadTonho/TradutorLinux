@@ -605,6 +605,12 @@ std::int32_t c_specific_handler(ExceptionRecordAmd64* const exception_record,
                                                            parameter_count * sizeof(*parameters), false)))) {
         fail_seh(code, "argumentos de RaiseException inválidos");
     }
+    if (code == 0xE06D7363U && cxx_eh_funclet_active()) {
+        // O protocolo completo de nested funclets/rethrow da ABI MSVC ainda
+        // não faz parte do subconjunto validado. Rejeitar aqui evita que a
+        // exceção seja redirecionada ao mesmo handler indefinidamente.
+        fail_seh(code, "nested-cxx-exception-unsupported");
+    }
     ExceptionRecordAmd64 record{};
     record.code = code;
     record.flags = flags;

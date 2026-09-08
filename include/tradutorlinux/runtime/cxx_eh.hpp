@@ -20,6 +20,11 @@ namespace tradutorlinux::runtime {
                                               void* establisher_frame,
                                               void* target_ip) noexcept;
 
+// Indica que a execução convidada está dentro de um funclet C++ que ainda não
+// retornou. O dispatcher rejeita reentrada que o subconjunto atual de WinEH
+// não consegue propagar com segurança.
+[[nodiscard]] bool cxx_eh_funclet_active() noexcept;
+
 // Prepara um cleanup funclet antes de transferir para o catch selecionado.
 // action_context é o contexto já desempilhado para chamar o cleanup; o
 // contexto original do frame é preservado para a entrada posterior no catch.

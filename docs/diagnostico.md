@@ -836,8 +836,20 @@ validados. Por exemplo:
 ```
 
 Uma falha SEH controlada não executa o entry point seguinte nem código fora da
-imagem; o convidado termina com o código da exceção. Exceções C++, `__finally`,
-sinais Linux e epílogos V2 não são traduzidos por esse mecanismo.
+imagem; o convidado termina com o código da exceção. O subconjunto C++ x64
+aceito cobre `__CxxFrameHandler3`, catch-all, tipo exato e cleanups de término.
+Uma exceção C++ sem handler termina com `detail="exceção não tratada"`; uma
+nova exceção durante um funclet ativo termina com
+`detail="nested-cxx-exception-unsupported"`, sem fallback ou repetição. O
+rethrow nativo completo, `__finally`, sinais Linux e epílogos V2 continuam fora
+desse mecanismo.
+
+Exemplos de rejeição controlada:
+
+```text
+[tl][runtime][info] seh state="failed" code="3765269347" detail="nested-cxx-exception-unsupported" mechanism="x64-seh"
+[tl][runtime][info] seh state="failed" code="3765269347" detail="exceção não tratada" mechanism="x64-seh"
+```
 
 Quando o arquivo não é um PE32+ aceitável, o leitor emite:
 

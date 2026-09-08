@@ -87,8 +87,11 @@ para funclets LLVM. A cadeia de ações do frame-alvo é percorrida com limite d
 funclet retorna pelo trampoline para o próximo cleanup ou para o catch. Cleanups
 de frames intermediários, conversões entre tipos, rethrow e
 `__CxxFrameHandler` legado ainda seguem a busca controlada e não são declarados
-suportados. Se o PC estiver num epílogo V2, o despacho falha como mecanismo
-ainda não interpretado, preservando o contexto.
+suportados. Uma nova exceção C++ durante um `catch` ou cleanup ativo é rejeitada
+com `nested-cxx-exception-unsupported`; isso evita redirecionar a exceção ao
+mesmo handler indefinidamente. Uma exceção C++ sem handler termina com o
+diagnóstico controlado `exceção não tratada`. Se o PC estiver num epílogo V2, o
+despacho falha como mecanismo ainda não interpretado, preservando o contexto.
 
 ## Diagnóstico e validação
 
@@ -147,7 +150,8 @@ objeto não são aplicados. A fixture `tl_cxx_eh_cleanup` adiciona
 `stateUnwindMap`, um destrutor executado durante o unwind e `cleanupret`;
 `tl_cxx_eh_cleanup_chain` adiciona dois funclets em cadeia e só permite a
 continuação quando ambos os marcadores foram executados. Os testes de metadata
-e execução terminam em `ExitProcess(0)` nos builds Rust ON e C++ OFF. Rethrow,
-cleanups de frames intermediários, conversões de tipo e o caminho sem handler
-continuam sendo extensões futuras antes de repetir o cenário de extração do
-WinRAR.
+e execução terminam em `ExitProcess(0)` nos builds Rust ON e C++ OFF.
+`tl_cxx_eh_nested` comprova a rejeição determinística de reentrada durante um
+catch, sem loop; `tl_cxx_eh_unhandled` comprova o caminho sem handler. O rethrow
+nativo da ABI MSVC, cleanups de frames intermediários e conversões de tipo
+continuam fora do contrato antes de repetir o cenário de extração do WinRAR.

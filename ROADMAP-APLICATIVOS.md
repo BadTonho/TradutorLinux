@@ -2585,9 +2585,13 @@ Próximo bloco de trabalho, ainda aberto:
   controlada para versões, ponteiros, ranges e disposições desconhecidos.
 - [x] Adicionar testes genéricos ON/OFF para o primeiro caso de unwind de
   término e destrutor, com metadata e execução da fixture `tl_cxx_eh_cleanup`.
-- [ ] Adicionar testes para rethrow, exceção não tratada e ausência de
-  mapeamento posterior a uma rejeição; só então repetir o cenário de extração
-  do WinRAR.
+- [x] Adicionar testes para a rejeição controlada de reentrada durante um
+  `catch` (fronteira atual para rethrow), exceção não tratada e ausência de
+  mapeamento posterior a uma rejeição. As fixtures `tl_cxx_eh_nested` e
+  `tl_cxx_eh_unhandled` passam 4/4 em cada backend; o teste
+  `integration_rust_app_run_malformed` passa ON/OFF e confirma ausência de
+  `mapped`/execução após a rejeição. O rethrow nativo completo da ABI MSVC
+  continua fora do contrato.
 
 Critério de saída:
 

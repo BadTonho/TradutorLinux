@@ -197,6 +197,10 @@ esta mudança.
 | `tl_unwind_v2.exe` | PE32+ AMD64 | Não | Mesmo subconjunto `KERNEL32.dll!Rtl*` de `tl_unwind.exe` | **Suportado para metadado V2 fora de epílogo:** fixture determinística com `UOP_Epilog` V2, normalização no relatório/trace e desempilhamento real no corpo; imprime `unwind-v2\n`, exit `0`. Em epílogo V2, o runtime preserva o contexto e retorna controladamente; não há interpretação de instruções nem despacho SEH. | Unwind V2 / despacho SEH |
 | `tl_seh.exe` | PE32+ AMD64 | Não | `KERNEL32.dll!RaiseException`, VEH, `RtlCaptureContext`, `RtlUnwindEx`, `CreateThread`, console; `msvcrt.dll!__C_specific_handler` | **Suportado para exceção explícita:** valida transferência de `RtlUnwindEx`/RAX, registra/remove VEH, lança em thread convidada e seleciona um `__except` por `SCOPE_TABLE_AMD64`; imprime `seh\n`, exit `0`. Não cobre C++, `__finally` nem sinais Linux. | Despacho SEH x64 |
 | `tl_seh_v2.exe` | PE32+ AMD64 | Não | Mesmo subconjunto de `tl_seh.exe` | **Suportado fora de epílogo V2:** a mesma busca e transferência SEH usa metadado V2 promovido deterministicamente; imprime `seh\n`, exit `0`. | Despacho SEH x64 |
+| `tl_cxx_eh.exe` | PE32+ AMD64 | Não | `KERNEL32.dll!RaiseException`, `ExitProcess`; `msvcrt.dll!__CxxFrameHandler3` | **Suportado no subconjunto C++:** captura `catch(...)` por funclet LLVM, com `FuncInfo` v3, mapas checked e retorno validado; exit `0`. | C++ EH x64 |
+| `tl_cxx_eh_typed.exe` | PE32+ AMD64 | Não | Mesmo subconjunto de `tl_cxx_eh.exe` | **Suportado no subconjunto C++:** captura tipada por correspondência exata de `ThrowInfo`/`CatchableTypeArray`/`type descriptor`; conversões e herança não são aplicadas; exit `0`. | C++ EH x64 |
+| `tl_cxx_eh_cleanup.exe` / `tl_cxx_eh_cleanup_chain.exe` | PE32+ AMD64 | Não | Mesmo subconjunto de `tl_cxx_eh.exe` | **Suportado no subconjunto C++:** um ou dois cleanups de término em cadeia, limite de 64 ações, rejeição de ciclos e continuação apenas após `cleanupret`; exit `0`. | C++ EH x64 |
+| `tl_cxx_eh_nested.exe` / `tl_cxx_eh_unhandled.exe` | PE32+ AMD64 | Não | `RaiseException`, `ExitProcess` e, na primeira fixture, `__CxxFrameHandler3` | **Rejeição controlada:** reentrada C++ durante funclet termina com `nested-cxx-exception-unsupported`, e ausência de handler termina com `exceção não tratada`; ambos retornam o código da exceção reduzido pelo processo (`99`), sem loop. | Limites C++ EH x64 |
 | `tl_locale_env_fls.exe` | PE32+ AMD64 | Não | `KERNEL32.dll` — ambiente W, CP/locale e FLS; thread, console e `ExitProcess` | **Suportado no núcleo determinístico:** altera/expande o ambiente isolado, valida bloco UTF-16, ACP 1252/OEMCP 437, CP437, `en-US`, `LCMapStringW/Ex` e callbacks FLS na thread filha e em `FlsFree`; imprime `locale-env-fls\n`, exit `0`. Metadata, `--report`, trace e execução são regressões CTest. | Ambiente, locale e FLS |
 | `tl_locale_extended.exe` | PE32+ AMD64 | Não | `KERNEL32.dll` — validação de locale/code page, enumeração, tipo de caractere e formato de data/hora; console e `ExitProcess` | **Suportado no locale estático:** valida `en-US`/`0x0409`, CP1252/437/UTF-8, enumera o único locale por callback Microsoft x64, classifica `CT_CTYPE1` e formata data/hora en-US; imprime `locale-extended\n`, exit `0`. Metadata, `--report`, trace e execução são regressões CTest. | Locale determinístico ampliado |
 | `tl_process_console.exe` | PE32+ AMD64 | Não | `KERNEL32.dll` — startup, handles/tipo, console W, diretório do sistema, recursos do processador, ponteiros e SList | **Suportado no contexto determinístico:** valida `STARTUPINFOW`, troca/restaura stdout, lê UTF-8 como UTF-16, escreve `process-console-é\n`, consulta `C:\Windows\System32`, testa SSE2, encode/decode e SList alinhada; exit `0`. Metadata, `--report`, trace e execução são regressões CTest. | Processo e console Win32 |
@@ -355,8 +359,9 @@ O CLI expõe o leitor via `--trace` (eventos do componente `pe`, ver `docs/diagn
 
 O contrato de desempilhamento e despacho SEH fica em
 [`arquitetura/unwinding-x64.md`](arquitetura/unwinding-x64.md). O runtime
-suporta apenas exceções explícitas V1/V2 fora de epílogos, não C++/`__finally`
-nem sinais Linux.
+suporta exceções explícitas V1/V2 fora de epílogos e um subconjunto checked de
+C++ `__CxxFrameHandler3`; `__finally`, rethrow nativo completo e sinais Linux
+continuam fora do contrato.
 
 ## Mapeamento de imagem (Fase 2)
 
