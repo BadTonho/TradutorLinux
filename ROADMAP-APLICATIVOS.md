@@ -2322,6 +2322,51 @@ Conclusão:
 - [x] Roblox continua como instalação controlada com exit `3`, sem suporte
   funcional declarado e sem cadastro parcial.
 
+### E37 — Fixture genérica de loop GUI com WinSock dinâmico
+
+Objetivo: reproduzir em um executável mínimo o mecanismo genérico de uma
+janela que recebe uma mensagem enfileirada, executa trabalho no callback e
+encerra pelo loop `GetMessageA`/`DispatchMessageA`, incluindo a resolução
+dinâmica de WinSock. A fixture não contém nomes, regras ou comportamento do
+PuTTY.
+
+Implementação:
+
+- [x] `tests/samples/src/tl_gui_dynamic_ws2.c` registra uma classe, cria a
+  janela, chama `PostMessageA`, despacha uma mensagem privada e, somente no
+  callback, resolve `WSAStartup`, `socket`, `closesocket` e `WSACleanup` por
+  `LoadLibraryA`/`GetProcAddress`. Depois escreve um marcador e encerra com
+  `DestroyWindow`/`PostQuitMessage`.
+- [x] O manifesto, o valor esperado e o cadastro CMake ficam em
+  `tests/samples/`, como fixture genérica compartilhada; nenhuma DLL, shim,
+  API ou regra específica de aplicativo foi adicionada ao runtime.
+
+Evidência reproduzível de 2026-09-08:
+
+- [x] Rust ON: `fixture_tl_gui_dynamic_ws2_metadata`,
+  `runtime_tl_gui_dynamic_ws2_matches_readobj`,
+  `app_run_tl_gui_dynamic_ws2` e `report_tl_gui_dynamic_ws2_support` passaram
+  com `ctest --parallel 2`; os dois testes de execução foram repetidos com
+  Xvfb para fornecer o backend gráfico.
+- [x] C++ OFF: os mesmos quatro testes passaram com `ctest --parallel 2` e
+  Xvfb, confirmando que a execução do mecanismo não depende do parser Rust.
+- [x] A fixture confirmou a sequência completa de criação de janela,
+  mensagem enfileirada, `DispatchMessageA`, resolução dinâmica de WinSock,
+  criação/fechamento de socket e saída `0`; report e validação estrutural
+  também passaram.
+- [x] Os testes não alteraram o diagnóstico do PuTTY: o smoke continua sem
+  chamadas convidadas a `socket`/`connect` depois de `Open` e termina no
+  `guest-timeout 72`. Portanto, a fixture não autoriza uma correção
+  especulativa nem uma declaração de suporte SSH.
+
+Conclusão:
+
+- [x] O contrato genérico de loop de mensagens e WinSock dinâmico usado pela
+  fixture funciona nos builds Rust ON e C++ OFF.
+- [x] O bloqueio do PuTTY permanece específico do fluxo interno observado
+  após a configuração; qualquer nova mudança precisa de outra evidência
+  reproduzível ou de um contrato Win32, sem código específico do aplicativo.
+
 ## Regras de validação
 
 - Cada correção começa com uma fixture mínima e termina com testes automatizados.
