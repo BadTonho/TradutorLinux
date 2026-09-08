@@ -2512,6 +2512,53 @@ Conclusão:
   `__CxxFrameHandler*`/unwind e testes ON/OFF antes de qualquer promoção do
   WinRAR.
 
+### E42 — Contrato genérico para exceções C++ x64
+
+Objetivo: preparar a próxima frente de compatibilidade sem transformar o
+comportamento observado no WinRAR em regra específica. O alvo é um contrato
+genérico para imagens PE32+ AMD64 que usam a ABI de exceções C++ da Microsoft,
+incluindo `0xE06D7363`, `__CxxFrameHandler*`, mapas de `try/catch` e destrutores.
+
+Evidência reproduzível de 2026-09-08:
+
+- [x] A captura controlada do SFX confirmou que ambiente, enumeração de
+  arquivos e `SetFileAttributesW` completam antes do lançamento; a sequência
+  de extração ainda termina no caminho de exceção C++ e não conclui a escrita.
+- [x] A tentativa temporária de deixar `0xE06D7363` atravessar o dispatcher
+  encontrou handlers, o tipo `.?AW4RAR_EXIT@@` e um alvo de unwind, mas entrou
+  em repetição até o timeout. O experimento foi removido e não alterou o
+  comportamento oficial.
+- [x] O compilador MinGW disponível localmente gera `__gxx_personality_seh0`
+  para C++ com exceções; isso é a ABI GCC/SEH e não substitui uma fixture com
+  metadados MSVC `__CxxFrameHandler*`. Não há `clang-cl` ou toolchain MSVC
+  disponível para gerar essa fixture de forma válida neste ambiente.
+- [x] O runtime continua com a política documentada: o stub de
+  `__CxxFrameHandler` não interpreta `FuncInfo`, `_CxxThrowException` não
+  fabrica estado de exceção e o dispatcher mantém o tratamento controlado de
+  `0xE06D7363`. Nenhuma dessas decisões foi promovida como suporte geral.
+
+Próximo bloco de trabalho, ainda aberto:
+
+- [ ] Obter ou gerar uma fixture PE32+ mínima e redistribuível com a ABI MSVC,
+  contendo `FuncInfo`, `try/catch`, unwind de término e pelo menos um destrutor;
+  uma fixture MinGW não atende este contrato.
+- [ ] Documentar o layout aceito de `DISPATCHER_CONTEXT`, `FuncInfo`, mapas de
+  unwind/try e informação de tipo antes de implementar qualquer handler.
+- [ ] Implementar validação checked e limites para esses metadados, com falha
+  controlada para versões, ponteiros, ranges e disposições desconhecidos.
+- [ ] Adicionar testes genéricos ON/OFF para busca, unwind de término,
+  destrutores, captura, exceção não tratada e ausência de mapeamento posterior
+  a uma rejeição; só então repetir o cenário de extração do WinRAR.
+
+Critério de saída:
+
+- [ ] A fixture genérica passa nos builds Rust ON e C++ OFF sem código ou
+  nomes de aplicativo no runtime.
+- [ ] O corpus existente não apresenta regressão e a matriz mantém timeout,
+  memória, prefixo temporário e comparação de trace/exit code.
+- [ ] A promoção não relaxa W^X, não converte sinais Linux em exceções
+  convidadas e não usa o parser C++ como fallback de produção.
+
 ## Regras de validação
 
 - Cada correção começa com uma fixture mínima e termina com testes automatizados.
