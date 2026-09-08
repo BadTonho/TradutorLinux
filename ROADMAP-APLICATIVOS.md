@@ -2189,6 +2189,14 @@ Evidência adicional reproduzível de 2026-09-08:
   removidas, os alvos `tradutorlinux` e `putty_ssh_smoke` foram recompilados e
   o smoke continuou com a mesma limitação controlada. Nenhuma alteração de
   produção ou do contrato Win32 foi mantida.
+- [x] Uma sondagem temporária dos chamadores de `set_last_error` mostrou a
+  sequência repetida `GetMessageA` → `IsDialogMessageW` → `DispatchMessageA`,
+  com consultas de controles entre as iterações. O mesmo trace não registrou
+  chamadas a `timeSetEvent` ou `timeKillEvent` no caminho pós-`Open`; portanto
+  não há evidência para corrigir WinMM nesse cenário.
+- [x] A sondagem foi removida, o alvo Rust foi recompilado e o binário voltou
+  ao contrato anterior de `set_last_error`/WinMM. O resultado permanece
+  `configuration reached, no bytes sent, guest-timeout 72`.
 
 Conclusão:
 
