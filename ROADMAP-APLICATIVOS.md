@@ -2197,6 +2197,16 @@ Evidência adicional reproduzível de 2026-09-08:
 - [x] A sondagem foi removida, o alvo Rust foi recompilado e o binário voltou
   ao contrato anterior de `set_last_error`/WinMM. O resultado permanece
   `configuration reached, no bytes sent, guest-timeout 72`.
+- [x] A inspeção temporária de `GetProcAddress` confirmou que as APIs WinSock
+  requisitadas pelo PuTTY (`WSAStartup`, `socket`, `connect`, `select`,
+  `WSAEventSelect`, `WSAIoctl` e demais símbolos do conjunto) são resolvidas.
+  As falhas observadas foram apenas consultas opcionais de GUI (`MakeDragList`,
+  `LBItemFromPt`, `DrawInsert`, `ToUnicodeEx` e
+  `SetCurrentProcessExplicitAppUserModelID`); nenhuma delas é chamada pelo
+  fluxo observado antes do bloqueio.
+- [x] A inspeção de nomes também foi removida e os alvos `tradutorlinux` e
+  `putty_ssh_smoke` foram recompilados. Não foi adicionado fallback, stub ou
+  regra específica para o aplicativo.
 
 Conclusão:
 
