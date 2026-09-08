@@ -77,10 +77,14 @@ código fora da imagem ativa.
 
 ## Limites explícitos
 
-Não há tradução de `SIGSEGV`/`SIGFPE`, exceções C++ (`__CxxFrameHandler*`),
-`__finally`/destrutores C++, function tables dinâmicas, VEH em DLLs externas,
-nem interpretação de instruções de epílogo V2. Se o PC estiver num epílogo V2,
-o despacho falha como mecanismo ainda não interpretado, preservando o contexto.
+Não há tradução de `SIGSEGV`/`SIGFPE`, `__finally`, destrutores C++ durante
+unwind, function tables dinâmicas ou VEH em DLLs externas. O suporte C++ x64 é
+deliberadamente limitado ao `__CxxFrameHandler3` com `FuncInfo` v3 relativo à
+imagem, `catch(...)` sem tipo e transferência para um catch funclet LLVM. Tipos
+de exceção, rethrow, cleanups de término e `__CxxFrameHandler` legado ainda
+seguem a busca controlada e não são declarados suportados. Se o PC estiver
+num epílogo V2, o despacho falha como mecanismo ainda não interpretado,
+preservando o contexto.
 
 ## Diagnóstico e validação
 
@@ -101,7 +105,7 @@ exceção explícita numa thread convidada, selecionam um `__except` por
 `__C_specific_handler` e imprimem `seh\n`. A segunda promove
 deterministicamente o frame que lança para `UNWIND_INFO` V2.
 
-## Fixture MSVC C++ EH em preparação
+## Contrato mínimo de MSVC C++ EH
 
 O projeto mantém `tests/samples/src/tl_cxx_eh.ll` como fixture genérica de
 contrato. Ela é gerada pelo backend WinEH do LLVM com a personalidade
@@ -110,10 +114,23 @@ PE32+ com uma importação explícita de `msvcrt.dll!__CxxFrameHandler3`. O test
 de metadados confirma `.pdata`, `.xdata`, os flags de exceção/terminação e as
 importações nos builds Rust ON e C++ OFF.
 
-No estado atual, o runtime rejeita essa fixture antes do mapeamento com
-`unknown-symbol`, porque o handler MSVC ainda não é implementado. Isso é
-intencional: a fixture serve para congelar o contrato e impedir que a
-implementação seja inferida de um aplicativo real. A próxima etapa deve
-interpretar, com ranges checked, o `FuncInfo` relativo à imagem, os mapas de
-unwind/try e os funclets; somente depois o teste poderá exigir captura e
-destrutor executados.
+O contrato aceito pelo primeiro bloco é estrito: magic `0x19930522`, contagens
+limitadas, offsets RVA relativos à imagem ativa, `tryLow <= tryHigh`, mapas de
+IP ordenados, handlers dentro da imagem e handler catch-all com descritor de
+tipo nulo. O leitor usa `memcpy` e aritmética checked; versões, ponteiros,
+contagens ou ranges desconhecidos retornam `ContinueSearch` e deixam a decisão
+no dispatcher controlado. Nenhum `FuncInfo` ou ponteiro do convidado é mantido
+fora da chamada.
+
+Durante a transferência, o contexto Microsoft x64 é salvo por thread, o frame
+é passado no `RDX` exigido pelo funclet e o retorno do `catchret` passa por um
+trampoline que valida o destino na imagem antes de restaurar o contexto. Isso
+evita saltar diretamente para um endereço devolvido pelo funclet ou executar
+um ponteiro externo à imagem.
+
+A fixture `tl_cxx_eh` agora cobre a busca e a captura de `catch(...)` com uma
+chamada a uma rotina chamada `tl_destructor` no caminho normal; ela termina em
+`ExitProcess(0)` nos builds Rust ON e C++ OFF. Ela ainda não modela a execução
+do destrutor durante unwind: a próxima extensão precisa cobrir `stateUnwindMap`,
+`cleanupret`, captura tipada, rethrow e o caminho sem handler antes de repetir
+o cenário de extração do WinRAR.

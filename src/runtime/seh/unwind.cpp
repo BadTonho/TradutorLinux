@@ -1,4 +1,5 @@
 #include "tradutorlinux/runtime/unwind.hpp"
+#include "tradutorlinux/runtime/cxx_eh.hpp"
 
 #include "runtime_context.hpp"
 
@@ -530,6 +531,10 @@ std::int32_t c_specific_handler(ExceptionRecordAmd64* const exception_record,
             ContextAmd64 result = before;
             result.rip = reinterpret_cast<std::uintptr_t>(target_ip);
             result.rax = reinterpret_cast<std::uintptr_t>(return_value);
+            if (exception_record != nullptr && exception_record->code == 0xE06D7363U &&
+                !prepare_cxx_catch_transfer(result, target_frame, target_ip)) {
+                fail_seh(exception_record->code, "transferência de catch funclet inválida");
+            }
             trace_seh("unwind", exception_record != nullptr ? exception_record->code : 0U, "target");
             tl_restore_guest_context_and_jump(&result);
         }
@@ -560,10 +565,6 @@ std::int32_t c_specific_handler(ExceptionRecordAmd64* const exception_record,
                                             const std::uint32_t flags,
                                             const std::uint32_t parameter_count,
                                             const std::uint64_t* const parameters) noexcept {
-    if (code == 0xE06D7363U) {
-        trace_seh("ignored", code, "cxx-throw ignored for Worker");
-        tl_restore_guest_context_and_jump(&context);
-    }
     if ((flags & ~kExceptionNoncontinuable) != 0U || parameter_count > 15U ||
         (parameter_count != 0U &&
          (parameters == nullptr || !validate_mapped_range(parameters,

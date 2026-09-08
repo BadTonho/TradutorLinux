@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "tradutorlinux/runtime/unwind.hpp"
+#include "tradutorlinux/runtime/cxx_eh.hpp"
 
 #if defined(__GNUC__) || defined(__clang__)
 #define TL_CRT_MSABI __attribute__((ms_abi))
@@ -156,6 +157,7 @@ TL_CRT_MSABI int tl_memcmp(const void* ptr1, const void* ptr2, std::size_t num) 
 TL_CRT_MSABI int tl_wcscmp(const std::uint16_t* string1, const std::uint16_t* string2) noexcept;
 TL_CRT_MSABI std::uint16_t* tl_wcsstr(const std::uint16_t* string, const std::uint16_t* str_char_set) noexcept;
 TL_CRT_MSABI int tl___CxxFrameHandler(void* rec, void* frame, void* context, void* disp) noexcept;
+TL_CRT_MSABI int tl___CxxFrameHandler3(void* rec, void* frame, void* context, void* disp) noexcept;
 TL_CRT_MSABI void tl__CxxThrowException(void* pexcept, void* pthrow_info) noexcept;
 TL_CRT_MSABI void tl__purecall() noexcept;
 TL_CRT_MSABI void tl_terminate() noexcept;

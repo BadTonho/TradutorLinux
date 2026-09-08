@@ -13,30 +13,25 @@ define void @tl_destructor() {
 
 define void @tl_entry() personality ptr @__CxxFrameHandler3 {
 entry:
-  invoke void @tl_destructor()
-          to label %invoke_cont unwind label %lpad_catch
+  invoke void @RaiseException(i32 3765269347, i32 0, i32 3, ptr @cxx_parameters)
+          to label %normal unwind label %lpad_catch
 
-invoke_cont:
-  %parameters = getelementptr inbounds [3 x i64], ptr @cxx_parameters, i32 0, i32 0
-  invoke void @RaiseException(i32 3765269347, i32 0, i32 3, ptr %parameters)
-          to label %invoke_cont_2 unwind label %lpad_cleanup
-
-invoke_cont_2:
+normal:
   call void @tl_destructor()
   call void @ExitProcess(i32 1)
   unreachable
 
-lpad_cleanup:
-  %cleanup_pad = cleanuppad within none []
-  call void @tl_destructor()
-  cleanupret from %cleanup_pad unwind label %lpad_catch
-
 lpad_catch:
-  %catch_switch = catchswitch within none [label %catch] unwind to caller
+  %catch_switch = catchswitch within none [label %catch] unwind label %lpad_terminate
 
 catch:
   %catch_pad = catchpad within %catch_switch [ptr null, i32 64, ptr null]
   catchret from %catch_pad to label %caught
+
+lpad_terminate:
+  %terminate_pad = cleanuppad within none []
+  call void @ExitProcess(i32 2)
+  unreachable
 
 caught:
   call void @ExitProcess(i32 0)

@@ -2532,10 +2532,12 @@ Evidência reproduzível de 2026-09-08:
   para C++ com exceções; isso é a ABI GCC/SEH e não substitui uma fixture com
   metadados MSVC `__CxxFrameHandler*`. Não há `clang-cl` ou toolchain MSVC
   disponível para gerar essa fixture de forma válida neste ambiente.
-- [x] O runtime continua com a política documentada: o stub de
+- [x] O runtime mantém o escopo documentado: o legado
   `__CxxFrameHandler` não interpreta `FuncInfo`, `_CxxThrowException` não
-  fabrica estado de exceção e o dispatcher mantém o tratamento controlado de
-  `0xE06D7363`. Nenhuma dessas decisões foi promovida como suporte geral.
+  fabrica estado de exceção e `__CxxFrameHandler3` só aceita o subconjunto
+  checked de `catch(...)` descrito abaixo. Exceções C++ fora desse contrato
+  seguem para o encerramento controlado; não há mais um `ignored` global para
+  `0xE06D7363`.
 - [x] Após o registro deste marco, a validação foi reiniciada nos dois
   backends: Rust ON e C++ OFF passaram `report`, análise recursiva, execução
   nativa e instalação, com 4/4 testes em cada build. A repetição não alterou
@@ -2546,27 +2548,31 @@ Evidência reproduzível de 2026-09-08:
   causa desse diagnóstico.
 - [x] Foi criada a fixture genérica `tl_cxx_eh` pelo backend WinEH do LLVM,
   com `__CxxFrameHandler3`, `FuncInfo`, mapas de `try/catch` e funclet de
-  captura. Os testes de metadados e de rejeição controlada passaram nos dois
-  builds; a fixture termina em `unknown-symbol` antes de mapeamento porque o
-  handler ainda não existe no runtime.
+  captura. Após o primeiro bloco do handler, os testes de metadados e captura
+  passam nos dois builds e terminam em `ExitProcess(0)`; a fixture não declara
+  ainda suporte a cleanups de término.
+- [x] O contrato mínimo foi documentado: `FuncInfo` v3 relativo à imagem,
+  mapas checked e limitados, catch-all sem RTTI e trampoline de `catchret` com
+  validação do alvo. A transferência não usa mais o antigo no-op global para
+  `0xE06D7363`.
 
 Próximo bloco de trabalho, ainda aberto:
 
 - [x] Obter ou gerar uma fixture PE32+ mínima e redistribuível com a ABI MSVC,
   contendo `FuncInfo`, `try/catch`, unwind de término e pelo menos um destrutor;
   uma fixture MinGW não atende este contrato.
-- [ ] Documentar o layout aceito de `DISPATCHER_CONTEXT`, `FuncInfo`, mapas de
-  unwind/try e informação de tipo antes de implementar qualquer handler.
-- [ ] Implementar validação checked e limites para esses metadados, com falha
+- [x] Documentar o layout aceito de `DISPATCHER_CONTEXT`, `FuncInfo`, mapas de
+  unwind/try e a regra de catch-all sem informação de tipo.
+- [x] Implementar validação checked e limites para esse subconjunto, com busca
   controlada para versões, ponteiros, ranges e disposições desconhecidos.
-- [ ] Adicionar testes genéricos ON/OFF para busca, unwind de término,
-  destrutores, captura, exceção não tratada e ausência de mapeamento posterior
-  a uma rejeição; só então repetir o cenário de extração do WinRAR.
+- [ ] Adicionar testes genéricos ON/OFF para unwind de término, destrutores,
+  captura tipada, rethrow, exceção não tratada e ausência de mapeamento
+  posterior a uma rejeição; só então repetir o cenário de extração do WinRAR.
 
 Critério de saída:
 
-- [ ] A fixture genérica passa nos builds Rust ON e C++ OFF sem código ou
-  nomes de aplicativo no runtime.
+- [x] A fixture genérica de captura passa nos builds Rust ON e C++ OFF sem
+  código ou nomes de aplicativo no runtime.
 - [ ] O corpus existente não apresenta regressão e a matriz mantém timeout,
   memória, prefixo temporário e comparação de trace/exit code.
 - [ ] A promoção não relaxa W^X, não converte sinais Linux em exceções

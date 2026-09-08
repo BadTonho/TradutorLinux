@@ -25,6 +25,8 @@ add_library(tradutorlinux_core STATIC
     runtime/core/winapi.cpp
     runtime/core/guest_entry.S
     runtime/seh/unwind.cpp
+    runtime/seh/cxx_eh.cpp
+    runtime/seh/cxx_eh.S
     runtime/seh/unwind_capture.S
     runtime/seh/seh.S
     runtime/ntdll.cpp

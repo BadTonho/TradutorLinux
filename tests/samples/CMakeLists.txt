@@ -607,17 +607,16 @@ set_tests_properties(fixture_tl_cxx_eh_metadata PROPERTIES
 )
 if(TARGET tradutorlinux)
     add_test(
-        NAME runtime_tl_cxx_eh_rejected
+        NAME runtime_tl_cxx_eh_catch_all
         COMMAND "${CMAKE_COMMAND}"
             "-DINPUT=${TL_CXX_EH_FIXTURE}"
             "-DRUNTIME=$<TARGET_FILE:tradutorlinux>"
-            "-DEXPECTED_EXIT=5"
-            "-DREQUIRED_TRACE=unknown-symbol"
-            -P "${CMAKE_CURRENT_SOURCE_DIR}/verify_runtime_rejection.cmake"
+            "-DEXPECTED_EXIT=0"
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/verify_cxx_eh.cmake"
     )
-    set_tests_properties(runtime_tl_cxx_eh_rejected PROPERTIES
+    set_tests_properties(runtime_tl_cxx_eh_catch_all PROPERTIES
         DEPENDS fixture_tl_cxx_eh_metadata
-        LABELS "runtime;pe32plus;cxx-eh;unsupported"
+        LABELS "runtime;pe32plus;cxx-eh"
     )
 endif()
 

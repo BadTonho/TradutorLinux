@@ -2024,6 +2024,14 @@ TL_CRT_MSABI int tl___CxxFrameHandler(void* rec, void* frame, void* context, voi
     return 1;
 }
 
+TL_CRT_MSABI int tl___CxxFrameHandler3(void* const rec, void* const frame,
+                                       void* const context, void* const disp) noexcept {
+    return runtime::cxx_frame_handler3(
+        static_cast<runtime::ExceptionRecordAmd64*>(rec), frame,
+        static_cast<runtime::ContextAmd64*>(context),
+        static_cast<runtime::DispatcherContextAmd64*>(disp));
+}
+
 TL_CRT_MSABI void tl__CxxThrowException(void* pexcept, void* pthrow_info) noexcept {
     (void)pexcept;
     (void)pthrow_info;
@@ -2165,6 +2173,7 @@ void register_msvcrt_module() {
         {"wcscmp", 103, reinterpret_cast<std::uintptr_t>(&tl_wcscmp)},
         {"wcsstr", 104, reinterpret_cast<std::uintptr_t>(&tl_wcsstr)},
         {"__CxxFrameHandler", 105, reinterpret_cast<std::uintptr_t>(&tl___CxxFrameHandler)},
+        {"__CxxFrameHandler3", 113, reinterpret_cast<std::uintptr_t>(&tl___CxxFrameHandler3)},
         {"_CxxThrowException", 106, reinterpret_cast<std::uintptr_t>(&tl__CxxThrowException)},
         {"_purecall", 107, reinterpret_cast<std::uintptr_t>(&tl__purecall)},
         {"?terminate@@YAXXZ", 108, reinterpret_cast<std::uintptr_t>(&tl_terminate)},
