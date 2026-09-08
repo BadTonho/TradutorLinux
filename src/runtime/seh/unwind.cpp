@@ -6,6 +6,7 @@
 #include <array>
 #include <cstdlib>
 #include <cstring>
+#include <iostream>
 #include <limits>
 #include <optional>
 #include <string>
@@ -215,6 +216,36 @@ void trace_seh(const char* const state, const std::uint32_t code,
         diagnostics::TraceField{"mechanism", "x64-seh"},
     };
     runtime_trace("seh", fields, fields.size());
+}
+
+void trace_seh_handler(const char* const state, const std::uint32_t code,
+                       const char* const detail, const void* const handler,
+                       const void* const handler_data, const std::size_t function_index) noexcept {
+    const auto relative_rva = [](const void* const pointer) {
+        if (pointer == nullptr || g_unwind_image.base == nullptr) {
+            return std::string{"0"};
+        }
+        const std::uintptr_t base = reinterpret_cast<std::uintptr_t>(g_unwind_image.base);
+        const std::uintptr_t address = reinterpret_cast<std::uintptr_t>(pointer);
+        if (address < base || address - base >= g_unwind_image.size) {
+            return std::string{"outside"};
+        }
+        return std::to_string(address - base);
+    };
+    const std::array<diagnostics::TraceField, 7> fields{
+        diagnostics::TraceField{"state", state},
+        diagnostics::TraceField{"code", std::to_string(code)},
+        diagnostics::TraceField{"detail", detail},
+        diagnostics::TraceField{"mechanism", "x64-seh"},
+        diagnostics::TraceField{"function-index", std::to_string(function_index)},
+        diagnostics::TraceField{"handler-rva", relative_rva(handler)},
+        diagnostics::TraceField{"handler-data-rva", relative_rva(handler_data)},
+    };
+    try {
+        diagnostics::write_trace(std::cerr, diagnostics::TraceComponent::Runtime,
+                                 diagnostics::TraceLevel::Info, "seh", fields);
+    } catch (...) {
+    }
 }
 
 [[nodiscard]] bool image_range(const void* const pointer, const std::size_t size) noexcept {
@@ -511,8 +542,8 @@ std::int32_t c_specific_handler(ExceptionRecordAmd64* const exception_record,
                                               .context_record = &cursor,
                                               .language_handler = frame.handler,
                                               .handler_data = frame.handler_data};
-            trace_seh("handler", exception_record != nullptr ? exception_record->code : 0U,
-                      "termination");
+            trace_seh_handler("handler", exception_record != nullptr ? exception_record->code : 0U,
+                              "termination", frame.handler, frame.handler_data, frame.index);
             const std::int32_t disposition = invoke_language_handler(
                 frame.handler, exception_record, frame.establisher_frame, &cursor, &dispatcher);
             if (disposition == kInvalidDisposition ||
@@ -643,7 +674,8 @@ std::int32_t c_specific_handler(ExceptionRecordAmd64* const exception_record,
                                           .context_record = &context,
                                           .language_handler = frame.handler,
                                           .handler_data = frame.handler_data};
-        trace_seh("handler", code, "search");
+        trace_seh_handler("handler", code, "search", frame.handler, frame.handler_data,
+                          frame.index);
         const std::int32_t disposition = invoke_language_handler(
             frame.handler, &record, frame.establisher_frame, &context, &dispatcher);
         if (disposition == kExceptionContinueExecution) {

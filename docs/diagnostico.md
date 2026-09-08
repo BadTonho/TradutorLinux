@@ -823,10 +823,15 @@ pilha nem interpretar instruções do epílogo.
 O despachante de exceções explícitas usa eventos `runtime` com
 `mechanism="x64-seh"`. Os estados são `raised`, `veh`, `frame`, `handler`,
 `unwind`, `continued` e `failed`; o campo `code` traz o código da exceção e
-`detail` identifica a etapa. Por exemplo:
+`detail` identifica a etapa. Nos eventos `handler`, o trace também informa
+`function-index`, `handler-rva` e `handler-data-rva`, relativos à imagem PE;
+`outside` indica um ponteiro fora da imagem e `0` representa referência nula.
+Esses campos são diagnósticos, não autorizam a execução de metadados não
+validados. Por exemplo:
 
 ```text
 [tl][runtime][info] seh state="raised" code="3762438722" detail="RaiseException" mechanism="x64-seh"
+[tl][runtime][info] seh state="handler" code="3762438722" detail="search" mechanism="x64-seh" function-index="5" handler-rva="4944" handler-data-rva="16444"
 [tl][runtime][info] seh state="unwind" code="3762438722" detail="target" mechanism="x64-seh"
 ```
 

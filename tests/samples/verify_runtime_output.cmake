@@ -92,3 +92,13 @@ if(DEFINED MANIFEST)
         endforeach()
     endif()
 endif()
+
+if(DEFINED REQUIRE_SEH_HANDLER_METADATA)
+    string(REGEX MATCH
+        "seh state=\"handler\" code=\"[0-9]+\" detail=\"search\" mechanism=\"x64-seh\" function-index=\"[0-9]+\" handler-rva=\"[0-9]+\" handler-data-rva=\"[0-9]+\""
+        seh_handler_metadata "${runtime_trace}")
+    if(NOT seh_handler_metadata)
+        message(FATAL_ERROR
+            "SEH handler metadata is missing from the trace:\n${runtime_trace}")
+    endif()
+endif()

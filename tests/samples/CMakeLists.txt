@@ -366,7 +366,8 @@ function(tl_add_pe_fixture target_name source_file manifest_file)
                     "-DEXPECTED_HEX=756e77696e640a")
             elseif(target_name STREQUAL "tl_seh")
                 set(runtime_extra_args
-                    "-DEXPECTED_HEX=7365680a")
+                    "-DEXPECTED_HEX=7365680a"
+                    "-DREQUIRE_SEH_HANDLER_METADATA=1")
             elseif(target_name STREQUAL "tl_powr")
                 set(runtime_extra_args
                     "-DEXPECTED_HEX=706f77720a"

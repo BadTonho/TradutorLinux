@@ -2540,6 +2540,10 @@ Evidência reproduzível de 2026-09-08:
   backends: Rust ON e C++ OFF passaram `report`, análise recursiva, execução
   nativa e instalação, com 4/4 testes em cada build. A repetição não alterou
   os exits nem criou arquivos residuais no corpus/prefixos temporários.
+- [x] O diagnóstico genérico `seh` passou a registrar os RVAs do handler, dos
+  dados do handler e o índice da função; a fixture `tl_seh` valida esses
+  campos nos builds Rust ON e C++ OFF. Nenhum metadado é dereferenciado por
+  causa desse diagnóstico.
 
 Próximo bloco de trabalho, ainda aberto:
 
