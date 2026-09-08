@@ -268,6 +268,23 @@ TEST(Crypt32Test, CryptQueryObjectRejectsUnsupportedInputWithoutFabricatedHandle
     EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
 }
 
+TEST(Crypt32Test, CryptMsgGetParamRejectsUnknownHandles) {
+    std::uint32_t size = 0xFFFFFFFFU;
+    std::uint8_t data[8]{};
+
+    EXPECT_EQ(tl_CryptMsgGetParam(nullptr, 0U, 0U, data, &size), 0);
+    EXPECT_EQ(size, 0U);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidHandle);
+
+    size = 0xFFFFFFFFU;
+    EXPECT_EQ(tl_CryptMsgGetParam(reinterpret_cast<void*>(1), 0U, 0U, data, &size), 0);
+    EXPECT_EQ(size, 0U);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidHandle);
+
+    EXPECT_EQ(tl_CryptMsgGetParam(reinterpret_cast<void*>(1), 0U, 0U, data, nullptr), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+}
+
 TEST(User32ExtTest, DesktopCaptureAndRectOperations) {
     EXPECT_NE(tl_GetDesktopWindow(), nullptr);
     EXPECT_NE(tl_MonitorFromWindow(nullptr, 0), nullptr);

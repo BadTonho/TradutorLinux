@@ -2400,6 +2400,57 @@ Conclusão:
   uma falha demonstrada do transporte WinSock. PuTTY continua sem suporte
   SSH declarado e sem fallback ou tratamento específico.
 
+### E39 — Rejeição segura de handles CryptMsg desconhecidos
+
+Objetivo: corrigir uma inconsistência genérica de `CRYPT32.dll` encontrada
+durante a investigação dos aplicativos que consultam certificados, sem
+fabricar estado CMS/Authenticode e sem criar tratamento específico para o
+Notepad++.
+
+Problema reproduzido:
+
+- [x] `CryptMsgGetParam` retornava sucesso e tamanho zero mesmo quando recebia
+  handle nulo ou desconhecido. Isso permitia que o convidado continuasse com
+  dados de mensagem inexistentes e produzisse exceções C++ com mensagens como
+  `The handle is invalid`.
+- [x] A tentativa experimental de deixar `0xE06D7363` seguir o dispatcher SEH
+  confirmou que os handlers convidados eram alcançados, mas terminou em
+  `SIGSEGV` durante o caminho de certificado. A alteração experimental foi
+  removida; exceções C++ gerais continuam fora do contrato.
+
+Correção genérica:
+
+- [x] `CryptMsgGetParam` agora rejeita todo handle que não foi emitido pelo
+  runtime com `FALSE`, `ERROR_INVALID_HANDLE` e `pcbData=0`; `pcbData` nulo
+  retorna `ERROR_INVALID_PARAMETER`.
+- [x] Nenhum handle, buffer, CMS ou certificado fictício é criado. O caminho
+  `CryptQueryObject` continua retornando `ERROR_NOT_SUPPORTED` para formatos
+  não implementados.
+- [x] Foi adicionada a regressão
+  `Crypt32Test.CryptMsgGetParamRejectsUnknownHandles`; a mudança permanece em
+  `src/runtime/dlls/crypto/crypt32.cpp` e não contém regra de aplicativo.
+
+Evidência reproduzível de 2026-09-08:
+
+- [x] Rust ON: os quatro testes `Crypt32Test.*` passaram, incluindo a nova
+  rejeição de handles.
+- [x] C++ OFF: os mesmos quatro testes passaram, sem campos ou símbolos Rust.
+- [x] O smoke do Notepad++ passou nos dois builds mantendo o bloqueio
+  controlado esperado (`exit 71`); a correção não foi promovida como suporte
+  GUI nem como implementação de Authenticode.
+- [x] A instalação do G HUB permaneceu controlada nos dois builds (`exit 1`),
+  sem arquivos residuais, extração ou cadastro.
+- [x] `git diff --check` passou antes do registro desta etapa.
+
+Conclusão:
+
+- [x] A semântica de erro para handles CMS desconhecidos agora é fechada e
+  determinística, evitando sucesso falso e dados parciais.
+- [x] Notepad++ continua limitado por Authenticode/CMS e exceções C++; G HUB
+  continua sendo setup encerrado pelo próprio convidado. O próximo avanço
+  funcional exigirá uma fixture e contrato próprios para CMS/Authenticode ou
+  outra decisão explícita de escopo.
+
 ## Regras de validação
 
 - Cada correção começa com uma fixture mínima e termina com testes automatizados.

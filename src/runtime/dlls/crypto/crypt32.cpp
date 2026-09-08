@@ -863,8 +863,16 @@ TL_CRYPT32_MSABI int tl_CryptMsgGetParam(void* const hCryptMsg, const std::uint3
     if (pcbData != nullptr) {
         *pcbData = 0;
     }
-    set_last_error(abi::kErrorSuccess);
-    return 1;
+    if (hCryptMsg == nullptr) {
+        set_last_error(abi::kErrorInvalidHandle);
+        return 0;
+    }
+    if (pcbData == nullptr) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    set_last_error(abi::kErrorInvalidHandle);
+    return 0;
 }
 
 TL_CRYPT32_MSABI int tl_CryptQueryObject(const std::uint32_t dwObjectType, const void* const pvObject, const std::uint32_t dwExpectedContentTypeFlags, const std::uint32_t dwExpectedFormatTypeFlags, const std::uint32_t dwFlags, std::uint32_t* const pdwMsgAndCertEncodingType, std::uint32_t* const pdwContentType, std::uint32_t* const pdwFormatType, void** const phCertStore, void** const phMsg, const void** const ppvContext) noexcept {
