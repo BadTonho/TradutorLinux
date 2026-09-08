@@ -2143,6 +2143,10 @@ Evidência reproduzível de 2026-09-08:
   '/home/tonho/Área de trabalho/Aplicativos_Windows_Populares/putty_x64.exe'`
   reproduziu `configuration reached, no bytes sent, guest-timeout 72` sem
   processo residual.
+- [x] No baseline C++ OFF, os mesmos 17 testes de locale, a matriz de report
+  do corpus e as fixtures WinSock passaram fora do sandbox; o probe PuTTY
+  reproduziu exatamente `configuration reached, no bytes sent,
+  guest-timeout 72`.
 
 Próximo bloqueio:
 
