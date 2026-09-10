@@ -53,7 +53,7 @@ Microsoft x64, ligação C e `noexcept`:
 | `RtlPcToFileHeader` | Devolve a base somente se o PC pertencer à imagem PE ativa. |
 | `RtlVirtualUnwind` | Aplica os códigos do prólogo/corpo e suas cadeias a um `CONTEXT`, restaura RIP/RSP e registradores/XMM e informa handler/dados quando solicitados. No prólogo não expõe handler; em epílogo V2 preserva contexto e parâmetros de saída, retorna sem handler e emite diagnóstico controlado. |
 | `RaiseException` | Entrada assembly Microsoft x64: fotografa o chamador antes de prólogo do hospedeiro, valida até 15 parâmetros e inicia a busca SEH. Não retorna: continua o contexto convidado, entra no bloco selecionado ou encerra controladamente. |
-| `RtlUnwind` / `RtlUnwindEx` | Percorrem `UHANDLER` até o frame alvo e usam um trampolim sem retorno para restaurar `CONTEXT`, incluindo GPRs, XMM, RSP, RIP e RAX. `RtlUnwind` captura o chamador e delega ao núcleo de `RtlUnwindEx`. |
+| `RtlUnwind` / `RtlUnwindEx` | Capturam o chamador na fronteira assembly, percorrem e chamam cada `UHANDLER` até o frame alvo, independentemente do código do registro, e usam um trampolim sem retorno para restaurar `CONTEXT`, incluindo GPRs, XMM, RSP, RIP e RAX. O subconjunto de `RtlUnwindEx` também interpreta `STATUS_UNWIND_CONSOLIDATE` (`0x80000029`): chama o callback indicado pelo primeiro parâmetro e usa o RIP devolvido. `RtlUnwind` delega ao mesmo núcleo. |
 | `UnhandledExceptionFilter` | Chama o filtro instalado por `SetUnhandledExceptionFilter` somente após a busca falhar; sem continuação válida, a exceção termina o convidado com seu código. |
 
 O contexto de metadados é local à thread de execução e é instalado antes do
@@ -71,7 +71,10 @@ somente handlers `EHANDLER`; o unwind de término percorre `UHANDLER`.
 VEH usa tokens opacos removíveis. Handlers registrados com prioridade `first`
 são chamados antes dos demais. Depois deles, `__C_specific_handler` interpreta
 apenas `SCOPE_TABLE_AMD64`: um filtro pode continuar a execução, continuar a
-busca ou selecionar o bloco `__except`. Ponteiros, tabelas, destinos, frames e
+busca ou selecionar o bloco `__except`. No unwind explícito, os `UHANDLER`
+recebem o registro com `EXCEPTION_UNWINDING` e, no frame-alvo,
+`EXCEPTION_TARGET_UNWIND`; o registro de consolidação chama o callback convidado
+validado e continua no RIP retornado. Ponteiros, tabelas, destinos, frames e
 disposições inválidos encerram o convidado com trace `seh`, sem tentar executar
 código fora da imagem ativa.
 
@@ -109,8 +112,9 @@ imprime `unwind-v2\n` e verifica trace e relatório.
 
 As fixtures `tl_seh.exe` e `tl_seh_v2.exe` registram/removem VEH, lançam uma
 exceção explícita numa thread convidada, selecionam um `__except` por
-`__C_specific_handler` e imprimem `seh\n`. A segunda promove
-deterministicamente o frame que lança para `UNWIND_INFO` V2.
+`__C_specific_handler` e imprimem `seh\n`. `tl_seh.exe` também valida a
+chamada de `UHANDLER` e o callback de consolidação de `RtlUnwindEx`; a segunda
+promove deterministicamente o frame que lança para `UNWIND_INFO` V2.
 
 ## Contrato mínimo de MSVC C++ EH
 

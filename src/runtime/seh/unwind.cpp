@@ -36,6 +36,7 @@ std::int64_t g_next_first_veh_order{-1};
 std::int64_t g_next_last_veh_order{1};
 
 constexpr std::int32_t kInvalidDisposition = 0x7FFFFFFF;
+constexpr std::uint32_t kStatusUnwindConsolidate = 0x80000029U;
 
 [[nodiscard]] bool add_u64(const std::uint64_t value, const std::uint64_t amount,
                            std::uint64_t& out) noexcept {
@@ -337,6 +338,7 @@ struct UnwoundFrame {
 
 using ExceptionRoutine = std::int32_t (TL_MSABI *)(ExceptionRecordAmd64*, void*, ContextAmd64*,
                                                    DispatcherContextAmd64*);
+using ConsolidationRoutine = std::uint64_t (TL_MSABI *)(ExceptionRecordAmd64*);
 using VectoredRoutine = std::int32_t (TL_MSABI *)(ExceptionPointersAmd64*);
 
 [[nodiscard]] bool valid_guest_code(const void* const pointer) noexcept {
@@ -360,6 +362,22 @@ using VectoredRoutine = std::int32_t (TL_MSABI *)(ExceptionPointersAmd64*);
     }
     return reinterpret_cast<ExceptionRoutine>(const_cast<void*>(routine))(
         record, reinterpret_cast<void*>(establisher), context, dispatcher);
+}
+
+[[nodiscard]] bool invoke_consolidation_callback(
+    ExceptionRecordAmd64* const record, std::uint64_t& target_ip) noexcept {
+    if (record == nullptr || record->code != kStatusUnwindConsolidate ||
+        record->parameter_count == 0U) {
+        return false;
+    }
+    const std::uint64_t callback_address = record->parameters[0];
+    if (callback_address == 0U ||
+        !valid_guest_code(reinterpret_cast<const void*>(callback_address))) {
+        return false;
+    }
+    const auto callback = reinterpret_cast<ConsolidationRoutine>(callback_address);
+    target_ip = callback(record);
+    return valid_guest_code(reinterpret_cast<const void*>(target_ip));
 }
 
 [[nodiscard]] bool validate_exception_record(const ExceptionRecordAmd64* const record) noexcept {
@@ -513,9 +531,10 @@ std::int32_t c_specific_handler(ExceptionRecordAmd64* const exception_record,
         fail_seh(exception_record != nullptr ? exception_record->code : 0U, "alvo de unwind inválido");
     }
     if (exception_record != nullptr) {
-        exception_record->flags |= kExceptionUnwinding | kExceptionTargetUnwind;
+        exception_record->flags = kExceptionUnwinding;
     }
     ContextAmd64 cursor = *context;
+    cursor.rax = reinterpret_cast<std::uintptr_t>(return_value);
     for (std::size_t depth = 0; depth <= g_unwind_image.functions.size() + 64U; ++depth) {
         const ContextAmd64 before = cursor;
         UnwoundFrame frame{};
@@ -528,22 +547,30 @@ std::int32_t c_specific_handler(ExceptionRecordAmd64* const exception_record,
                       "unwind");
         }
         if (frame.has_function && reinterpret_cast<void*>(frame.establisher_frame) == target_frame) {
-            if (exception_record != nullptr && exception_record->code == 0xE06D7363U &&
-                frame.handler != nullptr) {
+            // RtlUnwindEx invokes every UHANDLER while it walks toward the
+            // target, regardless of the exception code.  C++ EH is only one
+            // language handler that can live behind this callback; Win32
+            // images also use private handlers for explicit unwind records
+            // such as STATUS_UNWIND_CONSOLIDATE.
+            if (exception_record != nullptr) {
+                exception_record->flags |= kExceptionTargetUnwind;
+            }
+            if (exception_record != nullptr && frame.handler != nullptr) {
                 DispatcherContextAmd64 dispatcher{
                     .control_pc = before.rip,
                     .image_base = reinterpret_cast<std::uintptr_t>(g_unwind_image.base),
                     .function_entry = static_cast<std::uint32_t*>(raw_function_entry(frame.index)),
                     .establisher_frame = frame.establisher_frame,
                     .target_ip = reinterpret_cast<std::uintptr_t>(target_ip),
-                    .context_record = &cursor,
+                    .context_record = context,
                     .language_handler = frame.handler,
                     .handler_data = frame.handler_data};
                 trace_seh_handler("handler", exception_record->code, "termination", frame.handler,
                                   frame.handler_data, frame.index);
                 const std::int32_t disposition = invoke_language_handler(
-                    frame.handler, exception_record, frame.establisher_frame, &cursor, &dispatcher);
-                if (disposition == kExceptionExecuteHandler && dispatcher.target_ip != 0U) {
+                    frame.handler, exception_record, frame.establisher_frame, context, &dispatcher);
+                if (exception_record->code == 0xE06D7363U &&
+                    disposition == kExceptionExecuteHandler && dispatcher.target_ip != 0U) {
                     ContextAmd64 action_context = cursor;
                     if (!prepare_cxx_cleanup_transfer(
                             action_context, before,
@@ -562,6 +589,16 @@ std::int32_t c_specific_handler(ExceptionRecordAmd64* const exception_record,
             ContextAmd64 result = before;
             result.rip = reinterpret_cast<std::uintptr_t>(target_ip);
             result.rax = reinterpret_cast<std::uintptr_t>(return_value);
+            if (exception_record != nullptr &&
+                exception_record->code == kStatusUnwindConsolidate) {
+                std::uint64_t consolidated_ip = 0;
+                if (!invoke_consolidation_callback(exception_record, consolidated_ip)) {
+                    fail_seh(exception_record->code,
+                             "callback de consolidação inválido");
+                }
+                result.rip = consolidated_ip;
+                trace_seh("unwind", exception_record->code, "consolidated");
+            }
             if (exception_record != nullptr && exception_record->code == 0xE06D7363U &&
                 !prepare_cxx_catch_transfer(result, target_frame, target_ip)) {
                 fail_seh(exception_record->code, "transferência de catch funclet inválida");
@@ -578,19 +615,20 @@ std::int32_t c_specific_handler(ExceptionRecordAmd64* const exception_record,
                                                                exception_record->code == 0xE06D7363U
                                                            ? 0U
                                                            : reinterpret_cast<std::uintptr_t>(target_ip),
-                                              .context_record = &cursor,
+                                              .context_record = context,
                                               .language_handler = frame.handler,
                                               .handler_data = frame.handler_data};
             trace_seh_handler("handler", exception_record != nullptr ? exception_record->code : 0U,
                               "termination", frame.handler, frame.handler_data, frame.index);
             const std::int32_t disposition = invoke_language_handler(
-                frame.handler, exception_record, frame.establisher_frame, &cursor, &dispatcher);
+                frame.handler, exception_record, frame.establisher_frame, context, &dispatcher);
             if (disposition == kInvalidDisposition ||
                 (disposition != kExceptionContinueSearch && disposition != kExceptionContinueExecution)) {
                 fail_seh(exception_record != nullptr ? exception_record->code : 0U,
                          "disposição de termination handler inválida");
             }
         }
+        *context = cursor;
     }
     fail_seh(exception_record != nullptr ? exception_record->code : 0U, "frame alvo não encontrado");
 }
@@ -771,6 +809,22 @@ extern "C" [[noreturn]] void tl_dispatch_rtl_unwind_from_asm(
                               context, nullptr);
 }
 
+extern "C" [[noreturn]] void tl_dispatch_rtl_unwind_ex_from_asm(
+    runtime::ContextAmd64* const captured_context, void* const target_frame,
+    void* const target_ip, runtime::ExceptionRecordAmd64* const exception_record,
+    void* const return_value, runtime::ContextAmd64* const context_record) noexcept {
+    const std::array fields{diagnostics::TraceField{"function", "tl_RtlUnwindEx"}};
+    diagnostics::write_json_trace(diagnostics::TraceComponent::Runtime,
+                                  diagnostics::TraceLevel::Debug, "function-enter", fields);
+    runtime::ContextAmd64* working_context = captured_context;
+    if (working_context == nullptr && context_record != nullptr &&
+        runtime::validate_mapped_range(context_record, sizeof(*context_record), true)) {
+        working_context = context_record;
+    }
+    runtime::unwind_to_target(target_frame, target_ip, exception_record, return_value,
+                              working_context != nullptr ? working_context : context_record, nullptr);
+}
+
 extern "C" TL_MSABI std::uint32_t* tl_RtlLookupFunctionEntry(
     const std::uint64_t control_pc, std::uint64_t* const image_base, void*) noexcept {
     if (image_base == nullptr || !runtime::validate_mapped_range(image_base, sizeof(*image_base), true)) {
@@ -916,14 +970,6 @@ extern "C" TL_MSABI void* tl_RtlVirtualUnwind(
                         terminal->unwind.handler_data_rva;
     }
     return const_cast<std::byte*>(runtime::g_unwind_image.base) + terminal->unwind.handler_rva;
-}
-
-extern "C" TL_MSABI void tl_RtlUnwindEx(
-    void* const target_frame, void* const target_ip,
-    runtime::ExceptionRecordAmd64* const exception_record, void* const return_value,
-    runtime::ContextAmd64* const context, void* const history_table) noexcept {
-    runtime::unwind_to_target(target_frame, target_ip, exception_record, return_value,
-                              context, history_table);
 }
 
 extern "C" TL_MSABI std::int32_t tl_UnhandledExceptionFilter(

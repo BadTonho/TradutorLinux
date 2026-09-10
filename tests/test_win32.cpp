@@ -1254,6 +1254,23 @@ TEST(PrefixTest, RejectsPathsThatEscapeDriveC) {
     std::filesystem::remove_all(root);
 }
 
+TEST(PrefixTest, ResolvesExtendedLengthDrivePathsInsideDriveC) {
+    const std::filesystem::path root = std::filesystem::temp_directory_path() /
+        ("tl-prefix-extended-" + std::to_string(static_cast<unsigned long long>(::getpid())));
+    ASSERT_TRUE(prefix::initialize_prefix(root));
+
+    const auto resolved = prefix::resolve_windows_path(
+        R"(\\?\C:\Program Files\fixture.exe)", root);
+    ASSERT_FALSE(resolved.empty());
+    EXPECT_TRUE(prefix::is_path_within(resolved, prefix::get_environment_paths(root).drive_c));
+    EXPECT_EQ(std::filesystem::weakly_canonical(resolved),
+              std::filesystem::weakly_canonical(root / "drive_c" / "Program Files" / "fixture.exe"));
+    EXPECT_TRUE(prefix::resolve_windows_path(R"(\\?\C:\..\outside.txt)", root).empty());
+    EXPECT_TRUE(prefix::resolve_windows_path(R"(\\?\UNC\server\share\file.txt)", root).empty());
+
+    std::filesystem::remove_all(root);
+}
+
 TEST(PrefixTest, DriveLinksAreExplicitAndKeepCDriveConfined) {
     const std::filesystem::path root = std::filesystem::temp_directory_path() /
         ("tl-prefix-drives-" + std::to_string(static_cast<unsigned long long>(::getpid())));

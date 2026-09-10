@@ -15,6 +15,8 @@ typedef struct {
     void* context_record;
 } exception_pointers_t;
 
+void seh_unwind_target(void);
+
 __attribute__((dllimport, noreturn)) void RaiseException(uint32_t code, uint32_t flags,
                                                          uint32_t parameter_count,
                                                          const uint64_t* parameters);
@@ -39,6 +41,21 @@ static volatile uint32_t g_first_veh;
 static volatile uint32_t g_last_veh;
 static volatile uint32_t g_caught;
 static volatile uint64_t g_unwind_return;
+static volatile uint32_t g_unwind_handler_called;
+static volatile uint32_t g_unwind_callback_called;
+
+static uint64_t seh_consolidate_callback(exception_record_t* record) {
+    if (record != 0 && record->code == 0x80000029U && (record->flags & 2U) != 0U) {
+        g_unwind_callback_called = 1;
+    }
+    return (uint64_t)(uintptr_t)&seh_unwind_target;
+}
+
+static exception_record_t g_unwind_record = {
+    .code = 0x80000029U,
+    .parameter_count = 1,
+    .parameters = {(uint64_t)(uintptr_t)&seh_consolidate_callback},
+};
 
 static int seh_first_veh(exception_pointers_t* pointers) {
     if (pointers != 0 && pointers->exception_record != 0 &&
@@ -61,6 +78,17 @@ static int seh_filter(exception_pointers_t* pointers) {
                    pointers->exception_record->code == 0xE0424242U
                ? 1  /* EXCEPTION_EXECUTE_HANDLER */
                : 0; /* EXCEPTION_CONTINUE_SEARCH */
+}
+
+static int seh_unwind_handler(exception_record_t* record, void* establisher_frame,
+                              void* context, void* dispatcher) {
+    (void)establisher_frame;
+    (void)context;
+    (void)dispatcher;
+    if (record != 0 && (record->flags & 2U) != 0U) {
+        g_unwind_handler_called = 1;
+    }
+    return 1; /* ExceptionContinueSearch */
 }
 
 void seh_caught(void) {
@@ -123,20 +151,24 @@ __asm__(
     "leaq .Ltl_seh_context(%rip), %rcx\n"
     "call RtlCaptureContext\n"
     "leaq 72(%rsp), %rcx\n"
-    "leaq .Ltl_seh_unwind_target(%rip), %rdx\n"
-    "xorl %r8d, %r8d\n"
+    "leaq seh_unwind_target(%rip), %rdx\n"
+    "leaq g_unwind_record(%rip), %r8\n"
     "movabsq $0x1122334455667788, %r9\n"
     "leaq .Ltl_seh_context(%rip), %rax\n"
     "movq %rax, 32(%rsp)\n"
     "movq $0, 40(%rsp)\n"
     "call RtlUnwindEx\n"
     "ud2\n"
-    ".Ltl_seh_unwind_target:\n"
+    ".globl seh_unwind_target\n"
+    "seh_unwind_target:\n"
     "movq %rax, g_unwind_return(%rip)\n"
     "addq $56, %rsp\n"
     "popq %rbp\n"
     "popq %rbx\n"
     "ret\n"
+    ".seh_handler seh_unwind_handler, @unwind\n"
+    ".seh_handlerdata\n"
+    ".text\n"
     ".seh_endproc\n"
     ".bss\n"
     ".p2align 4\n"
@@ -164,6 +196,12 @@ void tl_entry(void) {
     seh_unwind_probe();
     if (g_unwind_return != 0x1122334455667788ULL) {
         ExitProcess(4);
+    }
+    if (g_unwind_handler_called == 0) {
+        ExitProcess(8);
+    }
+    if (g_unwind_callback_called == 0) {
+        ExitProcess(9);
     }
     void* const thread = CreateThread(0, 0, seh_thread, 0, 0, 0);
     if (thread == 0 || WaitForSingleObject(thread, 0xffffffffU) != 0 || CloseHandle(thread) == 0) {

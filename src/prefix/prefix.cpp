@@ -121,6 +121,18 @@ std::filesystem::path resolve_windows_path(
 
     std::string_view view = normalized;
 
+    // O prefixo Win32 de caminho estendido não muda o drive lógico. Removê-lo
+    // antes da resolução evita tratar "?\\C:" como componentes do drive C.
+    // UNC estendido continua fora do subconjunto de drives virtuais suportado;
+    // rejeitá-lo é preferível a transformar um caminho de rede em um caminho
+    // local ambíguo.
+    if (view.starts_with("//?/")) {
+        view.remove_prefix(4);
+        if (view.starts_with("UNC/")) {
+            return {};
+        }
+    }
+
     const auto confined_drive_path = [&prefix_root](const std::filesystem::path& candidate) {
         const auto drive = get_environment_paths(prefix_root).drive_c;
         std::error_code ec;

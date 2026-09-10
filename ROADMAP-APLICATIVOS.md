@@ -2643,6 +2643,44 @@ Correção e evidência:
   a execução permanece não tentada para arquiteturas fora do escopo e o
   desempacotamento genérico de HWiNFO continua uma limitação publicada.
 
+### E44 — Contrato de `RtlUnwindEx` e consolidação SEH x64
+
+Objetivo: fechar a lacuna genérica observada no unwind explícito de imagens
+PE32+ AMD64, sem introduzir regras ou shims para o WinRAR. O contrato cobre a
+captura do chamador na fronteira Microsoft x64, a chamada dos `UHANDLER` e a
+consolidação por callback.
+
+Evidência reproduzível de 2026-09-10:
+
+- [x] `RtlUnwindEx` passou a ter entrada assembly própria: captura o contexto
+  do chamador antes da ponte System V, recupera os cinco argumentos Microsoft
+  x64 e delega ao mesmo núcleo de unwind; `RtlUnwind` continua usando o caminho
+  equivalente já existente.
+- [x] O unwind explícito chama cada `UHANDLER` encontrado até o frame-alvo,
+  aplica `EXCEPTION_UNWINDING`/`EXCEPTION_TARGET_UNWIND`, preserva o valor de
+  retorno em `RAX` e valida os destinos antes do trampoline de restauração.
+- [x] O registro `STATUS_UNWIND_CONSOLIDATE` (`0x80000029`) chama o callback
+  convidado indicado pelo primeiro parâmetro e usa somente o RIP retornado
+  depois da validação de pertencimento à imagem.
+- [x] `tl_seh.exe` foi ampliada como fixture genérica para exigir `UHANDLER`,
+  `RtlUnwindEx`, `RAX` e o callback de consolidação; os quatro testes SEH
+  correspondentes passaram no build Debug, assim como os 468 testes unitários
+  (um skip ambiental de interfaces de rede).
+- [x] O teste de caminho estendido `\\?\C:\...` agora remove o prefixo sem
+  escapar do drive virtual e rejeita UNC estendido; os casos de prefixo
+  passaram junto com a suíte unitária.
+- [x] O smoke oficial de cancelamento do WinRAR continuou passando com
+  `ExitProcess(0)` sob Xvfb. A interação `Return` foi revalidada separadamente:
+  chega ao cleanup/unwind convidado, mas ainda termina com `guest-signal`/exit
+  `71`; isso não é promovido a suporte de extração.
+
+Limitação aberta:
+
+- [ ] Modelar e validar a ponte de pilha/contexto usada por cleanups aninhados
+  e callbacks de consolidação reais. A próxima correção deve começar por uma
+  fixture PE32+ genérica de unwind aninhado; nenhuma regra específica de
+  WinRAR deve ser adicionada.
+
 ## Regras de validação
 
 - Cada correção começa com uma fixture mínima e termina com testes automatizados.

@@ -88,6 +88,28 @@ tl_RtlUnwind:
     ud2
 .size tl_RtlUnwind, .-tl_RtlUnwind
 
+.globl tl_RtlUnwindEx
+.type tl_RtlUnwindEx, @function
+tl_RtlUnwindEx:
+    capture_context
+    movq %rsp, %rdi
+    movq 128(%rsp), %rsi
+    movq 136(%rsp), %rdx
+    movq 184(%rsp), %rcx
+    movq 192(%rsp), %r8
+    movq 1280(%rsp), %r9
+    leaq .Ltl_RtlUnwindEx_name(%rip), %rdi
+    callq trace_assembly_function_entry
+    movq %rsp, %rdi
+    movq 128(%rsp), %rsi
+    movq 136(%rsp), %rdx
+    movq 184(%rsp), %rcx
+    movq 192(%rsp), %r8
+    movq 1280(%rsp), %r9
+    callq tl_dispatch_rtl_unwind_ex_from_asm
+    ud2
+.size tl_RtlUnwindEx, .-tl_RtlUnwindEx
+
 .globl tl_restore_guest_context_and_jump
 .type tl_restore_guest_context_and_jump, @function
 tl_restore_guest_context_and_jump:
@@ -140,6 +162,8 @@ tl_restore_guest_context_and_jump:
     .asciz "tl_RaiseException"
 .Ltl_RtlUnwind_name:
     .asciz "tl_RtlUnwind"
+.Ltl_RtlUnwindEx_name:
+    .asciz "tl_RtlUnwindEx"
 .Ltl_restore_guest_context_and_jump_name:
     .asciz "tl_restore_guest_context_and_jump"
 
