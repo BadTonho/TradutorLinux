@@ -2601,8 +2601,14 @@ Critério de saída:
   quatro matrizes `popular_apps_*_matrix` passaram nos dois backends, cobrindo
   report, report recursivo, execução nativa e instalação, com timeout, memória,
   prefixos temporários e comparação de trace/exit code preservados.
-- [ ] A promoção não relaxa W^X, não converte sinais Linux em exceções
-  convidadas e não usa o parser C++ como fallback de produção.
+- [x] A promoção não relaxa W^X, não converte sinais Linux em exceções
+  convidadas e não usa o parser C++ como fallback de produção. A validação final
+  de 2026-09-10 passou nos dois backends: `ImageMapperTest.DowngradesWritableExecutableSectionToReadWrite`,
+  `runtime_tl_crash_guest_signal`, `app_run_tl_crash_guest_signal`,
+  `CommandRunTest.DirectRustReportPreservesStructuredParseFailure`,
+  `CommandRunTest.AppRunReportRemainsOnCppParserPath`,
+  `RustAppCatalogParserTest.PromotedLoadRejectsCppPermissiveInputAtomically` e
+  `integration_rust_app_run_malformed`, sem fallback ou mapeamento após rejeição.
 
 ### E43 — Rodada controlada de CPU-Z, GPU-Z, HWMonitor e HWiNFO
 

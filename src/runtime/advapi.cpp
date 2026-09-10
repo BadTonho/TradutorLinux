@@ -27,6 +27,7 @@ namespace {
 
 constexpr std::uintptr_t kHkeyCurrentUser = 0x80000001U;
 constexpr std::uint32_t kRegSz = 1;
+constexpr std::uint32_t kRegExpandSz = 2;
 constexpr std::uint32_t kErrorFileNotFound = 2;
 constexpr std::uint32_t kErrorMoreData = 234;
 constexpr std::uint32_t kErrorInvalidParameter = 87;
@@ -65,6 +66,100 @@ std::string wide_to_utf8(const std::uint16_t* value) {
         return {};
     }
     return util::wide_to_utf8(value);
+}
+
+bool is_string_value(const std::uint32_t type) noexcept {
+    return type == kRegSz || type == kRegExpandSz;
+}
+
+std::vector<unsigned char> ansi_string_to_utf8(const unsigned char* data,
+                                               const std::uint32_t data_size) {
+    std::vector<unsigned char> result;
+    result.reserve(data_size * 2U);
+    for (std::size_t index = 0; index < data_size; ++index) {
+        const std::uint32_t codepoint = util::cp1252_to_unicode(data[index]);
+        if (codepoint == 0) {
+            result.push_back(0);
+            break;
+        }
+        char bytes[4]{};
+        const std::size_t count = util::utf8_bytes_for(codepoint, bytes);
+        result.insert(result.end(), bytes, bytes + static_cast<std::ptrdiff_t>(count));
+    }
+    if (result.empty() || result.back() != 0) {
+        result.push_back(0);
+    }
+    return result;
+}
+
+std::vector<unsigned char> wide_string_to_utf8(const unsigned char* data,
+                                               const std::uint32_t data_size) {
+    if ((data_size % sizeof(std::uint16_t)) != 0) {
+        return {};
+    }
+    const std::size_t unit_count = data_size / sizeof(std::uint16_t);
+    std::vector<std::uint16_t> units(unit_count + 1U, 0);
+    for (std::size_t index = 0; index < unit_count; ++index) {
+        units[index] = static_cast<std::uint16_t>(data[index * 2U]) |
+                       (static_cast<std::uint16_t>(data[index * 2U + 1U]) << 8U);
+    }
+    const std::string utf8 = util::wide_to_utf8(units.data(), units.size());
+    std::vector<unsigned char> result(utf8.begin(), utf8.end());
+    result.push_back(0);
+    return result;
+}
+
+std::vector<unsigned char> string_value_to_utf8(const unsigned char* data,
+                                                const std::uint32_t data_size,
+                                                const bool wide) {
+    if (data_size == 0) {
+        return {0};
+    }
+    return wide ? wide_string_to_utf8(data, data_size)
+                : ansi_string_to_utf8(data, data_size);
+}
+
+std::vector<unsigned char> utf8_string_to_wide(const std::vector<unsigned char>& data) {
+    const auto terminator = std::find(data.begin(), data.end(), static_cast<unsigned char>(0));
+    const std::string_view utf8{reinterpret_cast<const char*>(data.data()),
+                                static_cast<std::size_t>(terminator - data.begin())};
+    const std::u16string wide = util::utf8_to_wide(utf8);
+    std::vector<unsigned char> result;
+    result.reserve((wide.size() + 1U) * sizeof(std::uint16_t));
+    for (const char16_t unit : wide) {
+        result.push_back(static_cast<unsigned char>(unit & 0xFFU));
+        result.push_back(static_cast<unsigned char>(unit >> 8U));
+    }
+    result.push_back(0);
+    result.push_back(0);
+    return result;
+}
+
+std::vector<unsigned char> utf8_string_to_ansi(const std::vector<unsigned char>& data) {
+    const auto terminator = std::find(data.begin(), data.end(), static_cast<unsigned char>(0));
+    const char* const bytes = reinterpret_cast<const char*>(data.data());
+    const std::size_t length = static_cast<std::size_t>(terminator - data.begin());
+    std::vector<unsigned char> result;
+    result.reserve(length + 1U);
+    std::size_t position = 0;
+    while (position < length) {
+        const std::uint32_t codepoint = util::decode_utf8(bytes, length, position);
+        std::uint8_t byte = '?';
+        if (codepoint != util::kInvalidCodepoint) {
+            (void)util::unicode_to_cp1252(codepoint, byte);
+        }
+        result.push_back(byte);
+    }
+    result.push_back(0);
+    return result;
+}
+
+std::vector<unsigned char> registry_data_for_query(const RegistryValue& value,
+                                                   const bool wide) {
+    if (!is_string_value(value.type)) {
+        return value.data;
+    }
+    return wide ? utf8_string_to_wide(value.data) : utf8_string_to_ansi(value.data);
 }
 
 std::string registry_path() {
@@ -271,7 +366,8 @@ std::uint32_t open_key(const void* key, const std::string& subkey, void** result
 }
 
 std::uint32_t set_value(const void* key, const std::string& name, const std::uint32_t type,
-                        const unsigned char* data, const std::uint32_t data_size) noexcept {
+                        const unsigned char* data, const std::uint32_t data_size,
+                        const bool wide) noexcept {
     if (data_size != 0 && (data == nullptr || !mapped_range(data, data_size, false))) {
         return abi::kErrorInvalidParameter;
     }
@@ -286,7 +382,12 @@ std::uint32_t set_value(const void* key, const std::string& name, const std::uin
     });
     RegistryValue replacement{open->path, name, type, {}};
     if (data_size != 0) {
-        replacement.data.assign(data, data + data_size);
+        replacement.data = is_string_value(type)
+                               ? string_value_to_utf8(data, data_size, wide)
+                               : std::vector<unsigned char>{data, data + data_size};
+        if (is_string_value(type) && replacement.data.empty()) {
+            return kErrorInvalidParameter;
+        }
     }
     if (found == g_values.end()) {
         g_values.push_back(std::move(replacement));
@@ -298,7 +399,8 @@ std::uint32_t set_value(const void* key, const std::string& name, const std::uin
 }
 
 std::uint32_t query_value(const void* key, const std::string& name, std::uint32_t* type,
-                          unsigned char* data, std::uint32_t* data_size) noexcept {
+                          unsigned char* data, std::uint32_t* data_size,
+                          const bool wide) noexcept {
     if (data_size == nullptr || !mapped_range(data_size, sizeof(*data_size), true) ||
         (type != nullptr && !mapped_range(type, sizeof(*type), true))) {
         return abi::kErrorInvalidParameter;
@@ -318,7 +420,8 @@ std::uint32_t query_value(const void* key, const std::string& name, std::uint32_
     if (type != nullptr) {
         *type = found->type;
     }
-    const std::uint32_t required = static_cast<std::uint32_t>(found->data.size());
+    const std::vector<unsigned char> output = registry_data_for_query(*found, wide);
+    const std::uint32_t required = static_cast<std::uint32_t>(output.size());
     if (data == nullptr || *data_size < required) {
         *data_size = required;
         return data == nullptr ? abi::kErrorSuccess : kErrorMoreData;
@@ -326,7 +429,7 @@ std::uint32_t query_value(const void* key, const std::string& name, std::uint32_
     if (required != 0 && !mapped_range(data, required, true)) {
         return abi::kErrorInvalidParameter;
     }
-    std::copy(found->data.begin(), found->data.end(), data);
+    std::copy(output.begin(), output.end(), data);
     *data_size = required;
     return abi::kErrorSuccess;
 }
@@ -424,7 +527,7 @@ TL_ADVAPI_MSABI std::uint32_t tl_RegQueryValueExA(const void* key, const char* v
     if (!mapped_cstring(value_name)) {
         return kErrorInvalidParameter;
     }
-    return query_value(key, value_name, type, data, data_size);
+    return query_value(key, value_name, type, data, data_size, false);
 }
 
 TL_ADVAPI_MSABI std::uint32_t tl_RegQueryValueExW(const void* key,
@@ -436,7 +539,7 @@ TL_ADVAPI_MSABI std::uint32_t tl_RegQueryValueExW(const void* key,
     if (!mapped_wstring(value_name)) {
         return kErrorInvalidParameter;
     }
-    return query_value(key, wide_to_utf8(value_name), type, data, data_size);
+    return query_value(key, wide_to_utf8(value_name), type, data, data_size, true);
 }
 
 TL_ADVAPI_MSABI std::uint32_t tl_RegSetValueExA(const void* key, const char* value_name,
@@ -448,7 +551,7 @@ TL_ADVAPI_MSABI std::uint32_t tl_RegSetValueExA(const void* key, const char* val
     if (!mapped_cstring(value_name)) {
         return kErrorInvalidParameter;
     }
-    return set_value(key, value_name, type, data, data_size);
+    return set_value(key, value_name, type, data, data_size, false);
 }
 
 TL_ADVAPI_MSABI std::uint32_t tl_RegSetValueExW(const void* key,
@@ -461,7 +564,7 @@ TL_ADVAPI_MSABI std::uint32_t tl_RegSetValueExW(const void* key,
     if (!mapped_wstring(value_name)) {
         return kErrorInvalidParameter;
     }
-    return set_value(key, wide_to_utf8(value_name), type, data, data_size);
+    return set_value(key, wide_to_utf8(value_name), type, data, data_size, true);
 }
 
 TL_ADVAPI_MSABI std::uint32_t tl_RegDeleteValueA(const void* key, const char* value_name) noexcept {

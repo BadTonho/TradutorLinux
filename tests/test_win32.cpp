@@ -445,6 +445,73 @@ TEST(Win32RegistryTest, TodoAutorunValueRoundTrips) {
     EXPECT_EQ(tl_RegCloseKey(sign_extended_key), abi::kErrorSuccess);
     std::remove(".tl_registry_todo");
 }
+
+TEST(Win32RegistryTest, WideQueryConvertsDefaultProgramFilesValueToUtf16) {
+    const void* local_machine = reinterpret_cast<const void*>(0x80000002U);
+    const std::u16string subkey_text = u"Software\\Microsoft\\Windows\\CurrentVersion";
+    const std::u16string value_name_text = u"ProgramFilesDir";
+    void* key = nullptr;
+    ASSERT_EQ(tl_RegOpenKeyExW(
+                  local_machine,
+                  reinterpret_cast<const std::uint16_t*>(subkey_text.c_str()), 0, 0, &key),
+              abi::kErrorSuccess);
+
+    std::uint32_t type = 0;
+    std::uint32_t byte_count = 0;
+    ASSERT_EQ(tl_RegQueryValueExW(
+                  key, reinterpret_cast<const std::uint16_t*>(value_name_text.c_str()), nullptr,
+                  &type, nullptr, &byte_count),
+              abi::kErrorSuccess);
+    EXPECT_EQ(type, 1U);
+    EXPECT_EQ(byte_count, (std::u16string{u"C:\\Program Files"}.size() + 1U) * 2U);
+
+    std::vector<unsigned char> wide_data(byte_count);
+    ASSERT_EQ(tl_RegQueryValueExW(
+                  key, reinterpret_cast<const std::uint16_t*>(value_name_text.c_str()), nullptr,
+                  nullptr, wide_data.data(), &byte_count),
+              abi::kErrorSuccess);
+    std::u16string decoded;
+    for (std::size_t index = 0; index + 1U < wide_data.size(); index += 2U) {
+        const char16_t unit = static_cast<char16_t>(wide_data[index]) |
+                              static_cast<char16_t>(wide_data[index + 1U]) << 8U;
+        if (unit == 0) {
+            break;
+        }
+        decoded.push_back(unit);
+    }
+    EXPECT_EQ(decoded, u"C:\\Program Files");
+    EXPECT_EQ(tl_RegCloseKey(key), abi::kErrorSuccess);
+}
+
+TEST(Win32RegistryTest, WideSetAndAnsiQueryUseTheSameStringValue) {
+    const void* current_user = reinterpret_cast<const void*>(0x80000001U);
+    const std::u16string subkey_text = u"Software\\TradutorLinux\\RegistryTest";
+    const std::u16string value_name_text = u"WideValue";
+    const std::u16string value_text = u"C:\\Program Files\\WinRAR";
+    void* key = nullptr;
+    ASSERT_EQ(tl_RegCreateKeyExW(
+                  current_user,
+                  reinterpret_cast<const std::uint16_t*>(subkey_text.c_str()), 0, nullptr, 0, 0,
+                  nullptr, &key, nullptr),
+              abi::kErrorSuccess);
+    ASSERT_EQ(tl_RegSetValueExW(
+                  key, reinterpret_cast<const std::uint16_t*>(value_name_text.c_str()), 0, 1,
+                  reinterpret_cast<const unsigned char*>(value_text.c_str()),
+                  static_cast<std::uint32_t>((value_text.size() + 1U) * sizeof(char16_t))),
+              abi::kErrorSuccess);
+
+    const char value_name[] = "WideValue";
+    std::array<unsigned char, 64> ansi{};
+    std::uint32_t byte_count = static_cast<std::uint32_t>(ansi.size());
+    ASSERT_EQ(tl_RegQueryValueExA(key, value_name, nullptr, nullptr, ansi.data(), &byte_count),
+              abi::kErrorSuccess);
+    EXPECT_STREQ(reinterpret_cast<const char*>(ansi.data()), "C:\\Program Files\\WinRAR");
+    EXPECT_EQ(tl_RegDeleteValueW(
+                  key, reinterpret_cast<const std::uint16_t*>(value_name_text.c_str())),
+              abi::kErrorSuccess);
+    EXPECT_EQ(tl_RegCloseKey(key), abi::kErrorSuccess);
+}
+
 TEST(Win32EnvTest, GetEnvironmentVariableWConvertsResult) {
     const std::uint16_t name[] = {'P', 'A', 'T', 'H', 0};
     const std::uint32_t needed = tl_GetEnvironmentVariableW(name, nullptr, 0);
