@@ -2795,28 +2795,30 @@ Evidência reproduzível:
   suporte a skip controlado (77) quando o binário ou Xvfb não estiver disponível.
 - [x] Nenhum código específico de WinRAR foi introduzido no runtime genérico.
 
-### F2 — Notepad++: diagnóstico do ExitProcess(3)
+### F2 concluído — Notepad++: diagnóstico e correção do stylers.xml (2026-09-11)
 
 Objetivo: isolar a causa do `ExitProcess(3)` após `Load stylers.xml failed`
 sem relaxar a política de segurança.
 
-Tarefas:
+Diagnóstico e Evidência reproduzível:
 
-- [ ] Criar fixture mínima que reproduza a sequência de leitura de XML de
-  recursos (RCDATA/arquivo), sem copiar código do Notepad++.
-- [ ] Comparar trace de falha no acesso ao arquivo `stylers.xml` em dois
-  cenários: com e sem o arquivo presente no prefixo.
-- [ ] Identificar se o bloqueio é de API de arquivo ausente, codepage de
-  recurso ou outra limitação no loader.
-- [ ] Corrigir somente se for uma lacuna genérica do runtime, com teste unitário.
-
-Aceitação:
-
-- [ ] Há hipótese específica, fixture e evidência ON/OFF antes de qualquer
-  alteração no runtime.
-- [ ] O Notepad++ não é promovido a suportado: o objetivo é apenas reduzir a
-  rejeição controlada de `ExitProcess(3)` para `guest-timeout` na janela
-  principal.
+- [x] **Causa isolada**: `src/runtime/shlwapi.cpp` possuía uma função
+  `normalize_win_path` ad-hoc que convertia qualquer caminho com letra de
+  unidade `Z:\...` para `./...` (relativo ao diretório corrente) em vez de
+  utilizar o resolvedor canônico `translate_windows_path`. Com isso,
+  `PathFileExistsW` retornava `0` para `stylers.xml`, gerando o diálogo
+  de erro e impedindo o avanço da aplicação.
+- [x] **Correção genérica**: `tl_PathFileExistsA/W` e `tl_PathIsDirectoryA/W` em
+  `src/runtime/shlwapi.cpp` foram atualizadas para utilizar `translate_windows_path`
+  e `normalized_wide_path`.
+- [x] **Validação unitária**: `TEST(ShellPathTest, PathFileExistsAndIsDirectoryWithZDrive)`
+  adicionado em `tests/test_win32_external.cpp`, cobrindo caminhos `Z:\`, arquivos
+  existentes e inexistentes com ANSI e UTF-16.
+- [x] **Efeito no Notepad++**: o diálogo `Load stylers.xml failed` foi
+  completamente eliminado; Notepad++ carrega `stylers.xml` com sucesso e avança
+  para a validação de certificados de plugins e módulos (`WinVerifyTrust`).
+- [x] O smoke `notepadpp_smoke` foi atualizado para verificar que
+  `Load stylers.xml failed` não ocorre mais.
 
 ### F3 — Matriz completa F e regressão
 

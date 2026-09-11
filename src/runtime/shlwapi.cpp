@@ -30,22 +30,6 @@ inline bool mapped_range(const void* address, const std::size_t size, const bool
     return runtime::validate_mapped_range(address, size, writable);
 }
 
-std::string normalize_win_path(const std::string& path) {
-    std::string out = path;
-    for (char& c : out) {
-        if (c == '\\') c = '/';
-    }
-    // Remove C: or similar drive letter prefix if present
-    if (out.size() >= 2 && std::isalpha(static_cast<unsigned char>(out[0])) && out[1] == ':') {
-        out = out.substr(2);
-        if (out.empty() || out[0] != '/') {
-            out = "/" + out;
-        }
-        out = "." + out; // translate to current root/prefix
-    }
-    return out;
-}
-
 }  // namespace
 
 extern "C" {
@@ -54,14 +38,27 @@ TL_SHLWAPI_MSABI int tl_PathFileExistsA(const char* path) noexcept {
     if (!mapped_cstring(path) || path[0] == '\0') {
         return 0;
     }
-    const std::string norm = normalize_win_path(path);
+    char normalized[4096]{};
+    if (translate_windows_path(path, normalized, sizeof(normalized))) {
+        struct stat st{};
+        if (stat(normalized, &st) == 0) {
+            return 1;
+        }
+    }
     struct stat st{};
-    return (stat(norm.c_str(), &st) == 0 || stat(path, &st) == 0) ? 1 : 0;
+    return stat(path, &st) == 0 ? 1 : 0;
 }
 
 TL_SHLWAPI_MSABI int tl_PathFileExistsW(const std::uint16_t* path) noexcept {
     if (!mapped_wstring(path)) {
         return 0;
+    }
+    char normalized[4096]{};
+    if (normalized_wide_path(path, normalized)) {
+        struct stat st{};
+        if (stat(normalized, &st) == 0) {
+            return 1;
+        }
     }
     const std::string utf8 = util::wide_to_utf8(path);
     return tl_PathFileExistsA(utf8.c_str());
@@ -71,9 +68,15 @@ TL_SHLWAPI_MSABI int tl_PathIsDirectoryA(const char* path) noexcept {
     if (!mapped_cstring(path) || path[0] == '\0') {
         return 0;
     }
-    const std::string norm = normalize_win_path(path);
+    char normalized[4096]{};
+    if (translate_windows_path(path, normalized, sizeof(normalized))) {
+        struct stat st{};
+        if (stat(normalized, &st) == 0) {
+            return S_ISDIR(st.st_mode) ? 1 : 0;
+        }
+    }
     struct stat st{};
-    if (stat(norm.c_str(), &st) == 0 || stat(path, &st) == 0) {
+    if (stat(path, &st) == 0) {
         return S_ISDIR(st.st_mode) ? 1 : 0;
     }
     return 0;
@@ -82,6 +85,13 @@ TL_SHLWAPI_MSABI int tl_PathIsDirectoryA(const char* path) noexcept {
 TL_SHLWAPI_MSABI int tl_PathIsDirectoryW(const std::uint16_t* path) noexcept {
     if (!mapped_wstring(path)) {
         return 0;
+    }
+    char normalized[4096]{};
+    if (normalized_wide_path(path, normalized)) {
+        struct stat st{};
+        if (stat(normalized, &st) == 0) {
+            return S_ISDIR(st.st_mode) ? 1 : 0;
+        }
     }
     const std::string utf8 = util::wide_to_utf8(path);
     return tl_PathIsDirectoryA(utf8.c_str());

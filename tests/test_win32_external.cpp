@@ -1,5 +1,6 @@
 #include "test_win32_common.hpp"
 #include "tradutorlinux/win32/kernel32.hpp"
+#include "tradutorlinux/runtime/shlwapi.hpp"
 
 namespace tradutorlinux {
 namespace {
@@ -391,6 +392,22 @@ TEST(ShellPathTest, PathIsRelativeAndAutoComplete) {
 
     std::uint8_t op_buf[100]{};
     EXPECT_EQ(tl_SHFileOperationW(op_buf), 0);
+}
+
+TEST(ShellPathTest, PathFileExistsAndIsDirectoryWithZDrive) {
+    EXPECT_EQ(tl_PathFileExistsA("Z:\\etc\\passwd"), 1);
+    EXPECT_EQ(tl_PathIsDirectoryA("Z:\\etc"), 1);
+    EXPECT_EQ(tl_PathIsDirectoryA("Z:\\etc\\passwd"), 0);
+
+    constexpr std::uint16_t z_passwd[] = {u'Z', u':', u'\\', u'e', u't', u'c', u'\\', u'p', u'a', u's', u's', u'w', u'd', 0};
+    constexpr std::uint16_t z_etc[] = {u'Z', u':', u'\\', u'e', u't', u'c', 0};
+    constexpr std::uint16_t z_missing[] = {u'Z', u':', u'\\', u'n', u'o', u'n', u'e', u'x', u'i', u's', u't', u'e', u'n', u't', 0};
+
+    EXPECT_EQ(tl_PathFileExistsW(z_passwd), 1);
+    EXPECT_EQ(tl_PathIsDirectoryW(z_etc), 1);
+    EXPECT_EQ(tl_PathIsDirectoryW(z_passwd), 0);
+    EXPECT_EQ(tl_PathFileExistsW(z_missing), 0);
+    EXPECT_EQ(tl_PathIsDirectoryW(z_missing), 0);
 }
 
 TEST(IphlpapiTest, EnumeratesLinuxAdaptersWithWin32BufferContracts) {
