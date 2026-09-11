@@ -54,7 +54,7 @@ case-insensitive (ou o nome nulo para o padrão). Ambos fornecem idioma, país,
 ISO, decimal, milhar, moeda, AM/PM e code page, inclusive
 `LOCALE_RETURN_NUMBER` para os tipos numéricos cobertos.
 
-`IsValidCodePage` aceita somente ACP/1252, OEM/437 e UTF-8. `IsValidLocale`
+`IsValidCodePage` aceita ACP/1252, OEM/437, UTF-8, CP 1250 (Central European), CP 1251 (Cyrillic) e CP 28591 (ISO-8859-1 Latin-1). `IsValidLocale`
 aceita o locale fixo para as flags `LCID_INSTALLED` e `LCID_SUPPORTED`.
 `EnumSystemLocalesW` chama uma única vez um callback Microsoft x64 validado da
 imagem convidada, com a string `0409`, para essas mesmas flags; callback

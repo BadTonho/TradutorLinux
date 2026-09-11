@@ -1117,10 +1117,12 @@ imports não encerra B5.
   mapeamentos externos. A fixture `tl_virtual_query.exe` valida reserva,
   commit, mudança de proteção, `RegionSize`, `Type` e liberação; unitário,
   metadata, `--report` e execução passam em Debug.
-- [ ] **B13 — Tabelas de codepage versionadas como dados.** Extrair as tabelas
-  embutidas para dados gerados de fonte pública somente quando um aplicativo
-  exigir outra página além de CP 0/1252/437/65001; versionar a fonte e testar
-  conversões e erros.
+- [x] **B13 — Tabelas de codepage versionadas como dados.** Extraídas e expandidas
+  tabelas de codepage com dados de fontes públicas para CP 1250 (Central European),
+  CP 1251 (Cyrillic) e CP 28591 (ISO-8859-1 Latin-1), além de CP 0/1252/437/65001.
+  Suportadas em `MultiByteToWideChar`, `WideCharToMultiByte`, `GetCPInfo` e
+  `IsValidCodePage`, com busca reversa constexpr O(log N) e testes unitários de
+  conversão e ida-e-volta (`Win32CodePageTest`).
 - [x] **B14 — Perfil de compatibilidade por aplicativo e extensões
   condicionados.** Cada prefixo poderá ter uma área `compat/` ao lado de
   `drive_c`: `drive_c` mantém os arquivos reais do convidado, enquanto

@@ -1985,5 +1985,105 @@ TEST(Win32HandleObjectTest, DuplicateHandleSyncObject) {
     EXPECT_EQ(tl_CloseHandle(event), 0);
 }
 
+TEST(Win32CodePageTest, CP1250RoundTrip) {
+    // 0x8A = Š (U+0160), 0x9A = š (U+0161), 0x8E = Ž (U+017D), 0x9E = ž (U+017E), 0xA3 = Ł (U+0141), 0xB3 = ł (U+0142)
+    const char cp1250_input[] = {static_cast<char>(0x8A), static_cast<char>(0x9A),
+                                  static_cast<char>(0x8E), static_cast<char>(0x9E),
+                                  static_cast<char>(0xA3), static_cast<char>(0xB3), 0};
+    std::uint16_t wide[8]{};
+    const int converted = tl_MultiByteToWideChar(abi::kCp1250, 0, cp1250_input, -1, wide, 8);
+    ASSERT_EQ(converted, 7);
+    EXPECT_EQ(wide[0], 0x0160U);
+    EXPECT_EQ(wide[1], 0x0161U);
+    EXPECT_EQ(wide[2], 0x017DU);
+    EXPECT_EQ(wide[3], 0x017EU);
+    EXPECT_EQ(wide[4], 0x0141U);
+    EXPECT_EQ(wide[5], 0x0142U);
+    EXPECT_EQ(wide[6], 0U);
+
+    char back[8]{};
+    int used_default = 0;
+    const int back_len = tl_WideCharToMultiByte(abi::kCp1250, 0, wide, -1, back, 8, nullptr, &used_default);
+    ASSERT_EQ(back_len, 7);
+    EXPECT_EQ(used_default, 0);
+    EXPECT_EQ(static_cast<unsigned char>(back[0]), 0x8AU);
+    EXPECT_EQ(static_cast<unsigned char>(back[1]), 0x9AU);
+    EXPECT_EQ(static_cast<unsigned char>(back[2]), 0x8EU);
+    EXPECT_EQ(static_cast<unsigned char>(back[3]), 0x9EU);
+    EXPECT_EQ(static_cast<unsigned char>(back[4]), 0xA3U);
+    EXPECT_EQ(static_cast<unsigned char>(back[5]), 0xB3U);
+}
+
+TEST(Win32CodePageTest, CP1251RoundTrip) {
+    // "Привет": П (0xCF = U+041F), р (0xF0 = U+0440), и (0xE8 = U+0438), в (0xE2 = U+0432), е (0xE5 = U+0435), т (0xF2 = U+0442)
+    const char cp1251_input[] = {static_cast<char>(0xCF), static_cast<char>(0xF0),
+                                  static_cast<char>(0xE8), static_cast<char>(0xE2),
+                                  static_cast<char>(0xE5), static_cast<char>(0xF2), 0};
+    std::uint16_t wide[8]{};
+    const int converted = tl_MultiByteToWideChar(abi::kCp1251, 0, cp1251_input, -1, wide, 8);
+    ASSERT_EQ(converted, 7);
+    EXPECT_EQ(wide[0], 0x041FU);
+    EXPECT_EQ(wide[1], 0x0440U);
+    EXPECT_EQ(wide[2], 0x0438U);
+    EXPECT_EQ(wide[3], 0x0432U);
+    EXPECT_EQ(wide[4], 0x0435U);
+    EXPECT_EQ(wide[5], 0x0442U);
+
+    char back[8]{};
+    int used_default = 0;
+    const int back_len = tl_WideCharToMultiByte(abi::kCp1251, 0, wide, -1, back, 8, nullptr, &used_default);
+    ASSERT_EQ(back_len, 7);
+    EXPECT_EQ(used_default, 0);
+    EXPECT_EQ(static_cast<unsigned char>(back[0]), 0xCFU);
+    EXPECT_EQ(static_cast<unsigned char>(back[1]), 0xF0U);
+    EXPECT_EQ(static_cast<unsigned char>(back[2]), 0xE8U);
+    EXPECT_EQ(static_cast<unsigned char>(back[3]), 0xE2U);
+    EXPECT_EQ(static_cast<unsigned char>(back[4]), 0xE5U);
+    EXPECT_EQ(static_cast<unsigned char>(back[5]), 0xF2U);
+}
+
+TEST(Win32CodePageTest, CP28591RoundTrip) {
+    const char latin1_input[] = {'H', 'e', 'l', 'l', 'o', static_cast<char>(0xE9), static_cast<char>(0xC0), 0};
+    std::uint16_t wide[10]{};
+    const int converted = tl_MultiByteToWideChar(abi::kCp28591, 0, latin1_input, -1, wide, 10);
+    ASSERT_EQ(converted, 8);
+    EXPECT_EQ(wide[5], 0x00E9U);
+    EXPECT_EQ(wide[6], 0x00C0U);
+
+    char back[10]{};
+    int used_default = 0;
+    const int back_len = tl_WideCharToMultiByte(abi::kCp28591, 0, wide, -1, back, 10, nullptr, &used_default);
+    ASSERT_EQ(back_len, 8);
+    EXPECT_EQ(used_default, 0);
+    EXPECT_EQ(static_cast<unsigned char>(back[5]), 0xE9U);
+    EXPECT_EQ(static_cast<unsigned char>(back[6]), 0xC0U);
+}
+
+TEST(Win32CodePageTest, IsValidCodePageRecognizesExpandedPages) {
+    EXPECT_EQ(tl_IsValidCodePage(abi::kCp1252), 1);
+    EXPECT_EQ(tl_IsValidCodePage(abi::kCp437), 1);
+    EXPECT_EQ(tl_IsValidCodePage(abi::kCpUtf8), 1);
+    EXPECT_EQ(tl_IsValidCodePage(abi::kCp1250), 1);
+    EXPECT_EQ(tl_IsValidCodePage(abi::kCp1251), 1);
+    EXPECT_EQ(tl_IsValidCodePage(abi::kCp28591), 1);
+    EXPECT_EQ(tl_IsValidCodePage(932U), 0);
+    EXPECT_EQ(tl_IsValidCodePage(99999U), 0);
+}
+
+TEST(Win32CodePageTest, GetCPInfoSucceedsForExpandedPages) {
+    abi::GuestCpInfo info{};
+    EXPECT_EQ(tl_GetCPInfo(abi::kCp1250, &info), 1);
+    EXPECT_EQ(info.max_char_size, 1U);
+    EXPECT_EQ(info.default_char[0], '?');
+
+    EXPECT_EQ(tl_GetCPInfo(abi::kCp1251, &info), 1);
+    EXPECT_EQ(info.max_char_size, 1U);
+
+    EXPECT_EQ(tl_GetCPInfo(abi::kCp28591, &info), 1);
+    EXPECT_EQ(info.max_char_size, 1U);
+
+    EXPECT_EQ(tl_GetCPInfo(932U, &info), 0);
+}
+
 }  // namespace
 }  // namespace tradutorlinux

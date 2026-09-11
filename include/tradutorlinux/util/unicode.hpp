@@ -16,6 +16,18 @@ constexpr std::uint32_t kInvalidCodepoint = 0x110000U;
 [[nodiscard]] std::uint32_t cp437_to_unicode(std::uint8_t byte) noexcept;
 [[nodiscard]] bool unicode_to_cp437(std::uint32_t codepoint, std::uint8_t& byte) noexcept;
 
+// Conversão entre CP1250 (Central European) e Unicode
+[[nodiscard]] std::uint32_t cp1250_to_unicode(std::uint8_t byte) noexcept;
+[[nodiscard]] bool unicode_to_cp1250(std::uint32_t codepoint, std::uint8_t& byte) noexcept;
+
+// Conversão entre CP1251 (Cyrillic) e Unicode
+[[nodiscard]] std::uint32_t cp1251_to_unicode(std::uint8_t byte) noexcept;
+[[nodiscard]] bool unicode_to_cp1251(std::uint32_t codepoint, std::uint8_t& byte) noexcept;
+
+// Conversão entre CP28591 (ISO 8859-1 Latin 1) e Unicode
+[[nodiscard]] std::uint32_t cp28591_to_unicode(std::uint8_t byte) noexcept;
+[[nodiscard]] bool unicode_to_cp28591(std::uint32_t codepoint, std::uint8_t& byte) noexcept;
+
 // Decodificação e contagem de unidades UTF-8
 [[nodiscard]] std::uint32_t decode_utf8(const char* bytes, std::size_t length, std::size_t& pos) noexcept;
 [[nodiscard]] std::size_t utf8_bytes_for(std::uint32_t codepoint, char out[4]) noexcept;

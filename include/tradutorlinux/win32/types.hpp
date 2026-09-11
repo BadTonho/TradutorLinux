@@ -134,7 +134,10 @@ constexpr Dword kRtRsrcData = 10;
 constexpr Dword kCpAcp = 0;          // CP_ACP -> CP1252 (locale C do runtime)
 constexpr Dword kCpOem = 1;          // CP_OEMCP -> CP437
 constexpr Dword kCp437 = 437;
+constexpr Dword kCp1250 = 1250;      // Central European
+constexpr Dword kCp1251 = 1251;      // Cyrillic
 constexpr Dword kCp1252 = 1252;
+constexpr Dword kCp28591 = 28591;    // ISO 8859-1 Latin 1
 constexpr Dword kCpUtf8 = 65001;
 
 constexpr Dword kFlsOutOfIndexes = 0xFFFFFFFFU;

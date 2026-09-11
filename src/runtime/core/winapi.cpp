@@ -831,6 +831,18 @@ std::uint32_t decode_multibyte(const std::uint32_t code_page,
         pos += 1;
         return util::cp437_to_unicode(first);
     }
+    if (code_page == abi::kCp1250) {
+        pos += 1;
+        return util::cp1250_to_unicode(first);
+    }
+    if (code_page == abi::kCp1251) {
+        pos += 1;
+        return util::cp1251_to_unicode(first);
+    }
+    if (code_page == abi::kCp28591) {
+        pos += 1;
+        return util::cp28591_to_unicode(first);
+    }
     return util::decode_utf8(reinterpret_cast<const char*>(bytes), length, pos);
 }
 

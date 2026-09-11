@@ -210,7 +210,8 @@ std::string format_message_text(const std::uint32_t flags,
 [[nodiscard]] bool supported_code_page(const std::uint32_t code_page) noexcept {
     return code_page == abi::kCpAcp || code_page == abi::kCp1252 ||
            code_page == abi::kCpOem || code_page == abi::kCp437 ||
-           code_page == abi::kCpUtf8;
+           code_page == abi::kCp1250 || code_page == abi::kCp1251 ||
+           code_page == abi::kCp28591 || code_page == abi::kCpUtf8;
 }
 
 [[nodiscard]] bool guest_executable_callback(const std::uintptr_t address) noexcept {
@@ -1036,9 +1037,7 @@ TL_MSABI int tl_IsDBCSLeadByteEx(std::uint32_t /*code_page*/, std::uint8_t /*tes
 TL_MSABI int tl_MultiByteToWideChar(std::uint32_t code_page, std::uint32_t flags,
                                     const char* mb_str, int mb_count,
                                     std::uint16_t* wide_str, int wide_count) noexcept {
-    const bool supported_page = code_page == abi::kCpAcp || code_page == abi::kCp1252 ||
-                                code_page == abi::kCpOem || code_page == abi::kCp437 ||
-                                code_page == abi::kCpUtf8;
+    const bool supported_page = supported_code_page(code_page);
     if (mb_str == nullptr || mb_count == 0 || mb_count < -1 || !supported_page ||
         (flags & ~(abi::kMbPrecomposed | abi::kMbUseGlyphChars |
                    abi::kMbErrInvalidChars)) != 0U ||
@@ -1109,9 +1108,7 @@ TL_MSABI int tl_WideCharToMultiByte(std::uint32_t code_page, std::uint32_t flags
                                     const std::uint16_t* wide_str, int wide_count,
                                     char* mb_str, int mb_count, const char* default_char,
                                     int* used_default_char) noexcept {
-    const bool supported_page = code_page == abi::kCpAcp || code_page == abi::kCp1252 ||
-                                code_page == abi::kCpOem || code_page == abi::kCp437 ||
-                                code_page == abi::kCpUtf8;
+    const bool supported_page = supported_code_page(code_page);
     if (wide_str == nullptr || wide_count == 0 || wide_count < -1 || !supported_page ||
         (flags & ~(abi::kWcCompositeCheck | abi::kWcNoBestFitChars)) != 0U ||
         (mb_count != 0 && mb_str == nullptr) ||
@@ -1139,7 +1136,6 @@ TL_MSABI int tl_WideCharToMultiByte(std::uint32_t code_page, std::uint32_t flags
         }
     }
     const bool utf8 = code_page == abi::kCpUtf8;
-    const bool cp437 = code_page == abi::kCpOem || code_page == abi::kCp437;
     std::size_t index = 0;
     std::size_t needed = null_terminated ? 1U : 0U;
     while (index < unit_count) {
@@ -1180,8 +1176,19 @@ TL_MSABI int tl_WideCharToMultiByte(std::uint32_t code_page, std::uint32_t flags
             written += count;
         } else {
             std::uint8_t byte = 0;
-            if ((cp437 ? util::unicode_to_cp437(codepoint, byte)
-                       : util::unicode_to_cp1252(codepoint, byte))) {
+            bool ok = false;
+            if (code_page == abi::kCpOem || code_page == abi::kCp437) {
+                ok = util::unicode_to_cp437(codepoint, byte);
+            } else if (code_page == abi::kCp1250) {
+                ok = util::unicode_to_cp1250(codepoint, byte);
+            } else if (code_page == abi::kCp1251) {
+                ok = util::unicode_to_cp1251(codepoint, byte);
+            } else if (code_page == abi::kCp28591) {
+                ok = util::unicode_to_cp28591(codepoint, byte);
+            } else {
+                ok = util::unicode_to_cp1252(codepoint, byte);
+            }
+            if (ok) {
                 mb_str[written++] = static_cast<char>(byte);
             } else {
                 mb_str[written++] = fallback;
@@ -1228,9 +1235,7 @@ TL_MSABI int tl_GetCPInfo(const std::uint32_t code_page, abi::GuestCpInfo* const
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
-    const bool single_byte = code_page == abi::kCpAcp || code_page == abi::kCp1252 ||
-                             code_page == abi::kCpOem || code_page == abi::kCp437;
-    if (!single_byte && code_page != abi::kCpUtf8) {
+    if (!supported_code_page(code_page)) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
