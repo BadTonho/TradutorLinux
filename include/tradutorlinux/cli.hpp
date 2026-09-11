@@ -1,5 +1,7 @@
 #pragma once
 
+#include "tradutorlinux/process/isolate.hpp"
+
 #include <cstdint>
 #include <filesystem>
 #include <iosfwd>
@@ -51,6 +53,9 @@ struct CommandLine {
     bool cpu_limit_set{false};
     std::uint64_t memory_limit_mib{0};
     bool memory_limit_set{false};
+    // Modo de isolamento de rede do sandbox
+    process::NetworkMode network_mode{process::NetworkMode::Full};
+    bool network_set{false};
     std::optional<std::filesystem::path> executable_path;
     // Executável final de uma instalação, relativo a C:\\ ou absoluto dentro
     // do drive_c do prefixo escolhido.

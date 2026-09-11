@@ -322,6 +322,21 @@ pipe sem leitor (ex.: `tradutorlinux prog.exe | head -c 0`) falha com
 `errno=32` e `win32-error="109"` (`ERROR_BROKEN_PIPE`) no evento
 `linux-failure` do `WriteFile`, em vez de matar o convidado pelo sinal.
 
+### Isolamento de rede do sandbox (`--no-network` e `--network=<modo>`)
+
+O runtime suporta isolamento estrito de rede para proteger o hospedeiro e impedir comunicação não autorizada ou exfiltração de dados por executáveis convidados:
+- `--no-network` ou `--network=none`: cria um namespace de rede privado (`CLONE_NEWNET` via user namespace desprivilegiado) sem nenhuma interface de rede ativa. Conexões de rede e criação de sockets falham com `ENETUNREACH` (`WSAENETUNREACH`).
+- `--network=loopback`: cria um namespace de rede isolado ativando exclusivamente a interface local de loopback (`127.0.0.1`), permitindo IPC local enquanto bloqueia todo tráfego para a rede física externa.
+- `--network=full`: mantém o acesso direto normal herdado da pilha de rede do hospedeiro (comportamento padrão).
+
+Quando qualquer política não padrão estiver configurada e o trace estiver ativo, o evento `sandbox` é emitido:
+
+```text
+[tl][process][info] sandbox network="none"
+```
+
+Se a instalação do isolamento de rede falhar no filho, o evento `network-isolation-failed` é emitido no componente `process` com `category="internal-error"`, retornando código de saída `70` (`InternalError`).
+
 O modo `--report` produz um relatório textual em stdout sem executar o entry
 point. Cada import aparece com seu estado e, quando resolvido, com
 `support=full`, `support=limited` ou `support=stub`. O campo

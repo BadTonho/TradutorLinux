@@ -616,6 +616,49 @@ TEST(CommandRunTest, DoctorEmitsStructuredJson) {
     EXPECT_NE(output.find("\"ready\": true"), std::string::npos);
 }
 
+TEST(CommandLineTest, ParsesNoNetworkOption) {
+    const std::array<const char*, 3> argv{"tradutorlinux", "--no-network", "app.exe"};
+    const ParseResult result = parse_command_line(static_cast<int>(argv.size()), argv.data());
+    ASSERT_TRUE(result.command_line.has_value());
+    EXPECT_EQ(result.command_line->network_mode, process::NetworkMode::None);
+    EXPECT_TRUE(result.command_line->network_set);
+}
+
+TEST(CommandLineTest, ParsesNetworkModes) {
+    {
+        const std::array<const char*, 3> argv{"tradutorlinux", "--network=none", "app.exe"};
+        const ParseResult result = parse_command_line(static_cast<int>(argv.size()), argv.data());
+        ASSERT_TRUE(result.command_line.has_value());
+        EXPECT_EQ(result.command_line->network_mode, process::NetworkMode::None);
+    }
+    {
+        const std::array<const char*, 4> argv{"tradutorlinux", "--network", "loopback", "app.exe"};
+        const ParseResult result = parse_command_line(static_cast<int>(argv.size()), argv.data());
+        ASSERT_TRUE(result.command_line.has_value());
+        EXPECT_EQ(result.command_line->network_mode, process::NetworkMode::Loopback);
+    }
+    {
+        const std::array<const char*, 3> argv{"tradutorlinux", "--network=full", "app.exe"};
+        const ParseResult result = parse_command_line(static_cast<int>(argv.size()), argv.data());
+        ASSERT_TRUE(result.command_line.has_value());
+        EXPECT_EQ(result.command_line->network_mode, process::NetworkMode::Full);
+    }
+}
+
+TEST(CommandLineTest, RejectsInvalidNetworkOption) {
+    const std::array<const char*, 3> argv{"tradutorlinux", "--network=wifi", "app.exe"};
+    const ParseResult result = parse_command_line(static_cast<int>(argv.size()), argv.data());
+    EXPECT_FALSE(result.command_line.has_value());
+    EXPECT_NE(result.error_message.find("modo inválido para --network"), std::string::npos);
+}
+
+TEST(CommandLineTest, RejectsDuplicateNetworkOption) {
+    const std::array<const char*, 4> argv{"tradutorlinux", "--no-network", "--network=none", "app.exe"};
+    const ParseResult result = parse_command_line(static_cast<int>(argv.size()), argv.data());
+    EXPECT_FALSE(result.command_line.has_value());
+    EXPECT_NE(result.error_message.find("a opção --network foi repetida"), std::string::npos);
+}
+
 }  // namespace
 }  // namespace tradutorlinux
 

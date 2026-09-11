@@ -62,6 +62,7 @@ struct ProtonRunRequest {
     process::ResourceLimits resource_limits;
     std::uint64_t timeout_ms{0};
     bool trace_enabled{false};
+    process::NetworkMode network_mode{process::NetworkMode::Full};
 };
 
 struct ProtonRunResult {

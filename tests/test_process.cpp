@@ -177,5 +177,47 @@ TEST(ExternalProcessTest, ReportsSignalTermination) {
     EXPECT_EQ(outcome.signal_number, SIGTERM);
 }
 
+TEST(ExternalProcessTest, NetworkIsolationNoneDisablesNetworkAccess) {
+    std::ostringstream diagnostics;
+    const std::vector<std::string> argv{
+        "/bin/sh", "-c",
+        "python3 -c \""
+        "import socket, sys\n"
+        "s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)\n"
+        "try:\n"
+        "    s.connect(('8.8.8.8', 53))\n"
+        "    sys.exit(0)\n"
+        "except OSError as e:\n"
+        "    if e.errno == 101: sys.exit(42)\n"
+        "    sys.exit(1)\n"
+        "\""
+    };
+    const process::GuestOutcome outcome = process::run_external_isolated(
+        argv, {}, 2000, {}, {}, diagnostics, "[test] ", process::NetworkMode::None);
+    ASSERT_EQ(outcome.kind, process::GuestOutcomeKind::Exited);
+    EXPECT_EQ(outcome.exit_code, 42U);
+}
+
+TEST(ExternalProcessTest, NetworkIsolationLoopbackAllowsLocalLoopback) {
+    std::ostringstream diagnostics;
+    const std::vector<std::string> argv{
+        "/bin/sh", "-c",
+        "python3 -c \""
+        "import socket, sys\n"
+        "s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)\n"
+        "try:\n"
+        "    s.bind(('127.0.0.1', 0))\n"
+        "    s.listen(1)\n"
+        "    sys.exit(55)\n"
+        "except Exception:\n"
+        "    sys.exit(1)\n"
+        "\""
+    };
+    const process::GuestOutcome outcome = process::run_external_isolated(
+        argv, {}, 2000, {}, {}, diagnostics, "[test] ", process::NetworkMode::Loopback);
+    ASSERT_EQ(outcome.kind, process::GuestOutcomeKind::Exited);
+    EXPECT_EQ(outcome.exit_code, 55U);
+}
+
 }  // namespace
 }  // namespace tradutorlinux::loader

@@ -20,12 +20,21 @@ enum class ResourceLimitKind {
     Memory,
 };
 
+enum class NetworkMode {
+    Full,      // Acesso irrestrito à rede do host (padrão)
+    None,      // Desconectado da rede (novo namespace sem interfaces ativas)
+    Loopback,  // Conexão apenas local (interface loopback 127.0.0.1)
+};
+
+[[nodiscard]] std::string_view network_mode_name(NetworkMode mode) noexcept;
+
 enum class GuestOutcomeKind {
     Exited,       // o guest retornou do entry point ou chamou ExitProcess
     Signaled,     // o guest terminou por um sinal Linux (ex.: SIGSEGV)
     TimedOut,     // o guest não terminou dentro de timeout_ms e foi morto
     ResourceLimited,       // um limite configurado terminou o guest
     ResourceSetupFailed,   // o limite não pôde ser instalado no filho
+    NetworkSetupFailed,    // o isolamento de rede não pôde ser configurado no filho
     SpawnFailed,  // não foi possível criar o processo filho
 };
 
@@ -68,7 +77,8 @@ struct SignalDescription {
                                               std::uintptr_t stack_top,
                                               std::uint64_t timeout_ms,
                                               const ResourceLimits& resource_limits = {},
-                                              const std::filesystem::path& working_directory = {}) noexcept;
+                                              const std::filesystem::path& working_directory = {},
+                                              NetworkMode network_mode = NetworkMode::Full) noexcept;
 
 struct ExternalEnvironmentVariable {
     std::string name;
@@ -85,6 +95,7 @@ struct ExternalEnvironmentVariable {
     const ResourceLimits& resource_limits,
     const std::filesystem::path& working_directory,
     std::ostream& diagnostic_stream,
-    std::string_view diagnostic_prefix = "[tl][external] ");
+    std::string_view diagnostic_prefix = "[tl][external] ",
+    NetworkMode network_mode = NetworkMode::Full);
 
 }  // namespace tradutorlinux::process

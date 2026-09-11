@@ -136,15 +136,16 @@ tradutorlinux run --sandbox --network=none --share-dir ~/Downloads:D: 7zFM.exe
 
 ## 6. Roteiro de Implementação (Roadmap)
 
-1. **Marco S1 — Abstração de Launcher Seguro:**
-   - Criar `src/process/sandbox.cpp` e `include/tradutorlinux/process/sandbox.hpp`.
-   - Detecção de capacidade do hospedeiro (`bwrap` instalado vs. suporte a user namespaces).
-2. **Marco S2 — Isolamento de Filesystem e Rede:**
+1. **Marco S1 — Isolamento de Rede e Diagnóstico de Ambiente (Concluído):**
+   - Detecção de capacidade do hospedeiro no comando `doctor` (`bwrap` e `unprivileged_userns_clone`).
+   - Implementação das opções CLI `--no-network` e `--network=<none|loopback|full>`.
+   - Confinamento do processo convidado em namespace de rede privado via `CLONE_NEWNET` / `CLONE_NEWUSER` (com mapeamento de UID/GID e suporte a ativação seletiva de loopback `lo`).
+   - Evento de diagnóstico estruturado no trace: `[tl][process][info] sandbox network="none|loopback"`.
+2. **Marco S2 — Confinamento de Filesystem (Mount Namespace):**
    - Confinamento estrito de `drive_c`.
-   - Remoção do link `Z:` para a raiz quando a sandbox estiver ativa.
-   - Implementação da política de rede `none` via `CLONE_NEWNET`.
+   - Remoção do link `Z:` para a raiz `/` quando a sandbox estiver ativa.
 3. **Marco S3 — Compartilhamento Granular de Diretórios:**
    - Mapeamento dinâmico de diretórios informados na flag `--share-dir` para drives virtuais `D:\`, `E:\`, etc.
-4. **Marco S4 — Filtros Seccomp e Diagnósticos:**
-   - Injeção de perfil seccomp padrão.
+4. **Marco S4 — Filtros Seccomp e Diagnósticos de Violação:**
+   - Injeção de perfil seccomp padrão bloqueando chamadas perigosas (`ptrace`, etc.).
    - Eventos de auditoria e diagnóstico no `--trace` indicando restrições ativas e acessos barrados.

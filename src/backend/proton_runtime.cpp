@@ -714,7 +714,7 @@ ProtonRunResult run_proton_application(const ProtonConfig& config,
                        "launch", { {"launcher", argv.front()}, {"working-directory", target_root.string()} });
     result.outcome = process::run_external_isolated(
         argv, environment, request.timeout_ms, request.resource_limits, target_root,
-        diagnostic_stream, "[tl][proton] ");
+        diagnostic_stream, "[tl][proton] ", request.network_mode);
     result.status = ProtonRunStatus::Completed;
 
     const bool cleanup_ok = exposure.cleanup();

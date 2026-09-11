@@ -25,9 +25,13 @@
 #include <unistd.h>
 
 #include <fcntl.h>
+#include <net/if.h>
 #include <ostream>
+#include <sched.h>
 #include <string>
 #include <string_view>
+#include <sys/ioctl.h>
+#include <sys/socket.h>
 #include <vector>
 
 extern char** environ;
@@ -40,6 +44,7 @@ constexpr std::size_t kProtocolSize = 7;  // [kind:1][resource:1][explicit:1][ex
 enum class ChildMessageKind : unsigned char {
     Exited = 0,
     ResourceSetupFailed = 1,
+    NetworkSetupFailed = 2,
 };
 
 // Registro de falha escrito pelo handler de sinais do filho quando o convidado
@@ -288,12 +293,100 @@ std::string_view resource_limit_name(const ResourceLimitKind resource) noexcept 
     return "none";
 }
 
+std::string_view network_mode_name(const NetworkMode mode) noexcept {
+    switch (mode) {
+        case NetworkMode::Full:
+            return "full";
+        case NetworkMode::None:
+            return "none";
+        case NetworkMode::Loopback:
+            return "loopback";
+    }
+    return "full";
+}
+
+bool write_all_raw(const int fd, const char* const data, const std::size_t len) noexcept {
+    std::size_t total = 0;
+    while (total < len) {
+        const ssize_t written = ::write(fd, data + total, len - total);
+        if (written < 0) {
+            if (errno == EINTR) continue;
+            return false;
+        }
+        if (written == 0) return false;
+        total += static_cast<std::size_t>(written);
+    }
+    return true;
+}
+
+bool apply_network_isolation(const NetworkMode mode) noexcept {
+    if (mode == NetworkMode::Full) {
+        return true;
+    }
+
+    // Tenta primeiro criar novo network namespace diretamente
+    if (::unshare(CLONE_NEWNET) != 0) {
+        // Se falhar (ex.: EPERM para processo desprivilegiado), cria também um user namespace
+        const uid_t real_uid = ::getuid();
+        const gid_t real_gid = ::getgid();
+
+        if (::unshare(CLONE_NEWUSER | CLONE_NEWNET) != 0) {
+            return false;
+        }
+
+        // Mapeia UID e GID do processo atual para manter acesso a seus arquivos
+        const int setgroups_fd = ::open("/proc/self/setgroups", O_WRONLY | O_CLOEXEC);
+        if (setgroups_fd >= 0) {
+            static_cast<void>(write_all_raw(setgroups_fd, "deny\n", 5));
+            ::close(setgroups_fd);
+        }
+
+        char map_buf[64];
+        const int uid_fd = ::open("/proc/self/uid_map", O_WRONLY | O_CLOEXEC);
+        if (uid_fd >= 0) {
+            const int len = std::snprintf(map_buf, sizeof(map_buf), "0 %u 1\n",
+                                          static_cast<unsigned int>(real_uid));
+            if (len > 0) {
+                static_cast<void>(write_all_raw(uid_fd, map_buf, static_cast<std::size_t>(len)));
+            }
+            ::close(uid_fd);
+        }
+
+        const int gid_fd = ::open("/proc/self/gid_map", O_WRONLY | O_CLOEXEC);
+        if (gid_fd >= 0) {
+            const int len = std::snprintf(map_buf, sizeof(map_buf), "0 %u 1\n",
+                                          static_cast<unsigned int>(real_gid));
+            if (len > 0) {
+                static_cast<void>(write_all_raw(gid_fd, map_buf, static_cast<std::size_t>(len)));
+            }
+            ::close(gid_fd);
+        }
+    }
+
+    if (mode == NetworkMode::Loopback) {
+        // Habilita a interface loopback (lo) no novo namespace
+        const int sock = ::socket(AF_INET, SOCK_DGRAM | SOCK_CLOEXEC, 0);
+        if (sock >= 0) {
+            struct ifreq ifr {};
+            std::strncpy(ifr.ifr_name, "lo", IFNAMSIZ - 1);
+            if (::ioctl(sock, SIOCGIFFLAGS, &ifr) >= 0) {
+                ifr.ifr_flags |= static_cast<short>(IFF_UP | IFF_RUNNING);
+                static_cast<void>(::ioctl(sock, SIOCSIFFLAGS, &ifr));
+            }
+            ::close(sock);
+        }
+    }
+
+    return true;
+}
+
 __attribute__((no_instrument_function))
 GuestOutcome run_guest_isolated(const std::uintptr_t entry_point,
                                 const std::uintptr_t stack_top,
                                 const std::uint64_t timeout_ms,
                                 const ResourceLimits& resource_limits,
-                                const std::filesystem::path& working_directory) noexcept {
+                                const std::filesystem::path& working_directory,
+                                const NetworkMode network_mode) noexcept {
     int pipe_fds[2] = {-1, -1};
     if (::pipe2(pipe_fds, O_CLOEXEC) != 0) {
         return {.kind = GuestOutcomeKind::SpawnFailed};
@@ -324,6 +417,13 @@ GuestOutcome run_guest_isolated(const std::uintptr_t entry_point,
             ::close(pipe_fds[1]);
             ::close(fault_fds[1]);
             ::_exit(126);
+        }
+        if (!apply_network_isolation(network_mode)) {
+            write_child_message(pipe_fds[1], ChildMessageKind::NetworkSetupFailed,
+                                ResourceLimitKind::None, false, 0);
+            ::close(pipe_fds[1]);
+            ::close(fault_fds[1]);
+            ::_exit(0);
         }
         const ResourceLimitKind resource_setup_failure = apply_resource_limits(resource_limits);
         if (resource_setup_failure != ResourceLimitKind::None) {
@@ -423,6 +523,12 @@ GuestOutcome run_guest_isolated(const std::uintptr_t entry_point,
             ::close(fault_fds[0]);
             return outcome;
         }
+        if (message[0] == std::byte{static_cast<unsigned char>(ChildMessageKind::NetworkSetupFailed)}) {
+            outcome.kind = GuestOutcomeKind::NetworkSetupFailed;
+            ::close(pipe_fds[0]);
+            ::close(fault_fds[0]);
+            return outcome;
+        }
         if (message[0] != std::byte{static_cast<unsigned char>(ChildMessageKind::Exited)} ||
             message[1] != std::byte{static_cast<unsigned char>(ResourceLimitKind::None)} ||
             (message[2] != std::byte{0} && message[2] != std::byte{1})) {
@@ -488,6 +594,7 @@ enum class ExternalStatus : unsigned char {
     CpuLimitFailed = 2,
     MemoryLimitFailed = 3,
     WorkingDirectoryFailed = 4,
+    NetworkSetupFailed = 5,
 };
 
 void write_external_status(const int fd, const ExternalStatus status) noexcept {
@@ -566,7 +673,8 @@ GuestOutcome run_external_isolated(
     const ResourceLimits& resource_limits,
     const std::filesystem::path& working_directory,
     std::ostream& diagnostic_stream,
-    const std::string_view diagnostic_prefix) {
+    const std::string_view diagnostic_prefix,
+    const NetworkMode network_mode) {
     if (argv.empty() || argv.front().empty()) {
         return {.kind = GuestOutcomeKind::SpawnFailed};
     }
@@ -613,6 +721,10 @@ GuestOutcome run_external_isolated(
         static_cast<void>(::setpgid(0, 0));
         if (!working_directory.empty() && ::chdir(working_directory.c_str()) != 0) {
             write_external_status(status_pipe[1], ExternalStatus::WorkingDirectoryFailed);
+            ::_exit(125);
+        }
+        if (!apply_network_isolation(network_mode)) {
+            write_external_status(status_pipe[1], ExternalStatus::NetworkSetupFailed);
             ::_exit(125);
         }
         const ResourceLimitKind resource_failure = apply_resource_limits(resource_limits);
@@ -718,6 +830,9 @@ GuestOutcome run_external_isolated(
         if (external_status == static_cast<unsigned char>(ExternalStatus::MemoryLimitFailed)) {
             return {.kind = GuestOutcomeKind::ResourceSetupFailed,
                     .resource = ResourceLimitKind::Memory};
+        }
+        if (external_status == static_cast<unsigned char>(ExternalStatus::NetworkSetupFailed)) {
+            return {.kind = GuestOutcomeKind::NetworkSetupFailed};
         }
         return {.kind = GuestOutcomeKind::SpawnFailed};
     }

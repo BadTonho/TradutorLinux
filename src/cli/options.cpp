@@ -83,6 +83,56 @@ enum class LimitOptionResult {
     return LimitOptionResult::Parsed;
 }
 
+enum class NetworkOptionResult {
+    NotMatched,
+    Parsed,
+    Error,
+};
+
+NetworkOptionResult parse_network_option(const std::string_view arg, int& index, const int argc,
+                                         const char* const argv[],
+                                         CommandLine& command_line,
+                                         std::string& error_message) {
+    if (arg == "--no-network") {
+        if (command_line.network_set) {
+            error_message = "a opção --network foi repetida";
+            return NetworkOptionResult::Error;
+        }
+        command_line.network_mode = process::NetworkMode::None;
+        command_line.network_set = true;
+        return NetworkOptionResult::Parsed;
+    }
+    if (arg == "--network" || arg.starts_with("--network=")) {
+        if (command_line.network_set) {
+            error_message = "a opção --network foi repetida";
+            return NetworkOptionResult::Error;
+        }
+        std::string_view value;
+        if (arg.starts_with("--network=")) {
+            value = arg.substr(10);
+        } else {
+            if (index + 1 >= argc) {
+                error_message = "a opção --network requer um modo: none, loopback ou full";
+                return NetworkOptionResult::Error;
+            }
+            value = argv[++index];
+        }
+        if (value == "none") {
+            command_line.network_mode = process::NetworkMode::None;
+        } else if (value == "loopback") {
+            command_line.network_mode = process::NetworkMode::Loopback;
+        } else if (value == "full") {
+            command_line.network_mode = process::NetworkMode::Full;
+        } else {
+            error_message = "modo inválido para --network: " + std::string{value} + " (esperado: none, loopback ou full)";
+            return NetworkOptionResult::Error;
+        }
+        command_line.network_set = true;
+        return NetworkOptionResult::Parsed;
+    }
+    return NetworkOptionResult::NotMatched;
+}
+
 }  // namespace
 
 ParseResult parse_command_line(const int argc, const char* const argv[]) {
@@ -211,6 +261,15 @@ ParseResult parse_command_line(const int argc, const char* const argv[]) {
                     return {.command_line = std::nullopt, .error_message = resource_error};
                 }
                 if (resource_result == LimitOptionResult::Parsed) {
+                    continue;
+                }
+                std::string network_error;
+                const NetworkOptionResult network_result =
+                    parse_network_option(arg, i, argc, argv, command_line, network_error);
+                if (network_result == NetworkOptionResult::Error) {
+                    return {.command_line = std::nullopt, .error_message = network_error};
+                }
+                if (network_result == NetworkOptionResult::Parsed) {
                     continue;
                 }
                 if (arg == "--trace-json") {
@@ -364,6 +423,15 @@ ParseResult parse_command_line(const int argc, const char* const argv[]) {
                         return {.command_line = std::nullopt, .error_message = resource_error};
                     }
                     if (resource_result == LimitOptionResult::Parsed) {
+                        continue;
+                    }
+                    std::string network_error;
+                    const NetworkOptionResult network_result =
+                        parse_network_option(arg, i, argc, argv, command_line, network_error);
+                    if (network_result == NetworkOptionResult::Error) {
+                        return {.command_line = std::nullopt, .error_message = network_error};
+                    }
+                    if (network_result == NetworkOptionResult::Parsed) {
                         continue;
                     }
                     command_line.guest_arguments.emplace_back(arg);
@@ -558,6 +626,15 @@ ParseResult parse_command_line(const int argc, const char* const argv[]) {
             if (resource_result == LimitOptionResult::Parsed) {
                 continue;
             }
+            std::string network_error;
+            const NetworkOptionResult network_result =
+                parse_network_option(argument, index, argc, argv, command_line, network_error);
+            if (network_result == NetworkOptionResult::Error) {
+                return {.command_line = std::nullopt, .error_message = network_error};
+            }
+            if (network_result == NetworkOptionResult::Parsed) {
+                continue;
+            }
         }
 
         if (!options_ended && is_option(argument)) {
@@ -616,6 +693,10 @@ void print_help(std::ostream& stream) {
     stream << "             limita o tempo de CPU do convidado; 0 = sem limite (padrão)\n";
     stream << "  --memory <MiB>\n";
     stream << "             limita o espaço virtual do convidado; 0 = sem limite (padrão)\n";
+    stream << "  --no-network\n";
+    stream << "             desativa o acesso à rede (equivale a --network=none)\n";
+    stream << "  --network <modo>\n";
+    stream << "             define o isolamento de rede do sandbox: none, loopback, full (padrão)\n";
     stream << "  --help     mostra esta ajuda\n";
     stream << "  --version  mostra a versão do TradutorLinux\n";
 }

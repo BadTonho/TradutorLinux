@@ -537,6 +537,9 @@ void write_install_trace(const bool enabled, std::ostream& stream,
         case process::GuestOutcomeKind::ResourceSetupFailed:
             stderr_stream << "erro: não foi possível instalar limites no processo Proton\n";
             return ExitCode::InternalError;
+        case process::GuestOutcomeKind::NetworkSetupFailed:
+            stderr_stream << "erro: não foi possível configurar o isolamento de rede no processo Proton\n";
+            return ExitCode::InternalError;
         case process::GuestOutcomeKind::SpawnFailed:
             stderr_stream << "erro: não foi possível iniciar o launcher Proton\n";
             return ExitCode::InternalError;
@@ -1250,6 +1253,7 @@ ExitCode run_command(const CommandLine& command_line, std::ostream& stdout_strea
             effective_cmd.memory_limit_set ? effective_cmd.memory_limit_mib : 0,
         };
         request.trace_enabled = effective_cmd.trace_enabled;
+        request.network_mode = effective_cmd.network_mode;
         const backend::ProtonRunResult result = backend::run_proton_application(
             *config.config, *compatibility_profile, request, stderr_stream);
         if (result.status == backend::ProtonRunStatus::Unsupported) {
@@ -1483,10 +1487,21 @@ ExitCode run_command(const CommandLine& command_line, std::ostream& stdout_strea
         diagnostics::write_trace(stderr_stream, diagnostics::TraceComponent::Process,
                                  diagnostics::TraceLevel::Info, "resource-limits", fields);
     }
+    if (effective_cmd.network_mode != process::NetworkMode::Full) {
+        if (effective_cmd.trace_enabled) {
+            const std::array fields{
+                diagnostics::TraceField{"network",
+                                        std::string{process::network_mode_name(effective_cmd.network_mode)}},
+            };
+            diagnostics::write_trace(stderr_stream, diagnostics::TraceComponent::Process,
+                                     diagnostics::TraceLevel::Info, "sandbox", fields);
+        }
+    }
     const process::GuestOutcome outcome = process::run_guest_isolated(
         process.thread.entry_point, process.thread.stack_top, effective_cmd.timeout_ms,
         resource_limits,
-        *effective_cmd.guest_working_directory);
+        *effective_cmd.guest_working_directory,
+        effective_cmd.network_mode);
 
     if (compatibility_files.has_value() && compatibility_files->applied()) {
         const bool cleanup_ok = compatibility_files->cleanup();
@@ -1643,6 +1658,26 @@ ExitCode run_command(const CommandLine& command_line, std::ostream& stdout_strea
         } else {
             stderr_stream << "erro: não foi possível instalar o limite de recurso no processo filho ("
                           << resource << ")\n";
+        }
+        return ExitCode::InternalError;
+    }
+
+    if (outcome.kind == process::GuestOutcomeKind::NetworkSetupFailed) {
+        if (effective_cmd.trace_enabled) {
+            const std::array fields{
+                diagnostics::TraceField{"category",
+                                        std::string{diagnostics::failure_category_name(
+                                            diagnostics::FailureCategory::InternalError)}},
+                diagnostics::TraceField{"isolation", "network"},
+                diagnostics::TraceField{"detail",
+                                        "não foi possível isolar a rede no processo filho"},
+            };
+            diagnostics::write_trace(stderr_stream, diagnostics::TraceComponent::Process,
+                                     diagnostics::TraceLevel::Error,
+                                     "network-isolation-failed", fields);
+            write_unmap_trace(stderr_stream, unmap_base);
+        } else {
+            stderr_stream << "erro: não foi possível configurar o isolamento de rede no processo filho\n";
         }
         return ExitCode::InternalError;
     }
