@@ -505,6 +505,23 @@ void print_support_report_group(std::ostream& stream, const loader::ResolveResul
     }
     if (!file_bytes.empty()) {
         const pe::ResourceInspectionResult res_info = pe::inspect_pe_resources(file_bytes, info);
+        if (res_info.version_info.has_version_info) {
+            stream << "identity:";
+            if (!res_info.version_info.product_name.empty()) {
+                stream << " \"" << res_info.version_info.product_name << "\"";
+            } else if (!res_info.version_info.file_description.empty()) {
+                stream << " \"" << res_info.version_info.file_description << "\"";
+            }
+            if (!res_info.version_info.product_version.empty()) {
+                stream << " v" << res_info.version_info.product_version;
+            } else if (!res_info.version_info.file_version.empty()) {
+                stream << " v" << res_info.version_info.file_version;
+            }
+            if (!res_info.version_info.company_name.empty()) {
+                stream << " (" << res_info.version_info.company_name << ")";
+            }
+            stream << '\n';
+        }
         if (res_info.has_resources && !res_info.types.empty()) {
             stream << "resources: " << res_info.types.size() << " types (";
             for (std::size_t i = 0; i < res_info.types.size(); ++i) {

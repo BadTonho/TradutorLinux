@@ -377,5 +377,96 @@ TEST(ResourceInspectorTest, HandlesEmptyBytesSafely) {
     EXPECT_TRUE(result.types.empty());
 }
 
+TEST(ResourceInspectorTest, ParseVersionInfoFull) {
+    std::vector<std::byte> data;
+    // Cabeçalho VS_VERSIONINFO
+    push_u16(data, 0);  // wLength placeholder
+    push_u16(data, 52); // wValueLength (sizeof VS_FIXEDFILEINFO)
+    push_u16(data, 0);  // wType (binary)
+
+    // szKey = "VS_VERSION_INFO"
+    auto push_utf16_str = [](std::vector<std::byte>& out, std::string_view text) {
+        for (char c : text) {
+            out.push_back(static_cast<std::byte>(static_cast<unsigned char>(c)));
+            out.push_back(std::byte{0});
+        }
+        out.push_back(std::byte{0});
+        out.push_back(std::byte{0});
+    };
+
+    push_utf16_str(data, "VS_VERSION_INFO");
+    while ((data.size() % 4) != 0) {
+        data.push_back(std::byte{0});
+    }
+
+    // VS_FIXEDFILEINFO (52 bytes)
+    push_u32(data, 0xFEEF04BD);              // dwSignature
+    push_u32(data, 0x00010000);              // dwStrucVersion
+    push_u32(data, (7 << 16) | 1);           // dwFileVersionMS: 7.1
+    push_u32(data, (2 << 16) | 3);           // dwFileVersionLS: 2.3
+    push_u32(data, (7 << 16) | 0);           // dwProductVersionMS: 7.0
+    push_u32(data, 0);                       // dwProductVersionLS: 0.0
+    // Restante do fixed file info (8 * 4 = 32 bytes)
+    for (int i = 0; i < 8; ++i) {
+        push_u32(data, 0);
+    }
+    while ((data.size() % 4) != 0) {
+        data.push_back(std::byte{0});
+    }
+
+    auto push_string_struct = [&](std::string_view key, std::string_view value) {
+        const std::size_t start = data.size();
+        push_u16(data, 0);
+        push_u16(data, static_cast<std::uint16_t>(value.size() + 1));
+        push_u16(data, 1);
+        push_utf16_str(data, key);
+        while ((data.size() % 4) != 0) {
+            data.push_back(std::byte{0});
+        }
+        push_utf16_str(data, value);
+        while ((data.size() % 4) != 0) {
+            data.push_back(std::byte{0});
+        }
+        write_u16(data, start, static_cast<std::uint16_t>(data.size() - start));
+    };
+
+    push_string_struct("ProductName", "TradutorLinux App");
+    push_string_struct("ProductVersion", "7.10.2");
+    push_string_struct("CompanyName", "TradutorLinux Team");
+    push_string_struct("FileDescription", "Compatibility App");
+
+    write_u16(data, 0, static_cast<std::uint16_t>(data.size()));
+
+    const ProductVersionInfo vinfo = parse_version_info(data);
+    EXPECT_TRUE(vinfo.has_version_info);
+    EXPECT_EQ(vinfo.product_name, "TradutorLinux App");
+    EXPECT_EQ(vinfo.product_version, "7.10.2");
+    EXPECT_EQ(vinfo.file_version, "7.1.2.3");
+    EXPECT_EQ(vinfo.company_name, "TradutorLinux Team");
+    EXPECT_EQ(vinfo.file_description, "Compatibility App");
+}
+
+TEST(ResourceInspectorTest, ParseVersionInfoFixedOnly) {
+    std::vector<std::byte> data(64, std::byte{0});
+    // Signature at offset 4
+    write_u32(data, 4, 0xFEEF04BD);
+    // dwFileVersionMS at offset 12: 3.4
+    write_u32(data, 12, (3 << 16) | 4);
+    // dwFileVersionLS at offset 16: 5.6
+    write_u32(data, 16, (5 << 16) | 6);
+
+    const ProductVersionInfo vinfo = parse_version_info(data);
+    EXPECT_TRUE(vinfo.has_version_info);
+    EXPECT_EQ(vinfo.file_version, "3.4.5.6");
+    EXPECT_TRUE(vinfo.product_name.empty());
+}
+
+TEST(ResourceInspectorTest, ParseVersionInfoEmptySafely) {
+    EXPECT_FALSE(parse_version_info({}).has_version_info);
+    std::vector<std::byte> short_data(20, std::byte{0});
+    EXPECT_FALSE(parse_version_info(short_data).has_version_info);
+}
+
 }  // namespace tradutorlinux::pe
+
 

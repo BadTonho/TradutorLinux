@@ -240,6 +240,105 @@ ManifestInfo parse_manifest_xml(std::string_view xml) {
     return info;
 }
 
+ProductVersionInfo parse_version_info(const std::span<const std::byte> version_data) {
+    ProductVersionInfo result{};
+    if (version_data.size() < 40) {
+        return result;
+    }
+
+    // Procura a assinatura do cabeçalho fixo VS_FIXEDFILEINFO: 0xFEEF04BD (little-endian: 0xBD, 0x04, 0xEF, 0xFE)
+    const std::array<std::byte, 4> kFixedSig{std::byte{0xBD}, std::byte{0x04}, std::byte{0xEF}, std::byte{0xFE}};
+    const auto sig_it = std::search(version_data.begin(), version_data.end(), kFixedSig.begin(), kFixedSig.end());
+    if (sig_it != version_data.end()) {
+        const std::size_t sig_offset = static_cast<std::size_t>(std::distance(version_data.begin(), sig_it));
+        if (sig_offset + 52 <= version_data.size()) {
+            result.has_version_info = true;
+            const std::uint32_t fv_ms = read_u32(version_data, sig_offset + 8);
+            const std::uint32_t fv_ls = read_u32(version_data, sig_offset + 12);
+            const std::uint32_t pv_ms = read_u32(version_data, sig_offset + 16);
+            const std::uint32_t pv_ls = read_u32(version_data, sig_offset + 20);
+
+            if (fv_ms != 0 || fv_ls != 0) {
+                result.file_version = std::to_string(fv_ms >> 16) + "." +
+                                      std::to_string(fv_ms & 0xFFFF) + "." +
+                                      std::to_string(fv_ls >> 16) + "." +
+                                      std::to_string(fv_ls & 0xFFFF);
+            }
+            if (pv_ms != 0 || pv_ls != 0) {
+                result.product_version = std::to_string(pv_ms >> 16) + "." +
+                                         std::to_string(pv_ms & 0xFFFF) + "." +
+                                         std::to_string(pv_ls >> 16) + "." +
+                                         std::to_string(pv_ls & 0xFFFF);
+            }
+        }
+    }
+
+    // Helper para extrair valores UTF-16LE de StringFileInfo / StringTable
+    auto extract_utf16_val = [&](std::string_view key_ascii) -> std::string {
+        std::vector<std::byte> key_bytes;
+        key_bytes.reserve((key_ascii.size() + 1) * 2);
+        for (const char c : key_ascii) {
+            key_bytes.push_back(static_cast<std::byte>(static_cast<unsigned char>(c)));
+            key_bytes.push_back(std::byte{0});
+        }
+        key_bytes.push_back(std::byte{0});
+        key_bytes.push_back(std::byte{0});
+
+        const auto it = std::search(version_data.begin(), version_data.end(), key_bytes.begin(), key_bytes.end());
+        if (it == version_data.end()) {
+            return {};
+        }
+        const std::size_t key_offset = static_cast<std::size_t>(std::distance(version_data.begin(), it));
+        const std::size_t after_key = key_offset + key_bytes.size();
+        const std::size_t val_offset = (after_key + 3) & ~std::size_t{3};
+        if (val_offset >= version_data.size()) {
+            return {};
+        }
+
+        std::size_t char_count = 0;
+        constexpr std::size_t kMaxChars = 256;
+        for (std::size_t pos = val_offset; pos + 1 < version_data.size() && char_count < kMaxChars; pos += 2) {
+            const std::uint16_t ch = read_u16(version_data, pos);
+            if (ch == 0) {
+                break;
+            }
+            ++char_count;
+        }
+        if (char_count == 0) {
+            return {};
+        }
+        return utf16le_to_utf8(version_data, val_offset, char_count);
+    };
+
+    const std::string prod_name = extract_utf16_val("ProductName");
+    if (!prod_name.empty()) {
+        result.has_version_info = true;
+        result.product_name = prod_name;
+    }
+    const std::string prod_ver = extract_utf16_val("ProductVersion");
+    if (!prod_ver.empty()) {
+        result.has_version_info = true;
+        result.product_version = prod_ver;
+    }
+    const std::string file_ver = extract_utf16_val("FileVersion");
+    if (!file_ver.empty()) {
+        result.has_version_info = true;
+        result.file_version = file_ver;
+    }
+    const std::string company = extract_utf16_val("CompanyName");
+    if (!company.empty()) {
+        result.has_version_info = true;
+        result.company_name = company;
+    }
+    const std::string desc = extract_utf16_val("FileDescription");
+    if (!desc.empty()) {
+        result.has_version_info = true;
+        result.file_description = desc;
+    }
+
+    return result;
+}
+
 ResourceInspectionResult inspect_pe_resources(
     std::span<const std::byte> file_bytes,
     const PeInfo& info) {
@@ -270,6 +369,71 @@ ResourceInspectionResult inspect_pe_resources(
     }
 
     result.has_resources = true;
+
+    auto find_leaf_rva_and_size = [&](const std::uint32_t off_data) -> std::pair<std::optional<std::uint32_t>, std::optional<std::uint32_t>> {
+        std::optional<std::uint32_t> data_rva;
+        std::optional<std::uint32_t> data_size;
+
+        if ((off_data & 0x80000000U) != 0) {
+            const std::size_t l2_offset = off_data & 0x7FFFFFFFU;
+            if (l2_offset + 16 <= rsrc.size()) {
+                const std::uint16_t l2_named = read_u16(rsrc, l2_offset + 12);
+                const std::uint16_t l2_id = read_u16(rsrc, l2_offset + 14);
+                const std::uint32_t l2_total = static_cast<std::uint32_t>(l2_named) + l2_id;
+                if (l2_total > 0 && l2_offset + 16 + 8 <= rsrc.size()) {
+                    const std::uint32_t l2_target = read_u32(rsrc, l2_offset + 16 + 4);
+                    if ((l2_target & 0x80000000U) != 0) {
+                        const std::size_t l3_offset = l2_target & 0x7FFFFFFFU;
+                        if (l3_offset + 16 <= rsrc.size()) {
+                            const std::uint16_t l3_named = read_u16(rsrc, l3_offset + 12);
+                            const std::uint16_t l3_id = read_u16(rsrc, l3_offset + 14);
+                            const std::uint32_t l3_total = static_cast<std::uint32_t>(l3_named) + l3_id;
+                            if (l3_total > 0 && l3_offset + 16 + 8 <= rsrc.size()) {
+                                const std::uint32_t l3_target = read_u32(rsrc, l3_offset + 16 + 4);
+                                if ((l3_target & 0x80000000U) == 0 && l3_target + 16 <= rsrc.size()) {
+                                    data_rva = read_u32(rsrc, l3_target);
+                                    data_size = read_u32(rsrc, l3_target + 4);
+                                }
+                            }
+                        }
+                    } else if (l2_target + 16 <= rsrc.size()) {
+                        data_rva = read_u32(rsrc, l2_target);
+                        data_size = read_u32(rsrc, l2_target + 4);
+                    }
+                }
+            }
+        } else if (off_data + 16 <= rsrc.size()) {
+            data_rva = read_u32(rsrc, off_data);
+            data_size = read_u32(rsrc, off_data + 4);
+        }
+        return {data_rva, data_size};
+    };
+
+    auto resolve_span_from_rva = [&](const std::uint32_t rva, const std::uint32_t len) -> std::span<const std::byte> {
+        for (const SectionInfo& sec : info.sections) {
+            const std::uint64_t span = std::max<std::uint64_t>(sec.virtual_size, sec.raw_data_size);
+            const std::uint64_t sec_end = static_cast<std::uint64_t>(sec.virtual_address) + span;
+            if (static_cast<std::uint64_t>(rva) >= sec.virtual_address && rva < sec_end) {
+                const std::uint64_t delta = static_cast<std::uint64_t>(rva) - sec.virtual_address;
+                if (delta < sec.raw_data_size) {
+                    const std::uint64_t file_offset = static_cast<std::uint64_t>(sec.raw_data_pointer) + delta;
+                    if (file_offset < file_bytes.size()) {
+                        const std::uint64_t avail = std::min({
+                            static_cast<std::uint64_t>(len),
+                            sec.raw_data_size - delta,
+                            file_bytes.size() - file_offset
+                        });
+                        if (avail > 0) {
+                            return file_bytes.subspan(static_cast<std::size_t>(file_offset),
+                                                      static_cast<std::size_t>(avail));
+                        }
+                    }
+                }
+                break;
+            }
+        }
+        return {};
+    };
 
     for (std::uint32_t i = 0; i < total_entries; ++i) {
         const std::size_t entry_offset = 16 + i * 8;
@@ -315,71 +479,24 @@ ResourceInspectionResult inspect_pe_resources(
 
         // Se for RT_MANIFEST (24), extrai e inspeciona o XML
         if (type_id == 24) {
-            std::optional<std::uint32_t> data_rva;
-            std::optional<std::uint32_t> data_size;
-
-            if ((offset_to_data & 0x80000000U) != 0) {
-                const std::size_t l2_offset = offset_to_data & 0x7FFFFFFFU;
-                if (l2_offset + 16 <= rsrc.size()) {
-                    const std::uint16_t l2_named = read_u16(rsrc, l2_offset + 12);
-                    const std::uint16_t l2_id = read_u16(rsrc, l2_offset + 14);
-                    const std::uint32_t l2_total = static_cast<std::uint32_t>(l2_named) + l2_id;
-                    if (l2_total > 0 && l2_offset + 16 + 8 <= rsrc.size()) {
-                        const std::uint32_t l2_target = read_u32(rsrc, l2_offset + 16 + 4);
-                        if ((l2_target & 0x80000000U) != 0) {
-                            // Level 3 (Language)
-                            const std::size_t l3_offset = l2_target & 0x7FFFFFFFU;
-                            if (l3_offset + 16 <= rsrc.size()) {
-                                const std::uint16_t l3_named = read_u16(rsrc, l3_offset + 12);
-                                const std::uint16_t l3_id = read_u16(rsrc, l3_offset + 14);
-                                const std::uint32_t l3_total = static_cast<std::uint32_t>(l3_named) + l3_id;
-                                if (l3_total > 0 && l3_offset + 16 + 8 <= rsrc.size()) {
-                                    const std::uint32_t l3_target = read_u32(rsrc, l3_offset + 16 + 4);
-                                    if ((l3_target & 0x80000000U) == 0 && l3_target + 16 <= rsrc.size()) {
-                                        data_rva = read_u32(rsrc, l3_target);
-                                        data_size = read_u32(rsrc, l3_target + 4);
-                                    }
-                                }
-                            }
-                        } else if (l2_target + 16 <= rsrc.size()) {
-                            data_rva = read_u32(rsrc, l2_target);
-                            data_size = read_u32(rsrc, l2_target + 4);
-                        }
-                    }
-                }
-            } else if (offset_to_data + 16 <= rsrc.size()) {
-                data_rva = read_u32(rsrc, offset_to_data);
-                data_size = read_u32(rsrc, offset_to_data + 4);
-            }
-
+            const auto [data_rva, data_size] = find_leaf_rva_and_size(offset_to_data);
             if (data_rva.has_value() && data_size.has_value() && *data_size > 0) {
                 constexpr std::uint32_t kMaxManifestSize = 64 * 1024;
-                const std::uint32_t rva = *data_rva;
-                const std::uint32_t manifest_len = std::min(*data_size, kMaxManifestSize);
-
-                for (const SectionInfo& sec : info.sections) {
-                    const std::uint64_t span = std::max<std::uint64_t>(sec.virtual_size, sec.raw_data_size);
-                    const std::uint64_t sec_end = static_cast<std::uint64_t>(sec.virtual_address) + span;
-                    if (static_cast<std::uint64_t>(rva) >= sec.virtual_address && rva < sec_end) {
-                        const std::uint64_t delta = static_cast<std::uint64_t>(rva) - sec.virtual_address;
-                        if (delta < sec.raw_data_size) {
-                            const std::uint64_t file_offset = static_cast<std::uint64_t>(sec.raw_data_pointer) + delta;
-                            if (file_offset < file_bytes.size()) {
-                                const std::uint64_t avail = std::min({
-                                    static_cast<std::uint64_t>(manifest_len),
-                                    sec.raw_data_size - delta,
-                                    file_bytes.size() - file_offset
-                                });
-                                if (avail > 0) {
-                                    const std::string_view xml_view(
-                                        reinterpret_cast<const char*>(file_bytes.data() + file_offset),
-                                        static_cast<std::size_t>(avail));
-                                    result.manifest = parse_manifest_xml(xml_view);
-                                }
-                            }
-                        }
-                        break;
-                    }
+                const auto manifest_bytes = resolve_span_from_rva(*data_rva, std::min(*data_size, kMaxManifestSize));
+                if (!manifest_bytes.empty()) {
+                    const std::string_view xml_view(
+                        reinterpret_cast<const char*>(manifest_bytes.data()),
+                        manifest_bytes.size());
+                    result.manifest = parse_manifest_xml(xml_view);
+                }
+            }
+        } else if (type_id == 16) { // RT_VERSION
+            const auto [data_rva, data_size] = find_leaf_rva_and_size(offset_to_data);
+            if (data_rva.has_value() && data_size.has_value() && *data_size > 0) {
+                constexpr std::uint32_t kMaxVersionSize = 64 * 1024;
+                const auto ver_bytes = resolve_span_from_rva(*data_rva, std::min(*data_size, kMaxVersionSize));
+                if (!ver_bytes.empty()) {
+                    result.version_info = parse_version_info(ver_bytes);
                 }
             }
         }
