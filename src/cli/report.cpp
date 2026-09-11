@@ -1,6 +1,7 @@
 #include "cli_internal.hpp"
 
 #include "tradutorlinux/diagnostics/trace.hpp"
+#include "tradutorlinux/pe/resource_inspector.hpp"
 #include "tradutorlinux/util/basics.hpp"
 
 #include <algorithm>
@@ -419,8 +420,10 @@ void print_support_report_group(std::ostream& stream, const loader::ResolveResul
     }
 }
 
-[[nodiscard]] loader::ResolveResult print_support_report(std::ostream& stream,
-                                                          const pe::PeInfo& info) {
+[[nodiscard]] loader::ResolveResult print_support_report(
+    std::ostream& stream,
+    const pe::PeInfo& info,
+    const std::span<const std::byte> file_bytes) {
     TL_TRACE_FUNCTION();
     const loader::ResolveResult result = loader::inspect_imports(info);
     const std::size_t total_imports = result.imports.size();
@@ -451,6 +454,19 @@ void print_support_report_group(std::ostream& stream, const loader::ResolveResul
     stream << "TradutorLinux compatibility report\n";
     stream << "format: " << (info.is_pe32_plus ? "PE32+ x86-64" : "unsupported") << '\n';
     stream << "entry-point: " << util::format_hex(info.address_of_entry_point) << '\n';
+    if (!file_bytes.empty()) {
+        const pe::ResourceInspectionResult res_info = pe::inspect_pe_resources(file_bytes, info);
+        if (res_info.has_resources && !res_info.types.empty()) {
+            stream << "resources: " << res_info.types.size() << " types (";
+            for (std::size_t i = 0; i < res_info.types.size(); ++i) {
+                if (i > 0) {
+                    stream << ", ";
+                }
+                stream << res_info.types[i].type_name << '=' << res_info.types[i].count;
+            }
+            stream << ")\n";
+        }
+    }
     if (!info.runtime_functions.empty()) {
         const std::size_t handler_count = static_cast<std::size_t>(std::count_if(
             info.runtime_functions.begin(), info.runtime_functions.end(),

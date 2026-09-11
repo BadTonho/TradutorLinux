@@ -5,8 +5,10 @@
 #include "tradutorlinux/loader/process.hpp"
 #include "tradutorlinux/pe/pe_reader.hpp"
 
+#include <cstddef>
 #include <cstdint>
 #include <ostream>
+#include <span>
 #include <string>
 #include <string_view>
 
@@ -32,7 +34,9 @@ void write_map_failed_trace(std::ostream& stream, std::string_view status,
 void print_map_summary(std::ostream& stream, const loader::MappedImage& image);
 void write_imports_trace(std::ostream& stream, const loader::ResolveResult& imports);
 void print_imports_summary(std::ostream& stream, const loader::ResolveResult& imports);
-[[nodiscard]] loader::ResolveResult print_support_report(std::ostream& stream,
-                                                        const pe::PeInfo& info);
+[[nodiscard]] loader::ResolveResult print_support_report(
+    std::ostream& stream,
+    const pe::PeInfo& info,
+    std::span<const std::byte> file_bytes = {});
 
 }  // namespace tradutorlinux::cli_detail
