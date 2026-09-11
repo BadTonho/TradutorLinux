@@ -1,6 +1,8 @@
 #include "tradutorlinux/pe/pe_analyzer.hpp"
 #include "tradutorlinux/pe/pe_reader.hpp"
 
+#include <algorithm>
+#include <cctype>
 #include <cstddef>
 #include <cstdint>
 #include <span>
@@ -62,6 +64,92 @@ MitigationInfo inspect_pe_mitigations(
     result.no_seh = (chars & kDllCharNoSeh) != 0;
     result.app_container = (chars & kDllCharAppContainer) != 0;
     result.force_integrity = (chars & kDllCharForceIntegrity) != 0;
+
+    return result;
+}
+
+PackerInspectionResult inspect_pe_packers(const PeInfo& info) {
+    PackerInspectionResult result{};
+    if (info.sections.empty()) {
+        return result;
+    }
+
+    auto to_lower = [](std::string_view text) {
+        std::string s;
+        s.reserve(text.size());
+        for (const char c : text) {
+            s.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(c))));
+        }
+        return s;
+    };
+
+    bool has_upx = false;
+    bool has_vmp = false;
+    bool has_themida = false;
+    bool has_aspack = false;
+    bool has_enigma = false;
+    bool has_mpress = false;
+    bool has_pecompact = false;
+
+    constexpr std::uint32_t kMemExecute = 0x20000000;
+    constexpr std::uint32_t kMemWrite   = 0x80000000;
+
+    for (const SectionInfo& sec : info.sections) {
+        const std::string lower_name = to_lower(sec.name);
+
+        if (lower_name.starts_with("upx") || lower_name == ".upx") {
+            has_upx = true;
+        } else if (lower_name.starts_with(".vmp") || lower_name.starts_with("vmp")) {
+            has_vmp = true;
+        } else if (lower_name.find("themida") != std::string::npos) {
+            has_themida = true;
+        } else if (lower_name.find("aspack") != std::string::npos || lower_name == ".adata" || lower_name == "adata") {
+            has_aspack = true;
+        } else if (lower_name.find("enigma") != std::string::npos) {
+            has_enigma = true;
+        } else if (lower_name.find("mpress") != std::string::npos) {
+            has_mpress = true;
+        } else if (lower_name.find("pec2") != std::string::npos || lower_name.find("pecompact") != std::string::npos) {
+            has_pecompact = true;
+        }
+
+        // Análise de seções anômalas W+X (executável e gravável)
+        const bool is_wx = (sec.characteristics & kMemExecute) != 0 && (sec.characteristics & kMemWrite) != 0;
+        if (is_wx) {
+            result.indicators.push_back("secao W+X (" + sec.name + ")");
+        }
+
+        // Análise de seções executáveis descompactadas em memória (raw_size == 0 && virtual_size >= 0x1000)
+        if ((sec.characteristics & kMemExecute) != 0 && sec.raw_data_size == 0 && sec.virtual_size >= 0x1000) {
+            result.indicators.push_back("secao executavel sem raw_data (" + sec.name + ")");
+        }
+    }
+
+    if (has_upx) {
+        result.is_packed = true;
+        result.packer_name = "UPX";
+    } else if (has_vmp) {
+        result.is_packed = true;
+        result.packer_name = "VMProtect";
+    } else if (has_themida) {
+        result.is_packed = true;
+        result.packer_name = "Themida";
+    } else if (has_aspack) {
+        result.is_packed = true;
+        result.packer_name = "ASPack";
+    } else if (has_enigma) {
+        result.is_packed = true;
+        result.packer_name = "Enigma";
+    } else if (has_mpress) {
+        result.is_packed = true;
+        result.packer_name = "MPRESS";
+    } else if (has_pecompact) {
+        result.is_packed = true;
+        result.packer_name = "PECompact";
+    } else if (!result.indicators.empty()) {
+        result.is_packed = true;
+        result.packer_name = "Generic/Packer";
+    }
 
     return result;
 }

@@ -40,5 +40,14 @@ struct MitigationInfo {
     std::span<const std::byte> file_bytes,
     const PeInfo& info);
 
+struct PackerInspectionResult {
+    bool is_packed{false};
+    std::string packer_name;
+    std::vector<std::string> indicators;
+};
+
+// Detecta empacotadores conhecidos (UPX, VMProtect, Themida, ASPack, etc.) e seções W+X anômalas.
+[[nodiscard]] PackerInspectionResult inspect_pe_packers(const PeInfo& info);
+
 }  // namespace tradutorlinux::pe
 

@@ -471,6 +471,22 @@ void print_support_report_group(std::ostream& stream, const loader::ResolveResul
             }
             stream << '\n';
         }
+    }
+    const pe::PackerInspectionResult packer = pe::inspect_pe_packers(info);
+    if (packer.is_packed) {
+        stream << "packer: detected (" << packer.packer_name;
+        if (!packer.indicators.empty()) {
+            stream << ": ";
+            for (std::size_t i = 0; i < packer.indicators.size(); ++i) {
+                if (i > 0) {
+                    stream << ", ";
+                }
+                stream << packer.indicators[i];
+            }
+        }
+        stream << ")\n";
+    }
+    if (!file_bytes.empty()) {
         const pe::ResourceInspectionResult res_info = pe::inspect_pe_resources(file_bytes, info);
         if (res_info.has_resources && !res_info.types.empty()) {
             stream << "resources: " << res_info.types.size() << " types (";
@@ -613,6 +629,11 @@ void print_support_report_group(std::ostream& stream, const loader::ResolveResul
             stream << graphics_dlls[i];
         }
         stream << "); configure profile.json com 'backend.kind: proton'\n";
+    }
+
+    if (packer.is_packed) {
+        stream << "recommendation: aplicativo empacotado/ofuscado (" << packer.packer_name
+               << "); descompacte o executavel se houver problemas de protecao W^X em runtime\n";
     }
 
     return result;
