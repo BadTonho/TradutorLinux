@@ -41,6 +41,7 @@ static volatile uint32_t g_first_veh;
 static volatile uint32_t g_last_veh;
 static volatile uint32_t g_caught;
 static volatile uint64_t g_unwind_return;
+static volatile uint32_t g_unwind_intermediate_called;
 static volatile uint32_t g_unwind_handler_called;
 static volatile uint32_t g_unwind_callback_called;
 
@@ -80,6 +81,17 @@ static int seh_filter(exception_pointers_t* pointers) {
                : 0; /* EXCEPTION_CONTINUE_SEARCH */
 }
 
+static int seh_intermediate_unwind_handler(exception_record_t* record, void* establisher_frame,
+                                           void* context, void* dispatcher) {
+    (void)establisher_frame;
+    (void)context;
+    (void)dispatcher;
+    if (record != 0 && (record->flags & 2U) != 0U && (record->flags & 0x20U) == 0U) {
+        g_unwind_intermediate_called = 1;
+    }
+    return 1; /* ExceptionContinueSearch */
+}
+
 static int seh_unwind_handler(exception_record_t* record, void* establisher_frame,
                               void* context, void* dispatcher) {
     (void)establisher_frame;
@@ -97,6 +109,8 @@ void seh_caught(void) {
 
 void seh_probe(void);
 void seh_unwind_probe(void);
+void seh_unwind_intermediate(void* target_frame, void* target_ip);
+void seh_unwind_inner(void* target_frame, void* target_ip);
 
 static uint32_t seh_thread(void* parameter) {
     (void)parameter;
@@ -148,16 +162,9 @@ __asm__(
     "subq $56, %rsp\n"
     ".seh_stackalloc 56\n"
     ".seh_endprologue\n"
-    "leaq .Ltl_seh_context(%rip), %rcx\n"
-    "call RtlCaptureContext\n"
     "leaq 72(%rsp), %rcx\n"
     "leaq seh_unwind_target(%rip), %rdx\n"
-    "leaq g_unwind_record(%rip), %r8\n"
-    "movabsq $0x1122334455667788, %r9\n"
-    "leaq .Ltl_seh_context(%rip), %rax\n"
-    "movq %rax, 32(%rsp)\n"
-    "movq $0, 40(%rsp)\n"
-    "call RtlUnwindEx\n"
+    "call seh_unwind_intermediate\n"
     "ud2\n"
     ".globl seh_unwind_target\n"
     "seh_unwind_target:\n"
@@ -168,6 +175,55 @@ __asm__(
     "ret\n"
     ".seh_handler seh_unwind_handler, @unwind\n"
     ".seh_handlerdata\n"
+    ".text\n"
+    ".seh_endproc\n"
+    ".globl seh_unwind_intermediate\n"
+    "seh_unwind_intermediate:\n"
+    ".seh_proc seh_unwind_intermediate\n"
+    "pushq %rbx\n"
+    ".seh_pushreg %rbx\n"
+    "pushq %rbp\n"
+    ".seh_pushreg %rbp\n"
+    "subq $56, %rsp\n"
+    ".seh_stackalloc 56\n"
+    ".seh_endprologue\n"
+    "call seh_unwind_inner\n"
+    "ud2\n"
+    "addq $56, %rsp\n"
+    "popq %rbp\n"
+    "popq %rbx\n"
+    "ret\n"
+    ".seh_handler seh_intermediate_unwind_handler, @unwind\n"
+    ".seh_handlerdata\n"
+    ".text\n"
+    ".seh_endproc\n"
+    ".globl seh_unwind_inner\n"
+    "seh_unwind_inner:\n"
+    ".seh_proc seh_unwind_inner\n"
+    "pushq %rbx\n"
+    ".seh_pushreg %rbx\n"
+    "pushq %rbp\n"
+    ".seh_pushreg %rbp\n"
+    "subq $56, %rsp\n"
+    ".seh_stackalloc 56\n"
+    ".seh_endprologue\n"
+    "movq %rcx, %rbx\n"
+    "movq %rdx, %rbp\n"
+    "leaq .Ltl_seh_context(%rip), %rcx\n"
+    "call RtlCaptureContext\n"
+    "movq %rbx, %rcx\n"
+    "movq %rbp, %rdx\n"
+    "leaq g_unwind_record(%rip), %r8\n"
+    "movabsq $0x1122334455667788, %r9\n"
+    "leaq .Ltl_seh_context(%rip), %rax\n"
+    "movq %rax, 32(%rsp)\n"
+    "movq $0, 40(%rsp)\n"
+    "call RtlUnwindEx\n"
+    "ud2\n"
+    "addq $56, %rsp\n"
+    "popq %rbp\n"
+    "popq %rbx\n"
+    "ret\n"
     ".text\n"
     ".seh_endproc\n"
     ".bss\n"
@@ -196,6 +252,9 @@ void tl_entry(void) {
     seh_unwind_probe();
     if (g_unwind_return != 0x1122334455667788ULL) {
         ExitProcess(4);
+    }
+    if (g_unwind_intermediate_called == 0) {
+        ExitProcess(10);
     }
     if (g_unwind_handler_called == 0) {
         ExitProcess(8);

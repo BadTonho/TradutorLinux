@@ -2674,12 +2674,14 @@ Evidência reproduzível de 2026-09-10:
   chega ao cleanup/unwind convidado, mas ainda termina com `guest-signal`/exit
   `71`; isso não é promovido a suporte de extração.
 
-Limitação aberta:
-
-- [ ] Modelar e validar a ponte de pilha/contexto usada por cleanups aninhados
-  e callbacks de consolidação reais. A próxima correção deve começar por uma
-  fixture PE32+ genérica de unwind aninhado; nenhuma regra específica de
-  WinRAR deve ser adicionada.
+- [x] A fixture PE32+ genérica `tl_seh.exe` (e sua variante promovida `tl_seh_v2.exe`)
+  foi expandida para modelar e validar a caminhada de unwind através de múltiplos
+  frames com cleanups intermediários: `seh_unwind_probe` (frame alvo) chama
+  `seh_unwind_intermediate` (com handler `@unwind`), que chama `seh_unwind_inner`
+  para acionar `RtlUnwindEx`. A suíte CTest valida que o handler intermediário é
+  acionado com `EXCEPTION_UNWINDING`, que o handler alvo recebe `EXCEPTION_TARGET_UNWIND`,
+  que o callback de consolidação é invocado e que o valor em RAX é preservado na
+  restauração do contexto.
 
 ### E45 — Rejeição segura de handlers SEH estáticos durante exceções C++
 
@@ -2713,11 +2715,9 @@ Correção e evidência:
 - [x] Nenhuma DLL, shim, regra de aplicativo ou tratamento especial foi
   adicionado. O resultado é rejeição controlada, não suporte ao Notepad++.
 
-Limitação preservada:
-
-- [ ] A ponte de pilha/contexto para cleanups aninhados e callbacks de
-  consolidação reais continua aberta conforme E44; a próxima correção deve
-  começar por fixture PE32+ genérica de unwind aninhado.
+- [x] O modelo de unwind através de múltiplos frames com cleanups intermediários
+  foi validado pela fixture genérica `tl_seh.exe`/`tl_seh_v2.exe`, confirmando a
+  execução de handlers intermediários e a consolidação no frame alvo.
 
 ### E46 — Limite explícito da stack convidada no unwind
 
