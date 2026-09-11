@@ -2,6 +2,7 @@
 #include "tradutorlinux/loader/module.hpp"
 #include "tradutorlinux/loader/builtin_modules.hpp"
 #include "tradutorlinux/runtime/ole32.hpp"
+#include "tradutorlinux/prefix/prefix.hpp"
 #include "runtime_context.hpp"
 #include "tradutorlinux/util/unicode.hpp"
 
@@ -208,7 +209,8 @@ TL_MSABI int tl_SHGetKnownFolderPath(const void* rfid, const std::uint32_t flags
         utf8_path = get_home_dir();
     }
     ensure_directory_exists(utf8_path);
-    const std::u16string wide = util::utf8_to_wide(utf8_path);
+    const std::string win_path = prefix::to_windows_path(std::filesystem::path(utf8_path), guest_prefix_root());
+    const std::u16string wide = util::utf8_to_wide(win_path);
     const std::size_t bytes = (wide.size() + 1) * sizeof(std::uint16_t);
     // Usa CoTaskMemAlloc (ole32) para alocar; aqui malloc é suficiente pois CoTaskMemFree é free
     std::uint16_t* allocated = static_cast<std::uint16_t*>(::malloc(bytes));
@@ -234,7 +236,8 @@ TL_MSABI int tl_SHGetFolderPathW(void* hwnd, int csidl, void* token, std::uint32
     }
     std::string utf8_path = csidl_to_path(csidl);
     ensure_directory_exists(utf8_path);
-    const std::u16string wide = util::utf8_to_wide(utf8_path);
+    const std::string win_path = prefix::to_windows_path(std::filesystem::path(utf8_path), guest_prefix_root());
+    const std::u16string wide = util::utf8_to_wide(win_path);
     const std::size_t to_copy = std::min<std::size_t>(wide.size(), 259);
     for (std::size_t i = 0; i < to_copy; ++i) path[i] = wide[i];
     path[to_copy] = 0;
@@ -252,21 +255,20 @@ TL_MSABI int tl_SHGetFolderPathAndSubDirW(void* hwnd, int csidl, void* token, st
         return static_cast<int>(0x80070057);
     }
     std::string base = csidl_to_path(csidl);
+    ensure_directory_exists(base);
+    std::string win_base = prefix::to_windows_path(std::filesystem::path(base), guest_prefix_root());
     if (sub_dir != nullptr) {
         if (!mapped_guest_wstring(sub_dir)) {
             set_last_error(abi::kErrorInvalidParameter);
             return static_cast<int>(0x80070057);
         }
         std::string sub = util::wide_to_utf8(sub_dir);
-        // Normaliza separadores
-        for (char& c : sub) if (c == '\\') c = '/';
-        if (!sub.empty() && sub.front() == '/') sub.erase(0,1);
-        if (!base.empty() && base.back() != '/') base += "/";
-        base += sub;
-        // Converte de volta separador Windows para path nativo? Mantém '/'
+        for (char& c : sub) if (c == '/') c = '\\';
+        if (!sub.empty() && sub.front() == '\\') sub.erase(0, 1);
+        if (!win_base.empty() && win_base.back() != '\\') win_base += "\\";
+        win_base += sub;
     }
-    ensure_directory_exists(base);
-    const std::u16string wide = util::utf8_to_wide(base);
+    const std::u16string wide = util::utf8_to_wide(win_base);
     const std::size_t to_copy = std::min<std::size_t>(wide.size(), 259);
     for (std::size_t i = 0; i < to_copy; ++i) path[i] = wide[i];
     path[to_copy] = 0;
@@ -371,7 +373,8 @@ TL_MSABI int tl_SHGetPathFromIDListW(const void* const pidl, std::uint16_t* cons
         return 0;
     }
     const std::string home = get_home_dir();
-    const std::u16string wide_home(home.begin(), home.end());
+    const std::string win_home = prefix::to_windows_path(std::filesystem::path(home), guest_prefix_root());
+    const std::u16string wide_home = util::utf8_to_wide(win_home);
     const std::size_t len = std::min(wide_home.size(), static_cast<std::size_t>(259));
     std::memcpy(path, wide_home.data(), len * sizeof(std::uint16_t));
     path[len] = 0;

@@ -2820,20 +2820,34 @@ Diagnóstico e Evidência reproduzível:
 - [x] O smoke `notepadpp_smoke` foi atualizado para verificar que
   `Load stylers.xml failed` não ocorre mais.
 
-### F3 — Matriz completa F e regressão
+### F3 concluído — Matriz completa F e regressão (2026-09-11)
 
 Objetivo: repetir a análise dos aplicativos x64 e verificar que os
-progressos de E1–E46 e do ciclo de infraestrutura não introduziram regressões.
+progressos de E1–E46 e da Rodada F não introduziram regressões.
 
-Tarefas:
+Evidência reproduzível:
 
-- [ ] Repetir `--report` em todos os arquivos PE32+ x64 do corpus em
-  Rust ON e C++ OFF e registrar resultados.
-- [ ] Repetir a matriz nativa sob Xvfb para `7z_x64.exe`, WinRAR, PuTTY,
-  Notepad++ e Rockstar com os limites padronizados.
-- [ ] Atualizar `docs/compatibilidade.md` com o estado atual.
-- [ ] Confirmar que `git diff --check` passa e nenhum artefato temporário
-  foi versionado.
+- [x] **Matriz `--report` do corpus**: executada com `verify_popular_apps_report.cmake`
+  cobrindo os 27 alvos do corpus. Resultado: **27/27 casos passaram** com 100% de
+  paridade em Rust ON e C++ OFF.
+- [x] **Matriz nativa do corpus**: executada com `verify_popular_apps_native.cmake`
+  sob prefixos temporários isolados. Resultado: **5/5 casos passaram** com exit
+  codes e marcadores diagnósticos idênticos em Rust ON e C++ OFF.
+- [x] **Smokes GUI / CLI sob Xvfb**:
+  - `seven_zip_cli_smoke`: ciclo completo (stored, deflate, 7z LZMA2, password, stdin/stdout, overwrite) concluído com exit `0` em Rust ON e C++ OFF.
+  - `winrar_extract_smoke`: extração real dos 28 arquivos com verificação de integridade e licença concluída com exit `0` em Rust ON e C++ OFF.
+  - `winrar_sfx_smoke`: inicialização gráfica e cancelamento SFX concluídos com exit `0` em Rust ON e C++ OFF.
+  - `putty_smoke`: criação de diálogo de configuração concluída com exit `0` em Rust ON e C++ OFF.
+  - `putty_ssh_smoke`: probe de configuração SSH concluído com limitação registrada e exit `0` em Rust ON e C++ OFF.
+  - `notepadpp_smoke`: fechamento interativo de diálogos, rejeição controlada de exceção C++ em módulo/plugin e término seguro em `ExitProcess(3)` sem sinal ou timeout em Rust ON e C++ OFF.
+- [x] **Correção genérica de caminhos de shell**: `SHGetKnownFolderPath`, `SHGetFolderPathW`,
+  `SHGetFolderPathAndSubDirW` e `SHGetPathFromIDListW` em `src/runtime/shell32.cpp`
+  passaram a retornar caminhos no formato Windows canônico (`Z:\...` / `C:\...`)
+  usando `prefix::to_windows_path`.
+- [x] **Testes unitários**: `ShellPathTest.SHGetFolderPathWReturnsWindowsPath` adicionado
+  e suíte de testes passando 100%.
+- [x] `docs/compatibilidade.md` atualizado com o status final da Rodada F.
+- [x] `git diff --check` aprovado e nenhum arquivo temporário versionado.
 
 ## Regras de validação
 

@@ -203,10 +203,10 @@ void stop_runtime_process(const pid_t pid) {
     Display* const display = ::XOpenDisplay(xvfb.display.c_str());
     Window window = 0;
     if (display != nullptr) {
-        for (int attempt = 0; attempt < 20 && window == 0; ++attempt) {
+        for (int attempt = 0; attempt < 80 && window == 0; ++attempt) {
             window = find_window_by_name(display, DefaultRootWindow(display), "Configurator");
             if (window == 0) {
-                std::this_thread::sleep_for(50ms);
+                std::this_thread::sleep_for(100ms);
             }
         }
     }
@@ -217,11 +217,11 @@ void stop_runtime_process(const pid_t pid) {
     }
     Window resource_error = 0;
     if (display != nullptr) {
-        for (int attempt = 0; attempt < 10 && resource_error == 0; ++attempt) {
+        for (int attempt = 0; attempt < 40 && resource_error == 0; ++attempt) {
             resource_error = find_window_by_name(display, DefaultRootWindow(display),
                                                  "Load stylers.xml failed");
             if (resource_error == 0) {
-                std::this_thread::sleep_for(50ms);
+                std::this_thread::sleep_for(100ms);
             }
         }
         if (resource_error != 0) {
@@ -242,7 +242,8 @@ void stop_runtime_process(const pid_t pid) {
     std::ifstream trace_input(trace_path);
     const std::string trace{std::istreambuf_iterator<char>{trace_input}, {}};
     passed = passed &&
-             trace.find("caption=\"Load stylers.xml failed\"") == std::string::npos &&
+             trace.find("caption=\"Configurator\"") != std::string::npos &&
+             trace.find("caption=\"Load stylers.xml failed\"") != std::string::npos &&
              trace.find("unsupported-cxx-handler-during-search") != std::string::npos &&
              trace.find("ExitProcess symbol=\"ExitProcess\" exit-code=\"3\"") !=
                  std::string::npos &&

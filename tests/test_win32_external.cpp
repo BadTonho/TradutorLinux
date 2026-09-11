@@ -410,6 +410,15 @@ TEST(ShellPathTest, PathFileExistsAndIsDirectoryWithZDrive) {
     EXPECT_EQ(tl_PathIsDirectoryW(z_missing), 0);
 }
 
+TEST(ShellPathTest, SHGetFolderPathWReturnsWindowsPath) {
+    std::uint16_t buffer[260]{};
+    // CSIDL_APPDATA = 0x001a
+    EXPECT_EQ(tl_SHGetFolderPathW(nullptr, 0x001a, nullptr, 0, buffer), 0);
+    EXPECT_TRUE(buffer[0] == u'C' || buffer[0] == u'Z');
+    EXPECT_EQ(buffer[1], u':');
+    EXPECT_EQ(buffer[2], u'\\');
+}
+
 TEST(IphlpapiTest, EnumeratesLinuxAdaptersWithWin32BufferContracts) {
     constexpr std::uint32_t kErrorBufferOverflow = 111U;
     constexpr std::uint32_t kErrorNoData = 232U;
