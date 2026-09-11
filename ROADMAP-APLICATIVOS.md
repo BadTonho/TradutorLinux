@@ -2750,6 +2750,87 @@ Validação pendente do ambiente:
 - [x] O aviso preexistente de `-Werror=conversion` em `tests/test_win32.cpp:475` foi
   corrigido com cast explícito sobre o resultado total da expressão inteira,
   mantendo a decodificação UTF-16 válida e a compilação limpa sob avisos estritos.
+## Rodada F — aprofundamento dos alvos x64 com maior progresso
+
+Esta rodada começa depois da conclusão de E46 e do ciclo de melhorias de
+infraestrutura (CLI JSON, doctor, sandbox S1, B11, B13). O objetivo é avançar
+o portfólio real com as lacunas de execução mais próximas de ser fechadas,
+começando pelos alvos que já têm todos os imports resolvidos e chegam ao entry
+point sem rejeição.
+
+### Estado do corpus — 2026-09-11
+
+| Aplicativo | --report | Execução atual | Próximo bloqueio |
+|---|---|---|---|
+| `7z_x64.exe` | `supported` (562 KB, 225 imports) | exit `0` (CLI sem args) | – fluxo completo já coberto |
+| `7zFM_x64.exe` | `supported` (987 KB, 298 imports) | `seven_zip_smoke` exit `0` | GUI estendida fora do smoke |
+| `WinRAR_x64.exe` | `supported` (3,8 MB, ~251 imports) | exit `0` (cancel SFX) | extração real não validada |
+| `putty_x64.exe` | `supported` (1,7 MB, 348 imports) | `guest-timeout 72` | bloqueio pós-ativação TCP |
+| `notepad++.exe` | `supported` (8,4 MB, ~400 imports) | `ExitProcess(3)` | falha ao carregar stylers.xml |
+| `Rockstar-Games-Launcher.exe` | `supported` (112 MB) | `ExitProcess(3)` | antidetecção de ambiente |
+| `HWiNFO64.exe` | `malformed` (UPX0/UPX1) | não tentada | imagem empacotada UPX |
+| `Rufus_x64.exe` | `malformed` (entry W^X) | não tentada | imagem empacotada, W^X |
+
+Aplicativos x86/32-bit (`CPU-Z`, `GPU-Z`, `HWMonitor`, `RTSS`,
+`Everything_Search_x64.exe`) continuam fora do escopo.
+
+### F1 — WinRAR: extração real de arquivo ZIP
+
+Objetivo: avançar o fluxo do WinRAR além do cancelamento controlado, validando
+a extração real de um arquivo ZIP simples num prefixo temporário. Sem
+introduzir regras ou shims específicos do WinRAR no runtime.
+
+Tarefas:
+
+- [ ] Criar arquivo ZIP mínimo de fixture no prefixo temporário.
+- [ ] Executar `WinRAR_x64.exe e fixture.zip dest\` sob Xvfb, com limite de
+  tempo e memória, verificando que os bytes extraídos correspondem ao original.
+- [ ] Comparar stdout, stderr, exit code e trace em Rust ON/C++ OFF.
+- [ ] Registrar o resultado na matriz de compatibilidade.
+
+Aceitação:
+
+- [ ] Fixture e teste CTest cobrem extração, exit `0` e conteúdo correto.
+- [ ] Nenhum código específico do WinRAR foi adicionado ao runtime.
+- [ ] `git diff --check` passa e o worktree fica limpo.
+
+### F2 — Notepad++: diagnóstico do ExitProcess(3)
+
+Objetivo: isolar a causa do `ExitProcess(3)` após `Load stylers.xml failed`
+sem relaxar a política de segurança.
+
+Tarefas:
+
+- [ ] Criar fixture mínima que reproduza a sequência de leitura de XML de
+  recursos (RCDATA/arquivo), sem copiar código do Notepad++.
+- [ ] Comparar trace de falha no acesso ao arquivo `stylers.xml` em dois
+  cenários: com e sem o arquivo presente no prefixo.
+- [ ] Identificar se o bloqueio é de API de arquivo ausente, codepage de
+  recurso ou outra limitação no loader.
+- [ ] Corrigir somente se for uma lacuna genérica do runtime, com teste unitário.
+
+Aceitação:
+
+- [ ] Há hipótese específica, fixture e evidência ON/OFF antes de qualquer
+  alteração no runtime.
+- [ ] O Notepad++ não é promovido a suportado: o objetivo é apenas reduzir a
+  rejeição controlada de `ExitProcess(3)` para `guest-timeout` na janela
+  principal.
+
+### F3 — Matriz completa F e regressão
+
+Objetivo: repetir a análise dos aplicativos x64 e verificar que os
+progressos de E1–E46 e do ciclo de infraestrutura não introduziram regressões.
+
+Tarefas:
+
+- [ ] Repetir `--report` em todos os arquivos PE32+ x64 do corpus em
+  Rust ON e C++ OFF e registrar resultados.
+- [ ] Repetir a matriz nativa sob Xvfb para `7z_x64.exe`, WinRAR, PuTTY,
+  Notepad++ e Rockstar com os limites padronizados.
+- [ ] Atualizar `docs/compatibilidade.md` com o estado atual.
+- [ ] Confirmar que `git diff --check` passa e nenhum artefato temporário
+  foi versionado.
 
 ## Regras de validação
 
