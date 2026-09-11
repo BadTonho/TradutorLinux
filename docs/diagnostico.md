@@ -332,6 +332,21 @@ Em todos os casos, `execution: not-attempted` e
 `execution-result: not-attempted` deixam claro que o relatório não executa o
 PE.
 
+Quando a imagem PE possuir recursos internos (`.rsrc`), o relatório inclui:
+- `resources: <N> types (<tipo>=<qtd>, ...)`: inventário estrutural de tipos
+  Win32 embutidos (ex.: `dialog`, `icon`, `version`, `manifest`).
+- `manifest: uac="..." dpi-aware="..." os-compat="..."`: extração segura do
+  `RT_MANIFEST`, identificando privilégio de execução solicitado (`asInvoker`,
+  `requireAdministrator`, etc.), percepção de DPI e versões de SO suportadas.
+  Caso `uac="requireAdministrator"`, emite alerta explícito de necessidade de
+  elevação.
+
+Caso a aplicação importe ou use delay-import de bibliotecas de aceleração
+gráfica 3D (`d3d11.dll`, `d3d12.dll`, `dxgi.dll`, `d3d9.dll`, `vulkan-1.dll`,
+`xinput1_4.dll`), o relatório emite uma recomendação direta para direcionar a
+execução ao backend Proton:
+`recommendation: requer aceleracao grafica 3D (...); configure profile.json com 'backend.kind: proton'`
+
 Para evitar confundir análise com compatibilidade de aplicativo, use esta ordem
 de evidência:
 

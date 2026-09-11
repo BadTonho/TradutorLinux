@@ -422,5 +422,71 @@ TEST(CommandRunTest, ReturnsGuestTimeoutWhenGuestHangs) {
     EXPECT_EQ(stderr_stream.str().find("exit exit-code="), std::string::npos);
 }
 
+TEST(CommandRunTest, ReportOutputsResourcesWhenPresent) {
+    CommandLine command_line;
+    command_line.report_only = true;
+    command_line.executable_path =
+        std::filesystem::path{TL_FIXTURE_OUTPUT_DIRECTORY} / "tl_resources.exe";
+    std::ostringstream stdout_stream;
+    std::ostringstream stderr_stream;
+
+    const ExitCode exit_code = run_command(command_line, stdout_stream, stderr_stream);
+    EXPECT_EQ(exit_code, ExitCode::Success);
+
+    const std::string report = stdout_stream.str();
+    EXPECT_NE(report.find("resources: 1 types (rcdata=1)\n"), std::string::npos)
+        << "Relatório:\n" << report;
+}
+
+TEST(CommandRunTest, ReportDetectsDirectXAndRecommendsProton) {
+    CommandLine command_line;
+    command_line.report_only = true;
+    command_line.executable_path =
+        std::filesystem::path{TL_FIXTURE_OUTPUT_DIRECTORY} / "tl_graphics_probe.exe";
+    std::ostringstream stdout_stream;
+    std::ostringstream stderr_stream;
+
+    const ExitCode exit_code = run_command(command_line, stdout_stream, stderr_stream);
+    EXPECT_EQ(exit_code, ExitCode::Unsupported);
+
+    const std::string report = stdout_stream.str();
+    EXPECT_NE(report.find("recommendation: requer aceleracao grafica 3D (d3d11.dll); configure profile.json com 'backend.kind: proton'"),
+              std::string::npos)
+        << "Relatório:\n" << report;
+}
+
+TEST(CommandRunTest, ReportDetectsD3D12AndDxgiRecommendsProton) {
+    CommandLine command_line;
+    command_line.report_only = true;
+    command_line.executable_path =
+        std::filesystem::path{TL_FIXTURE_OUTPUT_DIRECTORY} / "tl_d3d12_probe.exe";
+    std::ostringstream stdout_stream;
+    std::ostringstream stderr_stream;
+
+    const ExitCode exit_code = run_command(command_line, stdout_stream, stderr_stream);
+    EXPECT_EQ(exit_code, ExitCode::Unsupported);
+
+    const std::string report = stdout_stream.str();
+    EXPECT_NE(report.find("recommendation: requer aceleracao grafica 3D (d3d12.dll, dxgi.dll); configure profile.json com 'backend.kind: proton'"),
+              std::string::npos)
+        << "Relatório:\n" << report;
+}
+
+TEST(CommandRunTest, ReportDoesNotRecommendProtonWhenNoGraphics) {
+    CommandLine command_line;
+    command_line.report_only = true;
+    command_line.executable_path =
+        std::filesystem::path{TL_FIXTURE_OUTPUT_DIRECTORY} / "tl_hello.exe";
+    std::ostringstream stdout_stream;
+    std::ostringstream stderr_stream;
+
+    const ExitCode exit_code = run_command(command_line, stdout_stream, stderr_stream);
+    EXPECT_EQ(exit_code, ExitCode::Success);
+
+    const std::string report = stdout_stream.str();
+    EXPECT_EQ(report.find("recommendation:"), std::string::npos)
+        << "Relatório inesperadamente emitiu recomendação:\n" << report;
+}
+
 }  // namespace
 }  // namespace tradutorlinux

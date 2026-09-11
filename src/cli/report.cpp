@@ -545,6 +545,60 @@ void print_support_report_group(std::ostream& stream, const loader::ResolveResul
            << " (" << limited_exports << " limited, " << stub_exports << " stub)\n";
     stream << "execution: not-attempted\n";
     stream << "execution-result: not-attempted\n";
+
+    auto is_3d_graphics_dll = [](const std::string_view name) noexcept {
+        auto iequals = [](const std::string_view a, const std::string_view b) noexcept {
+            if (a.size() != b.size()) {
+                return false;
+            }
+            for (std::size_t i = 0; i < a.size(); ++i) {
+                if (std::tolower(static_cast<unsigned char>(a[i])) !=
+                    std::tolower(static_cast<unsigned char>(b[i]))) {
+                    return false;
+                }
+            }
+            return true;
+        };
+        return iequals(name, "d3d11.dll") ||
+               iequals(name, "d3d12.dll") ||
+               iequals(name, "dxgi.dll") ||
+               iequals(name, "d3d9.dll") ||
+               iequals(name, "vulkan-1.dll") ||
+               iequals(name, "xinput1_4.dll");
+    };
+
+    std::vector<std::string> graphics_dlls;
+    auto record_graphics_dll = [&](const std::string& dll_name) {
+        if (is_3d_graphics_dll(dll_name)) {
+            std::string lower;
+            lower.reserve(dll_name.size());
+            for (const char c : dll_name) {
+                lower.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(c))));
+            }
+            if (std::find(graphics_dlls.begin(), graphics_dlls.end(), lower) == graphics_dlls.end()) {
+                graphics_dlls.push_back(std::move(lower));
+            }
+        }
+    };
+
+    for (const auto& imp : info.imports) {
+        record_graphics_dll(imp.name);
+    }
+    for (const auto& imp : info.delay_imports) {
+        record_graphics_dll(imp.name);
+    }
+
+    if (!graphics_dlls.empty()) {
+        stream << "recommendation: requer aceleracao grafica 3D (";
+        for (std::size_t i = 0; i < graphics_dlls.size(); ++i) {
+            if (i > 0) {
+                stream << ", ";
+            }
+            stream << graphics_dlls[i];
+        }
+        stream << "); configure profile.json com 'backend.kind: proton'\n";
+    }
+
     return result;
 }
 
