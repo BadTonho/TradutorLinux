@@ -94,6 +94,28 @@ ParseResult parse_command_line(const int argc, const char* const argv[]) {
 
     const std::string_view first_arg{argv[1]};
 
+    // Subcomando: doctor [--json]
+    if (first_arg == "doctor") {
+        command_line.mode = CommandMode::Doctor;
+        for (int i = 2; i < argc; ++i) {
+            const std::string_view arg{argv[i]};
+            if (arg == "--json") {
+                if (command_line.report_json) {
+                    return {.command_line = std::nullopt,
+                            .error_message = "a opção --json foi repetida"};
+                }
+                command_line.report_json = true;
+            } else if (is_option(arg)) {
+                return {.command_line = std::nullopt,
+                        .error_message = "opção desconhecida para doctor: " + std::string{arg}};
+            } else {
+                return {.command_line = std::nullopt,
+                        .error_message = "argumento inesperado para doctor: " + std::string{arg}};
+            }
+        }
+        return {.command_line = std::move(command_line), .error_message = {}};
+    }
+
     // Subcomando: install <setup.exe|package.msix>
     if (first_arg == "install") {
         command_line.mode = CommandMode::Install;
@@ -556,7 +578,7 @@ ParseResult parse_command_line(const int argc, const char* const argv[]) {
                 .error_message = "--help e --version não podem ser usados juntos"};
     }
 
-    if (command_line.report_json && !command_line.report_only) {
+    if (command_line.report_json && !command_line.report_only && command_line.mode != CommandMode::Doctor) {
         return {.command_line = std::nullopt,
                 .error_message = "a opção --json requer --report"};
     }
@@ -568,7 +590,9 @@ void print_help(std::ostream& stream) {
     TL_TRACE_FUNCTION();
     stream << kUsage;
     stream << "\n";
-    stream << "Comandos de Gerenciamento da Biblioteca e Instalação:\n";
+    stream << "Comandos de Diagnóstico, Gerenciamento e Instalação:\n";
+    stream << "  doctor [--json]\n";
+    stream << "             diagnostica display, drivers gráficos, backends e isolamento no hospedeiro\n";
     stream << "  install <setup.exe|package.msix> [--name <Nome>] [--prefix <dir>] [--app-exe <caminho>] [--cpu <segundos>] [--memory <MiB>]\n";
     stream << "             instala em prefixo próprio; pacotes usam o executável do manifesto\n";
     stream << "             --app-exe escolhe manualmente um .exe dentro de drive_c\n";

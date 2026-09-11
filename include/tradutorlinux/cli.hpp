@@ -31,6 +31,7 @@ enum class CommandMode {
     AppRun,      // Executar aplicativo da biblioteca
     AppAdd,      // Cadastrar aplicativo manualmente na biblioteca
     AppRemove,   // Remover aplicativo do catálogo da biblioteca
+    Doctor,      // Diagnosticar ambiente de execução no hospedeiro
 };
 
 struct CommandLine {

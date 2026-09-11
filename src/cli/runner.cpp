@@ -586,6 +586,11 @@ ExitCode run_command(const CommandLine& command_line, std::ostream& stdout_strea
         return ExitCode::Success;
     }
 
+    // Modo: Diagnóstico do ambiente hospedeiro (Doctor)
+    if (command_line.mode == CommandMode::Doctor) {
+        return run_doctor(stdout_stream, stderr_stream, command_line.report_json);
+    }
+
     // Modo: Listar biblioteca de aplicativos
     if (command_line.mode == CommandMode::AppList) {
         catalog::AppCatalog app_catalog;

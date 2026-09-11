@@ -4,6 +4,7 @@ add_library(tradutorlinux_core STATIC
     catalog/app_catalog.cpp
     cli/options.cpp
     cli/report.cpp
+    cli/doctor.cpp
     cli/runner.cpp
     compat/profile.cpp
     compat/path_rules.cpp

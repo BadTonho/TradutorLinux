@@ -387,6 +387,20 @@ de evidência:
 Um `result: supported` sem execução correspondente significa apenas
 `imports-resolved`; não deve ser apresentado como suporte funcional ao usuário.
 
+### Diagnóstico de ambiente com o comando `doctor` (`tradutorlinux doctor [--json]`)
+
+O subcomando `tradutorlinux doctor` verifica a prontidão do ambiente Linux hospedeiro para executar aplicativos Windows pelo TradutorLinux (tanto via runtime nativo quanto via backend Proton).
+
+Ele inspeciona e relata o status de 6 categorias principais:
+1. **Sistema e Kernel**: arquitetura do host (`x86_64`), versão do kernel Linux via `uname()`.
+2. **Servidor Gráfico**: detecção de X11 (`$DISPLAY`), Wayland (`$WAYLAND_DISPLAY`) e disponibilidade de `Xvfb` no `$PATH` para testes headless.
+3. **Aceleração 3D e GPU**: presença de nós de renderização DRM (`/dev/dri/renderD*`) e manifestos ICD de drivers Vulkan instalados (`/usr/share/vulkan/icd.d`, `/etc/vulkan/icd.d`).
+4. **Backend Proton**: status da configuração de runtime (`root` configurada em `~/.config/tradutorlinux/proton.json` ou `TRADUTORLINUX_PROTON_ROOT`).
+5. **Sandbox e Isolamento**: presença do utilitário Bubblewrap (`bwrap`) no `$PATH` e status de namespaces de usuário desprivilegiados (`/proc/sys/kernel/unprivileged_userns_clone`).
+6. **Servidor de Áudio**: detecção de sockets de runtime PipeWire (`$XDG_RUNTIME_DIR/pipewire-0`) e PulseAudio (`$XDG_RUNTIME_DIR/pulse/native`).
+
+Com a opção `--json` (`tradutorlinux doctor --json`), o comando emite um documento JSON estruturado contendo as chaves `system`, `display`, `graphics_3d`, `proton`, `sandbox`, `audio` e a lista `issues`, viabilizando diagnósticos automáticos integrados a scripts de instalação, CI e interface gráfica Qt.
+
 ### Backend Rust no relatório direto e no `app run` nativo — R21.3–R21.5
 
 Quando o projeto é construído com `TL_BUILD_RUST=ON`, somente

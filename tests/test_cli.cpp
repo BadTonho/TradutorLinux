@@ -565,6 +565,58 @@ TEST(CommandRunTest, ReportJsonContains3DGraphicsRecommendation) {
         << report;
 }
 
+TEST(CommandLineTest, ParsesDoctorCommand) {
+    const std::vector<const char*> doctor_args{"tradutorlinux", "doctor"};
+    const ParseResult doc_res = parse_command_line(static_cast<int>(doctor_args.size()), doctor_args.data());
+    ASSERT_TRUE(doc_res.command_line.has_value());
+    EXPECT_EQ(doc_res.command_line->mode, CommandMode::Doctor);
+    EXPECT_FALSE(doc_res.command_line->report_json);
+
+    const std::vector<const char*> doctor_json_args{"tradutorlinux", "doctor", "--json"};
+    const ParseResult json_res = parse_command_line(static_cast<int>(doctor_json_args.size()), doctor_json_args.data());
+    ASSERT_TRUE(json_res.command_line.has_value());
+    EXPECT_EQ(json_res.command_line->mode, CommandMode::Doctor);
+    EXPECT_TRUE(json_res.command_line->report_json);
+
+    const std::vector<const char*> doctor_err_args{"tradutorlinux", "doctor", "--invalid-flag"};
+    const ParseResult err_res = parse_command_line(static_cast<int>(doctor_err_args.size()), doctor_err_args.data());
+    EXPECT_FALSE(err_res.command_line.has_value());
+}
+
+TEST(CommandRunTest, DoctorProducesHumanReadableDiagnostics) {
+    CommandLine command_line;
+    command_line.mode = CommandMode::Doctor;
+    std::ostringstream stdout_stream;
+    std::ostringstream stderr_stream;
+
+    const ExitCode exit_code = run_command(command_line, stdout_stream, stderr_stream);
+    EXPECT_EQ(exit_code, ExitCode::Success);
+
+    const std::string output = stdout_stream.str();
+    EXPECT_NE(output.find("TradutorLinux Doctor - Diagnostico do Ambiente Hospedeiro"), std::string::npos);
+    EXPECT_NE(output.find("[OK] Arquitetura:"), std::string::npos);
+    EXPECT_NE(output.find("Status: ambiente pronto"), std::string::npos);
+}
+
+TEST(CommandRunTest, DoctorEmitsStructuredJson) {
+    CommandLine command_line;
+    command_line.mode = CommandMode::Doctor;
+    command_line.report_json = true;
+    std::ostringstream stdout_stream;
+    std::ostringstream stderr_stream;
+
+    const ExitCode exit_code = run_command(command_line, stdout_stream, stderr_stream);
+    EXPECT_EQ(exit_code, ExitCode::Success);
+
+    const std::string output = stdout_stream.str();
+    EXPECT_EQ(output.front(), '{');
+    EXPECT_NE(output.find("\"doctor\": {"), std::string::npos);
+    EXPECT_NE(output.find("\"architecture\": {"), std::string::npos);
+    EXPECT_NE(output.find("\"display\": {"), std::string::npos);
+    EXPECT_NE(output.find("\"ready\": true"), std::string::npos);
+}
+
 }  // namespace
 }  // namespace tradutorlinux
+
 
