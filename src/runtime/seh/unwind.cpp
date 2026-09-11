@@ -143,7 +143,7 @@ constexpr std::uint32_t kStatusUnwindConsolidate = 0x80000029U;
 
 [[nodiscard]] bool read_u64(const std::uint64_t address, std::uint64_t& out) noexcept {
     const auto* const source = reinterpret_cast<const void*>(static_cast<std::uintptr_t>(address));
-    if (!validate_mapped_range(source, sizeof(out), false)) {
+    if (!validate_guest_stack_range(source, sizeof(out), false)) {
         return false;
     }
     std::memcpy(&out, source, sizeof(out));
@@ -152,7 +152,7 @@ constexpr std::uint32_t kStatusUnwindConsolidate = 0x80000029U;
 
 [[nodiscard]] bool read_m128(const std::uint64_t address, M128A& out) noexcept {
     const auto* const source = reinterpret_cast<const void*>(static_cast<std::uintptr_t>(address));
-    if (!validate_mapped_range(source, sizeof(out), false)) {
+    if (!validate_guest_stack_range(source, sizeof(out), false)) {
         return false;
     }
     std::memcpy(&out, source, sizeof(out));
@@ -411,6 +411,27 @@ void restore_guest_unwind_view(const GuestUnwindView view) noexcept {
     set_guest_unwind_view(view.image_base, view.image_size, view.exception_directory_rva, view.functions);
 }
 
+bool validate_guest_stack_range(const void* const address, const std::size_t size,
+                                const bool writable) noexcept {
+    if (address == nullptr || size == 0U) {
+        return false;
+    }
+    const std::uintptr_t start = reinterpret_cast<std::uintptr_t>(address);
+    if (size > std::numeric_limits<std::uintptr_t>::max() - start) {
+        return false;
+    }
+    if (::tradutorlinux::g_thread_teb != nullptr) {
+        const std::uintptr_t stack_limit = ::tradutorlinux::g_thread_teb->stack_limit;
+        const std::uintptr_t stack_base = ::tradutorlinux::g_thread_teb->stack_base;
+        if (stack_limit == 0U || stack_base <= stack_limit || start < stack_limit ||
+            start >= stack_base ||
+            size > stack_base - start) {
+            return false;
+        }
+    }
+    return validate_mapped_range(address, size, writable);
+}
+
 void* add_vectored_exception_handler(const std::uint32_t first, void* const handler) noexcept {
     if (handler == nullptr || !valid_guest_code(handler)) {
         set_last_error(abi::kErrorInvalidParameter);
@@ -555,7 +576,14 @@ std::int32_t c_specific_handler(ExceptionRecordAmd64* const exception_record,
             if (exception_record != nullptr) {
                 exception_record->flags |= kExceptionTargetUnwind;
             }
-            if (exception_record != nullptr && frame.handler != nullptr) {
+            const bool cxx_exception = exception_record != nullptr &&
+                                       exception_record->code == 0xE06D7363U;
+            const bool supported_cxx_handler =
+                cxx_exception && is_supported_cxx_handler_data(frame.handler_data);
+            if (cxx_exception && frame.handler != nullptr && !supported_cxx_handler) {
+                trace_seh("skipped", exception_record->code,
+                          "unsupported-cxx-handler-during-unwind");
+            } else if (exception_record != nullptr && frame.handler != nullptr) {
                 DispatcherContextAmd64 dispatcher{
                     .control_pc = before.rip,
                     .image_base = reinterpret_cast<std::uintptr_t>(g_unwind_image.base),
@@ -569,7 +597,7 @@ std::int32_t c_specific_handler(ExceptionRecordAmd64* const exception_record,
                                   frame.handler_data, frame.index);
                 const std::int32_t disposition = invoke_language_handler(
                     frame.handler, exception_record, frame.establisher_frame, context, &dispatcher);
-                if (exception_record->code == 0xE06D7363U &&
+                if (supported_cxx_handler &&
                     disposition == kExceptionExecuteHandler && dispatcher.target_ip != 0U) {
                     ContextAmd64 action_context = cursor;
                     if (!prepare_cxx_cleanup_transfer(
@@ -581,9 +609,14 @@ std::int32_t c_specific_handler(ExceptionRecordAmd64* const exception_record,
                     trace_seh("unwind", exception_record->code, "cxx-cleanup");
                     tl_restore_guest_context_and_jump(&action_context);
                 }
-                if (disposition != kExceptionContinueSearch) {
+                if (disposition != kExceptionContinueSearch &&
+                    disposition != kExceptionExecuteHandler) {
                     fail_seh(exception_record->code,
                              "disposição de termination handler C++ inválida");
+                }
+                if (disposition == kExceptionExecuteHandler && !supported_cxx_handler) {
+                    trace_seh("continued", exception_record->code,
+                              "static-handler-target");
                 }
             }
             ContextAmd64 result = before;
@@ -599,7 +632,7 @@ std::int32_t c_specific_handler(ExceptionRecordAmd64* const exception_record,
                 result.rip = consolidated_ip;
                 trace_seh("unwind", exception_record->code, "consolidated");
             }
-            if (exception_record != nullptr && exception_record->code == 0xE06D7363U &&
+            if (supported_cxx_handler &&
                 !prepare_cxx_catch_transfer(result, target_frame, target_ip)) {
                 fail_seh(exception_record->code, "transferência de catch funclet inválida");
             }
@@ -607,6 +640,15 @@ std::int32_t c_specific_handler(ExceptionRecordAmd64* const exception_record,
             tl_restore_guest_context_and_jump(&result);
         }
         if (frame.handler != nullptr) {
+            const bool unsupported_cxx_handler =
+                exception_record != nullptr && exception_record->code == 0xE06D7363U &&
+                !is_supported_cxx_handler_data(frame.handler_data);
+            if (unsupported_cxx_handler) {
+                trace_seh("skipped", exception_record->code,
+                          "unsupported-cxx-handler-during-unwind");
+                *context = cursor;
+                continue;
+            }
             DispatcherContextAmd64 dispatcher{.control_pc = before.rip,
                                               .image_base = reinterpret_cast<std::uintptr_t>(g_unwind_image.base),
                                               .function_entry = static_cast<std::uint32_t*>(raw_function_entry(frame.index)),
@@ -738,12 +780,23 @@ std::int32_t c_specific_handler(ExceptionRecordAmd64* const exception_record,
         UnwoundFrame frame{};
         const char* error = nullptr;
         if (!unwind_one(cursor, 0x1U, frame, error)) {
+            // A stack convidada termina antes de qualquer frame hospedeiro.
+            // Isso encerra a busca normalmente e deixa o
+            // UnhandledExceptionFilter produzir o diagnóstico final; não é
+            // uma autorização para ler a próxima área mapeada do host.
+            if (error != nullptr && std::strcmp(error, "frame folha inválido") == 0) {
+                break;
+            }
             fail_seh(code, error);
         }
         if (frame.has_function) {
             trace_seh("frame", code, "search");
         }
         if (frame.handler == nullptr) {
+            continue;
+        }
+        if (code == 0xE06D7363U && !is_supported_cxx_handler_data(frame.handler_data)) {
+            trace_seh("skipped", code, "unsupported-cxx-handler-during-search");
             continue;
         }
         DispatcherContextAmd64 dispatcher{.control_pc = before.rip,

@@ -822,7 +822,7 @@ pilha nem interpretar instruções do epílogo.
 
 O despachante de exceções explícitas usa eventos `runtime` com
 `mechanism="x64-seh"`. Os estados são `raised`, `veh`, `frame`, `handler`,
-`unwind`, `continued` e `failed`; o campo `code` traz o código da exceção e
+`unwind`, `continued`, `skipped` e `failed`; o campo `code` traz o código da exceção e
 `detail` identifica a etapa. Nos eventos `handler`, o trace também informa
 `function-index`, `handler-rva` e `handler-data-rva`, relativos à imagem PE;
 `outside` indica um ponteiro fora da imagem e `0` representa referência nula.
@@ -838,6 +838,11 @@ validados. Por exemplo:
 Uma falha SEH controlada não executa o entry point seguinte nem código fora da
 imagem; o convidado termina com o código da exceção. O subconjunto C++ x64
 aceito cobre `__CxxFrameHandler3`, catch-all, tipo exato e cleanups de término.
+Para `0xE06D7363`, o dispatcher só encaminha handlers cujo `handler-data`
+passa pela validação de `FuncInfo` v3; tabelas estáticas de
+`__C_specific_handler` e outros formatos não reconhecidos são registrados como
+`seh state="skipped"` com `detail="unsupported-cxx-handler-during-search"`
+ou `unsupported-cxx-handler-during-unwind`, sem usar a ponte de cleanup C++.
 Uma exceção C++ sem handler termina com `detail="exceção não tratada"`; uma
 nova exceção durante um funclet ativo termina com
 `detail="nested-cxx-exception-unsupported"`, sem fallback ou repetição. O

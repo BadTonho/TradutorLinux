@@ -1408,7 +1408,9 @@ TEST(Win32ConcurrencyTest, PointerBackedTlsSlotIsZeroInitializedAndReleased) {
     std::array<std::byte, 8> raw_template{};
     raw_template[0] = std::byte{0x5A};
     runtime::GuestTeb teb{};
-    runtime::initialize_guest_teb(&teb, &g_guest_peb, 0, 0, 1);
+    runtime::initialize_guest_teb(&teb, &g_guest_peb, 0x2000U, 0x1000U, 1);
+    EXPECT_EQ(teb.stack_base, 0x2000U);
+    EXPECT_EQ(teb.stack_limit, 0x1000U);
 
     set_guest_tls_directory(
         reinterpret_cast<std::uintptr_t>(raw_template.data()),

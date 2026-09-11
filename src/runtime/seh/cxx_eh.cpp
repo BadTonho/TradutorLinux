@@ -447,6 +447,20 @@ struct CatchTarget {
 
 }  // namespace
 
+bool is_supported_cxx_handler_data(void* const handler_data) noexcept {
+    const GuestUnwindView view = current_guest_unwind_view();
+    ImageReader image{view};
+    std::uint32_t handler_data_rva{};
+    std::uint32_t func_info_rva{};
+    if (!image.rva_of(handler_data, handler_data_rva) ||
+        !image.read_u32(handler_data_rva, func_info_rva)) {
+        return false;
+    }
+    FuncInfo info{};
+    return read_func_info(image, func_info_rva, info) &&
+           validate_unwind_map(image, info) && validate_ip_map(image, info);
+}
+
 std::int32_t cxx_frame_handler3(
     ExceptionRecordAmd64* const exception_record, void* const establisher_frame,
     ContextAmd64* const context_record,
@@ -537,7 +551,7 @@ bool prepare_cxx_catch_transfer(ContextAmd64& context, void* const establisher_f
                                 void* const target_ip) noexcept {
     const std::uint64_t target = reinterpret_cast<std::uintptr_t>(target_ip);
     if (target == 0U || target != g_cxx_catch_target ||
-        !validate_mapped_range(reinterpret_cast<void*>(context.rsp), sizeof(std::uint64_t), true)) {
+        !validate_guest_stack_range(reinterpret_cast<void*>(context.rsp), sizeof(std::uint64_t), true)) {
         trace_cxx_eh(diagnostics::TraceLevel::Error, "rejected", "invalid-catch-transfer");
         return false;
     }
@@ -561,10 +575,10 @@ bool prepare_cxx_cleanup_transfer(ContextAmd64& action_context,
     const std::uint64_t catch_target = reinterpret_cast<std::uintptr_t>(catch_ip);
     if (cleanup_target == 0U || cleanup_target != g_cxx_cleanup_target ||
         catch_target == 0U || catch_target != g_cxx_catch_target ||
-        !validate_mapped_range(reinterpret_cast<void*>(action_context.rsp),
-                               sizeof(std::uint64_t), true) ||
-        !validate_mapped_range(reinterpret_cast<void*>(catch_context.rsp),
-                               sizeof(std::uint64_t), true)) {
+        !validate_guest_stack_range(reinterpret_cast<void*>(action_context.rsp),
+                                    sizeof(std::uint64_t), true) ||
+        !validate_guest_stack_range(reinterpret_cast<void*>(catch_context.rsp),
+                                    sizeof(std::uint64_t), true)) {
         trace_cxx_eh(diagnostics::TraceLevel::Error, "rejected", "invalid-cleanup-transfer");
         return false;
     }
@@ -592,7 +606,7 @@ extern "C" [[noreturn]] void tl_cxx_cleanup_return_from_asm(
     const GuestUnwindView view = current_guest_unwind_view();
     const auto base = reinterpret_cast<std::uintptr_t>(view.image_base);
     if (view.image_base == nullptr ||
-        !validate_mapped_range(reinterpret_cast<void*>(stack_pointer), 1U, false) ||
+        !validate_guest_stack_range(reinterpret_cast<void*>(stack_pointer), 1U, false) ||
         !g_cxx_cleanup_context_ready || !g_cxx_catch_context_ready ||
         g_cxx_cleanup_count == 0U || g_cxx_cleanup_index >= g_cxx_cleanup_count ||
         g_cxx_catch_context.rip < base ||
@@ -607,8 +621,8 @@ extern "C" [[noreturn]] void tl_cxx_cleanup_return_from_asm(
         const std::uint32_t next_rva = g_cxx_cleanup_actions[next_index];
         if (next_rva >= view.image_size ||
             base > std::numeric_limits<std::uintptr_t>::max() - next_rva ||
-            !validate_mapped_range(reinterpret_cast<void*>(stack_pointer),
-                                   sizeof(std::uint64_t), true)) {
+            !validate_guest_stack_range(reinterpret_cast<void*>(stack_pointer),
+                                        sizeof(std::uint64_t), true)) {
             trace_cxx_eh(diagnostics::TraceLevel::Error, "rejected",
                          "invalid-chained-cleanup-target");
             tl_ExitThread(kCxxException);
@@ -632,8 +646,8 @@ extern "C" [[noreturn]] void tl_cxx_cleanup_return_from_asm(
     // convidada. O prólogo/locals do callback podem ter coberto a palavra de
     // retorno reservada no frame original; reescreva-a antes do salto para o
     // catch, sem confiar no conteúdo que atravessou a fronteira host/guest.
-    if (!validate_mapped_range(reinterpret_cast<void*>(g_cxx_catch_context.rsp),
-                               sizeof(std::uint64_t), true)) {
+    if (!validate_guest_stack_range(reinterpret_cast<void*>(g_cxx_catch_context.rsp),
+                                    sizeof(std::uint64_t), true)) {
         trace_cxx_eh(diagnostics::TraceLevel::Error, "rejected", "invalid-catch-return-slot");
         tl_ExitThread(kCxxException);
         std::abort();
@@ -653,7 +667,7 @@ extern "C" [[noreturn]] void tl_cxx_catch_return_from_asm(
     const GuestUnwindView view = current_guest_unwind_view();
     const auto base = reinterpret_cast<std::uintptr_t>(view.image_base);
     if (view.image_base == nullptr || target_ip < base || target_ip - base >= view.image_size ||
-        !validate_mapped_range(reinterpret_cast<void*>(stack_pointer), 1U, false) ||
+        !validate_guest_stack_range(reinterpret_cast<void*>(stack_pointer), 1U, false) ||
         !g_cxx_catch_context_ready) {
         trace_cxx_eh(diagnostics::TraceLevel::Error, "rejected", "invalid-catchret-target");
         tl_ExitThread(kCxxException);

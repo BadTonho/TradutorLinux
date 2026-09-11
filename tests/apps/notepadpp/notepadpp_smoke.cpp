@@ -238,7 +238,7 @@ void stop_runtime_process(const pid_t pid) {
         stop_runtime_process(runtime_pid);
     }
     passed = passed && runtime_exited && WIFEXITED(runtime_status) &&
-             WEXITSTATUS(runtime_status) == 71;
+             WEXITSTATUS(runtime_status) == 3;
     stop_process(xvfb.pid);
 
     std::ifstream trace_input(trace_path);
@@ -248,8 +248,10 @@ void stop_runtime_process(const pid_t pid) {
              trace.find("caption=\"Configurator\"") != std::string::npos &&
              trace.find("window-mapped backend=\"x11\"") != std::string::npos &&
              trace.find("caption=\"Load stylers.xml failed\"") != std::string::npos &&
-             trace.find("cxx-throw ignored") != std::string::npos &&
-             trace.find("guest-signal") != std::string::npos &&
+             trace.find("unsupported-cxx-handler-during-search") != std::string::npos &&
+             trace.find("ExitProcess symbol=\"ExitProcess\" exit-code=\"3\"") !=
+                 std::string::npos &&
+             trace.find("guest-signal") == std::string::npos &&
              trace.find("guest-timeout") == std::string::npos;
     if (!passed) {
         std::cerr << "smoke do Notepad++ não confirmou o bloqueio C++/SEH controlado\n";

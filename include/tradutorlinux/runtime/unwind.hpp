@@ -129,6 +129,12 @@ struct GuestUnwindView {
 [[nodiscard]] GuestUnwindView current_guest_unwind_view() noexcept;
 void restore_guest_unwind_view(GuestUnwindView view) noexcept;
 
+// Valida uma faixa pertencente à stack convidada ativa. Durante os testes de
+// APIs sem execução convidada, a função conserva o fallback para a validação
+// das regiões do processo hospedeiro.
+[[nodiscard]] bool validate_guest_stack_range(const void* address, std::size_t size,
+                                              bool writable) noexcept;
+
 // Registro de VEH separado das APIs KERNEL32 para que o despachante e a
 // superfície de imports compartilhem o mesmo estado por processo.
 void* add_vectored_exception_handler(std::uint32_t first, void* handler) noexcept;

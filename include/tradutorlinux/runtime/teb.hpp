@@ -119,10 +119,9 @@ inline void initialize_guest_teb(GuestTeb* teb, GuestPeb* peb, std::uint64_t sta
     if (teb == nullptr) {
         return;
     }
-    (void)stack_limit;
     teb->self = reinterpret_cast<std::uint64_t>(teb);
     teb->stack_base = stack_base;
-    teb->stack_limit = 0;
+    teb->stack_limit = stack_limit;
     teb->unique_process_id = process_id;
     teb->unique_thread_id = thread_id;
     teb->peb = reinterpret_cast<std::uint64_t>(peb);

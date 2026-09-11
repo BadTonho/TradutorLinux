@@ -2681,6 +2681,77 @@ Limitação aberta:
   fixture PE32+ genérica de unwind aninhado; nenhuma regra específica de
   WinRAR deve ser adicionada.
 
+### E45 — Rejeição segura de handlers SEH estáticos durante exceções C++
+
+Objetivo: corrigir uma regressão genérica revelada pela repetição do smoke do
+Notepad++ após E44, sem transformar o aplicativo em alvo especial nem ampliar
+o contrato C++ além do `FuncInfo` v3 validado.
+
+Problema reproduzido em 2026-09-11:
+
+- [x] O smoke sob Xvfb criava `Configurator` e `Load stylers.xml failed`, mas
+  o dispatcher tratava o `handler-data` de um handler SEH estático do convidado
+  como se fosse metadata `FuncInfo` C++. A transferência de cleanup corrompia
+  o contexto e terminava em `guest-signal`/SIGSEGV dentro de `.text`.
+- [x] A falha era específica da classificação incorreta de metadata: os
+  handlers estáticos usam uma tabela de escopos diferente de `FuncInfo` v3.
+
+Correção e evidência:
+
+- [x] Foi adicionada uma validação genérica de `handler-data` que aceita apenas
+  `FuncInfo` v3 com mapas de unwind e IP válidos para a imagem PE ativa.
+  Para `0xE06D7363`, metadata estática ou desconhecida é registrada como
+  `unsupported-cxx-handler-during-search`/`...-during-unwind` e não passa pela
+  ponte C++ de cleanup/catch.
+- [x] A regressão unitária
+  `UnwindTest.DistinguishesCxxFuncInfoFromStaticSehHandlerData` cobre as duas
+  representações; as fixtures C++ existentes continuam exercitando o caminho
+  `FuncInfo` validado.
+- [x] O smoke do Notepad++ agora termina deterministicamente com
+  `ExitProcess(3)`, confirma `Configurator`/`stylers.xml`, não registra
+  `guest-signal` nem `guest-timeout`, e passou no Rust ON e no C++ OFF.
+- [x] Nenhuma DLL, shim, regra de aplicativo ou tratamento especial foi
+  adicionado. O resultado é rejeição controlada, não suporte ao Notepad++.
+
+Limitação preservada:
+
+- [ ] A ponte de pilha/contexto para cleanups aninhados e callbacks de
+  consolidação reais continua aberta conforme E44; a próxima correção deve
+  começar por fixture PE32+ genérica de unwind aninhado.
+
+### E46 — Limite explícito da stack convidada no unwind
+
+Objetivo: eliminar a leitura fora da alocação observada quando a validação de
+sanitizers repetiu o bloqueio SEH do Notepad++, mantendo o unwind incapaz de
+tratar memória do hospedeiro como stack Win32.
+
+Problema reproduzido em 2026-09-11:
+
+- [x] O preset `sanitize` encontrou `heap-buffer-overflow` em
+  `unwind.cpp:149`: com `TEB.StackLimit=0`, a validação por mapas Linux aceitava
+  uma área de heap do hospedeiro durante a caminhada de frames folha.
+
+Correção e evidência:
+
+- [x] `initialize_guest_teb` agora preserva `StackLimit`; a validação interna
+  de leituras, escritas e slots de retorno exige a faixa
+  `[StackLimit, StackBase)` da thread convidada ativa antes de consultar os
+  mapas de memória do host.
+- [x] A regressão do TEB verifica os dois limites; quando a busca chega ao fim
+  da stack convidada, ela segue para `UnhandledExceptionFilter` sem acessar
+  frames do host. O smoke do Notepad++ no preset `sanitize` confirma a
+  rejeição controlada sem acesso fora da stack, e os testes unitários e smokes
+  Debug ON/OFF permanecem protegidos.
+- [x] Nenhuma DLL, shim, regra por aplicativo ou conversão de sinal foi
+  adicionada; o limite vale para qualquer imagem PE32+.
+
+Validação pendente do ambiente:
+
+- [ ] O alvo unitário completo do preset `sanitize` ainda não compila por um
+  `-Werror=conversion` preexistente em `tests/test_win32.cpp:475`; isso não
+  pertence à correção de SEH, e os alvos de runtime/smoke podem ser validados
+  separadamente.
+
 ## Regras de validação
 
 - Cada correção começa com uma fixture mínima e termina com testes automatizados.

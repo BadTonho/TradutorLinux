@@ -1,4 +1,6 @@
 #include "tradutorlinux/runtime/unwind.hpp"
+#include "tradutorlinux/runtime/cxx_eh.hpp"
+#include "tradutorlinux/runtime/teb.hpp"
 
 #include <array>
 #include <cstddef>
@@ -11,6 +13,9 @@
 #include <gtest/gtest.h>
 
 namespace tradutorlinux {
+
+extern thread_local runtime::GuestTeb* g_thread_teb;
+
 namespace {
 
 using pe::RuntimeFunction;
@@ -122,6 +127,37 @@ TEST_F(UnwindTest, SehLayoutsAndVectoredTokensAreValidated) {
     EXPECT_EQ(runtime::remove_vectored_exception_handler(first), 0U);
     EXPECT_EQ(runtime::remove_vectored_exception_handler(last), 1U);
     EXPECT_EQ(runtime::remove_vectored_exception_handler(nullptr), 0U);
+}
+
+TEST_F(UnwindTest, DistinguishesCxxFuncInfoFromStaticSehHandlerData) {
+    set_functions({});
+    constexpr std::uint32_t handler_data_rva = 0x100U;
+    constexpr std::uint32_t func_info_rva = 0x200U;
+    const std::uint32_t func_info[] = {
+        0x19930522U, 0xFFFFFFFFU, 0U, 0U, 0U, 0U, 0U, 0U, 0U, 0U};
+    std::memcpy(image.data() + handler_data_rva, &func_info_rva, sizeof(func_info_rva));
+    std::memcpy(image.data() + func_info_rva, func_info, sizeof(func_info));
+
+    EXPECT_TRUE(runtime::is_supported_cxx_handler_data(image.data() + handler_data_rva));
+
+    const std::uint32_t static_scope_count = 1U;
+    std::memcpy(image.data() + 0x120U, &static_scope_count, sizeof(static_scope_count));
+    EXPECT_FALSE(runtime::is_supported_cxx_handler_data(image.data() + 0x120U));
+}
+
+TEST_F(UnwindTest, RestrictsUnwindReadsToActiveGuestStack) {
+    std::array<std::uint64_t, 4> stack{};
+    runtime::GuestTeb teb{};
+    runtime::initialize_guest_teb(&teb, nullptr,
+                                  reinterpret_cast<std::uintptr_t>(stack.data() + stack.size()),
+                                  reinterpret_cast<std::uintptr_t>(stack.data()), 1);
+    runtime::GuestTeb* const previous_teb = g_thread_teb;
+    g_thread_teb = &teb;
+
+    EXPECT_TRUE(runtime::validate_guest_stack_range(stack.data(), sizeof(std::uint64_t), false));
+    EXPECT_FALSE(runtime::validate_guest_stack_range(image.data(), sizeof(std::uint64_t), false));
+
+    g_thread_teb = previous_teb;
 }
 
 TEST_F(UnwindTest, DoesNotExposeExceptionHandlerWhileInProlog) {

@@ -2,8 +2,8 @@
 
 Este contrato cobre o desempilhamento AMD64 e o despacho SEH explícito de uma
 imagem PE32+ já mapeada. O subconjunto executa `__try/__except` com
-`__C_specific_handler`; não implementa exceções C++, `__finally`, sinais Linux
-nem epílogos V2.
+`__C_specific_handler` e implementa uma parcela validada de exceções C++ por
+`__CxxFrameHandler3`; não implementa `__finally`, sinais Linux nem epílogos V2.
 
 ## Metadados PE
 
@@ -51,7 +51,7 @@ Microsoft x64, ligação C e `noexcept`:
 | `RtlCaptureContext` | Trecho assembly sem prólogo captura RIP/RSP, registradores gerais, flags, MXCSR e XMM0–XMM15 do chamador. |
 | `RtlLookupFunctionEntry` | Pesquisa somente a tabela `.pdata` da imagem PE ativa; devolve o ponteiro para a entrada mapeada e a base da imagem. |
 | `RtlPcToFileHeader` | Devolve a base somente se o PC pertencer à imagem PE ativa. |
-| `RtlVirtualUnwind` | Aplica os códigos do prólogo/corpo e suas cadeias a um `CONTEXT`, restaura RIP/RSP e registradores/XMM e informa handler/dados quando solicitados. No prólogo não expõe handler; em epílogo V2 preserva contexto e parâmetros de saída, retorna sem handler e emite diagnóstico controlado. |
+| `RtlVirtualUnwind` | Aplica os códigos do prólogo/corpo e suas cadeias a um `CONTEXT`, restaura RIP/RSP e registradores/XMM e informa handler/dados quando solicitados. Leituras da stack são limitadas à faixa ativa entre `TEB.StackLimit` e `TEB.StackBase`. No prólogo não expõe handler; em epílogo V2 preserva contexto e parâmetros de saída, retorna sem handler e emite diagnóstico controlado. |
 | `RaiseException` | Entrada assembly Microsoft x64: fotografa o chamador antes de prólogo do hospedeiro, valida até 15 parâmetros e inicia a busca SEH. Não retorna: continua o contexto convidado, entra no bloco selecionado ou encerra controladamente. |
 | `RtlUnwind` / `RtlUnwindEx` | Capturam o chamador na fronteira assembly, percorrem e chamam cada `UHANDLER` até o frame alvo, independentemente do código do registro, e usam um trampolim sem retorno para restaurar `CONTEXT`, incluindo GPRs, XMM, RSP, RIP e RAX. O subconjunto de `RtlUnwindEx` também interpreta `STATUS_UNWIND_CONSOLIDATE` (`0x80000029`): chama o callback indicado pelo primeiro parâmetro e usa o RIP devolvido. `RtlUnwind` delega ao mesmo núcleo. |
 | `UnhandledExceptionFilter` | Chama o filtro instalado por `SetUnhandledExceptionFilter` somente após a busca falhar; sem continuação válida, a exceção termina o convidado com seu código. |
@@ -95,6 +95,15 @@ com `nested-cxx-exception-unsupported`; isso evita redirecionar a exceção ao
 mesmo handler indefinidamente. Uma exceção C++ sem handler termina com o
 diagnóstico controlado `exceção não tratada`. Se o PC estiver num epílogo V2, o
 despacho falha como mecanismo ainda não interpretado, preservando o contexto.
+Leituras de endereços de retorno, registradores salvos e slots de funclet só
+são válidas dentro da stack convidada ativa (`TEB.StackLimit` inclusive até
+`TEB.StackBase` exclusivo); uma faixa hospedeira que apenas pareça mapeada não
+é aceita.
+Quando `handler-data` não representa um `FuncInfo` v3 validável — por exemplo,
+uma tabela estática de `__C_specific_handler` — o dispatcher não chama esse
+handler como C++ nem prepara um cleanup/catch transferido; registra
+`unsupported-cxx-handler-during-search` ou
+`unsupported-cxx-handler-during-unwind` e segue a rejeição controlada.
 
 ## Diagnóstico e validação
 
@@ -136,7 +145,9 @@ ação, e qualquer outra ação precisa estar dentro da imagem. O leitor usa
 `memcpy` e aritmética checked; versões, ponteiros, contagens ou ranges
 desconhecidos retornam `ContinueSearch` e deixam a decisão no dispatcher
 controlado. Nenhum `FuncInfo` ou ponteiro do convidado é mantido fora da
-chamada.
+chamada. Antes de tratar `0xE06D7363` como exceção C++, o dispatcher valida o
+primeiro RVA de `handler-data` como `FuncInfo` v3 completo; formatos estáticos
+de SEH não passam por essa ponte.
 
 Durante a transferência, o contexto Microsoft x64 é salvo por thread, o frame
 é passado no `RDX` exigido pelo funclet e o retorno de `cleanupret` passa por um

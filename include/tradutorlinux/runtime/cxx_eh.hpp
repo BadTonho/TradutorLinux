@@ -14,6 +14,11 @@ namespace tradutorlinux::runtime {
     ExceptionRecordAmd64* exception_record, void* establisher_frame,
     ContextAmd64* context_record, DispatcherContextAmd64* dispatcher_context) noexcept;
 
+// Identifica somente a representação FuncInfo v3 que o subconjunto C++ do
+// runtime consegue interpretar. Handlers estáticos de __C_specific_handler
+// podem receber a mesma exceção, mas usam outro formato de handler data.
+[[nodiscard]] bool is_supported_cxx_handler_data(void* handler_data) noexcept;
+
 // Prepara a transferência para um catch funclet. O estado é thread-local:
 // nenhum ponteiro do convidado atravessa a chamada de retorno do trampoline.
 [[nodiscard]] bool prepare_cxx_catch_transfer(ContextAmd64& context,
