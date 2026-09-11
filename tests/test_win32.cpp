@@ -472,8 +472,9 @@ TEST(Win32RegistryTest, WideQueryConvertsDefaultProgramFilesValueToUtf16) {
               abi::kErrorSuccess);
     std::u16string decoded;
     for (std::size_t index = 0; index + 1U < wide_data.size(); index += 2U) {
-        const char16_t unit = static_cast<char16_t>(wide_data[index]) |
-                              static_cast<char16_t>(wide_data[index + 1U]) << 8U;
+        const auto unit = static_cast<char16_t>(
+            static_cast<unsigned int>(wide_data[index]) |
+            (static_cast<unsigned int>(wide_data[index + 1U]) << 8U));
         if (unit == 0) {
             break;
         }

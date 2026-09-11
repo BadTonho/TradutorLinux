@@ -2747,10 +2747,9 @@ Correção e evidência:
 
 Validação pendente do ambiente:
 
-- [ ] O alvo unitário completo do preset `sanitize` ainda não compila por um
-  `-Werror=conversion` preexistente em `tests/test_win32.cpp:475`; isso não
-  pertence à correção de SEH, e os alvos de runtime/smoke podem ser validados
-  separadamente.
+- [x] O aviso preexistente de `-Werror=conversion` em `tests/test_win32.cpp:475` foi
+  corrigido com cast explícito sobre o resultado total da expressão inteira,
+  mantendo a decodificação UTF-16 válida e a compilação limpa sob avisos estritos.
 
 ## Regras de validação
 
