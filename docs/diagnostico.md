@@ -332,7 +332,26 @@ Em todos os casos, `execution: not-attempted` e
 `execution-result: not-attempted` deixam claro que o relatório não executa o
 PE.
 
+Quando a imagem PE é analisada, o relatório inclui inspeção aprofundada de segurança, empacotamento, framework e recursos:
+
+- `mitigations: aslr=<enabled(high-entropy)|enabled|disabled> dep=<enabled|disabled> cfg=<enabled|disabled> seh=<present|no-seh> [appcontainer=yes] [force-integrity=yes]`:
+  inspeciona o campo `DllCharacteristics` do cabeçalho opcional PE, reportando o estado das mitigações modernas do sistema operacional (ASLR com alta entropia, DEP/NX, Control Flow Guard, isolamento AppContainer e integridade forçada).
+- `packer: detected (<nome>: <indicadores>)`:
+  identifica compressores/obfuscadores de código conhecidos (UPX, VMProtect, Themida, ASPack, Enigma, MPRESS, PECompact) ou características anômalas de seções (permissões W+X ou seções executáveis descompactadas em memória com `raw_data_size=0`). Quando presente, emite recomendação para descompactar previamente a imagem a fim de evitar violações de W^X em runtime nativo.
+- `toolchain: <MSVC CRT | MinGW-w64 | Legacy MSVC CRT>`:
+  identifica o compilador e biblioteca de runtime CRT associada ao binário (ex.: Visual Studio 2015-2022 v14x, Visual Studio 2013/2012/2010, MinGW-w64 GCC ou o histórico `msvcrt.dll`).
+- `runtime: .NET CLR (Managed code via ...)`:
+  detecta binários gerenciados .NET através da importação do host `mscoree.dll` ou da presença do descritor COM/CLR na tabela de diretórios PE. Emite recomendação para uso com runtime `dotnet` ou Proton na ausência de código AOT nativo.
+- `gui-framework: <framework1, framework2, ...>`:
+  detecta bibliotecas de interface gráfica e toolkits utilizados (ex.: Qt 6, Qt 5, MFC, wxWidgets, Electron/Chromium Embedded Framework, WinUI 3).
+- `anticheat: detected (<nome>: <dlls>)`:
+  identifica módulos conhecidos de anticheat (EasyAntiCheat, BattlEye, Riot Vanguard, PunkBuster, Denuvo). Emite aviso/recomendação explícito informando que componentes ring-0 de proteção em nível de kernel não são suportados no runtime nativo.
+- `services: detected driver/service installation APIs (advapi32.dll: <APIs>)`:
+  identifica a presença de chamadas de instalação ou controle de serviços e drivers Windows (`CreateServiceW`, `OpenSCManagerW`, `StartServiceW`, etc.).
+
 Quando a imagem PE possuir recursos internos (`.rsrc`), o relatório inclui:
+- `identity: "<ProductName>" v<ProductVersion> (<CompanyName>)`:
+  extrai os metadados de produto e versão do bloco `RT_VERSION` (`VS_VERSIONINFO` / `StringFileInfo`), identificando o nome do produto, versão textual/estruturada e empresa desenvolvedora.
 - `resources: <N> types (<tipo>=<qtd>, ...)`: inventário estrutural de tipos
   Win32 embutidos (ex.: `dialog`, `icon`, `version`, `manifest`).
 - `manifest: uac="..." dpi-aware="..." os-compat="..."`: extração segura do

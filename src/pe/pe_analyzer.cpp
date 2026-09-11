@@ -260,5 +260,72 @@ FrameworkInspectionResult inspect_pe_frameworks(
     return result;
 }
 
+SecurityServiceInspectionResult inspect_pe_security_services(const PeInfo& info) {
+    SecurityServiceInspectionResult result{};
+
+    auto to_lower = [](std::string_view text) {
+        std::string s;
+        s.reserve(text.size());
+        for (char c : text) {
+            s.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(c))));
+        }
+        return s;
+    };
+
+    auto check_dll = [&](const ImportedDll& dll) {
+        const std::string lower = to_lower(dll.name);
+
+        // Checagem de Anticheat conhecido
+        if (lower.find("easyanticheat") != std::string::npos) {
+            result.has_anticheat = true;
+            result.anticheat_name = "EasyAntiCheat";
+            result.anticheat_indicators.push_back(dll.name);
+        } else if (lower.find("beservice") != std::string::npos ||
+                   lower.find("beclient") != std::string::npos ||
+                   lower.find("battleye") != std::string::npos) {
+            result.has_anticheat = true;
+            result.anticheat_name = "BattlEye";
+            result.anticheat_indicators.push_back(dll.name);
+        } else if (lower.find("vgk") != std::string::npos || lower.find("vgc") != std::string::npos) {
+            result.has_anticheat = true;
+            result.anticheat_name = "Riot Vanguard";
+            result.anticheat_indicators.push_back(dll.name);
+        } else if (lower.find("punkbuster") != std::string::npos || lower.find("pbcl") != std::string::npos) {
+            result.has_anticheat = true;
+            result.anticheat_name = "PunkBuster";
+            result.anticheat_indicators.push_back(dll.name);
+        } else if (lower.find("denuvo") != std::string::npos) {
+            result.has_anticheat = true;
+            result.anticheat_name = "Denuvo";
+            result.anticheat_indicators.push_back(dll.name);
+        }
+
+        // Checagem de APIs de controle de serviços e instalação de drivers (advapi32)
+        if (lower == "advapi32.dll" || lower == "advapi32") {
+            for (const ImportedSymbol& sym : dll.symbols) {
+                if (sym.name == "CreateServiceA" || sym.name == "CreateServiceW" ||
+                    sym.name == "OpenSCManagerA" || sym.name == "OpenSCManagerW" ||
+                    sym.name == "StartServiceA" || sym.name == "StartServiceW" ||
+                    sym.name == "ControlService") {
+                    result.has_service_apis = true;
+                    if (std::find(result.service_apis.begin(), result.service_apis.end(), sym.name) ==
+                        result.service_apis.end()) {
+                        result.service_apis.push_back(sym.name);
+                    }
+                }
+            }
+        }
+    };
+
+    for (const auto& imp : info.imports) {
+        check_dll(imp);
+    }
+    for (const auto& imp : info.delay_imports) {
+        check_dll(imp);
+    }
+
+    return result;
+}
+
 }  // namespace tradutorlinux::pe
 

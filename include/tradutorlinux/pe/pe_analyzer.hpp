@@ -61,5 +61,17 @@ struct FrameworkInspectionResult {
     const PeInfo& info,
     std::span<const std::byte> file_bytes = {});
 
+struct SecurityServiceInspectionResult {
+    bool has_anticheat{false};
+    std::string anticheat_name;
+    std::vector<std::string> anticheat_indicators;
+
+    bool has_service_apis{false};
+    std::vector<std::string> service_apis;
+};
+
+// Detecta componentes de anticheat (EasyAntiCheat, BattlEye, Vanguard) e APIs de serviços/drivers de kernel.
+[[nodiscard]] SecurityServiceInspectionResult inspect_pe_security_services(const PeInfo& info);
+
 }  // namespace tradutorlinux::pe
 

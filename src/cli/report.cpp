@@ -503,6 +503,30 @@ void print_support_report_group(std::ostream& stream, const loader::ResolveResul
         }
         stream << '\n';
     }
+    const pe::SecurityServiceInspectionResult security = pe::inspect_pe_security_services(info);
+    if (security.has_anticheat) {
+        stream << "anticheat: detected (" << security.anticheat_name;
+        if (!security.anticheat_indicators.empty()) {
+            stream << ": ";
+            for (std::size_t i = 0; i < security.anticheat_indicators.size(); ++i) {
+                if (i > 0) {
+                    stream << ", ";
+                }
+                stream << security.anticheat_indicators[i];
+            }
+        }
+        stream << ")\n";
+    }
+    if (security.has_service_apis) {
+        stream << "services: detected driver/service installation APIs (";
+        for (std::size_t i = 0; i < security.service_apis.size(); ++i) {
+            if (i > 0) {
+                stream << ", ";
+            }
+            stream << security.service_apis[i];
+        }
+        stream << ")\n";
+    }
     if (!file_bytes.empty()) {
         const pe::ResourceInspectionResult res_info = pe::inspect_pe_resources(file_bytes, info);
         if (res_info.version_info.has_version_info) {
@@ -672,6 +696,13 @@ void print_support_report_group(std::ostream& stream, const loader::ResolveResul
 
     if (frameworks.is_dotnet) {
         stream << "recommendation: aplicativo gerenciado .NET/CLR; execute com o runtime dotnet ou Proton se nao possuir stub nativo AOT\n";
+    }
+
+    if (security.has_anticheat) {
+        stream << "recommendation: requer anticheat em nivel de kernel (" << security.anticheat_name
+               << "); componentes ring-0 de anticheat nao sao suportados no runtime nativo\n";
+    } else if (security.has_service_apis) {
+        stream << "recommendation: aplicativo registra servicos ou drivers de sistema (advapi32); servicos de kernel nao sao suportados no runtime nativo\n";
     }
 
     return result;

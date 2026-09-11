@@ -20,6 +20,17 @@ Há três dimensões independentes:
 Assim, um aplicativo pode ter `supported` na resolução de imports e continuar
 `execution-failed` ou sem nível funcional no catálogo.
 
+### Análise aprofundada de requisitos com `--report`
+
+O comando `tradutorlinux --report <app.exe>` realiza inspeção estática aprofundada sem executar a aplicação, antecipando requisitos de infraestrutura e limitações conhecidas:
+- **Aceleração 3D (DirectX/Vulkan):** detecta dependências de `d3d11.dll`, `d3d12.dll`, `dxgi.dll`, `d3d9.dll`, `vulkan-1.dll` e `xinput1_4.dll`, recomendando `backend.kind: proton` quando gráficos 3D forem essenciais.
+- **Ambiente gerenciado (.NET/CLR):** identifica binários dependentes de runtime .NET (`mscoree.dll` ou diretório COM descriptor), orientando a execução via `dotnet` ou Proton na ausência de compilação nativa AOT.
+- **Drivers de kernel e anticheat:** detecta módulos de anticheat (EasyAntiCheat, BattlEye, Riot Vanguard, PunkBuster, Denuvo) e chamadas de gerenciamento de serviços/drivers (`CreateServiceW`, `OpenSCManagerW` em `advapi32.dll`), sinalizando a impossibilidade de execução nativa de módulos ring-0.
+- **Packers e proteções (UPX, Themida, VMProtect):** detecta código compactado e seções anômalas com permissões W+X ou sem dados físicos (`raw_size=0`), prevenindo violações da política W^X em runtime nativo.
+- **Mitigações de segurança (`DllCharacteristics`):** inspeciona o suporte a ASLR, High-Entropy VA, DEP/NX, Control Flow Guard (CFG) e AppContainer.
+- **Identidade e versão (`RT_VERSION`):** extrai nome do produto, versão e fabricante diretamente da árvore de recursos `.rsrc`.
+- **Inventário de recursos e manifesto (`RT_MANIFEST`):** inventaria tipos de recursos embutidos e requisitos de UAC (`asInvoker`, `requireAdministrator`), DPI e versões de SO suportadas.
+
 O teste CTest `popular_apps_report_matrix`, habilitado quando
 `TL_POPULAR_APPS_DIR` aponta para o corpus pinado, repete a análise estrutural
 dos 26 PE selecionados e do pacote MSIX. Ele verifica os códigos esperados de

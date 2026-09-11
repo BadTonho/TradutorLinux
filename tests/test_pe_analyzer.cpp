@@ -245,6 +245,69 @@ TEST(PeAnalyzerTest, DetectsElectronFramework) {
     EXPECT_EQ(result.gui_frameworks[0], "Electron / Chromium Embedded Framework");
 }
 
+TEST(PeAnalyzerTest, DetectsAnticheatComponents) {
+    PeInfo info_eac{};
+    ImportedDll eac{};
+    eac.name = "EasyAntiCheat_x64.dll";
+    info_eac.imports = {eac};
+    const SecurityServiceInspectionResult res_eac = inspect_pe_security_services(info_eac);
+    EXPECT_TRUE(res_eac.has_anticheat);
+    EXPECT_EQ(res_eac.anticheat_name, "EasyAntiCheat");
+    ASSERT_EQ(res_eac.anticheat_indicators.size(), 1U);
+
+    PeInfo info_be{};
+    ImportedDll be{};
+    be.name = "BEService_x64.dll";
+    info_be.imports = {be};
+    const SecurityServiceInspectionResult res_be = inspect_pe_security_services(info_be);
+    EXPECT_TRUE(res_be.has_anticheat);
+    EXPECT_EQ(res_be.anticheat_name, "BattlEye");
+
+    PeInfo info_vgk{};
+    ImportedDll vgk{};
+    vgk.name = "vgk.sys";
+    info_vgk.imports = {vgk};
+    const SecurityServiceInspectionResult res_vgk = inspect_pe_security_services(info_vgk);
+    EXPECT_TRUE(res_vgk.has_anticheat);
+    EXPECT_EQ(res_vgk.anticheat_name, "Riot Vanguard");
+}
+
+TEST(PeAnalyzerTest, DetectsKernelServiceApis) {
+    PeInfo info{};
+    ImportedDll adv{};
+    adv.name = "advapi32.dll";
+    ImportedSymbol s1{};
+    s1.name = "OpenSCManagerW";
+    ImportedSymbol s2{};
+    s2.name = "CreateServiceW";
+    ImportedSymbol s3{};
+    s3.name = "RegOpenKeyExW";
+    adv.symbols = {s1, s2, s3};
+    info.imports = {adv};
+
+    const SecurityServiceInspectionResult res = inspect_pe_security_services(info);
+    EXPECT_FALSE(res.has_anticheat);
+    EXPECT_TRUE(res.has_service_apis);
+    ASSERT_EQ(res.service_apis.size(), 2U);
+    EXPECT_EQ(res.service_apis[0], "OpenSCManagerW");
+    EXPECT_EQ(res.service_apis[1], "CreateServiceW");
+}
+
+TEST(PeAnalyzerTest, NoSecurityIssuesInCleanBinary) {
+    PeInfo info{};
+    ImportedDll k32{};
+    k32.name = "KERNEL32.dll";
+    ImportedSymbol exit_proc{};
+    exit_proc.name = "ExitProcess";
+    k32.symbols = {exit_proc};
+    info.imports = {k32};
+
+    const SecurityServiceInspectionResult res = inspect_pe_security_services(info);
+    EXPECT_FALSE(res.has_anticheat);
+    EXPECT_FALSE(res.has_service_apis);
+    EXPECT_TRUE(res.service_apis.empty());
+}
+
 }  // namespace
 }  // namespace tradutorlinux::pe
 
