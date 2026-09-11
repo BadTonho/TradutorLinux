@@ -504,6 +504,67 @@ TEST(CommandRunTest, ReportDisplaysPeSecurityMitigations) {
         << "Relatório não continha linha de mitigações:\n" << report;
 }
 
+TEST(CommandLineTest, ParsesReportJsonOptions) {
+    const std::vector<const char*> valid_args{"tradutorlinux", "--report", "--json", "app.exe"};
+    const ParseResult valid_res = parse_command_line(static_cast<int>(valid_args.size()), valid_args.data());
+    ASSERT_TRUE(valid_res.command_line.has_value());
+    EXPECT_TRUE(valid_res.command_line->report_only);
+    EXPECT_TRUE(valid_res.command_line->report_json);
+
+    const std::vector<const char*> json_only{"tradutorlinux", "--json", "app.exe"};
+    const ParseResult err_res = parse_command_line(static_cast<int>(json_only.size()), json_only.data());
+    EXPECT_FALSE(err_res.command_line.has_value());
+    EXPECT_NE(err_res.error_message.find("a opção --json requer --report"), std::string::npos);
+
+    const std::vector<const char*> repeated{"tradutorlinux", "--report", "--json", "--json", "app.exe"};
+    const ParseResult rep_res = parse_command_line(static_cast<int>(repeated.size()), repeated.data());
+    EXPECT_FALSE(rep_res.command_line.has_value());
+    EXPECT_NE(rep_res.error_message.find("a opção --json foi repetida"), std::string::npos);
+}
+
+TEST(CommandRunTest, ReportEmitsStructuredJson) {
+    CommandLine command_line;
+    command_line.report_only = true;
+    command_line.report_json = true;
+    command_line.executable_path =
+        std::filesystem::path{TL_FIXTURE_OUTPUT_DIRECTORY} / "tl_hello.exe";
+    std::ostringstream stdout_stream;
+    std::ostringstream stderr_stream;
+
+    const ExitCode exit_code = run_command(command_line, stdout_stream, stderr_stream);
+    EXPECT_EQ(exit_code, ExitCode::Success);
+
+    const std::string report = stdout_stream.str();
+    EXPECT_EQ(report.front(), '{');
+    EXPECT_NE(report.find("\"format\": \"PE32+ x86-64\""), std::string::npos) << report;
+    EXPECT_NE(report.find("\"mitigations\": {"), std::string::npos) << report;
+    EXPECT_NE(report.find("\"packer\": {"), std::string::npos) << report;
+    EXPECT_NE(report.find("\"toolchain\": {"), std::string::npos) << report;
+    EXPECT_NE(report.find("\"security\": {"), std::string::npos) << report;
+    EXPECT_NE(report.find("\"imports\": {"), std::string::npos) << report;
+    EXPECT_NE(report.find("\"status\": \"supported\""), std::string::npos) << report;
+    EXPECT_NE(report.find("\"recommendations\": ["), std::string::npos) << report;
+}
+
+TEST(CommandRunTest, ReportJsonContains3DGraphicsRecommendation) {
+    CommandLine command_line;
+    command_line.report_only = true;
+    command_line.report_json = true;
+    command_line.executable_path =
+        std::filesystem::path{TL_FIXTURE_OUTPUT_DIRECTORY} / "tl_graphics_probe.exe";
+    std::ostringstream stdout_stream;
+    std::ostringstream stderr_stream;
+
+    const ExitCode exit_code = run_command(command_line, stdout_stream, stderr_stream);
+    EXPECT_EQ(exit_code, ExitCode::Unsupported);
+
+    const std::string report = stdout_stream.str();
+    EXPECT_NE(report.find("\"recommendations\": ["), std::string::npos) << report;
+    EXPECT_NE(report.find("requer aceleracao grafica 3D (d3d11.dll); configure profile.json com 'backend.kind: proton'"),
+              std::string::npos)
+        << report;
+}
+
 }  // namespace
 }  // namespace tradutorlinux
 

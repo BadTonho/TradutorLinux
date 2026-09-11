@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <cstdio>
 #include <ostream>
 #include <string>
 #include <string_view>
@@ -421,12 +422,343 @@ void print_support_report_group(std::ostream& stream, const loader::ResolveResul
     }
 }
 
+[[nodiscard]] std::string escape_json_string(const std::string_view input) {
+    std::string output;
+    output.reserve(input.size() + 8);
+    for (const char c : input) {
+        switch (c) {
+            case '"':  output += "\\\""; break;
+            case '\\': output += "\\\\"; break;
+            case '\b': output += "\\b";  break;
+            case '\f': output += "\\f";  break;
+            case '\n': output += "\\n";  break;
+            case '\r': output += "\\r";  break;
+            case '\t': output += "\\t";  break;
+            default:
+                if (static_cast<unsigned char>(c) < 0x20) {
+                    char hex[7];
+                    std::snprintf(hex, sizeof(hex), "\\u%04x", static_cast<unsigned int>(static_cast<unsigned char>(c)));
+                    output += hex;
+                } else {
+                    output += c;
+                }
+                break;
+        }
+    }
+    return output;
+}
+
+[[nodiscard]] std::vector<std::string> collect_recommendations(
+    const pe::PeInfo& info,
+    const pe::PackerInspectionResult& packer,
+    const pe::FrameworkInspectionResult& frameworks,
+    const pe::SecurityServiceInspectionResult& security) {
+    std::vector<std::string> recs;
+
+    auto is_3d_graphics_dll = [](const std::string_view name) noexcept {
+        auto iequals = [](const std::string_view a, const std::string_view b) noexcept {
+            if (a.size() != b.size()) {
+                return false;
+            }
+            for (std::size_t i = 0; i < a.size(); ++i) {
+                if (std::tolower(static_cast<unsigned char>(a[i])) !=
+                    std::tolower(static_cast<unsigned char>(b[i]))) {
+                    return false;
+                }
+            }
+            return true;
+        };
+        return iequals(name, "d3d11.dll") ||
+               iequals(name, "d3d12.dll") ||
+               iequals(name, "dxgi.dll") ||
+               iequals(name, "d3d9.dll") ||
+               iequals(name, "vulkan-1.dll") ||
+               iequals(name, "xinput1_4.dll");
+    };
+
+    std::vector<std::string> graphics_dlls;
+    auto record_graphics_dll = [&](const std::string& dll_name) {
+        if (is_3d_graphics_dll(dll_name)) {
+            std::string lower;
+            lower.reserve(dll_name.size());
+            for (const char c : dll_name) {
+                lower.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(c))));
+            }
+            if (std::find(graphics_dlls.begin(), graphics_dlls.end(), lower) == graphics_dlls.end()) {
+                graphics_dlls.push_back(std::move(lower));
+            }
+        }
+    };
+
+    for (const auto& imp : info.imports) {
+        record_graphics_dll(imp.name);
+    }
+    for (const auto& imp : info.delay_imports) {
+        record_graphics_dll(imp.name);
+    }
+
+    if (!graphics_dlls.empty()) {
+        std::string rec = "requer aceleracao grafica 3D (";
+        for (std::size_t i = 0; i < graphics_dlls.size(); ++i) {
+            if (i > 0) {
+                rec += ", ";
+            }
+            rec += graphics_dlls[i];
+        }
+        rec += "); configure profile.json com 'backend.kind: proton'";
+        recs.push_back(std::move(rec));
+    }
+
+    if (packer.is_packed) {
+        recs.push_back("aplicativo empacotado/ofuscado (" + packer.packer_name +
+                       "); descompacte o executavel se houver problemas de protecao W^X em runtime");
+    }
+
+    if (frameworks.is_dotnet) {
+        recs.push_back("aplicativo gerenciado .NET/CLR; execute com o runtime dotnet ou Proton se nao possuir stub nativo AOT");
+    }
+
+    if (security.has_anticheat) {
+        recs.push_back("requer anticheat em nivel de kernel (" + security.anticheat_name +
+                       "); componentes ring-0 de anticheat nao sao suportados no runtime nativo");
+    } else if (security.has_service_apis) {
+        recs.push_back("aplicativo registra servicos ou drivers de sistema (advapi32); servicos de kernel nao sao suportados no runtime nativo");
+    }
+
+    return recs;
+}
+
+void print_support_report_json(
+    std::ostream& stream,
+    const pe::PeInfo& info,
+    const std::span<const std::byte> file_bytes,
+    const loader::ResolveResult& result,
+    const pe::PackerInspectionResult& packer,
+    const pe::FrameworkInspectionResult& frameworks,
+    const pe::SecurityServiceInspectionResult& security,
+    const std::vector<std::string>& recommendations) {
+    const std::size_t total_imports = result.imports.size();
+    const std::size_t resolved_imports = static_cast<std::size_t>(std::count_if(
+        result.imports.begin(), result.imports.end(), [](const loader::ResolvedImport& entry) {
+            return entry.status == loader::ImportStatus::Resolved;
+        }));
+    const std::size_t delay_imports = static_cast<std::size_t>(std::count_if(
+        result.imports.begin(), result.imports.end(), [](const loader::ResolvedImport& entry) {
+            return entry.mechanism == loader::ImportMechanism::Delay;
+        }));
+    const std::size_t resolved_delay_imports = static_cast<std::size_t>(std::count_if(
+        result.imports.begin(), result.imports.end(), [](const loader::ResolvedImport& entry) {
+            return entry.mechanism == loader::ImportMechanism::Delay &&
+                   entry.status == loader::ImportStatus::Resolved;
+        }));
+    const std::size_t limited_exports = static_cast<std::size_t>(std::count_if(
+        result.imports.begin(), result.imports.end(), [](const loader::ResolvedImport& entry) {
+            return entry.status == loader::ImportStatus::Resolved &&
+                   entry.support == loader::ExportSupport::Limited;
+        }));
+    const std::size_t stub_exports = static_cast<std::size_t>(std::count_if(
+        result.imports.begin(), result.imports.end(), [](const loader::ResolvedImport& entry) {
+            return entry.status == loader::ImportStatus::Resolved &&
+                   entry.support == loader::ExportSupport::Stub;
+        }));
+
+    const std::size_t pct = total_imports > 0 ? (resolved_imports * 100 / total_imports) : 100;
+    const char* runtime_support = result.status != loader::ImportStatus::Resolved
+                                      ? "unresolved"
+                                      : (stub_exports != 0 ? "stub"
+                                                           : (limited_exports != 0 ? "limited" : "full"));
+
+    stream << "{\n";
+    stream << "  \"format\": \"" << (info.is_pe32_plus ? "PE32+ x86-64" : "unsupported") << "\",\n";
+    stream << "  \"entry_point\": \"" << util::format_hex(info.address_of_entry_point) << "\",\n";
+    stream << "  \"image_base\": \"" << util::format_hex(info.image_base) << "\",\n";
+    stream << "  \"size_of_image\": \"" << util::format_hex(info.size_of_image) << "\",\n";
+    stream << "  \"sections_count\": " << info.sections.size() << ",\n";
+
+    // Mitigations
+    pe::MitigationInfo mitigations{};
+    if (!file_bytes.empty()) {
+        mitigations = pe::inspect_pe_mitigations(file_bytes, info);
+    }
+    stream << "  \"mitigations\": {\n";
+    stream << "    \"aslr\": \"" << (mitigations.aslr ? (mitigations.high_entropy_va ? "enabled(high-entropy)" : "enabled") : "disabled") << "\",\n";
+    stream << "    \"dep\": " << (mitigations.dep ? "true" : "false") << ",\n";
+    stream << "    \"cfg\": " << (mitigations.cfg ? "true" : "false") << ",\n";
+    stream << "    \"seh\": \"" << (mitigations.no_seh ? "no-seh" : "present") << "\",\n";
+    stream << "    \"appcontainer\": " << (mitigations.app_container ? "true" : "false") << ",\n";
+    stream << "    \"force_integrity\": " << (mitigations.force_integrity ? "true" : "false") << "\n";
+    stream << "  },\n";
+
+    // Packer
+    stream << "  \"packer\": {\n";
+    stream << "    \"is_packed\": " << (packer.is_packed ? "true" : "false") << ",\n";
+    stream << "    \"name\": \"" << escape_json_string(packer.packer_name) << "\",\n";
+    stream << "    \"indicators\": [";
+    for (std::size_t i = 0; i < packer.indicators.size(); ++i) {
+        if (i > 0) stream << ", ";
+        stream << "\"" << escape_json_string(packer.indicators[i]) << "\"";
+    }
+    stream << "]\n";
+    stream << "  },\n";
+
+    // Toolchain & Frameworks
+    stream << "  \"toolchain\": {\n";
+    stream << "    \"name\": \"" << escape_json_string(frameworks.toolchain) << "\",\n";
+    stream << "    \"is_dotnet\": " << (frameworks.is_dotnet ? "true" : "false") << ",\n";
+    stream << "    \"dotnet_details\": \"" << escape_json_string(frameworks.dotnet_details) << "\",\n";
+    stream << "    \"gui_frameworks\": [";
+    for (std::size_t i = 0; i < frameworks.gui_frameworks.size(); ++i) {
+        if (i > 0) stream << ", ";
+        stream << "\"" << escape_json_string(frameworks.gui_frameworks[i]) << "\"";
+    }
+    stream << "]\n";
+    stream << "  },\n";
+
+    // Security & Services
+    stream << "  \"security\": {\n";
+    stream << "    \"has_anticheat\": " << (security.has_anticheat ? "true" : "false") << ",\n";
+    stream << "    \"anticheat_name\": \"" << escape_json_string(security.anticheat_name) << "\",\n";
+    stream << "    \"anticheat_indicators\": [";
+    for (std::size_t i = 0; i < security.anticheat_indicators.size(); ++i) {
+        if (i > 0) stream << ", ";
+        stream << "\"" << escape_json_string(security.anticheat_indicators[i]) << "\"";
+    }
+    stream << "],\n";
+    stream << "    \"has_service_apis\": " << (security.has_service_apis ? "true" : "false") << ",\n";
+    stream << "    \"service_apis\": [";
+    for (std::size_t i = 0; i < security.service_apis.size(); ++i) {
+        if (i > 0) stream << ", ";
+        stream << "\"" << escape_json_string(security.service_apis[i]) << "\"";
+    }
+    stream << "]\n";
+    stream << "  },\n";
+
+    // Resources and Manifest
+    pe::ResourceInspectionResult res_info{};
+    if (!file_bytes.empty()) {
+        res_info = pe::inspect_pe_resources(file_bytes, info);
+    }
+    stream << "  \"identity\": {\n";
+    stream << "    \"has_version_info\": " << (res_info.version_info.has_version_info ? "true" : "false") << ",\n";
+    stream << "    \"product_name\": \"" << escape_json_string(res_info.version_info.product_name) << "\",\n";
+    stream << "    \"product_version\": \"" << escape_json_string(res_info.version_info.product_version) << "\",\n";
+    stream << "    \"company_name\": \"" << escape_json_string(res_info.version_info.company_name) << "\",\n";
+    stream << "    \"file_description\": \"" << escape_json_string(res_info.version_info.file_description) << "\"\n";
+    stream << "  },\n";
+
+    stream << "  \"resources\": {\n";
+    stream << "    \"total_types\": " << res_info.types.size() << ",\n";
+    stream << "    \"types\": [";
+    for (std::size_t i = 0; i < res_info.types.size(); ++i) {
+        if (i > 0) stream << ", ";
+        stream << "{\"type\": \"" << escape_json_string(res_info.types[i].type_name)
+               << "\", \"count\": " << res_info.types[i].count << "}";
+    }
+    stream << "]\n";
+    stream << "  },\n";
+
+    stream << "  \"manifest\": {\n";
+    stream << "    \"has_manifest\": " << (res_info.manifest.has_manifest ? "true" : "false") << ",\n";
+    stream << "    \"uac_level\": \"" << escape_json_string(res_info.manifest.requested_execution_level) << "\",\n";
+    stream << "    \"ui_access\": " << (res_info.manifest.ui_access == "true" ? "true" : "false") << ",\n";
+    stream << "    \"dpi_aware\": \"" << escape_json_string(res_info.manifest.dpi_aware) << "\",\n";
+    stream << "    \"supported_os\": \"";
+    for (std::size_t i = 0; i < res_info.manifest.supported_os.size(); ++i) {
+        if (i > 0) stream << ", ";
+        stream << escape_json_string(res_info.manifest.supported_os[i]);
+    }
+    stream << "\"\n";
+    stream << "  },\n";
+
+    // Imports
+    stream << "  \"imports\": {\n";
+    stream << "    \"total\": " << total_imports << ",\n";
+    stream << "    \"resolved\": " << resolved_imports << ",\n";
+    stream << "    \"delay_total\": " << delay_imports << ",\n";
+    stream << "    \"delay_resolved\": " << resolved_delay_imports << ",\n";
+    stream << "    \"status\": \"" << (result.status == loader::ImportStatus::Resolved ? "supported" : "unsupported") << "\",\n";
+    stream << "    \"compatibility_percentage\": " << pct << ",\n";
+    stream << "    \"runtime_support\": \"" << runtime_support << "\",\n";
+    stream << "    \"modules\": [\n";
+
+    std::vector<std::string> all_dlls;
+    for (const auto& entry : result.imports) {
+        if (std::find(all_dlls.begin(), all_dlls.end(), entry.dll) == all_dlls.end()) {
+            all_dlls.push_back(entry.dll);
+        }
+    }
+
+    for (std::size_t d = 0; d < all_dlls.size(); ++d) {
+        const std::string& dll_name = all_dlls[d];
+        std::size_t mod_total = 0;
+        std::size_t mod_resolved = 0;
+        loader::ImportMechanism mech = loader::ImportMechanism::Static;
+        for (const auto& entry : result.imports) {
+            if (entry.dll == dll_name) {
+                ++mod_total;
+                if (entry.status == loader::ImportStatus::Resolved) {
+                    ++mod_resolved;
+                }
+                mech = entry.mechanism;
+            }
+        }
+        stream << "      {\n";
+        stream << "        \"name\": \"" << escape_json_string(dll_name) << "\",\n";
+        stream << "        \"mechanism\": \"" << (mech == loader::ImportMechanism::Delay ? "delay-import" : "static") << "\",\n";
+        stream << "        \"total\": " << mod_total << ",\n";
+        stream << "        \"resolved\": " << mod_resolved << ",\n";
+        stream << "        \"symbols\": [\n";
+
+        bool first_sym = true;
+        for (const auto& entry : result.imports) {
+            if (entry.dll == dll_name) {
+                if (!first_sym) {
+                    stream << ",\n";
+                }
+                first_sym = false;
+                stream << "          {\"name\": \"" << escape_json_string(resolved_symbol_label(entry))
+                       << "\", \"status\": \"" << import_status_label(entry.status) << "\"";
+                if (entry.status == loader::ImportStatus::Resolved) {
+                    stream << ", \"support\": \"" << export_support_label(entry.support) << "\"";
+                }
+                stream << "}";
+            }
+        }
+        stream << "\n        ]\n";
+        stream << "      }" << (d + 1 < all_dlls.size() ? "," : "") << "\n";
+    }
+    stream << "    ]\n";
+    stream << "  },\n";
+
+    // Recommendations
+    stream << "  \"recommendations\": [\n";
+    for (std::size_t i = 0; i < recommendations.size(); ++i) {
+        stream << "    \"" << escape_json_string(recommendations[i]) << "\""
+               << (i + 1 < recommendations.size() ? "," : "") << "\n";
+    }
+    stream << "  ]\n";
+    stream << "}\n";
+}
+
 [[nodiscard]] loader::ResolveResult print_support_report(
     std::ostream& stream,
     const pe::PeInfo& info,
-    const std::span<const std::byte> file_bytes) {
+    const std::span<const std::byte> file_bytes,
+    const bool json_output) {
     TL_TRACE_FUNCTION();
     const loader::ResolveResult result = loader::inspect_imports(info);
+    const pe::PackerInspectionResult packer = pe::inspect_pe_packers(info);
+    const pe::FrameworkInspectionResult frameworks = pe::inspect_pe_frameworks(info, file_bytes);
+    const pe::SecurityServiceInspectionResult security = pe::inspect_pe_security_services(info);
+    const std::vector<std::string> recommendations =
+        collect_recommendations(info, packer, frameworks, security);
+
+    if (json_output) {
+        print_support_report_json(stream, info, file_bytes, result, packer, frameworks, security,
+                                  recommendations);
+        return result;
+    }
+
     const std::size_t total_imports = result.imports.size();
     const std::size_t resolved_imports = static_cast<std::size_t>(std::count_if(
         result.imports.begin(), result.imports.end(), [](const loader::ResolvedImport& entry) {
@@ -472,7 +804,6 @@ void print_support_report_group(std::ostream& stream, const loader::ResolveResul
             stream << '\n';
         }
     }
-    const pe::PackerInspectionResult packer = pe::inspect_pe_packers(info);
     if (packer.is_packed) {
         stream << "packer: detected (" << packer.packer_name;
         if (!packer.indicators.empty()) {
@@ -486,7 +817,6 @@ void print_support_report_group(std::ostream& stream, const loader::ResolveResul
         }
         stream << ")\n";
     }
-    const pe::FrameworkInspectionResult frameworks = pe::inspect_pe_frameworks(info, file_bytes);
     if (!frameworks.toolchain.empty()) {
         stream << "toolchain: " << frameworks.toolchain << '\n';
     }
@@ -503,7 +833,6 @@ void print_support_report_group(std::ostream& stream, const loader::ResolveResul
         }
         stream << '\n';
     }
-    const pe::SecurityServiceInspectionResult security = pe::inspect_pe_security_services(info);
     if (security.has_anticheat) {
         stream << "anticheat: detected (" << security.anticheat_name;
         if (!security.anticheat_indicators.empty()) {
@@ -636,73 +965,8 @@ void print_support_report_group(std::ostream& stream, const loader::ResolveResul
     stream << "execution: not-attempted\n";
     stream << "execution-result: not-attempted\n";
 
-    auto is_3d_graphics_dll = [](const std::string_view name) noexcept {
-        auto iequals = [](const std::string_view a, const std::string_view b) noexcept {
-            if (a.size() != b.size()) {
-                return false;
-            }
-            for (std::size_t i = 0; i < a.size(); ++i) {
-                if (std::tolower(static_cast<unsigned char>(a[i])) !=
-                    std::tolower(static_cast<unsigned char>(b[i]))) {
-                    return false;
-                }
-            }
-            return true;
-        };
-        return iequals(name, "d3d11.dll") ||
-               iequals(name, "d3d12.dll") ||
-               iequals(name, "dxgi.dll") ||
-               iequals(name, "d3d9.dll") ||
-               iequals(name, "vulkan-1.dll") ||
-               iequals(name, "xinput1_4.dll");
-    };
-
-    std::vector<std::string> graphics_dlls;
-    auto record_graphics_dll = [&](const std::string& dll_name) {
-        if (is_3d_graphics_dll(dll_name)) {
-            std::string lower;
-            lower.reserve(dll_name.size());
-            for (const char c : dll_name) {
-                lower.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(c))));
-            }
-            if (std::find(graphics_dlls.begin(), graphics_dlls.end(), lower) == graphics_dlls.end()) {
-                graphics_dlls.push_back(std::move(lower));
-            }
-        }
-    };
-
-    for (const auto& imp : info.imports) {
-        record_graphics_dll(imp.name);
-    }
-    for (const auto& imp : info.delay_imports) {
-        record_graphics_dll(imp.name);
-    }
-
-    if (!graphics_dlls.empty()) {
-        stream << "recommendation: requer aceleracao grafica 3D (";
-        for (std::size_t i = 0; i < graphics_dlls.size(); ++i) {
-            if (i > 0) {
-                stream << ", ";
-            }
-            stream << graphics_dlls[i];
-        }
-        stream << "); configure profile.json com 'backend.kind: proton'\n";
-    }
-
-    if (packer.is_packed) {
-        stream << "recommendation: aplicativo empacotado/ofuscado (" << packer.packer_name
-               << "); descompacte o executavel se houver problemas de protecao W^X em runtime\n";
-    }
-
-    if (frameworks.is_dotnet) {
-        stream << "recommendation: aplicativo gerenciado .NET/CLR; execute com o runtime dotnet ou Proton se nao possuir stub nativo AOT\n";
-    }
-
-    if (security.has_anticheat) {
-        stream << "recommendation: requer anticheat em nivel de kernel (" << security.anticheat_name
-               << "); componentes ring-0 de anticheat nao sao suportados no runtime nativo\n";
-    } else if (security.has_service_apis) {
-        stream << "recommendation: aplicativo registra servicos ou drivers de sistema (advapi32); servicos de kernel nao sao suportados no runtime nativo\n";
+    for (const auto& rec : recommendations) {
+        stream << "recommendation: " << rec << '\n';
     }
 
     return result;

@@ -37,6 +37,7 @@ void print_imports_summary(std::ostream& stream, const loader::ResolveResult& im
 [[nodiscard]] loader::ResolveResult print_support_report(
     std::ostream& stream,
     const pe::PeInfo& info,
-    std::span<const std::byte> file_bytes = {});
+    std::span<const std::byte> file_bytes = {},
+    bool json_output = false);
 
 }  // namespace tradutorlinux::cli_detail

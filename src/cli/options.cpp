@@ -179,6 +179,8 @@ ParseResult parse_command_line(const int argc, const char* const argv[]) {
                 }
             } else if (arg == "--report") {
                 command_line.report_only = true;
+            } else if (arg == "--json") {
+                command_line.report_json = true;
             } else {
                 std::string resource_error;
                 const LimitOptionResult resource_result =
@@ -302,6 +304,8 @@ ParseResult parse_command_line(const int argc, const char* const argv[]) {
                     }
                 } else if (arg == "--report") {
                     command_line.report_only = true;
+                } else if (arg == "--json") {
+                    command_line.report_json = true;
                 } else if (arg == "--timeout") {
                     if (command_line.timeout_set) {
                         return {.command_line = std::nullopt,
@@ -467,6 +471,15 @@ ParseResult parse_command_line(const int argc, const char* const argv[]) {
             continue;
         }
 
+        if (!options_ended && argument == "--json") {
+            if (command_line.report_json) {
+                return {.command_line = std::nullopt,
+                        .error_message = "a opção --json foi repetida"};
+            }
+            command_line.report_json = true;
+            continue;
+        }
+
         if (!options_ended && argument == "--trace-json") {
             if (command_line.trace_json_directory.has_value()) {
                 return {.command_line = std::nullopt,
@@ -543,6 +556,11 @@ ParseResult parse_command_line(const int argc, const char* const argv[]) {
                 .error_message = "--help e --version não podem ser usados juntos"};
     }
 
+    if (command_line.report_json && !command_line.report_only) {
+        return {.command_line = std::nullopt,
+                .error_message = "a opção --json requer --report"};
+    }
+
     return {.command_line = std::move(command_line), .error_message = {}};
 }
 
@@ -567,6 +585,7 @@ void print_help(std::ostream& stream) {
     stream << "                    sem lista = todos os canais (compatível com WINEDEBUG)\n";
     stream << "  --trace-json <dir> grava um arquivo JSON por evento, durante a execução\n";
     stream << "  --report   relata imports suportados sem executar o arquivo\n";
+    stream << "  --json     emite o relatório em formato JSON estruturado (com --report)\n";
     stream << "  --timeout <segundos>\n";
     stream << "             limita a execução do convidado; 0 = sem limite (padrão)\n";
     stream << "  --cpu <segundos>\n";

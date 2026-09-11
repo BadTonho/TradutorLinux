@@ -1207,7 +1207,7 @@ ExitCode run_command(const CommandLine& command_line, std::ostream& stdout_strea
 
     if (effective_cmd.report_only) {
         const loader::ResolveResult report_result =
-            print_support_report(stdout_stream, parse_result.info, *bytes);
+            print_support_report(stdout_stream, parse_result.info, *bytes, effective_cmd.report_json);
         return report_result.status == loader::ImportStatus::Resolved ? ExitCode::Success
                                                                        : ExitCode::Unsupported;
     }

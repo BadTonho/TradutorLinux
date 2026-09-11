@@ -366,6 +366,14 @@ gráfica 3D (`d3d11.dll`, `d3d12.dll`, `dxgi.dll`, `d3d9.dll`, `vulkan-1.dll`,
 execução ao backend Proton:
 `recommendation: requer aceleracao grafica 3D (...); configure profile.json com 'backend.kind: proton'`
 
+### Saída estruturada em JSON (`--report --json`)
+
+Quando combinado com a flag `--json` (`tradutorlinux --report --json <app.exe>`), o comando emite o relatório completo em formato JSON padronizado diretamente em `stdout`. Isso viabiliza o consumo automatizado pelo lançador gráfico Qt (`src/ui/`), ferramentas de CI e scripts de análise:
+
+- Chaves de primeiro nível: `format`, `entry_point`, `image_base`, `size_of_image`, `sections_count`.
+- Objetos estruturados: `mitigations` (ASLR/DEP/CFG/SEH/AppContainer), `packer` (is_packed, name, indicators), `toolchain` (compiler, .NET, frameworks GUI), `security` (anticheat e APIs de driver/serviços), `identity` (metadados do bloco `RT_VERSION`), `resources` (inventário por tipo), `manifest` (UAC, DPI, SOs suportados) e `imports` (módulos, contadores, status e suporte por símbolo).
+- Lista de `recommendations`: array de strings com todas as recomendações aplicáveis (aceleração 3D, descompactação de packers, runtime .NET, restrições de anticheat de kernel).
+
 Para evitar confundir análise com compatibilidade de aplicativo, use esta ordem
 de evidência:
 
