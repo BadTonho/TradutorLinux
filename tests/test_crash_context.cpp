@@ -102,4 +102,19 @@ TEST(CrashContextTest, WithoutResolvedImportsNearestImportStaysEmpty) {
     EXPECT_TRUE(context.nearest_import.empty());
 }
 
+TEST(CrashContextTest, IdentifiesFaultInGuestStackGuardPageAsStackOverflow) {
+    const void* const stack = reinterpret_cast<const void*>(0x70000000);
+    constexpr std::size_t guard_size = 4096;
+
+    EXPECT_TRUE(tradutorlinux::diagnostics::is_stack_overflow_fault(0x70000000, stack, guard_size));
+    EXPECT_TRUE(tradutorlinux::diagnostics::is_stack_overflow_fault(0x70000800, stack, guard_size));
+    EXPECT_TRUE(tradutorlinux::diagnostics::is_stack_overflow_fault(0x70000FFF, stack, guard_size));
+
+    EXPECT_FALSE(tradutorlinux::diagnostics::is_stack_overflow_fault(0x70001000, stack, guard_size));
+    EXPECT_FALSE(tradutorlinux::diagnostics::is_stack_overflow_fault(0x6FFFFFFF, stack, guard_size));
+    EXPECT_FALSE(tradutorlinux::diagnostics::is_stack_overflow_fault(0x0, stack, guard_size));
+    EXPECT_FALSE(tradutorlinux::diagnostics::is_stack_overflow_fault(0x70000000, nullptr, guard_size));
+    EXPECT_FALSE(tradutorlinux::diagnostics::is_stack_overflow_fault(0x70000000, stack, 0));
+}
+
 }  // namespace

@@ -1515,6 +1515,11 @@ ExitCode run_command(const CommandLine& command_line, std::ostream& stdout_strea
             ? diagnostics::describe_guest_crash(process.image, process.imports,
                                                 outcome.fault_rip != 0 ? outcome.fault_rip : outcome.fault_address)
             : diagnostics::GuestCrashContext{};
+    const bool is_stack_overflow =
+        outcome.kind == process::GuestOutcomeKind::Signaled && outcome.signal_number == SIGSEGV &&
+        outcome.fault_recorded &&
+        diagnostics::is_stack_overflow_fault(outcome.fault_address, process.stack,
+                                             util::host_page_size());
 
     const std::uint64_t unmap_base = process.image.base;
     set_guest_tls_directory(0, 0, 0, 0, {});
@@ -1663,16 +1668,22 @@ ExitCode run_command(const CommandLine& command_line, std::ostream& stdout_strea
     }
 
     if (outcome.kind == process::GuestOutcomeKind::Signaled) {
-        const process::SignalDescription signal = process::describe_signal(outcome.signal_number);
+        process::SignalDescription signal = process::describe_signal(outcome.signal_number);
+        if (is_stack_overflow) {
+            signal.detail = "estouro de pilha do convidado (stack overflow)";
+        }
         if (effective_cmd.trace_enabled) {
             std::vector<diagnostics::TraceField> fields;
-            fields.reserve(7);
+            fields.reserve(8);
             fields.push_back(diagnostics::TraceField{
                 "category",
                 std::string{diagnostics::failure_category_name(
                     diagnostics::FailureCategory::GuestSignal)}});
             fields.push_back(diagnostics::TraceField{"signal", std::string{signal.name}});
             fields.push_back(diagnostics::TraceField{"detail", std::string{signal.detail}});
+            if (is_stack_overflow) {
+                fields.push_back(diagnostics::TraceField{"fault-type", "stack-overflow"});
+            }
             if (outcome.fault_recorded) {
                 fields.push_back(diagnostics::TraceField{
                     "fault-address", util::format_hex(outcome.fault_address)});

@@ -29,4 +29,15 @@ struct GuestCrashContext {
                                                      const loader::ResolveResult& imports,
                                                      std::uint64_t fault_address);
 
+// Verifica se o endereço de falta recai na guard page da pilha do processo.
+[[nodiscard]] constexpr bool is_stack_overflow_fault(const std::uint64_t fault_address,
+                                                     const void* const stack_base,
+                                                     const std::size_t guard_size) noexcept {
+    if (stack_base == nullptr || guard_size == 0) {
+        return false;
+    }
+    const auto base = static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(stack_base));
+    return fault_address >= base && fault_address < (base + static_cast<std::uint64_t>(guard_size));
+}
+
 }  // namespace tradutorlinux::diagnostics

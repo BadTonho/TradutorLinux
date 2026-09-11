@@ -723,6 +723,13 @@ Exemplo real da fixture `tl_crash.exe` (desreferência de nulo):
 [tl][process][error] terminated category="guest-signal" signal="SIGSEGV" detail="acesso inválido à memória" fault-address="0x0"
 ```
 
+Quando a falta recai na guard page da pilha alocada para o processo convidado,
+o diagnóstico identifica o estouro de pilha e adiciona `fault-type="stack-overflow"`:
+
+```text
+[tl][process][error] terminated category="guest-signal" signal="SIGSEGV" detail="estouro de pilha do convidado (stack overflow)" fault-type="stack-overflow" fault-address="0x7ffcf000"
+```
+
 ## Componente `gui`
 
 O protótipo X11 usa um subconjunto de `USER32.dll`: `MessageBoxA` (somente com
