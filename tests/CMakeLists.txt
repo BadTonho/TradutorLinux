@@ -389,6 +389,7 @@ add_executable(tradutorlinux_unit_tests
     test_msvcrt.cpp
     test_pe_reader.cpp
     test_resource_inspector.cpp
+    test_pe_analyzer.cpp
     test_process.cpp
     test_runtime.cpp
     test_rust_pe_contract.cpp

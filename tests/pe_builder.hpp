@@ -91,6 +91,7 @@ struct BuildSpec {
     std::uint32_t delay_import_size{};
     std::uint32_t reloc_rva{};
     std::uint32_t reloc_size{};
+    std::uint16_t dll_characteristics{0};
     std::vector<std::string> section_names{".text", ".rdata"};
     std::vector<std::vector<std::byte>> section_data;
 };
@@ -132,7 +133,7 @@ inline std::vector<std::byte> build(const BuildSpec& spec) {
     push_u32(out, spec.size_of_headers);
     push_u32(out, 0);
     push_u16(out, 3);
-    push_u16(out, 0);
+    push_u16(out, spec.dll_characteristics);
     push_u64(out, 0x100000);
     push_u64(out, 0x1000);
     push_u64(out, 0x100000);

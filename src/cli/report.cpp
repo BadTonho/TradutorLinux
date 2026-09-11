@@ -1,6 +1,7 @@
 #include "cli_internal.hpp"
 
 #include "tradutorlinux/diagnostics/trace.hpp"
+#include "tradutorlinux/pe/pe_analyzer.hpp"
 #include "tradutorlinux/pe/resource_inspector.hpp"
 #include "tradutorlinux/util/basics.hpp"
 
@@ -455,6 +456,21 @@ void print_support_report_group(std::ostream& stream, const loader::ResolveResul
     stream << "format: " << (info.is_pe32_plus ? "PE32+ x86-64" : "unsupported") << '\n';
     stream << "entry-point: " << util::format_hex(info.address_of_entry_point) << '\n';
     if (!file_bytes.empty()) {
+        const pe::MitigationInfo mitigations = pe::inspect_pe_mitigations(file_bytes, info);
+        if (mitigations.has_mitigations) {
+            stream << "mitigations: aslr="
+                   << (mitigations.aslr ? (mitigations.high_entropy_va ? "enabled(high-entropy)" : "enabled") : "disabled")
+                   << " dep=" << (mitigations.dep ? "enabled" : "disabled")
+                   << " cfg=" << (mitigations.cfg ? "enabled" : "disabled")
+                   << " seh=" << (mitigations.no_seh ? "no-seh" : "present");
+            if (mitigations.app_container) {
+                stream << " appcontainer=yes";
+            }
+            if (mitigations.force_integrity) {
+                stream << " force-integrity=yes";
+            }
+            stream << '\n';
+        }
         const pe::ResourceInspectionResult res_info = pe::inspect_pe_resources(file_bytes, info);
         if (res_info.has_resources && !res_info.types.empty()) {
             stream << "resources: " << res_info.types.size() << " types (";

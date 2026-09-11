@@ -18,6 +18,7 @@ add_library(tradutorlinux_core STATIC
     package/msix.cpp
     pe/pe_reader.cpp
     pe/resource_inspector.cpp
+    pe/pe_analyzer.cpp
     prefix/prefix.cpp
     process/isolate.cpp
     runtime/core/memory_validator.cpp

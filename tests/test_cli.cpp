@@ -488,5 +488,22 @@ TEST(CommandRunTest, ReportDoesNotRecommendProtonWhenNoGraphics) {
         << "Relatório inesperadamente emitiu recomendação:\n" << report;
 }
 
+TEST(CommandRunTest, ReportDisplaysPeSecurityMitigations) {
+    CommandLine command_line;
+    command_line.report_only = true;
+    command_line.executable_path =
+        std::filesystem::path{TL_FIXTURE_OUTPUT_DIRECTORY} / "tl_hello.exe";
+    std::ostringstream stdout_stream;
+    std::ostringstream stderr_stream;
+
+    const ExitCode exit_code = run_command(command_line, stdout_stream, stderr_stream);
+    EXPECT_EQ(exit_code, ExitCode::Success);
+
+    const std::string report = stdout_stream.str();
+    EXPECT_NE(report.find("mitigations: aslr="), std::string::npos)
+        << "Relatório não continha linha de mitigações:\n" << report;
+}
+
 }  // namespace
 }  // namespace tradutorlinux
+
