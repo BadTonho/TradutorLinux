@@ -393,6 +393,7 @@ TL_MSABI void* tl_CreateFileMappingA(const void* file, const void* file_mapping_
         return nullptr;
     }
     it->used = true;
+    it->header = {runtime::HandleObjectType::FileMapping, 1};
     it->fd = fd >= 0 ? ::dup(fd) : -1;
     it->size = max_size;
     it->protect = protect;

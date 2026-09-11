@@ -1103,10 +1103,13 @@ imports não encerra B5.
 
 ### Evolução condicionada a alvo ou benefício medido
 
-- [ ] **B11 — Cabeçalho comum para objetos e handles.** Padronizar, sem mudar
-  a ABI pública, tipo, contagem de referências e operação de fechamento das
-  tabelas de arquivos, sincronização, threads e mapeamentos. Só iniciar com
-  regressão de handle misturado ou benefício mensurável de manutenção.
+- [x] **B11 — Cabeçalho comum para objetos e handles.** Padronizado `ObjectHeader`
+  com `HandleObjectType` e `ref_count` para arquivos, mapeamentos de memória,
+  objetos de sincronização (eventos, mutexes, semáforos), threads, snapshots e handles
+  de busca (`Find`). Fechamento unificado em `CloseHandle` respeitando contagem de
+  referência (`DuplicateHandle`) e rejeitando handles misturados (ex.: proibir fechar
+  `FindFirstFile` via `CloseHandle` em vez de `FindClose`). Validado com testes unitários
+  dedicados (`Win32HandleObjectTest`).
 - [x] **B12 — `VirtualQuery` coerente com alocações do runtime.** As alocações
   próprias agora registram `MEM_RESERVE`/`MEM_COMMIT`, `AllocationBase`,
   `AllocationProtect` e proteções por região; `VirtualProtect` divide a tabela

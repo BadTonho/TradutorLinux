@@ -1151,6 +1151,7 @@ TL_MSABI void* tl_CreateToolhelp32Snapshot(std::uint32_t flags, std::uint32_t pr
     for (auto& slot : g_snapshots) {
         if (!slot.used) {
             slot.used = true;
+            slot.header = {runtime::HandleObjectType::Snapshot, 1};
             slot.pids = std::move(pids);
             slot.next_index = 0;
             slot.flags = flags;
@@ -1456,6 +1457,7 @@ TL_MSABI int tl_CreateProcessA(const char* application_name, char* command_line,
             return 0;
         }
         it->used = true;
+        it->header = {runtime::HandleObjectType::Sync, 1};
         it->kind = SyncKind::Process;
         it->child_pid = -1;
         it->child_result_fd = -1;

@@ -17,6 +17,7 @@ void clear_unstarted_thread_slot(ThreadSlot& slot) noexcept {
     if (slot.stack != nullptr && slot.stack_size > 0) {
         munmap(slot.stack, slot.stack_size);
     }
+    slot.header = {};
     slot.used = false;
     slot.thread_id = 0;
     slot.teb = nullptr;
@@ -162,6 +163,7 @@ TL_MSABI void* tl_CreateThread(const void* thread_attributes, const std::uintptr
         return nullptr;
     }
     it->used = true;
+    it->header = {runtime::HandleObjectType::Thread, 1};
     it->thread_id = new_tid;
     it->teb = teb;
     it->stack = static_cast<std::byte*>(stack);

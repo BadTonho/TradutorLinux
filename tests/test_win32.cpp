@@ -1893,5 +1893,97 @@ TEST(OleAut32Test, BstrAndVariantOperations) {
     EXPECT_EQ(tl_VariantClear(&var), 0);
 }
 
+TEST(Win32HandleObjectTest, FindHandleCannotBeClosedWithCloseHandle) {
+    const char* tmpdir = "_tl_test_find_obj";
+    mkdir(tmpdir, 0777);
+    const std::string file_path = std::string(tmpdir) + "/dummy.txt";
+    FILE* f = std::fopen(file_path.c_str(), "wb");
+    ASSERT_NE(f, nullptr);
+    std::fwrite("abc", 1, 3, f);
+    std::fclose(f);
+
+    char pattern[64]{};
+    std::snprintf(pattern, sizeof(pattern), "%s/*", tmpdir);
+    char find_data_buf[400]{};
+    void* find_handle = tl_FindFirstFileA(pattern, find_data_buf);
+    ASSERT_NE(find_handle, reinterpret_cast<void*>(std::numeric_limits<std::uintptr_t>::max()));
+
+    // Attempting to close a Find handle with CloseHandle must fail with ERROR_INVALID_HANDLE
+    EXPECT_EQ(tl_CloseHandle(find_handle), 0);
+    EXPECT_EQ(tl_GetLastError(), 6U /* ERROR_INVALID_HANDLE */);
+
+    // Must be closed with FindClose
+    EXPECT_EQ(tl_FindClose(find_handle), 1);
+
+    std::remove(file_path.c_str());
+    rmdir(tmpdir);
+}
+
+TEST(Win32HandleObjectTest, DuplicateHandleIncrementsRefCountAndAllowsMultipleClose) {
+    const char* path = "_tl_test_dup_handle.bin";
+    void* handle = tl_CreateFileA(path, 0xC0000000U /* GENERIC_READ | GENERIC_WRITE */,
+                                  0, nullptr, 2U /* CREATE_ALWAYS */, 0x80U /* NORMAL */, nullptr);
+    ASSERT_NE(handle, reinterpret_cast<void*>(static_cast<std::uintptr_t>(-1)));
+
+    void* dup_handle = nullptr;
+    EXPECT_EQ(tl_DuplicateHandle(nullptr, handle, nullptr, &dup_handle, 0, 0, 2), 1);
+    EXPECT_EQ(dup_handle, handle);
+
+    // Writing through original handle works
+    const char msg[] = "test";
+    std::uint32_t written = 0;
+    EXPECT_EQ(tl_WriteFile(handle, msg, 4, &written, nullptr), 1);
+    EXPECT_EQ(written, 4U);
+
+    // Close duplicated handle - ref count decrements to 1, file remains open
+    EXPECT_EQ(tl_CloseHandle(dup_handle), 1);
+
+    // Can still write through handle
+    EXPECT_EQ(tl_WriteFile(handle, msg, 4, &written, nullptr), 1);
+    EXPECT_EQ(written, 4U);
+
+    // Close original handle - ref count reaches 0, actually closed
+    EXPECT_EQ(tl_CloseHandle(handle), 1);
+
+    // Third close fails with INVALID_HANDLE
+    EXPECT_EQ(tl_CloseHandle(handle), 0);
+    EXPECT_EQ(tl_GetLastError(), 6U);
+
+    std::remove(path);
+}
+
+TEST(Win32HandleObjectTest, DuplicateHandleRejectsInvalidHandles) {
+    void* target = nullptr;
+    EXPECT_EQ(tl_DuplicateHandle(nullptr, nullptr, nullptr, &target, 0, 0, 0), 0);
+    EXPECT_EQ(tl_GetLastError(), 6U /* ERROR_INVALID_HANDLE */);
+
+    EXPECT_EQ(tl_DuplicateHandle(nullptr, reinterpret_cast<void*>(0xBAADF00DULL), nullptr, &target, 0, 0, 0), 0);
+    EXPECT_EQ(tl_GetLastError(), 6U /* ERROR_INVALID_HANDLE */);
+
+    EXPECT_EQ(tl_DuplicateHandle(nullptr, reinterpret_cast<void*>(static_cast<std::uintptr_t>(-1)), nullptr, &target, 0, 0, 0), 0);
+    EXPECT_EQ(tl_GetLastError(), 6U /* ERROR_INVALID_HANDLE */);
+}
+
+TEST(Win32HandleObjectTest, DuplicateHandleSyncObject) {
+    void* event = tl_CreateEventA(nullptr, 0, 0, nullptr);
+    ASSERT_NE(event, nullptr);
+
+    void* dup_event = nullptr;
+    EXPECT_EQ(tl_DuplicateHandle(nullptr, event, nullptr, &dup_event, 0, 0, 0), 1);
+    EXPECT_EQ(dup_event, event);
+
+    // First close decrements ref count
+    EXPECT_EQ(tl_CloseHandle(dup_event), 1);
+
+    // Event is still usable
+    EXPECT_EQ(tl_SetEvent(event), 1);
+
+    // Second close frees event
+    EXPECT_EQ(tl_CloseHandle(event), 1);
+
+    // Third close fails
+    EXPECT_EQ(tl_CloseHandle(event), 0);
+}
+
 }  // namespace
 }  // namespace tradutorlinux

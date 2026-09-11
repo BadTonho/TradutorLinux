@@ -17,24 +17,36 @@ namespace {
 }
 
 [[nodiscard]] bool probe_wait_handle(const void* handle) noexcept {
-    if (handle == nullptr) {
+    if (handle == nullptr || handle == kInvalidHandleValue) {
         return false;
     }
-    if (find_file_slot(handle) != nullptr) {
-        return true;
+    const runtime::ObjectHeader* header = runtime::get_object_header(handle);
+    if (header == nullptr) {
+        return false;
     }
-    if (ThreadSlot* thread = find_thread_slot(handle); thread != nullptr) {
-        std::lock_guard<std::mutex> lock(thread->join_mutex);
-        return thread->finished;
-    }
-    if (SyncSlot* sync = find_sync_slot(handle); sync != nullptr) {
-        if (sync->kind == SyncKind::Process) {
-            return wait_process_slot(*sync, 0) == abi::kWaitObject0;
+    switch (header->type) {
+        case runtime::HandleObjectType::File:
+            return true;
+        case runtime::HandleObjectType::Thread: {
+            if (ThreadSlot* thread = find_thread_slot(handle); thread != nullptr) {
+                std::lock_guard<std::mutex> lock(thread->join_mutex);
+                return thread->finished;
+            }
+            return false;
         }
-        std::lock_guard<std::mutex> lock(sync->mutex);
-        return sync_is_signaled(*sync);
+        case runtime::HandleObjectType::Sync: {
+            if (SyncSlot* sync = find_sync_slot(handle); sync != nullptr) {
+                if (sync->kind == SyncKind::Process) {
+                    return wait_process_slot(*sync, 0) == abi::kWaitObject0;
+                }
+                std::lock_guard<std::mutex> lock(sync->mutex);
+                return sync_is_signaled(*sync);
+            }
+            return false;
+        }
+        default:
+            return false;
     }
-    return false;
 }
 
 std::mutex g_wait_address_mutex;
@@ -213,6 +225,7 @@ TL_MSABI void* tl_CreateMutexA(const void* security_attributes, const int initia
     }
     SyncSlot& slot = *free_it;
     slot.used = true;
+    slot.header = {runtime::HandleObjectType::Sync, 1};
     slot.kind = SyncKind::Mutex;
     slot.signaled = initial_owner == 0;
     slot.owner_valid = initial_owner != 0;
@@ -250,6 +263,7 @@ TL_MSABI void* tl_CreateEventA(const void* security_attributes, const int manual
     }
     SyncSlot& slot = *free_it;
     slot.used = true;
+    slot.header = {runtime::HandleObjectType::Sync, 1};
     slot.kind = SyncKind::Event;
     slot.signaled = initial_state != 0;
     slot.manual_reset = manual_reset != 0;
@@ -340,6 +354,7 @@ TL_MSABI void* tl_CreateSemaphoreA(const void* security_attributes,
     }
     SyncSlot& slot = *free_it;
     slot.used = true;
+    slot.header = {runtime::HandleObjectType::Sync, 1};
     slot.kind = SyncKind::Semaphore;
     slot.count = initial_count;
     slot.maximum = maximum_count;

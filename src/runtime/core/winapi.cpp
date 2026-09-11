@@ -330,15 +330,88 @@ bool normalized_wide_path(const std::uint16_t* path,
 }
 
 FileSlot* find_file_slot(const void* handle) noexcept {
-    std::lock_guard<std::mutex> lock(g_files_mutex);
-    const auto found = std::find_if(g_files.begin(), g_files.end(), [handle](const FileSlot& slot) {
-        return slot.used && handle == &slot;
-    });
-    if (found != g_files.end()) {
-        return &*found;
+    if (handle == nullptr) {
+        return nullptr;
     }
+    const auto addr = std::bit_cast<std::uintptr_t>(handle);
+    const auto begin = std::bit_cast<std::uintptr_t>(g_files.data());
+    const auto end = begin + g_files.size() * sizeof(FileSlot);
+    if (addr < begin || addr >= end || (addr - begin) % sizeof(FileSlot) != 0) {
+        return nullptr;
+    }
+    std::lock_guard<std::mutex> lock(g_files_mutex);
+    auto* slot = static_cast<FileSlot*>(const_cast<void*>(handle));
+    return slot->used ? slot : nullptr;
+}
+
+namespace runtime {
+
+ObjectHeader* get_object_header(const void* handle) noexcept {
+    const auto addr = reinterpret_cast<std::uintptr_t>(handle);
+    if (handle == nullptr || addr == ~static_cast<std::uintptr_t>(0)) {
+        return nullptr;
+    }
+
+    // 1. Thread handles (kThreadHandleBase)
+    if (addr >= kThreadHandleBase && addr < kThreadHandleBase + g_threads.size()) {
+        std::lock_guard<std::mutex> lock(g_threads_mutex);
+        const auto index = static_cast<std::size_t>(addr - kThreadHandleBase);
+        ThreadSlot& slot = g_threads[index];
+        return slot.used ? &slot.header : nullptr;
+    }
+
+    // 2. Sync handles (kSyncHandleBase)
+    if (addr >= kSyncHandleBase && addr < kSyncHandleBase + g_syncs.size()) {
+        std::lock_guard<std::mutex> lock(g_sync_mutex);
+        const auto index = static_cast<std::size_t>(addr - kSyncHandleBase);
+        SyncSlot& slot = g_syncs[index];
+        return slot.used ? &slot.header : nullptr;
+    }
+
+    // 3. Find handles (kFindHandleBase)
+    if (addr >= kFindHandleBase && addr < kFindHandleBase + g_find_slots.size()) {
+        const auto index = static_cast<std::size_t>(addr - kFindHandleBase);
+        FindSlot& slot = g_find_slots[index];
+        return slot.used ? &slot.header : nullptr;
+    }
+
+    // 4. File slots (ponteiros diretos em g_files)
+    {
+        const auto begin = std::bit_cast<std::uintptr_t>(g_files.data());
+        const auto end = begin + g_files.size() * sizeof(FileSlot);
+        if (addr >= begin && addr < end && (addr - begin) % sizeof(FileSlot) == 0) {
+            std::lock_guard<std::mutex> lock(g_files_mutex);
+            auto* slot = static_cast<FileSlot*>(const_cast<void*>(handle));
+            return slot->used ? &slot->header : nullptr;
+        }
+    }
+
+    // 5. FileMapping slots (ponteiros diretos em g_mappings)
+    {
+        const auto begin = std::bit_cast<std::uintptr_t>(g_mappings.data());
+        const auto end = begin + g_mappings.size() * sizeof(FileMappingSlot);
+        if (addr >= begin && addr < end && (addr - begin) % sizeof(FileMappingSlot) == 0) {
+            std::lock_guard<std::mutex> lock(g_mapping_mutex);
+            auto* slot = static_cast<FileMappingSlot*>(const_cast<void*>(handle));
+            return slot->used ? &slot->header : nullptr;
+        }
+    }
+
+    // 6. Snapshot slots (ponteiros diretos em g_snapshots)
+    {
+        const auto begin = std::bit_cast<std::uintptr_t>(g_snapshots.data());
+        const auto end = begin + g_snapshots.size() * sizeof(SnapshotSlot);
+        if (addr >= begin && addr < end && (addr - begin) % sizeof(SnapshotSlot) == 0) {
+            std::lock_guard<std::mutex> lock(g_snapshot_mutex);
+            auto* slot = static_cast<SnapshotSlot*>(const_cast<void*>(handle));
+            return slot->used ? &slot->header : nullptr;
+        }
+    }
+
     return nullptr;
 }
+
+}  // namespace runtime
 
 int handle_fd(const void* handle) noexcept {
     auto& ctx = runtime::guest_context();
@@ -389,6 +462,21 @@ SyncSlot* find_sync_slot(const void* handle) noexcept {
     return slot.used ? &slot : nullptr;
 }
 
+SnapshotSlot* find_snapshot_slot(const void* handle) noexcept {
+    if (handle == nullptr) {
+        return nullptr;
+    }
+    const auto addr = std::bit_cast<std::uintptr_t>(handle);
+    const auto begin = std::bit_cast<std::uintptr_t>(g_snapshots.data());
+    const auto end = begin + g_snapshots.size() * sizeof(SnapshotSlot);
+    if (addr < begin || addr >= end || (addr - begin) % sizeof(SnapshotSlot) != 0) {
+        return nullptr;
+    }
+    std::lock_guard<std::mutex> lock(g_snapshot_mutex);
+    auto* slot = static_cast<SnapshotSlot*>(const_cast<void*>(handle));
+    return slot->used ? slot : nullptr;
+}
+
 void* sync_slot_handle(const SyncSlot& slot) noexcept {
     return reinterpret_cast<void*>(kSyncHandleBase +
                                    static_cast<std::uintptr_t>(&slot - g_syncs.data()));
@@ -398,6 +486,7 @@ void clear_sync_slot(SyncSlot& slot) noexcept {
     if (slot.child_result_fd >= 0) {
         ::close(slot.child_result_fd);
     }
+    slot.header = {};
     slot.used = false;
     slot.signaled = false;
     slot.manual_reset = false;

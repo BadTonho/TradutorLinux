@@ -24,6 +24,24 @@ namespace tradutorlinux::runtime {
 
 enum class ContextSyncKind { Mutex, Event, Semaphore, Process };
 
+enum class HandleObjectType : std::uint8_t {
+    Unknown = 0,
+    File,
+    Sync,
+    FileMapping,
+    Thread,
+    Find,
+    Snapshot,
+    Resource,
+};
+
+struct ObjectHeader {
+    HandleObjectType type{HandleObjectType::Unknown};
+    std::uint32_t ref_count{1};
+};
+
+[[nodiscard]] ObjectHeader* get_object_header(const void* handle) noexcept;
+
 // Estado pertencente a uma execução Win32. O objeto é deliberadamente
 // independente do ABI convidado: as APIs exportadas continuam sendo funções
 // TL_MSABI e consultam o contexto ativo por thread.
@@ -67,6 +85,7 @@ struct GuestContext {
     std::mutex process_context_mutex;
 
     struct ContextFileSlot {
+        ObjectHeader header{HandleObjectType::File, 1};
         int fd{-1};
         bool used{false};
         std::uint64_t file_size{0};
@@ -94,6 +113,7 @@ struct GuestContext {
         std::vector<ContextAllocationRegion> regions;
     };
     struct ContextFileMappingSlot {
+        ObjectHeader header{HandleObjectType::FileMapping, 1};
         bool used{false};
         int fd{-1};
         std::uint64_t size{0};
@@ -172,6 +192,7 @@ struct GuestContext {
     std::atomic<std::uintptr_t> unhandled_exception_filter{0};
 
     struct ContextSyncSlot {
+        ObjectHeader header{HandleObjectType::Sync, 1};
         bool used{false};
         ContextSyncKind kind{ContextSyncKind::Event};
         std::mutex mutex;

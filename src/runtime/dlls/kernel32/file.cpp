@@ -162,6 +162,7 @@ void convert_find_data(const Win32FindDataA& source, LegacyFindDataW& target) no
         return kInvalidHandleValue;
     }
     it->used = true;
+    it->header = {runtime::HandleObjectType::Find, 1};
     it->dir = dir;
     it->pattern = pattern;
     it->directory = directory;
@@ -471,6 +472,7 @@ TL_MSABI void* tl_CreateFileA(const char* const file_name, const std::uint32_t d
         return kInvalidHandleValue;
     }
     it->used = true;
+    it->header = {runtime::HandleObjectType::File, 1};
     it->fd = fd;
     it->path = normalized;
     it->delete_pending = false;
@@ -536,6 +538,7 @@ TL_MSABI void* tl_CreateFileW(const std::uint16_t* path, const std::uint32_t des
         return kInvalidHandleValue;
     }
     it->used = true;
+    it->header = {runtime::HandleObjectType::File, 1};
     it->fd = fd;
     it->path = normalized;
     it->delete_pending = false;
@@ -561,6 +564,17 @@ TL_MSABI int tl_CloseHandle(const void* const handle) noexcept {
     if (runtime::security::close_token_handle(handle)) {
         set_last_error(abi::kErrorSuccess);
         return 1;
+    }
+    if (runtime::ObjectHeader* header = runtime::get_object_header(handle); header != nullptr) {
+        if (header->type == runtime::HandleObjectType::Find) {
+            set_last_error(abi::kErrorInvalidHandle);
+            return 0;
+        }
+        if (header->ref_count > 1) {
+            --header->ref_count;
+            set_last_error(abi::kErrorSuccess);
+            return 1;
+        }
     }
     if (FileSlot* slot = find_file_slot(handle); slot != nullptr) {
         std::lock_guard<std::mutex> lock(g_files_mutex);
@@ -641,18 +655,15 @@ TL_MSABI int tl_CloseHandle(const void* const handle) noexcept {
         set_last_error(abi::kErrorSuccess);
         return 1;
     }
-    {
+    if (SnapshotSlot* slot = find_snapshot_slot(handle); slot != nullptr) {
         std::lock_guard<std::mutex> lock(g_snapshot_mutex);
-        for (auto& slot : g_snapshots) {
-            if (slot.used && handle == static_cast<const void*>(&slot)) {
-                slot.used = false;
-                slot.pids.clear();
-                slot.next_index = 0;
-                slot.flags = 0;
-                set_last_error(abi::kErrorSuccess);
-                return 1;
-            }
-        }
+        slot->header = {};
+        slot->used = false;
+        slot->pids.clear();
+        slot->next_index = 0;
+        slot->flags = 0;
+        set_last_error(abi::kErrorSuccess);
+        return 1;
     }
     {
         const auto addr = reinterpret_cast<std::uintptr_t>(handle);
@@ -917,6 +928,11 @@ TL_MSABI int tl_FindClose(const void* handle) noexcept {
     if (slot == nullptr || !slot->used) {
         set_last_error(abi::kErrorInvalidHandle);
         return 0;
+    }
+    if (slot->header.ref_count > 1) {
+        --slot->header.ref_count;
+        set_last_error(abi::kErrorSuccess);
+        return 1;
     }
     if (slot->dir != nullptr) {
         closedir(slot->dir);
@@ -1579,7 +1595,7 @@ TL_MSABI std::uint32_t tl_K32GetProcessImageFileNameA(void* const process, char*
 }
 
 TL_MSABI int tl_DuplicateHandle(void* const src_process, void* const src_handle, void* const target_process, void** const target_handle,
-                                const std::uint32_t desired_access, const int inherit_handle, const std::uint32_t options) noexcept {
+                                 const std::uint32_t desired_access, const int inherit_handle, const std::uint32_t options) noexcept {
     (void)src_process;
     (void)target_process;
     (void)desired_access;
@@ -1589,9 +1605,29 @@ TL_MSABI int tl_DuplicateHandle(void* const src_process, void* const src_handle,
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
-    *target_handle = src_handle;
-    set_last_error(abi::kErrorSuccess);
-    return 1;
+    if (src_handle == nullptr || src_handle == kInvalidHandleValue) {
+        set_last_error(abi::kErrorInvalidHandle);
+        return 0;
+    }
+    if (src_handle == &kStdInputToken || src_handle == &kStdOutputToken || src_handle == &kStdErrorToken) {
+        *target_handle = src_handle;
+        set_last_error(abi::kErrorSuccess);
+        return 1;
+    }
+    if (runtime::ObjectHeader* header = runtime::get_object_header(src_handle); header != nullptr) {
+        ++header->ref_count;
+        *target_handle = src_handle;
+        set_last_error(abi::kErrorSuccess);
+        return 1;
+    }
+    const auto addr = reinterpret_cast<std::uintptr_t>(src_handle);
+    if (addr >= kProcessHandleBase && addr < kProcessHandleBase + kProcessHandleRange) {
+        *target_handle = src_handle;
+        set_last_error(abi::kErrorSuccess);
+        return 1;
+    }
+    set_last_error(abi::kErrorInvalidHandle);
+    return 0;
 }
 
 TL_MSABI int tl_LockFile(void* const file, const std::uint32_t offset_low, const std::uint32_t offset_high,

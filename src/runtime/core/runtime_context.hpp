@@ -117,6 +117,7 @@ using SyncSlot = runtime::GuestContext::ContextSyncSlot;
 constexpr std::uint32_t kMainThreadId = 1;
 
 struct ThreadSlot {
+    runtime::ObjectHeader header{runtime::HandleObjectType::Thread, 1};
     bool used{false};
     std::uint32_t thread_id{};
     void* teb{nullptr};
@@ -248,6 +249,7 @@ struct Win32FindDataA {
 
 constexpr std::uintptr_t kFindHandleBase = 0x0000800000000000ULL;
 struct FindSlot {
+    runtime::ObjectHeader header{runtime::HandleObjectType::Find, 1};
     bool used{false};
     DIR* dir{nullptr};
     std::string pattern;
@@ -257,6 +259,7 @@ extern std::array<FindSlot, 16> g_find_slots;
 
 constexpr std::uintptr_t kSnapshotHandleBase = 0x0000D00000000000ULL;
 struct SnapshotSlot {
+    runtime::ObjectHeader header{runtime::HandleObjectType::Snapshot, 0};
     bool used{false};
     std::vector<std::uint32_t> pids;
     std::size_t next_index{0};
@@ -357,6 +360,7 @@ ThreadSlot* find_thread_slot(const void* handle) noexcept;
 void* thread_slot_to_handle(ThreadSlot& slot) noexcept;
 
 SyncSlot* find_sync_slot(const void* handle) noexcept;
+SnapshotSlot* find_snapshot_slot(const void* handle) noexcept;
 void* sync_slot_handle(const SyncSlot& slot) noexcept;
 std::uint32_t wait_sync_slot(SyncSlot& slot, std::uint32_t milliseconds) noexcept;
 std::uint32_t wait_process_slot(SyncSlot& slot, std::uint32_t milliseconds) noexcept;
