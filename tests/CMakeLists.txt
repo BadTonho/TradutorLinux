@@ -287,6 +287,12 @@ if(TL_XVFB_EXECUTABLE)
     tl_enable_warnings(winrar_sfx_smoke)
     tl_enable_sanitizers(winrar_sfx_smoke)
 
+    add_executable(winrar_extract_smoke
+        apps/winrar/winrar_extract_smoke.cpp
+    )
+    tl_enable_warnings(winrar_extract_smoke)
+    tl_enable_sanitizers(winrar_extract_smoke)
+
     add_executable(notepadpp_smoke
         apps/notepadpp/notepadpp_smoke.cpp
     )
@@ -349,6 +355,17 @@ if(TL_XVFB_EXECUTABLE)
             )
             set_tests_properties(winrar_sfx_real_smoke PROPERTIES
                 LABELS "runtime;apps;gui;winrar"
+                TIMEOUT 60
+                SKIP_RETURN_CODE 77
+            )
+            add_test(
+                NAME winrar_extract_real_smoke
+                COMMAND winrar_extract_smoke
+                    "$<TARGET_FILE:tradutorlinux>"
+                    "${TL_WINRAR_EXECUTABLE}"
+            )
+            set_tests_properties(winrar_extract_real_smoke PROPERTIES
+                LABELS "runtime;apps;winrar"
                 TIMEOUT 60
                 SKIP_RETURN_CODE 77
             )

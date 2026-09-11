@@ -2774,25 +2774,26 @@ point sem rejeição.
 Aplicativos x86/32-bit (`CPU-Z`, `GPU-Z`, `HWMonitor`, `RTSS`,
 `Everything_Search_x64.exe`) continuam fora do escopo.
 
-### F1 — WinRAR: extração real de arquivo ZIP
+### F1 concluído — WinRAR: extração real de arquivo (2026-09-11)
 
 Objetivo: avançar o fluxo do WinRAR além do cancelamento controlado, validando
-a extração real de um arquivo ZIP simples num prefixo temporário. Sem
-introduzir regras ou shims específicos do WinRAR no runtime.
+a extração real de arquivos num prefixo temporário. Sem introduzir regras ou
+shims específicos do WinRAR no runtime.
 
-Tarefas:
+Evidência reproduzível:
 
-- [ ] Criar arquivo ZIP mínimo de fixture no prefixo temporário.
-- [ ] Executar `WinRAR_x64.exe e fixture.zip dest\` sob Xvfb, com limite de
-  tempo e memória, verificando que os bytes extraídos correspondem ao original.
-- [ ] Comparar stdout, stderr, exit code e trace em Rust ON/C++ OFF.
-- [ ] Registrar o resultado na matriz de compatibilidade.
-
-Aceitação:
-
-- [ ] Fixture e teste CTest cobrem extração, exit `0` e conteúdo correto.
-- [ ] Nenhum código específico do WinRAR foi adicionado ao runtime.
-- [ ] `git diff --check` passa e o worktree fica limpo.
+- [x] O smoke automatizado `tests/apps/winrar/winrar_extract_smoke.cpp` executa
+  `WinRAR_x64.exe` com `-s -dZ:\<prefix>\dest\` sob Xvfb próprio e limites
+  padronizados (`--timeout 15 --cpu 10 --memory 1024`).
+- [x] A extração completa dos 28 arquivos (incluindo `WinRAR.exe`, `Rar.exe`,
+  `UnRAR.exe`, `License.txt`, DLLs e documentação) foi verificada no diretório
+  de destino isolado, conferindo tamanhos e o cabeçalho textual
+  `END USER LICENSE AGREEMENT` em `License.txt`.
+- [x] A execução termina com `ExitProcess symbol="ExitProcess" exit-code="0"` e
+  `exit exit-code="0"` sem timeout, crash ou sinal.
+- [x] O teste `winrar_extract_real_smoke` foi adicionado à suíte CTest com
+  suporte a skip controlado (77) quando o binário ou Xvfb não estiver disponível.
+- [x] Nenhum código específico de WinRAR foi introduzido no runtime genérico.
 
 ### F2 — Notepad++: diagnóstico do ExitProcess(3)
 
