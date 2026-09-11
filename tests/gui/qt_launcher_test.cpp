@@ -77,6 +77,10 @@ public:
         run_case(QStringLiteral("instalação com escolha de executável"),
                  &QtLauncherSmoke::installs_and_selects_candidate);
         run_case(QStringLiteral("falha ao iniciar runtime"), &QtLauncherSmoke::reports_start_failure);
+        run_case(QStringLiteral("botão doctor presente e habilitado"),
+                 &QtLauncherSmoke::doctor_button_present);
+        run_case(QStringLiteral("execução de diagnóstico do host"),
+                 &QtLauncherSmoke::runs_doctor);
         return failures_ == 0 ? 0 : 1;
     }
 
@@ -427,6 +431,31 @@ private:
         }, 5000, QStringLiteral("falha de inicialização não foi reportada"));
         require(log_output(window)->toPlainText().contains(QStringLiteral("Erro ao iniciar o runtime")),
                 QStringLiteral("detalhe da falha não apareceu"));
+    }
+
+    void doctor_button_present() {
+        tradutorlinux::gui::MainWindow window(runtime_path());
+        window.show();
+        QApplication::processEvents();
+        QPushButton* const doc_btn = button(window, "doctor_button");
+        // Button must be present and enabled even without a path selected
+        require(doc_btn->isEnabled(),
+                QStringLiteral("doctor_button deve estar habilitado sem caminho"));
+    }
+
+    void runs_doctor() {
+        tradutorlinux::gui::MainWindow window(runtime_path());
+        window.show();
+        QApplication::processEvents();
+        button(window, "doctor_button")->click();
+        wait_until([this, &window] {
+            const QString text = status_label(window)->text();
+            return text == QStringLiteral("Diagnóstico do host concluído") ||
+                   text == QStringLiteral("Diagnóstico concluído com avisos");
+        }, 10000, QStringLiteral("diagnostico do host não terminou"));
+        const QString log = log_output(window)->toPlainText();
+        require(log.contains(QStringLiteral("doctor")),
+                QStringLiteral("saída do doctor não apareceu no log"));
     }
 
     QTemporaryDir config_dir_;

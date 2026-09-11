@@ -149,6 +149,8 @@ void MainWindow::setup_ui() {
     install_button_->setObjectName(QStringLiteral("install_button"));
     register_button_ = new QPushButton(QStringLiteral("Cadastrar"), action_box);
     register_button_->setObjectName(QStringLiteral("register_button"));
+    doctor_button_ = new QPushButton(QStringLiteral("Diagnosticar Host"), action_box);
+    doctor_button_->setObjectName(QStringLiteral("doctor_button"));
     clear_button_ = new QPushButton(QStringLiteral("Limpar"), action_box);
     clear_button_->setObjectName(QStringLiteral("clear_button"));
     exit_button_ = new QPushButton(QStringLiteral("Sair"), action_box);
@@ -157,8 +159,9 @@ void MainWindow::setup_ui() {
     buttons_layout->addWidget(run_button_, 0, 1);
     buttons_layout->addWidget(install_button_, 1, 0);
     buttons_layout->addWidget(register_button_, 1, 1);
-    buttons_layout->addWidget(clear_button_, 2, 0);
-    buttons_layout->addWidget(exit_button_, 2, 1);
+    buttons_layout->addWidget(doctor_button_, 2, 0);
+    buttons_layout->addWidget(clear_button_, 2, 1);
+    buttons_layout->addWidget(exit_button_, 3, 0, 1, 2);
     action_layout->addLayout(buttons_layout);
     action_layout->addStretch(1);
 
@@ -206,6 +209,7 @@ void MainWindow::setup_ui() {
     connect(install_button_, &QPushButton::clicked, this, &MainWindow::on_install_clicked);
     connect(register_button_, &QPushButton::clicked, this,
             &MainWindow::on_register_clicked);
+    connect(doctor_button_, &QPushButton::clicked, this, &MainWindow::on_doctor_clicked);
     connect(clear_button_, &QPushButton::clicked, this, &MainWindow::on_clear_clicked);
     connect(exit_button_, &QPushButton::clicked, this, &QWidget::close);
     connect(&process_, &QProcess::readyReadStandardOutput, this,
@@ -372,6 +376,22 @@ void MainWindow::on_clear_clicked() {
     update_action_state();
 }
 
+void MainWindow::on_doctor_clicked() {
+    if (process_is_running()) {
+        append_message(QStringLiteral("Aviso: um programa já está em execução."));
+        return;
+    }
+    const QString program = runtime_executable();
+    install_in_progress_ = false;
+    catalog_registration_in_progress_ = false;
+    doctor_in_progress_ = true;
+    process_start_failed_ = false;
+    set_status(QStringLiteral("Diagnosticando ambiente host..."));
+    append_message(QStringLiteral("Executando: %1 doctor").arg(program));
+    process_.start(program, QStringList{QStringLiteral("doctor")});
+    update_action_state();
+}
+
 void MainWindow::on_process_stdout_ready() {
     append_log(QStringLiteral("stdout"), process_.readAllStandardOutput());
 }
@@ -401,6 +421,7 @@ void MainWindow::on_process_finished(const int exit_code,
         process_start_failed_ = false;
         install_in_progress_ = false;
         catalog_registration_in_progress_ = false;
+        doctor_in_progress_ = false;
         update_action_state();
         return;
     }
@@ -419,6 +440,11 @@ void MainWindow::on_process_finished(const int exit_code,
             } else {
                 set_status(QStringLiteral("Cadastro após instalação falhou"));
             }
+        } else if (doctor_in_progress_) {
+            doctor_in_progress_ = false;
+            set_status(exit_code == 0
+                           ? QStringLiteral("Diagnóstico do host concluído")
+                           : QStringLiteral("Diagnóstico concluído com avisos"));
         } else {
             set_status(exit_code == 0 ? QStringLiteral("Operação concluída")
                                       : QStringLiteral("Operação terminou com erro"));
@@ -446,6 +472,7 @@ void MainWindow::update_action_state() {
     run_button_->setEnabled(has_path && !running);
     install_button_->setEnabled(has_path && !running);
     register_button_->setEnabled(has_path && !running);
+    doctor_button_->setEnabled(!running);
     clear_button_->setEnabled(!running);
     exit_button_->setEnabled(true);
     search_input_->setEnabled(!running);

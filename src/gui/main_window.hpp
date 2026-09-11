@@ -32,6 +32,7 @@ private slots:
     void on_run_clicked();
     void on_install_clicked();
     void on_register_clicked();
+    void on_doctor_clicked();
     void on_clear_clicked();
     void on_process_stdout_ready();
     void on_process_stderr_ready();
@@ -69,6 +70,7 @@ private:
     QPushButton* run_button_{nullptr};
     QPushButton* install_button_{nullptr};
     QPushButton* register_button_{nullptr};
+    QPushButton* doctor_button_{nullptr};
     QPushButton* clear_button_{nullptr};
     QPushButton* exit_button_{nullptr};
 
@@ -81,6 +83,7 @@ private:
     bool process_start_failed_{false};
     bool install_in_progress_{false};
     bool catalog_registration_in_progress_{false};
+    bool doctor_in_progress_{false};
 };
 
 }  // namespace tradutorlinux::gui
