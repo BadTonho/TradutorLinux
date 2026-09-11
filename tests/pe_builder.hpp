@@ -204,7 +204,15 @@ inline std::vector<std::byte> build(const BuildSpec& spec) {
         push_u16(out, 0);
         push_u32(out, index == 0 ? 0x60000020 : 0x40000040);
     }
-    out.resize(0x200 + static_cast<std::size_t>(spec.section_count) * 0x200, std::byte{0});
+
+    std::size_t total_file_size = 0x200 + static_cast<std::size_t>(spec.section_count) * 0x200;
+    for (std::size_t index = 0; index < spec.section_count; ++index) {
+        if (index < spec.section_data.size()) {
+            const std::size_t raw_pointer = 0x200 + index * 0x200;
+            total_file_size = std::max(total_file_size, raw_pointer + spec.section_data[index].size());
+        }
+    }
+    out.resize(total_file_size, std::byte{0});
 
     for (std::size_t index = 0; index < spec.section_count; ++index) {
         const std::size_t raw_pointer = 0x200 + index * 0x200;

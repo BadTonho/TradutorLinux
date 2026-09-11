@@ -144,6 +144,58 @@ std::vector<std::byte> make_named_resource_pe() {
     return build(spec);
 }
 
+// Constrói um PE com RT_MANIFEST contendo XML de manifesto real
+std::vector<std::byte> make_pe_with_manifest(const std::string& manifest_xml) {
+    constexpr std::uint32_t kRsrcRva = 0x2000;
+    std::vector<std::byte> rsrc;
+
+    // --- Root Directory (Level 1) ---
+    push_u32(rsrc, 0);
+    push_u32(rsrc, 0);
+    push_u16(rsrc, 0);
+    push_u16(rsrc, 0);
+    push_u16(rsrc, 0);  // 0 named
+    push_u16(rsrc, 1);  // 1 ID entry: RT_MANIFEST (24)
+
+    constexpr std::uint32_t kL2Offset = 24;
+    push_u32(rsrc, 24);
+    push_u32(rsrc, 0x80000000U | kL2Offset);
+
+    // --- Level 2 Directory (Manifest instance ID 1) ---
+    push_u32(rsrc, 0);
+    push_u32(rsrc, 0);
+    push_u16(rsrc, 0);
+    push_u16(rsrc, 0);
+    push_u16(rsrc, 0);
+    push_u16(rsrc, 1);  // 1 ID entry (ID 1)
+
+    constexpr std::uint32_t kDataEntryOffset = 48;
+    push_u32(rsrc, 1);
+    push_u32(rsrc, kDataEntryOffset);  // Bit 31 = 0: points to IMAGE_RESOURCE_DATA_ENTRY
+
+    // --- IMAGE_RESOURCE_DATA_ENTRY (offset 48, 16 bytes) ---
+    constexpr std::uint32_t kXmlOffsetInRsrc = 64;
+    const std::uint32_t xml_rva = kRsrcRva + kXmlOffsetInRsrc;
+    const std::uint32_t xml_size = static_cast<std::uint32_t>(manifest_xml.size());
+
+    push_u32(rsrc, xml_rva);   // OffsetToData (RVA)
+    push_u32(rsrc, xml_size);  // Size
+    push_u32(rsrc, 0);         // CodePage
+    push_u32(rsrc, 0);         // Reserved
+
+    // Append manifest XML at offset 64
+    for (const char c : manifest_xml) {
+        rsrc.push_back(static_cast<std::byte>(static_cast<unsigned char>(c)));
+    }
+
+    BuildSpec spec;
+    spec.section_names = {".text", ".rsrc"};
+    spec.section_data = {std::vector<std::byte>(0x10), rsrc};
+    spec.resource_rva = kRsrcRva;
+    spec.resource_size = static_cast<std::uint32_t>(rsrc.size());
+    return build(spec);
+}
+
 }  // namespace
 
 TEST(ResourceInspectorTest, StandardTypeNamesMapping) {
@@ -160,6 +212,99 @@ TEST(ResourceInspectorTest, StandardTypeNamesMapping) {
     EXPECT_EQ(standard_resource_type_name(16), "version");
     EXPECT_EQ(standard_resource_type_name(24), "manifest");
     EXPECT_EQ(standard_resource_type_name(999), "type_999");
+}
+
+TEST(ResourceInspectorTest, ManifestXmlParsingFull) {
+    constexpr std::string_view kXml =
+        R"(<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">
+  <trustInfo xmlns="urn:schemas-microsoft-com:asm.v3">
+    <security>
+      <requestedPrivileges>
+        <requestedExecutionLevel level="asInvoker" uiAccess="false"/>
+      </requestedPrivileges>
+    </security>
+  </trustInfo>
+  <application xmlns="urn:schemas-microsoft-com:asm.v3">
+    <windowsSettings>
+      <dpiAwareness xmlns="http://schemas.microsoft.com/SMI/2016/WindowsSettings">PerMonitorV2</dpiAwareness>
+    </windowsSettings>
+  </application>
+  <compatibility xmlns="urn:schemas-microsoft-com:compatibility.v1">
+    <application>
+      <!-- Windows 10/11 -->
+      <supportedOS Id="{8e0f7a12-bfb3-4fe8-b9a5-48fd50a15a9a}"/>
+      <!-- Windows 7 -->
+      <supportedOS Id="{35138b9a-5d96-4fbd-8e2d-a2440225f93a}"/>
+    </application>
+  </compatibility>
+</assembly>)";
+
+    const ManifestInfo info = parse_manifest_xml(kXml);
+    EXPECT_TRUE(info.has_manifest);
+    EXPECT_EQ(info.requested_execution_level, "asInvoker");
+    EXPECT_EQ(info.ui_access, "false");
+    EXPECT_EQ(info.dpi_aware, "PerMonitorV2");
+    ASSERT_EQ(info.supported_os.size(), 2U);
+    EXPECT_EQ(info.supported_os[0], "Windows 10/11");
+    EXPECT_EQ(info.supported_os[1], "Windows 7");
+}
+
+TEST(ResourceInspectorTest, ManifestXmlParsingElevation) {
+    constexpr std::string_view kXml =
+        R"(<assembly><trustInfo><security><requestedPrivileges>
+<requestedExecutionLevel level='requireAdministrator' uiAccess='true'/>
+</requestedPrivileges></security></trustInfo></assembly>)";
+
+    const ManifestInfo info = parse_manifest_xml(kXml);
+    EXPECT_TRUE(info.has_manifest);
+    EXPECT_EQ(info.requested_execution_level, "requireAdministrator");
+    EXPECT_EQ(info.ui_access, "true");
+}
+
+TEST(ResourceInspectorTest, ManifestXmlParsingBomAndDpiAware) {
+    const std::string kXml =
+        "\xEF\xBB\xBF<assembly><windowsSettings><dpiAware>true</dpiAware></windowsSettings></assembly>";
+
+    const ManifestInfo info = parse_manifest_xml(kXml);
+    EXPECT_TRUE(info.has_manifest);
+    EXPECT_EQ(info.dpi_aware, "true");
+}
+
+TEST(ResourceInspectorTest, ManifestXmlParsingMalformedSafely) {
+    const ManifestInfo empty_info = parse_manifest_xml("");
+    EXPECT_FALSE(empty_info.has_manifest);
+
+    const ManifestInfo malformed = parse_manifest_xml("<assembly><requestedExecutionLevel level=");
+    EXPECT_TRUE(malformed.has_manifest);
+    EXPECT_TRUE(malformed.requested_execution_level.empty());
+}
+
+TEST(ResourceInspectorTest, InspectsPeWithEmbeddedManifest) {
+    const std::string kXml =
+        "<assembly manifestVersion=\"1.0\"><trustInfo><security><requestedPrivileges>"
+        "<requestedExecutionLevel level=\"asInvoker\" uiAccess=\"false\"/>"
+        "</requestedPrivileges></security></trustInfo><application><windowsSettings>"
+        "<dpiAwareness>PerMonitorV2</dpiAwareness></windowsSettings></application>"
+        "<compatibility><application><supportedOS Id=\"{8e0f7a12-bfb3-4fe8-b9a5-48fd50a15a9a}\"/>"
+        "</application></compatibility></assembly>";
+
+    const std::vector<std::byte> pe_data = make_pe_with_manifest(kXml);
+    const ParseResult parse_result = parse_pe(pe_data);
+    ASSERT_EQ(parse_result.status, ParseStatus::Success);
+
+    const ResourceInspectionResult result = inspect_pe_resources(pe_data, parse_result.info);
+    EXPECT_TRUE(result.has_resources);
+    ASSERT_EQ(result.types.size(), 1U);
+    EXPECT_EQ(result.types[0].type_name, "manifest");
+    EXPECT_EQ(result.types[0].count, 1U);
+
+    EXPECT_TRUE(result.manifest.has_manifest);
+    EXPECT_EQ(result.manifest.requested_execution_level, "asInvoker");
+    EXPECT_EQ(result.manifest.ui_access, "false");
+    EXPECT_EQ(result.manifest.dpi_aware, "PerMonitorV2");
+    ASSERT_EQ(result.manifest.supported_os.size(), 1U);
+    EXPECT_EQ(result.manifest.supported_os[0], "Windows 10/11");
 }
 
 TEST(ResourceInspectorTest, EmptyPeHasNoResources) {

@@ -466,6 +466,34 @@ void print_support_report_group(std::ostream& stream, const loader::ResolveResul
             }
             stream << ")\n";
         }
+        if (res_info.manifest.has_manifest) {
+            stream << "manifest:";
+            if (!res_info.manifest.requested_execution_level.empty()) {
+                stream << " uac=\"" << res_info.manifest.requested_execution_level << "\"";
+            }
+            if (!res_info.manifest.dpi_aware.empty()) {
+                stream << " dpi-aware=\"" << res_info.manifest.dpi_aware << "\"";
+            }
+            if (!res_info.manifest.supported_os.empty()) {
+                stream << " os-compat=\"";
+                for (std::size_t i = 0; i < res_info.manifest.supported_os.size(); ++i) {
+                    if (i > 0) {
+                        stream << ", ";
+                    }
+                    stream << res_info.manifest.supported_os[i];
+                }
+                stream << "\"";
+            }
+            if (res_info.manifest.requested_execution_level == "requireAdministrator") {
+                stream << " (aviso: aplicativo solicita elevação de privilégios)";
+            }
+            if (res_info.manifest.requested_execution_level.empty() &&
+                res_info.manifest.dpi_aware.empty() &&
+                res_info.manifest.supported_os.empty()) {
+                stream << " present";
+            }
+            stream << '\n';
+        }
     }
     if (!info.runtime_functions.empty()) {
         const std::size_t handler_count = static_cast<std::size_t>(std::count_if(

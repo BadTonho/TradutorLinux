@@ -32,6 +32,76 @@ inline std::uint32_t read_u32(std::span<const std::byte> data, const std::size_t
         (static_cast<std::uint8_t>(data[offset + 3]) << 24));
 }
 
+bool contains_ci(const std::string_view haystack, const std::string_view needle) noexcept {
+    const auto it = std::search(haystack.begin(), haystack.end(), needle.begin(), needle.end(),
+                                [](const char a, const char b) {
+                                    return std::tolower(static_cast<unsigned char>(a)) ==
+                                           std::tolower(static_cast<unsigned char>(b));
+                                });
+    return it != haystack.end();
+}
+
+[[nodiscard]] std::string extract_attribute_value(const std::string_view xml,
+                                                  const std::size_t start_pos,
+                                                  const std::string_view attr_name) {
+    const std::size_t attr_pos = xml.find(attr_name, start_pos);
+    if (attr_pos == std::string_view::npos) {
+        return {};
+    }
+    const std::size_t eq_pos = xml.find('=', attr_pos + attr_name.size());
+    if (eq_pos == std::string_view::npos || eq_pos > attr_pos + attr_name.size() + 2) {
+        return {};
+    }
+    std::size_t val_start = eq_pos + 1;
+    while (val_start < xml.size() && (xml[val_start] == ' ' || xml[val_start] == '\t')) {
+        ++val_start;
+    }
+    if (val_start >= xml.size()) {
+        return {};
+    }
+    const char quote = xml[val_start];
+    if (quote != '"' && quote != '\'') {
+        return {};
+    }
+    ++val_start;
+    const std::size_t val_end = xml.find(quote, val_start);
+    if (val_end == std::string_view::npos) {
+        return {};
+    }
+    return std::string(xml.substr(val_start, val_end - val_start));
+}
+
+[[nodiscard]] std::string extract_tag_content(const std::string_view xml,
+                                              const std::string_view tag_name) {
+    const std::string open_tag = "<" + std::string(tag_name);
+    const std::size_t tag_pos = xml.find(open_tag);
+    if (tag_pos == std::string_view::npos) {
+        return {};
+    }
+    const std::size_t close_bracket = xml.find('>', tag_pos + open_tag.size());
+    if (close_bracket == std::string_view::npos || close_bracket >= xml.size() - 1) {
+        return {};
+    }
+    if (xml[close_bracket - 1] == '/') {
+        return {};
+    }
+    const std::string end_tag = "</" + std::string(tag_name) + ">";
+    const std::size_t end_tag_pos = xml.find(end_tag, close_bracket + 1);
+    if (end_tag_pos == std::string_view::npos) {
+        return {};
+    }
+    std::string_view content = xml.substr(close_bracket + 1, end_tag_pos - (close_bracket + 1));
+    while (!content.empty() && (content.front() == ' ' || content.front() == '\t' ||
+                                content.front() == '\r' || content.front() == '\n')) {
+        content.remove_prefix(1);
+    }
+    while (!content.empty() && (content.back() == ' ' || content.back() == '\t' ||
+                                content.back() == '\r' || content.back() == '\n')) {
+        content.remove_suffix(1);
+    }
+    return std::string(content);
+}
+
 [[nodiscard]] std::string utf16le_to_utf8(std::span<const std::byte> data,
                                           const std::size_t offset,
                                           const std::size_t length_chars) {
@@ -118,6 +188,58 @@ std::string standard_resource_type_name(const std::uint32_t type_id) {
     }
 }
 
+ManifestInfo parse_manifest_xml(std::string_view xml) {
+    ManifestInfo info;
+    if (xml.empty()) {
+        return info;
+    }
+
+    if (xml.size() >= 3 &&
+        static_cast<unsigned char>(xml[0]) == 0xEF &&
+        static_cast<unsigned char>(xml[1]) == 0xBB &&
+        static_cast<unsigned char>(xml[2]) == 0xBF) {
+        xml.remove_prefix(3);
+    }
+
+    info.has_manifest = true;
+
+    const std::size_t req_pos = xml.find("requestedExecutionLevel");
+    if (req_pos != std::string_view::npos) {
+        info.requested_execution_level = extract_attribute_value(xml, req_pos, "level");
+        info.ui_access = extract_attribute_value(xml, req_pos, "uiAccess");
+    }
+
+    const std::string dpi_awareness = extract_tag_content(xml, "dpiAwareness");
+    if (!dpi_awareness.empty()) {
+        info.dpi_aware = dpi_awareness;
+    } else {
+        const std::string dpi_aware = extract_tag_content(xml, "dpiAware");
+        if (!dpi_aware.empty()) {
+            info.dpi_aware = dpi_aware;
+        }
+    }
+
+    struct OsMapping {
+        const char* guid;
+        const char* label;
+    };
+    constexpr OsMapping kSupportedOsMap[] = {
+        {"8e0f7a12-bfb3-4fe8-b9a5-48fd50a15a9a", "Windows 10/11"},
+        {"1f676c76-80e1-4239-95bb-83d0f6d0da78", "Windows 8.1"},
+        {"4a2f28e3-53b9-4441-ba9c-d69d4a4a6e38", "Windows 8"},
+        {"35138b9a-5d96-4fbd-8e2d-a2440225f93a", "Windows 7"},
+        {"e2011457-1546-43c5-a5fe-008deee3d3f0", "Windows Vista"},
+    };
+
+    for (const auto& mapping : kSupportedOsMap) {
+        if (contains_ci(xml, mapping.guid)) {
+            info.supported_os.emplace_back(mapping.label);
+        }
+    }
+
+    return info;
+}
+
 ResourceInspectionResult inspect_pe_resources(
     std::span<const std::byte> file_bytes,
     const PeInfo& info) {
@@ -190,6 +312,77 @@ ResourceInspectionResult inspect_pe_resources(
             .type_name = std::move(type_name),
             .count = count,
         });
+
+        // Se for RT_MANIFEST (24), extrai e inspeciona o XML
+        if (type_id == 24) {
+            std::optional<std::uint32_t> data_rva;
+            std::optional<std::uint32_t> data_size;
+
+            if ((offset_to_data & 0x80000000U) != 0) {
+                const std::size_t l2_offset = offset_to_data & 0x7FFFFFFFU;
+                if (l2_offset + 16 <= rsrc.size()) {
+                    const std::uint16_t l2_named = read_u16(rsrc, l2_offset + 12);
+                    const std::uint16_t l2_id = read_u16(rsrc, l2_offset + 14);
+                    const std::uint32_t l2_total = static_cast<std::uint32_t>(l2_named) + l2_id;
+                    if (l2_total > 0 && l2_offset + 16 + 8 <= rsrc.size()) {
+                        const std::uint32_t l2_target = read_u32(rsrc, l2_offset + 16 + 4);
+                        if ((l2_target & 0x80000000U) != 0) {
+                            // Level 3 (Language)
+                            const std::size_t l3_offset = l2_target & 0x7FFFFFFFU;
+                            if (l3_offset + 16 <= rsrc.size()) {
+                                const std::uint16_t l3_named = read_u16(rsrc, l3_offset + 12);
+                                const std::uint16_t l3_id = read_u16(rsrc, l3_offset + 14);
+                                const std::uint32_t l3_total = static_cast<std::uint32_t>(l3_named) + l3_id;
+                                if (l3_total > 0 && l3_offset + 16 + 8 <= rsrc.size()) {
+                                    const std::uint32_t l3_target = read_u32(rsrc, l3_offset + 16 + 4);
+                                    if ((l3_target & 0x80000000U) == 0 && l3_target + 16 <= rsrc.size()) {
+                                        data_rva = read_u32(rsrc, l3_target);
+                                        data_size = read_u32(rsrc, l3_target + 4);
+                                    }
+                                }
+                            }
+                        } else if (l2_target + 16 <= rsrc.size()) {
+                            data_rva = read_u32(rsrc, l2_target);
+                            data_size = read_u32(rsrc, l2_target + 4);
+                        }
+                    }
+                }
+            } else if (offset_to_data + 16 <= rsrc.size()) {
+                data_rva = read_u32(rsrc, offset_to_data);
+                data_size = read_u32(rsrc, offset_to_data + 4);
+            }
+
+            if (data_rva.has_value() && data_size.has_value() && *data_size > 0) {
+                constexpr std::uint32_t kMaxManifestSize = 64 * 1024;
+                const std::uint32_t rva = *data_rva;
+                const std::uint32_t manifest_len = std::min(*data_size, kMaxManifestSize);
+
+                for (const SectionInfo& sec : info.sections) {
+                    const std::uint64_t span = std::max<std::uint64_t>(sec.virtual_size, sec.raw_data_size);
+                    const std::uint64_t sec_end = static_cast<std::uint64_t>(sec.virtual_address) + span;
+                    if (static_cast<std::uint64_t>(rva) >= sec.virtual_address && rva < sec_end) {
+                        const std::uint64_t delta = static_cast<std::uint64_t>(rva) - sec.virtual_address;
+                        if (delta < sec.raw_data_size) {
+                            const std::uint64_t file_offset = static_cast<std::uint64_t>(sec.raw_data_pointer) + delta;
+                            if (file_offset < file_bytes.size()) {
+                                const std::uint64_t avail = std::min({
+                                    static_cast<std::uint64_t>(manifest_len),
+                                    sec.raw_data_size - delta,
+                                    file_bytes.size() - file_offset
+                                });
+                                if (avail > 0) {
+                                    const std::string_view xml_view(
+                                        reinterpret_cast<const char*>(file_bytes.data() + file_offset),
+                                        static_cast<std::size_t>(avail));
+                                    result.manifest = parse_manifest_xml(xml_view);
+                                }
+                            }
+                        }
+                        break;
+                    }
+                }
+            }
+        }
     }
 
     return result;
