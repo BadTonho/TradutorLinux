@@ -49,5 +49,17 @@ struct PackerInspectionResult {
 // Detecta empacotadores conhecidos (UPX, VMProtect, Themida, ASPack, etc.) e seções W+X anômalas.
 [[nodiscard]] PackerInspectionResult inspect_pe_packers(const PeInfo& info);
 
+struct FrameworkInspectionResult {
+    std::string toolchain;
+    bool is_dotnet{false};
+    std::string dotnet_details;
+    std::vector<std::string> gui_frameworks;
+};
+
+// Identifica a toolchain CRT (MSVC, MinGW, Clang), runtime (.NET/CLR) e frameworks de interface (Qt, MFC, etc.).
+[[nodiscard]] FrameworkInspectionResult inspect_pe_frameworks(
+    const PeInfo& info,
+    std::span<const std::byte> file_bytes = {});
+
 }  // namespace tradutorlinux::pe
 

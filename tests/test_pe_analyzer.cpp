@@ -178,6 +178,73 @@ TEST(PeAnalyzerTest, DetectsGenericWxSection) {
     EXPECT_NE(result.indicators[0].find("secao W+X (.code)"), std::string::npos);
 }
 
+TEST(PeAnalyzerTest, DetectsMsvcModernToolchain) {
+    PeInfo info{};
+    ImportedDll dll1{};
+    dll1.name = "VCRUNTIME140.dll";
+    ImportedDll dll2{};
+    dll2.name = "MSVCP140.dll";
+    info.imports = {dll1, dll2};
+
+    const FrameworkInspectionResult result = inspect_pe_frameworks(info);
+    EXPECT_EQ(result.toolchain, "MSVC CRT (Visual Studio 2015-2022 / v14x)");
+    EXPECT_FALSE(result.is_dotnet);
+    EXPECT_TRUE(result.gui_frameworks.empty());
+}
+
+TEST(PeAnalyzerTest, DetectsMsvcLegacyAndMinGw) {
+    PeInfo info_msvcrt{};
+    ImportedDll msvcrt{};
+    msvcrt.name = "msvcrt.dll";
+    info_msvcrt.imports = {msvcrt};
+    EXPECT_EQ(inspect_pe_frameworks(info_msvcrt).toolchain, "Legacy MSVC CRT (msvcrt.dll)");
+
+    PeInfo info_mingw{};
+    ImportedDll mingw{};
+    mingw.name = "libgcc_s_seh-1.dll";
+    info_mingw.imports = {mingw};
+    EXPECT_EQ(inspect_pe_frameworks(info_mingw).toolchain, "MinGW-w64 (GCC runtime)");
+}
+
+TEST(PeAnalyzerTest, DetectsDotNetClrViaImport) {
+    PeInfo info{};
+    ImportedDll clr{};
+    clr.name = "mscoree.dll";
+    info.imports = {clr};
+
+    const FrameworkInspectionResult result = inspect_pe_frameworks(info);
+    EXPECT_TRUE(result.is_dotnet);
+    EXPECT_EQ(result.dotnet_details, ".NET CLR (Managed via mscoree.dll)");
+}
+
+TEST(PeAnalyzerTest, DetectsGuiFrameworks) {
+    PeInfo info{};
+    ImportedDll qt{};
+    qt.name = "Qt6Widgets.dll";
+    ImportedDll mfc{};
+    mfc.name = "mfc140u.dll";
+    ImportedDll wx{};
+    wx.name = "wxmsw32u_core.dll";
+    info.imports = {qt, mfc, wx};
+
+    const FrameworkInspectionResult result = inspect_pe_frameworks(info);
+    ASSERT_EQ(result.gui_frameworks.size(), 3U);
+    EXPECT_EQ(result.gui_frameworks[0], "Qt 6");
+    EXPECT_EQ(result.gui_frameworks[1], "MFC (Microsoft Foundation Classes)");
+    EXPECT_EQ(result.gui_frameworks[2], "wxWidgets");
+}
+
+TEST(PeAnalyzerTest, DetectsElectronFramework) {
+    PeInfo info{};
+    ImportedDll node{};
+    node.name = "node.dll";
+    info.imports = {node};
+
+    const FrameworkInspectionResult result = inspect_pe_frameworks(info);
+    ASSERT_EQ(result.gui_frameworks.size(), 1U);
+    EXPECT_EQ(result.gui_frameworks[0], "Electron / Chromium Embedded Framework");
+}
+
 }  // namespace
 }  // namespace tradutorlinux::pe
 

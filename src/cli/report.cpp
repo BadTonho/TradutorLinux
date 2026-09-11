@@ -486,6 +486,23 @@ void print_support_report_group(std::ostream& stream, const loader::ResolveResul
         }
         stream << ")\n";
     }
+    const pe::FrameworkInspectionResult frameworks = pe::inspect_pe_frameworks(info, file_bytes);
+    if (!frameworks.toolchain.empty()) {
+        stream << "toolchain: " << frameworks.toolchain << '\n';
+    }
+    if (frameworks.is_dotnet) {
+        stream << "runtime: " << frameworks.dotnet_details << '\n';
+    }
+    if (!frameworks.gui_frameworks.empty()) {
+        stream << "gui-framework: ";
+        for (std::size_t i = 0; i < frameworks.gui_frameworks.size(); ++i) {
+            if (i > 0) {
+                stream << ", ";
+            }
+            stream << frameworks.gui_frameworks[i];
+        }
+        stream << '\n';
+    }
     if (!file_bytes.empty()) {
         const pe::ResourceInspectionResult res_info = pe::inspect_pe_resources(file_bytes, info);
         if (res_info.has_resources && !res_info.types.empty()) {
@@ -634,6 +651,10 @@ void print_support_report_group(std::ostream& stream, const loader::ResolveResul
     if (packer.is_packed) {
         stream << "recommendation: aplicativo empacotado/ofuscado (" << packer.packer_name
                << "); descompacte o executavel se houver problemas de protecao W^X em runtime\n";
+    }
+
+    if (frameworks.is_dotnet) {
+        stream << "recommendation: aplicativo gerenciado .NET/CLR; execute com o runtime dotnet ou Proton se nao possuir stub nativo AOT\n";
     }
 
     return result;

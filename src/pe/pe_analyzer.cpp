@@ -154,5 +154,111 @@ PackerInspectionResult inspect_pe_packers(const PeInfo& info) {
     return result;
 }
 
+FrameworkInspectionResult inspect_pe_frameworks(
+    const PeInfo& info,
+    const std::span<const std::byte> file_bytes) {
+    FrameworkInspectionResult result{};
+
+    auto to_lower = [](std::string_view text) {
+        std::string s;
+        s.reserve(text.size());
+        for (char c : text) {
+            s.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(c))));
+        }
+        return s;
+    };
+
+    std::vector<std::string> imported_dlls;
+    auto add_dll = [&](const std::string& name) {
+        imported_dlls.push_back(to_lower(name));
+    };
+    for (const auto& imp : info.imports) {
+        add_dll(imp.name);
+    }
+    for (const auto& imp : info.delay_imports) {
+        add_dll(imp.name);
+    }
+
+    auto has_dll_prefix = [&](std::string_view prefix) {
+        return std::any_of(imported_dlls.begin(), imported_dlls.end(),
+                           [prefix](const std::string& d) { return d.starts_with(prefix); });
+    };
+    auto has_dll_contains = [&](std::string_view sub) {
+        return std::any_of(imported_dlls.begin(), imported_dlls.end(),
+                           [sub](const std::string& d) { return d.find(sub) != std::string::npos; });
+    };
+
+    // 1. Toolchain CRT
+    if (has_dll_prefix("vcruntime140") || has_dll_prefix("msvcp140")) {
+        result.toolchain = "MSVC CRT (Visual Studio 2015-2022 / v14x)";
+    } else if (has_dll_prefix("msvcr120") || has_dll_prefix("msvcp120")) {
+        result.toolchain = "MSVC CRT (Visual Studio 2013 / v120)";
+    } else if (has_dll_prefix("msvcr110") || has_dll_prefix("msvcp110")) {
+        result.toolchain = "MSVC CRT (Visual Studio 2012 / v110)";
+    } else if (has_dll_prefix("msvcr100") || has_dll_prefix("msvcp100")) {
+        result.toolchain = "MSVC CRT (Visual Studio 2010 / v100)";
+    } else if (has_dll_prefix("msvcrt")) {
+        result.toolchain = "Legacy MSVC CRT (msvcrt.dll)";
+    } else if (has_dll_prefix("libgcc_s") || has_dll_prefix("libstdc++") || has_dll_prefix("libwinpthread")) {
+        result.toolchain = "MinGW-w64 (GCC runtime)";
+    }
+
+    // 2. .NET / CLR (Managed code)
+    if (has_dll_prefix("mscoree")) {
+        result.is_dotnet = true;
+        result.dotnet_details = ".NET CLR (Managed via mscoree.dll)";
+    } else if (file_bytes.size() >= 0x100) {
+        if (std::to_integer<unsigned char>(file_bytes[0]) == 'M' &&
+            std::to_integer<unsigned char>(file_bytes[1]) == 'Z') {
+            std::uint32_t pe_offset = 0;
+            for (int i = 0; i < 4; ++i) {
+                pe_offset |= static_cast<std::uint32_t>(
+                    std::to_integer<unsigned char>(file_bytes[0x3C + static_cast<std::size_t>(i)])) << (i * 8);
+            }
+            constexpr std::size_t kComDescriptorDirOffset = 4 + 20 + 112 + 14 * 8;
+            const std::size_t com_dir_file_offset = static_cast<std::size_t>(pe_offset) + kComDescriptorDirOffset;
+            if (file_bytes.size() >= com_dir_file_offset + 8) {
+                std::uint32_t clr_rva = 0;
+                for (int i = 0; i < 4; ++i) {
+                    clr_rva |= static_cast<std::uint32_t>(
+                        std::to_integer<unsigned char>(file_bytes[com_dir_file_offset + static_cast<std::size_t>(i)])) << (i * 8);
+                }
+                if (clr_rva != 0) {
+                    result.is_dotnet = true;
+                    result.dotnet_details = ".NET CLR (COM Descriptor header)";
+                }
+            }
+        }
+    }
+
+    // 3. Frameworks GUI
+    auto add_framework = [&](std::string name) {
+        if (std::find(result.gui_frameworks.begin(), result.gui_frameworks.end(), name) == result.gui_frameworks.end()) {
+            result.gui_frameworks.push_back(std::move(name));
+        }
+    };
+
+    if (has_dll_contains("qt6core") || has_dll_contains("qt6gui") || has_dll_contains("qt6widgets")) {
+        add_framework("Qt 6");
+    }
+    if (has_dll_contains("qt5core") || has_dll_contains("qt5gui") || has_dll_contains("qt5widgets")) {
+        add_framework("Qt 5");
+    }
+    if (has_dll_prefix("mfc")) {
+        add_framework("MFC (Microsoft Foundation Classes)");
+    }
+    if (has_dll_prefix("wxmsw")) {
+        add_framework("wxWidgets");
+    }
+    if (has_dll_prefix("node") || has_dll_prefix("chrome_elf")) {
+        add_framework("Electron / Chromium Embedded Framework");
+    }
+    if (has_dll_contains("microsoft.ui.xaml") || has_dll_contains("windowsappruntime")) {
+        add_framework("WinUI 3 / Windows App SDK");
+    }
+
+    return result;
+}
+
 }  // namespace tradutorlinux::pe
 
