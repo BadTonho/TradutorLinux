@@ -324,9 +324,9 @@ os classifica como `stub`. `EnableMenuItem`, `CheckMenuItem` e
 O alvo Simple Todo recebe um overlay Linux versionado em
 `tests/targets/patches/`: a opção de inicialização com Windows é removida e o
 fechamento da janela destrói o alvo em vez de apenas ocultá-lo; o fluxo continua
-usando somente dados relativos em `APPDATA`. O smoke
-`targetapp_simple_todo_gui_smoke` cria um CWD próprio, prepara `appdata` para
-os caminhos relativos e verifica o artefato persistente de todos.
+usando somente dados dentro do `APPDATA` virtual do prefixo ativo. O smoke
+`targetapp_simple_todo_gui_smoke` cria um CWD e um `TL_PREFIX` próprios, prepara
+`drive_c/users/guest/AppData/Roaming` e verifica o artefato persistente de todos.
 
 ## Diálogos modais e controles reutilizáveis (Fase 13.11)
 

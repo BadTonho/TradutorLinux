@@ -22,6 +22,7 @@
 namespace {
 
 constexpr int kTimeoutMs = 15000;
+constexpr int kArtifactTimeoutMs = 5000;
 constexpr int kMenuRowHeight = 24;
 
 // Layout binário do Todo/TodoList no PE32+ MinGW pinado. Esses offsets são
@@ -186,7 +187,33 @@ void send_button(const std::string& display_name, const Window window, const int
         event.xbutton.same_screen = True;
         XSendEvent(dpy, window, False, type == ButtonPress ? ButtonPressMask : ButtonReleaseMask,
                    &event);
+        XFlush(dpy);
+        if (type == ButtonPress) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(20));
+        }
     }
+    XCloseDisplay(dpy);
+}
+
+void send_popup_selection(const std::string& display_name, const Window window, const int x,
+                          const int y) {
+    Display* dpy = XOpenDisplay(display_name.c_str());
+    if (dpy == nullptr) {
+        fail("display indisponível ao selecionar popup");
+    }
+    XEvent event{};
+    event.xbutton.type = ButtonPress;
+    event.xbutton.display = dpy;
+    event.xbutton.window = window;
+    event.xbutton.root = RootWindow(dpy, DefaultScreen(dpy));
+    event.xbutton.time = CurrentTime;
+    event.xbutton.x = x;
+    event.xbutton.y = y;
+    event.xbutton.x_root = x;
+    event.xbutton.y_root = y;
+    event.xbutton.button = 1;
+    event.xbutton.same_screen = True;
+    XSendEvent(dpy, window, False, ButtonPressMask, &event);
     XFlush(dpy);
     XCloseDisplay(dpy);
 }
@@ -272,7 +299,8 @@ Window wait_for_popup(const std::string& display_name) {
 
 void choose_menu(const std::string& display_name, const std::size_t row) {
     const Window popup = wait_for_popup(display_name);
-    send_button(display_name, popup, 20, static_cast<int>(row) * kMenuRowHeight + 12);
+    send_popup_selection(display_name, popup, 20,
+                         static_cast<int>(row) * kMenuRowHeight + 12);
     sleep_short();
 }
 
@@ -294,6 +322,8 @@ pid_t start_guest(const std::string& runtime, const std::string& executable,
         }
         ::setenv("DISPLAY", display.c_str(), 1);
         ::setenv("APPDATA", "appdata", 1);
+        const std::filesystem::path prefix = work / "prefix";
+        ::setenv("TL_PREFIX", prefix.c_str(), 1);
         ::execl(runtime.c_str(), runtime.c_str(), "--trace", executable.c_str(),
                 static_cast<char*>(nullptr));
         ::_exit(127);
@@ -304,6 +334,10 @@ pid_t start_guest(const std::string& runtime, const std::string& executable,
         fail("fork do runtime falhou");
     }
     return child;
+}
+
+std::filesystem::path todo_file_for_prefix(const std::filesystem::path& work) {
+    return work / "prefix/drive_c/users/guest/AppData/Roaming/TodoApp/todos.dat";
 }
 
 int wait_guest(const pid_t child) {
@@ -321,9 +355,15 @@ int wait_guest(const pid_t child) {
 }
 
 void require_file(const std::filesystem::path& path, const char* description) {
-    if (!std::filesystem::is_regular_file(path) || std::filesystem::file_size(path) == 0) {
-        fail(std::string{"artefato ausente ou vazio: "} + description);
+    const auto deadline = std::chrono::steady_clock::now() +
+                          std::chrono::milliseconds(kArtifactTimeoutMs);
+    while (std::chrono::steady_clock::now() < deadline) {
+        if (std::filesystem::is_regular_file(path) && std::filesystem::file_size(path) != 0) {
+            return;
+        }
+        sleep_short();
     }
+    fail(std::string{"artefato ausente ou vazio: "} + description);
 }
 
 std::string read_binary(const std::filesystem::path& path, const char* description) {
@@ -336,10 +376,20 @@ std::string read_binary(const std::filesystem::path& path, const char* descripti
 
 void require_binary_contains(const std::filesystem::path& path, const char* value,
                              const char* description) {
-    const std::string contents = read_binary(path, description);
-    if (contents.find(value) == std::string::npos) {
-        fail(std::string{"conteúdo ausente em "} + description + ": " + value);
+    const auto deadline = std::chrono::steady_clock::now() +
+                          std::chrono::milliseconds(kArtifactTimeoutMs);
+    while (std::chrono::steady_clock::now() < deadline) {
+        std::ifstream input(path, std::ios::binary);
+        if (input) {
+            const std::string contents((std::istreambuf_iterator<char>(input)),
+                                        std::istreambuf_iterator<char>());
+            if (contents.find(value) != std::string::npos) {
+                return;
+            }
+        }
+        sleep_short();
     }
+    fail(std::string{"conteúdo ausente em "} + description + ": " + value);
 }
 
 void require_todo_state(const std::filesystem::path& path, const std::int32_t count,
@@ -398,6 +448,7 @@ int main(int argc, char** argv) {
     const std::string display = start_xvfb();
     const pid_t child = start_guest(runtime, executable, display, work);
     const Window main_window = wait_for_window(display, "Todo Application");
+    std::this_thread::sleep_for(std::chrono::milliseconds(500));
 
     // Adicionar tarefa, incluindo descrição e prioridade 3.
     send_button(display, main_window, 100, 473);
@@ -408,7 +459,7 @@ int main(int argc, char** argv) {
     send_button(display, main_window, 650, 473);
     send_button(display, main_window, 70, 515);
     sleep_short();
-    const std::filesystem::path todo_file = work / "appdata/TodoApp/todos.dat";
+    const std::filesystem::path todo_file = todo_file_for_prefix(work);
     require_file(todo_file, "todos.dat após adicionar");
     require_binary_contains(todo_file, "Task alpha", "todos.dat após adicionar");
     require_binary_contains(todo_file, "Description beta", "todos.dat após adicionar");
@@ -416,7 +467,9 @@ int main(int argc, char** argv) {
 
     // Editar título, descrição e prioridade.
     send_button(display, main_window, 100, 110);
-    sleep_short();
+    std::this_thread::sleep_for(std::chrono::milliseconds(500));
+    send_button(display, main_window, 190, 515);
+    std::this_thread::sleep_for(std::chrono::milliseconds(500));
     send_button(display, main_window, 100, 473);
     sleep_short();
     erase_text(display, main_window, 32);
@@ -436,7 +489,7 @@ int main(int argc, char** argv) {
     send_button(display, main_window, 100, 37);
     type_text(display, main_window, "edited");
     send_button(display, main_window, 100, 110);
-    sleep_short();
+    std::this_thread::sleep_for(std::chrono::milliseconds(500));
     send_button(display, main_window, 430, 515);
     sleep_short();
     require_todo_state(todo_file, 1, 4, 1);
@@ -460,12 +513,16 @@ int main(int argc, char** argv) {
     // o mesmo item é excluído e a aplicação é encerrada pela bandeja.
     const pid_t second_child = start_guest(runtime, executable, display, work);
     const Window second_window = wait_for_window(display, "Todo Application");
+    std::this_thread::sleep_for(std::chrono::milliseconds(500));
     sleep_short();
     send_button(display, second_window, 100, 110);
+    std::this_thread::sleep_for(std::chrono::milliseconds(500));
     send_right_click(display, second_window, 700, 200);
     choose_menu(display, 1);
     send_right_click(display, second_window, 700, 200);
     choose_menu(display, 0);
+    send_button(display, second_window, 100, 110);
+    std::this_thread::sleep_for(std::chrono::milliseconds(500));
     send_button(display, second_window, 310, 515);
     sleep_short();
     require_todo_state(todo_file, 0, 0, 0);

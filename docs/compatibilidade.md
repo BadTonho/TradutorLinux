@@ -537,9 +537,10 @@ fixa a lista de 105 imports. O build aplica os overlays
 `simple_todo_linux_autorun.patch` e `simple_todo_linux_close.patch`: a tela
 ganha layout Linux, a opção de autorun no Windows é removida e o fechamento da
 janela destrói o processo. O teste `targetapp_simple_todo_gui_smoke` usa
-um Xvfb próprio, `APPDATA=appdata` relativo ao diretório de teste e verifica o
-fluxo de adicionar, editar, buscar, concluir, excluir, esconder, mostrar e
-sair pelo menu emulado.
+um Xvfb próprio, um `TL_PREFIX` temporário e verifica o fluxo de adicionar,
+editar, buscar, concluir, excluir, esconder, mostrar e sair pelo menu emulado;
+o arquivo persistente é conferido em
+`C:\users\guest\AppData\Roaming\TodoApp\todos.dat` dentro do prefixo.
 
 | Módulo | APIs adicionais | Estado | Limite publicado |
 |---|---|---|---|

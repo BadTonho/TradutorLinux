@@ -3031,11 +3031,13 @@ um clique real no 7-Zip de um clique no surrogate do Simple Todo.
   mesmo Xvfb, um clique secundário em `7-Zip` alcançou `DispatchMessageW` com
   `WM_RBUTTONDOWN` (`0x0204`). O fluxo não alcançou `TrackPopupMenuEx`, que
   continua stub até haver uma chamada real observada.
-- [ ] O smoke Simple Todo existente não foi promovido nesta coleta: o preset
-  atual não gerou sua fixture, e a fixture legada usada manualmente depende de
-  um layout de prefixo diferente do diretório esperado pelo smoke. A
-  regressão unitária do contrato de bandeja passou; a revalidação end-to-end
-  fica pendente de alinhar esse ambiente sem alterar o runtime por aplicativo.
+- [x] O smoke Simple Todo foi alinhado ao contrato de prefixos do runtime: a
+  fixture legada recebe `TL_PREFIX` temporário, o artefato persistente é lido
+  de `drive_c/users/guest/AppData/Roaming`, e o driver X11 separa cliques
+  normais da seleção de popup. A execução end-to-end passou em Debug e cobriu
+  adicionar, editar, buscar, concluir, esconder, mostrar, persistir em uma
+  segunda execução, excluir e sair pela bandeja, sem alterar o runtime por
+  aplicativo.
 
 ## Regras de validação
 
