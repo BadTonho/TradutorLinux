@@ -23,13 +23,13 @@ Os logs detalhados dessa rodada foram temporários e não fazem parte do contrat
 de evidência do projeto. Cada marco abaixo deve produzir sua própria fixture,
 teste e registro reproduzível.
 
-## Resultado de referência
+## Resultado de referência — 2026-09-12
 
 | Grupo | Resultado atual | Próxima ação |
 |---|---|---|
-| `--report` | `7zFM_x64.exe`, `7z_x64.exe`, `Rufus_x64.exe`, `WinRAR_x64.exe` e `winrar-x64-723.exe` passaram | Separar análise aprovada de execução aprovada |
-| Execução | `7z_x64.exe`, `WinRAR_x64.exe` e `winrar-x64-723.exe` terminaram com código 0 | Regressão em matriz ON/OFF |
-| GUI | `7zFM_x64.exe` chegou à execução, mas não havia X11 funcional | Repetir em ambiente gráfico controlado |
+| `--report` | Matriz do corpus: 27/27 casos passaram com paridade Rust ON/C++ OFF | Preservar a separação entre análise e execução |
+| Execução | 7-Zip CLI/GUI, operação `7zG`, WinRAR extração/SFX e os smokes controlados de PuTTY/Notepad++ passaram | Avançar somente com novo cenário reproduzível |
+| GUI | 7zFM, WinRAR SFX, PuTTY e Notepad++ executaram sob Xvfb próprio; os resultados funcionais permanecem limitados e documentados | Ampliar interação somente após observar um contrato genérico real |
 | PE32/x86 | 12 arquivos rejeitados por arquitetura não suportada | Manter fora do escopo até decisão própria |
 | Unwind x64 | 6 executáveis agora passam no `--report`; o trace registra V1/V2, cadeias e `extended-set-fpreg` | Avaliar as limitações de execução de cada aplicativo |
 | HWiNFO64 | Imagem empacotada: diretório de exports em região sem dados crus | Manter rejeição segura e registrar UPX0/UPX1 |
@@ -2758,16 +2758,16 @@ o portfólio real com as lacunas de execução mais próximas de ser fechadas,
 começando pelos alvos que já têm todos os imports resolvidos e chegam ao entry
 point sem rejeição.
 
-### Estado do corpus — 2026-09-11
+### Estado do corpus — 2026-09-12
 
 | Aplicativo | --report | Execução atual | Próximo bloqueio |
 |---|---|---|---|
 | `7z_x64.exe` | `supported` (562 KB, 225 imports) | exit `0` (CLI sem args) | – fluxo completo já coberto |
 | `7zG.exe` | `supported` (PE32+; 208 imports) | operação `a` cria arquivo 7z e termina com exit `0` sob `--timeout 30 --memory 512` sem limite artificial de CPU; timeout curto/`--cpu 10` ainda é intermitente | estabilizar o fluxo worker/modal antes de ampliar cenários de interação |
 | `7zFM_x64.exe` | `supported` (987 KB, 298 imports) | `seven_zip_smoke` exit `0` | GUI estendida fora do smoke |
-| `WinRAR_x64.exe` | `supported` (3,8 MB, ~251 imports) | exit `0` (cancel SFX) | extração real não validada |
+| `WinRAR_x64.exe` | `supported` (3,8 MB, ~251 imports) | exit `0` (extração real e cancelamento SFX) | – nos cenários já cobertos |
 | `putty_x64.exe` | `supported` (1,7 MB, 348 imports) | `guest-timeout 72` | bloqueio pós-ativação TCP |
-| `notepad++.exe` | `supported` (8,4 MB, ~400 imports) | `ExitProcess(3)` | falha ao carregar stylers.xml |
+| `notepad++.exe` | `supported` (8,4 MB, ~400 imports) | `ExitProcess(3)` após bloqueio C++/SEH controlado | `WinVerifyTrust` para arquivo e unwind C++ fora do `FuncInfo` v3 |
 | `Rockstar-Games-Launcher.exe` | `supported` (112 MB) | `ExitProcess(3)` | antidetecção de ambiente |
 | `HWiNFO64.exe` | `malformed` (UPX0/UPX1) | não tentada | imagem empacotada UPX |
 | `Rufus_x64.exe` | `malformed` (entry W^X) | não tentada | imagem empacotada, W^X |
