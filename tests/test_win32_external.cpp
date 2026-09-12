@@ -419,6 +419,53 @@ TEST(ShellPathTest, SHGetFolderPathWReturnsWindowsPath) {
     EXPECT_EQ(buffer[2], u'\\');
 }
 
+TEST(ShellExecutionTest, UnsupportedCallsFailWithoutFabricatingAProcess) {
+    constexpr std::uint16_t kFileW[] = {u't', u'e', u's', u't', u'.', u't', u'x', u't', 0};
+    EXPECT_LE(reinterpret_cast<std::uintptr_t>(tl_ShellExecuteW(nullptr, nullptr, kFileW,
+                                                                 nullptr, nullptr, 1)),
+              32U);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorNotSupported);
+
+    EXPECT_LE(reinterpret_cast<std::uintptr_t>(tl_ShellExecuteA(nullptr, nullptr, "test.txt",
+                                                                 nullptr, nullptr, 1)),
+              32U);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorNotSupported);
+
+    struct ShellExecuteInfoW {
+        std::uint32_t cb_size{};
+        std::uint32_t f_mask{};
+        void* hwnd{};
+        const std::uint16_t* lp_verb{};
+        const std::uint16_t* lp_file{};
+        const std::uint16_t* lp_parameters{};
+        const std::uint16_t* lp_directory{};
+        std::int32_t n_show{};
+        void* h_inst_app{};
+        void* lp_id_list{};
+        const std::uint16_t* lp_class{};
+        void* hkey_class{};
+        std::uint32_t dw_hot_key{};
+        std::uint32_t reserved{};
+        void* h_monitor{};
+        void* h_process{};
+    } info{};
+    static_assert(sizeof(ShellExecuteInfoW) == 112);
+    static_assert(offsetof(ShellExecuteInfoW, h_process) == 104);
+
+    info.cb_size = sizeof(info);
+    info.lp_file = kFileW;
+    info.h_inst_app = reinterpret_cast<void*>(1);
+    info.h_process = reinterpret_cast<void*>(1);
+    EXPECT_EQ(tl_ShellExecuteExW(&info), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorNotSupported);
+    EXPECT_EQ(info.h_inst_app, nullptr);
+    EXPECT_EQ(info.h_process, nullptr);
+
+    info.cb_size = sizeof(info) - 1;
+    EXPECT_EQ(tl_ShellExecuteExW(&info), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+}
+
 TEST(IphlpapiTest, EnumeratesLinuxAdaptersWithWin32BufferContracts) {
     constexpr std::uint32_t kErrorBufferOverflow = 111U;
     constexpr std::uint32_t kErrorNoData = 232U;

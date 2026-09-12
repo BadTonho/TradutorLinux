@@ -89,7 +89,7 @@ void tl_entry(void) {
     // ShellExecuteW
     const word_t kFile[] = {'n','o','t','e','p','a','d','.','e','x','e',0};
     void* h = ShellExecuteW((void*)0, (word_t*)0, kFile, (word_t*)0, (word_t*)0, 1);
-    if ((unsigned long long)h <= 32) ExitProcess(40U);
+    if ((unsigned long long)h > 32) ExitProcess(40U);
     void* h2 = ShellExecuteW((void*)0, (word_t*)0, (word_t*)0, (word_t*)0, (word_t*)0, 1);
     if ((unsigned long long)h2 > 32) ExitProcess(41U);
 
@@ -103,11 +103,12 @@ void tl_entry(void) {
     ex.lpVerb = kVerbOpen;
     ex.lpFile = kFile2;
     ex.nShow = 1;
-    if (!ShellExecuteExW(&ex)) ExitProcess(50U);
-    // hProcess deve ter sido preenchido com dummy
-    if (ex.hProcess == (void*)0) {
-        // aceita mesmo se não preenchido, mas nosso stub preenche
-    }
+    ex.hInstApp = (void*)1;
+    ex.hProcess = (void*)1;
+    if (ShellExecuteExW(&ex)) ExitProcess(50U);
+    // O layout x64 tem hInstApp em 56 e hProcess em 104; ambos são
+    // explicitamente limpos quando a operação não é suportada.
+    if (ex.hInstApp != (void*)0 || ex.hProcess != (void*)0) ExitProcess(52U);
     // com cbSize inválido deve falhar
     shellex_t bad;
     for (int i=0;i<(int)sizeof(bad);i++) ((char*)&bad)[i]=0;

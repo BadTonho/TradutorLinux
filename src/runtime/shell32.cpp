@@ -7,6 +7,7 @@
 #include "tradutorlinux/util/unicode.hpp"
 
 #include <algorithm>
+#include <cstddef>
 #include <cstdlib>
 #include <cstring>
 #include <string>
@@ -280,21 +281,46 @@ TL_MSABI void* tl_ShellExecuteW(void* hwnd, const std::uint16_t* operation,
                                 const std::uint16_t* file, const std::uint16_t* parameters,
                                 const std::uint16_t* directory, int show) noexcept {
     (void)hwnd;
-    (void)operation;
-    (void)parameters;
-    (void)directory;
     (void)show;
-    if (file != nullptr && !mapped_guest_wstring(file)) {
+    if ((operation != nullptr && !mapped_guest_wstring(operation)) ||
+        (parameters != nullptr && !mapped_guest_wstring(parameters)) ||
+        (directory != nullptr && !mapped_guest_wstring(directory)) ||
+        (file != nullptr && !mapped_guest_wstring(file))) {
         set_last_error(abi::kErrorInvalidParameter);
-        return reinterpret_cast<void*>(static_cast<std::uintptr_t>(0)); // failure <32
+        return nullptr;
     }
     if (file == nullptr || file[0] == 0) {
         set_last_error(abi::kErrorInvalidParameter);
-        return reinterpret_cast<void*>(static_cast<std::uintptr_t>(2)); // SE_ERR_FNF
+        return nullptr;
     }
-    set_last_error(abi::kErrorSuccess);
-    return reinterpret_cast<void*>(static_cast<std::uintptr_t>(42)); // >32 success
+    // Abrir documentos/processos pelo shell ainda não integra o ciclo de vida
+    // do processo convidado. Retornar êxito aqui faria o aplicativo acreditar
+    // que um processo foi iniciado quando nenhuma ação ocorreu.
+    set_last_error(abi::kErrorNotSupported);
+    return reinterpret_cast<void*>(static_cast<std::uintptr_t>(31)); // SE_ERR_NOASSOC (< 32)
 }
+
+struct GuestShellExecuteInfoW {
+    std::uint32_t cb_size;
+    std::uint32_t f_mask;
+    void* hwnd;
+    const std::uint16_t* lp_verb;
+    const std::uint16_t* lp_file;
+    const std::uint16_t* lp_parameters;
+    const std::uint16_t* lp_directory;
+    std::int32_t n_show;
+    void* h_inst_app;
+    void* lp_id_list;
+    const std::uint16_t* lp_class;
+    void* hkey_class;
+    std::uint32_t dw_hot_key;
+    std::uint32_t reserved;
+    void* h_monitor;
+    void* h_process;
+};
+static_assert(sizeof(GuestShellExecuteInfoW) == 112);
+static_assert(offsetof(GuestShellExecuteInfoW, h_inst_app) == 56);
+static_assert(offsetof(GuestShellExecuteInfoW, h_process) == 104);
 
 TL_MSABI int tl_ShellExecuteExW(void* exec_info) noexcept {
     if (exec_info == nullptr || !mapped_guest_range(exec_info, sizeof(std::uint32_t), false)) {
@@ -303,25 +329,24 @@ TL_MSABI int tl_ShellExecuteExW(void* exec_info) noexcept {
     }
     std::uint32_t cbSize = 0;
     std::memcpy(&cbSize, exec_info, sizeof(cbSize));
-    if (cbSize < 60 || !mapped_guest_range(exec_info, cbSize, true)) {
+    if (cbSize < sizeof(GuestShellExecuteInfoW) ||
+        !mapped_guest_range(exec_info, sizeof(GuestShellExecuteInfoW), true)) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
-    // SHELLEXECUTEINFOW layout: cbSize(4), fMask(4), hwnd(8), lpVerb(8), lpFile(8), lpParameters(8), lpDirectory(8), nShow(4), hInstApp(8), ... hProcess(8)
-    // Para stub, apenas valida lpFile se presente e preenche hProcess com dummy
-    auto* base = static_cast<std::uint8_t*>(exec_info);
-    // Offsets: lpFile at 24 (4+4+8+8), mas depende de packing; vamos apenas validar que se lpFile não nulo, é wstring válida
-    // Simplificamos: não valida profundamente, apenas retorna sucesso e seta hProcess se houver espaço
-    if (cbSize >= 60) {
-        // Tenta setar hProcess em offset 60? Na estrutura real, hProcess está em offset 56 (após hInstApp). Vamos tentar escrever um handle dummy se houver espaço
-        // Se cbSize >= 64, tenta escrever em 56
-        if (cbSize >= 64) {
-            void* dummy = reinterpret_cast<void*>(0x1);
-            std::memcpy(base + 56, &dummy, sizeof(void*));
-        }
+    auto* const info = static_cast<GuestShellExecuteInfoW*>(exec_info);
+    if (info->lp_file == nullptr || !mapped_guest_wstring(info->lp_file) || info->lp_file[0] == 0 ||
+        (info->lp_verb != nullptr && !mapped_guest_wstring(info->lp_verb)) ||
+        (info->lp_parameters != nullptr && !mapped_guest_wstring(info->lp_parameters)) ||
+        (info->lp_directory != nullptr && !mapped_guest_wstring(info->lp_directory)) ||
+        (info->lp_class != nullptr && !mapped_guest_wstring(info->lp_class))) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
     }
-    set_last_error(abi::kErrorSuccess);
-    return 1;
+    info->h_inst_app = nullptr;
+    info->h_process = nullptr;
+    set_last_error(abi::kErrorNotSupported);
+    return 0;
 }
 
 struct GuestShFileOpStructW {
@@ -450,12 +475,20 @@ TL_MSABI int tl_ShellNotifyIconW(const std::uint32_t message, void* const data) 
 
 TL_MSABI void* tl_ShellExecuteA(void* const hwnd, const char* const operation, const char* const file, const char* const parameters, const char* const directory, const int show_cmd) noexcept {
     (void)hwnd;
-    (void)operation;
-    (void)file;
-    (void)parameters;
-    (void)directory;
     (void)show_cmd;
-    return reinterpret_cast<void*>(42); // HINSTANCE > 32 indicates success
+    if ((operation != nullptr && !mapped_guest_cstring(operation)) ||
+        (parameters != nullptr && !mapped_guest_cstring(parameters)) ||
+        (directory != nullptr && !mapped_guest_cstring(directory)) ||
+        (file != nullptr && !mapped_guest_cstring(file))) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return nullptr;
+    }
+    if (file == nullptr || file[0] == '\0') {
+        set_last_error(abi::kErrorInvalidParameter);
+        return nullptr;
+    }
+    set_last_error(abi::kErrorNotSupported);
+    return reinterpret_cast<void*>(static_cast<std::uintptr_t>(31)); // SE_ERR_NOASSOC (< 32)
 }
 
 TL_MSABI int tl_SHCreateItemFromParsingName(const wchar_t* const pszPath, void* const pbc, const void* const riid, void** const ppv) noexcept {
