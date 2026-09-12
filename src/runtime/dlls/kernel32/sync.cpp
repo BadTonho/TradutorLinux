@@ -137,6 +137,10 @@ TL_MSABI std::uint32_t tl_WaitForSingleObject(const void* const handle,
         return abi::kWaitFailed;
     }
     if (ThreadSlot* thread = find_thread_slot(handle); thread != nullptr) {
+        trace_process_console(
+            "wait-single-begin", "single-object",
+            "kind=thread;handle=" + std::to_string(reinterpret_cast<std::uintptr_t>(handle)) +
+                ";timeout-ms=" + std::to_string(milliseconds));
         std::unique_lock<std::mutex> lock(thread->join_mutex);
         const auto predicate = [&]() { return thread->finished; };
         if (milliseconds == abi::kInfinite) {
@@ -146,11 +150,23 @@ TL_MSABI std::uint32_t tl_WaitForSingleObject(const void* const handle,
             return abi::kWaitTimeout;
         }
         set_last_error(abi::kErrorSuccess);
+        trace_process_console(
+            "wait-single-end", "single-object",
+            "kind=thread;handle=" + std::to_string(reinterpret_cast<std::uintptr_t>(handle)) +
+                ";result=object-0");
         return abi::kWaitObject0;
     }
     if (SyncSlot* sync = find_sync_slot(handle); sync != nullptr) {
+        trace_process_console(
+            "wait-single-begin", "single-object",
+            "kind=sync;handle=" + std::to_string(reinterpret_cast<std::uintptr_t>(handle)) +
+                ";timeout-ms=" + std::to_string(milliseconds));
         const std::uint32_t result = wait_sync_slot(*sync, milliseconds);
         set_last_error(result == abi::kWaitFailed ? abi::kErrorInvalidHandle : abi::kErrorSuccess);
+        trace_process_console(
+            "wait-single-end", "single-object",
+            "kind=sync;handle=" + std::to_string(reinterpret_cast<std::uintptr_t>(handle)) +
+                ";result=" + std::to_string(result));
         return result;
     }
     set_last_error(abi::kErrorInvalidHandle);
@@ -281,7 +297,13 @@ TL_MSABI void* tl_CreateEventA(const void* security_attributes, const int manual
     slot.signaled = initial_state != 0;
     slot.manual_reset = manual_reset != 0;
     set_last_error(abi::kErrorSuccess);
-    return sync_slot_handle(slot);
+    void* const handle = sync_slot_handle(slot);
+    trace_process_console(
+        "event-create", "event-object",
+        "handle=" + std::to_string(reinterpret_cast<std::uintptr_t>(handle)) +
+            ";manual-reset=" + std::to_string(manual_reset) +
+            ";initial-state=" + std::to_string(initial_state));
+    return handle;
 }
 
 TL_MSABI void* tl_CreateEventW(const void* security_attributes, const int manual_reset,
@@ -306,6 +328,9 @@ TL_MSABI int tl_SetEvent(const void* event_handle) noexcept {
         slot->signaled = true;
     }
     slot->condition.notify_all();
+    trace_process_console(
+        "event-set", "event-object",
+        "handle=" + std::to_string(reinterpret_cast<std::uintptr_t>(event_handle)));
     set_last_error(abi::kErrorSuccess);
     return 1;
 }

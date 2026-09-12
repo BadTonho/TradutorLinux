@@ -2763,7 +2763,7 @@ point sem rejeição.
 | Aplicativo | --report | Execução atual | Próximo bloqueio |
 |---|---|---|---|
 | `7z_x64.exe` | `supported` (562 KB, 225 imports) | exit `0` (CLI sem args) | – fluxo completo já coberto |
-| `7zG.exe` | `supported` (PE32+; 208 imports) | operação `a` cria arquivo 7z e termina com exit `0` sob `--timeout 30 --memory 512` sem limite artificial de CPU; timeout curto/`--cpu 10` ainda é intermitente | estabilizar o fluxo worker/modal antes de ampliar cenários de interação |
+| `7zG.exe` | `supported` (PE32+; 208 imports) | operação `a` cria arquivo 7z e termina com exit `0` sob `--timeout 30 --memory 512` sem limite artificial de CPU; timeout curto/`--cpu 10` ainda é intermitente | trace F14 mostra worker/eventos concluídos no caso que falha; investigar entrega modal de `WM_TIMER` antes de ampliar cenários |
 | `7zFM_x64.exe` | `supported` (987 KB, 298 imports) | `seven_zip_smoke` exit `0` | GUI estendida fora do smoke |
 | `WinRAR_x64.exe` | `supported` (3,8 MB, ~251 imports) | exit `0` (extração real e cancelamento SFX) | – nos cenários já cobertos |
 | `putty_x64.exe` | `supported` (1,7 MB, 348 imports) | `guest-timeout 72` | bloqueio pós-ativação TCP |
@@ -3078,6 +3078,33 @@ interação.
 - [x] A matriz e o smoke continuam classificando o aplicativo como não
   suportado. `WTD_CHOICE_FILE`/Authenticode permanece um gate posterior, caso
   o suporte C++/SEH avance; não foi criado fallback criptográfico.
+
+### F14 concluído — Diagnóstico de threads e eventos para o `7zG` (2026-09-12)
+
+O fluxo `7zG.exe a` alterna entre concluir e permanecer em uma espera modal,
+sem que o trace anterior permitisse distinguir worker não criado de evento não
+sinalizado. A tentativa de inserir `yield` no runtime não alterou a falha e
+foi descartada.
+
+- [x] O runtime agora registra genericamente `thread-create`, `thread-start`,
+  `thread-exit`, `event-create`, `event-set`, `wait-single-begin` e
+  `wait-single-end`, incluindo thread convidada, tipo de handle e timeout.
+- [x] A fixture `tl_thread` exige o ciclo de thread e espera no trace, sem
+  depender do 7-Zip nem criar regra por aplicativo.
+- [x] O contrato foi documentado em `docs/diagnostico.md`; um início de espera
+  sem o término correspondente permanece uma evidência diagnóstica, não uma
+  mudança de semântica.
+- [x] O cenário foi repetido com `--trace=loader,process,runtime,gui`: no
+  caso que termina em `guest-timeout 72`, o worker `thread-id=2` é criado,
+  iniciado e encerrado; o thread principal sinaliza o primeiro evento, o
+  worker sinaliza o segundo e a espera do primeiro termina com `result=0`.
+- [x] Não houve retorno incorreto de `WaitForSingleObject`, falha de criação
+  de thread ou espera sem término. O trace também não registra um segundo
+  worker nem `WM_TIMER` antes do timeout; o próximo bloqueio é a entrega do
+  diálogo modal, não a semântica básica de eventos.
+- [x] Nenhuma correção especulativa de sincronização foi aplicada. A próxima
+  etapa deve instrumentar ou corrigir genericamente a fila modal/timer do
+  USER32 somente depois de uma fixture que reproduza esse contrato.
 
 ## Regras de validação
 

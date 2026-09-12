@@ -189,6 +189,8 @@ TL_MSABI void* tl_CreateThread(const void* thread_attributes, const std::uintptr
             // qualquer outra tabela pertencente à execução.
             runtime::GuestContextScope context_scope(*guest_context);
             g_current_thread_id = slot_ptr->thread_id;
+            trace_process_console("thread-start", "guest-thread",
+                                  "thread-id=" + std::to_string(slot_ptr->thread_id));
             set_guest_gs_base(teb);
             initialize_thread_tls(static_cast<runtime::GuestTeb*>(teb));
             set_current_fls_thread_values(slot_ptr->fls_values);
@@ -216,16 +218,24 @@ TL_MSABI void* tl_CreateThread(const void* thread_attributes, const std::uintptr
             runtime::clear_guest_unwind_view();
             set_guest_gs_base(nullptr);
             bool should_cleanup = false;
+            std::uint32_t completed_thread_id = 0;
+            int completed_exit_code = 0;
             {
                 std::lock_guard<std::mutex> join_lock(finished_slot->join_mutex);
                 std::lock_guard<std::mutex> threads_lock(g_threads_mutex);
                 finished_slot->finished = true;
+                completed_thread_id = finished_slot->thread_id;
+                completed_exit_code = finished_slot->exit_code;
                 if (finished_slot->handle_closed && !finished_slot->joined) {
                     finished_slot->joined = true;
                     should_cleanup = true;
                 }
             }
             finished_slot->finish_cv.notify_all();
+            trace_process_console(
+                "thread-exit", "guest-thread",
+                "thread-id=" + std::to_string(completed_thread_id) +
+                    ";exit-code=" + std::to_string(completed_exit_code));
             if (should_cleanup) {
                 if (finished_slot->host_thread.joinable()) {
                     finished_slot->host_thread.detach();
@@ -260,6 +270,11 @@ TL_MSABI void* tl_CreateThread(const void* thread_attributes, const std::uintptr
     if (thread_id != nullptr) {
         *thread_id = it->thread_id;
     }
+    trace_process_console(
+        "thread-create", "guest-thread",
+        "thread-id=" + std::to_string(it->thread_id) +
+            ";start-address=" + std::to_string(start_address) +
+            ";creation-flags=" + std::to_string(creation_flags));
     set_last_error(abi::kErrorSuccess);
     return thread_slot_to_handle(*it);
 }

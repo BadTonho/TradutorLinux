@@ -58,6 +58,24 @@ do código convidado:
 [tl][process][info] exit exit-code="0" explicit="sim"
 ```
 
+Operações genéricas de threads e eventos também registram o ciclo mínimo de
+sincronização quando o trace completo está habilitado. Esses eventos não
+alteram a semântica nem expõem memória convidada; os handles são apenas os
+identificadores opacos usados pelo runtime para correlacionar chamadas:
+
+```text
+[tl][runtime][info] thread-create operation="thread-create" detail="thread-id=2;start-address=...;creation-flags=0" thread="1" status="success"
+[tl][runtime][info] thread-start operation="thread-start" detail="thread-id=2" thread="2" status="success"
+[tl][runtime][info] wait-single-begin operation="wait-single-begin" detail="kind=thread;handle=...;timeout-ms=4294967295" thread="1" status="success"
+[tl][runtime][info] thread-exit operation="thread-exit" detail="thread-id=2;exit-code=0" thread="2" status="success"
+[tl][runtime][info] wait-single-end operation="wait-single-end" detail="kind=thread;handle=...;result=object-0" thread="1" status="success"
+```
+
+`wait-single-begin` sem um `wait-single-end` correspondente identifica uma
+espera ainda pendente no instante do timeout. `event-create` e `event-set`
+registram o mesmo vínculo para eventos manuais ou automáticos. A fixture
+`tl_thread` protege a presença do ciclo de criação, início, espera e término.
+
 Durante `app run`, o runtime também consulta o perfil opcional do aplicativo
 no prefixo. O evento `compat-profile` informa `missing`, `loaded` ou `invalid`;
 um perfil ausente, inválido ou incompatível gera aviso e não muda o exit code

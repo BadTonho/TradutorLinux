@@ -237,7 +237,8 @@ function(tl_add_pe_fixture target_name source_file manifest_file)
                     "-DEXPECTED_HEX=7669727475616c2d71756572790a")
             elseif(target_name STREQUAL "tl_thread")
                 set(runtime_extra_args
-                    "-DEXPECTED_HEX=54687265616420646f6e650a54687265616420646f6e650a4d61696e20646f6e650a")
+                    "-DEXPECTED_HEX=54687265616420646f6e650a54687265616420646f6e650a4d61696e20646f6e650a"
+                    "-DREQUIRED_TRACE=thread-create,thread-start,thread-exit,wait-single-begin,wait-single-end")
             elseif(target_name STREQUAL "tl_tls_generic")
                 set(runtime_extra_args
                     "-DEXPECTED_HEX=746c732d67656e657269630a")
