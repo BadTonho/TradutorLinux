@@ -22,7 +22,7 @@ indícios e podem mudar.
 | ID | Classificação | Achado e próxima evidência |
 |---|---|---|
 | E1 | **Corrigido e protegido** | O caminho de delay-import agora propaga para `ResolveResult` qualquer falha de `patch_address`. `ImportResolverTest.PropagatesInvalidDelayIatSlotToOverallStatus` cobre IAT fora da imagem e os 16 testes da suíte passaram no Debug. |
-| E2 | **Alta prioridade — validar** | `src/loader/module_graph.cpp` verifica executabilidade por mapa `x`, mas a validação precisa também exigir que a VA esteja dentro da imagem convidada. Criar fixture TLS/DllMain com VA executável fora da imagem e exigir rejeição antes da chamada. |
+| E2 | **Corrigido e protegido** | `GuestModuleGraph::is_guest_executable` agora exige que a VA pertença à própria imagem convidada do callback ou `DllMain` antes de consultar permissões `x`. A regressão `ModuleGraphTest.RejectsTlsCallbackOutsideGuestImageBeforeInvocation` confirma rejeição sem invocar uma função executável do host. |
 | E3 | **Corrigido e protegido** | A coleta de callbacks TLS agora é limitada a 4096 entradas e rejeita uma tabela excessiva com `ParseStatus::Malformed`. A regressão `PeReaderTest.RejectsExcessiveTlsCallbacks` cobre 4097 callbacks sem terminador. |
 | E4 | **Alta prioridade — validar** | TLS truncado e `.pdata` apontando para região virtual sem dados físicos parecem virar `nullopt` sem diagnóstico estruturado. Fixtures truncadas devem distinguir `malformed` de ausência legítima do diretório. |
 | E5 | **Alta prioridade — validar** | A validação de `CHAININFO` percorre tabelas de runtime functions com buscas aninhadas. Medir um `.pdata` grande e adversarial; só depois escolher índice e limite que preservem a semântica. |

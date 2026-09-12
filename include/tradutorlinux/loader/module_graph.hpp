@@ -115,7 +115,8 @@ private:
     void reject_loaded_module(std::size_t index, std::string_view reason) noexcept;
     void release_dependency(std::size_t index) noexcept;
     void reject_profile_module(std::string_view module_name) noexcept;
-    [[nodiscard]] bool is_guest_executable(std::uintptr_t address) const noexcept;
+    [[nodiscard]] bool is_guest_executable(const MappedImage& image,
+                                           std::uintptr_t address) const noexcept;
     void trace_event(std::string_view event, std::string_view module,
                      std::string_view detail = {},
                      std::string_view provider = {}) const noexcept;

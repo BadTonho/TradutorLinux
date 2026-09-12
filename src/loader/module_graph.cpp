@@ -806,8 +806,13 @@ void GuestModuleGraph::bind_main_image(MappedImage& image, const pe::PeInfo& inf
     main_path_ = requester;
 }
 
-bool GuestModuleGraph::is_guest_executable(const std::uintptr_t address) const noexcept {
-    if (address == 0) return false;
+bool GuestModuleGraph::is_guest_executable(const MappedImage& image,
+                                           const std::uintptr_t address) const noexcept {
+    if (address == 0 || image.memory == nullptr || image.size == 0 ||
+        address < static_cast<std::uintptr_t>(image.base) ||
+        address - static_cast<std::uintptr_t>(image.base) >= image.size) {
+        return false;
+    }
     std::ifstream maps{"/proc/self/maps"};
     std::string line;
     while (std::getline(maps, line)) {
@@ -845,7 +850,7 @@ bool GuestModuleGraph::attach_module(const std::size_t index) noexcept {
     for (const std::uint64_t callback : module.info.tls_info.callback_vas) {
         const std::uintptr_t address = static_cast<std::uintptr_t>(
             relocate_va(callback, module.info, module.image));
-        if (!is_guest_executable(address)) {
+        if (!is_guest_executable(module.image, address)) {
             return fail_attach("TLS callback fora de seção executável");
         }
         trace_event("tls-callback", module.name, "process-attach");
@@ -854,7 +859,7 @@ bool GuestModuleGraph::attach_module(const std::size_t index) noexcept {
     if (module.info.address_of_entry_point != 0) {
         const std::uintptr_t address = static_cast<std::uintptr_t>(
             module.image.base + module.info.address_of_entry_point);
-        if (!is_guest_executable(address) || reinterpret_cast<DllMain>(address)(
+        if (!is_guest_executable(module.image, address) || reinterpret_cast<DllMain>(address)(
                                                   module.image.memory, 1U, nullptr) == 0) {
             return fail_attach("DllMain(PROCESS_ATTACH)");
         }
@@ -874,7 +879,7 @@ void GuestModuleGraph::detach_module(const std::size_t index) noexcept {
     if (module.info.address_of_entry_point != 0) {
         const std::uintptr_t address = static_cast<std::uintptr_t>(
             module.image.base + module.info.address_of_entry_point);
-        if (is_guest_executable(address)) {
+        if (is_guest_executable(module.image, address)) {
             reinterpret_cast<DllMain>(address)(module.image.memory, 0U, nullptr);
         }
     }
@@ -882,7 +887,7 @@ void GuestModuleGraph::detach_module(const std::size_t index) noexcept {
          callback != module.info.tls_info.callback_vas.rend(); ++callback) {
         const std::uintptr_t address = static_cast<std::uintptr_t>(
             relocate_va(*callback, module.info, module.image));
-        if (is_guest_executable(address)) {
+        if (is_guest_executable(module.image, address)) {
             trace_event("tls-callback", module.name, "process-detach");
             reinterpret_cast<TlsCallback>(address)(module.image.memory, 0U, nullptr);
         }
@@ -972,7 +977,7 @@ void GuestModuleGraph::thread_attach() noexcept {
         for (const std::uint64_t callback : module.info.tls_info.callback_vas) {
             const std::uintptr_t address = static_cast<std::uintptr_t>(
                 relocate_va(callback, module.info, module.image));
-            if (is_guest_executable(address)) {
+            if (is_guest_executable(module.image, address)) {
                 trace_event("tls-callback", module.name, "thread-attach");
                 reinterpret_cast<TlsCallback>(address)(module.image.memory, 2U, nullptr);
             }
@@ -989,7 +994,7 @@ void GuestModuleGraph::thread_detach() noexcept {
              callback != module.info.tls_info.callback_vas.rend(); ++callback) {
             const std::uintptr_t address = static_cast<std::uintptr_t>(
                 relocate_va(*callback, module.info, module.image));
-            if (is_guest_executable(address)) {
+            if (is_guest_executable(module.image, address)) {
                 trace_event("tls-callback", module.name, "thread-detach");
                 reinterpret_cast<TlsCallback>(address)(module.image.memory, 3U, nullptr);
             }

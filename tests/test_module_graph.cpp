@@ -7,6 +7,7 @@
 #include "tradutorlinux/runtime/guest_context.hpp"
 
 #include <algorithm>
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -23,6 +24,13 @@ namespace tradutorlinux::loader {
 namespace {
 
 using namespace tradutorlinux::pe::testutil;
+
+std::atomic<std::uint32_t> g_outside_tls_callback_calls{0};
+
+extern "C" __attribute__((noinline)) void outside_tls_callback(
+    void*, std::uint32_t, void*) noexcept {
+    g_outside_tls_callback_calls.fetch_add(1, std::memory_order_relaxed);
+}
 
 std::vector<std::byte> make_export_dll(const bool attach_succeeds = true) {
     constexpr std::uint32_t export_rva = 0x2000;
@@ -93,6 +101,22 @@ std::vector<std::byte> make_importing_executable() {
     spec.import_size = 40;
     spec.reloc_rva = 0x3000;
     spec.reloc_size = 12;
+    return build(spec);
+}
+
+std::vector<std::byte> make_tls_callback_dll(const std::uintptr_t callback) {
+    constexpr std::uint32_t kTlsRva = 0x2000;
+    std::vector<std::byte> data(56, std::byte{0});
+    write_u64(data, 24, 0x140002028ULL);  // callback table at RVA 0x2028
+    write_u64(data, 40, static_cast<std::uint64_t>(callback));
+
+    BuildSpec spec;
+    spec.coff_characteristics = 0x2022;
+    spec.entry_point = 0;
+    spec.section_names = {".text", ".tls"};
+    spec.section_data = {std::vector<std::byte>(0x10), data};
+    spec.tls_rva = kTlsRva;
+    spec.tls_size = 40;
     return build(spec);
 }
 
@@ -308,6 +332,30 @@ TEST_F(ModuleGraphTest, FailedProfileAttachIsReplacedByDriveProvider) {
     EXPECT_EQ(custom_address, reinterpret_cast<std::uintptr_t>(drive_handle) + 0x1000U);
     graph.process_detach();
     unmap_image(mapped.image);
+}
+
+TEST_F(ModuleGraphTest, RejectsTlsCallbackOutsideGuestImageBeforeInvocation) {
+    runtime::GuestContextScope scope(context_);
+    register_builtin_modules();
+    g_outside_tls_callback_calls.store(0, std::memory_order_relaxed);
+
+    const auto paths = prefix::get_environment_paths(root_);
+    std::ofstream output(paths.drive_c / "outside.dll",
+                         std::ios::binary | std::ios::trunc);
+    ASSERT_TRUE(output);
+    const std::vector<std::byte> bytes = make_tls_callback_dll(
+        reinterpret_cast<std::uintptr_t>(&outside_tls_callback));
+    const pe::ParseResult parsed = pe::parse_pe(bytes);
+    ASSERT_EQ(parsed.status, pe::ParseStatus::Success) << parsed.error_message;
+    ASSERT_TRUE(parsed.info.is_dll);
+    output.write(reinterpret_cast<const char*>(bytes.data()),
+                 static_cast<std::streamsize>(bytes.size()));
+    output.close();
+    ASSERT_TRUE(std::filesystem::is_regular_file(paths.drive_c / "outside.dll"));
+
+    GuestModuleGraph graph(root_, std::nullopt, root_ / "app.exe", false);
+    EXPECT_EQ(graph.load_library("outside.dll"), nullptr);
+    EXPECT_EQ(g_outside_tls_callback_calls.load(std::memory_order_relaxed), 0U);
 }
 
 }  // namespace
