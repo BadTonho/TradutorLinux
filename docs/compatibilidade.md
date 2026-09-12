@@ -45,11 +45,13 @@ somente `--report`, sem iniciar DLLs, instaladores ou pacotes rejeitados; os
 builds Rust ON e C++ OFF retornaram `25` sucessos, `2` rejeições estruturais e
 `37` formatos/arquiteturas não suportados em ambos os casos.
 
-O teste `popular_apps_native_matrix` cobre os cinco casos de execução direta já
-selecionados no B2: 7-Zip e os dois WinRAR terminam com `0`, Rockstar preserva
-seu `ExitProcess(3)` e Rufus é rejeitado com `4` por `map-failed`. Cada caso
-recebe prefixo temporário, limites de CPU/memória e timeout; isso é evidência
-de comportamento controlado, não uma promoção geral de compatibilidade.
+O teste `popular_apps_native_matrix` cobre seis casos de execução direta ou
+rejeição pré-entry: 7-Zip e os dois WinRAR terminam com `0`, Rockstar preserva
+seu `ExitProcess(3)`, Rufus é rejeitado com `4` por `map-failed` e o GUP do
+Notepad++ é rejeitado com `5` quando a cadeia `libcurl.dll` exige
+`WLDAP32.dll`. Cada caso recebe prefixo temporário, limites de CPU/memória e
+timeout; isso é evidência de comportamento controlado, não uma promoção geral
+de compatibilidade.
 
 O teste `popular_apps_install_matrix` cobre as instalações autorizadas de
 Roblox (`3` após `RBXCRASH`), G HUB e seu alias (`1` após `ExitProcess(1)`) e

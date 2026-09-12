@@ -3039,6 +3039,23 @@ um clique real no 7-Zip de um clique no surrogate do Simple Todo.
   segunda execução, excluir e sair pela bandeja, sem alterar o runtime por
   aplicativo.
 
+### F12 concluído — matriz nativa: rejeição pré-entry do WinGup (2026-09-12)
+
+O componente `Notepad++/updater/GUP.exe` é PE32+ x64, mas a execução direta
+encontra o `libcurl.dll` local e rejeita a dependência `WLDAP32.dll!ordinal(46)`
+antes de qualquer entry point. A matriz nativa passou a proteger esse resultado
+controlado junto dos cenários diretos já autorizados.
+
+- [x] O `--report` registra 149/153 imports resolvidos; os quatro imports do
+  executável pertencem a `libcurl.dll`, cuja cadeia também possui 18 ordinais
+  não registrados de `WLDAP32.dll`, além de lacunas independentes de criptografia
+  e normalização.
+- [x] O cenário direto retorna `5` nos builds Rust ON e C++ OFF, contém o
+  marcador `provider-rejected` com `WLDAP32.dll!ordinal(46)`, desmonta a imagem
+  principal e não registra `ExitProcess`, sinal ou timeout convidado.
+- [x] `popular_apps_native_matrix` passou de 5/5 para 6/6 nos dois backends,
+  sem adicionar DLL, shim ou regra específica ao runtime.
+
 ## Regras de validação
 
 - Cada correção começa com uma fixture mínima e termina com testes automatizados.

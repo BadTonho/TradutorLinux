@@ -15,15 +15,17 @@ endif()
 set(ENV{DISPLAY})
 set(ENV{WAYLAND_DISPLAY})
 
-# Estes são somente os PE32+ com uma ação direta segura já documentada no B2.
-# Instaladores, DLLs e cenários que exigem interação GUI têm smokes próprios e
-# não são iniciados por esta matriz.
+# Estes são somente os PE32+ com uma ação direta segura já documentada no B2,
+# mais rejeições controladas que devem parar antes do entry point. Instaladores,
+# DLLs e cenários que exigem interação GUI têm smokes próprios e não são
+# iniciados por esta matriz.
 set(CASES
     "7z_x64.exe|0|exit exit-code=\"0\" explicit=\"sim\""
     "WinRAR_x64.exe|0|exit exit-code=\"0\" explicit=\"sim\""
     "winrar-x64-723.exe|0|exit exit-code=\"0\" explicit=\"sim\""
     "Rockstar-Games-Launcher.exe|3|exit exit-code=\"3\" explicit=\"sim\""
     "Rufus_x64.exe|4|map-failed"
+    "Notepad++/updater/GUP.exe|5|provider-rejected module=\"libcurl.dll\" provider=\"drive_c\" detail=\"WLDAP32.dll!ordinal(46): módulo não registrado\""
 )
 
 file(REMOVE_RECURSE "${TL_STAGING_ROOT}")
@@ -70,6 +72,20 @@ foreach(case IN LISTS CASES)
             "${relative_path}: diagnóstico esperado não encontrado: ${expected_marker}\n"
             "stdout:\n${run_stdout}\n"
             "stderr:\n${run_stderr}")
+    endif()
+    if("${relative_path}" STREQUAL "Notepad++/updater/GUP.exe")
+        string(FIND "${run_stderr}" "unmap base=\"" unmap_position)
+        string(FIND "${run_stderr}" "ExitProcess symbol=\"" exit_process_position)
+        string(FIND "${run_stderr}" "guest-signal" guest_signal_position)
+        string(FIND "${run_stderr}" "guest-timeout" guest_timeout_position)
+        if(unmap_position EQUAL -1 OR NOT exit_process_position EQUAL -1 OR
+           NOT guest_signal_position EQUAL -1 OR NOT guest_timeout_position EQUAL -1)
+            file(REMOVE_RECURSE "${TL_STAGING_ROOT}")
+            message(FATAL_ERROR
+                "${relative_path}: rejeição não terminou antes do entry point:\n"
+                "stdout:\n${run_stdout}\n"
+                "stderr:\n${run_stderr}")
+        endif()
     endif()
     math(EXPR passed "${passed} + 1")
 endforeach()
