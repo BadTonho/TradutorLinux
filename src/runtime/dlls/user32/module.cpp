@@ -232,7 +232,7 @@ void register_user32_module() {
         {"CreateMenu", 222, reinterpret_cast<std::uintptr_t>(&tl_CreateMenu)},
         {"DefDlgProcA", 223, reinterpret_cast<std::uintptr_t>(&tl_DefDlgProcA)},
         {"DeleteMenu", 224, reinterpret_cast<std::uintptr_t>(&tl_DeleteMenu)},
-        {"DialogBoxParamA", 225, reinterpret_cast<std::uintptr_t>(&tl_DialogBoxParamA)},
+        {"DialogBoxParamA", 225, reinterpret_cast<std::uintptr_t>(&tl_DialogBoxParamA), ExportSupport::Limited},
         {"GetCaretBlinkTime", 226, reinterpret_cast<std::uintptr_t>(&tl_GetCaretBlinkTime)},
         {"GetClipboardOwner", 227, reinterpret_cast<std::uintptr_t>(&tl_GetClipboardOwner)},
         {"GetDoubleClickTime", 228, reinterpret_cast<std::uintptr_t>(&tl_GetDoubleClickTime)},
