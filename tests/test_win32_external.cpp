@@ -481,6 +481,37 @@ TEST(ShellPathTest, SpecialFoldersStayInsideTheActivePrefix) {
     std::filesystem::remove_all(root, error);
 }
 
+TEST(ShellAllocationTest, ReturnedBuffersUseTheDocumentedAllocators) {
+    const std::filesystem::path root = std::filesystem::temp_directory_path() /
+        ("tl-shell-allocator-" + std::to_string(static_cast<unsigned long long>(::getpid())));
+    ASSERT_TRUE(prefix::initialize_prefix(root));
+    set_guest_prefix_path(root);
+
+    struct Guid {
+        std::uint32_t data1;
+        std::uint16_t data2;
+        std::uint16_t data3;
+        std::uint8_t data4[8];
+    };
+    constexpr Guid kRoamingAppData = {
+        0x3EB685DBU, 0x65F9U, 0x4CF6U, {0xA0U, 0x3AU, 0xE3U, 0xEFU, 0x65U, 0x72U, 0x9FU, 0x3DU}};
+    std::uint16_t* path = nullptr;
+    ASSERT_EQ(tl_SHGetKnownFolderPath(&kRoamingAppData, 0, nullptr, &path), 0);
+    ASSERT_NE(path, nullptr);
+    void* const resized_path = tl_CoTaskMemRealloc(path, 1024);
+    ASSERT_NE(resized_path, nullptr);
+    tl_CoTaskMemFree(resized_path);
+
+    void* guid = nullptr;
+    ASSERT_EQ(tl_PowerGetActiveScheme(nullptr, &guid), 0U);
+    ASSERT_NE(guid, nullptr);
+    EXPECT_EQ(tl_LocalFree(guid), nullptr);
+
+    set_guest_prefix_path({});
+    std::error_code error;
+    std::filesystem::remove_all(root, error);
+}
+
 TEST(ShellExecutionTest, UnsupportedCallsFailWithoutFabricatingAProcess) {
     constexpr std::uint16_t kFileW[] = {u't', u'e', u's', u't', u'.', u't', u'x', u't', 0};
     EXPECT_LE(reinterpret_cast<std::uintptr_t>(tl_ShellExecuteW(nullptr, nullptr, kFileW,

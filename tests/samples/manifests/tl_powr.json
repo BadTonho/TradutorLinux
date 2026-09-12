@@ -8,6 +8,7 @@
     "KERNEL32.dll": [
       "ExitProcess",
       "GetStdHandle",
+      "LocalFree",
       "WriteFile"
     ],
     "POWRPROF.dll": [

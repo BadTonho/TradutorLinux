@@ -16,13 +16,13 @@ TL_MSABI std::uint32_t tl_PowerGetActiveScheme(void* UserRootPowerKey, void** Ac
         set_last_error(abi::kErrorInvalidParameter);
         return 87; // ERROR_INVALID_PARAMETER
     }
-    // Aloca GUID dummy via CoTaskMemAlloc (malloc)
-    void* guid = ::malloc(16);
+    // O contrato de PowerGetActiveScheme exige que o GUID seja liberável por
+    // LocalFree; use o mesmo alocador rastreado pela implementação de KERNEL32.
+    void* guid = tl_LocalAlloc(abi::kGmemZeroinit, 16);
     if (guid == nullptr) {
         set_last_error(abi::kErrorNotEnoughMemory);
         return 8;
     }
-    std::memset(guid, 0, 16);
     // GUID dummy: 381b4222-f694-41f0-9685-ff5bb260df2e (Balanced)
     static const unsigned char kBalanced[16] = {0x22,0x42,0x1b,0x38,0x94,0xf6,0xf0,0x41,0x96,0x85,0xff,0x5b,0xb2,0x60,0xdf,0x2e};
     std::memcpy(guid, kBalanced, 16);

@@ -203,8 +203,7 @@ TL_MSABI int tl_SHGetKnownFolderPath(const void* rfid, const std::uint32_t flags
     const std::string win_path = prefix::to_windows_path(native_path, guest_prefix_root());
     const std::u16string wide = util::utf8_to_wide(win_path);
     const std::size_t bytes = (wide.size() + 1) * sizeof(std::uint16_t);
-    // Usa CoTaskMemAlloc (ole32) para alocar; aqui malloc é suficiente pois CoTaskMemFree é free
-    std::uint16_t* allocated = static_cast<std::uint16_t*>(::malloc(bytes));
+    std::uint16_t* allocated = static_cast<std::uint16_t*>(tl_CoTaskMemAlloc(bytes));
     if (allocated == nullptr) {
         set_last_error(abi::kErrorNotEnoughMemory);
         return static_cast<int>(0x8007000E); // E_OUTOFMEMORY

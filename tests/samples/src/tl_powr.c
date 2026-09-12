@@ -5,6 +5,7 @@ __attribute__((dllimport)) void* GetStdHandle(dword_t nStdHandle);
 __attribute__((dllimport)) bool_t WriteFile(void* hFile, const void* lpBuffer, dword_t nNumberOfBytesToWrite,
                                             dword_t* lpNumberOfBytesWritten, void* lpOverlapped);
 __attribute__((dllimport, noreturn)) void ExitProcess(dword_t uExitCode);
+__attribute__((dllimport)) void* LocalFree(void* memory);
 __attribute__((dllimport)) dword_t PowerGetActiveScheme(void* UserRootPowerKey, void** ActivePolicyGuid);
 __attribute__((dllimport)) dword_t PowerSetActiveScheme(void* UserRootPowerKey, const void* SchemeGuid);
 __attribute__((dllimport)) dword_t CallNtPowerInformation(int InformationLevel, void* InputBuffer, dword_t InputBufferLength, void* OutputBuffer, dword_t OutputBufferLength);
@@ -24,6 +25,7 @@ void tl_entry(void) {
     dword_t res = PowerGetActiveScheme((void*)0, &guid);
     if (res != 0) ExitProcess(10U);
     if (guid == (void*)0) ExitProcess(11U);
+    if (LocalFree(guid) != (void*)0) ExitProcess(15U);
     // PowerGetActiveScheme with null out param should fail
     res = PowerGetActiveScheme((void*)0, (void**)0);
     if (res != 87) ExitProcess(12U);

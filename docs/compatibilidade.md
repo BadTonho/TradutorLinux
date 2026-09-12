@@ -706,7 +706,7 @@ do host como argumentos.
 | `KERNEL32.dll` | `GetFullPathNameW` | Suportado | Normalização Windows completa (Wine `dlls/kernel32/path.c`): resolve relativo via `GetCurrentDirectory`, colapsa `.`/`..`, trata `C:`, `\` e `\\` (UNC); `file_part` aponta para após último `\`/`:` |
 | `KERNEL32.dll` | `GetFullPathNameA` | Suportado | Conversão `A` → `W` com mesma normalização; buffer insuficiente retorna `tamanho+1` e `ERROR_INSUFFICIENT_BUFFER` |
 | `SHELL32.dll` | `CommandLineToArgvW` | Suportado | Divide a linha de comando UTF-16 em argumentos, preservando grupos entre aspas; o bloco único retornado é liberado por `LocalFree` |
-| `SHELL32.dll` | `SHGetKnownFolderPath` | Suportado | Resolve `FOLDERID_RoamingAppData`, `LocalAppData`, `ProgramData`, `Desktop`, `Documents`, `Downloads` e `Profile` sob `C:\users\guest`/`C:\ProgramData` do prefixo ativo; nunca consulta `HOME`, XDG ou `/tmp` do host. |
+| `SHELL32.dll` | `SHGetKnownFolderPath` | Suportado | Resolve `FOLDERID_RoamingAppData`, `LocalAppData`, `ProgramData`, `Desktop`, `Documents`, `Downloads` e `Profile` sob `C:\users\guest`/`C:\ProgramData` do prefixo ativo; nunca consulta `HOME`, XDG ou `/tmp` do host e devolve a string por `CoTaskMemAlloc`. |
 | `SHELL32.dll` | `SHGetFolderPathW` | Suportado | Resolve `CSIDL_APPDATA`/`LOCAL_APPDATA`/`COMMON_APPDATA`/`DESKTOP`/`PERSONAL`/`PROFILE` sob o prefixo ativo e copia o caminho Windows para `pszPath[260]`. |
 | `SHELL32.dll` | `SHGetFolderPathAndSubDirW` | Suportado | Cria a base `CSIDL` e o subdiretório relativo sob `drive_c`; rejeita caminho absoluto ou componente `..` e retorna o caminho Windows canônico. |
 | `SHELL32.dll` | `ShellExecuteA/W` / `ShellExecuteExW` | Não suportado controlado | Valida strings/estrutura e retorna falha com `ERROR_NOT_SUPPORTED`; `SHELLEXECUTEINFOW` x64 tem 112 bytes, com `hInstApp` em 56 e `hProcess` em 104, ambos nulos na falha. Nenhum processo ou documento é aberto. |
@@ -716,7 +716,7 @@ do host como argumentos.
 | `UxTheme.dll` | `SetWindowTheme` | Suportado | Valida `hwnd` e wstrings, retorna `S_OK` (0) |
 | `WINMM.dll` | `timeSetEvent` | Suportado | Stub retorna `1` |
 | `dbghelp.dll` | `SymFromAddr` | Suportado | Valida `process`/`displacement`/`symbol`, `displacement=0`, retorna `0` (não encontrado) mas sem crash |
-| `POWRPROF.dll` | `PowerGetActiveScheme` / `PowerSetActiveScheme` / `CallNtPowerInformation` | Suportado | `PowerGetActiveScheme` aloca GUID `Balanced` via `malloc`, `PowerSetActiveScheme` `S_OK`, `CallNtPowerInformation` `memset` `0` |
+| `POWRPROF.dll` | `PowerGetActiveScheme` / `PowerSetActiveScheme` / `CallNtPowerInformation` | Suportado | `PowerGetActiveScheme` devolve GUID `Balanced` alocado por `LocalAlloc` e liberável por `LocalFree`; `PowerSetActiveScheme` `S_OK`, `CallNtPowerInformation` `memset` `0` |
 | `IPHLPAPI.DLL` | `GetAdaptersInfo` / `GetAdaptersAddresses` / `if_nametoindex` | Suportado no subconjunto | `getifaddrs` do host, contratos de buffer `ERROR_BUFFER_OVERFLOW`/`ERROR_NO_DATA`, registros x64 com strings UTF-16 de largura fixa, interfaces IPv4 e `if_nametoindex` real; IPv6 e campos DNS continuam fora |
 
 ### Stubs com contrato explícito
