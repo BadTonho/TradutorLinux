@@ -200,10 +200,12 @@ promoção da extração interativa nem do uso diário do WinRAR.
 
 O alvo separado `tests/apps/notepadpp/notepadpp_smoke.cpp` confirma primeiro a
 janela `Configurator` e o diálogo `Load stylers.xml failed`, fechando ambos por
-`WM_DELETE_WINDOW`. Em seguida, os builds Rust ON e C++ OFF produzem o mesmo
-trace: cinco eventos `cxx-throw ignored` do worker, `guest-signal` e exit `71`,
-sem `guest-timeout`. O resultado é uma falha controlada do convidado, não uma
-alegação de compatibilidade.
+`WM_DELETE_WINDOW` quando aparecem. No caminho direto atual, os builds Rust ON
+e C++ OFF produzem o mesmo trace: o import de `WinVerifyTrust` é resolvido,
+mas a exceção `0xE06D7363` ocorre antes da chamada, três handlers não
+compatíveis com `FuncInfo` v3 são ignorados e o processo termina em
+`ExitProcess(3)`, sem `guest-signal` ou `guest-timeout`. O resultado é uma
+falha controlada do convidado, não uma alegação de compatibilidade.
 
 O código `0xE06D7363` é a exceção C++ do aplicativo. O suporte atual cobre o
 subconjunto SEH explicitamente documentado, não despacho geral de exceções C++;

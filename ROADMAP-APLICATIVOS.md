@@ -2767,7 +2767,7 @@ point sem rejeição.
 | `7zFM_x64.exe` | `supported` (987 KB, 298 imports) | `seven_zip_smoke` exit `0` | GUI estendida fora do smoke |
 | `WinRAR_x64.exe` | `supported` (3,8 MB, ~251 imports) | exit `0` (extração real e cancelamento SFX) | – nos cenários já cobertos |
 | `putty_x64.exe` | `supported` (1,7 MB, 348 imports) | `guest-timeout 72` | bloqueio pós-ativação TCP |
-| `notepad++.exe` | `supported` (8,4 MB, ~400 imports) | `ExitProcess(3)` após bloqueio C++/SEH controlado | `WinVerifyTrust` para arquivo e unwind C++ fora do `FuncInfo` v3 |
+| `notepad++.exe` | `supported` (8,4 MB, ~400 imports) | `ExitProcess(3)` após bloqueio C++/SEH controlado | exceção C++/SEH fora do `FuncInfo` v3; `WinVerifyTrust` para arquivo ainda é um gate posterior |
 | `Rockstar-Games-Launcher.exe` | `supported` (112 MB) | `ExitProcess(3)` | antidetecção de ambiente |
 | `HWiNFO64.exe` | `malformed` (UPX0/UPX1) | não tentada | imagem empacotada UPX |
 | `Rufus_x64.exe` | `malformed` (entry W^X) | não tentada | imagem empacotada, W^X |
@@ -2982,9 +2982,11 @@ atual do Notepad++, sem transformar uma falha controlada em suporte funcional.
 
 Evidência reproduzível:
 
-- [x] O trace atual mostra `WinVerifyTrust(WTD_CHOICE_FILE)`, exceção C++
-  `0xE06D7363`, `unsupported-cxx-handler-during-search` e `ExitProcess(3)`;
-  nesta execução o processo pode terminar antes de criar `Configurator`.
+- [x] O import de `WinVerifyTrust` é resolvido, mas o trace atual não mostra uma
+  chamada à API: o processo lança a exceção C++ `0xE06D7363` durante a
+  verificação inicial, registra `unsupported-cxx-handler-during-search` e
+  termina em `ExitProcess(3)`; nesta execução pode terminar antes de criar
+  `Configurator`.
 - [x] `notepadpp_smoke` agora aceita somente os dois caminhos observados:
   fechar `Configurator` quando ela existe, ou detectar o bloqueio C++/SEH
   direto; ambos exigem ausência de `Load stylers.xml failed`, sinal e timeout.
@@ -3055,6 +3057,26 @@ controlado junto dos cenários diretos já autorizados.
   principal e não registra `ExitProcess`, sinal ou timeout convidado.
 - [x] `popular_apps_native_matrix` passou de 5/5 para 6/6 nos dois backends,
   sem adicionar DLL, shim ou regra específica ao runtime.
+
+### F13 concluído — Notepad++: ordenar o bloqueio C++/SEH antes do WinTrust (2026-09-12)
+
+Uma execução direta controlada sob Xvfb foi repetida nos builds Rust ON e C++
+OFF para confirmar qual API é realmente alcançada pelo Notepad++ sem
+interação.
+
+- [x] Os dois builds retornaram `3`, resolveram o import
+  `WINTRUST.dll!WinVerifyTrust` e registraram o mesmo `cxx-throw` com a
+  mensagem `Checking certificate ...`.
+- [x] Nenhuma chamada `wintrust` foi registrada antes do bloqueio; o dispatcher
+  encontrou três `handler-data` que não satisfazem o contrato `FuncInfo` v3,
+  registrou `unsupported-cxx-handler-during-search` e transferiu para
+  `ExitProcess(3)`, sem `guest-signal` ou `guest-timeout`.
+- [x] A sondagem GDB confirmou que os dados rejeitados são tabelas relativas
+  sem o magic `0x19930522` ou uma tabela SEH estática com contagem de escopos.
+  Nenhum desses formatos foi interpretado como C++ por tentativa.
+- [x] A matriz e o smoke continuam classificando o aplicativo como não
+  suportado. `WTD_CHOICE_FILE`/Authenticode permanece um gate posterior, caso
+  o suporte C++/SEH avance; não foi criado fallback criptográfico.
 
 ## Regras de validação
 
