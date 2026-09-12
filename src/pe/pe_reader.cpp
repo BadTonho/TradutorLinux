@@ -841,17 +841,24 @@ private:
     }
 
     [[nodiscard]] std::optional<ParseResult> parse_tls_directory() {
-        if (parser_state_.tls_directory_rva == 0 ||
+        if (parser_state_.tls_directory_rva == 0 &&
             parser_state_.tls_directory_size == 0) {
             return std::nullopt;
         }
+        if (parser_state_.tls_directory_rva == 0 ||
+            parser_state_.tls_directory_size == 0) {
+            return fail(ParseStatus::Malformed,
+                        "diretório TLS sem RVA ou tamanho");
+        }
         if (parser_state_.tls_directory_size < 40) {
-            return std::nullopt;
+            return fail(ParseStatus::Malformed,
+                        "diretório TLS menor que a estrutura IMAGE_TLS_DIRECTORY64");
         }
         const std::optional<std::size_t> directory = rva_to_file_offset(
             {parser_state_.tls_directory_rva, parser_state_.tls_directory_size});
         if (!directory.has_value()) {
-            return std::nullopt;
+            return fail(ParseStatus::Malformed,
+                        "diretório TLS fora dos dados físicos da imagem");
         }
 
         const std::size_t offset = *directory;
@@ -1241,18 +1248,6 @@ private:
         const std::optional<std::size_t> directory = rva_to_file_offset(
             {parser_state_.exception_directory_rva, parser_state_.exception_directory_size});
         if (!directory.has_value()) {
-            bool in_virtual_section = false;
-            for (const auto& sec : parser_state_.sections) {
-                if (parser_state_.exception_directory_rva >= sec.virtual_address &&
-                    parser_state_.exception_directory_rva + parser_state_.exception_directory_size <=
-                        sec.virtual_address + sec.virtual_size) {
-                    in_virtual_section = true;
-                    break;
-                }
-            }
-            if (in_virtual_section) {
-                return std::nullopt;
-            }
             return fail(ParseStatus::Malformed, "diretório de exceções fora da imagem (RVA " +
                         util::format_hex(parser_state_.exception_directory_rva) + " size " +
                         util::format_hex(parser_state_.exception_directory_size) + ")");

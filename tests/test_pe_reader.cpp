@@ -104,6 +104,30 @@ std::vector<std::byte> make_excessive_tls_callbacks_pe() {
     return result;
 }
 
+std::vector<std::byte> make_truncated_tls_directory_pe() {
+    BuildSpec spec;
+    spec.section_names = {".text", ".tls"};
+    spec.section_data = {std::vector<std::byte>(0x10), std::vector<std::byte>(40)};
+    spec.tls_rva = 0x2000;
+    spec.tls_size = 40;
+    std::vector<std::byte> result = build(spec);
+    constexpr std::size_t kSecondSectionRawSizeOffset = 0x148 + 40 + 16;
+    write_u32(result, kSecondSectionRawSizeOffset, 16);
+    return result;
+}
+
+std::vector<std::byte> make_virtual_only_exception_directory_pe() {
+    BuildSpec spec;
+    spec.section_names = {".text", ".pdata"};
+    spec.section_data = {std::vector<std::byte>(0x10), std::vector<std::byte>(12)};
+    spec.exception_rva = 0x2000;
+    spec.exception_size = 12;
+    std::vector<std::byte> result = build(spec);
+    constexpr std::size_t kSecondSectionRawSizeOffset = 0x148 + 40 + 16;
+    write_u32(result, kSecondSectionRawSizeOffset, 0);
+    return result;
+}
+
 std::vector<std::byte> make_export_pe() {
     constexpr std::uint32_t kExportRva = 0x2000;
     std::vector<std::byte> data(0xA0, std::byte{0});
@@ -369,6 +393,20 @@ TEST(PeReaderTest, RejectsExcessiveTlsCallbacks) {
 
     EXPECT_EQ(result.status, ParseStatus::Malformed);
     EXPECT_NE(result.error_message.find("callbacks"), std::string::npos);
+}
+
+TEST(PeReaderTest, RejectsTruncatedTlsDirectory) {
+    const ParseResult result = parse_pe(make_truncated_tls_directory_pe());
+
+    EXPECT_EQ(result.status, ParseStatus::Malformed);
+    EXPECT_NE(result.error_message.find("TLS"), std::string::npos);
+}
+
+TEST(PeReaderTest, RejectsVirtualOnlyExceptionDirectory) {
+    const ParseResult result = parse_pe(make_virtual_only_exception_directory_pe());
+
+    EXPECT_EQ(result.status, ParseStatus::Malformed);
+    EXPECT_NE(result.error_message.find("exceções"), std::string::npos);
 }
 
 TEST(PeReaderTest, ParsesRuntimeFunctionAndUnwindCodes) {
