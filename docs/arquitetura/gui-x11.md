@@ -61,9 +61,13 @@ ferramenta.
 No escopo atual, o estado de USER32 e o display X11 pertencem ao thread
 convidado principal, identificado por `GetCurrentThreadId() == 1`. As APIs
 stateful de janela, fila, menu, foco, captura, timer, diálogo e pintura só
-podem ser chamadas por esse thread. Uma chamada de outro thread não acessa as
-tabelas globais nem o display: falha com `ERROR_NOT_SUPPORTED` e registra o
-diagnóstico `thread-affinity`.
+podem ser chamadas por esse thread. `PostMessageA/W` é a exceção deliberada:
+uma thread secundária pode postar para um `HWND` registrado, e o thread
+principal entrega a mensagem pela sua fila. A fila cross-thread é limitada a
+4096 mensagens, valida o handle e mantém `lParam` como valor opaco; o runtime
+não copia o payload apontado. Uma chamada de qualquer outra API stateful de
+outro thread não acessa as tabelas globais nem o display: falha com
+`ERROR_NOT_SUPPORTED` e registra o diagnóstico `thread-affinity`.
 
 Esse contrato é uma restrição explícita do runtime, não uma equivalência
 completa com o modelo Win32. A expansão futura para janelas associadas a

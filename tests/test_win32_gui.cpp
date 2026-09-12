@@ -172,6 +172,53 @@ TEST(Win32GuiTest, RejectsStatefulGuiCallsFromNonPrimaryGuestThread) {
     EXPECT_EQ(tl_DestroyMenu(main_menu), 1);
 }
 
+TEST(Win32GuiTest, AllowsCrossThreadPostMessageToPrimaryQueue) {
+    for (WindowSlot& slot : g_windows) {
+        unregister_window_handle(&slot);
+    }
+    clear_cross_thread_window_messages();
+    g_windows = {};
+    g_quit_requested = false;
+
+    WindowSlot& window = g_windows[0];
+    window.used = true;
+    ASSERT_TRUE(register_window_handle(&window));
+
+    int post_result = 0;
+    std::thread worker([&] {
+        g_current_thread_id = 2;
+        post_result = tl_PostMessageA(&window, 0x8002U, 0x1234U, 0x5678);
+    });
+    worker.join();
+
+    EXPECT_EQ(post_result, 1);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorSuccess);
+    abi::GuestMsg message{};
+    EXPECT_EQ(tl_GetMessageA(&message, nullptr, 0, 0), 1);
+    EXPECT_EQ(message.hwnd, &window);
+    EXPECT_EQ(message.message, 0x8002U);
+    EXPECT_EQ(message.wparam, 0x1234U);
+    EXPECT_EQ(message.lparam, 0x5678);
+
+    int second_post_result = 0;
+    std::thread second_worker([&] {
+        g_current_thread_id = 2;
+        second_post_result = tl_PostMessageA(&window, 0x8003U, 0x9ABCU, 0xDEF0);
+    });
+    second_worker.join();
+    EXPECT_EQ(second_post_result, 1);
+    abi::GuestMsg peeked{};
+    EXPECT_EQ(tl_PeekMessageA(&peeked, nullptr, 0, 0, 0), 1);
+    EXPECT_EQ(peeked.message, 0x8003U);
+    abi::GuestMsg removed{};
+    EXPECT_EQ(tl_GetMessageA(&removed, nullptr, 0, 0), 1);
+    EXPECT_EQ(removed.message, 0x8003U);
+
+    unregister_window_handle(&window);
+    clear_cross_thread_window_messages();
+    g_windows = {};
+}
+
 
 TEST(Win32DialogTemplateTest, ParsesAlignedStandardTemplateAndRejectsBounds) {
     EXPECT_EQ(sizeof(runtime::GuestDialogTemplate), 18U);

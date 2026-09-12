@@ -2763,6 +2763,7 @@ point sem rejeição.
 | Aplicativo | --report | Execução atual | Próximo bloqueio |
 |---|---|---|---|
 | `7z_x64.exe` | `supported` (562 KB, 225 imports) | exit `0` (CLI sem args) | – fluxo completo já coberto |
+| `7zG.exe` | `supported` (PE32+; 208 imports) | operação `a` cria arquivo 7z e termina com exit `0` | ampliar cenários de interação além do progresso |
 | `7zFM_x64.exe` | `supported` (987 KB, 298 imports) | `seven_zip_smoke` exit `0` | GUI estendida fora do smoke |
 | `WinRAR_x64.exe` | `supported` (3,8 MB, ~251 imports) | exit `0` (cancel SFX) | extração real não validada |
 | `putty_x64.exe` | `supported` (1,7 MB, 348 imports) | `guest-timeout 72` | bloqueio pós-ativação TCP |
@@ -2871,6 +2872,33 @@ Evidência reproduzível:
   interação.
 - [x] A matriz recursiva do corpus foi atualizada de `7zG.exe|5` para
   `7zG.exe|0`; não houve DLL, shim ou regra específica de aplicativo.
+
+### F5 concluído — 7zG: `PostMessageA/W` cross-thread (2026-09-11)
+
+Objetivo: permitir que uma thread convidada secundária publique mensagens na
+fila GUI do thread principal, contrato usado pela operação real de criação de
+arquivo do `7zG.exe`, sem liberar o restante do estado USER32 para acesso
+cross-thread.
+
+Evidência reproduzível:
+
+- [x] Antes da mudança, `7zG.exe a ...` criava a janela `Progress`, mas o
+  trace registrava `api-failure` em `PostMessageA` por `thread-affinity`,
+  produzia somente um arquivo de 32 bytes e terminava em `guest-timeout 72`.
+- [x] `PostMessageA/W` agora valida o `HWND`, enfileira mensagens de threads
+  secundárias em uma fila limitada a 4096 entradas e entrega a mensagem no
+  thread principal por `GetMessageA/W` ou `PeekMessageA/W`; `lParam` permanece
+  opaco e não há cópia arbitrária de payload.
+- [x] A fixture genérica `tl_gui_cross_thread.exe`, sua manifestação e a
+  unitária `Win32GuiTest.AllowsCrossThreadPostMessageToPrimaryQueue` cobrem
+  criação de thread, post, `GetMessage` e `PeekMessage` sem regra de aplicativo.
+- [x] Os quatro testes da fixture e os smokes `runtime_gui_smoke` e
+  `seven_zip_gui_smoke` passaram sob Xvfb.
+- [x] Depois da mudança, a operação real `7zG.exe a ...` terminou com exit `0`,
+  criou um arquivo de 749 bytes e `7z_x64.exe l ...` executado pelo
+  TradutorLinux confirmou `input.txt` com 1596 bytes dentro do arquivo.
+- [x] Nenhuma DLL, shim ou seleção específica do 7-Zip foi adicionada; as
+  demais APIs stateful de USER32 continuam exigindo o thread principal.
 
 ## Regras de validação
 

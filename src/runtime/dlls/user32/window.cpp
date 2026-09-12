@@ -360,6 +360,7 @@ TL_MSABI abi::HWnd tl_CreateWindowExA(const std::uint32_t ex_style,
                                              std::to_string(slot.height)}};
             runtime_trace("CreateWindowExA", fields, 4);
         }
+        static_cast<void>(register_window_handle(&slot));
         set_last_error(abi::kErrorSuccess);
         return &slot;
     }
@@ -438,6 +439,7 @@ TL_MSABI abi::HWnd tl_CreateWindowExA(const std::uint32_t ex_style,
                                        24, 132, 0x334155U, false);
         gui::platform::flush_window(slot.native);
     }
+    static_cast<void>(register_window_handle(&slot));
     GuestCreateStructA cs{};
     cs.lpCreateParams = param;
     cs.hInstance = instance;
@@ -472,6 +474,7 @@ TL_MSABI abi::HWnd tl_CreateWindowExA(const std::uint32_t ex_style,
     };
     runtime_trace("CreateWindowExA", create_end_fields, 3);
     if (create_result == -1) {
+        unregister_window_handle(&slot);
         gui::platform::destroy_window(slot.native);
         slot = {};
         set_last_error(abi::kErrorInvalidParameter);
@@ -612,6 +615,7 @@ TL_MSABI int tl_DestroyWindow(const void* const window) noexcept {
         set_last_error(abi::kErrorInvalidHandle);
         return 0;
     }
+    unregister_window_handle(slot);
     if (slot->destroying) {
         set_last_error(abi::kErrorSuccess);
         return 1;
@@ -621,6 +625,7 @@ TL_MSABI int tl_DestroyWindow(const void* const window) noexcept {
     // parent so a modal dialog cannot leave stale HWND tokens behind.
     for (WindowSlot& child : g_windows) {
         if (child.used && child.parent == slot) {
+            unregister_window_handle(&child);
             if (g_focused_control == &child) {
                 g_focused_control = nullptr;
             }

@@ -100,6 +100,7 @@ namespace {
     dialog.extended_style = parsed.extended_style;
     dialog.is_dialog = true;
     dialog.parent = parent_slot;
+    static_cast<void>(register_window_handle(&dialog));
     for (const runtime::DialogControl& item : parsed.controls) {
         const auto child_it = std::find_if(g_windows.begin(), g_windows.end(),
                                            [](const WindowSlot& slot) { return !slot.used; });
@@ -149,6 +150,7 @@ namespace {
                                          : ControlKind::Generic;
                 break;
         }
+        static_cast<void>(register_window_handle(&child));
         dialog.dialog_children.push_back(&child);
     }
     render_controls(dialog);
@@ -452,6 +454,7 @@ TL_MSABI std::intptr_t tl_DialogBoxParamW(const void* const instance,
     dialog.extended_style = parsed.extended_style;
     dialog.is_dialog = true;
     dialog.parent = parent_slot;
+    static_cast<void>(register_window_handle(&dialog));
     for (const runtime::DialogControl& item : parsed.controls) {
         const auto child_it = std::find_if(g_windows.begin(), g_windows.end(),
                                            [](const WindowSlot& slot) { return !slot.used; });
@@ -505,6 +508,7 @@ TL_MSABI std::intptr_t tl_DialogBoxParamW(const void* const instance,
                                          : ControlKind::Generic;
                 break;
         }
+        static_cast<void>(register_window_handle(&child));
         dialog.dialog_children.push_back(&child);
     }
     {

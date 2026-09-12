@@ -470,6 +470,7 @@ diretamente. Ele é experimental, não altera o subsistema de console e só acei
 | `USER32.dll` | `UpdateWindow` | Suportado | Despacha `WM_PAINT` diretamente ao `WNDPROC` |
 | `USER32.dll` | `InvalidateRect` | Suportado no subconjunto | Valida o `RECT` opcional, enfileira um `WM_PAINT` por janela até a entrega e faz flush da superfície X11 projetada para filhos lógicos |
 | `USER32.dll` | `GetMessageA` | Suportado no subconjunto | Traduz eventos X11 para `WM_PAINT`/`WM_LBUTTONDOWN`/`WM_KEYDOWN`/`WM_KEYUP`/`WM_CLOSE`; o hit-test entrega mouse a filhos lógicos customizados com `HWND` e coordenadas locais, enquanto controles comuns sem `WNDPROC` preservam suas notificações no parent; entrega mensagens pendentes antes dos eventos X11, despacha `WM_TIMER` expirados e retorna `0` com `WM_QUIT` após `PostQuitMessage` |
+| `USER32.dll` | `PostMessageA` / `PostMessageW` | Suportado no subconjunto | Thread principal enfileira diretamente; threads convidadas secundárias podem postar para um `HWND` registrado, e a mensagem é entregue pela fila do thread principal; a fila cross-thread é limitada a 4096 mensagens e não copia payload apontado por `lParam` |
 | `USER32.dll` | `TranslateMessage` | Suportado | Converte o `WM_KEYDOWN` mais recente em `WM_CHAR` com o caractere real (sem `WM_CHAR` para teclas sem caractere) |
 | `USER32.dll` | `SetTimer` | Suportado | Timer periódico por janela → `WM_TIMER`; só `lpTimerFunc == NULL` |
 | `USER32.dll` | `KillTimer` | Suportado | Remove um timer ativo |
@@ -1041,7 +1042,7 @@ continuam sendo a evidência necessária para registrá-lo como suportado.
 | 13 | `Affinity x64.msix` | Zip/MSIX ZIP64 | — | `malformed` exit `4` | `not-attempted` | Rust e C++ rejeitam o pacote no limite agregado de 512 MiB antes da extração; não houve instalação, cadastro ou execução. O conteúdo interno `.NET` continua fora do escopo e o pacote permanece sem suporte funcional |
 | 14 | `*_x64_Installer.exe` `CapCut/Epic/Creative/Everything/RTSS.exe` | PE32 (x86) | — | `unsupported-architecture` `0x14c` `exit 5` | `parse-failed status="unsupported-architecture"` `src/pe/pe_reader.cpp:685` |
 
-| 2a | `7-Zip/7zG.exe` | PE32+ x86-64 | 208/208 (100%) | `supported` | sob Xvfb cria a janela `7-Zip` e termina em `guest-timeout` exit `72` sem interação | a lacuna era somente `KERNEL32!lstrcatW`; a API agora possui fixture UTF-16 e o relatório real do `7zG` é aprovado; timeout é apenas ausência de interação |
+| 2a | `7-Zip/7zG.exe` | PE32+ x86-64 | 208/208 (100%) | `supported` | sob Xvfb executa `a`, cria a janela `Progress`, gera um arquivo 7z de 749 bytes e termina com exit `0`; `7z_x64.exe l` confirma `input.txt` | `lstrcatW` e `PostMessageA/W` cross-thread possuem fixtures genéricas; a fila GUI continua limitada ao thread principal para as demais APIs stateful |
 
 ### Atualização do corpus externo — rodada B (2026-09-07)
 

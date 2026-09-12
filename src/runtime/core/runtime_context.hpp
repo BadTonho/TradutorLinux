@@ -32,6 +32,7 @@
 #include <cstdint>
 #include <cstring>
 #include <ctime>
+#include <deque>
 #include <fstream>
 #include <functional>
 #include <iostream>
@@ -201,6 +202,26 @@ extern WindowSlot* g_modal_parent;
 extern bool g_modal_parent_was_enabled;
 extern bool g_quit_requested;
 extern std::uint32_t g_quit_code;
+
+struct CrossThreadWindowMessage {
+    std::uintptr_t window{};
+    std::uint32_t message{};
+    std::uintptr_t wparam{};
+    std::intptr_t lparam{};
+};
+
+bool register_window_handle(const void* handle) noexcept;
+void unregister_window_handle(const void* handle) noexcept;
+[[nodiscard]] bool is_registered_window_handle(const void* handle) noexcept;
+[[nodiscard]] bool post_cross_thread_window_message(const void* window,
+                                                    std::uint32_t message,
+                                                    std::uintptr_t wparam,
+                                                    std::intptr_t lparam) noexcept;
+[[nodiscard]] bool peek_cross_thread_window_message(const void* window_filter,
+                                                    CrossThreadWindowMessage& message) noexcept;
+[[nodiscard]] bool take_cross_thread_window_message(const void* window_filter,
+                                                    CrossThreadWindowMessage& message) noexcept;
+void clear_cross_thread_window_messages() noexcept;
 
 struct MenuSlot;
 

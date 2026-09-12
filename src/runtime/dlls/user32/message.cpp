@@ -785,6 +785,17 @@ TL_MSABI int tl_GetMessageA(void* const msg, const void* const window,
         }
     }
     for (;;) {
+        CrossThreadWindowMessage cross_thread_message{};
+        while (take_cross_thread_window_message(window, cross_thread_message)) {
+            void* const target = reinterpret_cast<void*>(cross_thread_message.window);
+            if (find_window_slot(target) == nullptr) {
+                continue;
+            }
+            write_guest_msg(msg, target, cross_thread_message.message,
+                            cross_thread_message.wparam, cross_thread_message.lparam);
+            set_last_error(abi::kErrorSuccess);
+            return 1;
+        }
         for (WindowSlot& slot : g_windows) {
             if (!slot.used || slot.native == nullptr || (window != nullptr && window != &slot)) {
                 continue;
@@ -1391,6 +1402,18 @@ TL_MSABI int tl_SendMessageW(const void* window, const std::uint32_t message,
 
 TL_MSABI int tl_PostMessageA(const void* window, const std::uint32_t message,
                              const abi::Wparam wparam, const abi::Lparam lparam) noexcept {
+    if (g_current_thread_id != kMainThreadId) {
+        if (!is_registered_window_handle(window)) {
+            set_last_error(abi::kErrorInvalidHandle);
+            return 0;
+        }
+        if (!post_cross_thread_window_message(window, message, wparam, lparam)) {
+            set_last_error(abi::kErrorNotEnoughMemory);
+            return 0;
+        }
+        set_last_error(abi::kErrorSuccess);
+        return 1;
+    }
     if (!user32_gui_thread_allowed("PostMessageA")) {
         return 0;
     }
@@ -1486,6 +1509,30 @@ TL_MSABI int tl_PeekMessageA(void* const msg, const void* const window,
     if (msg == nullptr || !mapped_guest_range(msg, sizeof(abi::GuestMsg), true)) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
+    }
+    CrossThreadWindowMessage cross_thread_message{};
+    while (peek_cross_thread_window_message(window, cross_thread_message)) {
+        void* const target = reinterpret_cast<void*>(cross_thread_message.window);
+        if (find_window_slot(target) == nullptr) {
+            CrossThreadWindowMessage discarded{};
+            static_cast<void>(take_cross_thread_window_message(window, discarded));
+            continue;
+        }
+        if ((remove_msg & kPmRemove) != 0U) {
+            CrossThreadWindowMessage removed{};
+            if (!take_cross_thread_window_message(window, removed)) {
+                continue;
+            }
+            cross_thread_message = removed;
+        }
+        *static_cast<abi::GuestMsg*>(msg) = abi::GuestMsg{
+            .hwnd = target,
+            .message = cross_thread_message.message,
+            .padding = 0,
+            .wparam = cross_thread_message.wparam,
+            .lparam = cross_thread_message.lparam,
+        };
+        return 1;
     }
     WindowSlot* slot = find_window_slot(window);
     if (slot == nullptr && window == nullptr) {

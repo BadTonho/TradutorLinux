@@ -277,6 +277,9 @@ function(tl_add_pe_fixture target_name source_file manifest_file)
             elseif(target_name STREQUAL "tl_gui_dynamic_ws2")
                 set(runtime_extra_args
                     "-DEXPECTED_HEX=6775692d64796e616d69632d7773320a")
+            elseif(target_name STREQUAL "tl_gui_cross_thread")
+                set(runtime_extra_args
+                    "-DEXPECTED_HEX=63726f73732d7468726561642d706f73740a")
             elseif(target_name STREQUAL "tl_version")
                 set(runtime_extra_args
                     "-DEXPECTED_HEX=76657273696f6e0a")
@@ -1486,6 +1489,10 @@ tl_add_pe_fixture(tl_dynamic_ws2 src/tl_dynamic_ws2.c manifests/tl_dynamic_ws2.j
     REPORT_SYMBOL "LoadLibraryA")
 
 tl_add_pe_fixture(tl_gui_dynamic_ws2 src/tl_gui_dynamic_ws2.c manifests/tl_gui_dynamic_ws2.json
+    LINK_KERNEL32 LINK_USER32 EXPECT_RESOLVED CONSOLE REPORT RELOCATABLE
+    REPORT_SYMBOL "PostMessageA")
+
+tl_add_pe_fixture(tl_gui_cross_thread src/tl_gui_cross_thread.c manifests/tl_gui_cross_thread.json
     LINK_KERNEL32 LINK_USER32 EXPECT_RESOLVED CONSOLE REPORT RELOCATABLE
     REPORT_SYMBOL "PostMessageA")
 

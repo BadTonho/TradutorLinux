@@ -109,6 +109,16 @@ bool g_modal_parent_was_enabled = true;
 bool g_quit_requested = false;
 std::uint32_t g_quit_code = 0;
 
+namespace {
+
+constexpr std::size_t kMaxCrossThreadWindowMessages = 4096;
+std::array<const void*, 32> g_registered_window_handles{};
+std::mutex g_registered_window_handles_mutex;
+std::deque<CrossThreadWindowMessage> g_cross_thread_window_messages;
+std::mutex g_cross_thread_window_messages_mutex;
+
+}  // namespace
+
 std::array<MenuSlot, 256> g_menus{};
 std::array<FindSlot, 16> g_find_slots{};
 std::array<SnapshotSlot, 16> g_snapshots{};
@@ -666,6 +676,106 @@ WindowSlot* find_window_slot(const void* const handle) noexcept {
     return nullptr;
 }
 
+bool register_window_handle(const void* const handle) noexcept {
+    if (handle == nullptr) {
+        return false;
+    }
+    std::lock_guard lock(g_registered_window_handles_mutex);
+    if (std::find(g_registered_window_handles.begin(), g_registered_window_handles.end(), handle) !=
+        g_registered_window_handles.end()) {
+        return true;
+    }
+    const auto free_it = std::find(g_registered_window_handles.begin(),
+                                   g_registered_window_handles.end(), nullptr);
+    if (free_it == g_registered_window_handles.end()) {
+        return false;
+    }
+    *free_it = handle;
+    return true;
+}
+
+void unregister_window_handle(const void* const handle) noexcept {
+    if (handle == nullptr) {
+        return;
+    }
+    std::lock_guard lock(g_registered_window_handles_mutex);
+    const auto found = std::find(g_registered_window_handles.begin(),
+                                 g_registered_window_handles.end(), handle);
+    if (found != g_registered_window_handles.end()) {
+        *found = nullptr;
+    }
+}
+
+bool is_registered_window_handle(const void* const handle) noexcept {
+    if (handle == nullptr) {
+        return false;
+    }
+    std::lock_guard lock(g_registered_window_handles_mutex);
+    return std::find(g_registered_window_handles.begin(), g_registered_window_handles.end(), handle) !=
+           g_registered_window_handles.end();
+}
+
+bool post_cross_thread_window_message(const void* const window, const std::uint32_t message,
+                                      const std::uintptr_t wparam,
+                                      const std::intptr_t lparam) noexcept {
+    if (!is_registered_window_handle(window)) {
+        return false;
+    }
+    std::lock_guard lock(g_cross_thread_window_messages_mutex);
+    if (g_cross_thread_window_messages.size() >= kMaxCrossThreadWindowMessages) {
+        return false;
+    }
+    try {
+        g_cross_thread_window_messages.push_back(CrossThreadWindowMessage{
+            .window = reinterpret_cast<std::uintptr_t>(window),
+            .message = message,
+            .wparam = wparam,
+            .lparam = lparam,
+        });
+    } catch (...) {
+        return false;
+    }
+    return true;
+}
+
+bool peek_cross_thread_window_message(const void* const window_filter,
+                                      CrossThreadWindowMessage& message) noexcept {
+    std::lock_guard lock(g_cross_thread_window_messages_mutex);
+    const auto found = std::find_if(
+        g_cross_thread_window_messages.begin(), g_cross_thread_window_messages.end(),
+        [window_filter](const CrossThreadWindowMessage& candidate) {
+            return window_filter == nullptr ||
+                   candidate.window == reinterpret_cast<std::uintptr_t>(window_filter);
+        });
+    if (found == g_cross_thread_window_messages.end()) {
+        return false;
+    }
+    message = *found;
+    return true;
+}
+
+bool take_cross_thread_window_message(const void* const window_filter,
+                                      CrossThreadWindowMessage& message) noexcept {
+    std::lock_guard lock(g_cross_thread_window_messages_mutex);
+    const auto found = std::find_if(
+        g_cross_thread_window_messages.begin(), g_cross_thread_window_messages.end(),
+        [window_filter](const CrossThreadWindowMessage& candidate) {
+            return window_filter == nullptr ||
+                   candidate.window == reinterpret_cast<std::uintptr_t>(window_filter);
+        });
+    if (found == g_cross_thread_window_messages.end()) {
+        return false;
+    }
+    message = *found;
+    g_cross_thread_window_messages.erase(found);
+    return true;
+}
+
+void clear_cross_thread_window_messages() noexcept {
+    std::lock_guard lock(g_cross_thread_window_messages_mutex);
+    g_cross_thread_window_messages.clear();
+}
+
 WindowSlot* create_logical_control(WindowSlot& parent, const std::string_view class_name,
                                    const std::string_view title, const std::uint32_t style,
                                    const std::uintptr_t control_id, const int x, const int y,
@@ -702,6 +812,10 @@ WindowSlot* create_logical_control(WindowSlot& parent, const std::string_view cl
     slot.visible = style == 0U || (style & 0x10000000U) != 0U;
     slot.enabled = (style & 0x08000000U) == 0U;
     slot.combo_selection = -1;
+    if (!register_window_handle(&slot)) {
+        slot = {};
+        return nullptr;
+    }
     return &slot;
 }
 
@@ -1016,6 +1130,11 @@ GuestExecutionResult execute_guest_entry(const std::uintptr_t entry_point,
         return {};
     }
 
+    clear_cross_thread_window_messages();
+    {
+        std::lock_guard lock(g_registered_window_handles_mutex);
+        g_registered_window_handles = {};
+    }
     g_quit_requested = false;
     g_quit_code = 0;
     g_guest_execution_active = true;

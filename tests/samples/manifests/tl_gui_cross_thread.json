@@ -1,0 +1,28 @@
+{
+  "name": "tl_gui_cross_thread",
+  "format": "PE32+",
+  "machine": "AMD64",
+  "entry_point": "tl_entry",
+  "uses_crt": false,
+  "imports": {
+    "KERNEL32.dll": [
+      "CloseHandle",
+      "CreateThread",
+      "ExitProcess",
+      "GetStdHandle",
+      "WaitForSingleObject",
+      "WriteFile"
+    ],
+    "USER32.dll": [
+      "RegisterClassExA",
+      "CreateWindowExA",
+      "ShowWindow",
+      "GetMessageA",
+      "DispatchMessageA",
+      "DefWindowProcA",
+      "PostMessageA",
+      "DestroyWindow",
+      "PostQuitMessage"
+    ]
+  }
+}
