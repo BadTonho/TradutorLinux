@@ -69,8 +69,11 @@ sandbox ou uma fronteira de segurança.
 | `simple_todo` | 105 (GDI32/USER32/SHELL32/msvcrt) | **uso diário** | `targetapp_simple_todo_gui_smoke` `105/105` |
 | `7zFM_x64.exe` | 298 | **fluxo principal restrito** | menu, toolbar, endereço, navegação e lista são desenhados; o menu MENUEX abre submenus aninhados e encaminha itens folha por `WM_COMMAND`; a lista mostra entradas imediatas do diretório do executável, limitada a 128 linhas, permite seleção, hover e abre pastas por Enter ou duplo clique; a árvore lateral oferece hover, retorna à raiz e seleciona diretórios Linux conhecidos; a barra de endereço navega somente dentro da raiz visual; a toolbar mostra hover e pressão; o smoke externo versionado conclui `Copy` (`546`) para arquivo selecionado, dentro da raiz e sem sobrescrever; demais operações continuam limitadas |
 
-Evidência atual do `7zFM_x64.exe`: o runtime em `build/debug` abriu a janela
-real no X11 com `800x600`; o trace registrou a normalização da geometria
+Evidência atual do `7zFM_x64.exe`: o smoke em `tests/apps/7zip/seven_zip_smoke.cpp`
+prepara um catálogo e perfil schema 4 temporários, cadastra o aplicativo com
+ID `7zip` e o executa via `app run`. O runtime abriu a janela real no X11 com
+`800x600`; o trace registrou a seleção de `compat-extension=7zip` e a
+normalização da geometria
 inválida recebida do aplicativo e o shell desenhou as áreas de menu, toolbar,
 endereço, navegação, lista e status. A lista foi alimentada pelo diretório que
 contém o executável, sem recursão e com limite de 128 linhas; permite selecionar

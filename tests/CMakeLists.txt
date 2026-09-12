@@ -256,7 +256,7 @@ if(TL_XVFB_EXECUTABLE)
     endif()
 
     add_executable(seven_zip_smoke
-        gui/seven_zip_smoke.cpp
+        apps/7zip/seven_zip_smoke.cpp
     )
     target_include_directories(seven_zip_smoke PRIVATE "${TL_X11_INCLUDE_DIR}")
     target_link_libraries(seven_zip_smoke PRIVATE "${TL_X11_LIBRARY}")

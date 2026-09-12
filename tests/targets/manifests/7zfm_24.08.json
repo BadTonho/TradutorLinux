@@ -17,7 +17,7 @@
   },
   "fixture_manifest": "tests/samples/manifests/tl_7zfm_gui.json",
   "smoke": {
-    "driver": "tests/gui/seven_zip_smoke.cpp",
+    "driver": "tests/apps/7zip/seven_zip_smoke.cpp",
     "flow": "select-file-and-copy",
     "destination": "TL_7ZFM_COPY_DESTINATION",
     "requires_existing_destination": true,

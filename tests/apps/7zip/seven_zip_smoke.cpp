@@ -54,6 +54,48 @@ void stop_process(const pid_t pid) {
     (void)::waitpid(pid, nullptr, 0);
 }
 
+[[nodiscard]] bool run_app_add(const std::filesystem::path& runtime,
+                                const std::filesystem::path& executable,
+                                const std::filesystem::path& prefix,
+                                const std::filesystem::path& config_home) {
+    const pid_t pid = ::fork();
+    if (pid == 0) {
+        if (::setenv("XDG_CONFIG_HOME", config_home.c_str(), 1) != 0 ||
+            ::setenv("XDG_DATA_HOME", config_home.c_str(), 1) != 0 ||
+            ::setenv("HOME", config_home.c_str(), 1) != 0 ||
+            ::setenv("APPDATA", config_home.c_str(), 1) != 0) {
+            ::_exit(126);
+        }
+        ::execl(runtime.c_str(), runtime.c_str(), "app", "add", executable.c_str(),
+                "--name", "7-Zip File Manager", "--prefix", prefix.c_str(), "--id", "7zip",
+                static_cast<char*>(nullptr));
+        ::_exit(127);
+    }
+    if (pid < 0) {
+        return false;
+    }
+    int status = 0;
+    if (!wait_for_exit(pid, 10s, &status)) {
+        stop_process(pid);
+        return false;
+    }
+    return WIFEXITED(status) && WEXITSTATUS(status) == 0;
+}
+
+[[nodiscard]] bool write_compatibility_profile(const std::filesystem::path& prefix) {
+    std::ofstream profile(prefix / "compat" / "profile.json");
+    profile << R"json({
+  "schema": 4,
+  "app_id": "7zip",
+  "files": [],
+  "dlls": [],
+  "backend": {"kind": "native"},
+  "extension": "7zip"
+}
+)json";
+    return profile.good();
+}
+
 [[nodiscard]] XvfbProcess start_xvfb() {
     int display_pipe[2]{};
     if (::pipe(display_pipe) != 0) {
@@ -182,6 +224,64 @@ void stop_runtime_process(const pid_t pid) {
     return sent;
 }
 
+[[nodiscard]] bool run_direct_without_extension(const std::filesystem::path& runtime,
+                                                const std::filesystem::path& executable,
+                                                const std::string& display_name,
+                                                const std::filesystem::path& trace_path,
+                                                const std::filesystem::path& config_home) {
+    const int trace_fd = ::open(trace_path.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0600);
+    if (trace_fd < 0) {
+        return false;
+    }
+    const pid_t runtime_pid = ::fork();
+    if (runtime_pid == 0) {
+        (void)::setpgid(0, 0);
+        (void)::setenv("DISPLAY", display_name.c_str(), 1);
+        (void)::setenv("XDG_CONFIG_HOME", config_home.c_str(), 1);
+        (void)::setenv("XDG_DATA_HOME", config_home.c_str(), 1);
+        (void)::setenv("HOME", config_home.c_str(), 1);
+        (void)::setenv("APPDATA", config_home.c_str(), 1);
+        (void)::unsetenv("TL_7ZFM_COPY_DESTINATION");
+        (void)::dup2(trace_fd, STDERR_FILENO);
+        ::close(trace_fd);
+        ::execl(runtime.c_str(), runtime.c_str(), "--trace", executable.c_str(),
+                static_cast<char*>(nullptr));
+        ::_exit(127);
+    }
+    ::close(trace_fd);
+    if (runtime_pid < 0) {
+        return false;
+    }
+    (void)::setpgid(runtime_pid, runtime_pid);
+
+    Display* const display = ::XOpenDisplay(display_name.c_str());
+    Window window = 0;
+    if (display != nullptr) {
+        for (int attempt = 0; attempt < 100 && window == 0; ++attempt) {
+            window = find_window_by_name(display, DefaultRootWindow(display), "7-Zip");
+            if (window == 0) {
+                std::this_thread::sleep_for(100ms);
+            }
+        }
+        if (window != 0) {
+            (void)send_close(display, window);
+        }
+        ::XCloseDisplay(display);
+    }
+
+    int runtime_status = 0;
+    const bool runtime_exited = wait_for_exit(runtime_pid, 3000ms, &runtime_status);
+    if (!runtime_exited) {
+        stop_runtime_process(runtime_pid);
+    }
+    std::ifstream trace_input(trace_path);
+    const std::string trace{std::istreambuf_iterator<char>{trace_input}, {}};
+    return display != nullptr && window != 0 && runtime_exited && WIFEXITED(runtime_status) &&
+           WEXITSTATUS(runtime_status) == 0 &&
+           trace.find("compat-extension") == std::string::npos &&
+           trace.find("SevenZipOperation") == std::string::npos;
+}
+
 [[nodiscard]] bool copy_runtime_sample(const std::filesystem::path& target,
                                         const std::filesystem::path& staging) {
     std::error_code error;
@@ -220,12 +320,42 @@ void stop_runtime_process(const pid_t pid) {
         return SmokeResult::Failed;
     }
 
+    const std::filesystem::path isolated_prefix =
+        staging.parent_path() / (staging.filename().string() + "-prefix");
+    const std::filesystem::path config_home =
+        staging.parent_path() / (staging.filename().string() + "-config");
+    if (!std::filesystem::create_directories(config_home, error) || error ||
+        !run_app_add(runtime, staging / "7zFM.exe", isolated_prefix, config_home) ||
+        !write_compatibility_profile(isolated_prefix)) {
+        std::cerr << "falha ao preparar catálogo/perfil do 7-Zip em " << staging << '\n';
+        std::filesystem::remove_all(staging, error);
+        std::filesystem::remove_all(isolated_prefix, error);
+        std::filesystem::remove_all(config_home, error);
+        return SmokeResult::Failed;
+    }
+
     const XvfbProcess xvfb = start_xvfb();
     if (xvfb.pid <= 0 || xvfb.display.empty()) {
         std::cerr << "falha ao iniciar Xvfb\n";
         std::filesystem::remove_all(staging, error);
+        std::filesystem::remove_all(isolated_prefix, error);
+        std::filesystem::remove_all(config_home, error);
         std::cerr << "smoke do 7-Zip GUI ignorado: Xvfb indisponível\n";
         return SmokeResult::Skipped;
+    }
+
+    const std::filesystem::path direct_trace_path =
+        staging.parent_path() / (staging.filename().string() + "-direct-trace.log");
+    const bool direct_generic = run_direct_without_extension(
+        runtime, staging / "7zFM.exe", xvfb.display, direct_trace_path, config_home);
+    if (!direct_generic) {
+        std::cerr << "execução direta ativou ou não encerrou o shell genérico esperado\n";
+        stop_process(xvfb.pid);
+        std::filesystem::remove_all(staging, error);
+        std::filesystem::remove_all(isolated_prefix, error);
+        std::filesystem::remove_all(config_home, error);
+        std::filesystem::remove(direct_trace_path, error);
+        return SmokeResult::Failed;
     }
 
     const std::filesystem::path trace_path = staging / "trace.log";
@@ -235,13 +365,17 @@ void stop_runtime_process(const pid_t pid) {
     if (runtime_pid == 0) {
         (void)::setpgid(0, 0);
         (void)::setenv("DISPLAY", xvfb.display.c_str(), 1);
+        (void)::setenv("XDG_CONFIG_HOME", config_home.c_str(), 1);
+        (void)::setenv("XDG_DATA_HOME", config_home.c_str(), 1);
+        (void)::setenv("HOME", config_home.c_str(), 1);
+        (void)::setenv("APPDATA", config_home.c_str(), 1);
         (void)::setenv("TL_7ZFM_COPY_DESTINATION", (staging / "output").c_str(), 1);
         (void)::dup2(trace_fd, STDERR_FILENO);
         (void)::dup2(output_fd, STDOUT_FILENO);
         ::close(trace_fd);
         ::close(output_fd);
-        ::execl(runtime.c_str(), runtime.c_str(), "--trace=runtime,gui,process",
-                (staging / "7zFM.exe").c_str(), static_cast<char*>(nullptr));
+        ::execl(runtime.c_str(), runtime.c_str(), "app", "run", "7zip",
+                "--trace=runtime,gui,process", static_cast<char*>(nullptr));
         ::_exit(127);
     }
     if (trace_fd >= 0) {
@@ -254,6 +388,9 @@ void stop_runtime_process(const pid_t pid) {
         stop_process(xvfb.pid);
         std::cerr << "falha ao iniciar o runtime\n";
         std::filesystem::remove_all(staging, error);
+        std::filesystem::remove_all(isolated_prefix, error);
+        std::filesystem::remove_all(config_home, error);
+        std::filesystem::remove(direct_trace_path, error);
         return SmokeResult::Failed;
     }
     (void)::setpgid(runtime_pid, runtime_pid);
@@ -303,8 +440,12 @@ void stop_runtime_process(const pid_t pid) {
 
     std::ifstream trace_input(trace_path);
     const std::string trace{std::istreambuf_iterator<char>{trace_input}, {}};
-    passed = passed && trace.find("SevenZipOperation operation=\"copy\" status=\"success\"") !=
-                        std::string::npos &&
+    passed = passed && trace.find("compat-profile status=\"loaded\"") != std::string::npos &&
+             trace.find("compat-extension status=\"selected\" id=\"7zip\"") !=
+                 std::string::npos &&
+             trace.find("compat-extension status=\"none\"") == std::string::npos &&
+             trace.find("SevenZipOperation operation=\"copy\" status=\"success\"") !=
+                 std::string::npos &&
              trace.find("source-name=\"input.txt\"") != std::string::npos;
     if (!passed) {
         std::cerr << "smoke do 7-Zip não confirmou cópia e trace; window=" << window
@@ -320,6 +461,9 @@ void stop_runtime_process(const pid_t pid) {
         }
     }
     std::filesystem::remove_all(staging, error);
+    std::filesystem::remove_all(isolated_prefix, error);
+    std::filesystem::remove_all(config_home, error);
+    std::filesystem::remove(direct_trace_path, error);
     return passed ? SmokeResult::Passed : SmokeResult::Failed;
 }
 

@@ -43,5 +43,9 @@ fora da execução funcional.
 
 Com o mesmo parâmetro e Xvfb disponível, os smokes GUI reais de 7-Zip File
 Manager, PuTTY, WinRAR SFX e Notepad++ também são registrados separadamente no
-CTest. Cada cenário cria seu próprio Xvfb/staging e mantém seu resultado
-limitado ao comportamento documentado na matriz de compatibilidade.
+CTest. O smoke do 7-Zip prepara catálogo, prefixo e
+`compat/profile.json` schema 4 temporários, cadastra o aplicativo com ID
+`7zip` e executa somente por `app run`; o trace exige `compat-profile` carregado
+e `compat-extension` selecionada. Cada cenário cria seu próprio Xvfb/staging e
+mantém seu resultado limitado ao comportamento documentado na matriz de
+compatibilidade.

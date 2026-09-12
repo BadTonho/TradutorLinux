@@ -51,28 +51,33 @@ e `tests/test_win32.cpp`.
 **Prioridade:** alta. É uma correção arquitetural real, mas não deve ser
 tratada como uma simples movimentação de arquivo.
 
-**Origem:** `src/runtime/gui_controls.cpp` e
+**Status:** concluída. A seleção explícita por perfil schema 4, a extensão
+host-side, o alvo separado e o smoke por `app run` estão implementados e
+validados nos commits da F1. As etapas posteriores desta proposta não devem
+reintroduzir lógica específica do 7-Zip no runtime genérico.
+
+**Origem histórica:** `src/runtime/gui_controls.cpp` e
 `src/runtime/gui_controls.hpp`.
 
 A lógica identificada por nomes como `SevenZipDirectoryEntry`,
-`perform_seven_zip_copy` e `render_seven_zip_file_manager` não pertence ao
-runtime genérico. Ela deve ser movida para uma extensão explícita em
-`compat/apps/7zip/`, com os cenários correspondentes em
+`perform_seven_zip_copy` e `render_seven_zip_file_manager` foi movida para uma
+extensão explícita em `compat/apps/7zip/`, com os cenários correspondentes em
 `tests/apps/7zip/`.
 
-Regras:
+Contratos preservados:
 
 - o runtime genérico continua oferecendo janelas, controles, mensagens e
   desenho que tenham contrato geral;
 - a extensão só pode ser selecionada por perfil ou prefixo explícito;
 - nenhum comportamento do 7-Zip pode alterar silenciosamente outro aplicativo;
 - a extensão não deve conter DLL binária gerada ou baixada;
-- o smoke existente do 7-Zip deve proteger a seleção, o contrato e o
-  isolamento da extensão.
+- o smoke do 7-Zip protege a seleção, o contrato, a execução por `app run`, a
+  cópia e o isolamento da extensão; a execução direta também é verificada sem
+  ativar a extensão.
 
 **Conclusão:** o código genérico não pode incluir referências específicas ao
-7-Zip depois desta etapa; a integração deve continuar reproduzível e a matriz
-de compatibilidade deve declarar o nível funcional separadamente.
+7-Zip; a integração reproduzível e a matriz de compatibilidade declaram o
+nível funcional separadamente.
 
 ### F2 — Dividir o estado interno do runtime
 
