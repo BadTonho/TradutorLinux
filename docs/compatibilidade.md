@@ -1047,7 +1047,7 @@ continuam sendo a evidência necessária para registrá-lo como suportado.
 | 13 | `Affinity x64.msix` | Zip/MSIX ZIP64 | — | `malformed` exit `4` | `not-attempted` | Rust e C++ rejeitam o pacote no limite agregado de 512 MiB antes da extração; não houve instalação, cadastro ou execução. O conteúdo interno `.NET` continua fora do escopo e o pacote permanece sem suporte funcional |
 | 14 | `*_x64_Installer.exe` `CapCut/Epic/Creative/Everything/RTSS.exe` | PE32 (x86) | — | `unsupported-architecture` `0x14c` `exit 5` | `parse-failed status="unsupported-architecture"` `src/pe/pe_reader.cpp:685` |
 
-| 2a | `7-Zip/7zG.exe` | PE32+ x86-64 | 208/208 (100%) | `supported` | sob Xvfb executa `a`, cria a janela `Progress`, gera um arquivo 7z de 749 bytes e termina com exit `0`; `7z_x64.exe l` confirma `input.txt`; uma repetição controlada terminou em `guest-timeout 72` | `lstrcatW`, `PostMessageA/W` cross-thread e o trace genérico de threads/eventos possuem fixtures; no caso intermitente o worker/eventos concluem, mas não há `WM_TIMER` antes do timeout e a fila modal permanece investigada |
+| 2a | `7-Zip/7zG.exe` | PE32+ x86-64 | 208/208 (100%) | `supported` | sob Xvfb uma execução controlada de `a` cria a janela `Progress`, gera um arquivo 7z válido e termina com exit `0`; `7z_x64.exe l` confirma `input.txt`; repetições controladas também terminam em `guest-timeout 72` | `lstrcatW`, `PostMessageA/W` cross-thread e o trace genérico de threads/eventos possuem fixtures; no caso intermitente o worker/eventos concluem, mas não há `WM_TIMER` antes do timeout e a fila modal permanece investigada |
 
 ### Atualização do corpus externo — rodada B (2026-09-07)
 

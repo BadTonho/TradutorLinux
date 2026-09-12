@@ -28,8 +28,8 @@ teste e registro reproduzível.
 | Grupo | Resultado atual | Próxima ação |
 |---|---|---|
 | `--report` | Matriz do corpus: 27/27 casos passaram com paridade Rust ON/C++ OFF | Preservar a separação entre análise e execução |
-| Execução | 7-Zip CLI/GUI, operação `7zG`, WinRAR extração/SFX e os smokes controlados de PuTTY/Notepad++ passaram | Avançar somente com novo cenário reproduzível |
-| GUI | 7zFM, WinRAR SFX, PuTTY e Notepad++ executaram sob Xvfb próprio; os resultados funcionais permanecem limitados e documentados | Ampliar interação somente após observar um contrato genérico real |
+| Execução | 7-Zip CLI, smoke do 7zFM, uma execução bem-sucedida da operação `7zG`, extração/SFX do WinRAR e smokes controlados de PuTTY/Notepad++ passaram; repetições de `7zG` ainda terminam intermitentemente em timeout | Avançar somente com novo cenário reproduzível |
+| GUI | 7zFM, WinRAR SFX, PuTTY e Notepad++ foram sondados sob Xvfb próprio; os smokes de PuTTY/Notepad++ validam diagnósticos controlados, não suporte funcional | Ampliar interação somente após observar um contrato genérico real |
 | PE32/x86 | 12 arquivos rejeitados por arquitetura não suportada | Manter fora do escopo até decisão própria |
 | Unwind x64 | 6 executáveis agora passam no `--report`; o trace registra V1/V2, cadeias e `extended-set-fpreg` | Avaliar as limitações de execução de cada aplicativo |
 | HWiNFO64 | Imagem empacotada: diretório de exports em região sem dados crus | Manter rejeição segura e registrar UPX0/UPX1 |
@@ -2077,8 +2077,8 @@ Evidência reproduzível de 2026-09-07:
 - [x] Os mesmos dois testes passaram em `build/debug` (C++ OFF), com saída e
   classificação equivalentes.
 - [x] `popular_apps_native_matrix` e `popular_apps_install_matrix` passaram
-  em Rust ON e C++ OFF: 5/5 execuções controladas e 4/4 instalações
-  controladas por build.
+  em Rust ON e C++ OFF: 6/6 execuções controladas e 8/8 casos de instalação
+  controlada por build.
 - [x] `putty_ssh_local_probe` passou em ambos os builds após o clique em
   `Open`, sem bytes no listener e sem processo residual.
 
@@ -2088,7 +2088,7 @@ Limites mantidos:
   antes da execução; HWiNFO continua rejeitado por imagem empacotada e
   Affinity por pacote fora do limite estrutural.
 - DLLs e instaladores não são iniciados indiscriminadamente. Instalação só é
-  exercitada pelos quatro candidatos com staging, timeout, memória e limpeza
+  exercitada pelos oito casos com staging, timeout, memória e limpeza
   controlados já aprovados pela matriz.
 - A criação da janela de sessão não é handshake SSH nem suporte funcional do
   PuTTY; o próximo bloqueio exige evidência nova do fluxo interno antes de
@@ -2894,9 +2894,11 @@ Evidência reproduzível:
   criação de thread, post, `GetMessage` e `PeekMessage` sem regra de aplicativo.
 - [x] Os quatro testes da fixture e os smokes `runtime_gui_smoke` e
   `seven_zip_gui_smoke` passaram sob Xvfb.
-- [x] Depois da mudança, a operação real `7zG.exe a ...` terminou com exit `0`,
-  criou um arquivo de 749 bytes e `7z_x64.exe l ...` executado pelo
-  TradutorLinux confirmou `input.txt` com 1596 bytes dentro do arquivo.
+- [x] Depois da mudança, uma execução real de `7zG.exe a ...` terminou com exit
+  `0`, criou um arquivo 7z válido e `7z_x64.exe l ...` executado pelo
+  TradutorLinux confirmou a presença de `input.txt`. O tamanho do arquivo e da
+  entrada dependem do caso de teste; essa evidência não fixa os valores
+  históricos de 749/1596 bytes como contrato.
 - [x] Nenhuma DLL, shim ou seleção específica do 7-Zip foi adicionada; as
   demais APIs stateful de USER32 continuam exigindo o thread principal.
 

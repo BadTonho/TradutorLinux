@@ -27,17 +27,19 @@ pacotes e instaladores rejeitados nunca são iniciados, e cada exit esperado é
 fixado no catálogo do teste para que uma mudança de formato ou arquitetura
 falhe de forma visível.
 
-`popular_apps_native_matrix` executa somente os cinco PE32+ com ação direta já
-documentada: 7-Zip, os dois binários WinRAR, Rockstar e Rufus. Cada caso usa
+`popular_apps_native_matrix` executa somente os seis casos PE32+ com ação direta
+ou rejeição pré-entry já documentados: 7-Zip, os dois binários WinRAR, Rockstar,
+Rufus e GUP do Notepad++. Cada caso usa
 prefixo temporário, ambiente headless, `--timeout 3`, limites de CPU/memória e
 verifica o exit code e o diagnóstico esperado; instaladores, DLLs e cenários
 interativos de GUI permanecem nos testes específicos.
 
-`popular_apps_install_matrix` cobre somente os quatro candidatos aprovados
-para instalação controlada: Roblox, G HUB, o alias byte-a-byte e Affinity. Cada
-caso usa `HOME`, `XDG_CONFIG_HOME`, `APPDATA` e prefixo temporários, verifica o
-estágio/erro esperado e exige ausência de arquivos, extração e cadastro após a
-rejeição. Instaladores PE32/x86 permanecem fora.
+`popular_apps_install_matrix` cobre oito casos controlados: Roblox, G HUB, o
+alias byte-a-byte, Affinity e as rejeições pré-extração de CPU-Z, GPU-Z,
+HWMonitor e HWiNFO. Cada caso usa `HOME`, `XDG_CONFIG_HOME`, `APPDATA` e
+prefixo temporários, verifica o estágio/erro esperado e exige ausência de
+arquivos, extração e cadastro após a rejeição. Instaladores PE32/x86 permanecem
+fora da execução funcional.
 
 Com o mesmo parâmetro e Xvfb disponível, os smokes GUI reais de 7-Zip File
 Manager, PuTTY, WinRAR SFX e Notepad++ também são registrados separadamente no
