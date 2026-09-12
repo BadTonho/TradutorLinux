@@ -158,6 +158,7 @@ namespace {
         set_focus_control(next_dialog_tab_item(dialog, nullptr, false));
     }
     static_cast<void>(call_wndproc(dialog.wndproc, &dialog, 0x0110U, 0, init_param)); // WM_INITDIALOG
+    flush_dialog_render();
     const std::array<diagnostics::TraceField, 4> fields{
         diagnostics::TraceField{"symbol", "CreateDialogParamA"},
         diagnostics::TraceField{"template", std::to_string(reinterpret_cast<std::uintptr_t>(template_name))},
@@ -522,6 +523,7 @@ TL_MSABI std::intptr_t tl_DialogBoxParamW(const void* const instance,
         set_focus_control(next_dialog_tab_item(dialog, nullptr, false));
     }
     static_cast<void>(call_wndproc(dialog.wndproc, &dialog, 0x0110U, 0, init_param)); // WM_INITDIALOG
+    flush_dialog_render();
     const std::array<diagnostics::TraceField, 4> created_fields{
         diagnostics::TraceField{"symbol", "DialogBoxParamW"},
         diagnostics::TraceField{"template", std::to_string(reinterpret_cast<std::uintptr_t>(template_name))},
@@ -538,7 +540,10 @@ TL_MSABI std::intptr_t tl_DialogBoxParamW(const void* const instance,
             }
         }
         abi::GuestMsg message{};
-        const int received = tl_GetMessageW(&message, &dialog, 0, 0);
+        // A fila modal pertence ao thread, não somente ao HWND do diálogo:
+        // janelas auxiliares do mesmo fluxo podem postar notificações para
+        // que o diálogo as despache enquanto permanece modal.
+        const int received = tl_GetMessageW(&message, nullptr, 0, 0);
         if (received <= 0) {
             static_cast<void>(tl_EndDialog(&dialog, kIdCancel));
             break;
@@ -546,8 +551,7 @@ TL_MSABI std::intptr_t tl_DialogBoxParamW(const void* const instance,
         if (tl_IsDialogMessageW(&dialog, &message) != 0) {
             continue;
         }
-        const abi::Lresult handled = call_wndproc(dialog.wndproc, &dialog, message.message,
-                                                  message.wparam, message.lparam);
+        const abi::Lresult handled = tl_DispatchMessageW(&message);
         {
             std::lock_guard lock(g_modal_mutex);
             if (g_modal_done) {
@@ -564,6 +568,7 @@ TL_MSABI std::intptr_t tl_DialogBoxParamW(const void* const instance,
             }
         }
     }
+    flush_dialog_render();
     std::intptr_t result = 0;
     {
         std::lock_guard lock(g_modal_mutex);

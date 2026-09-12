@@ -321,6 +321,7 @@ TEST(Win32DialogTest, LogicalChildrenTabTextGeometryAndWindowLongWrappers) {
     const std::uint16_t text[] = {'n', 'e', 'w', 0};
     EXPECT_EQ(tl_SetDlgItemTextW(&dialog, 100, text), 1);
     EXPECT_EQ(edit.text, "new");
+    EXPECT_TRUE(dialog.render_pending);
     EXPECT_EQ(tl_GetNextDlgTabItem(&dialog, nullptr, 0), &edit);
     EXPECT_EQ(tl_GetNextDlgTabItem(&dialog, &edit, 0), &button);
     EXPECT_EQ(tl_GetWindowLongW(&edit, -12), 100);

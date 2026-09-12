@@ -49,6 +49,7 @@ struct WindowSlot {
     bool mapped{false};
     abi::GuestMsg pending{};
     bool has_pending{false};
+    bool render_pending{false};
     std::deque<abi::GuestMsg> queued_messages;
     char last_key{'\0'};
     bool left_button_down{false};

@@ -39,17 +39,122 @@ constexpr int kMaxGuestWindowDimension = 8192;
            width > kMaxHostWindowDimension || height > kMaxHostWindowDimension;
 }
 
-inline abi::Lresult call_wndproc(const std::uintptr_t wndproc, const abi::HWnd hwnd,
-                                 const std::uint32_t message, const abi::Wparam wparam,
-                                 const abi::Lparam lparam) noexcept {
-    return std::bit_cast<WndProc>(wndproc)(hwnd, message, wparam, lparam);
-}
-
 void paint_registered_children(WindowSlot& parent) noexcept;
 
 inline void render_controls(WindowSlot& parent) noexcept {
     runtime_gui::render_controls(parent, std::span<WindowSlot>{g_windows});
     paint_registered_children(parent);
+}
+
+struct DialogRenderBatchState {
+    WindowSlot* parent{nullptr};
+    unsigned int depth{0};
+    bool dirty{false};
+    bool flushing{false};
+};
+
+inline thread_local DialogRenderBatchState g_dialog_render_batch{};
+
+[[nodiscard]] inline WindowSlot* dialog_render_parent(WindowSlot* const slot) noexcept {
+    if (slot == nullptr) {
+        return nullptr;
+    }
+    if (slot->is_dialog) {
+        return slot;
+    }
+    return slot->parent != nullptr && slot->parent->is_dialog ? slot->parent : nullptr;
+}
+
+inline void request_dialog_render(WindowSlot& parent) noexcept {
+    DialogRenderBatchState& batch = g_dialog_render_batch;
+    if (parent.is_dialog) {
+        if (batch.parent == nullptr) {
+            batch.parent = &parent;
+        }
+        batch.dirty = true;
+        parent.render_pending = true;
+        return;
+    }
+    if (batch.parent == &parent) {
+        batch.dirty = true;
+        return;
+    }
+    if (batch.flushing) {
+        batch.dirty = true;
+        return;
+    }
+    render_controls(parent);
+}
+
+inline void flush_dialog_render() noexcept {
+    DialogRenderBatchState& batch = g_dialog_render_batch;
+    if (batch.depth != 0U || batch.parent == nullptr || !batch.dirty) {
+        return;
+    }
+    WindowSlot* const parent = batch.parent;
+    batch.parent = nullptr;
+    batch.dirty = false;
+    parent->render_pending = false;
+    if (!parent->used) {
+        return;
+    }
+    batch.flushing = true;
+    render_controls(*parent);
+    batch.flushing = false;
+    if (batch.dirty && parent->used) {
+        batch.dirty = false;
+        render_controls(*parent);
+    }
+}
+
+class ScopedGuestWndProc {
+public:
+    explicit ScopedGuestWndProc(const abi::HWnd hwnd) noexcept {
+        WindowSlot* const slot = find_window_slot(hwnd);
+        parent_ = dialog_render_parent(slot);
+        if (parent_ == nullptr) {
+            return;
+        }
+        DialogRenderBatchState& batch = g_dialog_render_batch;
+        if (batch.flushing) {
+            return;
+        }
+        if (batch.depth == 0U && batch.parent != nullptr && batch.parent != parent_) {
+            flush_dialog_render();
+        }
+        if (batch.depth == 0U) {
+            batch.parent = parent_;
+        }
+        if (batch.parent == parent_) {
+            ++batch.depth;
+            active_ = true;
+        }
+    }
+
+    ScopedGuestWndProc(const ScopedGuestWndProc&) = delete;
+    ScopedGuestWndProc& operator=(const ScopedGuestWndProc&) = delete;
+
+    ~ScopedGuestWndProc() noexcept {
+        if (!active_) {
+            return;
+        }
+        DialogRenderBatchState& batch = g_dialog_render_batch;
+        --batch.depth;
+        if (batch.depth != 0U) {
+            return;
+        }
+    }
+
+private:
+    WindowSlot* parent_{nullptr};
+    bool active_{false};
+};
+
+inline abi::Lresult call_wndproc(const std::uintptr_t wndproc, const abi::HWnd hwnd,
+                                 const std::uint32_t message, const abi::Wparam wparam,
+                                 const abi::Lparam lparam) noexcept {
+    ScopedGuestWndProc render_batch(hwnd);
+    return std::bit_cast<WndProc>(wndproc)(hwnd, message, wparam, lparam);
 }
 
 inline void handle_control_key(WindowSlot& parent, const gui::WindowEvent& event) noexcept {

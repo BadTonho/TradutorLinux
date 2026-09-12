@@ -555,7 +555,7 @@ TL_MSABI int tl_ShowWindow(const void* const window, const int cmd_show) noexcep
         slot->visible = true;
     }
     if (slot->is_control && slot->parent != nullptr) {
-        render_controls(*slot->parent);
+        request_dialog_render(*slot->parent);
     }
     set_last_error(abi::kErrorSuccess);
     const std::array<diagnostics::TraceField, 4> show_end{
@@ -653,7 +653,7 @@ TL_MSABI int tl_DestroyWindow(const void* const window) noexcept {
     }
     *slot = {};
     if (parent != nullptr) {
-        render_controls(*parent);
+        request_dialog_render(*parent);
     }
     set_last_error(abi::kErrorSuccess);
     return 1;
@@ -703,7 +703,7 @@ TL_MSABI int tl_MoveWindow(const void* window, int x, int y, int width, int heig
     slot->width = width;
     slot->height = height;
     if (slot->parent != nullptr) {
-        render_controls(*slot->parent);
+        request_dialog_render(*slot->parent);
     }
     set_last_error(abi::kErrorSuccess);
     return 1;
@@ -724,7 +724,7 @@ TL_MSABI int tl_SetWindowTextA(const void* window, const char* text) noexcept {
     }
     slot->text = text;
     if (slot->parent != nullptr) {
-        render_controls(*slot->parent);
+        request_dialog_render(*slot->parent);
     }
     set_last_error(abi::kErrorSuccess);
     return 1;
@@ -956,7 +956,7 @@ TL_MSABI std::intptr_t tl_SetWindowLongPtrA(const void* window, const int index,
             slot->visible = (slot->style & kWsVisible) != 0U || slot->style == 0U;
             slot->enabled = (slot->style & kWsDisabled) == 0U;
             if (slot->is_control && slot->parent != nullptr) {
-                render_controls(*slot->parent);
+                request_dialog_render(*slot->parent);
             }
             return prev;
         }

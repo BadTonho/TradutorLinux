@@ -2763,7 +2763,7 @@ point sem rejeição.
 | Aplicativo | --report | Execução atual | Próximo bloqueio |
 |---|---|---|---|
 | `7z_x64.exe` | `supported` (562 KB, 225 imports) | exit `0` (CLI sem args) | – fluxo completo já coberto |
-| `7zG.exe` | `supported` (PE32+; 208 imports) | operação `a` cria arquivo 7z e termina com exit `0` | ampliar cenários de interação além do progresso |
+| `7zG.exe` | `supported` (PE32+; 208 imports) | operação `a` cria arquivo 7z e termina com exit `0` sob `--timeout 30 --memory 512` sem limite artificial de CPU; timeout curto/`--cpu 10` ainda é intermitente | estabilizar o fluxo worker/modal antes de ampliar cenários de interação |
 | `7zFM_x64.exe` | `supported` (987 KB, 298 imports) | `seven_zip_smoke` exit `0` | GUI estendida fora do smoke |
 | `WinRAR_x64.exe` | `supported` (3,8 MB, ~251 imports) | exit `0` (cancel SFX) | extração real não validada |
 | `putty_x64.exe` | `supported` (1,7 MB, 348 imports) | `guest-timeout 72` | bloqueio pós-ativação TCP |

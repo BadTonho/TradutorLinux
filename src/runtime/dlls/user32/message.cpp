@@ -910,6 +910,16 @@ TL_MSABI int tl_GetMessageA(void* const msg, const void* const window,
                 }
             }
         }
+        for (WindowSlot& slot : g_windows) {
+            if (!slot.used || !slot.render_pending ||
+                (window != nullptr && window != &slot)) {
+                continue;
+            }
+            slot.render_pending = false;
+            write_guest_msg(msg, &slot, abi::kWmPaint, 0, 0);
+            set_last_error(abi::kErrorSuccess);
+            return 1;
+        }
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
 }
@@ -969,8 +979,12 @@ TL_MSABI abi::Lresult tl_DispatchMessageA(const void* const msg) noexcept {
         return 0;
     }
     set_last_error(abi::kErrorSuccess);
-    return call_wndproc(slot->wndproc, message->hwnd, message->message, message->wparam,
-                        message->lparam);
+    const abi::Lresult result = call_wndproc(slot->wndproc, message->hwnd, message->message,
+                                             message->wparam, message->lparam);
+    if (message->message == abi::kWmPaint) {
+        flush_dialog_render();
+    }
+    return result;
 }
 
 TL_MSABI abi::Lresult tl_DispatchMessageW(const void* const msg) noexcept {
@@ -1098,7 +1112,7 @@ TL_MSABI int tl_SendMessageA(const void* window, const std::uint32_t message,
                     slot->height = height;
                 }
                 if (slot->parent != nullptr) {
-                    render_controls(*slot->parent);
+                    request_dialog_render(*slot->parent);
                 }
                 set_last_error(abi::kErrorSuccess);
                 return 1;
@@ -1139,7 +1153,7 @@ TL_MSABI int tl_SendMessageA(const void* window, const std::uint32_t message,
                                                      std::to_string(slot->height)}};
                 runtime_trace("ToolbarModel", fields, 4);
                 if (slot->parent != nullptr) {
-                    render_controls(*slot->parent);
+                    request_dialog_render(*slot->parent);
                 }
                 set_last_error(abi::kErrorSuccess);
                 return 1;
@@ -1158,7 +1172,7 @@ TL_MSABI int tl_SendMessageA(const void* window, const std::uint32_t message,
                     slot->toolbar_buttons.begin() +
                     static_cast<std::vector<ToolbarButton>::difference_type>(index));
                 if (slot->parent != nullptr) {
-                    render_controls(*slot->parent);
+                    request_dialog_render(*slot->parent);
                 }
                 set_last_error(abi::kErrorSuccess);
                 return 1;
@@ -1169,7 +1183,7 @@ TL_MSABI int tl_SendMessageA(const void* window, const std::uint32_t message,
                     slot->y = 0;
                     slot->width = std::max(slot->parent->width, 1);
                     slot->height = std::max(slot->height, 24);
-                    render_controls(*slot->parent);
+                    request_dialog_render(*slot->parent);
                 }
                 set_last_error(abi::kErrorSuccess);
                 return 1;
@@ -1190,7 +1204,7 @@ TL_MSABI int tl_SendMessageA(const void* window, const std::uint32_t message,
                     slot->text = reinterpret_cast<const char*>(lparam);
                 }
                 if (slot->parent != nullptr) {
-                    render_controls(*slot->parent);
+                    request_dialog_render(*slot->parent);
                 }
                 set_last_error(abi::kErrorSuccess);
                 return 1;
@@ -1214,7 +1228,7 @@ TL_MSABI int tl_SendMessageA(const void* window, const std::uint32_t message,
                 }
                 slot->height = static_cast<int>(wparam);
                 if (slot->parent != nullptr) {
-                    render_controls(*slot->parent);
+                    request_dialog_render(*slot->parent);
                 }
                 set_last_error(abi::kErrorSuccess);
                 return 1;
@@ -1229,7 +1243,7 @@ TL_MSABI int tl_SendMessageA(const void* window, const std::uint32_t message,
                 mapped_guest_cstring(reinterpret_cast<const char*>(lparam))) {
                 slot->text = reinterpret_cast<const char*>(lparam);
                 if (slot->parent != nullptr) {
-                    render_controls(*slot->parent);
+                    request_dialog_render(*slot->parent);
                 }
                 return 1;
             }
@@ -1243,7 +1257,7 @@ TL_MSABI int tl_SendMessageA(const void* window, const std::uint32_t message,
             if (message == abi::kCbSetCurSel) {
                 slot->combo_selection = static_cast<int>(wparam);
                 if (slot->parent != nullptr) {
-                    render_controls(*slot->parent);
+                    request_dialog_render(*slot->parent);
                 }
                 return slot->combo_selection;
             }
@@ -1262,7 +1276,7 @@ TL_MSABI int tl_SendMessageA(const void* window, const std::uint32_t message,
                 slot->list_rows.clear();
                 slot->list_selection = -1;
                 if (slot->parent != nullptr) {
-                    render_controls(*slot->parent);
+                    request_dialog_render(*slot->parent);
                 }
                 return 1;
             }
@@ -1282,7 +1296,7 @@ TL_MSABI int tl_SendMessageA(const void* window, const std::uint32_t message,
                 }
                 slot->list_rows.insert(slot->list_rows.begin() + index, std::move(row));
                 if (slot->parent != nullptr) {
-                    render_controls(*slot->parent);
+                    request_dialog_render(*slot->parent);
                 }
                 return index;
             }
@@ -1297,7 +1311,7 @@ TL_MSABI int tl_SendMessageA(const void* window, const std::uint32_t message,
                     slot->list_rows[static_cast<std::size_t>(index)].columns[static_cast<std::size_t>(item->subitem)] =
                         item->text;
                     if (slot->parent != nullptr) {
-                        render_controls(*slot->parent);
+                        request_dialog_render(*slot->parent);
                     }
                     return 1;
                 }
