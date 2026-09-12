@@ -93,6 +93,15 @@ bool write_exact(const int fd, const std::byte* const buffer, const std::size_t 
     return true;
 }
 
+void kill_process_group(const ::pid_t child) noexcept {
+    if (child <= 0) {
+        return;
+    }
+    if (::kill(-child, SIGKILL) != 0) {
+        static_cast<void>(::kill(child, SIGKILL));
+    }
+}
+
 // O convidado precisa terminar com a disposição padrão dos sinais fatais para
 // que um crash (ex.: SIGSEGV) chegue ao waitpid como sinal real. Runtimes do
 // hospedeiro como o AddressSanitizer instalam handlers próprios, que engoliriam
@@ -413,6 +422,7 @@ GuestOutcome run_guest_isolated(const std::uintptr_t entry_point,
         diagnostics::resume_trace_json_after_fork();
         ::close(pipe_fds[0]);
         ::close(fault_fds[0]);
+        static_cast<void>(::setpgid(0, 0));
         if (!working_directory.empty() && ::chdir(working_directory.c_str()) != 0) {
             ::close(pipe_fds[1]);
             ::close(fault_fds[1]);
@@ -454,6 +464,9 @@ GuestOutcome run_guest_isolated(const std::uintptr_t entry_point,
     diagnostics::resume_trace_json_after_fork();
     ::close(pipe_fds[1]);
     ::close(fault_fds[1]);
+    // O filho também faz setpgid para fechar a corrida; esta chamada cobre o
+    // intervalo em que ele ainda não executou essa instrução.
+    static_cast<void>(::setpgid(child, child));
 
     // Espera o filho com poll no pipe de resultado. O lado de escrita é
     // fechado quando o filho termina (HUP), então o pai não fica preso e pode
@@ -484,6 +497,9 @@ GuestOutcome run_guest_isolated(const std::uintptr_t entry_point,
             if (errno == EINTR) {
                 continue;
             }
+            kill_process_group(child);
+            while (::waitpid(child, &status, 0) < 0 && errno == EINTR) {
+            }
             ::close(pipe_fds[0]);
             ::close(fault_fds[0]);
             return {.kind = GuestOutcomeKind::SpawnFailed};
@@ -493,6 +509,9 @@ GuestOutcome run_guest_isolated(const std::uintptr_t entry_point,
             break;
         }
         if (waited < 0 && errno != EINTR) {
+            kill_process_group(child);
+            while (::waitpid(child, &status, 0) < 0 && errno == EINTR) {
+            }
             ::close(pipe_fds[0]);
             ::close(fault_fds[0]);
             return {.kind = GuestOutcomeKind::SpawnFailed};
@@ -500,7 +519,7 @@ GuestOutcome run_guest_isolated(const std::uintptr_t entry_point,
     }
 
     if (timed_out) {
-        static_cast<void>(::kill(child, SIGKILL));
+        kill_process_group(child);
         while (::waitpid(child, &status, 0) < 0 && errno == EINTR) {
         }
         ::close(pipe_fds[0]);
@@ -512,6 +531,7 @@ GuestOutcome run_guest_isolated(const std::uintptr_t entry_point,
     if (WIFEXITED(status)) {
         std::array<std::byte, kProtocolSize> message{};
         if (!read_exact(pipe_fds[0], message.data(), message.size())) {
+            kill_process_group(child);
             ::close(pipe_fds[0]);
             ::close(fault_fds[0]);
             return {.kind = GuestOutcomeKind::SpawnFailed};
@@ -532,6 +552,7 @@ GuestOutcome run_guest_isolated(const std::uintptr_t entry_point,
         if (message[0] != std::byte{static_cast<unsigned char>(ChildMessageKind::Exited)} ||
             message[1] != std::byte{static_cast<unsigned char>(ResourceLimitKind::None)} ||
             (message[2] != std::byte{0} && message[2] != std::byte{1})) {
+            kill_process_group(child);
             ::close(pipe_fds[0]);
             ::close(fault_fds[0]);
             return {.kind = GuestOutcomeKind::SpawnFailed};
@@ -655,12 +676,6 @@ void close_if_open(int& fd) noexcept {
     if (fd >= 0) {
         ::close(fd);
         fd = -1;
-    }
-}
-
-void kill_process_group(const ::pid_t child) noexcept {
-    if (::kill(-child, SIGKILL) != 0) {
-        static_cast<void>(::kill(child, SIGKILL));
     }
 }
 

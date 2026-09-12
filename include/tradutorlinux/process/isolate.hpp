@@ -66,13 +66,13 @@ struct SignalDescription {
 // the child only runs the guest and reports the outcome through a pipe before
 // _exit(0). When the guest terminates by a signal, the parent observes it via
 // waitpid and the caller can publish a controlled guest-signal diagnosis.
-// timeout_ms > 0 limits how long the guest may run; on expiry the child is
-// SIGKILLed and GuestOutcomeKind::TimedOut is returned (timeout_ms == 0 means
-// no limit). Nonzero resource limits are installed in the isolated child
-// before the entry point and inherited by its POSIX descendants; they are
-// containment controls, not a security sandbox. SIGXCPU from ResourceLimits
-// is reported as GuestOutcomeKind::ResourceLimited. Must not be called while
-// the process has other running threads.
+// timeout_ms > 0 limits how long the guest may run; on expiry the guest's
+// process group is SIGKILLed and GuestOutcomeKind::TimedOut is returned
+// (timeout_ms == 0 means no limit). Nonzero resource limits are installed in
+// the isolated child before the entry point and inherited by its POSIX
+// descendants; they are containment controls, not a security sandbox.
+// SIGXCPU from ResourceLimits is reported as GuestOutcomeKind::ResourceLimited.
+// Must not be called while the process has other running threads.
 [[nodiscard]] GuestOutcome run_guest_isolated(std::uintptr_t entry_point,
                                               std::uintptr_t stack_top,
                                               std::uint64_t timeout_ms,
