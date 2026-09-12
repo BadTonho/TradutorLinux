@@ -113,10 +113,16 @@ memória sem precisar dele; o comportamento e a ABI permanecem inalterados.
 **Prioridade:** alta, depois de F1. A redução do acoplamento entre os módulos de
 KERNEL32 prepara a divisão de `file.cpp` sem alterar as exports.
 
+**Status:** concluída. Os módulos de KERNEL32 agora incluem headers por
+domínio, os helpers comuns foram separados e `kernel32_internal.hpp` deixou de
+ser um guarda-chuva. A tabela de exports e o comportamento das APIs não foram
+alterados. A validação focada passou, exceto por uma falha preexistente e
+isolada em `Win32HandleObjectTest.DuplicateHandleIncrementsRefCountAndAllowsMultipleClose`.
+
 **Origem:** `src/runtime/dlls/kernel32/kernel32_internal.hpp`.
 
-Esse arquivo deve ser reduzido a helpers realmente comuns. As dependências
-específicas podem ser separadas, por exemplo, em:
+O arquivo foi reduzido a uma fachada interna mínima, enquanto as dependências
+específicas foram separadas em:
 
 - `kernel32_file_internal.hpp`;
 - `kernel32_process_internal.hpp`;
@@ -124,9 +130,9 @@ específicas podem ser separadas, por exemplo, em:
 - `kernel32_memory_internal.hpp`;
 - `kernel32_common.hpp` para tipos e helpers sem domínio específico.
 
-A migração deve começar por um módulo e remover includes não utilizados. Não
-se deve alterar a assinatura das exports, o layout das estruturas convidadas
-ou a ordem de registro das DLLs.
+A migração foi concluída módulo a módulo, removendo dependências implícitas e
+mantendo a assinatura das exports, o layout das estruturas convidadas e a
+ordem de registro das DLLs.
 
 **Conclusão:** cada módulo de KERNEL32 depende apenas do estado e dos helpers
 que utiliza; o comportamento continua protegido pelos testes atuais.

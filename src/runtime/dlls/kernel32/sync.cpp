@@ -1,4 +1,7 @@
-#include "kernel32_internal.hpp"
+#include "kernel32_common.hpp"
+
+#include <shared_mutex>
+
 namespace tradutorlinux {
 
 namespace {

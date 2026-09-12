@@ -1,4 +1,4 @@
-#include "kernel32_internal.hpp"
+#include "kernel32_process_internal.hpp"
 namespace tradutorlinux {
 
 namespace {

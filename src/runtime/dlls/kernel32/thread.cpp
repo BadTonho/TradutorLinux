@@ -1,4 +1,4 @@
-#include "kernel32_internal.hpp"
+#include "kernel32_thread_internal.hpp"
 namespace tradutorlinux {
 
 extern "C" std::uint32_t tl_call_guest_thread_on_stack(std::uintptr_t entry,

@@ -1,4 +1,6 @@
-#include "kernel32_internal.hpp"
+#include "kernel32_common.hpp"
+#include "tradutorlinux/loader/builtin_modules.hpp"
+#include "tradutorlinux/loader/module.hpp"
 
 namespace tradutorlinux::loader {
 
