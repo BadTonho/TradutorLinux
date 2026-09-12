@@ -296,6 +296,13 @@ TEST(Win32LocaleTest, WideStringApisUseGuestUtf16Units) {
 
     EXPECT_EQ(tl_lstrcpyW(copied, source), copied);
     EXPECT_EQ(tl_lstrcpynW(bounded, source, 16), bounded);
+    std::uint16_t concatenated[32] = {'C', ':', '\\', 0};
+    constexpr std::uint16_t suffix[] = {'T', 'e', 'm', 'p', 0};
+    EXPECT_EQ(tl_lstrcatW(concatenated, suffix), concatenated);
+    constexpr std::uint16_t expected_concatenated[] = {'C', ':', '\\', 'T', 'e', 'm', 'p', 0};
+    for (std::size_t index = 0; index < std::size(expected_concatenated); ++index) {
+        EXPECT_EQ(concatenated[index], expected_concatenated[index]);
+    }
     EXPECT_EQ(tl_lstrcmpW(copied, source), 0);
     EXPECT_EQ(tl_lstrcmpiW(copied, other_case), 0);
     for (std::size_t index = 0; index < sizeof(source) / sizeof(source[0]); ++index) {

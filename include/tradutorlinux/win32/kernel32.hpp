@@ -557,6 +557,8 @@ TL_MSABI int tl_GetTimeFormatEx(const wchar_t* lpLocaleName, std::uint32_t dwFla
 TL_MSABI int tl_GetDateFormatEx(const wchar_t* lpLocaleName, std::uint32_t dwFlags, const void* lpDate, const wchar_t* lpFormat, wchar_t* lpDateStr, int cchDate, const wchar_t* lpCalendar) noexcept;
 TL_MSABI std::uint16_t* tl_lstrcpynW(std::uint16_t* lpString1, const std::uint16_t* lpString2,
                                      int iMaxLength) noexcept;
+TL_MSABI std::uint16_t* tl_lstrcatW(std::uint16_t* lpString1,
+                                    const std::uint16_t* lpString2) noexcept;
 TL_MSABI int tl_GetApplicationRestartSettings(void* hProcess, wchar_t* pwzCommandLine, std::uint32_t* pcchSize, std::uint32_t* pdwFlags) noexcept;
 TL_MSABI int tl_UnregisterApplicationRestart() noexcept;
 TL_MSABI int tl_lstrcmpiA(const char* lpString1, const char* lpString2) noexcept;

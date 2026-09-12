@@ -308,6 +308,9 @@ function(tl_add_pe_fixture target_name source_file manifest_file)
             elseif(target_name STREQUAL "tl_k32_gap")
                 set(runtime_extra_args
                     "-DEXPECTED_HEX=6b33322d6761700a")
+            elseif(target_name STREQUAL "tl_lstrcat")
+                set(runtime_extra_args
+                    "-DEXPECTED_HEX=6c7374726361740a")
             elseif(target_name STREQUAL "tl_globalmem")
                 set(runtime_extra_args
                     "-DEXPECTED_HEX=676c6f62616c6d656d0a")
@@ -1341,6 +1344,10 @@ tl_add_pe_fixture(tl_sync src/tl_sync.c manifests/tl_sync.json
 tl_add_pe_fixture(tl_k32_gap src/tl_k32_gap.c manifests/tl_k32_gap.json
     LINK_KERNEL32 EXPECT_RESOLVED CONSOLE REPORT RELOCATABLE
     REPORT_SYMBOL "InitializeCriticalSectionEx")
+
+tl_add_pe_fixture(tl_lstrcat src/tl_lstrcat.c manifests/tl_lstrcat.json
+    LINK_KERNEL32 EXPECT_RESOLVED CONSOLE REPORT RELOCATABLE
+    REPORT_SYMBOL "lstrcatW")
 
 tl_add_pe_fixture(tl_globalmem src/tl_globalmem.c manifests/tl_globalmem.json
     LINK_KERNEL32 EXPECT_RESOLVED CONSOLE REPORT RELOCATABLE

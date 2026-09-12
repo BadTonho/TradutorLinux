@@ -705,6 +705,7 @@ do host como argumentos.
 | `KERNEL32.dll` | `GetModuleFileNameA/W` | Suportado | Retorna o módulo definido via `set_guest_module_path()` como caminho Windows lógico: aplicação instalada no prefixo usa `C:\\...`; setup externo usa `Z:\\...` |
 | `KERNEL32.dll` | `GetFullPathNameW` | Suportado | Normalização Windows completa (Wine `dlls/kernel32/path.c`): resolve relativo via `GetCurrentDirectory`, colapsa `.`/`..`, trata `C:`, `\` e `\\` (UNC); `file_part` aponta para após último `\`/`:` |
 | `KERNEL32.dll` | `GetFullPathNameA` | Suportado | Conversão `A` → `W` com mesma normalização; buffer insuficiente retorna `tamanho+1` e `ERROR_INSUFFICIENT_BUFFER` |
+| `KERNEL32.dll` | `lstrcatW` | Suportado no subconjunto | Concatena strings UTF-16 guest e retorna o destino; valida as strings e o intervalo gravável do resultado |
 | `SHELL32.dll` | `CommandLineToArgvW` | Suportado | Divide a linha de comando UTF-16 em argumentos, preservando grupos entre aspas; o bloco único retornado é liberado por `LocalFree` |
 | `SHELL32.dll` | `SHGetKnownFolderPath` | Suportado | Resolve `FOLDERID_RoamingAppData`, `LocalAppData`, `ProgramData`, `Desktop`, `Documents`, `Downloads` e `Profile` sob `C:\users\guest`/`C:\ProgramData` do prefixo ativo; nunca consulta `HOME`, XDG ou `/tmp` do host e devolve a string por `CoTaskMemAlloc`. |
 | `SHELL32.dll` | `SHGetFolderPathW` | Suportado | Resolve `CSIDL_APPDATA`/`LOCAL_APPDATA`/`COMMON_APPDATA`/`DESKTOP`/`PERSONAL`/`PROFILE` sob o prefixo ativo e copia o caminho Windows para `pszPath[260]`. |
@@ -1039,6 +1040,8 @@ continuam sendo a evidência necessária para registrá-lo como suportado.
 | 12 | `RTSSHooks64.dll` | PE32+ DLL x86-64 | 256/256 (100%) | `imports-resolved` | `not-attempted` (DLL) | **Fase 13.RTSS**: imports resolvidos para análise; `CreateRemoteThread` e `WriteProcessMemory` agora falham com `ERROR_NOT_SUPPORTED` (sem fingir execução remota). O restante inclui `GDI32 ...`, `USER32 ...`, `KERNEL32 ...`, `SHLWAPI ...`, `WINMM ...`, `SETUPAPI 7` e `delay DirectX 11`; os stubs DirectX retornam `E_FAIL/S_OK` controlados |
 | 13 | `Affinity x64.msix` | Zip/MSIX ZIP64 | — | `malformed` exit `4` | `not-attempted` | Rust e C++ rejeitam o pacote no limite agregado de 512 MiB antes da extração; não houve instalação, cadastro ou execução. O conteúdo interno `.NET` continua fora do escopo e o pacote permanece sem suporte funcional |
 | 14 | `*_x64_Installer.exe` `CapCut/Epic/Creative/Everything/RTSS.exe` | PE32 (x86) | — | `unsupported-architecture` `0x14c` `exit 5` | `parse-failed status="unsupported-architecture"` `src/pe/pe_reader.cpp:685` |
+
+| 2a | `7-Zip/7zG.exe` | PE32+ x86-64 | 208/208 (100%) | `supported` | sob Xvfb cria a janela `7-Zip` e termina em `guest-timeout` exit `72` sem interação | a lacuna era somente `KERNEL32!lstrcatW`; a API agora possui fixture UTF-16 e o relatório real do `7zG` é aprovado; timeout é apenas ausência de interação |
 
 ### Atualização do corpus externo — rodada B (2026-09-07)
 

@@ -445,10 +445,10 @@ void register_kernel32_module() {
         {"lstrcmpA", 414, reinterpret_cast<std::uintptr_t>(&tl_lstrcmpA)},
         {"IsThreadAFiber", 415, reinterpret_cast<std::uintptr_t>(&tl_IsThreadAFiber)},
         {"InterlockedFlushSList", 416, reinterpret_cast<std::uintptr_t>(&tl_InterlockedFlushSList)},
+        {"lstrcatW", 417, reinterpret_cast<std::uintptr_t>(&tl_lstrcatW)},
     };
     static const InternalModule kKernel32Module{"KERNEL32.dll", kKernel32Exports};
     register_module(kKernel32Module);
 }
 
 }  // namespace tradutorlinux::loader
-

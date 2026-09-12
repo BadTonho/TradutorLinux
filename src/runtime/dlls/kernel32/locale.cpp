@@ -995,6 +995,29 @@ TL_MSABI std::uint16_t* tl_lstrcpyW(std::uint16_t* const lpString1,
     return lpString1;
 }
 
+TL_MSABI std::uint16_t* tl_lstrcatW(std::uint16_t* const lpString1,
+                                    const std::uint16_t* const lpString2) noexcept {
+    if (lpString1 == nullptr || lpString2 == nullptr ||
+        !mapped_guest_wstring(lpString1) || !mapped_guest_wstring(lpString2)) {
+        return lpString1;
+    }
+
+    const std::size_t destination_length = static_cast<std::size_t>(tl_lstrlenW(lpString1));
+    const std::size_t source_length = static_cast<std::size_t>(tl_lstrlenW(lpString2));
+    if (destination_length > std::numeric_limits<std::size_t>::max() - source_length - 1U) {
+        return lpString1;
+    }
+    const std::size_t total_units = destination_length + source_length + 1U;
+    if (total_units > std::numeric_limits<std::size_t>::max() / sizeof(*lpString1)) {
+        return lpString1;
+    }
+    if (!mapped_guest_range(lpString1, total_units * sizeof(*lpString1), true)) {
+        return lpString1;
+    }
+    std::copy(lpString2, lpString2 + source_length + 1U, lpString1 + destination_length);
+    return lpString1;
+}
+
 TL_MSABI int tl_lstrcmpW(const std::uint16_t* const lpString1,
                          const std::uint16_t* const lpString2) noexcept {
     if (lpString1 == lpString2) return 0;

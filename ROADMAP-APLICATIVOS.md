@@ -2849,6 +2849,29 @@ Evidência reproduzível:
 - [x] `docs/compatibilidade.md` atualizado com o status final da Rodada F.
 - [x] `git diff --check` aprovado e nenhum arquivo temporário versionado.
 
+### F4 concluído — 7zG: `KERNEL32!lstrcatW` (2026-09-11)
+
+Objetivo: remover uma lacuna genérica de strings wide observada ao analisar o
+`7-Zip/7zG.exe`, sem introduzir regra específica para o aplicativo.
+
+Evidência reproduzível:
+
+- [x] Antes da mudança, o `--report` do `7zG.exe` retornava `5` com `207/208`
+  imports resolvidos e classificava `KERNEL32.dll!lstrcatW` como
+  `unknown-symbol`.
+- [x] `lstrcatW` foi implementada no módulo genérico `KERNEL32.dll`, com
+  strings UTF-16 guest, retorno do buffer de destino e validação do intervalo
+  gravável da concatenação.
+- [x] A fixture `tl_lstrcat.exe` cobre a ABI Microsoft x64, concatenação
+  `C:\\` + `Temp`, saída, `--report` e exit `0`; o teste unitário wide também
+  protege o resultado.
+- [x] Depois da mudança, o `--report` real do `7zG.exe` retorna `0` e
+  `208/208` imports resolvidos. Sob Xvfb, o aplicativo resolve `lstrcatW`,
+  cria a janela `7-Zip` e termina somente por timeout controlado (`72`) sem
+  interação.
+- [x] A matriz recursiva do corpus foi atualizada de `7zG.exe|5` para
+  `7zG.exe|0`; não houve DLL, shim ou regra específica de aplicativo.
+
 ## Regras de validação
 
 - Cada correção começa com uma fixture mínima e termina com testes automatizados.
