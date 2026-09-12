@@ -96,7 +96,7 @@ principal restrito**, não a uso diário nem a suporte geral de compactação.
 | `tl_wthelper.exe` | WINTRUST 4 + CRYPT32 1 | **fluxo principal restrito** | estado WinTrust, signer e certificados folha/raiz, CN DER e fechamento |
 | `tl_k32_gap.exe` | KERNEL32 11 | **fluxo principal** | seções críticas estendidas, ANSI e `FormatMessageA` |
 | `tl_globalmem.exe` | KERNEL32 10 | **fluxo principal** | `GlobalAlloc`/lock e `LocalAlloc` com `ZEROINIT` |
-| `tl_crypt32.exe` | CRYPT32 1 + KERNEL32 4 | **fluxo principal restrito** | nome subject/issuer de blob X.509 DER |
+| `tl_crypt32.exe` | CRYPT32 2 + KERNEL32 4 | **fluxo principal restrito** | nomes subject/issuer e `CERT_NAME_BLOB` X.509 DER |
 
 ## Benchmark de cobertura
 

@@ -183,6 +183,29 @@ TEST(Crypt32Test, CertGetNameStringReadsSubjectIssuerAndValidatesBuffers) {
     EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
 }
 
+TEST(Crypt32Test, CertNameToStrConvertsValidatedNameBlobAndBoundsOutput) {
+    const std::array<std::uint8_t, 23> encoded_name{
+        0x30, 0x15, 0x31, 0x13, 0x30, 0x11, 0x06, 0x03, 0x55, 0x04, 0x03,
+        0x0C, 0x0A, 'T', 'L', ' ', 'F', 'i', 'x', 't', 'u', 'r', 'e'};
+    GuestDataBlob name{static_cast<std::uint32_t>(encoded_name.size()),
+                       const_cast<std::uint8_t*>(encoded_name.data())};
+    std::uint16_t output[32]{};
+    constexpr std::uint16_t expected[] = {
+        'C', 'N', '=', 'T', 'L', ' ', 'F', 'i', 'x', 't', 'u', 'r', 'e', 0};
+
+    EXPECT_EQ(tl_CertNameToStrW(1, &name, 3, nullptr, 0), 14U);
+    EXPECT_EQ(tl_CertNameToStrW(1, &name, 3, output, 32), 14U);
+    EXPECT_TRUE(std::equal(std::begin(expected), std::end(expected), output));
+
+    output[0] = 'X';
+    EXPECT_EQ(tl_CertNameToStrW(1, &name, 3, output, 2), 14U);
+    EXPECT_EQ(output[0], 0U);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInsufficientBuffer);
+
+    EXPECT_EQ(tl_CertNameToStrW(2, &name, 3, output, 32), 0U);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+}
+
 TEST(Crypt32Test, CertContextAndStoreManagement) {
     const std::array<std::uint8_t, 61> certificate{
         0x30, 0x3B, 0x30, 0x34, 0x02, 0x01, 0x01, 0x30, 0x00,

@@ -258,6 +258,95 @@ std::u16string select_name(const std::vector<NameAttribute>& attributes,
     return {};
 }
 
+std::u16string name_label(const std::string_view oid, const std::uint32_t string_type) {
+    if (string_type == 1U) {
+        return {};
+    }
+    if (string_type == 2U) {
+        return util::utf8_to_wide(oid);
+    }
+    const std::pair<std::string_view, std::string_view> known_names[] = {
+        {"2.5.4.3", "CN"},   {"2.5.4.4", "SN"},   {"2.5.4.5", "SERIALNUMBER"},
+        {"2.5.4.6", "C"},    {"2.5.4.7", "L"},    {"2.5.4.8", "S"},
+        {"2.5.4.10", "O"},   {"2.5.4.11", "OU"},  {"2.5.4.12", "T"},
+        {"2.5.4.42", "G"},   {"2.5.4.43", "I"},   {"1.2.840.113549.1.9.1", "E"},
+    };
+    for (const auto& [known_oid, known_name] : known_names) {
+        if (oid == known_oid) {
+            return util::utf8_to_wide(known_name);
+        }
+    }
+    return util::utf8_to_wide(std::string{"OID."} + std::string{oid});
+}
+
+bool name_value_needs_quotes(const std::u16string& value) noexcept {
+    if (value.empty()) return true;
+    const auto is_space = [](const char16_t character) noexcept {
+        return character == u' ' || character == u'\t' || character == u'\r' || character == u'\n';
+    };
+    if (is_space(value.front()) || is_space(value.back())) return true;
+    for (const char16_t character : value) {
+        if (character == u',' || character == u'+' || character == u'=' ||
+            character == u'"' || character == u'\\' || character == u'\n' ||
+            character == u'<' || character == u'>' || character == u'#' ||
+            character == u';') {
+            return true;
+        }
+    }
+    return false;
+}
+
+void append_name_value(std::u16string& output, const std::u16string& value,
+                       const bool no_quoting) {
+    if (no_quoting || !name_value_needs_quotes(value)) {
+        output += value;
+        return;
+    }
+    output.push_back(u'"');
+    for (const char16_t character : value) {
+        output.push_back(character);
+        if (character == u'"') output.push_back(u'"');
+    }
+    output.push_back(u'"');
+}
+
+std::u16string format_name(const std::vector<NameAttribute>& attributes,
+                           const std::uint32_t string_type) {
+    constexpr std::uint32_t kSemicolonFlag = 0x40000000U;
+    constexpr std::uint32_t kCrlfFlag = 0x08000000U;
+    constexpr std::uint32_t kNoPlusFlag = 0x20000000U;
+    constexpr std::uint32_t kNoQuotingFlag = 0x10000000U;
+    constexpr std::uint32_t kReverseFlag = 0x02000000U;
+    const std::uint32_t base_type = string_type & 0xFFU;
+    const bool reverse = (string_type & kReverseFlag) != 0U;
+    const bool no_quoting = (string_type & kNoQuotingFlag) != 0U;
+    const bool semicolon = (string_type & kSemicolonFlag) != 0U;
+    const bool crlf = (string_type & kCrlfFlag) != 0U;
+    (void)kNoPlusFlag;
+
+    std::u16string output;
+    for (std::size_t index = 0; index < attributes.size(); ++index) {
+        const std::size_t attribute_index = reverse ? attributes.size() - 1U - index : index;
+        if (index != 0U) {
+            if (crlf) {
+                output += u"\r\n";
+            } else if (semicolon) {
+                output += u"; ";
+            } else {
+                output += u", ";
+            }
+        }
+        const NameAttribute& attribute = attributes[attribute_index];
+        const std::u16string label = name_label(attribute.oid, base_type);
+        if (!label.empty()) {
+            output += label;
+            output.push_back(u'=');
+        }
+        append_name_value(output, attribute.value, no_quoting);
+    }
+    return output;
+}
+
 struct Sha1Context {
     std::uint64_t count{0};
     std::array<std::uint32_t, 5> state{0x67452301U, 0xEFCDAB89U, 0x98BADCFEU, 0x10325476U, 0xC3D2E1F0U};
@@ -435,6 +524,80 @@ TL_CRYPT32_MSABI std::uint32_t tl_CertGetNameStringW(
     }
     std::copy(selected.begin(), selected.end(), name_string);
     name_string[selected.size()] = 0;
+    set_last_error(abi::kErrorSuccess);
+    return static_cast<std::uint32_t>(required);
+}
+
+TL_CRYPT32_MSABI std::uint32_t tl_CertNameToStrW(
+    const std::uint32_t encoding_type, const GuestDataBlob* const name,
+    const std::uint32_t string_type, std::uint16_t* const string,
+    const std::uint32_t string_capacity) noexcept {
+    constexpr std::uint32_t kSupportedEncoding = kX509AsnEncoding;
+    constexpr std::uint32_t kSupportedStringTypes = 1U | 2U | 3U;
+    constexpr std::uint32_t kSemicolonFlag = 0x40000000U;
+    constexpr std::uint32_t kCrlfFlag = 0x08000000U;
+    constexpr std::uint32_t kNoPlusFlag = 0x20000000U;
+    constexpr std::uint32_t kNoQuotingFlag = 0x10000000U;
+    constexpr std::uint32_t kReverseFlag = 0x02000000U;
+    constexpr std::uint32_t kSupportedFlags =
+        kSemicolonFlag | kCrlfFlag | kNoPlusFlag | kNoQuotingFlag | kReverseFlag;
+
+    if ((encoding_type & 0xFFFFU) != kSupportedEncoding || name == nullptr ||
+        !runtime::validate_mapped_range(name, sizeof(*name), false) ||
+        (string_type & 0xFFU) == 0U ||
+        (string_type & 0xFFU) > kSupportedStringTypes ||
+        (string_type & ~(0xFFU | kSupportedFlags)) != 0U || name->data == nullptr ||
+        name->size == 0U || name->size > kMaxCertificateSize ||
+        !runtime::validate_mapped_range(name->data, name->size, false)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    if (string != nullptr && string_capacity != 0U &&
+        (static_cast<std::size_t>(string_capacity) >
+             std::numeric_limits<std::size_t>::max() / sizeof(*string) ||
+         !runtime::validate_mapped_range(
+             string, static_cast<std::size_t>(string_capacity) * sizeof(*string), true))) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+
+    Bytes encoded_name{name->data, name->size};
+    if (!encoded_name.empty() && encoded_name.front() == 0x30U) {
+        std::size_t offset = 0;
+        Bytes sequence{};
+        if (!read_der_tag(encoded_name, offset, 0x30U, sequence) ||
+            offset != encoded_name.size()) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
+        }
+        encoded_name = sequence;
+    }
+    std::vector<NameAttribute> attributes;
+    if (!parse_name(encoded_name, attributes)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    const std::u16string formatted = format_name(attributes, string_type);
+    if (formatted.size() == std::numeric_limits<std::size_t>::max()) {
+        set_last_error(abi::kErrorNotEnoughMemory);
+        return 0;
+    }
+    const std::size_t required = formatted.size() + 1U;
+    if (required > std::numeric_limits<std::uint32_t>::max()) {
+        set_last_error(abi::kErrorNotEnoughMemory);
+        return 0;
+    }
+    if (string == nullptr || string_capacity == 0U) {
+        set_last_error(abi::kErrorSuccess);
+        return static_cast<std::uint32_t>(required);
+    }
+    if (string_capacity < required) {
+        string[0] = 0;
+        set_last_error(abi::kErrorInsufficientBuffer);
+        return static_cast<std::uint32_t>(required);
+    }
+    std::copy(formatted.begin(), formatted.end(), string);
+    string[formatted.size()] = 0;
     set_last_error(abi::kErrorSuccess);
     return static_cast<std::uint32_t>(required);
 }
@@ -905,19 +1068,6 @@ TL_CRYPT32_MSABI int tl_CryptQueryObject(const std::uint32_t dwObjectType, const
     if (ppvContext != nullptr) *ppvContext = nullptr;
     set_last_error(abi::kErrorNotSupported);
     return 0;
-}
-
-TL_CRYPT32_MSABI std::uint32_t tl_CertNameToStrW(const std::uint32_t dwCertEncodingType, void* const pName, const std::uint32_t dwStrType, wchar_t* const psz, const std::uint32_t cchName) noexcept {
-    (void)dwCertEncodingType;
-    (void)pName;
-    (void)dwStrType;
-    const wchar_t dummy_name[] = L"CN=Notepad++";
-    const std::uint32_t len = sizeof(dummy_name) / sizeof(wchar_t);
-    if (psz == nullptr || cchName < len) {
-        return len;
-    }
-    std::memcpy(psz, dummy_name, sizeof(dummy_name));
-    return len;
 }
 
 }  // extern "C"

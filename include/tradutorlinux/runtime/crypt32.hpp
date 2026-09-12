@@ -56,6 +56,7 @@ struct GuestDataBlob {
     std::uint32_t size{};
     std::uint8_t* data{};
 };
+static_assert(sizeof(GuestDataBlob) == 16);
 
 extern "C" {
 
@@ -63,6 +64,10 @@ TL_CRYPT32_MSABI std::uint32_t tl_CertGetNameStringW(
     const GuestCertContext* cert_context, std::uint32_t type, std::uint32_t flags,
     const void* type_parameter, std::uint16_t* name_string,
     std::uint32_t name_string_capacity) noexcept;
+
+TL_CRYPT32_MSABI std::uint32_t tl_CertNameToStrW(
+    std::uint32_t encoding_type, const GuestDataBlob* name, std::uint32_t string_type,
+    std::uint16_t* string, std::uint32_t string_capacity) noexcept;
 
 TL_CRYPT32_MSABI const GuestCertContext* tl_CertDuplicateCertificateContext(
     const GuestCertContext* cert_context) noexcept;

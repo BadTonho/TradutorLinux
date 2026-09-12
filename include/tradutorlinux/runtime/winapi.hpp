@@ -198,7 +198,6 @@ TL_MSABI int tl_IsTextUnicode(const void* lpv, int iSize, int* lpiResult) noexce
 TL_MSABI int tl_CryptMsgClose(void* hCryptMsg) noexcept;
 TL_MSABI int tl_CryptMsgGetParam(void* hCryptMsg, std::uint32_t dwParamType, std::uint32_t dwIndex, void* pvData, std::uint32_t* pcbData) noexcept;
 TL_MSABI int tl_CryptQueryObject(std::uint32_t dwObjectType, const void* pvObject, std::uint32_t dwExpectedContentTypeFlags, std::uint32_t dwExpectedFormatTypeFlags, std::uint32_t dwFlags, std::uint32_t* pdwMsgAndCertEncodingType, std::uint32_t* pdwContentType, std::uint32_t* pdwFormatType, void** phCertStore, void** phMsg, const void** ppvContext) noexcept;
-TL_MSABI std::uint32_t tl_CertNameToStrW(std::uint32_t dwCertEncodingType, void* pName, std::uint32_t dwStrType, wchar_t* psz, std::uint32_t cchName) noexcept;
 TL_MSABI int tl_SHCreateItemFromParsingName(const wchar_t* pszPath, void* pbc, const void* riid, void** ppv) noexcept;
 TL_MSABI std::uint32_t tl_DragQueryFileW(void* hDrop, std::uint32_t iFile, wchar_t* lpszFile, std::uint32_t cch) noexcept;
 TL_MSABI int tl_DragQueryPoint(void* hDrop, void* lppt) noexcept;

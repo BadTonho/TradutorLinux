@@ -52,6 +52,11 @@ sem executar a operação.
 - **Confirmado como caso de falso-sucesso:** `DBGHELP!SymFromAddr` não deve
   retornar ponteiro nulo com sucesso. O mesmo vale para `SHBrowseForFolder` e
   qualquer API que devolva handle/ponteiro fictício.
+- **Corrigido nesta etapa:** `CRYPT32!CertNameToStrW` deixou de retornar um CN
+  fixo; agora valida `CERT_NAME_BLOB`, decodifica o DER no subconjunto publicado,
+  respeita o buffer UTF-16 e atualiza `GetLastError` nos erros. A regressão
+  `Crypt32Test.CertNameToStrConvertsValidatedNameBlobAndBoundsOutput` e a
+  fixture `tl_crypt32` cobrem o comportamento.
 - **Alta prioridade:** módulos que falham sem atualizar `GetLastError` precisam
   de testes de erro. `IMM32`, `DWMAPI`, `WINMM`, `COMDLG32` e `version` não
   podem deixar o erro anterior do convidado parecer a causa atual.

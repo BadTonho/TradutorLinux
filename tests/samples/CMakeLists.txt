@@ -1359,7 +1359,7 @@ tl_add_pe_fixture(tl_globalmem src/tl_globalmem.c manifests/tl_globalmem.json
 
 tl_add_pe_fixture(tl_crypt32 src/tl_crypt32.c manifests/tl_crypt32.json
     LINK_KERNEL32 LINK_CRYPT32 EXPECT_RESOLVED CONSOLE REPORT RELOCATABLE
-    REPORT_SYMBOL "CertGetNameStringW")
+    REPORT_SYMBOL "CertNameToStrW")
 
 tl_add_pe_fixture(tl_certcontext src/tl_certcontext.c manifests/tl_certcontext.json
     LINK_KERNEL32 LINK_CRYPT32 EXPECT_RESOLVED CONSOLE REPORT RELOCATABLE

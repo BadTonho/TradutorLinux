@@ -6,7 +6,8 @@
   "uses_crt": false,
   "imports": {
     "CRYPT32.dll": [
-      "CertGetNameStringW"
+      "CertGetNameStringW",
+      "CertNameToStrW"
     ],
     "KERNEL32.dll": [
       "ExitProcess",

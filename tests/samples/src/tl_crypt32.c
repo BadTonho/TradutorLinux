@@ -12,6 +12,10 @@ __attribute__((dllimport)) dword_t CertGetNameStringW(const void* cert_context, 
                                                        dword_t flags, const void* type_parameter,
                                                        unsigned short* name_string,
                                                        dword_t name_string_capacity);
+__attribute__((dllimport)) dword_t CertNameToStrW(dword_t encoding_type, const void* name,
+                                                  dword_t string_type,
+                                                  unsigned short* string,
+                                                  dword_t string_capacity);
 
 struct cert_context {
     dword_t encoding_type;
@@ -19,6 +23,11 @@ struct cert_context {
     dword_t encoded_size;
     void* cert_info;
     void* cert_store;
+};
+
+struct cert_name_blob {
+    dword_t size;
+    byte_t* data;
 };
 
 void tl_entry(void);
@@ -56,6 +65,12 @@ void tl_entry(void) {
     static const unsigned short subject[] = {'T', 'L', ' ', 'F', 'i', 'x', 't', 'u', 'r', 'e', 0};
     static const unsigned short issuer[] = {'T', 'L', ' ', 'R', 'o', 'o', 't', 0};
     static const char common_name_oid[] = "2.5.4.3";
+    static const byte_t name_der[] = {
+        0x30, 0x15, 0x31, 0x13, 0x30, 0x11, 0x06, 0x03, 0x55, 0x04, 0x03,
+        0x0C, 0x0A, 'T', 'L', ' ', 'F', 'i', 'x', 't', 'u', 'r', 'e'};
+    const struct cert_name_blob name_blob = {sizeof(name_der), (byte_t*)name_der};
+    static const unsigned short x500_name[] = {
+        'C', 'N', '=', 'T', 'L', ' ', 'F', 'i', 'x', 't', 'u', 'r', 'e', 0};
 
     if (CertGetNameStringW(&context, 4, 0, (void*)0, (unsigned short*)0, 0) != 11U ||
         CertGetNameStringW(&context, 4, 0, (void*)0, name, 32) != 11U ||
@@ -81,6 +96,19 @@ void tl_entry(void) {
     if (CertGetNameStringW(&context, 7, 0, (void*)0, name, 32) != 0U ||
         GetLastError() != 87U) {
         fail(output, &bytes_written, 6);
+    }
+    if (CertNameToStrW(1, &name_blob, 3, (unsigned short*)0, 0) != 14U) {
+        fail(output, &bytes_written, 7);
+    }
+    if (CertNameToStrW(1, &name_blob, 3, name, 32) != 14U) {
+        fail(output, &bytes_written, 8);
+    }
+    if (!equal_wide(name, x500_name, 14)) {
+        fail(output, &bytes_written, 9);
+    }
+    if (CertNameToStrW(1, &name_blob, 3, name, 2) != 14U ||
+        GetLastError() != 122U || name[0] != 0) {
+        fail(output, &bytes_written, 10);
     }
 
     static const char result[] = "crypt32\n";
