@@ -126,7 +126,6 @@ Não entram neste roadmap, por enquanto:
 - Qt opcional, novos presets e reorganização de CI sem uma necessidade
   reproduzida;
 - novas famílias de DLL ou suporte a PE32/x86;
-- exclusão dos arquivos de análise histórica.
 
 Esses temas só podem entrar em uma revisão futura com evidência, alvo,
 critério de aceite e etapa própria.
@@ -139,7 +138,4 @@ critério de aceite e etapa própria.
   contratos do runtime;
 - [docs/arquitetura/api-win32.md](docs/arquitetura/api-win32.md) — contratos
   de APIs Win32;
-- [ANALISE-ERROS-2026-09-12.md](ANALISE-ERROS-2026-09-12.md) — registro
-  histórico das falhas que originaram R1–R3;
-- [ANALISE-MELHORIAS-2026-09-12.md](ANALISE-MELHORIAS-2026-09-12.md) —
-  registro histórico da regra de classificação de R4.
+- as triagens de 2026-09-12, consolidadas nas etapas R1–R4 deste documento.
