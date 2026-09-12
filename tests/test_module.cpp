@@ -242,6 +242,10 @@ TEST_F(ModuleTest, RegistersBuiltinKernel32Exports) {
               ExportSupport::Stub);
     EXPECT_EQ(find_export(ExportQuery{"COMDLG32.dll", "GetOpenFileNameW"}).support,
               ExportSupport::Stub);
+    EXPECT_EQ(find_export(ExportQuery{"version.dll", "GetFileVersionInfoA"}).support,
+              ExportSupport::Stub);
+    EXPECT_EQ(find_export(ExportQuery{"version.dll", "VerQueryValueW"}).support,
+              ExportSupport::Stub);
     EXPECT_EQ(find_export(ExportQuery{"KERNEL32.dll", "TlsGetValue"}).address,
               reinterpret_cast<std::uintptr_t>(&tl_TlsGetValue));
     EXPECT_EQ(find_export(ExportQuery{"KERNEL32.dll", "RtlCaptureContext"}).address,

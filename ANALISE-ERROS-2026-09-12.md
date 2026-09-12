@@ -75,6 +75,13 @@ sem executar a operação.
   enquanto ponteiros nulos retornam `ERROR_INVALID_PARAMETER` e
   `CDERR_STRUCTSIZE`. `Win32StubTest.ComdlgStubsRejectFalseSuccessAndReportDialogFailure`
   protege o contrato.
+- **Corrigido nesta etapa:** `version.dll` não retorna mais tamanho `512`,
+  bloco de zeros ou ponteiros para strings estáticas do host como se fossem
+  `RT_VERSION`. As dez exports estão classificadas como `Stub`; consultas
+  válidas retornam `ERROR_NOT_SUPPORTED`, limpam as saídas de
+  `VerQueryValue` e entradas inválidas retornam `ERROR_INVALID_PARAMETER`.
+  `Win32StubTest.VersionStubsRejectFabricatedMetadataAndClearQueries`
+  protege o contrato.
 - **Alta prioridade:** módulos que falham sem atualizar `GetLastError` precisam
   de testes de erro. `IMM32`, `DWMAPI`, `WINMM`, `COMDLG32` e `version` não
   podem deixar o erro anterior do convidado parecer a causa atual.

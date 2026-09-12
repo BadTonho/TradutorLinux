@@ -321,7 +321,9 @@ revogação, Authenticode completo e provedores criptográficos do sistema não 
 prometidos; handles desconhecidos falham sem acessar memória arbitrária.
 
 `GetFileVersionInfoSizeA/W`, `GetFileVersionInfoA/W`, `GetFileVersionInfoSizeExA/W`,
-`GetFileVersionInfoExA/W` e `VerQueryValueA/W` leem `RT_VERSION`. `InitCommonControls`,
+`GetFileVersionInfoExA/W` e `VerQueryValueA/W` são stubs controlados: não
+leem `RT_VERSION`, não fabricam metadados e não retornam ponteiros host.
+`InitCommonControls`,
 image lists, `CreateStatusWindowW`, `CreateToolbarEx`, `PropertySheetW`,
 `TaskDialog*` e subclassing de controles possuem apenas os contratos de
 fixtures. `SetWindowTheme` e funções UxTheme são stubs/limitadas; DWM, WINMM,

@@ -205,6 +205,40 @@ TEST(Win32StubTest, ComdlgStubsRejectFalseSuccessAndReportDialogFailure) {
     EXPECT_EQ(tl_CommDlgExtendedError(), 0x0001U);
 }
 
+TEST(Win32StubTest, VersionStubsRejectFabricatedMetadataAndClearQueries) {
+    std::uint32_t handle = 123U;
+    EXPECT_EQ(tl_GetFileVersionInfoSizeA("test.exe", &handle), 0U);
+    EXPECT_EQ(handle, 0U);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorNotSupported);
+    EXPECT_EQ(tl_GetFileVersionInfoSizeExW(0, nullptr, &handle), 0U);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorNotSupported);
+
+    std::array<std::byte, 64> data;
+    data.fill(std::byte{0xA5});
+    EXPECT_EQ(tl_GetFileVersionInfoA("test.exe", 0, data.size(), data.data()), 0);
+    EXPECT_EQ(data.front(), std::byte{0xA5});
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorNotSupported);
+    EXPECT_EQ(tl_GetFileVersionInfoExW(0, nullptr, 0, data.size(), data.data()), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorNotSupported);
+
+    void* buffer = reinterpret_cast<void*>(0x1U);
+    std::uint32_t length = 123U;
+    EXPECT_EQ(tl_VerQueryValueA(nullptr, "\\", &buffer, &length), 0);
+    EXPECT_EQ(buffer, nullptr);
+    EXPECT_EQ(length, 0U);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorNotSupported);
+
+    buffer = reinterpret_cast<void*>(0x2U);
+    length = 456U;
+    EXPECT_EQ(tl_VerQueryValueW(nullptr, nullptr, &buffer, &length), 0);
+    EXPECT_EQ(buffer, nullptr);
+    EXPECT_EQ(length, 0U);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorNotSupported);
+
+    EXPECT_EQ(tl_GetFileVersionInfoA(nullptr, 0, 0, nullptr), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+}
+
 TEST(Win32StubTest, UnsupportedApisEmitTraceWithMechanismAndDetail) {
     const std::filesystem::path directory =
         std::filesystem::temp_directory_path() /

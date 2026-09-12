@@ -457,14 +457,20 @@ TEST(NotepadPlusPlusCoverageTest, AllApisAndModules) {
 
     // VERSION
     std::uint32_t ver_h = 0;
-    EXPECT_EQ(tl_GetFileVersionInfoSizeA("test.exe", &ver_h), 512U);
-    EXPECT_EQ(tl_GetFileVersionInfoSizeW(nullptr, &ver_h), 512U);
+    EXPECT_EQ(tl_GetFileVersionInfoSizeA("test.exe", &ver_h), 0U);
+    EXPECT_EQ(ver_h, 0U);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorNotSupported);
+    EXPECT_EQ(tl_GetFileVersionInfoSizeW(nullptr, &ver_h), 0U);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorNotSupported);
     char ver_buf[512]{};
-    EXPECT_EQ(tl_GetFileVersionInfoA("test.exe", 0, 512, ver_buf), 1);
-    void* q_buf = nullptr;
-    std::uint32_t q_len = 0;
-    EXPECT_EQ(tl_VerQueryValueA(ver_buf, "\\", &q_buf, &q_len), 1);
-    EXPECT_NE(q_buf, nullptr);
+    EXPECT_EQ(tl_GetFileVersionInfoA("test.exe", 0, sizeof(ver_buf), ver_buf), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorNotSupported);
+    void* q_buf = reinterpret_cast<void*>(0x1U);
+    std::uint32_t q_len = 123;
+    EXPECT_EQ(tl_VerQueryValueA(ver_buf, "\\", &q_buf, &q_len), 0);
+    EXPECT_EQ(q_buf, nullptr);
+    EXPECT_EQ(q_len, 0U);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorNotSupported);
 
     // UxTheme
     void* theme = tl_OpenThemeData(nullptr, nullptr);
