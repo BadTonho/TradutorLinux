@@ -10,11 +10,10 @@
 #include <cstddef>
 #include <cstdlib>
 #include <cstring>
+#include <filesystem>
 #include <string>
+#include <system_error>
 #include <vector>
-#include <sys/stat.h>
-#include <sys/types.h>
-#include <unistd.h>
 
 namespace tradutorlinux {
 
@@ -108,15 +107,12 @@ bool guid_equal(const Guid* a, const Guid* b) noexcept {
     return std::memcmp(a, b, sizeof(Guid)) == 0;
 }
 
-std::string get_home_dir() {
-    const char* home = ::getenv("HOME");
-    if (home != nullptr && home[0] != '\0') return home;
-    home = ::getenv("USERPROFILE");
-    if (home != nullptr && home[0] != '\0') return home;
-    return "/tmp";
+std::filesystem::path user_profile_path(const prefix::EnvironmentPaths& paths) {
+    return paths.drive_c / "users" / "guest";
 }
 
-std::string known_folder_path_for_guid(const Guid* rfid) {
+std::filesystem::path known_folder_path_for_guid(const Guid* rfid,
+                                                 const prefix::EnvironmentPaths& paths) {
     // GUIDs conhecidos
     static const Guid kRoamingAppData = {0x3EB685DB, 0x65F9, 0x4CF6, {0xA0,0x3A,0xE3,0xEF,0x65,0x72,0x9F,0x3D}};
     static const Guid kLocalAppData = {0xF1B32785, 0x6FBA, 0x4FCF, {0x9D,0x55,0x7B,0x8E,0x7F,0x15,0x70,0x91}};
@@ -125,70 +121,59 @@ std::string known_folder_path_for_guid(const Guid* rfid) {
     static const Guid kDocuments = {0xFDD39AD0, 0x238F, 0x46AF, {0xAD,0xB4,0x6C,0x85,0x48,0x03,0x69,0xC7}};
     static const Guid kDownloads = {0x374DE290, 0x123F, 0x4565, {0x91,0x64,0x39,0xC4,0x92,0x5E,0x46,0x7B}};
     static const Guid kProfile = {0x5E6C858F, 0x0E22, 0x4760, {0x9A,0xFE,0xEA,0x33,0x17,0xB6,0x71,0x73}};
-    const std::string home = get_home_dir();
     if (guid_equal(rfid, &kRoamingAppData)) {
-        const char* xdg = ::getenv("XDG_CONFIG_HOME");
-        if (xdg != nullptr && xdg[0] != '\0') return xdg;
-        return home + "/.config";
+        return paths.app_data_roaming;
     }
     if (guid_equal(rfid, &kLocalAppData)) {
-        const char* xdg = ::getenv("XDG_DATA_HOME");
-        if (xdg != nullptr && xdg[0] != '\0') return xdg;
-        return home + "/.local/share";
+        return paths.app_data_local;
     }
     if (guid_equal(rfid, &kProgramData)) {
-        return "/tmp/ProgramData";
+        return paths.drive_c / "ProgramData";
     }
     if (guid_equal(rfid, &kDesktop)) {
-        return home + "/Desktop";
+        return user_profile_path(paths) / "Desktop";
     }
     if (guid_equal(rfid, &kDocuments)) {
-        const char* xdg = ::getenv("XDG_DOCUMENTS_DIR");
-        if (xdg != nullptr && xdg[0] != '\0') return xdg;
-        return home + "/Documents";
+        return user_profile_path(paths) / "Documents";
     }
     if (guid_equal(rfid, &kDownloads)) {
-        return home + "/Downloads";
+        return user_profile_path(paths) / "Downloads";
     }
     if (guid_equal(rfid, &kProfile)) {
-        return home;
+        return user_profile_path(paths);
     }
-    return "";
+    return {};
 }
 
-std::string csidl_to_path(int csidl) {
-    const std::string home = get_home_dir();
+std::filesystem::path csidl_to_path(const int csidl, const prefix::EnvironmentPaths& paths) {
     switch (csidl & 0xFF) {
-        case 0x00: return home + "/Desktop"; // CSIDL_DESKTOP
-        case 0x05: return home + "/Documents"; // PERSONAL
-        case 0x1A: { // APPDATA
-            const char* xdg = ::getenv("XDG_CONFIG_HOME");
-            if (xdg && xdg[0]) return xdg;
-            return home + "/.config";
-        }
-        case 0x1C: { // LOCAL_APPDATA
-            const char* xdg = ::getenv("XDG_DATA_HOME");
-            if (xdg && xdg[0]) return xdg;
-            return home + "/.local/share";
-        }
-        case 0x23: return "/tmp/ProgramData"; // COMMON_APPDATA
-        case 0x28: return home; // PROFILE
-        default: return home;
+        case 0x00: return user_profile_path(paths) / "Desktop"; // CSIDL_DESKTOP
+        case 0x05: return user_profile_path(paths) / "Documents"; // PERSONAL
+        case 0x1A: return paths.app_data_roaming; // APPDATA
+        case 0x1C: return paths.app_data_local; // LOCAL_APPDATA
+        case 0x23: return paths.drive_c / "ProgramData"; // COMMON_APPDATA
+        case 0x28: return user_profile_path(paths); // PROFILE
+        default: return user_profile_path(paths);
     }
 }
 
-void ensure_directory_exists(const std::string& path) {
-    // Cria diretório de forma best-effort, ignora erro se já existe
-    ::mkdir(path.c_str(), 0755);
-    // Tenta criar pais recursivamente via sistema simples
-    // Se falhar por ENOENT, tenta criar pai
-    if (::mkdir(path.c_str(), 0755) != 0 && errno == ENOENT) {
-        std::size_t pos = path.find_last_of('/');
-        if (pos != std::string::npos && pos > 0) {
-            ensure_directory_exists(path.substr(0, pos));
-            ::mkdir(path.c_str(), 0755);
+bool ensure_directory_exists(const std::filesystem::path& path) {
+    std::error_code error;
+    std::filesystem::create_directories(path, error);
+    return !error;
+}
+
+bool is_safe_relative_subdirectory(const std::string& value) {
+    const std::filesystem::path relative(value);
+    if (relative.empty() || relative.is_absolute()) {
+        return !relative.is_absolute();
+    }
+    for (const std::filesystem::path& component : relative) {
+        if (component == "..") {
+            return false;
         }
     }
+    return true;
 }
 } // namespace
 
@@ -204,13 +189,18 @@ TL_MSABI int tl_SHGetKnownFolderPath(const void* rfid, const std::uint32_t flags
         set_last_error(abi::kErrorInvalidParameter);
         return static_cast<int>(0x80070057);
     }
-    const Guid* guid = static_cast<const Guid*>(rfid);
-    std::string utf8_path = known_folder_path_for_guid(guid);
-    if (utf8_path.empty()) {
-        utf8_path = get_home_dir();
+    const prefix::EnvironmentPaths paths = prefix::get_environment_paths(guest_prefix_root());
+    const std::filesystem::path native_path =
+        known_folder_path_for_guid(static_cast<const Guid*>(rfid), paths);
+    if (native_path.empty()) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return static_cast<int>(0x80070057);
     }
-    ensure_directory_exists(utf8_path);
-    const std::string win_path = prefix::to_windows_path(std::filesystem::path(utf8_path), guest_prefix_root());
+    if (!ensure_directory_exists(native_path)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return static_cast<int>(0x80004005); // E_FAIL
+    }
+    const std::string win_path = prefix::to_windows_path(native_path, guest_prefix_root());
     const std::u16string wide = util::utf8_to_wide(win_path);
     const std::size_t bytes = (wide.size() + 1) * sizeof(std::uint16_t);
     // Usa CoTaskMemAlloc (ole32) para alocar; aqui malloc é suficiente pois CoTaskMemFree é free
@@ -235,9 +225,13 @@ TL_MSABI int tl_SHGetFolderPathW(void* hwnd, int csidl, void* token, std::uint32
         set_last_error(abi::kErrorInvalidParameter);
         return static_cast<int>(0x80070057);
     }
-    std::string utf8_path = csidl_to_path(csidl);
-    ensure_directory_exists(utf8_path);
-    const std::string win_path = prefix::to_windows_path(std::filesystem::path(utf8_path), guest_prefix_root());
+    const prefix::EnvironmentPaths paths = prefix::get_environment_paths(guest_prefix_root());
+    const std::filesystem::path native_path = csidl_to_path(csidl, paths);
+    if (!ensure_directory_exists(native_path)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return static_cast<int>(0x80004005); // E_FAIL
+    }
+    const std::string win_path = prefix::to_windows_path(native_path, guest_prefix_root());
     const std::u16string wide = util::utf8_to_wide(win_path);
     const std::size_t to_copy = std::min<std::size_t>(wide.size(), 259);
     for (std::size_t i = 0; i < to_copy; ++i) path[i] = wide[i];
@@ -255,21 +249,28 @@ TL_MSABI int tl_SHGetFolderPathAndSubDirW(void* hwnd, int csidl, void* token, st
         set_last_error(abi::kErrorInvalidParameter);
         return static_cast<int>(0x80070057);
     }
-    std::string base = csidl_to_path(csidl);
-    ensure_directory_exists(base);
-    std::string win_base = prefix::to_windows_path(std::filesystem::path(base), guest_prefix_root());
+    const prefix::EnvironmentPaths paths = prefix::get_environment_paths(guest_prefix_root());
+    std::filesystem::path native_path = csidl_to_path(csidl, paths);
     if (sub_dir != nullptr) {
         if (!mapped_guest_wstring(sub_dir)) {
             set_last_error(abi::kErrorInvalidParameter);
             return static_cast<int>(0x80070057);
         }
         std::string sub = util::wide_to_utf8(sub_dir);
-        for (char& c : sub) if (c == '/') c = '\\';
-        if (!sub.empty() && sub.front() == '\\') sub.erase(0, 1);
-        if (!win_base.empty() && win_base.back() != '\\') win_base += "\\";
-        win_base += sub;
+        std::replace(sub.begin(), sub.end(), '\\', '/');
+        if (!is_safe_relative_subdirectory(sub)) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return static_cast<int>(0x80070057);
+        }
+        native_path /= std::filesystem::path(sub);
     }
-    const std::u16string wide = util::utf8_to_wide(win_base);
+    if (!prefix::is_path_within(native_path, paths.drive_c) ||
+        !ensure_directory_exists(native_path)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return static_cast<int>(0x80004005); // E_FAIL
+    }
+    const std::string win_path = prefix::to_windows_path(native_path, guest_prefix_root());
+    const std::u16string wide = util::utf8_to_wide(win_path);
     const std::size_t to_copy = std::min<std::size_t>(wide.size(), 259);
     for (std::size_t i = 0; i < to_copy; ++i) path[i] = wide[i];
     path[to_copy] = 0;
@@ -407,9 +408,14 @@ TL_MSABI int tl_SHGetPathFromIDListW(const void* const pidl, std::uint16_t* cons
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
-    const std::string home = get_home_dir();
-    const std::string win_home = prefix::to_windows_path(std::filesystem::path(home), guest_prefix_root());
-    const std::u16string wide_home = util::utf8_to_wide(win_home);
+    const prefix::EnvironmentPaths paths = prefix::get_environment_paths(guest_prefix_root());
+    const std::filesystem::path profile = user_profile_path(paths);
+    if (!ensure_directory_exists(profile)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    const std::string win_profile = prefix::to_windows_path(profile, guest_prefix_root());
+    const std::u16string wide_home = util::utf8_to_wide(win_profile);
     const std::size_t len = std::min(wide_home.size(), static_cast<std::size_t>(259));
     std::memcpy(path, wide_home.data(), len * sizeof(std::uint16_t));
     path[len] = 0;

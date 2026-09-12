@@ -445,6 +445,42 @@ TEST(ShellPathTest, SHGetFolderPathWReturnsWindowsPath) {
     EXPECT_EQ(buffer[2], u'\\');
 }
 
+TEST(ShellPathTest, SpecialFoldersStayInsideTheActivePrefix) {
+    const std::filesystem::path root = std::filesystem::temp_directory_path() /
+        ("tl-shell-prefix-" + std::to_string(static_cast<unsigned long long>(::getpid())));
+    const std::filesystem::path first = root / "first";
+    const std::filesystem::path second = root / "second";
+    ASSERT_TRUE(prefix::initialize_prefix(first));
+    ASSERT_TRUE(prefix::initialize_prefix(second));
+
+    std::uint16_t app_data[260]{};
+    set_guest_prefix_path(first);
+    ASSERT_EQ(tl_SHGetFolderPathW(nullptr, 0x001A, nullptr, 0, app_data), 0);
+    const std::u16string expected = u"C:\\users\\guest\\AppData\\Roaming";
+    EXPECT_EQ(std::u16string(reinterpret_cast<const char16_t*>(app_data)), expected);
+    EXPECT_TRUE(std::filesystem::exists(first / "drive_c" / "users" / "guest" / "AppData" / "Roaming"));
+
+    constexpr std::uint16_t kSubdir[] = {u'C', u'a', u'c', u'h', u'e', 0};
+    std::uint16_t sub_path[260]{};
+    ASSERT_EQ(tl_SHGetFolderPathAndSubDirW(nullptr, 0x001A, nullptr, 0, kSubdir, sub_path), 0);
+    EXPECT_EQ(std::u16string(reinterpret_cast<const char16_t*>(sub_path)), expected + u"\\Cache");
+    EXPECT_TRUE(std::filesystem::exists(first / "drive_c" / "users" / "guest" / "AppData" /
+                                        "Roaming" / "Cache"));
+
+    constexpr std::uint16_t kEscape[] = {u'.', u'.', u'\\', u'o', u'u', u't', 0};
+    EXPECT_NE(tl_SHGetFolderPathAndSubDirW(nullptr, 0x001A, nullptr, 0, kEscape, sub_path), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+
+    set_guest_prefix_path(second);
+    ASSERT_EQ(tl_SHGetFolderPathW(nullptr, 0x001A, nullptr, 0, app_data), 0);
+    EXPECT_EQ(std::u16string(reinterpret_cast<const char16_t*>(app_data)), expected);
+    EXPECT_TRUE(std::filesystem::exists(second / "drive_c" / "users" / "guest" / "AppData" / "Roaming"));
+
+    set_guest_prefix_path({});
+    std::error_code error;
+    std::filesystem::remove_all(root, error);
+}
+
 TEST(ShellExecutionTest, UnsupportedCallsFailWithoutFabricatingAProcess) {
     constexpr std::uint16_t kFileW[] = {u't', u'e', u's', u't', u'.', u't', u'x', u't', 0};
     EXPECT_LE(reinterpret_cast<std::uintptr_t>(tl_ShellExecuteW(nullptr, nullptr, kFileW,
