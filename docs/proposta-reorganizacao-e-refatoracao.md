@@ -142,26 +142,39 @@ que utiliza; o comportamento continua protegido pelos testes atuais.
 **Prioridade:** média, depois de F3. Deve ser feita incrementalmente, com um
 domínio por vez e regressão dos testes correspondentes.
 
-**Origem:** `src/runtime/dlls/kernel32/file.cpp`.
+**Status:** concluída. O antigo `file.cpp` foi dividido em contratos internos
+de I/O, enumeração, metadados, caminhos e INI, com os helpers compartilhados
+concentrados em `file_common.cpp`. A tabela de exports, os símbolos ABI, os
+layouts Win32 e os resultados das APIs foram preservados.
 
-A divisão sugerida é:
+**Origem histórica:** `src/runtime/dlls/kernel32/file.cpp`.
 
-- `file_io.cpp`: abertura, leitura, escrita, ponteiro, flush e fechamento;
-- `file_find.cpp`: enumeração de arquivos, streams e notificações;
-- `file_metadata.cpp`: atributos, tempos, tamanho, volume e informações por
+Os arquivos atuais são:
+
+- `file_common.cpp`: posição, conversões de tempo e normalização de caminhos;
+- `file_io.cpp`: abertura, leitura, escrita, ponteiro, flush, fechamento,
+  locks e handles;
+- `file_find.cpp`: enumeração, streams e notificações;
+- `file_metadata.cpp`: atributos, tamanhos, volumes, tempos e informações por
   handle;
-- `file_paths.cpp`: diretórios, caminhos completos, temporários, drives e
-  operações de cópia/movimentação;
-- `file_ini.cpp`: APIs de perfil INI;
-- `file_exports.cpp`, somente se a tabela de exports deixar de caber junto
-  do domínio sem duplicação.
+- `file_paths.cpp`: diretórios, caminhos, drives, temporários, cópia,
+  movimentação e links;
+- `file_ini.cpp`: APIs de perfil INI.
 
-A separação deve seguir as APIs e os helpers usados, não apenas o tamanho do
-arquivo. Cada movimento precisa manter a mesma exportação, o mesmo símbolo
-ABI e o mesmo resultado de erro.
+Não foi necessário criar `file_exports.cpp`: todas as APIs permaneceram junto
+do contrato correspondente, sem duplicação.
 
-**Conclusão:** a mudança só estará pronta quando os testes de arquivo,
-enumeração, caminhos, metadados e INI continuarem passando sem regressão.
+Cada movimento preservou a mesma exportação, o mesmo símbolo ABI e o mesmo
+resultado de erro.
+
+**Critério atendido:** os testes de arquivo, enumeração, caminhos, metadados e
+INI continuam passando sem regressão.
+
+A validação da divisão passou no build dos alvos `tradutorlinux` e
+`tradutorlinux_unit_tests`, além de 47 testes focados de KERNEL32 e arquivos.
+Permanece registrada a falha preexistente e isolada de
+`Win32HandleObjectTest.DuplicateHandleIncrementsRefCountAndAllowsMultipleClose`,
+que não pertence ao escopo da F4.
 
 ## Ordem recomendada
 
@@ -169,7 +182,8 @@ enumeração, caminhos, metadados e INI continuarem passando sem regressão.
    arquitetural real entre runtime genérico e extensão de aplicativo;
 2. F3 — reduzir `kernel32_internal.hpp` e criar dependências explícitas entre
    os módulos de KERNEL32;
-3. F4 — dividir `file.cpp` depois que os helpers comuns estiverem estáveis;
+3. F4 — dividir `file.cpp` depois que os helpers comuns estiverem estáveis
+   (concluída);
 4. F2 — dividir o estado interno somente se o mapeamento de dependências e uma
    medição simples confirmarem benefício suficiente para compensar o risco.
 

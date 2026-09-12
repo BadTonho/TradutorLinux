@@ -36,7 +36,12 @@ add_library(tradutorlinux_core STATIC
     runtime/seh/unwind_capture.S
     runtime/seh/seh.S
     runtime/ntdll.cpp
-    runtime/dlls/kernel32/file.cpp
+    runtime/dlls/kernel32/file_common.cpp
+    runtime/dlls/kernel32/file_io.cpp
+    runtime/dlls/kernel32/file_find.cpp
+    runtime/dlls/kernel32/file_metadata.cpp
+    runtime/dlls/kernel32/file_paths.cpp
+    runtime/dlls/kernel32/file_ini.cpp
     runtime/dlls/kernel32/process.cpp
     runtime/dlls/kernel32/thread.cpp
     runtime/dlls/kernel32/sync.cpp
@@ -130,7 +135,10 @@ target_compile_definitions(tradutorlinux_core
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
     target_compile_options(tradutorlinux_core PUBLIC -mstackrealign)
     set_source_files_properties(
-        runtime/dlls/kernel32/file.cpp runtime/dlls/kernel32/process.cpp runtime/dlls/kernel32/thread.cpp
+        runtime/dlls/kernel32/file_common.cpp runtime/dlls/kernel32/file_io.cpp
+        runtime/dlls/kernel32/file_find.cpp runtime/dlls/kernel32/file_metadata.cpp
+        runtime/dlls/kernel32/file_paths.cpp runtime/dlls/kernel32/file_ini.cpp
+        runtime/dlls/kernel32/process.cpp runtime/dlls/kernel32/thread.cpp
         runtime/dlls/kernel32/sync.cpp runtime/dlls/kernel32/memory.cpp runtime/dlls/kernel32/time.cpp
         runtime/dlls/kernel32/console.cpp runtime/dlls/kernel32/locale.cpp runtime/dlls/kernel32/module.cpp
         runtime/dlls/user32/window.cpp runtime/dlls/user32/message.cpp runtime/dlls/user32/dialog.cpp

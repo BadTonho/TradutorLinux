@@ -9,12 +9,68 @@
 #include <cctype>
 #include <cstdint>
 #include <ctime>
+#include <limits>
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include <sys/statvfs.h>
 
 namespace tradutorlinux {
+
+namespace file_internal {
+
+struct LegacyFileTime {
+    std::uint32_t low{};
+    std::uint32_t high{};
+};
+static_assert(sizeof(LegacyFileTime) == 8);
+
+struct LegacyFileAttributeData {
+    std::uint32_t attributes{};
+    LegacyFileTime creation{};
+    LegacyFileTime last_access{};
+    LegacyFileTime last_write{};
+    std::uint32_t size_high{};
+    std::uint32_t size_low{};
+};
+static_assert(sizeof(LegacyFileAttributeData) == 36);
+
+struct LegacyByHandleFileInformation {
+    std::uint32_t attributes{};
+    LegacyFileTime creation{};
+    LegacyFileTime last_access{};
+    LegacyFileTime last_write{};
+    std::uint32_t volume_serial_number{};
+    std::uint32_t size_high{};
+    std::uint32_t size_low{};
+    std::uint32_t number_of_links{};
+    std::uint32_t file_index_high{};
+    std::uint32_t file_index_low{};
+};
+static_assert(sizeof(LegacyByHandleFileInformation) == 52);
+
+struct LegacyBasicFileInformation {
+    std::int64_t creation_time{};
+    std::int64_t last_access_time{};
+    std::int64_t last_write_time{};
+    std::int64_t change_time{};
+    std::uint32_t attributes{};
+    std::uint32_t reserved{};
+};
+static_assert(sizeof(LegacyBasicFileInformation) == 40);
+
+std::uint64_t current_file_size(const FileSlot& slot) noexcept;
+void synchronize_file_position(FileSlot* slot, int fd) noexcept;
+bool normalize_wide_path(const std::uint16_t* path, std::string& result) noexcept;
+std::int64_t filetime_ticks(const timespec& value) noexcept;
+void write_filetime(const timespec& source, LegacyFileTime& target) noexcept;
+bool filetime_to_timespec(const LegacyFileTime& value, timespec& result) noexcept;
+std::string normalize_windows_path_segments(const std::string& absolute_with_drive);
+std::string build_full_windows_path(const std::string& input_raw);
+std::u16string final_windows_path(const std::string& path);
+
+}  // namespace file_internal
 
 constexpr std::uint32_t kFileAttributeReadOnly = 0x00000001;
 constexpr std::uint32_t kFileAttributeDirectory = 0x00000010;
