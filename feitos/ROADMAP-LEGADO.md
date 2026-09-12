@@ -3703,8 +3703,8 @@ Cada fase só deve avançar quando seus critérios de saída estiverem atendidos
 Os itens marcados como concluídos devem ter evidência no repositório: código, teste, documentação ou um artefato reproduzível. O roadmap descreve ordem de dependências, não uma promessa de prazo.
 
 Este era o backlog normativo da rodada histórica. `PROXIMAS-ETAPAS.md`, os
-registros de análise, `ideia.md` e as propostas em `docs/` permanecem apenas
-como referências históricas; as próximas tarefas agora são registradas no
+registros de análise e as propostas em `docs/` permanecem apenas como
+referências históricas; as próximas tarefas agora são registradas no
 `ROADMAP.md` da raiz. O backlog consolidado ao final deste documento usa IDs
 `B1`, `B2` etc. para preservar as referências das fases históricas.
 
@@ -4634,7 +4634,7 @@ roadmap.
 ## Backlog consolidado
 
 Este inventário reúne as pendências históricas de `PROXIMAS-ETAPAS.md`, dos
-registros de análise, `ideia.md`, `docs/propostas-evolucao.md` e da proposta de
+registros de análise, `docs/propostas-evolucao.md` e da proposta de
 reorganização. As pendências atuais foram separadas no `ROADMAP.md` da raiz.
 Uma tarefa fica pronta somente com a evidência exigida na definição de pronto
 abaixo.
