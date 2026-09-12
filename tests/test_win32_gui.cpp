@@ -48,6 +48,40 @@ TEST(Win32GuiTest, MenuStateOperationsPreservePreviousState) {
     EXPECT_EQ(tl_DestroyMenu(menu), 1);
 }
 
+TEST(Win32GuiTest, InsertsMenuItemWithMicrosoftMask) {
+    struct GuestMenuItemInfoW {
+        std::uint32_t cb_size;
+        std::uint32_t f_mask;
+        std::uint32_t f_type;
+        std::uint32_t f_state;
+        std::uint32_t item_id;
+        void* sub_menu;
+        void* checked_bitmap;
+        void* unchecked_bitmap;
+        std::uintptr_t item_data;
+        std::uint16_t* type_data;
+        std::uint32_t char_count;
+        void* item_bitmap;
+    } info{};
+    static_assert(sizeof(GuestMenuItemInfoW) == 80);
+    std::uint16_t text[] = {'I', 'n', 's', 'e', 'r', 't', 'e', 'd', 0};
+    info.cb_size = sizeof(info);
+    info.f_mask = 0x00000010U | 0x00000002U | 0x00000040U;
+    info.item_id = 707;
+    info.type_data = text;
+    void* const menu = tl_CreatePopupMenu();
+    ASSERT_NE(menu, nullptr);
+    ASSERT_EQ(tl_InsertMenuItemW(menu, 0, 1, &info), 1);
+    ASSERT_EQ(tl_GetMenuItemCount(menu), 1);
+    const MenuSlot* const actual = find_menu_slot(menu);
+    ASSERT_NE(actual, nullptr);
+    EXPECT_EQ(actual->logical_items[0].command_id, 707U);
+    EXPECT_EQ(actual->logical_items[0].text, "Inserted");
+    EXPECT_EQ(actual->items[0].command, 707U);
+    EXPECT_EQ(actual->items[0].text, "Inserted");
+    EXPECT_EQ(tl_DestroyMenu(menu), 1);
+}
+
 TEST(Win32GuiTest, LoadsExtendedMenuResourceAndExposesHierarchy) {
     std::vector<std::byte> image(512, std::byte{0});
     const auto write_u16 = [&image](const std::size_t offset, const std::uint16_t value) {
@@ -137,7 +171,7 @@ TEST(Win32GuiTest, LoadsExtendedMenuResourceAndExposesHierarchy) {
     static_assert(sizeof(GuestMenuItemInfoW) == 80);
     std::uint16_t text[16]{};
     info.cb_size = sizeof(info);
-    info.f_mask = 0x00000004U | 0x00000008U | 0x00000040U;
+    info.f_mask = 0x00000002U | 0x00000004U | 0x00000040U;
     info.type_data = text;
     info.char_count = static_cast<std::uint32_t>(std::size(text));
     EXPECT_EQ(tl_GetMenuItemInfoW(menu, 0, 1, &info), 1);

@@ -137,7 +137,7 @@ void register_user32_module() {
         {"GetMenuItemCount", 128, reinterpret_cast<std::uintptr_t>(&tl_GetMenuItemCount), ExportSupport::Limited},
         {"GetMenuItemInfoW", 129, reinterpret_cast<std::uintptr_t>(&tl_GetMenuItemInfoW), ExportSupport::Limited},
         {"SetMenuItemInfoW", 130, reinterpret_cast<std::uintptr_t>(&tl_SetMenuItemInfoW), ExportSupport::Stub},
-        {"InsertMenuItemW", 131, reinterpret_cast<std::uintptr_t>(&tl_InsertMenuItemW), ExportSupport::Stub},
+        {"InsertMenuItemW", 131, reinterpret_cast<std::uintptr_t>(&tl_InsertMenuItemW), ExportSupport::Limited},
         {"RemoveMenu", 132, reinterpret_cast<std::uintptr_t>(&tl_RemoveMenu), ExportSupport::Stub},
         {"EnableMenuItem", 133, reinterpret_cast<std::uintptr_t>(&tl_EnableMenuItem), ExportSupport::Limited},
         {"CheckMenuItem", 134, reinterpret_cast<std::uintptr_t>(&tl_CheckMenuItem), ExportSupport::Limited},

@@ -2991,6 +2991,27 @@ Evidência reproduzível:
 - [x] O smoke continua classificando o aplicativo como não suportado e não
   adiciona fallback para `WinVerifyTrust`, CMS, Authenticode ou exceções C++.
 
+### F10 concluído — USER32: inserção de itens de menu observada no 7-Zip (2026-09-12)
+
+O report estático do 7zFM listava `InsertMenuItemW` como stub, e a sondagem
+dinâmica com GDB confirmou chamadas reais durante a montagem do menu de classe:
+`item=0`, `fByPosition=1`, máscara `0x17`, ID `540`, tipo textual e estrutura
+`MENUITEMINFOW` x64 de 80 bytes. Após a implementação, uma nova sondagem não
+observou `SetMenuItemInfoW`, `RemoveMenu` ou `TrackPopupMenuEx` nesse fluxo.
+
+- [x] `InsertMenuItemW` agora valida thread GUI, handle, `cbSize`, ponteiros e
+  máscaras; aceita estado, tipo, ID, submenu e texto UTF-16, rejeitando
+  bitmaps/dados arbitrários com erro controlado.
+- [x] A inserção funciona por posição ou ID, mantém `MenuItem` e o vetor de
+  itens do popup sincronizados e emite trace de sucesso; o export passou de
+  `stub` para `limited`.
+- [x] A unitária cobre máscara Microsoft, ID, texto e sincronização visual; o
+  report de 7zFM/Notepad++ continua com todos os imports resolvidos.
+- [x] O smoke real do 7-Zip foi revalidado sob Xvfb após a implementação e
+  retornou `0`, confirmando cópia e encerramento limpo.
+- [x] `SetMenuItemInfoW`, `RemoveMenu` e `TrackPopupMenuEx` permanecem stubs
+  até outro fluxo real justificar uma promoção em etapas separadas.
+
 ## Regras de validação
 
 - Cada correção começa com uma fixture mínima e termina com testes automatizados.

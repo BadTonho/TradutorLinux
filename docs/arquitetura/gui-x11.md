@@ -308,10 +308,12 @@ uma integração com o tray do desktop.
 hierarquia lógica e `GetMenuItemInfoW` devolve os campos solicitados com
 validação do buffer. A implementação atual cobre o menu de classe usado pelo
 7-Zip e retorna falha controlada para templates padrão v0 ou recursos ausentes.
-As operações de mutação de itens (`SetMenuItemInfoW`, `InsertMenuItemW`, `RemoveMenu`,
-`EnableMenuItem`, `CheckMenuItem` e `CheckMenuRadioItem`) e
-`TrackPopupMenuEx` também falham explicitamente como stubs; o relatório os
-classifica como `stub`.
+`InsertMenuItemW` aceita o subconjunto x64 de `MENUITEMINFOW` usado pelo 7-Zip
+(estado, tipo, ID, submenu e texto), por posição ou por ID, e mantém o vetor
+visual sincronizado com o modelo lógico. `SetMenuItemInfoW`, `RemoveMenu`,
+bitmaps e `TrackPopupMenuEx` ainda falham explicitamente como stubs; o relatório
+os classifica como `stub`. `EnableMenuItem`, `CheckMenuItem` e
+`CheckMenuRadioItem` continuam limitados ao estado lógico, sem bitmaps.
 
 O alvo Simple Todo recebe um overlay Linux versionado em
 `tests/targets/patches/`: a opção de inicialização com Windows é removida e o

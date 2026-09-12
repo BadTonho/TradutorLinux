@@ -178,7 +178,7 @@ TEST(SevenZipGuiCoverageTest, AllApisAndModules) {
     EXPECT_EQ(tl_SetMenuItemInfoW(menu, 0, 1, nullptr), 0);
     EXPECT_EQ(tl_GetLastError(), abi::kErrorNotSupported);
     EXPECT_EQ(tl_InsertMenuItemW(menu, 0, 1, nullptr), 0);
-    EXPECT_EQ(tl_GetLastError(), abi::kErrorNotSupported);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidHandle);
     EXPECT_EQ(tl_RemoveMenu(menu, 0, 0), 0);
     EXPECT_EQ(tl_GetLastError(), abi::kErrorNotSupported);
     void* state_menu = tl_CreatePopupMenu();

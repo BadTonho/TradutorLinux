@@ -222,6 +222,8 @@ TEST_F(ModuleTest, RegistersBuiltinKernel32Exports) {
               ExportSupport::Limited);
     EXPECT_EQ(find_export(ExportQuery{"USER32.dll", "TrackPopupMenuEx"}).support,
               ExportSupport::Stub);
+    EXPECT_EQ(find_export(ExportQuery{"USER32.dll", "InsertMenuItemW"}).support,
+              ExportSupport::Limited);
     EXPECT_EQ(find_export(ExportQuery{"USER32.dll", "GetMenu"}).support,
               ExportSupport::Limited);
     EXPECT_EQ(find_export(ExportQuery{"KERNEL32.dll", "TlsGetValue"}).address,

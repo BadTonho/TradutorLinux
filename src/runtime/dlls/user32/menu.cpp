@@ -7,11 +7,15 @@ constexpr std::uint32_t kRtMenu = 4U;
 constexpr std::uint16_t kMenuItemPopup = 0x0001U;
 constexpr std::uint16_t kMenuItemLast = 0x0080U;
 constexpr std::uint32_t kMenuTypeSeparator = 0x00000800U;
-constexpr std::uint32_t kMenuItemInfoType = 0x00000001U;
-constexpr std::uint32_t kMenuItemInfoState = 0x00000002U;
-constexpr std::uint32_t kMenuItemInfoId = 0x00000004U;
-constexpr std::uint32_t kMenuItemInfoSubmenu = 0x00000008U;
+constexpr std::uint32_t kMenuItemInfoState = 0x00000001U;
+constexpr std::uint32_t kMenuItemInfoId = 0x00000002U;
+constexpr std::uint32_t kMenuItemInfoSubmenu = 0x00000004U;
+constexpr std::uint32_t kMenuItemInfoCheckmarks = 0x00000008U;
+constexpr std::uint32_t kMenuItemInfoType = 0x00000010U;
+constexpr std::uint32_t kMenuItemInfoData = 0x00000020U;
 constexpr std::uint32_t kMenuItemInfoString = 0x00000040U;
+constexpr std::uint32_t kMenuItemInfoBitmap = 0x00000080U;
+constexpr std::uint32_t kMenuItemInfoFType = 0x00000100U;
 constexpr std::uint32_t kMenuByPosition = 0x00000400U;
 constexpr std::uint32_t kMenuStateEnabledMask = 0x00000003U;
 constexpr std::uint32_t kMenuStateChecked = 0x00000008U;
@@ -25,6 +29,17 @@ constexpr std::uint32_t kMenuStateChecked = 0x00000008U;
                                      return entry.used && &entry == menu;
                                  });
     return it == g_menus.end() ? nullptr : &*it;
+}
+
+void rebuild_popup_items(MenuSlot& menu) {
+    menu.items.clear();
+    menu.items.reserve(menu.logical_items.size());
+    for (const MenuItem& item : menu.logical_items) {
+        menu.items.push_back(gui::PopupMenuItem{
+            .command = item.command_id,
+            .text = item.text,
+            .separator = (item.type & kMenuTypeSeparator) != 0U});
+    }
 }
 
 [[nodiscard]] MenuSlot* allocate_menu_slot() noexcept {
@@ -217,6 +232,54 @@ static_assert(sizeof(GuestMenuItemInfoW) == 80);
     return menu_item_for(menu, item, (flags & kMenuByPosition) != 0U ? 1 : 0);
 }
 
+[[nodiscard]] bool read_guest_menu_item_info(const void* const mii, MenuItem& item) noexcept {
+    if (mii == nullptr || !mapped_guest_range(mii, sizeof(GuestMenuItemInfoW), false)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return false;
+    }
+    const auto* const input = static_cast<const GuestMenuItemInfoW*>(mii);
+    if (input->cb_size < sizeof(GuestMenuItemInfoW)) {
+        set_last_error(abi::kErrorBadLength);
+        return false;
+    }
+    if ((input->f_mask & (kMenuItemInfoData | kMenuItemInfoBitmap)) != 0U) {
+        set_last_error(abi::kErrorNotSupported);
+        return false;
+    }
+    if ((input->f_mask & (kMenuItemInfoType | kMenuItemInfoFType)) != 0U) {
+        item.type = input->f_type;
+    }
+    if ((input->f_mask & kMenuItemInfoState) != 0U) {
+        item.state = input->f_state;
+    }
+    if ((input->f_mask & kMenuItemInfoId) != 0U) {
+        item.command_id = input->item_id;
+    }
+    if ((input->f_mask & kMenuItemInfoSubmenu) != 0U) {
+        if (input->sub_menu != nullptr && mutable_menu_slot(input->sub_menu) == nullptr) {
+            set_last_error(abi::kErrorInvalidHandle);
+            return false;
+        }
+        item.submenu = static_cast<MenuSlot*>(input->sub_menu);
+    }
+    if ((input->f_mask & (kMenuItemInfoType | kMenuItemInfoString)) != 0U) {
+        if (input->type_data == nullptr) {
+            item.text.clear();
+        } else if (!mapped_guest_wstring(input->type_data)) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return false;
+        } else {
+            item.text = util::wide_to_utf8(input->type_data);
+        }
+    }
+    if ((input->f_mask & kMenuItemInfoCheckmarks) != 0U &&
+        (input->checked_bitmap != nullptr || input->unchecked_bitmap != nullptr)) {
+        set_last_error(abi::kErrorNotSupported);
+        return false;
+    }
+    return true;
+}
+
 }  // namespace
 
 extern "C" {
@@ -381,7 +444,7 @@ TL_MSABI int tl_GetMenuItemInfoW(void* const menu, const std::uint32_t item, con
         set_last_error(abi::kErrorBadLength);
         return 0;
     }
-    if ((output->f_mask & kMenuItemInfoType) != 0U) {
+    if ((output->f_mask & (kMenuItemInfoType | kMenuItemInfoFType)) != 0U) {
         output->f_type = entry->type;
     }
     if ((output->f_mask & kMenuItemInfoState) != 0U) {
@@ -393,7 +456,7 @@ TL_MSABI int tl_GetMenuItemInfoW(void* const menu, const std::uint32_t item, con
     if ((output->f_mask & kMenuItemInfoSubmenu) != 0U) {
         output->sub_menu = entry->submenu;
     }
-    if ((output->f_mask & kMenuItemInfoString) != 0U) {
+    if ((output->f_mask & (kMenuItemInfoType | kMenuItemInfoString)) != 0U) {
         if (output->type_data == nullptr || output->char_count == 0U) {
             set_last_error(abi::kErrorInvalidParameter);
             return 0;
@@ -435,12 +498,55 @@ TL_MSABI int tl_SetMenuItemInfoW(void* const menu, const std::uint32_t item, con
 
 TL_MSABI int tl_InsertMenuItemW(void* const menu, const std::uint32_t item, const int f_by_position,
                                const void* const mii) noexcept {
-    (void)menu;
-    (void)item;
-    (void)f_by_position;
-    (void)mii;
-    set_last_error(abi::kErrorNotSupported);
-    return 0;
+    if (!user32_gui_thread_allowed("InsertMenuItemW")) {
+        return 0;
+    }
+    MenuSlot* const actual = mutable_menu_slot(menu);
+    if (actual == nullptr) {
+        set_last_error(abi::kErrorInvalidHandle);
+        return 0;
+    }
+    MenuItem inserted{};
+    if (!read_guest_menu_item_info(mii, inserted)) {
+        return 0;
+    }
+    std::size_t index = actual->logical_items.size();
+    if (f_by_position != 0) {
+        index = static_cast<std::size_t>(item);
+        if (index > actual->logical_items.size()) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
+        }
+    } else {
+        const auto found = std::find_if(
+            actual->logical_items.begin(), actual->logical_items.end(),
+            [item](const MenuItem& entry) { return entry.command_id == item; });
+        if (found == actual->logical_items.end()) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
+        }
+        index = static_cast<std::size_t>(found - actual->logical_items.begin());
+    }
+    inserted.flags = inserted.submenu != nullptr ? kMenuItemPopup : 0;
+    try {
+        actual->logical_items.reserve(actual->logical_items.size() + 1U);
+        actual->items.reserve(actual->logical_items.size() + 1U);
+        actual->logical_items.insert(actual->logical_items.begin() +
+                                         static_cast<std::ptrdiff_t>(index),
+                                     std::move(inserted));
+        rebuild_popup_items(*actual);
+    } catch (...) {
+        set_last_error(abi::kErrorNotEnoughMemory);
+        return 0;
+    }
+    const std::array<diagnostics::TraceField, 4> fields{
+        diagnostics::TraceField{"symbol", "InsertMenuItemW"},
+        diagnostics::TraceField{"status", "success"},
+        diagnostics::TraceField{"index", std::to_string(index)},
+        diagnostics::TraceField{"items", std::to_string(actual->logical_items.size())}};
+    runtime_trace("InsertMenuItemW", fields, 4);
+    set_last_error(abi::kErrorSuccess);
+    return 1;
 }
 
 TL_MSABI int tl_RemoveMenu(void* const menu, const std::uint32_t position, const std::uint32_t flags) noexcept {
