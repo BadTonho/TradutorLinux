@@ -112,6 +112,9 @@ ResolveResult resolve_imports(MappedImage& image, const pe::PeInfo& info) {
         if (entry.mechanism == ImportMechanism::Delay) {
             if (entry.status == ImportStatus::Resolved && entry.address != 0) {
                 patch_address(image, entry);
+                if (entry.status != ImportStatus::Resolved) {
+                    fail(result, entry, entry.status, entry.detail);
+                }
             }
             continue;
         }

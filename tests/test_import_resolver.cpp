@@ -256,6 +256,36 @@ TEST_F(ImportResolverTest, ReportsEveryUnresolvedDelayImport) {
     EXPECT_EQ(result.imports[1].status, ImportStatus::UnknownSymbol);
 }
 
+TEST_F(ImportResolverTest, PropagatesInvalidDelayIatSlotToOverallStatus) {
+    const std::vector<std::byte> data = make_delay_import_data({{"FAKE.dll", {"DoWork"}, {}}});
+    BuildSpec spec;
+    spec.section_data.push_back({});
+    spec.section_data.push_back(data);
+    spec.delay_import_rva = kImportDataRva;
+    spec.delay_import_size = 64;
+    add_empty_reloc(spec);
+    const std::vector<std::byte> bytes = build(spec);
+
+    const pe::ParseResult parse_result = pe::parse_pe(bytes);
+    ASSERT_EQ(parse_result.status, pe::ParseStatus::Success);
+    MapResult map_result = map_image(parse_result.info, bytes,
+                                     {.preferred_base = kTestPreferredBase});
+    ASSERT_EQ(map_result.status, MapStatus::Success);
+    mapped = std::move(map_result.image);
+
+    pe::PeInfo info = parse_result.info;
+    ASSERT_EQ(info.delay_imports.size(), 1U);
+    ASSERT_EQ(info.delay_imports[0].symbols.size(), 1U);
+    info.delay_imports[0].symbols[0].iat_rva = info.size_of_image + 8;
+
+    const ResolveResult result = resolve_imports(mapped, info);
+    EXPECT_EQ(result.status, ImportStatus::UnsupportedMechanism);
+    ASSERT_EQ(result.imports.size(), 1U);
+    EXPECT_EQ(result.imports[0].mechanism, ImportMechanism::Delay);
+    EXPECT_EQ(result.imports[0].status, ImportStatus::UnsupportedMechanism);
+    EXPECT_FALSE(result.error_message.empty());
+}
+
 TEST_F(ImportResolverTest, EmptyImportsResolveCleanly) {
     BuildSpec spec;
     spec.section_data.push_back({});

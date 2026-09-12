@@ -21,7 +21,7 @@ indícios e podem mudar.
 
 | ID | Classificação | Achado e próxima evidência |
 |---|---|---|
-| E1 | **Confirmado estaticamente — alta prioridade** | No caminho de delay-import de `src/loader/import_resolver.cpp`, `patch_address` pode marcar a entrada como `UnsupportedMechanism` sem chamar `fail`. Deve existir uma fixture com delay-import inválido que exija resultado global não resolvido, IAT intacta e entry point não executado. |
+| E1 | **Corrigido e protegido** | O caminho de delay-import agora propaga para `ResolveResult` qualquer falha de `patch_address`. `ImportResolverTest.PropagatesInvalidDelayIatSlotToOverallStatus` cobre IAT fora da imagem e os 16 testes da suíte passaram no Debug. |
 | E2 | **Alta prioridade — validar** | `src/loader/module_graph.cpp` verifica executabilidade por mapa `x`, mas a validação precisa também exigir que a VA esteja dentro da imagem convidada. Criar fixture TLS/DllMain com VA executável fora da imagem e exigir rejeição antes da chamada. |
 | E3 | **Confirmado estaticamente — alta prioridade** | A coleta de callbacks TLS em `src/pe/pe_reader.cpp` não possui limite explícito equivalente ao limite de entradas. Adicionar caso hostil com terminador ausente/quantidade excessiva e exigir `malformed` sem crescimento ilimitado. |
 | E4 | **Alta prioridade — validar** | TLS truncado e `.pdata` apontando para região virtual sem dados físicos parecem virar `nullopt` sem diagnóstico estruturado. Fixtures truncadas devem distinguir `malformed` de ausência legítima do diretório. |
