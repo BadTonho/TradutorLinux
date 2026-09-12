@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <optional>
 #include <span>
 #include <string>
@@ -13,7 +14,7 @@ namespace tradutorlinux::pe {
 namespace {
 
 inline std::uint16_t read_u16(std::span<const std::byte> data, const std::size_t offset) noexcept {
-    if (offset + 2 > data.size()) {
+    if (offset > data.size() || 2 > data.size() - offset) {
         return 0;
     }
     return static_cast<std::uint16_t>(
@@ -22,7 +23,7 @@ inline std::uint16_t read_u16(std::span<const std::byte> data, const std::size_t
 }
 
 inline std::uint32_t read_u32(std::span<const std::byte> data, const std::size_t offset) noexcept {
-    if (offset + 4 > data.size()) {
+    if (offset > data.size() || 4 > data.size() - offset) {
         return 0;
     }
     return static_cast<std::uint32_t>(
@@ -370,43 +371,41 @@ ResourceInspectionResult inspect_pe_resources(
 
     result.has_resources = true;
 
-    auto find_leaf_rva_and_size = [&](const std::uint32_t off_data) -> std::pair<std::optional<std::uint32_t>, std::optional<std::uint32_t>> {
-        std::optional<std::uint32_t> data_rva;
-        std::optional<std::uint32_t> data_size;
-
-        if ((off_data & 0x80000000U) != 0) {
-            const std::size_t l2_offset = off_data & 0x7FFFFFFFU;
-            if (l2_offset + 16 <= rsrc.size()) {
-                const std::uint16_t l2_named = read_u16(rsrc, l2_offset + 12);
-                const std::uint16_t l2_id = read_u16(rsrc, l2_offset + 14);
-                const std::uint32_t l2_total = static_cast<std::uint32_t>(l2_named) + l2_id;
-                if (l2_total > 0 && l2_offset + 16 + 8 <= rsrc.size()) {
-                    const std::uint32_t l2_target = read_u32(rsrc, l2_offset + 16 + 4);
-                    if ((l2_target & 0x80000000U) != 0) {
-                        const std::size_t l3_offset = l2_target & 0x7FFFFFFFU;
-                        if (l3_offset + 16 <= rsrc.size()) {
-                            const std::uint16_t l3_named = read_u16(rsrc, l3_offset + 12);
-                            const std::uint16_t l3_id = read_u16(rsrc, l3_offset + 14);
-                            const std::uint32_t l3_total = static_cast<std::uint32_t>(l3_named) + l3_id;
-                            if (l3_total > 0 && l3_offset + 16 + 8 <= rsrc.size()) {
-                                const std::uint32_t l3_target = read_u32(rsrc, l3_offset + 16 + 4);
-                                if ((l3_target & 0x80000000U) == 0 && l3_target + 16 <= rsrc.size()) {
-                                    data_rva = read_u32(rsrc, l3_target);
-                                    data_size = read_u32(rsrc, l3_target + 4);
-                                }
-                            }
-                        }
-                    } else if (l2_target + 16 <= rsrc.size()) {
-                        data_rva = read_u32(rsrc, l2_target);
-                        data_size = read_u32(rsrc, l2_target + 4);
-                    }
+    using ResourceData = std::pair<std::uint32_t, std::uint32_t>;
+    const auto collect_leaf_resources = [&](const std::uint32_t root_offset) {
+        std::vector<ResourceData> resources;
+        const auto has_range = [&rsrc](const std::size_t offset, const std::size_t length) {
+            return offset <= rsrc.size() && length <= rsrc.size() - offset;
+        };
+        std::function<void(std::uint32_t, std::size_t)> visit_directory;
+        visit_directory = [&](const std::uint32_t encoded_offset, const std::size_t depth) {
+            if (depth > 3 || (encoded_offset & 0x80000000U) == 0) {
+                if ((encoded_offset & 0x80000000U) == 0 &&
+                    has_range(encoded_offset, 16)) {
+                    resources.emplace_back(read_u32(rsrc, encoded_offset),
+                                           read_u32(rsrc, encoded_offset + 4));
                 }
+                return;
             }
-        } else if (off_data + 16 <= rsrc.size()) {
-            data_rva = read_u32(rsrc, off_data);
-            data_size = read_u32(rsrc, off_data + 4);
-        }
-        return {data_rva, data_size};
+
+            const std::size_t directory_offset = encoded_offset & 0x7FFFFFFFU;
+            if (!has_range(directory_offset, 16)) {
+                return;
+            }
+            const std::uint16_t named = read_u16(rsrc, directory_offset + 12);
+            const std::uint16_t ids = read_u16(rsrc, directory_offset + 14);
+            const std::size_t entry_count = static_cast<std::size_t>(named) + ids;
+            if (entry_count == 0 || entry_count > 1024 ||
+                entry_count > (rsrc.size() - directory_offset - 16) / 8) {
+                return;
+            }
+            for (std::size_t index = 0; index < entry_count; ++index) {
+                const std::size_t entry_offset = directory_offset + 16 + index * 8;
+                visit_directory(read_u32(rsrc, entry_offset + 4), depth + 1);
+            }
+        };
+        visit_directory(root_offset, 0);
+        return resources;
     };
 
     auto resolve_span_from_rva = [&](const std::uint32_t rva, const std::uint32_t len) -> std::span<const std::byte> {
@@ -479,24 +478,36 @@ ResourceInspectionResult inspect_pe_resources(
 
         // Se for RT_MANIFEST (24), extrai e inspeciona o XML
         if (type_id == 24) {
-            const auto [data_rva, data_size] = find_leaf_rva_and_size(offset_to_data);
-            if (data_rva.has_value() && data_size.has_value() && *data_size > 0) {
+            for (const auto& [data_rva, data_size] : collect_leaf_resources(offset_to_data)) {
+                if (data_size == 0) {
+                    continue;
+                }
                 constexpr std::uint32_t kMaxManifestSize = 64 * 1024;
-                const auto manifest_bytes = resolve_span_from_rva(*data_rva, std::min(*data_size, kMaxManifestSize));
+                const auto manifest_bytes = resolve_span_from_rva(
+                    data_rva, std::min(data_size, kMaxManifestSize));
                 if (!manifest_bytes.empty()) {
                     const std::string_view xml_view(
                         reinterpret_cast<const char*>(manifest_bytes.data()),
                         manifest_bytes.size());
                     result.manifest = parse_manifest_xml(xml_view);
+                    if (result.manifest.has_manifest) {
+                        break;
+                    }
                 }
             }
         } else if (type_id == 16) { // RT_VERSION
-            const auto [data_rva, data_size] = find_leaf_rva_and_size(offset_to_data);
-            if (data_rva.has_value() && data_size.has_value() && *data_size > 0) {
+            for (const auto& [data_rva, data_size] : collect_leaf_resources(offset_to_data)) {
+                if (data_size == 0) {
+                    continue;
+                }
                 constexpr std::uint32_t kMaxVersionSize = 64 * 1024;
-                const auto ver_bytes = resolve_span_from_rva(*data_rva, std::min(*data_size, kMaxVersionSize));
+                const auto ver_bytes = resolve_span_from_rva(
+                    data_rva, std::min(data_size, kMaxVersionSize));
                 if (!ver_bytes.empty()) {
                     result.version_info = parse_version_info(ver_bytes);
+                    if (result.version_info.has_version_info) {
+                        break;
+                    }
                 }
             }
         }
@@ -506,4 +517,3 @@ ResourceInspectionResult inspect_pe_resources(
 }
 
 }  // namespace tradutorlinux::pe
-

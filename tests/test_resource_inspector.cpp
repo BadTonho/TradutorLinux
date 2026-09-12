@@ -196,6 +196,57 @@ std::vector<std::byte> make_pe_with_manifest(const std::string& manifest_xml) {
     return build(spec);
 }
 
+std::vector<std::byte> make_pe_with_invalid_first_manifest(const std::string& manifest_xml) {
+    constexpr std::uint32_t kRsrcRva = 0x2000;
+    constexpr std::uint32_t kL2Offset = 24;
+    constexpr std::uint32_t kDataEntryOffset = 64;
+    constexpr std::uint32_t kXmlOffset = 80;
+    std::vector<std::byte> rsrc;
+
+    // Root directory: one RT_MANIFEST type.
+    push_u32(rsrc, 0);
+    push_u32(rsrc, 0);
+    push_u16(rsrc, 0);
+    push_u16(rsrc, 0);
+    push_u16(rsrc, 0);
+    push_u16(rsrc, 1);
+    push_u32(rsrc, 24);
+    push_u32(rsrc, 0x80000000U | kL2Offset);
+
+    // Level 2: the first leaf is invalid; the second one is valid.
+    push_u32(rsrc, 0);
+    push_u32(rsrc, 0);
+    push_u16(rsrc, 0);
+    push_u16(rsrc, 0);
+    push_u16(rsrc, 0);
+    push_u16(rsrc, 2);
+    push_u32(rsrc, 1);
+    push_u32(rsrc, 0x400);
+    push_u32(rsrc, 2);
+    push_u32(rsrc, kDataEntryOffset);
+
+    while (rsrc.size() < kDataEntryOffset) {
+        rsrc.push_back(std::byte{0});
+    }
+    push_u32(rsrc, kRsrcRva + kXmlOffset);
+    push_u32(rsrc, static_cast<std::uint32_t>(manifest_xml.size()));
+    push_u32(rsrc, 0);
+    push_u32(rsrc, 0);
+    while (rsrc.size() < kXmlOffset) {
+        rsrc.push_back(std::byte{0});
+    }
+    for (const char character : manifest_xml) {
+        rsrc.push_back(static_cast<std::byte>(static_cast<unsigned char>(character)));
+    }
+
+    BuildSpec spec;
+    spec.section_names = {".text", ".rsrc"};
+    spec.section_data = {std::vector<std::byte>(0x10), rsrc};
+    spec.resource_rva = kRsrcRva;
+    spec.resource_size = static_cast<std::uint32_t>(rsrc.size());
+    return build(spec);
+}
+
 }  // namespace
 
 TEST(ResourceInspectorTest, StandardTypeNamesMapping) {
@@ -305,6 +356,22 @@ TEST(ResourceInspectorTest, InspectsPeWithEmbeddedManifest) {
     EXPECT_EQ(result.manifest.dpi_aware, "PerMonitorV2");
     ASSERT_EQ(result.manifest.supported_os.size(), 1U);
     EXPECT_EQ(result.manifest.supported_os[0], "Windows 10/11");
+}
+
+TEST(ResourceInspectorTest, FindsValidManifestAfterInvalidFirstLeaf) {
+    const std::vector<std::byte> pe_data = make_pe_with_invalid_first_manifest(
+        "<assembly><trustInfo><security><requestedPrivileges>"
+        "<requestedExecutionLevel level=\"asInvoker\"/>"
+        "</requestedPrivileges></security></trustInfo></assembly>");
+    const ParseResult parse_result = parse_pe(pe_data);
+    ASSERT_EQ(parse_result.status, ParseStatus::Success);
+
+    const ResourceInspectionResult result = inspect_pe_resources(pe_data, parse_result.info);
+    ASSERT_TRUE(result.has_resources);
+    ASSERT_EQ(result.types.size(), 1U);
+    EXPECT_EQ(result.types[0].count, 2U);
+    EXPECT_TRUE(result.manifest.has_manifest);
+    EXPECT_EQ(result.manifest.requested_execution_level, "asInvoker");
 }
 
 TEST(ResourceInspectorTest, EmptyPeHasNoResources) {
@@ -468,5 +535,4 @@ TEST(ResourceInspectorTest, ParseVersionInfoEmptySafely) {
 }
 
 }  // namespace tradutorlinux::pe
-
 
