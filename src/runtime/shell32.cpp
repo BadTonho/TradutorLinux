@@ -17,6 +17,55 @@
 
 namespace tradutorlinux {
 
+namespace {
+
+constexpr std::uint32_t kNimAdd = 0U;
+constexpr std::uint32_t kNimModify = 1U;
+constexpr std::uint32_t kNimDelete = 2U;
+
+struct GuestNotifyIconDataPrefix {
+    std::uint32_t cb_size;
+    std::uint32_t padding;
+    void* hwnd;
+    std::uint32_t icon_id;
+    std::uint32_t flags;
+    std::uint32_t callback_message;
+};
+static_assert(offsetof(GuestNotifyIconDataPrefix, hwnd) == 8);
+static_assert(offsetof(GuestNotifyIconDataPrefix, callback_message) == 24);
+
+bool update_tray_registration(const std::uint32_t message, void* const data) noexcept {
+    if (data == nullptr) {
+        return true;
+    }
+    if (!mapped_guest_range(data, sizeof(GuestNotifyIconDataPrefix), false)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return false;
+    }
+    const auto* const input = static_cast<const GuestNotifyIconDataPrefix*>(data);
+    if (input->cb_size < sizeof(GuestNotifyIconDataPrefix)) {
+        set_last_error(abi::kErrorBadLength);
+        return false;
+    }
+    WindowSlot* const window = find_window_slot(input->hwnd);
+    if (window == nullptr) {
+        set_last_error(abi::kErrorInvalidHandle);
+        return false;
+    }
+    if (message == kNimDelete) {
+        window->tray_registered = false;
+        window->tray_icon_id = 0;
+        window->tray_callback_message = 0;
+    } else if (message == kNimAdd || message == kNimModify) {
+        window->tray_registered = true;
+        window->tray_icon_id = input->icon_id;
+        window->tray_callback_message = input->callback_message;
+    }
+    return true;
+}
+
+}  // namespace
+
 extern "C" {
 
 // CommandLineToArgvW: parseia a linha de comando no formato Windows e retorna
@@ -89,8 +138,9 @@ TL_MSABI std::uint16_t** tl_CommandLineToArgvW(const std::uint16_t* command_line
 }
 
 TL_MSABI int tl_ShellNotifyIconA(const std::uint32_t message, void* const data) noexcept {
-    (void)message;
-    (void)data;
+    if (!update_tray_registration(message, data)) {
+        return 0;
+    }
     set_last_error(abi::kErrorSuccess);
     return 1;
 }
@@ -483,8 +533,10 @@ TL_MSABI int tl_SHGetSpecialFolderPathW(void* const hwnd, std::uint16_t* const p
 }
 
 TL_MSABI int tl_ShellNotifyIconW(const std::uint32_t message, void* const data) noexcept {
-    (void)message;
-    (void)data;
+    if (!update_tray_registration(message, data)) {
+        return 0;
+    }
+    set_last_error(abi::kErrorSuccess);
     return 1;
 }
 
@@ -545,7 +597,8 @@ namespace tradutorlinux::loader {
 void register_shell32_module() {
     static const ExportedFunction kShell32Exports[] = {
         {"CommandLineToArgvW", 1, reinterpret_cast<std::uintptr_t>(&tl_CommandLineToArgvW)},
-        {"Shell_NotifyIconA", 2, reinterpret_cast<std::uintptr_t>(&tl_ShellNotifyIconA)},
+        {"Shell_NotifyIconA", 2, reinterpret_cast<std::uintptr_t>(&tl_ShellNotifyIconA),
+         ExportSupport::Limited},
         {"SHGetKnownFolderPath", 3, reinterpret_cast<std::uintptr_t>(&tl_SHGetKnownFolderPath)},
         {"SHGetFolderPathW", 4, reinterpret_cast<std::uintptr_t>(&tl_SHGetFolderPathW)},
         {"SHGetFolderPathAndSubDirW", 5, reinterpret_cast<std::uintptr_t>(&tl_SHGetFolderPathAndSubDirW)},
@@ -561,7 +614,8 @@ void register_shell32_module() {
         {"SHGetDesktopFolder", 15, reinterpret_cast<std::uintptr_t>(&tl_SHGetDesktopFolder)},
         {"SHGetSpecialFolderLocation", 16, reinterpret_cast<std::uintptr_t>(&tl_SHGetSpecialFolderLocation)},
         {"SHGetSpecialFolderPathW", 17, reinterpret_cast<std::uintptr_t>(&tl_SHGetSpecialFolderPathW)},
-        {"Shell_NotifyIconW", 18, reinterpret_cast<std::uintptr_t>(&tl_ShellNotifyIconW)},
+        {"Shell_NotifyIconW", 18, reinterpret_cast<std::uintptr_t>(&tl_ShellNotifyIconW),
+         ExportSupport::Limited},
         {"ShellExecuteA", 19, reinterpret_cast<std::uintptr_t>(&tl_ShellExecuteA)},
         {"SHCreateItemFromParsingName", 20, reinterpret_cast<std::uintptr_t>(&tl_SHCreateItemFromParsingName)},
         {"DragQueryFileW", 21, reinterpret_cast<std::uintptr_t>(&tl_DragQueryFileW)},

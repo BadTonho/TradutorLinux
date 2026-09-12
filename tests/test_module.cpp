@@ -226,6 +226,10 @@ TEST_F(ModuleTest, RegistersBuiltinKernel32Exports) {
               ExportSupport::Limited);
     EXPECT_EQ(find_export(ExportQuery{"USER32.dll", "GetMenu"}).support,
               ExportSupport::Limited);
+    EXPECT_EQ(find_export(ExportQuery{"SHELL32.dll", "Shell_NotifyIconA"}).support,
+              ExportSupport::Limited);
+    EXPECT_EQ(find_export(ExportQuery{"SHELL32.dll", "Shell_NotifyIconW"}).support,
+              ExportSupport::Limited);
     EXPECT_EQ(find_export(ExportQuery{"KERNEL32.dll", "TlsGetValue"}).address,
               reinterpret_cast<std::uintptr_t>(&tl_TlsGetValue));
     EXPECT_EQ(find_export(ExportQuery{"KERNEL32.dll", "RtlCaptureContext"}).address,

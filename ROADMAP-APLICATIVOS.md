@@ -3012,6 +3012,31 @@ observou `SetMenuItemInfoW`, `RemoveMenu` ou `TrackPopupMenuEx` nesse fluxo.
 - [x] `SetMenuItemInfoW`, `RemoveMenu` e `TrackPopupMenuEx` permanecem stubs
   até outro fluxo real justificar uma promoção em etapas separadas.
 
+### F11 concluído — USER32: clique secundário normal versus bandeja (2026-09-12)
+
+O backend X11 já capturava o botão 3, mas o message loop tratava qualquer
+`RightPress` como callback de bandeja. Isso impedia que uma janela normal
+recebesse `WM_RBUTTONDOWN`/`WM_RBUTTONUP` e também tornava impossível distinguir
+um clique real no 7-Zip de um clique no surrogate do Simple Todo.
+
+- [x] X11 e Wayland agora preservam pressão e soltura do botão secundário;
+  `GetMessageA`/`GetMessageW` entrega as duas mensagens Win32 para janelas
+  sem registro de bandeja.
+- [x] `Shell_NotifyIconA/W` valida o prefixo x64 de `NOTIFYICONDATA`, rastreia
+  `NIM_ADD`/`NIM_MODIFY`/`NIM_DELETE` por `HWND` e mantém o callback lógico da
+  bandeja somente para a janela que o registrou.
+- [x] A unitária cobre registro, alteração e remoção nos wrappers ANSI/Wide;
+  o teste Sanitizer focalizado passou sem leaks habilitados.
+- [x] O smoke real do 7-Zip continuou retornando `0`. Em sondagem GDB no
+  mesmo Xvfb, um clique secundário em `7-Zip` alcançou `DispatchMessageW` com
+  `WM_RBUTTONDOWN` (`0x0204`). O fluxo não alcançou `TrackPopupMenuEx`, que
+  continua stub até haver uma chamada real observada.
+- [ ] O smoke Simple Todo existente não foi promovido nesta coleta: o preset
+  atual não gerou sua fixture, e a fixture legada usada manualmente depende de
+  um layout de prefixo diferente do diretório esperado pelo smoke. A
+  regressão unitária do contrato de bandeja passou; a revalidação end-to-end
+  fica pendente de alinhar esse ambiente sem alterar o runtime por aplicativo.
+
 ## Regras de validação
 
 - Cada correção começa com uma fixture mínima e termina com testes automatizados.

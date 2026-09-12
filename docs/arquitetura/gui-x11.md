@@ -21,10 +21,12 @@ e `xkbcommon`, com o protocolo gerado pelo CMake.
 `src/gui/x11.cpp` abre um único display (lazy) compartilhado por todas as
 janelas do processo. Cada janela é um token opaco num pool fixo (`NativeWindow`).
 Os eventos X11 são drenados pelo runtime via `next_window_event` e traduzidos
-para o subconjunto Win32: `Expose` → `WM_PAINT`, `ButtonPress` → `WM_LBUTTONDOWN`,
-`KeyPress` → `WM_KEYDOWN`, `KeyRelease` → `WM_KEYUP`, `KeyPress` com caractere →
-`WM_CHAR` (via `TranslateMessage`) e `WM_DELETE_WINDOW` (protocolo de janela) →
-`WM_CLOSE`. O pump também despacha timers expirados como `WM_TIMER`.
+para o subconjunto Win32: `Expose` → `WM_PAINT`, `ButtonPress`/`ButtonRelease` →
+`WM_LBUTTONDOWN`/`WM_LBUTTONUP`, botão secundário →
+`WM_RBUTTONDOWN`/`WM_RBUTTONUP`, `KeyPress` → `WM_KEYDOWN`, `KeyRelease` →
+`WM_KEYUP`, `KeyPress` com caractere → `WM_CHAR` (via `TranslateMessage`) e
+`WM_DELETE_WINDOW` (protocolo de janela) → `WM_CLOSE`. O pump também despacha
+timers expirados como `WM_TIMER`.
 
 O pump mantém uma **fila de eventos por janela**: a cada consulta, todos os
 eventos X11 pendentes do display são demultiplexados para a fila da janela-alvo
@@ -297,12 +299,16 @@ dos controles; foco de edição produz `EN_SETFOCUS`, `EN_KILLFOCUS` e
 Essas notificações são enfileiradas no `HWND` pai e atravessam o mesmo
 `GetMessageA`/`DispatchMessageA` do aplicativo.
 
-`Shell_NotifyIconA` registra o contrato lógico da bandeja. Um botão secundário
-na janela X11 gera `WM_USER + 1` com `WM_RBUTTONUP`; `CreatePopupMenu`,
-`AppendMenuA` e `TrackPopupMenu` abrem uma janela X11 popup. A janela principal
-fica mapeada enquanto sua visibilidade Win32 é falsa para que o surrogate da
-bandeja permaneça acionável. Isso é deliberadamente uma emulação de teste, não
-uma integração com o tray do desktop.
+`Shell_NotifyIconA/W` registra o contrato lógico da bandeja por janela para
+`NIM_ADD`, `NIM_MODIFY` e `NIM_DELETE`. Um botão secundário em uma janela sem
+registro de bandeja entrega `WM_RBUTTONDOWN`/`WM_RBUTTONUP` ao `WNDPROC`; em uma
+janela registrada, o pressionamento vira a mensagem de callback com
+`WM_RBUTTONUP` no `lParam`, e a soltura é consumida para preservar o surrogate
+da bandeja. `CreatePopupMenu`, `AppendMenuA` e `TrackPopupMenu` abrem uma
+janela X11 popup. A janela principal fica mapeada enquanto sua visibilidade
+Win32 é falsa para que o surrogate da bandeja permaneça acionável. Isso é
+deliberadamente uma emulação de teste, não uma integração com o tray do
+desktop.
 
 `LoadMenuW` reconhece o recurso `RT_MENU` MENUEX v1 do módulo convidado, cria a
 hierarquia lógica e `GetMenuItemInfoW` devolve os campos solicitados com

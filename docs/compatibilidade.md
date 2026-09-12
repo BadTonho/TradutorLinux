@@ -469,7 +469,7 @@ diretamente. Ele é experimental, não altera o subsistema de console e só acei
 | `USER32.dll` | `ShowWindow` | Suportado | Mostra/esconde a janela X11 |
 | `USER32.dll` | `UpdateWindow` | Suportado | Despacha `WM_PAINT` diretamente ao `WNDPROC` |
 | `USER32.dll` | `InvalidateRect` | Suportado no subconjunto | Valida o `RECT` opcional, enfileira um `WM_PAINT` por janela até a entrega e faz flush da superfície X11 projetada para filhos lógicos |
-| `USER32.dll` | `GetMessageA` | Suportado no subconjunto | Traduz eventos X11 para `WM_PAINT`/`WM_LBUTTONDOWN`/`WM_KEYDOWN`/`WM_KEYUP`/`WM_CLOSE`; o hit-test entrega mouse a filhos lógicos customizados com `HWND` e coordenadas locais, enquanto controles comuns sem `WNDPROC` preservam suas notificações no parent; entrega mensagens pendentes antes dos eventos X11, despacha `WM_TIMER` expirados e retorna `0` com `WM_QUIT` após `PostQuitMessage` |
+| `USER32.dll` | `GetMessageA` | Suportado no subconjunto | Traduz eventos X11 para `WM_PAINT`/`WM_LBUTTONDOWN`/`WM_LBUTTONUP`/`WM_RBUTTONDOWN`/`WM_RBUTTONUP`/`WM_KEYDOWN`/`WM_KEYUP`/`WM_CLOSE`; o hit-test entrega mouse a filhos lógicos customizados com `HWND` e coordenadas locais, enquanto controles comuns sem `WNDPROC` preservam suas notificações no parent; um botão secundário só vira callback de bandeja quando a janela registrou `Shell_NotifyIconA/W`; entrega mensagens pendentes antes dos eventos X11, despacha `WM_TIMER` expirados e retorna `0` com `WM_QUIT` após `PostQuitMessage` |
 | `USER32.dll` | `PostMessageA` / `PostMessageW` | Suportado no subconjunto | Thread principal enfileira diretamente; threads convidadas secundárias podem postar para um `HWND` registrado, e a mensagem é entregue pela fila do thread principal; a fila cross-thread é limitada a 4096 mensagens e não copia payload apontado por `lParam` |
 | `USER32.dll` | `TranslateMessage` | Suportado | Converte o `WM_KEYDOWN` mais recente em `WM_CHAR` com o caractere real (sem `WM_CHAR` para teclas sem caractere) |
 | `USER32.dll` | `SetTimer` | Suportado | Timer periódico por janela → `WM_TIMER`; só `lpTimerFunc == NULL` |
@@ -545,7 +545,7 @@ sair pelo menu emulado.
 |---|---|---|---|
 | `USER32.dll` | `RegisterClassA`, controles lógicos via `CreateWindowExA`, `SendMessageA`, `Get/SetWindowTextA`, foco, tabulação, geometria, `WM_COMMAND` e `WM_NOTIFY` | Implementado para o alvo | Não são janelas X11 filhas; EDIT, BUTTON, COMBOBOX, STATIC, SysListView32 e SysTreeView32 são roteados por uma side-table; TreeView cobre o modelo de itens, seleção, expansão e notificações básicas, enquanto o renderer visual permanece limitado |
 | `GDI32.dll` | `CreateFontA`, `CreateSolidBrush`, `DeleteObject`, `SetBkColor`, `SetTextColor` | Implementado para o alvo | Tokens de fonte/brush e cores têm efeito limitado; o desenho usa o GC X11 mínimo |
-| `SHELL32.dll` | `Shell_NotifyIconA` | Implementado para o alvo | O ícone de bandeja é apenas um contrato lógico; o menu é uma janela popup X11, sem integração com o tray do desktop |
+| `SHELL32.dll` | `Shell_NotifyIconA` / `Shell_NotifyIconW` | Limitado | Registra por janela o prefixo x64 de `NOTIFYICONDATA` para `NIM_ADD`, `NIM_MODIFY` e `NIM_DELETE`; o callback de bandeja é emulado por X11 e não há integração com o tray do desktop |
 | `msvcrt.dll` | `_acmdln`, `_ismbblead`, `_time64`, `_localtime64`, `strftime`, `_strlwr` | Implementado para o alvo | Locale/DBCS continuam no subconjunto C/ANSI do runtime |
 
 O smoke de integração sob Xvfb é o contrato de regressão do fluxo do alvo e

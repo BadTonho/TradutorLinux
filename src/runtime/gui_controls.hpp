@@ -53,6 +53,9 @@ struct WindowSlot {
     std::deque<abi::GuestMsg> queued_messages;
     char last_key{'\0'};
     bool left_button_down{false};
+    bool tray_registered{false};
+    std::uint32_t tray_icon_id{0};
+    std::uint32_t tray_callback_message{0};
     std::vector<GuestTimer> timers;
     int width{0};
     int height{0};

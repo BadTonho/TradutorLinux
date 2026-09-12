@@ -234,7 +234,10 @@ constexpr Uint kWmTimer = 0x0113;
 constexpr Uint kWmMouseMove = 0x0200;
 constexpr Uint kWmLButtonDown = 0x0201;
 constexpr Uint kWmLButtonUp = 0x0202;
+constexpr Uint kWmRButtonDown = 0x0204;
+constexpr Uint kWmRButtonUp = 0x0205;
 constexpr Wparam kMkLButton = 0x0001;  // MK_LBUTTON
+constexpr Wparam kMkRButton = 0x0002;  // MK_RBUTTON
 constexpr int kSwShow = 1;
 
 // Virtual keys (subconjunto suportado).

@@ -48,6 +48,45 @@ TEST(Win32GuiTest, MenuStateOperationsPreservePreviousState) {
     EXPECT_EQ(tl_DestroyMenu(menu), 1);
 }
 
+TEST(Win32GuiTest, TracksTrayRegistrationPerWindow) {
+    for (WindowSlot& slot : g_windows) {
+        unregister_window_handle(&slot);
+    }
+    g_windows = {};
+    WindowSlot& window = g_windows[0];
+    window.used = true;
+
+    struct GuestNotifyIconDataPrefix {
+        std::uint32_t cb_size;
+        std::uint32_t padding;
+        void* hwnd;
+        std::uint32_t icon_id;
+        std::uint32_t flags;
+        std::uint32_t callback_message;
+    } info{};
+    static_assert(sizeof(GuestNotifyIconDataPrefix) == 32);
+    info.cb_size = sizeof(info);
+    info.hwnd = &window;
+    info.icon_id = 19;
+    info.callback_message = 0x8007U;
+
+    EXPECT_EQ(tl_ShellNotifyIconA(0, &info), 1);
+    EXPECT_TRUE(window.tray_registered);
+    EXPECT_EQ(window.tray_icon_id, 19U);
+    EXPECT_EQ(window.tray_callback_message, 0x8007U);
+
+    info.icon_id = 20;
+    EXPECT_EQ(tl_ShellNotifyIconW(1, &info), 1);
+    EXPECT_EQ(window.tray_icon_id, 20U);
+    EXPECT_EQ(window.tray_callback_message, 0x8007U);
+
+    EXPECT_EQ(tl_ShellNotifyIconA(2, &info), 1);
+    EXPECT_FALSE(window.tray_registered);
+    EXPECT_EQ(window.tray_icon_id, 0U);
+    EXPECT_EQ(window.tray_callback_message, 0U);
+    g_windows = {};
+}
+
 TEST(Win32GuiTest, InsertsMenuItemWithMicrosoftMask) {
     struct GuestMenuItemInfoW {
         std::uint32_t cb_size;

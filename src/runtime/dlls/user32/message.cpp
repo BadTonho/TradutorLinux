@@ -873,7 +873,25 @@ TL_MSABI int tl_GetMessageA(void* const msg, const void* const window,
                 return 1;
             }
             if (event.type == gui::WindowEventType::RightPress) {
-                write_guest_msg(msg, &slot, abi::kWmTrayIcon, 0, 0x0205);
+                if (slot.tray_registered) {
+                    write_guest_msg(msg, &slot,
+                                    slot.tray_callback_message != 0
+                                        ? slot.tray_callback_message
+                                        : abi::kWmTrayIcon,
+                                    slot.tray_icon_id, abi::kWmRButtonUp);
+                } else {
+                    write_guest_msg(msg, &slot, abi::kWmRButtonDown, abi::kMkRButton,
+                                    mouse_lparam(event.x, event.y));
+                }
+                set_last_error(abi::kErrorSuccess);
+                return 1;
+            }
+            if (event.type == gui::WindowEventType::RightRelease) {
+                if (slot.tray_registered) {
+                    continue;
+                }
+                write_guest_msg(msg, &slot, abi::kWmRButtonUp, 0,
+                                mouse_lparam(event.x, event.y));
                 set_last_error(abi::kErrorSuccess);
                 return 1;
             }

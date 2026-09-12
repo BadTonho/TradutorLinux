@@ -162,8 +162,11 @@ void pointer_button(void*, wl_pointer*, std::uint32_t, std::uint32_t, std::uint3
     if (g_context.focus == nullptr) return;
     if (button == 0x110U) g_context.focus->pending.push_back(
         {state == WL_POINTER_BUTTON_STATE_PRESSED ? WindowEventType::Press : WindowEventType::Release, 0, 0});
-    else if (button == 0x111U && state == WL_POINTER_BUTTON_STATE_PRESSED)
-        g_context.focus->pending.push_back({WindowEventType::RightPress, 0, 0});
+    else if (button == 0x111U)
+        g_context.focus->pending.push_back(
+            {state == WL_POINTER_BUTTON_STATE_PRESSED ? WindowEventType::RightPress
+                                                       : WindowEventType::RightRelease,
+             0, 0});
 }
 void pointer_axis(void*, wl_pointer*, std::uint32_t, std::uint32_t, wl_fixed_t) {}
 const wl_pointer_listener kPointerListener{pointer_enter, pointer_leave, pointer_motion, pointer_button,
