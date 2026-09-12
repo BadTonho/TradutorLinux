@@ -2839,7 +2839,7 @@ Evidência reproduzível:
   - `winrar_sfx_smoke`: inicialização gráfica e cancelamento SFX concluídos com exit `0` em Rust ON e C++ OFF.
   - `putty_smoke`: criação de diálogo de configuração concluída com exit `0` em Rust ON e C++ OFF.
   - `putty_ssh_smoke`: probe de configuração SSH concluído com limitação registrada e exit `0` em Rust ON e C++ OFF.
-  - `notepadpp_smoke`: fechamento interativo de diálogos, rejeição controlada de exceção C++ em módulo/plugin e término seguro em `ExitProcess(3)` sem sinal ou timeout em Rust ON e C++ OFF.
+  - `notepadpp_smoke`: fecha `Configurator`, exige a ausência de `Load stylers.xml failed`, confirma a rejeição controlada de exceção C++ em módulo/plugin e o término em `ExitProcess(3)` sem sinal ou timeout em Rust ON e C++ OFF.
 - [x] **Correção genérica de caminhos de shell**: `SHGetKnownFolderPath`, `SHGetFolderPathW`,
   `SHGetFolderPathAndSubDirW` e `SHGetPathFromIDListW` em `src/runtime/shell32.cpp`
   passaram a retornar caminhos no formato Windows canônico (`Z:\...` / `C:\...`)

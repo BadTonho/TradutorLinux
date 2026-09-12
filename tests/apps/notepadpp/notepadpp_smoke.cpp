@@ -243,7 +243,7 @@ void stop_runtime_process(const pid_t pid) {
     const std::string trace{std::istreambuf_iterator<char>{trace_input}, {}};
     passed = passed &&
              trace.find("caption=\"Configurator\"") != std::string::npos &&
-             trace.find("caption=\"Load stylers.xml failed\"") != std::string::npos &&
+             trace.find("caption=\"Load stylers.xml failed\"") == std::string::npos &&
              trace.find("unsupported-cxx-handler-during-search") != std::string::npos &&
              trace.find("ExitProcess symbol=\"ExitProcess\" exit-code=\"3\"") !=
                  std::string::npos &&
