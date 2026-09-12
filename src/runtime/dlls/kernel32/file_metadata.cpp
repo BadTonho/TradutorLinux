@@ -1,5 +1,9 @@
 #include "kernel32_file_internal.hpp"
 
+#include "tradutorlinux/util/unicode.hpp"
+
+#include <cstring>
+
 namespace tradutorlinux {
 using namespace file_internal;
 

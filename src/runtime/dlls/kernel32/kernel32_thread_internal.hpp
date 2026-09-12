@@ -2,6 +2,10 @@
 
 #include "kernel32_common.hpp"
 
+#include "../../core/runtime_handle_state.hpp"
+#include "../../core/runtime_process_state.hpp"
+#include "../../core/runtime_thread_state.hpp"
+
 #include "tradutorlinux/runtime/teb.hpp"
 #include "tradutorlinux/runtime/unwind.hpp"
 

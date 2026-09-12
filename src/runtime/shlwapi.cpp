@@ -10,7 +10,7 @@
 #include <unistd.h>
 
 #include "tradutorlinux/runtime/memory_validator.hpp"
-#include "runtime_context.hpp"
+#include "core/runtime_state_common.hpp"
 #include "tradutorlinux/util/basics.hpp"
 #include "tradutorlinux/util/unicode.hpp"
 

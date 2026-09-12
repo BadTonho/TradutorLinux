@@ -1,5 +1,8 @@
 #include "kernel32_file_internal.hpp"
 
+#include "tradutorlinux/prefix/prefix.hpp"
+#include "tradutorlinux/util/unicode.hpp"
+
 #include <filesystem>
 
 #include <unistd.h>

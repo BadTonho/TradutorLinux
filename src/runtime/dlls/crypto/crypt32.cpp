@@ -2,11 +2,13 @@
 #include "tradutorlinux/loader/module.hpp"
 #include "tradutorlinux/loader/builtin_modules.hpp"
 
-#include "runtime_context.hpp"
+#include "../../core/runtime_state_common.hpp"
+#include "tradutorlinux/util/unicode.hpp"
 
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <limits>
 #include <span>
 #include <string>

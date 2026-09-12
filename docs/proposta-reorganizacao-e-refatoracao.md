@@ -83,8 +83,14 @@ nível funcional separadamente.
 
 **Prioridade:** posterior e condicionada a evidência. É uma refatoração de
 alto risco porque `runtime_context.hpp` participa de muitas fronteiras
-internas; só deve avançar depois de mapear dependências e demonstrar benefício
-de manutenção ou compilação.
+internas; foi executada somente depois do mapeamento de dependências e da
+definição de validação estrutural.
+
+**Status:** concluída. O estado interno foi separado nos seis headers de
+domínio abaixo, sem dividir `GuestContext`, mover o armazenamento para fora
+de `winapi.cpp` ou alterar ABI, exports e layouts Win32. A fachada
+`runtime_context.hpp` permanece apenas para testes e consumidores legados;
+produção inclui diretamente os contratos necessários.
 
 **Origem:** `src/runtime/core/runtime_context.hpp`.
 
@@ -92,6 +98,8 @@ O header deve deixar de ser o ponto obrigatório para todo estado do runtime.
 A divisão deve ser incremental, sem expor os novos headers como API pública.
 A organização sugerida é:
 
+- `runtime_state_common.hpp`: contexto ativo, memória convidada, erros,
+  tracing e caminhos;
 - `runtime_thread_state.hpp`: TEB, TLS, FLS, threads e sincronização de
   inicialização;
 - `runtime_process_state.hpp`: imagem, processos, snapshots e ciclo de vida;
@@ -104,6 +112,14 @@ Os nomes são uma direção de organização, não uma autorização para criar
 headers vazios ou duplicar declarações. Cada novo header deve ter um dono
 claro, incluir somente o contrato necessário e possuir teste de compilação ou
 regressão que justifique sua existência.
+
+A validação da F2 passou pela compilação dos alvos `tradutorlinux` e
+`tradutorlinux_unit_tests`, pela inclusão sintática isolada dos seis headers e
+pelos testes focados de contexto, loader, processo, memória, arquivos,
+threads, sincronização, USER32/GDI, controles e DLLs relacionadas. A falha
+conhecida de
+`Win32HandleObjectTest.DuplicateHandleIncrementsRefCountAndAllowsMultipleClose`
+permanece fora do escopo e não foi alterada.
 
 **Conclusão:** módulos de DLL não devem incluir estado de GUI, processo ou
 memória sem precisar dele; o comportamento e a ABI permanecem inalterados.
@@ -184,8 +200,8 @@ que não pertence ao escopo da F4.
    os módulos de KERNEL32;
 3. F4 — dividir `file.cpp` depois que os helpers comuns estiverem estáveis
    (concluída);
-4. F2 — dividir o estado interno somente se o mapeamento de dependências e uma
-   medição simples confirmarem benefício suficiente para compensar o risco.
+4. F2 — dividir o estado interno depois do mapeamento de dependências e da
+   validação estrutural (concluída).
 
 Cada frente deve ser um commit próprio. Uma refatoração não deve ser misturada
 com correção de comportamento, nova API, mudança de classificação ou alteração

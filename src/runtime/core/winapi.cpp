@@ -1,5 +1,10 @@
 #include "tradutorlinux/runtime/winapi.hpp"
-#include "runtime_context.hpp"
+#include "runtime_state_common.hpp"
+#include "runtime_thread_state.hpp"
+#include "runtime_process_state.hpp"
+#include "runtime_handle_state.hpp"
+#include "runtime_memory_state.hpp"
+#include "runtime_gui_state.hpp"
 
 #include "tradutorlinux/diagnostics/trace.hpp"
 #include "tradutorlinux/gui/platform.hpp"
@@ -68,7 +73,7 @@ extern "C" [[noreturn]] void tl_raw_guest_longjmp(std::jmp_buf, int) noexcept
 namespace tradutorlinux {
 
 // ---------------------------------------------------------------------------
-// Definições de estado compartilhado (declarados extern em runtime_context.hpp)
+// Definições de estado compartilhado (declaradas extern nos headers de domínio)
 // ---------------------------------------------------------------------------
 
 char kStdInputToken = 0;

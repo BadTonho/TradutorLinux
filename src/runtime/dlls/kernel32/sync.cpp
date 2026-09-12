@@ -1,5 +1,8 @@
 #include "kernel32_common.hpp"
+#include "../../core/runtime_handle_state.hpp"
+#include "../../core/runtime_thread_state.hpp"
 
+#include <cstring>
 #include <shared_mutex>
 
 namespace tradutorlinux {

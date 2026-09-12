@@ -1,6 +1,7 @@
 #include "tradutorlinux/runtime/ntdll.hpp"
 
-#include "runtime_context.hpp"
+#include "core/runtime_state_common.hpp"
+#include "core/runtime_memory_state.hpp"
 #include "tradutorlinux/diagnostics/trace.hpp"
 #include "tradutorlinux/runtime/error_map.hpp"
 #include "tradutorlinux/runtime/memory_validator.hpp"
@@ -10,6 +11,7 @@
 #include <cerrno>
 #include <cstring>
 #include <fstream>
+#include <iostream>
 #include <mutex>
 #include <string>
 #include <unistd.h>

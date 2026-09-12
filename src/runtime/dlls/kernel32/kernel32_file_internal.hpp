@@ -2,6 +2,8 @@
 
 #include "kernel32_common.hpp"
 
+#include "../../core/runtime_handle_state.hpp"
+
 #include "tradutorlinux/runtime/security.hpp"
 
 #include <algorithm>

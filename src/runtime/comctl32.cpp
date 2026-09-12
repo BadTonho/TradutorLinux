@@ -2,6 +2,7 @@
 #include "tradutorlinux/loader/module.hpp"
 #include "tradutorlinux/loader/builtin_modules.hpp"
 #include "tradutorlinux/runtime/winapi.hpp"
+#include "tradutorlinux/util/unicode.hpp"
 
 #include <algorithm>
 #include <array>
@@ -10,7 +11,8 @@
 #include <limits>
 #include <string>
 
-#include "runtime_context.hpp"
+#include "core/runtime_state_common.hpp"
+#include "core/runtime_gui_state.hpp"
 
 namespace tradutorlinux {
 

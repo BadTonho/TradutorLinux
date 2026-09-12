@@ -1,7 +1,7 @@
 #include "tradutorlinux/runtime/msvcrt.hpp"
 #include "tradutorlinux/loader/module.hpp"
 #include "tradutorlinux/loader/builtin_modules.hpp"
-#include "runtime_context.hpp"
+#include "core/runtime_state_common.hpp"
 
 #include "tradutorlinux/diagnostics/trace.hpp"
 #include "tradutorlinux/prefix/prefix.hpp"

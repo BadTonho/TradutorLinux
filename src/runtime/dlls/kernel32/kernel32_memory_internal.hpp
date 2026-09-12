@@ -2,6 +2,9 @@
 
 #include "kernel32_common.hpp"
 
+#include "../../core/runtime_handle_state.hpp"
+#include "../../core/runtime_memory_state.hpp"
+
 #include "tradutorlinux/runtime/ntdll.hpp"
 
 #include <bit>

@@ -1,7 +1,9 @@
 #include "tradutorlinux/runtime/unwind.hpp"
 #include "tradutorlinux/runtime/cxx_eh.hpp"
 
-#include "runtime_context.hpp"
+#include "../core/runtime_state_common.hpp"
+#include "../core/runtime_process_state.hpp"
+#include "../core/runtime_thread_state.hpp"
 
 #include <algorithm>
 #include <array>

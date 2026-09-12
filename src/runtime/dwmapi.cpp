@@ -2,7 +2,7 @@
 #include "tradutorlinux/loader/module.hpp"
 #include "tradutorlinux/loader/builtin_modules.hpp"
 #include "tradutorlinux/runtime/memory_validator.hpp"
-#include "runtime_context.hpp"
+#include "core/runtime_state_common.hpp"
 
 #include <cstring>
 

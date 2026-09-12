@@ -4,10 +4,14 @@
 #include "tradutorlinux/win32/kernel32.hpp"
 #include "tradutorlinux/loader/module.hpp"
 #include "tradutorlinux/loader/builtin_modules.hpp"
-#include "../../core/runtime_context.hpp"
+#include "../../core/runtime_state_common.hpp"
+#include "../../core/runtime_process_state.hpp"
+#include "../../core/runtime_thread_state.hpp"
+#include "../../core/runtime_gui_state.hpp"
 #include "tradutorlinux/gui/platform.hpp"
 #include "tradutorlinux/runtime/dialog_template.hpp"
 #include "gui_controls.hpp"
+#include "tradutorlinux/util/basics.hpp"
 #include "tradutorlinux/util/unicode.hpp"
 
 #include <algorithm>

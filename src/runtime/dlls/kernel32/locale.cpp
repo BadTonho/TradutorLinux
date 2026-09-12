@@ -1,4 +1,12 @@
 #include "kernel32_common.hpp"
+#include "../../core/runtime_memory_state.hpp"
+#include "tradutorlinux/util/basics.hpp"
+#include "tradutorlinux/util/unicode.hpp"
+
+#include <charconv>
+#include <cstring>
+#include <strings.h>
+
 namespace tradutorlinux {
 
 namespace {

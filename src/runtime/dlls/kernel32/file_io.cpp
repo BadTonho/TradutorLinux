@@ -1,5 +1,9 @@
 #include "kernel32_file_internal.hpp"
+#include "../../core/runtime_memory_state.hpp"
 #include "kernel32_memory_internal.hpp"
+
+#include <fcntl.h>
+#include <sys/mman.h>
 
 namespace tradutorlinux {
 using namespace file_internal;

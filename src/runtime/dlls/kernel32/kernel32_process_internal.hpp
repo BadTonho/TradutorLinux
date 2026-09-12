@@ -2,16 +2,23 @@
 
 #include "kernel32_common.hpp"
 
+#include "../../core/runtime_handle_state.hpp"
+#include "../../core/runtime_memory_state.hpp"
+#include "../../core/runtime_process_state.hpp"
+#include "../../core/runtime_thread_state.hpp"
+
 #include "tradutorlinux/loader/builtin_modules.hpp"
 #include "tradutorlinux/loader/import_resolver.hpp"
 #include "tradutorlinux/loader/module.hpp"
 #include "tradutorlinux/loader/module_graph.hpp"
+#include "tradutorlinux/loader/process.hpp"
 #include "tradutorlinux/prefix/prefix.hpp"
 #include "tradutorlinux/runtime/environment.hpp"
 #include "tradutorlinux/runtime/msvcrt.hpp"
 #include "tradutorlinux/runtime/ntdll.hpp"
 #include "tradutorlinux/runtime/security.hpp"
 #include "tradutorlinux/runtime/unwind.hpp"
+#include "tradutorlinux/util/unicode.hpp"
 
 #include <algorithm>
 #include <array>

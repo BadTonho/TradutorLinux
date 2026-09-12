@@ -3,7 +3,7 @@
 #include "tradutorlinux/loader/builtin_modules.hpp"
 
 #include <cstdint>
-#include "runtime_context.hpp"
+#include "core/runtime_state_common.hpp"
 
 namespace tradutorlinux {
 

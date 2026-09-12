@@ -1,7 +1,7 @@
 #include "runtime/gui_controls.hpp"
 #include "runtime/gui_extension.hpp"
 
-#include "runtime_context.hpp"
+#include "runtime_gui_state.hpp"
 #include "tradutorlinux/runtime/guest_context.hpp"
 #include "tradutorlinux/util/basics.hpp"
 

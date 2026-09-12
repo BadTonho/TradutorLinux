@@ -1,6 +1,7 @@
 #include "kernel32_common.hpp"
 #include "tradutorlinux/loader/builtin_modules.hpp"
 #include "tradutorlinux/loader/module.hpp"
+#include "tradutorlinux/runtime/msvcrt.hpp"
 
 namespace tradutorlinux::loader {
 

@@ -1,7 +1,10 @@
 #include "tradutorlinux/runtime/winapi.hpp"
 #include "tradutorlinux/loader/module.hpp"
 #include "tradutorlinux/loader/builtin_modules.hpp"
-#include "runtime_context.hpp"
+#include "core/runtime_state_common.hpp"
+#include "core/runtime_gui_state.hpp"
+#include "core/runtime_memory_state.hpp"
+#include "core/runtime_process_state.hpp"
 
 #include <algorithm>
 #include <array>

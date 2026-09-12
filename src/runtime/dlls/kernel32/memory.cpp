@@ -1,4 +1,11 @@
 #include "kernel32_memory_internal.hpp"
+
+#include "tradutorlinux/util/unicode.hpp"
+
+#include <charconv>
+#include <cstring>
+#include <sys/mman.h>
+
 namespace tradutorlinux {
 
 namespace {

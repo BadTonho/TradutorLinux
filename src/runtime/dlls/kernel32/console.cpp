@@ -1,4 +1,10 @@
 #include "kernel32_common.hpp"
+#include "../../core/runtime_handle_state.hpp"
+#include "tradutorlinux/runtime/msvcrt.hpp"
+#include "tradutorlinux/util/unicode.hpp"
+
+#include <cstring>
+
 namespace tradutorlinux {
 
 namespace {

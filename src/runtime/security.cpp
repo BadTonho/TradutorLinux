@@ -6,7 +6,8 @@
 #include "tradutorlinux/runtime/memory_validator.hpp"
 #include "tradutorlinux/runtime/winapi.hpp"
 #include "tradutorlinux/util/unicode.hpp"
-#include "runtime_context.hpp"
+#include "core/runtime_state_common.hpp"
+#include "core/runtime_memory_state.hpp"
 
 #include <algorithm>
 #include <array>
