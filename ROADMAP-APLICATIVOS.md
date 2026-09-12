@@ -2975,6 +2975,22 @@ Implementação:
   contrato baseada nos imports reais e no modelo de menu já usado pelo smoke,
   não uma declaração de que esses fluxos passaram a usar a API.
 
+### F9 concluído — smoke Notepad++ para bloqueio pré-GUI controlado (2026-09-12)
+
+Objetivo: alinhar o cenário de integração ao primeiro bloqueio reproduzível
+atual do Notepad++, sem transformar uma falha controlada em suporte funcional.
+
+Evidência reproduzível:
+
+- [x] O trace atual mostra `WinVerifyTrust(WTD_CHOICE_FILE)`, exceção C++
+  `0xE06D7363`, `unsupported-cxx-handler-during-search` e `ExitProcess(3)`;
+  nesta execução o processo pode terminar antes de criar `Configurator`.
+- [x] `notepadpp_smoke` agora aceita somente os dois caminhos observados:
+  fechar `Configurator` quando ela existe, ou detectar o bloqueio C++/SEH
+  direto; ambos exigem ausência de `Load stylers.xml failed`, sinal e timeout.
+- [x] O smoke continua classificando o aplicativo como não suportado e não
+  adiciona fallback para `WinVerifyTrust`, CMS, Authenticode ou exceções C++.
+
 ## Regras de validação
 
 - Cada correção começa com uma fixture mínima e termina com testes automatizados.
