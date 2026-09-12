@@ -24,6 +24,30 @@ TEST(Win32GuiTest, PopupMenuHandleHasLifecycle) {
     EXPECT_EQ(tl_DestroyMenu(menu), 1);
 }
 
+TEST(Win32GuiTest, MenuStateOperationsPreservePreviousState) {
+    void* const menu = tl_CreatePopupMenu();
+    ASSERT_NE(menu, nullptr);
+    ASSERT_EQ(tl_AppendMenuA(menu, 0, 101, "One"), 1);
+    ASSERT_EQ(tl_AppendMenuA(menu, 0, 102, "Two"), 1);
+    ASSERT_EQ(tl_AppendMenuA(menu, 0, 103, "Three"), 1);
+
+    EXPECT_EQ(tl_EnableMenuItem(menu, 101, 1), 0);
+    EXPECT_EQ(find_menu_slot(menu)->logical_items[0].state & 0x3U, 1U);
+    EXPECT_EQ(tl_EnableMenuItem(menu, 0, 0x400U), 1);
+    EXPECT_EQ(find_menu_slot(menu)->logical_items[0].state & 0x3U, 0U);
+
+    EXPECT_EQ(tl_CheckMenuItem(menu, 102, 0x8U), 0U);
+    EXPECT_EQ(tl_CheckMenuItem(menu, 102, 0), 0x8U);
+    EXPECT_EQ(tl_CheckMenuRadioItem(menu, 101, 103, 102, 0), 1);
+    EXPECT_EQ(find_menu_slot(menu)->logical_items[0].state & 0x8U, 0U);
+    EXPECT_EQ(find_menu_slot(menu)->logical_items[1].state & 0x8U, 0x8U);
+    EXPECT_EQ(find_menu_slot(menu)->logical_items[2].state & 0x8U, 0U);
+
+    EXPECT_EQ(tl_EnableMenuItem(menu, 999, 0), -1);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidHandle);
+    EXPECT_EQ(tl_DestroyMenu(menu), 1);
+}
+
 TEST(Win32GuiTest, LoadsExtendedMenuResourceAndExposesHierarchy) {
     std::vector<std::byte> image(512, std::byte{0});
     const auto write_u16 = [&image](const std::size_t offset, const std::uint16_t value) {

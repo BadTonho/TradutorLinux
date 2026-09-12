@@ -12,6 +12,9 @@ constexpr std::uint32_t kMenuItemInfoState = 0x00000002U;
 constexpr std::uint32_t kMenuItemInfoId = 0x00000004U;
 constexpr std::uint32_t kMenuItemInfoSubmenu = 0x00000008U;
 constexpr std::uint32_t kMenuItemInfoString = 0x00000040U;
+constexpr std::uint32_t kMenuByPosition = 0x00000400U;
+constexpr std::uint32_t kMenuStateEnabledMask = 0x00000003U;
+constexpr std::uint32_t kMenuStateChecked = 0x00000008U;
 
 [[nodiscard]] MenuSlot* mutable_menu_slot(const void* const menu) noexcept {
     if (menu == nullptr) {
@@ -207,6 +210,11 @@ static_assert(sizeof(GuestMenuItemInfoW) == 80);
                                      return entry.command_id == item;
                                  });
     return it == menu.logical_items.end() ? nullptr : &*it;
+}
+
+[[nodiscard]] MenuItem* menu_item_for_flags(MenuSlot& menu, const std::uint32_t item,
+                                             const std::uint32_t flags) noexcept {
+    return menu_item_for(menu, item, (flags & kMenuByPosition) != 0U ? 1 : 0);
 }
 
 }  // namespace
@@ -444,30 +452,75 @@ TL_MSABI int tl_RemoveMenu(void* const menu, const std::uint32_t position, const
 }
 
 TL_MSABI int tl_EnableMenuItem(void* const menu, const std::uint32_t item, const std::uint32_t enable) noexcept {
-    (void)menu;
-    (void)item;
-    (void)enable;
-    set_last_error(abi::kErrorNotSupported);
-    return 0;
+    if (!user32_gui_thread_allowed("EnableMenuItem")) {
+        return -1;
+    }
+    MenuSlot* const actual = mutable_menu_slot(menu);
+    MenuItem* const entry = actual == nullptr ? nullptr : menu_item_for_flags(*actual, item, enable);
+    if (entry == nullptr) {
+        set_last_error(abi::kErrorInvalidHandle);
+        return -1;
+    }
+    const std::uint32_t previous = entry->state & kMenuStateEnabledMask;
+    entry->state = (entry->state & ~kMenuStateEnabledMask) | (enable & kMenuStateEnabledMask);
+    set_last_error(abi::kErrorSuccess);
+    return static_cast<int>(previous);
 }
 
 TL_MSABI std::uint32_t tl_CheckMenuItem(void* const menu, const std::uint32_t item, const std::uint32_t check) noexcept {
-    (void)menu;
-    (void)item;
-    (void)check;
-    set_last_error(abi::kErrorNotSupported);
-    return 0;
+    if (!user32_gui_thread_allowed("CheckMenuItem")) {
+        return std::numeric_limits<std::uint32_t>::max();
+    }
+    MenuSlot* const actual = mutable_menu_slot(menu);
+    MenuItem* const entry = actual == nullptr ? nullptr : menu_item_for_flags(*actual, item, check);
+    if (entry == nullptr) {
+        set_last_error(abi::kErrorInvalidHandle);
+        return std::numeric_limits<std::uint32_t>::max();
+    }
+    const std::uint32_t previous = entry->state & kMenuStateChecked;
+    if ((check & kMenuStateChecked) != 0U) {
+        entry->state |= kMenuStateChecked;
+    } else {
+        entry->state &= ~kMenuStateChecked;
+    }
+    set_last_error(abi::kErrorSuccess);
+    return previous;
 }
 
 TL_MSABI int tl_CheckMenuRadioItem(void* const menu, const std::uint32_t first, const std::uint32_t last,
                                   const std::uint32_t check, const std::uint32_t flags) noexcept {
-    (void)menu;
-    (void)first;
-    (void)last;
-    (void)check;
-    (void)flags;
-    set_last_error(abi::kErrorNotSupported);
-    return 0;
+    if (!user32_gui_thread_allowed("CheckMenuRadioItem")) {
+        return 0;
+    }
+    MenuSlot* const actual = mutable_menu_slot(menu);
+    if (actual == nullptr || first > last) {
+        set_last_error(abi::kErrorInvalidHandle);
+        return 0;
+    }
+    const bool by_position = (flags & kMenuByPosition) != 0U;
+    bool range_found = false;
+    bool check_found = false;
+    for (std::size_t index = 0; index < actual->logical_items.size(); ++index) {
+        MenuItem& entry = actual->logical_items[index];
+        const std::uint32_t value = by_position ? static_cast<std::uint32_t>(index)
+                                                : entry.command_id;
+        if (value < first || value > last) {
+            continue;
+        }
+        range_found = true;
+        if (value == check) {
+            entry.state |= kMenuStateChecked;
+            check_found = true;
+        } else {
+            entry.state &= ~kMenuStateChecked;
+        }
+    }
+    if (!range_found || !check_found) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    set_last_error(abi::kErrorSuccess);
+    return 1;
 }
 
 TL_MSABI int tl_DrawMenuBar(void* const hwnd) noexcept {

@@ -2945,6 +2945,36 @@ Evidência reproduzível:
 - [x] Nenhum tratamento específico de aplicativo foi adicionado; o wrapper é
   compartilhado por USER32 e limitado a recursos `RT_DIALOG` numéricos.
 
+### F8 concluído — USER32: estado básico de menus (2026-09-12)
+
+Objetivo: substituir os stubs de estado de menu identificados nos reports de
+7zFM e Notepad++ por operações genéricas sobre o modelo `MenuItem::state`.
+
+Implementação:
+
+- [x] `EnableMenuItem` atualiza enabled/grayed/disabled e retorna o estado
+  anterior; `CheckMenuItem` atualiza `MFS_CHECKED`; `CheckMenuRadioItem`
+  marca um item dentro de uma faixa e desmarca os irmãos.
+- [x] As três APIs aceitam `MF_BYPOSITION` quando aplicável, rejeitam handles
+  e faixas inválidos de forma controlada e deixam `InsertMenuItemW`,
+  `SetMenuItemInfoW`, `RemoveMenu` e `TrackPopupMenuEx` como limitações
+  explícitas.
+- [x] A unitária cobre seleção por comando/posição, retorno do estado anterior,
+  rádio e handle inválido; a cobertura agregada de USER32 deixou de esperar
+  sucesso falso dos stubs.
+- [x] Os reports reais de 7zFM e Notepad++ resolvem as três APIs como
+  `support=limited`; o report continua com 100% dos imports resolvidos.
+- [x] `seven_zip_gui_smoke` passou com a cópia interativa real em 2,72 s;
+  `putty_real_gui_smoke` e `putty_ssh_local_probe` continuam passando com o
+  mesmo resultado de configuração e limitação SSH documentado.
+- [x] A unitária focada passou nos builds Rust ON e sanitize, com
+  `ASAN_OPTIONS=detect_leaks=0` por causa da restrição de LeakSanitizer sob
+  ptrace; `git diff --check` passou.
+- [x] Nenhuma chamada aos estados de menu foi observada durante a inicialização
+  ou fechamento automático de PuTTY/7zFM; a implementação é uma extensão de
+  contrato baseada nos imports reais e no modelo de menu já usado pelo smoke,
+  não uma declaração de que esses fluxos passaram a usar a API.
+
 ## Regras de validação
 
 - Cada correção começa com uma fixture mínima e termina com testes automatizados.
