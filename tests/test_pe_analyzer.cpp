@@ -98,6 +98,20 @@ TEST(PeAnalyzerTest, HandlesTruncatedAndMalformedPeSafely) {
     EXPECT_FALSE(trunc_res.has_mitigations);
 }
 
+TEST(PeAnalyzerTest, RejectsPe32OptionalHeaderForMitigations) {
+    std::vector<std::byte> pe_data = build(BuildSpec{});
+    write_u16(pe_data, kOptionalMagicOffset, 0x10B);
+    PeInfo info{};
+    info.is_pe32_plus = true;
+
+    const MitigationInfo pe32_result = inspect_pe_mitigations(pe_data, info);
+    EXPECT_FALSE(pe32_result.has_mitigations);
+
+    write_u32(pe_data, kLfanewOffset, 0xFFFFFFF0U);
+    const MitigationInfo out_of_file_result = inspect_pe_mitigations(pe_data, info);
+    EXPECT_FALSE(out_of_file_result.has_mitigations);
+}
+
 TEST(PeAnalyzerTest, CleanBinaryNotPacked) {
     PeInfo info{};
     SectionInfo sec_text{};
@@ -310,4 +324,3 @@ TEST(PeAnalyzerTest, NoSecurityIssuesInCleanBinary) {
 
 }  // namespace
 }  // namespace tradutorlinux::pe
-

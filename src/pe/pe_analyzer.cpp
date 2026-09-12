@@ -30,25 +30,42 @@ MitigationInfo inspect_pe_mitigations(
             std::to_integer<unsigned char>(file_bytes[0x3C + static_cast<std::size_t>(i)])) << (i * 8);
     }
 
-    // OptionalHeader64 DllCharacteristics fica no offset 70 dentro do Optional Header.
     // Estrutura: PE_SIGNATURE (4 bytes) + COFF_HEADER (20 bytes) + OPTIONAL_HEADER.
     constexpr std::size_t kSignatureSize = 4;
     constexpr std::size_t kCoffHeaderSize = 20;
+    constexpr std::size_t kOptionalMagicSize = 2;
     constexpr std::size_t kDllCharOptOffset = 70;
-    const std::size_t dll_char_file_offset =
-        static_cast<std::size_t>(pe_offset) + kSignatureSize + kCoffHeaderSize + kDllCharOptOffset;
-
-    if (file_bytes.size() < dll_char_file_offset + 2) {
+    constexpr std::uint16_t kOptionalMagic64 = 0x20B;
+    const std::size_t pe_start = static_cast<std::size_t>(pe_offset);
+    if (pe_start > file_bytes.size() ||
+        kSignatureSize + kCoffHeaderSize > file_bytes.size() - pe_start) {
         return result;
     }
 
     // Validação da assinatura PE ('PE\0\0')
-    if (std::to_integer<unsigned char>(file_bytes[pe_offset]) != 'P' ||
-        std::to_integer<unsigned char>(file_bytes[pe_offset + 1]) != 'E' ||
-        std::to_integer<unsigned char>(file_bytes[pe_offset + 2]) != 0 ||
-        std::to_integer<unsigned char>(file_bytes[pe_offset + 3]) != 0) {
+    if (std::to_integer<unsigned char>(file_bytes[pe_start]) != 'P' ||
+        std::to_integer<unsigned char>(file_bytes[pe_start + 1]) != 'E' ||
+        std::to_integer<unsigned char>(file_bytes[pe_start + 2]) != 0 ||
+        std::to_integer<unsigned char>(file_bytes[pe_start + 3]) != 0) {
         return result;
     }
+
+    const std::size_t optional_start = pe_start + kSignatureSize + kCoffHeaderSize;
+    if (kOptionalMagicSize > file_bytes.size() - optional_start) {
+        return result;
+    }
+    const std::uint16_t optional_magic = static_cast<std::uint16_t>(
+        std::to_integer<unsigned char>(file_bytes[optional_start]) |
+        (static_cast<std::uint16_t>(std::to_integer<unsigned char>(file_bytes[optional_start + 1])) << 8));
+    if (optional_magic != kOptionalMagic64) {
+        return result;
+    }
+
+    if (kDllCharOptOffset > file_bytes.size() - optional_start ||
+        2 > file_bytes.size() - optional_start - kDllCharOptOffset) {
+        return result;
+    }
+    const std::size_t dll_char_file_offset = optional_start + kDllCharOptOffset;
 
     // Leitura segura do campo DllCharacteristics (uint16_t little-endian)
     const std::uint16_t chars = static_cast<std::uint16_t>(
@@ -328,4 +345,3 @@ SecurityServiceInspectionResult inspect_pe_security_services(const PeInfo& info)
 }
 
 }  // namespace tradutorlinux::pe
-

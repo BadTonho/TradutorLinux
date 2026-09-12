@@ -34,7 +34,7 @@ indícios e podem mudar.
 | E11 | **Risco de robustez — validar** | A validação por `/proc/self/maps` é uma fotografia e a string UTF-16 não exige alinhamento de 2 bytes. Criar teste de ponteiro desalinhado e documentar o limite da validação; a correção de TOCTOU exige desenho próprio. |
 | E12 | **Corrigido e protegido** | O parser valida potência de dois e faixa de `SectionAlignment`/`FileAlignment`, exige `SectionAlignment >= FileAlignment` e rejeita entry point não nulo fora de `SizeOfImage`. As regressões `PeReaderTest.RejectsInvalidOptionalHeaderAlignment` e `PeReaderTest.RejectsEntryPointOutsideImage` cobrem o caminho antes do mapeamento. |
 | E13 | **Confirmado como risco de diagnóstico — validar regressão** | `resource_inspector.cpp` usa zero como retorno de leitura fora dos limites e segue somente a primeira entrada de cada nível. Recursos truncados e múltiplas entradas devem ser testados contra falso recurso válido. |
-| E14 | **Confirmado como lacuna de validação — validar regressão** | `inspect_pe_mitigations` precisa validar o magic do optional header antes de ler `DllCharacteristics`. Um PE32 fornecido ao caminho PE32+ deve ser rejeitado, não interpretado com offsets x64. |
+| E14 | **Corrigido e protegido** | `inspect_pe_mitigations` agora valida limites do `e_lfanew`, assinatura PE e o magic PE32+ antes de ler `DllCharacteristics`. `PeAnalyzerTest.RejectsPe32OptionalHeaderForMitigations` cobre PE32 e `e_lfanew` fora do arquivo sem falso positivo ou acesso inválido. |
 
 ## Falso-sucesso de APIs
 
