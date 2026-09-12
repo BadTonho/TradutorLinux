@@ -76,6 +76,7 @@ struct BuildSpec {
     std::uint32_t entry_point{0x1000};
     std::uint64_t image_base{0x140000000ULL};
     std::uint32_t section_alignment{0x1000};
+    std::uint32_t file_alignment{0x200};
     std::uint32_t size_of_image{0x3000};
     std::uint32_t size_of_headers{0x200};
     std::uint32_t number_of_rva_and_sizes{16};
@@ -123,7 +124,7 @@ inline std::vector<std::byte> build(const BuildSpec& spec) {
     push_u32(out, 0x1000);
     push_u64(out, spec.image_base);
     push_u32(out, spec.section_alignment);
-    push_u32(out, 0x200);
+    push_u32(out, spec.file_alignment);
     push_u16(out, 0);
     push_u16(out, 0);
     push_u16(out, 0);

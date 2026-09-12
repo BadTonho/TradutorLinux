@@ -838,6 +838,27 @@ TEST(PeReaderTest, RejectsTinyOptionalHeader) {
     EXPECT_EQ(parse_pe(bytes).status, ParseStatus::Malformed);
 }
 
+TEST(PeReaderTest, RejectsInvalidOptionalHeaderAlignment) {
+    BuildSpec spec;
+    spec.section_alignment = 0x300;
+    EXPECT_EQ(parse_pe(build(spec)).status, ParseStatus::Malformed);
+
+    spec = BuildSpec{};
+    spec.file_alignment = 0x100;
+    EXPECT_EQ(parse_pe(build(spec)).status, ParseStatus::Malformed);
+
+    spec = BuildSpec{};
+    spec.file_alignment = 0x2000;
+    EXPECT_EQ(parse_pe(build(spec)).status, ParseStatus::Malformed);
+}
+
+TEST(PeReaderTest, RejectsEntryPointOutsideImage) {
+    BuildSpec spec;
+    spec.entry_point = spec.size_of_image;
+
+    EXPECT_EQ(parse_pe(build(spec)).status, ParseStatus::Malformed);
+}
+
 TEST(PeReaderTest, RejectsSectionTableBeyondFile) {
     std::vector<std::byte> bytes = make_minimal();
     write_u16(bytes, kSectionCountOffset, 0xFFFF);

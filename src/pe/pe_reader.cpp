@@ -61,6 +61,8 @@ constexpr std::size_t kMaxCString = 65535;
 constexpr std::size_t kMaxExportFunctions = 65536;
 constexpr std::size_t kMaxExportNames = 65536;
 constexpr std::size_t kMaxTlsCallbacks = 4096;
+constexpr std::uint32_t kMinFileAlignment = 0x200;
+constexpr std::uint32_t kMaxFileAlignment = 0x10000;
 
 constexpr std::uint16_t kImageFileDll = 0x2000;
 
@@ -81,6 +83,10 @@ constexpr std::uint8_t kUnwindV2EpilogAtFunctionEnd = 0x1;
 [[nodiscard]] constexpr bool is_nonvolatile_register(const std::uint8_t register_number) {
     return register_number == 3 || register_number == 5 || register_number == 6 ||
            register_number == 7 || (register_number >= 12 && register_number <= 15);
+}
+
+[[nodiscard]] constexpr bool is_power_of_two(const std::uint32_t value) {
+    return value != 0U && (value & (value - 1U)) == 0U;
 }
 
 [[nodiscard]] ParseResult fail(const ParseStatus status, std::string message) {
@@ -245,14 +251,24 @@ public:
         reader_.read_u32(opt_offset + 16, info.address_of_entry_point);
         reader_.read_u64(opt_offset + 24, info.image_base);
         reader_.read_u32(opt_offset + 32, info.section_alignment);
+        std::uint32_t file_alignment{};
+        reader_.read_u32(opt_offset + 36, file_alignment);
         reader_.read_u32(opt_offset + 56, info.size_of_image);
         reader_.read_u32(opt_offset + 60, info.size_of_headers);
         reader_.read_u16(opt_offset + 68, info.subsystem);
 
         if (info.size_of_image == 0 || info.size_of_headers == 0 ||
-            info.size_of_headers > info.size_of_image || info.section_alignment == 0) {
+            info.size_of_headers > info.size_of_image ||
+            !is_power_of_two(info.section_alignment) ||
+            !is_power_of_two(file_alignment) || file_alignment < kMinFileAlignment ||
+            file_alignment > kMaxFileAlignment || info.section_alignment < file_alignment) {
             return fail(ParseStatus::Malformed,
-                        "optional header com SizeOfImage, SizeOfHeaders ou SectionAlignment inválido");
+                        "optional header com alinhamento ou tamanho de imagem inválido");
+        }
+        if (info.address_of_entry_point != 0 &&
+            info.address_of_entry_point >= info.size_of_image) {
+            return fail(ParseStatus::Malformed,
+                        "entry point fora dos limites de SizeOfImage");
         }
 
         std::uint32_t number_of_rva_and_sizes{};
