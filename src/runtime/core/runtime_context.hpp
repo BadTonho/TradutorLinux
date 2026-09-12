@@ -353,7 +353,28 @@ bool translate_windows_path(const char* win_path, char* linux_out, std::size_t o
 bool wide_path_to_string(const std::uint16_t* path, std::string& result) noexcept;
 bool normalized_wide_path(const std::uint16_t* path, char (&buffer)[4096]) noexcept;
 
-FileSlot* find_file_slot(const void* handle) noexcept;
+// Mantém o mutex da tabela de arquivos enquanto uma API usa os campos de um
+// slot. Handles de arquivo são endereços dos slots; portanto, devolver um
+// FileSlot* sem manter o lock permite que CloseHandle o limpe/reutilize entre
+// a validação e a operação no descritor.
+class FileSlotGuard {
+public:
+    explicit FileSlotGuard(const void* handle) noexcept;
+
+    FileSlotGuard(const FileSlotGuard&) = delete;
+    FileSlotGuard& operator=(const FileSlotGuard&) = delete;
+    FileSlotGuard(FileSlotGuard&&) = delete;
+    FileSlotGuard& operator=(FileSlotGuard&&) = delete;
+
+    [[nodiscard]] FileSlot* get() const noexcept { return slot_; }
+    [[nodiscard]] bool is_file_handle() const noexcept { return is_file_handle_; }
+
+private:
+    std::unique_lock<std::mutex> lock_;
+    FileSlot* slot_{nullptr};
+    bool is_file_handle_{false};
+};
+
 int handle_fd(const void* handle) noexcept;
 
 ThreadSlot* find_thread_slot(const void* handle) noexcept;

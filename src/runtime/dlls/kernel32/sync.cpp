@@ -20,6 +20,13 @@ namespace {
     if (handle == nullptr || handle == kInvalidHandleValue) {
         return false;
     }
+    FileSlotGuard file_guard(handle);
+    if (file_guard.get() != nullptr) {
+        return true;
+    }
+    if (file_guard.is_file_handle()) {
+        return false;
+    }
     const runtime::ObjectHeader* header = runtime::get_object_header(handle);
     if (header == nullptr) {
         return false;
@@ -120,9 +127,14 @@ TL_MSABI std::uint32_t tl_WaitForSingleObject(const void* const handle,
         set_last_error(abi::kErrorInvalidHandle);
         return abi::kWaitFailed;
     }
-    if (find_file_slot(handle) != nullptr) {
+    FileSlotGuard file_guard(handle);
+    if (file_guard.get() != nullptr) {
         set_last_error(abi::kErrorSuccess);
         return abi::kWaitObject0;
+    }
+    if (file_guard.is_file_handle()) {
+        set_last_error(abi::kErrorInvalidHandle);
+        return abi::kWaitFailed;
     }
     if (ThreadSlot* thread = find_thread_slot(handle); thread != nullptr) {
         std::unique_lock<std::mutex> lock(thread->join_mutex);
@@ -156,8 +168,9 @@ TL_MSABI std::uint32_t tl_WaitForMultipleObjects(const std::uint32_t count,
         return abi::kWaitFailed;
     }
     for (std::uint32_t index = 0; index < count; ++index) {
+        FileSlotGuard file_guard(handles[index]);
         if (handles[index] == nullptr ||
-            (find_file_slot(handles[index]) == nullptr &&
+            (file_guard.get() == nullptr &&
              find_thread_slot(handles[index]) == nullptr &&
              find_sync_slot(handles[index]) == nullptr)) {
             set_last_error(abi::kErrorInvalidHandle);

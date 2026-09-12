@@ -297,7 +297,9 @@ std::u16string final_windows_path(const std::string& path) {
 extern "C" {
 
 TL_MSABI std::uint32_t tl_GetFileType(const void* const handle) noexcept {
-    const int fd = handle_fd(handle);
+    FileSlotGuard slot_guard(handle);
+    const int fd = slot_guard.get() != nullptr ? slot_guard.get()->fd
+                                                : (slot_guard.is_file_handle() ? -1 : handle_fd(handle));
     if (fd < 0) {
         set_last_error(abi::kErrorInvalidHandle);
         return abi::kFileTypeUnknown;
@@ -337,8 +339,9 @@ TL_MSABI int tl_WriteFile(const void* const handle, const void* const buffer,
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
-    FileSlot* const slot = find_file_slot(handle);
-    const int fd = slot != nullptr ? slot->fd : handle_fd(handle);
+    FileSlotGuard slot_guard(handle);
+    FileSlot* const slot = slot_guard.get();
+    const int fd = slot != nullptr ? slot->fd : (slot_guard.is_file_handle() ? -1 : handle_fd(handle));
     if (fd < 0) {
         if (bytes_written != nullptr) {
             *bytes_written = 0;
@@ -387,8 +390,9 @@ TL_MSABI int tl_ReadFile(const void* const handle, void* const buffer,
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
-    FileSlot* const slot = find_file_slot(handle);
-    const int fd = slot != nullptr ? slot->fd : handle_fd(handle);
+    FileSlotGuard slot_guard(handle);
+    FileSlot* const slot = slot_guard.get();
+    const int fd = slot != nullptr ? slot->fd : (slot_guard.is_file_handle() ? -1 : handle_fd(handle));
     if (fd < 0) {
         if (bytes_read != nullptr) {
             *bytes_read = 0;
@@ -565,6 +569,32 @@ TL_MSABI int tl_CloseHandle(const void* const handle) noexcept {
         set_last_error(abi::kErrorSuccess);
         return 1;
     }
+    {
+        FileSlotGuard file_guard(handle);
+        if (FileSlot* const slot = file_guard.get(); slot != nullptr) {
+            const bool delete_pending = slot->delete_pending && !slot->unlinked;
+            const std::string path = slot->path;
+            ::close(slot->fd);
+            *slot = {};
+            slot->fd = -1;
+            if (delete_pending && ::unlink(path.c_str()) != 0 && errno != ENOENT) {
+                const std::uint32_t error = errno_to_win32(errno);
+                set_last_error(error);
+                trace_filesystem("delete-on-close", "failed", std::to_string(error));
+                return 0;
+            }
+            set_last_error(abi::kErrorSuccess);
+            if (delete_pending) {
+                runtime::security::remove_path(path);
+                trace_filesystem("delete-on-close", "success", "removed");
+            }
+            return 1;
+        }
+        if (file_guard.is_file_handle()) {
+            set_last_error(abi::kErrorInvalidHandle);
+            return 0;
+        }
+    }
     if (runtime::ObjectHeader* header = runtime::get_object_header(handle); header != nullptr) {
         if (header->type == runtime::HandleObjectType::Find) {
             set_last_error(abi::kErrorInvalidHandle);
@@ -575,26 +605,6 @@ TL_MSABI int tl_CloseHandle(const void* const handle) noexcept {
             set_last_error(abi::kErrorSuccess);
             return 1;
         }
-    }
-    if (FileSlot* slot = find_file_slot(handle); slot != nullptr) {
-        std::lock_guard<std::mutex> lock(g_files_mutex);
-        const bool delete_pending = slot->delete_pending && !slot->unlinked;
-        const std::string path = slot->path;
-        ::close(slot->fd);
-        *slot = {};
-        slot->fd = -1;
-        if (delete_pending && ::unlink(path.c_str()) != 0 && errno != ENOENT) {
-            const std::uint32_t error = errno_to_win32(errno);
-            set_last_error(error);
-            trace_filesystem("delete-on-close", "failed", std::to_string(error));
-            return 0;
-        }
-        set_last_error(abi::kErrorSuccess);
-        if (delete_pending) {
-            runtime::security::remove_path(path);
-            trace_filesystem("delete-on-close", "success", "removed");
-        }
-        return 1;
     }
     if (SyncSlot* slot = find_sync_slot(handle); slot != nullptr) {
         std::lock_guard<std::mutex> lock(g_sync_mutex);
@@ -681,7 +691,8 @@ TL_MSABI int tl_CloseHandle(const void* const handle) noexcept {
 }
 
 TL_MSABI std::uint32_t tl_GetFileSize(const void* handle, std::uint32_t* high_size) noexcept {
-    const FileSlot* slot = find_file_slot(handle);
+    FileSlotGuard slot_guard(handle);
+    const FileSlot* const slot = slot_guard.get();
     if (slot == nullptr) {
         set_last_error(abi::kErrorInvalidHandle);
         return 0xFFFFFFFFU;
@@ -701,7 +712,8 @@ TL_MSABI std::uint32_t tl_GetFileSize(const void* handle, std::uint32_t* high_si
 TL_MSABI std::int32_t tl_SetFilePointer(const void* handle, std::int32_t distance,
                                          std::int32_t* high_distance,
                                          std::uint32_t move_method) noexcept {
-    FileSlot* slot = find_file_slot(handle);
+    FileSlotGuard slot_guard(handle);
+    FileSlot* const slot = slot_guard.get();
     if (slot == nullptr) {
         set_last_error(abi::kErrorInvalidHandle);
         return -1;
@@ -1153,7 +1165,9 @@ TL_MSABI int tl_GetVolumeInformationW(const std::uint16_t*, std::uint16_t* volum
 }
 
 TL_MSABI int tl_FlushFileBuffers(const void* handle) noexcept {
-    const int fd = handle_fd(handle);
+    FileSlotGuard slot_guard(handle);
+    const int fd = slot_guard.get() != nullptr ? slot_guard.get()->fd
+                                                : (slot_guard.is_file_handle() ? -1 : handle_fd(handle));
     if (fd < 0) {
         set_last_error(abi::kErrorInvalidHandle);
         return 0;
@@ -1168,7 +1182,8 @@ TL_MSABI int tl_FlushFileBuffers(const void* handle) noexcept {
 
 TL_MSABI int tl_SetFilePointerEx(const void* handle, const std::int64_t distance_to_move,
                                  std::int64_t* new_file_pointer, const std::uint32_t move_method) noexcept {
-    FileSlot* slot = find_file_slot(handle);
+    FileSlotGuard slot_guard(handle);
+    FileSlot* const slot = slot_guard.get();
     if (slot == nullptr) {
         set_last_error(abi::kErrorInvalidHandle);
         return 0;
@@ -1201,7 +1216,8 @@ TL_MSABI int tl_SetFilePointerEx(const void* handle, const std::int64_t distance
 }
 
 TL_MSABI int tl_GetFileSizeEx(const void* handle, std::int64_t* file_size) noexcept {
-    const FileSlot* slot = find_file_slot(handle);
+    FileSlotGuard slot_guard(handle);
+    const FileSlot* const slot = slot_guard.get();
     if (slot == nullptr || file_size == nullptr || !mapped_guest_range(file_size, sizeof(std::int64_t), true)) {
         set_last_error(slot == nullptr ? abi::kErrorInvalidHandle : abi::kErrorInvalidParameter);
         return 0;
@@ -1614,6 +1630,19 @@ TL_MSABI int tl_DuplicateHandle(void* const src_process, void* const src_handle,
         set_last_error(abi::kErrorSuccess);
         return 1;
     }
+    {
+        FileSlotGuard file_guard(src_handle);
+        if (FileSlot* const slot = file_guard.get(); slot != nullptr) {
+            ++slot->header.ref_count;
+            *target_handle = src_handle;
+            set_last_error(abi::kErrorSuccess);
+            return 1;
+        }
+        if (file_guard.is_file_handle()) {
+            set_last_error(abi::kErrorInvalidHandle);
+            return 0;
+        }
+    }
     if (runtime::ObjectHeader* header = runtime::get_object_header(src_handle); header != nullptr) {
         ++header->ref_count;
         *target_handle = src_handle;
@@ -1910,7 +1939,8 @@ TL_MSABI std::uint32_t tl_GetTempFileNameW(const std::uint16_t* path_name,
 }
 
 TL_MSABI int tl_SetEndOfFile(const void* handle) noexcept {
-    FileSlot* slot = find_file_slot(handle);
+    FileSlotGuard slot_guard(handle);
+    FileSlot* const slot = slot_guard.get();
     if (slot == nullptr || slot->position < 0 || ::ftruncate(slot->fd, slot->position) != 0) {
         set_last_error(slot == nullptr ? abi::kErrorInvalidHandle : errno_to_win32(errno));
         return 0;
@@ -2146,7 +2176,8 @@ TL_MSABI std::uint32_t tl_GetFullPathNameA(const char* path, std::uint32_t buffe
 
 TL_MSABI int tl_GetFileTime(const void* handle, void* creation_time, void* access_time,
                             void* write_time) noexcept {
-    const FileSlot* slot = find_file_slot(handle);
+    FileSlotGuard slot_guard(handle);
+    const FileSlot* const slot = slot_guard.get();
     if (slot == nullptr) {
         set_last_error(abi::kErrorInvalidHandle);
         return 0;
@@ -2177,7 +2208,8 @@ TL_MSABI int tl_GetFileTime(const void* handle, void* creation_time, void* acces
 
 TL_MSABI int tl_SetFileTime(const void* handle, const void* creation_time,
                             const void* access_time, const void* write_time) noexcept {
-    FileSlot* slot = find_file_slot(handle);
+    FileSlotGuard slot_guard(handle);
+    FileSlot* const slot = slot_guard.get();
     if (slot == nullptr) {
         set_last_error(abi::kErrorInvalidHandle);
         return 0;
@@ -2211,7 +2243,8 @@ TL_MSABI int tl_SetFileTime(const void* handle, const void* creation_time,
 }
 
 TL_MSABI int tl_GetFileInformationByHandle(const void* handle, void* information) noexcept {
-    const FileSlot* slot = find_file_slot(handle);
+    FileSlotGuard slot_guard(handle);
+    const FileSlot* const slot = slot_guard.get();
     if (slot == nullptr) {
         set_last_error(abi::kErrorInvalidHandle);
         return 0;
@@ -2245,7 +2278,8 @@ TL_MSABI int tl_GetFileInformationByHandle(const void* handle, void* information
 
 TL_MSABI int tl_GetFileInformationByHandleEx(const void* handle, int info_class,
                                              void* buffer, std::uint32_t size) noexcept {
-    const FileSlot* slot = find_file_slot(handle);
+    FileSlotGuard slot_guard(handle);
+    const FileSlot* const slot = slot_guard.get();
     if (slot == nullptr) {
         set_last_error(abi::kErrorInvalidHandle);
         return 0;
@@ -2270,7 +2304,8 @@ TL_MSABI int tl_GetFileInformationByHandleEx(const void* handle, int info_class,
 TL_MSABI int tl_SetFileInformationByHandle(const void* const handle, const int info_class,
                                            const void* const buffer,
                                            const std::uint32_t size) noexcept {
-    FileSlot* const slot = find_file_slot(handle);
+    FileSlotGuard slot_guard(handle);
+    FileSlot* const slot = slot_guard.get();
     if (slot == nullptr) {
         set_last_error(abi::kErrorInvalidHandle);
         trace_filesystem("set-information", "failed", "invalid-handle");
@@ -2417,7 +2452,8 @@ TL_MSABI std::uint32_t tl_GetFinalPathNameByHandleW(const void* handle, std::uin
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
-    const FileSlot* slot = find_file_slot(handle);
+    FileSlotGuard slot_guard(handle);
+    const FileSlot* const slot = slot_guard.get();
     if (slot == nullptr) {
         set_last_error(abi::kErrorInvalidHandle);
         return 0;

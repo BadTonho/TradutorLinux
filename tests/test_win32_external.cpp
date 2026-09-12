@@ -2,6 +2,8 @@
 #include "tradutorlinux/win32/kernel32.hpp"
 #include "tradutorlinux/runtime/shlwapi.hpp"
 
+#include <atomic>
+
 namespace tradutorlinux {
 namespace {
 TEST(WininetTest, RejectsExternalHostBeforeTransport) {
@@ -510,6 +512,34 @@ TEST(ShellAllocationTest, ReturnedBuffersUseTheDocumentedAllocators) {
     set_guest_prefix_path({});
     std::error_code error;
     std::filesystem::remove_all(root, error);
+}
+
+TEST(FileSlotTest, CloseWaitsForAnActiveFileSlotGuard) {
+    TempDirFixture context;
+    const std::string path = context.path("file-slot-guard.bin");
+    void* const handle = tl_CreateFileA(path.c_str(), abi::kGenericWrite, 0, nullptr,
+                                        abi::kCreateAlways, 0, nullptr);
+    ASSERT_NE(handle, reinterpret_cast<void*>(static_cast<std::uintptr_t>(abi::kInvalidHandleValue)));
+
+    std::atomic<bool> close_started{false};
+    std::atomic<int> close_result{0};
+    std::thread closer;
+    {
+        FileSlotGuard guard(handle);
+        ASSERT_NE(guard.get(), nullptr);
+        closer = std::thread([&] {
+            close_started.store(true, std::memory_order_release);
+            close_result.store(tl_CloseHandle(handle), std::memory_order_release);
+        });
+        for (int retry = 0; retry < 1000 && !close_started.load(std::memory_order_acquire); ++retry) {
+            std::this_thread::yield();
+        }
+        ASSERT_TRUE(close_started.load(std::memory_order_acquire));
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        EXPECT_EQ(close_result.load(std::memory_order_acquire), 0);
+    }
+    closer.join();
+    EXPECT_EQ(close_result.load(std::memory_order_acquire), 1);
 }
 
 TEST(ShellExecutionTest, UnsupportedCallsFailWithoutFabricatingAProcess) {

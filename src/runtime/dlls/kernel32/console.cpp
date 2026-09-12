@@ -52,7 +52,10 @@ TL_MSABI int tl_SetStdHandle(const std::uint32_t std_handle, void* const handle)
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
-    if (handle != nullptr && handle_fd(handle) < 0) {
+    FileSlotGuard slot_guard(handle);
+    const int fd = slot_guard.get() != nullptr ? slot_guard.get()->fd
+                                                : (slot_guard.is_file_handle() ? -1 : handle_fd(handle));
+    if (handle != nullptr && fd < 0) {
         set_last_error(abi::kErrorInvalidHandle);
         return 0;
     }
@@ -75,7 +78,9 @@ TL_MSABI int tl_ReadConsoleW(const void* const console_input, std::uint16_t* con
         return 0;
     }
     *chars_read = 0;
-    const int fd = handle_fd(console_input);
+    FileSlotGuard slot_guard(console_input);
+    const int fd = slot_guard.get() != nullptr ? slot_guard.get()->fd
+                                                : (slot_guard.is_file_handle() ? -1 : handle_fd(console_input));
     if (input_control != nullptr || fd != STDIN_FILENO || chars_to_read > (1U << 20U) ||
         (chars_to_read != 0 &&
          !mapped_guest_range(buffer, static_cast<std::size_t>(chars_to_read) * sizeof(*buffer),
@@ -119,7 +124,9 @@ TL_MSABI int tl_WriteConsoleW(const void* const console_output,
         return 0;
     }
     *chars_written = 0;
-    const int fd = handle_fd(console_output);
+    FileSlotGuard slot_guard(console_output);
+    const int fd = slot_guard.get() != nullptr ? slot_guard.get()->fd
+                                                : (slot_guard.is_file_handle() ? -1 : handle_fd(console_output));
     if (reserved != nullptr || (fd != STDOUT_FILENO && fd != STDERR_FILENO) ||
         chars_to_write > (1U << 20U) ||
         (chars_to_write != 0 &&
@@ -439,7 +446,9 @@ TL_MSABI int tl_GetConsoleMode(const void* handle, std::uint32_t* mode) noexcept
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
-    const int fd = handle_fd(handle);
+    FileSlotGuard slot_guard(handle);
+    const int fd = slot_guard.get() != nullptr ? slot_guard.get()->fd
+                                                : (slot_guard.is_file_handle() ? -1 : handle_fd(handle));
     if (fd < 0 || ::isatty(fd) == 0) {
         set_last_error(abi::kErrorInvalidHandle);
         return 0;
@@ -450,7 +459,10 @@ TL_MSABI int tl_GetConsoleMode(const void* handle, std::uint32_t* mode) noexcept
 }
 
 TL_MSABI int tl_SetConsoleMode(const void* handle, std::uint32_t /*mode*/) noexcept {
-    if (handle_fd(handle) < 0) {
+    FileSlotGuard slot_guard(handle);
+    const int fd = slot_guard.get() != nullptr ? slot_guard.get()->fd
+                                                : (slot_guard.is_file_handle() ? -1 : handle_fd(handle));
+    if (fd < 0) {
         set_last_error(abi::kErrorInvalidHandle);
         return 0;
     }

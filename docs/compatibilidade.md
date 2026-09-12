@@ -766,6 +766,9 @@ fluxo principal. Os contratos abaixo são protegidos por
 - `FileSlot` rastreia tamanho, posição e exclusão pendente; `ReadFile` e
   `WriteFile` atualizam a posição automaticamente a partir do descritor host,
   mantendo `SetFilePointer(FILE_CURRENT)` consistente após I/O.
+- APIs que usam um `FileSlot` mantêm o lock até concluir a operação;
+  `CloseHandle` não pode limpar ou reutilizar o descritor durante leitura,
+  escrita, seek, consulta de metadados ou atualização de atributos/tempos.
 - `GetFileAttributesA` para arquivos inexistentes retorna `0xFFFFFFFF` com
   `ERROR_FILE_NOT_FOUND`.
 - `GetCurrentDirectoryA/W` reflete apenas o processo convidado isolado. Em

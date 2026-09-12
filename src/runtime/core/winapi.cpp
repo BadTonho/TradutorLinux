@@ -329,19 +329,20 @@ bool normalized_wide_path(const std::uint16_t* path,
            translate_windows_path(utf8.c_str(), buffer, sizeof(buffer));
 }
 
-FileSlot* find_file_slot(const void* handle) noexcept {
+FileSlotGuard::FileSlotGuard(const void* const handle) noexcept {
     if (handle == nullptr) {
-        return nullptr;
+        return;
     }
     const auto addr = std::bit_cast<std::uintptr_t>(handle);
     const auto begin = std::bit_cast<std::uintptr_t>(g_files.data());
     const auto end = begin + g_files.size() * sizeof(FileSlot);
     if (addr < begin || addr >= end || (addr - begin) % sizeof(FileSlot) != 0) {
-        return nullptr;
+        return;
     }
-    std::lock_guard<std::mutex> lock(g_files_mutex);
+    is_file_handle_ = true;
+    lock_ = std::unique_lock<std::mutex>(g_files_mutex);
     auto* slot = static_cast<FileSlot*>(const_cast<void*>(handle));
-    return slot->used ? slot : nullptr;
+    slot_ = slot->used ? slot : nullptr;
 }
 
 namespace runtime {
@@ -375,18 +376,7 @@ ObjectHeader* get_object_header(const void* handle) noexcept {
         return slot.used ? &slot.header : nullptr;
     }
 
-    // 4. File slots (ponteiros diretos em g_files)
-    {
-        const auto begin = std::bit_cast<std::uintptr_t>(g_files.data());
-        const auto end = begin + g_files.size() * sizeof(FileSlot);
-        if (addr >= begin && addr < end && (addr - begin) % sizeof(FileSlot) == 0) {
-            std::lock_guard<std::mutex> lock(g_files_mutex);
-            auto* slot = static_cast<FileSlot*>(const_cast<void*>(handle));
-            return slot->used ? &slot->header : nullptr;
-        }
-    }
-
-    // 5. FileMapping slots (ponteiros diretos em g_mappings)
+    // 4. FileMapping slots (ponteiros diretos em g_mappings)
     {
         const auto begin = std::bit_cast<std::uintptr_t>(g_mappings.data());
         const auto end = begin + g_mappings.size() * sizeof(FileMappingSlot);
@@ -397,7 +387,7 @@ ObjectHeader* get_object_header(const void* handle) noexcept {
         }
     }
 
-    // 6. Snapshot slots (ponteiros diretos em g_snapshots)
+    // 5. Snapshot slots (ponteiros diretos em g_snapshots)
     {
         const auto begin = std::bit_cast<std::uintptr_t>(g_snapshots.data());
         const auto end = begin + g_snapshots.size() * sizeof(SnapshotSlot);
@@ -424,7 +414,8 @@ int handle_fd(const void* handle) noexcept {
     if (handle == &kStdErrorToken || handle == &ctx.standard_handle_tokens[2] || handle == ctx.standard_handles[2]) {
         return STDERR_FILENO;
     }
-    if (const FileSlot* slot = find_file_slot(handle); slot != nullptr) {
+    FileSlotGuard guard(handle);
+    if (const FileSlot* slot = guard.get(); slot != nullptr) {
         return slot->fd;
     }
     return -1;

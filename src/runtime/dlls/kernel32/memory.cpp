@@ -372,8 +372,10 @@ TL_MSABI void* tl_CreateFileMappingA(const void* file, const void* file_mapping_
                                      const std::uint32_t maximum_size_low, const char* name) noexcept {
     (void)file_mapping_attributes;
     int fd = -1;
+    FileSlotGuard file_guard(file);
     if (file != nullptr && file != reinterpret_cast<const void*>(~static_cast<std::uintptr_t>(0))) {
-        fd = handle_fd(file);
+        fd = file_guard.get() != nullptr ? file_guard.get()->fd
+                                         : (file_guard.is_file_handle() ? -1 : handle_fd(file));
         if (fd < 0) {
             set_last_error(abi::kErrorInvalidHandle);
             return nullptr;
