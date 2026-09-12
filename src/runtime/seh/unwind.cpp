@@ -581,8 +581,9 @@ std::int32_t c_specific_handler(ExceptionRecordAmd64* const exception_record,
             const bool supported_cxx_handler =
                 cxx_exception && is_supported_cxx_handler_data(frame.handler_data);
             if (cxx_exception && frame.handler != nullptr && !supported_cxx_handler) {
-                trace_seh("skipped", exception_record->code,
-                          "unsupported-cxx-handler-during-unwind");
+                trace_seh_handler("skipped", exception_record->code,
+                                  "unsupported-cxx-handler-during-unwind", frame.handler,
+                                  frame.handler_data, frame.index);
             } else if (exception_record != nullptr && frame.handler != nullptr) {
                 DispatcherContextAmd64 dispatcher{
                     .control_pc = before.rip,
@@ -644,8 +645,9 @@ std::int32_t c_specific_handler(ExceptionRecordAmd64* const exception_record,
                 exception_record != nullptr && exception_record->code == 0xE06D7363U &&
                 !is_supported_cxx_handler_data(frame.handler_data);
             if (unsupported_cxx_handler) {
-                trace_seh("skipped", exception_record->code,
-                          "unsupported-cxx-handler-during-unwind");
+                trace_seh_handler("skipped", exception_record->code,
+                                  "unsupported-cxx-handler-during-unwind", frame.handler,
+                                  frame.handler_data, frame.index);
                 *context = cursor;
                 continue;
             }
@@ -796,7 +798,8 @@ std::int32_t c_specific_handler(ExceptionRecordAmd64* const exception_record,
             continue;
         }
         if (code == 0xE06D7363U && !is_supported_cxx_handler_data(frame.handler_data)) {
-            trace_seh("skipped", code, "unsupported-cxx-handler-during-search");
+            trace_seh_handler("skipped", code, "unsupported-cxx-handler-during-search",
+                              frame.handler, frame.handler_data, frame.index);
             continue;
         }
         DispatcherContextAmd64 dispatcher{.control_pc = before.rip,

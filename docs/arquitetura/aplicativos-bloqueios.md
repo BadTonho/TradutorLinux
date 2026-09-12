@@ -204,8 +204,10 @@ janela `Configurator` e o diálogo `Load stylers.xml failed`, fechando ambos por
 e C++ OFF produzem o mesmo trace: o import de `WinVerifyTrust` é resolvido,
 mas a exceção `0xE06D7363` ocorre antes da chamada, três handlers não
 compatíveis com `FuncInfo` v3 são ignorados e o processo termina em
-`ExitProcess(3)`, sem `guest-signal` ou `guest-timeout`. O resultado é uma
-falha controlada do convidado, não uma alegação de compatibilidade.
+`ExitProcess(3)`, sem `guest-signal` ou `guest-timeout`; cada rejeição agora
+inclui no trace o índice da função e os RVAs do handler e de seus dados. O
+resultado é uma falha controlada do convidado, não uma alegação de
+compatibilidade.
 
 O código `0xE06D7363` é a exceção C++ do aplicativo. O suporte atual cobre o
 subconjunto SEH explicitamente documentado, não despacho geral de exceções C++;

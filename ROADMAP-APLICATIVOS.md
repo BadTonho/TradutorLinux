@@ -3069,8 +3069,9 @@ interação.
   mensagem `Checking certificate ...`.
 - [x] Nenhuma chamada `wintrust` foi registrada antes do bloqueio; o dispatcher
   encontrou três `handler-data` que não satisfazem o contrato `FuncInfo` v3,
-  registrou `unsupported-cxx-handler-during-search` e transferiu para
-  `ExitProcess(3)`, sem `guest-signal` ou `guest-timeout`.
+  registrou `unsupported-cxx-handler-during-search` com índice da função e
+  RVAs do handler/metadata e transferiu para `ExitProcess(3)`, sem
+  `guest-signal` ou `guest-timeout`.
 - [x] A sondagem GDB confirmou que os dados rejeitados são tabelas relativas
   sem o magic `0x19930522` ou uma tabela SEH estática com contagem de escopos.
   Nenhum desses formatos foi interpretado como C++ por tentativa.

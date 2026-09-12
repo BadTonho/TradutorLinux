@@ -243,8 +243,13 @@ void stop_runtime_process(const pid_t pid) {
     const std::string trace{std::istreambuf_iterator<char>{trace_input}, {}};
     const bool direct_cxx_block = trace.find("unsupported-cxx-handler-during-search") !=
                                   std::string::npos;
+    const bool cxx_handler_metadata =
+        trace.find("seh state=\"skipped\" code=\"3765269347\" "
+                   "detail=\"unsupported-cxx-handler-during-search\" "
+                   "mechanism=\"x64-seh\" function-index=\"") != std::string::npos;
     passed = passed &&
              direct_cxx_block &&
+             cxx_handler_metadata &&
              trace.find("caption=\"Load stylers.xml failed\"") == std::string::npos &&
              trace.find("ExitProcess symbol=\"ExitProcess\" exit-code=\"3\"") !=
                  std::string::npos &&
