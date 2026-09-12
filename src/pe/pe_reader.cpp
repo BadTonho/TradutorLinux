@@ -1280,41 +1280,61 @@ private:
             parser_state_.runtime_functions.push_back(std::move(function));
         }
 
-        for (const RuntimeFunction& function : parser_state_.runtime_functions) {
+        const auto find_chained_index = [&](const UnwindInfo& unwind)
+            -> std::optional<std::size_t> {
+            const auto chained = std::lower_bound(
+                parser_state_.runtime_functions.begin(), parser_state_.runtime_functions.end(),
+                unwind.chained_begin_rva,
+                [](const RuntimeFunction& function, const std::uint32_t begin_rva) {
+                    return function.begin_rva < begin_rva;
+                });
+            if (chained == parser_state_.runtime_functions.end() ||
+                chained->begin_rva != unwind.chained_begin_rva ||
+                chained->end_rva != unwind.chained_end_rva ||
+                chained->unwind_info_rva != unwind.chained_unwind_info_rva) {
+                return std::nullopt;
+            }
+            return static_cast<std::size_t>(
+                std::distance(parser_state_.runtime_functions.begin(), chained));
+        };
+
+        std::vector<std::optional<std::size_t>> chained_targets(
+            parser_state_.runtime_functions.size());
+        for (std::size_t index = 0; index < parser_state_.runtime_functions.size(); ++index) {
+            const RuntimeFunction& function = parser_state_.runtime_functions[index];
             if (!function.unwind.has_chained_function) {
                 continue;
             }
-            const auto chained = std::find_if(
-                parser_state_.runtime_functions.begin(), parser_state_.runtime_functions.end(),
-                [&function](const RuntimeFunction& candidate) {
-                    return candidate.begin_rva == function.unwind.chained_begin_rva &&
-                           candidate.end_rva == function.unwind.chained_end_rva &&
-                           candidate.unwind_info_rva == function.unwind.chained_unwind_info_rva;
-                });
-            if (chained == parser_state_.runtime_functions.end()) {
+            chained_targets[index] = find_chained_index(function.unwind);
+            if (!chained_targets[index].has_value()) {
                 return fail(ParseStatus::Malformed,
                             "CHAININFO não referencia uma RUNTIME_FUNCTION da tabela");
             }
         }
-        for (std::size_t start = 0; start < parser_state_.runtime_functions.size(); ++start) {
+
+        std::vector<std::uint8_t> chain_state(parser_state_.runtime_functions.size(), 0);
+        for (std::size_t start = 0; start < chain_state.size(); ++start) {
+            if (chain_state[start] == 2U) {
+                continue;
+            }
+            std::vector<std::size_t> path;
             std::size_t current = start;
-            for (std::size_t depth = 0; depth <= parser_state_.runtime_functions.size(); ++depth) {
-                const RuntimeFunction& function = parser_state_.runtime_functions[current];
-                if (!function.unwind.has_chained_function) {
-                    break;
-                }
-                const auto chained = std::find_if(
-                    parser_state_.runtime_functions.begin(), parser_state_.runtime_functions.end(),
-                    [&function](const RuntimeFunction& candidate) {
-                        return candidate.begin_rva == function.unwind.chained_begin_rva &&
-                               candidate.end_rva == function.unwind.chained_end_rva &&
-                               candidate.unwind_info_rva == function.unwind.chained_unwind_info_rva;
-                    });
-                current = static_cast<std::size_t>(
-                    std::distance(parser_state_.runtime_functions.begin(), chained));
-                if (depth == parser_state_.runtime_functions.size()) {
+            for (;;) {
+                if (chain_state[current] == 1U) {
                     return fail(ParseStatus::Malformed, "ciclo em CHAININFO de UNWIND_INFO");
                 }
+                if (chain_state[current] == 2U) {
+                    break;
+                }
+                chain_state[current] = 1U;
+                path.push_back(current);
+                if (!chained_targets[current].has_value()) {
+                    break;
+                }
+                current = *chained_targets[current];
+            }
+            for (const std::size_t index : path) {
+                chain_state[index] = 2U;
             }
         }
         return std::nullopt;

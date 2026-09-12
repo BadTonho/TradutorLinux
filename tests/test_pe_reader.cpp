@@ -128,6 +128,48 @@ std::vector<std::byte> make_virtual_only_exception_directory_pe() {
     return result;
 }
 
+std::vector<std::byte> make_large_chained_unwind_pe() {
+    constexpr std::size_t kFunctionCount = 65536;
+    constexpr std::uint32_t kPdataRva = 0x2000;
+    constexpr std::size_t kRuntimeFunctionSize = 12;
+    constexpr std::size_t kUnwindInfoSize = 16;
+    const std::size_t table_size = kFunctionCount * kRuntimeFunctionSize;
+    std::vector<std::byte> data(table_size + kFunctionCount * kUnwindInfoSize,
+                                 std::byte{0});
+    for (std::size_t index = 0; index < kFunctionCount; ++index) {
+        const std::uint32_t begin_rva = 0x1000U + static_cast<std::uint32_t>(index * 0x10U);
+        const std::uint32_t end_rva = begin_rva + 0x10U;
+        const std::uint32_t unwind_rva =
+            kPdataRva + static_cast<std::uint32_t>(table_size + index * kUnwindInfoSize);
+        const std::size_t function_offset = index * kRuntimeFunctionSize;
+        write_u32(data, function_offset, begin_rva);
+        write_u32(data, function_offset + 4, end_rva);
+        write_u32(data, function_offset + 8, unwind_rva);
+
+        const std::size_t unwind_offset = table_size + index * kUnwindInfoSize;
+        write_u32(data, unwind_offset, index + 1U < kFunctionCount ? 0x21U : 0x01U);
+        if (index + 1U < kFunctionCount) {
+            const std::uint32_t next_begin = end_rva;
+            const std::uint32_t next_end = next_begin + 0x10U;
+            const std::uint32_t next_unwind = unwind_rva + kUnwindInfoSize;
+            write_u32(data, unwind_offset + 4, next_begin);
+            write_u32(data, unwind_offset + 8, next_end);
+            write_u32(data, unwind_offset + 12, next_unwind);
+        }
+    }
+
+    BuildSpec spec;
+    spec.size_of_image = 0x200000;
+    spec.section_names = {".text", ".pdata"};
+    spec.section_data = {std::vector<std::byte>(0x10), data};
+    spec.exception_rva = kPdataRva;
+    spec.exception_size = static_cast<std::uint32_t>(table_size);
+    std::vector<std::byte> result = build(spec);
+    constexpr std::size_t kSecondSectionRawSizeOffset = 0x148 + 40 + 16;
+    write_u32(result, kSecondSectionRawSizeOffset, static_cast<std::uint32_t>(data.size()));
+    return result;
+}
+
 std::vector<std::byte> make_export_pe() {
     constexpr std::uint32_t kExportRva = 0x2000;
     std::vector<std::byte> data(0xA0, std::byte{0});
@@ -407,6 +449,13 @@ TEST(PeReaderTest, RejectsVirtualOnlyExceptionDirectory) {
 
     EXPECT_EQ(result.status, ParseStatus::Malformed);
     EXPECT_NE(result.error_message.find("exceções"), std::string::npos);
+}
+
+TEST(PeReaderTest, ParsesLargeChainedUnwindTable) {
+    const ParseResult result = parse_pe(make_large_chained_unwind_pe());
+
+    ASSERT_EQ(result.status, ParseStatus::Success) << result.error_message;
+    EXPECT_EQ(result.info.runtime_functions.size(), 65536U);
 }
 
 TEST(PeReaderTest, ParsesRuntimeFunctionAndUnwindCodes) {
