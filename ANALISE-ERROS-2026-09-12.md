@@ -82,6 +82,13 @@ sem executar a operação.
   `VerQueryValue` e entradas inválidas retornam `ERROR_INVALID_PARAMETER`.
   `Win32StubTest.VersionStubsRejectFabricatedMetadataAndClearQueries`
   protege o contrato.
+- **Corrigido nesta etapa:** `IMM32.dll` não retorna mais o endereço de um
+  contexto estático do host nem `TRUE` para mutações de composição sem IME.
+  As treze exports estão classificadas como `Stub`; não há contexto ou texto
+  de composição fabricado, consultas retornam falha controlada e
+  `ImmGetVirtualKey` publica explicitamente a ausência de IME. A regressão
+  `Win32StubTest.ImmStubsRejectFakeContextsAndCompositionSuccess` protege o
+  contrato.
 - **Alta prioridade:** módulos que falham sem atualizar `GetLastError` precisam
   de testes de erro. `IMM32`, `DWMAPI`, `WINMM`, `COMDLG32` e `version` não
   podem deixar o erro anterior do convidado parecer a causa atual.

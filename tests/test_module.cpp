@@ -246,6 +246,10 @@ TEST_F(ModuleTest, RegistersBuiltinKernel32Exports) {
               ExportSupport::Stub);
     EXPECT_EQ(find_export(ExportQuery{"version.dll", "VerQueryValueW"}).support,
               ExportSupport::Stub);
+    EXPECT_EQ(find_export(ExportQuery{"IMM32.dll", "ImmGetContext"}).support,
+              ExportSupport::Stub);
+    EXPECT_EQ(find_export(ExportQuery{"IMM32.dll", "ImmGetVirtualKey"}).support,
+              ExportSupport::Stub);
     EXPECT_EQ(find_export(ExportQuery{"KERNEL32.dll", "TlsGetValue"}).address,
               reinterpret_cast<std::uintptr_t>(&tl_TlsGetValue));
     EXPECT_EQ(find_export(ExportQuery{"KERNEL32.dll", "RtlCaptureContext"}).address,

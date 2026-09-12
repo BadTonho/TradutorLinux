@@ -2,6 +2,7 @@
 
 #include "tradutorlinux/diagnostics/trace.hpp"
 #include "tradutorlinux/runtime/comdlg32.hpp"
+#include "tradutorlinux/runtime/imm32.hpp"
 #include "tradutorlinux/runtime/winmm.hpp"
 
 #include <algorithm>
@@ -236,6 +237,38 @@ TEST(Win32StubTest, VersionStubsRejectFabricatedMetadataAndClearQueries) {
     EXPECT_EQ(tl_GetLastError(), abi::kErrorNotSupported);
 
     EXPECT_EQ(tl_GetFileVersionInfoA(nullptr, 0, 0, nullptr), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+}
+
+TEST(Win32StubTest, ImmStubsRejectFakeContextsAndCompositionSuccess) {
+    void* window = reinterpret_cast<void*>(0x1U);
+    void* context = reinterpret_cast<void*>(0x2U);
+    void* form = reinterpret_cast<void*>(0x3U);
+
+    EXPECT_EQ(tl_ImmGetContext(window), nullptr);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorNotSupported);
+    EXPECT_EQ(tl_ImmReleaseContext(window, context), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorNotSupported);
+    EXPECT_EQ(tl_ImmSetCompositionWindow(context, form), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorNotSupported);
+    EXPECT_EQ(tl_ImmGetCompositionStringA(context, 0, nullptr, 0), -1);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorNotSupported);
+    EXPECT_EQ(tl_ImmGetCompositionStringW(context, 0, nullptr, 0), -1);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorNotSupported);
+    EXPECT_EQ(tl_ImmAssociateContext(window, context), nullptr);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorNotSupported);
+    EXPECT_EQ(tl_ImmGetVirtualKey(window), 0U);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorNotSupported);
+    EXPECT_EQ(tl_ImmSetCompositionFontA(context, form), 0);
+    EXPECT_EQ(tl_ImmSetCompositionFontW(context, form), 0);
+    EXPECT_EQ(tl_ImmSetCandidateWindow(context, form), 0);
+    EXPECT_EQ(tl_ImmSetCompositionStringW(context, 0, nullptr, 0, nullptr, 0), 0);
+    EXPECT_EQ(tl_ImmEscapeW(nullptr, context, 0, nullptr), 0);
+    EXPECT_EQ(tl_ImmNotifyIME(context, 0, 0, 0), 0);
+
+    EXPECT_EQ(tl_ImmGetContext(nullptr), nullptr);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_ImmNotifyIME(nullptr, 0, 0, 0), 0);
     EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
 }
 

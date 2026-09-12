@@ -464,8 +464,9 @@ callbacks multimídia nem acessam áudio do host.
 `GdipCreateHBITMAPFromBitmap` (`gdiplus.dll`), `SymFromAddr`/`ImageNtHeader`
 (`DBGHELP.dll`), `ImmGetContext`/`ImmReleaseContext` e as demais APIs
 `IMM32.dll`, além de `SetWindowTheme`, `OpenThemeData`, `CloseThemeData` e
-funções `UxTheme`, são contratos de importação controlada. Não constituem GDI+,
-IME, tema visual ou depuração completos.
+funções `UxTheme`, são contratos de importação controlada. `IMM32` não cria
+contextos host nem processa composição; não constitui um IME completo. Essas
+APIs também não constituem GDI+, tema visual ou depuração completos.
 
 ### Módulos de portfólio
 
