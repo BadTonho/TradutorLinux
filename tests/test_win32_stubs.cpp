@@ -151,6 +151,37 @@ TEST(Win32StubTest, DebugAndShellDialogStubsReportUnsupported) {
     EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
 }
 
+TEST(Win32StubTest, GdiplusStubsRejectFakeObjectsAndClearOutputs) {
+    void* token = reinterpret_cast<void*>(0x1U);
+    EXPECT_EQ(tl_GdiplusStartup(&token, nullptr, nullptr), 1);
+    EXPECT_EQ(token, nullptr);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorNotSupported);
+
+    void* bitmap = reinterpret_cast<void*>(0x2U);
+    EXPECT_EQ(tl_GdipCreateBitmapFromStream(nullptr, &bitmap), 1);
+    EXPECT_EQ(bitmap, nullptr);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorNotSupported);
+
+    void* clone = reinterpret_cast<void*>(0x3U);
+    EXPECT_EQ(tl_GdipCloneImage(nullptr, &clone), 1);
+    EXPECT_EQ(clone, nullptr);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorNotSupported);
+
+    void* hbitmap = reinterpret_cast<void*>(0x4U);
+    EXPECT_EQ(tl_GdipCreateHBITMAPFromBitmap(nullptr, &hbitmap, 0), 1);
+    EXPECT_EQ(hbitmap, nullptr);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorNotSupported);
+
+    EXPECT_EQ(tl_GdipDisposeImage(nullptr), 1);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorNotSupported);
+    EXPECT_EQ(tl_GdipAlloc(32), nullptr);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorNotSupported);
+    tl_GdipFree(nullptr);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorNotSupported);
+    tl_GdiplusShutdown(nullptr);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorNotSupported);
+}
+
 TEST(Win32StubTest, UnsupportedApisEmitTraceWithMechanismAndDetail) {
     const std::filesystem::path directory =
         std::filesystem::temp_directory_path() /

@@ -3,9 +3,6 @@
 #include "tradutorlinux/loader/builtin_modules.hpp"
 #include "runtime_context.hpp"
 
-#include <cstdlib>
-#include <cstring>
-
 namespace tradutorlinux {
 
 extern "C" {
@@ -17,25 +14,25 @@ TL_MSABI int tl_GdiplusStartup(void* token, const void* input, void* output) noe
         set_last_error(abi::kErrorInvalidParameter);
         return 1;
     }
-    *static_cast<void**>(token) = reinterpret_cast<void*>(0x1);
-    set_last_error(abi::kErrorSuccess);
-    return 0;
+    *static_cast<void**>(token) = nullptr;
+    set_last_error(abi::kErrorNotSupported);
+    return 1; // GenericError: GDI+ is not initialized by this runtime.
 }
 
 TL_MSABI void tl_GdiplusShutdown(void* token) noexcept {
     (void)token;
-    set_last_error(abi::kErrorSuccess);
+    set_last_error(abi::kErrorNotSupported);
 }
 
 TL_MSABI void* tl_GdipAlloc(std::size_t size) noexcept {
-    void* ptr = ::malloc(size);
-    set_last_error(ptr != nullptr ? abi::kErrorSuccess : abi::kErrorNotEnoughMemory);
-    return ptr;
+    (void)size;
+    set_last_error(abi::kErrorNotSupported);
+    return nullptr;
 }
 
 TL_MSABI void tl_GdipFree(void* ptr) noexcept {
-    ::free(ptr);
-    set_last_error(abi::kErrorSuccess);
+    (void)ptr;
+    set_last_error(abi::kErrorNotSupported);
 }
 
 TL_MSABI int tl_GdipCreateBitmapFromStream(void* stream, void** bitmap) noexcept {
@@ -44,26 +41,26 @@ TL_MSABI int tl_GdipCreateBitmapFromStream(void* stream, void** bitmap) noexcept
         set_last_error(abi::kErrorInvalidParameter);
         return 1;
     }
-    static char dummy = 0;
-    *bitmap = &dummy;
-    set_last_error(abi::kErrorSuccess);
-    return 0;
+    *bitmap = nullptr;
+    set_last_error(abi::kErrorNotSupported);
+    return 1; // GenericError: no GDI+ image backend is installed.
 }
 
 TL_MSABI int tl_GdipCloneImage(void* image, void** clone) noexcept {
-    if (image == nullptr || clone == nullptr || !mapped_guest_range(clone, sizeof(void*), true)) {
+    (void)image;
+    if (clone == nullptr || !mapped_guest_range(clone, sizeof(void*), true)) {
         set_last_error(abi::kErrorInvalidParameter);
         return 1;
     }
-    *clone = image;
-    set_last_error(abi::kErrorSuccess);
-    return 0;
+    *clone = nullptr;
+    set_last_error(abi::kErrorNotSupported);
+    return 1; // GenericError: no GDI+ image backend is installed.
 }
 
 TL_MSABI int tl_GdipDisposeImage(void* image) noexcept {
     (void)image;
-    set_last_error(abi::kErrorSuccess);
-    return 0;
+    set_last_error(abi::kErrorNotSupported);
+    return 1; // GenericError: there are no runtime-owned GDI+ images.
 }
 
 TL_MSABI int tl_GdipCreateHBITMAPFromBitmap(void* bitmap, void** hbm, std::uint32_t background) noexcept {
@@ -73,10 +70,9 @@ TL_MSABI int tl_GdipCreateHBITMAPFromBitmap(void* bitmap, void** hbm, std::uint3
         set_last_error(abi::kErrorInvalidParameter);
         return 1;
     }
-    static char hbm_dummy = 0;
-    *hbm = &hbm_dummy;
-    set_last_error(abi::kErrorSuccess);
-    return 0;
+    *hbm = nullptr;
+    set_last_error(abi::kErrorNotSupported);
+    return 1; // GenericError: bitmap conversion is not implemented.
 }
 
 } // extern "C"
@@ -86,14 +82,14 @@ namespace tradutorlinux::loader {
 
 void register_gdiplus_module() {
     static const ExportedFunction kGdiplusExports[] = {
-        {"GdiplusStartup", 1, reinterpret_cast<std::uintptr_t>(&tl_GdiplusStartup)},
-        {"GdiplusShutdown", 2, reinterpret_cast<std::uintptr_t>(&tl_GdiplusShutdown)},
-        {"GdipAlloc", 3, reinterpret_cast<std::uintptr_t>(&tl_GdipAlloc)},
-        {"GdipFree", 4, reinterpret_cast<std::uintptr_t>(&tl_GdipFree)},
-        {"GdipCreateBitmapFromStream", 5, reinterpret_cast<std::uintptr_t>(&tl_GdipCreateBitmapFromStream)},
-        {"GdipCloneImage", 6, reinterpret_cast<std::uintptr_t>(&tl_GdipCloneImage)},
-        {"GdipDisposeImage", 7, reinterpret_cast<std::uintptr_t>(&tl_GdipDisposeImage)},
-        {"GdipCreateHBITMAPFromBitmap", 8, reinterpret_cast<std::uintptr_t>(&tl_GdipCreateHBITMAPFromBitmap)},
+        {"GdiplusStartup", 1, reinterpret_cast<std::uintptr_t>(&tl_GdiplusStartup), ExportSupport::Stub},
+        {"GdiplusShutdown", 2, reinterpret_cast<std::uintptr_t>(&tl_GdiplusShutdown), ExportSupport::Stub},
+        {"GdipAlloc", 3, reinterpret_cast<std::uintptr_t>(&tl_GdipAlloc), ExportSupport::Stub},
+        {"GdipFree", 4, reinterpret_cast<std::uintptr_t>(&tl_GdipFree), ExportSupport::Stub},
+        {"GdipCreateBitmapFromStream", 5, reinterpret_cast<std::uintptr_t>(&tl_GdipCreateBitmapFromStream), ExportSupport::Stub},
+        {"GdipCloneImage", 6, reinterpret_cast<std::uintptr_t>(&tl_GdipCloneImage), ExportSupport::Stub},
+        {"GdipDisposeImage", 7, reinterpret_cast<std::uintptr_t>(&tl_GdipDisposeImage), ExportSupport::Stub},
+        {"GdipCreateHBITMAPFromBitmap", 8, reinterpret_cast<std::uintptr_t>(&tl_GdipCreateHBITMAPFromBitmap), ExportSupport::Stub},
     };
     static const InternalModule kGdiplusModule{"gdiplus.dll", kGdiplusExports};
     register_module(kGdiplusModule);

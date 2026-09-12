@@ -63,6 +63,11 @@ sem executar a operação.
   `ERROR_NOT_SUPPORTED` sem fabricar PIDL ou janela. A regressão
   `Win32StubTest.DebugAndShellDialogStubsReportUnsupported` protege os dois
   contratos.
+- **Corrigido nesta etapa:** as oito exports auditadas de `gdiplus.dll` não
+  retornam mais token, memória, imagem ou HBITMAP falsos com sucesso. Elas
+  estão classificadas como `Stub`, limpam saídas válidas e retornam
+  `GenericError` com `ERROR_NOT_SUPPORTED`; `Win32StubTest.GdiplusStubsRejectFakeObjectsAndClearOutputs`
+  e a fixture `tl_gdiex` protegem esse contrato.
 - **Alta prioridade:** módulos que falham sem atualizar `GetLastError` precisam
   de testes de erro. `IMM32`, `DWMAPI`, `WINMM`, `COMDLG32` e `version` não
   podem deixar o erro anterior do convidado parecer a causa atual.

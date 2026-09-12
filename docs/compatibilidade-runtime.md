@@ -376,7 +376,7 @@ do host como argumentos.
 | `SHELL32.dll` | `ShellExecuteA/W` / `ShellExecuteExW` | Não suportado controlado | Valida strings/estrutura e retorna falha com `ERROR_NOT_SUPPORTED`; `SHELLEXECUTEINFOW` x64 tem 112 bytes, com `hInstApp` em 56 e `hProcess` em 104, ambos nulos na falha. Nenhum processo ou documento é aberto. |
 | `GDI32.dll` | `CreateFontW` | Suportado | Wrapper `wide_to_utf8` → `CreateFontA`; valida `face_name` wide, token estático |
 | `GDI32.dll` | `SetDCBrushColor` / `SetDCPenColor` | Suportado | Stub retorna `0`, `ERROR_SUCCESS` |
-| `gdiplus.dll` | `GdiplusStartup` / `GdiplusShutdown` / `GdipAlloc` / `GdipFree` / `GdipCreateBitmapFromStream` / `GdipCloneImage` / `GdipDisposeImage` / `GdipCreateHBITMAPFromBitmap` | Suportado | `GdiplusStartup` aloca token `0x1`, `GdipAlloc` `malloc`, `GdipFree` `free`, `GdipCreateBitmapFromStream`/`Clone`/`HBITMAP` retornam dummy `0` |
+| `gdiplus.dll` | `GdiplusStartup` / `GdiplusShutdown` / `GdipAlloc` / `GdipFree` / `GdipCreateBitmapFromStream` / `GdipCloneImage` / `GdipDisposeImage` / `GdipCreateHBITMAPFromBitmap` | Não suportado controlado | As oito exports são `ExportSupport::Stub`: não inicializam GDI+, não alocam memória nem fabricam imagens/HBITMAPs; saídas válidas são zeradas e as operações retornam `GenericError` (`1`) com `ERROR_NOT_SUPPORTED` |
 | `UxTheme.dll` | `SetWindowTheme` | Suportado | Valida `hwnd` e wstrings, retorna `S_OK` (0) |
 | `WINMM.dll` | `timeSetEvent` | Suportado | Stub retorna `1` |
 | `dbghelp.dll` | `SymFromAddr` | Não suportado controlado | Valida o buffer opcional `symbol`, zera `displacement` quando válido e retorna `FALSE` + `ERROR_NOT_SUPPORTED`; resolução de símbolos não é fabricada |

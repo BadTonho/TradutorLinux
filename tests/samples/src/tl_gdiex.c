@@ -51,22 +51,23 @@ void tl_entry(void) {
     ReleaseDC((void*)0, dc);
 
     // gdiplus
-    void* token = (void*)0;
+    void* token = (void*)1;
     char input[16] = {1,0,0,0};
-    if (GdiplusStartup(&token, input, (void*)0) != 0) ExitProcess(20U);
-    if (token == (void*)0) ExitProcess(21U);
-    void* bmp = (void*)0;
-    if (GdipCreateBitmapFromStream((void*)0, &bmp) != 0) ExitProcess(22U);
-    if (bmp == (void*)0) ExitProcess(23U);
-    void* clone = (void*)0;
-    if (GdipCloneImage(bmp, &clone) != 0) ExitProcess(24U);
-    void* hbm = (void*)0;
-    if (GdipCreateHBITMAPFromBitmap(clone, &hbm, 0) != 0) ExitProcess(25U);
-    if (GdipDisposeImage(bmp) != 0) ExitProcess(26U);
-    if (GdipDisposeImage(clone) != 0) ExitProcess(27U);
-    GdiplusShutdown(token);
+    if (GdiplusStartup(&token, input, (void*)0) != 1U) ExitProcess(20U);
+    if (token != (void*)0) ExitProcess(21U);
+    void* bmp = (void*)1;
+    if (GdipCreateBitmapFromStream((void*)0, &bmp) != 1) ExitProcess(22U);
+    if (bmp != (void*)0) ExitProcess(23U);
+    void* clone = (void*)1;
+    if (GdipCloneImage((void*)0, &clone) != 1) ExitProcess(24U);
+    if (clone != (void*)0) ExitProcess(25U);
+    void* hbm = (void*)1;
+    if (GdipCreateHBITMAPFromBitmap((void*)0, &hbm, 0) != 1) ExitProcess(26U);
+    if (hbm != (void*)0) ExitProcess(27U);
+    if (GdipDisposeImage((void*)0) != 1) ExitProcess(28U);
+    GdiplusShutdown((void*)0);
     void* mem = GdipAlloc(32);
-    if (mem == (void*)0) ExitProcess(28U);
+    if (mem != (void*)0) ExitProcess(29U);
     GdipFree(mem);
 
     // UxTheme
