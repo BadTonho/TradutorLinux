@@ -28,6 +28,8 @@ namespace {
 
 constexpr std::size_t kNoModule = std::numeric_limits<std::size_t>::max();
 constexpr std::size_t kMaxPeFileSize = 512U * 1024U * 1024U;
+constexpr std::size_t kMaxLoadedPeModules = 256;
+constexpr std::size_t kMaxMappedImageBytes = 2U * 1024U * 1024U * 1024U;
 constexpr std::size_t kMaxForwarderDepth = 32;
 constexpr std::uintptr_t kBuiltinHandleBase = 0x0000200000000000ULL;
 
@@ -137,7 +139,6 @@ struct GuestModuleGraph::LoadedModule {
     std::string name;
     ModuleProvider provider{ModuleProvider::Builtin};
     std::filesystem::path source;
-    std::vector<std::byte> file_bytes;
     pe::PeInfo info;
     MappedImage image;
     LoadedState state{LoadedState::Resolving};
@@ -451,6 +452,28 @@ std::optional<std::size_t> GuestModuleGraph::load_pe_module(
         trace_event("provider-rejected", module_name, provider_name(provider));
         return std::nullopt;
     }
+    if (modules_.size() >= kMaxLoadedPeModules) {
+        trace_event("provider-rejected", module_name, "limite de módulos PE atingido",
+                    provider_name(provider));
+        return std::nullopt;
+    }
+    std::size_t mapped_image_bytes = 0;
+    for (const auto& module : modules_) {
+        if (module->image.memory == nullptr) continue;
+        if (module->image.size > kMaxMappedImageBytes - mapped_image_bytes) {
+            trace_event("provider-rejected", module_name,
+                        "limite de memória de imagens PE atingido",
+                        provider_name(provider));
+            return std::nullopt;
+        }
+        mapped_image_bytes += module->image.size;
+    }
+    if (parsed.info.size_of_image > kMaxMappedImageBytes - mapped_image_bytes) {
+        trace_event("provider-rejected", module_name,
+                    "imagem PE excede o limite de memória do grafo",
+                    provider_name(provider));
+        return std::nullopt;
+    }
     MapResult mapped = map_image(parsed.info, *bytes);
     if (mapped.status != MapStatus::Success) {
         trace_event("provider-rejected", module_name, provider_name(provider));
@@ -462,7 +485,6 @@ std::optional<std::size_t> GuestModuleGraph::load_pe_module(
     loaded->name = std::move(module_name);
     loaded->provider = provider;
     loaded->source = std::move(source);
-    loaded->file_bytes = *bytes;
     loaded->info = parsed.info;
     loaded->image = std::move(mapped.image);
     loaded->state = LoadedState::Resolving;

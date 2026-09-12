@@ -229,6 +229,31 @@ TEST_F(ModuleGraphTest, LoadsDriveDllFromExternalApplicationDirectory) {
     EXPECT_FALSE(graph.is_valid_module_handle(handle));
 }
 
+TEST_F(ModuleGraphTest, RejectsGraphGrowthBeyondModuleLimit) {
+    runtime::GuestContextScope scope(context_);
+    register_builtin_modules();
+    const std::vector<std::byte> bytes = make_export_dll();
+    constexpr std::size_t kAttemptedModules = 300;
+    for (std::size_t index = 0; index < kAttemptedModules; ++index) {
+        const std::filesystem::path path = root_ / ("module" + std::to_string(index) + ".dll");
+        std::ofstream output(path, std::ios::binary | std::ios::trunc);
+        ASSERT_TRUE(output);
+        output.write(reinterpret_cast<const char*>(bytes.data()),
+                     static_cast<std::streamsize>(bytes.size()));
+    }
+
+    GuestModuleGraph graph(root_, std::nullopt, root_ / "app.exe", false);
+    std::size_t loaded = 0;
+    for (std::size_t index = 0; index < kAttemptedModules; ++index) {
+        if (graph.load_library("module" + std::to_string(index) + ".dll") != nullptr) {
+            ++loaded;
+        }
+    }
+
+    EXPECT_EQ(loaded, 256U);
+    EXPECT_EQ(graph.load_library("module256.dll"), nullptr);
+}
+
 TEST_F(ModuleGraphTest, MissingProfileDllFallsBackToBuiltinProvider) {
     runtime::GuestContextScope scope(context_);
     register_builtin_modules();
