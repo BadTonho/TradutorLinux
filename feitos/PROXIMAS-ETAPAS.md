@@ -1,12 +1,13 @@
 # Próximas etapas — arquivo histórico
 
-Este documento foi consolidado no [ROADMAP.md](ROADMAP.md), que agora é a
-fonte única de tarefas e prioridades do TradutorLinux.
+Este documento foi consolidado no [ROADMAP-LEGADO.md](ROADMAP-LEGADO.md), que é
+somente o arquivo histórico das tarefas e prioridades anteriores do
+TradutorLinux.
 
 O resultado da retomada no Linux real de 2026-09-04 permanece registrado nos
-marcos e no [backlog consolidado](ROADMAP.md#backlog-consolidado). Não adicione
-checklists ou novas etapas aqui; registre qualquer pendência diretamente no
-`ROADMAP.md`.
+marcos e no [backlog consolidado](ROADMAP-LEGADO.md#backlog-consolidado). Não adicione
+checklists ou novas etapas aqui; elas serão registradas no novo roadmap quando
+ele for criado.
 
 As validações históricas desta retomada incluíram os smokes X11, parser MSIX,
 forwarders, delay-import, TLS genérico, fixtures de rede/sessão, manutenção

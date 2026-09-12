@@ -1,7 +1,7 @@
 # Análise crítica — arquivo histórico
 
 A análise crítica de 2026-09-04 foi incorporada ao
-[backlog consolidado do `feitos/ROADMAP.md`](feitos/ROADMAP.md#backlog-consolidado).
+[backlog consolidado legado](feitos/ROADMAP-LEGADO.md#backlog-consolidado).
 Este arquivo é mantido como ponto de referência para links e contexto
 histórico; ele não é mais uma lista de tarefas.
 
@@ -18,4 +18,4 @@ marcados como absorvidos no roadmap e
 não devem ser reabertos sem nova evidência.
 
 Não adicione novas pendências neste arquivo. A fonte de verdade é sempre o
-`feitos/ROADMAP.md`.
+`feitos/ROADMAP-LEGADO.md`.

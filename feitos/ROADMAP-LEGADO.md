@@ -1,3 +1,11 @@
+# Roadmaps legados do TradutorLinux
+
+Este arquivo preserva integralmente os três roadmaps anteriores. Ele é somente histórico; o novo roadmap será definido em documento separado.
+
+---
+
+## `ROADMAP-APLICATIVOS.md` (legado)
+
 # Roadmap do corpus de aplicativos Windows
 
 Este documento transforma os resultados da primeira rodada de testes do diretório
@@ -3128,3 +3136,1984 @@ revisada, testes CTest/Rust relevantes, report e execução avaliados, comparaç
 ON/OFF quando aplicável, trace/exit code documentados e `git diff --check`
 aprovado. Skips ambientais devem ser identificados separadamente; falhas
 funcionais não podem ser reclassificadas como skips.
+
+---
+
+## `feitos/ROADMAP-RUST.md` (legado)
+
+# Roadmap de migração seletiva para Rust
+
+Este documento contém somente os componentes do TradutorLinux cuja migração
+para Rust tem benefício técnico claro. Ele complementa o `ROADMAP.md` e não
+transforma Rust em requisito geral do projeto.
+
+## Objetivo
+
+Usar Rust onde o projeto processa dados externos, potencialmente malformados,
+com muitas validações de limites e pouca dependência da execução Win32. O Rust
+deve proteger a parte de análise; o C++ continua responsável por integrar o
+resultado ao loader e executar o convidado.
+
+A regra de promoção é ter uma implementação canônica, corpus diferencial,
+integração reproduzível e diagnóstico equivalente. Durante a transição, uma
+implementação C++ pode permanecer como oráculo de comparação ou fallback
+explícito, mas nunca deve haver escolha silenciosa entre resultados diferentes.
+
+## Estado atual
+
+- [x] **B20 — Validação lexical de caminhos.** O Rust já valida, de modo
+  opt-in, caminhos relativos, destinos `C:\...`, UTF-8 e UTF-16. O filesystem,
+  o materializador e o runtime continuam em C++.
+- [x] **B20 — Fronteira FFI e robustez.** ABI C estável, handles opacos,
+  buffers pertencentes ao chamador, ausência de unwind pela ABI, Cargo fixado,
+  testes determinísticos e comparação Rust/C++ foram concluídos.
+
+## Prioridade 1 — Parser de PE
+
+O leitor em `src/pe/pe_reader.cpp` é o melhor próximo candidato. Ele tem cerca
+de 1.394 linhas, recebe bytes externos e analisa headers, seções, imports,
+exports, relocations, TLS, delay imports e unwind sem precisar executar código.
+
+### R21.1 — Contrato do parser Rust
+
+- [x] Definir uma representação normalizada e versionada para o resultado do
+  parsing PE32+ AMD64.
+- [x] Manter todos os buffers de entrada e saída sob propriedade do C++.
+- [x] Não devolver ponteiros, `String`, `Vec` ou referências Rust pela ABI.
+- [x] Definir códigos para arquivo truncado, malformado, arquitetura/formato
+  incompatível e mecanismo não suportado.
+- [x] Definir limites para seções, diretórios, strings, imports, exports,
+  relocations, runtime functions e callbacks TLS.
+- [x] Provar que o contrato não depende de layout interno do Rust.
+
+### R21.2 — Implementação e robustez
+
+- [x] Implementar no Rust um leitor de bytes com aritmética checked e acesso
+  sempre limitado ao arquivo recebido.
+- [x] Migrar a validação e extração de headers e seções.
+- [x] Migrar imports estáticos e delay imports.
+- [x] Migrar exports por nome, ordinal e forwarder textual.
+- [x] Migrar relocations, TLS e diretório de exceções somente como dados.
+- [x] Manter zero crates externas inicialmente.
+- [x] Adicionar testes unitários, property-based determinístico e corpus de
+  arquivos PE válidos, truncados e malformados.
+- [x] Comparar o resultado com o parser C++ existente sem divergência não
+  justificada.
+
+Evidência reproduzível em 2026-09-06: `cargo test --locked --offline` passou
+17/17 e `cargo clippy --locked --offline --all-targets -- -D warnings` passou;
+os testes selecionados passaram 55/55 no Debug, 9/9 no Sanitize, e 55/55 no
+Release após construir explicitamente o contrato C. Com `TL_BUILD_RUST=OFF`,
+os 42 testes `PeReaderTest` e o contrato C passaram 43/43. A implementação
+continua fora do loader e do `app run`; o uso no relatório direto é o escopo
+exclusivo de R21.3.
+
+### R21.3 — Integração sem risco de execução
+
+- [x] Integrar somente no `--report` direto, sem alterar o mapeamento ou
+  executar o entry point do convidado; `app run --report` permanece em C++.
+- [x] Confirmar equivalência semântica de headers, seções, imports,
+  delay-imports, exports/forwarders, relocations, TLS e unwind, além de status
+  e diagnóstico estruturado.
+- [x] Executar o corpus de relatório em Debug Rust e no baseline C++ com
+  `TL_BUILD_RUST=OFF`, além dos testes afetados em Sanitize e Release.
+- [x] Registrar a política de backend, limites e falhas estruturadas no trace,
+  no diagnóstico e na matriz de compatibilidade.
+
+Evidência reproduzível em 2026-09-06: o conjunto completo do Debug passou
+464/464 testes executados (1 teste ambiental pulado); os testes diferenciais
+do wire format e do caminho `--report` passaram 14/14 em Debug, Sanitize e
+Release. O corpus `report_*_support` passou 60/60 serialmente com Rust e
+60/60 no baseline `TL_BUILD_RUST=OFF`; a comparação do stdout do relatório
+mínimo passou sem diferenças. Cargo test passou 17/17 e Clippy offline com
+`-D warnings` passou. O teste com LeakSanitizer não pôde inicializar neste
+ambiente por restrição de `ptrace`; a rodada Sanitize foi repetida com
+`detect_leaks=0` e passou 14/14.
+
+### R21.4 — Integração no `app run`
+
+- [x] Usar o resultado Rust para preparar o modelo consumido pelo loader,
+  somente na imagem principal do `app run` nativo com Rust habilitado.
+- [x] Manter em C++ o `mmap`, `mprotect`, relocação aplicada na memória,
+  resolução de endereços, ABI Microsoft x64 e execução.
+- [x] Validar que uma falha de parsing impede o entry point e preserva os
+  códigos de saída existentes.
+- [x] Reexecutar todas as fixtures PE32+ e os testes de imports, TLS, unwind e
+  crash, incluindo o baseline sem Rust e os caminhos Proton/`--report`.
+
+Evidência reproduzível em 2026-09-06:
+
+- Debug com `TL_BUILD_RUST=ON`: matriz `runtime` sem Proton passou 192/192,
+  incluindo 61/61 testes `app-run`; as verificações Rust/contrato passaram
+  4/4 e o teste de DLL dependente confirmou que somente a imagem principal usa
+  `backend="rust"`.
+- Debug com `TL_BUILD_RUST=OFF`: matriz `app-run` passou 61/61 e os testes
+  operacionais, Proton, instalação, relatório, rejeição e DLL dependente
+  passaram 7/7, sem referência ao backend Rust.
+- Release com Rust: matriz `app-run` passou 61/61; os gates Rust, rejeições,
+  delay-imports e unwind passaram 12/12.
+- Sanitize com Rust: os casos estáveis selecionados passaram 12/12 e a
+  dependência DLL passou. A matriz completa passou 54/61; sete casos foram
+  limitados por condições ambientais/fixtures já conhecidas (imagem sem
+  relocations sob a base do sanitizer, UBSan em stores desalinhados de
+  fixtures, limites de memória do ASan e saídas específicas de fixtures).
+  Portanto, não se declara a matriz Sanitize completa como verde.
+- Cargo `test --locked --offline`, Clippy offline com `-D warnings` e os
+  contratos C/C++ passaram nos gates executados. O conjunto de testes não
+  modificou `PeInfo`, o header FFI, o wire format, o loader ou o backend
+  Proton.
+
+### R21.5 — Promoção
+
+- [x] Escolher Rust como implementação canônica do parsing PE no `--report`
+  direto e na imagem principal do `app run` nativo sem `--report` quando
+  `TL_BUILD_RUST=ON`.
+- [x] Centralizar a seleção do backend e manter o parser C++ em produção nos
+  caminhos excluídos: DLLs dependentes, Proton, instalação, `app run
+  --report`, execução direta normal e builds `TL_BUILD_RUST=OFF`.
+- [x] Não permitir fallback silencioso quando a análise Rust falhar ou quando
+  o wire format for inválido; falhas terminam antes de mapeamento e execução.
+- [x] Manter `TL_BUILD_RUST=OFF` como variante C++ explícita e padrão, sem
+  linkar ou referenciar a biblioteca Rust.
+- [x] Preservar o fluxo C++ após o `PeInfo` Rust e manter o parser C++ como
+  oráculo diferencial somente nos caminhos promovidos.
+
+Evidência reproduzível em 2026-09-06:
+
+- Debug Rust, Release Rust e Sanitize Rust passaram `748/748` testes executados
+  cada, incluindo a matriz nativa `app-run`, relatório direto, `app run
+  --report`, DLL dependente, Proton mockado, contratos e corpus diferencial.
+  Em cada rodada, `IphlpapiTest.EnumeratesLinuxAdaptersWithWin32BufferContracts`
+  e `runtime_tl_wininet_https_loopback` foram os únicos skips de ambiente.
+- Os dois testes GUI/X11 opcionais foram executados separadamente e retornaram
+  `SKIPPED` por indisponibilidade do display; o Proton real permanece um teste
+  opcional dependente da instalação local. O Proton mockado passou no Sanitize.
+- O baseline C++ Debug e Release com `TL_BUILD_RUST=OFF` passou `725/725`
+  testes executados cada. `nm` não encontrou símbolos `tl_pe_parse_v1` ou
+  `tl_rust_validator` nos executáveis OFF.
+- `cargo test --locked --offline` passou `17/17` e `cargo clippy --locked
+  --offline --all-targets -- -D warnings` passou. `git diff --check` passou.
+
+R21.5 não altera o estado de compatibilidade de aplicativos nem promove
+suporte funcional; a promoção cobre apenas a seleção do parser e preserva o
+loader, o backend Proton e a separação Rust/C++ definida acima.
+
+## Prioridade 2 — Parser de pacotes MSIX/AppX
+
+O parser em `src/package/msix.cpp` também recebe entrada externa e combina
+ZIP, XML, caminhos e seleção de executável. A migração deve ficar limitada à
+análise dos bytes e do manifesto.
+
+### R22.1 — Análise segura do pacote
+
+- [x] Migrar a leitura limitada da estrutura ZIP e do manifesto XML para a ABI
+  `TLMS` v1.0, sem alterar a seleção de backend de produção.
+- [x] Validar tamanhos, contagens, compressão, entidades e caminhos no Rust,
+  com ponte C mínima para raw DEFLATE/zlib.
+- [x] Rejeitar traversal, links, NUL, colisões após normalização, bundles,
+  Zip64, multipartes, encryption, DTD e entidades externas de forma
+  determinística; o inspector C++ recebeu a mesma política.
+- [x] Preservar a seleção exclusiva de PE32+ AMD64 nativo no fluxo C++ futuro;
+  R22.1 não valida nem executa o PE interno do pacote.
+- [x] Comparar semanticamente Rust e C++ em pacotes stored/DEFLATE e manter
+  regressões para manifesto, wire, buffers, erros e concorrência.
+
+Implementação concluída em R22.1:
+
+- `include/tradutorlinux/ffi/rust_msix_parser.h` congela a ABI, os status,
+  erros estruturados, limites e layouts do wire; os contratos C/C++ verificam
+  largura, alinhamento, offsets e constantes.
+- `src/rust/msix_parser.rs` implementa leitor LE bounded, EOCD/central/local
+  headers, stored/raw DEFLATE, normalização de nomes, XML limitado e serializer
+  determinístico; `src/package/rust_msix_parser.cpp` valida/decodifica TLMS e
+  adapta `AppxPackageInfo`.
+- `TL_BUILD_RUST=OFF` continua padrão: o runner, `inspect_msix_package`,
+  `install`, `app run` e o loader continuam no backend C++.
+
+Evidência reproduzível em 2026-09-06:
+
+- `cargo test --locked --offline`: `23/23`; Clippy com
+  `--locked --offline --all-targets -- -D warnings`: aprovado.
+- Rust Release: `RustMsixParserTest.*` `6/6`, `MsixParserTest.*` `8/8`,
+  contratos C/C++ `2/2` e CTest `rust_msix_differential` aprovado.
+- C++ Debug com `TL_BUILD_RUST=OFF`: `MsixParserTest.*` `8/8`, contratos C/C++
+  `2/2`; `nm` não encontrou os símbolos `tl_msix_parse_v1`,
+  `tl_msix_inflate_raw` ou `tl_rust_validator` na biblioteca C++.
+- `git diff --check` deve permanecer limpo antes do commit; a execução dos
+  presets Rust Debug/Sanitize depende dos presets já configurados no ambiente.
+
+### R22.2 — Integração
+
+- [x] Integrar Rust no `--report` direto e no fluxo de instalação quando
+  `TL_BUILD_RUST=ON`, selecionando pacotes por extensão antes da validação ZIP.
+- [x] Manter em C++ a criação do prefixo, extração física, permissões,
+  cadastro no catálogo e validação do PE interno; a extração usa o executável
+  principal validado por Rust e não substitui seus metadados.
+- [x] Rejeitar bundles sem fallback e preservar os caminhos C++ de execução
+  direta normal, `app run`, `app run --report`, Proton, DLLs dependentes e
+  `TL_BUILD_RUST=OFF`.
+- [x] Emitir `package-parse` apenas nos caminhos Rust, com `backend`, `status`
+  e os campos estruturados de falha; mapear erros para os códigos `4`, `5` e
+  `70` sem alterar a saída normal.
+- [x] Expandir a integração de testes e CI para a matriz de pacotes ON/OFF,
+  incluindo instalação, rejeições, diferencial, contratos e verificação de
+  ausência dos símbolos Rust no build OFF.
+- [x] Fechar o gate de conclusão após evidência local dos presets exigidos,
+  mantendo como skips somente os testes opcionais sem display, rede local ou
+  execução Proton real disponíveis no ambiente.
+
+Implementação concluída para R22.2:
+
+- `select_msix_parser_backend` centraliza a política: Rust só é canônico no
+  relatório direto e no `install`; os demais fluxos continuam no inspector C++.
+- O runner lê o pacote inteiro com limite de 2 GiB e chama `parse_msix_rust`;
+  falhas encerram antes de extração/cadastro e não acionam fallback. O
+  `extract_msix_package` sobrecarregado recebe `main_executable` do resultado
+  Rust, enquanto o extrator mantém as validações físicas e o PE interno C++.
+- As bibliotecas de teste Rust declaram explicitamente a ponte DEFLATE e zlib;
+  isso mantém `tl_rust_ffi_probe` e `tl_rust_path_validation` independentes do
+  link transitivo do `tradutorlinux_core`.
+- `integration_msix_install` e `integration_msix_rejections` verificam
+  `RUST_ENABLED`, stdout, trace, códigos, bundles, pacote truncado, manifesto
+  inválido, instalação e ausência de catálogo após falha.
+
+Evidência reproduzível em 2026-09-06:
+
+- Rust Release: CTest completo `763/763` passou, com quatro skips ambientais;
+  a seleção MSIX, contratos e diferencial passaram.
+- Rust Debug: após instalar Ninja e reutilizar a cópia local do GoogleTest para
+  manter o configure offline, CTest completo `763/763` passou, com quatro
+  skips ambientais; Cargo/Clippy e os probes FFI também passaram.
+- Rust Sanitize: CTest completo com exclusão explícita dos cinco testes Proton
+  reais e do smoke X11 impedidos pelo sandbox passou `762/762`, com três skips
+  opcionais (Iphlpapi, GUI e loopback HTTPS). A execução sem essa exclusão
+  registrou as falhas ambientais reais e não foi promovida a verde.
+- `cargo test --locked --offline` passou `23/23`; Clippy offline com
+  `--all-targets -- -D warnings` passou. O baseline Release OFF passou
+  `732/732`, e `nm` não encontrou símbolos `tl_msix_parse_v1`,
+  `tl_msix_inflate_raw` ou `tl_rust_validator` na biblioteca C++.
+- `git diff --check` passou; o worktree será verificado novamente após este
+  registro.
+
+## Prioridade 3 — Parser de perfis
+
+O parser em `src/compat/profile.cpp` é um candidato válido, mas posterior ao
+PE e ao MSIX. O ganho principal é eliminar outra rotina manual de parsing de
+entrada, não melhorar o runtime em si.
+
+### R23.1 — Schema e validação
+
+- [x] Implementar a análise byte-oriented dos schemas de perfil já
+  documentados e o contrato TLPR v1.0 sem alterar `Profile` público.
+- [x] Preservar rejeição de campos desconhecidos, duplicidades, fontes ausentes,
+  traversal, identidades incompatíveis e backend inválido.
+- [x] Manter a materialização, o acesso ao filesystem e a seleção final do
+  backend em C++.
+- [x] Comparar perfis válidos, ausentes, inválidos e incompatíveis com o
+  parser C++ atual.
+
+Implementação concluída em R23.1:
+
+- `include/tradutorlinux/ffi/rust_profile_parser.h` congela a ABI C, o contexto
+  de identidade, status, erros estruturados, limites e layouts TLPR.
+- `src/rust/profile_parser.rs` implementa o modelo proprietário, leitor JSON
+  byte-oriented para schemas 1/2/3, validação de identidade/caminhos e
+  serializer determinístico com aritmética checked.
+- `src/compat/rust_profile_parser.cpp` valida e decodifica TLPR para o
+  `Profile` existente; `load_profile`, produção, materialização e seleção de
+  backend continuam em C++.
+- Os testes cobrem ABI C/C++, magic/versão/offsets/strides/reservados,
+  buffers/sentinelas, limites, concorrência e diferencial contra
+  `load_profile`. O build OFF não liga a staticlib nem referencia símbolos Rust.
+
+Evidência reproduzível em 2026-09-06:
+
+- `cargo test --locked --offline`: `28/28`; Clippy com
+  `--locked --offline --all-targets -- -D warnings`: aprovado.
+- Rust Debug: CTest completo `771/771`; Rust Release: CTest completo
+  `771/771`; em ambos, quatro skips ambientais opcionais.
+- Rust Sanitize: subconjunto reproduzível passou sem falhas nos testes de
+  produto; os cinco Proton reais e `x11_popup_smoke` foram excluídos por
+  dependências ambientais, e Iphlpapi, GUI e HTTPS permaneceram skips
+  opcionais. A execução sem exclusões registrou somente essas limitações.
+- Baseline `TL_BUILD_RUST=OFF`: CTest `734/734`; os contratos C/C++ passaram e
+  `nm` não encontrou símbolos do parser Rust na biblioteca C++.
+- `git diff --check` foi executado antes do commit final. R23.2 permanece
+  limitada à promoção do backend e ao fallback genérico para perfil ausente ou
+  lexicalmente inválido.
+
+### R23.2 — Promoção
+
+- [x] Promover Rust dentro de `load_profile` para perfis existentes em todos os
+  consumidores atuais quando `TL_BUILD_RUST=ON`, mantendo `Profile`, TLPR e a
+  assinatura pública inalterados.
+- [x] Preservar a detecção C++ de perfil ausente e o fallback genérico para
+  rejeições de conteúdo Rust (`malformed`, schema/identidade/caminho inválido,
+  `unsupported-format`, `input-too-large` e `output-too-large`).
+- [x] Encerrar sem fallback em falhas internas da ABI, transporte/decoder TLPR,
+  buffers, panic ou status inesperado, com `ProfileStatus::InternalError` e
+  diagnóstico estruturado no evento `compat-profile`.
+- [x] Manter no C++ as validações físicas, filesystem, materialização, seleção
+  de backend e execução; `TL_BUILD_RUST=OFF` continua a variante C++ explícita,
+  sem link ou símbolos Rust.
+- [x] Atualizar CI, testes diferenciais, diagnóstico, compatibilidade e o
+  contrato arquitetural, sem alterar `Cargo.lock` nem o schema de perfis.
+
+Implementação concluída em R23.2:
+
+- `load_profile` chama `parse_profile_rust` e `decode_tlpr_v1` somente depois
+  dos pré-checks C++ de presença, tipo regular, leitura e limite de entrada;
+  o resultado Rust alimenta diretamente o `Profile` existente.
+- `ProfileLoadResult` preserva diagnósticos do backend, status, código, fase,
+  offset e valor estruturado. O trace `compat-profile` acrescenta os campos
+  Rust somente quando houve tentativa; perfil ausente e build OFF não recebem
+  esses campos.
+- A matriz CI constrói explicitamente os contratos C/C++ e executa o CTest
+  completo serialmente, evitando colisões dos prefixos compartilhados pelos
+  testes.
+
+Evidência reproduzível em 2026-09-06:
+
+- `cargo test --locked --offline`: `28/28`; Clippy com
+  `--locked --offline --all-targets -- -D warnings`: aprovado.
+- Rust Debug: CTest completo passou `768` testes, com quatro skips ambientais;
+  Rust Release teve o mesmo resultado. As matrizes de perfil, contratos,
+  diferenciais e integrações passaram.
+- Rust Sanitize: a matriz reproduzível passou `771/771`, com três skips
+  ambientais. Os cinco testes Proton real e `x11_popup_smoke` foram excluídos
+  explicitamente porque o Proton tentou escrever `dist.lock` em uma instalação
+  somente leitura e o Xvfb não iniciou sob LeakSanitizer/ptrace; a execução
+  completa sem exclusões registrou somente essas limitações ambientais.
+- Baseline `TL_BUILD_RUST=OFF`: Debug e Release passaram `735/735` cada, com
+  quatro skips ambientais; os contratos C/C++ passaram e `nm` não encontrou
+  símbolos `tl_profile_parse_v1`, `tl_rust_profile`, `tl_pe_parse_v1` ou
+  `tl_msix_parse_v1` nas bibliotecas C++.
+- `git diff --check` passou. R23.2 está concluída; R23.3 pode tratar a próxima
+  promoção de componente sem reabrir o contrato TLPR ou o `Profile` público.
+
+## Prioridade 4 — Catálogo persistente de aplicativos
+
+O catálogo em `src/catalog/app_catalog.cpp` é uma fronteira de dados externos
+usada pela CLI, pela GUI, pela instalação e pelo `app run`. O leitor atual é
+permissivo: localiza o campo `"apps"` por texto, pode aceitar objetos
+parcialmente inválidos e não valida de forma estrita a versão nem o conteúdo
+posterior. A migração será limitada à análise dos bytes do `library.json` e
+não ampliará a compatibilidade de aplicativos.
+
+### R24.1 — Contrato e parser Rust do catálogo
+
+- [x] Criar `rust_app_catalog_parser.h` com as funções
+  `tl_app_catalog_parse_v1_size` e `tl_app_catalog_parse_v1_fill`, status
+  estáveis, erro estruturado e buffers caller-owned.
+- [x] Definir o wire `TLAC` v1.0 com cabeçalho de 128 bytes, inteiros
+  little-endian, tabelas alinhadas a 8 bytes para `info`, `apps`, `args` e
+  `strings`, registros de stride fixo, campos reservados zerados e strings
+  deduplicadas por bytes.
+- [x] Limitar entrada, contagens, argumentos, strings e saída serializada;
+  usar aritmética checked em somas, multiplicações, alinhamento e conversões.
+- [x] Implementar em Rust um modelo interno separado de `AppEntry`, sem
+  filesystem, ponteiros retidos ou tipos Rust atravessando a ABI.
+- [x] Preservar o schema atual: versão `1`, campos de identidade, caminhos,
+  `args`, `cpu_limit_seconds`, `memory_limit_mib`, SHA-256 e versão opcional,
+  incluindo as regras atuais de escapes e Unicode.
+- [x] Manter `AppEntry`, `save_to_file`, CLI, GUI, loader, Proton e execução
+  inalterados nesta etapa; Rust ficará restrito à ABI e aos testes.
+
+Implementação concluída para R24.1:
+
+- `rust_app_catalog_parser.h` congela a ABI C, os status, erros, limites e o
+  wire TLAC v1.0; os contratos C e C++ confirmam largura, alinhamento, magic,
+  strides e constantes.
+- `src/rust/catalog_parser.rs` implementa o parser JSON byte-oriented estrito,
+  o modelo interno, validação de schema/IDs, serializer determinístico e as
+  funções `size`/`fill` com panics capturados e buffers caller-owned.
+- O C++ de produção não foi alterado: não há decoder, adaptador ou promoção
+  de `AppCatalog` nesta etapa. R24.2 continua responsável pelo diferencial.
+- A documentação do contrato, da ABI, do diagnóstico e da compatibilidade foi
+  atualizada sem alterar `AppEntry`, `Cargo.lock` ou o formato persistido.
+
+Evidência reproduzível em 2026-09-06:
+
+- `cargo test --locked --offline`: 38/38 testes passaram; Clippy com
+  `--locked --offline --all-targets -- -D warnings` passou.
+- Rust Debug: build do static library, contratos C/C++ e Cargo/Clippy via
+  CTest passaram.
+- Baseline Debug `TL_BUILD_RUST=OFF`: contratos C/C++ passaram sem link ou
+  referência ao parser Rust.
+- `git diff --check` deve ser executado antes do commit final deste marco.
+
+### R24.2 — Decoder e diferencial (concluída)
+
+- [x] Criar `parse_app_catalog_rust` e decoder C++ reutilizável para validar
+  magic, versão, cabeçalho, descritores, offsets, contagens, strides,
+  alinhamento, referências, reservados e limites antes de construir o
+  `AppCatalog`.
+- [x] Comparar semanticamente Rust e `AppCatalog::load_from_file` em catálogos
+  válidos, Unicode, escapes, argumentos, SHA-256, versões e múltiplas entradas.
+- [x] Cobrir JSON truncado, campos desconhecidos ou repetidos, trailing comma,
+  conteúdo extra, overflow numérico, IDs inválidos, entradas parciais e
+  limites de quantidade/tamanho.
+- [x] Cobrir `size`/`fill`, buffers insuficientes, sentinelas de memória,
+  chamadas repetidas e concorrentes, sem alterar a saída quando a capacidade
+  for insuficiente.
+- [x] Confirmar que o build `TL_BUILD_RUST=OFF` não liga nem referencia a
+  biblioteca ou símbolos do parser Rust.
+
+Implementação entregue para R24.2:
+
+- `rust_app_catalog_parser.hpp/.cpp` expõe o adaptador interno e o decoder
+  TLAC sem alterar `AppCatalog::load_from_file` ou qualquer caminho de
+  produção. O decoder usa leitores little-endian, valida ranges checked,
+  descritores vazios canônicos, padding, reservas, strings, referências,
+  contagens, intervalos de argumentos e IDs antes de publicar o vetor.
+- `test_rust_app_catalog_parser.cpp` cobre equivalência semântica, strings
+  binárias, JSON inválido, mensagens caller-owned, `size`/`fill`, sentinelas,
+  mutações de wire, limite de entrada e concorrência. O CMake só adiciona o
+  adaptador/teste quando `TL_BUILD_RUST=ON`.
+
+**Status: concluída em 2026-09-06.**
+
+Evidência reproduzível:
+
+- `cargo test --locked --offline`: 38/38; Clippy offline com `-D warnings`:
+  aprovado.
+- Rust Debug e Rust Release: CTest completo passou, 783/783 testes, com
+  quatro skips ambientais permitidos (Iphlpapi, X11/GUI e HTTPS local).
+- Rust Sanitize: 781/781 testes passaram; `x11_popup_smoke` e
+  `runtime_gui_smoke` foram excluídos explicitamente porque o sandbox não
+  fornece X11 e o LeakSanitizer não pode iniciar nesse ambiente. Restaram
+  dois skips ambientais permitidos (Iphlpapi e HTTPS local).
+- Baseline Debug e Release com `TL_BUILD_RUST=OFF`: CTest serial completo
+  passou, 737/737 testes em cada configuração, com os quatro skips ambientais
+  permitidos. Ambos foram configurados com `TL_PROTON_ROOT` vazio e
+  `TL_BUILD_RUST=OFF`.
+- `nm` não encontrou os símbolos Rust do parser/adaptador TLAC nas bibliotecas
+  OFF; `git diff --check` passou.
+- As matrizes usaram `TL_PREFIX` e `XDG_CONFIG_HOME` temporários e graváveis;
+  a execução anterior que registrava falhas de preparação dependia do HOME
+  somente leitura do sandbox e não é evidência válida contra R24.2.
+
+O gate diferencial e de build de R24.2 está fechado. A promoção de R24.3 foi
+implementada e validada abaixo.
+
+### R24.3 — Promoção do leitor (concluída)
+
+- [x] Somente após o diferencial passar, centralizar a seleção dentro de
+  `AppCatalog::load_from_file`, mantendo sua assinatura pública e o formato
+  persistido.
+- [x] Com `TL_BUILD_RUST=ON`, usar Rust como fonte canônica para catálogos
+  existentes; arquivo ausente preserva o comportamento atual e conteúdo
+  inválido não pode deixar entradas parciais no catálogo.
+- [x] Converter falhas internas de ABI, transporte ou decoder em diagnóstico
+  estruturado no trace, sem substituir silenciosamente o resultado Rust por
+  C++.
+- [x] Manter em C++ a escrita do catálogo, filesystem, permissões, validações
+  físicas, criação de desktop entries, seleção de backend e execução.
+- [x] Preservar `TL_BUILD_RUST=OFF` como variante C++ explícita e padrão, sem
+  alterar stdout, stderr normal, exit codes ou o comportamento dos caminhos de
+  execução.
+
+Critérios de saída da R24:
+
+- [x] Cargo test e Clippy com `--locked --offline`.
+- [x] Contratos C/C++, diferencial completo e testes de robustez do catálogo.
+- [x] CTest nos presets Rust Debug, Sanitize e Release, além dos baselines
+  Debug e Release com `TL_BUILD_RUST=OFF`.
+- [x] `nm` sem símbolos Rust nas bibliotecas OFF, `git diff --check` limpo e
+  evidência reproduzível antes de marcar qualquer subetapa como concluída.
+- [x] Nenhuma alteração em `AppEntry`, no schema persistido, no `Cargo.lock`,
+  no loader, no backend Proton ou na matriz de compatibilidade de aplicativos.
+
+Implementação concluída para R24.3:
+
+- `AppCatalog::load_from_file` seleciona o parser Rust somente no build
+  `TL_BUILD_RUST=ON`, depois de limpar o estado, confirmar abertura e aplicar o
+  limite de 4 MiB. O adaptador `parse_app_catalog_rust` e o decoder TLAC são a
+  única ponte de produção; o vetor só é publicado após a validação completa.
+  Rejeições e falhas internas retornam `false`, deixam o catálogo vazio e não
+  acionam fallback para o parser C++.
+- O arquivo ausente ou indisponível não chama Rust. O C++ continua responsável
+  pela escrita, filesystem e demais operações físicas. O build
+  `TL_BUILD_RUST=OFF` mantém o leitor C++ original sem símbolos Rust.
+- A tentativa Rust emite `catalog-parse` no componente `runtime` apenas com
+  trace solicitado. Sucessos usam `Info`; rejeições de conteúdo/limite,
+  `Warning`; falhas internas, `Error`. Rejeições incluem `code`, `phase`,
+  `input-offset` e `detail-value`, sem alterar stdout/stderr normal sem trace.
+
+Evidência reproduzível em 2026-09-06:
+
+- Rust Debug: CTest completo passou, `788/788`, com quatro skips ambientais
+  permitidos (Iphlpapi, X11/GUI e HTTPS local). A matriz incluiu contratos,
+  diferencial TLAC e `integration_catalog_parser`.
+- Rust Release: CTest completo passou, `788/788`, com os mesmos quatro skips
+  ambientais permitidos.
+- Rust Sanitize: `786/786` passou com `x11_popup_smoke` e
+  `runtime_gui_smoke` excluídos explicitamente pela limitação de X11/LeakSanitizer
+  do ambiente; permaneceram apenas os skips ambientais de Iphlpapi e HTTPS
+  local.
+- Baseline C++ Debug e Release (`TL_BUILD_RUST=OFF`): CTest completo passou,
+  `738/738` em cada configuração, com quatro skips ambientais permitidos.
+  Os testes de integração confirmaram que o caminho OFF continua aceitando o
+  comportamento C++ e que o ON publica o mesmo catálogo válido sem fallback.
+- `cargo test --locked --offline` e Clippy offline com `-D warnings` passaram
+  via CTest Rust; contratos C/C++, diferencial, concorrência, buffers,
+  sentinelas e trace passaram. `nm` não encontrou símbolos do parser/adaptador
+  Rust nas bibliotecas OFF, `Cargo.lock` permaneceu inalterado e
+  `git diff --check` passou.
+
+R24.3 está concluída. A promoção não altera `AppEntry`, o schema persistido,
+o loader, Proton, execução ou a matriz de compatibilidade de aplicativos.
+
+## Regras para todas as migrações
+
+- [ ] Rust não deve atravessar a ABI com exceções, panics ou ponteiros próprios.
+- [ ] Nenhuma crate externa será adicionada sem versão fixada, lockfile,
+  justificativa, revisão de licença e validação offline.
+- [ ] Cada parser terá corpus diferencial e teste de regressão antes de ser
+  usado no fluxo de produção.
+- [ ] O resultado Rust será convertido para tipos C++ estáveis antes de entrar
+  no loader ou no runtime.
+- [ ] Rust deve ser promovido por componente, não por reescrita global.
+
+## Componentes que não entram neste roadmap
+
+O loader de execução, `GuestContext`, grafo de módulos, `image_mapper`, ABI
+Microsoft x64, APIs Win32, SEH/unwind, assembly, memória convidada, isolamento
+de processos, materialização física, GUI e backend Proton permanecem em C++.
+Eles dependem de endereços reais, pilhas, sinais, chamadas Windows, `mmap`,
+assembly ou bibliotecas do host; uma reescrita em Rust acrescentaria uma
+fronteira `unsafe` sem benefício proporcional.
+
+Rust também não será usado para substituir código estável apenas por ser
+menor ou mais moderno. A migração só avança quando reduzir risco real ou
+melhorar a validação de uma entrada compartilhada por várias aplicações.
+
+---
+
+## `feitos/ROADMAP.md` (legado)
+
+# Roadmap do TradutorLinux
+
+Este arquivo acompanha a execução do projeto. O documento de visão, escopo e arquitetura está em [PROJETO.md](../PROJETO.md).
+
+## Como usar este roadmap
+
+Cada fase só deve avançar quando seus critérios de saída estiverem atendidos. Uma API nova entra no projeto apenas quando existir um teste ou aplicativo-alvo que justifique seu comportamento.
+
+Os itens marcados como concluídos devem ter evidência no repositório: código, teste, documentação ou um artefato reproduzível. O roadmap descreve ordem de dependências, não uma promessa de prazo.
+
+Este é o único backlog normativo do projeto. `PROXIMAS-ETAPAS.md`,
+`ANALISE-CRITICA.md`, `ideia.md` e as propostas em `docs/` permanecem apenas
+como referências históricas; novas tarefas devem ser registradas aqui. O
+backlog consolidado ao final deste documento usa IDs `B1`, `B2` etc. para que
+as referências nas fases não criem listas paralelas.
+
+## Stack decidido
+
+- **Linguagem principal:** C++20.
+- **C:** estruturas PE, interfaces C e trechos que precisem de ABI simples.
+- **Assembly x86-64:** somente trampolins, bootstrap ou outras fronteiras que não possam ser expressas com segurança pelo compilador.
+- **Build:** CMake + Ninja.
+- **Hospedeiro inicial:** Linux x86-64.
+- **Binários de teste:** PE32+ x86-64 produzidos com `mingw-w64`.
+
+## Estado atual
+
+- **Fase atual:** Fase 13 — compatibilidade ampla por portfólio.
+- **Próximo ciclo:** B2 fica estacionada até uma decisão de produto específica
+  sobre tradução de interface; B6 e B9 continuam condicionadas a evidência
+  externa. B1, B8, B10, B12, B15 e B16 deste ciclo foram concluídas.
+- **Decisões vigentes:** a triagem dos itens condicionais está registrada em
+  [Decisões registradas](#decisões-registradas--2026-09-05); nenhuma API ou
+  capacidade será ampliada apenas para eliminar uma caixa desmarcada.
+- **Último incremento:** a Fase 13.14 concluiu TLS genérico e a fixture
+  reutilizável Worker/RSL. O caso comercial do Roblox continua como benchmark:
+  imports resolvidos, mas execução interrompida em `RBXCRASH`/`ExitProcess 3`.
+- **Última etapa funcional:** B5/B7 concluíram um fluxo principal restrito do
+  7zFM 24.08. O smoke externo versionado seleciona `input.txt`, aciona
+  `Copy` (`546`), verifica a cópia dentro da raiz e encerra o runtime com exit
+  `0`; a execução direta sem interação continua sujeita a timeout, portanto o
+  alvo não é declarado de uso diário nem como suporte geral.
+- **Última etapa de infraestrutura:** B12 passou a rastrear regiões privadas de
+  memória como `RESERVE`/`COMMIT`, proteções e divisão por página após
+  `VirtualProtect`; a fixture `tl_virtual_query.exe` valida o contrato
+  completo. B1 continua cobrindo limites opcionais de CPU/RAM e herança POSIX
+  para `CreateProcessW`.
+- **Última validação de recursos:** B10 passou no `x11_popup_smoke` do build
+  `sanitize`, executado fora de `ptrace` com Xvfb próprio e
+  `detect_leaks=1`. O smoke repetiu 512 desenhos de cores e cobriu Escape,
+  clique externo, destruição externa e timeout, sem relatório de ASan/LSan.
+- **Última validação de distribuição:** B8 instalou a fixture reproduzível
+  `native-fixture.msix` em prefixo exclusivo, extraiu o PE32+ x86-64 declarado
+  no `AppxManifest.xml`, cadastrou-o no catálogo e confirmou `app run` com
+  stdout e exit code esperados. A extração valida central directory, CRC,
+  DEFLATE, limites, traversal, symlinks e colisões; bundles, .NET/Mono e
+  assinaturas Authenticode continuam fora do contrato.
+
+Os demais bullets desta seção são registro cronológico de marcos já entregues;
+para decidir o próximo trabalho, use somente a ordem do backlog abaixo.
+- **Marco concluído:** a Fase 7 foi validada de ponta a ponta e a decisão de produto foi tomada: **seguir com a GUI Win32 mínima como objetivo experimental**. `tl_gui.exe` abriu a janela X11, recebeu o clique em OK e encerrou com código `0`; `tl_win.exe` criou uma janela real e executou um message loop completo (`RegisterClassExA`, `CreateWindowExA`, `ShowWindow`, `GetMessageA`, `DispatchMessageA`, `DefWindowProcA`, `PostQuitMessage`), encerrando via `WM_CLOSE`/autoclose com código `0`; o modo `--report` lista imports suportados sem executar o PE; `tl_hello`, `tl_echo` e `tl_file` têm regressões e limitações publicadas na matriz.
+- **Marco concluído:** o smoke test de GUI passou a ter cobertura automática em CI. O teste `runtime_gui_smoke` sobe um `Xvfb` próprio e executa `tl_win.exe`, `tl_win2.exe`, `tl_key.exe`, `tl_timer.exe`, `tl_gdi.exe`, `tl_paint.exe` e `tl_dialog.exe` de ponta a ponta, cobrindo message loop, `WM_DELETE_WINDOW`, teclado, duas janelas, timers, pintura e diálogo modal. O `x11_popup_smoke` cobre Escape, clique externo, destruição externa e timeout; a conexão X11 do runtime é fechada no teardown (`DisplayCloser`). A validação Debug desta retomada passou nos dois smokes.
+- **Marco concluído:** `CreateWindowExA` agora despacha `WM_CREATE` ao `WNDPROC` do convidado antes de devolver o `HWND` (retorno `-1` aborta a criação e devolve `NULL`). A fixture `tl_win.c` marca uma flag no `WM_CREATE` e propaga no exit code via `PostQuitMessage`, então o `runtime_gui_smoke` prova o despacho exigindo exit-code `1`.
+- **Marco concluído:** o message loop ganhou entrada real de teclado. `KeyPress` X11 vira `WM_KEYDOWN` (virtual key: letras em maiúsculas) com o caractere guardado; `TranslateMessage` converte em `WM_CHAR` enfileirado (entregue antes dos próximos eventos X11) e registra o evento de trace `TranslateMessage message="WM_CHAR" wparam status="translated"`. A fixture `tl_win.c` encerra a janela ao receber `WM_CHAR('q')`, e o terceiro cenário do `runtime_gui_smoke` envia um `KeyPress` sintético sob `Xvfb` e exige exit-code `3`. O teste agora sobe sempre um `Xvfb` próprio (sem window manager): com WM a janela é reparentada e o `XSendEvent` para o frame não chega ao cliente.
+- **Marco concluído:** o pump passou a usar fila de eventos por janela. Todos os eventos X11 pendentes são demultiplexados para a fila da janela-alvo a cada consulta, então nada se perde entre janelas independentemente da ordem do message loop. A fixture `tl_win2.exe` cria duas janelas simultâneas com `WNDPROC`s independentes ("Janela A" e "Janela B"); o quarto cenário do `runtime_gui_smoke` envia `KeyPress 'q'` à A e `'k'` à B e exige exit-code `15` (flags 1+2+4+8), provando o roteamento independente por janela.
+- **Marco concluído:** diagnóstico de falhas com isolamento em processo filho (ideia §1). O convidado agora executa em um processo filho (`fork`/`waitpid`); o pai prepara o PE, o mapeamento e os imports, e o filho só executa o entry point e reporta o resultado por um pipe antes de `_exit`. Sinais fatais do filho são restaurados para `SIG_DFL` para que um `SIGSEGV` do convidado não seja engolido por handlers do hospedeiro (ex.: AddressSanitizer). O pai distingue saída normal de término por sinal: no término por sinal emite `[tl][process][error] terminated category="guest-signal" signal="SIGSEGV" detail="acesso inválido à memória"` e retorna `71` (`GuestFault`), novo código de saída do hospedeiro. A fixture `tl_crash.exe` (sem imports) acessa o endereço `0` e valida o diagnóstico no preset `sanitize` (onde o ASan interceptaria o sinal sem o reset), no `debug` e no `release`; o exit code do convidado continua propagado integralmente pelo pipe (não truncado pelo status POSIX).
+- **Marco concluído:** a Fase 8 começou com a definição dos primeiros aplicativos-alvo reais, de código aberto e compilados em CI: `xxd` (vim `v9.2.0957`), `bzip2` (`1.0.8`) e `dos2unix`/`unix2dos` (`7.5.6`). O módulo `tests/targets` baixa as fontes pinadas por hash SHA-256, faz o cross-build com `mingw-w64` (opção `TL_BUILD_TARGET_APPS=ON`, job `target-apps` do CI) e protege os imports reais em manifests via `llvm-readobj` e `--report` (8 testes, label `targetapp`). Nenhum alvo executava ainda: todos importam `msvcrt.dll` (fora de escopo até a Fase 9) e o `--report` os classificava como `result: unsupported` / `execution: not-attempted`. Os imports capturados (xxd: 73 símbolos; bzip2: 69; dos2unix/unix2dos: 88, incluindo `SHELL32.dll!CommandLineToArgvW`) guiam o subconjunto mínimo de CRT da Fase 9.
+- **Marco concluído:** o subconjunto mínimo de `msvcrt.dll` foi implementado e registrado (57 símbolos, ordinais 1–57), junto com as 14 APIs de `KERNEL32.dll` que o CRT interno do mingw e o `xxd.exe` exigem (`VirtualQuery`/`VirtualProtect` via `/proc/self/maps` + `mprotect`, `MultiByteToWideChar`/`WideCharToMultiByte` com CP 0/1252/65001, critical sections no-op para convidado single-thread, `TlsGetValue`, `GetConsoleMode`/`SetConsoleMode`, `Sleep`, `SetUnhandledExceptionFilter`, `IsDBCSLeadByteEx`). O `--report` do `xxd.exe` passou a `result: supported`.
+- **Marco concluído:** `xxd.exe` executa de ponta a ponta com saída **byte-idêntica** ao `xxd` do sistema (exit `0`). Para isso a fronteira agora aloca um TEB de uma página e aponta o segmento `%gs` via `arch_prctl(ARCH_SET_GS)` durante a execução do convidado (o mingw lê `%gs:[0x30]` no `__mingw_CRTStartup`), restaurando o `GS` e liberando o TEB em seguida. O teste e2e fixa um ouro em `tests/targets/golden/xxd/` (entrada de 4880 bytes que cruza a coluna de offset em `0x1000`) e verifica em CTest: modo padrão, `-p` (plain) e caminho de erro (arquivo inexistente → exit `2`, stderr não vazio), 3 testes novos com label `targetapp`. As conversões de código de página, `VirtualQuery`/`VirtualProtect`, `TlsGetValue`, critical sections e o subconjunto de CRT têm 42 testes unitários novos (`test_win32.cpp`, `test_msvcrt.cpp`). Total: 180 testes verdes no preset com alvos; 169 em `debug`, `release` e `sanitize`.
+- **Marco concluído:** `bzip2.exe` executa de ponta a ponta nos dois sentidos. `__iob_func()` devolve o ponteiro do array `GuestFile` (o convidado indexa `[0..2]` com `sizeof(_iobuf)` = 48 bytes — o argumento `rcx` é ignorado, como no CRT MSVC clássico) e `_stat64` passou de stub `ENOSYS` para implementação real que preenche o `struct _stat64` do MinGW (pack 8, `st_mode` em `0x06`, tamanho 56 bytes) via `stat()` do host; a verificação `S_ISREG` do bzip2 (`testb $0x40, +7`) depende dos bits de tipo do Linux, idênticos aos do Windows (`S_IFREG = 0x8000`). Compressão (`-c`) e descompressão (`-d`, `-d -c`) de arquivo são byte-idênticas ao `bzip2` nativo; e2e em CTest (ouro em `tests/targets/golden/bzip2/` e `golden/bzip2_decompress/`, comparação binária via `verify_target_run_bytes.cmake`), 2 testes novos com label `targetapp`, e 3 testes unitários novos para `_stat64` (`test_msvcrt.cpp`). Total: 265 testes verdes no preset com alvos; 218 em `debug` e `sanitize`.
+- **Marco concluído:** `tl_thread.exe` fecha a validação do subconjunto atual de concorrência. O fixture cria duas threads convidadas sequenciais, cada uma escreve `Thread done`, termina via `ExitThread` e é aguardada por `WaitForSingleObject`; a thread principal escreve `Main done` e encerra com código `0`. Metadata e execução passam em Debug, Release e Sanitize (`LSAN_OPTIONS=detect_leaks=0`); a regressão é coberta por `fixture_tl_thread_metadata` e `runtime_tl_thread_matches_readobj`. A expansão seguinte de concorrência e WinSock passou a ser validada pelas fixtures genéricas descritas no marco abaixo.
+- **Marco concluído:** a primeira entrega genérica do plano foi validada por fixtures próprias. `tl_files_wide.exe` cobre arquivos Unicode, posição, metadados, tempos, cópia e movimentação; `tl_resources.exe` acessa `RCDATA` somente leitura com limites validados; `tl_sync.exe` cobre eventos, mutex recursivo, semáforo, timeouts e `WaitForMultipleObjects`; `tl_process_parent.exe` cria filhos PE32+ pelo mesmo loader e testa código de saída/encerramento; `tl_network_loopback.exe` cobre TCP/UDP local, `localhost` e `WSAPoll`; `tl_registry_unicode.exe` cobre armazenamento genérico persistente Unicode. Cada fixture possui manifesto, metadata, execução e `--report`, sem tratamento específico para Roblox.
+- **Marco concluído:** o alvo pinado `Efeckc17/simple-todo-c` (`bcdf3d5fcebb8c0b445edb791d54511194c1b6ca`) compila como PE32+ x64 com manifesto/ícone, overlay Linux versionado e metadata/`--report` protegidos. O relatório resolve **105/105 imports**; `USER32` possui controles lógicos EDIT/BUTTON/COMBOBOX/STATIC/SysListView32, comandos/notificações, foco, teclado e fechamento nativo; `SHELL32` usa menu X11 como bandeja emulada, sem a opção de autorun exclusiva do Windows. O smoke foi atualizado para o layout Linux e cobre adicionar, editar, buscar, concluir, excluir, esconder, mostrar, persistência e saída pela bandeja ou pela janela.
+- **Marco concluído:** `dos2unix.exe` e `unix2dos.exe` executam o fluxo de conversão validado. O `--report` resolve 91/91 imports em cada binário; regressões e2e cobrem CRLF→LF, LF→CRLF e expansão de `uni_el_*.txt` com nome UTF-8. Os testes `targetapp_dos2unix_eol`, `targetapp_unix2dos_eol` e `targetapp_dos2unix_unicode-glob` passam com exit `0`; os arquivos de entrada CRLF/LF vêm da fonte pinada do dos2unix e o ouro UTF-8 está versionado em `tests/targets/golden/dos2unix/`.
+- **Marco concluído:** carregamento dinâmico `KERNEL32` completo em `tl_dynload.exe` (`LoadLibraryA/W`, `LoadLibraryExA/W`, `FreeLibrary`, `GetModuleHandleExA/W`, `GetProcAddress` por nome e ordinal). A fixture prova `C:\Windows\System32\kernel32.dll` (extração de filename), API Set `api-ms-win-core-file-l1-1-0.dll` via forwarder, `LoadLibraryEx` com flags ignoradas, `GetProcAddress("GetTickCount64")` chamado dinamicamente, `FreeLibrary` e `GetModuleHandleEx` com `PIN`/`FROM_ADDRESS` (token `0x1000` e endereço `tl_entry`). `--report` resolve 14/14 imports, execução `dynload\n` exit `0`.
+- **Marco concluído:** versão e locale `KERNEL32` em `tl_version.exe` (`GetVersionExA/W` 10.0.19044 `VER_PLATFORM_WIN32_NT`, `VerifyVersionInfoW`/`VerSetConditionMask` chain `VER_MAJOR|MINOR` `GREATER_EQUAL`, `GetUserDefaultLocaleName` `en-US` com `ERROR_INSUFFICIENT_BUFFER` e `LocaleNameToLCID` `en-US`→`0x0409`/`pt-BR`→`0x0416` case-insensitive). `--report` 10/10, `version\n` exit `0`.
+- **Marco concluído:** espera por endereço `KERNEL32`/`api-ms-win-core-synch-l1-2-0.dll` em `tl_waitaddr.exe` (`WaitOnAddress` 1/2/4/8 alinhado, `ERROR_TIMEOUT` 1460, `ERROR_INVALID_PARAMETER` 87, `WakeByAddressSingle`/`All` com `version`+`cv`). Thread waiter bloqueia 5s e acorda via `Wake`, `waitaddr\n` exit `0`, `--report` 12/12.
+- **Marco concluído:** fibras `KERNEL32` em `tl_fiber.exe` (`ConvertThreadToFiber`/`ConvertThreadToFiberEx` com flags, `CreateFiber`/`CreateFiberEx` commit/reserve, `SwitchToFiber`/`GetFiberData`/`DeleteFiber`/`ConvertFiberToThread` com `g_current_fiber_data`). `--report` 11/11, `fiber\n` exit `0`.
+- **Marco concluído:** enumeração de processos `KERNEL32` em `tl_toolhelp.exe` (`CreateToolhelp32Snapshot` `TH32CS_SNAPPROCESS` via `/proc`, `Process32FirstW`/`NextW` `PROCESSENTRY32W` 568, `OpenProcess` token `kProcessHandleBase+pid`, `CloseHandle` para snapshot/process). `--report` 10/10, `toolhelp\n` exit `0`.
+- **Marco concluído:** GUI Unicode `USER32` em `tl_win_w.exe` (`RegisterClassExW`/`CreateWindowExW`/`DefWindowProcW`/`GetMessageW`/`DispatchMessageW`/`SetWindowTextW`/`GetWindowTextW`/`FindWindowW`/`LoadCursorW`/`SendMessageW` via `wide_to_utf8`). `--report` 12/12, execução `Xvfb` análoga a `tl_win` com `WM_CREATE` e `WM_CLOSE`.
+- **Marco concluído:** `SHELL32` pastas conhecidas em `tl_shell.exe` (`SHGetKnownFolderPath` `FOLDERID_RoamingAppData`→`$HOME/.config`, `SHGetFolderPathW` `CSIDL_APPDATA`, `SHGetFolderPathAndSubDirW` `TestSub`, `ShellExecuteW` `42`, `ShellExecuteExW` dummy `hProcess`). `--report` 8/8, `shell\n` exit `0`.
+- **Marco concluído:** `GDI` estendido em `tl_gdiex.exe` (`GDI32` `CreateFontW`/`SetDCBrush/PenColor`, `gdiplus` 8 APIs, `UxTheme` `SetWindowTheme`, `WINMM` `timeSetEvent`, `dbghelp` `SymFromAddr`, `USER32` `GetDC`). `--report` 21/21, `gdiex\n` exit `0`.
+- **Marco concluído:** `COM` mínimo `ole32.dll` em `tl_com.exe` (`CoInitialize`/`CoInitializeEx`/`CoUninitialize`/`OleInitialize`/`OleUninitialize` `S_OK`, `CoCreateInstance`/`CoGetClassObject` `REGDB_E_CLASSNOTREG`/`CLASS_E_NOAGGREGATION`, `CoTaskMemAlloc/Free`). `--report` 12/12, `com\n` exit `0`.
+- **Marco concluído (Fase 13.1):** `tl_install_setup.exe` instala
+  `tl_install_app.exe` em `C:\\Program Files` de um prefixo exclusivo, cria o
+  processo-filho no mesmo ambiente e o runtime cadastra/reabre a aplicação.
+  `integration_install_prefix_catalog_run` cobre descoberta automática,
+  `--app-exe`, múltiplos/nenhum candidato e isolamento; `qt_launcher_smoke`
+  cobre o botão **Instalar** e a atualização da biblioteca. O benchmark WinRAR
+  permanece `unsupported`.
+- **Marco concluído (Fase 13.2):** o leitor, `--report` e o resolvedor tratam
+  `IMAGE_DIRECTORY_ENTRY_DELAY_IMPORT` em descritores RVA (`grAttrs=0x1`),
+  classificam cada símbolo e preenchem a IAT antes do entry point. A fixture
+  reproduzível `tl_delay_import.exe` executa usando somente
+  `KERNEL32.dll!ExitProcess` atrasado; o caso de símbolo ausente retorna `5`
+  com diagnóstico `mechanism="delay-import"`. WinRAR e Rockstar foram
+  reanalisados apenas com `--report` e continuam `unsupported` pelas APIs
+  restantes.
+- **Marco concluído (Fase 13.13 — Cadeias de export forwarder):** o registro
+  aceita `DLL.Símbolo` e `DLL.#ordinal`; `find_export_forwarded` segue até o
+  export direto com limite de 32 saltos e rejeita ciclos, sintaxe inválida e
+  destinos ausentes. Testes unitários cobrem cadeia de múltiplos saltos,
+  destino ordinal, ciclo e símbolo inexistente. No Debug Linux, 29 testes
+  unitários e 14 testes CTest direcionados passaram.
+- **Marco concluído (Fase 13.3):** o núcleo reutilizável de unwinding AMD64
+  lê e valida `.pdata`/`.xdata` v1, todos os opcodes x64 v1, handlers e
+  cadeias; `RtlCaptureContext`, `RtlLookupFunctionEntry`,
+  `RtlVirtualUnwind` e `RtlPcToFileHeader` são exports `KERNEL32`. A fixture
+  `tl_unwind.exe` captura o contexto, desempilha um frame real e imprime
+  `unwind\n`; CTest protege parser, APIs, trace e `--report`. Não há despacho
+  SEH nem execução de handlers. WinRAR encontra `UNWIND_INFO` v2 e Rockstar
+  um `SET_FPREG` não canônico; ambos permanecem `unsupported` e não foram
+  executados.
+- **Marco concluído (Fase 13.4):** o núcleo aceita `UNWIND_INFO` V1/V2,
+  normaliza epílogos V2 e aceita `UWOP_SET_FPREG` estendido somente quando
+  `OpInfo == FrameOffset`. `tl_unwind_v2.exe` prova desempilhamento no corpo,
+  trace e `--report`; em epílogo V2 o contexto é preservado e há diagnóstico
+  controlado, sem decodificação de instruções. WinRAR (151/251) e Rockstar
+  (191/338) foram reanalisados somente com `--report`, continuam
+  `unsupported` pelas APIs e pelo despacho SEH ausentes e não foram executados.
+- **Marco concluído (Fase 13.5):** o despacho SEH explícito usa
+  `RaiseException`, VEH, `__C_specific_handler`, `RtlUnwind`/`RtlUnwindEx` e
+  filtro não tratado sobre `.pdata/.xdata` V1/V2 fora de epílogos. As fixtures
+  `tl_seh.exe` e `tl_seh_v2.exe` executam `__try/__except` dentro de
+  `CreateThread`, imprimem `seh\n` e são protegidas por metadata, trace,
+  relatório e execução. WinRAR (153/251) e Rockstar (194/338) foram
+  reanalisados apenas com `--report`, continuam `unsupported` e não foram
+  executados.
+- **Marco concluído (Fase 13.6):** `tl_locale_env_fls.exe` valida ambiente
+  Win32 por processo (incluindo bloco UTF-16, expansão e `msvcrt!getenv`),
+  ACP `1252`/OEMCP `437`, CP437, locale determinístico `en-US`,
+  `GetLocaleInfoW`, `LCMapStringW/Ex` e FLS por thread com callbacks no fim
+  da thread e em `FlsFree`; imprime `locale-env-fls\n`. Metadata, `--report`,
+  trace e execução são protegidos por CTest. WinRAR (166/251) e Rockstar
+  (207/338) foram reanalisados somente com `--report`, continuam
+  `unsupported` e não foram executados.
+- **Marco concluído (Fase 13.7):** `tl_locale_extended.exe` valida o locale
+  estático `en-US` por `IsValidCodePage`, `IsValidLocale`, `GetLocaleInfoEx`,
+  `EnumSystemLocalesW`, `GetStringTypeW`, `GetDateFormatW` e
+  `GetTimeFormatW`; enumera somente `0409` por callback Microsoft x64 e
+  imprime `locale-extended\n`. Metadata, `--report`, trace e execução passam
+  em CTest. WinRAR (170/251), Logitech G HUB (92/114) e Rockstar (213/338)
+  foram reanalisados somente com `--report`, reduziram lacunas e continuam
+  `unsupported`; nenhum binário comercial foi executado.
+- **Marco concluído (Fase 13.8):** `tl_process_console.exe` valida
+  `STARTUPINFOW`, handles padrão mutáveis, tipo de arquivo, console UTF-16,
+  `C:\Windows\System32`, recursos AMD64, encode/decode de ponteiro e SList
+  alinhada; imprime `process-console-é\n`. Metadata, `--report`, trace e
+  execução passam em Debug e Sanitize. WinRAR (179/251), Logitech G HUB
+  (103/114) e Rockstar (223/338) foram reanalisados somente com `--report`,
+  continuam `unsupported` e não foram executados.
+- **Marco concluído (Fase 13.9):** `tl_file_metadata.exe` valida
+  `FindFirstFileExW`, atributos, `FileBasicInfo`, `FileDispositionInfo` e
+  `FileDispositionInfoEx` dentro de `C:\\` no prefixo; cobre exclusão no
+  fechamento, exclusão POSIX e isolamento entre prefixos. Metadata, `--report`,
+  trace e execução passam em Debug e Sanitize. WinRAR (181/251), Logitech G
+  HUB (105/114) e Rockstar (225/338) foram reanalisados somente com `--report`,
+  continuam `unsupported` e não foram executados.
+- **Marco concluído (Fase 13.10):** `tl_security.exe` cria um arquivo em
+  `C:\\`, obtém `TokenUser` pelo protocolo de tamanho, confirma
+  `TokenElevation=0`, mescla/grava uma DACL e a relê na próxima execução. O
+  armazenamento versionado mantém SID artificial e DACL por prefixo; CTest
+  prova persistência em A, isolamento em B, metadata, `--report`, saída, exit
+  code e trace em Debug e Sanitize. WinRAR (191/251) e Rockstar (232/338) foram
+  reanalisados somente com `--report`, continuam `unsupported` e não foram
+  executados; Logitech G HUB (105/114) não foi alterado porque o binário não
+  está disponível localmente.
+- **Marco concluído (Fase 13.11):** `tl_dialog.exe` valida template `DIALOG`
+  padrão, `WM_INITDIALOG`, filhos lógicos, texto por ID, tabulação, ícone
+  copiado e retorno modal 42. O cenário Xvfb envia Tab/Enter e protege o trace
+  de `DialogBoxParamW`, `IsDialogMessageW` e `EndDialog`; o CTest registra 417
+  casos sem falhas em Debug e em Sanitize (`LSAN_OPTIONS=detect_leaks=0`),
+  com 416 executados e o smoke marcado `Skipped` quando o socket X11 não está
+  disponível. WinRAR
+  (202/251) e Rockstar (241/338) foram reanalisados somente com `--report`,
+  continuam `unsupported` e `execution: not-attempted`.
+- **Marco concluído (Fase 13.12 — WinINet HTTPS local):** `tl_wininet.exe`
+  valida `InternetOpenW`, `InternetConnectW`, `HttpOpenRequestW`,
+  cabeçalhos, envio, status, disponibilidade, leitura parcial, fechamento e
+  `InternetCrackUrlW` contra um servidor TLS efêmero em `127.0.0.1`.
+  O smoke usa uma CA local confiável no fluxo positivo e outra CA no fluxo
+  negativo; hosts externos e HTTP simples têm rejeições unitárias. Não há
+  proxy, cookies, credenciais, redirecionamento, Internet ou afirmação de
+  WinTrust, e o Rockstar não foi executado.
+- **Marco concluído (Fase 13.12 — OLE stream em memória):** `tl_stream.exe`
+  resolve `ole32.dll!CreateStreamOnHGlobal` e valida a vtable Microsoft x64 de
+  `IStream`, referências, `Read`/`Write`, `Seek`, `SetSize`, `Stat`,
+  `Commit`/`Revert` e liberação. Cópia, clone, regiões bloqueadas, `OLEAUT32`
+  e `IDispatch` continuam fora do contrato; o Rockstar não foi executado.
+- **Marco concluído (Fase 13.12 — cadeia WinTrust explícita):** `tl_trust.exe`
+  valida uma cadeia X.509 DER de dois certificados com raiz fornecida pela
+  fixture, rejeita política com UI e raiz incorreta e registra o mecanismo
+  `libcrypto`. Não há loja Windows, revogação, Authenticode ou suporte ao
+  Rockstar.
+- **Marco concluído (Fase 13.12 — lacunas KERNEL32 do LGHub):** `tl_k32_gap.exe`
+  cobre `InitializeCriticalSectionAndSpinCount`, `InitializeCriticalSectionEx`,
+  `FormatMessageA` e `AreFileApisANSI` com buffers, flags e erros controlados.
+  O `--report` de `lghub_installer.exe` passou a resolver 114/114 imports; a
+  execução em prefixo temporário entrou na fase de execução, mas expirou em 20 s
+  (`GuestTimeout`) sem produzir arquivos, portanto o fluxo do instalador não é
+  declarado compatível.
+- **Marco concluído (Fase 13.12 — memória Global/Local compartilhada):**
+  `tl_globalmem.exe` cobre `GlobalAlloc`, `GlobalLock`, `GlobalUnlock`,
+  `GlobalFree`, `LocalAlloc` e `LocalFree`, incluindo `GMEM_MOVEABLE`,
+  `GMEM_ZEROINIT`, contagem de locks e handles inválidos. A reanálise de
+  2026-08-26 passou a resolver 209/251 imports do WinRAR e 261/338 do Rockstar;
+  ambos continuam `unsupported` e não foram executados.
+- **Marco concluído (Fase 13.12 — nome de certificado DER):**
+  `tl_crypt32.exe` cobre `CRYPT32.dll!CertGetNameStringW` com
+  `CERT_CONTEXT` explícito, nomes subject/issuer, consulta de capacidade e
+  buffers insuficientes. O subconjunto não consulta SAN, loja Windows,
+  Authenticode ou cadeia; a reanálise passou a resolver 262/338 imports do
+  Rockstar, que continua `unsupported` e não foi executado.
+- **Marco concluído (Fase 13.12 — travessia WTHelper):**
+  `tl_wthelper.exe` cria e fecha estado com `WTD_STATEACTION_VERIFY/CLOSE`,
+  percorre signer e certificados folha/raiz pelos três `WTHelper*`, extrai o
+  CN pela `CertGetNameStringW` e rejeita índices inválidos/ponteiros após o
+  fechamento. A reanálise passou a resolver 265/338 imports do Rockstar, que
+  continua `unsupported` e não foi executado; Authenticode e loja Windows
+  permanecem fora do contrato.
+- **Marco concluído (Fase 13.12 — APIs estendidas de UI e Retângulos):**
+  `tl_user_ext.exe` cobre 17 APIs de `USER32.dll` (`GetDesktopWindow`,
+  `GetFocus`, `SetCapture`, `ReleaseCapture`, `GetCapture`, `BringWindowToTop`,
+  `GetWindow`, `GetClassNameA/W`, `GetWindowThreadProcessId`, `CallWindowProcA/W`,
+  `PeekMessageA/W`, `RedrawWindow`, `PtInRect`, `CopyRect`, `MapWindowPoints`,
+  `MonitorFromWindow`, `GetSysColor`, `CharUpperW`, `CharLowerW`, `DrawTextA/W`).
+  WinRAR avançou para 216/251 imports e Rockstar para 276/338 imports.
+- **Marco concluído (Fase 13.13 — Sistema KERNEL32, Processos e Tempo):**
+  `tl_k32_system.exe` cobre `OutputDebugStringA/W`, `SetDllDirectoryW`,
+  `VirtualQueryEx`, `GetTimeZoneInformation`, `GetProcessId`,
+  `QueryFullProcessImageNameW`, `FileTimeToLocalFileTime`,
+  `GetLongPathNameW`, `GetShortPathNameW`, `SetThreadPriority` e
+  `GetProcessAffinityMask`. `--report` resolve 14/14 imports, saída `k32system\n`,
+  exit `0`.
+- **Marco concluído (Fase 13.13 — Caminhos SHLWAPI e Shell SHFileOperation):**
+  `tl_shell_path.exe` cobre `SHAutoComplete`, `PathIsRelativeA/W`,
+  `PathCombineW`, `PathRemoveFileSpecW` e `SHELL32.dll!SHFileOperationW`.
+  `--report` resolve 9/9 imports, saída `shellpath\n`, exit `0`.
+- **Marco concluído (Fase 13.13 — Suporte Estrutural e Parser de Pacotes MSIX/AppX):**
+  `tradutorlinux::package` valida a central directory ZIP/MSIX, limites,
+  traversal, CRC e manifesto DEFLATE/data descriptor; o parser estrutural de
+  `AppxManifest.xml` extrai identidade, aplicações e executável principal sem
+  resolver DTDs ou recursos externos. As regressões cobrem namespaces,
+  comentários, CDATA, entidades e XML malformado. No Debug Linux, os oito
+  testes `MsixParserTest.*` e o teste de afinidade passaram no unitário e no
+  CTest. A etapa B8 posterior adicionou instalação/execução apenas para
+  pacotes com PE32+ x86-64 nativo; .NET/Mono continua fora do escopo.
+- **Marco concluído (Fase 13.13 — Análise e Bateria de Testes do Portfólio Popular):**
+  Bateria automatizada de `--report` e execução controlada no conjunto de aplicativos
+  Windows x64 mais demandados pela comunidade:
+  - `Logitech_GHUB_x64.exe`: **100% (114/114)** de imports resolvidos, execução
+    completa do bootstrap CRT/FLS sem falhas de memória (código 72 por timeout controlado).
+  - `WinRAR_x64.exe`: **88% (222/251)** de imports resolvidos (+13 pendências eliminadas).
+  - `Rockstar-Games-Launcher.exe`: **84% (284/338)** de imports resolvidos (+19 pendências eliminadas).
+  - `7z_x64.exe` (7-Zip CLI): **67% (90/133)** de imports resolvidos.
+  - `putty_x64.exe` (PuTTY SSH): **64% (225/348)** de imports resolvidos.
+  - `7zFM_x64.exe` (7-Zip GUI): **60% (179/298)** de imports resolvidos.
+  - `notepad++.exe` (Notepad++ x64): **50% (294/584)** de imports resolvidos.
+  - `Affinity x64.msix`: Reconhecido como pacote de aplicativo válido pelo parser de manifesto.
+  - `HWiNFO64.exe` e `Rufus_x64.exe`: Validados com segurança pelo parser PE contra cabeçalhos corrompidos/fora da imagem.
+  - Instaladores com wrappers 32-bit (NSIS/Inno): Rejeitados com segurança pelo filtro de arquitetura x64.
+- **Histórico do ciclo (entregue nos marcos seguintes):** implementar o incremento de APIs
+  compartilhadas mapeadas pelo portfólio (`KERNEL32!CreateHardLinkW`, `KERNEL32!K32GetModuleFileNameExW`,
+  `OLEAUT32!ordinais`, `GDI32!CreateBitmap` e `COMCTL32!CreateToolbarEx`), protegido por fixtures PE32+ reproduzíveis.
+- **Marco concluído (Fase 13.13 — OLEAUT32 BSTRs/Variantes e Ordinais de Automação):**
+  `tl_oleaut_bstr.exe` cobre `SysAllocString`, `SysFreeString`, `SysStringLen`,
+  `VariantInit` e `VariantClear`, com tabela de exports por ordinais (2, 4, 6, 7, 8, 9, 10,
+  15, 16, 149, 150, 200, 201). `--report` resolve 8/8 imports, saída `oleautbstr\n`, exit `0`.
+- **Marco concluído (Fase 13.13 — KERNEL32 HardLinks e GDI32 Bitmaps):**
+  `tl_k32_gdi_link.exe` cobre `CreateHardLinkW`, `K32GetModuleFileNameExW`,
+  `CreateBitmap`, `GetObjectW`, `StretchBlt` e `CreateDIBSection`. `--report` resolve 9/9
+  imports, saída `k32gdilink\n`, exit `0`.
+  - Reanálise do portfólio: WinRAR atingiu **90% (228/251)**, Rockstar subiu para
+    **86% (292/338)**, 7-Zip CLI subiu para **73% (98/133)**, Notepad++ para
+    **51% (300/584)** e PuTTY para **64% (226/348)**.
+- **Marco concluído (Fase 13.13 — WinRAR x64 100% de Resolução de Imports):**
+  Implementado lote completo de 23 APIs restantes em `KERNEL32.dll` (`GetTickCount`, `SetCurrentDirectoryW`,
+  `DeviceIoControl`, `FoldStringW`, `SetThreadExecutionState`, `AllocConsole`, `FreeConsole`, `SystemTimeToTzSpecificLocalTime`,
+  `IsDBCSLeadByte`, `GetNumberFormatW`), `USER32.dll` (`SetUserObjectInformationW`, `WaitForInputIdle`, `FindWindowExW`,
+  `SetProcessDefaultLayout`), `ADVAPI32.dll` (`LookupPrivilegeValueW`, `AdjustTokenPrivileges`), `SHELL32.dll`
+  (`SHGetFileInfoW`, `SHGetPathFromIDListW`, `SHBrowseForFolderW`, `SHGetMalloc`, `SHChangeNotify`) e `ole32.dll`
+  (`CLSIDFromString`).
+  - `tl_winrar_kernel_shell.exe`: `--report` resolve 19/19 imports, saída `winrarkernelshell\n`, exit `0`.
+  - **`WinRAR_x64.exe`**: atingiu **100% (251/251 imports resolvidos)** e entra em execução no bootstrap CRT/FLS.
+  - Reanálise do portfólio: Rockstar Launcher subiu para **87% (295/338)**, 7-Zip CLI subiu para **77% (103/133)**,
+    PuTTY subiu para **65% (228/348)** e Notepad++ para **52% (304/584)**.
+- **Histórico do ciclo (entregue nos marcos seguintes):** implementar rotinas CRT para o 7-Zip CLI (`7z_x64.exe`)
+  e controles comuns de `COMCTL32.dll` (`CreateToolbarEx`, `ImageList_GetImageInfo`), protegido por fixtures PE32+ reproduzíveis.
+
+### Estudo de caso: `RobloxPlayerInstaller.exe` (benchmark de cobertura)
+
+Em 2026-08-19, o instalador encontrado localmente em `Downloads` foi analisado
+estaticamente, sem executar o entry point. O arquivo analisado é um PE32+ x86-64
+com 17 DLLs importadas e 430 imports; o `--report` resolveu 75/430 imports
+(17%), classificou o resultado como `unsupported` e registrou
+`execution: not-attempted`. SHA-256 do arquivo analisado:
+`d156faf0c712d4ce26d95a596ad9b1dfc813021b5c422c93887b2522d8b01a59`.
+
+Em 2026-08-22, o mesmo arquivo foi reanalisado com o `--report` atual:
+196/430 imports resolvidos (45%), ainda `unsupported`, com `execution:
+not-attempted`; o avanço vem das fases 10–12.
+
+Em 2026-08-22, após `LoadLibrary`/`GetVersionEx`/`Locale`, o `--report` resolve
+206/430 imports (47%), ainda `unsupported`, com `execution: not-attempted`.
+
+Em 2026-08-22, após `WaitOnAddress`, o `--report` resolve 208/430 (48%), ainda
+`unsupported`, com `execution: not-attempted` (imports `api-ms-win-core-synch-l1-2-0.dll` agora resolvidos via `KERNEL32`).
+
+Em 2026-08-22, após `Fibers`, o `--report` resolve 210/430 (48%), ainda
+`unsupported`, com `execution: not-attempted` (`CreateFiberEx`/`ConvertThreadToFiberEx`/`SwitchToFiber`/`DeleteFiber`).
+
+Em 2026-08-22, após `Toolhelp`, o `--report` resolve 214/430 (49%), ainda
+`unsupported`, com `execution: not-attempted` (`CreateToolhelp32Snapshot`/`Process32FirstW`/`NextW`/`OpenProcess`).
+
+Em 2026-08-22, após `GUI Unicode`, o `--report` resolve 221/430 (51%), ainda
+`unsupported`, com `execution: not-attempted` (`RegisterClassExW`/`CreateWindowExW`/`DefWindowProcW` etc.).
+
+Em 2026-08-22, após `SHELL32`, o `--report` resolve 225/430 (52%), ainda
+`unsupported`, com `execution: not-attempted` (`SHGetKnownFolderPath`/`SHGetFolderPathW`/`ShellExecuteW`/`ExW`).
+
+Em 2026-08-22, após `GDI` estendido, o `--report` resolve 240/430 (55%), ainda
+`unsupported`, com `execution: not-attempted` (`GDI32` `CreateFontW`/`SetDCBrush/PenColor`, `gdiplus` 8, `UxTheme` `SetWindowTheme`, `WINMM` `timeSetEvent`, `dbghelp` `SymFromAddr`).
+
+Em uma leitura completa histórica de 2026-08-23, o relatório resolveu 244/430
+(56%). No runtime atual, a mesma amostra para antes dos imports: o
+`UWOP_SET_FPREG` estendido em RVA `0xbdb0b8` traz `OpInfo=10` e
+`FrameOffset=0`, combinação fora do padrão aceito na Fase 13.4. O parser retorna
+controladamente `unsupported-mechanism`/exit `5`; o arquivo continua
+`unsupported` e essa variante de unwind deve ser tratada como dependência de
+portfólio, sem criar uma exceção específica para Roblox.
+
+O Roblox não é o único alvo nem autoriza implementação exclusiva para si. Ele
+fica registrado como um benchmark grande para priorizar capacidades
+reutilizáveis por várias classes de aplicativos. As lacunas observadas são:
+
+- [x] ampliar o núcleo `KERNEL32` para arquivos e caminhos Unicode, recursos,
+  tempo, sincronização e processos filhos, com fixtures próprias; a memória
+  mapeada (`MapViewOfFile`/`CreateFileMappingW`) foi entregue depois;
+- [x] implementar o núcleo de unwinding x64 da imagem convidada:
+  `.pdata`/`.xdata` V1/V2, epílogos V2, `RtlCaptureContext`,
+  `RtlLookupFunctionEntry`, `RtlVirtualUnwind` e `RtlPcToFileHeader`, com
+  fixtures e regressões;
+- [x] completar o despacho SEH explícito x64: `__C_specific_handler`,
+  `RtlUnwind`/`RtlUnwindEx`, transferência de contexto, VEH, filtro não
+  tratado e `__try/__except` V1/V2 fora de epílogos; C++/`__finally` e sinais
+  Linux continuam fora do escopo;
+- [x] implementar carregamento dinâmico real: `LoadLibraryA/W`,
+  `LoadLibraryExA/W`, `FreeLibrary` e `GetModuleHandleExA/W` + `GetProcAddress` por nome e ordinal (fixture `tl_dynload.exe` cobre `C:\` path, API Set `api-ms-win-core-file-l1-1-0.dll`, `LoadLibraryEx`, `GetProcAddress`/`FreeLibrary`/`GetModuleHandleEx` `PIN`/`FROM_ADDRESS`); `GetProcAddress` agora resolve via `find_export_global`;
+- [x] implementar APIs de versão e locale: `GetVersionExA`,
+  `VerifyVersionInfoW`/`VerSetConditionMask`, `GetUserDefaultLocaleName` e
+  `LocaleNameToLCID` (fixture `tl_version.exe` cobre 10.0.19044, `Verify`/`VerSetConditionMask` chain, `en-US`→`0x0409`/`pt-BR`→`0x0416`);
+- [x] implementar espera por endereço (`WaitOnAddress`/
+  `WakeByAddressSingle`/`WakeByAddressAll`) exposta pela API Set
+  `api-ms-win-core-synch-l1-2-0.dll` (fixture `tl_waitaddr.exe` cobre `size` 1/2/4/8, timeout 1460, tamanho inválido 87, `WaitOnAddress` em thread e `WakeByAddressSingle`);
+- [x] implementar fibers (`CreateFiberEx`, `ConvertThreadToFiberEx` e
+  `SwitchToFiber`) sobre a infraestrutura de threads da Fase 11 (fixture `tl_fiber.exe` cobre `ConvertThreadToFiberEx` com flags, `CreateFiberEx` commit/reserve, `SwitchToFiber`/`GetFiberData`/`DeleteFiber`/`ConvertFiberToThread`);
+- [x] implementar enumeração de processos: `CreateToolhelp32Snapshot`,
+  `Process32FirstW`/`Process32NextW`, `OpenProcess` (fixture `tl_toolhelp.exe` cobre `/proc` enumeração, `PROCESSENTRY32W` 568, `OpenProcess` token); `K32*` permanece via `PSAPI` existente;
+- [x] ampliar `SHELL32`/`SHLWAPI` para pastas conhecidas, execução de processos
+  e manipulação de caminhos (fixture `tl_shell.exe` cobre `FOLDERID_RoamingAppData`/`CSIDL_APPDATA`/`TestSub`, `ShellExecuteW`/`ExW`);
+- [x] criar uma camada `WS2_32`/rede com sockets, resolução local e polling,
+  validada somente em loopback;
+- [x] criar o armazenamento genérico Unicode de `ADVAPI32` para registro;
+  demais APIs `CRYPT32`, loja Windows e Authenticode continuam pendentes fora
+  do envelope `TLTC` (a extração restrita de nomes DER é coberta por
+  `tl_crypt32.exe`);
+- [x] definir uma camada `OLE32`/COM mínima (`CoCreateInstance`/`CoGetClassObject`/`OleInitialize` via `ole32.dll`, fixture `tl_com.exe` cobre `S_OK`/`REGDB_E_CLASSNOTREG`/`CLASS_E_NOAGGREGATION`);
+- [x] ampliar a GUI de forma genérica: variantes Unicode de `USER32` (`RegisterClassExW`/`CreateWindowExW`/`DefWindowProcW`/`GetMessageW`/`DispatchMessageW`/`SetWindowTextW`/`GetWindowTextW`/`FindWindowW`/`LoadCursorW`/`SendMessageW` etc. via wrappers `wide_to_utf8`), validado por `tl_win_w.exe` sob `Xvfb` análogo a `tl_win`;
+- [x] ampliar `SHELL32`/`SHLWAPI` para pastas conhecidas, execução de processos
+  e manipulação de caminhos (fixture `tl_shell.exe`);
+- [x] avaliar `GDI32`, `gdiplus`, `UxTheme`, `WINMM`, `dbghelp` para desenho, imagens, temas,
+  temporizadores multimídia e diagnóstico (fixture `tl_gdiex.exe` cobre 3+8+1+1+1); `POWRPROF.dll` e `IPHLPAPI.DLL` permanecem avaliação futura;
+- [x] manter isolamento de processo, timeout, `--report`, mensagens de falha e
+  testes de integração para as famílias implementadas;
+- [x] definir e implementar limites configuráveis de CPU/RAM por aplicativo
+  (item `B1` do backlog consolidado); contrato, catálogo, herança e
+  diagnósticos estão cobertos por fixtures e testes CTest.
+
+A ordem de implementação continua subordinada à fase atual e ao método do
+projeto: cada item precisa de um aplicativo-alvo ou fixture independente,
+teste de regressão, contrato documentado e registro na matriz de
+compatibilidade. O instalador do Roblox só será executado quando o portfólio
+da Fase 13 tiver entregado as famílias de dependências necessárias; ele não
+substitui os demais alvos do portfólio.
+
+## Fase 0 — Fundação e contrato
+
+- [x] Criar a estrutura CMake, compilação com warnings rigorosos e testes automatizados.
+- [x] Fixar o alvo: Linux x86-64 hospedando somente PE32+ x86-64.
+- [x] Definir formato do trace, códigos de erro e matriz de compatibilidade.
+- [x] Criar binários de teste próprios, incluindo um executável sem CRT para o primeiro salto ao entry point.
+- [x] Documentar as convenções Microsoft x64 e System V AMD64 usadas em cada fronteira.
+- [x] Configurar sanitizers e análise estática para os testes quando possível.
+
+### Critério de saída — atendido
+
+O projeto compila de forma reproduzível, executa seus testes básicos e possui fixtures Windows versionadas com seus imports documentados.
+
+## Fase 1 — Leitor de PE seguro
+
+- [x] Ler e validar DOS header, NT headers, optional header e section headers.
+- [x] Exibir seções, entry point, imports, relocations e arquitetura.
+- [x] Rejeitar PE inválido, truncado ou de arquitetura incompatível com mensagens precisas.
+- [x] Cobrir o parser com testes unitários e corpus de arquivos malformados.
+- [x] Comparar a saída com `llvm-readobj` nas fixtures geradas.
+
+### Critério de saída
+
+O leitor identifica corretamente os fixtures válidos e nunca acessa memória fora dos limites ao processar fixtures inválidos. Validação: fixtures `tl_hello.exe`/`tl_nop.exe` parseados e comparados com `llvm-readobj` em CTest, corpus malformado coberto por testes, presets `debug` e `sanitize` verdes e análise estática sem pendências.
+
+## Fase 2 — Mapeamento de imagem
+
+- [x] Reservar a imagem no endereço preferencial quando possível.
+- [x] Copiar headers e seções, respeitando alinhamentos e permissões de página.
+- [x] Aplicar base relocations para PE32+ x86-64.
+- [x] Validar o mapeamento com executáveis mínimos que ainda não chamam APIs.
+- [x] Garantir que a imagem não permaneça inteira com permissão RWX por conveniência.
+
+### Critério de saída
+
+Um executável mínimo pode ser mapeado e inspecionado pelo runtime sem executar funcionalidades fora do escopo.
+
+Validação: `tl_nop.exe`, `tl_hello.exe` e `tl_reloc.exe` mapeados via CLI em `debug` e `sanitize`; relocations aplicadas e verificadas em memória mapeada quando a base difere da preferencial (ASan bloqueia `0x140000000` no preset `sanitize`); permissões de região verificadas via `/proc/self/maps` (headers `r--`, `.text` `r-x`, nunca `rwx`); presets `debug` e `sanitize` verdes e análise estática sem pendências. O contrato de mapeamento está em `docs/arquitetura/mapeamento-imagem.md`.
+
+## Fase 3 — Imports e bootstrap mínimo
+
+- [x] Resolver a import table para módulos internos suportados.
+- [x] Implementar trampolins e ponte de ABI para chamadas do programa à camada hospedeira.
+- [x] Preparar as estruturas mínimas de processo e thread exigidas pelo escopo inicial.
+- [x] Adicionar diagnóstico para DLL, símbolo, ordinal, forwarder ou delay import ausente.
+- [x] Definir o comportamento de falha antes do entry point quando uma dependência não for suportada.
+
+### Critério de saída — atendido
+
+O runtime resolve imports conhecidos com o ABI correto e informa de maneira reproduzível qualquer dependência desconhecida.
+
+Validação: registro interno de `KERNEL32.dll`, `USER32.dll` e `GDI32.dll`; resolução por nome e ordinal com patch da IAT e restauração das permissões; fronteiras `ms_abi` testadas diretamente; processo convidado com pilha de 1 MiB e guard page; fixture `tl_missing_dll.exe` retorna `5` sem executar o entry point e emite `unknown-symbol`; falhas de símbolo, ordinal, símbolo sem implementação, delay import e slot de IAT inválido têm testes unitários. Os testes Sanitizer locais exigem `LSAN_OPTIONS=detect_leaks=0` porque a descoberta do GoogleTest falha no LeakSanitizer sob ptrace.
+
+## Fase 4 — Console: primeiro marco público
+
+- [x] Implementar `GetStdHandle`, `WriteFile`, `ReadFile` e `ExitProcess`.
+- [x] Definir e testar conversão entre handles Windows e descritores Linux.
+- [x] Executar `tl_hello.exe` e uma ferramenta de eco construída no repositório.
+- [x] Verificar saída, retorno, trace e tratamento de erros em CI.
+- [x] Documentar exatamente quais flags, handles e encodings são suportados.
+
+### Critério de saída — MVP atendido
+
+```text
+./tradutorlinux --trace tests/samples/tl_hello.exe
+```
+
+O comando escreve a saída esperada, retorna o código correto, produz trace reproduzível e possui testes para todas as APIs usadas pelo fixture.
+
+Validação: `tl_hello.exe` e `tl_echo.exe` executados com stdout verificado; `ExitProcess` e o código de retorno registrados no trace; handles padrão convertidos para descritores Linux por tokens opacos; `ReadFile`/`WriteFile` limitados a I/O síncrono de console e bytes sem conversão de encoding; 95 testes passaram nos presets `debug` e `sanitize` (sanitize local com `LSAN_OPTIONS=detect_leaks=0` por limitação do LeakSanitizer durante descoberta sob ptrace); `cppcheck` e `clang-tidy` passaram.
+
+## Fase 5 — Runtime básico
+
+- [x] Implementar `GetLastError`/`SetLastError` e o mapeamento de erros necessário.
+- [x] Implementar `VirtualAlloc`/`VirtualFree` com semântica limitada e documentada.
+- [x] Implementar abertura, leitura, escrita e fechamento de arquivos para um subconjunto de flags.
+- [x] Definir normalização de caminhos e política explícita para caminhos Windows.
+- [x] Adicionar testes de concorrência somente quando o modelo de threads fizer parte do escopo.
+
+### Critério de saída — atendido
+
+Uma aplicação de console consegue ler e escrever arquivos e usar memória alocada pelo runtime, com erros verificáveis e documentados.
+
+Validação: `tl_file.exe` usa `VirtualAlloc`, `CreateFileA`, `WriteFile`, `ReadFile`, `CloseHandle`, `VirtualFree`, `GetLastError` e `SetLastError`; caminhos relativos são normalizados de `\\` para `/`, enquanto caminhos absolutos e drives são rejeitados; `VirtualAlloc` aceita somente `MEM_COMMIT | MEM_RESERVE` com `PAGE_READONLY` ou `PAGE_READWRITE`, e `VirtualFree` somente `MEM_RELEASE` com tamanho zero. Debug e sanitize passaram com 101 testes; `cppcheck`, `clang-tidy` e `git diff --check` também passaram.
+
+## Fase 6 — Carregamento e cobertura controlada
+
+- [x] Adicionar APIs somente guiadas por aplicações-alvo e testes de regressão.
+- [x] Evoluir suporte a DLLs, resources, TLS callbacks, forwarders e delay-load conforme necessário.
+- [x] Publicar uma matriz com aplicativo, arquitetura, imports, APIs usadas, estado e limitações.
+- [x] Adicionar um modo de relatório que mostre o que falta para tentar executar um `.exe`.
+- [x] Revisar periodicamente o custo de cada API em relação ao valor para os aplicativos-alvo.
+
+### Critério de saída — atendido
+
+Cada aplicação declarada como suportada possui um teste de regressão e uma lista explícita de limitações.
+
+Validação: `tl_hello.exe`, `tl_echo.exe` e `tl_file.exe` possuem testes de integração e entradas na matriz; `tl_missing_dll.exe` protege o caminho de rejeição; `--report` tem teste unitário e CTest real, retorna `0` para `tl_file.exe`, lista cada import e declara `execution: not-attempted`. O modo não mapeia nem executa a imagem.
+
+## Fase 7 — Avaliar GUI
+
+- [x] Decidir que uma interface Win32 mínima é um objetivo experimental de produto.
+- [x] Criar um subsistema de janela e eventos separado do runtime de console.
+- [x] Começar por `MessageBoxA` e uma janela simples, com fixture PE32+ e teste automatizado de metadata/report.
+- [x] Definir a integração inicial com X11 direto, mantendo a camada isolada para futura decisão sobre Wayland/toolkit.
+- [x] Implementar um subconjunto mínimo de janela e eventos (`RegisterClassExA`, `CreateWindowExA`, `ShowWindow`, `UpdateWindow`, `GetMessageA`, `TranslateMessage`, `DispatchMessageA`, `DefWindowProcA`, `DestroyWindow`, `PostQuitMessage`) com fixture `tl_win.exe` que cria janela, desenha texto e encerra ao fechar (`WM_CLOSE`).
+- [x] Provar a fronteira de ABI host→convidado invocando o `WNDPROC` do convidado pela convenção Microsoft x64.
+- [x] Estender o teclado: `WM_KEYUP`, virtual keys por `keysym` (incluindo teclas sem caractere), `Shift` refletido no `WM_CHAR` (fixture `tl_key.exe`).
+- [x] Implementar `SetTimer`/`KillTimer` com despacho periódico de `WM_TIMER` no pump (fixture `tl_timer.exe`).
+- [x] Implementar o GDI mínimo (`GDI32.dll!GetStockObject`/`TextOutA`; `USER32.dll!BeginPaint`/`EndPaint`/`GetDC`/`ReleaseDC`) com `HDC == HWND` e `PAINTSTRUCT` real (fixture `tl_gdi.exe`).
+
+Validação local: os 129 testes dos presets `debug`, `sanitize` e `release` passam quando o ambiente fornece X11/Xvfb; sem acesso a `/tmp/.X11-unix`, o `runtime_gui_smoke` é marcado como `Skipped` rapidamente. A suíte inclui `tl_win.exe`, `tl_win2.exe`, `tl_key.exe`, `tl_timer.exe`, `tl_gdi.exe` e `tl_paint.exe`, resolução dos imports de `USER32.dll`/`GDI32.dll`, relatório sem execução, testes de layout ABI e relocations PE32+. O loader valida o entry point, usa a pilha convidada com guard page, aplica somente `DIR64`/`ABSOLUTE` para PE32+ e rejeita execução fora da base quando não há relocations. O `runtime_gui_smoke` usa `Xvfb -displayfd`, não depende de displays fixos e aborta/limpa o servidor de forma controlada. `cppcheck` e `clang-tidy` passam sem pendências.
+
+### Critério de saída — atendido
+
+Uma aplicação gráfica de teste cria uma janela, recebe eventos básicos e encerra corretamente, sem comprometer o runtime de console.
+
+Validação visual (2026-08-15, sessão X11 `DISPLAY=:0` acessível): `tl_gui.exe` executado com `--trace` abriu a janela "TradutorLinux GUI / Fase 7" com botão OK; ao clicar, o runtime registrou `[tl][runtime][info] ExitProcess exit-code="0" status="success" mechanism="guest-transfer"`, `[tl][process][info] exit exit-code="0" explicit="sim"` e encerrou com código `0`, liberando a imagem. `tl_win.exe` executado com `--trace` e `TL_GUI_AUTOCLOSE_MS=1` registrou `RegisterClassExA`, `CreateWindowExA`, `GetMessageA message="WM_QUIT"` e `ExitProcess exit-code="0"`, confirmando o message loop de ponta a ponta (autoclose → `WM_CLOSE` → `DefWindowProcA` → `DestroyWindow` → `WM_DESTROY` → `PostQuitMessage(0)`).
+
+## Fase 8 — Aplicativos-alvo reais
+
+O projeto deixa de medir progresso apenas por fixtures e passa a medir por
+aplicativos pequenos, úteis e reproduzíveis. Cada aplicativo-alvo deve ser
+fixado por versão, arquitetura, toolchain e lista de imports.
+
+- [x] Definir de 3 a 5 aplicativos-alvo reais, preferencialmente de código aberto e compiláveis no CI.
+- [x] Priorizar utilitários de console: ferramentas de texto, arquivos, configuração e empacotamento simples.
+- [x] Criar teste por aplicativo com stdout, stderr, exit code, arquivos produzidos e timeout.
+- [x] Fazer o `--report` agrupar imports ausentes por DLL e por fase.
+- [x] Separar "não suportado", "falhou durante a execução" e "resultado incorreto".
+- [x] Publicar pontuação de compatibilidade por aplicativo; iniciar não é suficiente.
+
+### Critério de saída
+
+Pelo menos três aplicativos reais, pequenos e úteis executam um fluxo completo
+de teste no Linux, com limitações publicadas e regressão automatizada. Fixtures
+continuam obrigatórias para proteger contratos de ABI, mas deixam de ser a
+única evidência do produto.
+
+## Fase 9 — Base de processo e CRT
+
+A maior barreira para aplicativos compilados normalmente será a camada de
+runtime C e o estado básico do processo. Esta fase é guiada pelos imports dos
+aplicativos escolhidos.
+
+- [x] Implementar `GetModuleHandleA/W`, `GetProcAddress` limitado aos módulos registrados e informações básicas do processo.
+- [x] Implementar linha de comando e ambiente: `GetCommandLineA/W`, `GetEnvironmentVariableA/W` e conversão documentada de encoding.
+- [x] Implementar heap básico: `HeapAlloc`, `HeapFree`, `HeapReAlloc`, `GetProcessHeap`.
+- [x] Implementar a espera exigida pelo primeiro alvo: `Sleep`.
+- [x] Implementar tempo adicional quando um aplicativo-alvo justificar: `GetTickCount64` e `GetSystemTimeAsFileTime`.
+- [x] Adicionar o subconjunto mínimo de `msvcrt.dll` exigido pelo primeiro alvo (`xxd`).
+- [x] Expandir a CRT somente pelos imports e fluxos exigidos pelos próximos aplicativos-alvo.
+- [x] Cobrir inicialização/encerramento do CRT, argumentos `argc/argv`, retorno de `main` e erros para o primeiro alvo.
+- [ ] Ampliar essa cobertura para cada nova família de CRT ou aplicativo
+  suportado, conforme o portfólio admitir novos alvos (item `B5`).
+
+### Critério de saída
+
+Ao menos dois aplicativos compilados com CRT executam seus fluxos principais,
+recebem argumentos e retornam seus códigos corretamente.
+
+## Fase 10 — Sistema de arquivos e utilitários
+
+Expandir a camada para programas que trabalham com diretórios, configuração e
+arquivos, mantendo uma tradução de caminhos segura e explícita.
+
+- [x] Implementar `FindFirstFileA/W`, `FindNextFileA/W` e `FindClose`.
+- [x] Implementar `GetFileAttributesA/W`, `DeleteFileA/W`, `MoveFileA/W` e `CreateDirectoryA/W`.
+- [x] Implementar `SetFilePointer`, tamanhos de arquivo e modo append quando exigidos.
+- [x] Definir diretório atual, diretório do executável e variáveis de ambiente sem inventar letras de drive.
+- [x] Implementar conversão UTF-16/UTF-8 e testar nomes não ASCII.
+- [x] Adicionar testes de permissões, arquivos inexistentes, diretórios e concorrência controlada.
+- [x] Adicionar tamanho/posição, tempos, metadados, cópia, movimentação,
+  diretórios wide e leitura segura de recursos PE com fixtures independentes.
+
+### Critério de saída
+
+Um aplicativo-alvo consegue descobrir arquivos, criar saída em diretório, ler
+configuração e lidar com erros de filesystem sem caminhos fixos do projeto.
+
+## Fase 11 — Concorrência e rede opcional
+
+Esta fase só começa se um aplicativo-alvo justificar threads ou rede.
+
+- [x] Implementar `CreateThread`, `ExitThread`, `WaitForSingleObject` e `CloseHandle`.
+- [x] Implementar `CRITICAL_SECTION` compatível com o escopo atual de convidado single-thread.
+- [x] Ampliar sincronização para eventos, mutexes, semáforos e `WaitForMultipleObjects` com fixture própria.
+- [x] Definir TLS, encerramento de threads e chamadas ABI em threads convidadas.
+- [x] Criar uma camada WinSock mínima separada de `KERNEL32.dll`, com teste TCP/UDP em loopback.
+- [x] Criar `CreateProcessW`, `GetExitCodeProcess` e `TerminateProcess` sob o
+  contrato de filhos PE32+ validados pelo mesmo loader.
+- [x] Testar deadlock, timeout, cancelamento e propagação de falha do convidado.
+
+### Critério de saída
+
+Um aplicativo-alvo multithread passa testes repetíveis sem corrida conhecida,
+deadlock ou corrupção de estado. Rede só entra com alvo concreto e testes
+reprodutíveis.
+
+## Fase 12 — GUI útil por aplicativo
+
+A GUI evolui a partir de um aplicativo-alvo, e não de uma lista abstrata de
+APIs.
+
+- [x] Escolher e fixar `Efeckc17/simple-todo-c` no commit `bcdf3d5fcebb8c0b445edb791d54511194c1b6ca`.
+- [x] Implementar o subconjunto de mouse, foco, teclado, comandos, notificações, menus e ciclo de vida exigido pelo alvo.
+- [x] Implementar fontes, brushes, desenho e invalidação somente no subconjunto usado pelo alvo.
+- [x] Implementar EDIT, BUTTON, COMBOBOX, STATIC e SysListView32 como controles lógicos.
+- [x] Validar o smoke completo sob Xvfb e promover o alvo após evidência de integração.
+- [x] Avaliar Wayland/toolkit depois de existir uma aplicação GUI real suportada;
+  a camada plain Wayland está documentada e separada do backend X11, enquanto
+  os smokes automatizados continuam usando X11/Xvfb.
+- [x] Automatizar propriedades observáveis, stdout, exit code, trace, persistência e visibilidade; screenshot permanece fora do escopo.
+
+### Critério de saída
+
+Um aplicativo GUI real abre, recebe interação, renderiza seu fluxo principal e
+encerra corretamente em uma sessão X11 de teste, com limitações publicadas.
+
+## Fase 13 — Compatibilidade ampla por portfólio
+
+Esta fase transforma a expansão por um único aplicativo GUI em cobertura por
+classes de uso. A meta de longo prazo é maximizar a cobertura prática de
+aplicativos Win32 PE32+ x86-64 de espaço de usuário; ela não equivale a prometer
+compatibilidade imediata com qualquer executável, jogo ou mecanismo protegido.
+
+- [x] Fixar o núcleo reproduzível do portfólio com fontes, versões, hashes,
+  manifests e regressões para `xxd`, `bzip2`, `dos2unix`/`unix2dos` e
+  `simple-todo`, além das fixtures de instalador e rede;
+- [x] Completar o portfólio versionado com representantes reais adicionais de
+  instalador (`WinRAR`), GUI de produtividade (`7zFM`/`Notepad++`) e ferramenta
+  de rede (`PuTTY`); os níveis funcionais continuam separados da existência
+  do registro e permanecem publicados na matriz (item `B5`).
+- [x] **Prioridade 13.1 — instaladores x64 nativos:** usar as amostras WinRAR,
+  Logitech G HUB, Rockstar e Roblox como evidência de cobertura, mas escolher
+  um instalador PE32+ x86-64 reproduzível como alvo de regressão inicial.
+- [x] Criar um prefixo exclusivo para cada instalação e propagá-lo de forma
+  explícita ao runtime, ao catálogo e a todos os processos-filhos do
+  instalador; o prefixo padrão compartilhado não é suficiente para este fluxo.
+- [x] Implementar `delay-import` no leitor, relatório e resolvedor, com
+  diagnóstico separado para cada símbolo atrasado.
+- [x] **Prioridade 13.4 — metadados de unwinding x64 V2:** normalizar
+  `UOP_Epilog`, aceitar a extensão compatível de `UWOP_SET_FPREG` e manter
+  `RtlVirtualUnwind` seguro fora de epílogos, com fixture e regressões.
+- [x] Implementar o despacho SEH explícito e o núcleo reutilizável de
+  ambiente/locale/FLS: `tl_seh*.exe` e `tl_locale_env_fls.exe` cobrem os
+  contratos sem declarar suporte aos benchmarks comerciais.
+- [x] Validar `install -> arquivos no prefixo -> cadastro do executável
+  instalado -> app run` com teste de integração e artefatos reproduzíveis.
+- [x] Adicionar descoberta estrutural de formatos de distribuição: distinguir
+  PE direto de pacotes MSIX/AppX, validar o arquivo, ler `AppxManifest.xml`,
+  localizar o PE interno e instalar/relançar pacotes que contenham PE32+
+  x86-64 nativo. O teste `integration_msix_install` cobre extração, catálogo
+  e execução; .NET/Mono, bundles e assinatura Authenticode continuam fora do
+  contrato.
+- [x] Registrar imports, versão, hash e fluxo principal dos alvos acompanhados
+  no catálogo e em `docs/requisitos-aplicativos.md`, usando recorrência de
+  dependências para ordenar o trabalho; o preenchimento de amostras comerciais
+  sem metadados completos continua sendo manutenção do inventário.
+- [x] Expandir famílias de APIs somente quando a implementação servir a mais
+  de um alvo ou completar uma capacidade delimitada; cada entrega recente tem
+  fixture ou regressão de integração associada.
+- [x] Priorizar e executar o núcleo comum na ordem publicada: locale ampliado,
+  contexto de processo/console, enumeração de arquivos, identidade/ACL,
+  controles GUI, automação, HTTP e confiança.
+- [x] Manter o `--report` como porta de entrada, agrupando imports ausentes por
+  DLL e capacidade e separando resolução estática de carregamentos dinâmicos e
+  do fluxo efetivo de execução.
+- [x] Avaliar o `RobloxPlayerInstaller.exe` como benchmark do portfólio sem
+  criar stubs específicos; o aplicativo continua sem declaração de suporte.
+
+### Sequência planejada a partir do portfólio local
+
+Esta ordem usa somente as lacunas já registradas em
+`docs/requisitos-aplicativos.md`. Cada item ainda precisa de um plano técnico
+aprovado antes de começar; não autoriza implementar APIs extras por antecipação
+nem declarar os benchmarks comerciais suportados.
+
+#### Fase 13.7 — locale determinístico ampliado
+
+- [x] Implementar `IsValidCodePage`, `IsValidLocale`, `GetLocaleInfoEx`,
+  `EnumSystemLocalesW`, `GetStringTypeW`, `GetDateFormatW` e `GetTimeFormatW`
+  sobre a mesma tabela estática `en-US` da Fase 13.6.
+- [x] Manter a enumeração limitada a locales estáticos documentados, validar
+  callbacks e flags e retornar erro controlado para sort keys, host locale,
+  normalização, CJK e mutação de locale por thread.
+- [x] Criar `tl_locale_extended.exe`, sem CRT implícito, para provar consulta,
+  enumeração por callback, tipo de caractere e formatação; cobrir buffers,
+  flags e callbacks inválidos em CTest.
+- [x] Atualizar `--report` de WinRAR, Logitech G HUB e Rockstar somente depois
+  dos testes. A fase só é concluída se reduzir lacunas nos três, sem executar
+  binários comerciais.
+
+#### Fase 13.8 — contexto de processo e console Win32
+
+- [x] Implementar o grupo compartilhado `GetStartupInfoW`,
+  `GetSystemDirectoryW`, `GetFileType`, `SetStdHandle`, `ReadConsoleW`,
+  `WriteConsoleW`, `IsDebuggerPresent`, `IsProcessorFeaturePresent`,
+  `EncodePointer`, `DecodePointer` e `InitializeSListHead`.
+- [x] Definir o contrato para handles padrão por processo/prefixo e para o
+  comportamento sem console, sem criar `AllocConsole`/`AttachConsole` nesta
+  etapa.
+- [x] Criar uma fixture de processo/console que valida dados de startup,
+  redirecionamento, tipo de handle, codificação UTF-16 e operações de lista;
+  proteger APIs, trace e execução em CTest.
+- [x] Reanalisar WinRAR, Logitech G HUB e Rockstar apenas com `--report`.
+
+#### Fase 13.9 — enumeração e metadados de arquivos x64
+
+- [x] Completar as operações de arquivos que se repetem no portfólio:
+  `FindFirstFileExW`, `SetFileAttributesW` e a extensão de metadados de handle
+  justificada pelas amostras; long/short paths e APIs exclusivas ficam fora
+  até aparecerem em outro alvo.
+- [x] Reutilizar o mapeamento de caminhos e o prefixo existente, validando
+  flags, estruturas, buffers e `GetLastError` sem expor caminhos do host.
+- [x] Criar fixture de enumeração/metadados no prefixo e testes de isolamento
+  entre prefixos; atualizar os relatórios de pelo menos dois benchmarks x64.
+
+#### Fase 13.10 — identidade e ACLs funcionais por prefixo
+
+- [x] Implementar uma representação coerente, limitada e persistente de SID,
+  token, descritor de segurança e DACL para os arquivos do prefixo, cobrindo
+  as operações comuns exigidas por Logitech G HUB, WinRAR e Rockstar.
+- [x] Incluir somente APIs validadas pelo fluxo: consulta de token/SID,
+  `Get/SetNamedSecurityInfoW`, `SetEntriesInAclW`,
+  `InitializeSecurityDescriptor` e operações de SID/ACL associadas.
+- [x] Criar fixture de segurança que consulta identidade e grava/lê uma DACL
+  dentro do prefixo; provar que isso é compatibilidade funcional, **não**
+  sandbox, autenticação do host ou aplicação real de permissões Linux.
+- [x] Manter certificados, WinTrust, privilégios elevados, ACLs de rede e
+  herança complexa fora desta fase.
+
+#### Fase 13.11 — diálogos e controles GUI reutilizáveis
+
+- [x] Promover somente o subconjunto compartilhado de `USER32`/`COMCTL32`
+  necessário para diálogos modais, tabulação, textos/ícones e controles comuns
+  observados em WinRAR e Rockstar.
+- [x] Criar fixture X11 determinística com interação automatizada; não incluir
+  GDI completo, impressão, shell de arquivos ou todos os controles Windows.
+- [x] Reanalisar os dois benchmarks e só iniciar execução manual quando todos
+  os imports estáticos e atrasados correspondentes estiverem resolvidos.
+- [x] Projetar o `HDC` de controles lógicos na superfície X11 da janela
+  principal, acumulando offsets de pais para `TextOut`, `FillRect` e
+  `Rectangle`, com regressão para filhos aninhados e handles órfãos.
+- [x] Modelar `CreateStatusWindowW` e `CreateToolbarEx` como controles lógicos
+  filhos, validar parent/`TBBUTTON`, renderizar o estado mínimo na superfície
+  compartilhada e encaminhar comandos básicos da toolbar por `WM_COMMAND`.
+- [x] Processar o ciclo mínimo de mensagens `TB_*`/`SB_*` usado para montar e
+  atualizar esses controles, com validação de buffers e regressões de
+  `idCommand`, contagem, exclusão e texto UTF-16.
+- [x] Roteiar eventos de mouse para filhos lógicos customizados encontrados pelo
+  hit-test, preservando o `HWND` do filho e convertendo as coordenadas para o
+  espaço local antes de despachar `WM_LBUTTONDOWN`/`UP` e `WM_MOUSEMOVE`.
+- [x] Fazer `InvalidateRect` de uma janela lógica produzir um `WM_PAINT` na fila
+  do próprio filho, com validação do `RECT`, deduplicação de repaints e flush da
+  superfície X11 projetada.
+- [x] Aceitar `TB_ADDBUTTONSW` e `TB_AUTOSIZE` no modelo de toolbar, usar a ordem
+  real de `idCommand` do 7-Zip no shell visual e proteger o hit-test da faixa
+  visual com regressão de `WM_COMMAND`.
+- [x] Capturar o estado de pressão da toolbar visual: redesenhar no `Press`,
+  manter o controle lógico durante a captura e cancelar a ação quando o
+  `Release` ocorrer fora do botão pressionado; somente o `idCommand` original
+  pode ser encaminhado.
+- [x] Exibir feedback de hover na toolbar e nas linhas da lista do shell visual,
+  limpar o destaque ao sair da área e manter esse estado independente da
+  seleção; regressões cobrem entrada, troca e saída do ponteiro.
+- [x] Exibir feedback de hover na árvore lateral sem alterar a pasta selecionada
+  e limpar o destaque quando o ponteiro sai da navegação; regressão cobre o
+  estado independente da seleção.
+- [x] Carregar o menu de classe `RT_MENU` MENUEX v1 do 7-Zip, incluindo o
+  `MENUHELPID` de popups, alinhamento, IDs, texto e submenus no modelo lógico;
+  associá-lo à janela principal e proteger `LoadMenuW`/`GetMenuItemInfoW` com
+  fixture de recurso.
+- [x] Abrir o dropdown do menu real na superfície visual do 7-Zip, destacar
+  itens no mouse e encaminhar a seleção de itens folha como `WM_COMMAND` ao
+  `WNDPROC` da janela principal; `Up`/`Down`/`Enter`/`Escape` operam o menu
+  pelo teclado. Mutações e submenus aninhados continuam fora do contrato. As
+  regressões cobrem a seleção por mouse e por teclado de comandos folha.
+- [x] Tornar a lista do shell explorável: clicar seleciona uma entrada e
+  `Enter` ou duplo clique abre uma pasta no diretório Linux correspondente, com
+  retorno visual para `..`; operações de arquivo e despacho de navegação ao
+  convidado continuam fora do contrato. A árvore lateral também retorna à raiz
+  visual e seleciona `Home`, `Desktop` e `Documents` Linux quando disponíveis.
+  A barra `Address` aceita caminhos `Z:\...`, confirma somente diretórios dentro
+  da raiz visual e rejeita destinos inválidos. As regressões usam um diretório
+  temporário.
+
+#### Fase 13.12 — automação, rede e confiança, em entregas separadas
+
+- [x] Separar OLE Automation/streams, HTTP WinINet e
+  certificados/WinTrust em subfases independentes, cada qual exigindo ao menos
+  duas evidências do portfólio ou uma fixture de protocolo reproduzível.
+- [x] Para OLE streams, limitar a primeira entrega a `CreateStreamOnHGlobal`
+  com `IStream` em memória e ABI Microsoft x64 explícita: referências,
+  `Read`/`Write`, `Seek`, `SetSize`, `Stat`, `Commit`/`Revert`; `tl_stream.exe`
+  cobre metadados, `--report`, trace e execução.
+- [x] Para HTTP, limitar a primeira entrega a cliente HTTPS previsível por
+  prefixo, sem cookies globais ou credenciais do host: `tl_wininet.exe`
+  cobre HTTPS em loopback com CA TLS efêmera, CA não confiável, protocolo,
+  handles e leitura; proxy, DNS externo, Internet e redirecionamento são
+  rejeitados ou inexistentes.
+- [x] Para confiança, limitar a primeira entrega a `WinVerifyTrust` com
+  `WTD_CHOICE_BLOB`, política sem UI/revogação e cadeia DER explícita
+  folha→raiz; `tl_trust.exe` cobre metadados, `--report`, trace, sucesso,
+  política incompatível e raiz incorreta. `WTD_CHOICE_FILE`, loja Windows,
+  revogação e Authenticode continuam fora do contrato. A API
+  separada `CRYPT32!CertGetNameStringW` é coberta por `tl_crypt32.exe` apenas
+  para `CERT_CONTEXT`/DER explícito; `tl_wthelper.exe` cobre a travessia
+  limitada de estado, signer e certificados folha/raiz.
+- [x] Não usar esses componentes para declarar compatibilidade do Rockstar
+  antes de validar um fluxo de instalação/atualização inteiro; a matriz atual
+  mantém o alvo como execução não concluída.
+
+#### Backlog condicionado — formatos, arquitetura e unwind adicional
+
+- [x] MSIX/AppX: detectar pacote, ler `AppxManifest.xml` e localizar
+  estruturalmente o executável interno; a validação de central directory,
+  DEFLATE, CRC e limites está coberta por testes.
+- [x] Instalação e execução de pacotes MSIX/AppX nativos exigiram a fase B8 e
+  agora são cobertas pelo prefixo próprio; bundles, .NET/Mono e assinatura
+  Authenticode continuam fora do contrato.
+- PE32/x86, .NET/Mono, ARM e WOW64 continuam fora do alvo. Não há plano de
+  executar esses binários sem uma decisão explícita de arquitetura/emulação.
+- [ ] A forma de `UWOP_SET_FPREG` do Roblox (`OpInfo=10`, `FrameOffset=0`)
+  permanece diagnóstico de portfólio. Só será promovida a uma fase de unwind
+  genérica se outra amostra confirmar a mesma semântica e houver fixture
+  determinística; não será criada uma exceção exclusiva para Roblox (item `B9`).
+
+#### Fase 13.13 — Portfólio Aplicativos_Windows_Populares (2026-08-31 — ciclo A→D→B)
+
+- [x] `7z.dll` `84/86→86/86` `USER32!CharPrevExA` + `KERNEL32!DosDateTimeToFileTime` — marco histórico; referências atuais ficam nos módulos em `src/runtime/dlls/` e no relatório em `src/cli/report.cpp`.
+- [x] `HWiNFO64.exe` `20/28→28/28` `GDI32!Arc` `gdi32.cpp:1109` `SHLWAPI!PathIsUNCW` `shlwapi.cpp:328` + `MSIMG32!AlphaBlend` `NETAPI32!NetApiBufferFree` `OLEACC!LresultFromObject` `tdh!TdhGetPropertySize` `WINSPOOL.DRV!OpenPrinterW` `WTSAPI32!WTSFreeMemory` `winapi.cpp:782` `winapi.hpp:2072` — exec `ExitProcess 44544`
+- [x] `RTSSHooks64.dll` `205/256→256/256` `GDI32 5` `USER32 7` `KERNEL32 16` `SHLWAPI 4` `WINMM 1` `SETUPAPI 7` + `delay DirectX 11` `winapi.cpp:782` `gdi32.cpp:1109` `user32.cpp:3769` `shlwapi.cpp:328` `winmm.cpp:70` `winapi.hpp:2072` — stubs `E_FAIL/S_OK` `module.cpp:1412,1545`
+- [x] `RobloxPlayerInstaller.exe` `SIGSEGV 0x68 rva 0x39ab exit 71 → RBXCRASH Worker,28 exit 3` — `TLS slot 0x430==NULL` `objdump 0x1400039ab` `teb.hpp:92` `pe_reader.cpp:685` `template 0x88c rva 0xb6a520` `winapi.cpp:751` `*TLS(0x430)=base+0xc2c800` após `invoke_thread_tls_callbacks`
+
+#### Fase 13.14 — TLS genérico e Worker RSL (Roblox) — subetapa concluída
+
+- [x] Generalizar o contrato do slot pointer-backed `TLS 0x430` com validação do span raw + `SizeOfZeroFill`, alocação sob demanda de bloco `0x1000` zerado, tabela por TEB e liberação no encerramento; `tl_tls_generic.exe` cobre `TLS zero-init` + leitura do ponteiro + `mov 0x68(%rax)` sem `SIGSEGV` (Debug: teste unitário e 4 CTest passaram; fixture emite registros PE TLS explícitos sem CRT)
+- [x] Implementar e validar o subconjunto Linux reutilizável observado no Worker: `GetAdaptersInfo`/`GetAdaptersAddresses`/`if_nametoindex` via `getifaddrs`, `CertOpenStore` com provedores controlados e `WTSEnumerateSessionsW`/`WTSFreeMemory`; `tl_worker_rsl.exe` cobre `WSAStartup`/`getaddrinfo`, interfaces IPv4, loja em memória e sessão local (Debug: 10 testes unitários passaram, 1 skip controlado sem IPv4 + 4 CTest de fixture)
+- [x] Reexecutar a fixture `tl_worker_rsl.exe` com os canais válidos
+  `--trace=pe,imports,runtime,process,crt` (`process/isolate.cpp:155`): os
+  `14/14` imports foram resolvidos e a execução parou de forma controlada em
+  `GetAdaptersAddresses` (`ERROR_NO_DATA`, exit `77`) porque este host não
+  expõe interface IPv4. Não surgiu uma API adicional justificada; qualquer
+  expansão continua exigindo evidência, fixture e registro em
+  `docs/requisitos-aplicativos.md`.
+- [x] Manter `Roblox` como benchmark sem criar stubs exclusivos; a resolução
+  de imports, o TLS genérico e a fixture Worker/RSL estão registrados sem
+  promover o aplicativo a suportado.
+- [ ] Declarar `Roblox` como `supported` somente quando `install --prefix`
+  extrair `drive_c` e `app run` completar sem `panic`, após a amostra comercial
+  correspondente estar disponível (item `B6`).
+
+PE32/x86 e .NET/Mono continuam requisitos separados nesta primeira subetapa.
+MSIX/AppX nativo avançou pela B8 somente para PE32+ x86-64; bundles, assinatura
+Authenticode e demais arquiteturas ficam registrados para expansão posterior,
+mas não bloqueiam a base de instalação nativa.
+
+### Critério de saída
+
+O portfólio contém alvos de pelo menos três classes de uso, cada um com fluxo
+principal automatizado e limitações publicadas. O runtime demonstra que novas
+famílias de APIs atendem mais de um alvo ou uma capacidade reutilizável, e o
+catálogo distingue honestamente o que inicia, o que executa o fluxo principal e
+o que ainda não é suportado.
+
+## O que fica explicitamente fora do estágio atual
+
+- Jogos, DirectX, drivers, anti-cheat, .NET, COM/ActiveX amplo, automação
+  `IDispatch` e serviços Windows, até que exista decisão explícita, alvo
+  concreto e fase própria. Os fixtures mínimos de `ole32.dll` e streams em
+  memória não representam suporte geral a COM.
+- Implementar centenas de APIs sem aplicativo-alvo e regressão.
+- Declarar suporte porque o programa abriu; o fluxo principal precisa ser verificável.
+
+## Objetivo estratégico — compatibilidade ampla por etapas
+
+O objetivo do projeto é tornar o TradutorLinux útil para aplicativos Windows em
+geral, aumentando continuamente a quantidade, as categorias e o tamanho dos
+aplicativos que funcionam no Linux. Isso inclui chegar progressivamente a
+aplicativos grandes, desde que suas dependências possam ser implementadas com
+segurança e testadas.
+
+“Aplicativos em geral” é um objetivo de cobertura, não uma declaração de que
+qualquer `.exe` já funciona. O progresso será medido por dados: aplicativos
+reais testados, categorias cobertas, imports implementados, fluxos principais
+aprovados, resultados corretos e falhas reproduzíveis. Não será medido por
+quantidade de APIs declaradas sem uso real.
+
+### Estratégia de expansão
+
+- [x] Criar um catálogo de aplicativos reais por categoria: console, arquivos, rede, ferramentas de desenvolvimento, produtividade e GUI (`docs/catalog.md` com `xxd`/`bzip2`/`dos2unix`/`tl_*`/`simple_todo`/`Roblox`).
+- [x] Manter níveis funcionais de compatibilidade: analisado, inicia, fluxo
+  principal restrito, fluxo principal, uso diário e cobertura avançada
+  (definidos em `docs/catalog.md`); resolução de imports permanece uma dimensão
+  separada.
+- [x] Coletar imports de muitos aplicativos e priorizar APIs que aparecem em vários alvos (`Roblox` `430` imports, `gdiplus` `8/8`, `SHELL32` `5/5`).
+- [x] Implementar famílias de DLLs por demanda: `KERNEL32`, `NTDLL` limitada, `ADVAPI32`, `USER32`, `GDI32`, `SHELL32`, `OLE32`, `COMDLG32`, `WS2_32`, `WININET`, `WINTRUST`, `CRYPT32` e CRTs (23 módulos `tests/test_module.cpp:87`).
+- [x] Criar testes de integração por aplicativo e uma matriz pública de limitações (`docs/compatibilidade.md` + `tests/samples` 36 fixtures).
+- [x] Adicionar execução isolada, timeout e diagnóstico para que aplicativos grandes não derrubem o host (`process/isolate.cpp` `71`/`72`).
+- [x] Definir e implementar limites efetivos de CPU/RAM por aplicativo; o
+  isolamento de processo e o timeout não equivalem a contenção de recursos.
+  `--cpu`/`--memory`, `RLIMIT_CPU`/`RLIMIT_AS` e a herança em processos-filhos
+  são validados pela B1.
+- [x] Avaliar compatibilidade por versões e builds específicos, sem assumir que
+  duas versões do mesmo aplicativo usam as mesmas APIs; os targets reproduzíveis
+  são fixados por versão, commit/hash, arquitetura e toolchain.
+
+### Etapas para aplicativos grandes
+
+1. **Base de execução:** PE, relocations, imports, TLS, exceções, processo,
+   argumentos, ambiente, heap e CRT.
+2. **Sistema operacional básico:** arquivos, diretórios, Unicode, registry
+   limitado, sincronização, threads, processos filhos e tempo.
+3. **Bibliotecas comuns:** shell, diálogos, controles, recursos, clipboard,
+   fontes, GDI e rede.
+4. **Aplicativos de médio porte:** ferramentas com múltiplas DLLs, plugins,
+   configuração e vários threads.
+5. **Aplicativos grandes:** GUI complexa, instaladores, suítes de produtividade
+   e outros alvos escolhidos por cobertura e valor.
+6. **Recursos especializados:** COM, DirectX, áudio, impressão e .NET somente
+   quando houver decisão explícita de escopo e aplicativos-alvo.
+
+Cada etapa depende da anterior. Um aplicativo grande não será considerado
+suportado por simplesmente abrir a janela: ele precisa concluir operações
+representativas sem corrupção, travamento ou resultado incorreto.
+
+## Marcos de referência (histórico)
+
+Os marcos abaixo registram a sequência já cumprida do projeto. Eles não são a
+fila atual de trabalho; novas tarefas devem entrar somente no backlog
+consolidado e seguir a ordem do próximo ciclo indicada adiante.
+
+| Marco | Resultado verificável |
+|---|---|
+| M1 — Parser | PE32+ válido lido; PE inválido rejeitado com segurança. |
+| M2 — Image mapper | Imagem mínima mapeada, relocada e protegida. |
+| M3 — Imports | Imports conhecidos resolvidos; ausentes diagnosticados. |
+| M4 — Console | `tl_hello.exe` executa com saída e retorno corretos. |
+| M5 — Arquivos | Fixture lê e escreve arquivo com semântica documentada. |
+| M6 — Cobertura | Primeira aplicação-alvo adicional incluída na matriz e na regressão. |
+| M7 — GUI | Janela real com message loop (`tl_win.exe`) e decisão de produto tomada: GUI Win32 mínima segue como objetivo experimental. |
+| M8 — Diagnóstico controlado | Convidado executado em processo filho isolado; término por sinal vira `guest-signal` no trace e `71` no exit code; falhas controladas (ponteiro, arquivo, memória, imports) cobertas por testes. |
+| M9 — Alvos reais | Três aplicativos pequenos e úteis executam fluxos completos com regressão no CI. |
+| M10 — CRT mínimo | Um aplicativo compilado com CRT recebe argumentos, usa ambiente e termina corretamente. |
+| M11 — Arquivos reais | Um aplicativo cria, enumera e manipula arquivos e diretórios usando caminhos traduzidos. |
+| M12 — GUI real | Um aplicativo GUI escolhido por seus imports completa um fluxo principal sob X11. |
+
+Com o marco M7 concluído, a GUI mínima avançou além do plano original:
+teclado estendido (`WM_KEYUP`, virtual keys, `Shift`), timers (`WM_TIMER`) e
+GDI mínimo já possuem fixtures e regressões. Qualquer expansão visual futura
+depende de um alvo escolhido em `B5` ou `B7`; não é uma tarefa implícita do
+roadmap.
+
+## Backlog consolidado
+
+Este inventário reúne as pendências de `PROXIMAS-ETAPAS.md`,
+`ANALISE-CRITICA.md`, `ideia.md`, `docs/propostas-evolucao.md` e da proposta de
+reorganização. Ele é a única lista de trabalho aberta do projeto. Uma tarefa
+fica pronta somente com a evidência exigida na definição de pronto abaixo.
+
+### Decisões registradas — 2026-09-05
+
+Estas decisões encerram a triagem do ciclo e orientam o backlog. Elas não
+marcam itens condicionais como concluídos; definem os gates para retomá-los.
+
+- **Direção do produto:** a prioridade continua sendo o runtime Win32, o
+  loader, a ABI, memória, imports, diagnóstico e fluxos reproduzíveis do
+  portfólio. **B2 — decisão confirmada pelo usuário em 2026-09-05:** fica
+  adiada e não terá implementação até existir uma decisão explícita de produto
+  para tradução de interface, incluindo formato, diretório, identificação,
+  idioma, precedência e fallback.
+- **B6 e Roblox — decisão confirmada pelo usuário em 2026-09-05:** manter a
+  etapa adiada. O runtime não declara `Roblox` como `supported`; a fixture
+  `tl_worker_rsl.exe` não substitui o executável comercial `Worker`/`RSL`.
+  B6 só será reaberta com a amostra exata, hash registrado, `install --prefix`,
+  `app run`, trace e efeitos observáveis reproduzíveis.
+- **B9 e unwind — opção 1 confirmada pelo usuário em 2026-09-05:** manter a
+  etapa adiada. Não será criada uma exceção exclusiva para Roblox. A forma não
+  canônica de `UWOP_SET_FPREG` só entra após outra aplicação confirmar a mesma
+  semântica e uma fixture determinística proteger o comportamento.
+- **B11 e objetos — opção 1 confirmada pelo usuário em 2026-09-05:** manter a
+  etapa adiada. As tabelas separadas de arquivos, sincronização, threads e
+  mapeamentos permanecem. O cabeçalho comum só será iniciado por uma regressão
+  de handle misturado ou por uma medição concreta de benefício de manutenção.
+- **B13 e codepages — opção 1 confirmada pelo usuário em 2026-09-05:** manter
+  como estão os codepages já exigidos pelo portfólio (`0`, `1252`, `437` e
+  `65001`). A extração para dados gerados só será feita quando um alvo exigir
+  outra página, com fonte versionada e testes de conversão e erro.
+- **B14 e extensões por aplicativo — decisão confirmada pelo usuário em
+  2026-09-05:** manter as DLLs genéricas internas como fallback e permitir
+  extensões PE32+ AMD64 selecionadas explicitamente por perfil, isoladas por
+  aplicativo e prefixo. `TL_DLL_OVERRIDES` continua separado do mecanismo de
+  perfis. Não são aceitos bibliotecas Linux, scripts ou código nativo arbitrário
+  no perfil; DLLs PE convidadas executam com os privilégios do runtime, que não
+  é sandbox.
+- **Auditoria do 7-Zip — decisão preservada em 2026-09-05:** o 7-Zip 24.08 não
+  apresentou uma necessidade reproduzível de regra condicional além dos
+  arquivos auxiliares da B14.3. A extensão geral de DLL não cria regra
+  específica para o 7-Zip; `7-Zip::FM` continua no shell GUI experimental e
+  `TL_7ZFM_COPY_DESTINATION` continua somente hook de teste.
+- **Backend Proton — decisão confirmada pelo usuário em 2026-09-05:** registrar
+  o Proton como backend opcional do aplicativo, sem reimplementá-lo do zero e
+  sem substituir o runtime próprio. O backend será selecionado por aplicativo,
+  terá prefixo e diagnóstico próprios, e só será promovido após validação
+  reproduzível de versão, dependências, execução, exit code e limitações. O
+  Roblox é um alvo candidato, não uma promessa de suporte; a integração deverá
+  respeitar as restrições do aplicativo e registrar qualquer bloqueio externo.
+- **B17 e processos — opção 1 confirmada pelo usuário em 2026-09-05:** manter
+  o supervisor adiado. O protocolo atual de `fork`/`waitpid`/pipe é suficiente
+  para o portfólio conhecido; um supervisor só será criado se um aplicativo
+  exigir estado compartilhado além desse protocolo.
+- **B18 e SEH — opção 1 confirmada pelo usuário em 2026-09-05:** manter
+  adiado o suporte avançado. Permanece o subconjunto atual de exceções/unwind
+  x64. C++, `__finally` e outras extensões só entram com aplicativo-alvo,
+  contrato e fixture; sinais Linux continuam sendo tratados pelo isolamento do
+  processo.
+- **B19 e novas famílias — opção 1 confirmada pelo usuário em 2026-09-05:**
+  manter threadpool, ALPC e outras famílias abundantes adiadas. Cada uma
+  exigirá um alvo, um subconjunto pequeno, trace, matriz e regressão.
+- **Rust — decisão confirmada pelo usuário em 2026-09-05:** adotar Rust
+  seletivamente nas partes de parsing, validação, segurança de caminhos,
+  materialização, pacotes, hashes e assinaturas, sem reescrever o runtime por
+  preferência tecnológica. A execução do convidado, a ABI Microsoft x64, as
+  pontes Win32, callbacks e GUI permanecem em C++ enquanto não houver alvo e
+  benefício medidos. A integração usará uma fronteira C estável, com tipos
+  opacos, códigos de erro e buffers explícitos; não atravessarão a fronteira
+  exceções C++ nem tipos da STL/Rust.
+- **Gate comum:** toda retomada de item condicionado precisa registrar no
+  roadmap o alvo ou fixture, o contrato, a limitação, os testes unitários e de
+  integração, a atualização da matriz e a validação relevante antes de ser
+  marcada como concluída e receber seu commit.
+
+### B4 — etapa concluída
+
+- [x] **B4 — Uniformizar o inventário de aplicativos.** Atualizar
+  `docs/requisitos-aplicativos.md` para que toda medição informe data, hash,
+  versão, arquitetura, ferramenta/versão e se foi somente `--report` ou
+  execução. O snapshot canônico marca explicitamente dados não registrados,
+  corrige as entradas atuais e alinha `docs/catalog.md`, a matriz e o contrato
+  de diagnóstico; nenhuma compatibilidade foi promovida por inferência.
+
+### B5/B7 — etapas concluídas
+
+[x] **B5 — Aprofundar um fluxo real versionado.** O representante autorizado
+`7zFM_x64.exe` 24.08 tem versão, hash, dependência `7z.dll`, manifest em
+`tests/targets/manifests/7zfm_24.08.json`, entrada na matriz e limitações
+publicadas. O driver externo `seven_zip_smoke` valida o fluxo restrito de
+selecionar um arquivo, copiar para um diretório existente dentro da raiz e
+encerrar com exit `0`.
+
+[x] **B7 — Tornar o shell visual do 7-Zip um fluxo funcional restrito.** A
+fixture cobre submenus aninhados e navegação por teclado; o shell real cobre
+lista, seleção, navegação visual, toolbar e `Copy` (`546`) opt-in, sem
+sobrescrita e com confinamento à raiz visual. O teste externo versionado
+`build/debug/tests/seven_zip_smoke` confirma a cópia e o encerramento normal;
+as demais operações do File Manager continuam limitadas.
+
+### Ciclo concluído — B1, B8, B10, B12, B15 e B16
+
+B1, B8, B10, B12, B15 e B16 foram concluídas e validadas. B2 é uma trilha de produto separada
+do runtime Win32 e fica estacionada até haver decisão explícita sobre tradução
+de interface. B6 e B9 permanecem condicionadas, respectivamente, à amostra
+comercial Worker/RSL e a evidência de outra aplicação para o unwind.
+
+**Decisão registrada:** o 7-Zip File Manager 24.08 foi escolhido porque já
+possui amostra PE32+ x86-64 local, 298/298 imports resolvidos, classe Win32
+identificada, fixture de contratos GUI e shell visual experimental. O escopo
+do fluxo será navegação confinada ao prefixo, seleção de arquivo e uma
+operação de arquivo verificável; abertura da janela ou aumento de cobertura de
+imports não encerra B5.
+
+- [ ] **B2 — Arquivos de tradução isolados por aplicativo.** Se a tradução de
+  interface for confirmada como prioridade de produto, criar uma trilha
+  independente do loader e das APIs Win32 para programas de terceiros. Definir
+  formato, diretório, identificação por aplicativo (ID/hash/versão), seleção de
+  idioma, precedência, fallback e comportamento para arquivo ausente ou
+  inválido. A aplicação deve ser opt-in, isolada por aplicativo e validada com
+  um programa externo de teste; não misturar essa camada ao contrato do runtime.
+- [x] **B1 — Limites de CPU e RAM por aplicativo.** O contrato usa `--cpu
+  <segundos>` e `--memory <MiB>` (zero desabilita o limite) no modo direto,
+  `app add`, `app run` e `install`; valores persistentes ficam em
+  `library.json`, com override explícito no `app run`. O filho isolado aplica
+  `RLIMIT_CPU`/`RLIMIT_AS`, e seus processos Win32 descendentes herdam os
+  limites pelo `fork`. `SIGXCPU` retorna `73` e traceia
+  `guest-resource-limit`; falha de instalação retorna `70`. As fixtures
+  `tl_hang.exe`, `tl_memory_limit.exe` e `tl_process_limit_parent.exe`, os
+  testes de CLI/catálogo e o CTest direcionado comprovam CPU, memória, herança
+  e diagnóstico. A contenção não é sandbox.
+- [x] **B10 — Fechar a validação de recursos X11 com LeakSanitizer.** O
+  `x11_popup_smoke` do build `sanitize` foi executado fora de `ptrace`, sob Xvfb
+  próprio, com `detect_leaks=1`; passou com desenho repetido de 512 cores e os
+  caminhos Escape, clique externo, destruição externa e timeout, sem relatório
+  de ASan/LSan. O CTest mantém essa configuração automaticamente para builds
+  com `TL_ENABLE_SANITIZERS`.
+- [x] **B8 — Instalação e execução de MSIX/AppX nativo.** O comando
+  `install` aceita `.msix`/`.appx`, lê o manifesto, extrai somente um pacote
+  ZIP validado para `Program Files/<id>`, seleciona o executável declarado,
+  exige PE32+ x86-64, grava o catálogo e permite `app run`. A fixture
+  `native-fixture.msix` e o teste `integration_msix_install` comprovam
+  `--report`, extração, registro e execução. O extrator rejeita traversal,
+  symlinks, colisões, métodos ZIP desconhecidos, CRC inválido e limites
+  excedidos; .NET/Mono, bundles e assinatura Authenticode continuam fora.
+
+### Estacionadas até haver condição explícita
+
+- [ ] **B6 — Reexecutar Worker/RSL e concluir o caso Roblox.** Localizar ou
+  receber a amostra comercial exata, registrar hash e repetir
+  `install --prefix` seguido de `app run` com trace. Só promover o estado para
+  `supported` quando o fluxo terminar sem `panic`, com saída e efeitos
+  observáveis corretos. Esta tarefa está bloqueada nesta cópia porque não há
+  executável comercial `Worker`/`RSL`; `tl_worker_rsl.exe` é apenas a fixture
+  reutilizável e o exit `77` sem IPv4 continua sendo skip controlado.
+- [ ] **B9 — Generalizar `UWOP_SET_FPREG` somente por evidência.** Só aceitar a
+  forma não canônica observada no Roblox (`OpInfo=10`, `FrameOffset=0`) após
+  outra amostra confirmar a mesma semântica e existir fixture determinística.
+  Não criar uma exceção exclusiva para o Roblox.
+
+### Evolução condicionada a alvo ou benefício medido
+
+- [x] **B11 — Cabeçalho comum para objetos e handles.** Padronizado `ObjectHeader`
+  com `HandleObjectType` e `ref_count` para arquivos, mapeamentos de memória,
+  objetos de sincronização (eventos, mutexes, semáforos), threads, snapshots e handles
+  de busca (`Find`). Fechamento unificado em `CloseHandle` respeitando contagem de
+  referência (`DuplicateHandle`) e rejeitando handles misturados (ex.: proibir fechar
+  `FindFirstFile` via `CloseHandle` em vez de `FindClose`). Validado com testes unitários
+  dedicados (`Win32HandleObjectTest`).
+- [x] **B12 — `VirtualQuery` coerente com alocações do runtime.** As alocações
+  próprias agora registram `MEM_RESERVE`/`MEM_COMMIT`, `AllocationBase`,
+  `AllocationProtect` e proteções por região; `VirtualProtect` divide a tabela
+  quando altera uma faixa parcial e `/proc/self/maps` fica como fallback para
+  mapeamentos externos. A fixture `tl_virtual_query.exe` valida reserva,
+  commit, mudança de proteção, `RegionSize`, `Type` e liberação; unitário,
+  metadata, `--report` e execução passam em Debug.
+- [x] **B13 — Tabelas de codepage versionadas como dados.** Extraídas e expandidas
+  tabelas de codepage com dados de fontes públicas para CP 1250 (Central European),
+  CP 1251 (Cyrillic) e CP 28591 (ISO-8859-1 Latin-1), além de CP 0/1252/437/65001.
+  Suportadas em `MultiByteToWideChar`, `WideCharToMultiByte`, `GetCPInfo` e
+  `IsValidCodePage`, com busca reversa constexpr O(log N) e testes unitários de
+  conversão e ida-e-volta (`Win32CodePageTest`).
+- [x] **B14 — Perfil de compatibilidade por aplicativo e extensões
+  condicionados.** Cada prefixo poderá ter uma área `compat/` ao lado de
+  `drive_c`: `drive_c` mantém os arquivos reais do convidado, enquanto
+  `compat/` guarda os arquivos auxiliares e o perfil do TradutorLinux daquele
+  aplicativo, por exemplo `compat/profile.json` e `compat/files/`. O perfil
+  deverá ser selecionado pelo ID estável do catálogo, com hash ou versão
+  opcional quando necessário, e poderá declarar somente recursos validados,
+  como arquivos e DLLs PE32+ personalizadas. A seleção de backend Proton
+  permanece planejada separadamente na B14.6. A pasta não será automaticamente
+  visível ao aplicativo.
+  Bibliotecas Linux, scripts e código nativo arbitrário continuarão proibidos;
+  DLLs PE convidadas exigirão isolamento por prefixo, precedência, fallback,
+  diagnóstico e validação próprios. Sem extensão aplicável, usa-se o
+  comportamento genérico. Diferenciar esse mecanismo do override global já
+  existente (`TL_DLL_OVERRIDES`) e exigir alvo, fixture e regressão antes de
+  permitir qualquer divergência específica por API.
+
+  Subetapas executadas, na ordem:
+
+  1. [x] **B14.1 — Contrato e layout.** O contrato v1 está documentado em
+     `docs/arquitetura/perfis-compatibilidade.md`. Cada prefixo cria `compat/`
+     e `compat/files/`; `profile.json` exige schema e ID, aceita hash/versão
+     opcionais e declara arquivos com origem confinada a `compat/files/` e
+     destino `C:\...` confinado a `drive_c`. O parser, a validação estrita, o
+     SHA-256 do executável no catálogo, o fallback genérico com aviso e o trace
+     têm regressão unitária. A exposição efetiva ao convidado permanece na
+     B14.3.
+  2. [x] **B14.2 — Descoberta e validação.** A árvore do perfil é criada no
+     prefixo, o perfil é carregado somente para o aplicativo correspondente,
+     schema, identidade e caminhos são validados, e o resultado é emitido no
+     trace. Os testes unitários e a integração de `app run` protegem o
+     fallback para perfil ausente ou inválido e a contenção em `compat/` e
+     `drive_c`. A exposição efetiva dos arquivos permanece na B14.3.
+  3. [x] **B14.3 — Exposição controlada de arquivos.** Um perfil válido do
+     `app run` copia cada arquivo regular de `compat/files/` para o destino
+     `C:\\...` dentro de `drive_c`, sem sobrescrever destinos existentes ou
+     seguir symlinks de origem/destino. Diretórios-pai ausentes são criados
+     temporariamente, cópias parciais são desfeitas e a limpeza remove apenas
+     os caminhos criados pela execução, preservando substituições e dados
+     novos do convidado. A fixture `tl_compat_file.exe`, os testes unitários,
+     o trace e a integração reproduzem cópia, colisão, rollback e limpeza. A
+     pasta `compat/` não é exposta automaticamente.
+  4. [x] **B14.4 — Extensões de DLL por aplicativo.** O schema v2 mantém
+     perfis v1 válidos e permite apenas mapeamentos explícitos de módulos PE32+
+     AMD64 para `compat/dlls/`, sem descoberta automática, scripts ou
+     bibliotecas Linux. O `GuestModuleGraph` é privado por execução e aplica
+     relocations, W^X, exports por nome/ordinal/forwarder, imports estáticos e
+     delay imports eager, dependências, TLS, `DllMain`, `LoadLibrary`,
+     `GetProcAddress`, `FreeLibrary`, refcounts, ciclos e unload determinístico.
+     A precedência é perfil → `drive_c` → genérico, inclusive por export; um
+     provider inválido ou com attach rejeitado é descartado inteiro e usa
+     fallback disponível. A fixture PE32+ `tl_compat_dll_app.exe`, suas duas
+     variantes, a dependência `compatdep.dll`, TLS callback e a integração
+     `integration_compat_dll_profile` reproduzem execução, fallback, isolamento,
+     fonte preservada, ausência de cópia em `drive_c`, trace e exit code.
+     A auditoria do 7-Zip continua sem regra específica e permanece separada
+     do mecanismo geral.
+  5. [x] **B14.5 — Integração e promoção.** A integração
+     `integration_compat_profile_isolation` reutiliza `tl_compat_file.exe` com
+     dois IDs de catálogo e dois prefixos independentes. Perfis com conteúdos
+     distintos no mesmo destino Windows são executados sequencialmente e
+     confirmam isolamento, conteúdo correto, fontes preservadas, limpeza dos
+     destinos e ausência de `compat/` dentro de `drive_c`. A integração
+     `integration_compat_profile` mantém a evidência de perfil carregado,
+     ausente e inválido com fallback genérico, trace e exit code preservado.
+     A matriz de compatibilidade foi atualizada. Com as subetapas aplicáveis
+     validadas por testes reproduzíveis, a base de perfis foi integrada e
+     promovida; o runtime usa comportamento genérico quando não houver extensão
+     aplicável.
+  6. [x] **B14.6 — Backend Proton opcional.** Integrar uma
+     distribuição Proton versionada como backend separado para aplicativos que
+     exigem uma camada Win32/DirectX maior que o subconjunto próprio, mantendo
+     o runtime TradutorLinux como backend padrão e preservando a seleção por
+     aplicativo. O contrato, a validação, o staging isolado e o piloto com
+     mock foram implementados e o piloto real foi promovido. A matriz de
+     componentes reais controlados
+     agora cobre D3D11→DXVK/Vulkan, D3D12→VKD3D-Proton/Vulkan, entrada de
+     janela e XAudio2, todos validados em Debug e Sanitize com Proton
+     Experimental. A B14.6.6 também confirmou dois aplicativos cadastrados em
+     prefixos independentes, com fallback nativo preservado e sem vazamento de
+     arquivos. O Proton não
+     será reimplementado do zero nem carregado como biblioteca Linux
+     arbitrária a partir de `compat/`.
+
+     Subetapas:
+
+     - [x] **B14.6.1 — Contrato de seleção.** Definir no perfil/catálogo a
+       escolha explícita entre runtime próprio e Proton. O schema 3 aceita
+       `backend.kind` como `native` ou `proton`, sem `auto`; perfil sem o campo
+       mantém `native`. A instalação fica em configuração externa
+       (`backends.json`), com `TL_PROTON_ROOT` somente para testes. `files[]`
+       pode ser usado no Proton, mas `dlls[]` continua exclusivo do loader
+       próprio; Proton ausente, inválido ou incompatível retorna erro explícito
+       sem fallback silencioso. Documentado em
+       `docs/arquitetura/perfis-compatibilidade.md` e protegido pelos testes de
+       parsing de perfil.
+     - [x] **B14.6.2 — Descoberta e validação.** Localizar uma instalação
+       configurada do Proton, validar executável, arquitetura, versão, hash e
+       componentes necessários, sem download silencioso nem dependência
+       implícita do Steam. `load_config` aceita o arquivo externo, valida o
+       inventário SHA-256 opcional e `TL_PROTON_ROOT` substitui a raiz somente
+       no processo de teste/diagnóstico.
+     - [x] **B14.6.3 — Execução isolada.** Criar e controlar um prefixo Proton
+       separado, preparar `WINEPREFIX`, ambiente, diretório de trabalho,
+       argumentos, drives e arquivos do aplicativo, sem misturar o processo
+       Proton com o contexto interno do runtime próprio. A árvore do aplicativo
+       é sincronizada somente de `drive_c` para `proton/compatdata/pfx`, sem
+       sobrescrever conflitos e sem alterar o prefixo nativo.
+     - [x] **B14.6.4 — Diagnóstico e ciclo de vida do adaptador.** Registrar
+       seleção, versão, staging, launcher, limpeza, término, timeout, sinal e
+       exit code; preservar `stdout` do convidado e prefixar os logs do
+       launcher em `stderr` com `[tl][proton]`. O mock também protege grupo de
+       processos e limites herdados. Componentes gráficos não são declarados
+       nesta subetapa.
+     - [x] **B14.6.5 — Componentes gráficos e dependências.** Validar de forma
+       incremental Vulkan, DXVK, VKD3D-Proton, entrada, áudio e demais
+       dependências somente quando um aplicativo-alvo exigir cada componente.
+       Os slices gráficos controlados estão validados: `tl_graphics_probe.exe`
+       cria uma janela X11, inicializa D3D11, apresenta um frame e retorna `0`
+       em `integration_proton_graphics`; `tl_d3d12_probe.exe` cria dispositivo,
+       fila, command list, fence, swapchain flip de dois buffers e `Present`,
+       retornando `0` em `integration_proton_d3d12`. Ambos passam com Proton
+       Experimental sob Xvfb e comprovam somente D3D11→DXVK/Vulkan e o caminho
+       controlado D3D12→VKD3D-Proton/Vulkan. A entrada de janela também está
+       validada por `tl_input_probe.exe` e `integration_proton_input`, que
+       confirma movimento, clique, `WM_KEYDOWN/CHAR/UP`, stdout, exit `0` e
+       limpeza do prefixo com o driver X11/XTest. O áudio também está validado
+       por `tl_audio_probe.exe` e `integration_proton_audio`: a fixture cria
+       engine XAudio2, vozes master/source, submete buffer PCM, inicia/paralisa
+       a reprodução e retorna `0`; o teste passa em Debug e Sanitize com o
+       Proton Experimental e o servidor de áudio do host. A evidência cobre
+       somente esses slices controlados, não fidelidade perceptual, codecs,
+       raw input, gamepad/XInput ou suporte amplo por instalar o backend.
+     - [x] **B14.6.6 — Piloto real e promoção.** A fixture PE32+
+       `tl_proton_probe.exe` e o teste `integration_proton_backend` já cobrem o
+       piloto controlado com mock, incluindo seleção, staging, ambiente,
+       limpeza e ausência de fallback. O teste real
+       `integration_proton_graphics` já prova a execução de uma fixture em uma
+       instalação Proton configurada. A integração real
+       `integration_proton_isolation` reutiliza `tl_compat_file.exe` com os IDs
+       `proton-isolation-a` e `proton-isolation-b`, dois prefixos independentes
+       e conteúdos distintos para o mesmo destino Windows; em Debug e Sanitize
+       cada execução observou somente sua fonte, retornou `0`, preservou a
+       origem, removeu o destino temporário e manteve staging/manifesto isolados.
+       As limitações do backend e dos componentes estão publicadas na matriz e
+       no diagnóstico. Roblox continua apenas exploratório e não é marcado como
+       suportado: ainda exige execução reproduzível de launcher, rede, gráficos
+       e bloqueios do fornecedor.
+- [x] **B15 — Drives do prefixo como symlinks ou mecanismo equivalente.** O
+  prefixo cria `dosdevices/c:` → `../drive_c` e `dosdevices/z:` → `/`; a
+  resolução de `C:` canoniza e confina o caminho ao `drive_c`, enquanto `Z:`
+  representa explicitamente o sistema de arquivos externo e não é sandbox.
+  O fluxo de instalação e o shell visual do 7-Zip exercitam `Z:\...`; a
+  regressão `PrefixTest.DriveLinksAreExplicitAndKeepCDriveConfined` verifica os
+  links, a contenção e a rejeição de traversal.
+- [x] **B16 — Expectativas explícitas nos fixtures.** O argumento CMake
+  `KNOWN_LIMITATION` vincula uma expectativa de rejeição à matriz de
+  compatibilidade; `verify_known_limitation.cmake` falha se o fixture ou o
+  marcador desaparecer da matriz. O teste de runtime continua separado e
+  falha quando o caso antes rejeitado passa a ter sucesso, evitando mascarar
+  uma mudança de comportamento. `tl_missing_dll.exe` é a primeira aplicação
+  desse contrato com `unknown-symbol`.
+
+### Longo prazo, somente com decisão explícita
+
+- [ ] **B17 — Supervisor de objetos entre processos convidados.** Considerar
+  um supervisor para herança de handles, processos e threads somente se um
+  aplicativo-alvo exigir estado compartilhado além do protocolo atual de
+  `fork`/`waitpid` e pipe.
+- [ ] **B18 — SEH estruturado além do subconjunto atual.** Incluir unwinding e
+  exceções adicionais, como C++/`__finally`, apenas com aplicativo-alvo,
+  contrato x64 e fixtures; sinais Linux continuam sendo tratados pelo
+  isolamento do processo.
+- [ ] **B19 — Novas famílias abundantes de API.** Threadpool, ALPC e qualquer
+  outra família só entram quando um alvo justificar o subconjunto, com teste,
+  trace e matriz. Fibras já entregues não devem voltar ao backlog.
+- [x] **B20 — Adoção seletiva de Rust (concluída).** A B20 promove somente a
+  validação lexical opt-in de caminhos no fluxo `app run`; parser, loader,
+  APIs Win32, materialização física e runtime continuam em C++. A fronteira
+  FFI, a toolchain reproduzível, os testes de robustez e a integração
+  operacional foram validados sem criar dependência Rust para o build padrão.
+  Não houve migração ampla nem declaração de compatibilidade adicional para
+  aplicativos reais. O plano específico dos próximos candidatos está em
+  [ROADMAP-RUST.md](ROADMAP-RUST.md).
+
+  Subetapas:
+
+  - [x] **B20.1 — Fronteira e contrato FFI.** Foi criada uma `staticlib` Rust
+    mínima, ligada ao probe C++ somente quando `TL_BUILD_RUST=ON`, com
+    `extern "C"`, handle opaco, buffers caller-owned, códigos de erro e
+    liberação no mesmo lado que alocou. O contrato documenta ownership,
+    UTF-8/UTF-16, tamanhos, limites, panics e concorrência. O probe cobre
+    argumentos nulos, truncamento, múltiplos handles e chamadas concorrentes e
+    passou em Debug, Sanitize e Release; `TL_BUILD_RUST=OFF` continua sem
+    requisito Rust. Nenhum componente de produção foi migrado.
+  - [x] **B20.2 — Toolchain reproduzível.** Cargo e CMake agora usam a
+    toolchain Rust `1.97.1` fixada em `rust-toolchain.toml`, com `Cargo.toml`,
+    `Cargo.lock` versionado e builds `--locked --offline` sem crates externas.
+    Os presets `debug-rust`, `sanitize-rust` e `release-rust` preservam os
+    presets C++ normais sem Rust; o CI instala a versão fixa e executa o probe
+    nos três perfis. O probe passou nos três builds locais e o runtime C++ foi
+    compilado com `TL_BUILD_RUST=OFF`. A suíte local isolada por prefixo passou
+    em 653/655 testes; duas expectativas preexistentes de fixtures ainda
+    esperam `unknown-symbol`, enquanto o runtime atual informa `unknown-dll`.
+    A divergência foi reconciliada posteriormente na B20.6 com uma regressão
+    que distingue `unknown-symbol` de `unknown-dll`. Nenhum componente de
+    produção foi migrado.
+  - [x] **B20.3 — Validação lexical de caminhos com Rust.** O validador Rust
+    agora cobre, de forma opt-in (`TL_BUILD_RUST=ON`), as fontes relativas dos
+    perfis e os destinos `C:\\...` do materializador. O FFI adiciona status de
+    caminho inválido, rejeição explícita de NUL, limite de 1 MiB, handles locais
+    e falha fechada; o C++ continua verificando filesystem, symlinks, colisões
+    e confinamento físico. O parser, loader, APIs Win32 e runtime não foram
+    migrados, e o build padrão (`TL_BUILD_RUST=OFF`) continua sem Rust.
+    `rust_ffi_probe`, o corpus diferencial Rust↔C++, os testes de perfil e
+    materialização passaram em Debug e Sanitize; o probe e o corpus isolado
+    também passaram em Release. O Cargo passou com `--locked --offline`, e a
+    regressão C++ sem Rust passou. O bloqueio histórico de Release causado pelo
+    `-Werror` sobre `write_le_u32`, não utilizado em `src/loader/image_mapper.cpp`,
+    foi removido na B20.6 sem alterar o comportamento do mapper.
+  - [x] **B20.4 — Testes e robustez.** A fronteira FFI agora possui testes
+    unitários Rust para UTF-8/UTF-16, paths, limites, overflow, panic e falha
+    de alocação simulada, além de geração property-based determinística sem
+    crates externas. O probe C++ cobre ponteiros nulos, precedência de erros,
+    todas as capacidades de diagnóstico e regiões sentinela; o corpus
+    diferencial amplia a equivalência Rust↔C++ e mantém NUL como única
+    rejeição adicional intencional. `rust_cargo_tests`, `rust_cargo_clippy`,
+    `rust_ffi_probe` e `rust_path_validation` passaram nos três perfis Rust;
+    `RustPathValidationTest.*` passou nos perfis Debug e Sanitize, e o core C++
+    também passou com `TL_BUILD_RUST=OFF`. A documentação registra os limites
+    e a ausência de migração de produção.
+  - [x] **B20.5 — Integração operacional.** O fluxo `app run` agora cria uma
+    sessão RAII Rust por fase (`load_profile` e materialização), reutiliza um
+    handle local para todos os caminhos, registra checks/rejeições/duração e
+    distingue entrada lexical inválida de falha interna. Perfil ou
+    materialização lexicalmente inválidos preservam o fallback genérico; falha
+    interna do adaptador impede o convidado e retorna `70`, sem fallback
+    silencioso. O trace emite `path-validation` no componente `runtime` e,
+    para a materialização Proton, no componente `proton`; `TL_BUILD_RUST=OFF`
+    mantém o caminho C++ sem esses eventos.
+
+    `integration_rust_operational` passou em Debug e Sanitize Rust e no mesmo
+    cenário Debug sem Rust: duas execuções catalogadas de
+    `tl_compat_file.exe`, perfil inválido de `tl_hello.exe`, timeout `72` de
+    `tl_hang.exe` com limpeza e fonte preservada, e `tl_proton_probe.exe` com
+    mock Proton, stdout/stderr, exit code, prefixos, destino temporário e
+    invisibilidade de `compat/` verificados. As regressões de perfil,
+    materialização, isolamento e Proton também passaram. Na validação original,
+    o runtime Release ainda não pôde ser relinkado por causa do warning
+    preexistente de `write_le_u32`; a B20.6 removeu o helper, tratou os retornos
+    de `write()` e corrigiu o salto cross-stack intencional para `_longjmp`. O
+    baseline local do cenário foi aproximadamente 1,42 s com Rust e 1,41 s sem
+    Rust; é medição informativa, não um limite de hardware. Nenhum parser,
+    loader, runtime Win32 ou componente de produção foi migrado.
+  - [x] **B20.6 — Promoção por evidência.** A adoção seletiva foi promovida
+    somente para a validação lexical de caminhos integrada ao `app run`.
+    Debug Rust e Release Rust passaram na suíte completa, sem os cinco testes
+    opcionais de Proton real: 0 falhas entre 668 testes em cada perfil (os
+    quatro testes ambientais aplicáveis foram `skipped`). O gate específico B20
+    (probe, Cargo, Clippy, paths, integração operacional, regressão de imports
+    e `tl_missing_dll`) passou 7/7 em Debug, Sanitize e Release. O piloto real
+    opcional do Proton passou 5/5 em Debug com a instalação configurada. O
+    baseline C++ isolado com `TL_BUILD_RUST=OFF` passou sem falhas entre 659
+    testes, sem staticlib nem eventos Rust. A suíte completa Sanitize foi
+    executada; dez falhas
+    históricas ou ambientais fora deste gate permanecem reproduzíveis
+    (ASan/UBSan em helpers e fixtures, `RLIMIT_AS`, imagens sem relocations e
+    Xvfb/LSan) e não foram atribuídas à B20. Nenhuma falha nova apareceu no
+    escopo promovido. A divergência de `tl_missing_dll` foi reconciliada para
+    distinguir `unknown-symbol` de `unknown-dll`, e o bloqueio histórico de
+    Release foi removido. Rust continua opt-in, Cargo/toolchain ficam fora do
+    build padrão, e nenhum parser, loader, API Win32 ou componente de produção
+    foi migrado. A matriz e a documentação foram atualizadas; o worktree foi
+    limpo após o commit desta etapa.
+
+### Itens das listas antigas já absorvidos
+
+O isolamento em processo filho, o crash log com endereço/RVA/seção quando
+possível, o timeout, os forwarders, TLS genérico, o parser MSIX, a divisão da
+suíte Win32, a centralização de helpers e a auditoria de stubs já possuem
+implementação e evidência no repositório. A entrada/localização básica por
+caminho também já existe em `<app.exe>`, `app add`, `install --app-exe` e no
+launcher; isso corresponde ao item `B3`. Eles não devem ser reabertos por causa
+das versões históricas dos documentos auxiliares.
+
+As restrições de PE32/x86, ARM, WOW64, .NET/Mono, drivers, anticheat e serviços
+Windows continuam limites de escopo, não tarefas abertas. DirectX e áudio
+continuam fora do runtime próprio; a B14.6 avalia esses recursos somente pelo
+backend Proton opcional e por aplicativo-alvo, sem transformar a avaliação em
+promessa de suporte geral.
+
+## Definição de pronto
+
+Uma tarefa do roadmap só é considerada pronta quando:
+
+- o código foi compilado com as configurações suportadas;
+- existe um teste automatizado ou uma justificativa documentada para teste manual;
+- falhas são observáveis pelo trace ou por uma mensagem de erro útil;
+- a documentação da API ou limitação foi atualizada;
+- o comportamento não quebra os fixtures já suportados.

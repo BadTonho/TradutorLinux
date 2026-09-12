@@ -130,7 +130,7 @@ Ordem de trabalho:
 10. [x] **Fase 13.10 — identidade e DACL virtual por prefixo**, comprovada
     por `tl_security.exe`. Controles GUI e, em subfases independentes,
     automação, HTTP e confiança seguem na ordem e com os critérios registrados
-    em `feitos/ROADMAP.md`.
+    no novo roadmap.
 11. [x] **B8 — instalação de pacote MSIX/AppX nativo**, comprovada por
     `native-fixture.msix`: manifesto, extração segura, seleção PE32+ x86-64,
     cadastro e execução no prefixo. Pacotes .NET/Mono e bundles permanecem

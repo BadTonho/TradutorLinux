@@ -91,7 +91,7 @@ O resultado deve imprimir a saída esperada, retornar o código correto e gerar 
 
 Esses limites descrevem o estágio atual, não o limite definitivo do produto. A expansão para novas classes exige uma fase ou aplicativo-alvo explícito, contratos técnicos, testes de integração e atualização da matriz de compatibilidade.
 
-O plano de execução, dividido em fases, marcos e entregas verificáveis, está em [ROADMAP.md](feitos/ROADMAP.md).
+O plano de execução legado, dividido em fases, marcos e entregas verificáveis, está em [ROADMAP-LEGADO.md](feitos/ROADMAP-LEGADO.md). Um novo roadmap será definido separadamente.
 
 ## 4. Arquitetura proposta
 
@@ -134,11 +134,9 @@ Cada marco deve ser reproduzível sem Windows. `mingw-w64` pode gerar os binári
 ```text
 TradutorLinux/
 ├── PROJETO.md
-├── ROADMAP-APLICATIVOS.md
 ├── feitos/
-│   ├── PROXIMAS-ETAPAS.md
-│   ├── ROADMAP.md
-│   └── ROADMAP-RUST.md
+│   ├── ROADMAP-LEGADO.md
+│   └── PROXIMAS-ETAPAS.md
 ├── README.md
 ├── CMakeLists.txt
 ├── CMakePresets.json

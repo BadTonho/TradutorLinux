@@ -151,7 +151,7 @@ As fases abaixo registram somente o histórico da migração. As fases 1–7 for
 aplicadas conforme a estrutura atual do projeto e não são instruções para mover
 novamente os mesmos arquivos. Qualquer manutenção futura, inclusive uma nova
 subdivisão motivada por um alvo concreto, deve ser registrada no
-[backlog consolidado do `feitos/ROADMAP.md`](../feitos/ROADMAP.md#backlog-consolidado).
+[backlog consolidado legado](../feitos/ROADMAP-LEGADO.md#backlog-consolidado).
 
 * **Fase 1 — Agrupamento de DLLs Independentes (concluída)**:
   - Mover `ws2_32.cpp`, `wininet.cpp`, `iphlpapi.cpp`, `mpr.cpp` $\to$ `src/runtime/dlls/net/`.

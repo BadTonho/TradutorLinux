@@ -3,7 +3,7 @@
 Data: 2026-09-07
 
 Este documento registra a triagem C1 da matriz em
-`ROADMAP-APLICATIVOS.md`. Os resultados foram obtidos com Rust ON
+`feitos/ROADMAP-LEGADO.md`, na seção legada de aplicativos. Os resultados foram obtidos com Rust ON
 (`build/debug-rust`) e C++ OFF (`build/debug`), usando os arquivos temporários
 `/tmp/tl-matrix-b1`, `/tmp/tl-matrix-b2` e `/tmp/tl-matrix-b3`.
 

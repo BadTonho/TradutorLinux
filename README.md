@@ -11,7 +11,7 @@ foi concluída para as fixtures reutilizáveis; o caso comercial do Roblox
 continua como benchmark com execução não concluída. O ciclo de reconciliação,
 portfólio, limites de recursos, instalação MSIX/AppX, validação X11 e
 expectativas de fixtures (`B1`, `B4`, `B5`, `B7`, `B8`, `B10`, `B12`, `B15` e
-`B16` em `feitos/ROADMAP.md`) já têm entregas validadas. As próximas etapas são
+`B16` no roadmap legado já têm entregas validadas. As próximas etapas são
 condicionadas: B2 exige decisão de produto, B6 exige a amostra comercial
 Worker/RSL, B9 exige evidência adicional de unwind e B11, B13, B14 e B17–B19
 exigem alvo ou benefício medido. Parser,
@@ -20,7 +20,7 @@ cobertura, instaladores em prefixos e GUI Win32 experimental já têm entregas
 validadas. O suporte continua restrito às aplicações, APIs e limitações
 publicadas na matriz de compatibilidade.
 
-Consulte [PROJETO.md](PROJETO.md) para visão e arquitetura e [ROADMAP.md](feitos/ROADMAP.md) para os marcos.
+Consulte [PROJETO.md](PROJETO.md) para visão e arquitetura e o [roadmap legado](feitos/ROADMAP-LEGADO.md) para o histórico dos marcos.
 
 Para testar visualmente as aplicações GUI em uma sessão X11 real, consulte o
 [guia de teste visual](docs/guia-visual.md). O smoke test automático usa
