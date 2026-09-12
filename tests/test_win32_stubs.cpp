@@ -301,6 +301,30 @@ TEST(Win32StubTest, DwmStubsRejectFakeCompositionAndClearOutputs) {
     EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
 }
 
+TEST(Win32StubTest, UxThemeStubsRejectFakeHandlesAndClearOutputs) {
+    constexpr std::int32_t kENotImpl = static_cast<std::int32_t>(0x80004001U);
+    EXPECT_EQ(tl_SetWindowTheme(nullptr, nullptr, nullptr), kENotImpl);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorNotSupported);
+    EXPECT_EQ(tl_OpenThemeData(nullptr, nullptr), nullptr);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorNotSupported);
+    EXPECT_EQ(tl_CloseThemeData(nullptr), kENotImpl);
+    EXPECT_EQ(tl_IsThemeActive(), 0);
+    EXPECT_EQ(tl_IsAppThemed(), 0);
+
+    std::uint32_t color = 0xFFFFFFFFU;
+    EXPECT_EQ(tl_GetThemeColor(nullptr, 0, 0, 0, &color), kENotImpl);
+    EXPECT_EQ(color, 0U);
+    int metric = 123;
+    EXPECT_EQ(tl_GetThemeMetric(nullptr, nullptr, 0, 0, 0, &metric), kENotImpl);
+    EXPECT_EQ(metric, 0);
+
+    void* hdc_out = reinterpret_cast<void*>(0x1U);
+    EXPECT_EQ(tl_BeginBufferedPaint(nullptr, nullptr, 0, nullptr, &hdc_out), nullptr);
+    EXPECT_EQ(hdc_out, nullptr);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorNotSupported);
+    EXPECT_EQ(tl_BufferedPaintRenderAnimation(nullptr, nullptr), 0);
+}
+
 TEST(Win32StubTest, UnsupportedApisEmitTraceWithMechanismAndDetail) {
     const std::filesystem::path directory =
         std::filesystem::temp_directory_path() /

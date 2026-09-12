@@ -3,9 +3,26 @@
 #include "tradutorlinux/loader/builtin_modules.hpp"
 #include "runtime_context.hpp"
 
-#include <string>
+#include <cstring>
 
 namespace tradutorlinux {
+
+namespace {
+
+constexpr std::int32_t kThemeENotImpl = static_cast<std::int32_t>(0x80004001U);
+constexpr std::int32_t kThemeEInvalidArg = static_cast<std::int32_t>(0x80070057U);
+
+std::int32_t reject_theme() noexcept {
+    set_last_error(abi::kErrorNotSupported);
+    return kThemeENotImpl;
+}
+
+void* reject_theme_handle() noexcept {
+    set_last_error(abi::kErrorNotSupported);
+    return nullptr;
+}
+
+}  // namespace
 
 extern "C" {
 
@@ -21,19 +38,21 @@ TL_MSABI int tl_SetWindowTheme(void* hwnd, const std::uint16_t* subAppName, cons
         set_last_error(abi::kErrorInvalidParameter);
         return static_cast<int>(0x80070057);
     }
-    set_last_error(abi::kErrorSuccess);
-    return 0; // S_OK
+    return reject_theme();
 }
 
 TL_MSABI void* tl_OpenThemeData(void* const hwnd, const std::uint16_t* const class_list) noexcept {
     (void)hwnd;
-    (void)class_list;
-    return reinterpret_cast<void*>(0x5448454DULL); // 'THEM'
+    if (class_list != nullptr && !mapped_guest_wstring(class_list)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return nullptr;
+    }
+    return reject_theme_handle();
 }
 
 TL_MSABI std::int32_t tl_CloseThemeData(void* const theme) noexcept {
     (void)theme;
-    return 0; // S_OK
+    return reject_theme();
 }
 
 TL_MSABI std::int32_t tl_DrawThemeBackground(void* const theme, void* const hdc, const int part_id,
@@ -44,7 +63,7 @@ TL_MSABI std::int32_t tl_DrawThemeBackground(void* const theme, void* const hdc,
     (void)state_id;
     (void)rect;
     (void)clip_rect;
-    return 0; // S_OK
+    return reject_theme();
 }
 
 TL_MSABI std::int32_t tl_DrawThemeText(void* const theme, void* const hdc, const int part_id, const int state_id,
@@ -60,7 +79,7 @@ TL_MSABI std::int32_t tl_DrawThemeText(void* const theme, void* const hdc, const
     (void)text_flags;
     (void)text_flags2;
     (void)rect;
-    return 0; // S_OK
+    return reject_theme();
 }
 
 TL_MSABI std::int32_t tl_DrawThemeTextEx(void* const theme, void* const hdc, const int part_id, const int state_id,
@@ -75,7 +94,7 @@ TL_MSABI std::int32_t tl_DrawThemeTextEx(void* const theme, void* const hdc, con
     (void)text_flags;
     (void)rect;
     (void)options;
-    return 0; // S_OK
+    return reject_theme();
 }
 
 TL_MSABI std::int32_t tl_GetThemeColor(void* const theme, const int part_id, const int state_id,
@@ -84,10 +103,12 @@ TL_MSABI std::int32_t tl_GetThemeColor(void* const theme, const int part_id, con
     (void)part_id;
     (void)state_id;
     (void)prop_id;
-    if (color != nullptr && mapped_guest_range(color, sizeof(std::uint32_t), true)) {
-        *color = 0x00FFFFFF; // White / default
+    if (color == nullptr || !mapped_guest_range(color, sizeof(std::uint32_t), true)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return kThemeEInvalidArg;
     }
-    return 0; // S_OK
+    *color = 0;
+    return reject_theme();
 }
 
 TL_MSABI std::int32_t tl_GetThemeFont(void* const theme, void* const hdc, const int part_id,
@@ -97,10 +118,12 @@ TL_MSABI std::int32_t tl_GetThemeFont(void* const theme, void* const hdc, const 
     (void)part_id;
     (void)state_id;
     (void)prop_id;
-    if (font != nullptr && mapped_guest_range(font, 92, true)) { // LOGFONTW size
-        std::memset(font, 0, 92);
+    if (font == nullptr || !mapped_guest_range(font, 92, true)) { // LOGFONTW size
+        set_last_error(abi::kErrorInvalidParameter);
+        return kThemeEInvalidArg;
     }
-    return 0; // S_OK
+    std::memset(font, 0, 92);
+    return reject_theme();
 }
 
 TL_MSABI std::int32_t tl_GetThemeMetric(void* const theme, void* const hdc, const int part_id,
@@ -110,10 +133,12 @@ TL_MSABI std::int32_t tl_GetThemeMetric(void* const theme, void* const hdc, cons
     (void)part_id;
     (void)state_id;
     (void)prop_id;
-    if (val != nullptr && mapped_guest_range(val, sizeof(int), true)) {
-        *val = 0;
+    if (val == nullptr || !mapped_guest_range(val, sizeof(int), true)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return kThemeEInvalidArg;
     }
-    return 0; // S_OK
+    *val = 0;
+    return reject_theme();
 }
 
 TL_MSABI std::int32_t tl_GetThemePartSize(void* const theme, void* const hdc, const int part_id,
@@ -125,46 +150,51 @@ TL_MSABI std::int32_t tl_GetThemePartSize(void* const theme, void* const hdc, co
     (void)state_id;
     (void)rect;
     (void)type;
-    if (size != nullptr && mapped_guest_range(size, 8, true)) { // SIZE struct
-        *reinterpret_cast<std::int32_t*>(static_cast<char*>(size) + 0) = 16;
-        *reinterpret_cast<std::int32_t*>(static_cast<char*>(size) + 4) = 16;
+    if (size == nullptr || !mapped_guest_range(size, 8, true)) { // SIZE struct
+        set_last_error(abi::kErrorInvalidParameter);
+        return kThemeEInvalidArg;
     }
-    return 0; // S_OK
+    std::memset(size, 0, 8);
+    return reject_theme();
 }
 
 TL_MSABI std::uint32_t tl_GetThemeSysColor(void* const theme, const int color_id) noexcept {
     (void)theme;
     (void)color_id;
-    return 0x00FFFFFF;
+    set_last_error(abi::kErrorNotSupported);
+    return 0;
 }
 
 TL_MSABI void* tl_GetThemeSysColorBrush(void* const theme, const int color_id) noexcept {
     (void)theme;
     (void)color_id;
-    return reinterpret_cast<void*>(0x42525348ULL); // 'BRSH'
+    return reject_theme_handle();
 }
 
 TL_MSABI int tl_IsThemeActive() noexcept {
-    return 1;
+    set_last_error(abi::kErrorNotSupported);
+    return 0;
 }
 
 TL_MSABI int tl_IsAppThemed() noexcept {
-    return 1;
+    set_last_error(abi::kErrorNotSupported);
+    return 0;
 }
 
 TL_MSABI int tl_IsThemeBackgroundPartiallyTransparent(void* const theme, const int part_id, const int state_id) noexcept {
     (void)theme;
     (void)part_id;
     (void)state_id;
+    set_last_error(abi::kErrorNotSupported);
     return 0;
 }
 
 TL_MSABI std::int32_t tl_BufferedPaintInit() noexcept {
-    return 0; // S_OK
+    return reject_theme();
 }
 
 TL_MSABI std::int32_t tl_BufferedPaintUnInit() noexcept {
-    return 0; // S_OK
+    return reject_theme();
 }
 
 TL_MSABI void* tl_BeginBufferedPaint(void* const hdc_target, const void* const target_rect, const int format,
@@ -172,29 +202,34 @@ TL_MSABI void* tl_BeginBufferedPaint(void* const hdc_target, const void* const t
     (void)target_rect;
     (void)format;
     (void)animation_params;
-    if (hdc_out != nullptr && mapped_guest_range(hdc_out, sizeof(void*), true)) {
-        *hdc_out = hdc_target;
+    (void)hdc_target;
+    if (hdc_out != nullptr) {
+        if (!mapped_guest_range(hdc_out, sizeof(void*), true)) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return nullptr;
+        }
+        *hdc_out = nullptr;
     }
-    return reinterpret_cast<void*>(0x42504E54ULL); // 'BPNT'
+    return reject_theme_handle();
 }
 
 TL_MSABI std::int32_t tl_EndBufferedPaint(void* const buffered_paint, const int update_target) noexcept {
     (void)buffered_paint;
     (void)update_target;
-    return 0; // S_OK
+    return reject_theme();
 }
 
 TL_MSABI std::int32_t tl_DrawThemeParentBackground(void* const hwnd, void* const hdc, const void* const rect) noexcept {
     (void)hwnd;
     (void)hdc;
     (void)rect;
-    return 0; // S_OK
+    return reject_theme();
 }
 
 TL_MSABI int tl_EndBufferedAnimation(void* const hbpAnimation, const int fUpdateTarget) noexcept {
     (void)hbpAnimation;
     (void)fUpdateTarget;
-    return 0; // S_OK
+    return reject_theme();
 }
 
 TL_MSABI int tl_GetThemeTransitionDuration(void* const hTheme, const int iPartId, const int iStateIdFrom, const int iStateIdTo, const int iPropId, int* const pdwDuration) noexcept {
@@ -203,10 +238,12 @@ TL_MSABI int tl_GetThemeTransitionDuration(void* const hTheme, const int iPartId
     (void)iStateIdFrom;
     (void)iStateIdTo;
     (void)iPropId;
-    if (pdwDuration != nullptr && mapped_guest_range(pdwDuration, sizeof(int), true)) {
-        *pdwDuration = 0;
+    if (pdwDuration == nullptr || !mapped_guest_range(pdwDuration, sizeof(int), true)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return kThemeEInvalidArg;
     }
-    return 0; // S_OK
+    *pdwDuration = 0;
+    return reject_theme();
 }
 
 TL_MSABI int tl_GetThemeBackgroundContentRect(void* const hTheme, void* const hdc, const int iPartId, const int iStateId, const void* const pBoundingRect, void* const pContentRect) noexcept {
@@ -214,21 +251,24 @@ TL_MSABI int tl_GetThemeBackgroundContentRect(void* const hTheme, void* const hd
     (void)hdc;
     (void)iPartId;
     (void)iStateId;
-    if (pBoundingRect != nullptr && pContentRect != nullptr &&
-        mapped_guest_range(pBoundingRect, 16, false) && mapped_guest_range(pContentRect, 16, true)) {
-        std::memcpy(pContentRect, pBoundingRect, 16);
+    (void)pBoundingRect;
+    if (pContentRect == nullptr || !mapped_guest_range(pContentRect, 16, true)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return kThemeEInvalidArg;
     }
-    return 0; // S_OK
+    std::memset(pContentRect, 0, 16);
+    return reject_theme();
 }
 
 TL_MSABI int tl_EnableThemeDialogTexture(void* const hwnd, const std::uint32_t dwFlags) noexcept {
     (void)hwnd;
     (void)dwFlags;
-    return 0; // S_OK
+    return reject_theme();
 }
 
 TL_MSABI void tl_BufferedPaintStopAllAnimations(void* const hwnd) noexcept {
     (void)hwnd;
+    set_last_error(abi::kErrorNotSupported);
 }
 
 TL_MSABI void* tl_BeginBufferedAnimation(void* const hwnd, void* const hdcTarget, const void* const rcTarget, const int dwFormat, void* const pPaintParams, void* const pAnimationParams, void** const phdcFrom, void** const phdcTo) noexcept {
@@ -237,19 +277,29 @@ TL_MSABI void* tl_BeginBufferedAnimation(void* const hwnd, void* const hdcTarget
     (void)dwFormat;
     (void)pPaintParams;
     (void)pAnimationParams;
-    if (phdcFrom != nullptr && mapped_guest_range(phdcFrom, sizeof(void*), true)) {
-        *phdcFrom = hdcTarget;
+    (void)hdcTarget;
+    if (phdcFrom != nullptr) {
+        if (!mapped_guest_range(phdcFrom, sizeof(void*), true)) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return nullptr;
+        }
+        *phdcFrom = nullptr;
     }
-    if (phdcTo != nullptr && mapped_guest_range(phdcTo, sizeof(void*), true)) {
-        *phdcTo = hdcTarget;
+    if (phdcTo != nullptr) {
+        if (!mapped_guest_range(phdcTo, sizeof(void*), true)) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return nullptr;
+        }
+        *phdcTo = nullptr;
     }
-    return reinterpret_cast<void*>(0x414E494DULL); // 'ANIM'
+    return reject_theme_handle();
 }
 
 TL_MSABI int tl_BufferedPaintRenderAnimation(void* const hwnd, void* const hdcTarget) noexcept {
     (void)hwnd;
     (void)hdcTarget;
-    return 1;
+    set_last_error(abi::kErrorNotSupported);
+    return 0;
 }
 
 } // extern "C"
@@ -259,33 +309,33 @@ namespace tradutorlinux::loader {
 
 void register_uxtheme_module() {
     static const ExportedFunction kUxThemeExports[] = {
-        {"SetWindowTheme", 1, reinterpret_cast<std::uintptr_t>(&tl_SetWindowTheme)},
-        {"OpenThemeData", 2, reinterpret_cast<std::uintptr_t>(&tl_OpenThemeData)},
-        {"CloseThemeData", 3, reinterpret_cast<std::uintptr_t>(&tl_CloseThemeData)},
-        {"DrawThemeBackground", 4, reinterpret_cast<std::uintptr_t>(&tl_DrawThemeBackground)},
-        {"DrawThemeText", 5, reinterpret_cast<std::uintptr_t>(&tl_DrawThemeText)},
-        {"DrawThemeTextEx", 6, reinterpret_cast<std::uintptr_t>(&tl_DrawThemeTextEx)},
-        {"GetThemeColor", 7, reinterpret_cast<std::uintptr_t>(&tl_GetThemeColor)},
-        {"GetThemeFont", 8, reinterpret_cast<std::uintptr_t>(&tl_GetThemeFont)},
-        {"GetThemeMetric", 9, reinterpret_cast<std::uintptr_t>(&tl_GetThemeMetric)},
-        {"GetThemePartSize", 10, reinterpret_cast<std::uintptr_t>(&tl_GetThemePartSize)},
-        {"GetThemeSysColor", 11, reinterpret_cast<std::uintptr_t>(&tl_GetThemeSysColor)},
-        {"GetThemeSysColorBrush", 12, reinterpret_cast<std::uintptr_t>(&tl_GetThemeSysColorBrush)},
-        {"IsThemeActive", 13, reinterpret_cast<std::uintptr_t>(&tl_IsThemeActive)},
-        {"IsAppThemed", 14, reinterpret_cast<std::uintptr_t>(&tl_IsAppThemed)},
-        {"IsThemeBackgroundPartiallyTransparent", 15, reinterpret_cast<std::uintptr_t>(&tl_IsThemeBackgroundPartiallyTransparent)},
-        {"BufferedPaintInit", 16, reinterpret_cast<std::uintptr_t>(&tl_BufferedPaintInit)},
-        {"BufferedPaintUnInit", 17, reinterpret_cast<std::uintptr_t>(&tl_BufferedPaintUnInit)},
-        {"BeginBufferedPaint", 18, reinterpret_cast<std::uintptr_t>(&tl_BeginBufferedPaint)},
-        {"EndBufferedPaint", 19, reinterpret_cast<std::uintptr_t>(&tl_EndBufferedPaint)},
-        {"DrawThemeParentBackground", 20, reinterpret_cast<std::uintptr_t>(&tl_DrawThemeParentBackground)},
-        {"EndBufferedAnimation", 21, reinterpret_cast<std::uintptr_t>(&tl_EndBufferedAnimation)},
-        {"GetThemeTransitionDuration", 22, reinterpret_cast<std::uintptr_t>(&tl_GetThemeTransitionDuration)},
-        {"GetThemeBackgroundContentRect", 23, reinterpret_cast<std::uintptr_t>(&tl_GetThemeBackgroundContentRect)},
-        {"EnableThemeDialogTexture", 24, reinterpret_cast<std::uintptr_t>(&tl_EnableThemeDialogTexture)},
-        {"BufferedPaintStopAllAnimations", 25, reinterpret_cast<std::uintptr_t>(&tl_BufferedPaintStopAllAnimations)},
-        {"BeginBufferedAnimation", 26, reinterpret_cast<std::uintptr_t>(&tl_BeginBufferedAnimation)},
-        {"BufferedPaintRenderAnimation", 27, reinterpret_cast<std::uintptr_t>(&tl_BufferedPaintRenderAnimation)},
+        {"SetWindowTheme", 1, reinterpret_cast<std::uintptr_t>(&tl_SetWindowTheme), ExportSupport::Stub},
+        {"OpenThemeData", 2, reinterpret_cast<std::uintptr_t>(&tl_OpenThemeData), ExportSupport::Stub},
+        {"CloseThemeData", 3, reinterpret_cast<std::uintptr_t>(&tl_CloseThemeData), ExportSupport::Stub},
+        {"DrawThemeBackground", 4, reinterpret_cast<std::uintptr_t>(&tl_DrawThemeBackground), ExportSupport::Stub},
+        {"DrawThemeText", 5, reinterpret_cast<std::uintptr_t>(&tl_DrawThemeText), ExportSupport::Stub},
+        {"DrawThemeTextEx", 6, reinterpret_cast<std::uintptr_t>(&tl_DrawThemeTextEx), ExportSupport::Stub},
+        {"GetThemeColor", 7, reinterpret_cast<std::uintptr_t>(&tl_GetThemeColor), ExportSupport::Stub},
+        {"GetThemeFont", 8, reinterpret_cast<std::uintptr_t>(&tl_GetThemeFont), ExportSupport::Stub},
+        {"GetThemeMetric", 9, reinterpret_cast<std::uintptr_t>(&tl_GetThemeMetric), ExportSupport::Stub},
+        {"GetThemePartSize", 10, reinterpret_cast<std::uintptr_t>(&tl_GetThemePartSize), ExportSupport::Stub},
+        {"GetThemeSysColor", 11, reinterpret_cast<std::uintptr_t>(&tl_GetThemeSysColor), ExportSupport::Stub},
+        {"GetThemeSysColorBrush", 12, reinterpret_cast<std::uintptr_t>(&tl_GetThemeSysColorBrush), ExportSupport::Stub},
+        {"IsThemeActive", 13, reinterpret_cast<std::uintptr_t>(&tl_IsThemeActive), ExportSupport::Stub},
+        {"IsAppThemed", 14, reinterpret_cast<std::uintptr_t>(&tl_IsAppThemed), ExportSupport::Stub},
+        {"IsThemeBackgroundPartiallyTransparent", 15, reinterpret_cast<std::uintptr_t>(&tl_IsThemeBackgroundPartiallyTransparent), ExportSupport::Stub},
+        {"BufferedPaintInit", 16, reinterpret_cast<std::uintptr_t>(&tl_BufferedPaintInit), ExportSupport::Stub},
+        {"BufferedPaintUnInit", 17, reinterpret_cast<std::uintptr_t>(&tl_BufferedPaintUnInit), ExportSupport::Stub},
+        {"BeginBufferedPaint", 18, reinterpret_cast<std::uintptr_t>(&tl_BeginBufferedPaint), ExportSupport::Stub},
+        {"EndBufferedPaint", 19, reinterpret_cast<std::uintptr_t>(&tl_EndBufferedPaint), ExportSupport::Stub},
+        {"DrawThemeParentBackground", 20, reinterpret_cast<std::uintptr_t>(&tl_DrawThemeParentBackground), ExportSupport::Stub},
+        {"EndBufferedAnimation", 21, reinterpret_cast<std::uintptr_t>(&tl_EndBufferedAnimation), ExportSupport::Stub},
+        {"GetThemeTransitionDuration", 22, reinterpret_cast<std::uintptr_t>(&tl_GetThemeTransitionDuration), ExportSupport::Stub},
+        {"GetThemeBackgroundContentRect", 23, reinterpret_cast<std::uintptr_t>(&tl_GetThemeBackgroundContentRect), ExportSupport::Stub},
+        {"EnableThemeDialogTexture", 24, reinterpret_cast<std::uintptr_t>(&tl_EnableThemeDialogTexture), ExportSupport::Stub},
+        {"BufferedPaintStopAllAnimations", 25, reinterpret_cast<std::uintptr_t>(&tl_BufferedPaintStopAllAnimations), ExportSupport::Stub},
+        {"BeginBufferedAnimation", 26, reinterpret_cast<std::uintptr_t>(&tl_BeginBufferedAnimation), ExportSupport::Stub},
+        {"BufferedPaintRenderAnimation", 27, reinterpret_cast<std::uintptr_t>(&tl_BufferedPaintRenderAnimation), ExportSupport::Stub},
     };
     static const InternalModule kUxThemeModule{"UxTheme.dll", kUxThemeExports};
     register_module(kUxThemeModule);

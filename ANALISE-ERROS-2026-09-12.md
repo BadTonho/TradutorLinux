@@ -95,6 +95,12 @@ sem executar a operação.
   `DwmDefWindowProc` continua `Limited` porque “não tratado” é seu resultado
   booleano legítimo. `Win32StubTest.DwmStubsRejectFakeCompositionAndClearOutputs`
   protege o contrato.
+- **Corrigido nesta etapa:** `UxTheme.dll` não fabrica mais handles de tema,
+  brushes ou buffered-paints nem retorna `S_OK` para desenho sem backend. As
+  exports estão classificadas como `Stub`, retornam `E_NOTIMPL`, limpam saídas
+  válidas e marcam entradas inválidas com `E_INVALIDARG`; a fixture `tl_gdiex`
+  e `Win32StubTest.UxThemeStubsRejectFakeHandlesAndClearOutputs` protegem o
+  contrato.
 - **Alta prioridade:** módulos que falham sem atualizar `GetLastError` precisam
   de testes de erro. `IMM32`, `DWMAPI`, `WINMM`, `COMDLG32` e `version` não
   podem deixar o erro anterior do convidado parecer a causa atual.

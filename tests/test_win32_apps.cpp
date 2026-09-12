@@ -477,13 +477,15 @@ TEST(NotepadPlusPlusCoverageTest, AllApisAndModules) {
 
     // UxTheme
     void* theme = tl_OpenThemeData(nullptr, nullptr);
-    EXPECT_NE(theme, nullptr);
-    EXPECT_EQ(tl_IsThemeActive(), 1);
-    EXPECT_EQ(tl_IsAppThemed(), 1);
-    EXPECT_EQ(tl_DrawThemeBackground(theme, nullptr, 0, 0, nullptr, nullptr), 0);
-    EXPECT_EQ(tl_CloseThemeData(theme), 0);
-    EXPECT_EQ(tl_BufferedPaintInit(), 0);
-    EXPECT_EQ(tl_BufferedPaintUnInit(), 0);
+    EXPECT_EQ(theme, nullptr);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorNotSupported);
+    EXPECT_EQ(tl_IsThemeActive(), 0);
+    EXPECT_EQ(tl_IsAppThemed(), 0);
+    EXPECT_EQ(tl_DrawThemeBackground(nullptr, nullptr, 0, 0, nullptr, nullptr),
+              static_cast<int>(0x80004001U));
+    EXPECT_EQ(tl_CloseThemeData(nullptr), static_cast<int>(0x80004001U));
+    EXPECT_EQ(tl_BufferedPaintInit(), static_cast<int>(0x80004001U));
+    EXPECT_EQ(tl_BufferedPaintUnInit(), static_cast<int>(0x80004001U));
 
     // COMCTL32
     int btn = 0;

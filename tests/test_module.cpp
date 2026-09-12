@@ -254,6 +254,10 @@ TEST_F(ModuleTest, RegistersBuiltinKernel32Exports) {
               ExportSupport::Stub);
     EXPECT_EQ(find_export(ExportQuery{"DWMAPI.dll", "DwmDefWindowProc"}).support,
               ExportSupport::Limited);
+    EXPECT_EQ(find_export(ExportQuery{"UxTheme.dll", "OpenThemeData"}).support,
+              ExportSupport::Stub);
+    EXPECT_EQ(find_export(ExportQuery{"UxTheme.dll", "BeginBufferedPaint"}).support,
+              ExportSupport::Stub);
     EXPECT_EQ(find_export(ExportQuery{"KERNEL32.dll", "TlsGetValue"}).address,
               reinterpret_cast<std::uintptr_t>(&tl_TlsGetValue));
     EXPECT_EQ(find_export(ExportQuery{"KERNEL32.dll", "RtlCaptureContext"}).address,

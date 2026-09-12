@@ -72,8 +72,8 @@ void tl_entry(void) {
 
     // UxTheme
     const word_t kExplorer[] = {'E','x','p','l','o','r','e','r',0};
-    if (SetWindowTheme((void*)0, kExplorer, (word_t*)0) != 0) ExitProcess(30U);
-    if (SetWindowTheme((void*)0, (word_t*)0, (word_t*)0) != 0) ExitProcess(31U);
+    if (SetWindowTheme((void*)0, kExplorer, (word_t*)0) != (int)0x80004001U) ExitProcess(30U);
+    if (SetWindowTheme((void*)0, (word_t*)0, (word_t*)0) != (int)0x80004001U) ExitProcess(31U);
 
     // WINMM
     dword_t tid = timeSetEvent(10, 0, (void*)0, 0, 0);

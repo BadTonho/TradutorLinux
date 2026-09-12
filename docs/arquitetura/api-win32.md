@@ -466,8 +466,9 @@ callbacks multimídia nem acessam áudio do host.
 (`DBGHELP.dll`), `ImmGetContext`/`ImmReleaseContext` e as demais APIs
 `IMM32.dll`, além de `SetWindowTheme`, `OpenThemeData`, `CloseThemeData` e
 funções `UxTheme`, são contratos de importação controlada. `IMM32` não cria
-contextos host nem processa composição; não constitui um IME completo. Essas
-APIs também não constituem GDI+, tema visual ou depuração completos.
+contextos host nem processa composição; `UxTheme` não cria temas, brushes ou
+buffered-paints. Essas APIs não constituem IME, GDI+, tema visual ou depuração
+completos.
 
 ### Módulos de portfólio
 

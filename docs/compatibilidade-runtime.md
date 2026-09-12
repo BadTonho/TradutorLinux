@@ -381,7 +381,7 @@ do host como argumentos.
 | `GDI32.dll` | `CreateFontW` | Suportado | Wrapper `wide_to_utf8` → `CreateFontA`; valida `face_name` wide, token estático |
 | `GDI32.dll` | `SetDCBrushColor` / `SetDCPenColor` | Suportado | Stub retorna `0`, `ERROR_SUCCESS` |
 | `gdiplus.dll` | `GdiplusStartup` / `GdiplusShutdown` / `GdipAlloc` / `GdipFree` / `GdipCreateBitmapFromStream` / `GdipCloneImage` / `GdipDisposeImage` / `GdipCreateHBITMAPFromBitmap` | Não suportado controlado | As oito exports são `ExportSupport::Stub`: não inicializam GDI+, não alocam memória nem fabricam imagens/HBITMAPs; saídas válidas são zeradas e as operações retornam `GenericError` (`1`) com `ERROR_NOT_SUPPORTED` |
-| `UxTheme.dll` | `SetWindowTheme` | Suportado | Valida `hwnd` e wstrings, retorna `S_OK` (0) |
+| `UxTheme.dll` | `SetWindowTheme` / `OpenThemeData` / `CloseThemeData` / desenho, consultas e buffered paint | Não suportado controlado | As exports são `ExportSupport::Stub`: não criam tema, brush, HDC ou buffered-paint; retornam `E_NOTIMPL`, limpam saídas válidas e definem `ERROR_NOT_SUPPORTED`; entradas inválidas retornam `E_INVALIDARG` |
 | `WINMM.dll` | `timeSetEvent` | Suportado | Stub retorna `1` |
 | `dbghelp.dll` | `SymFromAddr` | Não suportado controlado | Valida o buffer opcional `symbol`, zera `displacement` quando válido e retorna `FALSE` + `ERROR_NOT_SUPPORTED`; resolução de símbolos não é fabricada |
 | `POWRPROF.dll` | `PowerGetActiveScheme` / `PowerSetActiveScheme` / `CallNtPowerInformation` | Suportado | `PowerGetActiveScheme` devolve GUID `Balanced` alocado por `LocalAlloc` e liberável por `LocalFree`; `PowerSetActiveScheme` `S_OK`, `CallNtPowerInformation` `memset` `0` |
