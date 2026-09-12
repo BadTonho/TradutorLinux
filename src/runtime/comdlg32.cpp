@@ -1,53 +1,30 @@
 #include "tradutorlinux/runtime/comdlg32.hpp"
 #include "tradutorlinux/loader/module.hpp"
 #include "tradutorlinux/loader/builtin_modules.hpp"
-
-#include <cstring>
-#include <string>
-
 #include "tradutorlinux/runtime/memory_validator.hpp"
-#include "tradutorlinux/util/unicode.hpp"
+#include "runtime_context.hpp"
 
 namespace tradutorlinux {
 
 namespace {
 
-struct GuestOpenFileNameA {
-    std::uint32_t struct_size;
-    void* owner;
-    void* instance;
-    const char* filter;
-    char* custom_filter;
-    std::uint32_t max_cust_filter;
-    std::uint32_t filter_index;
-    char* file;
-    std::uint32_t max_file;
-    char* file_title;
-    std::uint32_t max_file_title;
-    const char* initial_dir;
-    const char* title;
-    std::uint32_t flags;
-};
-
-struct GuestOpenFileNameW {
-    std::uint32_t struct_size;
-    void* owner;
-    void* instance;
-    const std::uint16_t* filter;
-    std::uint16_t* custom_filter;
-    std::uint32_t max_cust_filter;
-    std::uint32_t filter_index;
-    std::uint16_t* file;
-    std::uint32_t max_file;
-    std::uint16_t* file_title;
-    std::uint32_t max_file_title;
-    const std::uint16_t* initial_dir;
-    const std::uint16_t* title;
-    std::uint32_t flags;
-};
+constexpr std::uint32_t kCdErrDialogFailure = 0xFFFFU;
+constexpr std::uint32_t kCdErrStructSize = 0x0001U;
+thread_local std::uint32_t g_commdlg_extended_error = 0;
 
 inline bool mapped_range(const void* address, const std::size_t size, const bool writable) noexcept {
     return runtime::validate_mapped_range(address, size, writable);
+}
+
+int reject_common_dialog(void* dialog) noexcept {
+    if (dialog == nullptr || !mapped_range(dialog, sizeof(std::uint32_t), false)) {
+        g_commdlg_extended_error = kCdErrStructSize;
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    g_commdlg_extended_error = kCdErrDialogFailure;
+    set_last_error(abi::kErrorNotSupported);
+    return 0;
 }
 
 }  // namespace
@@ -55,35 +32,11 @@ inline bool mapped_range(const void* address, const std::size_t size, const bool
 extern "C" {
 
 TL_COMDLG_MSABI int tl_GetOpenFileNameA(void* open_filename) noexcept {
-    if (open_filename == nullptr || !mapped_range(open_filename, sizeof(GuestOpenFileNameA), true)) {
-        return 0;
-    }
-    auto* ofn = static_cast<GuestOpenFileNameA*>(open_filename);
-    if (ofn->file != nullptr && ofn->max_file > 0 && mapped_range(ofn->file, ofn->max_file, true)) {
-        if (ofn->file[0] == '\0') {
-            std::strncpy(ofn->file, "C:\\document.txt", ofn->max_file - 1);
-            ofn->file[ofn->max_file - 1] = '\0';
-        }
-        return 1;
-    }
-    return 0;
+    return reject_common_dialog(open_filename);
 }
 
 TL_COMDLG_MSABI int tl_GetOpenFileNameW(void* open_filename) noexcept {
-    if (open_filename == nullptr || !mapped_range(open_filename, sizeof(GuestOpenFileNameW), true)) {
-        return 0;
-    }
-    auto* ofn = static_cast<GuestOpenFileNameW*>(open_filename);
-    if (ofn->file != nullptr && ofn->max_file > 0 && mapped_range(ofn->file, ofn->max_file * sizeof(std::uint16_t), true)) {
-        if (ofn->file[0] == 0) {
-            const std::u16string u16 = util::utf8_to_wide("C:\\document.txt");
-            const std::size_t len = std::min<std::size_t>(u16.size(), ofn->max_file - 1);
-            std::copy(u16.begin(), u16.begin() + static_cast<std::ptrdiff_t>(len), ofn->file);
-            ofn->file[len] = 0;
-        }
-        return 1;
-    }
-    return 0;
+    return reject_common_dialog(open_filename);
 }
 
 TL_COMDLG_MSABI int tl_GetSaveFileNameA(void* open_filename) noexcept {
@@ -95,32 +48,27 @@ TL_COMDLG_MSABI int tl_GetSaveFileNameW(void* open_filename) noexcept {
 }
 
 TL_COMDLG_MSABI int tl_ChooseColorA(void* choose_color) noexcept {
-    (void)choose_color;
-    return 1;
+    return reject_common_dialog(choose_color);
 }
 
 TL_COMDLG_MSABI int tl_ChooseColorW(void* choose_color) noexcept {
-    (void)choose_color;
-    return 1;
+    return reject_common_dialog(choose_color);
 }
 
 TL_COMDLG_MSABI int tl_ChooseFontA(void* const choose_font) noexcept {
-    (void)choose_font;
-    return 1;
+    return reject_common_dialog(choose_font);
 }
 
 TL_COMDLG_MSABI int tl_ChooseFontW(void* const choose_font) noexcept {
-    (void)choose_font;
-    return 1;
+    return reject_common_dialog(choose_font);
 }
 
 TL_COMDLG_MSABI int tl_PrintDlgW(void* const print_dlg) noexcept {
-    (void)print_dlg;
-    return 1;
+    return reject_common_dialog(print_dlg);
 }
 
 TL_COMDLG_MSABI std::uint32_t tl_CommDlgExtendedError() noexcept {
-    return 0; // CDERR_GENERALCODES / No error
+    return g_commdlg_extended_error;
 }
 
 }  // extern "C"
@@ -130,16 +78,16 @@ namespace tradutorlinux::loader {
 
 void register_comdlg32_module() {
     static const ExportedFunction kComdlg32Exports[] = {
-        {"GetOpenFileNameA", 1, reinterpret_cast<std::uintptr_t>(&tl_GetOpenFileNameA)},
-        {"GetOpenFileNameW", 2, reinterpret_cast<std::uintptr_t>(&tl_GetOpenFileNameW)},
-        {"GetSaveFileNameA", 3, reinterpret_cast<std::uintptr_t>(&tl_GetSaveFileNameA)},
-        {"GetSaveFileNameW", 4, reinterpret_cast<std::uintptr_t>(&tl_GetSaveFileNameW)},
-        {"ChooseColorA", 5, reinterpret_cast<std::uintptr_t>(&tl_ChooseColorA)},
-        {"ChooseColorW", 6, reinterpret_cast<std::uintptr_t>(&tl_ChooseColorW)},
-        {"PrintDlgW", 7, reinterpret_cast<std::uintptr_t>(&tl_PrintDlgW)},
-        {"CommDlgExtendedError", 8, reinterpret_cast<std::uintptr_t>(&tl_CommDlgExtendedError)},
-        {"ChooseFontA", 9, reinterpret_cast<std::uintptr_t>(&tl_ChooseFontA)},
-        {"ChooseFontW", 10, reinterpret_cast<std::uintptr_t>(&tl_ChooseFontW)},
+        {"GetOpenFileNameA", 1, reinterpret_cast<std::uintptr_t>(&tl_GetOpenFileNameA), ExportSupport::Stub},
+        {"GetOpenFileNameW", 2, reinterpret_cast<std::uintptr_t>(&tl_GetOpenFileNameW), ExportSupport::Stub},
+        {"GetSaveFileNameA", 3, reinterpret_cast<std::uintptr_t>(&tl_GetSaveFileNameA), ExportSupport::Stub},
+        {"GetSaveFileNameW", 4, reinterpret_cast<std::uintptr_t>(&tl_GetSaveFileNameW), ExportSupport::Stub},
+        {"ChooseColorA", 5, reinterpret_cast<std::uintptr_t>(&tl_ChooseColorA), ExportSupport::Stub},
+        {"ChooseColorW", 6, reinterpret_cast<std::uintptr_t>(&tl_ChooseColorW), ExportSupport::Stub},
+        {"PrintDlgW", 7, reinterpret_cast<std::uintptr_t>(&tl_PrintDlgW), ExportSupport::Stub},
+        {"CommDlgExtendedError", 8, reinterpret_cast<std::uintptr_t>(&tl_CommDlgExtendedError), ExportSupport::Stub},
+        {"ChooseFontA", 9, reinterpret_cast<std::uintptr_t>(&tl_ChooseFontA), ExportSupport::Stub},
+        {"ChooseFontW", 10, reinterpret_cast<std::uintptr_t>(&tl_ChooseFontW), ExportSupport::Stub},
     };
     static const InternalModule kComdlg32Module{"COMDLG32.dll", kComdlg32Exports};
     register_module(kComdlg32Module);

@@ -159,6 +159,7 @@ diretamente. Ele é experimental, não altera o subsistema de console e só acei
 | `COMCTL32.dll` | `InitCommonControlsEx` | Suportado no layout de 8 bytes | Valida `cbSize`/classes; ordinais 410/413 continuam `unknown-ordinal` |
 | `COMCTL32.dll` | `CreateStatusWindowW` | Suportado no subconjunto | Parent válido; cria uma `msctls_statusbar32` lógica no rodapé, com texto UTF-16 convertido para UTF-8 e desenho na superfície X11 principal |
 | `COMCTL32.dll` | `CreateToolbarEx` | Suportado no subconjunto | Parent válido; valida até 128 entradas do vetor `TBBUTTON`, preserva `idCommand`, desenha botões lógicos, mostra o pressionamento, cancela soltura fora do botão e encaminha somente o clique capturado por `WM_COMMAND`; mensagens `TB_ADDBUTTONSA/W` e `TB_AUTOSIZE` também atualizam esse modelo; bitmaps, image lists e estilos avançados permanecem fora |
+| `COMDLG32.dll` | `GetOpenFileNameA/W` / `GetSaveFileNameA/W` / `ChooseColorA/W` / `ChooseFontA/W` / `PrintDlgW` / `CommDlgExtendedError` | Não suportado controlado | Não abre diálogos nem fabrica seleção; as funções de diálogo retornam `FALSE`, preservam as estruturas e definem `ERROR_NOT_SUPPORTED`/`CDERR_DIALOGFAILURE` quando o ponteiro é válido; ponteiro nulo retorna `ERROR_INVALID_PARAMETER`/`CDERR_STRUCTSIZE` |
 
 `tl_dialog.exe` valida o ciclo mínimo sob Xvfb quando o ambiente fornece o
 socket X11. O smoke confirma Tab/Enter, `WM_COMMAND`, retorno 42, saída

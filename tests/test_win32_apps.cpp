@@ -400,8 +400,10 @@ TEST(PuttyCoverageTest, AllApisAndModules) {
     EXPECT_EQ(tl_EnumClipboardFormats(0), 0U);
 
     // COMDLG32 & IMM32 & SHELL32
-    EXPECT_EQ(tl_ChooseFontA(nullptr), 1);
-    EXPECT_EQ(tl_ChooseFontW(nullptr), 1);
+    EXPECT_EQ(tl_ChooseFontA(nullptr), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_ChooseFontW(nullptr), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
     EXPECT_EQ(tl_ImmGetVirtualKey(nullptr), 0U);
     EXPECT_EQ(tl_ShellNotifyIconW(0, nullptr), 1);
 

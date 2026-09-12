@@ -1,6 +1,7 @@
 #include "test_win32_common.hpp"
 
 #include "tradutorlinux/diagnostics/trace.hpp"
+#include "tradutorlinux/runtime/comdlg32.hpp"
 #include "tradutorlinux/runtime/winmm.hpp"
 
 #include <algorithm>
@@ -180,6 +181,28 @@ TEST(Win32StubTest, GdiplusStubsRejectFakeObjectsAndClearOutputs) {
     EXPECT_EQ(tl_GetLastError(), abi::kErrorNotSupported);
     tl_GdiplusShutdown(nullptr);
     EXPECT_EQ(tl_GetLastError(), abi::kErrorNotSupported);
+}
+
+TEST(Win32StubTest, ComdlgStubsRejectFalseSuccessAndReportDialogFailure) {
+    constexpr std::uint32_t kCdErrDialogFailure = 0xFFFFU;
+    std::array<std::byte, 256> dialog{};
+
+    EXPECT_EQ(tl_GetOpenFileNameA(dialog.data()), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorNotSupported);
+    EXPECT_EQ(tl_CommDlgExtendedError(), kCdErrDialogFailure);
+    EXPECT_EQ(tl_GetOpenFileNameW(dialog.data()), 0);
+    EXPECT_EQ(tl_GetSaveFileNameA(dialog.data()), 0);
+    EXPECT_EQ(tl_GetSaveFileNameW(dialog.data()), 0);
+    EXPECT_EQ(tl_ChooseColorA(dialog.data()), 0);
+    EXPECT_EQ(tl_ChooseColorW(dialog.data()), 0);
+    EXPECT_EQ(tl_ChooseFontA(dialog.data()), 0);
+    EXPECT_EQ(tl_ChooseFontW(dialog.data()), 0);
+    EXPECT_EQ(tl_PrintDlgW(dialog.data()), 0);
+    EXPECT_EQ(tl_CommDlgExtendedError(), kCdErrDialogFailure);
+
+    EXPECT_EQ(tl_ChooseFontW(nullptr), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_CommDlgExtendedError(), 0x0001U);
 }
 
 TEST(Win32StubTest, UnsupportedApisEmitTraceWithMechanismAndDetail) {

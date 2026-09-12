@@ -238,6 +238,10 @@ TEST_F(ModuleTest, RegistersBuiltinKernel32Exports) {
               ExportSupport::Stub);
     EXPECT_EQ(find_export(ExportQuery{"gdiplus.dll", "GdipCreateBitmapFromStream"}).support,
               ExportSupport::Stub);
+    EXPECT_EQ(find_export(ExportQuery{"COMDLG32.dll", "ChooseFontW"}).support,
+              ExportSupport::Stub);
+    EXPECT_EQ(find_export(ExportQuery{"COMDLG32.dll", "GetOpenFileNameW"}).support,
+              ExportSupport::Stub);
     EXPECT_EQ(find_export(ExportQuery{"KERNEL32.dll", "TlsGetValue"}).address,
               reinterpret_cast<std::uintptr_t>(&tl_TlsGetValue));
     EXPECT_EQ(find_export(ExportQuery{"KERNEL32.dll", "RtlCaptureContext"}).address,

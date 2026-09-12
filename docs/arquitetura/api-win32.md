@@ -528,9 +528,10 @@ Além das operações BSTR, VARIANT e SAFEARRAY descritas acima, `OLEAUT32` exp�
 ownership validado; descritores não emitidos pelo runtime são rejeitados.
 
 `GetOpenFileNameA/W`, `GetSaveFileNameA/W`, `ChooseColorA/W`, `ChooseFontA/W`,
-`PrintDlgW` e `CommDlgExtendedError` (`COMDLG32.dll`) são stubs ou diálogos
-limitados. Não abrem seletor nativo nem permitem que um aplicativo escape do
-prefixo sem uma fixture que defina esse comportamento.
+`PrintDlgW` e `CommDlgExtendedError` (`COMDLG32.dll`) são stubs controlados.
+Não abrem seletor nativo, não retornam caminhos/seleções fictícios e não
+alteram as estruturas do convidado; falhas válidas retornam `FALSE`,
+`ERROR_NOT_SUPPORTED` e `CDERR_DIALOGFAILURE`.
 
 `InitCommonControls`, `InitCommonControlsEx`, `ImageList_Create`,
 `ImageList_Destroy`, `ImageList_Add`, `ImageList_AddMasked`,

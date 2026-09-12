@@ -68,6 +68,13 @@ sem executar a operação.
   estão classificadas como `Stub`, limpam saídas válidas e retornam
   `GenericError` com `ERROR_NOT_SUPPORTED`; `Win32StubTest.GdiplusStubsRejectFakeObjectsAndClearOutputs`
   e a fixture `tl_gdiex` protegem esse contrato.
+- **Corrigido nesta etapa:** `COMDLG32.dll` não fabrica mais `C:\\document.txt`
+  nem retorna sucesso para `ChooseColor`, `ChooseFont` ou `PrintDlg` sem uma
+  seleção real. As dez exports estão classificadas como `Stub`; diálogos
+  válidos retornam `FALSE`, `ERROR_NOT_SUPPORTED` e `CDERR_DIALOGFAILURE`,
+  enquanto ponteiros nulos retornam `ERROR_INVALID_PARAMETER` e
+  `CDERR_STRUCTSIZE`. `Win32StubTest.ComdlgStubsRejectFalseSuccessAndReportDialogFailure`
+  protege o contrato.
 - **Alta prioridade:** módulos que falham sem atualizar `GetLastError` precisam
   de testes de erro. `IMM32`, `DWMAPI`, `WINMM`, `COMDLG32` e `version` não
   podem deixar o erro anterior do convidado parecer a causa atual.
