@@ -43,6 +43,7 @@ public:
         bool files_seen = false;
         bool dlls_seen = false;
         bool backend_seen = false;
+        bool extension_seen = false;
 
         skip_whitespace();
         if (consume_raw('}')) return fail(error, "o perfil não pode ser vazio");
@@ -89,6 +90,12 @@ public:
                 }
                 backend_seen = true;
                 profile.backend_declared = true;
+            } else if (key == "extension") {
+                if (extension_seen || !parse_string(profile.extension)) {
+                    return fail(error, "campo extension inválido ou repetido");
+                }
+                extension_seen = true;
+                profile.extension_declared = true;
             } else {
                 return fail(error, "campo desconhecido: " + key);
             }
@@ -537,14 +544,21 @@ ProfileLoadResult load_profile(const std::filesystem::path& prefix_root,
     if (!JsonParser{contents}.parse(profile, parse_error)) {
         return invalid_result(parse_error);
     }
-    if (profile.schema != 1U && profile.schema != 2U && profile.schema != 3U) {
+    if (profile.schema != 1U && profile.schema != 2U && profile.schema != 3U &&
+        profile.schema != 4U) {
         return invalid_result("schema de perfil não suportado");
     }
     if (profile.schema == 1U && !profile.dlls.empty()) {
         return invalid_result("campo dlls requer schema 2");
     }
-    if (profile.schema != 3U && profile.backend_declared) {
+    if (profile.schema != 3U && profile.schema != 4U && profile.backend_declared) {
         return invalid_result("campo backend requer schema 3");
+    }
+    if (profile.schema != 4U && profile.extension_declared) {
+        return invalid_result("campo extension requer schema 4");
+    }
+    if (profile.extension_declared && !is_safe_app_id(profile.extension)) {
+        return invalid_result("extension inválida");
     }
     if (profile.backend.kind == BackendKind::Native && !profile.backend.min_version.empty()) {
         return invalid_result("min_version requer backend proton");

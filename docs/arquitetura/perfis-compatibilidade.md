@@ -127,6 +127,30 @@ com diagnóstico explícito. Um Proton solicitado que não esteja disponível ou
 não passe pela validação também falha com `Unsupported`, sem fallback silencioso
 para `native`.
 
+## Formato v4 e seleção de extensão host-side
+
+A v4 mantém os campos de arquivos, DLLs e backend da v3 e acrescenta o campo
+opcional `extension`. Ele identifica uma extensão host-side previamente
+registrada pelo executável do TradutorLinux; não é um caminho, uma DLL, um
+script nem uma regra de execução:
+
+```json
+{
+  "schema": 4,
+  "app_id": "7zip",
+  "files": [],
+  "dlls": [],
+  "backend": {"kind": "native"},
+  "extension": "7zip"
+}
+```
+
+Perfis v1–v3 continuam sem esse campo. A ausência de `extension` mantém o
+comportamento genérico. Quando o campo está presente, o runtime exige que o
+identificador esteja registrado e rejeita a execução antes do entry point se
+nenhuma extensão correspondente estiver disponível; não há seleção automática
+por nome de janela ou por classe Win32.
+
 O caminho da instalação fica fora do perfil, em
 `$XDG_CONFIG_HOME/tradutorlinux/backends.json` ou
 `~/.config/tradutorlinux/backends.json`:

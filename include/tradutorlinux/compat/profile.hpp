@@ -35,10 +35,12 @@ struct Profile {
     std::string app_id;
     std::string app_sha256;
     std::string app_version;
+    std::string extension;
     std::vector<FileMapping> files;
     std::vector<DllMapping> dlls;
     BackendSelection backend;
     bool backend_declared{false};
+    bool extension_declared{false};
 };
 
 enum class ProfileStatus {

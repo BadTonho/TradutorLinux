@@ -135,6 +135,40 @@ TEST_F(CompatProfileTest, LoadsSchema3WithExplicitProtonBackend) {
     expect_rust_profile_success(result);
 }
 
+TEST_F(CompatProfileTest, LoadsSchema4WithExplicitGuiExtension) {
+    write_profile(R"json({
+  "schema": 4,
+  "app_id": "fixture",
+  "files": [],
+  "dlls": [],
+  "backend": {"kind": "native"},
+  "extension": "7zip"
+})json");
+
+    const ProfileLoadResult result = load_profile(root_, "fixture");
+
+    ASSERT_EQ(result.status, ProfileStatus::Loaded);
+    EXPECT_EQ(result.profile.schema, 4U);
+    EXPECT_EQ(result.profile.extension, "7zip");
+    EXPECT_TRUE(result.profile.extension_declared);
+    expect_rust_profile_success(result);
+}
+
+TEST_F(CompatProfileTest, Schema3CannotDeclareGuiExtension) {
+    write_profile(R"json({
+  "schema": 3,
+  "app_id": "fixture",
+  "files": [],
+  "extension": "7zip"
+})json");
+
+    const ProfileLoadResult result = load_profile(root_, "fixture");
+
+    EXPECT_EQ(result.status, ProfileStatus::Invalid);
+    EXPECT_NE(result.error.find("schema 4"), std::string::npos);
+    expect_rust_profile_malformed(result);
+}
+
 TEST_F(CompatProfileTest, Schema2CannotDeclareBackend) {
     write_profile(R"json({
   "schema": 2,

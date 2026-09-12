@@ -72,6 +72,13 @@ TEST_F(RustProfileParserTest, ValidProfilesMatchCppModelForAllSchemas) {
     EXPECT_EQ(schema3.profile.backend.kind, BackendKind::Proton);
     EXPECT_TRUE(schema3.profile.backend_declared);
     EXPECT_EQ(schema3.profile.backend.min_version, "11.0");
+
+    const auto schema4 = parse_rust(
+        R"json({"schema":4,"app_id":"fixture","files":[],"dlls":[],"backend":{"kind":"native"},"extension":"7zip"})json");
+    ASSERT_EQ(schema4.status, TL_PROFILE_STATUS_SUCCESS);
+    EXPECT_EQ(schema4.profile.schema, 4U);
+    EXPECT_EQ(schema4.profile.extension, "7zip");
+    EXPECT_TRUE(schema4.profile.extension_declared);
 }
 
 TEST_F(RustProfileParserTest, FileAndDllEntriesPreserveCxxSemantics) {
@@ -103,6 +110,10 @@ TEST_F(RustProfileParserTest, InvalidAndUnsupportedProfilesAreStructured) {
         R"json({"schema":1,"app_id":"fixture","files":[{"source":"../x","target":"C:\\x"}]})json");
     EXPECT_EQ(traversal.status, TL_PROFILE_STATUS_MALFORMED);
     EXPECT_EQ(traversal.error.code, TL_PROFILE_ERROR_PATH);
+
+    const auto extension_on_schema3 = parse_rust(
+        R"json({"schema":3,"app_id":"fixture","files":[],"extension":"7zip"})json");
+    EXPECT_EQ(extension_on_schema3.status, TL_PROFILE_STATUS_MALFORMED);
 }
 
 TEST_F(RustProfileParserTest, SizeFillAndWireDecoderHonorBufferContract) {

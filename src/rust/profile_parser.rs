@@ -23,6 +23,7 @@ struct ProfileModel {
     app_id: Vec<u8>,
     app_sha256: Vec<u8>,
     app_version: Vec<u8>,
+    extension: Vec<u8>,
     files: Vec<FileMapping>,
     dlls: Vec<DllMapping>,
     backend_kind: u32,
@@ -111,13 +112,14 @@ impl<'a> JsonParser<'a> {
             app_id: Vec::new(),
             app_sha256: Vec::new(),
             app_version: Vec::new(),
+            extension: Vec::new(),
             files: Vec::new(),
             dlls: Vec::new(),
             backend_kind: WIRE_BACKEND_NATIVE,
             backend_declared: false,
             min_version: Vec::new(),
         };
-        let mut seen = [false; 7];
+        let mut seen = [false; 8];
         self.skip_whitespace();
         if self.consume(b'}') {
             return Err(Failure::malformed(
@@ -141,6 +143,7 @@ impl<'a> JsonParser<'a> {
                 b"files" => 4,
                 b"dlls" => 5,
                 b"backend" => 6,
+                b"extension" => 7,
                 _ => {
                     return Err(self.error(b"campo JSON desconhecido"));
                 }
@@ -163,6 +166,7 @@ impl<'a> JsonParser<'a> {
                     profile.min_version = min_version;
                     profile.backend_declared = true;
                 }
+                7 => profile.extension = self.parse_string()?,
                 _ => unreachable!(),
             }
 
@@ -497,7 +501,7 @@ fn validate_profile(
     mut profile: ProfileModel,
     expected: (&[u8], &[u8], &[u8]),
 ) -> Result<ProfileModel, Failure> {
-    if profile.schema != 1 && profile.schema != 2 && profile.schema != 3 {
+    if profile.schema != 1 && profile.schema != 2 && profile.schema != 3 && profile.schema != 4 {
         return Err(Failure::new(
             STATUS_UNSUPPORTED_FORMAT,
             ERROR_SCHEMA,
@@ -514,11 +518,18 @@ fn validate_profile(
             b"campo dlls requer schema 2",
         ));
     }
-    if profile.schema != 3 && profile.backend_declared {
+    if profile.schema != 3 && profile.schema != 4 && profile.backend_declared {
         return Err(Failure::malformed(
             PHASE_SCHEMA,
             UNKNOWN_OFFSET as usize,
             b"campo backend requer schema 3",
+        ));
+    }
+    if profile.schema != 4 && !profile.extension.is_empty() {
+        return Err(Failure::malformed(
+            PHASE_SCHEMA,
+            UNKNOWN_OFFSET as usize,
+            b"campo extension requer schema 4",
         ));
     }
     if profile.backend_kind == WIRE_BACKEND_NATIVE && !profile.min_version.is_empty() {
@@ -552,6 +563,16 @@ fn validate_profile(
             UNKNOWN_OFFSET,
             0,
             b"app_id do perfil nao corresponde ao aplicativo",
+        ));
+    }
+    if !profile.extension.is_empty() && !safe_app_id(&profile.extension) {
+        return Err(Failure::new(
+            STATUS_MALFORMED,
+            ERROR_SCHEMA,
+            PHASE_SCHEMA,
+            UNKNOWN_OFFSET,
+            0,
+            b"extension invalida",
         ));
     }
     if !profile.app_sha256.is_empty() && !is_hex(&profile.app_sha256, 64) {
@@ -829,6 +850,7 @@ fn serialize(profile: &ProfileModel) -> Result<Success, Failure> {
     let app_sha256 = strings.intern(&profile.app_sha256)?;
     let app_version = strings.intern(&profile.app_version)?;
     let min_version = strings.intern(&profile.min_version)?;
+    let extension = strings.intern(&profile.extension)?;
     let mut file_refs = Vec::with_capacity(profile.files.len());
     for mapping in &profile.files {
         file_refs.push((
@@ -955,11 +977,12 @@ fn serialize(profile: &ProfileModel) -> Result<Success, Failure> {
     put_u32(
         &mut wire,
         info + WIRE_INFO_FLAGS_OFFSET,
-        if profile.backend_declared {
-            WIRE_INFO_FLAG_BACKEND_DECLARED
-        } else {
-            0
-        },
+        (if profile.backend_declared { WIRE_INFO_FLAG_BACKEND_DECLARED } else { 0 }) |
+            (if !profile.extension.is_empty() {
+                WIRE_INFO_FLAG_EXTENSION_DECLARED
+            } else {
+                0
+            }),
     );
     put_ref(&mut wire, info + WIRE_INFO_APP_ID_OFFSET, &strings, app_id, strings_offset, total)?;
     put_ref(
@@ -983,6 +1006,14 @@ fn serialize(profile: &ProfileModel) -> Result<Success, Failure> {
         info + WIRE_INFO_MIN_VERSION_OFFSET,
         &strings,
         min_version,
+        strings_offset,
+        total,
+    )?;
+    put_ref(
+        &mut wire,
+        info + WIRE_INFO_EXTENSION_OFFSET,
+        &strings,
+        extension,
         strings_offset,
         total,
     )?;

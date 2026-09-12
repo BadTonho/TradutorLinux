@@ -11,6 +11,8 @@ int main(void) {
     return TL_PROFILE_WIRE_HEADER_SIZE == 128U &&
                    TL_PROFILE_WIRE_TABLE_COUNT == 4U &&
                    TL_PROFILE_WIRE_INFO_STRIDE == 96U &&
+                   TL_PROFILE_WIRE_INFO_EXTENSION_OFFSET == 80U &&
+                   TL_PROFILE_WIRE_INFO_FLAG_EXTENSION_DECLARED == 2U &&
                    TL_PROFILE_WIRE_FILE_STRIDE == 32U &&
                    TL_PROFILE_WIRE_DLL_STRIDE == 32U &&
                    TL_PROFILE_WIRE_STRING_RECORD_HEADER_SIZE == 8U

@@ -85,9 +85,10 @@ As tabelas têm estes registros:
 
 - `info`, um registro de stride 96: `schema` em 0, `backend` em 4, `flags` em
   8, reservado em 12, e referências de 16 bytes para `app_id`, SHA-256,
-  `app_version` e `min_version` em 16, 32, 48 e 64. O intervalo 80–96 é
-  reservado e zero. A flag 1 indica que `backend` foi declarado; backend 0 é
-  `native` e backend 1 é `proton`.
+  `app_version`, `min_version` e `extension` em 16, 32, 48, 64 e 80. A flag 1
+  indica que `backend` foi declarado; a flag 2 indica que `extension` foi
+  declarado. Backend 0 é `native` e backend 1 é `proton`. O tamanho do
+  registro e a versão do wire permanecem inalterados.
 - `files`, stride 32: referência `source` em 0 e `target` em 16.
 - `dlls`, stride 32: referência `module` em 0 e `source` em 16.
 - `strings`, registros variáveis: stride 0 e flag
@@ -110,7 +111,9 @@ schema aceito é exatamente o atual:
 - schema 1: `schema` e `app_id`, com `files` opcional;
 - schema 2: adiciona `dlls` opcional;
 - schema 3: adiciona `backend`, com `kind` `native` ou `proton` e
-  `min_version` opcional.
+  `min_version` opcional;
+- schema 4: adiciona `extension` opcional, um identificador seguro de extensão
+  host-side, sem comandos, caminhos, scripts ou regras executáveis.
 
 Campos obrigatórios e opcionais, tipos, escapes JSON simples, campos repetidos,
 campos desconhecidos, vírgula final e conteúdo após o objeto são validados

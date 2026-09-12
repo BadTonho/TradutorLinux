@@ -303,8 +303,10 @@ private:
     if (!is_safe_app_id(profile.app_id) ||
         (!profile.app_sha256.empty() && !is_hex_string(profile.app_sha256, 64U)) ||
         (!profile.app_version.empty() && !is_valid_version(profile.app_version)) ||
+        (profile.extension_declared && !is_safe_app_id(profile.extension)) ||
         (profile.schema == 1U && !profile.dlls.empty()) ||
-        (profile.schema != 3U && profile.backend_declared) ||
+        (profile.schema != 3U && profile.schema != 4U && profile.backend_declared) ||
+        (profile.schema != 4U && profile.extension_declared) ||
         (profile.backend.kind == BackendKind::Native && !profile.backend.min_version.empty()) ||
         (profile.backend.kind == BackendKind::Proton && !profile.backend.min_version.empty() &&
          !is_valid_backend_min_version(profile.backend.min_version))) {
@@ -510,15 +512,16 @@ private:
     if (!decoder.read_u32(info_record + TL_PROFILE_WIRE_INFO_SCHEMA_OFFSET, schema) ||
         !decoder.read_u32(info_record + TL_PROFILE_WIRE_INFO_BACKEND_OFFSET, backend) ||
         !decoder.read_u32(info_record + TL_PROFILE_WIRE_INFO_FLAGS_OFFSET, flags) ||
-        !decoder.read_u32(info_record + TL_PROFILE_WIRE_INFO_RESERVED_OFFSET, reserved) ||
-        !decoder.zero_range(info_record + TL_PROFILE_WIRE_INFO_TAIL_RESERVED_OFFSET, 16U)) {
+        !decoder.read_u32(info_record + TL_PROFILE_WIRE_INFO_RESERVED_OFFSET, reserved)) {
         error = decoder.error();
         error_message = decoder.message();
         return false;
     }
-    if ((schema != 1U && schema != 2U && schema != 3U) ||
+    if ((schema != 1U && schema != 2U && schema != 3U && schema != 4U) ||
         (backend != TL_PROFILE_WIRE_BACKEND_NATIVE && backend != TL_PROFILE_WIRE_BACKEND_PROTON) ||
-        (flags & ~TL_PROFILE_WIRE_INFO_FLAG_BACKEND_DECLARED) != 0U || reserved != 0U) {
+        (flags & ~(TL_PROFILE_WIRE_INFO_FLAG_BACKEND_DECLARED |
+                   TL_PROFILE_WIRE_INFO_FLAG_EXTENSION_DECLARED)) != 0U ||
+        reserved != 0U) {
         error = {TL_PROFILE_ERROR_WIRE_FORMAT, TL_PROFILE_ERROR_PHASE_WIRE, info_record, schema};
         error_message = "registro info TLPR invalido";
         return false;
@@ -536,17 +539,27 @@ private:
         !decoder.read_ref(info_record + TL_PROFILE_WIRE_INFO_VERSION_OFFSET, strings,
                           profile.app_version) ||
         !decoder.read_ref(info_record + TL_PROFILE_WIRE_INFO_MIN_VERSION_OFFSET, strings,
-                          profile.backend.min_version)) {
+                          profile.backend.min_version) ||
+        !decoder.read_ref(info_record + TL_PROFILE_WIRE_INFO_EXTENSION_OFFSET, strings,
+                          profile.extension)) {
         error = decoder.error();
         error_message = decoder.message();
         return false;
     }
 
     if ((profile.schema == 1U && tables[TL_PROFILE_WIRE_TABLE_DLLS].count != 0U) ||
-        (profile.schema != 3U && profile.backend_declared) ||
+        (profile.schema != 3U && profile.schema != 4U && profile.backend_declared) ||
+        (profile.schema != 4U && !profile.extension.empty()) ||
         (profile.backend.kind == BackendKind::Native && !profile.backend.min_version.empty())) {
         error = {TL_PROFILE_ERROR_WIRE_FORMAT, TL_PROFILE_ERROR_PHASE_WIRE, info_record, schema};
         error_message = "combinacao de schema TLPR invalida";
+        return false;
+    }
+    profile.extension_declared =
+        (flags & TL_PROFILE_WIRE_INFO_FLAG_EXTENSION_DECLARED) != 0U;
+    if (profile.extension_declared != !profile.extension.empty()) {
+        error = {TL_PROFILE_ERROR_WIRE_FORMAT, TL_PROFILE_ERROR_PHASE_WIRE, info_record, schema};
+        error_message = "campo extension TLPR inconsistente";
         return false;
     }
 

@@ -82,8 +82,9 @@ pub const WIRE_INFO_APP_ID_OFFSET: usize = 16;
 pub const WIRE_INFO_SHA256_OFFSET: usize = 32;
 pub const WIRE_INFO_VERSION_OFFSET: usize = 48;
 pub const WIRE_INFO_MIN_VERSION_OFFSET: usize = 64;
-pub const WIRE_INFO_TAIL_RESERVED_OFFSET: usize = 80;
+pub const WIRE_INFO_EXTENSION_OFFSET: usize = 80;
 pub const WIRE_INFO_FLAG_BACKEND_DECLARED: u32 = 1;
+pub const WIRE_INFO_FLAG_EXTENSION_DECLARED: u32 = 2;
 pub const WIRE_BACKEND_NATIVE: u32 = 0;
 pub const WIRE_BACKEND_PROTON: u32 = 1;
 
