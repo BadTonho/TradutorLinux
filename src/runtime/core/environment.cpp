@@ -1,5 +1,6 @@
 #include "tradutorlinux/runtime/environment.hpp"
 
+#include "environment_internal.hpp"
 #include "tradutorlinux/prefix/prefix.hpp"
 #include "tradutorlinux/util/unicode.hpp"
 
@@ -8,6 +9,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <map>
+#include <limits>
 #include <mutex>
 #include <new>
 #include <unordered_set>
@@ -127,6 +129,23 @@ void rebuild_ansi_block_locked() {
 
 }  // namespace
 
+bool checked_environment_block_units(const std::span<const std::size_t> entry_lengths,
+                                     std::size_t& units) noexcept {
+    units = 1;
+    constexpr std::size_t kMax = std::numeric_limits<std::size_t>::max();
+    for (const std::size_t length : entry_lengths) {
+        if (length == kMax) {
+            return false;
+        }
+        const std::size_t contribution = length + 1U;
+        if (units > kMax - contribution) {
+            return false;
+        }
+        units += contribution;
+    }
+    return units <= kMax / sizeof(std::uint16_t);
+}
+
 void initialize_guest_environment(const std::filesystem::path& prefix_root) {
     std::lock_guard lock(environment_mutex());
     initialize_locked(prefix_root);
@@ -213,27 +232,39 @@ std::vector<std::u16string> guest_environment_entries_w() {
     return entries;
 }
 
-std::uint16_t* allocate_environment_block_w() {
-    const std::vector<std::u16string> entries = guest_environment_entries_w();
-    std::size_t units = 1;
-    for (const std::u16string& entry : entries) {
-        units += entry.size() + 1U;
-    }
-    auto* const block = new (std::nothrow) std::uint16_t[units]{};
-    if (block == nullptr) {
+std::uint16_t* allocate_environment_block_w() noexcept {
+    std::uint16_t* block = nullptr;
+    try {
+        const std::vector<std::u16string> entries = guest_environment_entries_w();
+        std::vector<std::size_t> entry_lengths;
+        entry_lengths.reserve(entries.size());
+        for (const std::u16string& entry : entries) {
+            entry_lengths.push_back(entry.size());
+        }
+        std::size_t units = 0;
+        if (!checked_environment_block_units(entry_lengths, units)) {
+            return nullptr;
+        }
+
+        block = new (std::nothrow) std::uint16_t[units]{};
+        if (block == nullptr) {
+            return nullptr;
+        }
+        std::size_t offset = 0;
+        for (const std::u16string& entry : entries) {
+            for (const char16_t unit : entry) {
+                block[offset++] = static_cast<std::uint16_t>(unit);
+            }
+            block[offset++] = 0;
+        }
+        block[offset] = 0;
+        std::lock_guard lock(environment_mutex());
+        environment_blocks().insert(block);
+        return block;
+    } catch (...) {
+        delete[] block;
         return nullptr;
     }
-    std::size_t offset = 0;
-    for (const std::u16string& entry : entries) {
-        for (const char16_t unit : entry) {
-            block[offset++] = static_cast<std::uint16_t>(unit);
-        }
-        block[offset++] = 0;
-    }
-    block[offset] = 0;
-    std::lock_guard lock(environment_mutex());
-    environment_blocks().insert(block);
-    return block;
 }
 
 bool free_environment_block_w(std::uint16_t* const block) noexcept {

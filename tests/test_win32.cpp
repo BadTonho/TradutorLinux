@@ -1,4 +1,5 @@
 #include "test_win32_common.hpp"
+#include "../src/runtime/core/environment_internal.hpp"
 
 namespace tradutorlinux {
 namespace {
@@ -567,6 +568,23 @@ TEST(Win32EnvTest, EnvironmentBlockIsSortedAndCanOnlyBeFreedOnce) {
     EXPECT_EQ(tl_FreeEnvironmentStringsW(block), 0);
     EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
     EXPECT_EQ(tl_SetEnvironmentVariableW(name, nullptr), 1);
+}
+
+TEST(Win32EnvTest, EnvironmentBlockSizeRejectsCheckedOverflow) {
+    const std::size_t maximum = std::numeric_limits<std::size_t>::max();
+    std::size_t units = 0;
+    const std::array<std::size_t, 1> impossible_length{maximum};
+    EXPECT_FALSE(runtime::checked_environment_block_units(impossible_length, units));
+
+    const std::array<std::size_t, 2> overflowing_sum{maximum / 2U, maximum / 2U};
+    EXPECT_FALSE(runtime::checked_environment_block_units(overflowing_sum, units));
+
+    const std::array<std::size_t, 1> overflowing_allocation{maximum / sizeof(std::uint16_t)};
+    EXPECT_FALSE(runtime::checked_environment_block_units(overflowing_allocation, units));
+
+    const std::array<std::size_t, 2> valid_lengths{1U, 2U};
+    ASSERT_TRUE(runtime::checked_environment_block_units(valid_lengths, units));
+    EXPECT_EQ(units, 6U);
 }
 
 TEST(Win32LocaleTest, FixedCodePagesAndCp437RoundTrip) {

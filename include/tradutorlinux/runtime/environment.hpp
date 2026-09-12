@@ -25,7 +25,7 @@ void clear_guest_environment() noexcept;
 
 // Blocos retornados por GetEnvironmentStringsW pertencem ao runtime e só
 // podem ser liberados por FreeEnvironmentStringsW.
-[[nodiscard]] std::uint16_t* allocate_environment_block_w();
+[[nodiscard]] std::uint16_t* allocate_environment_block_w() noexcept;
 [[nodiscard]] bool free_environment_block_w(std::uint16_t* block) noexcept;
 
 }  // namespace tradutorlinux::runtime
