@@ -147,6 +147,10 @@ TL_MSABI std::uint32_t tl_WaitForSingleObject(const void* const handle,
             thread->finish_cv.wait(lock, predicate);
         } else if (!thread->finish_cv.wait_for(lock, std::chrono::milliseconds(milliseconds), predicate)) {
             set_last_error(abi::kErrorSuccess);
+            trace_process_console(
+                "wait-single-end", "single-object",
+                "kind=thread;handle=" + std::to_string(reinterpret_cast<std::uintptr_t>(handle)) +
+                    ";result=timeout");
             return abi::kWaitTimeout;
         }
         set_last_error(abi::kErrorSuccess);
