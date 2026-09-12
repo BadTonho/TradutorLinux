@@ -12,6 +12,7 @@
 #include <cstdint>
 #include <cstring>
 #include <limits>
+#include <mutex>
 #include <string>
 #include <utility>
 #include <vector>
@@ -32,6 +33,7 @@ constexpr std::uint16_t kImageRelBasedDir64 = 10;
 
 constexpr std::size_t kBaseRelocBlockHeaderSize = 8;
 constexpr std::size_t kMaxRelocBlocks = 4096;
+std::mutex g_image_patch_mutex;
 
 [[nodiscard]] std::uint64_t align_down(const std::uint64_t value, const std::uint64_t alignment) {
     return value - value % alignment;
@@ -508,6 +510,7 @@ PatchStatus write_image_bytes(MappedImage& image, const std::uint32_t rva,
     if (covering == nullptr && !covers_headers) {
         return PatchStatus::InvalidAddress;
     }
+    std::lock_guard<std::mutex> patch_lock(g_image_patch_mutex);
     const std::size_t page = util::host_page_size();
     const std::uint64_t page_start = align_down(rva, page);
     std::uint64_t page_end =

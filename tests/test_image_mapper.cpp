@@ -8,6 +8,8 @@
 #include <cstdint>
 #include <fstream>
 #include <iterator>
+#include <atomic>
+#include <thread>
 #include <optional>
 #include <sstream>
 #include <string>
@@ -342,6 +344,49 @@ TEST_F(ImageMapperTest, PatchesBytesStoredInHeaders) {
     EXPECT_EQ(write_image_bytes(result.image, 0x100, replacement.data(), replacement.size()),
               PatchStatus::Success);
     EXPECT_TRUE(std::equal(replacement.begin(), replacement.end(), result.image.memory + 0x100));
+    const std::optional<std::string> header_perms =
+        maps_permissions_for(reinterpret_cast<std::uintptr_t>(result.image.memory));
+    ASSERT_TRUE(header_perms.has_value());
+    EXPECT_EQ(*header_perms, "r--p");
+    unmap_image(result.image);
+}
+
+TEST_F(ImageMapperTest, SerializesConcurrentPatchesAndRestoresPermissions) {
+    const std::vector<std::byte> bytes = make_minimal();
+    const pe::ParseResult parse = pe::parse_pe(bytes);
+    ASSERT_EQ(parse.status, pe::ParseStatus::Success);
+
+    MapOptions options;
+    options.preferred_base = kTestPreferredBase;
+    MapResult result = map_image(parse.info, bytes, options);
+    ASSERT_EQ(result.status, MapStatus::Success);
+
+    std::atomic<bool> failed{false};
+    std::vector<std::thread> workers;
+    for (std::size_t worker_index = 0; worker_index < 8; ++worker_index) {
+        workers.emplace_back([&, worker_index] {
+            const std::array<std::byte, 8> replacement{
+                static_cast<std::byte>(worker_index), std::byte{0x22}, std::byte{0x33},
+                std::byte{0x44}, std::byte{0x55}, std::byte{0x66}, std::byte{0x77},
+                std::byte{0x88}};
+            for (std::size_t iteration = 0; iteration < 100; ++iteration) {
+                if (write_image_bytes(result.image, 0x100, replacement.data(), replacement.size()) !=
+                    PatchStatus::Success) {
+                    failed.store(true, std::memory_order_relaxed);
+                    return;
+                }
+            }
+        });
+    }
+    for (std::thread& worker : workers) {
+        worker.join();
+    }
+
+    EXPECT_FALSE(failed.load(std::memory_order_relaxed));
+    const std::optional<std::string> header_perms =
+        maps_permissions_for(reinterpret_cast<std::uintptr_t>(result.image.memory));
+    ASSERT_TRUE(header_perms.has_value());
+    EXPECT_EQ(*header_perms, "r--p");
     unmap_image(result.image);
 }
 
