@@ -14,5 +14,11 @@ Regras:
 - não serão adicionadas DLLs binárias geradas ou baixadas diretamente ao
   repositório.
 
+O diretório `7zip/` é a primeira extensão host-side implementada. Seu alvo
+`tradutorlinux_7zip` é composto explicitamente apenas pelo executável CLI e
+não altera o comportamento do `tradutorlinux_core`. O perfil schema 4 precisa
+selecionar `"extension": "7zip"`; não há fallback quando uma extensão
+declarada não está registrada.
+
 O diretório `_template/` documenta a forma reservada para novos aplicativos,
 sem representar suporte ou implementação funcional.

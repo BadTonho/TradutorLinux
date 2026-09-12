@@ -235,20 +235,21 @@ o Proton fornece `XAudio2_8.dll` dentro do prefixo isolado. A fixture valida o
 engine, as vozes e o ciclo básico de um buffer PCM, mas não transforma esse
 slice em suporte geral a áudio, codecs, dispositivos ou multimídia.
 
-## Auditoria do 7-Zip — sem regra específica
+## Extensão host-side do 7-Zip
 
-O 7-Zip 24.08 foi auditado como alvo real após a implementação da B14.3. Não
-foi encontrada uma necessidade reproduzível de comportamento adicional no
-perfil: os arquivos auxiliares cobertos pela B14.3 são suficientes para a
-necessidade identificada. Por isso, a v1 não possui campo `rules` e a B14.4
-não adiciona regras condicionais para o 7-Zip. A extensão de DLL da B14.4 é um
-mecanismo geral de perfil; ela não altera o tratamento específico do 7-Zip.
+O 7-Zip File Manager é o primeiro consumidor do mecanismo de extensão
+host-side. O código específico fica em `compat/apps/7zip/`, no alvo separado
+`tradutorlinux_7zip`; `tradutorlinux_core` não contém a detecção
+`7-Zip::FM`, a geometria do shell, a navegação, a leitura de diretórios ou o
+comando `Copy`.
 
-O tratamento da classe `7-Zip::FM` continua pertencendo ao shell GUI
-experimental, separado dos perfis. `TL_7ZFM_COPY_DESTINATION` é um hook de
-teste e não uma configuração de perfil. Uma futura regra específica exigirá um
-alvo, comportamento, justificativa, precedência, isolamento, diagnóstico,
-fixture e regressão reproduzíveis.
+O executável CLI registra explicitamente essa extensão e um perfil schema 4
+precisa declarar `"extension": "7zip"` para selecioná-la. A extensão mantém
+seu estado visual fora de `WindowSlot`, em estado host-only associado ao
+`GuestContext`. Execuções diretas e perfis sem `extension` permanecem no
+renderer genérico; um identificador declarado, mas não registrado, falha antes
+do entry point com o trace `compat-extension`. `TL_7ZFM_COPY_DESTINATION`
+continua sendo apenas um hook de teste e não uma configuração de perfil.
 
 ## Fallback e diagnóstico
 

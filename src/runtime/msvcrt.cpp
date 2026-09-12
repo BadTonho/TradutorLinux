@@ -565,8 +565,7 @@ void msvcrt_set_guest_command_line(std::vector<std::string> arguments) {
         }
         // GetCommandLineA is a Windows-facing API.  Passing the host path
         // verbatim breaks the CRT parser as soon as the executable or its
-        // working directory contains spaces (and was especially visible with
-        // the 7-Zip installation under the user's desktop directory).
+        // working directory contains spaces.
         const bool needs_quotes = argument.find_first_of(" \t\"") != std::string::npos;
         if (needs_quotes) g_guest_command_line.push_back('"');
         g_guest_command_line += argument;

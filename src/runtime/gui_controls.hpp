@@ -6,7 +6,6 @@
 #include <chrono>
 #include <cstdint>
 #include <deque>
-#include <filesystem>
 #include <span>
 #include <string>
 #include <vector>
@@ -31,8 +30,6 @@ struct TreeItem {
     std::string text;
     bool expanded{false};
 };
-
-inline constexpr std::size_t kSevenZipDirectoryRowLimit = 128;
 
 struct GuestTimer {
     std::uintptr_t id{0};
@@ -76,9 +73,6 @@ struct WindowSlot {
     int pressed_toolbar_index{-1};
     const void* menu_handle{nullptr};
     int open_menu_index{-1};
-    std::vector<int> open_menu_path;
-    int hovered_menu_item{-1};
-    int pressed_menu_item{-1};
     std::vector<std::string> combo_items;
     int combo_selection{-1};
     std::vector<ToolbarButton> toolbar_buttons;
@@ -86,20 +80,9 @@ struct WindowSlot {
     std::uint32_t toolbar_button_struct_size{0};
     std::vector<ListViewRow> list_rows;
     int list_selection{-1};
-    int hovered_list_row{-1};
     std::vector<TreeItem> tree_items;
     std::uintptr_t tree_next_handle{1};
     std::uintptr_t tree_selected{0};
-    int last_list_press_row{-1};
-    std::chrono::steady_clock::time_point last_list_press_time{};
-    int navigation_selection{1};
-    int hovered_navigation_row{-1};
-    std::filesystem::path visual_root_directory;
-    std::filesystem::path visual_directory;
-    bool address_editing{false};
-    bool address_error{false};
-    std::string address_text;
-    std::string last_operation_status;
     void* user_data{nullptr};
     std::uint32_t style{0};
     std::uint32_t extended_style{0};
@@ -110,9 +93,6 @@ struct WindowSlot {
 
 [[nodiscard]] bool is_builtin_control(const char* name) noexcept;
 [[nodiscard]] ControlKind control_kind_for(const char* name) noexcept;
-[[nodiscard]] std::vector<ListViewRow> collect_seven_zip_directory_rows(
-    const std::filesystem::path& directory,
-    std::size_t max_rows = kSevenZipDirectoryRowLimit) noexcept;
 
 void queue_window_message(WindowSlot& slot, std::uint32_t message, abi::Wparam wparam,
                           abi::Lparam lparam) noexcept;

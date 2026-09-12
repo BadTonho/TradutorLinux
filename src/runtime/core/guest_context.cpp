@@ -1,6 +1,7 @@
 #include "tradutorlinux/runtime/guest_context.hpp"
 
 #include "tradutorlinux/loader/module_graph.hpp"
+#include "../gui_extension.hpp"
 
 namespace tradutorlinux::runtime {
 namespace {

@@ -22,6 +22,7 @@
 #include "tradutorlinux/prefix/prefix.hpp"
 #include "tradutorlinux/process/isolate.hpp"
 #include "tradutorlinux/runtime/msvcrt.hpp"
+#include "../runtime/gui_extension.hpp"
 #include "tradutorlinux/runtime/guest_context.hpp"
 #include "tradutorlinux/runtime/unwind.hpp"
 #include "tradutorlinux/runtime/winapi.hpp"
@@ -833,6 +834,33 @@ ExitCode run_command(const CommandLine& command_line, std::ostream& stdout_strea
         }
         if (profile.status == compat::ProfileStatus::Loaded) {
             compatibility_profile = profile.profile;
+            std::string extension_error;
+            const std::string_view extension_id =
+                compatibility_profile->extension_declared
+                    ? std::string_view{compatibility_profile->extension}
+                    : std::string_view{};
+            if (!runtime_gui::select_gui_extension(extension_id, extension_error)) {
+                if (effective_cmd.trace_enabled) {
+                    const std::array<diagnostics::TraceField, 3> fields{
+                        diagnostics::TraceField{"status", "rejected"},
+                        diagnostics::TraceField{"id", std::string{extension_id}},
+                        diagnostics::TraceField{"detail", extension_error}};
+                    diagnostics::write_trace(
+                        stderr_stream, diagnostics::TraceComponent::Runtime,
+                        diagnostics::TraceLevel::Error, "compat-extension", fields);
+                }
+                stderr_stream << "erro: perfil de compatibilidade não pode selecionar a extensão"
+                              << (extension_error.empty() ? "" : ": " + extension_error) << '\n';
+                return ExitCode::Unsupported;
+            }
+            if (effective_cmd.trace_enabled) {
+                const std::array<diagnostics::TraceField, 2> fields{
+                    diagnostics::TraceField{"status", extension_id.empty() ? "none" : "selected"},
+                    diagnostics::TraceField{"id", std::string{extension_id}}};
+                diagnostics::write_trace(
+                    stderr_stream, diagnostics::TraceComponent::Runtime,
+                    diagnostics::TraceLevel::Info, "compat-extension", fields);
+            }
         }
         if (profile.status != compat::ProfileStatus::Loaded) {
             stderr_stream << "aviso: perfil de compatibilidade " << profile_status

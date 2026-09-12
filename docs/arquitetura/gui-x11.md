@@ -149,10 +149,10 @@ cria uma status bar lógica no rodapé e `CreateToolbarEx`, ou
 geometria mínima desse controle. A toolbar pode encaminhar um clique básico ao
 parent como `WM_COMMAND`; o botão pressionado é redesenhado no `Press`, a
 captura lógica mantém o controle até o `Release` e uma soltura fora do botão
-pressionado cancela o comando. No shell visual específico do 7-Zip, o botão sob
-o ponteiro recebe hover independente da pressão, e a linha da lista recebe o
-mesmo feedback sem alterar a seleção. Bitmaps, image lists, temas e estilos
-avançados ainda não fazem parte do contrato.
+pressionado cancela o comando. Bitmaps, image lists, temas e estilos avançados
+ainda não fazem parte do contrato. Comportamentos visuais de aplicativos
+específicos não pertencem a este renderer genérico; extensões host-side podem
+compor o ciclo por seleção explícita de perfil.
 
 Pelo mesmo motivo, `SendMessageA/W` trata apenas o ciclo necessário para esse
 modelo: dimensionamento, `TB_ADDBUTTONSA/W`, contagem/exclusão e atualização de
@@ -254,10 +254,13 @@ Classes customizadas registradas pelo convidado também entram na side-table e
 recebem o ciclo básico de `WM_CREATE`/`WM_PAINT`, mas não são tratadas como se
 fossem visualmente suportadas: quando não há renderer para a classe, a área
 mostra um diagnóstico explícito com o nome do controle. Isso evita uma tela
-branca silenciosa em aplicações genéricas. Há uma exceção deliberada para o
-alvo real `7zFM_x64.exe`: quando a classe principal é `7-Zip::FM`, o backend
-desenha um shell visual próprio com menu, toolbar, endereço, navegação lateral,
-lista e status, sem fingir que os comandos do convidado já funcionam. A lista
+branca silenciosa em aplicações genéricas. Há uma extensão deliberada para o
+alvo real `7zFM_x64.exe`: quando um perfil schema 4 seleciona
+`"extension": "7zip"` e a classe principal é `7-Zip::FM`,
+`compat/apps/7zip/` desenha um shell visual host-side com menu, toolbar,
+endereço, navegação lateral, lista e status, sem fingir que os comandos do
+convidado já funcionam. Sem a seleção do perfil, a classe segue o caminho
+genérico. A lista
 mostra somente as entradas imediatas do diretório que contém o executável
 aberto, em ordem determinística, sem seguir links simbólicos e limitada a 128
 linhas; clicar seleciona uma entrada e `Enter` ou duplo clique abre uma pasta no

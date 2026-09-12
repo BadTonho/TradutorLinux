@@ -1,3 +1,6 @@
+add_subdirectory("${PROJECT_SOURCE_DIR}/compat/apps/7zip"
+                 "${CMAKE_CURRENT_BINARY_DIR}/compat/apps/7zip")
+
 add_library(tradutorlinux_core STATIC
     backend/proton.cpp
     backend/proton_runtime.cpp
@@ -53,6 +56,7 @@ add_library(tradutorlinux_core STATIC
     runtime/gdi32.cpp
     runtime/shell32.cpp
     runtime/gui_controls.cpp
+    runtime/gui_extension.cpp
     runtime/msvcrt.cpp
     runtime/advapi.cpp
     runtime/security.cpp
@@ -196,7 +200,7 @@ tl_enable_warnings(tradutorlinux_core)
 tl_enable_sanitizers(tradutorlinux_core)
 
 add_executable(tradutorlinux main.cpp)
-target_link_libraries(tradutorlinux PRIVATE tradutorlinux_core)
+target_link_libraries(tradutorlinux PRIVATE tradutorlinux_7zip tradutorlinux_core)
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
     target_compile_options(tradutorlinux PRIVATE -finstrument-functions)
     target_link_options(tradutorlinux PRIVATE -rdynamic)

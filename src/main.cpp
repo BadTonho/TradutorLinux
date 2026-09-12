@@ -1,10 +1,12 @@
 #include "tradutorlinux/cli.hpp"
+#include "tradutorlinux/compat/7zip.hpp"
 
 #include <cstddef>
 #include <iostream>
 #include <vector>
 
 int main(int argc, char* argv[]) {
+    tradutorlinux::compat::seven_zip::register_extension();
     std::vector<const char*> arguments;
     arguments.reserve(static_cast<std::size_t>(argc));
     for (int index = 0; index < argc; ++index) {

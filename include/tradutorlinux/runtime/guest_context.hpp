@@ -20,6 +20,11 @@ namespace tradutorlinux::loader {
 class GuestModuleGraph;
 }
 
+namespace tradutorlinux::runtime_gui {
+class GuiExtension;
+class GuiExtensionRuntime;
+}
+
 namespace tradutorlinux::runtime {
 
 enum class ContextSyncKind { Mutex, Event, Semaphore, Process };
@@ -62,6 +67,11 @@ struct GuestContext {
 
     std::string module_file_name;
     std::filesystem::path prefix_path;
+
+    // Extensão host-side selecionada pelo perfil de compatibilidade. Os
+    // ponteiros nunca atravessam a fronteira ABI do convidado.
+    const runtime_gui::GuiExtension* gui_extension{nullptr};
+    std::unique_ptr<runtime_gui::GuiExtensionRuntime> gui_extension_runtime;
 
     const std::byte* image_base{nullptr};
     std::size_t image_size{0};
