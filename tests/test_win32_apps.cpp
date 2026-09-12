@@ -445,15 +445,18 @@ TEST(WinSockTest, AddressToStringValidatesCapacityAndFormatsIpv4) {
 TEST(NotepadPlusPlusCoverageTest, AllApisAndModules) {
     // DWMAPI
     int comp_enabled = 0;
-    EXPECT_EQ(tl_DwmIsCompositionEnabled(&comp_enabled), 0);
-    EXPECT_EQ(comp_enabled, 1);
-    EXPECT_EQ(tl_DwmSetWindowAttribute(nullptr, 0, nullptr, 0), 0);
+    EXPECT_EQ(tl_DwmIsCompositionEnabled(&comp_enabled), static_cast<int>(0x80004001U));
+    EXPECT_EQ(comp_enabled, 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorNotSupported);
+    EXPECT_EQ(tl_DwmSetWindowAttribute(nullptr, 0, nullptr, 0), static_cast<int>(0x80004001U));
     std::intptr_t dwm_res = 0;
     EXPECT_EQ(tl_DwmDefWindowProc(nullptr, 0, 0, 0, &dwm_res), 0);
     std::uint32_t dwm_col = 0;
     int dwm_op = 0;
-    EXPECT_EQ(tl_DwmGetColorizationColor(&dwm_col, &dwm_op), 0);
-    EXPECT_EQ(tl_DwmFlush(), 0);
+    EXPECT_EQ(tl_DwmGetColorizationColor(&dwm_col, &dwm_op), static_cast<int>(0x80004001U));
+    EXPECT_EQ(dwm_col, 0U);
+    EXPECT_EQ(dwm_op, 0);
+    EXPECT_EQ(tl_DwmFlush(), static_cast<int>(0x80004001U));
 
     // VERSION
     std::uint32_t ver_h = 0;

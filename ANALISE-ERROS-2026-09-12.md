@@ -89,6 +89,12 @@ sem executar a operação.
   `ImmGetVirtualKey` publica explicitamente a ausência de IME. A regressão
   `Win32StubTest.ImmStubsRejectFakeContextsAndCompositionSuccess` protege o
   contrato.
+- **Corrigido nesta etapa:** `DWMAPI.dll` não reporta mais composição ativa,
+  cor de destaque ou `S_OK` sem backend. As operações de composição estão
+  classificadas como `Stub`, retornam `E_NOTIMPL` e limpam saídas válidas;
+  `DwmDefWindowProc` continua `Limited` porque “não tratado” é seu resultado
+  booleano legítimo. `Win32StubTest.DwmStubsRejectFakeCompositionAndClearOutputs`
+  protege o contrato.
 - **Alta prioridade:** módulos que falham sem atualizar `GetLastError` precisam
   de testes de erro. `IMM32`, `DWMAPI`, `WINMM`, `COMDLG32` e `version` não
   podem deixar o erro anterior do convidado parecer a causa atual.

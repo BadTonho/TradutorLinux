@@ -272,6 +272,35 @@ TEST(Win32StubTest, ImmStubsRejectFakeContextsAndCompositionSuccess) {
     EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
 }
 
+TEST(Win32StubTest, DwmStubsRejectFakeCompositionAndClearOutputs) {
+    constexpr std::int32_t kENotImpl = static_cast<std::int32_t>(0x80004001U);
+    int enabled = 1;
+    EXPECT_EQ(tl_DwmIsCompositionEnabled(&enabled), kENotImpl);
+    EXPECT_EQ(enabled, 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorNotSupported);
+
+    std::array<std::byte, 16> attributes;
+    attributes.fill(std::byte{0xA5});
+    EXPECT_EQ(tl_DwmGetWindowAttribute(nullptr, 0, attributes.data(), attributes.size()), kENotImpl);
+    EXPECT_EQ(attributes.front(), std::byte{0});
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorNotSupported);
+
+    std::uint32_t color = 0xFFFFFFFFU;
+    int opaque = 1;
+    EXPECT_EQ(tl_DwmGetColorizationColor(&color, &opaque), kENotImpl);
+    EXPECT_EQ(color, 0U);
+    EXPECT_EQ(opaque, 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorNotSupported);
+    EXPECT_EQ(tl_DwmSetWindowAttribute(nullptr, 0, nullptr, 0), kENotImpl);
+    EXPECT_EQ(tl_DwmExtendFrameIntoClientArea(nullptr, nullptr), kENotImpl);
+    EXPECT_EQ(tl_DwmEnableBlurBehindWindow(nullptr, nullptr), kENotImpl);
+    EXPECT_EQ(tl_DwmFlush(), kENotImpl);
+    EXPECT_EQ(tl_DwmDefWindowProc(nullptr, 0, 0, 0, nullptr), 0);
+
+    EXPECT_EQ(tl_DwmIsCompositionEnabled(nullptr), static_cast<std::int32_t>(0x80070057U));
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+}
+
 TEST(Win32StubTest, UnsupportedApisEmitTraceWithMechanismAndDetail) {
     const std::filesystem::path directory =
         std::filesystem::temp_directory_path() /

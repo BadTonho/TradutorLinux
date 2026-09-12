@@ -454,7 +454,8 @@ diagnosticar dependências de hardware; não enumeram drivers reais.
 `DwmSetWindowAttribute`, `DwmGetWindowAttribute`, `DwmIsCompositionEnabled`,
 `DwmDefWindowProc`, `DwmExtendFrameIntoClientArea`, `DwmEnableBlurBehindWindow`,
 `DwmFlush` e `DwmGetColorizationColor` (`DWMAPI.dll`) não criam uma composição
-Windows: retornam somente o contrato mínimo do protótipo ou erro controlado.
+Windows: as operações de composição retornam `E_NOTIMPL`, limpam saídas válidas
+e `DwmDefWindowProc` retorna somente “não tratado”.
 `timeGetTime`, `timeBeginPeriod`, `timeEndPeriod`, `timeGetDevCaps`,
 `PlaySoundA/W`, `timeSetEvent` e `timeKillEvent` (`WINMM.dll`) não agendam
 callbacks multimídia nem acessam áudio do host.
