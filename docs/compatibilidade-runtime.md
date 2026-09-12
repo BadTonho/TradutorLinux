@@ -379,7 +379,7 @@ do host como argumentos.
 | `gdiplus.dll` | `GdiplusStartup` / `GdiplusShutdown` / `GdipAlloc` / `GdipFree` / `GdipCreateBitmapFromStream` / `GdipCloneImage` / `GdipDisposeImage` / `GdipCreateHBITMAPFromBitmap` | Suportado | `GdiplusStartup` aloca token `0x1`, `GdipAlloc` `malloc`, `GdipFree` `free`, `GdipCreateBitmapFromStream`/`Clone`/`HBITMAP` retornam dummy `0` |
 | `UxTheme.dll` | `SetWindowTheme` | Suportado | Valida `hwnd` e wstrings, retorna `S_OK` (0) |
 | `WINMM.dll` | `timeSetEvent` | Suportado | Stub retorna `1` |
-| `dbghelp.dll` | `SymFromAddr` | Suportado | Valida `process`/`displacement`/`symbol`, `displacement=0`, retorna `0` (não encontrado) mas sem crash |
+| `dbghelp.dll` | `SymFromAddr` | Não suportado controlado | Valida o buffer opcional `symbol`, zera `displacement` quando válido e retorna `FALSE` + `ERROR_NOT_SUPPORTED`; resolução de símbolos não é fabricada |
 | `POWRPROF.dll` | `PowerGetActiveScheme` / `PowerSetActiveScheme` / `CallNtPowerInformation` | Suportado | `PowerGetActiveScheme` devolve GUID `Balanced` alocado por `LocalAlloc` e liberável por `LocalFree`; `PowerSetActiveScheme` `S_OK`, `CallNtPowerInformation` `memset` `0` |
 | `IPHLPAPI.DLL` | `GetAdaptersInfo` / `GetAdaptersAddresses` / `if_nametoindex` | Suportado no subconjunto | `getifaddrs` do host, contratos de buffer `ERROR_BUFFER_OVERFLOW`/`ERROR_NO_DATA`, registros x64 com strings UTF-16 de largura fixa, interfaces IPv4 e `if_nametoindex` real; IPv6 e campos DNS continuam fora |
 
@@ -634,7 +634,7 @@ processo filho; cada thread convidada recebe seu próprio TEB/GS, stack e
 | `ADVAPI32.dll` | `AdjustTokenPrivileges` | Suportado | Ajuste e concessão de privilégios em tokens de processo |
 | `SHELL32.dll` | `SHFileOperationW` / `SHGetFileInfoW` | Não suportado controlado | Operações de arquivo e metadados/ícones do Shell retornam `ERROR_NOT_SUPPORTED`; `SHFileOperationW` marca `fAnyOperationsAborted` e zera `hNameMappings`, sem alterar o sistema de arquivos. |
 | `SHELL32.dll` | `SHGetPathFromIDListW` | Suportado | Conversão de lista de IDs de shell para caminho no sistema de arquivos |
-| `SHELL32.dll` | `SHBrowseForFolderW` | Suportado | Diálogo de navegação e seleção de diretórios |
+| `SHELL32.dll` | `SHBrowseForFolderW` | Não suportado controlado | Valida o `BROWSEINFO` mínimo e retorna `nullptr` + `ERROR_NOT_SUPPORTED`; nenhum diálogo ou PIDL é fabricado |
 | `SHELL32.dll` | `SHGetMalloc` | Suportado | Obtenção do alocador de memória padrão do Shell |
 | `SHELL32.dll` | `SHChangeNotify` | Suportado | Emissão e notificação de eventos do sistema de arquivos para o shell |
 | `ole32.dll` | `CLSIDFromString` | Suportado | Conversão de strings de GUID/CLSID para estrutura binária `GUID` |

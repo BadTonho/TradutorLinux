@@ -21,10 +21,7 @@ TL_MSABI int tl_SymFromAddr(void* process, std::uint64_t address, std::uint64_t*
             return 0;
         }
     }
-    set_last_error(abi::kErrorSuccess);
-    // Retorna 0 (falha) para indicar símbolo não encontrado, mas não é erro fatal; algumas apps tratam falha como ok
-    // Para aumentar compatibilidade, retornamos 0 mas com last error success? Melhor retornar 0 e deixar caller tratar.
-    // Para teste de fixture, esperamos 0 (não encontrado) mas não crash.
+    set_last_error(abi::kErrorNotSupported);
     return 0;
 }
 
@@ -53,7 +50,8 @@ namespace tradutorlinux::loader {
 
 void register_dbghelp_module() {
     static const ExportedFunction kDbghelpExports[] = {
-        {"SymFromAddr", 1, reinterpret_cast<std::uintptr_t>(&tl_SymFromAddr)},
+        {"SymFromAddr", 1, reinterpret_cast<std::uintptr_t>(&tl_SymFromAddr),
+         ExportSupport::Stub},
         {"ImageNtHeader", 2, reinterpret_cast<std::uintptr_t>(&tl_ImageNtHeader)},
     };
     static const InternalModule kDbghelpModule{"dbghelp.dll", kDbghelpExports};

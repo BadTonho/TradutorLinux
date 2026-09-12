@@ -138,6 +138,19 @@ TEST(Win32StubTest, WinmmStubsKeepTheirExplicitCompatibilityContract) {
     EXPECT_EQ(tl_timeKillEvent(1), 0U);
 }
 
+TEST(Win32StubTest, DebugAndShellDialogStubsReportUnsupported) {
+    std::uint64_t displacement = 0;
+    EXPECT_EQ(tl_SymFromAddr(nullptr, 0x140000000ULL, &displacement, nullptr), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorNotSupported);
+    EXPECT_EQ(displacement, 0U);
+
+    std::array<std::byte, 64> browse_info{};
+    EXPECT_EQ(tl_SHBrowseForFolderW(browse_info.data()), nullptr);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorNotSupported);
+    EXPECT_EQ(tl_SHBrowseForFolderW(nullptr), nullptr);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+}
+
 TEST(Win32StubTest, UnsupportedApisEmitTraceWithMechanismAndDetail) {
     const std::filesystem::path directory =
         std::filesystem::temp_directory_path() /

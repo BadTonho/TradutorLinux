@@ -57,6 +57,12 @@ sem executar a operação.
   respeita o buffer UTF-16 e atualiza `GetLastError` nos erros. A regressão
   `Crypt32Test.CertNameToStrConvertsValidatedNameBlobAndBoundsOutput` e a
   fixture `tl_crypt32` cobrem o comportamento.
+- **Corrigido nesta etapa:** `DBGHELP!SymFromAddr` e
+  `SHELL32!SHBrowseForFolderW` deixaram de parecer suporte funcional: ambos
+  estão classificados como `Stub`, e o diálogo retorna
+  `ERROR_NOT_SUPPORTED` sem fabricar PIDL ou janela. A regressão
+  `Win32StubTest.DebugAndShellDialogStubsReportUnsupported` protege os dois
+  contratos.
 - **Alta prioridade:** módulos que falham sem atualizar `GetLastError` precisam
   de testes de erro. `IMM32`, `DWMAPI`, `WINMM`, `COMDLG32` e `version` não
   podem deixar o erro anterior do convidado parecer a causa atual.

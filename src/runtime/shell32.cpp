@@ -473,8 +473,11 @@ TL_MSABI int tl_SHGetPathFromIDListW(const void* const pidl, std::uint16_t* cons
 }
 
 TL_MSABI void* tl_SHBrowseForFolderW(void* const bi) noexcept {
-    (void)bi;
-    set_last_error(abi::kErrorSuccess);
+    if (bi == nullptr || !mapped_guest_range(bi, 64, false)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return nullptr;
+    }
+    set_last_error(abi::kErrorNotSupported);
     return nullptr;
 }
 
@@ -607,7 +610,8 @@ void register_shell32_module() {
         {"SHFileOperationW", 8, reinterpret_cast<std::uintptr_t>(&tl_SHFileOperationW)},
         {"SHGetFileInfoW", 9, reinterpret_cast<std::uintptr_t>(&tl_SHGetFileInfoW)},
         {"SHGetPathFromIDListW", 10, reinterpret_cast<std::uintptr_t>(&tl_SHGetPathFromIDListW)},
-        {"SHBrowseForFolderW", 11, reinterpret_cast<std::uintptr_t>(&tl_SHBrowseForFolderW)},
+        {"SHBrowseForFolderW", 11, reinterpret_cast<std::uintptr_t>(&tl_SHBrowseForFolderW),
+         ExportSupport::Stub},
         {"SHGetMalloc", 12, reinterpret_cast<std::uintptr_t>(&tl_SHGetMalloc)},
         {"SHChangeNotify", 13, reinterpret_cast<std::uintptr_t>(&tl_SHChangeNotify)},
         {"ExtractIconExW", 14, reinterpret_cast<std::uintptr_t>(&tl_ExtractIconExW)},
