@@ -81,6 +81,29 @@ std::vector<std::byte> make_delay_import_pe() {
     return build(spec);
 }
 
+std::vector<std::byte> make_excessive_tls_callbacks_pe() {
+    constexpr std::uint32_t kTlsRva = 0x2000;
+    constexpr std::size_t kCallbackCount = 4097;
+    std::vector<std::byte> data(40 + kCallbackCount * sizeof(std::uint64_t), std::byte{0});
+    write_u64(data, 24, 0x140002028ULL);  // callback table at RVA 0x2028
+    for (std::size_t index = 0; index < kCallbackCount; ++index) {
+        write_u64(data, 40 + index * sizeof(std::uint64_t), 0x140001111ULL);
+    }
+
+    BuildSpec spec;
+    spec.size_of_image = 0xB000;
+    spec.section_names = {".text", ".tls"};
+    spec.section_data = {std::vector<std::byte>(0x10), data};
+    spec.tls_rva = kTlsRva;
+    spec.tls_size = 40;
+    std::vector<std::byte> result = build(spec);
+
+    // Expand only this hostile fixture so the parser reaches the callback limit.
+    constexpr std::size_t kSecondSectionRawSizeOffset = 0x148 + 40 + 16;
+    write_u32(result, kSecondSectionRawSizeOffset, static_cast<std::uint32_t>(data.size()));
+    return result;
+}
+
 std::vector<std::byte> make_export_pe() {
     constexpr std::uint32_t kExportRva = 0x2000;
     std::vector<std::byte> data(0xA0, std::byte{0});
@@ -339,6 +362,13 @@ TEST(PeReaderTest, ParsesDelayImportsByNameAndOrdinal) {
     EXPECT_TRUE(dll.symbols[1].by_ordinal);
     EXPECT_EQ(dll.symbols[1].ordinal, 5);
     EXPECT_NE(dll.symbols[0].iat_rva, 0U);
+}
+
+TEST(PeReaderTest, RejectsExcessiveTlsCallbacks) {
+    const ParseResult result = parse_pe(make_excessive_tls_callbacks_pe());
+
+    EXPECT_EQ(result.status, ParseStatus::Malformed);
+    EXPECT_NE(result.error_message.find("callbacks"), std::string::npos);
 }
 
 TEST(PeReaderTest, ParsesRuntimeFunctionAndUnwindCodes) {

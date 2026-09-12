@@ -60,6 +60,7 @@ constexpr std::size_t kMaxRuntimeFunctions = 65536;
 constexpr std::size_t kMaxCString = 65535;
 constexpr std::size_t kMaxExportFunctions = 65536;
 constexpr std::size_t kMaxExportNames = 65536;
+constexpr std::size_t kMaxTlsCallbacks = 4096;
 
 constexpr std::uint16_t kImageFileDll = 0x2000;
 
@@ -869,13 +870,19 @@ private:
                     {static_cast<std::uint32_t>(callbacks_rva), sizeof(std::uint64_t)});
                 if (callbacks_file_offset.has_value()) {
                     std::size_t current_cb_offset = *callbacks_file_offset;
+                    std::size_t callback_count = 0;
                     while (reader_.has_range(current_cb_offset, sizeof(std::uint64_t))) {
                         std::uint64_t cb_va{};
                         reader_.read_u64(current_cb_offset, cb_va);
                         if (cb_va == 0) {
                             break;
                         }
+                        if (callback_count >= kMaxTlsCallbacks) {
+                            return fail(ParseStatus::Malformed,
+                                        "diretório TLS excede o limite de callbacks");
+                        }
                         parser_state_.tls_info.callback_vas.push_back(cb_va);
+                        ++callback_count;
                         current_cb_offset += sizeof(std::uint64_t);
                     }
                 }

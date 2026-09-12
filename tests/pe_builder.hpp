@@ -87,6 +87,8 @@ struct BuildSpec {
     std::uint32_t exception_size{};
     std::uint32_t resource_rva{};
     std::uint32_t resource_size{};
+    std::uint32_t tls_rva{};
+    std::uint32_t tls_size{};
     std::uint32_t delay_import_rva{};
     std::uint32_t delay_import_size{};
     std::uint32_t reloc_rva{};
@@ -167,6 +169,14 @@ inline std::vector<std::byte> build(const BuildSpec& spec) {
                   spec.exception_rva);
         write_u32(out, opt_start + 112 + kExceptionDirectory * kDataDirectorySize + 4,
                   spec.exception_size);
+    }
+    if (spec.tls_rva != 0 || spec.tls_size != 0) {
+        constexpr std::size_t kTlsDirectory = 9;
+        constexpr std::size_t kDataDirectorySize = 8;
+        write_u32(out, opt_start + 112 + kTlsDirectory * kDataDirectorySize,
+                  spec.tls_rva);
+        write_u32(out, opt_start + 112 + kTlsDirectory * kDataDirectorySize + 4,
+                  spec.tls_size);
     }
     if (spec.delay_import_rva != 0 || spec.delay_import_size != 0) {
         constexpr std::size_t kDelayImportDirectory = 13;
