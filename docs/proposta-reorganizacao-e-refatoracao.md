@@ -1,175 +1,185 @@
-# Proposta de Reorganização e Refatoração Modular — TradutorLinux
+# Proposta de reorganização e refatoração modular — estado atual
 
-## 1. Contexto e Motivação
+## Finalidade
 
-O TradutorLinux evoluiu de forma rápida ao longo das 13 fases do seu roadmap, passando de um runtime mínimo de console com apenas 3 APIs importadas (`GetStdHandle`, `WriteFile`, `ExitProcess`) para um runtime com loader PE, unwinding SEH x86-64, rede, registro persistente e GUI X11 experimental.
+Este documento descreve somente a reorganização que ainda faz sentido no
+estado atual do TradutorLinux. A migração estrutural principal já foi
+concluída e permanece registrada no histórico ao final; ela não deve ser
+reexecutada nem usada como uma lista paralela ao roadmap.
 
-A reorganização principal já foi aplicada. O estado atual é modular em `src/runtime/core`, `src/runtime/seh`, `src/runtime/dlls` e `src/cli`; os pontos que ainda justificam manutenção são:
-1. `src/runtime/dlls/kernel32/` e `src/runtime/dlls/user32/` ainda podem ganhar subdivisões internas quando houver um alvo concreto.
-2. A suíte Win32 já foi separada por domínio em `test_win32_apps.cpp`,
-   `test_win32_external.cpp`, `test_win32_gui.cpp`, `test_win32_security.cpp` e
-   `test_win32_stubs.cpp`; `tests/test_win32.cpp` ainda concentra os testes
-   comuns remanescentes e é o maior arquivo da suíte.
-3. Algumas famílias legadas permanecem diretamente em `src/runtime/` (`gdi32.cpp`, `shell32.cpp`, rede e outras) e só devem ser movidas junto com testes e dependências reais.
-4. `include/tradutorlinux/win32/` já separa tipos e contratos por família; `winapi.hpp` permanece como superfície de compatibilidade.
-5. O próximo trabalho de refatoração deve priorizar testes e famílias ainda grandes, sem repetir a migração já concluída.
+O objetivo desta proposta é reduzir acoplamento, separar código genérico de
+código específico de aplicativo e diminuir o risco de manutenção sem alterar
+comportamento, ABI Microsoft x64, exports ou contratos de compatibilidade.
 
----
+## Estado atual já consolidado
 
-## 2. Diagnóstico dos Maiores Arquivos
+As seguintes reorganizações já existem e não precisam ser refeitas:
 
-| Arquivo Atual | Tamanho | Responsabilidades Misturadas | Destino Proposto |
-|---|---|---|---|
-| `src/runtime/dlls/kernel32/*.cpp` | módulos temáticos | Arquivos, processos, threads, memória, tempo e console | Dividir somente quando uma API-alvo justificar |
-| `src/runtime/dlls/user32/*.cpp` | módulos temáticos | Mensageria, janelas, menus, diálogos e clipboard | Dividir controles quando houver contrato e teste próprios |
-| `include/tradutorlinux/win32/` | headers por família | Tipos e contratos ABI Win32 | Manter `winapi.hpp` apenas como superfície compatível |
-| `src/cli/*.cpp` | `options`, `report`, `runner` | CLI, relatório, catálogo e execução | Manter separação e evitar retorno a um monólito |
-| `tests/test_win32.cpp` | maior fonte de testes remanescentes | Testes comuns de Win32 | Dividir apenas os domínios que ainda trouxerem benefício de manutenção |
-| `src/loader/module.cpp` | registro de módulos | Registro e lookup de exports | Manter tabelas junto das DLLs, como já ocorre |
+- `src/runtime/core/` concentra bootstrap, contexto e despacho central;
+- `src/runtime/seh/` concentra unwind e trampolins de exceção;
+- `src/runtime/dlls/` separa famílias de DLL, incluindo `kernel32/`,
+  `user32/`, `net/`, `crypto/` e `com/`;
+- `src/runtime/dlls/kernel32/` já separa arquivos, processos, threads,
+  sincronização, memória, tempo, console, locale e módulos;
+- `src/runtime/dlls/user32/` já separa janelas, mensagens, diálogos e menus;
+- `include/tradutorlinux/win32/` já separa tipos e contratos por família;
+- `src/cli/` já separa opções, relatório e execução;
+- a suíte Win32 já possui arquivos separados para aplicativos, APIs externas,
+  GUI, segurança e stubs.
 
----
+Mover novamente esses diretórios não é uma etapa deste documento.
 
-## 3. Estrutura Proposta
+## Diagnóstico que motivou a atualização
 
-### 3.1. Reorganização de `src/runtime/`
+| Área | Estado observado | Decisão |
+|---|---|---|
+| GUI | `src/runtime/gui_controls.cpp` contém controles genéricos e lógica específica do 7-Zip, incluindo renderização, navegação e cópia. | Separar a extensão do 7-Zip do runtime genérico. |
+| Estado global | `src/runtime/core/runtime_context.hpp` declara estado de arquivos, threads, TLS/FLS, processos, janelas, menus, handles e memória. | Dividir por domínio mantendo uma fachada interna estável. |
+| KERNEL32 | `src/runtime/dlls/kernel32/kernel32_internal.hpp` é incluído por todos os módulos e reúne headers, tipos e helpers de vários domínios. | Reduzir o header guarda-chuva e criar dependências explícitas. |
+| Arquivos | `src/runtime/dlls/kernel32/file.cpp` mistura I/O, enumeração, metadados, caminhos, volumes, INI e notificações. | Dividir por contrato de API, preservando a tabela de exports. |
 
-Nota: a árvore abaixo preserva a proposta original para fins de histórico. A
-reorganização correspondente já existe em grande parte; não recriar caminhos
-que já foram migrados. O restante deve ser executado apenas quando houver um
-alvo, teste e benefício de manutenção claramente identificados.
+Arquivos grandes que já possuem responsabilidade coerente não são motivo
+suficiente para uma nova divisão. Isso vale, por enquanto, para
+`src/runtime/core/winapi.cpp`, `src/cli/runner.cpp`,
+`src/runtime/dlls/user32/message.cpp`, `src/runtime/dlls/user32/window.cpp`
+e `tests/test_win32.cpp`.
 
-```text
-src/runtime/
-├── core/                     # Infraestrutura profunda de bootstrap e contexto
-│   ├── guest_context.cpp     # Gerenciamento de GuestContext
-│   ├── guest_entry.S         # Trampolim assembly de troca de pilha e ABI
-│   ├── memory_validator.cpp  # Validação de limites de memória (/proc/self/maps)
-│   ├── environment.cpp       # Bloco de variáveis de ambiente Win32
-│   ├── runtime_context.hpp   # Definições internas de contexto e threads
-│   └── winapi.cpp            # Despacho central do entry point
-│
-├── seh/                      # Subsistema estruturado de exceções x86-64
-│   ├── unwind.cpp            # Parser de .pdata/.xdata e RtlVirtualUnwind
-│   ├── unwind_capture.S      # RtlCaptureContext em assembly
-│   └── seh.S                 # Trampolim de despacho SEH
-│
-├── dlls/                     # Implementações de DLLs organizadas por família
-│   ├── kernel32/             # Fim do monólito de 275 KB
-│   │   ├── file.cpp          # CreateFile, ReadFile, WriteFile, MoveFile, FindFirstFile...
-│   │   ├── process.cpp       # CreateProcess, ExitProcess, OpenProcess, Toolhelp...
-│   │   ├── thread.cpp        # CreateThread, TlsAlloc, GetExitCodeThread...
-│   │   ├── sync.cpp          # Mutex, Event, Semaphore, SRWLock, CondVar, WaitFor*...
-│   │   ├── memory.cpp        # VirtualAlloc, VirtualProtect, HeapAlloc, GlobalAlloc...
-│   │   ├── time.cpp          # GetTickCount64, Sleep, GetSystemTimeAsFileTime...
-│   │   └── exports.cpp       # Tabela de exportações da KERNEL32
-│   │
-│   ├── user32/               # Fim do monólito de 158 KB
-│   │   ├── message.cpp       # GetMessage, PeekMessage, SendMessage, PostMessage...
-│   │   ├── window.cpp        # CreateWindowEx, RegisterClassEx, ShowWindow, SetWindowPos...
-│   │   ├── controls/         # Controles lógicos nativos (Button, Edit, Listview, etc.)
-│   │   │   ├── button.cpp
-│   │   │   ├── edit.cpp
-│   │   │   └── listview.cpp
-│   │   ├── dialog.cpp        # DialogBox, CreateDialog, dialog_template.cpp
-│   │   └── exports.cpp       # Tabela de exportações da USER32
-│   │
-│   ├── gdi/                  # Subsistema gráfico 2D
-│   │   ├── gdi32.cpp
-│   │   └── gdiplus.cpp
-│   │
-│   ├── net/                  # Rede, sockets e internet
-│   │   ├── ws2_32.cpp        # WinSock2 (sockets, poll, getaddrinfo)
-│   │   ├── wininet.cpp       # WinINet (HTTP/HTTPS, cache, URLs)
-│   │   ├── iphlpapi.cpp
-│   │   └── mpr.cpp
-│   │
-│   ├── system/               # Sistema operacional, registro e segurança
-│   │   ├── advapi.cpp        # Registro Win32 (RegOpenKey, RegSetValue, etc.)
-│   │   ├── security.cpp      # SIDs, DACLs, Tokens de segurança
-│   │   ├── ntdll.cpp
-│   │   └── psapi.cpp
-│   │
-│   ├── shell/                # Desktop, temas e diálogos comuns
-│   │   ├── shell32.cpp
-│   │   ├── shlwapi.cpp
-│   │   ├── comctl32.cpp
-│   │   ├── comdlg32.cpp
-│   │   ├── uxtheme.cpp
-│   │   ├── dwmapi.cpp
-│   │   └── imm32.cpp
-│   │
-│   ├── com/                  # Component Object Model
-│   │   ├── ole32.cpp
-│   │   └── oleaut32.cpp
-│   │
-│   ├── crypto/               # Criptografia e validação de confiança
-│   │   ├── crypt32.cpp
-│   │   └── wintrust.cpp
-│   │
-│   └── crt/                  # C Runtime
-│       └── msvcrt.cpp
-```
+## Frentes atuais
 
-### 3.2. Reorganização de Cabeçalhos (`include/tradutorlinux/`)
+### F1 — Separar a extensão específica do 7-Zip
 
-Criar subpastas em `include/tradutorlinux/win32/`:
-- `include/tradutorlinux/win32/types.hpp`: tipos fundamentais Win32 (`HWND`, `HANDLE`, `DWORD`, `BOOL`, `RECT`, `POINT`).
-- `include/tradutorlinux/win32/kernel32.hpp`: protótipos de `KERNEL32.dll`.
-- `include/tradutorlinux/win32/user32.hpp`: protótipos de `USER32.dll`.
-- `include/tradutorlinux/win32/gdi32.hpp`: protótipos de `GDI32.dll`.
-- `include/tradutorlinux/runtime/winapi.hpp`: arquivo guarda-chuva que inclui os módulos acima, garantindo **retrocompatibilidade imediata** com qualquer código existente.
+**Origem:** `src/runtime/gui_controls.cpp` e
+`src/runtime/gui_controls.hpp`.
 
----
+A lógica identificada por nomes como `SevenZipDirectoryEntry`,
+`perform_seven_zip_copy` e `render_seven_zip_file_manager` não pertence ao
+runtime genérico. Ela deve ser movida para uma extensão explícita em
+`compat/apps/7zip/`, com os cenários correspondentes em
+`tests/apps/7zip/`.
 
-## 4. Benefícios Práticos da Refatoração
+Regras:
 
-1. **Velocidade de Compilação Drasticamente Superior**:
-   - A divisão atual permite alterar APIs de arquivo em `src/runtime/dlls/kernel32/file.cpp` sem recompilar um monólito histórico.
-   - Os domínios principais da suíte Win32 já foram extraídos para arquivos
-     próprios; `tests/test_win32.cpp` permanece como núcleo comum e pode ser
-     reduzido em uma manutenção futura, caso isso traga benefício mensurável.
-2. **Localização Imediata do Código**:
-   - Rede $\to$ `src/runtime/dlls/net/`.
-   - Criptografia $\to$ `src/runtime/dlls/crypto/`.
-   - Threads e Concorrência $\to$ `src/runtime/dlls/kernel32/thread.cpp` e `sync.cpp`.
-   - Janelas e Eventos $\to$ `src/runtime/dlls/user32/window.cpp` e `message.cpp`.
-3. **Eliminação de Código Duplicado**:
-   - A antiga sobreposição de `legacy_winapi.cpp` foi eliminada; novas APIs devem continuar entrando no módulo da família correspondente.
-4. **Descentralização do Registro de DLLs**:
-   - As tabelas de exportação já ficam junto dos módulos de cada DLL, enquanto o loader mantém apenas registro e lookup.
-5. **Facilidade para Testes Unitários Focados**:
-   - A separação por domínio já cobre aplicativos, APIs externas, GUI,
-     segurança e stubs. O arquivo `tests/test_win32.cpp` ainda pode receber
-     uma divisão adicional por assunto, mas deixou de ser a única suíte para
-     esses subsistemas.
+- o runtime genérico continua oferecendo janelas, controles, mensagens e
+  desenho que tenham contrato geral;
+- a extensão só pode ser selecionada por perfil ou prefixo explícito;
+- nenhum comportamento do 7-Zip pode alterar silenciosamente outro aplicativo;
+- a extensão não deve conter DLL binária gerada ou baixada;
+- o smoke existente do 7-Zip deve proteger a seleção, o contrato e o
+  isolamento da extensão.
 
----
+**Conclusão:** o código genérico não pode incluir referências específicas ao
+7-Zip depois desta etapa; a integração deve continuar reproduzível e a matriz
+de compatibilidade deve declarar o nível funcional separadamente.
 
-## 5. Histórico da reorganização
+### F2 — Dividir o estado interno do runtime
 
-As fases abaixo registram somente o histórico da migração. As fases 1–7 foram
-aplicadas conforme a estrutura atual do projeto e não são instruções para mover
-novamente os mesmos arquivos. Qualquer manutenção futura, inclusive uma nova
-subdivisão motivada por um alvo concreto, deve ser registrada no
-[backlog consolidado legado](../feitos/ROADMAP-LEGADO.md#backlog-consolidado).
+**Origem:** `src/runtime/core/runtime_context.hpp`.
 
-* **Fase 1 — Agrupamento de DLLs Independentes (concluída)**:
-  - Mover `ws2_32.cpp`, `wininet.cpp`, `iphlpapi.cpp`, `mpr.cpp` $\to$ `src/runtime/dlls/net/`.
-  - Mover `crypt32.cpp`, `wintrust.cpp` $\to$ `src/runtime/dlls/crypto/`.
-  - Mover `ole32.cpp`, `oleaut32.cpp` $\to$ `src/runtime/dlls/com/`.
-  - Atualizar caminhos no `CMakeLists.txt`.
-* **Fase 2 — Infraestrutura Core e SEH (concluída)**:
-  - Mover arquivos de bootstrap para `src/runtime/core/`.
-  - Mover arquivos de exceção para `src/runtime/seh/`.
-  - Atualizar caminhos no `CMakeLists.txt`.
-* **Fase 3 — Descentralização de `module.cpp` (concluída)**:
-  - Extrair as tabelas de exports para cada DLL respectiva.
-* **Fase 4 — Modularização de `kernel32.cpp` e Unificação de `legacy_winapi.cpp` (concluída)**:
-  - Criar a subpasta `src/runtime/dlls/kernel32/` e dividir por funcionalidade (`file.cpp`, `process.cpp`, `thread.cpp`, `sync.cpp`, `memory.cpp`, `time.cpp`).
-* **Fase 5 — Modularização de `user32.cpp` (concluída parcialmente)**:
-  - Criar a subpasta `src/runtime/dlls/user32/` e separar `message.cpp`, `window.cpp`, `controls/`, `dialog.cpp`.
-* **Fase 6 — Modularização de Cabeçalhos e CLI (concluída)**:
-  - Dividir `winapi.hpp` e `cli.cpp` conforme a proposta.
-* **Fase 7 — Separação da suíte Win32 (concluída)**:
-  - Extrair os testes de aplicativos, APIs externas, GUI, segurança e stubs,
-    preservando helpers compartilhados, fixtures e regressões existentes.
+O header deve deixar de ser o ponto obrigatório para todo estado do runtime.
+A divisão deve ser incremental, sem expor os novos headers como API pública.
+A organização sugerida é:
+
+- `runtime_thread_state.hpp`: TEB, TLS, FLS, threads e sincronização de
+  inicialização;
+- `runtime_process_state.hpp`: imagem, processos, snapshots e ciclo de vida;
+- `runtime_handle_state.hpp`: tabelas e validação de handles;
+- `runtime_gui_state.hpp`: classes, janelas, menus, diálogos e mensagens;
+- `runtime_memory_state.hpp`: alocações, mapeamentos e recursos de memória;
+- `runtime_context.hpp`: fachada interna mínima e pontos de composição.
+
+Os nomes são uma direção de organização, não uma autorização para criar
+headers vazios ou duplicar declarações. Cada novo header deve ter um dono
+claro, incluir somente o contrato necessário e possuir teste de compilação ou
+regressão que justifique sua existência.
+
+**Conclusão:** módulos de DLL não devem incluir estado de GUI, processo ou
+memória sem precisar dele; o comportamento e a ABI permanecem inalterados.
+
+### F3 — Reduzir o header interno do KERNEL32
+
+**Origem:** `src/runtime/dlls/kernel32/kernel32_internal.hpp`.
+
+Esse arquivo deve ser reduzido a helpers realmente comuns. As dependências
+específicas podem ser separadas, por exemplo, em:
+
+- `kernel32_file_internal.hpp`;
+- `kernel32_process_internal.hpp`;
+- `kernel32_thread_internal.hpp`;
+- `kernel32_memory_internal.hpp`;
+- `kernel32_common.hpp` para tipos e helpers sem domínio específico.
+
+A migração deve começar por um módulo e remover includes não utilizados. Não
+se deve alterar a assinatura das exports, o layout das estruturas convidadas
+ou a ordem de registro das DLLs.
+
+**Conclusão:** cada módulo de KERNEL32 depende apenas do estado e dos helpers
+que utiliza; o comportamento continua protegido pelos testes atuais.
+
+### F4 — Dividir `file.cpp` por contrato
+
+**Origem:** `src/runtime/dlls/kernel32/file.cpp`.
+
+A divisão sugerida é:
+
+- `file_io.cpp`: abertura, leitura, escrita, ponteiro, flush e fechamento;
+- `file_find.cpp`: enumeração de arquivos, streams e notificações;
+- `file_metadata.cpp`: atributos, tempos, tamanho, volume e informações por
+  handle;
+- `file_paths.cpp`: diretórios, caminhos completos, temporários, drives e
+  operações de cópia/movimentação;
+- `file_ini.cpp`: APIs de perfil INI;
+- `file_exports.cpp`, somente se a tabela de exports deixar de caber junto
+  do domínio sem duplicação.
+
+A separação deve seguir as APIs e os helpers usados, não apenas o tamanho do
+arquivo. Cada movimento precisa manter a mesma exportação, o mesmo símbolo
+ABI e o mesmo resultado de erro.
+
+**Conclusão:** a mudança só estará pronta quando os testes de arquivo,
+enumeração, caminhos, metadados e INI continuarem passando sem regressão.
+
+## Ordem recomendada
+
+1. F1 — separar a lógica específica do 7-Zip, porque é uma fronteira
+   arquitetural real entre runtime genérico e extensão de aplicativo;
+2. F2 — dividir o estado interno, criando a base para dependências menores;
+3. F3 — reduzir `kernel32_internal.hpp` usando os novos limites de estado;
+4. F4 — dividir `file.cpp` depois que os helpers comuns estiverem estáveis.
+
+Cada frente deve ser um commit próprio. Uma refatoração não deve ser misturada
+com correção de comportamento, nova API, mudança de classificação ou alteração
+de compatibilidade.
+
+## Critérios para cada etapa
+
+- exports, nomes de DLL, ABI e layouts Win32 permanecem inalterados;
+- nenhuma regra específica de aplicativo entra no runtime genérico;
+- o CMake e os includes são atualizados junto com a movimentação;
+- testes unitários e fixtures do domínio continuam executando;
+- `docs/compatibilidade.md` só muda quando a evidência ou o comportamento
+  publicado mudar;
+- `git diff --check` passa e o commit contém somente a etapa concluída.
+
+## Histórico da reorganização já concluída
+
+Estas etapas são registro histórico, não tarefas abertas:
+
+- agrupamento das DLLs independentes em `net/`, `crypto/` e `com/`;
+- criação de `runtime/core/` e `runtime/seh/`;
+- descentralização das tabelas de exports por DLL;
+- divisão do antigo KERNEL32 em módulos temáticos;
+- divisão parcial do USER32 em janelas, mensagens, diálogos e menus;
+- separação dos headers Win32 e dos componentes da CLI;
+- separação da suíte Win32 por domínio.
+
+## Referências
+
+- [ROADMAP.md](../ROADMAP.md) — etapas funcionais atuais;
+- [PROJETO.md](../PROJETO.md) — missão, limites e regras arquiteturais;
+- [docs/compatibilidade.md](compatibilidade.md) — matriz de evidência;
+- [docs/compatibilidade-runtime.md](compatibilidade-runtime.md) — contratos
+  do runtime;
+- [docs/arquitetura/api-win32.md](arquitetura/api-win32.md) — catálogo de
+  APIs e limites publicados;
+- [feitos/ROADMAP-LEGADO.md](../feitos/ROADMAP-LEGADO.md) — histórico das
+  fases antigas.
