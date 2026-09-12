@@ -2924,6 +2924,27 @@ Evidência reproduzível:
 - [x] Nenhuma DLL, shim, seleção por aplicativo ou regra exclusiva foi criada;
   o contrato é genérico para USER32 e continua limitado a templates padrão.
 
+### F7 concluído — USER32: `DialogBoxParamA` numérico (2026-09-12)
+
+Objetivo: retirar o retorno permissivo `IDOK` de `DialogBoxParamA` e alinhar o
+contrato ANSI ao modal wide já validado, cobrindo o formato usado pelos
+templates numéricos de aplicativos Win32 como PuTTY.
+
+Evidência reproduzível:
+
+- [x] `DialogBoxParamA` agora valida thread, nome nulo e `MAKEINTRESOURCE`,
+  delega o template numérico para `DialogBoxParamW` e preserva falhas como
+  `-1`; nomes textuais ANSI continuam explicitamente fora do subconjunto.
+- [x] `tl_dialog` executa o mesmo recurso por `DialogBoxParamA` depois do
+  modal wide e exige retorno 42; a unitária cobre callback inválido sem criar
+  uma janela falsa.
+- [x] O report do PuTTY continua resolvendo 348/348 imports. O trace GDB no
+  fluxo sem interação observou `CreateDialogParamA`, mas não `DialogBoxParamA`
+  antes do timeout; portanto esta melhoria não é declarada como correção do
+  bloqueio SSH do PuTTY.
+- [x] Nenhum tratamento específico de aplicativo foi adicionado; o wrapper é
+  compartilhado por USER32 e limitado a recursos `RT_DIALOG` numéricos.
+
 ## Regras de validação
 
 - Cada correção começa com uma fixture mínima e termina com testes automatizados.

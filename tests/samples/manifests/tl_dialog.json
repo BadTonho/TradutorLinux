@@ -19,6 +19,7 @@
       "CreateDialogParamW",
       "DestroyIcon",
       "DestroyWindow",
+      "DialogBoxParamA",
       "DialogBoxParamW",
       "EndDialog",
       "GetDlgItem",

@@ -77,6 +77,9 @@ TL_MSABI int tl_SendMessageW(const void* window, std::uint32_t message, abi::Wpa
 TL_MSABI std::intptr_t tl_DialogBoxParamW(const void* instance, const std::uint16_t* template_name,
                                            const void* parent, std::uintptr_t dialog_proc,
                                            abi::Lparam init_param) noexcept;
+TL_MSABI std::intptr_t tl_DialogBoxParamA(void* instance, const char* template_name,
+                                           void* parent, void* dialog_proc,
+                                           std::intptr_t init_param) noexcept;
 TL_MSABI int tl_EndDialog(const void* dialog, std::intptr_t result) noexcept;
 TL_MSABI void* tl_GetDlgItem(const void* dialog, int identifier) noexcept;
 TL_MSABI int tl_SetDlgItemTextW(const void* dialog, int identifier,

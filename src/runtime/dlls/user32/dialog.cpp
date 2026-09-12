@@ -665,13 +665,26 @@ TL_MSABI std::intptr_t tl_DefDlgProcA(void* const hwnd, const std::uint32_t msg,
 }
 
 TL_MSABI std::intptr_t tl_DialogBoxParamA(void* const instance, const char* const template_name, void* const wnd_parent, void* const dialog_func, const std::intptr_t init_param) noexcept {
-    (void)instance;
-    (void)template_name;
-    (void)wnd_parent;
-    (void)dialog_func;
-    (void)init_param;
-    set_last_error(abi::kErrorSuccess);
-    return 1; // IDOK
+    if (!user32_gui_thread_allowed("DialogBoxParamA")) {
+        return -1;
+    }
+    const std::uintptr_t raw_template = reinterpret_cast<std::uintptr_t>(template_name);
+    if (template_name == nullptr || raw_template > 0xFFFFU) {
+        set_last_error(template_name == nullptr ? abi::kErrorInvalidParameter
+                                                  : abi::kErrorNotSupported);
+        return -1;
+    }
+    const std::intptr_t result = tl_DialogBoxParamW(
+        instance, reinterpret_cast<const std::uint16_t*>(template_name), wnd_parent,
+        reinterpret_cast<std::uintptr_t>(dialog_func), init_param);
+    const std::array<diagnostics::TraceField, 4> fields{
+        diagnostics::TraceField{"symbol", "DialogBoxParamA"},
+        diagnostics::TraceField{"template", std::to_string(raw_template)},
+        diagnostics::TraceField{"result", std::to_string(result)},
+        diagnostics::TraceField{"status", result < 0 ? "failure" : "returned"},
+    };
+    runtime_trace("DialogBoxParamA", fields, 4);
+    return result;
 }
 
 TL_MSABI int tl_IsDialogMessageA(void* const hwnd, void* const msg) noexcept {
