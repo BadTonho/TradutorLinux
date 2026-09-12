@@ -7,17 +7,19 @@ namespace {
                                                  const std::uint16_t* const template_name,
                                                  const void* const parent,
                                                  const std::uintptr_t dialog_proc,
-                                                 const abi::Lparam init_param) noexcept {
-    const auto trace_failure = [](const char* const stage, const char* const detail) noexcept {
+                                                 const abi::Lparam init_param,
+                                                 const char* const trace_symbol) noexcept {
+    const auto trace_failure = [trace_symbol](const char* const stage,
+                                              const char* const detail) noexcept {
         const std::array<diagnostics::TraceField, 4> fields{
-            diagnostics::TraceField{"symbol", "CreateDialogParamA"},
+            diagnostics::TraceField{"symbol", trace_symbol},
             diagnostics::TraceField{"stage", stage},
             diagnostics::TraceField{"detail", detail},
             diagnostics::TraceField{"status", "failure"},
         };
-        runtime_trace("CreateDialogParamA", fields, 4);
+        runtime_trace(trace_symbol, fields, 4);
     };
-    if (!user32_gui_thread_allowed("CreateDialogParamA")) {
+    if (!user32_gui_thread_allowed(trace_symbol)) {
         trace_failure("thread-policy", "GUI thread não permitido");
         return nullptr;
     }
@@ -160,12 +162,12 @@ namespace {
     static_cast<void>(call_wndproc(dialog.wndproc, &dialog, 0x0110U, 0, init_param)); // WM_INITDIALOG
     flush_dialog_render();
     const std::array<diagnostics::TraceField, 4> fields{
-        diagnostics::TraceField{"symbol", "CreateDialogParamA"},
+        diagnostics::TraceField{"symbol", trace_symbol},
         diagnostics::TraceField{"template", std::to_string(reinterpret_cast<std::uintptr_t>(template_name))},
         diagnostics::TraceField{"controls", std::to_string(parsed.controls.size())},
         diagnostics::TraceField{"status", "created"},
     };
-    runtime_trace("CreateDialogParamA", fields, 4);
+    runtime_trace(trace_symbol, fields, 4);
     set_last_error(abi::kErrorSuccess);
     return &dialog;
 }
@@ -655,7 +657,7 @@ TL_MSABI void* tl_CreateDialogParamA(void* const instance, const char* const tem
     }
     return create_modeless_dialog(instance, reinterpret_cast<const std::uint16_t*>(template_name),
                                   wnd_parent, reinterpret_cast<std::uintptr_t>(dialog_func),
-                                  init_param);
+                                  init_param, "CreateDialogParamA");
 }
 
 TL_MSABI std::intptr_t tl_DefDlgProcA(void* const hwnd, const std::uint32_t msg, const std::uintptr_t wparam, const std::intptr_t lparam) noexcept {
@@ -736,13 +738,15 @@ TL_MSABI int tl_SetDlgItemInt(void* const hDlg, const int nIDDlgItem, const std:
     return 1;
 }
 
-TL_MSABI void* tl_CreateDialogParamW(void* const hInstance, const wchar_t* const lpTemplateName, void* const hWndParent, void* const lpDialogFunc, const std::intptr_t dwInitParam) noexcept {
-    (void)hInstance;
-    (void)lpTemplateName;
-    (void)hWndParent;
-    (void)lpDialogFunc;
-    (void)dwInitParam;
-    return reinterpret_cast<void*>(0x444C4757ULL);
+TL_MSABI void* tl_CreateDialogParamW(void* const hInstance,
+                                     const std::uint16_t* const lpTemplateName,
+                                     void* const hWndParent,
+                                     void* const lpDialogFunc,
+                                     const std::intptr_t dwInitParam) noexcept {
+    return create_modeless_dialog(
+        hInstance, lpTemplateName, hWndParent,
+        reinterpret_cast<std::uintptr_t>(lpDialogFunc), dwInitParam,
+        "CreateDialogParamW");
 }
 
 TL_MSABI void* tl_CreateDialogIndirectParamW(void* const hInstance, const void* const lpTemplate, void* const hWndParent, void* const lpDialogFunc, const std::intptr_t dwInitParam) noexcept {

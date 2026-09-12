@@ -366,6 +366,9 @@ TEST(Win32DialogTest, RejectsInvalidModalInputsAndUnknownTemplates) {
     EXPECT_EQ(tl_DialogBoxParamW(nullptr, numeric_template, nullptr, 0, 0), -1);
     EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
 
+    EXPECT_EQ(tl_CreateDialogParamW(nullptr, numeric_template, nullptr, nullptr, 0), nullptr);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+
     const std::uint16_t invalid_template[] = {0};
     EXPECT_EQ(tl_DialogBoxParamW(nullptr, invalid_template, nullptr, 1, 0), -1);
     EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);

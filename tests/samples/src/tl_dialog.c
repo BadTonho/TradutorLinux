@@ -30,9 +30,13 @@ typedef struct {
 } rect_t;
 
 __attribute__((dllimport)) void* GetModuleHandleW(const word_t* name);
+__attribute__((dllimport)) hwnd_t CreateDialogParamW(const void* instance, const word_t* name,
+                                                     hwnd_t parent, void* proc,
+                                                     lparam_t parameter);
 __attribute__((dllimport)) lresult_t DialogBoxParamW(const void* instance, const word_t* name,
                                                      hwnd_t parent, void* proc,
                                                      lparam_t parameter);
+__attribute__((dllimport)) bool_t DestroyWindow(hwnd_t window);
 __attribute__((dllimport)) bool_t EndDialog(hwnd_t dialog, lparam_t result);
 __attribute__((dllimport)) hwnd_t GetDlgItem(hwnd_t dialog, int identifier);
 __attribute__((dllimport)) bool_t SetDlgItemTextW(hwnd_t dialog, int identifier,
@@ -97,6 +101,11 @@ void tl_entry(void);
 __attribute__((used, section(".rdata"))) void (*const tl_relocation_anchor)(void) = &tl_entry;
 
 void tl_entry(void) {
+    hwnd_t modeless = CreateDialogParamW(GetModuleHandleW((const word_t*)0), kTemplate,
+                                         (hwnd_t)0, (void*)dialog_proc, 0);
+    if (modeless == (hwnd_t)0 || !g_init_seen || !DestroyWindow(modeless)) {
+        ExitProcess(3U);
+    }
     const lresult_t result = DialogBoxParamW(GetModuleHandleW((const word_t*)0), kTemplate,
                                              (hwnd_t)0, (void*)dialog_proc, 0);
     if (result != 42 || !g_checks_ok) {

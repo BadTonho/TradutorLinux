@@ -16,7 +16,9 @@
     ],
     "USER32.dll": [
       "CopyImage",
+      "CreateDialogParamW",
       "DestroyIcon",
+      "DestroyWindow",
       "DialogBoxParamW",
       "EndDialog",
       "GetDlgItem",

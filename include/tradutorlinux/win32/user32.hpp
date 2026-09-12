@@ -334,7 +334,7 @@ TL_MSABI std::uint32_t tl_GetMenuState(void* hMenu, std::uint32_t uId, std::uint
 TL_MSABI int tl_InsertMenuW(void* hMenu, std::uint32_t uPosition, std::uint32_t uFlags, std::uintptr_t uIDNewItem, const wchar_t* lpNewItem) noexcept;
 TL_MSABI std::uint32_t tl_GetDlgItemInt(void* hDlg, int nIDDlgItem, int* lpTranslated, int bSigned) noexcept;
 TL_MSABI int tl_SetDlgItemInt(void* hDlg, int nIDDlgItem, std::uint32_t uValue, int bSigned) noexcept;
-TL_MSABI void* tl_CreateDialogParamW(void* hInstance, const wchar_t* lpTemplateName, void* hWndParent, void* lpDialogFunc, std::intptr_t dwInitParam) noexcept;
+TL_MSABI void* tl_CreateDialogParamW(void* hInstance, const std::uint16_t* lpTemplateName, void* hWndParent, void* lpDialogFunc, std::intptr_t dwInitParam) noexcept;
 TL_MSABI void* tl_CreateDialogIndirectParamW(void* hInstance, const void* lpTemplate, void* hWndParent, void* lpDialogFunc, std::intptr_t dwInitParam) noexcept;
 TL_MSABI std::intptr_t tl_DialogBoxIndirectParamW(void* hInstance, const void* hDialogTemplate, void* hWndParent, void* lpDialogFunc, std::intptr_t dwInitParam) noexcept;
 TL_MSABI void* tl_SetClipboardViewer(void* hWndNewViewer) noexcept;

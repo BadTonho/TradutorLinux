@@ -2900,6 +2900,30 @@ Evidência reproduzível:
 - [x] Nenhuma DLL, shim ou seleção específica do 7-Zip foi adicionada; as
   demais APIs stateful de USER32 continuam exigindo o thread principal.
 
+### F6 concluído — USER32: `CreateDialogParamW` modeless (2026-09-12)
+
+Objetivo: substituir o sentinela de `CreateDialogParamW` por criação real de
+diálogo modeless no subconjunto USER32 já usado por aplicativos x64, sem
+introduzir tratamento específico para Notepad++ ou PuTTY.
+
+Evidência reproduzível:
+
+- [x] `CreateDialogParamW` agora reutiliza o parser de `RT_DIALOG`, a criação
+  X11/modelo lógico, controles padrão, `WM_INITDIALOG` e o ciclo de vida já
+  exercitado por `CreateDialogParamA`; falhas de recurso, callback, thread ou
+  janela retornam erro controlado em vez de um handle falso.
+- [x] A fixture genérica `tl_dialog` cria e destrói primeiro um diálogo
+  modeless wide, valida seu callback e depois executa o modal existente; o
+  metadata passou e `runtime_gui_smoke` passou sob Xvfb fora do sandbox.
+- [x] A unitária cobre a rejeição de template/callback inválidos e o report do
+  Notepad++ continua com `CreateDialogParamW` resolvido em `supported`.
+- [x] O smoke real do Notepad++ permaneceu fora da promoção: nesta execução o
+  ambiente reproduziu o bloqueio C++/SEH antes de criar a janela esperada; isso
+  não é usado como evidência de suporte funcional nem de que o aplicativo
+  tenha exercitado a nova API.
+- [x] Nenhuma DLL, shim, seleção por aplicativo ou regra exclusiva foi criada;
+  o contrato é genérico para USER32 e continua limitado a templates padrão.
+
 ## Regras de validação
 
 - Cada correção começa com uma fixture mínima e termina com testes automatizados.
