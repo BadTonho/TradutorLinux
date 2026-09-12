@@ -58,6 +58,7 @@ public:
     [[nodiscard]] GraphExportLookup get_proc_address(void* module_handle,
                                                       std::uint16_t ordinal) noexcept;
     [[nodiscard]] bool is_valid_module_handle(void* module_handle) const noexcept;
+    [[nodiscard]] bool is_guest_executable_address(std::uintptr_t address) const noexcept;
 
     // Executa os callbacks dos módulos que foram realmente usados por
     // imports estáticos ou LoadLibrary. Dependências são percorridas antes do

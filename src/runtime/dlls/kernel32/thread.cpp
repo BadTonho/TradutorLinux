@@ -44,6 +44,52 @@ void trace_fls(const char* const operation, const std::string& detail) noexcept 
     runtime_trace("fls", fields, 4);
 }
 
+void complete_host_thread(ThreadSlot* const finished_slot) noexcept {
+    if (finished_slot == nullptr) return;
+    bool should_cleanup = false;
+    std::uint32_t completed_thread_id = 0;
+    int completed_exit_code = 0;
+    {
+        std::lock_guard<std::mutex> join_lock(finished_slot->join_mutex);
+        std::lock_guard<std::mutex> threads_lock(g_threads_mutex);
+        finished_slot->finished = true;
+        completed_thread_id = finished_slot->thread_id;
+        completed_exit_code = finished_slot->exit_code;
+        if (finished_slot->handle_closed && !finished_slot->joined) {
+            finished_slot->joined = true;
+            should_cleanup = true;
+        }
+    }
+    finished_slot->finish_cv.notify_all();
+    trace_process_console(
+        "thread-exit", "guest-thread",
+        "thread-id=" + std::to_string(completed_thread_id) +
+            ";exit-code=" + std::to_string(completed_exit_code));
+    if (!should_cleanup) return;
+    if (finished_slot->host_thread.joinable()) {
+        finished_slot->host_thread.detach();
+    }
+    std::lock_guard<std::mutex> threads_lock(g_threads_mutex);
+    if (finished_slot->teb != nullptr) {
+        free_guest_teb(finished_slot->teb);
+    }
+    if (finished_slot->stack != nullptr && finished_slot->stack_size > 0) {
+        munmap(finished_slot->stack, finished_slot->stack_size);
+    }
+    finished_slot->used = false;
+    finished_slot->thread_id = 0;
+    finished_slot->teb = nullptr;
+    finished_slot->stack = nullptr;
+    finished_slot->stack_size = 0;
+    finished_slot->stack_top = 0;
+    finished_slot->thread_func = {};
+    finished_slot->finished = false;
+    finished_slot->joined = false;
+    finished_slot->handle_closed = false;
+    finished_slot->exit_code = 0;
+    runtime::invalidate_memory_map_cache();
+}
+
 constexpr std::uint32_t kTlsMinimumAvailable = 64;
 bool tls_index_allocated(const std::uint32_t tls_index) noexcept {
     return tls_index < kTlsMinimumAvailable && g_tls_indices_used[tls_index];
@@ -135,7 +181,7 @@ TL_MSABI void* tl_CreateThread(const void* thread_attributes, const std::uintptr
                                 std::uint32_t* thread_id) noexcept {
     (void)thread_attributes;
     if (start_address == 0 ||
-        !mapped_guest_range(reinterpret_cast<const void*>(start_address), 1, false) ||
+        !is_guest_executable_address(start_address) ||
         (creation_flags != 0 && creation_flags != 0x00000004)) {
         set_last_error(abi::kErrorInvalidParameter);
         return nullptr;
@@ -146,6 +192,7 @@ TL_MSABI void* tl_CreateThread(const void* thread_attributes, const std::uintptr
         set_last_error(abi::kErrorNotEnoughMemory);
         return nullptr;
     }
+    constexpr std::size_t kStackGuardSize = 4096;
     const std::size_t real_stack_size = std::max<std::size_t>(
         stack_size > 0 ? static_cast<std::size_t>(stack_size) : 0x1000000U, 0x1000000U);
     void* stack = mmap(nullptr, real_stack_size, PROT_READ | PROT_WRITE,
@@ -154,9 +201,14 @@ TL_MSABI void* tl_CreateThread(const void* thread_attributes, const std::uintptr
         set_last_error(abi::kErrorNotEnoughMemory);
         return nullptr;
     }
+    if (mprotect(stack, kStackGuardSize, PROT_NONE) != 0) {
+        munmap(stack, real_stack_size);
+        set_last_error(abi::kErrorNotEnoughMemory);
+        return nullptr;
+    }
     const std::uintptr_t stack_top = reinterpret_cast<std::uintptr_t>(stack) + real_stack_size;
     const std::uint32_t new_tid = g_next_thread_id.fetch_add(1);
-    void* teb = allocate_guest_teb(stack_top, real_stack_size, new_tid);
+    void* teb = allocate_guest_teb(stack_top, real_stack_size - kStackGuardSize, new_tid);
     if (teb == nullptr) {
         munmap(stack, real_stack_size);
         set_last_error(abi::kErrorNotEnoughMemory);
@@ -191,7 +243,11 @@ TL_MSABI void* tl_CreateThread(const void* thread_attributes, const std::uintptr
             g_current_thread_id = slot_ptr->thread_id;
             trace_process_console("thread-start", "guest-thread",
                                   "thread-id=" + std::to_string(slot_ptr->thread_id));
-            set_guest_gs_base(teb);
+            if (!set_guest_gs_base(teb)) {
+                trace_guest_failure("CreateThread", "guest-teb", "ARCH_SET_GS failed");
+                complete_host_thread(slot_ptr);
+                return;
+            }
             initialize_thread_tls(static_cast<runtime::GuestTeb*>(teb));
             set_current_fls_thread_values(slot_ptr->fls_values);
             runtime::restore_guest_unwind_view(unwind_view);
@@ -217,49 +273,7 @@ TL_MSABI void* tl_CreateThread(const void* thread_attributes, const std::uintptr
             set_current_fls_thread_values({});
             runtime::clear_guest_unwind_view();
             set_guest_gs_base(nullptr);
-            bool should_cleanup = false;
-            std::uint32_t completed_thread_id = 0;
-            int completed_exit_code = 0;
-            {
-                std::lock_guard<std::mutex> join_lock(finished_slot->join_mutex);
-                std::lock_guard<std::mutex> threads_lock(g_threads_mutex);
-                finished_slot->finished = true;
-                completed_thread_id = finished_slot->thread_id;
-                completed_exit_code = finished_slot->exit_code;
-                if (finished_slot->handle_closed && !finished_slot->joined) {
-                    finished_slot->joined = true;
-                    should_cleanup = true;
-                }
-            }
-            finished_slot->finish_cv.notify_all();
-            trace_process_console(
-                "thread-exit", "guest-thread",
-                "thread-id=" + std::to_string(completed_thread_id) +
-                    ";exit-code=" + std::to_string(completed_exit_code));
-            if (should_cleanup) {
-                if (finished_slot->host_thread.joinable()) {
-                    finished_slot->host_thread.detach();
-                }
-                std::lock_guard<std::mutex> threads_lock(g_threads_mutex);
-                if (finished_slot->teb != nullptr) {
-                    free_guest_teb(finished_slot->teb);
-                }
-                if (finished_slot->stack != nullptr && finished_slot->stack_size > 0) {
-                    munmap(finished_slot->stack, finished_slot->stack_size);
-                }
-                finished_slot->used = false;
-                finished_slot->thread_id = 0;
-                finished_slot->teb = nullptr;
-                finished_slot->stack = nullptr;
-                finished_slot->stack_size = 0;
-                finished_slot->stack_top = 0;
-                finished_slot->thread_func = {};
-                finished_slot->finished = false;
-                finished_slot->joined = false;
-                finished_slot->handle_closed = false;
-                finished_slot->exit_code = 0;
-                runtime::invalidate_memory_map_cache();
-            }
+            complete_host_thread(finished_slot);
         });
     } catch (...) {
         clear_unstarted_thread_slot(*it);

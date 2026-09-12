@@ -199,6 +199,10 @@ inline bool copy_wide_string(const std::u16string& value, std::uint16_t* buffer,
 }
 
 [[nodiscard]] inline bool is_guest_executable_address(const std::uintptr_t address) noexcept {
+    if (runtime::guest_context().module_graph != nullptr &&
+        runtime::guest_context().module_graph->is_guest_executable_address(address)) {
+        return true;
+    }
     if (g_guest_image_base == nullptr || address == 0) {
         return false;
     }

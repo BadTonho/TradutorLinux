@@ -1513,6 +1513,15 @@ TEST(Win32ConcurrencyTest, CreateThreadRejectsInvalidStartWithoutPartialHandle) 
     EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
 }
 
+TEST(Win32ConcurrencyTest, CreateThreadRejectsReadableNonExecutableStart) {
+    std::uint32_t readable_data = 0;
+    EXPECT_EQ(tl_CreateThread(nullptr, 0,
+                              reinterpret_cast<std::uintptr_t>(&readable_data), nullptr, 0,
+                              nullptr),
+              nullptr);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+}
+
 TEST(Win32ConcurrencyTest, GetCurrentProcessIdMatchesHost) {
     const std::uint32_t pid = tl_GetCurrentProcessId();
     EXPECT_EQ(pid, static_cast<std::uint32_t>(getpid()));

@@ -849,6 +849,21 @@ bool GuestModuleGraph::is_guest_executable(const MappedImage& image,
     return false;
 }
 
+bool GuestModuleGraph::is_guest_executable_address(const std::uintptr_t address) const noexcept {
+    if (main_image_ != nullptr && is_guest_executable(*main_image_, address)) {
+        return true;
+    }
+    for (const auto& module : modules_) {
+        if (module->state == LoadedState::Rejected || module->state == LoadedState::Unloaded) {
+            continue;
+        }
+        if (is_guest_executable(module->image, address)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 bool GuestModuleGraph::attach_module(const std::size_t index) noexcept {
     if (index >= modules_.size()) return false;
     LoadedModule& module = *modules_[index];

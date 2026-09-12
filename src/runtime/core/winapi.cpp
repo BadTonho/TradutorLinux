@@ -952,10 +952,14 @@ std::uint32_t decode_multibyte(const std::uint32_t code_page,
 }
 
 bool set_guest_gs_base(const void* const base) noexcept {
-    g_thread_teb = const_cast<runtime::GuestTeb*>(static_cast<const runtime::GuestTeb*>(base));
     constexpr long kArchSetGs = 0x1001;  // ARCH_SET_GS
-    return ::syscall(SYS_arch_prctl, kArchSetGs,
-                     static_cast<std::uintptr_t>(reinterpret_cast<std::uintptr_t>(base))) == 0;
+    const bool configured = ::syscall(
+                                SYS_arch_prctl, kArchSetGs,
+                                static_cast<std::uintptr_t>(reinterpret_cast<std::uintptr_t>(base))) == 0;
+    if (configured) {
+        g_thread_teb = const_cast<runtime::GuestTeb*>(static_cast<const runtime::GuestTeb*>(base));
+    }
+    return configured;
 }
 
 void* allocate_guest_teb(const std::uintptr_t stack_top,
