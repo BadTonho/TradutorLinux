@@ -59,7 +59,8 @@ void tl_entry(void) {
     op.any_aborted = 0;
     op.name_mappings = (void*)0;
     op.progress_title = (const uint16_t*)0;
-    if (SHFileOperationW(&op) != 0) {
+    if (SHFileOperationW(&op) != 50 || GetLastError() != 50U || !op.any_aborted ||
+        op.name_mappings != (void*)0) {
         fail(output, &bytes_written, 2);
     }
 
@@ -93,4 +94,3 @@ void tl_entry(void) {
     }
     ExitProcess(0);
 }
-

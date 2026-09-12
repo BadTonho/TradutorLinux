@@ -390,8 +390,34 @@ TEST(ShellPathTest, PathIsRelativeAndAutoComplete) {
 
     EXPECT_EQ(tl_SHAutoComplete(nullptr, 0), 0);
 
-    std::uint8_t op_buf[100]{};
-    EXPECT_EQ(tl_SHFileOperationW(op_buf), 0);
+    struct ShFileOperationW {
+        void* hwnd{};
+        std::uint32_t func{};
+        const std::uint16_t* from{};
+        const std::uint16_t* to{};
+        std::uint16_t flags{};
+        std::int32_t any_operations_aborted{};
+        void* name_mappings{reinterpret_cast<void*>(1)};
+        const std::uint16_t* progress_title{};
+    } operation{};
+    static_assert(sizeof(ShFileOperationW) == 56);
+    EXPECT_EQ(tl_SHFileOperationW(&operation), abi::kErrorNotSupported);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorNotSupported);
+    EXPECT_EQ(operation.any_operations_aborted, 1);
+    EXPECT_EQ(operation.name_mappings, nullptr);
+
+    struct ShFileInfoW {
+        void* icon{reinterpret_cast<void*>(1)};
+        std::int32_t icon_index{};
+        std::uint32_t attributes{};
+        std::uint16_t display_name[260]{};
+        std::uint16_t type_name[80]{};
+    } file_info{};
+    constexpr std::uint16_t kFile[] = {u'C', u':', u'\\', u't', u'e', u's', u't', 0};
+    static_assert(sizeof(ShFileInfoW) == 696);
+    EXPECT_EQ(tl_SHGetFileInfoW(kFile, 0, &file_info, sizeof(file_info), 0), 0U);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorNotSupported);
+    EXPECT_EQ(file_info.icon, reinterpret_cast<void*>(1));
 }
 
 TEST(ShellPathTest, PathFileExistsAndIsDirectoryWithZDrive) {

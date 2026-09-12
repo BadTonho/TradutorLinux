@@ -964,7 +964,7 @@ processo filho; cada thread convidada recebe seu próprio TEB/GS, stack e
 | `USER32.dll` | `SetProcessDefaultLayout` | Suportado | Configuração de layout de renderização de janelas (LTR/RTL) |
 | `ADVAPI32.dll` | `LookupPrivilegeValueW` | Suportado | Resolução de LUID para identificadores de privilégios de segurança |
 | `ADVAPI32.dll` | `AdjustTokenPrivileges` | Suportado | Ajuste e concessão de privilégios em tokens de processo |
-| `SHELL32.dll` | `SHGetFileInfoW` | Suportado | Consulta de atributos, extensões e ícones de arquivos do shell |
+| `SHELL32.dll` | `SHFileOperationW` / `SHGetFileInfoW` | Não suportado controlado | Operações de arquivo e metadados/ícones do Shell retornam `ERROR_NOT_SUPPORTED`; `SHFileOperationW` marca `fAnyOperationsAborted` e zera `hNameMappings`, sem alterar o sistema de arquivos. |
 | `SHELL32.dll` | `SHGetPathFromIDListW` | Suportado | Conversão de lista de IDs de shell para caminho no sistema de arquivos |
 | `SHELL32.dll` | `SHBrowseForFolderW` | Suportado | Diálogo de navegação e seleção de diretórios |
 | `SHELL32.dll` | `SHGetMalloc` | Suportado | Obtenção do alocador de memória padrão do Shell |

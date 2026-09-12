@@ -365,8 +365,14 @@ TL_MSABI int tl_SHFileOperationW(void* const file_op) noexcept {
         set_last_error(abi::kErrorInvalidParameter);
         return 1;
     }
-    set_last_error(abi::kErrorSuccess);
-    return 0; // 0 = S_OK / success in SHFileOperation
+    auto* const operation = static_cast<GuestShFileOpStructW*>(file_op);
+    operation->any_operations_aborted = 1;
+    operation->name_mappings = nullptr;
+    // Cópia, movimentação, exclusão e renomeação do shell ainda não têm
+    // implementação. Não sinalize sucesso sem ter alterado o sistema de
+    // arquivos do prefixo.
+    set_last_error(abi::kErrorNotSupported);
+    return static_cast<int>(abi::kErrorNotSupported);
 }
 
 struct GuestShFileInfoW {
@@ -380,15 +386,19 @@ struct GuestShFileInfoW {
 TL_MSABI std::uintptr_t tl_SHGetFileInfoW(const std::uint16_t* const path, const std::uint32_t file_attributes,
                                           void* const sfi, const std::uint32_t cb_file_info,
                                           const std::uint32_t flags) noexcept {
-    (void)path;
+    if (path != nullptr && !mapped_guest_wstring(path)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
     (void)file_attributes;
     (void)flags;
-    if (sfi != nullptr && cb_file_info >= sizeof(GuestShFileInfoW) &&
-        mapped_guest_range(sfi, sizeof(GuestShFileInfoW), true)) {
-        std::memset(sfi, 0, sizeof(GuestShFileInfoW));
+    if (sfi != nullptr && (cb_file_info < sizeof(GuestShFileInfoW) ||
+                           !mapped_guest_range(sfi, sizeof(GuestShFileInfoW), true))) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
     }
-    set_last_error(abi::kErrorSuccess);
-    return 1;
+    set_last_error(abi::kErrorNotSupported);
+    return 0;
 }
 
 TL_MSABI int tl_SHGetPathFromIDListW(const void* const pidl, std::uint16_t* const path) noexcept {
