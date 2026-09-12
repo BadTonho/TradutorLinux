@@ -35,7 +35,7 @@ Mover novamente esses diretórios não é uma etapa deste documento.
 |---|---|---|
 | GUI | `src/runtime/gui_controls.cpp` contém controles genéricos e lógica específica do 7-Zip, incluindo renderização, navegação e cópia. | Separar a extensão do 7-Zip do runtime genérico. |
 | Estado global | `src/runtime/core/runtime_context.hpp` declara estado de arquivos, threads, TLS/FLS, processos, janelas, menus, handles e memória. | Dividir por domínio mantendo uma fachada interna estável. |
-| KERNEL32 | `src/runtime/dlls/kernel32/kernel32_internal.hpp` é incluído por todos os módulos e reúne headers, tipos e helpers de vários domínios. | Reduzir o header guarda-chuva e criar dependências explícitas. |
+| KERNEL32 | `src/runtime/dlls/kernel32/kernel32_internal.hpp` é incluído pelos módulos de KERNEL32 e reúne headers, tipos e helpers de vários domínios. | Reduzir o header guarda-chuva e criar dependências explícitas. |
 | Arquivos | `src/runtime/dlls/kernel32/file.cpp` mistura I/O, enumeração, metadados, caminhos, volumes, INI e notificações. | Dividir por contrato de API, preservando a tabela de exports. |
 
 Arquivos grandes que já possuem responsabilidade coerente não são motivo
@@ -47,6 +47,9 @@ e `tests/test_win32.cpp`.
 ## Frentes atuais
 
 ### F1 — Separar a extensão específica do 7-Zip
+
+**Prioridade:** alta. É uma correção arquitetural real, mas não deve ser
+tratada como uma simples movimentação de arquivo.
 
 **Origem:** `src/runtime/gui_controls.cpp` e
 `src/runtime/gui_controls.hpp`.
@@ -73,6 +76,11 @@ de compatibilidade deve declarar o nível funcional separadamente.
 
 ### F2 — Dividir o estado interno do runtime
 
+**Prioridade:** posterior e condicionada a evidência. É uma refatoração de
+alto risco porque `runtime_context.hpp` participa de muitas fronteiras
+internas; só deve avançar depois de mapear dependências e demonstrar benefício
+de manutenção ou compilação.
+
 **Origem:** `src/runtime/core/runtime_context.hpp`.
 
 O header deve deixar de ser o ponto obrigatório para todo estado do runtime.
@@ -97,6 +105,9 @@ memória sem precisar dele; o comportamento e a ABI permanecem inalterados.
 
 ### F3 — Reduzir o header interno do KERNEL32
 
+**Prioridade:** alta, depois de F1. A redução do acoplamento entre os módulos de
+KERNEL32 prepara a divisão de `file.cpp` sem alterar as exports.
+
 **Origem:** `src/runtime/dlls/kernel32/kernel32_internal.hpp`.
 
 Esse arquivo deve ser reduzido a helpers realmente comuns. As dependências
@@ -116,6 +127,9 @@ ou a ordem de registro das DLLs.
 que utiliza; o comportamento continua protegido pelos testes atuais.
 
 ### F4 — Dividir `file.cpp` por contrato
+
+**Prioridade:** média, depois de F3. Deve ser feita incrementalmente, com um
+domínio por vez e regressão dos testes correspondentes.
 
 **Origem:** `src/runtime/dlls/kernel32/file.cpp`.
 
@@ -142,9 +156,11 @@ enumeração, caminhos, metadados e INI continuarem passando sem regressão.
 
 1. F1 — separar a lógica específica do 7-Zip, porque é uma fronteira
    arquitetural real entre runtime genérico e extensão de aplicativo;
-2. F2 — dividir o estado interno, criando a base para dependências menores;
-3. F3 — reduzir `kernel32_internal.hpp` usando os novos limites de estado;
-4. F4 — dividir `file.cpp` depois que os helpers comuns estiverem estáveis.
+2. F3 — reduzir `kernel32_internal.hpp` e criar dependências explícitas entre
+   os módulos de KERNEL32;
+3. F4 — dividir `file.cpp` depois que os helpers comuns estiverem estáveis;
+4. F2 — dividir o estado interno somente se o mapeamento de dependências e uma
+   medição simples confirmarem benefício suficiente para compensar o risco.
 
 Cada frente deve ser um commit próprio. Uma refatoração não deve ser misturada
 com correção de comportamento, nova API, mudança de classificação ou alteração
