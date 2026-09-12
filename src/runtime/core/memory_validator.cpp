@@ -164,7 +164,7 @@ bool validate_mapped_cstring(const char* str, const std::size_t max_len) noexcep
 }
 
 bool validate_mapped_wstring(const std::uint16_t* wstr, const std::size_t max_len) noexcept {
-    if (wstr == nullptr) {
+    if (wstr == nullptr || reinterpret_cast<std::uintptr_t>(wstr) % alignof(std::uint16_t) != 0) {
         return false;
     }
 

@@ -1,4 +1,5 @@
 #include "tradutorlinux/runtime/winapi.hpp"
+#include "tradutorlinux/runtime/memory_validator.hpp"
 
 #include <array>
 #include <cstddef>
@@ -58,6 +59,15 @@ TEST(RuntimeTest, RejectsAbsoluteFilePath) {
                                       abi::kOpenExisting, 0, nullptr);
     EXPECT_EQ(file, reinterpret_cast<void*>(~static_cast<std::uintptr_t>(0)));
     EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+}
+
+TEST(RuntimeMemoryValidationTest, RejectsMisalignedUtf16Pointer) {
+    const std::uint16_t aligned_string[] = {u'A', 0};
+    EXPECT_TRUE(runtime::validate_mapped_wstring(aligned_string));
+
+    const auto* const bytes = reinterpret_cast<const std::byte*>(aligned_string);
+    const auto* const misaligned_string = reinterpret_cast<const std::uint16_t*>(bytes + 1);
+    EXPECT_FALSE(runtime::validate_mapped_wstring(misaligned_string));
 }
 
 }  // namespace
