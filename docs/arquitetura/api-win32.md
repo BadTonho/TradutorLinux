@@ -328,6 +328,261 @@ fixtures. `SetWindowTheme` e funções UxTheme são stubs/limitadas; DWM, WINMM,
 DirectX, drivers e GPU são resolvidos somente quando o diagnóstico controlado
 exige uma rejeição segura.
 
+## APIs adicionais registradas nos roadmaps
+
+Esta seção fecha o inventário nominal das funções que aparecem nos marcos
+históricos, mas não pertencem ao caminho principal descrito acima. As listas
+mantêm o nome da exportação para permitir conferência direta com `--report`;
+as funções de um mesmo grupo compartilham o contrato indicado.
+
+### Contexto de processo e sistema — KERNEL32
+
+`GetStartupInfoA/W`, `GetSystemInfo`, `GetNativeSystemInfo`, `GetLogicalDrives`,
+`GetLogicalDriveStringsW`, `GetCurrentProcessorNumber`,
+`GetLogicalProcessorInformation`, `GetPhysicallyInstalledSystemMemory`,
+`GlobalMemoryStatus`, `GlobalMemoryStatusEx`, `GetTimeZoneInformation`,
+`GetProcessTimes`, `GetThreadTimes`, `GetProcessId`,
+`QueryFullProcessImageNameW`, `GetProcessAffinityMask`,
+`SetProcessAffinityMask`, `SetThreadAffinityMask`, `SetThreadPriority`,
+`SetPriorityClass`, `IsDebuggerPresent`, `IsProcessorFeaturePresent`, `Beep`,
+`OutputDebugStringA/W`, `EncodePointer`, `DecodePointer`,
+`InitializeSListHead`, `InterlockedPushEntrySList`, `InterlockedFlushSList`,
+`GetVersion`, `GetLargePageMinimum`, `GetCurrentProcessorNumber` e
+`SwitchToThread` expõem o contexto mínimo para fixtures e diagnósticos. Dados
+sem equivalente seguro no Linux usam valores determinísticos ou erro
+controlado; essas funções não expõem hardware, firmware ou privilégios reais.
+
+`GetVersionExA/W`, `VerifyVersionInfoW`, `VerSetConditionMask`,
+`GetUserDefaultUILanguage`, `SetThreadLocale`, `SetThreadUILanguage`,
+`GetSystemDefaultLangID` e `GetUserDefaultLangID` completam o contexto de
+versão e idioma virtual. Eles não alteram o locale global do hospedeiro.
+
+### Arquivos avançados, pipes e INI — KERNEL32
+
+`CreateFileMappingA/W`, `OpenFileMappingA/W`, `MapViewOfFile`,
+`UnmapViewOfFile`, `FlushViewOfFile`, `GetDiskFreeSpaceA/W`,
+`GetDiskFreeSpaceExA/W`, `GetDriveTypeA/W`, `GetVolumeInformationA/W`,
+`GetVolumePathNameA/W`, `SetNamedPipeHandleState`, `TransactNamedPipe`,
+`PeekNamedPipe`, `CreateNamedPipeA`, `ConnectNamedPipe`, `CreatePipe`,
+`WaitNamedPipeA/W`, `CancelIo`, `ReadDirectoryChangesW` e
+`GetOverlappedResult` têm implementação limitada a arquivos, pipes e
+mapeamentos controlados pelo prefixo. I/O overlapped completo e IPC arbitrário
+não fazem parte do contrato.
+
+`GetPrivateProfileStringA/W`, `GetPrivateProfileIntA/W`,
+`GetPrivateProfileSectionA/W` e `WritePrivateProfileStringA/W` operam em INI
+aprovado pelo resolvedor de caminhos. `lstrlenW`, `lstrcpyW`, `lstrcpynA/W`,
+`lstrcmpA/W`, `lstrcmpiA/W`, `lstrcatW` e `MulDiv` são helpers de texto e
+aritmética com buffers validados; não são uma autorização para ignorar os
+limites do endereço convidado.
+
+`CreateHardLinkW`, `FileTimeToDosDateTime`, `DosDateTimeToFileTime`,
+`GetCompressedFileSizeW`, `SetSearchPathMode`, `GetApplicationRestartSettings`,
+`RegisterApplicationRestart` e `UnregisterApplicationRestart` são helpers de
+arquivo ou ciclo de vida com resultado limitado ao prefixo. Recursos de restart,
+compressão e busca não iniciam serviços auxiliares no host.
+
+### PSAPI, Toolhelp e recursos PE
+
+`CreateToolhelp32Snapshot`, `Process32First`, `Process32FirstW`,
+`Process32Next`, `Process32NextW` e `OpenProcess` expõem enumeração limitada de
+processos Linux e handles de processo. `EnumProcesses`, `EnumProcessModules`,
+`EnumProcessModulesEx`, `GetModuleBaseNameA/W`, `GetModuleFileNameExA/W`,
+`GetProcessMemoryInfo`, `K32GetProcessMemoryInfo` e
+`K32GetProcessImageFileNameA` fazem o mesmo para PSAPI. Processos protegidos,
+módulos kernel e namespaces de outros usuários não são simulados.
+
+`FindResourceA/W`, `FindResourceExW`, `LoadResource`, `LockResource` e
+`SizeofResource` acessam recursos da imagem PE já validada. `FindResource` não
+carrega DLL externa implicitamente e nunca autoriza acesso fora da seção
+`.rsrc` mapeada.
+
+### Geometria, entrada e recursos visuais — USER32
+
+`ClientToScreen`, `ScreenToClient`, `MapWindowPoints`, `PtInRect`, `CopyRect`,
+`OffsetRect`, `InflateRect`, `IntersectRect`, `SubtractRect`, `SetRectEmpty`,
+`IsRectEmpty`, `GetWindowPlacement`, `SetWindowPlacement`, `IsZoomed`,
+`IsIconic`, `GetLastActivePopup`, `GetShellWindow`, `GetProcessWindowStation`,
+`GetUserObjectInformationW`, `SetUserObjectInformationW`, `GetMonitorInfoA/W`,
+`MonitorFromWindow`, `MonitorFromPoint`, `MonitorFromRect`,
+`EnumDisplayDevicesA`, `EnumDisplaySettingsA` e `SystemParametersInfoA/W`
+convertem coordenadas e consultam metadados lógicos da superfície X11. Dados
+do window manager ou do desktop que não podem ser reproduzidos retornam valor
+controlado.
+
+`LoadCursorA/W`, `LoadIconA/W`, `LoadImageA/W`, `CopyImage`, `DestroyIcon`,
+`DestroyCursor`, `SetCursor`, `ShowCursor`, `GetIconInfo`, `GetIconInfoExW`,
+`CreateIconIndirect`, `DrawIcon`, `DrawIconEx`, `FlashWindow`,
+`FlashWindowEx`, `MessageBeep`, `RegisterWindowMessageA/W`, `NotifyWinEvent`,
+`GetMessageTime`, `GetQueueStatus`, `GetKeyboardLayout`, `GetKeyboardState`,
+`SetKeyboardState`, `MapVirtualKeyW`, `ToAscii`, `ToAsciiEx` e
+`SetProcessDpiAwarenessContext` fornecem apenas o subconjunto de entrada,
+ícones e DPI coberto pelas fixtures. Não existe acessibilidade ou integração
+de desktop completa.
+
+### GDI avançado e impressão
+
+`SetWindowOrgEx`, `SaveDC`, `RestoreDC`, `OffsetWindowOrgEx`, `SetBrushOrgEx`,
+`SetMapMode`, `SetROP2`, `GetROP2`, `GetCurrentObject`, `GetTextAlign`,
+`SetTextAlign`, `GetBkMode`, `GetPixel`, `SetPixel`,
+`GetSystemPaletteEntries`, `RealizePalette`, `SelectPalette`,
+`SetPaletteEntries`, `TranslateCharsetInfo`, `CreatePatternBrush`,
+`CreateHatchBrush`, `PatBlt`, `MaskBlt`, `PlgBlt`,
+`GetCharABCWidthsFloatA`, `GetCharacterPlacementW`, `GetOutlineTextMetricsA`,
+`CreateDCA`, `GetDeviceGammaRamp` e `UpdateColors` operam somente nos DCs,
+objetos e formatos suportados pelo backend lógico. `StartDocW`, `StartPage`,
+`EndPage`, `EndDoc` e `AbortDoc` retornam falha controlada quando não há
+impressora configurada; o runtime não finge um spooler Windows.
+
+### Bibliotecas auxiliares e stubs de hardware
+
+`WNetAddConnection2W`, `WNetOpenEnumW`, `WNetEnumResourceW`, `WNetCloseEnum`,
+`WNetGetResourceInformationW` e `WNetGetResourceParentW` (`MPR.dll`) limitam-se
+a recursos locais controlados; unidades persistentes e credenciais não são
+criadas.
+
+`PowerGetActiveScheme`, `PowerSetActiveScheme` e `CallNtPowerInformation`
+(`POWRPROF.dll`) têm retorno controlado para consultas de energia. As APIs
+`CM_Get_Child`, `SetupDiGetClassDevsA`, `SetupDiEnumDeviceInfo`,
+`SetupDiEnumDeviceInterfaces`, `SetupDiGetDeviceInterfaceDetailA`,
+`SetupDiGetDeviceRegistryPropertyA`, `SetupDiGetDeviceInstanceIdA` e
+`SetupDiDestroyDeviceInfoList` (`CFGMGR32/SETUPAPI`) são stubs seguros para
+diagnosticar dependências de hardware; não enumeram drivers reais.
+
+`DwmSetWindowAttribute`, `DwmGetWindowAttribute`, `DwmIsCompositionEnabled`,
+`DwmDefWindowProc`, `DwmExtendFrameIntoClientArea`, `DwmEnableBlurBehindWindow`,
+`DwmFlush` e `DwmGetColorizationColor` (`DWMAPI.dll`) não criam uma composição
+Windows: retornam somente o contrato mínimo do protótipo ou erro controlado.
+`timeGetTime`, `timeBeginPeriod`, `timeEndPeriod`, `timeGetDevCaps`,
+`PlaySoundA/W`, `timeSetEvent` e `timeKillEvent` (`WINMM.dll`) não agendam
+callbacks multimídia nem acessam áudio do host.
+
+`GdiplusStartup`, `GdiplusShutdown`, `GdipAlloc`, `GdipFree`,
+`GdipCreateBitmapFromStream`, `GdipCloneImage`, `GdipDisposeImage` e
+`GdipCreateHBITMAPFromBitmap` (`gdiplus.dll`), `SymFromAddr`/`ImageNtHeader`
+(`DBGHELP.dll`), `ImmGetContext`/`ImmReleaseContext` e as demais APIs
+`IMM32.dll`, além de `SetWindowTheme`, `OpenThemeData`, `CloseThemeData` e
+funções `UxTheme`, são contratos de importação controlada. Não constituem GDI+,
+IME, tema visual ou depuração completos.
+
+### Módulos de portfólio
+
+As funções observadas nos alvos reais são cobertas pela mesma política genérica:
+`CharPrevExA` e `DosDateTimeToFileTime` (7-Zip), `Arc`, `PathIsUNCW`,
+`AlphaBlend`, `NetApiBufferFree`, `LresultFromObject`, `TdhGetPropertySize`,
+`OpenPrinterW`, `WTSFreeMemory` e `CreateToolbarEx` (HWiNFO/controles), e
+`WSAStartup`, `WSACleanup`, `socket`, `connect`, `getaddrinfo`,
+`GetAdaptersInfo`, `GetAdaptersAddresses`, `CertOpenStore` e
+`WTSEnumerateSessionsW` (Worker/RSL). As primeiras têm implementação limitada
+ou stub controlado conforme o módulo; as últimas têm fixtures próprias e
+retornos dependentes do ambiente, como `ERROR_NO_DATA` sem IPv4.
+
+### Registro, identidade e segurança — ADVAPI32
+
+`RegCloseKey`, `RegDeleteValueA/W`, `RegCreateKeyExA/W`, `RegOpenKeyExA/W`,
+`RegQueryValueExA/W`, `RegSetValueA/W`, `RegDeleteTreeW`, `RegEnumValueA/W`,
+`RegEnumKeyA/W`, `RegDeleteKeyA/W`, `RegDeleteKeyExW`, `RegGetValueW` e
+`RegQueryInfoKeyA/W` implementam chaves, valores, enumeração e remoção no
+registro persistente do prefixo. O armazenamento não é o registro global do
+Linux e não permite atravessar o prefixo.
+
+`OpenProcessToken`, `GetTokenInformation`, `AllocateAndInitializeSid`,
+`FreeSid`, `GetLengthSid`, `CopySid`, `EqualSid`, `IsValidSid`,
+`CreateWellKnownSid`, `CheckTokenMembership`, `BuildTrusteeWithSidW`,
+`InitializeSecurityDescriptor`, `SetSecurityDescriptorDacl`,
+`SetSecurityDescriptorOwner`, `SetEntriesInAclW`, `GetNamedSecurityInfoW`,
+`SetNamedSecurityInfoW`, `SetFileSecurityW`, `GetFileSecurityW`,
+`LookupAccountNameW`, `GetUserNameA/W`, `LookupPrivilegeValueW` e
+`AdjustTokenPrivileges` representam identidade, SID, DACL e privilégios
+somente como metadados de compatibilidade. Eles não autenticam o usuário Linux,
+não elevam privilégios e não aplicam ACLs Windows ao host.
+
+`CryptAcquireContextA/W`, `CryptGenRandom`, `CryptReleaseContext`,
+`CryptCreateHash`, `CryptHashData`, `CryptGetHashParam`, `CryptSetHashParam`,
+`CryptDestroyHash`, `CryptSignHashW`, `CryptDecrypt`, `CryptExportKey`,
+`CryptGetUserKey`, `CryptGetProvParam`, `CryptDestroyKey`,
+`CryptEnumProvidersW`, `SystemFunction036` e `IsTextUnicode` existem para os
+fluxos criptográficos e de identificação cobertos pelas fixtures. Provedores,
+chaves privadas e armazenamento criptográfico do Windows não são expostos.
+
+### Certificados e confiança
+
+`CertGetNameStringW`, `CertDuplicateCertificateContext`,
+`CertFreeCertificateContext`, `CertOpenStore`, `CertCloseStore`,
+`CertEnumCertificatesInStore`, `CertFindCertificateInStore`,
+`CertGetCertificateContextProperty`, `CertOpenSystemStoreA/W`,
+`CertGetEnhancedKeyUsage`, `CertGetIntendedKeyUsage`, `CertNameToStrW`,
+`CryptQueryObject`, `CryptMsgGetParam` e `CryptMsgClose` validam apenas DER,
+`CERT_CONTEXT` e handles emitidos por este runtime. Entradas inválidas ou
+handles desconhecidos retornam erro controlado.
+
+`WinVerifyTrust`, `WTHelperProvDataFromStateData`,
+`WTHelperGetProvSignerFromChain` e `WTHelperGetProvCertFromChain` implementam
+o contrato de blob/cadeia explícita usado por `tl_trust`. `WTD_CHOICE_FILE`,
+revogação, loja Windows e Authenticode completo continuam fora do escopo.
+
+### OLEAUT32, COMDLG32 e controles comuns
+
+Além das operações BSTR, VARIANT e SAFEARRAY descritas acima, `OLEAUT32` expõe
+`SysStringByteLen`, `SafeArrayDestroyData` e `SafeArrayDestroyDescriptor` com
+ownership validado; descritores não emitidos pelo runtime são rejeitados.
+
+`GetOpenFileNameA/W`, `GetSaveFileNameA/W`, `ChooseColorA/W`, `ChooseFontA/W`,
+`PrintDlgW` e `CommDlgExtendedError` (`COMDLG32.dll`) são stubs ou diálogos
+limitados. Não abrem seletor nativo nem permitem que um aplicativo escape do
+prefixo sem uma fixture que defina esse comportamento.
+
+`InitCommonControls`, `InitCommonControlsEx`, `ImageList_Create`,
+`ImageList_Destroy`, `ImageList_Add`, `ImageList_AddMasked`,
+`ImageList_ReplaceIcon`, `ImageList_GetImageCount`, `ImageList_Draw`,
+`ImageList_DrawEx`, `ImageList_GetIcon`, `ImageList_Duplicate`,
+`ImageList_SetBkColor`, `ImageList_GetBkColor`, `ImageList_GetIconSize`,
+`ImageList_GetImageInfo`, `ImageList_Remove`, `ImageList_SetIconSize`,
+`CreateStatusWindowW`, `CreateToolbarEx`, `PropertySheetW`, `TaskDialog`,
+`TaskDialogIndirect`, `SetWindowSubclass`, `RemoveWindowSubclass` e
+`DefSubclassProc` cobrem controles lógicos e imagens nas fixtures GUI. O
+contrato não inclui o conjunto completo de classes, temas ou notificações de
+`COMCTL32`.
+
+### Shell e caminhos — SHELL32/SHLWAPI
+
+`PathFileExistsA/W`, `PathIsDirectoryA/W`, `PathCombineA/W`,
+`PathFindFileNameA/W`, `PathFindExtensionA/W`, `PathRemoveFileSpecA/W`,
+`PathAddBackslashA/W`, `PathRemoveBackslashA/W`, `PathIsRelativeA/W`,
+`PathStripToRootW`, `PathStripPathA/W`, `PathAddExtensionW`,
+`PathRemoveExtensionA/W`, `PathAppendW`, `PathCompactPathExW`,
+`PathGetDriveNumberW`, `PathMatchSpecA/W`, `PathIsUNCA/W`, `StrStrIA/W`,
+`StrCmpIA/W`, `SHAutoComplete`, `AssocQueryStringW`, `ColorRGBToHLS`,
+`ColorHLSToRGB` e `ColorAdjustLuma` formam o subconjunto `SHLWAPI` de
+normalização, comparação e transformação de caminhos. Caminhos `Z:\` são
+resolvidos pelo tradutor canônico, `C:\` fica restrito ao prefixo e resultados
+de existência/diretório nunca consultam uma raiz do host sem validação.
+
+`SHGetDesktopFolder`, `SHGetSpecialFolderLocation`, `SHGetSpecialFolderPathW`,
+`Shell_NotifyIconA/W`, `ExtractIconExW`, `SHGetKnownFolderPath`,
+`SHGetFolderPathW`, `SHGetFolderPathAndSubDirW`, `SHGetPathFromIDListW`,
+`SHFileOperationW`, `SHGetFileInfoW`, `SHBrowseForFolderW`, `SHGetMalloc`,
+`SHChangeNotify`, `ShellExecuteA/W`, `ShellExecuteExW`,
+`SHCreateItemFromParsingName`, `CommandLineToArgvW`, `DragQueryFileW`,
+`DragQueryPoint` e `DragFinish` retornam caminhos ou executam operações apenas
+no modelo de prefixo documentado. `Shell_NotifyIcon` mantém um surrogate
+lógico por janela; ele não registra ícone real no tray do desktop.
+
+### Mapeamento entre roadmap e documentação
+
+O inventário acima é deliberadamente organizado por contrato, não pela ordem
+dos roadmaps. Para localizar a evidência sem duplicar textos:
+
+| Conteúdo originalmente tratado no roadmap | Documento técnico principal |
+|---|---|
+| loader PE, imagem, relocations e imports | [`mapeamento-imagem.md`](mapeamento-imagem.md), [`imports.md`](imports.md) |
+| ABI Microsoft x64, TEB, TLS e unwind | [`abi-x64.md`](abi-x64.md), [`unwinding-x64.md`](unwinding-x64.md), [`ambiente-locale-fls.md`](ambiente-locale-fls.md) |
+| arquivos, prefixos, instalação e catálogo | [`instaladores-e-biblioteca.md`](instaladores-e-biblioteca.md), [`perfis-compatibilidade.md`](perfis-compatibilidade.md), [`rust-app-catalog-parser.md`](rust-app-catalog-parser.md) |
+| GUI X11, diálogos e controles | [`gui-x11.md`](gui-x11.md), [`guia-ui-qt6.md`](guia-ui-qt6.md) |
+| rede, TLS e confiança | [`ws2-32.md`](ws2-32.md), [`wininet.md`](wininet.md), [`wintrust.md`](wintrust.md) |
+| bloqueios e resultados dos aplicativos | [`aplicativos-bloqueios.md`](aplicativos-bloqueios.md), [`../compatibilidade.md`](../compatibilidade.md), [`../diagnostico.md`](../diagnostico.md) |
+| parser e FFI Rust | [`rust-pe-parser.md`](rust-pe-parser.md), [`rust-msix-parser.md`](rust-msix-parser.md), [`rust-profile-parser.md`](rust-profile-parser.md), [`rust-ffi.md`](rust-ffi.md) |
+
 ## Contratos internos Rust/C
 
 Os roadmaps de Rust introduziram APIs `extern "C"` para análise e validação,
