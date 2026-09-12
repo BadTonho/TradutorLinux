@@ -1,25 +1,23 @@
-# Análise crítica — triagem histórica
+# Análise crítica — registro histórico
 
 ## Estado
 
-Esta análise foi produzida em 2026-09-04 e é exclusivamente histórica. Os
-achados foram absorvidos no roadmap legado ou substituídos por decisões
-posteriores. Ela não é uma lista de tarefas e não deve ser usada como fonte de
-verdade para o novo roadmap.
+Esta análise foi encerrada. Ela registra a triagem realizada em 2026-09-04 e
+não é fonte de tarefas nem de compatibilidade.
 
-As pendências daquela rodada foram convertidas nos itens históricos `B1`, `B2`,
-`B4`, `B5`, `B6`, `B7`, `B8`, `B9` e `B10`. Os itens `B1`, `B4`, `B5`, `B7`,
-`B8`, `B10`, `B12`, `B15` e `B16` foram posteriormente registrados como
-concluídos; `B2`, `B6` e `B9` continuam condicionados conforme a documentação
-atual de compatibilidade.
+Os achados daquela rodada foram incorporados ao roadmap legado, à matriz de
+compatibilidade e à documentação técnica. O estado verificável do projeto deve
+ser consultado em:
 
-## Classificação
+- [`feitos/ROADMAP-LEGADO.md`](feitos/ROADMAP-LEGADO.md), para o histórico das
+  etapas concluídas;
+- [`docs/compatibilidade.md`](docs/compatibilidade.md), para imports, execução,
+  nível funcional e limitações;
+- [`docs/arquitetura/api-win32.md`](docs/arquitetura/api-win32.md), para os
+  contratos das APIs Win32.
 
-Os achados já tratados — isolamento, estado GUI, parser MSIX, forwarders, TLS,
-memória virtual, drives do prefixo, helpers e stubs — não são problemas abertos
-por si só. Só devem voltar ao backlog se uma nova execução ou regressão fornecer
-evidência diferente.
+## Conclusão
 
-O documento de referência para o histórico é
-[`feitos/ROADMAP-LEGADO.md`](feitos/ROADMAP-LEGADO.md). O documento de referência
-para o estado atual será o novo `ROADMAP.md` na raiz, quando criado.
+Não há itens acionáveis a manter neste arquivo. Uma nova ocorrência só deve ser
+registrada depois de reproduzida por teste, trace ou evidência de integração e
+encaminhada ao novo roadmap.
