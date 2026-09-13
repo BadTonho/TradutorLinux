@@ -4,8 +4,6 @@
 #include "tradutorlinux/runtime/memory_validator.hpp"
 #include "../../core/runtime_state_common.hpp"
 
-#include <cstring>
-
 namespace tradutorlinux {
 
 namespace {
@@ -15,8 +13,8 @@ inline bool mapped_range(const void* address, const std::size_t size, const bool
 }
 
 // NETRESOURCEW usa quatro DWORDs seguidos de quatro ponteiros na ABI Win64.
-// A estrutura é lida por memcpy para não exigir alinhamento do ponteiro
-// fornecido pelo convidado.
+// A estrutura é copiada pela fronteira protegida para não exigir alinhamento
+// nem desreferenciar diretamente o ponteiro fornecido pelo convidado.
 struct GuestNetResourceW {
     std::uint32_t scope{};
     std::uint32_t type{};
@@ -34,11 +32,14 @@ bool valid_optional_wstring(const std::uint16_t* const value) noexcept {
 }
 
 bool valid_net_resource(const void* const value) noexcept {
-    if (value == nullptr || !mapped_range(value, sizeof(GuestNetResourceW), false)) {
+    if (value == nullptr) {
         return false;
     }
     GuestNetResourceW resource{};
-    std::memcpy(&resource, value, sizeof(resource));
+    if (runtime::read_guest_memory(value, &resource, sizeof(resource)).status !=
+        runtime::GuestMemoryAccessStatus::Success) {
+        return false;
+    }
     return valid_optional_wstring(resource.local_name) &&
            valid_optional_wstring(resource.remote_name) &&
            valid_optional_wstring(resource.comment) &&
@@ -104,7 +105,12 @@ TL_MPR_MSABI std::uint32_t tl_WNetOpenEnumW(const std::uint32_t scope, const std
         invalid_parameter("WNetOpenEnumW", "NETRESOURCEW inválida");
         return abi::kErrorInvalidParameter;
     }
-    *enum_handle = nullptr;
+    const void* empty_handle = nullptr;
+    if (runtime::write_guest_memory(enum_handle, &empty_handle, sizeof(empty_handle)).status !=
+        runtime::GuestMemoryAccessStatus::Success) {
+        invalid_parameter("WNetOpenEnumW", "enum_handle foi desmontado durante a escrita");
+        return abi::kErrorInvalidParameter;
+    }
     return unsupported("WNetOpenEnumW", "enumeração de provedores MPR não implementada");
 }
 
@@ -116,7 +122,9 @@ TL_MPR_MSABI std::uint32_t tl_WNetEnumResourceW(void* const enum_handle, std::ui
         invalid_parameter("WNetEnumResourceW", "count ou buffer_size inválido");
         return abi::kErrorInvalidParameter;
     }
-    if (!valid_optional_buffer(buffer, *buffer_size)) {
+    std::uint32_t requested_size = 0;
+    if (runtime::read_guest_memory(buffer_size, &requested_size, sizeof(requested_size)).status !=
+        runtime::GuestMemoryAccessStatus::Success || !valid_optional_buffer(buffer, requested_size)) {
         invalid_parameter("WNetEnumResourceW", "buffer de recursos inválido");
         return abi::kErrorInvalidParameter;
     }
@@ -141,12 +149,22 @@ TL_MPR_MSABI std::uint32_t tl_WNetGetResourceInformationW(const void* const net_
         invalid_parameter("WNetGetResourceInformationW", "NETRESOURCEW ou buffer_size inválido");
         return abi::kErrorInvalidParameter;
     }
-    if (!valid_optional_buffer(buffer, *buffer_size) ||
+    std::uint32_t requested_size = 0;
+    if (runtime::read_guest_memory(buffer_size, &requested_size, sizeof(requested_size)).status !=
+            runtime::GuestMemoryAccessStatus::Success ||
+        !valid_optional_buffer(buffer, requested_size) ||
         (system != nullptr && !mapped_range(system, sizeof(*system), true))) {
         invalid_parameter("WNetGetResourceInformationW", "buffer ou system inválido");
         return abi::kErrorInvalidParameter;
     }
-    if (system != nullptr) *system = nullptr;
+    if (system != nullptr) {
+        const void* empty_system = nullptr;
+        if (runtime::write_guest_memory(system, &empty_system, sizeof(empty_system)).status !=
+            runtime::GuestMemoryAccessStatus::Success) {
+            invalid_parameter("WNetGetResourceInformationW", "system foi desmontado durante a escrita");
+            return abi::kErrorInvalidParameter;
+        }
+    }
     return unsupported("WNetGetResourceInformationW", "informações de recursos MPR não implementadas");
 }
 
@@ -157,7 +175,10 @@ TL_MPR_MSABI std::uint32_t tl_WNetGetResourceParentW(const void* const net_resou
         invalid_parameter("WNetGetResourceParentW", "NETRESOURCEW ou buffer_size inválido");
         return abi::kErrorInvalidParameter;
     }
-    if (!valid_optional_buffer(buffer, *buffer_size)) {
+    std::uint32_t requested_size = 0;
+    if (runtime::read_guest_memory(buffer_size, &requested_size, sizeof(requested_size)).status !=
+            runtime::GuestMemoryAccessStatus::Success ||
+        !valid_optional_buffer(buffer, requested_size)) {
         invalid_parameter("WNetGetResourceParentW", "buffer de recursos inválido");
         return abi::kErrorInvalidParameter;
     }

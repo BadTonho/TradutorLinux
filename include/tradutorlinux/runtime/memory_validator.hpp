@@ -5,6 +5,31 @@
 
 namespace tradutorlinux::runtime {
 
+enum class GuestMemoryAccessStatus : std::uint8_t {
+    Success,
+    InvalidArgument,
+    Unmapped,
+    PermissionDenied,
+    Partial,
+    SystemError,
+};
+
+struct GuestMemoryAccessResult {
+    GuestMemoryAccessStatus status{GuestMemoryAccessStatus::InvalidArgument};
+    std::size_t transferred{0};
+};
+
+// Copia memória usando a interface do kernel para o próprio processo. Ao
+// contrário de uma leitura após um snapshot de /proc/self/maps, a operação
+// não desreferencia o endereço convidado no código do host e reporta cópia
+// parcial quando uma página desaparece durante a operação.
+[[nodiscard]] GuestMemoryAccessResult read_guest_memory(const void* source,
+                                                        void* destination,
+                                                        std::size_t size) noexcept;
+[[nodiscard]] GuestMemoryAccessResult write_guest_memory(void* destination,
+                                                         const void* source,
+                                                         std::size_t size) noexcept;
+
 // Valida se uma faixa de memória [address, address + size) está mapeada e acessível no espaço de endereço atual.
 [[nodiscard]] bool validate_mapped_range(const void* address, std::size_t size, bool writable) noexcept;
 

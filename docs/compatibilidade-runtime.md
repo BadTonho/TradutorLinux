@@ -115,6 +115,24 @@ caminhos relativos sem drive são aceitos; `\\` é normalizado para `/`.
 `VirtualAlloc`, `VirtualFree`, `VirtualProtect` e `VirtualQuery` têm o contrato limitado descrito em
 [`runtime-basico.md`](arquitetura/runtime-basico.md).
 
+### Fronteira de memória convidada (E11)
+
+`read_guest_memory` e `write_guest_memory` são as primitivas protegidas para
+copiar buffers entre o processo convidado e o host. A implementação usa
+`process_vm_readv`/`process_vm_writev` quando permitido pelo Linux e
+`/proc/thread-self/mem` como fallback controlado; nenhum dos caminhos precisa
+desreferenciar o ponteiro convidado no código C++. O resultado distingue
+`Success`, `Partial`, `Unmapped`, `PermissionDenied`, `InvalidArgument` e
+`SystemError`.
+
+Os testes cobrem ponteiro nulo, overflow de endereço, página desmontada com
+cópia parcial, destino somente leitura e alternância concorrente entre
+`PROT_NONE` e leitura/escrita. O validador de strings (`cstring`/UTF-16) e os
+buffers de entrada do MPR já usam essa cópia. A migração do runtime ainda não
+está completa: `validate_mapped_range` continua sendo uma fotografia de
+`/proc/self/maps`, e há APIs antigas com acesso direto após validação; essas
+rotas não são anunciadas como atômicas até serem migradas.
+
 ## GUI mínima (Fase 7)
 
 O protótipo registra um subconjunto de `USER32.dll` e `GDI32.dll` e usa X11

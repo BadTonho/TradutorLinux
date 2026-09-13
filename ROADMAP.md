@@ -22,10 +22,10 @@ para ampliar famílias de DLL sem alvo, contrato e regressão.
 - **R2 não é um defeito de produção reproduzido:** o caminho de falha de
   `ARCH_SET_GS` já existe e limpa o estado; falta uma injeção determinística
   para comprovar esse caminho.
-- **R3 é uma limitação arquitetural real, mas ainda sem reproducer:** a
-  validação por `/proc/self/maps` não é atômica com o acesso posterior. A
-  etapa deve fechar essa lacuna sem alegar uma falha observada que ainda não
-  foi reproduzida.
+- **R3 é uma limitação arquitetural real:** a validação por `/proc/self/maps`
+  não é atômica com o acesso posterior. A primeira parte da correção já possui
+  reproducer de página desmontada, permissões e mudança concorrente; a
+  migração de todos os consumidores ainda não terminou.
 
 ## Regras de execução
 
@@ -145,25 +145,33 @@ Os dois testes de rejeição de entry point inválido continuam passando.
 
 **Risco arquitetural:** a validação por `/proc/self/maps` é uma fotografia.
 Entre a validação e o acesso, o mapeamento pode mudar; isso deixa uma janela
-TOCTOU em rotinas que leem ou escrevem memória do convidado. Ainda não há um
-reproducer determinístico desse cenário no runtime atual.
+TOCTOU em rotinas que leem ou escrevem memória do convidado. A fronteira
+protegida e os primeiros consumidores já têm regressão determinística, mas a
+auditoria encontrou consumidores legados que ainda precisam de migração.
 
 **Tarefas:**
 
-- [ ] catalogar os pontos de leitura e escrita que atravessam a fronteira de
-  memória convidada;
-- [ ] escolher um mecanismo de acesso protegido compatível com o processo
-  convidado, sem exceção C++ atravessar a ABI e sem mascarar falhas;
-- [ ] definir comportamento para páginas desmontadas, somente leitura,
-  desalinhamento, overflow e buffers parcialmente acessíveis;
-- [ ] adicionar testes de robustez para acesso concorrente e truncado;
-- [ ] publicar a garantia efetiva e os limites residuais em docs/arquitetura/
-  e docs/compatibilidade-runtime.md.
+- [x] catalogar as categorias e os consumidores já auditados em
+  `docs/arquitetura/memoria-convidada.md`; a migração dos consumidores legados
+  continua sendo o trabalho restante desta etapa;
+- [x] escolher `process_vm_readv`/`process_vm_writev`, com fallback controlado
+  para `/proc/thread-self/mem`, sem exceção C++ atravessar a ABI;
+- [x] definir comportamento para páginas desmontadas, somente leitura,
+  desalinhamento, overflow e buffers parcialmente acessíveis por meio de
+  `GuestMemoryAccessStatus`;
+- [x] adicionar testes de robustez para acesso concorrente e truncado em
+  `RuntimeMemoryValidationTest.*`;
+- [x] publicar a garantia efetiva e os limites residuais em
+  `docs/arquitetura/memoria-convidada.md` e
+  `docs/compatibilidade-runtime.md`.
 
 **Aceitação:** nenhum caminho documentado depende apenas de uma fotografia de
 `/proc/self/maps` sem declarar a limitação; acessos inválidos falham de forma
 controlada no processo convidado, sem corrupção do host nem falso sucesso; os
 testes cobrem páginas desmontadas, permissões, overflow e buffers parciais.
+Esta aceitação continua pendente enquanto existirem consumidores de ponteiros
+convidados que façam acesso direto sem contrato equivalente; o progresso atual
+fecha a primitiva e os caminhos de strings/MPR, mas não toda a superfície.
 
 ## Fora desta rodada
 

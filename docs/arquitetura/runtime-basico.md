@@ -40,7 +40,18 @@ Os handles de arquivo são tokens internos limitados a 64 slots. Eles podem ser
 usados por `ReadFile`, `WriteFile` e `CloseHandle`; não são compatíveis com os
 tokens dos handles padrão nem com APIs futuras sem conversão explícita.
 
-As APIs que recebem ponteiros do programa convidado verificam o mapeamento e as
-permissões da faixa em `/proc/self/maps` antes de ler ou escrever. Strings ANSI
-também precisam estar terminadas dentro do limite suportado; entradas inválidas
-retornam erro Win32 em vez de serem desreferenciadas pelo host.
+As APIs que recebem ponteiros do programa convidado devem usar as primitivas
+`read_guest_memory` e `write_guest_memory` para copiar dados entre os espaços
+convidado e host. Elas tentam a interface do kernel
+`process_vm_readv`/`process_vm_writev` e possuem fallback para
+`/proc/thread-self/mem` em ambientes que bloqueiam essas syscalls. O resultado
+classifica sucesso, cópia parcial, faixa desmontada, permissão insuficiente,
+argumento inválido ou erro do sistema; a cópia não desreferencia diretamente o
+endereço convidado no código do host.
+
+`validate_mapped_range` continua sendo uma verificação de permissão baseada em
+uma fotografia de `/proc/self/maps`, útil para contratos que precisam apenas
+validar uma faixa. Ela não é uma garantia de posse da página entre a validação
+e um acesso posterior. Strings ANSI e UTF-16 migradas para o validador usam
+cópia protegida em blocos; caminhos legados que ainda leem ou escrevem ponteiros
+diretamente permanecem fora dessa garantia até serem migrados.
