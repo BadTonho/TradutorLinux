@@ -80,28 +80,37 @@ de `SHGetSpecialFolderPathW`, registrada sem ser atribuída a R1.
 
 ### R4 — Tornar explícita a classificação de exports
 
-**Problema confirmado:** `ExportSupport::Full` ainda é o valor padrão de
-estruturas de registro. A omissão já faz os exports MPR parecerem completos no
-`--report`, embora a implementação atual seja um stub com falso sucesso.
+**Problema confirmado:** ~~`ExportSupport::Full` era o valor padrão de
+estruturas de registro. A omissão fazia os exports MPR parecerem completos no
+`--report`, embora a implementação fosse um stub com falso sucesso.~~ Corrigido
+nesta etapa.
 
 **Tarefas:**
 
-- [ ] levantar registros que dependem do valor padrão e separar os casos
+- [x] levantar registros que dependem do valor padrão e separar os casos
   intencionais dos acidentais, começando por MPR;
-- [ ] exigir classificação explícita para novos exports e migrar registros
+- [x] exigir classificação explícita para novos exports e migrar registros
   existentes sem alterar a ABI dos módulos já publicados;
-- [ ] auditar aliases e `direct_export` somente para preservar a distinção
+- [x] auditar aliases e `direct_export` somente para preservar a distinção
   entre export de DLL convidada, stub, forwarder e endereço vazio; não mudar a
   classificação de um export PE convidado sem um caso de regressão;
-- [ ] adicionar teste de registro e diagnóstico que detecte classificação
+- [x] adicionar teste de registro e diagnóstico que detecte classificação
   ausente ou incompatível com o contrato;
-- [ ] atualizar a documentação da API e a matriz quando uma classificação
+- [x] atualizar a documentação da API e a matriz quando uma classificação
   mudar.
 
 **Aceitação:** cada exportação nova tem classificação, comportamento testado
 e limitação publicada; nenhum export MPR não implementado aparece como
 `Full`; endereço zero não é resolvido como função; nenhuma alteração de
 classificação é feita apenas por nome de símbolo ou resolução de import.
+
+**Evidência 2026-09-12:** `ExportedFunction` agora exige `ExportSupport` no
+construtor; os registros existentes foram migrados explicitamente, enquanto
+exports PE convidados continuam classificados como `Full` somente no caminho
+`direct_export`. `register_module` rejeita valores inválidos antes de publicar
+o módulo, coberto por `ModuleTest.RejectsInvalidExportSupportLevel`. As suítes
+`ModuleTest.*`, `ImportResolverTest.*` e `Win32StubTest.*` passaram (43 testes),
+e o relatório do 7-Zip confirmou os três imports MPR como `support=stub`.
 
 ### R2 — Adicionar regressão determinística para falha de inicialização de thread (E7)
 

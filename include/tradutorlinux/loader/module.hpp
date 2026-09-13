@@ -18,10 +18,19 @@ enum class ExportSupport : std::uint8_t {
 };
 
 struct ExportedFunction {
+    constexpr ExportedFunction(std::string_view export_name, const std::uint16_t export_ordinal,
+                               const std::uintptr_t export_address, const ExportSupport export_support,
+                               std::string_view export_forwarder = {}) noexcept
+        : name(export_name),
+          ordinal(export_ordinal),
+          address(export_address),
+          support(export_support),
+          forwarder(export_forwarder) {}
+
     std::string_view name;
     std::uint16_t ordinal{};
     std::uintptr_t address{};
-    ExportSupport support{ExportSupport::Full};
+    ExportSupport support;
     // Texto de um export forwarder no formato "DLL.Simbolo" ou
     // "DLL.#ordinal". Quando preenchido, address deve ser zero.
     std::string_view forwarder{};

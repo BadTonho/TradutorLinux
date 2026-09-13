@@ -52,7 +52,7 @@ void register_dbghelp_module() {
     static const ExportedFunction kDbghelpExports[] = {
         {"SymFromAddr", 1, reinterpret_cast<std::uintptr_t>(&tl_SymFromAddr),
          ExportSupport::Stub},
-        {"ImageNtHeader", 2, reinterpret_cast<std::uintptr_t>(&tl_ImageNtHeader)},
+        {"ImageNtHeader", 2, reinterpret_cast<std::uintptr_t>(&tl_ImageNtHeader), ExportSupport::Full},
     };
     static const InternalModule kDbghelpModule{"dbghelp.dll", kDbghelpExports};
     register_module(kDbghelpModule);

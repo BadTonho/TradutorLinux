@@ -380,13 +380,13 @@ namespace tradutorlinux::loader {
 
 void register_wintrust_module() {
     static const ExportedFunction kWintrustExports[] = {
-        {"WinVerifyTrust", 1, reinterpret_cast<std::uintptr_t>(&tl_WinVerifyTrust)},
+        {"WinVerifyTrust", 1, reinterpret_cast<std::uintptr_t>(&tl_WinVerifyTrust), ExportSupport::Full},
         {"WTHelperProvDataFromStateData", 2,
-         reinterpret_cast<std::uintptr_t>(&tl_WTHelperProvDataFromStateData)},
+         reinterpret_cast<std::uintptr_t>(&tl_WTHelperProvDataFromStateData), ExportSupport::Full},
         {"WTHelperGetProvSignerFromChain", 3,
-         reinterpret_cast<std::uintptr_t>(&tl_WTHelperGetProvSignerFromChain)},
+         reinterpret_cast<std::uintptr_t>(&tl_WTHelperGetProvSignerFromChain), ExportSupport::Full},
         {"WTHelperGetProvCertFromChain", 4,
-         reinterpret_cast<std::uintptr_t>(&tl_WTHelperGetProvCertFromChain)},
+         reinterpret_cast<std::uintptr_t>(&tl_WTHelperGetProvCertFromChain), ExportSupport::Full},
     };
     static const InternalModule kWintrustModule{"WINTRUST.dll", kWintrustExports};
     register_module(kWintrustModule);

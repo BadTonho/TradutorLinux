@@ -67,9 +67,9 @@ namespace tradutorlinux::loader {
 
 void register_powrprof_module() {
     static const ExportedFunction kPowrProfExports[] = {
-        {"PowerGetActiveScheme", 1, reinterpret_cast<std::uintptr_t>(&tl_PowerGetActiveScheme)},
-        {"PowerSetActiveScheme", 2, reinterpret_cast<std::uintptr_t>(&tl_PowerSetActiveScheme)},
-        {"CallNtPowerInformation", 3, reinterpret_cast<std::uintptr_t>(&tl_CallNtPowerInformation)},
+        {"PowerGetActiveScheme", 1, reinterpret_cast<std::uintptr_t>(&tl_PowerGetActiveScheme), ExportSupport::Full},
+        {"PowerSetActiveScheme", 2, reinterpret_cast<std::uintptr_t>(&tl_PowerSetActiveScheme), ExportSupport::Full},
+        {"CallNtPowerInformation", 3, reinterpret_cast<std::uintptr_t>(&tl_CallNtPowerInformation), ExportSupport::Full},
     };
     static const InternalModule kPowrProfModule{"POWRPROF.dll", kPowrProfExports};
     register_module(kPowrProfModule);

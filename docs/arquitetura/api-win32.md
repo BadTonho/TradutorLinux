@@ -25,6 +25,11 @@ Handles são tokens opacos associados ao processo/prefixo. Erros seguem o par
 retorno Win32 + `GetLastError`, salvo onde a tabela indicar um contrato
 específico.
 
+Cada exportação de módulo interno deve declarar explicitamente `Full`,
+`Limited` ou `Stub` no registro `ExportedFunction`; não há mais classificação
+implícita. O registro rejeita valores fora desse conjunto antes de publicar o
+módulo, e o `--report` expõe a classificação efetivamente resolvida.
+
 ## KERNEL32 e NTDLL
 
 ### Processo, módulos, ambiente e encerramento

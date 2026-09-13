@@ -33,6 +33,16 @@ const OwnedModule* find_module_locked(const std::string_view dll) {
     return &*found;
 }
 
+[[nodiscard]] bool is_valid_export_support(const ExportSupport support) noexcept {
+    switch (support) {
+        case ExportSupport::Full:
+        case ExportSupport::Limited:
+        case ExportSupport::Stub:
+            return true;
+    }
+    return false;
+}
+
 }  // namespace
 
 bool is_api_set_dll(const std::string_view dll) noexcept {
@@ -280,6 +290,11 @@ bool is_module_registered_forwarded(const std::string_view dll) noexcept {
 }
 
 bool register_module(const InternalModule& module) {
+    for (const ExportedFunction& export_ : module.exports) {
+        if (!is_valid_export_support(export_.support)) {
+            return false;
+        }
+    }
     std::lock_guard<std::mutex> lock(modules_mutex());
     if (find_module_locked(module.name) != nullptr) {
         return false;

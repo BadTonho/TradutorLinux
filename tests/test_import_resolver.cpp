@@ -52,8 +52,8 @@ protected:
     void SetUp() override {
         clear_modules();
         const ExportedFunction exports[] = {
-            {"DoWork", 1, reinterpret_cast<std::uintptr_t>(&tl_GetStdHandle)},
-            {"WriteFile", 2, reinterpret_cast<std::uintptr_t>(&tl_WriteFile)},
+            {"DoWork", 1, reinterpret_cast<std::uintptr_t>(&tl_GetStdHandle), ExportSupport::Full},
+            {"WriteFile", 2, reinterpret_cast<std::uintptr_t>(&tl_WriteFile), ExportSupport::Full},
         };
         const InternalModule module{"FAKE.dll", exports};
         ASSERT_TRUE(register_module(module));
@@ -181,7 +181,7 @@ TEST_F(ImportResolverTest, ReportsUnknownOrdinal) {
 TEST_F(ImportResolverTest, ReportsKnownSymbolWithoutImplementation) {
     clear_modules();
     const ExportedFunction exports[] = {
-        {"Unavailable", 7, 0},
+        {"Unavailable", 7, 0, ExportSupport::Full},
     };
     ASSERT_TRUE(register_module(InternalModule{"FAKE.dll", exports}));
 

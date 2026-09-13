@@ -153,14 +153,14 @@ namespace tradutorlinux::loader {
 
 void register_psapi_module() {
     static const ExportedFunction kPsapiExports[] = {
-        {"EnumProcesses", 1, reinterpret_cast<std::uintptr_t>(&tl_EnumProcesses)},
-        {"EnumProcessModules", 2, reinterpret_cast<std::uintptr_t>(&tl_EnumProcessModules)},
-        {"EnumProcessModulesEx", 3, reinterpret_cast<std::uintptr_t>(&tl_EnumProcessModulesEx)},
-        {"GetModuleBaseNameA", 4, reinterpret_cast<std::uintptr_t>(&tl_GetModuleBaseNameA)},
-        {"GetModuleBaseNameW", 5, reinterpret_cast<std::uintptr_t>(&tl_GetModuleBaseNameW)},
-        {"GetModuleFileNameExA", 6, reinterpret_cast<std::uintptr_t>(&tl_GetModuleFileNameExA)},
-        {"GetModuleFileNameExW", 7, reinterpret_cast<std::uintptr_t>(&tl_GetModuleFileNameExW)},
-        {"GetProcessMemoryInfo", 8, reinterpret_cast<std::uintptr_t>(&tl_GetProcessMemoryInfo)},
+        {"EnumProcesses", 1, reinterpret_cast<std::uintptr_t>(&tl_EnumProcesses), ExportSupport::Full},
+        {"EnumProcessModules", 2, reinterpret_cast<std::uintptr_t>(&tl_EnumProcessModules), ExportSupport::Full},
+        {"EnumProcessModulesEx", 3, reinterpret_cast<std::uintptr_t>(&tl_EnumProcessModulesEx), ExportSupport::Full},
+        {"GetModuleBaseNameA", 4, reinterpret_cast<std::uintptr_t>(&tl_GetModuleBaseNameA), ExportSupport::Full},
+        {"GetModuleBaseNameW", 5, reinterpret_cast<std::uintptr_t>(&tl_GetModuleBaseNameW), ExportSupport::Full},
+        {"GetModuleFileNameExA", 6, reinterpret_cast<std::uintptr_t>(&tl_GetModuleFileNameExA), ExportSupport::Full},
+        {"GetModuleFileNameExW", 7, reinterpret_cast<std::uintptr_t>(&tl_GetModuleFileNameExW), ExportSupport::Full},
+        {"GetProcessMemoryInfo", 8, reinterpret_cast<std::uintptr_t>(&tl_GetProcessMemoryInfo), ExportSupport::Full},
     };
     static const InternalModule kPsapiModule{"PSAPI.dll", kPsapiExports};
     register_module(kPsapiModule);

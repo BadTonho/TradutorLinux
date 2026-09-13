@@ -19,8 +19,8 @@ namespace tradutorlinux::loader {
 namespace {
 
 constexpr ExportedFunction kFakeExports[] = {
-    {"DoWork", 1, 0x4000000000000001ULL},
-    {"CleanUp", 2, 0x4000000000000002ULL},
+    {"DoWork", 1, 0x4000000000000001ULL, ExportSupport::Full},
+    {"CleanUp", 2, 0x4000000000000002ULL, ExportSupport::Full},
 };
 
 constexpr InternalModule kFakeModule{"FAKE.dll", kFakeExports};
@@ -67,6 +67,16 @@ TEST_F(ModuleTest, PreservesExportSupportLevel) {
               ExportSupport::Stub);
 }
 
+TEST_F(ModuleTest, RejectsInvalidExportSupportLevel) {
+    const ExportSupport invalid_support = static_cast<ExportSupport>(0xFFU);
+    const ExportedFunction exports[] = {
+        {"Invalid", 1, 0x4000000000000010ULL, invalid_support},
+    };
+
+    EXPECT_FALSE(register_module(InternalModule{"INVALID_SUPPORT.dll", exports}));
+    EXPECT_FALSE(is_module_registered("INVALID_SUPPORT.dll"));
+}
+
 TEST_F(ModuleTest, DllNamesAreCaseInsensitive) {
     ASSERT_TRUE(register_module(kFakeModule));
     EXPECT_TRUE(find_export(ExportQuery{"fake.dll", "DoWork"}).found);
@@ -89,8 +99,8 @@ TEST_F(ModuleTest, UnknownDllAndSymbolAreNotFound) {
 
 TEST_F(ModuleTest, ResolvesMultiHopForwarderByNameAndOrdinal) {
     const ExportedFunction target_exports[] = {
-        {"Final", 7, 0x4000000000000070ULL},
-        {"OrdinalTarget", 9, 0x4000000000000090ULL},
+        {"Final", 7, 0x4000000000000070ULL, ExportSupport::Full},
+        {"OrdinalTarget", 9, 0x4000000000000090ULL, ExportSupport::Full},
     };
     const ExportedFunction middle_exports[] = {
         {"Middle", 3, 0, ExportSupport::Full, "TARGET.dll.Final"},
@@ -379,7 +389,7 @@ TEST_F(ModuleTest, RegisterBuiltinModulesIsIdempotent) {
 TEST_F(ModuleTest, RegistryOwnsItsStrings) {
     const char* name = "TRANSIENT.dll";
     const char* symbol = "Temp";
-    ExportedFunction export_{symbol, 7, 0x5000000000000007ULL};
+    ExportedFunction export_{symbol, 7, 0x5000000000000007ULL, ExportSupport::Full};
     const ExportedFunction exports[] = {export_};
     const InternalModule module{name, exports};
     ASSERT_TRUE(register_module(module));

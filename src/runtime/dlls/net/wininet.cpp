@@ -1090,17 +1090,17 @@ namespace tradutorlinux::loader {
 
 void register_wininet_module() {
     static const ExportedFunction kWininetExports[] = {
-        {"InternetReadFile", 1, reinterpret_cast<std::uintptr_t>(&tl_InternetReadFile)},
-        {"InternetCrackUrlW", 2, reinterpret_cast<std::uintptr_t>(&tl_InternetCrackUrlW)},
-        {"InternetCloseHandle", 3, reinterpret_cast<std::uintptr_t>(&tl_InternetCloseHandle)},
-        {"InternetConnectW", 4, reinterpret_cast<std::uintptr_t>(&tl_InternetConnectW)},
-        {"InternetQueryDataAvailable", 5, reinterpret_cast<std::uintptr_t>(&tl_InternetQueryDataAvailable)},
-        {"InternetSetOptionW", 6, reinterpret_cast<std::uintptr_t>(&tl_InternetSetOptionW)},
-        {"HttpOpenRequestW", 7, reinterpret_cast<std::uintptr_t>(&tl_HttpOpenRequestW)},
-        {"HttpAddRequestHeadersW", 8, reinterpret_cast<std::uintptr_t>(&tl_HttpAddRequestHeadersW)},
-        {"HttpSendRequestW", 9, reinterpret_cast<std::uintptr_t>(&tl_HttpSendRequestW)},
-        {"HttpQueryInfoW", 10, reinterpret_cast<std::uintptr_t>(&tl_HttpQueryInfoW)},
-        {"InternetOpenW", 11, reinterpret_cast<std::uintptr_t>(&tl_InternetOpenW)},
+        {"InternetReadFile", 1, reinterpret_cast<std::uintptr_t>(&tl_InternetReadFile), ExportSupport::Full},
+        {"InternetCrackUrlW", 2, reinterpret_cast<std::uintptr_t>(&tl_InternetCrackUrlW), ExportSupport::Full},
+        {"InternetCloseHandle", 3, reinterpret_cast<std::uintptr_t>(&tl_InternetCloseHandle), ExportSupport::Full},
+        {"InternetConnectW", 4, reinterpret_cast<std::uintptr_t>(&tl_InternetConnectW), ExportSupport::Full},
+        {"InternetQueryDataAvailable", 5, reinterpret_cast<std::uintptr_t>(&tl_InternetQueryDataAvailable), ExportSupport::Full},
+        {"InternetSetOptionW", 6, reinterpret_cast<std::uintptr_t>(&tl_InternetSetOptionW), ExportSupport::Full},
+        {"HttpOpenRequestW", 7, reinterpret_cast<std::uintptr_t>(&tl_HttpOpenRequestW), ExportSupport::Full},
+        {"HttpAddRequestHeadersW", 8, reinterpret_cast<std::uintptr_t>(&tl_HttpAddRequestHeadersW), ExportSupport::Full},
+        {"HttpSendRequestW", 9, reinterpret_cast<std::uintptr_t>(&tl_HttpSendRequestW), ExportSupport::Full},
+        {"HttpQueryInfoW", 10, reinterpret_cast<std::uintptr_t>(&tl_HttpQueryInfoW), ExportSupport::Full},
+        {"InternetOpenW", 11, reinterpret_cast<std::uintptr_t>(&tl_InternetOpenW), ExportSupport::Full},
     };
     static const InternalModule kWininetModule{"WININET.dll", kWininetExports};
     register_module(kWininetModule);

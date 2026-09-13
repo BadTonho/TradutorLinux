@@ -97,10 +97,10 @@ namespace tradutorlinux::loader {
 
 void register_winmm_module() {
     static const ExportedFunction kWinmmExports[] = {
-        {"timeGetTime", 1, reinterpret_cast<std::uintptr_t>(&tl_timeGetTime)},
-        {"timeBeginPeriod", 2, reinterpret_cast<std::uintptr_t>(&tl_timeBeginPeriod)},
-        {"timeEndPeriod", 3, reinterpret_cast<std::uintptr_t>(&tl_timeEndPeriod)},
-        {"timeGetDevCaps", 4, reinterpret_cast<std::uintptr_t>(&tl_timeGetDevCaps)},
+        {"timeGetTime", 1, reinterpret_cast<std::uintptr_t>(&tl_timeGetTime), ExportSupport::Full},
+        {"timeBeginPeriod", 2, reinterpret_cast<std::uintptr_t>(&tl_timeBeginPeriod), ExportSupport::Full},
+        {"timeEndPeriod", 3, reinterpret_cast<std::uintptr_t>(&tl_timeEndPeriod), ExportSupport::Full},
+        {"timeGetDevCaps", 4, reinterpret_cast<std::uintptr_t>(&tl_timeGetDevCaps), ExportSupport::Full},
         {"PlaySoundA", 5, reinterpret_cast<std::uintptr_t>(&tl_PlaySoundA), ExportSupport::Stub},
         {"PlaySoundW", 6, reinterpret_cast<std::uintptr_t>(&tl_PlaySoundW), ExportSupport::Stub},
         {"timeSetEvent", 7, reinterpret_cast<std::uintptr_t>(&tl_timeSetEvent), ExportSupport::Stub},

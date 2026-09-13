@@ -472,9 +472,9 @@ namespace tradutorlinux::loader {
 
 void register_iphlpapi_module() {
     static const ExportedFunction kIphlpapiExports[] = {
-        {"GetAdaptersInfo", 1, reinterpret_cast<std::uintptr_t>(&tl_GetAdaptersInfo)},
-        {"GetAdaptersAddresses", 2, reinterpret_cast<std::uintptr_t>(&tl_GetAdaptersAddresses)},
-        {"if_nametoindex", 3, reinterpret_cast<std::uintptr_t>(&tl_if_nametoindex)},
+        {"GetAdaptersInfo", 1, reinterpret_cast<std::uintptr_t>(&tl_GetAdaptersInfo), ExportSupport::Full},
+        {"GetAdaptersAddresses", 2, reinterpret_cast<std::uintptr_t>(&tl_GetAdaptersAddresses), ExportSupport::Full},
+        {"if_nametoindex", 3, reinterpret_cast<std::uintptr_t>(&tl_if_nametoindex), ExportSupport::Full},
     };
     static const InternalModule kIphlpapiModule{"IPHLPAPI.DLL", kIphlpapiExports};
     register_module(kIphlpapiModule);
