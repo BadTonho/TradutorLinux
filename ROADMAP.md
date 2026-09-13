@@ -201,6 +201,11 @@ regressão `Win32ConcurrencyTest.ProtectedSynchronizationPointersRejectUnmappedM
 passou com a cobertura existente de eventos, semáforos, mutexes e múltiplos
 waits.
 
+O lote WININET migrou o corpo opcional de `HttpSendRequestW`, leitura e
+disponibilidade de resposta, consultas HTTP, opções de timeout e
+`InternetCrackUrlW`; `WininetTest.*` passou, incluindo a regressão de ponteiro
+não mapeado para `URL_COMPONENTS`.
+
 ## Fora desta rodada
 
 Não entram neste roadmap, por enquanto:

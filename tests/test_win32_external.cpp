@@ -62,6 +62,16 @@ TEST(WininetTest, CrackUrlRejectsPlainHttp) {
     EXPECT_EQ(tl_GetLastError(), kErrorInternetInvalidUrl);
 }
 
+TEST(WininetTest, CrackUrlRejectsUnmappedComponentsPointer) {
+    constexpr std::uint16_t kUrl[] = {
+        'h', 't', 't', 'p', 's', ':', '/', '/', 'l', 'o', 'c', 'a', 'l', 'h', 'o', 's', 't', 0,
+    };
+    auto* const invalid = reinterpret_cast<GuestUrlComponentsW*>(static_cast<std::uintptr_t>(0x1000));
+
+    EXPECT_EQ(tl_InternetCrackUrlW(kUrl, 0, 0, invalid), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+}
+
 TEST(OleStreamTest, InMemoryStreamRoundTripsAndReportsSize) {
     GuestIStream* stream = nullptr;
     ASSERT_EQ(tl_CreateStreamOnHGlobal(nullptr, 1, &stream), kSOk);

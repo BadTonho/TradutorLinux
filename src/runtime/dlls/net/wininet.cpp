@@ -6,6 +6,8 @@
 #include "tradutorlinux/runtime/memory_validator.hpp"
 #include "tradutorlinux/util/unicode.hpp"
 
+#include "../../core/runtime_state_common.hpp"
+
 #include <algorithm>
 #include <array>
 #include <cctype>
@@ -19,6 +21,7 @@
 #include <iostream>
 #include <limits>
 #include <mutex>
+#include <new>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -220,10 +223,6 @@ void trace_wininet(const char* operation, const char* status,
     };
     diagnostics::write_trace(std::cerr, diagnostics::TraceComponent::Runtime,
                              diagnostics::TraceLevel::Info, "wininet", fields);
-}
-
-bool mapped_range(const void* address, const std::size_t size, const bool writable) noexcept {
-    return runtime::validate_mapped_range(address, size, writable);
 }
 
 bool copy_wide(const std::uint16_t* source, const std::size_t length,
@@ -626,22 +625,51 @@ bool perform_request_locked(InternetSlot& request, const InternetSlot& connectio
 
 bool write_wide_component(std::uint16_t* destination, std::uint32_t& capacity,
                           const std::string& value) noexcept {
-    const std::size_t required = value.size() + 1U;
+    const std::u16string wide = util::utf8_to_wide(value);
+    const std::size_t required = wide.size() + 1U;
     if (required > std::numeric_limits<std::uint32_t>::max()) return false;
     if (destination == nullptr || capacity == 0) {
         capacity = static_cast<std::uint32_t>(required);
         return value.empty();
     }
-    if (capacity < required || !mapped_range(destination, required * sizeof(std::uint16_t), true)) {
+    if (capacity < required) {
         capacity = static_cast<std::uint32_t>(required);
         set_error(abi::kErrorInsufficientBuffer);
         return false;
     }
-    for (std::size_t index = 0; index < value.size(); ++index) {
-        destination[index] = static_cast<std::uint16_t>(static_cast<unsigned char>(value[index]));
+    std::vector<std::uint16_t> terminated;
+    try {
+        terminated.assign(wide.begin(), wide.end());
+        terminated.push_back(0);
+    } catch (const std::bad_alloc&) {
+        set_error(abi::kErrorNotEnoughMemory);
+        return false;
     }
-    destination[value.size()] = 0;
-    capacity = static_cast<std::uint32_t>(value.size());
+    if (runtime::write_guest_memory(destination, terminated.data(),
+                                    terminated.size() * sizeof(terminated[0])).status !=
+        runtime::GuestMemoryAccessStatus::Success) {
+        set_error(abi::kErrorInvalidParameter);
+        return false;
+    }
+    capacity = static_cast<std::uint32_t>(wide.size());
+    return true;
+}
+
+bool write_wide_buffer(std::uint16_t* destination, const std::u16string& value) noexcept {
+    std::vector<std::uint16_t> terminated;
+    try {
+        terminated.assign(value.begin(), value.end());
+        terminated.push_back(0);
+    } catch (const std::bad_alloc&) {
+        set_error(abi::kErrorNotEnoughMemory);
+        return false;
+    }
+    if (runtime::write_guest_memory(destination, terminated.data(),
+                                    terminated.size() * sizeof(terminated[0])).status !=
+        runtime::GuestMemoryAccessStatus::Success) {
+        set_error(abi::kErrorInvalidParameter);
+        return false;
+    }
     return true;
 }
 
@@ -820,9 +848,7 @@ TL_MSABI int tl_HttpSendRequestW(const HInternet request,
                                  const std::uint32_t optional_data_length) noexcept {
     if ((optional_headers_length != 0 && optional_headers == nullptr) ||
         optional_headers_length > kMaxHeaderLength || optional_data_length > kMaxBodyLength ||
-        (optional_data_length != 0 && optional_data == nullptr) ||
-        (optional_data != nullptr && optional_data_length != 0 &&
-         !mapped_range(optional_data, optional_data_length, false))) {
+        (optional_data_length != 0 && optional_data == nullptr)) {
         set_error(abi::kErrorInvalidParameter);
         return 0;
     }
@@ -849,8 +875,19 @@ TL_MSABI int tl_HttpSendRequestW(const HInternet request,
     }
     request_slot.body.clear();
     if (optional_data_length != 0) {
-        const auto* bytes = static_cast<const std::uint8_t*>(optional_data);
-        request_slot.body.assign(bytes, bytes + optional_data_length);
+        std::vector<std::uint8_t> body;
+        try {
+            body.resize(optional_data_length);
+        } catch (const std::bad_alloc&) {
+            set_error(abi::kErrorNotEnoughMemory);
+            return 0;
+        }
+        if (runtime::read_guest_memory(optional_data, body.data(), body.size()).status !=
+            runtime::GuestMemoryAccessStatus::Success) {
+            set_error(abi::kErrorInvalidParameter);
+            return 0;
+        }
+        request_slot.body = std::move(body);
     }
     const std::size_t connection_index = request_slot.parent;
     const std::size_t session_index = root_session_locked(connection_index);
@@ -862,9 +899,8 @@ TL_MSABI int tl_HttpSendRequestW(const HInternet request,
 TL_MSABI int tl_InternetReadFile(const HInternet file, void* buffer,
                                  const std::uint32_t number_of_bytes_to_read,
                                  std::uint32_t* number_of_bytes_read) noexcept {
-    if (number_of_bytes_read == nullptr || !mapped_range(number_of_bytes_read, sizeof(*number_of_bytes_read), true) ||
-        (number_of_bytes_to_read != 0 && (buffer == nullptr ||
-         !mapped_range(buffer, number_of_bytes_to_read, true)))) {
+    if (number_of_bytes_read == nullptr ||
+        (number_of_bytes_to_read != 0 && buffer == nullptr)) {
         set_error(abi::kErrorInvalidParameter);
         return 0;
     }
@@ -882,10 +918,18 @@ TL_MSABI int tl_InternetReadFile(const HInternet file, void* buffer,
     const std::size_t remaining = request.response_body.size() - request.response_position;
     const std::size_t copy_size = std::min<std::size_t>(remaining, number_of_bytes_to_read);
     if (copy_size != 0) {
-        std::memcpy(buffer, request.response_body.data() + request.response_position, copy_size);
-        request.response_position += copy_size;
+        if (runtime::write_guest_memory(
+                buffer, request.response_body.data() + request.response_position, copy_size).status !=
+            runtime::GuestMemoryAccessStatus::Success) {
+            set_error(abi::kErrorInvalidParameter);
+            return 0;
+        }
     }
-    *number_of_bytes_read = static_cast<std::uint32_t>(copy_size);
+    if (!write_guest_value(number_of_bytes_read, static_cast<std::uint32_t>(copy_size))) {
+        set_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    request.response_position += copy_size;
     set_error(abi::kErrorSuccess);
     trace_wininet("read", "success", 0, copy_size);
     return 1;
@@ -895,9 +939,7 @@ TL_MSABI int tl_InternetQueryDataAvailable(const HInternet file,
                                            std::uint32_t* number_of_bytes_available,
                                            const std::uint32_t flags,
                                            const std::uintptr_t context) noexcept {
-    if (number_of_bytes_available == nullptr ||
-        !mapped_range(number_of_bytes_available, sizeof(*number_of_bytes_available), true) ||
-        flags != 0 || context != 0) {
+    if (number_of_bytes_available == nullptr || flags != 0 || context != 0) {
         set_error(abi::kErrorInvalidParameter);
         return 0;
     }
@@ -912,11 +954,15 @@ TL_MSABI int tl_InternetQueryDataAvailable(const HInternet file,
         set_error(kErrorInternetInvalidOperation);
         return 0;
     }
-    *number_of_bytes_available = static_cast<std::uint32_t>(
+    const std::uint32_t available = static_cast<std::uint32_t>(
         std::min<std::size_t>(request.response_body.size() - request.response_position,
                               std::numeric_limits<std::uint32_t>::max()));
+    if (!write_guest_value(number_of_bytes_available, available)) {
+        set_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
     set_error(abi::kErrorSuccess);
-    trace_wininet("available", "success", 0, *number_of_bytes_available);
+    trace_wininet("available", "success", 0, available);
     return 1;
 }
 
@@ -925,12 +971,14 @@ TL_MSABI int tl_HttpQueryInfoW(const HInternet request,
                                void* buffer,
                                std::uint32_t* buffer_length,
                                std::uint32_t* index) noexcept {
-    if (buffer_length == nullptr || !mapped_range(buffer_length, sizeof(*buffer_length), true) ||
-        (index != nullptr && !mapped_range(index, sizeof(*index), true))) {
+    std::uint32_t capacity = 0;
+    std::uint32_t query_index = 0;
+    if (!read_guest_value(buffer_length, capacity) ||
+        (index != nullptr && !read_guest_value(index, query_index))) {
         set_error(abi::kErrorInvalidParameter);
         return 0;
     }
-    if (index != nullptr && *index != 0) {
+    if (query_index != 0) {
         set_error(abi::kErrorNoMoreFiles);
         return 0;
     }
@@ -952,14 +1000,19 @@ TL_MSABI int tl_HttpQueryInfoW(const HInternet request,
         return 0;
     }
     if (query == kHttpQueryStatusCode && number) {
-        if (*buffer_length < sizeof(std::uint32_t) || buffer == nullptr ||
-            !mapped_range(buffer, sizeof(std::uint32_t), true)) {
-            *buffer_length = sizeof(std::uint32_t);
+        if (capacity < sizeof(std::uint32_t) || buffer == nullptr) {
+            if (!write_guest_value(buffer_length, std::uint32_t{sizeof(std::uint32_t)})) {
+                set_error(abi::kErrorInvalidParameter);
+                return 0;
+            }
             set_error(abi::kErrorInsufficientBuffer);
             return 0;
         }
-        std::memcpy(buffer, &value.status_code, sizeof(value.status_code));
-        *buffer_length = sizeof(value.status_code);
+        if (!write_guest_value(buffer, value.status_code) ||
+            !write_guest_value(buffer_length, std::uint32_t{sizeof(value.status_code)})) {
+            set_error(abi::kErrorInvalidParameter);
+            return 0;
+        }
         set_error(abi::kErrorSuccess);
         trace_wininet("query", "success");
         return 1;
@@ -979,19 +1032,23 @@ TL_MSABI int tl_HttpQueryInfoW(const HInternet request,
         set_error(abi::kErrorNotSupported);
         return 0;
     }
-    const std::size_t required = (text.size() + 1U) * sizeof(std::uint16_t);
+    const std::u16string wide = util::utf8_to_wide(text);
+    const std::size_t required = (wide.size() + 1U) * sizeof(std::uint16_t);
     if (required > std::numeric_limits<std::uint32_t>::max() || buffer == nullptr ||
-        *buffer_length < required || !mapped_range(buffer, required, true)) {
-        *buffer_length = static_cast<std::uint32_t>(required);
+        capacity < required) {
+        if (required <= std::numeric_limits<std::uint32_t>::max() &&
+            !write_guest_value(buffer_length, static_cast<std::uint32_t>(required))) {
+            set_error(abi::kErrorInvalidParameter);
+            return 0;
+        }
         set_error(abi::kErrorInsufficientBuffer);
         return 0;
     }
-    auto* destination = static_cast<std::uint16_t*>(buffer);
-    for (std::size_t character = 0; character < text.size(); ++character) {
-        destination[character] = static_cast<std::uint16_t>(static_cast<unsigned char>(text[character]));
+    if (!write_wide_buffer(static_cast<std::uint16_t*>(buffer), wide) ||
+        !write_guest_value(buffer_length, static_cast<std::uint32_t>(required))) {
+        set_error(abi::kErrorInvalidParameter);
+        return 0;
     }
-    destination[text.size()] = 0;
-    *buffer_length = static_cast<std::uint32_t>(required);
     set_error(abi::kErrorSuccess);
     trace_wininet("query", "success");
     return 1;
@@ -1001,8 +1058,7 @@ TL_MSABI int tl_InternetSetOptionW(const HInternet internet,
                                    const std::uint32_t option,
                                    void* buffer,
                                    const std::uint32_t buffer_length) noexcept {
-    if (buffer == nullptr || buffer_length != sizeof(std::uint32_t) ||
-        !mapped_range(buffer, sizeof(std::uint32_t), false)) {
+    if (buffer == nullptr || buffer_length != sizeof(std::uint32_t)) {
         set_error(abi::kErrorInvalidParameter);
         return 0;
     }
@@ -1011,7 +1067,11 @@ TL_MSABI int tl_InternetSetOptionW(const HInternet internet,
         set_error(abi::kErrorNotSupported);
         return 0;
     }
-    const std::uint32_t timeout = *static_cast<const std::uint32_t*>(buffer);
+    std::uint32_t timeout = 0;
+    if (!read_guest_value(buffer, timeout)) {
+        set_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
     if (timeout == 0 || timeout > 600000U) {
         set_error(abi::kErrorInvalidParameter);
         return 0;
@@ -1051,9 +1111,9 @@ TL_MSABI int tl_InternetCrackUrlW(const std::uint16_t* url,
                                   const std::uint32_t url_length,
                                   const std::uint32_t flags,
                                   GuestUrlComponentsW* components) noexcept {
-    if (url == nullptr || components == nullptr || flags != 0 ||
-        !mapped_range(components, sizeof(*components), true) ||
-        components->dw_struct_size != sizeof(GuestUrlComponentsW)) {
+    GuestUrlComponentsW local_components{};
+    if (!read_guest_value(components, local_components) || url == nullptr || flags != 0 ||
+        local_components.dw_struct_size != sizeof(GuestUrlComponentsW)) {
         set_error(abi::kErrorInvalidParameter);
         return 0;
     }
@@ -1072,14 +1132,15 @@ TL_MSABI int tl_InternetCrackUrlW(const std::uint16_t* url,
         set_error(kErrorInternetInvalidUrl);
         return 0;
     }
-    components->n_scheme = kInternetSchemeHttps;
-    components->n_port = parsed.port;
-    components->dw_user_name_length = 0;
-    components->dw_password_length = 0;
-    if (!write_wide_component(components->lpsz_scheme, components->dw_scheme_length, parsed.scheme) ||
-        !write_wide_component(components->lpsz_host_name, components->dw_host_name_length, parsed.host) ||
-        !write_wide_component(components->lpsz_url_path, components->dw_url_path_length, parsed.path) ||
-        !write_wide_component(components->lpsz_extra_info, components->dw_extra_info_length, parsed.extra)) {
+    local_components.n_scheme = kInternetSchemeHttps;
+    local_components.n_port = parsed.port;
+    local_components.dw_user_name_length = 0;
+    local_components.dw_password_length = 0;
+    if (!write_wide_component(local_components.lpsz_scheme, local_components.dw_scheme_length, parsed.scheme) ||
+        !write_wide_component(local_components.lpsz_host_name, local_components.dw_host_name_length, parsed.host) ||
+        !write_wide_component(local_components.lpsz_url_path, local_components.dw_url_path_length, parsed.path) ||
+        !write_wide_component(local_components.lpsz_extra_info, local_components.dw_extra_info_length, parsed.extra) ||
+        !write_guest_value(components, local_components)) {
         if (tl_GetLastError() == abi::kErrorSuccess) set_error(abi::kErrorInsufficientBuffer);
         return 0;
     }

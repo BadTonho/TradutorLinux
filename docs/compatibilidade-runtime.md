@@ -139,7 +139,10 @@ também usam essa fronteira. `GlobalMemoryStatusEx`, `GlobalMemoryStatus`,
 mesma cópia protegida. `WaitForMultipleObjects`, `WaitOnAddress`,
 `ReleaseSemaphore`, `INIT_ONCE`, SRW locks, variáveis de condição e
 `RegisterWaitForSingleObject` também não interpretam mais diretamente os
-buffers convidados. A migração do runtime ainda não está completa:
+buffers convidados. No WININET, `InternetReadFile`,
+`InternetQueryDataAvailable`, `HttpQueryInfoW`, `InternetSetOptionW`,
+`InternetCrackUrlW` e o corpo opcional de `HttpSendRequestW` seguem o mesmo
+contrato. A migração do runtime ainda não está completa:
 `validate_mapped_range` continua sendo uma fotografia de `/proc/self/maps`, e
 há APIs antigas com acesso direto após validação; essas rotas não são
 anunciadas como atômicas até serem migradas.
