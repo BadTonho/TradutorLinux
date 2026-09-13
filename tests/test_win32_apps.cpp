@@ -90,6 +90,20 @@ TEST(MprTest, RejectsInvalidArgumentsBeforeUnsupportedPath) {
     EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
 }
 
+TEST(ComctlTest, ProtectedControlOutputsRejectUnmappedPointers) {
+    auto* const invalid = reinterpret_cast<void*>(static_cast<std::uintptr_t>(0x1000U));
+
+    EXPECT_EQ(tl_TaskDialogIndirect(nullptr, static_cast<int*>(invalid), static_cast<int*>(invalid),
+                                    static_cast<int*>(invalid)), 0);
+    EXPECT_EQ(tl_TaskDialog(nullptr, nullptr, nullptr, nullptr, nullptr, 0, nullptr,
+                            static_cast<int*>(invalid)), 0);
+    EXPECT_EQ(tl_ImageList_GetIconSize(nullptr, static_cast<int*>(invalid),
+                                       static_cast<int*>(invalid)), 1);
+    EXPECT_EQ(tl_ImageList_GetImageInfo(nullptr, 0, invalid), 1);
+    EXPECT_EQ(tl_LoadIconWithScaleDown(nullptr, nullptr, 16, 16, static_cast<void**>(invalid)),
+              static_cast<int>(0x80070057U));
+}
+
 TEST(WinRarCoverageTest, TickCountPrivilegeAndClsid) {
     EXPECT_GT(tl_GetTickCount(), 0U);
     EXPECT_EQ(tl_AllocConsole(), 1);

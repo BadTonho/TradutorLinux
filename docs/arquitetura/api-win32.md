@@ -350,7 +350,8 @@ fabricar conteúdo.
 `InitCommonControls`,
 image lists, `CreateStatusWindowW`, `CreateToolbarEx`, `PropertySheetW`,
 `TaskDialog*` e subclassing de controles possuem apenas os contratos de
-fixtures. `SetWindowTheme` e funções UxTheme são stubs/limitadas; DWM, WINMM,
+fixtures. As saídas de `TaskDialog*`, dimensões/informações de image list e
+ícones são publicadas por cópias protegidas. `SetWindowTheme` e funções UxTheme são stubs/limitadas; DWM, WINMM,
 DirectX, drivers e GPU são resolvidos somente quando o diagnóstico controlado
 exige uma rejeição segura.
 

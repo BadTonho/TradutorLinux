@@ -403,6 +403,11 @@ As validações de buffers que precedem I/O potencialmente bloqueante continuam
 explícitas; a regressão cobre saídas inacessíveis sem alterar os retornos
 limitados dessas APIs.
 
+O lote `COMCTL32` migrou as saídas de `TaskDialog*`, dimensões e informações de
+image list e `LoadIconWithScaleDown` para cópias protegidas. Os contratos
+determinísticos dos stubs foram preservados; a regressão cobre todos esses
+ponteiros de saída inacessíveis.
+
 ## Fora desta rodada
 
 Não entram neste roadmap, por enquanto:

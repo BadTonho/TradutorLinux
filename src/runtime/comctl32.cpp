@@ -2,6 +2,7 @@
 #include "tradutorlinux/loader/module.hpp"
 #include "tradutorlinux/loader/builtin_modules.hpp"
 #include "tradutorlinux/runtime/winapi.hpp"
+#include "tradutorlinux/runtime/memory_validator.hpp"
 #include "tradutorlinux/util/unicode.hpp"
 
 #include <algorithm>
@@ -266,14 +267,14 @@ TL_COMCTL_MSABI std::intptr_t tl_PropertySheetW(const void* const header) noexce
 TL_COMCTL_MSABI std::int32_t tl_TaskDialogIndirect(const void* const config, int* const button,
                                                   int* const radio_button, int* const verification_flag_checked) noexcept {
     (void)config;
-    if (button != nullptr && mapped_guest_range(button, sizeof(int), true)) {
-        *button = 1; // IDOK
+    if (button != nullptr) {
+        static_cast<void>(write_guest_value(button, 1)); // IDOK
     }
-    if (radio_button != nullptr && mapped_guest_range(radio_button, sizeof(int), true)) {
-        *radio_button = 0;
+    if (radio_button != nullptr) {
+        static_cast<void>(write_guest_value(radio_button, 0));
     }
-    if (verification_flag_checked != nullptr && mapped_guest_range(verification_flag_checked, sizeof(int), true)) {
-        *verification_flag_checked = 0;
+    if (verification_flag_checked != nullptr) {
+        static_cast<void>(write_guest_value(verification_flag_checked, 0));
     }
     return 0; // S_OK
 }
@@ -291,8 +292,8 @@ TL_COMCTL_MSABI std::int32_t tl_TaskDialog(void* const hwnd_parent, void* const 
     (void)content;
     (void)common_buttons;
     (void)icon;
-    if (button != nullptr && mapped_guest_range(button, sizeof(int), true)) {
-        *button = 1; // IDOK
+    if (button != nullptr) {
+        static_cast<void>(write_guest_value(button, 1)); // IDOK
     }
     return 0; // S_OK
 }
@@ -348,11 +349,11 @@ TL_COMCTL_MSABI std::uint32_t tl_ImageList_GetBkColor(void* const himl) noexcept
 
 TL_COMCTL_MSABI int tl_ImageList_GetIconSize(void* const himl, int* const cx, int* const cy) noexcept {
     (void)himl;
-    if (cx != nullptr && mapped_guest_range(cx, sizeof(int), true)) {
-        *cx = 16;
+    if (cx != nullptr) {
+        static_cast<void>(write_guest_value(cx, 16));
     }
-    if (cy != nullptr && mapped_guest_range(cy, sizeof(int), true)) {
-        *cy = 16;
+    if (cy != nullptr) {
+        static_cast<void>(write_guest_value(cy, 16));
     }
     return 1;
 }
@@ -365,8 +366,9 @@ TL_COMCTL_MSABI int tl_TrackMouseEvent_alias(void* const event_track) noexcept {
 TL_COMCTL_MSABI int tl_ImageList_GetImageInfo(void* const himl, const int i, void* const pImageInfo) noexcept {
     (void)himl;
     (void)i;
-    if (pImageInfo != nullptr && mapped_guest_range(pImageInfo, 40, true)) {
-        std::memset(pImageInfo, 0, 40);
+    if (pImageInfo != nullptr) {
+        const std::array<std::byte, 40> zeroes{};
+        static_cast<void>(runtime::write_guest_memory(pImageInfo, zeroes.data(), zeroes.size()));
     }
     return 1;
 }
@@ -417,9 +419,13 @@ TL_COMCTL_MSABI int tl_ImageList_SetIconSize(void* const himl, const int cx, con
 TL_COMCTL_MSABI int tl_LoadIconWithScaleDown(void* const hinst, const wchar_t* const pszName, const int cx, const int cy, void** const phico) noexcept {
     (void)cx;
     (void)cy;
-    if (phico != nullptr && mapped_guest_range(phico, sizeof(void*), true)) {
-        *phico = reinterpret_cast<void*>(tl_LoadIconW(hinst, reinterpret_cast<const std::uint16_t*>(pszName)));
-        return *phico != nullptr ? 0 : static_cast<int>(0x80004005U);
+    if (phico != nullptr) {
+        void* const icon = reinterpret_cast<void*>(tl_LoadIconW(
+            hinst, reinterpret_cast<const std::uint16_t*>(pszName)));
+        if (!write_guest_value(phico, icon)) {
+            return static_cast<int>(0x80070057U); // E_INVALIDARG
+        }
+        return icon != nullptr ? 0 : static_cast<int>(0x80004005U);
     }
     return static_cast<int>(0x80070057U); // E_INVALIDARG
 }
