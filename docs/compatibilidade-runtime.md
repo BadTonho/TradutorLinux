@@ -688,9 +688,9 @@ processo filho; cada thread convidada recebe seu próprio TEB/GS, stack e
 | `KERNEL32.dll` | `ExitThread` | Suportado | `longjmp` para o `setjmp` do wrapper; thread termina sem encerrar o processo |
 | `KERNEL32.dll` | `WaitForSingleObject` | Suportado | Thread, evento, mutex, semáforo, processo e arquivo síncrono; suporta `INFINITE` e timeout |
 | `KERNEL32.dll` | `WaitForMultipleObjects` | Suportado | Até 64 handles válidos, espera any/all e retorno por índice; polling controlado para o subconjunto atual |
-| `KERNEL32.dll` | `CreateEventA/W`, `SetEvent`, `ResetEvent` | Suportado | Eventos manuais/automáticos com `condition_variable` |
-| `KERNEL32.dll` | `CreateMutexA/W`, `ReleaseMutex` | Suportado | Mutex recursivo e ownership pela thread convidada corrente |
-| `KERNEL32.dll` | `CreateSemaphoreA/W`, `ReleaseSemaphore` | Suportado | Contagem inicial/máxima e consumo por espera |
+| `KERNEL32.dll` | `CreateEventA/W`, `SetEvent`, `ResetEvent` | Suportado | Eventos manuais/automáticos com `condition_variable`; atributos de segurança opcionais são lidos por cópia protegida |
+| `KERNEL32.dll` | `CreateMutexA/W`, `ReleaseMutex` | Suportado | Mutex recursivo e ownership pela thread convidada corrente; atributos de segurança opcionais são lidos por cópia protegida |
+| `KERNEL32.dll` | `CreateSemaphoreA/W`, `ReleaseSemaphore` | Suportado | Contagem inicial/máxima e consumo por espera; `previous_count` é publicado por cópia protegida |
 | `KERNEL32.dll` | `CloseHandle` | Suportado | Fecha thread/processo/sincronização/arquivo e libera os recursos associados |
 | `KERNEL32.dll` | `CreateProcessW` | Suportado no contrato limitado | Cria um filho PE32+ pelo mesmo loader e devolve processo assíncrono; sem drives, WOW64 ou execução nativa direta |
 | `KERNEL32.dll` | `GetExitCodeProcess` / `TerminateProcess` | Suportado no contrato limitado | Consulta código e encerra filho isolado via sinal controlado |

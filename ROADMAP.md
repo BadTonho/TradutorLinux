@@ -359,6 +359,12 @@ fusos e conversões FILETIME/SYSTEMTIME/DOS. Leituras e publicações agora usam
 cópias protegidas; `Win32TimeTest.ProtectedTimeBuffersRejectUnmappedPointers`
 passou junto das três regressões de memória.
 
+O fechamento do lote de sincronização removeu as pré-validações por snapshot
+dos atributos de segurança em criações de objetos e de `previous_count` em
+`ReleaseSemaphore`. A regressão
+`Win32ConcurrencyTest.ProtectedSynchronizationPointersRejectUnmappedMemory`
+passou com as 28 coberturas de concorrência e memória.
+
 ## Fora desta rodada
 
 Não entram neste roadmap, por enquanto:

@@ -135,6 +135,8 @@ threadpool (`CreateThreadpoolWork`, `SubmitThreadpoolWork`,
 `CreateThreadpoolTimer`, `SetThreadpoolTimer`,
 `WaitForThreadpoolTimerCallbacks`, `CloseThreadpoolTimer`) têm cobertura
 controlada, sem prometer o scheduler completo do Windows.
+Os atributos de segurança opcionais das criações e o contador anterior de
+`ReleaseSemaphore` atravessam a fronteira por cópias protegidas.
 
 `InitializeCriticalSection`, `InitializeCriticalSectionEx`,
 `InitializeCriticalSectionAndSpinCount`, `EnterCriticalSection`,

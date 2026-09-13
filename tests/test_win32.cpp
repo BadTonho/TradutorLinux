@@ -2216,6 +2216,12 @@ TEST(Win32ConcurrencyTest, EventsSemaphoresMutexAndMultipleWaitsHaveWin32Semanti
 
 TEST(Win32ConcurrencyTest, ProtectedSynchronizationPointersRejectUnmappedMemory) {
     auto* const invalid = reinterpret_cast<void*>(static_cast<std::uintptr_t>(0x1000));
+    EXPECT_EQ(tl_CreateMutexA(invalid, 0, nullptr), nullptr);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_CreateEventA(invalid, 0, 0, nullptr), nullptr);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_CreateSemaphoreA(invalid, 0, 1, nullptr), nullptr);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
     EXPECT_EQ(tl_WaitForMultipleObjects(
                   1, reinterpret_cast<const void* const*>(invalid), 0, 0),
               abi::kWaitFailed);

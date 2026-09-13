@@ -76,6 +76,14 @@ std::array<InternalSrwLock, kMaxSrwLocks> g_srw_pool{};
 std::unordered_map<void*, std::size_t> g_srw_map;
 std::mutex g_srw_pool_mutex;
 
+[[nodiscard]] bool read_security_attributes(const void* const security_attributes) noexcept {
+    if (security_attributes == nullptr) {
+        return true;
+    }
+    std::uint32_t ignored_attributes = 0;
+    return read_guest_value(security_attributes, ignored_attributes);
+}
+
 InternalSrwLock* get_or_create_srw(void* ptr) {
     std::lock_guard<std::mutex> lock(g_srw_pool_mutex);
     auto it = g_srw_map.find(ptr);
@@ -252,7 +260,7 @@ TL_MSABI std::uint32_t tl_WaitForMultipleObjects(const std::uint32_t count,
 
 TL_MSABI void* tl_CreateMutexA(const void* security_attributes, const int initial_owner,
                                const char* name) noexcept {
-    if ((security_attributes != nullptr && !mapped_guest_range(security_attributes, sizeof(std::uint32_t), false)) ||
+    if (!read_security_attributes(security_attributes) ||
         (name != nullptr && !mapped_guest_cstring(name)) ||
         (initial_owner != 0 && initial_owner != 1)) {
         set_last_error(abi::kErrorInvalidParameter);
@@ -279,7 +287,7 @@ TL_MSABI void* tl_CreateMutexA(const void* security_attributes, const int initia
 
 TL_MSABI void* tl_CreateMutexW(const void* security_attributes, const int initial_owner,
                                const std::uint16_t* name) noexcept {
-    if ((security_attributes != nullptr && !mapped_guest_range(security_attributes, sizeof(std::uint32_t), false)) ||
+    if (!read_security_attributes(security_attributes) ||
         (name != nullptr && !mapped_guest_wstring(name)) ||
         (initial_owner != 0 && initial_owner != 1)) {
         set_last_error(abi::kErrorInvalidParameter);
@@ -290,7 +298,7 @@ TL_MSABI void* tl_CreateMutexW(const void* security_attributes, const int initia
 
 TL_MSABI void* tl_CreateEventA(const void* security_attributes, const int manual_reset,
                                const int initial_state, const char* name) noexcept {
-    if ((security_attributes != nullptr && !mapped_guest_range(security_attributes, sizeof(std::uint32_t), false)) ||
+    if (!read_security_attributes(security_attributes) ||
         (name != nullptr && !mapped_guest_cstring(name)) ||
         (manual_reset != 0 && manual_reset != 1) || (initial_state != 0 && initial_state != 1)) {
         set_last_error(abi::kErrorInvalidParameter);
@@ -321,7 +329,7 @@ TL_MSABI void* tl_CreateEventA(const void* security_attributes, const int manual
 
 TL_MSABI void* tl_CreateEventW(const void* security_attributes, const int manual_reset,
                                const int initial_state, const std::uint16_t* name) noexcept {
-    if ((security_attributes != nullptr && !mapped_guest_range(security_attributes, sizeof(std::uint32_t), false)) ||
+    if (!read_security_attributes(security_attributes) ||
         (name != nullptr && !mapped_guest_wstring(name)) ||
         (manual_reset != 0 && manual_reset != 1) || (initial_state != 0 && initial_state != 1)) {
         set_last_error(abi::kErrorInvalidParameter);
@@ -390,7 +398,7 @@ TL_MSABI void* tl_CreateSemaphoreA(const void* security_attributes,
                                    const std::int32_t initial_count,
                                    const std::int32_t maximum_count,
                                    const char* name) noexcept {
-    if ((security_attributes != nullptr && !mapped_guest_range(security_attributes, sizeof(std::uint32_t), false)) ||
+    if (!read_security_attributes(security_attributes) ||
         (name != nullptr && !mapped_guest_cstring(name)) ||
         initial_count < 0 || maximum_count <= 0 || initial_count > maximum_count) {
         set_last_error(abi::kErrorInvalidParameter);
@@ -427,8 +435,7 @@ TL_MSABI void* tl_CreateSemaphoreW(const void* security_attributes,
 TL_MSABI int tl_ReleaseSemaphore(const void* semaphore, const std::int32_t release_count,
                                   std::int32_t* previous_count) noexcept {
     SyncSlot* slot = find_sync_slot(semaphore);
-    if (slot == nullptr || slot->kind != SyncKind::Semaphore || release_count <= 0 ||
-        (previous_count != nullptr && !mapped_guest_range(previous_count, sizeof(*previous_count), true))) {
+    if (slot == nullptr || slot->kind != SyncKind::Semaphore || release_count <= 0) {
         set_last_error(slot == nullptr ? abi::kErrorInvalidHandle : abi::kErrorInvalidParameter);
         return 0;
     }
