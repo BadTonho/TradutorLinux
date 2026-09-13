@@ -3,10 +3,22 @@
 #include "kernel32_memory_internal.hpp"
 
 #include <fcntl.h>
+#include <new>
 #include <sys/mman.h>
+#include <vector>
 
 namespace tradutorlinux {
 using namespace file_internal;
+
+namespace {
+
+bool write_guest_u32(std::uint32_t* const destination, const std::uint32_t value) noexcept {
+    return destination == nullptr ||
+           runtime::write_guest_memory(destination, &value, sizeof(value)).status ==
+               runtime::GuestMemoryAccessStatus::Success;
+}
+
+}  // namespace
 
 extern "C" {
 TL_MSABI std::uint32_t tl_GetFileType(const void* const handle) noexcept {
@@ -44,43 +56,55 @@ TL_MSABI int tl_WriteFile(const void* const handle, const void* const buffer,
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
-    if (overlapped != nullptr || !mapped_guest_range(buffer, bytes_to_write, false)) {
-        if (bytes_written != nullptr) {
-            *bytes_written = 0;
-        }
+    if (overlapped != nullptr || (bytes_to_write != 0 && buffer == nullptr)) {
+        static_cast<void>(write_guest_u32(bytes_written, 0));
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
+    }
+    std::vector<std::byte> host_buffer;
+    if (bytes_to_write != 0) {
+        try {
+            host_buffer.resize(bytes_to_write);
+        } catch (const std::bad_alloc&) {
+            static_cast<void>(write_guest_u32(bytes_written, 0));
+            set_last_error(abi::kErrorNotEnoughMemory);
+            return 0;
+        }
+        if (runtime::read_guest_memory(buffer, host_buffer.data(), bytes_to_write).status !=
+            runtime::GuestMemoryAccessStatus::Success) {
+            static_cast<void>(write_guest_u32(bytes_written, 0));
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
+        }
     }
     FileSlotGuard slot_guard(handle);
     FileSlot* const slot = slot_guard.get();
     const int fd = slot != nullptr ? slot->fd : (slot_guard.is_file_handle() ? -1 : handle_fd(handle));
     if (fd < 0) {
-        if (bytes_written != nullptr) {
-            *bytes_written = 0;
-        }
+        static_cast<void>(write_guest_u32(bytes_written, 0));
         set_last_error(abi::kErrorInvalidHandle);
         return 0;
     }
     if (bytes_to_write == 0) {
-        if (bytes_written != nullptr) {
-            *bytes_written = 0;
+        if (!write_guest_u32(bytes_written, 0)) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
         }
         set_last_error(abi::kErrorSuccess);
         return 1;
     }
-    const ssize_t written = ::write(fd, buffer, bytes_to_write);
+    const ssize_t written = ::write(fd, host_buffer.data(), bytes_to_write);
     if (written < 0) {
         const std::uint32_t win32_error = errno_to_win32(errno);
         trace_linux_failure("WriteFile", "write", errno, win32_error);
-        if (bytes_written != nullptr) {
-            *bytes_written = 0;
-        }
+        static_cast<void>(write_guest_u32(bytes_written, 0));
         set_last_error(win32_error);
         return 0;
     }
     synchronize_file_position(slot, fd);
-    if (bytes_written != nullptr) {
-        *bytes_written = static_cast<std::uint32_t>(written);
+    if (!write_guest_u32(bytes_written, static_cast<std::uint32_t>(written))) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
     }
     set_last_error(abi::kErrorSuccess);
     return 1;
@@ -94,10 +118,8 @@ TL_MSABI int tl_ReadFile(const void* const handle, void* const buffer,
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
-    if (overlapped != nullptr || !mapped_guest_range(buffer, bytes_to_read, true)) {
-        if (bytes_read != nullptr) {
-            *bytes_read = 0;
-        }
+    if (overlapped != nullptr || (bytes_to_read != 0 && buffer == nullptr)) {
+        static_cast<void>(write_guest_u32(bytes_read, 0));
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
@@ -105,32 +127,45 @@ TL_MSABI int tl_ReadFile(const void* const handle, void* const buffer,
     FileSlot* const slot = slot_guard.get();
     const int fd = slot != nullptr ? slot->fd : (slot_guard.is_file_handle() ? -1 : handle_fd(handle));
     if (fd < 0) {
-        if (bytes_read != nullptr) {
-            *bytes_read = 0;
-        }
+        static_cast<void>(write_guest_u32(bytes_read, 0));
         set_last_error(abi::kErrorInvalidHandle);
         return 0;
     }
     if (bytes_to_read == 0) {
-        if (bytes_read != nullptr) {
-            *bytes_read = 0;
+        if (!write_guest_u32(bytes_read, 0)) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
         }
         set_last_error(abi::kErrorSuccess);
         return 1;
     }
-    const ssize_t read_bytes = ::read(fd, buffer, bytes_to_read);
+    std::vector<std::byte> host_buffer;
+    try {
+        host_buffer.resize(bytes_to_read);
+    } catch (const std::bad_alloc&) {
+        static_cast<void>(write_guest_u32(bytes_read, 0));
+        set_last_error(abi::kErrorNotEnoughMemory);
+        return 0;
+    }
+    const ssize_t read_bytes = ::read(fd, host_buffer.data(), bytes_to_read);
     if (read_bytes < 0) {
         const std::uint32_t win32_error = errno_to_win32(errno);
         trace_linux_failure("ReadFile", "read", errno, win32_error);
-        if (bytes_read != nullptr) {
-            *bytes_read = 0;
-        }
+        static_cast<void>(write_guest_u32(bytes_read, 0));
         set_last_error(win32_error);
         return 0;
     }
     synchronize_file_position(slot, fd);
-    if (bytes_read != nullptr) {
-        *bytes_read = static_cast<std::uint32_t>(read_bytes);
+    if (read_bytes > 0 &&
+        runtime::write_guest_memory(buffer, host_buffer.data(), static_cast<std::size_t>(read_bytes)).status !=
+            runtime::GuestMemoryAccessStatus::Success) {
+        static_cast<void>(write_guest_u32(bytes_read, 0));
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    if (!write_guest_u32(bytes_read, static_cast<std::uint32_t>(read_bytes))) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
     }
     set_last_error(abi::kErrorSuccess);
     return 1;
