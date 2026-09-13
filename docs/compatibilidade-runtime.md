@@ -150,6 +150,11 @@ publicados junto com o bloco completo. A migração do runtime ainda não está 
 há APIs antigas com acesso direto após validação; essas rotas não são
 anunciadas como atômicas até serem migradas.
 
+As APIs `GetPrivateProfileStringA/W` e `GetPrivateProfileSectionA/W` copiam
+strings de entrada para objetos host e publicam resultados ANSI/UTF-16 por
+`write_guest_memory`, preservando a truncagem e a terminação dos buffers. A
+leitura de arquivos INI continua limitada ao parser simples existente.
+
 ## GUI mínima (Fase 7)
 
 O protótipo registra um subconjunto de `USER32.dll` e `GDI32.dll` e usa X11

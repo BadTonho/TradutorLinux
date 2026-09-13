@@ -215,6 +215,13 @@ real foi executada quando o ambiente forneceu interfaces e é pulada de forma
 controlada quando não há dados de rede. O lote foi compilado no preset
 `validation-sanitize`.
 
+O lote de perfil INI migrou `GetPrivateProfileStringA/W` e
+`GetPrivateProfileSectionA/W`: strings opcionais são copiadas do convidado,
+resultados truncados recebem terminador por escrita protegida e o caminho do
+arquivo é traduzido somente depois de estar em memória do host. A regressão
+`Win32FileTest.PrivateProfileStringsUseProtectedGuestBuffers` passou junto com
+os testes da primitiva de memória.
+
 ## Fora desta rodada
 
 Não entram neste roadmap, por enquanto:

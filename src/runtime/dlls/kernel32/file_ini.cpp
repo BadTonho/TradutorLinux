@@ -4,37 +4,113 @@
 #include "tradutorlinux/util/unicode.hpp"
 
 #include <cstring>
+#include <limits>
 
 namespace tradutorlinux {
 using namespace file_internal;
+
+namespace {
+
+constexpr std::size_t kProfileInputLimit = 4096U;
+
+bool copy_optional_cstring(const char* const source, std::string& destination) noexcept {
+    if (source == nullptr) {
+        destination.clear();
+        return true;
+    }
+    return runtime::copy_guest_cstring(source, kProfileInputLimit, destination);
+}
+
+bool copy_optional_wstring(const std::uint16_t* const source,
+                           std::u16string& destination) noexcept {
+    if (source == nullptr) {
+        destination.clear();
+        return true;
+    }
+    return runtime::copy_guest_wstring(source, kProfileInputLimit, destination);
+}
+
+bool write_profile_bytes(void* const destination, const void* const source,
+                         const std::size_t length, const std::size_t capacity) noexcept {
+    if (destination == nullptr || capacity == 0U) return false;
+    const std::size_t copy_length = std::min(length, capacity - 1U);
+    if (copy_length > 0U &&
+        runtime::write_guest_memory(destination, source, copy_length).status !=
+            runtime::GuestMemoryAccessStatus::Success) {
+        return false;
+    }
+    const std::uintptr_t base = reinterpret_cast<std::uintptr_t>(destination);
+    if (copy_length > std::numeric_limits<std::uintptr_t>::max() - base) return false;
+    const std::uintptr_t terminator_address = base + copy_length;
+    const std::uint8_t terminator = 0U;
+    return runtime::write_guest_memory(reinterpret_cast<void*>(terminator_address), &terminator,
+                                       sizeof(terminator)).status ==
+           runtime::GuestMemoryAccessStatus::Success;
+}
+
+bool write_profile_wstring(std::uint16_t* const destination, const std::u16string& value,
+                           const std::uint32_t capacity) noexcept {
+    if (destination == nullptr || capacity == 0U) return false;
+    const std::size_t length = std::min<std::size_t>(value.size(), capacity - 1U);
+    if (length > 0U &&
+        runtime::write_guest_memory(destination, value.data(), length * sizeof(std::uint16_t)).status !=
+            runtime::GuestMemoryAccessStatus::Success) {
+        return false;
+    }
+    const std::uintptr_t base = reinterpret_cast<std::uintptr_t>(destination);
+    if (length > (std::numeric_limits<std::uintptr_t>::max() - base) / sizeof(std::uint16_t)) {
+        return false;
+    }
+    const std::uint16_t terminator = 0U;
+    return runtime::write_guest_memory(
+               reinterpret_cast<void*>(base + length * sizeof(std::uint16_t)), &terminator,
+               sizeof(terminator)).status == runtime::GuestMemoryAccessStatus::Success;
+}
+
+}  // namespace
 
 extern "C" {
 TL_MSABI std::uint32_t tl_GetPrivateProfileStringA(const char* app_name, const char* key_name,
                                                    const char* default_val, char* returned_string,
                                                    const std::uint32_t size, const char* file_name) noexcept {
-    if (returned_string == nullptr || size == 0 || !mapped_guest_range(returned_string, size, true)) {
+    if (returned_string == nullptr || size == 0U) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
-    std::string fallback = (default_val != nullptr && mapped_guest_cstring(default_val)) ? default_val : "";
-    if (file_name == nullptr || !mapped_guest_cstring(file_name)) {
-        std::strncpy(returned_string, fallback.c_str(), size - 1);
-        returned_string[size - 1] = '\0';
-        return static_cast<std::uint32_t>(std::strlen(returned_string));
+    std::string fallback;
+    std::string guest_file;
+    std::string target_section;
+    std::string target_key;
+    if (!copy_optional_cstring(default_val, fallback) ||
+        !copy_optional_cstring(file_name, guest_file) ||
+        !copy_optional_cstring(app_name, target_section) ||
+        !copy_optional_cstring(key_name, target_key)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
     }
+    if (file_name == nullptr) {
+        if (!write_profile_bytes(returned_string, fallback.data(), fallback.size(), size)) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
+        }
+        set_last_error(abi::kErrorSuccess);
+        return static_cast<std::uint32_t>(std::min<std::size_t>(fallback.size(), size - 1U));
+    }
+
     char normalized[4096]{};
-    const char* path_to_open = file_name;
-    if (translate_windows_path(file_name, normalized, sizeof(normalized))) {
-        path_to_open = normalized;
+    if (!translate_windows_path(guest_file.c_str(), normalized, sizeof(normalized))) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
     }
-    std::ifstream file{path_to_open};
+    std::ifstream file{normalized};
     if (!file) {
-        std::strncpy(returned_string, fallback.c_str(), size - 1);
-        returned_string[size - 1] = '\0';
-        return static_cast<std::uint32_t>(std::strlen(returned_string));
+        if (!write_profile_bytes(returned_string, fallback.data(), fallback.size(), size)) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
+        }
+        set_last_error(abi::kErrorSuccess);
+        return static_cast<std::uint32_t>(std::min<std::size_t>(fallback.size(), size - 1U));
     }
-    std::string target_section = (app_name != nullptr && mapped_guest_cstring(app_name)) ? app_name : "";
-    std::string target_key = (key_name != nullptr && mapped_guest_cstring(key_name)) ? key_name : "";
     std::string current_section;
     std::string line;
     std::string found_val = fallback;
@@ -62,32 +138,53 @@ TL_MSABI std::uint32_t tl_GetPrivateProfileStringA(const char* app_name, const c
             }
         }
     }
-    std::strncpy(returned_string, found_val.c_str(), size - 1);
-    returned_string[size - 1] = '\0';
+    if (!write_profile_bytes(returned_string, found_val.data(), found_val.size(), size)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
     set_last_error(abi::kErrorSuccess);
-    return static_cast<std::uint32_t>(std::strlen(returned_string));
+    return static_cast<std::uint32_t>(std::min<std::size_t>(found_val.size(), size - 1U));
 }
 TL_MSABI std::uint32_t tl_GetPrivateProfileStringW(const std::uint16_t* app_name, const std::uint16_t* key_name,
                                                    const std::uint16_t* default_val, std::uint16_t* returned_string,
                                                    const std::uint32_t size, const std::uint16_t* file_name) noexcept {
-    if (returned_string == nullptr || size == 0 || !mapped_guest_range(returned_string, size * sizeof(std::uint16_t), true)) {
+    if (returned_string == nullptr || size == 0U) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
-    const std::string utf8_app = (app_name != nullptr && mapped_guest_wstring(app_name)) ? util::wide_to_utf8(app_name) : "";
-    const std::string utf8_key = (key_name != nullptr && mapped_guest_wstring(key_name)) ? util::wide_to_utf8(key_name) : "";
-    const std::string utf8_def = (default_val != nullptr && mapped_guest_wstring(default_val)) ? util::wide_to_utf8(default_val) : "";
-    const std::string utf8_file = (file_name != nullptr && mapped_guest_wstring(file_name)) ? util::wide_to_utf8(file_name) : "";
+    std::u16string guest_app;
+    std::u16string guest_key;
+    std::u16string guest_default;
+    std::u16string guest_file;
+    if (!copy_optional_wstring(app_name, guest_app) ||
+        !copy_optional_wstring(key_name, guest_key) ||
+        !copy_optional_wstring(default_val, guest_default) ||
+        !copy_optional_wstring(file_name, guest_file)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    const std::string utf8_app = util::wide_to_utf8(
+        reinterpret_cast<const std::uint16_t*>(guest_app.data()), guest_app.size());
+    const std::string utf8_key = util::wide_to_utf8(
+        reinterpret_cast<const std::uint16_t*>(guest_key.data()), guest_key.size());
+    const std::string utf8_def = util::wide_to_utf8(
+        reinterpret_cast<const std::uint16_t*>(guest_default.data()), guest_default.size());
+    const std::string utf8_file = util::wide_to_utf8(
+        reinterpret_cast<const std::uint16_t*>(guest_file.data()), guest_file.size());
     char buf[4096]{};
-    tl_GetPrivateProfileStringA(utf8_app.empty() ? nullptr : utf8_app.c_str(),
-                                utf8_key.empty() ? nullptr : utf8_key.c_str(),
-                                utf8_def.empty() ? nullptr : utf8_def.c_str(),
+    const std::uint32_t result = tl_GetPrivateProfileStringA(
+                                app_name == nullptr ? nullptr : utf8_app.c_str(),
+                                key_name == nullptr ? nullptr : utf8_key.c_str(),
+                                default_val == nullptr ? nullptr : utf8_def.c_str(),
                                 buf, sizeof(buf),
-                                utf8_file.empty() ? nullptr : utf8_file.c_str());
-    const std::u16string u16 = util::utf8_to_wide(buf);
-    const std::size_t len = std::min<std::size_t>(u16.size(), size - 1);
-    std::copy(u16.begin(), u16.begin() + static_cast<std::ptrdiff_t>(len), returned_string);
-    returned_string[len] = 0;
+                                file_name == nullptr ? nullptr : utf8_file.c_str());
+    if (result == 0U && tl_GetLastError() == abi::kErrorInvalidParameter) return 0U;
+    const std::u16string u16 = util::utf8_to_wide(std::string_view{buf});
+    const std::size_t len = std::min<std::size_t>(u16.size(), size - 1U);
+    if (!write_profile_wstring(returned_string, u16, size)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0U;
+    }
     return static_cast<std::uint32_t>(len);
 }
 TL_MSABI std::uint32_t tl_GetPrivateProfileIntA(const char* app_name, const char* key_name,
@@ -127,9 +224,12 @@ TL_MSABI std::uint32_t tl_GetPrivateProfileSectionA(const char* app_name, char* 
                                                     const std::uint32_t size, const char* file_name) noexcept {
     (void)app_name;
     (void)file_name;
-    if (returned_string != nullptr && size >= 2 && mapped_guest_range(returned_string, size, true)) {
-        returned_string[0] = '\0';
-        returned_string[1] = '\0';
+    if (returned_string != nullptr && size >= 2U) {
+        const std::uint8_t empty[2]{0U, 0U};
+        if (runtime::write_guest_memory(returned_string, empty, sizeof(empty)).status !=
+            runtime::GuestMemoryAccessStatus::Success) {
+            set_last_error(abi::kErrorInvalidParameter);
+        }
     }
     return 0;
 }
@@ -137,9 +237,12 @@ TL_MSABI std::uint32_t tl_GetPrivateProfileSectionW(const std::uint16_t* app_nam
                                                     const std::uint32_t size, const std::uint16_t* file_name) noexcept {
     (void)app_name;
     (void)file_name;
-    if (returned_string != nullptr && size >= 2 && mapped_guest_range(returned_string, size * sizeof(std::uint16_t), true)) {
-        returned_string[0] = 0;
-        returned_string[1] = 0;
+    if (returned_string != nullptr && size >= 2U) {
+        const std::uint16_t empty[2]{0U, 0U};
+        if (runtime::write_guest_memory(returned_string, empty, sizeof(empty)).status !=
+            runtime::GuestMemoryAccessStatus::Success) {
+            set_last_error(abi::kErrorInvalidParameter);
+        }
     }
     return 0;
 }

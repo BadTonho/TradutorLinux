@@ -840,6 +840,34 @@ TEST(Win32FileTest, GetFileSizeReturnsCorrectSize) {
     tl_CloseHandle(handle);
 }
 
+TEST(Win32FileTest, PrivateProfileStringsUseProtectedGuestBuffers) {
+    char narrow[8]{};
+    EXPECT_EQ(tl_GetPrivateProfileStringA(nullptr, nullptr, "fallback", narrow,
+                                          sizeof(narrow), nullptr), 7U);
+    EXPECT_STREQ(narrow, "fallbac");
+
+    constexpr std::uint16_t kFallback[] = {'w', 'i', 'd', 'e', 0};
+    std::uint16_t wide[8]{};
+    EXPECT_EQ(tl_GetPrivateProfileStringW(nullptr, nullptr, kFallback, wide,
+                                          std::size(wide), nullptr), 4U);
+    EXPECT_EQ(wide[0], static_cast<std::uint16_t>('w'));
+    EXPECT_EQ(wide[4], 0U);
+
+    auto* const invalid_narrow =
+        reinterpret_cast<char*>(static_cast<std::uintptr_t>(0x1000U));
+    auto* const invalid_wide =
+        reinterpret_cast<std::uint16_t*>(static_cast<std::uintptr_t>(0x1000U));
+    EXPECT_EQ(tl_GetPrivateProfileStringA(nullptr, nullptr, "x", invalid_narrow, 2U, nullptr),
+              0U);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_GetPrivateProfileStringW(nullptr, nullptr, kFallback, invalid_wide, 2U, nullptr),
+              0U);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+
+    EXPECT_EQ(tl_GetPrivateProfileSectionA(nullptr, invalid_narrow, 2U, nullptr), 0U);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+}
+
 TEST(Win32FileTest, SetFilePointerSeeksToBeginning) {
     TempDirFixture ctx;
     const std::string fpath = ctx.path("seek_test.bin");
