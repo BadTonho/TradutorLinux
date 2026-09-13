@@ -474,6 +474,14 @@ TEST(Win32DialogTest, RejectsInvalidModalInputsAndUnknownTemplates) {
     EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
 }
 
+TEST(Win32DialogTest, ProtectedSimpleOutputsRejectUnmappedPointers) {
+    auto* const invalid = reinterpret_cast<void*>(static_cast<std::uintptr_t>(0x1000U));
+
+    EXPECT_EQ(tl_GetDlgItemTextA(nullptr, 0, static_cast<char*>(invalid), 16), 0U);
+    EXPECT_EQ(tl_GetDlgItemTextW(nullptr, 0, static_cast<wchar_t*>(invalid), 16), 0U);
+    EXPECT_EQ(tl_GetDlgItemInt(nullptr, 0, static_cast<int*>(invalid), 0), 0U);
+}
+
 
 TEST(Gdi32Test, BitmapAndHardLinkOperations) {
     void* bmp = tl_CreateBitmap(64, 64, 1, 32, nullptr);

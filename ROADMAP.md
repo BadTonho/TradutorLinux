@@ -418,6 +418,10 @@ O lote `USER32/misc` migrou as saídas determinísticas de cursor, caret,
 rolagem e informações de ícone para cópias protegidas. A regressão cobre
 ponteiros inacessíveis sem alterar os retornos limitados dessas APIs.
 
+O lote `USER32/dialog` migrou as saídas simples de `GetDlgItemTextA/W` e
+`GetDlgItemInt` para cópias protegidas. Os stubs continuam retornando texto e
+indicadores determinísticos; a regressão cobre ponteiros de saída inacessíveis.
+
 ## Fora desta rodada
 
 Não entram neste roadmap, por enquanto:

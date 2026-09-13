@@ -220,7 +220,8 @@ por cópia protegida.
 `GetDialogBaseUnits`, `GetNextDlgTabItem` e `IsDialogMessageA/W` formam o
 contrato mínimo de diálogo modal/modeless. Templates válidos são interpretados
 com limites; controles genéricos têm apenas o comportamento coberto pelas
-fixtures.
+fixtures. `GetDlgItemTextA/W` e `GetDlgItemInt` publicam suas saídas simples
+por cópias protegidas.
 
 `CreateMenu`, `CreatePopupMenu`, `DestroyMenu`, `AppendMenuA/W`,
 `InsertMenuA/W`, `InsertMenuItemW`, `RemoveMenu`, `DeleteMenu`, `SetMenu`,

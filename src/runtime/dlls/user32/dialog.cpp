@@ -718,8 +718,8 @@ TL_MSABI int tl_SetDlgItemTextA(void* const hwnd, const int id_dlg_item, const c
 TL_MSABI std::uint32_t tl_GetDlgItemTextA(void* const hDlg, const int nIDDlgItem, char* const lpString, const int cchMax) noexcept {
     (void)hDlg;
     (void)nIDDlgItem;
-    if (lpString != nullptr && cchMax > 0 && mapped_guest_range(lpString, static_cast<std::size_t>(cchMax), true)) {
-        lpString[0] = 0;
+    if (lpString != nullptr && cchMax > 0) {
+        static_cast<void>(write_guest_value(lpString, char{0}));
     }
     return 0;
 }
@@ -727,8 +727,8 @@ TL_MSABI std::uint32_t tl_GetDlgItemTextA(void* const hDlg, const int nIDDlgItem
 TL_MSABI std::uint32_t tl_GetDlgItemTextW(void* const hDlg, const int nIDDlgItem, wchar_t* const lpString, const int cchMax) noexcept {
     (void)hDlg;
     (void)nIDDlgItem;
-    if (lpString != nullptr && cchMax > 0 && mapped_guest_range(lpString, static_cast<std::size_t>(cchMax) * sizeof(wchar_t), true)) {
-        lpString[0] = 0;
+    if (lpString != nullptr && cchMax > 0) {
+        static_cast<void>(write_guest_value(lpString, wchar_t{0}));
     }
     return 0;
 }
@@ -737,8 +737,8 @@ TL_MSABI std::uint32_t tl_GetDlgItemInt(void* const hDlg, const int nIDDlgItem, 
     (void)hDlg;
     (void)nIDDlgItem;
     (void)bSigned;
-    if (lpTranslated != nullptr && mapped_guest_range(lpTranslated, sizeof(int), true)) {
-        *lpTranslated = 1;
+    if (lpTranslated != nullptr) {
+        static_cast<void>(write_guest_value(lpTranslated, 1));
     }
     return 0;
 }
