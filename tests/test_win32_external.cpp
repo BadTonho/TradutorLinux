@@ -664,6 +664,15 @@ TEST(IphlpapiTest, EnumeratesLinuxAdaptersWithWin32BufferContracts) {
     EXPECT_EQ(tl_if_nametoindex("tl-interface-does-not-exist"), 0U);
 }
 
+TEST(IphlpapiTest, RejectsUnmappedGuestPointers) {
+    auto* const invalid = reinterpret_cast<void*>(static_cast<std::uintptr_t>(0x1000U));
+
+    EXPECT_EQ(tl_GetAdaptersInfo(nullptr, static_cast<std::uint32_t*>(invalid)), 87U);
+    EXPECT_EQ(tl_GetAdaptersAddresses(2U, 0U, nullptr, nullptr,
+                                       static_cast<std::uint32_t*>(invalid)), 87U);
+    EXPECT_EQ(tl_if_nametoindex(static_cast<const char*>(invalid)), 0U);
+}
+
 TEST(WtsApiTest, EnumeratesAndReleasesLocalSession) {
     void* session_info = nullptr;
     std::uint32_t count = 0;

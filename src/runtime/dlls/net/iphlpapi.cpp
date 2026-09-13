@@ -8,7 +8,9 @@
 #include <cstdint>
 #include <cstring>
 #include <limits>
+#include <new>
 #include <string>
+#include <vector>
 
 #include <arpa/inet.h>
 #include <ifaddrs.h>
@@ -227,6 +229,16 @@ bool checked_align8(const std::size_t value, std::size_t& result) noexcept {
     return true;
 }
 
+bool guest_address_at(const void* const base, const std::size_t offset,
+                      void*& result) noexcept {
+    const std::uintptr_t address = reinterpret_cast<std::uintptr_t>(base);
+    if (offset > std::numeric_limits<std::uintptr_t>::max() - address) {
+        return false;
+    }
+    result = reinterpret_cast<void*>(address + offset);
+    return true;
+}
+
 std::size_t adapter_addresses_record_size(const HostAdapter& adapter,
                                           const std::uint32_t flags) noexcept {
     std::size_t result = sizeof(GuestAdapterAddresses);
@@ -246,10 +258,11 @@ std::size_t adapter_addresses_record_size(const HostAdapter& adapter,
     return checked_align8(result, result) ? result : 0U;
 }
 
-void copy_wide_name(const char* const source, std::uint16_t* const destination) noexcept {
+void copy_wide_name(const char* const source, std::byte* const destination) noexcept {
     const std::size_t length = std::strlen(source);
     for (std::size_t index = 0; index <= length; ++index) {
-        destination[index] = static_cast<std::uint8_t>(source[index]);
+        const std::uint16_t value = static_cast<std::uint8_t>(source[index]);
+        std::memcpy(destination + index * sizeof(value), &value, sizeof(value));
     }
 }
 
@@ -280,7 +293,8 @@ extern "C" {
 
 TL_MSABI std::uint32_t tl_GetAdaptersInfo(void* const AdapterInfo,
                                           std::uint32_t* const OutBufLen) noexcept {
-    if (OutBufLen == nullptr || !mapped_guest_range(OutBufLen, sizeof(*OutBufLen), true)) {
+    std::uint32_t capacity = 0;
+    if (!read_guest_value(OutBufLen, capacity)) {
         set_last_error(abi::kErrorInvalidParameter);
         return abi::kErrorInvalidParameter;
     }
@@ -288,54 +302,66 @@ TL_MSABI std::uint32_t tl_GetAdaptersInfo(void* const AdapterInfo,
     std::array<HostAdapter, kMaxHostAdapters> adapters{};
     std::size_t adapter_count = 0U;
     if (!collect_host_adapters(adapters, adapter_count)) {
-        *OutBufLen = 0U;
+        if (!write_guest_value(OutBufLen, std::uint32_t{0})) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return abi::kErrorInvalidParameter;
+        }
         set_last_error(kErrorNoData);
         trace_iphlpapi("GetAdaptersInfo", "no-data", kErrorNoData, 0U);
         return kErrorNoData;
     }
     const std::uint32_t required = required_adapter_info_size(adapter_count);
     if (required == 0U) {
-        *OutBufLen = 0U;
+        static_cast<void>(write_guest_value(OutBufLen, std::uint32_t{0}));
         set_last_error(abi::kErrorNotEnoughMemory);
         trace_iphlpapi("GetAdaptersInfo", "size-overflow", abi::kErrorNotEnoughMemory, 0U);
         return abi::kErrorNotEnoughMemory;
     }
-    if (AdapterInfo == nullptr || *OutBufLen < required) {
-        *OutBufLen = required;
+    if (AdapterInfo == nullptr || capacity < required) {
+        if (!write_guest_value(OutBufLen, required)) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return abi::kErrorInvalidParameter;
+        }
         set_last_error(kErrorBufferOverflow);
         trace_iphlpapi("GetAdaptersInfo", "buffer-overflow", kErrorBufferOverflow, required);
         return kErrorBufferOverflow;
     }
-    if (!mapped_guest_range(AdapterInfo, required, true)) {
+    std::vector<GuestAdapterInfo> output;
+    try {
+        output.resize(adapter_count);
+    } catch (const std::bad_alloc&) {
+        set_last_error(abi::kErrorNotEnoughMemory);
+        return abi::kErrorNotEnoughMemory;
+    }
+    for (std::size_t index = 0; index < adapter_count; ++index) {
+        GuestAdapterInfo& info = output[index];
+        const HostAdapter& adapter = adapters[index];
+        info.combo_index = static_cast<std::uint32_t>(index + 1U);
+        if (index + 1U < adapter_count &&
+            !guest_address_at(AdapterInfo, (index + 1U) * sizeof(GuestAdapterInfo), info.next)) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return abi::kErrorInvalidParameter;
+        }
+        std::memcpy(info.adapter_name, adapter.name.data(),
+                    std::min(adapter.name.size(), sizeof(info.adapter_name) - 1U));
+        std::memcpy(info.description, adapter.name.data(),
+                    std::min(adapter.name.size(), sizeof(info.description) - 1U));
+        info.address_length = std::min<std::uint32_t>(adapter.physical_address_length,
+                                                       sizeof(info.address));
+        std::memcpy(info.address, adapter.physical_address.data(), info.address_length);
+        info.index = adapter.index;
+        info.type = adapter.loopback ? 24U : 6U;
+        if (adapter.has_ipv4) {
+            copy_ipv4_text(adapter.ipv4, info.ip_address_list.ip_address);
+            copy_ipv4_text(adapter.netmask, info.ip_address_list.ip_mask);
+        }
+    }
+    if (runtime::write_guest_memory(AdapterInfo, output.data(), required).status !=
+        runtime::GuestMemoryAccessStatus::Success ||
+        !write_guest_value(OutBufLen, required)) {
         set_last_error(abi::kErrorInvalidParameter);
         return abi::kErrorInvalidParameter;
     }
-
-    std::memset(AdapterInfo, 0, required);
-    auto* const first = static_cast<std::byte*>(AdapterInfo);
-    for (std::size_t index = 0; index < adapter_count; ++index) {
-        auto* const info = reinterpret_cast<GuestAdapterInfo*>(
-            first + index * sizeof(GuestAdapterInfo));
-        const HostAdapter& adapter = adapters[index];
-        info->combo_index = static_cast<std::uint32_t>(index + 1U);
-        info->next = index + 1U < adapter_count
-                         ? first + (index + 1U) * sizeof(GuestAdapterInfo)
-                         : nullptr;
-        std::memcpy(info->adapter_name, adapter.name.data(),
-                    std::min(adapter.name.size(), sizeof(info->adapter_name) - 1U));
-        std::memcpy(info->description, adapter.name.data(),
-                    std::min(adapter.name.size(), sizeof(info->description) - 1U));
-        info->address_length = std::min<std::uint32_t>(adapter.physical_address_length,
-                                                       sizeof(info->address));
-        std::memcpy(info->address, adapter.physical_address.data(), info->address_length);
-        info->index = adapter.index;
-        info->type = adapter.loopback ? 24U : 6U;
-        if (adapter.has_ipv4) {
-            copy_ipv4_text(adapter.ipv4, info->ip_address_list.ip_address);
-            copy_ipv4_text(adapter.netmask, info->ip_address_list.ip_mask);
-        }
-    }
-    *OutBufLen = required;
     set_last_error(abi::kErrorSuccess);
     trace_iphlpapi("GetAdaptersInfo", "success", abi::kErrorSuccess, required);
     return abi::kErrorSuccess;
@@ -344,8 +370,9 @@ TL_MSABI std::uint32_t tl_GetAdaptersInfo(void* const AdapterInfo,
 TL_MSABI std::uint32_t tl_GetAdaptersAddresses(
     const std::uint32_t Family, const std::uint32_t Flags, void* const Reserved,
     void* const AdapterAddresses, std::uint32_t* const SizePointer) noexcept {
+    std::uint32_t capacity = 0;
     if (Reserved != nullptr || (Family != 0U && Family != kGuestAfInet && Family != kGuestAfInet6) ||
-        SizePointer == nullptr || !mapped_guest_range(SizePointer, sizeof(*SizePointer), true)) {
+        !read_guest_value(SizePointer, capacity)) {
         set_last_error(abi::kErrorInvalidParameter);
         return abi::kErrorInvalidParameter;
     }
@@ -353,13 +380,19 @@ TL_MSABI std::uint32_t tl_GetAdaptersAddresses(
     std::array<HostAdapter, kMaxHostAdapters> adapters{};
     std::size_t adapter_count = 0U;
     if (!collect_host_adapters(adapters, adapter_count)) {
-        *SizePointer = 0U;
+        if (!write_guest_value(SizePointer, std::uint32_t{0})) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return abi::kErrorInvalidParameter;
+        }
         set_last_error(kErrorNoData);
         trace_iphlpapi("GetAdaptersAddresses", "no-data", kErrorNoData, 0U);
         return kErrorNoData;
     }
     if (Family == kGuestAfInet6) {
-        *SizePointer = 0U;
+        if (!write_guest_value(SizePointer, std::uint32_t{0})) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return abi::kErrorInvalidParameter;
+        }
         set_last_error(kErrorNoData);
         trace_iphlpapi("GetAdaptersAddresses", "ipv6-not-supported", kErrorNoData, 0U);
         return kErrorNoData;
@@ -375,31 +408,44 @@ TL_MSABI std::uint32_t tl_GetAdaptersAddresses(
     }
     adapter_count = ipv4_count;
     if (adapter_count == 0U) {
-        *SizePointer = 0U;
+        if (!write_guest_value(SizePointer, std::uint32_t{0})) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return abi::kErrorInvalidParameter;
+        }
         set_last_error(kErrorNoData);
         trace_iphlpapi("GetAdaptersAddresses", "no-ipv4-data", kErrorNoData, 0U);
         return kErrorNoData;
     }
     const std::uint32_t required = required_adapter_addresses_size(adapters, adapter_count, Flags);
     if (required == 0U) {
-        *SizePointer = 0U;
+        static_cast<void>(write_guest_value(SizePointer, std::uint32_t{0}));
         set_last_error(abi::kErrorNotEnoughMemory);
         trace_iphlpapi("GetAdaptersAddresses", "size-overflow", abi::kErrorNotEnoughMemory, 0U);
         return abi::kErrorNotEnoughMemory;
     }
-    if (AdapterAddresses == nullptr || *SizePointer < required) {
-        *SizePointer = required;
+    if (AdapterAddresses == nullptr || capacity < required) {
+        if (!write_guest_value(SizePointer, required)) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return abi::kErrorInvalidParameter;
+        }
         set_last_error(kErrorBufferOverflow);
         trace_iphlpapi("GetAdaptersAddresses", "buffer-overflow", kErrorBufferOverflow, required);
         return kErrorBufferOverflow;
     }
-    if (!mapped_guest_range(AdapterAddresses, required, true)) {
+    if (required > std::numeric_limits<std::uintptr_t>::max() -
+                       reinterpret_cast<std::uintptr_t>(AdapterAddresses)) {
         set_last_error(abi::kErrorInvalidParameter);
         return abi::kErrorInvalidParameter;
     }
 
-    std::memset(AdapterAddresses, 0, required);
-    auto* const first = static_cast<std::byte*>(AdapterAddresses);
+    std::vector<std::byte> output;
+    try {
+        output.assign(required, std::byte{0});
+    } catch (const std::bad_alloc&) {
+        set_last_error(abi::kErrorNotEnoughMemory);
+        return abi::kErrorNotEnoughMemory;
+    }
+    auto* const first = output.data();
     GuestAdapterAddresses* previous = nullptr;
     std::size_t offset = 0U;
     for (std::size_t index = 0; index < adapter_count; ++index) {
@@ -413,18 +459,31 @@ TL_MSABI std::uint32_t tl_GetAdaptersAddresses(
             adapter.physical_address_length, sizeof(current->physical_address));
         std::memcpy(current->physical_address, adapter.physical_address.data(),
                     current->physical_address_length);
-        if (previous != nullptr) previous->next = current;
+        if (previous != nullptr &&
+            !guest_address_at(AdapterAddresses, offset, previous->next)) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return abi::kErrorInvalidParameter;
+        }
         previous = current;
 
         std::size_t cursor = offset + sizeof(GuestAdapterAddresses);
         if (!checked_align8(cursor, cursor)) return abi::kErrorNotEnoughMemory;
-        current->adapter_name = reinterpret_cast<char*>(first + cursor);
+        void* guest_pointer = nullptr;
+        if (!guest_address_at(AdapterAddresses, cursor, guest_pointer)) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return abi::kErrorInvalidParameter;
+        }
+        current->adapter_name = static_cast<char*>(guest_pointer);
         const std::size_t name_length = std::strlen(adapter.name.data());
-        std::memcpy(current->adapter_name, adapter.name.data(), name_length + 1U);
+        std::memcpy(first + cursor, adapter.name.data(), name_length + 1U);
         cursor += name_length + 1U;
 
-        current->description = reinterpret_cast<std::uint16_t*>(first + cursor);
-        copy_wide_name(adapter.name.data(), current->description);
+        if (!guest_address_at(AdapterAddresses, cursor, guest_pointer)) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return abi::kErrorInvalidParameter;
+        }
+        current->description = static_cast<std::uint16_t*>(guest_pointer);
+        copy_wide_name(adapter.name.data(), first + cursor);
         cursor += (name_length + 1U) * sizeof(std::uint16_t);
         if ((Flags & kGaaFlagSkipFriendlyName) == 0U) {
             current->friendly_name = current->description;
@@ -437,26 +496,46 @@ TL_MSABI std::uint32_t tl_GetAdaptersAddresses(
             auto* const address = reinterpret_cast<sockaddr_in*>(first + cursor);
             cursor += sizeof(sockaddr_in);
             unicast->length = sizeof(GuestUnicastAddress);
-            unicast->address.address = address;
+            if (!guest_address_at(AdapterAddresses,
+                                  cursor - sizeof(sockaddr_in), guest_pointer)) {
+                set_last_error(abi::kErrorInvalidParameter);
+                return abi::kErrorInvalidParameter;
+            }
+            unicast->address.address = guest_pointer;
             unicast->address.length = sizeof(sockaddr_in);
             unicast->on_link_prefix_length = prefix_length(adapter.netmask);
-            std::memcpy(address, &adapter.ipv4, sizeof(*address));
-            current->first_unicast_address = unicast;
+            std::memcpy(first + cursor - sizeof(sockaddr_in), &adapter.ipv4,
+                        sizeof(*address));
+            if (!guest_address_at(AdapterAddresses,
+                                  cursor - sizeof(sockaddr_in) - sizeof(GuestUnicastAddress),
+                                  guest_pointer)) {
+                set_last_error(abi::kErrorInvalidParameter);
+                return abi::kErrorInvalidParameter;
+            }
+            current->first_unicast_address = guest_pointer;
         }
         offset += adapter_addresses_record_size(adapter, Flags);
     }
-    *SizePointer = static_cast<std::uint32_t>(offset);
+    if (runtime::write_guest_memory(AdapterAddresses, output.data(), offset).status !=
+        runtime::GuestMemoryAccessStatus::Success ||
+        !write_guest_value(SizePointer, static_cast<std::uint32_t>(offset))) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return abi::kErrorInvalidParameter;
+    }
     set_last_error(abi::kErrorSuccess);
-    trace_iphlpapi("GetAdaptersAddresses", "success", abi::kErrorSuccess, *SizePointer);
+    trace_iphlpapi("GetAdaptersAddresses", "success", abi::kErrorSuccess,
+                   static_cast<std::uint32_t>(offset));
     return abi::kErrorSuccess;
 }
 
 TL_MSABI std::uint32_t tl_if_nametoindex(const char* const ifname) noexcept {
-    if (ifname == nullptr || !mapped_guest_cstring(ifname) || ifname[0] == '\0') {
+    std::string guest_name;
+    if (!runtime::copy_guest_cstring(ifname, kAdapterNameCapacity, guest_name) ||
+        guest_name.empty()) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0U;
     }
-    const unsigned int index = ::if_nametoindex(ifname);
+    const unsigned int index = ::if_nametoindex(guest_name.c_str());
     if (index == 0U) {
         set_last_error(abi::kErrorFileNotFound);
         return 0U;

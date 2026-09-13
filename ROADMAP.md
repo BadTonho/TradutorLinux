@@ -206,6 +206,15 @@ disponibilidade de resposta, consultas HTTP, opções de timeout e
 `InternetCrackUrlW`; `WininetTest.*` passou, incluindo a regressão de ponteiro
 não mapeado para `URL_COMPONENTS`.
 
+O lote `IPHLPAPI` migrou `GetAdaptersInfo`, `GetAdaptersAddresses` e
+`if_nametoindex`: tamanhos e strings agora são copiados com a fronteira
+protegida, os registros encadeados são montados em memória do host e publicados
+em uma única transferência, e ponteiros internos são derivados com verificação
+de overflow. `IphlpapiTest.RejectsUnmappedGuestPointers` passou; a enumeração
+real foi executada quando o ambiente forneceu interfaces e é pulada de forma
+controlada quando não há dados de rede. O lote foi compilado no preset
+`validation-sanitize`.
+
 ## Fora desta rodada
 
 Não entram neste roadmap, por enquanto:

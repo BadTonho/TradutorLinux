@@ -142,7 +142,10 @@ mesma cópia protegida. `WaitForMultipleObjects`, `WaitOnAddress`,
 buffers convidados. No WININET, `InternetReadFile`,
 `InternetQueryDataAvailable`, `HttpQueryInfoW`, `InternetSetOptionW`,
 `InternetCrackUrlW` e o corpo opcional de `HttpSendRequestW` seguem o mesmo
-contrato. A migração do runtime ainda não está completa:
+contrato. `GetAdaptersInfo`, `GetAdaptersAddresses` e `if_nametoindex` em
+`IPHLPAPI.DLL` também copiam strings, estruturas encadeadas e tamanhos por essa
+fronteira; os ponteiros internos dos registros são calculados no host e só são
+publicados junto com o bloco completo. A migração do runtime ainda não está completa:
 `validate_mapped_range` continua sendo uma fotografia de `/proc/self/maps`, e
 há APIs antigas com acesso direto após validação; essas rotas não são
 anunciadas como atômicas até serem migradas.
