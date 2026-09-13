@@ -1,8 +1,36 @@
 #include "test_win32_common.hpp"
+#include "tradutorlinux/diagnostics/trace.hpp"
 #include "../src/runtime/core/environment_internal.hpp"
+#include "../src/runtime/core/runtime_handle_state.hpp"
+#include "../src/runtime/core/runtime_thread_state.hpp"
 
 namespace tradutorlinux {
 namespace {
+
+std::atomic<std::uint32_t> g_gs_failure_entry_calls{0};
+
+TL_MSABI std::uint32_t gs_failure_entry(const void*) noexcept {
+    g_gs_failure_entry_calls.fetch_add(1, std::memory_order_relaxed);
+    return 91U;
+}
+
+bool fail_guest_gs_base(const void*) noexcept {
+    return false;
+}
+
+struct GuestGsFailureScope final {
+    GuestGsFailureScope() noexcept {
+        set_guest_image_view(
+            reinterpret_cast<const void*>(reinterpret_cast<std::uintptr_t>(&gs_failure_entry)),
+            1, 0, 0);
+        set_guest_gs_base_test_hook(&fail_guest_gs_base);
+    }
+
+    ~GuestGsFailureScope() {
+        set_guest_gs_base_test_hook(nullptr);
+        set_guest_image_view(nullptr, 0, 0, 0);
+    }
+};
 
 TEST(Win32CodePageTest, Cp1252ConvertsByte80ToEuroSign) {
     const char input[] = {'c', 'a', 'f', static_cast<char>(0xE9), static_cast<char>(0x80), '\0'};
@@ -1520,6 +1548,53 @@ TEST(Win32ConcurrencyTest, CreateThreadRejectsReadableNonExecutableStart) {
                               nullptr),
               nullptr);
     EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+}
+
+TEST(Win32ConcurrencyTest, CreateThreadCleansUpAfterInjectedGsFailure) {
+    g_gs_failure_entry_calls.store(0, std::memory_order_relaxed);
+    const std::filesystem::path trace_directory =
+        std::filesystem::temp_directory_path() /
+        ("tl-create-thread-gs-failure-" + std::to_string(static_cast<unsigned long long>(getpid())));
+    std::filesystem::remove_all(trace_directory);
+    ASSERT_TRUE(diagnostics::configure_trace_json_directory(trace_directory));
+    GuestGsFailureScope failure_scope;
+
+    std::uint32_t thread_id = 0;
+    void* const handle = tl_CreateThread(nullptr, 0,
+                                         reinterpret_cast<std::uintptr_t>(&gs_failure_entry),
+                                         nullptr, 0, &thread_id);
+    ASSERT_NE(handle, nullptr);
+    ASSERT_NE(thread_id, 0U);
+    const std::size_t slot_index = static_cast<std::size_t>(
+        reinterpret_cast<std::uintptr_t>(handle) - kThreadHandleBase);
+    ASSERT_LT(slot_index, g_threads.size());
+
+    EXPECT_EQ(tl_WaitForSingleObject(handle, 1000), abi::kWaitObject0);
+    std::uint32_t exit_code = 0xFFFFFFFFU;
+    EXPECT_EQ(tl_GetExitCodeThread(handle, &exit_code), 1);
+    EXPECT_EQ(exit_code, 0U);
+    EXPECT_EQ(g_gs_failure_entry_calls.load(std::memory_order_relaxed), 0U);
+    EXPECT_EQ(tl_CloseHandle(handle), 1);
+    EXPECT_EQ(find_thread_slot(handle), nullptr);
+    {
+        std::lock_guard<std::mutex> lock(g_threads_mutex);
+        EXPECT_FALSE(g_threads[slot_index].used);
+        EXPECT_EQ(g_threads[slot_index].teb, nullptr);
+        EXPECT_EQ(g_threads[slot_index].stack, nullptr);
+        EXPECT_EQ(g_threads[slot_index].stack_size, 0U);
+    }
+
+    diagnostics::disable_trace_json_directory();
+    std::string trace;
+    for (const auto& entry : std::filesystem::directory_iterator(trace_directory)) {
+        if (entry.path().extension() != ".jsonl") continue;
+        std::ifstream input(entry.path());
+        trace.append(std::istreambuf_iterator<char>{input}, std::istreambuf_iterator<char>{});
+    }
+    EXPECT_NE(trace.find("\"event\": \"api-failure\""), std::string::npos);
+    EXPECT_NE(trace.find("\"symbol\": \"CreateThread\""), std::string::npos);
+    EXPECT_NE(trace.find("\"operation\": \"guest-teb\""), std::string::npos);
+    std::filesystem::remove_all(trace_directory);
 }
 
 TEST(Win32ConcurrencyTest, GetCurrentProcessIdMatchesHost) {

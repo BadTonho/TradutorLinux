@@ -114,25 +114,32 @@ e o relatório do 7-Zip confirmou os três imports MPR como `support=stub`.
 
 ### R2 — Adicionar regressão determinística para falha de inicialização de thread (E7)
 
-**Lacuna de evidência:** a criação de thread já valida o endereço inicial,
+**Lacuna de evidência:** ~~a criação de thread já valida o endereço inicial,
 trata falhas de alocação e possui um caminho de falha para a configuração de
 `ARCH_SET_GS`, mas ainda não existe uma fixture capaz de provocar essa falha de
-modo determinístico.
+modo determinístico.~~ Corrigida nesta etapa.
 
 **Tarefas:**
 
-- [ ] introduzir uma fronteira de teste estreita para injetar a falha de
+- [x] introduzir uma fronteira de teste estreita para injetar a falha de
   arch_prctl, sem alterar o caminho normal nem a ABI Microsoft x64;
-- [ ] verificar limpeza de stack, TEB, descritores de thread, handles e
+- [x] verificar limpeza de stack, TEB, descritores de thread, handles e
   sinalização de término quando a inicialização falhar;
-- [ ] garantir que a thread convidada não execute o entry point após a falha;
-- [ ] adicionar regressão de concorrência e trace do erro controlado;
-- [ ] atualizar a documentação de ABI e concorrência.
+- [x] garantir que a thread convidada não execute o entry point após a falha;
+- [x] adicionar regressão de concorrência e trace do erro controlado;
+- [x] atualizar a documentação de ABI e concorrência.
 
 **Aceitação:** a falha injetada produz resultado reproduzível, não deixa estado
 parcial observável e não permite execução convidada após `ARCH_SET_GS` falhar.
 O caminho normal de `CreateThread` permanece protegido pelos testes
 existentes, sem transformar uma lacuna de teste em alegação de incompatibilidade.
+
+**Evidência 2026-09-12:** `Win32ConcurrencyTest.CreateThreadCleansUpAfterInjectedGsFailure`
+usa um entry point convidado executável, injeta apenas a fronteira de
+`set_guest_gs_base`, espera a conclusão, verifica exit code `0`, zero chamadas
+ao entry point, handle inválido após `CloseHandle` e slot com TEB/stack limpos.
+Também confirma no JSONL o evento `api-failure` de `CreateThread`/`guest-teb`.
+Os dois testes de rejeição de entry point inválido continuam passando.
 
 ### R3 — Delimitar acesso seguro à memória convidada (E11)
 

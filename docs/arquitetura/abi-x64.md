@@ -49,6 +49,10 @@ Contrato vigente:
 - Nenhuma exceção C++ atravessa a fronteira: as APIs exportadas são `noexcept` e convertem falhas em retorno, `GetLastError` e trace.
 - As APIs de console, arquivos, memória e GUI são exercitadas por fixtures PE e testes de integração.
 - As chamadas host→guest de `WNDPROC` também usam ponteiros tipados `ms_abi` e são cobertas por testes de layout e execução.
+- O wrapper de `CreateThread` instala o TEB no GS antes de chamar o entry point;
+  se `ARCH_SET_GS` falhar, a fronteira retorna pela thread host sem executar o
+  convidado. A injeção usada para testar essa falha é interna ao runtime e não
+  altera a ABI Microsoft x64 publicada.
 
 A lista de módulos, exports, ordinais internos e comportamentos suportados está em `docs/arquitetura/imports.md` e `docs/compatibilidade.md`.
 

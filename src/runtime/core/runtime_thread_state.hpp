@@ -5,6 +5,7 @@
 #include "tradutorlinux/runtime/unwind.hpp"
 
 #include <array>
+#include <atomic>
 #include <condition_variable>
 #include <csetjmp>
 #include <cstdint>
@@ -90,6 +91,8 @@ void free_tls_dynamic_blocks(void* owner_teb) noexcept;
 void initialize_pointer_backed_tls_slot(void* teb) noexcept;
 
 bool set_guest_gs_base(const void* base) noexcept;
+using GuestGsBaseTestHook = bool (*)(const void* base) noexcept;
+void set_guest_gs_base_test_hook(GuestGsBaseTestHook hook) noexcept;
 void* allocate_guest_teb(std::uintptr_t stack_top, std::uintptr_t stack_size,
                          std::uint32_t thread_id = 1) noexcept;
 void free_guest_teb(void* teb) noexcept;
