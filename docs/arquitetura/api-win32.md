@@ -439,9 +439,13 @@ impressora configurada; o runtime não finge um spooler Windows.
 ### Bibliotecas auxiliares e stubs de hardware
 
 `WNetAddConnection2W`, `WNetOpenEnumW`, `WNetEnumResourceW`, `WNetCloseEnum`,
-`WNetGetResourceInformationW` e `WNetGetResourceParentW` (`MPR.dll`) limitam-se
-a recursos locais controlados; unidades persistentes e credenciais não são
-criadas.
+`WNetGetResourceInformationW` e `WNetGetResourceParentW` (`MPR.dll`) são
+stubs controlados. Eles validam as estruturas, strings, buffers e ponteiros
+convidados; operações válidas que exigiriam um provedor MPR retornam
+`ERROR_NOT_SUPPORTED`, sem criar conexões, credenciais ou handles. Como não há
+tabela de enumeração MPR, `WNetOpenEnumW` deixa a saída nula e
+`WNetEnumResourceW`/`WNetCloseEnum` rejeitam handles desconhecidos com
+`ERROR_INVALID_HANDLE`.
 
 `PowerGetActiveScheme`, `PowerSetActiveScheme` e `CallNtPowerInformation`
 (`POWRPROF.dll`) têm retorno controlado para consultas de energia. As APIs

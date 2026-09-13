@@ -47,27 +47,36 @@ atualizar o erro correspondente e informar a limitação no diagnóstico.
 
 ### R1 — Corrigir falso sucesso de MPR.dll
 
-**Problema:** src/runtime/dlls/net/mpr.cpp ainda retorna NO_ERROR em operações
-que não são executadas e WNetOpenEnumW publica o valor constante 'WNet' como
-se fosse um handle válido.
+**Problema:** ~~`src/runtime/dlls/net/mpr.cpp` retornava `NO_ERROR` em operações
+que não eram executadas e `WNetOpenEnumW` publicava o valor constante `WNet` como
+se fosse um handle válido.~~ Corrigido nesta etapa.
 
 **Tarefas:**
 
-- [ ] inventariar quais APIs MPR.dll são consumidas pelas fixtures e pelo
+- [x] inventariar quais APIs MPR.dll são consumidas pelas fixtures e pelo
   7-Zip File Manager;
-- [ ] definir o subconjunto realmente implementável: estado lógico validado ou
+- [x] definir o subconjunto realmente implementável: estado lógico validado ou
   stub controlado com ERROR_NOT_SUPPORTED;
-- [ ] remover o handle fictício e aceitar somente handles emitidos por uma
+- [x] remover o handle fictício e aceitar somente handles emitidos por uma
   tabela de ownership do runtime, se a enumeração for implementada;
-- [ ] validar ponteiros, contagens, buffers e GetLastError em todos os caminhos
+- [x] validar ponteiros, contagens, buffers e GetLastError em todos os caminhos
   de sucesso e falha;
-- [ ] classificar cada export como Full, Limited ou Stub;
-- [ ] adicionar regressão unitária e atualizar a fixture/integração do 7-Zip
+- [x] classificar cada export como Full, Limited ou Stub;
+- [x] adicionar regressão unitária e atualizar a fixture/integração do 7-Zip
   sem promover resolução de import a suporte funcional.
 
 **Aceitação:** nenhuma API retorna sucesso para uma operação não realizada;
 nenhum handle inventado atravessa a ABI; os testes cobrem entradas válidas,
 inválidas e a limitação publicada; a matriz registra o resultado observado.
+
+**Evidência 2026-09-12:** `MPR.dll` foi reduzida a stubs explícitos. Os seis
+exports validam `NETRESOURCEW`, strings, buffers e saídas; operações válidas
+retornam `ERROR_NOT_SUPPORTED`, `WNetOpenEnumW` zera o handle e handles não
+emitidos retornam `ERROR_INVALID_HANDLE`. `MprTest.*` passou, o fixture
+`tl_7zfm_gui.exe` terminou com `7ZFM GUI APIS OK`/exit `0`, e `--report` mostrou
+`MPR.dll (3/3 resolved)` com `support=stub`. O teste agregado
+`SevenZipGuiCoverageTest.AllApisAndModules` continua com a falha pré-existente
+de `SHGetSpecialFolderPathW`, registrada sem ser atribuída a R1.
 
 ### R4 — Tornar explícita a classificação de exports
 

@@ -495,6 +495,14 @@ um teste TLS local; não há loja de certificados, validação de cadeia Windows
 nem WinTrust. O contrato completo está em
 [`wininet.md`](arquitetura/wininet.md).
 
+`MPR.dll` expõe somente os seis símbolos consumidos pelas fixtures atuais.
+Todos validam os argumentos convidados antes de responder; as operações
+válidas retornam `ERROR_NOT_SUPPORTED`, sem conexões, credenciais ou estado de
+enumeração. `WNetOpenEnumW` deixa o handle de saída nulo, e handles que não
+foram emitidos pelo runtime são rejeitados por `WNetEnumResourceW` e
+`WNetCloseEnum` com `ERROR_INVALID_HANDLE`. No `--report`, esses exports são
+classificados como `stub`; resolução de import não significa suporte de rede.
+
 ## Cadeia WinTrust explícita
 
 `WINTRUST.dll` expõe `WinVerifyTrust` e os três `WTHelper*` no contrato de blob

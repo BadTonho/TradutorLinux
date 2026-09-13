@@ -1,8 +1,10 @@
 #include "tradutorlinux/runtime/mpr.hpp"
 #include "tradutorlinux/loader/module.hpp"
 #include "tradutorlinux/loader/builtin_modules.hpp"
-#include "tradutorlinux/runtime/winapi.hpp"
 #include "tradutorlinux/runtime/memory_validator.hpp"
+#include "../../core/runtime_state_common.hpp"
+
+#include <cstring>
 
 namespace tradutorlinux {
 
@@ -10,6 +12,65 @@ namespace {
 
 inline bool mapped_range(const void* address, const std::size_t size, const bool writable) noexcept {
     return runtime::validate_mapped_range(address, size, writable);
+}
+
+// NETRESOURCEW usa quatro DWORDs seguidos de quatro ponteiros na ABI Win64.
+// A estrutura é lida por memcpy para não exigir alinhamento do ponteiro
+// fornecido pelo convidado.
+struct GuestNetResourceW {
+    std::uint32_t scope{};
+    std::uint32_t type{};
+    std::uint32_t display_type{};
+    std::uint32_t usage{};
+    const std::uint16_t* local_name{};
+    const std::uint16_t* remote_name{};
+    const std::uint16_t* comment{};
+    const std::uint16_t* provider{};
+};
+static_assert(sizeof(GuestNetResourceW) == 48);
+
+bool valid_optional_wstring(const std::uint16_t* const value) noexcept {
+    return value == nullptr || runtime::validate_mapped_wstring(value);
+}
+
+bool valid_net_resource(const void* const value) noexcept {
+    if (value == nullptr || !mapped_range(value, sizeof(GuestNetResourceW), false)) {
+        return false;
+    }
+    GuestNetResourceW resource{};
+    std::memcpy(&resource, value, sizeof(resource));
+    return valid_optional_wstring(resource.local_name) &&
+           valid_optional_wstring(resource.remote_name) &&
+           valid_optional_wstring(resource.comment) &&
+           valid_optional_wstring(resource.provider);
+}
+
+bool valid_optional_buffer(void* const buffer, const std::uint32_t size) noexcept {
+    return size == 0U || (buffer != nullptr && mapped_range(buffer, size, true));
+}
+
+void invalid_parameter(const char* const symbol, const char* const detail) noexcept {
+    set_last_error(abi::kErrorInvalidParameter);
+    trace_guest_failure(symbol, "argument-validation", detail);
+}
+
+std::uint32_t unsupported(const char* const symbol, const char* const detail) noexcept {
+    set_last_error(abi::kErrorNotSupported);
+    runtime_trace(symbol, {
+        diagnostics::TraceField{"symbol", symbol},
+        diagnostics::TraceField{"status", "unsupported"},
+        diagnostics::TraceField{"mechanism", "stub"},
+        diagnostics::TraceField{"detail", detail}}, 4);
+    return abi::kErrorNotSupported;
+}
+
+void invalid_handle(const char* const symbol) noexcept {
+    set_last_error(abi::kErrorInvalidHandle);
+    runtime_trace(symbol, {
+        diagnostics::TraceField{"symbol", symbol},
+        diagnostics::TraceField{"status", "invalid-handle"},
+        diagnostics::TraceField{"mechanism", "validation"},
+        diagnostics::TraceField{"detail", "handle de enumeração não pertence ao runtime"}}, 4);
 }
 
 }  // namespace
@@ -20,12 +81,13 @@ TL_MPR_MSABI std::uint32_t tl_WNetAddConnection2W(const void* const net_resource
                                                   const std::uint16_t* const password,
                                                   const std::uint16_t* const user_name,
                                                   const std::uint32_t flags) noexcept {
-    (void)net_resource;
-    (void)password;
-    (void)user_name;
+    if (!valid_net_resource(net_resource) || !valid_optional_wstring(password) ||
+        !valid_optional_wstring(user_name)) {
+        invalid_parameter("WNetAddConnection2W", "NETRESOURCEW ou credencial inválida");
+        return abi::kErrorInvalidParameter;
+    }
     (void)flags;
-    tl_SetLastError(abi::kErrorSuccess);
-    return 0; // NO_ERROR
+    return unsupported("WNetAddConnection2W", "conexões de rede e credenciais não implementadas");
 }
 
 TL_MPR_MSABI std::uint32_t tl_WNetOpenEnumW(const std::uint32_t scope, const std::uint32_t type,
@@ -34,50 +96,72 @@ TL_MPR_MSABI std::uint32_t tl_WNetOpenEnumW(const std::uint32_t scope, const std
     (void)scope;
     (void)type;
     (void)usage;
-    (void)net_resource;
-    if (enum_handle != nullptr && mapped_range(enum_handle, sizeof(void*), true)) {
-        *enum_handle = reinterpret_cast<void*>(0x574E6574ULL); // 'WNet'
+    if (enum_handle == nullptr || !mapped_range(enum_handle, sizeof(void*), true)) {
+        invalid_parameter("WNetOpenEnumW", "saída enum_handle inválida");
+        return abi::kErrorInvalidParameter;
     }
-    tl_SetLastError(abi::kErrorSuccess);
-    return 0; // NO_ERROR
+    if (net_resource != nullptr && !valid_net_resource(net_resource)) {
+        invalid_parameter("WNetOpenEnumW", "NETRESOURCEW inválida");
+        return abi::kErrorInvalidParameter;
+    }
+    *enum_handle = nullptr;
+    return unsupported("WNetOpenEnumW", "enumeração de provedores MPR não implementada");
 }
 
 TL_MPR_MSABI std::uint32_t tl_WNetEnumResourceW(void* const enum_handle, std::uint32_t* const count,
                                                 void* const buffer, std::uint32_t* const buffer_size) noexcept {
     (void)enum_handle;
-    (void)buffer;
-    (void)buffer_size;
-    if (count != nullptr && mapped_range(count, sizeof(std::uint32_t), true)) {
-        *count = 0;
+    if (count == nullptr || !mapped_range(count, sizeof(*count), true) ||
+        buffer_size == nullptr || !mapped_range(buffer_size, sizeof(*buffer_size), true)) {
+        invalid_parameter("WNetEnumResourceW", "count ou buffer_size inválido");
+        return abi::kErrorInvalidParameter;
     }
-    tl_SetLastError(abi::kErrorSuccess);
-    return 259; // ERROR_NO_MORE_ITEMS
+    if (!valid_optional_buffer(buffer, *buffer_size)) {
+        invalid_parameter("WNetEnumResourceW", "buffer de recursos inválido");
+        return abi::kErrorInvalidParameter;
+    }
+    invalid_handle("WNetEnumResourceW");
+    return abi::kErrorInvalidHandle;
 }
 
 TL_MPR_MSABI std::uint32_t tl_WNetCloseEnum(void* const enum_handle) noexcept {
-    (void)enum_handle;
-    tl_SetLastError(abi::kErrorSuccess);
-    return 0; // NO_ERROR
+    if (enum_handle == nullptr) {
+        invalid_handle("WNetCloseEnum");
+        return abi::kErrorInvalidHandle;
+    }
+    invalid_handle("WNetCloseEnum");
+    return abi::kErrorInvalidHandle;
 }
 
 TL_MPR_MSABI std::uint32_t tl_WNetGetResourceInformationW(const void* const net_resource, void* const buffer,
                                                           std::uint32_t* const buffer_size,
                                                           std::uint16_t** const system) noexcept {
-    (void)net_resource;
-    (void)buffer;
-    (void)buffer_size;
-    (void)system;
-    tl_SetLastError(abi::kErrorSuccess);
-    return 0; // NO_ERROR
+    if (!valid_net_resource(net_resource) || buffer_size == nullptr ||
+        !mapped_range(buffer_size, sizeof(*buffer_size), true)) {
+        invalid_parameter("WNetGetResourceInformationW", "NETRESOURCEW ou buffer_size inválido");
+        return abi::kErrorInvalidParameter;
+    }
+    if (!valid_optional_buffer(buffer, *buffer_size) ||
+        (system != nullptr && !mapped_range(system, sizeof(*system), true))) {
+        invalid_parameter("WNetGetResourceInformationW", "buffer ou system inválido");
+        return abi::kErrorInvalidParameter;
+    }
+    if (system != nullptr) *system = nullptr;
+    return unsupported("WNetGetResourceInformationW", "informações de recursos MPR não implementadas");
 }
 
 TL_MPR_MSABI std::uint32_t tl_WNetGetResourceParentW(const void* const net_resource, void* const buffer,
                                                      std::uint32_t* const buffer_size) noexcept {
-    (void)net_resource;
-    (void)buffer;
-    (void)buffer_size;
-    tl_SetLastError(abi::kErrorSuccess);
-    return 0; // NO_ERROR
+    if (!valid_net_resource(net_resource) || buffer_size == nullptr ||
+        !mapped_range(buffer_size, sizeof(*buffer_size), true)) {
+        invalid_parameter("WNetGetResourceParentW", "NETRESOURCEW ou buffer_size inválido");
+        return abi::kErrorInvalidParameter;
+    }
+    if (!valid_optional_buffer(buffer, *buffer_size)) {
+        invalid_parameter("WNetGetResourceParentW", "buffer de recursos inválido");
+        return abi::kErrorInvalidParameter;
+    }
+    return unsupported("WNetGetResourceParentW", "recurso pai MPR não implementado");
 }
 
 }  // extern "C"
@@ -87,18 +171,19 @@ namespace tradutorlinux::loader {
 
 void register_mpr_module() {
     static const ExportedFunction kMprExports[] = {
-        {"WNetAddConnection2W", 1, reinterpret_cast<std::uintptr_t>(&tl_WNetAddConnection2W)},
-        {"WNetOpenEnumW", 2, reinterpret_cast<std::uintptr_t>(&tl_WNetOpenEnumW)},
-        {"WNetEnumResourceW", 3, reinterpret_cast<std::uintptr_t>(&tl_WNetEnumResourceW)},
-        {"WNetCloseEnum", 4, reinterpret_cast<std::uintptr_t>(&tl_WNetCloseEnum)},
+        {"WNetAddConnection2W", 1, reinterpret_cast<std::uintptr_t>(&tl_WNetAddConnection2W),
+         ExportSupport::Stub},
+        {"WNetOpenEnumW", 2, reinterpret_cast<std::uintptr_t>(&tl_WNetOpenEnumW), ExportSupport::Stub},
+        {"WNetEnumResourceW", 3, reinterpret_cast<std::uintptr_t>(&tl_WNetEnumResourceW),
+         ExportSupport::Stub},
+        {"WNetCloseEnum", 4, reinterpret_cast<std::uintptr_t>(&tl_WNetCloseEnum), ExportSupport::Stub},
         {"WNetGetResourceInformationW", 5,
-         reinterpret_cast<std::uintptr_t>(&tl_WNetGetResourceInformationW)},
+         reinterpret_cast<std::uintptr_t>(&tl_WNetGetResourceInformationW), ExportSupport::Stub},
         {"WNetGetResourceParentW", 6,
-         reinterpret_cast<std::uintptr_t>(&tl_WNetGetResourceParentW)},
+         reinterpret_cast<std::uintptr_t>(&tl_WNetGetResourceParentW), ExportSupport::Stub},
     };
     static const InternalModule kMprModule{"MPR.dll", kMprExports};
     register_module(kMprModule);
 }
 
 }  // namespace tradutorlinux::loader
-

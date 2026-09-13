@@ -40,7 +40,6 @@
 
 namespace tradutorlinux {
 
-inline constexpr std::uint32_t kWNetNoMoreEntries = 259U;
 inline constexpr std::uint32_t kRegisteredClipboardFormat = 0xC002U;
 
 inline void append_u16(std::vector<std::byte>& bytes, const std::uint16_t value) {

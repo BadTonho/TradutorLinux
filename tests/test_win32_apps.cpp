@@ -30,6 +30,53 @@ TEST(UnsupportedApiTest, StubsReportFailureInsteadOfSuccess) {
     EXPECT_EQ(tl_GetLastError(), abi::kErrorNotSupported);
 }
 
+TEST(MprTest, RejectsUnsupportedOperationsWithoutFabricatedState) {
+    alignas(8) std::array<std::byte, 48> net_resource{};
+    void* enum_handle = reinterpret_cast<void*>(0x574E6574ULL);
+    EXPECT_EQ(tl_WNetAddConnection2W(net_resource.data(), nullptr, nullptr, 0),
+              abi::kErrorNotSupported);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorNotSupported);
+
+    EXPECT_EQ(tl_WNetOpenEnumW(0, 0, 0, net_resource.data(), &enum_handle),
+              abi::kErrorNotSupported);
+    EXPECT_EQ(enum_handle, nullptr);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorNotSupported);
+
+    std::uint32_t count = 10;
+    std::uint32_t buffer_size = 0;
+    EXPECT_EQ(tl_WNetEnumResourceW(reinterpret_cast<void*>(0x574E6574ULL), &count, nullptr,
+                                   &buffer_size),
+              abi::kErrorInvalidHandle);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidHandle);
+    EXPECT_EQ(tl_WNetCloseEnum(reinterpret_cast<void*>(0x574E6574ULL)),
+              abi::kErrorInvalidHandle);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidHandle);
+
+    std::uint16_t* system = reinterpret_cast<std::uint16_t*>(0x1U);
+    buffer_size = 0;
+    EXPECT_EQ(tl_WNetGetResourceInformationW(net_resource.data(), nullptr, &buffer_size, &system),
+              abi::kErrorNotSupported);
+    EXPECT_EQ(system, nullptr);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorNotSupported);
+    EXPECT_EQ(tl_WNetGetResourceParentW(net_resource.data(), nullptr, &buffer_size),
+              abi::kErrorNotSupported);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorNotSupported);
+}
+
+TEST(MprTest, RejectsInvalidArgumentsBeforeUnsupportedPath) {
+    void* enum_handle = reinterpret_cast<void*>(0x1U);
+    EXPECT_EQ(tl_WNetAddConnection2W(nullptr, nullptr, nullptr, 0),
+              abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_WNetOpenEnumW(0, 0, 0, nullptr, nullptr), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_WNetEnumResourceW(enum_handle, nullptr, nullptr, nullptr),
+              abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_WNetCloseEnum(nullptr), abi::kErrorInvalidHandle);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidHandle);
+}
+
 TEST(WinRarCoverageTest, TickCountPrivilegeAndClsid) {
     EXPECT_GT(tl_GetTickCount(), 0U);
     EXPECT_EQ(tl_AllocConsole(), 1);
@@ -219,16 +266,15 @@ TEST(SevenZipGuiCoverageTest, AllApisAndModules) {
 
     // MPR (WNet)
     void* enum_handle = nullptr;
-    EXPECT_EQ(tl_WNetOpenEnumW(0, 0, 0, nullptr, &enum_handle), 0U);
-    EXPECT_NE(enum_handle, nullptr);
+    EXPECT_EQ(tl_WNetOpenEnumW(0, 0, 0, nullptr, &enum_handle), abi::kErrorNotSupported);
+    EXPECT_EQ(enum_handle, nullptr);
     std::uint32_t count = 10;
-    EXPECT_EQ(tl_WNetEnumResourceW(enum_handle, &count, nullptr, nullptr),
-              kWNetNoMoreEntries);
-    EXPECT_EQ(count, 0U);
-    EXPECT_EQ(tl_WNetCloseEnum(enum_handle), 0U);
-    EXPECT_EQ(tl_WNetAddConnection2W(nullptr, nullptr, nullptr, 0), 0U);
-    EXPECT_EQ(tl_WNetGetResourceInformationW(nullptr, nullptr, nullptr, nullptr), 0U);
-    EXPECT_EQ(tl_WNetGetResourceParentW(nullptr, nullptr, nullptr), 0U);
+    std::uint32_t buffer_size = 0;
+    EXPECT_EQ(tl_WNetEnumResourceW(reinterpret_cast<void*>(0x574E6574ULL), &count, nullptr,
+                                   &buffer_size),
+              abi::kErrorInvalidHandle);
+    EXPECT_EQ(tl_WNetCloseEnum(reinterpret_cast<void*>(0x574E6574ULL)),
+              abi::kErrorInvalidHandle);
 
     // COMCTL32 & COMDLG32
     g_windows = {};
