@@ -309,6 +309,14 @@ incluindo dados contados, tamanhos e handles emitidos. A regressão
 `Win32RegistryTest.ProtectedRegistryInputsAndOutputsRejectUnmappedPointers`
 passou junto com as coberturas existentes de registro e conversão A/W.
 
+O lote criptográfico migrou as publicações e buffers contados de
+`CryptAcquireContextA/W`, `CryptGenRandom`, `CryptCreateHash`,
+`CryptGetHashParam`, `CryptSignHashW`, `CryptExportKey`, `CryptGetUserKey`,
+`CryptGetProvParam` e `SystemFunction036` para a fronteira protegida; os
+stubs continuam sem expor provedores ou chaves reais. A regressão
+`Win32CryptoTest.ProtectedCryptoBuffersRejectUnmappedPointers` passou junto
+com as coberturas existentes de hash e aleatoriedade.
+
 ## Fora desta rodada
 
 Não entram neste roadmap, por enquanto:

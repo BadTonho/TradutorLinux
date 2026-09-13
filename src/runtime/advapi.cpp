@@ -637,11 +637,13 @@ TL_ADVAPI_MSABI int tl_CryptAcquireContextA(void** prov_handle, const char* cont
     (void)provider;
     (void)prov_type;
     (void)flags;
-    if (prov_handle == nullptr || !mapped_range(prov_handle, sizeof(void*), true)) {
+    if (prov_handle == nullptr) {
         return 0;
     }
     static char g_crypto_provider_token = 0;
-    *prov_handle = &g_crypto_provider_token;
+    if (!write_guest_value(prov_handle, static_cast<void*>(&g_crypto_provider_token))) {
+        return 0;
+    }
     return 1;
 }
 
@@ -652,31 +654,44 @@ TL_ADVAPI_MSABI int tl_CryptAcquireContextW(void** prov_handle, const std::uint1
     (void)provider;
     (void)prov_type;
     (void)flags;
-    if (prov_handle == nullptr || !mapped_range(prov_handle, sizeof(void*), true)) {
+    if (prov_handle == nullptr) {
         return 0;
     }
     static char g_crypto_provider_token = 0;
-    *prov_handle = &g_crypto_provider_token;
+    if (!write_guest_value(prov_handle, static_cast<void*>(&g_crypto_provider_token))) {
+        return 0;
+    }
     return 1;
 }
 
 TL_ADVAPI_MSABI int tl_CryptGenRandom(void* prov_handle, const std::uint32_t length,
                                       std::uint8_t* buffer) noexcept {
-    if (prov_handle == nullptr || buffer == nullptr || length == 0 ||
-        !mapped_range(buffer, length, true)) {
+    if (prov_handle == nullptr || buffer == nullptr || length == 0) {
         return 0;
     }
-    std::ifstream urandom{"/dev/urandom", std::ios::binary};
-    if (urandom) {
-        urandom.read(reinterpret_cast<char*>(buffer), length);
-        if (urandom.gcount() == static_cast<std::streamsize>(length)) {
-            return 1;
+    try {
+        std::vector<std::uint8_t> random_bytes(length);
+        std::ifstream urandom{"/dev/urandom", std::ios::binary};
+        if (urandom) {
+            urandom.read(reinterpret_cast<char*>(random_bytes.data()), length);
+            if (urandom.gcount() != static_cast<std::streamsize>(length)) {
+                for (std::uint8_t& byte : random_bytes) {
+                    byte = static_cast<std::uint8_t>(std::rand() & 0xFF);
+                }
+            }
+        } else {
+            for (std::uint8_t& byte : random_bytes) {
+                byte = static_cast<std::uint8_t>(std::rand() & 0xFF);
+            }
         }
+        if (runtime::write_guest_memory(buffer, random_bytes.data(), random_bytes.size()).status !=
+            runtime::GuestMemoryAccessStatus::Success) {
+            return 0;
+        }
+        return 1;
+    } catch (...) {
+        return 0;
     }
-    for (std::uint32_t i = 0; i < length; ++i) {
-        buffer[i] = static_cast<std::uint8_t>(std::rand() & 0xFF);
-    }
-    return 1;
 }
 
 TL_ADVAPI_MSABI int tl_CryptReleaseContext(void* prov_handle, const std::uint32_t flags) noexcept {
@@ -790,15 +805,29 @@ TL_ADVAPI_MSABI int tl_GetUserNameW(std::uint16_t* const buffer, std::uint32_t* 
         tl_SetLastError(abi::kErrorInvalidParameter);
         return 0;
     }
-    if (*size < kLen) {
-        *size = kLen;
+    std::uint32_t capacity = 0;
+    if (!read_guest_value(size, capacity)) {
+        tl_SetLastError(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    if (capacity < kLen) {
+        if (!write_guest_value(size, kLen)) {
+            tl_SetLastError(abi::kErrorInvalidParameter);
+            return 0;
+        }
         tl_SetLastError(122); // ERROR_INSUFFICIENT_BUFFER
         return 0;
     }
-    if (buffer != nullptr && mapped_range(buffer, kLen * sizeof(std::uint16_t), true)) {
-        std::memcpy(buffer, kUser, kLen * sizeof(std::uint16_t));
+    if (buffer != nullptr &&
+        runtime::write_guest_memory(buffer, kUser, sizeof(kUser)).status !=
+            runtime::GuestMemoryAccessStatus::Success) {
+        tl_SetLastError(abi::kErrorInvalidParameter);
+        return 0;
     }
-    *size = kLen;
+    if (!write_guest_value(size, kLen)) {
+        tl_SetLastError(abi::kErrorInvalidParameter);
+        return 0;
+    }
     tl_SetLastError(abi::kErrorSuccess);
     return 1;
 }
@@ -1000,11 +1029,11 @@ TL_ADVAPI_MSABI int tl_CryptCreateHash(const std::uintptr_t prov, const std::uin
     (void)algid;
     (void)key;
     (void)flags;
-    if (hash == nullptr) {
+    if (hash == nullptr ||
+        !write_guest_value(hash, static_cast<std::uintptr_t>(0x48415348ULL))) {
         tl_SetLastError(kErrorInvalidParameter);
         return 0;
     }
-    *hash = 0x48415348ULL; // 'HASH'
     tl_SetLastError(static_cast<std::uint32_t>(abi::kErrorSuccess));
     return 1;
 }
@@ -1030,13 +1059,30 @@ TL_ADVAPI_MSABI int tl_CryptGetHashParam(const std::uintptr_t hash, const std::u
         return 0;
     }
     constexpr std::uint32_t hash_size = 32; // SHA-256 size
-    if (data == nullptr || *data_len < hash_size) {
-        *data_len = hash_size;
+    std::uint32_t capacity = 0;
+    if (!read_guest_value(data_len, capacity)) {
+        tl_SetLastError(kErrorInvalidParameter);
+        return 0;
+    }
+    if (data == nullptr || capacity < hash_size) {
+        if (!write_guest_value(data_len, hash_size)) {
+            tl_SetLastError(kErrorInvalidParameter);
+            return 0;
+        }
         tl_SetLastError(static_cast<std::uint32_t>(abi::kErrorSuccess));
         return 1;
     }
-    std::memset(data, 0xAA, hash_size);
-    *data_len = hash_size;
+    const std::array<std::uint8_t, hash_size> hash_bytes = [] {
+        std::array<std::uint8_t, hash_size> result{};
+        result.fill(0xAA);
+        return result;
+    }();
+    if (runtime::write_guest_memory(data, hash_bytes.data(), hash_bytes.size()).status !=
+            runtime::GuestMemoryAccessStatus::Success ||
+        !write_guest_value(data_len, hash_size)) {
+        tl_SetLastError(kErrorInvalidParameter);
+        return 0;
+    }
     tl_SetLastError(static_cast<std::uint32_t>(abi::kErrorSuccess));
     return 1;
 }
@@ -1069,12 +1115,26 @@ TL_ADVAPI_MSABI int tl_CryptSignHashW(const std::uintptr_t hash, const std::uint
         return 0;
     }
     constexpr std::uint32_t dummy_sig_len = 256;
-    if (signature == nullptr || *sig_len < dummy_sig_len) {
-        *sig_len = dummy_sig_len;
+    std::uint32_t capacity = 0;
+    if (!read_guest_value(sig_len, capacity)) {
+        tl_SetLastError(kErrorInvalidParameter);
+        return 0;
+    }
+    if (signature == nullptr || capacity < dummy_sig_len) {
+        if (!write_guest_value(sig_len, dummy_sig_len)) {
+            tl_SetLastError(kErrorInvalidParameter);
+            return 0;
+        }
         return 1;
     }
-    std::memset(signature, 0x55, dummy_sig_len);
-    *sig_len = dummy_sig_len;
+    std::array<std::uint8_t, dummy_sig_len> signature_bytes{};
+    signature_bytes.fill(0x55);
+    if (runtime::write_guest_memory(signature, signature_bytes.data(), signature_bytes.size()).status !=
+            runtime::GuestMemoryAccessStatus::Success ||
+        !write_guest_value(sig_len, dummy_sig_len)) {
+        tl_SetLastError(kErrorInvalidParameter);
+        return 0;
+    }
     tl_SetLastError(static_cast<std::uint32_t>(abi::kErrorSuccess));
     return 1;
 }
@@ -1104,12 +1164,26 @@ TL_ADVAPI_MSABI int tl_CryptExportKey(const std::uintptr_t key, const std::uintp
         return 0;
     }
     constexpr std::uint32_t key_blob_size = 64;
-    if (data == nullptr || *data_len < key_blob_size) {
-        *data_len = key_blob_size;
+    std::uint32_t capacity = 0;
+    if (!read_guest_value(data_len, capacity)) {
+        tl_SetLastError(kErrorInvalidParameter);
+        return 0;
+    }
+    if (data == nullptr || capacity < key_blob_size) {
+        if (!write_guest_value(data_len, key_blob_size)) {
+            tl_SetLastError(kErrorInvalidParameter);
+            return 0;
+        }
         return 1;
     }
-    std::memset(data, 0x11, key_blob_size);
-    *data_len = key_blob_size;
+    std::array<std::uint8_t, key_blob_size> key_blob{};
+    key_blob.fill(0x11);
+    if (runtime::write_guest_memory(data, key_blob.data(), key_blob.size()).status !=
+            runtime::GuestMemoryAccessStatus::Success ||
+        !write_guest_value(data_len, key_blob_size)) {
+        tl_SetLastError(kErrorInvalidParameter);
+        return 0;
+    }
     tl_SetLastError(static_cast<std::uint32_t>(abi::kErrorSuccess));
     return 1;
 }
@@ -1118,11 +1192,11 @@ TL_ADVAPI_MSABI int tl_CryptGetUserKey(const std::uintptr_t prov, const std::uin
                                        std::uintptr_t* const user_key) noexcept {
     (void)prov;
     (void)key_spec;
-    if (user_key == nullptr) {
+    if (user_key == nullptr ||
+        !write_guest_value(user_key, static_cast<std::uintptr_t>(0x4B455931ULL))) {
         tl_SetLastError(kErrorInvalidParameter);
         return 0;
     }
-    *user_key = 0x4B455931ULL; // 'KEY1'
     tl_SetLastError(static_cast<std::uint32_t>(abi::kErrorSuccess));
     return 1;
 }
@@ -1138,12 +1212,25 @@ TL_ADVAPI_MSABI int tl_CryptGetProvParam(const std::uintptr_t prov, const std::u
         return 0;
     }
     constexpr std::uint32_t param_size = 16;
-    if (data == nullptr || *data_len < param_size) {
-        *data_len = param_size;
+    std::uint32_t capacity = 0;
+    if (!read_guest_value(data_len, capacity)) {
+        tl_SetLastError(kErrorInvalidParameter);
+        return 0;
+    }
+    if (data == nullptr || capacity < param_size) {
+        if (!write_guest_value(data_len, param_size)) {
+            tl_SetLastError(kErrorInvalidParameter);
+            return 0;
+        }
         return 1;
     }
-    std::memset(data, 0, param_size);
-    *data_len = param_size;
+    const std::array<std::uint8_t, param_size> parameter{};
+    if (runtime::write_guest_memory(data, parameter.data(), parameter.size()).status !=
+            runtime::GuestMemoryAccessStatus::Success ||
+        !write_guest_value(data_len, param_size)) {
+        tl_SetLastError(kErrorInvalidParameter);
+        return 0;
+    }
     tl_SetLastError(static_cast<std::uint32_t>(abi::kErrorSuccess));
     return 1;
 }
@@ -1179,20 +1266,31 @@ TL_ADVAPI_MSABI int tl_CryptEnumProvidersW(const std::uint32_t index, std::uint3
 }
 
 TL_ADVAPI_MSABI int tl_SystemFunction036(void* const buffer, const std::uint32_t length) noexcept {
-    if (buffer == nullptr || length == 0 || !mapped_range(buffer, length, true)) {
+    if (buffer == nullptr || length == 0) {
         return 0;
     }
-    std::ifstream urandom{"/dev/urandom", std::ios::binary};
-    if (urandom) {
-        urandom.read(reinterpret_cast<char*>(buffer), length);
-        if (urandom.gcount() == static_cast<std::streamsize>(length)) {
-            return 1;
+    try {
+        std::vector<std::uint8_t> random_bytes(length);
+        std::ifstream urandom{"/dev/urandom", std::ios::binary};
+        if (urandom) {
+            urandom.read(reinterpret_cast<char*>(random_bytes.data()), length);
+            if (urandom.gcount() != static_cast<std::streamsize>(length)) {
+                for (std::uint8_t& byte : random_bytes) {
+                    byte = static_cast<std::uint8_t>(std::rand() & 0xFF);
+                }
+            }
+        } else {
+            for (std::uint8_t& byte : random_bytes) {
+                byte = static_cast<std::uint8_t>(std::rand() & 0xFF);
+            }
         }
+        return runtime::write_guest_memory(buffer, random_bytes.data(), random_bytes.size()).status ==
+                       runtime::GuestMemoryAccessStatus::Success
+                   ? 1
+                   : 0;
+    } catch (...) {
+        return 0;
     }
-    for (std::uint32_t i = 0; i < length; ++i) {
-        static_cast<std::uint8_t*>(buffer)[i] = static_cast<std::uint8_t>(std::rand() & 0xFF);
-    }
-    return 1;
 }
 
 TL_ADVAPI_MSABI int tl_GetUserNameA(char* const buffer, std::uint32_t* const size) noexcept {
@@ -1202,15 +1300,29 @@ TL_ADVAPI_MSABI int tl_GetUserNameA(char* const buffer, std::uint32_t* const siz
         tl_SetLastError(abi::kErrorInvalidParameter);
         return 0;
     }
-    if (*size < kLen) {
-        *size = kLen;
+    std::uint32_t capacity = 0;
+    if (!read_guest_value(size, capacity)) {
+        tl_SetLastError(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    if (capacity < kLen) {
+        if (!write_guest_value(size, kLen)) {
+            tl_SetLastError(abi::kErrorInvalidParameter);
+            return 0;
+        }
         tl_SetLastError(122); // ERROR_INSUFFICIENT_BUFFER
         return 0;
     }
-    if (buffer != nullptr && mapped_range(buffer, kLen, true)) {
-        std::memcpy(buffer, kUser, kLen);
+    if (buffer != nullptr &&
+        runtime::write_guest_memory(buffer, kUser, kLen).status !=
+            runtime::GuestMemoryAccessStatus::Success) {
+        tl_SetLastError(abi::kErrorInvalidParameter);
+        return 0;
     }
-    *size = kLen;
+    if (!write_guest_value(size, kLen)) {
+        tl_SetLastError(abi::kErrorInvalidParameter);
+        return 0;
+    }
     tl_SetLastError(abi::kErrorSuccess);
     return 1;
 }

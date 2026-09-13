@@ -608,6 +608,60 @@ TEST(Win32RegistryTest, ProtectedRegistryInputsAndOutputsRejectUnmappedPointers)
     EXPECT_EQ(tl_RegCloseKey(key), abi::kErrorSuccess);
 }
 
+TEST(Win32CryptoTest, ProtectedCryptoBuffersRejectUnmappedPointers) {
+    auto* const invalid = reinterpret_cast<void*>(static_cast<std::uintptr_t>(0x1000U));
+    void* provider = nullptr;
+    EXPECT_EQ(tl_CryptAcquireContextA(static_cast<void**>(invalid), nullptr, nullptr, 0, 0), 0);
+    ASSERT_EQ(tl_CryptAcquireContextA(&provider, nullptr, nullptr, 0, 0), 1);
+
+    std::array<std::uint8_t, 32> random_bytes{};
+    EXPECT_EQ(tl_CryptGenRandom(provider, static_cast<std::uint32_t>(random_bytes.size()),
+                                static_cast<std::uint8_t*>(invalid)),
+              0);
+    ASSERT_EQ(tl_CryptGenRandom(provider, static_cast<std::uint32_t>(random_bytes.size()),
+                                random_bytes.data()),
+              1);
+
+    std::uintptr_t hash = 0;
+    EXPECT_EQ(tl_CryptCreateHash(0, 0x8004, 0, 0,
+                                 static_cast<std::uintptr_t*>(invalid)), 0);
+    ASSERT_EQ(tl_CryptCreateHash(0, 0x8004, 0, 0, &hash), 1);
+
+    std::uint32_t length = 32;
+    EXPECT_EQ(tl_CryptGetHashParam(hash, 2, static_cast<std::uint8_t*>(invalid), &length, 0), 0);
+    EXPECT_EQ(tl_CryptGetHashParam(hash, 2, random_bytes.data(),
+                                   static_cast<std::uint32_t*>(invalid), 0), 0);
+    ASSERT_EQ(tl_CryptGetHashParam(hash, 2, random_bytes.data(), &length, 0), 1);
+    EXPECT_EQ(length, 32U);
+
+    std::uint32_t signature_length = 256;
+    EXPECT_EQ(tl_CryptSignHashW(hash, 0, nullptr, 0,
+                                static_cast<std::uint8_t*>(invalid), &signature_length), 0);
+    EXPECT_EQ(tl_CryptSignHashW(hash, 0, nullptr, 0, random_bytes.data(),
+                                static_cast<std::uint32_t*>(invalid)), 0);
+
+    std::array<std::uint8_t, 64> key_blob{};
+    std::uint32_t blob_length = static_cast<std::uint32_t>(key_blob.size());
+    EXPECT_EQ(tl_CryptExportKey(0, 0, 0, 0, static_cast<std::uint8_t*>(invalid), &blob_length), 0);
+    EXPECT_EQ(tl_CryptExportKey(0, 0, 0, 0, key_blob.data(),
+                                static_cast<std::uint32_t*>(invalid)), 0);
+    ASSERT_EQ(tl_CryptExportKey(0, 0, 0, 0, key_blob.data(), &blob_length), 1);
+
+    std::uintptr_t user_key = 0;
+    EXPECT_EQ(tl_CryptGetUserKey(0, 0, static_cast<std::uintptr_t*>(invalid)), 0);
+    ASSERT_EQ(tl_CryptGetUserKey(0, 0, &user_key), 1);
+
+    std::uint32_t provider_length = 16;
+    EXPECT_EQ(tl_CryptGetProvParam(0, 0, static_cast<std::uint8_t*>(invalid), &provider_length, 0), 0);
+    EXPECT_EQ(tl_CryptGetProvParam(0, 0, random_bytes.data(),
+                                   static_cast<std::uint32_t*>(invalid), 0), 0);
+    ASSERT_EQ(tl_CryptGetProvParam(0, 0, random_bytes.data(), &provider_length, 0), 1);
+
+    EXPECT_EQ(tl_SystemFunction036(invalid, 16), 0);
+    ASSERT_EQ(tl_SystemFunction036(random_bytes.data(),
+                                   static_cast<std::uint32_t>(random_bytes.size())), 1);
+}
+
 TEST(Win32EnvTest, GetEnvironmentVariableWConvertsResult) {
     const std::uint16_t name[] = {'P', 'A', 'T', 'H', 0};
     const std::uint32_t needed = tl_GetEnvironmentVariableW(name, nullptr, 0);

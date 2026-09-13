@@ -517,7 +517,9 @@ não elevam privilégios e não aplicam ACLs Windows ao host.
 `CryptGetUserKey`, `CryptGetProvParam`, `CryptDestroyKey`,
 `CryptEnumProvidersW`, `SystemFunction036` e `IsTextUnicode` existem para os
 fluxos criptográficos e de identificação cobertos pelas fixtures. Provedores,
-chaves privadas e armazenamento criptográfico do Windows não são expostos.
+chaves privadas e armazenamento criptográfico do Windows não são expostos. As
+rotas de hash, assinatura, exportação e aleatoriedade usam snapshots e cópias
+protegidas para seus tamanhos, entradas e buffers de saída.
 
 ### Certificados e confiança
 

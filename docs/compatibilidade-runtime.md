@@ -619,6 +619,12 @@ principais usam snapshots e cópias protegidas; a regressão
 `Win32RegistryTest.ProtectedRegistryInputsAndOutputsRejectUnmappedPointers`
 cobre os ponteiros não acessíveis.
 
+Nos stubs criptográficos de `ADVAPI32.dll`, buffers de aleatoriedade, hash,
+assinatura e exportação, assim como seus tamanhos e handles de saída, também
+passam pela cópia protegida. `Win32CryptoTest.ProtectedCryptoBuffersRejectUnmappedPointers`
+protege esse contrato sem transformar os stubs em provedores criptográficos
+reais.
+
 ## Segurança virtual por prefixo
 
 `ADVAPI32.dll` expõe token não elevado do processo atual, SID virtual
