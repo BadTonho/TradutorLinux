@@ -136,7 +136,10 @@ essa cópia. As saídas de `GetCurrentDirectoryA/W`, `GetModuleFileNameA/W`,
 também usam essa fronteira. `GlobalMemoryStatusEx`, `GlobalMemoryStatus`,
 `VirtualQuery`, `VirtualQueryEx`, `VirtualProtect` e
 `GetPhysicallyInstalledSystemMemory` publicam suas estruturas e escalares pela
-mesma cópia protegida. A migração do runtime ainda não está completa:
+mesma cópia protegida. `WaitForMultipleObjects`, `WaitOnAddress`,
+`ReleaseSemaphore`, `INIT_ONCE`, SRW locks, variáveis de condição e
+`RegisterWaitForSingleObject` também não interpretam mais diretamente os
+buffers convidados. A migração do runtime ainda não está completa:
 `validate_mapped_range` continua sendo uma fotografia de `/proc/self/maps`, e
 há APIs antigas com acesso direto após validação; essas rotas não são
 anunciadas como atômicas até serem migradas.
@@ -474,7 +477,7 @@ fluxo principal. Os contratos abaixo são protegidos por
   apenas a representação lógica `C:\\...` ou `Z:\\...`.
 - `MultiByteToWideChar` e `WideCharToMultiByte` suportam CP_UTF8 (65001) para
   conversão UTF-8/UTF-16; surrogates pair são suportados.
-- 17 testes unitários novos em `tests/test_win32.cpp` cobrem `GetFileSize`,
+- 18 testes unitários novos em `tests/test_win32.cpp` cobrem `GetFileSize`,
   `SetFilePointer` (seek beginning/end/negative), `GetFileAttributesA`
   (file/directory/nonexistent), `DeleteFileA` (existente/inexistente),
   `MoveFileA` (existente/inexistente), `CreateDirectoryA` (novo/duplicado),

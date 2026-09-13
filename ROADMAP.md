@@ -195,6 +195,12 @@ O lote de memória virtual migrou as estruturas e escalares de
 `Win32VirtualTest.ProtectedMemoryOutputsRejectUnmappedPointers` passou junto
 com as coberturas de alocação, proteção e consulta.
 
+O lote de sincronização migrou arrays de handles, `WaitOnAddress`, contadores
+de semáforo, `INIT_ONCE`, SRW/condição e `RegisterWaitForSingleObject`; a
+regressão `Win32ConcurrencyTest.ProtectedSynchronizationPointersRejectUnmappedMemory`
+passou com a cobertura existente de eventos, semáforos, mutexes e múltiplos
+waits.
+
 ## Fora desta rodada
 
 Não entram neste roadmap, por enquanto:

@@ -1754,6 +1754,34 @@ TEST(Win32ConcurrencyTest, EventsSemaphoresMutexAndMultipleWaitsHaveWin32Semanti
     EXPECT_EQ(tl_CloseHandle(second), 1);
 }
 
+TEST(Win32ConcurrencyTest, ProtectedSynchronizationPointersRejectUnmappedMemory) {
+    auto* const invalid = reinterpret_cast<void*>(static_cast<std::uintptr_t>(0x1000));
+    EXPECT_EQ(tl_WaitForMultipleObjects(
+                  1, reinterpret_cast<const void* const*>(invalid), 0, 0),
+              abi::kWaitFailed);
+
+    std::uint32_t expected = 0;
+    EXPECT_EQ(tl_WaitOnAddress(invalid, &expected, sizeof(expected), 0), 0);
+
+    void* const semaphore = tl_CreateSemaphoreA(nullptr, 0, 1, nullptr);
+    ASSERT_NE(semaphore, nullptr);
+    EXPECT_EQ(tl_ReleaseSemaphore(
+                  semaphore, 1, reinterpret_cast<std::int32_t*>(invalid)),
+              0);
+    EXPECT_EQ(tl_WaitForSingleObject(semaphore, 0), abi::kWaitTimeout);
+    EXPECT_EQ(tl_CloseHandle(semaphore), 1);
+
+    int pending = 0;
+    void* context = nullptr;
+    EXPECT_EQ(tl_InitOnceBeginInitialize(invalid, 0, &pending, &context), 0);
+    tl_InitializeSRWLock(invalid);
+    tl_InitializeConditionVariable(invalid);
+    EXPECT_EQ(tl_RegisterWaitForSingleObject(
+                  reinterpret_cast<void**>(invalid), nullptr, nullptr, nullptr, 0, 0),
+              0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+}
+
 TEST(Win32ConcurrencyTest, TlsGetValueInvalidIndexReturnsNull) {
     // TlsGetValue on an index that was allocated then freed should return nullptr
     // (slot 0 is TEB self pointer and may be set).

@@ -187,18 +187,21 @@ TL_MSABI std::uint32_t tl_WaitForMultipleObjects(const std::uint32_t count,
                                                   const void* const* handles,
                                                   const int wait_all,
                                                   const std::uint32_t milliseconds) noexcept {
-    if (count == 0 || count > 64 || handles == nullptr ||
-        !mapped_guest_range(handles, static_cast<std::size_t>(count) * sizeof(*handles), false) ||
+    std::array<const void*, 64> guest_handles{};
+    if (count == 0 || count > guest_handles.size() ||
+        runtime::read_guest_memory(handles, guest_handles.data(),
+                                   static_cast<std::size_t>(count) * sizeof(*handles)).status !=
+            runtime::GuestMemoryAccessStatus::Success ||
         (wait_all != 0 && wait_all != 1)) {
         set_last_error(abi::kErrorInvalidParameter);
         return abi::kWaitFailed;
     }
     for (std::uint32_t index = 0; index < count; ++index) {
-        FileSlotGuard file_guard(handles[index]);
-        if (handles[index] == nullptr ||
+        FileSlotGuard file_guard(guest_handles[index]);
+        if (guest_handles[index] == nullptr ||
             (file_guard.get() == nullptr &&
-             find_thread_slot(handles[index]) == nullptr &&
-             find_sync_slot(handles[index]) == nullptr)) {
+             find_thread_slot(guest_handles[index]) == nullptr &&
+             find_sync_slot(guest_handles[index]) == nullptr)) {
             set_last_error(abi::kErrorInvalidHandle);
             return abi::kWaitFailed;
         }
@@ -208,11 +211,11 @@ TL_MSABI std::uint32_t tl_WaitForMultipleObjects(const std::uint32_t count,
         if (wait_all != 0) {
             bool ready = true;
             for (std::uint32_t index = 0; index < count; ++index) {
-                ready = ready && probe_wait_handle(handles[index]);
+                ready = ready && probe_wait_handle(guest_handles[index]);
             }
             if (ready) {
                 for (std::uint32_t index = 0; index < count; ++index) {
-                    if (tl_WaitForSingleObject(handles[index], 0) == abi::kWaitFailed) {
+                    if (tl_WaitForSingleObject(guest_handles[index], 0) == abi::kWaitFailed) {
                         set_last_error(abi::kErrorInvalidHandle);
                         return abi::kWaitFailed;
                     }
@@ -222,8 +225,8 @@ TL_MSABI std::uint32_t tl_WaitForMultipleObjects(const std::uint32_t count,
             }
         } else {
             for (std::uint32_t index = 0; index < count; ++index) {
-                if (probe_wait_handle(handles[index])) {
-                    const std::uint32_t result = tl_WaitForSingleObject(handles[index], 0);
+                if (probe_wait_handle(guest_handles[index])) {
+                    const std::uint32_t result = tl_WaitForSingleObject(guest_handles[index], 0);
                     if (result == abi::kWaitObject0) {
                         set_last_error(abi::kErrorSuccess);
                         return abi::kWaitObject0 + index;
@@ -435,8 +438,9 @@ TL_MSABI int tl_ReleaseSemaphore(const void* semaphore, const std::int32_t relea
             set_last_error(abi::kErrorInvalidParameter);
             return 0;
         }
-        if (previous_count != nullptr) {
-            *previous_count = slot->count;
+        if (previous_count != nullptr && !write_guest_value(previous_count, slot->count)) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
         }
         slot->count += release_count;
     }
@@ -558,12 +562,16 @@ TL_MSABI int tl_WaitOnAddress(void* address, void* compare_address, std::size_t 
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
-    if (!mapped_guest_range(address, address_size, false) ||
-        !mapped_guest_range(compare_address, address_size, false)) {
+    std::array<std::byte, 8> current_value{};
+    std::array<std::byte, 8> expected_value{};
+    if (runtime::read_guest_memory(address, current_value.data(), address_size).status !=
+            runtime::GuestMemoryAccessStatus::Success ||
+        runtime::read_guest_memory(compare_address, expected_value.data(), address_size).status !=
+            runtime::GuestMemoryAccessStatus::Success) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
-    if (std::memcmp(address, compare_address, address_size) != 0) {
+    if (std::memcmp(current_value.data(), expected_value.data(), address_size) != 0) {
         set_last_error(abi::kErrorSuccess);
         return 1;
     }
@@ -571,25 +579,45 @@ TL_MSABI int tl_WaitOnAddress(void* address, void* compare_address, std::size_t 
     std::unique_lock<std::mutex> lock(g_wait_address_mutex);
     int& version = g_wait_address_versions[address]; // cria se não existe
     int start_version = version;
-    auto pred = [&]() {
+    bool memory_invalid = false;
+    const auto values_differ = [&]() noexcept {
+        const auto current = runtime::read_guest_memory(address, current_value.data(), address_size);
+        const auto expected = runtime::read_guest_memory(compare_address, expected_value.data(), address_size);
+        if (current.status != runtime::GuestMemoryAccessStatus::Success ||
+            expected.status != runtime::GuestMemoryAccessStatus::Success) {
+            memory_invalid = true;
+            return true;
+        }
+        return std::memcmp(current_value.data(), expected_value.data(), address_size) != 0;
+    };
+    const auto pred = [&]() {
         if (version != start_version) return true;
-        // Se o valor na memória mudou, também acorda
-        // Memcmp dentro do lock pode ler memória guest que outra thread modifica sem lock;
-        // mas a condição de versão já cobre Wake.
-        return std::memcmp(address, compare_address, address_size) != 0;
+        return values_differ();
     };
     // Checa pred antes para evitar wait desnecessário se já mudou entre primeiro memcmp e lock
     if (pred()) {
+        if (memory_invalid) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
+        }
         set_last_error(abi::kErrorSuccess);
         return 1;
     }
     if (milliseconds == abi::kInfinite) {
         g_wait_address_cv.wait(lock, pred);
+        if (memory_invalid) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
+        }
         set_last_error(abi::kErrorSuccess);
         return 1;
     }
     if (!g_wait_address_cv.wait_for(lock, std::chrono::milliseconds(milliseconds), pred)) {
         set_last_error(abi::kErrorTimeout);
+        return 0;
+    }
+    if (memory_invalid) {
+        set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
     set_last_error(abi::kErrorSuccess);
@@ -625,8 +653,8 @@ TL_MSABI void tl_WakeByAddressAll(void* address) noexcept {
 }
 
 TL_MSABI void tl_InitializeSRWLock(void* srw_lock) noexcept {
-    if (srw_lock != nullptr && mapped_guest_range(srw_lock, sizeof(void*), true)) {
-        *reinterpret_cast<void**>(srw_lock) = nullptr;
+    if (srw_lock != nullptr && !write_guest_value(srw_lock, static_cast<void*>(nullptr))) {
+        set_last_error(abi::kErrorInvalidParameter);
     }
 }
 
@@ -732,8 +760,10 @@ TL_MSABI int tl_RegisterWaitForSingleObject(void** const ph_new_wait_object, voi
     (void)context;
     (void)ms;
     (void)flags;
-    if (ph_new_wait_object != nullptr && mapped_guest_range(ph_new_wait_object, sizeof(void*), true)) {
-        *ph_new_wait_object = reinterpret_cast<void*>(0x12340001ULL);
+    if (ph_new_wait_object != nullptr &&
+        !write_guest_value(ph_new_wait_object, reinterpret_cast<void*>(0x12340001ULL))) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
     }
     set_last_error(abi::kErrorSuccess);
     return 1;
@@ -752,8 +782,9 @@ TL_MSABI std::uint32_t tl_WaitForMultipleObjectsEx(const std::uint32_t count, co
 }
 
 TL_MSABI void tl_InitializeConditionVariable(void* const condition_variable) noexcept {
-    if (condition_variable != nullptr && mapped_guest_range(condition_variable, sizeof(void*), true)) {
-        *reinterpret_cast<void**>(condition_variable) = nullptr;
+    if (condition_variable != nullptr &&
+        !write_guest_value(condition_variable, static_cast<void*>(nullptr))) {
+        set_last_error(abi::kErrorInvalidParameter);
     }
 }
 
@@ -824,28 +855,37 @@ TL_MSABI void* tl_CreateMutexExW(void* const mutex_attributes, const wchar_t* co
 }
 
 TL_MSABI int tl_InitOnceBeginInitialize(void* const init_once, const std::uint32_t flags, int* const pending, void** const context) noexcept {
-    if (init_once == nullptr || !mapped_guest_range(init_once, sizeof(void*), true)) {
+    std::uintptr_t state = 0;
+    if (!read_guest_value(init_once, state)) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
-    auto* const ptr = static_cast<std::uintptr_t*>(init_once);
+    const auto write_outputs = [&](const int pending_value) noexcept {
+        return (pending == nullptr || write_guest_value(pending, pending_value)) &&
+               (context == nullptr || write_guest_value(context, static_cast<void*>(nullptr)));
+    };
     if ((flags & 1U) != 0U) { // INIT_ONCE_CHECK_ONLY
-        if (*ptr == 2U) {
-            if (pending != nullptr && mapped_guest_range(pending, sizeof(int), true)) *pending = 0;
-            if (context != nullptr && mapped_guest_range(context, sizeof(void*), true)) *context = nullptr;
+        if (state == 2U) {
+            if (!write_outputs(0)) {
+                set_last_error(abi::kErrorInvalidParameter);
+                return 0;
+            }
             set_last_error(abi::kErrorSuccess);
             return 1;
         }
         set_last_error(1067 /* ERROR_GEN_FAILURE */);
         return 0;
     }
-    if (*ptr == 2U) {
-        if (pending != nullptr && mapped_guest_range(pending, sizeof(int), true)) *pending = 0;
-        if (context != nullptr && mapped_guest_range(context, sizeof(void*), true)) *context = nullptr;
+    if (state == 2U) {
+        if (!write_outputs(0)) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
+        }
     } else {
-        if (pending != nullptr && mapped_guest_range(pending, sizeof(int), true)) *pending = 1;
-        if (context != nullptr && mapped_guest_range(context, sizeof(void*), true)) *context = nullptr;
-        *ptr = 1U;
+        if (!write_outputs(1) || !write_guest_value(init_once, std::uintptr_t{1})) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
+        }
     }
     set_last_error(abi::kErrorSuccess);
     return 1;
@@ -854,8 +894,9 @@ TL_MSABI int tl_InitOnceBeginInitialize(void* const init_once, const std::uint32
 TL_MSABI int tl_InitOnceComplete(void* const init_once, const std::uint32_t flags, void* const context) noexcept {
     (void)flags;
     (void)context;
-    if (init_once != nullptr && mapped_guest_range(init_once, sizeof(void*), true)) {
-        *static_cast<std::uintptr_t*>(init_once) = 2U;
+    if (init_once != nullptr && !write_guest_value(init_once, std::uintptr_t{2})) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
     }
     set_last_error(abi::kErrorSuccess);
     return 1;
