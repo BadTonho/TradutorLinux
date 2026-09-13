@@ -339,12 +339,8 @@ TL_MSABI void* tl_LocalFree(void* memory) noexcept {
 }
 
 TL_MSABI int tl_GlobalMemoryStatusEx(void* buffer) noexcept {
-    if (buffer == nullptr || !mapped_guest_range(buffer, sizeof(abi::GuestMemoryStatusEx), true)) {
-        set_last_error(abi::kErrorInvalidParameter);
-        return 0;
-    }
-    auto* ms = static_cast<abi::GuestMemoryStatusEx*>(buffer);
-    if (ms->length < sizeof(abi::GuestMemoryStatusEx)) {
+    abi::GuestMemoryStatusEx ms{};
+    if (!read_guest_value(buffer, ms) || ms.length < sizeof(abi::GuestMemoryStatusEx)) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
@@ -362,14 +358,18 @@ TL_MSABI int tl_GlobalMemoryStatusEx(void* buffer) noexcept {
     const std::uint64_t used_phys = total_phys > avail_phys ? total_phys - avail_phys : 0;
     const std::uint32_t load = total_phys > 0 ? static_cast<std::uint32_t>((used_phys * 100ULL) / total_phys) : 0;
 
-    ms->memory_load = load;
-    ms->total_phys = total_phys;
-    ms->avail_phys = avail_phys;
-    ms->total_page_file = total_phys * 2;
-    ms->avail_page_file = avail_phys * 2;
-    ms->total_virtual = 0x7FFFFFFF0000ULL;
-    ms->avail_virtual = 0x700000000000ULL;
-    ms->avail_extended_virtual = 0;
+    ms.memory_load = load;
+    ms.total_phys = total_phys;
+    ms.avail_phys = avail_phys;
+    ms.total_page_file = total_phys * 2;
+    ms.avail_page_file = avail_phys * 2;
+    ms.total_virtual = 0x7FFFFFFF0000ULL;
+    ms.avail_virtual = 0x700000000000ULL;
+    ms.avail_extended_virtual = 0;
+    if (!write_guest_value(buffer, ms)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
     set_last_error(abi::kErrorSuccess);
     return 1;
 }
@@ -406,8 +406,17 @@ TL_MSABI void* tl_CreateFileMappingA(const void* file, const void* file_mapping_
     it->fd = fd >= 0 ? ::dup(fd) : -1;
     it->size = max_size;
     it->protect = protect;
-    if (name != nullptr && mapped_guest_cstring(name)) {
-        it->name = name;
+    if (name != nullptr) {
+        std::string guest_name;
+        if (!runtime::copy_guest_cstring(name, 4096, guest_name)) {
+            if (it->fd >= 0) {
+                ::close(it->fd);
+            }
+            *it = FileMappingSlot{};
+            set_last_error(abi::kErrorInvalidParameter);
+            return nullptr;
+        }
+        it->name = std::move(guest_name);
     }
     set_last_error(abi::kErrorSuccess);
     return &*it;
@@ -417,8 +426,14 @@ TL_MSABI void* tl_CreateFileMappingW(const void* file, const void* file_mapping_
                                      const std::uint32_t protect, const std::uint32_t maximum_size_high,
                                      const std::uint32_t maximum_size_low, const std::uint16_t* name) noexcept {
     std::string utf8_name;
-    if (name != nullptr && mapped_guest_wstring(name)) {
-        utf8_name = util::wide_to_utf8(name);
+    if (name != nullptr) {
+        std::u16string guest_name;
+        if (!runtime::copy_guest_wstring(name, 4096, guest_name)) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return nullptr;
+        }
+        utf8_name = util::wide_to_utf8(
+            reinterpret_cast<const std::uint16_t*>(guest_name.data()), guest_name.size());
     }
     return tl_CreateFileMappingA(file, file_mapping_attributes, protect, maximum_size_high, maximum_size_low,
                                  utf8_name.empty() ? nullptr : utf8_name.c_str());
@@ -571,8 +586,7 @@ TL_MSABI std::size_t tl_HeapCompact(void* heap, const std::uint32_t flags) noexc
 TL_MSABI std::size_t tl_VirtualQueryEx(const void* const process_handle, const void* const address,
                                        void* const buffer, const std::size_t length) noexcept {
     (void)process_handle;
-    if (buffer == nullptr || length < sizeof(abi::GuestMemoryBasicInformation) ||
-        !mapped_guest_range(buffer, sizeof(abi::GuestMemoryBasicInformation), true)) {
+    if (buffer == nullptr || length < sizeof(abi::GuestMemoryBasicInformation)) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
@@ -593,8 +607,10 @@ TL_MSABI void* tl_OpenFileMappingW(const std::uint32_t desired_access, const int
 }
 
 TL_MSABI int tl_GetPhysicallyInstalledSystemMemory(std::uint64_t* const total_memory_in_kilobytes) noexcept {
-    if (total_memory_in_kilobytes != nullptr && mapped_guest_range(total_memory_in_kilobytes, sizeof(std::uint64_t), true)) {
-        *total_memory_in_kilobytes = 16ULL * 1024ULL * 1024ULL; // 16 GB in KB
+    if (total_memory_in_kilobytes != nullptr &&
+        !write_guest_value(total_memory_in_kilobytes, 16ULL * 1024ULL * 1024ULL)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
     }
     set_last_error(abi::kErrorSuccess);
     return 1;
@@ -609,24 +625,25 @@ TL_MSABI std::size_t tl_GlobalSize(void* const mem) noexcept {
 }
 
 TL_MSABI void tl_GlobalMemoryStatus(void* const buffer) noexcept {
-    if (buffer != nullptr && mapped_guest_range(buffer, 32, true)) {
-        auto* const mem = reinterpret_cast<std::uint32_t*>(buffer);
-        mem[0] = 32; // dwLength
-        mem[1] = 25; // dwMemoryLoad (25%)
-        mem[2] = 0x7FFFFFFF; // dwTotalPhys (2GB)
-        mem[3] = 0x60000000; // dwAvailPhys (1.5GB)
-        mem[4] = 0x7FFFFFFF; // dwTotalPageFile
-        mem[5] = 0x60000000; // dwAvailPageFile
-        mem[6] = 0x7FFE0000; // dwTotalVirtual
-        mem[7] = 0x70000000; // dwAvailVirtual
+    const std::array<std::uint32_t, 8> values{
+        32,          // dwLength
+        25,          // dwMemoryLoad (25%)
+        0x7FFFFFFF,  // dwTotalPhys (2GB)
+        0x60000000,  // dwAvailPhys (1.5GB)
+        0x7FFFFFFF,  // dwTotalPageFile
+        0x60000000,  // dwAvailPageFile
+        0x7FFE0000,  // dwTotalVirtual
+        0x70000000,  // dwAvailVirtual
+    };
+    if (buffer != nullptr) {
+        static_cast<void>(runtime::write_guest_memory(buffer, values.data(), sizeof(values)));
     }
 }
 
 TL_MSABI int tl_VirtualProtect(void* address, std::uintptr_t size,
                                std::uint32_t new_protection,
                                std::uint32_t* old_protection) noexcept {
-    if (old_protection == nullptr ||
-        !mapped_guest_range(old_protection, sizeof(*old_protection), true)) {
+    if (old_protection == nullptr) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
@@ -644,15 +661,17 @@ TL_MSABI int tl_VirtualProtect(void* address, std::uintptr_t size,
         }
         return 0;
     }
-    *old_protection = old;
+    if (!write_guest_value(old_protection, old)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
     set_last_error(abi::kErrorSuccess);
     return 1;
 }
 
 TL_MSABI std::uintptr_t tl_VirtualQuery(const void* address, void* memory_information,
                                         std::uintptr_t length) noexcept {
-    if (memory_information == nullptr || length < sizeof(abi::GuestMemoryBasicInformation) ||
-        !mapped_guest_range(memory_information, sizeof(abi::GuestMemoryBasicInformation), true)) {
+    if (memory_information == nullptr || length < sizeof(abi::GuestMemoryBasicInformation)) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
@@ -662,17 +681,20 @@ TL_MSABI std::uintptr_t tl_VirtualQuery(const void* address, void* memory_inform
         set_last_error(abi::kErrorInvalidAddress);
         return 0;
     }
-    auto* out = static_cast<abi::GuestMemoryBasicInformation*>(memory_information);
-    *out = {};
-    out->base_address = info.BaseAddress;
-    out->allocation_base = info.AllocationBase;
-    out->allocation_protect = info.AllocationProtect;
-    out->region_size = info.RegionSize;
-    out->state = info.State;
-    out->protect = info.Protect;
-    out->type = info.Type;
+    abi::GuestMemoryBasicInformation out{};
+    out.base_address = info.BaseAddress;
+    out.allocation_base = info.AllocationBase;
+    out.allocation_protect = info.AllocationProtect;
+    out.region_size = info.RegionSize;
+    out.state = info.State;
+    out.protect = info.Protect;
+    out.type = info.Type;
+    if (!write_guest_value(memory_information, out)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
     set_last_error(abi::kErrorSuccess);
-    return sizeof(*out);
+    return sizeof(out);
 }
 
 }  // extern "C"

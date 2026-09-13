@@ -189,6 +189,12 @@ capacidade de disco, nomes completos/finais e `file_part`, além das leituras de
 strings A/W usadas por essas rotas. As coberturas existentes e a regressão
 `Win32DirTest.ProtectedPathOutputsRejectUnmappedPointers` passaram.
 
+O lote de memória virtual migrou as estruturas e escalares de
+`GlobalMemoryStatusEx`, `GlobalMemoryStatus`, `VirtualQuery`, `VirtualQueryEx`,
+`VirtualProtect` e `GetPhysicallyInstalledSystemMemory`; a regressão
+`Win32VirtualTest.ProtectedMemoryOutputsRejectUnmappedPointers` passou junto
+com as coberturas de alocação, proteção e consulta.
+
 ## Fora desta rodada
 
 Não entram neste roadmap, por enquanto:

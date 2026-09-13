@@ -220,6 +220,30 @@ TEST(Win32VirtualTest, ProtectChangesPermissionsAndReportsOldOnes) {
     EXPECT_EQ(tl_VirtualFree(memory, 0, abi::kMemRelease), 1);
 }
 
+TEST(Win32VirtualTest, ProtectedMemoryOutputsRejectUnmappedPointers) {
+    auto* const invalid = reinterpret_cast<void*>(static_cast<std::uintptr_t>(1));
+    EXPECT_EQ(tl_GlobalMemoryStatusEx(invalid), 0);
+    EXPECT_EQ(tl_GetPhysicallyInstalledSystemMemory(
+                  reinterpret_cast<std::uint64_t*>(invalid)),
+              0);
+    tl_GlobalMemoryStatus(invalid);
+
+    void* const memory = tl_VirtualAlloc(nullptr, 0x1000,
+                                         abi::kMemCommit | abi::kMemReserve,
+                                         abi::kPageReadWrite);
+    ASSERT_NE(memory, nullptr);
+    EXPECT_EQ(tl_VirtualQuery(memory, invalid, sizeof(GuestMemoryBasicInformation)), 0U);
+    EXPECT_EQ(tl_VirtualQueryEx(nullptr, memory, invalid,
+                                sizeof(GuestMemoryBasicInformation)), 0U);
+    EXPECT_EQ(tl_VirtualProtect(memory, 0x1000, abi::kPageReadOnly,
+                                reinterpret_cast<std::uint32_t*>(invalid)),
+              0);
+    std::uint32_t old_protection = 0;
+    EXPECT_EQ(tl_VirtualProtect(memory, 0x1000, abi::kPageReadWrite,
+                                &old_protection), 1);
+    EXPECT_EQ(tl_VirtualFree(memory, 0, abi::kMemRelease), 1);
+}
+
 TEST(Win32TlsTest, GetValueReturnsNullForUnusedSlot) {
     EXPECT_EQ(tl_TlsGetValue(0), nullptr);
     EXPECT_EQ(tl_GetLastError(), abi::kErrorSuccess);
