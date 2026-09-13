@@ -324,6 +324,11 @@ O lote de identidade e consultas auxiliares migrou `LookupPrivilegeValueW`,
 `Win32AdvapiTest.ProtectedIdentityAndRegistryQueryOutputsRejectUnmappedPointers`
 passou com as coberturas existentes de identidade, LSA e registro.
 
+O fechamento do grupo ADVAPI32 migrou `IsTextUnicode` para snapshot do buffer
+de entrada e publicação protegida do indicador. A regressão
+`Win32AdvapiTest.ProtectedIsTextUnicodeBuffersRejectUnmappedPointers` passou
+com as coberturas de ADVAPI32, registro, memória e segurança.
+
 ## Fora desta rodada
 
 Não entram neste roadmap, por enquanto:

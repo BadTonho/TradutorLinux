@@ -624,6 +624,10 @@ assinatura e exportação, assim como seus tamanhos e handles de saída, também
 passam pela cópia protegida. `Win32CryptoTest.ProtectedCryptoBuffersRejectUnmappedPointers`
 protege esse contrato sem transformar os stubs em provedores criptográficos
 reais.
+`IsTextUnicode` também copia o buffer de entrada e publica o indicador por
+escrita protegida; a regressão
+`Win32AdvapiTest.ProtectedIsTextUnicodeBuffersRejectUnmappedPointers` cobre
+essa fronteira.
 
 ## Segurança virtual por prefixo
 

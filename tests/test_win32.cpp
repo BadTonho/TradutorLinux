@@ -721,6 +721,21 @@ TEST(Win32AdvapiTest, ProtectedIdentityAndRegistryQueryOutputsRejectUnmappedPoin
     EXPECT_EQ(sub_keys, 0U);
 }
 
+TEST(Win32AdvapiTest, ProtectedIsTextUnicodeBuffersRejectUnmappedPointers) {
+    auto* const invalid = reinterpret_cast<void*>(static_cast<std::uintptr_t>(0x1000U));
+    const std::array<std::uint8_t, 2> unicode_prefix{0xFF, 0xFE};
+    int result = -1;
+
+    EXPECT_EQ(tl_IsTextUnicode(invalid, static_cast<int>(unicode_prefix.size()), &result), 0);
+    EXPECT_EQ(result, 0);
+    EXPECT_EQ(tl_IsTextUnicode(unicode_prefix.data(), static_cast<int>(unicode_prefix.size()),
+                               static_cast<int*>(invalid)),
+              0);
+    ASSERT_EQ(tl_IsTextUnicode(unicode_prefix.data(),
+                               static_cast<int>(unicode_prefix.size()), &result), 1);
+    EXPECT_EQ(result, 1);
+}
+
 TEST(Win32EnvTest, GetEnvironmentVariableWConvertsResult) {
     const std::uint16_t name[] = {'P', 'A', 'T', 'H', 0};
     const std::uint32_t needed = tl_GetEnvironmentVariableW(name, nullptr, 0);

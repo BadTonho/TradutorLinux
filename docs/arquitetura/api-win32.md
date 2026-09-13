@@ -521,7 +521,8 @@ usam cópias protegidas e rejeitam destinos não acessíveis.
 fluxos criptográficos e de identificação cobertos pelas fixtures. Provedores,
 chaves privadas e armazenamento criptográfico do Windows não são expostos. As
 rotas de hash, assinatura, exportação e aleatoriedade usam snapshots e cópias
-protegidas para seus tamanhos, entradas e buffers de saída.
+protegidas para seus tamanhos, entradas e buffers de saída; `IsTextUnicode`
+também usa snapshot da entrada e publicação protegida do resultado.
 
 ### Certificados e confiança
 
