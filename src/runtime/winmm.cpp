@@ -4,9 +4,9 @@
 
 #include <chrono>
 #include <cstdint>
-#include <cstring>
 #include <ctime>
 
+#include "core/runtime_state_common.hpp"
 #include "tradutorlinux/runtime/memory_validator.hpp"
 #include "tradutorlinux/util/unicode.hpp"
 
@@ -55,7 +55,9 @@ TL_WINMM_MSABI std::uint32_t tl_timeGetDevCaps(void* time_caps, const std::uint3
         return kTimerrNocando;
     }
     GuestTimeCaps caps{};
-    std::memcpy(time_caps, &caps, sizeof(caps));
+    if (!write_guest_value(time_caps, caps)) {
+        return kTimerrNocando;
+    }
     return kTimerrNoError;
 }
 

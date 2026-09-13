@@ -46,6 +46,18 @@ inline bool mapped_guest_wstring(const std::uint16_t* value) noexcept {
     return runtime::validate_mapped_wstring(value);
 }
 
+template <typename T>
+inline bool read_guest_value(const void* const source, T& destination) noexcept {
+    return runtime::read_guest_memory(source, &destination, sizeof(destination)).status ==
+           runtime::GuestMemoryAccessStatus::Success;
+}
+
+template <typename T>
+inline bool write_guest_value(void* const destination, const T& source) noexcept {
+    return runtime::write_guest_memory(destination, &source, sizeof(source)).status ==
+           runtime::GuestMemoryAccessStatus::Success;
+}
+
 void runtime_trace(const char* event, const std::array<diagnostics::TraceField, 4>& fields,
                    std::size_t field_count) noexcept;
 void trace_guest_failure(const char* symbol, const char* operation, const char* detail) noexcept;

@@ -175,8 +175,8 @@ fecha a primitiva e os caminhos de strings/MPR, mas não toda a superfície.
 
 **Progresso 2026-09-12:** além da primitiva, `ReadFile`/`WriteFile`,
 `FindFirstFileA/W`, `GetMessageA`, conversões comuns de caminho e entradas de
-`WININET` usam cópias protegidas. Os testes focados de memória, arquivos,
-metadados, GUI, MPR e WININET passaram; a busca de auditoria ainda encontra
+`WININET`, PSAPI, WINMM e DWM usam cópias protegidas. Os testes focados de
+memória, arquivos, metadados, GUI, MPR, WININET e stubs auxiliares passaram; a busca de auditoria ainda encontra
 rotas legadas em módulos como locale, segurança, GDI, sincronização e APIs de
 rede, portanto a aceitação final permanece aberta.
 

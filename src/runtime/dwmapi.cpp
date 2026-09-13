@@ -4,7 +4,8 @@
 #include "tradutorlinux/runtime/memory_validator.hpp"
 #include "core/runtime_state_common.hpp"
 
-#include <cstring>
+#include <new>
+#include <vector>
 
 namespace tradutorlinux {
 
@@ -43,8 +44,17 @@ TL_DWM_MSABI std::int32_t tl_DwmGetWindowAttribute(void* const hwnd, const std::
         set_last_error(abi::kErrorInvalidParameter);
         return kDwmEInvalidArg;
     }
-    if (mapped_range(attr_val, attr_sz, true)) {
-        std::memset(attr_val, 0, attr_sz);
+    std::vector<std::byte> zeroes;
+    try {
+        zeroes.resize(attr_sz);
+    } catch (const std::bad_alloc&) {
+        set_last_error(abi::kErrorNotEnoughMemory);
+        return kDwmENotImpl;
+    }
+    if (runtime::write_guest_memory(attr_val, zeroes.data(), zeroes.size()).status !=
+        runtime::GuestMemoryAccessStatus::Success) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return kDwmEInvalidArg;
     }
     return reject_dwm();
 }
@@ -54,7 +64,10 @@ TL_DWM_MSABI std::int32_t tl_DwmIsCompositionEnabled(int* const enabled) noexcep
         set_last_error(abi::kErrorInvalidParameter);
         return kDwmEInvalidArg;
     }
-    *enabled = 0;
+    if (!write_guest_value(enabled, 0)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return kDwmEInvalidArg;
+    }
     return reject_dwm();
 }
 
@@ -65,7 +78,10 @@ TL_DWM_MSABI int tl_DwmDefWindowProc(void* const hwnd, const std::uint32_t msg, 
     (void)wparam;
     (void)lparam;
     if (lresult != nullptr && mapped_range(lresult, sizeof(std::intptr_t), true)) {
-        *lresult = 0;
+        if (!write_guest_value(lresult, static_cast<std::intptr_t>(0))) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
+        }
     }
     return 0; // Not handled by DWM; this is the documented BOOL result.
 }
@@ -93,8 +109,10 @@ TL_DWM_MSABI std::int32_t tl_DwmGetColorizationColor(std::uint32_t* const color,
         set_last_error(abi::kErrorInvalidParameter);
         return kDwmEInvalidArg;
     }
-    *color = 0;
-    *opaque = 0;
+    if (!write_guest_value(color, std::uint32_t{0}) || !write_guest_value(opaque, 0)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return kDwmEInvalidArg;
+    }
     return reject_dwm();
 }
 
