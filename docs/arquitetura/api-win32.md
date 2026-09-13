@@ -509,7 +509,9 @@ Linux e não permite atravessar o prefixo.
 `LookupAccountNameW`, `GetUserNameA/W`, `LookupPrivilegeValueW` e
 `AdjustTokenPrivileges` representam identidade, SID, DACL e privilégios
 somente como metadados de compatibilidade. Eles não autenticam o usuário Linux,
-não elevam privilégios e não aplicam ACLs Windows ao host.
+não elevam privilégios e não aplicam ACLs Windows ao host. As saídas de LUID,
+contadores, nomes, SID/domínio, handles de política e consultas do registro
+usam cópias protegidas e rejeitam destinos não acessíveis.
 
 `CryptAcquireContextA/W`, `CryptGenRandom`, `CryptReleaseContext`,
 `CryptCreateHash`, `CryptHashData`, `CryptGetHashParam`, `CryptSetHashParam`,

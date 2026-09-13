@@ -710,14 +710,13 @@ TL_ADVAPI_MSABI int tl_LookupPrivilegeValueW(const std::uint16_t* system_name,
                                              void* luid) noexcept {
     (void)system_name;
     (void)name;
-    if (luid == nullptr || !mapped_range(luid, sizeof(GuestLuid), true)) {
+    if (luid == nullptr) {
         return 0;
     }
     GuestLuid out{};
     out.low_part = 1;
     out.high_part = 0;
-    std::memcpy(luid, &out, sizeof(GuestLuid));
-    return 1;
+    return write_guest_value(luid, out) ? 1 : 0;
 }
 
 TL_ADVAPI_MSABI int tl_AdjustTokenPrivileges(void* token_handle, int disable_all_privileges,
@@ -728,8 +727,8 @@ TL_ADVAPI_MSABI int tl_AdjustTokenPrivileges(void* token_handle, int disable_all
     (void)new_state;
     (void)buffer_length;
     (void)previous_state;
-    if (return_length != nullptr && mapped_range(return_length, sizeof(*return_length), true)) {
-        *return_length = 0;
+    if (return_length != nullptr && !write_guest_value(return_length, std::uint32_t{0})) {
+        return 0;
     }
     return 1;
 }
@@ -741,8 +740,8 @@ TL_ADVAPI_MSABI int tl_GetFileSecurityW(const std::uint16_t* file_name, std::uin
     (void)requested_information;
     (void)security_descriptor;
     (void)length;
-    if (length_needed != nullptr && mapped_range(length_needed, sizeof(*length_needed), true)) {
-        *length_needed = 0;
+    if (length_needed != nullptr && !write_guest_value(length_needed, std::uint32_t{0})) {
+        return 0;
     }
     return 1;
 }
@@ -841,20 +840,35 @@ TL_ADVAPI_MSABI int tl_LookupAccountNameW(const std::uint16_t* const system_name
     (void)system_name;
     (void)account_name;
     static const std::uint16_t kDomain[] = {'W', 'O', 'R', 'K', 'G', 'R', 'O', 'U', 'P', 0};
-    if (domain_size != nullptr && mapped_range(domain_size, sizeof(std::uint32_t), true)) {
-        *domain_size = 10;
-        if (referenced_domain != nullptr && mapped_range(referenced_domain, 10 * sizeof(std::uint16_t), true)) {
-            std::memcpy(referenced_domain, kDomain, sizeof(kDomain));
+    if (domain_size != nullptr) {
+        if (!write_guest_value(domain_size, std::uint32_t{10})) {
+            tl_SetLastError(kErrorInvalidParameter);
+            return 0;
+        }
+        if (referenced_domain != nullptr &&
+            runtime::write_guest_memory(referenced_domain, kDomain, sizeof(kDomain)).status !=
+                runtime::GuestMemoryAccessStatus::Success) {
+            tl_SetLastError(kErrorInvalidParameter);
+            return 0;
         }
     }
-    if (sid_size != nullptr && mapped_range(sid_size, sizeof(std::uint32_t), true)) {
-        *sid_size = 28;
-        if (sid != nullptr && mapped_range(sid, 28, true)) {
-            std::memset(sid, 0, 28);
+    if (sid_size != nullptr) {
+        if (!write_guest_value(sid_size, std::uint32_t{28})) {
+            tl_SetLastError(kErrorInvalidParameter);
+            return 0;
+        }
+        if (sid != nullptr) {
+            const std::array<std::uint8_t, 28> empty_sid{};
+            if (runtime::write_guest_memory(sid, empty_sid.data(), empty_sid.size()).status !=
+                runtime::GuestMemoryAccessStatus::Success) {
+                tl_SetLastError(kErrorInvalidParameter);
+                return 0;
+            }
         }
     }
-    if (sid_name_use != nullptr && mapped_range(sid_name_use, sizeof(std::uint32_t), true)) {
-        *static_cast<std::uint32_t*>(sid_name_use) = 1; // SidTypeUser
+    if (sid_name_use != nullptr && !write_guest_value(sid_name_use, std::uint32_t{1})) {
+        tl_SetLastError(kErrorInvalidParameter);
+        return 0;
     }
     tl_SetLastError(abi::kErrorSuccess);
     return 1;
@@ -865,8 +879,9 @@ TL_ADVAPI_MSABI int tl_LsaOpenPolicy(void* const system_name, void* const obj_at
     (void)system_name;
     (void)obj_attributes;
     (void)access_mask;
-    if (policy_handle != nullptr && mapped_range(policy_handle, sizeof(void*), true)) {
-        *policy_handle = reinterpret_cast<void*>(0x4C534150ULL); // 'LSAP'
+    if (policy_handle != nullptr &&
+        !write_guest_value(policy_handle, reinterpret_cast<void*>(0x4C534150ULL))) {
+        return abi::kErrorInvalidParameter;
     }
     return 0; // STATUS_SUCCESS
 }
@@ -903,20 +918,12 @@ TL_ADVAPI_MSABI std::int32_t tl_RegQueryInfoKeyA(void* const key, char* const cl
     (void)max_class_len;
     (void)security_descriptor;
     (void)last_write_time;
-    if (sub_keys != nullptr && mapped_range(sub_keys, sizeof(std::uint32_t), true)) {
-        *sub_keys = 0;
-    }
-    if (max_sub_key_len != nullptr && mapped_range(max_sub_key_len, sizeof(std::uint32_t), true)) {
-        *max_sub_key_len = 0;
-    }
-    if (values != nullptr && mapped_range(values, sizeof(std::uint32_t), true)) {
-        *values = 0;
-    }
-    if (max_value_name_len != nullptr && mapped_range(max_value_name_len, sizeof(std::uint32_t), true)) {
-        *max_value_name_len = 0;
-    }
-    if (max_value_len != nullptr && mapped_range(max_value_len, sizeof(std::uint32_t), true)) {
-        *max_value_len = 0;
+    const auto write_zero = [](std::uint32_t* const output) {
+        return output == nullptr || write_guest_value(output, std::uint32_t{0});
+    };
+    if (!write_zero(sub_keys) || !write_zero(max_sub_key_len) || !write_zero(values) ||
+        !write_zero(max_value_name_len) || !write_zero(max_value_len)) {
+        return static_cast<std::int32_t>(kErrorInvalidParameter);
     }
     return static_cast<std::int32_t>(abi::kErrorSuccess);
 }
@@ -939,20 +946,12 @@ TL_ADVAPI_MSABI std::int32_t tl_RegQueryInfoKeyW(void* const key, std::uint16_t*
     (void)max_class_len;
     (void)security_descriptor;
     (void)last_write_time;
-    if (sub_keys != nullptr && mapped_range(sub_keys, sizeof(std::uint32_t), true)) {
-        *sub_keys = 0;
-    }
-    if (max_sub_key_len != nullptr && mapped_range(max_sub_key_len, sizeof(std::uint32_t), true)) {
-        *max_sub_key_len = 0;
-    }
-    if (values != nullptr && mapped_range(values, sizeof(std::uint32_t), true)) {
-        *values = 0;
-    }
-    if (max_value_name_len != nullptr && mapped_range(max_value_name_len, sizeof(std::uint32_t), true)) {
-        *max_value_name_len = 0;
-    }
-    if (max_value_len != nullptr && mapped_range(max_value_len, sizeof(std::uint32_t), true)) {
-        *max_value_len = 0;
+    const auto write_zero = [](std::uint32_t* const output) {
+        return output == nullptr || write_guest_value(output, std::uint32_t{0});
+    };
+    if (!write_zero(sub_keys) || !write_zero(max_sub_key_len) || !write_zero(values) ||
+        !write_zero(max_value_name_len) || !write_zero(max_value_len)) {
+        return static_cast<std::int32_t>(kErrorInvalidParameter);
     }
     return static_cast<std::int32_t>(abi::kErrorSuccess);
 }

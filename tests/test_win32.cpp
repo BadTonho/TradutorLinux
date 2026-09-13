@@ -662,6 +662,65 @@ TEST(Win32CryptoTest, ProtectedCryptoBuffersRejectUnmappedPointers) {
                                    static_cast<std::uint32_t>(random_bytes.size())), 1);
 }
 
+TEST(Win32AdvapiTest, ProtectedIdentityAndRegistryQueryOutputsRejectUnmappedPointers) {
+    auto* const invalid = reinterpret_cast<void*>(static_cast<std::uintptr_t>(0x1000U));
+
+    EXPECT_EQ(tl_LookupPrivilegeValueW(nullptr, nullptr, invalid), 0);
+    std::array<std::uint32_t, 2> luid{};
+    ASSERT_EQ(tl_LookupPrivilegeValueW(nullptr, nullptr, luid.data()), 1);
+
+    EXPECT_EQ(tl_AdjustTokenPrivileges(nullptr, 0, nullptr, 0, nullptr,
+                                       static_cast<std::uint32_t*>(invalid)), 0);
+    std::uint32_t return_length = 1;
+    ASSERT_EQ(tl_AdjustTokenPrivileges(nullptr, 0, nullptr, 0, nullptr, &return_length), 1);
+    EXPECT_EQ(return_length, 0U);
+
+    EXPECT_EQ(tl_GetFileSecurityW(nullptr, 0, nullptr, 0,
+                                  static_cast<std::uint32_t*>(invalid)), 0);
+    std::uint32_t length_needed = 1;
+    ASSERT_EQ(tl_GetFileSecurityW(nullptr, 0, nullptr, 0, &length_needed), 1);
+    EXPECT_EQ(length_needed, 0U);
+
+    std::uint32_t user_size = 6;
+    EXPECT_EQ(tl_GetUserNameA(static_cast<char*>(invalid), &user_size), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_GetUserNameA(nullptr, static_cast<std::uint32_t*>(invalid)), 0);
+    std::array<char, 6> user_name{};
+    ASSERT_EQ(tl_GetUserNameA(user_name.data(), &user_size), 1);
+    EXPECT_STREQ(user_name.data(), "Tonho");
+
+    std::array<std::uint8_t, 28> sid{};
+    std::array<std::uint16_t, 10> domain{};
+    std::uint32_t sid_size = static_cast<std::uint32_t>(sid.size());
+    std::uint32_t domain_size = static_cast<std::uint32_t>(domain.size());
+    std::uint32_t sid_name_use = 0;
+    EXPECT_EQ(tl_LookupAccountNameW(nullptr, nullptr, sid.data(),
+                                     static_cast<std::uint32_t*>(invalid), domain.data(),
+                                     &domain_size, &sid_name_use), 0);
+    ASSERT_EQ(tl_LookupAccountNameW(nullptr, nullptr, sid.data(), &sid_size, domain.data(),
+                                    &domain_size, &sid_name_use), 1);
+    EXPECT_EQ(sid_size, 28U);
+    EXPECT_EQ(domain_size, 10U);
+    EXPECT_EQ(sid_name_use, 1U);
+    EXPECT_EQ(tl_LookupAccountNameW(nullptr, nullptr, invalid, &sid_size, domain.data(),
+                                    &domain_size, &sid_name_use), 0);
+
+    EXPECT_NE(tl_LsaOpenPolicy(nullptr, nullptr, 0, static_cast<void**>(invalid)), 0);
+    void* policy = nullptr;
+    ASSERT_EQ(tl_LsaOpenPolicy(nullptr, nullptr, 0, &policy), 0);
+    EXPECT_EQ(tl_LsaClose(policy), 0);
+
+    EXPECT_EQ(tl_RegQueryInfoKeyA(nullptr, nullptr, nullptr, nullptr,
+                                  static_cast<std::uint32_t*>(invalid), nullptr, nullptr,
+                                  nullptr, nullptr, nullptr, nullptr, nullptr),
+              abi::kErrorInvalidParameter);
+    std::uint32_t sub_keys = 1;
+    ASSERT_EQ(tl_RegQueryInfoKeyW(nullptr, nullptr, nullptr, nullptr, &sub_keys, nullptr,
+                                  nullptr, nullptr, nullptr, nullptr, nullptr, nullptr),
+              abi::kErrorSuccess);
+    EXPECT_EQ(sub_keys, 0U);
+}
+
 TEST(Win32EnvTest, GetEnvironmentVariableWConvertsResult) {
     const std::uint16_t name[] = {'P', 'A', 'T', 'H', 0};
     const std::uint32_t needed = tl_GetEnvironmentVariableW(name, nullptr, 0);

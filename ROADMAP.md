@@ -317,6 +317,13 @@ stubs continuam sem expor provedores ou chaves reais. A regressão
 `Win32CryptoTest.ProtectedCryptoBuffersRejectUnmappedPointers` passou junto
 com as coberturas existentes de hash e aleatoriedade.
 
+O lote de identidade e consultas auxiliares migrou `LookupPrivilegeValueW`,
+`AdjustTokenPrivileges`, `GetFileSecurityW`, `GetUserNameA/W`,
+`LookupAccountNameW`, `LsaOpenPolicy` e as saídas escalares de
+`RegQueryInfoKeyA/W` para publicações protegidas. A regressão
+`Win32AdvapiTest.ProtectedIdentityAndRegistryQueryOutputsRejectUnmappedPointers`
+passou com as coberturas existentes de identidade, LSA e registro.
+
 ## Fora desta rodada
 
 Não entram neste roadmap, por enquanto:
