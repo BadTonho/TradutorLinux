@@ -758,6 +758,73 @@ TEST(Win32LocaleTest, ProtectedSystemAndMessageBuffersRejectUnmappedPointers) {
     EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
 }
 
+TEST(Win32LocaleTest, ProtectedConversionAndFormattingBuffersRejectUnmappedPointers) {
+    auto* const invalid = reinterpret_cast<void*>(static_cast<std::uintptr_t>(0x1000U));
+    const char narrow[] = "123";
+    const std::uint16_t wide[] = {'1', '2', '3', 0};
+    std::uint16_t wide_output[32]{};
+    char narrow_output[32]{};
+
+    EXPECT_EQ(tl_MultiByteToWideChar(abi::kCp1252, 0, static_cast<const char*>(invalid), -1,
+                                     wide_output, std::size(wide_output)), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_MultiByteToWideChar(abi::kCp1252, 0, narrow, -1,
+                                     static_cast<std::uint16_t*>(invalid), std::size(wide_output)), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_WideCharToMultiByte(abi::kCp1252, 0, static_cast<const std::uint16_t*>(invalid), -1,
+                                     narrow_output, std::size(narrow_output), nullptr, nullptr), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_WideCharToMultiByte(abi::kCp1252, 0, wide, -1,
+                                     static_cast<char*>(invalid), std::size(narrow_output), nullptr, nullptr), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+
+    EXPECT_EQ(tl_GetCPInfo(abi::kCp1252, static_cast<abi::GuestCpInfo*>(invalid)), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_GetLocaleInfoW(abi::kLocaleEnglishUnitedStates, abi::kLocaleSCountry,
+                                static_cast<std::uint16_t*>(invalid), 32), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_GetStringTypeW(abi::kCType1, static_cast<const std::uint16_t*>(invalid), -1,
+                                wide_output), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_GetStringTypeW(abi::kCType1, wide, -1,
+                                static_cast<std::uint16_t*>(invalid)), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+
+    EXPECT_EQ(tl_FoldStringW(abi::kLcmapsLowercase, static_cast<const std::uint16_t*>(invalid), -1,
+                             wide_output, std::size(wide_output)), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_FoldStringW(abi::kLcmapsLowercase, wide, -1,
+                             static_cast<std::uint16_t*>(invalid), std::size(wide_output)), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_GetNumberFormatW(abi::kLocaleEnglishUnitedStates, 0,
+                                  static_cast<const std::uint16_t*>(invalid), nullptr,
+                                  wide_output, std::size(wide_output)), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_GetNumberFormatW(abi::kLocaleEnglishUnitedStates, 0, wide, nullptr,
+                                  static_cast<std::uint16_t*>(invalid), std::size(wide_output)), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+
+    EXPECT_EQ(tl_GetSystemDirectoryW(static_cast<std::uint16_t*>(invalid), 32), 0U);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_GetSystemDirectoryA(static_cast<char*>(invalid), 32), 0U);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    const abi::GuestSystemTime date{2024, 1, 2, 2, 15, 4, 5, 0};
+    EXPECT_EQ(tl_GetDateFormatW(abi::kLocaleEnglishUnitedStates, 0,
+                                static_cast<const abi::GuestSystemTime*>(invalid), nullptr,
+                                wide_output, std::size(wide_output)), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_GetDateFormatW(abi::kLocaleEnglishUnitedStates, 0, &date, nullptr,
+                                static_cast<std::uint16_t*>(invalid), std::size(wide_output)), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_GetTimeFormatW(abi::kLocaleEnglishUnitedStates, 0,
+                                static_cast<const abi::GuestSystemTime*>(invalid), nullptr,
+                                wide_output, std::size(wide_output)), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_GetTimeFormatW(abi::kLocaleEnglishUnitedStates, 0, &date, nullptr,
+                                static_cast<std::uint16_t*>(invalid), std::size(wide_output)), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+}
+
 TEST(Win32HeapTest, GetProcessHeapReturnsNonNull) {
     EXPECT_NE(tl_GetProcessHeap(), nullptr);
 }

@@ -343,7 +343,7 @@ Contratos de ABI em `docs/arquitetura/msvcrt.md` e
 | `msvcrt.dll` | `signal` | Suportado | Registra handlers em tabela por sinal; nenhuma entrega real ao convidado |
 | `KERNEL32.dll` | `VirtualQuery` | Suportado no subconjunto | Preenche `MEMORY_BASIC_INFORMATION` (48 bytes); reservas e commits próprios usam regiões rastreadas pelo runtime, inclusive `AllocationBase`, `AllocationProtect`, `State`, `Protect` e divisão após mudança parcial; os demais mapeamentos usam `/proc/self/maps` |
 | `KERNEL32.dll` | `VirtualProtect` | Suportado no subconjunto | `mprotect` sobre a página alinhada dentro de uma alocação commitada; escreve a proteção antiga em `*lpflOldProtect`, atualiza a tabela de regiões e rejeita reserva ou faixa que não contenha `[address, address+size)` |
-| `KERNEL32.dll` | `MultiByteToWideChar` / `WideCharToMultiByte` | Suportado | CP `0` (ACP → 1252), `1252`, OEM/`437` e `65001` (UTF-8), incluindo tabela CP437 completa; conversões manuais sem locale e `ERROR_INSUFFICIENT_BUFFER` (122) |
+| `KERNEL32.dll` | `MultiByteToWideChar` / `WideCharToMultiByte` | Suportado | CP `0` (ACP → 1252), `1252`, OEM/`437` e `65001` (UTF-8), incluindo tabela CP437 completa; conversões manuais sem locale, entradas/saídas por cópia protegida e `ERROR_INSUFFICIENT_BUFFER` (122) |
 | `KERNEL32.dll` | `Initialize/Enter/Leave/DeleteCriticalSection` | Suportado | No-ops com validação de ponteiro (convidado single-thread → exclusão trivial) |
 | `KERNEL32.dll` | `InitializeCriticalSectionAndSpinCount` / `InitializeCriticalSectionEx` | Suportado no subconjunto | Reutilizam a tabela de seções críticas; spin count é ignorado e `InitializeCriticalSectionEx` aceita somente `CRITICAL_SECTION_NO_DEBUG_INFO` ou flags zero |
 | `KERNEL32.dll` | `AreFileApisANSI` | Suportado no subconjunto | Retorna `TRUE` para o ACP determinístico `1252` |
@@ -372,8 +372,8 @@ Contratos de ABI em `docs/arquitetura/msvcrt.md` e
 | `KERNEL32.dll` | `GetCommandLineA/W` | Suportado | Retorna linha de comando formatada com aspas a partir do `argv` do convidado |
 | `KERNEL32.dll` | `GetEnvironmentVariableA/W`, `SetEnvironmentVariableW`, `Get/FreeEnvironmentStringsW`, `ExpandEnvironmentStringsW` | Suportado | Mapa por processo, case-insensitive, copiado do host e sobreposto pelo prefixo sem mutar o Linux; bloco UTF-16 ordenado/rastreado, expansão `%NOME%`, consultas de tamanho e `ERROR_INSUFFICIENT_BUFFER` |
 | `KERNEL32.dll` | `FlsAlloc`, `FlsFree`, `FlsGetValue`, `FlsSetValue` | Suportado no subconjunto por thread | Índices/callbacks por processo, valores por thread; callback MS x64 validado na imagem, uma vez no fim da thread ou em `FlsFree`; fibras reais continuam fora do escopo |
-| `KERNEL32.dll` | `GetACP`, `GetOEMCP`, `GetCPInfo`, `IsValidCodePage`, `IsValidLocale`, `GetLocaleInfoW/Ex`, `EnumSystemLocalesW`, `GetStringTypeW`, `GetDateFormatW`, `GetTimeFormatW`, `LCMapStringW/Ex` | Suportado no subconjunto determinístico | Locale único `en-US`/`0x0409`, ACP 1252 e OEMCP 437; enumeração de um callback, `CT_CTYPE1`, formatos estáticos de data/hora e case mapping ASCII/Latin-1; sort keys, CJK, formatos customizados e locale do host não entram |
-| `KERNEL32.dll` | `GetStartupInfoW`, `GetSystemDirectoryW`, `GetFileType`, `SetStdHandle`, `ReadConsoleW`, `WriteConsoleW`, `IsDebuggerPresent`, `IsProcessorFeaturePresent`, `EncodePointer`, `DecodePointer`, `InitializeSListHead` | Suportado no subconjunto de processo/console | Estado padrão por processo e compartilhado por threads; `STARTUPINFOW` 104 bytes, `C:\Windows\System32`, console UTF-16↔UTF-8, recursos AMD64 fixos, cookie reversível e SList vazia alinhada; sem alocação de console, herança explícita ou operações interlocked de lista |
+| `KERNEL32.dll` | `GetACP`, `GetOEMCP`, `GetCPInfo`, `IsValidCodePage`, `IsValidLocale`, `GetLocaleInfoW/Ex`, `EnumSystemLocalesW`, `GetStringTypeW`, `GetDateFormatW`, `GetTimeFormatW`, `LCMapStringW/Ex` | Suportado no subconjunto determinístico | Locale único `en-US`/`0x0409`, ACP 1252 e OEMCP 437; enumeração de um callback, `CT_CTYPE1`, formatos estáticos de data/hora e case mapping ASCII/Latin-1; snapshots de entradas e cópias protegidas das saídas; sort keys, CJK, formatos customizados e locale do host não entram |
+| `KERNEL32.dll` | `GetStartupInfoW`, `GetSystemDirectoryA/W`, `GetWindowsDirectoryA/W`, `GetFileType`, `SetStdHandle`, `ReadConsoleW`, `WriteConsoleW`, `IsDebuggerPresent`, `IsProcessorFeaturePresent`, `EncodePointer`, `DecodePointer`, `InitializeSListHead` | Suportado no subconjunto de processo/console | Estado padrão por processo e compartilhado por threads; `STARTUPINFOW` 104 bytes, diretórios Windows por publicação protegida, console UTF-16↔UTF-8, recursos AMD64 fixos, cookie reversível e SList vazia alinhada; sem alocação de console, herança explícita ou operações interlocked de lista |
 | `KERNEL32.dll` | `FindFirstFileExW`, `SetFileAttributesW`, `SetFileInformationByHandle` | Suportado no subconjunto de metadados | Enumeração W por `FindExInfoStandard/Basic`, `*`/`?` ASCII case-insensitive e `LARGE_FETCH` como hint; atributos `READONLY`/`NORMAL`/`ARCHIVE`/`DIRECTORY`; classes `FileBasicInfo`, `FileDispositionInfo` e `FileDispositionInfoEx` validadas no prefixo |
 | `KERNEL32.dll` | `GetProcessHeap` | Suportado | Retorna token opaco fixo (heap único do processo) |
 | `KERNEL32.dll` | `HeapAlloc` | Suportado | `malloc` do hospedeiro; flag `HEAP_ZERO_MEMORY` (0x0008) → `calloc` |
@@ -387,6 +387,12 @@ O `xxd.exe` tem 42 testes unitários novos (`tests/test_win32.cpp` e
 surrogate pairs e erro `1113`), `VirtualQuery`/`VirtualProtect`, `TlsGetValue`,
 critical sections, `__getmainargs`, stdio em `GuestFile`, `strtol`/`wcslen`,
 locale e sinais.
+
+As APIs de locale e conversão também rejeitam ponteiros convidados não
+acessíveis sem tocar diretamente nesses endereços: a regressão
+`Win32LocaleTest.ProtectedConversionAndFormattingBuffersRejectUnmappedPointers`
+cobre conversões de code page, `GetCPInfo`, informações/classificação de locale,
+`FoldStringW`, `GetNumberFormatW`, diretórios e formatação de data/hora.
 
 Observações que orientam a próxima etapa (Fase 9/10):
 

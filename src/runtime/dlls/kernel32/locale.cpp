@@ -5,6 +5,7 @@
 
 #include <charconv>
 #include <cstring>
+#include <vector>
 #include <strings.h>
 
 namespace tradutorlinux {
@@ -70,15 +71,60 @@ int write_locale_value(const std::u16string& value, std::uint16_t* const data,
         set_last_error(abi::kErrorSuccess);
         return needed;
     }
-    if (data_count < needed ||
-        !mapped_guest_range(data, static_cast<std::size_t>(data_count) * sizeof(*data), true)) {
-        set_last_error(abi::kErrorInsufficientBuffer);
+    std::uint32_t error = abi::kErrorSuccess;
+    if (!copy_wide_string(value, data, static_cast<std::size_t>(data_count), error)) {
+        set_last_error(error);
         return 0;
     }
-    std::copy(value.begin(), value.end(), data);
-    data[value.size()] = 0;
     set_last_error(abi::kErrorSuccess);
     return needed;
+}
+
+constexpr std::size_t kMaxLocaleUnits = 1U << 20U;
+
+[[nodiscard]] bool copy_guest_ansi_count(const char* const source, const int count,
+                                         std::string& destination) noexcept {
+    if (source == nullptr || count == 0 || count < -1) {
+        return false;
+    }
+    if (count == -1) {
+        return runtime::copy_guest_cstring(source, kMaxLocaleUnits, destination);
+    }
+    const auto units = static_cast<std::size_t>(count);
+    if (units > kMaxLocaleUnits) {
+        return false;
+    }
+    try {
+        destination.resize(units);
+    } catch (const std::bad_alloc&) {
+        destination.clear();
+        return false;
+    }
+    return units == 0 || runtime::read_guest_memory(source, destination.data(), units).status ==
+                             runtime::GuestMemoryAccessStatus::Success;
+}
+
+[[nodiscard]] bool copy_guest_utf16_count(const std::uint16_t* const source, const int count,
+                                          std::u16string& destination) noexcept {
+    if (source == nullptr || count == 0 || count < -1) {
+        return false;
+    }
+    if (count == -1) {
+        return runtime::copy_guest_wstring(source, kMaxLocaleUnits, destination);
+    }
+    const auto units = static_cast<std::size_t>(count);
+    if (units > kMaxLocaleUnits) {
+        return false;
+    }
+    try {
+        destination.resize(units);
+    } catch (const std::bad_alloc&) {
+        destination.clear();
+        return false;
+    }
+    return units == 0 || runtime::read_guest_memory(source, destination.data(),
+                                                     units * sizeof(std::uint16_t)).status ==
+                             runtime::GuestMemoryAccessStatus::Success;
 }
 
 [[nodiscard]] std::optional<std::u16string> locale_string(const std::uint32_t locale_type) {
@@ -109,12 +155,13 @@ int write_locale_value(const std::u16string& value, std::uint16_t* const data,
 }
 
 [[nodiscard]] bool locale_name_is_en_us(const std::uint16_t* const name) noexcept {
-    if (name == nullptr || !mapped_guest_wstring(name)) {
+    std::u16string guest_name;
+    if (name == nullptr || !runtime::copy_guest_wstring(name, 64U, guest_name)) {
         return false;
     }
     static constexpr std::uint16_t kEnUs[] = {'e', 'n', '-', 'U', 'S', 0};
     for (std::size_t index = 0; index < std::size(kEnUs); ++index) {
-        const std::uint16_t left = name[index];
+        const std::uint16_t left = index < guest_name.size() ? guest_name[index] : 0;
         const std::uint16_t right = kEnUs[index];
         const std::uint16_t normalized =
             left >= 'A' && left <= 'Z' ? static_cast<std::uint16_t>(left + ('a' - 'A')) : left;
@@ -151,33 +198,36 @@ int map_locale_string(const std::uint32_t flags, const std::uint16_t* const sour
                            ? abi::kErrorInvalidParameter : abi::kErrorInvalidFlags);
         return 0;
     }
-    std::size_t units = 0;
-    if (source_count == -1) {
-        if (!mapped_guest_wstring(source)) {
-            set_last_error(abi::kErrorInvalidParameter);
-            return 0;
-        }
-        do {
-            ++units;
-        } while (source[units - 1U] != 0);
-    } else {
-        units = static_cast<std::size_t>(source_count);
-        if (!mapped_guest_range(source, units * sizeof(*source), false)) {
-            set_last_error(abi::kErrorInvalidParameter);
-            return 0;
-        }
+    std::u16string source_copy;
+    if (!copy_guest_utf16_count(source, source_count, source_copy)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
     }
+    const bool null_terminated = source_count == -1;
+    const std::size_t units = source_copy.size() + (null_terminated ? 1U : 0U);
     if (destination == nullptr || destination_count == 0) {
         set_last_error(abi::kErrorSuccess);
         return static_cast<int>(units);
     }
-    if (destination_count < 0 || static_cast<std::size_t>(destination_count) < units ||
-        !mapped_guest_range(destination, units * sizeof(*destination), true)) {
+    if (destination_count < 0 || static_cast<std::size_t>(destination_count) < units) {
         set_last_error(abi::kErrorInsufficientBuffer);
         return 0;
     }
+    std::vector<std::uint16_t> output;
+    try {
+        output.resize(units);
+    } catch (const std::bad_alloc&) {
+        set_last_error(abi::kErrorNotEnoughMemory);
+        return 0;
+    }
     for (std::size_t index = 0; index < units; ++index) {
-        destination[index] = locale_case_map(source[index], flags);
+        const std::uint16_t unit = index < source_copy.size() ? source_copy[index] : 0;
+        output[index] = locale_case_map(unit, flags);
+    }
+    if (runtime::write_guest_memory(destination, output.data(), output.size() * sizeof(*destination)).status !=
+        runtime::GuestMemoryAccessStatus::Success) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
     }
     set_last_error(abi::kErrorSuccess);
     return static_cast<int>(units);
@@ -248,13 +298,16 @@ TL_MSABI std::uint32_t tl_GetSystemDirectoryW(std::uint16_t* const buffer,
         set_last_error(abi::kErrorSuccess);
         return required;
     }
-    if (size < required ||
-        !mapped_guest_range(buffer, static_cast<std::size_t>(size) * sizeof(*buffer), true)) {
+    if (size < required) {
         set_last_error(abi::kErrorInsufficientBuffer);
         return required;
     }
-    std::copy(kSystemDirectory.begin(), kSystemDirectory.end(), buffer);
-    buffer[kSystemDirectory.size()] = 0;
+    if (runtime::write_guest_memory(buffer, kSystemDirectory.data(),
+                                    static_cast<std::size_t>(required) * sizeof(*buffer)).status !=
+        runtime::GuestMemoryAccessStatus::Success) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
     set_last_error(abi::kErrorSuccess);
     trace_process_console("process-context", "system-directory", "C:\\Windows\\System32");
     return static_cast<std::uint32_t>(kSystemDirectory.size());
@@ -733,26 +786,28 @@ TL_MSABI int tl_FoldStringW(const std::uint32_t map_flags, const std::uint16_t* 
                             const int cch_src, std::uint16_t* const dest_str,
                             const int cch_dest) noexcept {
     (void)map_flags;
-    if (src_str == nullptr || !mapped_guest_wstring(src_str)) {
+    std::u16string source;
+    if (!copy_guest_utf16_count(src_str, cch_src, source)) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
-    std::size_t null_term_len = 0;
-    while (src_str[null_term_len] != 0) {
-        ++null_term_len;
-    }
-    const std::size_t src_len = (cch_src < 0) ? (null_term_len + 1) : static_cast<std::size_t>(cch_src);
+    const std::size_t src_len = source.size() + (cch_src == -1 ? 1U : 0U);
     if (cch_dest == 0) {
         return static_cast<int>(src_len);
     }
-    if (cch_dest < 0 || dest_str == nullptr ||
-        !mapped_guest_range(dest_str, static_cast<std::size_t>(cch_dest) * sizeof(std::uint16_t), true)) {
+    if (cch_dest < 0 || dest_str == nullptr) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
     const std::size_t to_copy = std::min(static_cast<std::size_t>(cch_dest), src_len);
-    for (std::size_t i = 0; i < to_copy; ++i) {
-        dest_str[i] = src_str[i];
+    if (cch_src == -1) {
+        source.push_back(0);
+    }
+    if (to_copy > 0 && runtime::write_guest_memory(dest_str, source.data(),
+                                                    to_copy * sizeof(*dest_str)).status !=
+                           runtime::GuestMemoryAccessStatus::Success) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
     }
     set_last_error(abi::kErrorSuccess);
     return static_cast<int>(to_copy);
@@ -769,26 +824,26 @@ TL_MSABI int tl_GetNumberFormatW(const std::uint32_t locale, const std::uint32_t
     (void)locale;
     (void)flags;
     (void)format;
-    if (value == nullptr || !mapped_guest_wstring(value)) {
+    std::u16string value_copy;
+    if (!copy_guest_utf16_count(value, -1, value_copy)) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
-    std::size_t val_len = 0;
-    while (value[val_len] != 0) {
-        ++val_len;
-    }
-    const std::size_t len = val_len + 1;
+    const std::size_t len = value_copy.size() + 1U;
     if (cch_number == 0) {
         return static_cast<int>(len);
     }
-    if (cch_number < 0 || number_str == nullptr ||
-        !mapped_guest_range(number_str, static_cast<std::size_t>(cch_number) * sizeof(std::uint16_t), true)) {
+    if (cch_number < 0 || number_str == nullptr) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
     const std::size_t to_copy = std::min(static_cast<std::size_t>(cch_number), len);
-    for (std::size_t i = 0; i < to_copy; ++i) {
-        number_str[i] = value[i];
+    value_copy.push_back(0);
+    if (to_copy > 0 && runtime::write_guest_memory(number_str, value_copy.data(),
+                                                    to_copy * sizeof(*number_str)).status !=
+                           runtime::GuestMemoryAccessStatus::Success) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
     }
     set_last_error(abi::kErrorSuccess);
     return static_cast<int>(to_copy);
@@ -817,11 +872,11 @@ TL_MSABI std::uint32_t tl_GetWindowsDirectoryW(std::uint16_t* const buffer, cons
     if (buffer == nullptr || size <= kLen) {
         return kLen + 1;
     }
-    if (!mapped_guest_range(buffer, (kLen + 1) * sizeof(std::uint16_t), true)) {
+    if (runtime::write_guest_memory(buffer, kWinDir, (kLen + 1U) * sizeof(*buffer)).status !=
+        runtime::GuestMemoryAccessStatus::Success) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
-    std::memcpy(buffer, kWinDir, (kLen + 1) * sizeof(std::uint16_t));
     set_last_error(abi::kErrorSuccess);
     return kLen;
 }
@@ -830,11 +885,10 @@ TL_MSABI int tl_lstrlenW(const std::uint16_t* const str) noexcept {
     if (str == nullptr) {
         return 0;
     }
-    int len = 0;
-    while (str[len] != 0) {
-        ++len;
-    }
-    return len;
+    std::u16string value;
+    return runtime::copy_guest_wstring(str, kMaxLocaleUnits, value)
+               ? static_cast<int>(value.size())
+               : 0;
 }
 
 TL_MSABI int tl_CompareStringEx(const wchar_t* const locale_name, const std::uint32_t flags,
@@ -846,24 +900,40 @@ TL_MSABI int tl_CompareStringEx(const wchar_t* const locale_name, const std::uin
     (void)version_information;
     (void)reserved;
     (void)param;
-    if (string1 == nullptr || string2 == nullptr) {
+    std::u16string value1;
+    std::u16string value2;
+    if (!copy_guest_utf16_count(reinterpret_cast<const std::uint16_t*>(string1), count1, value1) ||
+        !copy_guest_utf16_count(reinterpret_cast<const std::uint16_t*>(string2), count2, value2)) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
     int cmp = 0;
-    if (count1 < 0 || count2 < 0) {
-        cmp = std::wcscmp(string1, string2);
-    } else {
-        cmp = std::wcsncmp(string1, string2, static_cast<std::size_t>(std::min(count1, count2)));
-        if (cmp == 0 && count1 != count2) {
-            cmp = count1 < count2 ? -1 : 1;
+    if ((flags & 0x00000001U) != 0U) {
+        for (std::size_t index = 0; index < std::min(value1.size(), value2.size()); ++index) {
+            const auto c1 = static_cast<char16_t>(std::towlower(static_cast<wint_t>(value1[index])));
+            const auto c2 = static_cast<char16_t>(std::towlower(static_cast<wint_t>(value2[index])));
+            if (c1 != c2) {
+                cmp = c1 < c2 ? -1 : 1;
+                break;
+            }
         }
+    } else {
+        const std::size_t common = std::min(value1.size(), value2.size());
+        for (std::size_t index = 0; index < common; ++index) {
+            if (value1[index] != value2[index]) {
+                cmp = value1[index] < value2[index] ? -1 : 1;
+                break;
+            }
+        }
+    }
+    if (cmp == 0 && value1.size() != value2.size()) {
+        cmp = value1.size() < value2.size() ? -1 : 1;
     }
     return cmp < 0 ? 1 : (cmp == 0 ? 2 : 3); // 1 = CSTR_LESS_THAN, 2 = CSTR_EQUAL, 3 = CSTR_GREATER_THAN
 }
 
 TL_MSABI std::uint32_t tl_GetSystemDirectoryA(char* const buffer, const std::uint32_t size) noexcept {
-    if (buffer == nullptr || size == 0 || !mapped_guest_range(buffer, size, true)) {
+    if (buffer == nullptr || size == 0) {
         return 0;
     }
     const char sys[] = "C:\\Windows\\System32";
@@ -871,7 +941,11 @@ TL_MSABI std::uint32_t tl_GetSystemDirectoryA(char* const buffer, const std::uin
     if (size <= len) {
         return len + 1;
     }
-    std::memcpy(buffer, sys, len + 1);
+    if (runtime::write_guest_memory(buffer, sys, len + 1U).status !=
+        runtime::GuestMemoryAccessStatus::Success) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
     set_last_error(abi::kErrorSuccess);
     return len;
 }
@@ -891,21 +965,31 @@ TL_MSABI std::uint32_t tl_GetSystemFirmwareTable(const std::uint32_t firmware_ta
 TL_MSABI int tl_GetLocaleInfoA(const std::uint32_t lcid, const std::uint32_t lctype, char* const lcdata, const int cch_data) noexcept {
     (void)lcid;
     (void)lctype;
-    if (cch_data > 0 && lcdata != nullptr && mapped_guest_range(lcdata, static_cast<std::size_t>(cch_data), true)) {
-        std::strncpy(lcdata, "0409", static_cast<std::size_t>(cch_data) - 1);
-        lcdata[cch_data - 1] = '\0';
-        return static_cast<int>(std::strlen(lcdata) + 1);
+    if (cch_data <= 0 || lcdata == nullptr) {
+        return 5;
     }
-    return 5;
+    char output[] = "0409";
+    const std::size_t copy_length = std::min<std::size_t>(static_cast<std::size_t>(cch_data), sizeof(output));
+    output[copy_length - 1U] = '\0';
+    if (runtime::write_guest_memory(lcdata, output, copy_length).status !=
+        runtime::GuestMemoryAccessStatus::Success) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    return static_cast<int>(copy_length);
 }
 
 TL_MSABI std::uint32_t tl_GetWindowsDirectoryA(char* const buffer, const std::uint32_t size) noexcept {
     const char win_dir[] = "C:\\Windows";
     const std::uint32_t len = sizeof(win_dir) - 1;
-    if (size <= len || buffer == nullptr || !mapped_guest_range(buffer, size, true)) {
+    if (size <= len || buffer == nullptr) {
         return len + 1;
     }
-    std::memcpy(buffer, win_dir, len + 1);
+    if (runtime::write_guest_memory(buffer, win_dir, len + 1U).status !=
+        runtime::GuestMemoryAccessStatus::Success) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
     return len;
 }
 
@@ -914,14 +998,18 @@ TL_MSABI int tl_GetTimeFormatEx(const wchar_t* const lpLocaleName, const std::ui
     (void)dwFlags;
     (void)lpTime;
     (void)lpFormat;
-    const wchar_t dummy[] = L"12:00:00";
-    const int len = sizeof(dummy) / sizeof(wchar_t);
+    static constexpr std::uint16_t kDummy[] = {'1', '2', ':', '0', '0', ':', '0', '0', 0};
+    constexpr int len = static_cast<int>(std::size(kDummy));
     if (lpTimeStr == nullptr || cchTime == 0) return len;
-    if (cchTime < len) {
+    if (cchTime < 0 || cchTime < len) {
         set_last_error(122);
         return 0;
     }
-    std::memcpy(lpTimeStr, dummy, sizeof(dummy));
+    if (runtime::write_guest_memory(lpTimeStr, kDummy, sizeof(kDummy)).status !=
+        runtime::GuestMemoryAccessStatus::Success) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
     return len;
 }
 
@@ -931,14 +1019,18 @@ TL_MSABI int tl_GetDateFormatEx(const wchar_t* const lpLocaleName, const std::ui
     (void)lpDate;
     (void)lpFormat;
     (void)lpCalendar;
-    const wchar_t dummy[] = L"2026-08-28";
-    const int len = sizeof(dummy) / sizeof(wchar_t);
+    static constexpr std::uint16_t kDummy[] = {'2', '0', '2', '6', '-', '0', '8', '-', '2', '8', 0};
+    constexpr int len = static_cast<int>(std::size(kDummy));
     if (lpDateStr == nullptr || cchDate == 0) return len;
-    if (cchDate < len) {
+    if (cchDate < 0 || cchDate < len) {
         set_last_error(122);
         return 0;
     }
-    std::memcpy(lpDateStr, dummy, sizeof(dummy));
+    if (runtime::write_guest_memory(lpDateStr, kDummy, sizeof(kDummy)).status !=
+        runtime::GuestMemoryAccessStatus::Success) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
     return len;
 }
 
@@ -947,15 +1039,19 @@ TL_MSABI std::uint16_t* tl_lstrcpynW(std::uint16_t* const lpString1,
                                      const int iMaxLength) noexcept {
     if (lpString1 == nullptr || iMaxLength <= 0) return lpString1;
     if (lpString2 == nullptr) {
-        lpString1[0] = 0;
+        static_cast<void>(write_guest_value(lpString1, std::uint16_t{0}));
         return lpString1;
     }
-    int i = 0;
-    while (i < iMaxLength - 1 && lpString2[i] != 0) {
-        lpString1[i] = lpString2[i];
-        ++i;
+    std::u16string source;
+    if (!runtime::copy_guest_wstring(lpString2, kMaxLocaleUnits, source)) {
+        return lpString1;
     }
-    lpString1[i] = 0;
+    const std::size_t copy_length = std::min<std::size_t>(source.size(),
+                                                          static_cast<std::size_t>(iMaxLength - 1));
+    source.resize(copy_length);
+    source.push_back(0);
+    static_cast<void>(runtime::write_guest_memory(lpString1, source.data(),
+                                                  source.size() * sizeof(*lpString1)));
     return lpString1;
 }
 
@@ -963,32 +1059,47 @@ TL_MSABI int tl_lstrcmpiA(const char* const lpString1, const char* const lpStrin
     if (lpString1 == lpString2) return 0;
     if (lpString1 == nullptr) return -1;
     if (lpString2 == nullptr) return 1;
-    return strcasecmp(lpString1, lpString2);
+    std::string value1;
+    std::string value2;
+    if (!runtime::copy_guest_cstring(lpString1, kMaxLocaleUnits, value1) ||
+        !runtime::copy_guest_cstring(lpString2, kMaxLocaleUnits, value2)) {
+        return 0;
+    }
+    return strcasecmp(value1.c_str(), value2.c_str());
 }
 
 TL_MSABI char* tl_lstrcpynA(char* const lpString1, const char* const lpString2, const int iMaxLength) noexcept {
     if (lpString1 == nullptr || iMaxLength <= 0) return lpString1;
     if (lpString2 == nullptr) {
-        lpString1[0] = 0;
+        static_cast<void>(write_guest_value(lpString1, static_cast<char>('\0')));
         return lpString1;
     }
-    int i = 0;
-    while (i < iMaxLength - 1 && lpString2[i] != 0) {
-        lpString1[i] = lpString2[i];
-        ++i;
+    std::string source;
+    if (!runtime::copy_guest_cstring(lpString2, kMaxLocaleUnits, source)) {
+        return lpString1;
     }
-    lpString1[i] = 0;
+    const std::size_t copy_length = std::min<std::size_t>(source.size(),
+                                                          static_cast<std::size_t>(iMaxLength - 1));
+    source.resize(copy_length);
+    source.push_back('\0');
+    static_cast<void>(runtime::write_guest_memory(lpString1, source.data(), source.size()));
     return lpString1;
 }
 
 TL_MSABI int tl_GetStringTypeExW(const std::uint32_t Locale, const std::uint32_t dwInfoType, const wchar_t* const lpSrcStr, const int cchSrc, std::uint16_t* const lpCharType) noexcept {
     (void)Locale;
     (void)dwInfoType;
-    (void)lpSrcStr;
-    if (lpCharType == nullptr) return 0;
-    const int count = cchSrc > 0 ? cchSrc : 1;
-    for (int i = 0; i < count; ++i) {
-        lpCharType[i] = 0x0001; // C1_UPPER/ALPHA
+    std::u16string source;
+    if (lpCharType == nullptr || !copy_guest_utf16_count(
+                                    reinterpret_cast<const std::uint16_t*>(lpSrcStr),
+                                    cchSrc > 0 ? cchSrc : -1, source)) {
+        return 0;
+    }
+    const std::size_t count = cchSrc > 0 ? source.size() : source.size() + 1U;
+    std::vector<std::uint16_t> output(count, 0x0001U);
+    if (runtime::write_guest_memory(lpCharType, output.data(), output.size() * sizeof(*lpCharType)).status !=
+        runtime::GuestMemoryAccessStatus::Success) {
+        return 0;
     }
     return 1;
 }
@@ -996,22 +1107,31 @@ TL_MSABI int tl_GetStringTypeExW(const std::uint32_t Locale, const std::uint32_t
 TL_MSABI int tl_LCMapStringA(const std::uint32_t Locale, const std::uint32_t dwMapFlags, const char* const lpSrcStr, const int cchSrc, char* const lpDestStr, const int cchDest) noexcept {
     (void)Locale;
     (void)dwMapFlags;
-    if (lpSrcStr == nullptr) return 0;
-    const int len = cchSrc > 0 ? cchSrc : static_cast<int>(std::strlen(lpSrcStr) + 1);
+    std::string source;
+    if (!copy_guest_ansi_count(lpSrcStr, cchSrc > 0 ? cchSrc : -1, source)) return 0;
+    const int len = cchSrc > 0 ? cchSrc : static_cast<int>(source.size() + 1U);
     if (lpDestStr == nullptr || cchDest == 0) return len;
     const int copy_len = std::min(len, cchDest);
-    std::memcpy(lpDestStr, lpSrcStr, static_cast<std::size_t>(copy_len));
+    if (cchSrc <= 0) source.push_back('\0');
+    if (runtime::write_guest_memory(lpDestStr, source.data(), static_cast<std::size_t>(copy_len)).status !=
+        runtime::GuestMemoryAccessStatus::Success) {
+        return 0;
+    }
     return copy_len;
 }
 
 TL_MSABI int tl_GetStringTypeExA(const std::uint32_t Locale, const std::uint32_t dwInfoType, const char* const lpSrcStr, const int cchSrc, std::uint16_t* const lpCharType) noexcept {
     (void)Locale;
     (void)dwInfoType;
-    (void)lpSrcStr;
-    if (lpCharType == nullptr) return 0;
-    const int count = cchSrc > 0 ? cchSrc : 1;
-    for (int i = 0; i < count; ++i) {
-        lpCharType[i] = 0x0001;
+    std::string source;
+    if (lpCharType == nullptr || !copy_guest_ansi_count(lpSrcStr, cchSrc > 0 ? cchSrc : -1, source)) {
+        return 0;
+    }
+    const std::size_t count = cchSrc > 0 ? source.size() : 1U;
+    std::vector<std::uint16_t> output(count, 0x0001U);
+    if (runtime::write_guest_memory(lpCharType, output.data(), output.size() * sizeof(*lpCharType)).status !=
+        runtime::GuestMemoryAccessStatus::Success) {
+        return 0;
     }
     return 1;
 }
@@ -1020,38 +1140,34 @@ TL_MSABI std::uint16_t* tl_lstrcpyW(std::uint16_t* const lpString1,
                                     const std::uint16_t* const lpString2) noexcept {
     if (lpString1 == nullptr) return nullptr;
     if (lpString2 == nullptr) {
-        lpString1[0] = 0;
+        static_cast<void>(write_guest_value(lpString1, std::uint16_t{0}));
         return lpString1;
     }
-    std::size_t i = 0;
-    while (lpString2[i] != 0) {
-        lpString1[i] = lpString2[i];
-        ++i;
+    std::u16string source;
+    if (!runtime::copy_guest_wstring(lpString2, kMaxLocaleUnits, source)) {
+        return lpString1;
     }
-    lpString1[i] = 0;
+    source.push_back(0);
+    static_cast<void>(runtime::write_guest_memory(lpString1, source.data(),
+                                                  source.size() * sizeof(*lpString1)));
     return lpString1;
 }
 
 TL_MSABI std::uint16_t* tl_lstrcatW(std::uint16_t* const lpString1,
                                     const std::uint16_t* const lpString2) noexcept {
-    if (lpString1 == nullptr || lpString2 == nullptr ||
-        !mapped_guest_wstring(lpString1) || !mapped_guest_wstring(lpString2)) {
+    if (lpString1 == nullptr || lpString2 == nullptr) {
         return lpString1;
     }
-
-    const std::size_t destination_length = static_cast<std::size_t>(tl_lstrlenW(lpString1));
-    const std::size_t source_length = static_cast<std::size_t>(tl_lstrlenW(lpString2));
-    if (destination_length > std::numeric_limits<std::size_t>::max() - source_length - 1U) {
+    std::u16string destination;
+    std::u16string source;
+    if (!runtime::copy_guest_wstring(lpString1, kMaxLocaleUnits, destination) ||
+        !runtime::copy_guest_wstring(lpString2, kMaxLocaleUnits, source)) {
         return lpString1;
     }
-    const std::size_t total_units = destination_length + source_length + 1U;
-    if (total_units > std::numeric_limits<std::size_t>::max() / sizeof(*lpString1)) {
-        return lpString1;
-    }
-    if (!mapped_guest_range(lpString1, total_units * sizeof(*lpString1), true)) {
-        return lpString1;
-    }
-    std::copy(lpString2, lpString2 + source_length + 1U, lpString1 + destination_length);
+    destination.append(source);
+    destination.push_back(0);
+    static_cast<void>(runtime::write_guest_memory(lpString1, destination.data(),
+                                                  destination.size() * sizeof(*lpString1)));
     return lpString1;
 }
 
@@ -1060,15 +1176,13 @@ TL_MSABI int tl_lstrcmpW(const std::uint16_t* const lpString1,
     if (lpString1 == lpString2) return 0;
     if (lpString1 == nullptr) return -1;
     if (lpString2 == nullptr) return 1;
-    std::size_t i = 0;
-    while (lpString1[i] != 0 && lpString2[i] != 0) {
-        if (lpString1[i] != lpString2[i]) {
-            return lpString1[i] < lpString2[i] ? -1 : 1;
-        }
-        ++i;
+    std::u16string value1;
+    std::u16string value2;
+    if (!runtime::copy_guest_wstring(lpString1, kMaxLocaleUnits, value1) ||
+        !runtime::copy_guest_wstring(lpString2, kMaxLocaleUnits, value2)) {
+        return 0;
     }
-    if (lpString1[i] == lpString2[i]) return 0;
-    return lpString1[i] < lpString2[i] ? -1 : 1;
+    return value1 == value2 ? 0 : (value1 < value2 ? -1 : 1);
 }
 
 TL_MSABI int tl_lstrcmpiW(const std::uint16_t* const lpString1,
@@ -1076,17 +1190,18 @@ TL_MSABI int tl_lstrcmpiW(const std::uint16_t* const lpString1,
     if (lpString1 == lpString2) return 0;
     if (lpString1 == nullptr) return -1;
     if (lpString2 == nullptr) return 1;
-    std::size_t i = 0;
-    while (lpString1[i] != 0 && lpString2[i] != 0) {
-        const auto c1 = static_cast<wchar_t>(std::towlower(static_cast<wint_t>(lpString1[i])));
-        const auto c2 = static_cast<wchar_t>(std::towlower(static_cast<wint_t>(lpString2[i])));
-        if (c1 != c2) {
-            return c1 < c2 ? -1 : 1;
-        }
-        ++i;
+    std::u16string value1;
+    std::u16string value2;
+    if (!runtime::copy_guest_wstring(lpString1, kMaxLocaleUnits, value1) ||
+        !runtime::copy_guest_wstring(lpString2, kMaxLocaleUnits, value2)) {
+        return 0;
     }
-    if (lpString1[i] == lpString2[i]) return 0;
-    return lpString1[i] < lpString2[i] ? -1 : 1;
+    for (std::size_t index = 0; index < std::min(value1.size(), value2.size()); ++index) {
+        const auto c1 = static_cast<char16_t>(std::towlower(static_cast<wint_t>(value1[index])));
+        const auto c2 = static_cast<char16_t>(std::towlower(static_cast<wint_t>(value2[index])));
+        if (c1 != c2) return c1 < c2 ? -1 : 1;
+    }
+    return value1.size() == value2.size() ? 0 : (value1.size() < value2.size() ? -1 : 1);
 }
 
 TL_MSABI int tl_IsDBCSLeadByteEx(std::uint32_t /*code_page*/, std::uint8_t /*test_char*/) noexcept {
@@ -1105,17 +1220,14 @@ TL_MSABI int tl_MultiByteToWideChar(std::uint32_t code_page, std::uint32_t flags
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
+    std::string source;
+    if (!copy_guest_ansi_count(mb_str, mb_count, source)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
     const bool null_terminated = mb_count == -1;
-    if (null_terminated && !mapped_guest_cstring(mb_str)) {
-        set_last_error(abi::kErrorInvalidParameter);
-        return 0;
-    }
-    const std::size_t byte_count = null_terminated ? std::strlen(mb_str) : static_cast<std::size_t>(mb_count);
-    if (!mapped_guest_range(mb_str, byte_count, false)) {
-        set_last_error(abi::kErrorInvalidParameter);
-        return 0;
-    }
-    const auto* bytes = reinterpret_cast<const std::uint8_t*>(mb_str);
+    const std::size_t byte_count = source.size();
+    const auto* bytes = reinterpret_cast<const std::uint8_t*>(source.data());
     std::size_t index = 0;
     std::size_t needed = null_terminated ? 1U : 0U;
     while (index < byte_count) {
@@ -1139,9 +1251,15 @@ TL_MSABI int tl_MultiByteToWideChar(std::uint32_t code_page, std::uint32_t flags
         set_last_error(abi::kErrorSuccess);
         return static_cast<int>(needed);
     }
-    if (wide_count < 0 || static_cast<std::size_t>(wide_count) < needed ||
-        !mapped_guest_range(wide_str, needed * sizeof(*wide_str), true)) {
+    if (wide_count < 0 || static_cast<std::size_t>(wide_count) < needed) {
         set_last_error(abi::kErrorInsufficientBuffer);
+        return 0;
+    }
+    std::vector<std::uint16_t> output;
+    try {
+        output.resize(needed);
+    } catch (const std::bad_alloc&) {
+        set_last_error(abi::kErrorNotEnoughMemory);
         return 0;
     }
     index = 0;
@@ -1154,11 +1272,16 @@ TL_MSABI int tl_MultiByteToWideChar(std::uint32_t code_page, std::uint32_t flags
         }
         std::uint16_t units[2]{};
         const std::size_t count = util::utf16_units_for(codepoint, units);
-        std::copy(units, units + static_cast<std::ptrdiff_t>(count), wide_str + written);
+        std::copy(units, units + static_cast<std::ptrdiff_t>(count), output.data() + written);
         written += count;
     }
     if (null_terminated) {
-        wide_str[written++] = 0;
+        output[written++] = 0;
+    }
+    if (runtime::write_guest_memory(wide_str, output.data(), output.size() * sizeof(*wide_str)).status !=
+        runtime::GuestMemoryAccessStatus::Success) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
     }
     set_last_error(abi::kErrorSuccess);
     return static_cast<int>(written);
@@ -1171,35 +1294,28 @@ TL_MSABI int tl_WideCharToMultiByte(std::uint32_t code_page, std::uint32_t flags
     const bool supported_page = supported_code_page(code_page);
     if (wide_str == nullptr || wide_count == 0 || wide_count < -1 || !supported_page ||
         (flags & ~(abi::kWcCompositeCheck | abi::kWcNoBestFitChars)) != 0U ||
-        (mb_count != 0 && mb_str == nullptr) ||
-        (default_char != nullptr && !mapped_guest_range(default_char, sizeof(*default_char), false)) ||
-        (used_default_char != nullptr &&
-         !mapped_guest_range(used_default_char, sizeof(*used_default_char), true))) {
+        (mb_count != 0 && mb_str == nullptr)) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
     const bool null_terminated = wide_count == -1;
-    std::size_t unit_count = 0;
-    if (null_terminated) {
-        if (!mapped_guest_wstring(wide_str)) {
-            set_last_error(abi::kErrorInvalidParameter);
-            return 0;
-        }
-        while (wide_str[unit_count] != 0) {
-            ++unit_count;
-        }
-    } else {
-        unit_count = static_cast<std::size_t>(wide_count);
-        if (!mapped_guest_range(wide_str, unit_count * sizeof(*wide_str), false)) {
-            set_last_error(abi::kErrorInvalidParameter);
-            return 0;
-        }
+    std::u16string source;
+    if (!copy_guest_utf16_count(wide_str, wide_count, source)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
     }
+    char fallback = '?';
+    if (default_char != nullptr && !read_guest_value(default_char, fallback)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    const std::size_t unit_count = source.size();
     const bool utf8 = code_page == abi::kCpUtf8;
     std::size_t index = 0;
     std::size_t needed = null_terminated ? 1U : 0U;
     while (index < unit_count) {
-        const std::uint32_t codepoint = util::decode_utf16(wide_str, unit_count, index);
+        const std::uint32_t codepoint = util::decode_utf16(
+            reinterpret_cast<const std::uint16_t*>(source.data()), unit_count, index);
         if (utf8) {
             char bytes[4]{};
             needed += util::utf8_bytes_for(codepoint > 0x10FFFFU ? '?' : codepoint, bytes);
@@ -1215,24 +1331,30 @@ TL_MSABI int tl_WideCharToMultiByte(std::uint32_t code_page, std::uint32_t flags
         set_last_error(abi::kErrorSuccess);
         return static_cast<int>(needed);
     }
-    if (mb_count < 0 || static_cast<std::size_t>(mb_count) < needed ||
-        !mapped_guest_range(mb_str, needed, true)) {
+    if (mb_count < 0 || static_cast<std::size_t>(mb_count) < needed) {
         set_last_error(abi::kErrorInsufficientBuffer);
         return 0;
     }
-    const char fallback = default_char != nullptr ? *default_char : '?';
     bool used_default = false;
+    std::vector<char> output;
+    try {
+        output.resize(needed);
+    } catch (const std::bad_alloc&) {
+        set_last_error(abi::kErrorNotEnoughMemory);
+        return 0;
+    }
     index = 0;
     std::size_t written = 0;
     while (index < unit_count) {
-        std::uint32_t codepoint = util::decode_utf16(wide_str, unit_count, index);
+        std::uint32_t codepoint = util::decode_utf16(
+            reinterpret_cast<const std::uint16_t*>(source.data()), unit_count, index);
         if (codepoint > 0x10FFFFU) {
             codepoint = '?';
         }
         if (utf8) {
             char bytes[4]{};
             const std::size_t count = util::utf8_bytes_for(codepoint, bytes);
-            std::copy(bytes, bytes + static_cast<std::ptrdiff_t>(count), mb_str + written);
+            std::copy(bytes, bytes + static_cast<std::ptrdiff_t>(count), output.data() + written);
             written += count;
         } else {
             std::uint8_t byte = 0;
@@ -1249,18 +1371,26 @@ TL_MSABI int tl_WideCharToMultiByte(std::uint32_t code_page, std::uint32_t flags
                 ok = util::unicode_to_cp1252(codepoint, byte);
             }
             if (ok) {
-                mb_str[written++] = static_cast<char>(byte);
+                output[written++] = static_cast<char>(byte);
             } else {
-                mb_str[written++] = fallback;
+                output[written++] = fallback;
                 used_default = true;
             }
         }
     }
     if (null_terminated) {
-        mb_str[written++] = '\0';
+        output[written++] = '\0';
+    }
+    if (runtime::write_guest_memory(mb_str, output.data(), output.size()).status !=
+        runtime::GuestMemoryAccessStatus::Success) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
     }
     if (used_default_char != nullptr) {
-        *used_default_char = used_default ? 1 : 0;
+        if (!write_guest_value(used_default_char, used_default ? 1 : 0)) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
+        }
     }
     set_last_error(abi::kErrorSuccess);
     return static_cast<int>(written);
@@ -1291,7 +1421,7 @@ TL_MSABI std::uint32_t tl_GetOEMCP() noexcept {
 }
 
 TL_MSABI int tl_GetCPInfo(const std::uint32_t code_page, abi::GuestCpInfo* const info) noexcept {
-    if (info == nullptr || !mapped_guest_range(info, sizeof(*info), true)) {
+    if (info == nullptr) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
@@ -1299,14 +1429,19 @@ TL_MSABI int tl_GetCPInfo(const std::uint32_t code_page, abi::GuestCpInfo* const
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
-    *info = {};
-    info->max_char_size = code_page == abi::kCpUtf8 ? 4U : 1U;
-    info->default_char[0] = '?';
+    abi::GuestCpInfo output{};
+    output.max_char_size = code_page == abi::kCpUtf8 ? 4U : 1U;
+    output.default_char[0] = '?';
+    if (runtime::write_guest_memory(info, &output, sizeof(output)).status !=
+        runtime::GuestMemoryAccessStatus::Success) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
     const std::array<diagnostics::TraceField, 4> fields{
         diagnostics::TraceField{"operation", "cpinfo"},
         diagnostics::TraceField{"code-page", std::to_string(code_page)},
         diagnostics::TraceField{"status", "success"},
-        diagnostics::TraceField{"max-char-size", std::to_string(info->max_char_size)},
+        diagnostics::TraceField{"max-char-size", std::to_string(output.max_char_size)},
     };
     runtime_trace("locale", fields, 4);
     set_last_error(abi::kErrorSuccess);
@@ -1331,12 +1466,14 @@ TL_MSABI int tl_GetLocaleInfoW(const std::uint32_t locale, const std::uint32_t l
             set_last_error(abi::kErrorSuccess);
             return kNumberUnits;
         }
-        if (data_count < kNumberUnits ||
-            !mapped_guest_range(data, sizeof(std::uint32_t), true)) {
+        if (data_count < kNumberUnits) {
             set_last_error(abi::kErrorInsufficientBuffer);
             return 0;
         }
-        std::memcpy(data, &*value, sizeof(*value));
+        if (!write_guest_value(data, value.value())) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
+        }
         set_last_error(abi::kErrorSuccess);
         return kNumberUnits;
     }
@@ -1350,13 +1487,13 @@ TL_MSABI int tl_GetLocaleInfoW(const std::uint32_t locale, const std::uint32_t l
         set_last_error(abi::kErrorSuccess);
         return needed;
     }
-    if (data_count < needed ||
-        !mapped_guest_range(data, static_cast<std::size_t>(data_count) * sizeof(*data), true)) {
+    if (data_count < needed) {
         set_last_error(abi::kErrorInsufficientBuffer);
         return 0;
     }
-    std::copy(value->begin(), value->end(), data);
-    data[value->size()] = 0;
+    if (!write_locale_value(*value, data, data_count)) {
+        return 0;
+    }
     const std::array<diagnostics::TraceField, 4> fields{
         diagnostics::TraceField{"operation", "info"},
         diagnostics::TraceField{"locale", "en-US"},
@@ -1438,28 +1575,27 @@ TL_MSABI int tl_GetStringTypeW(const std::uint32_t info_type,
                                                   : abi::kErrorInvalidFlags);
         return 0;
     }
-    std::size_t units = 0;
-    if (source_count == -1) {
-        if (!mapped_guest_wstring(source)) {
-            set_last_error(abi::kErrorInvalidParameter);
-            return 0;
-        }
-        do {
-            ++units;
-        } while (source[units - 1U] != 0);
-    } else {
-        units = static_cast<std::size_t>(source_count);
-        if (!mapped_guest_range(source, units * sizeof(*source), false)) {
-            set_last_error(abi::kErrorInvalidParameter);
-            return 0;
-        }
-    }
-    if (!mapped_guest_range(char_type, units * sizeof(*char_type), true)) {
+    std::u16string source_copy;
+    if (!copy_guest_utf16_count(source, source_count, source_copy)) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
+    const std::size_t units = source_copy.size() + (source_count == -1 ? 1U : 0U);
+    std::vector<std::uint16_t> output;
+    try {
+        output.resize(units);
+    } catch (const std::bad_alloc&) {
+        set_last_error(abi::kErrorNotEnoughMemory);
+        return 0;
+    }
     for (std::size_t index = 0; index < units; ++index) {
-        char_type[index] = ctype1(source[index]);
+        const std::uint16_t unit = index < source_copy.size() ? source_copy[index] : 0;
+        output[index] = ctype1(unit);
+    }
+    if (runtime::write_guest_memory(char_type, output.data(), output.size() * sizeof(*char_type)).status !=
+        runtime::GuestMemoryAccessStatus::Success) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
     }
     trace_locale_extension("string-type", std::to_string(units));
     set_last_error(abi::kErrorSuccess);
@@ -1470,13 +1606,17 @@ TL_MSABI int tl_GetDateFormatW(const std::uint32_t locale, const std::uint32_t f
                                const abi::GuestSystemTime* const date,
                                const std::uint16_t* const format,
                                std::uint16_t* const data, const int data_count) noexcept {
-    if (!supported_locale_lcid(locale) || date == nullptr ||
-        !mapped_guest_range(date, sizeof(*date), false) || format != nullptr || data_count < 0 ||
-        (flags != 0U && flags != abi::kDateShortDate && flags != abi::kDateLongDate) ||
-        !valid_system_time(*date)) {
+    const bool invalid_flags = flags != 0U && flags != abi::kDateShortDate && flags != abi::kDateLongDate;
+    if (!supported_locale_lcid(locale) || date == nullptr || format != nullptr || data_count < 0 ||
+        invalid_flags) {
         set_last_error(flags != 0U && flags != abi::kDateShortDate && flags != abi::kDateLongDate
                            ? abi::kErrorInvalidFlags
                            : abi::kErrorInvalidParameter);
+        return 0;
+    }
+    abi::GuestSystemTime local_date{};
+    if (!read_guest_value(date, local_date) || !valid_system_time(local_date)) {
+        set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
     std::u16string value;
@@ -1486,19 +1626,19 @@ TL_MSABI int tl_GetDateFormatW(const std::uint32_t locale, const std::uint32_t f
         static constexpr std::u16string_view kMonths[]{u"January", u"February", u"March", u"April",
                                                         u"May", u"June", u"July", u"August", u"September",
                                                         u"October", u"November", u"December"};
-        value.append(kWeekdays[date->day_of_week]);
+        value.append(kWeekdays[local_date.day_of_week]);
         value.append(u", ");
-        value.append(kMonths[date->month - 1U]);
+        value.append(kMonths[local_date.month - 1U]);
         value.push_back(u' ');
-        append_decimal(value, date->day, 1);
+        append_decimal(value, local_date.day, 1);
         value.append(u", ");
-        append_decimal(value, date->year, 4);
+        append_decimal(value, local_date.year, 4);
     } else {
-        append_decimal(value, date->month, 1);
+        append_decimal(value, local_date.month, 1);
         value.push_back(u'/');
-        append_decimal(value, date->day, 1);
+        append_decimal(value, local_date.day, 1);
         value.push_back(u'/');
-        append_decimal(value, date->year, 4);
+        append_decimal(value, local_date.year, 4);
     }
     const int result = write_locale_value(value, data, data_count);
     if (result != 0) trace_locale_extension("date-format", flags == abi::kDateLongDate ? "long" : "short");
@@ -1511,30 +1651,35 @@ TL_MSABI int tl_GetTimeFormatW(const std::uint32_t locale, const std::uint32_t f
                                std::uint16_t* const data, const int data_count) noexcept {
     const std::uint32_t allowed_flags = abi::kTimeNoSeconds | abi::kTimeNoTimeMarker |
                                         abi::kTimeForce24HourFormat;
-    if (!supported_locale_lcid(locale) || time == nullptr ||
-        !mapped_guest_range(time, sizeof(*time), false) || format != nullptr || data_count < 0 ||
-        (flags & ~allowed_flags) != 0U || !valid_system_time(*time)) {
+    const bool invalid_flags = (flags & ~allowed_flags) != 0U;
+    if (!supported_locale_lcid(locale) || time == nullptr || format != nullptr || data_count < 0 ||
+        invalid_flags) {
         set_last_error((flags & ~allowed_flags) != 0U ? abi::kErrorInvalidFlags
                                                        : abi::kErrorInvalidParameter);
+        return 0;
+    }
+    abi::GuestSystemTime local_time{};
+    if (!read_guest_value(time, local_time) || !valid_system_time(local_time)) {
+        set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
     const bool use_24_hour = (flags & (abi::kTimeNoTimeMarker | abi::kTimeForce24HourFormat)) != 0U;
     const bool show_seconds = (flags & abi::kTimeNoSeconds) == 0U;
     std::u16string value;
     if (use_24_hour) {
-        append_decimal(value, time->hour, 2);
+        append_decimal(value, local_time.hour, 2);
     } else {
-        const std::uint16_t hour = static_cast<std::uint16_t>(time->hour % 12U == 0U ? 12U : time->hour % 12U);
+        const std::uint16_t hour = static_cast<std::uint16_t>(local_time.hour % 12U == 0U ? 12U : local_time.hour % 12U);
         append_decimal(value, hour, 1);
     }
     value.push_back(u':');
-    append_decimal(value, time->minute, 2);
+    append_decimal(value, local_time.minute, 2);
     if (show_seconds) {
         value.push_back(u':');
-        append_decimal(value, time->second, 2);
+        append_decimal(value, local_time.second, 2);
     }
     if (!use_24_hour) {
-        value.append(time->hour < 12U ? u" AM" : u" PM");
+        value.append(local_time.hour < 12U ? u" AM" : u" PM");
     }
     const int result = write_locale_value(value, data, data_count);
     if (result != 0) trace_locale_extension("time-format", use_24_hour ? "24h" : "12h");

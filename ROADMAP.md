@@ -241,6 +241,16 @@ O primeiro lote de locale migrou `GetVersionExA/W`, `VerifyVersionInfoW`,
 passou junto com 23 testes de locale/code page, os testes de `FormatMessage` e
 a primitiva de memória; as APIs de locale restantes continuam pendentes.
 
+O segundo lote de locale migrou cópias contadas de strings ANSI/UTF-16 e
+publicações protegidas para conversões de code page, `GetCPInfo`,
+`GetLocaleInfoA/W`, `GetStringTypeW/ExA/ExW`, `LCMapStringA/W`,
+`FoldStringW`, `GetNumberFormatW`, diretórios Windows e formatação de data/hora.
+`Win32LocaleTest.ProtectedConversionAndFormattingBuffersRejectUnmappedPointers`
+passou junto com os 31 testes focados de locale, code page, `FormatMessage` e
+memória. A auditoria do arquivo de locale não encontra mais
+`mapped_guest_*` nem acesso direto a buffers convidados; `EnumSystemLocalesW`
+continua limitado ao callback explicitamente validado.
+
 O lote inicial de `WS2_32` migrou `WSAStartup`, cópia de `sockaddr`,
 `getsockname`/`getpeername`, `getaddrinfo`, `inet_addr`, `inet_ntop`,
 `inet_pton`, `WSAAddressToStringA` e `gethostname` para buffers host
