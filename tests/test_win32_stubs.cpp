@@ -251,6 +251,10 @@ TEST(Win32StubTest, VersionStubsRejectFabricatedMetadataAndClearQueries) {
     EXPECT_EQ(tl_GetFileVersionInfoSizeExW(0, nullptr, &handle), 0U);
     EXPECT_EQ(tl_GetLastError(), abi::kErrorNotSupported);
 
+    auto* const invalid_handle = reinterpret_cast<std::uint32_t*>(static_cast<std::uintptr_t>(0x1000U));
+    EXPECT_EQ(tl_GetFileVersionInfoSizeA("test.exe", invalid_handle), 0U);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+
     std::array<std::byte, 64> data;
     data.fill(std::byte{0xA5});
     EXPECT_EQ(tl_GetFileVersionInfoA("test.exe", 0, data.size(), data.data()), 0);
@@ -272,6 +276,12 @@ TEST(Win32StubTest, VersionStubsRejectFabricatedMetadataAndClearQueries) {
     EXPECT_EQ(buffer, nullptr);
     EXPECT_EQ(length, 0U);
     EXPECT_EQ(tl_GetLastError(), abi::kErrorNotSupported);
+
+    auto* const invalid_buffer = reinterpret_cast<void**>(static_cast<std::uintptr_t>(0x1000U));
+    length = 456U;
+    EXPECT_EQ(tl_VerQueryValueA(nullptr, "\\", invalid_buffer, &length), 0);
+    EXPECT_EQ(length, 456U);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
 
     EXPECT_EQ(tl_GetFileVersionInfoA(nullptr, 0, 0, nullptr), 0);
     EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);

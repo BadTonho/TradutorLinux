@@ -380,6 +380,11 @@ buffers de entrada e a saída zerada de `CallNtPowerInformation` para cópias
 protegidas em blocos. A regressão cobre ponteiros de saída inacessíveis, sem
 alterar os retornos determinísticos das APIs.
 
+O lote `version.dll` migrou as saídas de tamanho de arquivo e de
+`VerQueryValueA/W` para cópias protegidas. Os stubs continuam sem fabricar
+metadados `RT_VERSION`, e a regressão cobre `handle` e ponteiro de consulta
+inacessíveis, preservando `ERROR_NOT_SUPPORTED` nas consultas válidas.
+
 ## Fora desta rodada
 
 Não entram neste roadmap, por enquanto:

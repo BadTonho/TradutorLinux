@@ -341,7 +341,10 @@ prometidos; handles desconhecidos falham sem acessar memória arbitrária.
 
 `GetFileVersionInfoSizeA/W`, `GetFileVersionInfoA/W`, `GetFileVersionInfoSizeExA/W`,
 `GetFileVersionInfoExA/W` e `VerQueryValueA/W` são stubs controlados: não
-leem `RT_VERSION`, não fabricam metadados e não retornam ponteiros host.
+leem `RT_VERSION`, não fabricam metadados e não retornam ponteiros host. As
+saídas de tamanho, ponteiro e comprimento são zeradas por cópias protegidas;
+as rotas que recebem um bloco de versão ainda rejeitam buffers inválidos sem
+fabricar conteúdo.
 `InitCommonControls`,
 image lists, `CreateStatusWindowW`, `CreateToolbarEx`, `PropertySheetW`,
 `TaskDialog*` e subclassing de controles possuem apenas os contratos de

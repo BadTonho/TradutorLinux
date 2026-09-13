@@ -14,11 +14,10 @@ inline bool mapped_range(const void* address, const std::size_t size, const bool
 
 std::uint32_t reject_version_size(std::uint32_t* const handle) noexcept {
     if (handle != nullptr) {
-        if (!mapped_range(handle, sizeof(std::uint32_t), true)) {
+        if (!write_guest_value(handle, std::uint32_t{0})) {
             set_last_error(abi::kErrorInvalidParameter);
             return 0;
         }
-        *handle = 0;
     }
     set_last_error(abi::kErrorNotSupported);
     return 0;
@@ -34,14 +33,11 @@ int reject_version_info(const std::uint32_t len, void* const data) noexcept {
 }
 
 int reject_version_query(void** const buffer, std::uint32_t* const len) noexcept {
-    if (buffer == nullptr || len == nullptr ||
-        !mapped_range(buffer, sizeof(void*), true) ||
-        !mapped_range(len, sizeof(std::uint32_t), true)) {
+    if (buffer == nullptr || len == nullptr || !write_guest_value(buffer, static_cast<void*>(nullptr)) ||
+        !write_guest_value(len, std::uint32_t{0})) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
-    *buffer = nullptr;
-    *len = 0;
     set_last_error(abi::kErrorNotSupported);
     return 0;
 }
