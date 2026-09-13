@@ -569,6 +569,17 @@ TEST(WinSockTest, ProtectedPayloadAndOptionBuffersRejectUnmappedPointers) {
     EXPECT_EQ(tl_closesocket(socket), 0);
 }
 
+TEST(WinSockTest, ProtectedPollingAndEventArraysRejectUnmappedPointers) {
+    auto* const invalid = reinterpret_cast<void*>(static_cast<std::uintptr_t>(0x1000U));
+    EXPECT_EQ(tl_WSAPoll(invalid, 1, 0), -1);
+    EXPECT_EQ(tl_WSAGetLastError(), 10014);
+    EXPECT_EQ(tl_select(0, invalid, nullptr, nullptr, nullptr), -1);
+    EXPECT_EQ(tl_WSAGetLastError(), 10014);
+    EXPECT_EQ(tl_WSAWaitForMultipleEvents(
+                  1, reinterpret_cast<const void* const*>(invalid), 0, 0, 0), 0xFFFFFFFFU);
+    EXPECT_EQ(tl_WSAGetLastError(), 10014);
+}
+
 TEST(NotepadPlusPlusCoverageTest, AllApisAndModules) {
     // DWMAPI
     int comp_enabled = 0;

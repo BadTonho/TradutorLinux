@@ -249,6 +249,13 @@ ponteiros inválidos e é pulada de forma controlada quando o sandbox não
 permite sockets UDP locais. A cobertura de PuTTY, Notepad++ e memória também
 passou.
 
+O lote de polling e eventos de `WS2_32` migrou `WSAPoll`, `select`,
+`WSAWaitForMultipleEvents` e `WSAEnumNetworkEvents`: descritores, conjuntos de
+handles, timeouts e estruturas de eventos são lidos em snapshots host, e os
+resultados são publicados com a primitiva protegida. A regressão
+`WinSockTest.ProtectedPollingAndEventArraysRejectUnmappedPointers` passou,
+junto com as coberturas de PuTTY, Notepad++ e memória.
+
 ## Fora desta rodada
 
 Não entram neste roadmap, por enquanto:

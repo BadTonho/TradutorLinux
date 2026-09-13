@@ -108,15 +108,12 @@ struct GuestPollFd {
 };
 static_assert(sizeof(GuestPollFd) == 16);
 
-inline bool mapped_range(const void* address, const std::size_t size, const bool writable) noexcept {
-    return runtime::validate_mapped_range(address, size, writable);
-}
-
-inline bool mapped_cstring(const char* value) noexcept {
-    if (value == nullptr) {
-        return true;
+void* guest_address_at(const void* const base, const std::size_t offset) noexcept {
+    const std::uintptr_t raw = reinterpret_cast<std::uintptr_t>(base);
+    if (offset > std::numeric_limits<std::uintptr_t>::max() - raw) {
+        return nullptr;
     }
-    return runtime::validate_mapped_cstring(value);
+    return reinterpret_cast<void*>(raw + offset);
 }
 
 SocketSlot* find_socket(const std::uintptr_t handle) noexcept {
@@ -760,14 +757,18 @@ TL_MSABI std::uint32_t tl_inet_addr(const char* address) noexcept {
 
 TL_MSABI int tl_WSAPoll(void* descriptors, const std::uint32_t count,
                         const int timeout) noexcept {
-    if (count > 64 || (count != 0 &&
-                       !mapped_range(descriptors, static_cast<std::size_t>(count) * sizeof(GuestPollFd),
-                                     true))) {
+    if (count > 64 || (count != 0 && descriptors == nullptr)) {
         g_wsa_last_error = kWsaEInvalidArgument;
         return -1;
     }
+    std::array<GuestPollFd, 64> guest_descriptors{};
+    if (count != 0 && runtime::read_guest_memory(descriptors, guest_descriptors.data(),
+                                                  static_cast<std::size_t>(count) * sizeof(GuestPollFd)).status !=
+                             runtime::GuestMemoryAccessStatus::Success) {
+        g_wsa_last_error = kWsaEFault;
+        return -1;
+    }
     std::array<pollfd, 64> host_descriptors{};
-    auto* guest_descriptors = static_cast<GuestPollFd*>(descriptors);
     for (std::uint32_t index = 0; index < count; ++index) {
         SocketSlot* slot = find_socket(guest_descriptors[index].socket);
         if (slot == nullptr) {
@@ -784,7 +785,13 @@ TL_MSABI int tl_WSAPoll(void* descriptors, const std::uint32_t count,
         return -1;
     }
     for (std::uint32_t index = 0; index < count; ++index) {
-        guest_descriptors[index].revents = host_descriptors[index].revents;
+        auto* const guest_revents = static_cast<std::int16_t*>(guest_address_at(
+            descriptors, index * sizeof(GuestPollFd) + offsetof(GuestPollFd, revents)));
+        if (guest_revents == nullptr ||
+            !write_guest_value(guest_revents, static_cast<std::int16_t>(host_descriptors[index].revents))) {
+            g_wsa_last_error = kWsaEFault;
+            return -1;
+        }
     }
     g_wsa_last_error = 0;
     return result;
@@ -812,29 +819,38 @@ TL_MSABI int tl_select(const int nfds, void* readfds, void* writefds, void* exce
     FD_ZERO(&eset);
     int max_fd = -1;
 
-    auto* r_win = static_cast<Win32FdSet*>(readfds);
-    auto* w_win = static_cast<Win32FdSet*>(writefds);
-    auto* e_win = static_cast<Win32FdSet*>(exceptfds);
+    Win32FdSet r_win{};
+    Win32FdSet w_win{};
+    Win32FdSet e_win{};
+    if ((readfds != nullptr && runtime::read_guest_memory(readfds, &r_win, sizeof(r_win)).status !=
+                                  runtime::GuestMemoryAccessStatus::Success) ||
+        (writefds != nullptr && runtime::read_guest_memory(writefds, &w_win, sizeof(w_win)).status !=
+                                   runtime::GuestMemoryAccessStatus::Success) ||
+        (exceptfds != nullptr && runtime::read_guest_memory(exceptfds, &e_win, sizeof(e_win)).status !=
+                                    runtime::GuestMemoryAccessStatus::Success)) {
+        g_wsa_last_error = kWsaEFault;
+        return -1;
+    }
 
-    if (r_win != nullptr && mapped_range(r_win, sizeof(Win32FdSet), true)) {
-        for (std::uint32_t i = 0; i < std::min<std::uint32_t>(r_win->fd_count, 64); ++i) {
-            if (SocketSlot* slot = find_socket(r_win->fd_array[i])) {
+    if (readfds != nullptr) {
+        for (std::uint32_t i = 0; i < std::min<std::uint32_t>(r_win.fd_count, 64); ++i) {
+            if (SocketSlot* slot = find_socket(r_win.fd_array[i])) {
                 FD_SET(slot->fd, &rset);
                 max_fd = std::max(max_fd, slot->fd);
             }
         }
     }
-    if (w_win != nullptr && mapped_range(w_win, sizeof(Win32FdSet), true)) {
-        for (std::uint32_t i = 0; i < std::min<std::uint32_t>(w_win->fd_count, 64); ++i) {
-            if (SocketSlot* slot = find_socket(w_win->fd_array[i])) {
+    if (writefds != nullptr) {
+        for (std::uint32_t i = 0; i < std::min<std::uint32_t>(w_win.fd_count, 64); ++i) {
+            if (SocketSlot* slot = find_socket(w_win.fd_array[i])) {
                 FD_SET(slot->fd, &wset);
                 max_fd = std::max(max_fd, slot->fd);
             }
         }
     }
-    if (e_win != nullptr && mapped_range(e_win, sizeof(Win32FdSet), true)) {
-        for (std::uint32_t i = 0; i < std::min<std::uint32_t>(e_win->fd_count, 64); ++i) {
-            if (SocketSlot* slot = find_socket(e_win->fd_array[i])) {
+    if (exceptfds != nullptr) {
+        for (std::uint32_t i = 0; i < std::min<std::uint32_t>(e_win.fd_count, 64); ++i) {
+            if (SocketSlot* slot = find_socket(e_win.fd_array[i])) {
                 FD_SET(slot->fd, &eset);
                 max_fd = std::max(max_fd, slot->fd);
             }
@@ -843,60 +859,44 @@ TL_MSABI int tl_select(const int nfds, void* readfds, void* writefds, void* exce
 
     struct timeval tv{};
     struct timeval* ptv = nullptr;
-    if (timeout != nullptr && mapped_range(timeout, sizeof(Win32TimeVal), false)) {
-        const auto* wt = static_cast<const Win32TimeVal*>(timeout);
-        tv.tv_sec = wt->tv_sec;
-        tv.tv_usec = wt->tv_usec;
+    if (timeout != nullptr) {
+        Win32TimeVal guest_timeout{};
+        if (runtime::read_guest_memory(timeout, &guest_timeout, sizeof(guest_timeout)).status !=
+            runtime::GuestMemoryAccessStatus::Success) {
+            g_wsa_last_error = kWsaEFault;
+            return -1;
+        }
+        tv.tv_sec = guest_timeout.tv_sec;
+        tv.tv_usec = guest_timeout.tv_usec;
         ptv = &tv;
     }
 
-    const int result = ::select(max_fd + 1, (r_win ? &rset : nullptr), (w_win ? &wset : nullptr), (e_win ? &eset : nullptr), ptv);
+    const int result = ::select(max_fd + 1, (readfds ? &rset : nullptr), (writefds ? &wset : nullptr),
+                                (exceptfds ? &eset : nullptr), ptv);
     if (result < 0) {
         g_wsa_last_error = errno_to_wsa(errno);
         return -1;
     }
 
-    if (r_win != nullptr && mapped_range(r_win, sizeof(Win32FdSet), true)) {
-        std::vector<std::uintptr_t> active;
-        for (std::uint32_t i = 0; i < std::min<std::uint32_t>(r_win->fd_count, 64); ++i) {
-            if (SocketSlot* slot = find_socket(r_win->fd_array[i])) {
-                if (FD_ISSET(slot->fd, &rset)) {
-                    active.push_back(r_win->fd_array[i]);
+    auto publish_fd_set = [](void* const guest, const Win32FdSet& source,
+                             const fd_set& ready) noexcept {
+        if (guest == nullptr) return true;
+        Win32FdSet output{};
+        for (std::uint32_t i = 0; i < std::min<std::uint32_t>(source.fd_count, 64); ++i) {
+            if (SocketSlot* slot = find_socket(source.fd_array[i])) {
+                if (!FD_ISSET(slot->fd, &ready)) continue;
+                if (output.fd_count < 64) {
+                    output.fd_array[output.fd_count++] = source.fd_array[i];
                 }
             }
         }
-        r_win->fd_count = static_cast<std::uint32_t>(active.size());
-        for (std::size_t i = 0; i < active.size(); ++i) {
-            r_win->fd_array[i] = active[i];
-        }
-    }
-    if (w_win != nullptr && mapped_range(w_win, sizeof(Win32FdSet), true)) {
-        std::vector<std::uintptr_t> active;
-        for (std::uint32_t i = 0; i < std::min<std::uint32_t>(w_win->fd_count, 64); ++i) {
-            if (SocketSlot* slot = find_socket(w_win->fd_array[i])) {
-                if (FD_ISSET(slot->fd, &wset)) {
-                    active.push_back(w_win->fd_array[i]);
-                }
-            }
-        }
-        w_win->fd_count = static_cast<std::uint32_t>(active.size());
-        for (std::size_t i = 0; i < active.size(); ++i) {
-            w_win->fd_array[i] = active[i];
-        }
-    }
-    if (e_win != nullptr && mapped_range(e_win, sizeof(Win32FdSet), true)) {
-        std::vector<std::uintptr_t> active;
-        for (std::uint32_t i = 0; i < std::min<std::uint32_t>(e_win->fd_count, 64); ++i) {
-            if (SocketSlot* slot = find_socket(e_win->fd_array[i])) {
-                if (FD_ISSET(slot->fd, &eset)) {
-                    active.push_back(e_win->fd_array[i]);
-                }
-            }
-        }
-        e_win->fd_count = static_cast<std::uint32_t>(active.size());
-        for (std::size_t i = 0; i < active.size(); ++i) {
-            e_win->fd_array[i] = active[i];
-        }
+        return runtime::write_guest_memory(guest, &output, sizeof(output)).status ==
+               runtime::GuestMemoryAccessStatus::Success;
+    };
+    if (!publish_fd_set(readfds, r_win, rset) || !publish_fd_set(writefds, w_win, wset) ||
+        !publish_fd_set(exceptfds, e_win, eset)) {
+        g_wsa_last_error = kWsaEFault;
+        return -1;
     }
 
     g_wsa_last_error = 0;
@@ -1276,9 +1276,15 @@ TL_MSABI std::uint32_t tl_WSAWaitForMultipleEvents(const std::uint32_t count, co
                                                   const int alertable) noexcept {
     (void)alertable;
     if (count == 0 || count > kMaxWsaEvents || events == nullptr ||
-        !mapped_range(events, static_cast<std::size_t>(count) * sizeof(*events), false) ||
         (wait_all != 0 && wait_all != 1)) {
         g_wsa_last_error = kWsaEInvalidArgument;
+        return kWsaWaitFailed;
+    }
+    std::array<void*, kMaxWsaEvents> guest_events{};
+    if (runtime::read_guest_memory(events, guest_events.data(),
+                                   static_cast<std::size_t>(count) * sizeof(void*)).status !=
+        runtime::GuestMemoryAccessStatus::Success) {
+        g_wsa_last_error = kWsaEFault;
         return kWsaWaitFailed;
     }
     const auto start = std::chrono::steady_clock::now();
@@ -1290,7 +1296,7 @@ TL_MSABI std::uint32_t tl_WSAWaitForMultipleEvents(const std::uint32_t count, co
             bool all_signaled = true;
             std::uint32_t first_signaled = count;
             for (std::uint32_t index = 0; index < count; ++index) {
-                WsaEventSlot* const event = find_wsa_event(const_cast<void*>(events[index]));
+                WsaEventSlot* const event = find_wsa_event(guest_events[index]);
                 if (event == nullptr) {
                     g_wsa_last_error = kWsaEInvalidArgument;
                     return kWsaWaitFailed;
@@ -1330,7 +1336,7 @@ TL_MSABI std::uint32_t tl_WSAWaitForMultipleEvents(const std::uint32_t count, co
 TL_MSABI int tl_WSAEnumNetworkEvents(const std::uintptr_t socket, void* const event_handle,
                                     void* const network_events) noexcept {
     constexpr std::size_t kNetworkEventsSize = 4U + 10U * 4U;
-    if (network_events == nullptr || !mapped_range(network_events, kNetworkEventsSize, true)) {
+    if (network_events == nullptr) {
         g_wsa_last_error = kWsaEFault;
         return -1;
     }
@@ -1342,13 +1348,17 @@ TL_MSABI int tl_WSAEnumNetworkEvents(const std::uintptr_t socket, void* const ev
         g_wsa_last_error = slot == nullptr ? kWsaENotSocket : kWsaEInvalidArgument;
         return -1;
     }
-    std::memset(network_events, 0, kNetworkEventsSize);
+    std::array<std::byte, kNetworkEventsSize> output{};
     const std::int32_t pending = static_cast<std::int32_t>(slot->pending_events);
-    std::memcpy(network_events, &pending, sizeof(pending));
-    auto* const errors = static_cast<std::byte*>(network_events) + sizeof(pending);
+    std::memcpy(output.data(), &pending, sizeof(pending));
     for (int index = 0; index < 10; ++index) {
-        std::memcpy(errors + static_cast<std::size_t>(index) * sizeof(std::int32_t),
+        std::memcpy(output.data() + sizeof(pending) + static_cast<std::size_t>(index) * sizeof(std::int32_t),
                     &slot->event_errors[static_cast<std::size_t>(index)], sizeof(std::int32_t));
+    }
+    if (runtime::write_guest_memory(network_events, output.data(), output.size()).status !=
+        runtime::GuestMemoryAccessStatus::Success) {
+        g_wsa_last_error = kWsaEFault;
+        return -1;
     }
     slot->pending_events = 0;
     slot->event_errors.fill(0);
