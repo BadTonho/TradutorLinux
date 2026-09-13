@@ -1361,6 +1361,24 @@ TEST(Win32DirTest, GetCurrentDirectoryAReturnsNeededWhenBufferTooSmall) {
     EXPECT_GT(needed, 1U);
 }
 
+TEST(Win32DirTest, ProtectedPathOutputsRejectUnmappedPointers) {
+    auto* const invalid_narrow = reinterpret_cast<char*>(static_cast<std::uintptr_t>(1));
+    auto* const invalid_wide = reinterpret_cast<std::uint16_t*>(static_cast<std::uintptr_t>(1));
+    auto* const invalid_u32 = reinterpret_cast<std::uint32_t*>(static_cast<std::uintptr_t>(1));
+
+    EXPECT_EQ(tl_GetCurrentDirectoryA(4096, invalid_narrow), 0U);
+    EXPECT_EQ(tl_GetCurrentDirectoryW(4096, invalid_wide), 0U);
+    set_guest_module_path("protected/path.exe");
+    EXPECT_EQ(tl_GetModuleFileNameA(nullptr, invalid_narrow, 4096), 0U);
+    EXPECT_EQ(tl_GetModuleFileNameW(nullptr, invalid_wide, 4096), 0U);
+    set_guest_module_path(nullptr);
+    EXPECT_EQ(tl_GetFullPathNameA("relative.txt", 4096, invalid_narrow, nullptr), 0U);
+    EXPECT_EQ(tl_GetTempPathA(64, invalid_narrow), 0U);
+    EXPECT_EQ(tl_GetTempPathW(64, invalid_wide), 0U);
+    EXPECT_EQ(tl_GetDiskFreeSpaceA(nullptr, invalid_u32, nullptr, nullptr, nullptr), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+}
+
 TEST(Win32DirTest, GetModuleFileNameAReturnsSetPath) {
     set_guest_module_path("test/path/app.exe");
     char buf[4096]{};

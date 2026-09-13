@@ -130,7 +130,10 @@ cópia parcial, destino somente leitura e alternância concorrente entre
 `PROT_NONE` e leitura/escrita. O validador de strings (`cstring`/UTF-16), os
 buffers de entrada do MPR, os caminhos de arquivo (`ReadFile`/`WriteFile`),
 `FindFirstFileA/W`, as conversões comuns de caminhos e `GetMessageA` já usam
-essa cópia. A migração do runtime ainda não está completa:
+essa cópia. As saídas de `GetCurrentDirectoryA/W`, `GetModuleFileNameA/W`,
+`GetFullPathNameA/W`, `GetFinalPathNameByHandleW`, `GetTempPathA/W`,
+`GetTempFileNameW`, `GetDiskFreeSpaceA/W` e APIs relacionadas de caminhos
+também usam essa fronteira. A migração do runtime ainda não está completa:
 `validate_mapped_range` continua sendo uma fotografia de `/proc/self/maps`, e
 há APIs antigas com acesso direto após validação; essas rotas não são
 anunciadas como atômicas até serem migradas.
@@ -468,7 +471,7 @@ fluxo principal. Os contratos abaixo são protegidos por
   apenas a representação lógica `C:\\...` ou `Z:\\...`.
 - `MultiByteToWideChar` e `WideCharToMultiByte` suportam CP_UTF8 (65001) para
   conversão UTF-8/UTF-16; surrogates pair são suportados.
-- 15 testes unitários novos em `tests/test_win32.cpp` cobrem `GetFileSize`,
+- 16 testes unitários novos em `tests/test_win32.cpp` cobrem `GetFileSize`,
   `SetFilePointer` (seek beginning/end/negative), `GetFileAttributesA`
   (file/directory/nonexistent), `DeleteFileA` (existente/inexistente),
   `MoveFileA` (existente/inexistente), `CreateDirectoryA` (novo/duplicado),

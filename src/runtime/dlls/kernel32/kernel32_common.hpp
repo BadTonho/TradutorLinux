@@ -11,6 +11,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <fstream>
+#include <limits>
 #include <string>
 #include <string_view>
 
@@ -33,13 +34,24 @@ inline void trace_process_console(const char* const event, const char* const ope
 
 inline bool copy_wide_string(const std::u16string& value, std::uint16_t* buffer,
                              const std::size_t capacity, std::uint32_t& error) noexcept {
-    if (buffer == nullptr || value.size() + 1U > capacity ||
-        !mapped_guest_range(buffer, capacity * sizeof(*buffer), true)) {
+    if (buffer == nullptr || value.size() + 1U > capacity) {
         error = abi::kErrorInsufficientBuffer;
         return false;
     }
-    std::copy(value.begin(), value.end(), buffer);
-    buffer[value.size()] = 0;
+    if (!value.empty() &&
+        runtime::write_guest_memory(buffer, value.data(), value.size() * sizeof(*buffer)).status !=
+            runtime::GuestMemoryAccessStatus::Success) {
+        error = abi::kErrorInvalidParameter;
+        return false;
+    }
+    const std::uintptr_t base = reinterpret_cast<std::uintptr_t>(buffer);
+    if (value.size() > (std::numeric_limits<std::uintptr_t>::max() - base) / sizeof(*buffer) ||
+        !write_guest_value(
+            reinterpret_cast<std::uint16_t*>(base + value.size() * sizeof(*buffer)),
+            std::uint16_t{0})) {
+        error = abi::kErrorInvalidParameter;
+        return false;
+    }
     error = abi::kErrorSuccess;
     return true;
 }

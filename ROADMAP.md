@@ -184,6 +184,11 @@ O lote seguinte migrou também estruturas e buffers de console/tempo, com os
 testes de `Win32ConsoleTest`, `Win32ProcessConsoleTest`, `Win32TimeTest` e
 `Win32WideTest` passando.
 
+O lote de caminhos migrou as saídas de diretório, módulo, temporários,
+capacidade de disco, nomes completos/finais e `file_part`, além das leituras de
+strings A/W usadas por essas rotas. As coberturas existentes e a regressão
+`Win32DirTest.ProtectedPathOutputsRejectUnmappedPointers` passaram.
+
 ## Fora desta rodada
 
 Não entram neste roadmap, por enquanto:
