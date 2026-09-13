@@ -96,6 +96,11 @@ controlado; isso não é suporte a todo o ABI de exceções C++.
 manutenção e enumeração de arquivos. A normalização de caminhos impede escape
 do prefixo e não inventa letras de drive.
 
+As consultas de volume, tempos e metadados por handle publicam resultados por
+cópias protegidas e fazem leituras protegidas dos parâmetros de entrada. Elas
+não dependem de um snapshot de `/proc/self/maps`; o horário de criação aceito
+por `SetFileTime` é validado, mas permanece sem representação no Linux.
+
 `GetCurrentDirectoryA/W`, `SetCurrentDirectoryA/W`, `GetFullPathNameA/W`,
 `GetModuleFileNameA/W`, `GetSystemDirectoryA/W`, `GetWindowsDirectoryA/W`,
 `GetTempPathA/W`, `GetTempFileNameW`, `GetVolumePathNameA/W` e

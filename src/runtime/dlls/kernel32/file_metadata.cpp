@@ -97,7 +97,7 @@ TL_MSABI int tl_GetVolumeInformationA(const char*, char* volume_name_buffer,
                                       std::uint32_t volume_name_size, std::uint32_t* volume_serial_number,
                                       std::uint32_t* maximum_component_length, std::uint32_t* file_system_flags,
                                       char* file_system_name_buffer, std::uint32_t file_system_name_size) noexcept {
-    if (volume_name_buffer != nullptr && volume_name_size > 0 && mapped_guest_range(volume_name_buffer, volume_name_size, true)) {
+    if (volume_name_buffer != nullptr && volume_name_size > 0) {
         const char value[] = "Local Disk";
         const std::size_t length = std::min<std::size_t>(std::size(value), volume_name_size) - 1U;
         if (runtime::write_guest_memory(volume_name_buffer, value, length + 1U).status !=
@@ -106,19 +106,28 @@ TL_MSABI int tl_GetVolumeInformationA(const char*, char* volume_name_buffer,
             return 0;
         }
     }
-    if (volume_serial_number != nullptr && mapped_guest_range(volume_serial_number, sizeof(std::uint32_t), true)) {
+    if (volume_serial_number != nullptr) {
         const std::uint32_t value = 0x12345678U;
-        if (!write_guest_object(volume_serial_number, value)) return 0;
+        if (!write_guest_object(volume_serial_number, value)) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
+        }
     }
-    if (maximum_component_length != nullptr && mapped_guest_range(maximum_component_length, sizeof(std::uint32_t), true)) {
+    if (maximum_component_length != nullptr) {
         const std::uint32_t value = 255;
-        if (!write_guest_object(maximum_component_length, value)) return 0;
+        if (!write_guest_object(maximum_component_length, value)) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
+        }
     }
-    if (file_system_flags != nullptr && mapped_guest_range(file_system_flags, sizeof(std::uint32_t), true)) {
+    if (file_system_flags != nullptr) {
         const std::uint32_t value = 0x00000002U | 0x00000004U;
-        if (!write_guest_object(file_system_flags, value)) return 0;
+        if (!write_guest_object(file_system_flags, value)) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
+        }
     }
-    if (file_system_name_buffer != nullptr && file_system_name_size > 0 && mapped_guest_range(file_system_name_buffer, file_system_name_size, true)) {
+    if (file_system_name_buffer != nullptr && file_system_name_size > 0) {
         const char value[] = "NTFS";
         const std::size_t length = std::min<std::size_t>(std::size(value), file_system_name_size) - 1U;
         if (runtime::write_guest_memory(file_system_name_buffer, value, length + 1U).status !=
@@ -134,36 +143,47 @@ TL_MSABI int tl_GetVolumeInformationW(const std::uint16_t*, std::uint16_t* volum
                                       std::uint32_t volume_name_size, std::uint32_t* volume_serial_number,
                                       std::uint32_t* maximum_component_length, std::uint32_t* file_system_flags,
                                       std::uint16_t* file_system_name_buffer, std::uint32_t file_system_name_size) noexcept {
-    if (volume_name_buffer != nullptr && volume_name_size > 0 && mapped_guest_range(volume_name_buffer, volume_name_size * sizeof(std::uint16_t), true)) {
+    if (volume_name_buffer != nullptr && volume_name_size > 0) {
         const std::u16string u16 = util::utf8_to_wide("Local Disk");
         const std::size_t len = std::min<std::size_t>(u16.size(), volume_name_size - 1);
-        if (runtime::write_guest_memory(volume_name_buffer, u16.data(), len * sizeof(char16_t)).status !=
-                runtime::GuestMemoryAccessStatus::Success ||
-            runtime::write_guest_memory(volume_name_buffer + len, "\0", sizeof(char16_t)).status !=
-                runtime::GuestMemoryAccessStatus::Success) {
+        std::u16string output = u16.substr(0, len);
+        output.push_back(u'\0');
+        if (runtime::write_guest_memory(volume_name_buffer, output.data(),
+                                        output.size() * sizeof(char16_t)).status !=
+            runtime::GuestMemoryAccessStatus::Success) {
             set_last_error(abi::kErrorInvalidParameter);
             return 0;
         }
     }
-    if (volume_serial_number != nullptr && mapped_guest_range(volume_serial_number, sizeof(std::uint32_t), true)) {
+    if (volume_serial_number != nullptr) {
         const std::uint32_t value = 0x12345678U;
-        if (!write_guest_object(volume_serial_number, value)) return 0;
+        if (!write_guest_object(volume_serial_number, value)) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
+        }
     }
-    if (maximum_component_length != nullptr && mapped_guest_range(maximum_component_length, sizeof(std::uint32_t), true)) {
+    if (maximum_component_length != nullptr) {
         const std::uint32_t value = 255;
-        if (!write_guest_object(maximum_component_length, value)) return 0;
+        if (!write_guest_object(maximum_component_length, value)) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
+        }
     }
-    if (file_system_flags != nullptr && mapped_guest_range(file_system_flags, sizeof(std::uint32_t), true)) {
+    if (file_system_flags != nullptr) {
         const std::uint32_t value = 0x00000002U | 0x00000004U;
-        if (!write_guest_object(file_system_flags, value)) return 0;
+        if (!write_guest_object(file_system_flags, value)) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
+        }
     }
-    if (file_system_name_buffer != nullptr && file_system_name_size > 0 && mapped_guest_range(file_system_name_buffer, file_system_name_size * sizeof(std::uint16_t), true)) {
+    if (file_system_name_buffer != nullptr && file_system_name_size > 0) {
         const std::u16string u16 = util::utf8_to_wide("NTFS");
         const std::size_t len = std::min<std::size_t>(u16.size(), file_system_name_size - 1);
-        if (runtime::write_guest_memory(file_system_name_buffer, u16.data(), len * sizeof(char16_t)).status !=
-                runtime::GuestMemoryAccessStatus::Success ||
-            runtime::write_guest_memory(file_system_name_buffer + len, "\0", sizeof(char16_t)).status !=
-                runtime::GuestMemoryAccessStatus::Success) {
+        std::u16string output = u16.substr(0, len);
+        output.push_back(u'\0');
+        if (runtime::write_guest_memory(file_system_name_buffer, output.data(),
+                                        output.size() * sizeof(char16_t)).status !=
+            runtime::GuestMemoryAccessStatus::Success) {
             set_last_error(abi::kErrorInvalidParameter);
             return 0;
         }
@@ -191,7 +211,7 @@ TL_MSABI std::uint32_t tl_GetCompressedFileSizeW(const std::uint16_t* const file
     return tl_GetFileSize(file_name != nullptr ? reinterpret_cast<void*>(0x1) : nullptr, high);
 }
 TL_MSABI int tl_GetFileAttributesExW(const std::uint16_t* path, int info_level, void* data) noexcept {
-    if (info_level != 0 || data == nullptr || !mapped_guest_range(data, sizeof(LegacyFileAttributeData), true)) {
+    if (info_level != 0 || data == nullptr) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
@@ -222,12 +242,6 @@ TL_MSABI int tl_GetFileTime(const void* handle, void* creation_time, void* acces
     const FileSlot* const slot = slot_guard.get();
     if (slot == nullptr) {
         set_last_error(abi::kErrorInvalidHandle);
-        return 0;
-    }
-    if ((creation_time != nullptr && !mapped_guest_range(creation_time, sizeof(LegacyFileTime), true)) ||
-        (access_time != nullptr && !mapped_guest_range(access_time, sizeof(LegacyFileTime), true)) ||
-        (write_time != nullptr && !mapped_guest_range(write_time, sizeof(LegacyFileTime), true))) {
-        set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
     struct stat st{};
@@ -264,11 +278,12 @@ TL_MSABI int tl_SetFileTime(const void* handle, const void* creation_time,
         set_last_error(abi::kErrorInvalidHandle);
         return 0;
     }
-    if ((creation_time != nullptr && !mapped_guest_range(creation_time, sizeof(LegacyFileTime), false)) ||
-        (access_time != nullptr && !mapped_guest_range(access_time, sizeof(LegacyFileTime), false)) ||
-        (write_time != nullptr && !mapped_guest_range(write_time, sizeof(LegacyFileTime), false))) {
-        set_last_error(abi::kErrorInvalidParameter);
-        return 0;
+    if (creation_time != nullptr) {
+        LegacyFileTime ignored_creation{};
+        if (!read_guest_object(creation_time, ignored_creation)) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
+        }
     }
     struct stat st{};
     if (::fstat(slot->fd, &st) != 0) {
@@ -308,7 +323,7 @@ TL_MSABI int tl_GetFileInformationByHandle(const void* handle, void* information
         set_last_error(abi::kErrorInvalidHandle);
         return 0;
     }
-    if (information == nullptr || !mapped_guest_range(information, sizeof(LegacyByHandleFileInformation), true)) {
+    if (information == nullptr) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
@@ -345,8 +360,7 @@ TL_MSABI int tl_GetFileInformationByHandleEx(const void* handle, int info_class,
         set_last_error(abi::kErrorInvalidHandle);
         return 0;
     }
-    if (info_class != 0 || buffer == nullptr || size < sizeof(LegacyBasicFileInformation) ||
-        !mapped_guest_range(buffer, sizeof(LegacyBasicFileInformation), true)) {
+    if (info_class != 0 || buffer == nullptr || size < sizeof(LegacyBasicFileInformation)) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
@@ -382,8 +396,7 @@ TL_MSABI int tl_SetFileInformationByHandle(const void* const handle, const int i
     }
 
     if (info_class == static_cast<int>(abi::kFileBasicInfo)) {
-        if (size < sizeof(abi::GuestFileBasicInfo) ||
-            !mapped_guest_range(buffer, sizeof(abi::GuestFileBasicInfo), false)) {
+        if (size < sizeof(abi::GuestFileBasicInfo)) {
             set_last_error(abi::kErrorInvalidParameter);
             trace_filesystem("set-information", "failed", "short-basic-info");
             return 0;
@@ -441,8 +454,7 @@ TL_MSABI int tl_SetFileInformationByHandle(const void* const handle, const int i
     bool posix_semantics = false;
     bool ignore_readonly = false;
     if (info_class == static_cast<int>(abi::kFileDispositionInfo)) {
-        if (size < sizeof(abi::GuestFileDispositionInfo) ||
-            !mapped_guest_range(buffer, sizeof(abi::GuestFileDispositionInfo), false)) {
+        if (size < sizeof(abi::GuestFileDispositionInfo)) {
             set_last_error(abi::kErrorInvalidParameter);
             return 0;
         }
@@ -453,8 +465,7 @@ TL_MSABI int tl_SetFileInformationByHandle(const void* const handle, const int i
         }
         delete_file = info.delete_file != 0;
     } else if (info_class == static_cast<int>(abi::kFileDispositionInfoEx)) {
-        if (size < sizeof(abi::GuestFileDispositionInfoEx) ||
-            !mapped_guest_range(buffer, sizeof(abi::GuestFileDispositionInfoEx), false)) {
+        if (size < sizeof(abi::GuestFileDispositionInfoEx)) {
             set_last_error(abi::kErrorInvalidParameter);
             return 0;
         }

@@ -1462,6 +1462,47 @@ TEST(Win32FileMetadataTest, Amd64LayoutsMatchWindows) {
     EXPECT_EQ(sizeof(abi::GuestFileDispositionInfoEx), 4U);
 }
 
+TEST(Win32FileMetadataTest, ProtectedMetadataBuffersRejectUnmappedPointers) {
+    TempDirFixture ctx;
+    const std::string path = ctx.path("protected-metadata.tmp");
+    FILE* file = std::fopen(path.c_str(), "wb");
+    ASSERT_NE(file, nullptr);
+    std::fwrite("data", 1, 4, file);
+    std::fclose(file);
+    const std::uint16_t wide_path[] = {
+        '_', 't', 'l', '_', 't', 'e', 's', 't', '/',
+        'p', 'r', 'o', 't', 'e', 'c', 't', 'e', 'd', '-',
+        'm', 'e', 't', 'a', 'd', 'a', 't', 'a', '.', 't', 'm', 'p', 0};
+    auto* const invalid = reinterpret_cast<void*>(static_cast<std::uintptr_t>(0x1000U));
+
+    EXPECT_EQ(tl_GetVolumeInformationA(nullptr, static_cast<char*>(invalid), 32,
+                                       nullptr, nullptr, nullptr, nullptr, 0), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_GetVolumeInformationW(nullptr, static_cast<std::uint16_t*>(invalid), 32,
+                                       nullptr, nullptr, nullptr, nullptr, 0), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_GetFileAttributesExW(wide_path, 0, invalid), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+
+    void* handle = tl_CreateFileA(path.c_str(), abi::kGenericRead | abi::kGenericWrite, 0,
+                                  nullptr, abi::kOpenExisting, 0, nullptr);
+    ASSERT_NE(handle, nullptr);
+    EXPECT_EQ(tl_GetFileTime(handle, invalid, nullptr, nullptr), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_SetFileTime(handle, invalid, nullptr, nullptr), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_GetFileInformationByHandle(handle, invalid), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_GetFileInformationByHandleEx(handle, 0, invalid, 40), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+
+    abi::GuestFileBasicInfo basic{};
+    EXPECT_EQ(tl_SetFileInformationByHandle(handle, abi::kFileBasicInfo, invalid,
+                                            sizeof(basic)), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_CloseHandle(handle), 1);
+}
+
 TEST(Win32FileMetadataTest, FindFirstFileExWMatchesCaseWildcardsAndFillsMetadata) {
     TempDirFixture ctx;
     const std::string first = ctx.path("Case_A.TXT");

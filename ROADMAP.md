@@ -341,6 +341,12 @@ validação do `msync(2)` no kernel. A regressão
 `Win32FileTest.ProtectedDirectoryChangeAndFlushInputsRejectUnmappedPointers`
 cobre saídas inválidas e mapeamento válido.
 
+O lote de metadados de arquivos removeu a pré-validação por snapshot das
+consultas de volume, tempos e informações por handle. Leituras e publicações
+agora passam pela cópia protegida, com a regressão
+`Win32FileMetadataTest.ProtectedMetadataBuffersRejectUnmappedPointers`; as
+11 coberturas de metadados, arquivo wide e memória passaram.
+
 ## Fora desta rodada
 
 Não entram neste roadmap, por enquanto:
