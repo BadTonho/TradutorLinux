@@ -334,6 +334,13 @@ e publicações protegidas, preservando o stub controlado de símbolos e a leitu
 mínima da assinatura PE. A cobertura `Win32StubTest.DebugAndShellDialogStubsReportUnsupported`
 passou com a regressão de memória e as demais coberturas de stubs.
 
+O lote final de pequenas rotas KERNEL32 migrou `ReadDirectoryChangesW` para
+publicação protegida, removeu a pré-validação TOCTOU de `InitializeSListHead`
+(que já publicava por cópia protegida) e deixou `FlushViewOfFile` depender da
+validação do `msync(2)` no kernel. A regressão
+`Win32FileTest.ProtectedDirectoryChangeAndFlushInputsRejectUnmappedPointers`
+cobre saídas inválidas e mapeamento válido.
+
 ## Fora desta rodada
 
 Não entram neste roadmap, por enquanto:

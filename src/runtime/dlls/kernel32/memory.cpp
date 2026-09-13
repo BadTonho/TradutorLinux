@@ -534,7 +534,7 @@ TL_MSABI int tl_FlushViewOfFile(const void* base_address, const std::size_t numb
     }
     const std::size_t size = number_of_bytes_to_flush > 0 ? number_of_bytes_to_flush : 4096;
     const auto address = reinterpret_cast<std::uintptr_t>(base_address);
-    if (address % 4096 != 0 || !mapped_guest_range(base_address, size, false)) {
+    if (address % 4096 != 0) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }

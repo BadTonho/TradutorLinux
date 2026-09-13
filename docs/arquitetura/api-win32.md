@@ -373,8 +373,11 @@ versão e idioma virtual. Eles não alteram o locale global do hospedeiro.
 `PeekNamedPipe`, `CreateNamedPipeA`, `ConnectNamedPipe`, `CreatePipe`,
 `WaitNamedPipeA/W`, `CancelIo`, `ReadDirectoryChangesW` e
 `GetOverlappedResult` têm implementação limitada a arquivos, pipes e
-mapeamentos controlados pelo prefixo. I/O overlapped completo e IPC arbitrário
-não fazem parte do contrato.
+mapeamentos controlados pelo prefixo. `ReadDirectoryChangesW` publica
+`lpBytesReturned` por escrita protegida; `FlushViewOfFile` mantém apenas a
+validação de alinhamento e delega a validação do intervalo ao `msync(2)` do
+kernel, sem depender de um snapshot de `/proc/self/maps`. I/O overlapped
+completo e IPC arbitrário não fazem parte do contrato.
 
 `GetPrivateProfileStringA/W`, `GetPrivateProfileIntA/W`,
 `GetPrivateProfileSectionA/W` e `WritePrivateProfileStringA/W` operam em INI

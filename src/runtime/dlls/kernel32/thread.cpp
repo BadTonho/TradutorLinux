@@ -167,8 +167,7 @@ extern "C" {
 
 TL_MSABI void tl_InitializeSListHead(abi::GuestSListHeader* const list_head) noexcept {
     if (list_head == nullptr ||
-        reinterpret_cast<std::uintptr_t>(list_head) % alignof(abi::GuestSListHeader) != 0 ||
-        !mapped_guest_range(list_head, sizeof(*list_head), true)) {
+        reinterpret_cast<std::uintptr_t>(list_head) % alignof(abi::GuestSListHeader) != 0) {
         set_last_error(abi::kErrorInvalidParameter);
         return;
     }

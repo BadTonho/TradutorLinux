@@ -244,6 +244,24 @@ TEST(Win32VirtualTest, ProtectedMemoryOutputsRejectUnmappedPointers) {
     EXPECT_EQ(tl_VirtualFree(memory, 0, abi::kMemRelease), 1);
 }
 
+TEST(Win32FileTest, ProtectedDirectoryChangeAndFlushInputsRejectUnmappedPointers) {
+    auto* const invalid = reinterpret_cast<void*>(static_cast<std::uintptr_t>(0x1000U));
+    std::uint32_t bytes_returned = 123;
+    EXPECT_EQ(tl_ReadDirectoryChangesW(nullptr, nullptr, 0, 0, 0,
+                                       &bytes_returned, nullptr, nullptr), 1);
+    EXPECT_EQ(bytes_returned, 0U);
+    EXPECT_EQ(tl_ReadDirectoryChangesW(nullptr, nullptr, 0, 0, 0,
+                                       static_cast<std::uint32_t*>(invalid), nullptr, nullptr), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_FlushViewOfFile(invalid, 4096), 0);
+
+    void* memory = tl_VirtualAlloc(nullptr, 4096, abi::kMemCommit | abi::kMemReserve,
+                                   abi::kPageReadWrite);
+    ASSERT_NE(memory, nullptr);
+    EXPECT_EQ(tl_FlushViewOfFile(memory, 4096), 1);
+    EXPECT_EQ(tl_VirtualFree(memory, 0, abi::kMemRelease), 1);
+}
+
 TEST(Win32TlsTest, GetValueReturnsNullForUnusedSlot) {
     EXPECT_EQ(tl_TlsGetValue(0), nullptr);
     EXPECT_EQ(tl_GetLastError(), abi::kErrorSuccess);

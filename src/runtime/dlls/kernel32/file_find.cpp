@@ -203,8 +203,9 @@ TL_MSABI int tl_ReadDirectoryChangesW(void* const hDirectory, void* const lpBuff
     (void)dwNotifyFilter;
     (void)lpOverlapped;
     (void)lpCompletionRoutine;
-    if (lpBytesReturned != nullptr && mapped_guest_range(lpBytesReturned, sizeof(std::uint32_t), true)) {
-        *lpBytesReturned = 0;
+    if (lpBytesReturned != nullptr && !write_guest_value(lpBytesReturned, std::uint32_t{0})) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
     }
     set_last_error(abi::kErrorSuccess);
     return 1;
