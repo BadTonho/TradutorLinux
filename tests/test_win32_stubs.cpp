@@ -141,10 +141,25 @@ TEST(Win32StubTest, WinmmStubsKeepTheirExplicitCompatibilityContract) {
 }
 
 TEST(Win32StubTest, DebugAndShellDialogStubsReportUnsupported) {
+    auto* const invalid = reinterpret_cast<void*>(static_cast<std::uintptr_t>(0x1000U));
     std::uint64_t displacement = 0;
+    EXPECT_EQ(tl_SymFromAddr(nullptr, 0x140000000ULL, &displacement, invalid), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
     EXPECT_EQ(tl_SymFromAddr(nullptr, 0x140000000ULL, &displacement, nullptr), 0);
     EXPECT_EQ(tl_GetLastError(), abi::kErrorNotSupported);
     EXPECT_EQ(displacement, 0U);
+
+    std::array<std::uint8_t, 128> image{};
+    image[0] = 'M';
+    image[1] = 'Z';
+    const std::uint32_t nt_offset = 0x40U;
+    std::copy_n(reinterpret_cast<const std::uint8_t*>(&nt_offset), sizeof(nt_offset),
+                image.begin() + 0x3C);
+    const std::uint32_t signature = 0x00004550U;
+    std::copy_n(reinterpret_cast<const std::uint8_t*>(&signature), sizeof(signature),
+                image.begin() + nt_offset);
+    EXPECT_EQ(tl_ImageNtHeader(invalid), nullptr);
+    EXPECT_EQ(tl_ImageNtHeader(image.data()), image.data() + nt_offset);
 
     std::array<std::byte, 64> browse_info{};
     EXPECT_EQ(tl_SHBrowseForFolderW(browse_info.data()), nullptr);

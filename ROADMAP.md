@@ -329,6 +329,11 @@ de entrada e publicação protegida do indicador. A regressão
 `Win32AdvapiTest.ProtectedIsTextUnicodeBuffersRejectUnmappedPointers` passou
 com as coberturas de ADVAPI32, registro, memória e segurança.
 
+O lote de `dbghelp.dll` migrou `SymFromAddr` e `ImageNtHeader` para snapshots
+e publicações protegidas, preservando o stub controlado de símbolos e a leitura
+mínima da assinatura PE. A cobertura `Win32StubTest.DebugAndShellDialogStubsReportUnsupported`
+passou com a regressão de memória e as demais coberturas de stubs.
+
 ## Fora desta rodada
 
 Não entram neste roadmap, por enquanto:
