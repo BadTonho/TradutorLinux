@@ -523,5 +523,48 @@ TEST(Gdi32Test, GetTextExtentPoint32RejectsInvalidDestination) {
                                         reinterpret_cast<void*>(0x1U)), 0);
     EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
 }
+
+TEST(Gdi32Test, ProtectedDrawingAndBitmapBuffersRejectUnmappedPointers) {
+    auto* const invalid = reinterpret_cast<void*>(static_cast<std::uintptr_t>(0x1000U));
+    const char text[] = "text";
+    const std::uint16_t wide_text[] = {'t', 'e', 'x', 't'};
+    std::uint16_t output[32]{};
+    std::int32_t size[2]{};
+
+    EXPECT_EQ(tl_TextOut(nullptr, 0, 0, static_cast<const char*>(invalid), 1), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_TextOut(nullptr, 0, 0, text, 4), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidHandle);
+
+    EXPECT_EQ(tl_FillRect(nullptr, invalid, nullptr), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_GetTextExtentPoint32W(nullptr, static_cast<const std::uint16_t*>(invalid), 4,
+                                        size), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_GetTextExtentPoint32W(nullptr, wide_text, 4, invalid), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_GetTextMetricsW(nullptr, invalid), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_GetClipBox(nullptr, invalid), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+
+    void* const bitmap = tl_CreateBitmap(8, 8, 1, 32, nullptr);
+    ASSERT_NE(bitmap, nullptr);
+    EXPECT_EQ(tl_GetObjectW(bitmap, 32, invalid), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_DeleteObject(bitmap), 1);
+
+    EXPECT_EQ(tl_CreateDIBSection(nullptr, invalid, 0, nullptr, nullptr, 0), nullptr);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_CreateDIBSection(nullptr, nullptr, 0, reinterpret_cast<void**>(invalid), nullptr, 0),
+              nullptr);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_CreateFontW(16, 0, 0, 0, 400, 0, 0, 0, 0, 0, 0, 0, 0,
+                             static_cast<const std::uint16_t*>(invalid)), nullptr);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+
+    EXPECT_EQ(tl_GetTextExtentPoint32W(nullptr, wide_text, 4, output), 1);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorSuccess);
+}
 }  // namespace
 }  // namespace tradutorlinux

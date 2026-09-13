@@ -273,6 +273,14 @@ resultados são publicados com a primitiva protegida. A regressão
 `WinSockTest.ProtectedPollingAndEventArraysRejectUnmappedPointers` passou,
 junto com as coberturas de PuTTY, Notepad++ e memória.
 
+O lote GDI migrou o texto de `TextOut`, o `RECT` de `FillRect`,
+`GetObjectA/W`, o cabeçalho de `CreateDIBSection`, `GetTextExtentPoint32W`,
+`GetTextMetricsA/W` e `GetClipBox` para snapshots locais e publicações
+protegidas. A regressão
+`Gdi32Test.ProtectedDrawingAndBitmapBuffersRejectUnmappedPointers` passou com
+as coberturas existentes de bitmap, DIB e extensão de texto; consultas e
+buffers auxiliares de GDI ainda permanecem para lotes posteriores.
+
 ## Fora desta rodada
 
 Não entram neste roadmap, por enquanto:

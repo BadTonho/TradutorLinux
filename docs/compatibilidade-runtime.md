@@ -212,7 +212,8 @@ diretamente. Ele é experimental, não altera o subsistema de console e só acei
 | `USER32.dll` | `BeginPaint` / `EndPaint` | Suportado | Preenchem o `PAINTSTRUCT` (layout Microsoft x64, 72 bytes) com o tamanho da janela/controle e marcam/desmarcam o estado de pintura; o `HDC` usa a superfície X11 da janela principal |
 | `USER32.dll` | `SendMessageA` / `SendMessageW` (controles comuns) | Suportado no subconjunto | Toolbar: `TB_BUTTONSTRUCTSIZE`, `TB_ADDBUTTONSA/W`, `TB_BUTTONCOUNT`, `TB_DELETEBUTTON`, `TB_SETBUTTONSIZE`, `TB_SETBITMAPSIZE`, `TB_AUTOSIZE`, `TB_SETIMAGELIST`, `TB_ENABLEBUTTON`; status bar: `SB_SETTEXTA/W`, `SB_SETPARTS`, `SB_SETMINHEIGHT`, `SB_SIMPLE` |
 | `GDI32.dll` | `GetStockObject` | Suportado | Token opaco por stock object (tabela estática, `object` em `0..23`); stock objects não são liberados |
-| `GDI32.dll` | `TextOutA` / `TextOut` | Suportado | Desenha texto ANSI com comprimento explícito via `XDrawString`; em controles lógicos soma a posição dos pais ao destino |
+| `GDI32.dll` | `TextOutA` / `TextOut` | Suportado | Desenha texto ANSI com comprimento explícito via `XDrawString`; o texto convidado é copiado antes do desenho e, em controles lógicos, soma a posição dos pais ao destino |
+| `GDI32.dll` | `FillRect`, `GetObjectA/W`, `CreateDIBSection`, `GetTextExtentPoint32W`, `GetTextMetricsA/W`, `GetClipBox` | Suportado no subconjunto | Estruturas e strings de entrada são lidas em snapshots host e as estruturas de saída são publicadas por cópia protegida; DIB continua limitado a 256 MiB e métricas permanecem estáticas |
 
 ### Diálogos e controles (Fase 13.11)
 
@@ -697,8 +698,8 @@ processo filho; cada thread convidada recebe seu próprio TEB/GS, stack e
 | `KERNEL32.dll` | `K32GetModuleFileNameExW` | Suportado | Retorna caminho da imagem do módulo executável |
 | `GDI32.dll` | `CreateBitmap` | Suportado | Cria e registra handle de bitmap em memória |
 | `GDI32.dll` | `StretchBlt` | Suportado | Cópia e redimensionamento de blocos de imagem em DC |
-| `GDI32.dll` | `GetObjectW` | Suportado | Consulta informações de dimensões de BITMAP ou LOGFONTW |
-| `GDI32.dll` | `CreateDIBSection` | Suportado no subconjunto | Valida `BITMAPINFO`/dimensões, aloca bitmap DIB com ponteiro direto a pixels e limita a superfície a 256 MiB |
+| `GDI32.dll` | `GetObjectW` | Suportado | Consulta informações de dimensões de BITMAP ou LOGFONTW e publica o resultado por cópia protegida |
+| `GDI32.dll` | `CreateDIBSection` | Suportado no subconjunto | Valida `BITMAPINFO`/dimensões por snapshot protegido, publica `ppvBits` por escrita protegida, aloca bitmap DIB com ponteiro direto a pixels e limita a superfície a 256 MiB |
 | `OLEAUT32.dll` | `SysAllocString` / `SysAllocStringLen` / `SysFreeString` / `SysStringLen` / `SysStringByteLen` | Suportado | Alocação, liberação e consulta de BSTR com cabeçalho de 4 bytes e terminação null |
 | `OLEAUT32.dll` | `VariantInit` / `VariantClear` / `VariantCopy` / `VariantCopyInd` / `VariantChangeType` | Suportado | Gerenciamento e clonagem de estruturas VARIANT |
 | `OLEAUT32.dll` | `SafeArrayCreate` / `SafeArrayDestroy` / `SafeArrayGetDim` / `SafeArrayAccessData` / etc. | Suportado | Suporte e gerenciamento de contêineres SafeArray multidimensionais |

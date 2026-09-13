@@ -11,7 +11,9 @@
 #include <cstdint>
 #include <cstring>
 #include <limits>
+#include <new>
 #include <string>
+#include <vector>
 
 namespace tradutorlinux {
 
@@ -38,12 +40,26 @@ TL_MSABI void* tl_GetStockObject(const int object) noexcept {
 
 TL_MSABI int tl_TextOut(const void* const dc, const int x, const int y,
                         const char* const text, const int length) noexcept {
-    if (text == nullptr || length < 0 ||
-        (length > 0 &&
-         !mapped_guest_range(text, static_cast<std::size_t>(length), false))) {
+    if (text == nullptr || length < 0) {
         set_last_error(abi::kErrorInvalidParameter);
         trace_guest_failure("TextOut", "text", "ponteiro ou comprimento inválido");
         return 0;
+    }
+    std::string text_copy;
+    if (length > 0) {
+        try {
+            text_copy.resize(static_cast<std::size_t>(length));
+        } catch (const std::bad_alloc&) {
+            set_last_error(abi::kErrorNotEnoughMemory);
+            trace_guest_failure("TextOut", "text", "memória insuficiente para cópia");
+            return 0;
+        }
+        if (runtime::read_guest_memory(text, text_copy.data(), text_copy.size()).status !=
+            runtime::GuestMemoryAccessStatus::Success) {
+            set_last_error(abi::kErrorInvalidParameter);
+            trace_guest_failure("TextOut", "text", "buffer convidado inacessível");
+            return 0;
+        }
     }
     const WindowDrawingTarget target = window_drawing_target(dc);
     if (target.native == nullptr) {
@@ -52,7 +68,7 @@ TL_MSABI int tl_TextOut(const void* const dc, const int x, const int y,
         return 0;
     }
     if (length > 0) {
-        gui::platform::draw_text_len(target.native, text, length, x + target.offset_x,
+        gui::platform::draw_text_len(target.native, text_copy.data(), length, x + target.offset_x,
                                      y + target.offset_y);
         gui::platform::flush_window(target.native);
     }
@@ -69,9 +85,15 @@ TL_MSABI int tl_TextOut(const void* const dc, const int x, const int y,
 
 TL_MSABI int tl_FillRect(const void* const dc,
                          const void* const rect, const void* const brush) noexcept {
-    if (rect == nullptr || !mapped_guest_range(rect, sizeof(abi::GuestRect), false)) {
+    if (rect == nullptr) {
         set_last_error(abi::kErrorInvalidParameter);
         trace_guest_failure("FillRect", "rect", "ponteiro RECT inválido");
+        return 0;
+    }
+    abi::GuestRect rect_copy{};
+    if (!read_guest_value(rect, rect_copy)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        trace_guest_failure("FillRect", "rect", "buffer convidado inacessível");
         return 0;
     }
     const WindowDrawingTarget target = window_drawing_target(dc);
@@ -86,21 +108,21 @@ TL_MSABI int tl_FillRect(const void* const dc,
         trace_guest_failure("FillRect", "brush", "brush deve ser um stock object WHITE..NULL");
         return 0;
     }
-    const auto* const rc = static_cast<const abi::GuestRect*>(rect);
-    const int width = rc->right - rc->left;
-    const int height = rc->bottom - rc->top;
+    const int width = rect_copy.right - rect_copy.left;
+    const int height = rect_copy.bottom - rect_copy.top;
     if (width > 0 && height > 0 && brush_index != 5) {
-        gui::platform::fill_rectangle(target.native, rc->left + target.offset_x,
-                                      rc->top + target.offset_y, width, height, brush_index);
+        gui::platform::fill_rectangle(target.native, rect_copy.left + target.offset_x,
+                                      rect_copy.top + target.offset_y, width, height, brush_index);
         gui::platform::flush_window(target.native);
     }
     set_last_error(abi::kErrorSuccess);
     const std::array<diagnostics::TraceField, 4> fields{
         diagnostics::TraceField{"symbol", "FillRect"},
         diagnostics::TraceField{"brush", std::to_string(brush_index)},
-        diagnostics::TraceField{"rect", std::to_string(rc->left) + "," + std::to_string(rc->top) +
-                                     "-" + std::to_string(rc->right) + "," +
-                                     std::to_string(rc->bottom)},
+        diagnostics::TraceField{"rect", std::to_string(rect_copy.left) + "," +
+                                     std::to_string(rect_copy.top) + "-" +
+                                     std::to_string(rect_copy.right) + "," +
+                                     std::to_string(rect_copy.bottom)},
         diagnostics::TraceField{"status", "success"},
     };
     runtime_trace("FillRect", fields, 4);
@@ -286,11 +308,13 @@ TL_MSABI void* tl_CreateFontW(int height, int width, int escapement, int orienta
     (void)clip_precision;
     (void)quality;
     (void)pitch_and_family;
-    (void)face_name;
     static char g_font_w2_token = 0;
-    if (face_name != nullptr && !mapped_guest_wstring(face_name)) {
-        set_last_error(abi::kErrorInvalidParameter);
-        return nullptr;
+    if (face_name != nullptr) {
+        std::u16string face_name_copy;
+        if (!runtime::copy_guest_wstring(face_name, 1024U, face_name_copy)) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return nullptr;
+        }
     }
     set_last_error(abi::kErrorSuccess);
     return &g_font_w2_token;
@@ -370,11 +394,20 @@ TL_MSABI int tl_GetObjectW(const void* hgdiobj, const int buffer_size, void* obj
         bmp.bmPlanes = 1;
         bmp.bmBitsPixel = 32;
         bmp.bmBits = nullptr;
-        std::memcpy(object_buffer, &bmp, sizeof(GuestBitmap));
+        if (runtime::write_guest_memory(object_buffer, &bmp, sizeof(bmp)).status !=
+            runtime::GuestMemoryAccessStatus::Success) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
+        }
         set_last_error(abi::kErrorSuccess);
         return static_cast<int>(sizeof(GuestBitmap));
     }
-    std::memset(object_buffer, 0, static_cast<std::size_t>(buffer_size));
+    std::array<std::uint8_t, sizeof(GuestBitmap)> empty{};
+    if (runtime::write_guest_memory(object_buffer, empty.data(), static_cast<std::size_t>(buffer_size)).status !=
+        runtime::GuestMemoryAccessStatus::Success) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
     set_last_error(abi::kErrorSuccess);
     return buffer_size;
 }
@@ -382,15 +415,9 @@ TL_MSABI int tl_GetObjectW(const void* hgdiobj, const int buffer_size, void* obj
 TL_MSABI void* tl_CreateDIBSection(const void* dc, const void* pbmi, const std::uint32_t usage,
                                    void** ppv_bits, void* section, const std::uint32_t offset) noexcept {
     (void)dc;
-    (void)pbmi;
     (void)usage;
     (void)section;
     (void)offset;
-    if (ppv_bits != nullptr && !mapped_guest_range(ppv_bits, sizeof(*ppv_bits), true)) {
-        set_last_error(abi::kErrorInvalidParameter);
-        return nullptr;
-    }
-
     struct GuestBitmapInfoHeader {
         std::uint32_t size;
         std::int32_t width;
@@ -405,11 +432,10 @@ TL_MSABI void* tl_CreateDIBSection(const void* dc, const void* pbmi, const std::
         std::uint32_t clr_important;
     } header{40U, 100, 100, 1, 32, 0, 0, 0, 0, 0, 0};
     if (pbmi != nullptr) {
-        if (!mapped_guest_range(pbmi, sizeof(header), false)) {
+        if (!read_guest_value(pbmi, header)) {
             set_last_error(abi::kErrorInvalidParameter);
             return nullptr;
         }
-        std::memcpy(&header, pbmi, sizeof(header));
         if (header.size < sizeof(header) || header.width == 0 || header.height == 0 ||
             header.planes != 1 || header.bit_count == 0 || header.compression > 3U) {
             set_last_error(abi::kErrorInvalidParameter);
@@ -459,11 +485,12 @@ TL_MSABI void* tl_CreateDIBSection(const void* dc, const void* pbmi, const std::
     free_it->stride = static_cast<std::uint32_t>(std::min<std::uint64_t>(stride,
                                                                           std::numeric_limits<std::uint32_t>::max()));
     if (ppv_bits != nullptr) {
-        if (!mapped_guest_range(ppv_bits, sizeof(void*), true)) {
+        void* const pixel_data = free_it->pixels.data();
+        if (!write_guest_value(ppv_bits, pixel_data)) {
+            *free_it = {};
             set_last_error(abi::kErrorInvalidParameter);
             return nullptr;
         }
-        *ppv_bits = free_it->pixels.data();
     }
     set_last_error(abi::kErrorSuccess);
     return &*free_it;
@@ -476,11 +503,24 @@ TL_MSABI int tl_GetTextExtentPoint32W(void* const hdc, const std::uint16_t* cons
         std::int32_t cx;
         std::int32_t cy;
     };
-    if (length < 0 || size == nullptr || !mapped_guest_range(size, sizeof(GuestSize), true) ||
-        (length > 0 && (string == nullptr ||
-                         !mapped_guest_range(string, static_cast<std::size_t>(length) * sizeof(*string), false)))) {
+    if (length < 0 || size == nullptr || (length > 0 && string == nullptr)) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
+    }
+    if (length > 0) {
+        std::vector<std::uint16_t> string_copy;
+        try {
+            string_copy.resize(static_cast<std::size_t>(length));
+        } catch (const std::bad_alloc&) {
+            set_last_error(abi::kErrorNotEnoughMemory);
+            return 0;
+        }
+        if (runtime::read_guest_memory(string, string_copy.data(),
+                                       string_copy.size() * sizeof(*string)).status !=
+            runtime::GuestMemoryAccessStatus::Success) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
+        }
     }
     if (size != nullptr) {
         GuestSize s{};
@@ -490,7 +530,10 @@ TL_MSABI int tl_GetTextExtentPoint32W(void* const hdc, const std::uint16_t* cons
         s.cx = static_cast<std::int32_t>(std::min<std::int64_t>(
             measured_width, std::numeric_limits<std::int32_t>::max()));
         s.cy = 16;
-        std::memcpy(size, &s, sizeof(s));
+        if (!write_guest_value(size, s)) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
+        }
     }
     set_last_error(abi::kErrorSuccess);
     return 1;
@@ -529,11 +572,17 @@ TL_MSABI int tl_AbortDoc(void* const hdc) noexcept {
 
 TL_MSABI int tl_GetTextMetricsW(void* const hdc, void* const tm) noexcept {
     (void)hdc;
-    if (tm != nullptr && mapped_guest_range(tm, 56, true)) {
-        std::memset(tm, 0, 56);
-        // Default reasonable character metrics: height 16, width 8
-        *reinterpret_cast<std::int32_t*>(static_cast<char*>(tm) + 0) = 16; // tmHeight
-        *reinterpret_cast<std::int32_t*>(static_cast<char*>(tm) + 20) = 8; // tmAveCharWidth
+    if (tm != nullptr) {
+        std::array<std::uint8_t, 56> output{};
+        const std::int32_t height = 16;
+        const std::int32_t average_width = 8;
+        std::memcpy(output.data(), &height, sizeof(height));
+        std::memcpy(output.data() + 20, &average_width, sizeof(average_width));
+        if (runtime::write_guest_memory(tm, output.data(), output.size()).status !=
+            runtime::GuestMemoryAccessStatus::Success) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
+        }
     }
     set_last_error(abi::kErrorSuccess);
     return 1;
@@ -641,11 +690,12 @@ TL_MSABI int tl_SelectClipRgn(void* const hdc, void* const rgn) noexcept {
 
 TL_MSABI int tl_GetClipBox(void* const hdc, void* const rect) noexcept {
     (void)hdc;
-    if (rect != nullptr && mapped_guest_range(rect, 16, true)) {
-        *reinterpret_cast<std::int32_t*>(static_cast<char*>(rect) + 0) = 0;
-        *reinterpret_cast<std::int32_t*>(static_cast<char*>(rect) + 4) = 0;
-        *reinterpret_cast<std::int32_t*>(static_cast<char*>(rect) + 8) = 1024;
-        *reinterpret_cast<std::int32_t*>(static_cast<char*>(rect) + 12) = 768;
+    if (rect != nullptr) {
+        const abi::GuestRect output{0, 0, 1024, 768};
+        if (!write_guest_value(rect, output)) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
+        }
     }
     set_last_error(abi::kErrorSuccess);
     return 2; // SIMPLEREGION
