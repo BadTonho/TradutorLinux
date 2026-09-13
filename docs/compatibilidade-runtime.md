@@ -745,6 +745,7 @@ processo filho; cada thread convidada recebe seu próprio TEB/GS, stack e
 | `USER32.dll` | `WaitForInputIdle` | Suportado | Sincronização de prontidão de entrada de processo |
 | `USER32.dll` | `FindWindowExW` | Suportado | Busca hierárquica de janelas filhas |
 | `USER32.dll` | `SetProcessDefaultLayout` | Suportado | Configuração de layout de renderização de janelas (LTR/RTL) |
+| `USER32.dll` | `GetCursorPos` / `GetCaretPos` / `GetScrollRange` / `GetIconInfo` / `GetIconInfoExW` | Suportado no subconjunto | Estado determinístico de cursor, caret, rolagem e ícones; saídas são publicadas por cópias protegidas |
 | `ADVAPI32.dll` | `LookupPrivilegeValueW` | Suportado | Resolução de LUID para identificadores de privilégios de segurança; saída publicada por cópia protegida |
 | `ADVAPI32.dll` | `AdjustTokenPrivileges` | Suportado | Ajuste e concessão de privilégios em tokens de processo; `ReturnLength` usa publicação protegida |
 | `SHELL32.dll` | `SHFileOperationW` / `SHGetFileInfoW` | Não suportado controlado | Operações de arquivo e metadados/ícones do Shell retornam `ERROR_NOT_SUPPORTED`; `SHFileOperationW` marca `fAnyOperationsAborted` e zera `hNameMappings`, sem alterar o sistema de arquivos. |

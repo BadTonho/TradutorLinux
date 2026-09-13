@@ -308,6 +308,18 @@ TEST(Win32ConsoleTest, IsDBCSLeadByteExAlwaysReturnsFalse) {
     EXPECT_EQ(tl_GetLastError(), abi::kErrorSuccess);
 }
 
+TEST(Win32UserMiscTest, ProtectedCursorScrollAndIconOutputsRejectUnmappedPointers) {
+    auto* const invalid = reinterpret_cast<void*>(static_cast<std::uintptr_t>(0x1000U));
+
+    EXPECT_EQ(tl_GetCursorPos(invalid), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_GetCaretPos(invalid), 1);
+    EXPECT_EQ(tl_GetScrollRange(nullptr, 0, static_cast<int*>(invalid),
+                                static_cast<int*>(invalid)), 1);
+    EXPECT_EQ(tl_GetIconInfo(nullptr, invalid), 1);
+    EXPECT_EQ(tl_GetIconInfoExW(nullptr, invalid), 1);
+}
+
 TEST(Win32ProcessConsoleTest, StandardHandlesStartupAndSystemDirectoryShareContext) {
     void* const input = tl_GetStdHandle(abi::kStdInputHandle);
     void* const output = tl_GetStdHandle(abi::kStdOutputHandle);

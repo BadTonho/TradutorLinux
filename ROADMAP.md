@@ -414,6 +414,10 @@ protegidas. As operações continuam limitadas ao prefixo ou a stubs
 determinísticos; estruturas de entrada complexas permanecem para uma etapa
 posterior, e a regressão cobre ponteiros de saída inacessíveis.
 
+O lote `USER32/misc` migrou as saídas determinísticas de cursor, caret,
+rolagem e informações de ícone para cópias protegidas. A regressão cobre
+ponteiros inacessíveis sem alterar os retornos limitados dessas APIs.
+
 ## Fora desta rodada
 
 Não entram neste roadmap, por enquanto:

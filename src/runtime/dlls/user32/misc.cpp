@@ -56,13 +56,16 @@ TL_MSABI int tl_EndPaint(const void* const window, const void* const paint_struc
 }
 
 TL_MSABI int tl_GetCursorPos(void* point) noexcept {
-    if (point == nullptr || !mapped_guest_range(point, sizeof(std::int32_t) * 2U, true)) {
+    if (point == nullptr) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
-    auto* coordinates = static_cast<std::int32_t*>(point);
-    coordinates[0] = 0;
-    coordinates[1] = 0;
+    const std::array<std::int32_t, 2> coordinates{};
+    if (runtime::write_guest_memory(point, coordinates.data(), sizeof(coordinates)).status !=
+        runtime::GuestMemoryAccessStatus::Success) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
     set_last_error(abi::kErrorSuccess);
     return 1;
 }
@@ -581,8 +584,9 @@ TL_MSABI int tl_HideCaret(void* const hwnd) noexcept {
 }
 
 TL_MSABI int tl_GetCaretPos(void* const point) noexcept {
-    if (point != nullptr && mapped_guest_range(point, 8, true)) {
-        std::memset(point, 0, 8);
+    if (point != nullptr) {
+        const std::array<std::byte, 8> zeroes{};
+        static_cast<void>(runtime::write_guest_memory(point, zeroes.data(), zeroes.size()));
     }
     set_last_error(abi::kErrorSuccess);
     return 1;
@@ -648,11 +652,11 @@ TL_MSABI int tl_SetScrollRange(void* const hwnd, const int bar, const int min_po
 TL_MSABI int tl_GetScrollRange(void* const hwnd, const int bar, int* const min_pos, int* const max_pos) noexcept {
     (void)hwnd;
     (void)bar;
-    if (min_pos != nullptr && mapped_guest_range(min_pos, sizeof(int), true)) {
-        *min_pos = 0;
+    if (min_pos != nullptr) {
+        static_cast<void>(write_guest_value(min_pos, 0));
     }
-    if (max_pos != nullptr && mapped_guest_range(max_pos, sizeof(int), true)) {
-        *max_pos = 100;
+    if (max_pos != nullptr) {
+        static_cast<void>(write_guest_value(max_pos, 100));
     }
     set_last_error(abi::kErrorSuccess);
     return 1;
@@ -692,8 +696,9 @@ TL_MSABI void* tl_CreateIconIndirect(const void* const icon_info) noexcept {
 
 TL_MSABI int tl_GetIconInfo(void* const icon, void* const icon_info) noexcept {
     (void)icon;
-    if (icon_info != nullptr && mapped_guest_range(icon_info, 32, true)) {
-        std::memset(icon_info, 0, 32);
+    if (icon_info != nullptr) {
+        const std::array<std::byte, 32> zeroes{};
+        static_cast<void>(runtime::write_guest_memory(icon_info, zeroes.data(), zeroes.size()));
     }
     set_last_error(abi::kErrorSuccess);
     return 1;
@@ -701,8 +706,9 @@ TL_MSABI int tl_GetIconInfo(void* const icon, void* const icon_info) noexcept {
 
 TL_MSABI int tl_GetIconInfoExW(void* const icon, void* const icon_info_ex) noexcept {
     (void)icon;
-    if (icon_info_ex != nullptr && mapped_guest_range(icon_info_ex, 40, true)) {
-        std::memset(icon_info_ex, 0, 40);
+    if (icon_info_ex != nullptr) {
+        const std::array<std::byte, 40> zeroes{};
+        static_cast<void>(runtime::write_guest_memory(icon_info_ex, zeroes.data(), zeroes.size()));
     }
     set_last_error(abi::kErrorSuccess);
     return 1;

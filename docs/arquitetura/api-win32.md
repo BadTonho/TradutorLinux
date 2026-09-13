@@ -208,7 +208,8 @@ window manager real.
 `SetWindowLongW`, `SetWindowLongPtrA/W`, `SetClassLongPtrA/W`, `SetCapture`,
 `ReleaseCapture`, `GetCapture`, `BringWindowToTop`, `SetCursorPos`,
 `GetCursorPos`, `GetKeyState` e `GetAsyncKeyState` expõem apenas o estado
-logical e eventos que o backend possui.
+logical e eventos que o backend possui; `GetCursorPos` publica suas coordenadas
+por cópia protegida.
 
 ### Diálogos, menus, clipboard e controles
 
@@ -450,7 +451,7 @@ controlado.
 `SetKeyboardState`, `MapVirtualKeyW`, `ToAscii`, `ToAsciiEx` e
 `SetProcessDpiAwarenessContext` fornecem apenas o subconjunto de entrada,
 ícones e DPI coberto pelas fixtures. Não existe acessibilidade ou integração
-de desktop completa.
+de desktop completa; as estruturas de ícone são zeradas por cópias protegidas.
 
 ### GDI avançado e impressão
 
