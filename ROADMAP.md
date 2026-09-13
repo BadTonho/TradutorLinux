@@ -422,6 +422,11 @@ O lote `USER32/dialog` migrou as saídas simples de `GetDlgItemTextA/W` e
 `GetDlgItemInt` para cópias protegidas. Os stubs continuam retornando texto e
 indicadores determinísticos; a regressão cobre ponteiros de saída inacessíveis.
 
+O lote adicional de `USER32/misc` migrou `GetUpdateRect`,
+`GetUserObjectInformationW`, `GetMonitorInfoW` e `GetComboBoxInfo` para
+cópias protegidas. As estruturas continuam determinísticas, e a regressão
+cobre seus ponteiros de saída inacessíveis.
+
 ## Fora desta rodada
 
 Não entram neste roadmap, por enquanto:

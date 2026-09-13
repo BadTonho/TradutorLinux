@@ -763,11 +763,9 @@ TL_MSABI int tl_InvertRect(void* const hdc, const void* const rect) noexcept {
 TL_MSABI int tl_GetUpdateRect(void* const hwnd, void* const rect, const int erase) noexcept {
     (void)hwnd;
     (void)erase;
-    if (rect != nullptr && mapped_guest_range(rect, 16, true)) {
-        *reinterpret_cast<std::int32_t*>(static_cast<char*>(rect) + 0) = 0;
-        *reinterpret_cast<std::int32_t*>(static_cast<char*>(rect) + 4) = 0;
-        *reinterpret_cast<std::int32_t*>(static_cast<char*>(rect) + 8) = 1024;
-        *reinterpret_cast<std::int32_t*>(static_cast<char*>(rect) + 12) = 768;
+    if (rect != nullptr) {
+        const std::array<std::int32_t, 4> update_rect{0, 0, 1024, 768};
+        static_cast<void>(runtime::write_guest_memory(rect, update_rect.data(), sizeof(update_rect)));
     }
     return 1;
 }
@@ -797,11 +795,11 @@ TL_MSABI int tl_GetUserObjectInformationW(void* const handle, const int index,
                                           std::uint32_t* const length_needed) noexcept {
     (void)handle;
     (void)index;
-    if (length_needed != nullptr && mapped_guest_range(length_needed, sizeof(std::uint32_t), true)) {
-        *length_needed = sizeof(std::uint32_t);
+    if (length_needed != nullptr) {
+        static_cast<void>(write_guest_value(length_needed, static_cast<std::uint32_t>(sizeof(std::uint32_t))));
     }
-    if (info != nullptr && length >= sizeof(std::uint32_t) && mapped_guest_range(info, sizeof(std::uint32_t), true)) {
-        *reinterpret_cast<std::uint32_t*>(info) = 1; // WSF_VISIBLE
+    if (info != nullptr && length >= sizeof(std::uint32_t)) {
+        static_cast<void>(write_guest_value(static_cast<std::uint32_t*>(info), 1U)); // WSF_VISIBLE
     }
     set_last_error(abi::kErrorSuccess);
     return 1;
@@ -902,13 +900,10 @@ TL_MSABI void* tl_MonitorFromRect(const void* const lprc, const std::uint32_t dw
 
 TL_MSABI int tl_GetMonitorInfoW(void* const hMonitor, void* const lpmi) noexcept {
     (void)hMonitor;
-    if (lpmi != nullptr && mapped_guest_range(lpmi, 40, true)) {
-        std::memset(lpmi, 0, 40);
-        *reinterpret_cast<std::uint32_t*>(lpmi) = 40;
-        auto* rects = reinterpret_cast<std::int32_t*>(static_cast<char*>(lpmi) + 4);
-        rects[0] = 0; rects[1] = 0; rects[2] = 1920; rects[3] = 1080;
-        rects[4] = 0; rects[5] = 0; rects[6] = 1920; rects[7] = 1080;
-        rects[8] = 1;
+    if (lpmi != nullptr) {
+        const std::array<std::int32_t, 10> monitor_info{
+            40, 0, 0, 1920, 1080, 0, 0, 1920, 1080, 1};
+        static_cast<void>(runtime::write_guest_memory(lpmi, monitor_info.data(), sizeof(monitor_info)));
     }
     return 1;
 }
@@ -968,9 +963,11 @@ TL_MSABI int tl_SetRectEmpty(void* const lprc) noexcept {
 
 TL_MSABI int tl_GetComboBoxInfo(void* const hwndCombo, void* const pcbi) noexcept {
     (void)hwndCombo;
-    if (pcbi != nullptr && mapped_guest_range(pcbi, 64, true)) {
-        std::memset(pcbi, 0, 64);
-        *reinterpret_cast<std::uint32_t*>(pcbi) = 64;
+    if (pcbi != nullptr) {
+        std::array<std::byte, 64> combo_info{};
+        const std::uint32_t size = 64;
+        std::memcpy(combo_info.data(), &size, sizeof(size));
+        static_cast<void>(runtime::write_guest_memory(pcbi, combo_info.data(), combo_info.size()));
     }
     return 1;
 }

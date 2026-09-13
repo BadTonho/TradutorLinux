@@ -442,7 +442,8 @@ carrega DLL externa implicitamente e nunca autoriza acesso fora da seção
 `EnumDisplayDevicesA`, `EnumDisplaySettingsA` e `SystemParametersInfoA/W`
 convertem coordenadas e consultam metadados lógicos da superfície X11. Dados
 do window manager ou do desktop que não podem ser reproduzidos retornam valor
-controlado.
+controlado. `GetUpdateRect`, `GetUserObjectInformationW`, `GetMonitorInfoW` e
+`GetComboBoxInfo` publicam suas estruturas por cópias protegidas.
 
 `LoadCursorA/W`, `LoadIconA/W`, `LoadImageA/W`, `CopyImage`, `DestroyIcon`,
 `DestroyCursor`, `SetCursor`, `ShowCursor`, `GetIconInfo`, `GetIconInfoExW`,

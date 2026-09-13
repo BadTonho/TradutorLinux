@@ -318,6 +318,11 @@ TEST(Win32UserMiscTest, ProtectedCursorScrollAndIconOutputsRejectUnmappedPointer
                                 static_cast<int*>(invalid)), 1);
     EXPECT_EQ(tl_GetIconInfo(nullptr, invalid), 1);
     EXPECT_EQ(tl_GetIconInfoExW(nullptr, invalid), 1);
+    EXPECT_EQ(tl_GetUpdateRect(nullptr, invalid, 0), 1);
+    EXPECT_EQ(tl_GetUserObjectInformationW(nullptr, 0, invalid, sizeof(std::uint32_t),
+                                            static_cast<std::uint32_t*>(invalid)), 1);
+    EXPECT_EQ(tl_GetMonitorInfoW(nullptr, invalid), 1);
+    EXPECT_EQ(tl_GetComboBoxInfo(nullptr, invalid), 1);
 }
 
 TEST(Win32ProcessConsoleTest, StandardHandlesStartupAndSystemDirectoryShareContext) {
