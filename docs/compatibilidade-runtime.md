@@ -214,6 +214,7 @@ diretamente. Ele é experimental, não altera o subsistema de console e só acei
 | `GDI32.dll` | `GetStockObject` | Suportado | Token opaco por stock object (tabela estática, `object` em `0..23`); stock objects não são liberados |
 | `GDI32.dll` | `TextOutA` / `TextOut` | Suportado | Desenha texto ANSI com comprimento explícito via `XDrawString`; o texto convidado é copiado antes do desenho e, em controles lógicos, soma a posição dos pais ao destino |
 | `GDI32.dll` | `FillRect`, `GetObjectA/W`, `CreateDIBSection`, `GetTextExtentPoint32W`, `GetTextMetricsA/W`, `GetClipBox` | Suportado no subconjunto | Estruturas e strings de entrada são lidas em snapshots host e as estruturas de saída são publicadas por cópia protegida; DIB continua limitado a 256 MiB e métricas permanecem estáticas |
+| `GDI32.dll` | `GetCharWidthA/W`, `GetCharABCWidthsA`, `GetCharABCWidthsFloatA`, `GetTextExtentPointA/W`, `GetTextExtentExPointA/W`, `TranslateCharsetInfo`, `Set/OffsetWindowOrgEx`, `SetBrushOrgEx`, `GetDeviceGammaRamp` | Suportado no subconjunto | Arrays, pontos, métricas, strings contadas e rampas são montados em memória host e publicados por cópia protegida; larguras, charset, origens e gamma permanecem valores estáticos |
 
 ### Diálogos e controles (Fase 13.11)
 

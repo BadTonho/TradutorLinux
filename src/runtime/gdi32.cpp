@@ -17,6 +17,74 @@
 
 namespace tradutorlinux {
 
+namespace {
+
+constexpr std::size_t kMaxGdiArrayElements = 1U << 20U;
+constexpr std::size_t kMaxGdiStringUnits = 1U << 20U;
+
+[[nodiscard]] bool copy_gdi_ansi_count(const char* const source, const int count,
+                                       std::string& destination) noexcept {
+    if (count < 0 || static_cast<std::size_t>(count) > kMaxGdiStringUnits ||
+        (count > 0 && source == nullptr)) {
+        return false;
+    }
+    if (count == 0) {
+        destination.clear();
+        return true;
+    }
+    try {
+        destination.resize(static_cast<std::size_t>(count));
+    } catch (const std::bad_alloc&) {
+        destination.clear();
+        return false;
+    }
+    return runtime::read_guest_memory(source, destination.data(), destination.size()).status ==
+           runtime::GuestMemoryAccessStatus::Success;
+}
+
+[[nodiscard]] bool copy_gdi_utf16_count(const std::uint16_t* const source, const int count,
+                                        std::u16string& destination) noexcept {
+    if (count < 0 || static_cast<std::size_t>(count) > kMaxGdiStringUnits ||
+        (count > 0 && source == nullptr)) {
+        return false;
+    }
+    if (count == 0) {
+        destination.clear();
+        return true;
+    }
+    try {
+        destination.resize(static_cast<std::size_t>(count));
+    } catch (const std::bad_alloc&) {
+        destination.clear();
+        return false;
+    }
+    return runtime::read_guest_memory(source, destination.data(),
+                                      destination.size() * sizeof(*source)).status ==
+           runtime::GuestMemoryAccessStatus::Success;
+}
+
+[[nodiscard]] bool gdi_range_count(const std::uint32_t first, const std::uint32_t last,
+                                   std::size_t& count) noexcept {
+    if (last < first) {
+        count = 0;
+        return true;
+    }
+    count = static_cast<std::size_t>(last) - static_cast<std::size_t>(first) + 1U;
+    return count <= kMaxGdiArrayElements;
+}
+
+struct GuestGdiSize {
+    std::int32_t cx;
+    std::int32_t cy;
+};
+
+struct GuestGdiPoint {
+    std::int32_t x;
+    std::int32_t y;
+};
+
+} // namespace
+
 extern "C" {
 
 // Tokens opacos para stock objects do GDI: o próprio endereço serve de handle
@@ -705,11 +773,22 @@ TL_MSABI int tl_GetCharWidthW(void* const hdc, const std::uint32_t first, const 
                               int* const buffer) noexcept {
     (void)hdc;
     if (buffer != nullptr && last >= first) {
-        const std::size_t count = static_cast<std::size_t>(last - first + 1);
-        if (mapped_guest_range(buffer, count * sizeof(int), true)) {
-            for (std::size_t i = 0; i < count; ++i) {
-                buffer[i] = 8; // standard 8px mono width
-            }
+        std::size_t count = 0;
+        if (!gdi_range_count(first, last, count)) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
+        }
+        std::vector<int> output;
+        try {
+            output.assign(count, 8); // standard 8px mono width
+        } catch (const std::bad_alloc&) {
+            set_last_error(abi::kErrorNotEnoughMemory);
+            return 0;
+        }
+        if (runtime::write_guest_memory(buffer, output.data(), output.size() * sizeof(*buffer)).status !=
+            runtime::GuestMemoryAccessStatus::Success) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
         }
     }
     set_last_error(abi::kErrorSuccess);
@@ -724,9 +803,32 @@ TL_MSABI int tl_GetCharWidth32W(void* const hdc, const std::uint32_t first, cons
 TL_MSABI int tl_GetTextExtentPoint32A(void* const hdc, const char* const string, const int length,
                                       void* const size) noexcept {
     (void)hdc;
-    if (size != nullptr && mapped_guest_range(size, 8, true)) {
-        *reinterpret_cast<std::int32_t*>(static_cast<char*>(size) + 0) = (length > 0 ? length : (string ? static_cast<int>(std::strlen(string)) : 0)) * 8;
-        *reinterpret_cast<std::int32_t*>(static_cast<char*>(size) + 4) = 16;
+    if (length < 0) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    std::string string_copy;
+    if (length > 0) {
+        if (!copy_gdi_ansi_count(string, length, string_copy)) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
+        }
+    } else if (string != nullptr && !runtime::copy_guest_cstring(string, kMaxGdiStringUnits, string_copy)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    if (size != nullptr) {
+        const std::size_t measured_length = length > 0 ? string_copy.size() : string_copy.size();
+        const std::int64_t width = static_cast<std::int64_t>(measured_length) * 8;
+        if (width > std::numeric_limits<std::int32_t>::max()) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
+        }
+        const GuestGdiSize output{static_cast<std::int32_t>(width), 16};
+        if (!write_guest_value(size, output)) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
+        }
     }
     set_last_error(abi::kErrorSuccess);
     return 1;
@@ -939,13 +1041,23 @@ TL_MSABI int tl_GetBkMode(void* const hdc) noexcept {
 TL_MSABI int tl_GetCharABCWidthsFloatA(void* const hdc, const std::uint32_t first, const std::uint32_t last, void* const abc) noexcept {
     (void)hdc;
     if (abc != nullptr && last >= first) {
-        const std::size_t count = static_cast<std::size_t>(last - first + 1);
+        std::size_t count = 0;
+        if (!gdi_range_count(first, last, count)) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
+        }
         struct ABCFloat { float a; float b; float c; };
-        if (mapped_guest_range(abc, count * sizeof(ABCFloat), true)) {
-            auto* const out = static_cast<ABCFloat*>(abc);
-            for (std::size_t i = 0; i < count; ++i) {
-                out[i] = {0.0f, 8.0f, 0.0f};
-            }
+        std::vector<ABCFloat> output;
+        try {
+            output.assign(count, ABCFloat{0.0f, 8.0f, 0.0f});
+        } catch (const std::bad_alloc&) {
+            set_last_error(abi::kErrorNotEnoughMemory);
+            return 0;
+        }
+        if (runtime::write_guest_memory(abc, output.data(), output.size() * sizeof(ABCFloat)).status !=
+            runtime::GuestMemoryAccessStatus::Success) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
         }
     }
     set_last_error(abi::kErrorSuccess);
@@ -955,11 +1067,22 @@ TL_MSABI int tl_GetCharABCWidthsFloatA(void* const hdc, const std::uint32_t firs
 TL_MSABI int tl_GetCharWidth32A(void* const hdc, const std::uint32_t first, const std::uint32_t last, int* const buffer) noexcept {
     (void)hdc;
     if (buffer != nullptr && last >= first) {
-        const std::size_t count = static_cast<std::size_t>(last - first + 1);
-        if (mapped_guest_range(buffer, count * sizeof(int), true)) {
-            for (std::size_t i = 0; i < count; ++i) {
-                buffer[i] = 8;
-            }
+        std::size_t count = 0;
+        if (!gdi_range_count(first, last, count)) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
+        }
+        std::vector<int> output;
+        try {
+            output.assign(count, 8);
+        } catch (const std::bad_alloc&) {
+            set_last_error(abi::kErrorNotEnoughMemory);
+            return 0;
+        }
+        if (runtime::write_guest_memory(buffer, output.data(), output.size() * sizeof(*buffer)).status !=
+            runtime::GuestMemoryAccessStatus::Success) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
         }
     }
     set_last_error(abi::kErrorSuccess);
@@ -1020,19 +1143,48 @@ TL_MSABI std::uint32_t tl_GetPixel(void* const hdc, const int x, const int y) no
 
 TL_MSABI int tl_GetTextExtentExPointA(void* const hdc, const char* const str, const int count, const int max_extent, int* const fit, int* const dx, void* const size) noexcept {
     (void)hdc;
-    (void)str;
     (void)max_extent;
-    if (fit != nullptr && mapped_guest_range(fit, sizeof(int), true)) {
-        *fit = count;
+    if (count < 0) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
     }
-    if (dx != nullptr && count > 0 && mapped_guest_range(dx, static_cast<std::size_t>(count) * sizeof(int), true)) {
+    std::string string_copy;
+    if (!copy_gdi_ansi_count(str, count, string_copy)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    if (fit != nullptr && !write_guest_value(fit, count)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    if (dx != nullptr && count > 0) {
+        std::vector<int> output;
+        try {
+            output.resize(static_cast<std::size_t>(count));
+        } catch (const std::bad_alloc&) {
+            set_last_error(abi::kErrorNotEnoughMemory);
+            return 0;
+        }
         for (int i = 0; i < count; ++i) {
-            dx[i] = (i + 1) * 8;
+            output[static_cast<std::size_t>(i)] = (i + 1) * 8;
+        }
+        if (runtime::write_guest_memory(dx, output.data(), output.size() * sizeof(*dx)).status !=
+            runtime::GuestMemoryAccessStatus::Success) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
         }
     }
-    if (size != nullptr && mapped_guest_range(size, 8, true)) {
-        *reinterpret_cast<std::int32_t*>(size) = count * 8;
-        *reinterpret_cast<std::int32_t*>(static_cast<char*>(size) + 4) = 16;
+    if (size != nullptr) {
+        const std::int64_t width = static_cast<std::int64_t>(count) * 8;
+        if (width > std::numeric_limits<std::int32_t>::max()) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
+        }
+        const GuestGdiSize output{static_cast<std::int32_t>(width), 16};
+        if (!write_guest_value(size, output)) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
+        }
     }
     set_last_error(abi::kErrorSuccess);
     return 1;
@@ -1091,9 +1243,15 @@ TL_MSABI std::uint32_t tl_SetPixel(void* const hdc, const int x, const int y, co
 TL_MSABI int tl_TranslateCharsetInfo(std::uint32_t* const src, void* const cs, const std::uint32_t flags) noexcept {
     (void)src;
     (void)flags;
-    if (cs != nullptr && mapped_guest_range(cs, 32, true)) {
-        std::memset(cs, 0, 32);
-        *reinterpret_cast<std::uint32_t*>(static_cast<char*>(cs) + 4) = 1252; // cp
+    if (cs != nullptr) {
+        std::array<std::uint8_t, 32> output{};
+        const std::uint32_t code_page = 1252;
+        std::memcpy(output.data() + 4, &code_page, sizeof(code_page)); // cp
+        if (runtime::write_guest_memory(cs, output.data(), output.size()).status !=
+            runtime::GuestMemoryAccessStatus::Success) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
+        }
     }
     set_last_error(abi::kErrorSuccess);
     return 1;
@@ -1115,9 +1273,9 @@ TL_MSABI int tl_SetWindowOrgEx(void* const hdc, const int x, const int y, void* 
     (void)hdc;
     (void)x;
     (void)y;
-    if (lppt != nullptr && mapped_guest_range(lppt, 8, true)) {
-        *reinterpret_cast<std::int32_t*>(lppt) = 0;
-        *reinterpret_cast<std::int32_t*>(static_cast<char*>(lppt) + 4) = 0;
+    if (lppt != nullptr && !write_guest_value(lppt, GuestGdiPoint{0, 0})) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
     }
     set_last_error(abi::kErrorSuccess);
     return 1;
@@ -1138,9 +1296,9 @@ TL_MSABI int tl_OffsetWindowOrgEx(void* const hdc, const int x, const int y, voi
     (void)hdc;
     (void)x;
     (void)y;
-    if (lppt != nullptr && mapped_guest_range(lppt, 8, true)) {
-        *reinterpret_cast<std::int32_t*>(lppt) = 0;
-        *reinterpret_cast<std::int32_t*>(static_cast<char*>(lppt) + 4) = 0;
+    if (lppt != nullptr && !write_guest_value(lppt, GuestGdiPoint{0, 0})) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
     }
     set_last_error(abi::kErrorSuccess);
     return 1;
@@ -1150,9 +1308,9 @@ TL_MSABI int tl_SetBrushOrgEx(void* const hdc, const int x, const int y, void* c
     (void)hdc;
     (void)x;
     (void)y;
-    if (lppt != nullptr && mapped_guest_range(lppt, 8, true)) {
-        *reinterpret_cast<std::int32_t*>(lppt) = 0;
-        *reinterpret_cast<std::int32_t*>(static_cast<char*>(lppt) + 4) = 0;
+    if (lppt != nullptr && !write_guest_value(lppt, GuestGdiPoint{0, 0})) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
     }
     set_last_error(abi::kErrorSuccess);
     return 1;
@@ -1179,11 +1337,22 @@ TL_MSABI int tl_DPtoLP(void* const hdc, void* const lpPoints, const int nCount) 
 
 TL_MSABI int tl_GetTextExtentPointW(void* const hdc, const wchar_t* const lpString, const int c, void* const lpSize) noexcept {
     (void)hdc;
-    (void)lpString;
-    if (lpSize != nullptr && mapped_guest_range(lpSize, 8, true)) {
-        const int len = c >= 0 ? c : 0;
-        *reinterpret_cast<std::int32_t*>(lpSize) = len * 8;
-        *reinterpret_cast<std::int32_t*>(static_cast<char*>(lpSize) + 4) = 16;
+    if (c < 0) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    std::u16string string_copy;
+    if (!copy_gdi_utf16_count(reinterpret_cast<const std::uint16_t*>(lpString), c, string_copy)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    if (lpSize != nullptr) {
+        const std::int64_t width = static_cast<std::int64_t>(string_copy.size()) * 8;
+        if (width > std::numeric_limits<std::int32_t>::max() ||
+            !write_guest_value(lpSize, GuestGdiSize{static_cast<std::int32_t>(width), 16})) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
+        }
     }
     set_last_error(abi::kErrorSuccess);
     return 1;
@@ -1227,19 +1396,44 @@ TL_MSABI int tl_GdiAlphaBlend(void* const hdcDest, const int xoriginDest, const 
 
 TL_MSABI int tl_GetTextExtentExPointW(void* const hdc, const wchar_t* const lpszStr, const int cchString, const int nMaxExtent, int* const lpnFit, int* const alpDx, void* const lpSize) noexcept {
     (void)hdc;
-    (void)lpszStr;
     (void)nMaxExtent;
-    if (lpnFit != nullptr && mapped_guest_range(lpnFit, sizeof(int), true)) {
-        *lpnFit = cchString;
+    if (cchString < 0) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
     }
-    if (alpDx != nullptr && cchString > 0 && mapped_guest_range(alpDx, static_cast<std::size_t>(cchString) * sizeof(int), true)) {
+    std::u16string string_copy;
+    if (!copy_gdi_utf16_count(reinterpret_cast<const std::uint16_t*>(lpszStr), cchString, string_copy)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    if (lpnFit != nullptr && !write_guest_value(lpnFit, cchString)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    if (alpDx != nullptr && cchString > 0) {
+        std::vector<int> output;
+        try {
+            output.resize(static_cast<std::size_t>(cchString));
+        } catch (const std::bad_alloc&) {
+            set_last_error(abi::kErrorNotEnoughMemory);
+            return 0;
+        }
         for (int i = 0; i < cchString; ++i) {
-            alpDx[i] = (i + 1) * 8;
+            output[static_cast<std::size_t>(i)] = (i + 1) * 8;
+        }
+        if (runtime::write_guest_memory(alpDx, output.data(), output.size() * sizeof(*alpDx)).status !=
+            runtime::GuestMemoryAccessStatus::Success) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
         }
     }
-    if (lpSize != nullptr && mapped_guest_range(lpSize, 8, true)) {
-        *reinterpret_cast<std::int32_t*>(lpSize) = cchString * 8;
-        *reinterpret_cast<std::int32_t*>(static_cast<char*>(lpSize) + 4) = 16;
+    if (lpSize != nullptr) {
+        const std::int64_t width = static_cast<std::int64_t>(string_copy.size()) * 8;
+        if (width > std::numeric_limits<std::int32_t>::max() ||
+            !write_guest_value(lpSize, GuestGdiSize{static_cast<std::int32_t>(width), 16})) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
+        }
     }
     set_last_error(abi::kErrorSuccess);
     return 1;
@@ -1310,9 +1504,22 @@ TL_MSABI int tl_GetTextCharacterExtra(void* const hdc) noexcept {
 TL_MSABI int tl_GetCharABCWidthsA(void* const hdc, const std::uint32_t first, const std::uint32_t last, void* const abc) noexcept {
     (void)hdc;
     if (abc != nullptr && last >= first) {
-        const std::size_t count = static_cast<std::size_t>(last - first + 1);
-        if (mapped_guest_range(abc, count * 12, true)) {
-            std::memset(abc, 0, count * 12);
+        std::size_t count = 0;
+        if (!gdi_range_count(first, last, count)) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
+        }
+        std::vector<std::uint8_t> output;
+        try {
+            output.assign(count * 12U, 0);
+        } catch (const std::bad_alloc&) {
+            set_last_error(abi::kErrorNotEnoughMemory);
+            return 0;
+        }
+        if (runtime::write_guest_memory(abc, output.data(), output.size()).status !=
+            runtime::GuestMemoryAccessStatus::Success) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
         }
     }
     set_last_error(abi::kErrorSuccess);
@@ -1321,9 +1528,15 @@ TL_MSABI int tl_GetCharABCWidthsA(void* const hdc, const std::uint32_t first, co
 
 TL_MSABI int tl_GetDeviceGammaRamp(void* const hdc, void* const ramp) noexcept {
     (void)hdc;
-    if (ramp != nullptr && mapped_guest_range(ramp, 512, true)) {
-        std::memset(ramp, 0, 512);
+    if (ramp != nullptr) {
+        const std::array<std::uint8_t, 512> output{};
+        if (runtime::write_guest_memory(ramp, output.data(), output.size()).status !=
+            runtime::GuestMemoryAccessStatus::Success) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
+        }
     }
+    set_last_error(abi::kErrorSuccess);
     return 1;
 }
 

@@ -278,8 +278,15 @@ O lote GDI migrou o texto de `TextOut`, o `RECT` de `FillRect`,
 `GetTextMetricsA/W` e `GetClipBox` para snapshots locais e publicações
 protegidas. A regressão
 `Gdi32Test.ProtectedDrawingAndBitmapBuffersRejectUnmappedPointers` passou com
-as coberturas existentes de bitmap, DIB e extensão de texto; consultas e
-buffers auxiliares de GDI ainda permanecem para lotes posteriores.
+as coberturas existentes de bitmap, DIB e extensão de texto. As consultas e
+buffers auxiliares foram fechados no lote seguinte.
+
+O lote auxiliar de GDI migrou `GetCharWidthA/W`, `GetCharABCWidthsA`,
+`GetCharABCWidthsFloatA`, `GetTextExtentPointA/W`, `GetTextExtentExPointA/W`,
+`TranslateCharsetInfo`, as APIs de origem de janela e `GetDeviceGammaRamp`.
+`Gdi32Test.ProtectedAuxiliaryTextAndDeviceBuffersRejectUnmappedPointers`
+passou junto com os demais testes GDI, e a auditoria de `src/runtime/gdi32.cpp`
+não encontra mais `mapped_guest_*` nem acesso direto aos buffers convidados.
 
 ## Fora desta rodada
 

@@ -566,5 +566,59 @@ TEST(Gdi32Test, ProtectedDrawingAndBitmapBuffersRejectUnmappedPointers) {
     EXPECT_EQ(tl_GetTextExtentPoint32W(nullptr, wide_text, 4, output), 1);
     EXPECT_EQ(tl_GetLastError(), abi::kErrorSuccess);
 }
+
+TEST(Gdi32Test, ProtectedAuxiliaryTextAndDeviceBuffersRejectUnmappedPointers) {
+    auto* const invalid = reinterpret_cast<void*>(static_cast<std::uintptr_t>(0x1000U));
+    const char narrow[] = "x";
+    const std::uint16_t wide[] = {'x'};
+    int widths[2]{};
+    std::int32_t size[2]{};
+
+    EXPECT_EQ(tl_GetCharWidthW(nullptr, 'A', 'B', static_cast<int*>(invalid)), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_GetCharWidth32A(nullptr, 'A', 'B', static_cast<int*>(invalid)), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_GetCharWidthW(nullptr, 'A', 'B', widths), 1);
+    EXPECT_EQ(widths[0], 8);
+    EXPECT_EQ(widths[1], 8);
+
+    EXPECT_EQ(tl_GetCharABCWidthsFloatA(nullptr, 'A', 'B', invalid), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_GetCharABCWidthsA(nullptr, 'A', 'B', invalid), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+
+    EXPECT_EQ(tl_GetTextExtentPoint32A(nullptr, static_cast<const char*>(invalid), 1, size), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_GetTextExtentPoint32A(nullptr, narrow, 1, invalid), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_GetTextExtentExPointA(nullptr, static_cast<const char*>(invalid), 1, 0,
+                                       widths, widths, size), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_GetTextExtentExPointA(nullptr, narrow, 1, 0,
+                                       static_cast<int*>(invalid), widths, size), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+
+    EXPECT_EQ(tl_GetTextExtentPointW(nullptr, reinterpret_cast<const wchar_t*>(invalid), 1, size), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_GetTextExtentPointW(nullptr, reinterpret_cast<const wchar_t*>(wide), 1, invalid), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_GetTextExtentExPointW(nullptr, reinterpret_cast<const wchar_t*>(invalid), 1, 0,
+                                       widths, widths, size), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_GetTextExtentExPointW(nullptr, reinterpret_cast<const wchar_t*>(wide), 1, 0,
+                                       static_cast<int*>(invalid), widths, size), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+
+    EXPECT_EQ(tl_TranslateCharsetInfo(nullptr, invalid, 0), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_SetWindowOrgEx(nullptr, 0, 0, invalid), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_OffsetWindowOrgEx(nullptr, 0, 0, invalid), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_SetBrushOrgEx(nullptr, 0, 0, invalid), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_GetDeviceGammaRamp(nullptr, invalid), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+}
 }  // namespace
 }  // namespace tradutorlinux
