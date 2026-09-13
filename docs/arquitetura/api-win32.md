@@ -620,7 +620,9 @@ de existência/diretório nunca consultam uma raiz do host sem validação.
 `SHCreateItemFromParsingName`, `CommandLineToArgvW`, `DragQueryFileW`,
 `DragQueryPoint` e `DragFinish` retornam caminhos ou executam operações apenas
 no modelo de prefixo documentado. `Shell_NotifyIcon` mantém um surrogate
-lógico por janela; ele não registra ícone real no tray do desktop.
+lógico por janela; ele não registra ícone real no tray do desktop. As saídas de
+caminhos, alocadores, ícones, objetos Shell e pontos são publicadas por cópias
+protegidas.
 `SHBrowseForFolderW` é uma rejeição controlada (`ERROR_NOT_SUPPORTED`) e não
 cria diálogo nem PIDL.
 

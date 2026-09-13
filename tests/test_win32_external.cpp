@@ -537,6 +537,45 @@ TEST(ShellPathTest, SpecialFoldersStayInsideTheActivePrefix) {
     std::filesystem::remove_all(root, error);
 }
 
+TEST(ShellPathTest, ProtectedShellOutputsRejectUnmappedPointers) {
+    const std::filesystem::path root = std::filesystem::temp_directory_path() /
+        ("tl-shell-protected-" + std::to_string(static_cast<unsigned long long>(::getpid())));
+    ASSERT_TRUE(prefix::initialize_prefix(root));
+    set_guest_prefix_path(root);
+
+    auto* const invalid = reinterpret_cast<void*>(static_cast<std::uintptr_t>(0x1000U));
+    struct Guid {
+        std::uint32_t data1;
+        std::uint16_t data2;
+        std::uint16_t data3;
+        std::uint8_t data4[8];
+    };
+    constexpr Guid kRoamingAppData = {
+        0x3EB685DBU, 0x65F9U, 0x4CF6U, {0xA0U, 0x3AU, 0xE3U, 0xEFU, 0x65U, 0x72U, 0x9FU, 0x3DU}};
+
+    EXPECT_NE(tl_SHGetKnownFolderPath(&kRoamingAppData, 0, nullptr,
+                                      static_cast<std::uint16_t**>(invalid)), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_NE(tl_SHGetFolderPathW(nullptr, 0x001A, nullptr, 0,
+                                   static_cast<std::uint16_t*>(invalid)), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_SHGetPathFromIDListW(nullptr, static_cast<std::uint16_t*>(invalid)), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+
+    EXPECT_EQ(tl_SHGetMalloc(static_cast<void**>(invalid)), static_cast<int>(0x80070057U));
+    EXPECT_EQ(tl_ExtractIconExW(nullptr, 0, static_cast<void**>(invalid),
+                                static_cast<void**>(invalid), 1), 1U);
+    EXPECT_EQ(tl_SHGetDesktopFolder(static_cast<void**>(invalid)), 0);
+    EXPECT_EQ(tl_SHGetSpecialFolderLocation(nullptr, 0, static_cast<void**>(invalid)), 0);
+    EXPECT_EQ(tl_SHCreateItemFromParsingName(nullptr, nullptr, nullptr,
+                                              static_cast<void**>(invalid)), 0);
+    EXPECT_EQ(tl_DragQueryPoint(nullptr, invalid), 1);
+
+    set_guest_prefix_path({});
+    std::error_code error;
+    std::filesystem::remove_all(root, error);
+}
+
 TEST(ShellAllocationTest, ReturnedBuffersUseTheDocumentedAllocators) {
     const std::filesystem::path root = std::filesystem::temp_directory_path() /
         ("tl-shell-allocator-" + std::to_string(static_cast<unsigned long long>(::getpid())));

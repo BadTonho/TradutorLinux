@@ -453,8 +453,8 @@ do host como argumentos.
 | `KERNEL32.dll` | `GetFullPathNameA` | Suportado | Conversão `A` → `W` com mesma normalização; buffer insuficiente retorna `tamanho+1` e `ERROR_INSUFFICIENT_BUFFER` |
 | `KERNEL32.dll` | `lstrcatW` | Suportado no subconjunto | Concatena strings UTF-16 guest e retorna o destino; valida as strings e o intervalo gravável do resultado |
 | `SHELL32.dll` | `CommandLineToArgvW` | Suportado | Divide a linha de comando UTF-16 em argumentos, preservando grupos entre aspas; o bloco único retornado é liberado por `LocalFree` |
-| `SHELL32.dll` | `SHGetKnownFolderPath` | Suportado | Resolve `FOLDERID_RoamingAppData`, `LocalAppData`, `ProgramData`, `Desktop`, `Documents`, `Downloads` e `Profile` sob `C:\users\guest`/`C:\ProgramData` do prefixo ativo; nunca consulta `HOME`, XDG ou `/tmp` do host e devolve a string por `CoTaskMemAlloc`. |
-| `SHELL32.dll` | `SHGetFolderPathW` | Suportado | Resolve `CSIDL_APPDATA`/`LOCAL_APPDATA`/`COMMON_APPDATA`/`DESKTOP`/`PERSONAL`/`PROFILE` sob o prefixo ativo e copia o caminho Windows para `pszPath[260]`. |
+| `SHELL32.dll` | `SHGetKnownFolderPath` | Suportado | Resolve `FOLDERID_RoamingAppData`, `LocalAppData`, `ProgramData`, `Desktop`, `Documents`, `Downloads` e `Profile` sob `C:\users\guest`/`C:\ProgramData` do prefixo ativo; nunca consulta `HOME`, XDG ou `/tmp` do host e devolve a string por `CoTaskMemAlloc` e a saída por cópia protegida. |
+| `SHELL32.dll` | `SHGetFolderPathW` | Suportado | Resolve `CSIDL_APPDATA`/`LOCAL_APPDATA`/`COMMON_APPDATA`/`DESKTOP`/`PERSONAL`/`PROFILE` sob o prefixo ativo e copia o caminho Windows para `pszPath[260]` por cópia protegida. |
 | `SHELL32.dll` | `SHGetFolderPathAndSubDirW` | Suportado | Cria a base `CSIDL` e o subdiretório relativo sob `drive_c`; rejeita caminho absoluto ou componente `..` e retorna o caminho Windows canônico. |
 | `SHELL32.dll` | `ShellExecuteA/W` / `ShellExecuteExW` | Não suportado controlado | Valida strings/estrutura e retorna falha com `ERROR_NOT_SUPPORTED`; `SHELLEXECUTEINFOW` x64 tem 112 bytes, com `hInstApp` em 56 e `hProcess` em 104, ambos nulos na falha. Nenhum processo ou documento é aberto. |
 | `GDI32.dll` | `CreateFontW` | Suportado | Wrapper `wide_to_utf8` → `CreateFontA`; valida `face_name` wide, token estático |
@@ -748,9 +748,9 @@ processo filho; cada thread convidada recebe seu próprio TEB/GS, stack e
 | `ADVAPI32.dll` | `LookupPrivilegeValueW` | Suportado | Resolução de LUID para identificadores de privilégios de segurança; saída publicada por cópia protegida |
 | `ADVAPI32.dll` | `AdjustTokenPrivileges` | Suportado | Ajuste e concessão de privilégios em tokens de processo; `ReturnLength` usa publicação protegida |
 | `SHELL32.dll` | `SHFileOperationW` / `SHGetFileInfoW` | Não suportado controlado | Operações de arquivo e metadados/ícones do Shell retornam `ERROR_NOT_SUPPORTED`; `SHFileOperationW` marca `fAnyOperationsAborted` e zera `hNameMappings`, sem alterar o sistema de arquivos. |
-| `SHELL32.dll` | `SHGetPathFromIDListW` | Suportado | Conversão de lista de IDs de shell para caminho no sistema de arquivos |
+| `SHELL32.dll` | `SHGetPathFromIDListW` | Suportado | Conversão de lista de IDs de shell para caminho no sistema de arquivos por cópia protegida |
 | `SHELL32.dll` | `SHBrowseForFolderW` | Não suportado controlado | Valida o `BROWSEINFO` mínimo e retorna `nullptr` + `ERROR_NOT_SUPPORTED`; nenhum diálogo ou PIDL é fabricado |
-| `SHELL32.dll` | `SHGetMalloc` | Suportado | Obtenção do alocador de memória padrão do Shell |
+| `SHELL32.dll` | `SHGetMalloc` | Suportado | Obtenção do alocador de memória padrão do Shell; ponteiro de saída por cópia protegida |
 | `SHELL32.dll` | `SHChangeNotify` | Suportado | Emissão e notificação de eventos do sistema de arquivos para o shell |
 | `ole32.dll` | `CLSIDFromString` | Suportado | Conversão de strings de GUID/CLSID para estrutura binária `GUID` |
 | `SHLWAPI.dll` | `SHAutoComplete` | Suportado | Retorna `S_OK` para autocompletar em caixas de texto |

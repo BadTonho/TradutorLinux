@@ -6,6 +6,7 @@
 #include "core/runtime_state_common.hpp"
 #include "core/runtime_gui_state.hpp"
 #include "core/runtime_memory_state.hpp"
+#include "tradutorlinux/runtime/memory_validator.hpp"
 #include "tradutorlinux/util/unicode.hpp"
 
 #include <algorithm>
@@ -35,6 +36,17 @@ struct GuestNotifyIconDataPrefix {
 };
 static_assert(offsetof(GuestNotifyIconDataPrefix, hwnd) == 8);
 static_assert(offsetof(GuestNotifyIconDataPrefix, callback_message) == 24);
+
+bool write_shell_path(std::uint16_t* const path, const std::u16string& wide) noexcept {
+    const std::size_t length = std::min(wide.size(), static_cast<std::size_t>(259));
+    if (length > 0 && runtime::write_guest_memory(path, wide.data(), length * sizeof(std::uint16_t)).status !=
+                         runtime::GuestMemoryAccessStatus::Success) {
+        return false;
+    }
+    auto* const terminator = reinterpret_cast<std::uint16_t*>(
+        reinterpret_cast<std::byte*>(path) + length * sizeof(std::uint16_t));
+    return write_guest_value(terminator, std::uint16_t{0});
+}
 
 bool update_tray_registration(const std::uint32_t message, void* const data) noexcept {
     if (data == nullptr) {
@@ -233,7 +245,7 @@ TL_MSABI int tl_SHGetKnownFolderPath(const void* rfid, const std::uint32_t flags
                                      std::uint16_t** path) noexcept {
     (void)flags;
     (void)token;
-    if (rfid == nullptr || path == nullptr || !mapped_guest_range(path, sizeof(*path), true)) {
+    if (rfid == nullptr || path == nullptr) {
         set_last_error(abi::kErrorInvalidParameter);
         return static_cast<int>(0x80070057); // E_INVALIDARG
     }
@@ -262,7 +274,11 @@ TL_MSABI int tl_SHGetKnownFolderPath(const void* rfid, const std::uint32_t flags
     }
     std::copy(wide.begin(), wide.end(), allocated);
     allocated[wide.size()] = 0;
-    *path = allocated;
+    if (!write_guest_value(path, allocated)) {
+        static_cast<void>(tl_CoTaskMemFree(allocated));
+        set_last_error(abi::kErrorInvalidParameter);
+        return static_cast<int>(0x80070057); // E_INVALIDARG
+    }
     set_last_error(abi::kErrorSuccess);
     return 0; // S_OK
 }
@@ -272,7 +288,7 @@ TL_MSABI int tl_SHGetFolderPathW(void* hwnd, int csidl, void* token, std::uint32
     (void)hwnd;
     (void)token;
     (void)flags;
-    if (path == nullptr || !mapped_guest_range(path, 260 * sizeof(std::uint16_t), true)) {
+    if (path == nullptr) {
         set_last_error(abi::kErrorInvalidParameter);
         return static_cast<int>(0x80070057);
     }
@@ -284,9 +300,10 @@ TL_MSABI int tl_SHGetFolderPathW(void* hwnd, int csidl, void* token, std::uint32
     }
     const std::string win_path = prefix::to_windows_path(native_path, guest_prefix_root());
     const std::u16string wide = util::utf8_to_wide(win_path);
-    const std::size_t to_copy = std::min<std::size_t>(wide.size(), 259);
-    for (std::size_t i = 0; i < to_copy; ++i) path[i] = wide[i];
-    path[to_copy] = 0;
+    if (!write_shell_path(path, wide)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return static_cast<int>(0x80070057);
+    }
     set_last_error(abi::kErrorSuccess);
     return 0; // S_OK
 }
@@ -296,7 +313,7 @@ TL_MSABI int tl_SHGetFolderPathAndSubDirW(void* hwnd, int csidl, void* token, st
     (void)hwnd;
     (void)token;
     (void)flags;
-    if (path == nullptr || !mapped_guest_range(path, 260 * sizeof(std::uint16_t), true)) {
+    if (path == nullptr) {
         set_last_error(abi::kErrorInvalidParameter);
         return static_cast<int>(0x80070057);
     }
@@ -322,9 +339,10 @@ TL_MSABI int tl_SHGetFolderPathAndSubDirW(void* hwnd, int csidl, void* token, st
     }
     const std::string win_path = prefix::to_windows_path(native_path, guest_prefix_root());
     const std::u16string wide = util::utf8_to_wide(win_path);
-    const std::size_t to_copy = std::min<std::size_t>(wide.size(), 259);
-    for (std::size_t i = 0; i < to_copy; ++i) path[i] = wide[i];
-    path[to_copy] = 0;
+    if (!write_shell_path(path, wide)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return static_cast<int>(0x80070057);
+    }
     set_last_error(abi::kErrorSuccess);
     return 0;
 }
@@ -467,9 +485,10 @@ TL_MSABI int tl_SHGetPathFromIDListW(const void* const pidl, std::uint16_t* cons
     }
     const std::string win_profile = prefix::to_windows_path(profile, guest_prefix_root());
     const std::u16string wide_home = util::utf8_to_wide(win_profile);
-    const std::size_t len = std::min(wide_home.size(), static_cast<std::size_t>(259));
-    std::memcpy(path, wide_home.data(), len * sizeof(std::uint16_t));
-    path[len] = 0;
+    if (!write_shell_path(path, wide_home)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
     set_last_error(abi::kErrorSuccess);
     return 1;
 }
@@ -484,10 +503,9 @@ TL_MSABI void* tl_SHBrowseForFolderW(void* const bi) noexcept {
 }
 
 TL_MSABI int tl_SHGetMalloc(void** const pp_malloc) noexcept {
-    if (pp_malloc == nullptr || !mapped_guest_range(pp_malloc, sizeof(void*), true)) {
+    if (pp_malloc == nullptr || !write_guest_value(pp_malloc, static_cast<void*>(&g_guest_imalloc))) {
         return static_cast<int>(0x80070057U); // E_INVALIDARG
     }
-    *pp_malloc = &g_guest_imalloc;
     return 0; // S_OK
 }
 
@@ -505,18 +523,18 @@ TL_MSABI std::uint32_t tl_ExtractIconExW(const std::uint16_t* const file, const 
     (void)file;
     (void)index;
     (void)icons;
-    if (icon_large != nullptr && mapped_guest_range(icon_large, sizeof(void*), true)) {
-        *icon_large = reinterpret_cast<void*>(0x1000);
+    if (icon_large != nullptr) {
+        static_cast<void>(write_guest_value(icon_large, reinterpret_cast<void*>(0x1000)));
     }
-    if (icon_small != nullptr && mapped_guest_range(icon_small, sizeof(void*), true)) {
-        *icon_small = reinterpret_cast<void*>(0x1000);
+    if (icon_small != nullptr) {
+        static_cast<void>(write_guest_value(icon_small, reinterpret_cast<void*>(0x1000)));
     }
     return 1;
 }
 
 TL_MSABI int tl_SHGetDesktopFolder(void** const ppshf) noexcept {
-    if (ppshf != nullptr && mapped_guest_range(ppshf, sizeof(void*), true)) {
-        *ppshf = reinterpret_cast<void*>(0x4445534BULL); // 'DESK'
+    if (ppshf != nullptr) {
+        static_cast<void>(write_guest_value(ppshf, reinterpret_cast<void*>(0x4445534BULL))); // 'DESK'
     }
     return 0; // S_OK
 }
@@ -524,8 +542,8 @@ TL_MSABI int tl_SHGetDesktopFolder(void** const ppshf) noexcept {
 TL_MSABI int tl_SHGetSpecialFolderLocation(void* const hwnd, const int folder, void** const ppidl) noexcept {
     (void)hwnd;
     (void)folder;
-    if (ppidl != nullptr && mapped_guest_range(ppidl, sizeof(void*), true)) {
-        *ppidl = reinterpret_cast<void*>(0x5049444CULL); // 'PIDL'
+    if (ppidl != nullptr) {
+        static_cast<void>(write_guest_value(ppidl, reinterpret_cast<void*>(0x5049444CULL))); // 'PIDL'
     }
     return 0; // S_OK
 }
@@ -567,8 +585,8 @@ TL_MSABI int tl_SHCreateItemFromParsingName(const wchar_t* const pszPath, void* 
     (void)pszPath;
     (void)pbc;
     (void)riid;
-    if (ppv != nullptr && mapped_guest_range(ppv, sizeof(void*), true)) {
-        *ppv = reinterpret_cast<void*>(0x4954454DULL); // 'ITEM'
+    if (ppv != nullptr) {
+        static_cast<void>(write_guest_value(ppv, reinterpret_cast<void*>(0x4954454DULL))); // 'ITEM'
     }
     return 0; // S_OK
 }
@@ -583,9 +601,9 @@ TL_MSABI std::uint32_t tl_DragQueryFileW(void* const hDrop, const std::uint32_t 
 
 TL_MSABI int tl_DragQueryPoint(void* const hDrop, void* const lppt) noexcept {
     (void)hDrop;
-    if (lppt != nullptr && mapped_guest_range(lppt, 8, true)) {
-        *reinterpret_cast<std::int32_t*>(lppt) = 0;
-        *reinterpret_cast<std::int32_t*>(static_cast<char*>(lppt) + 4) = 0;
+    if (lppt != nullptr) {
+        const std::array<std::int32_t, 2> point{};
+        static_cast<void>(runtime::write_guest_memory(lppt, point.data(), sizeof(point)));
     }
     return 1;
 }

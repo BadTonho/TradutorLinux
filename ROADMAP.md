@@ -408,6 +408,12 @@ image list e `LoadIconWithScaleDown` para cópias protegidas. Os contratos
 determinísticos dos stubs foram preservados; a regressão cobre todos esses
 ponteiros de saída inacessíveis.
 
+O lote `SHELL32` migrou caminhos wide e saídas de `SHGetKnownFolderPath`,
+`SHGetMalloc`, ícones, pastas, item Shell e `DragQueryPoint` para cópias
+protegidas. As operações continuam limitadas ao prefixo ou a stubs
+determinísticos; estruturas de entrada complexas permanecem para uma etapa
+posterior, e a regressão cobre ponteiros de saída inacessíveis.
+
 ## Fora desta rodada
 
 Não entram neste roadmap, por enquanto:
