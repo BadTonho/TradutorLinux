@@ -177,8 +177,8 @@ fecha a primitiva e os caminhos de strings/MPR, mas não toda a superfície.
 `FindFirstFileA/W`, `GetMessageA`, conversões comuns de caminho e entradas de
 `WININET`, PSAPI, WINMM e DWM usam cópias protegidas. Os testes focados de
 memória, arquivos, metadados, GUI, MPR, WININET e stubs auxiliares passaram; a busca de auditoria ainda encontra
-rotas legadas em módulos como locale, segurança, GDI, sincronização e APIs de
-rede, portanto a aceitação final permanece aberta.
+rotas legadas em módulos como segurança, sincronização e APIs de processo/GUI,
+portanto a aceitação final permanece aberta.
 
 O lote seguinte migrou também estruturas e buffers de console/tempo, com os
 testes de `Win32ConsoleTest`, `Win32ProcessConsoleTest`, `Win32TimeTest` e
@@ -287,6 +287,14 @@ O lote auxiliar de GDI migrou `GetCharWidthA/W`, `GetCharABCWidthsA`,
 `Gdi32Test.ProtectedAuxiliaryTextAndDeviceBuffersRejectUnmappedPointers`
 passou junto com os demais testes GDI, e a auditoria de `src/runtime/gdi32.cpp`
 não encontra mais `mapped_guest_*` nem acesso direto aos buffers convidados.
+
+O lote de segurança básica migrou snapshots de SID, token e caminhos wide,
+além das publicações de `OpenProcessToken`, `GetTokenInformation`,
+`AllocateAndInitializeSid`, `CopySid`, `CreateWellKnownSid`,
+`CheckTokenMembership` e `BuildTrusteeWithSidW`. A regressão
+`Win32SecurityTest.ProtectedTokenAndSidBuffersRejectUnmappedPointers` passou
+com os testes existentes de token/SID e memória; ACLs e descritores ainda
+permanecem para o próximo lote de segurança.
 
 ## Fora desta rodada
 

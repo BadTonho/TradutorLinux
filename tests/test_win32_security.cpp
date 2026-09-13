@@ -198,5 +198,62 @@ TEST(Win32SecurityTest, RejectsUnsupportedAclInputsAndExternalPaths) {
               abi::kErrorInvalidParameter);
 }
 
+TEST(Win32SecurityTest, ProtectedTokenAndSidBuffersRejectUnmappedPointers) {
+    SecurityPrefixFixture ctx;
+    auto* const invalid = reinterpret_cast<void*>(static_cast<std::uintptr_t>(0x1000U));
+
+    EXPECT_EQ(tl_OpenProcessToken(tl_GetCurrentProcess(), abi::kTokenQuery,
+                                  static_cast<void**>(invalid)), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+
+    void* token = nullptr;
+    ASSERT_EQ(tl_OpenProcessToken(tl_GetCurrentProcess(), abi::kTokenQuery, &token), 1);
+    std::uint32_t return_length = 0;
+    abi::GuestTokenElevation elevation{};
+    EXPECT_EQ(tl_GetTokenInformation(token, abi::kTokenElevation, invalid,
+                                     sizeof(elevation), &return_length), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_GetTokenInformation(token, abi::kTokenElevation, &elevation,
+                                     sizeof(elevation), static_cast<std::uint32_t*>(invalid)), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_CloseHandle(token), 1);
+
+    const std::array<std::uint8_t, 6> authority{0, 0, 0, 0, 0, 5};
+    void* sid = nullptr;
+    ASSERT_EQ(tl_AllocateAndInitializeSid(authority.data(), 1, 42, 0, 0, 0, 0, 0, 0, 0,
+                                          &sid), 1);
+    ASSERT_NE(sid, nullptr);
+    EXPECT_EQ(tl_AllocateAndInitializeSid(invalid, 1, 42, 0, 0, 0, 0, 0, 0, 0,
+                                          &sid), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_AllocateAndInitializeSid(authority.data(), 1, 42, 0, 0, 0, 0, 0, 0, 0,
+                                          static_cast<void**>(invalid)), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+
+    std::array<std::byte, 64> sid_copy{};
+    EXPECT_EQ(tl_CopySid(static_cast<std::uint32_t>(sid_copy.size()), invalid, sid), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_CopySid(static_cast<std::uint32_t>(sid_copy.size()), sid_copy.data(), invalid), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+
+    std::uint32_t sid_size = 32;
+    EXPECT_EQ(tl_CreateWellKnownSid(abi::kWinWorldSid, nullptr, invalid, &sid_size), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_CreateWellKnownSid(abi::kWinWorldSid, nullptr, sid_copy.data(),
+                                    static_cast<std::uint32_t*>(invalid)), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    int is_member = 0;
+    EXPECT_EQ(tl_CheckTokenMembership(nullptr, sid, static_cast<int*>(invalid)), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_CheckTokenMembership(nullptr, sid, &is_member), 1);
+
+    abi::GuestTrusteeW trustee{};
+    tl_BuildTrusteeWithSidW(invalid, sid);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    tl_BuildTrusteeWithSidW(&trustee, sid);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorSuccess);
+    EXPECT_EQ(tl_FreeSid(sid), nullptr);
+}
+
 }  // namespace
 }  // namespace tradutorlinux

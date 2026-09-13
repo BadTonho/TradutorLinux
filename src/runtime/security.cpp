@@ -117,16 +117,18 @@ template <typename T>
 
 [[nodiscard]] bool sid_length(const void* const sid, std::size_t& length) noexcept {
     length = 0;
-    if (!mapped_range(sid, sizeof(abi::GuestSidHeader), false)) {
+    abi::GuestSidHeader header{};
+    if (!read_guest_value(sid, header)) {
         return false;
     }
-    const auto* const header = static_cast<const abi::GuestSidHeader*>(sid);
-    if (header->revision != abi::kSecurityDescriptorRevision || header->sub_authority_count > 15U) {
+    if (header.revision != abi::kSecurityDescriptorRevision || header.sub_authority_count > 15U) {
         return false;
     }
     length = sizeof(abi::GuestSidHeader) +
-             static_cast<std::size_t>(header->sub_authority_count) * sizeof(std::uint32_t);
-    return mapped_range(sid, length, false);
+             static_cast<std::size_t>(header.sub_authority_count) * sizeof(std::uint32_t);
+    std::array<std::uint8_t, sizeof(abi::GuestSidHeader) + 15U * sizeof(std::uint32_t)> snapshot{};
+    return runtime::read_guest_memory(sid, snapshot.data(), length).status ==
+           runtime::GuestMemoryAccessStatus::Success;
 }
 
 [[nodiscard]] bool copy_sid(const void* const sid, SidBytes& output) noexcept {
@@ -134,9 +136,14 @@ template <typename T>
     if (!sid_length(sid, length)) {
         return false;
     }
-    const auto* const first = static_cast<const std::uint8_t*>(sid);
-    output.assign(first, first + length);
-    return true;
+    try {
+        output.resize(length);
+    } catch (const std::bad_alloc&) {
+        output.clear();
+        return false;
+    }
+    return runtime::read_guest_memory(sid, output.data(), output.size()).status ==
+           runtime::GuestMemoryAccessStatus::Success;
 }
 
 [[nodiscard]] std::vector<std::uint8_t> make_acl(const std::vector<Ace>& aces) {
@@ -401,11 +408,14 @@ enum class PathStatus { Success, InvalidParameter, AccessDenied, FileNotFound, I
 }
 
 [[nodiscard]] PathStatus key_for_wide_path(const std::uint16_t* const input, std::string& key) {
-    if (input == nullptr || !runtime::validate_mapped_wstring(input)) {
+    std::u16string input_copy;
+    if (input == nullptr || !runtime::copy_guest_wstring(input, 4096U, input_copy)) {
         return PathStatus::InvalidParameter;
     }
+    const std::string input_utf8 = util::wide_to_utf8(
+        reinterpret_cast<const std::uint16_t*>(input_copy.data()), input_copy.size());
     const std::filesystem::path resolved =
-        prefix::resolve_windows_path(util::wide_to_utf8(input), guest_prefix_root());
+        prefix::resolve_windows_path(input_utf8, guest_prefix_root());
     if (resolved.empty()) {
         return PathStatus::InvalidParameter;
     }
@@ -579,7 +589,7 @@ TL_ADVAPI_MSABI int tl_OpenProcessToken(const void* const process, const std::ui
                                         void** const token) noexcept {
     try {
         if (process != reinterpret_cast<const void*>(~static_cast<std::uintptr_t>(0)) ||
-            token == nullptr || !mapped_range(token, sizeof(*token), true)) {
+            token == nullptr) {
             set_last_error(abi::kErrorInvalidParameter);
             return 0;
         }
@@ -599,7 +609,12 @@ TL_ADVAPI_MSABI int tl_OpenProcessToken(const void* const process, const std::ui
             return 0;
         }
         found->open = true;
-        *token = &*found;
+        void* const token_value = &*found;
+        if (!write_guest_value(token, token_value)) {
+            found->open = false;
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
+        }
         set_last_error(abi::kErrorSuccess);
         trace_security("open-token", "success", "current-process");
         return 1;
@@ -615,7 +630,7 @@ TL_ADVAPI_MSABI int tl_GetTokenInformation(const void* const token,
                                            const std::uint32_t information_length,
                                            std::uint32_t* const return_length) noexcept {
     try {
-        if (return_length == nullptr || !mapped_range(return_length, sizeof(*return_length), true)) {
+        if (return_length == nullptr) {
             set_last_error(abi::kErrorInvalidParameter);
             return 0;
         }
@@ -633,22 +648,34 @@ TL_ADVAPI_MSABI int tl_GetTokenInformation(const void* const token,
             set_last_error(abi::kErrorNotSupported);
             return 0;
         }
-        *return_length = static_cast<std::uint32_t>(required);
+        if (!write_guest_value(return_length, static_cast<std::uint32_t>(required))) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
+        }
         if (information == nullptr || information_length < required) {
             set_last_error(abi::kErrorInsufficientBuffer);
             return 0;
         }
-        if (!mapped_range(information, required, true)) {
+        std::vector<std::uint8_t> output(required, 0);
+        if (information_class == abi::kTokenUser) {
+            void* guest_sid = nullptr;
+            const std::uintptr_t information_address = reinterpret_cast<std::uintptr_t>(information);
+            if (sizeof(abi::GuestTokenUser) > std::numeric_limits<std::uintptr_t>::max() -
+                                                    information_address) {
+                set_last_error(abi::kErrorInvalidParameter);
+                return 0;
+            }
+            guest_sid = reinterpret_cast<void*>(information_address + sizeof(abi::GuestTokenUser));
+            abi::GuestTokenUser result{};
+            result.user.sid = guest_sid;
+            std::memcpy(output.data(), &result, sizeof(result));
+            std::memcpy(output.data() + sizeof(result), g_state.user_sid.data(),
+                        g_state.user_sid.size());
+        }
+        if (runtime::write_guest_memory(information, output.data(), output.size()).status !=
+            runtime::GuestMemoryAccessStatus::Success) {
             set_last_error(abi::kErrorInvalidParameter);
             return 0;
-        }
-        if (information_class == abi::kTokenUser) {
-            auto* const result = static_cast<abi::GuestTokenUser*>(information);
-            result->user = {};
-            result->user.sid = static_cast<std::uint8_t*>(information) + sizeof(*result);
-            std::memcpy(result->user.sid, g_state.user_sid.data(), g_state.user_sid.size());
-        } else {
-            *static_cast<abi::GuestTokenElevation*>(information) = {};
         }
         set_last_error(abi::kErrorSuccess);
         trace_security("token-information", "success",
@@ -672,8 +699,7 @@ TL_ADVAPI_MSABI int tl_AllocateAndInitializeSid(const void* const identifier_aut
                                                 const std::uint32_t sub_authority7,
                                                 void** const sid) noexcept {
     try {
-        if (identifier_authority == nullptr || sub_authority_count > 8U || sid == nullptr ||
-            !mapped_range(identifier_authority, 6, false) || !mapped_range(sid, sizeof(*sid), true)) {
+        if (identifier_authority == nullptr || sub_authority_count > 8U || sid == nullptr) {
             set_last_error(abi::kErrorInvalidParameter);
             return 0;
         }
@@ -681,7 +707,11 @@ TL_ADVAPI_MSABI int tl_AllocateAndInitializeSid(const void* const identifier_aut
                                                  sub_authority3, sub_authority4, sub_authority5,
                                                  sub_authority6, sub_authority7};
         std::array<std::uint8_t, 6> authority{};
-        std::memcpy(authority.data(), identifier_authority, authority.size());
+        if (runtime::read_guest_memory(identifier_authority, authority.data(), authority.size()).status !=
+            runtime::GuestMemoryAccessStatus::Success) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
+        }
         const std::vector<std::uint32_t> selected{subs.begin(),
                                                   subs.begin() + sub_authority_count};
         SidBytes data = make_sid(authority, selected);
@@ -691,11 +721,15 @@ TL_ADVAPI_MSABI int tl_AllocateAndInitializeSid(const void* const identifier_aut
             return 0;
         }
         std::memcpy(allocated, data.data(), data.size());
+        if (!write_guest_value(sid, allocated)) {
+            std::free(allocated);
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
+        }
         {
             std::lock_guard lock(g_security_mutex);
             g_allocated_sids.insert(allocated);
         }
-        *sid = allocated;
         set_last_error(abi::kErrorSuccess);
         return 1;
     } catch (...) {
@@ -730,14 +764,23 @@ TL_ADVAPI_MSABI std::uint32_t tl_GetLengthSid(const void* const sid) noexcept {
 TL_ADVAPI_MSABI int tl_CopySid(const std::uint32_t destination_length, void* const destination,
                                const void* const source) noexcept {
     std::size_t source_length = 0;
-    if (!sid_length(source, source_length) || destination == nullptr ||
-        destination_length < source_length || !mapped_range(destination, source_length, true)) {
+    SidBytes source_copy;
+    if (!copy_sid(source, source_copy)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    source_length = source_copy.size();
+    if (destination == nullptr || destination_length < source_length) {
         set_last_error(destination != nullptr && destination_length < source_length
                            ? abi::kErrorInsufficientBuffer
                            : abi::kErrorInvalidParameter);
         return 0;
     }
-    std::memcpy(destination, source, source_length);
+    if (runtime::write_guest_memory(destination, source_copy.data(), source_copy.size()).status !=
+        runtime::GuestMemoryAccessStatus::Success) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
     set_last_error(abi::kErrorSuccess);
     return 1;
 }
@@ -763,7 +806,7 @@ TL_ADVAPI_MSABI int tl_IsValidSid(const void* const sid) noexcept {
 TL_ADVAPI_MSABI int tl_CreateWellKnownSid(const std::uint32_t well_known_sid_type,
                                           const void* const domain_sid, void* const sid,
                                           std::uint32_t* const sid_size) noexcept {
-    if (domain_sid != nullptr || sid_size == nullptr || !mapped_range(sid_size, sizeof(*sid_size), true)) {
+    if (domain_sid != nullptr || sid_size == nullptr) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
@@ -777,17 +820,24 @@ TL_ADVAPI_MSABI int tl_CreateWellKnownSid(const std::uint32_t well_known_sid_typ
         return 0;
     }
     const std::uint32_t required = static_cast<std::uint32_t>(result.size());
-    if (sid == nullptr || *sid_size < required) {
-        *sid_size = required;
-        set_last_error(abi::kErrorInsufficientBuffer);
-        return 0;
-    }
-    if (!mapped_range(sid, required, true)) {
+    std::uint32_t capacity = 0;
+    if (!read_guest_value(sid_size, capacity)) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
-    std::memcpy(sid, result.data(), result.size());
-    *sid_size = required;
+    if (sid == nullptr || capacity < required) {
+        if (!write_guest_value(sid_size, required)) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
+        }
+        set_last_error(abi::kErrorInsufficientBuffer);
+        return 0;
+    }
+    if (runtime::write_guest_memory(sid, result.data(), result.size()).status !=
+        runtime::GuestMemoryAccessStatus::Success || !write_guest_value(sid_size, required)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
     set_last_error(abi::kErrorSuccess);
     return 1;
 }
@@ -795,7 +845,7 @@ TL_ADVAPI_MSABI int tl_CreateWellKnownSid(const std::uint32_t well_known_sid_typ
 TL_ADVAPI_MSABI int tl_CheckTokenMembership(const void* const token, const void* const sid,
                                             int* const is_member) noexcept {
     try {
-        if (is_member == nullptr || !mapped_range(is_member, sizeof(*is_member), true)) {
+        if (is_member == nullptr) {
             set_last_error(abi::kErrorInvalidParameter);
             return 0;
         }
@@ -809,7 +859,10 @@ TL_ADVAPI_MSABI int tl_CheckTokenMembership(const void* const token, const void*
             set_last_error(abi::kErrorInvalidHandle);
             return 0;
         }
-        *is_member = checked == g_state.user_sid ? 1 : 0;
+        if (!write_guest_value(is_member, checked == g_state.user_sid ? 1 : 0)) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
+        }
         set_last_error(abi::kErrorSuccess);
         return 1;
     } catch (...) {
@@ -820,17 +873,20 @@ TL_ADVAPI_MSABI int tl_CheckTokenMembership(const void* const token, const void*
 
 TL_ADVAPI_MSABI void tl_BuildTrusteeWithSidW(void* const trustee, void* const sid) noexcept {
     std::size_t sid_size = 0;
-    if (trustee == nullptr || !mapped_range(trustee, sizeof(abi::GuestTrusteeW), true) ||
+    if (trustee == nullptr ||
         !sid_length(sid, sid_size)) {
         set_last_error(abi::kErrorInvalidParameter);
         return;
     }
-    auto* const result = static_cast<abi::GuestTrusteeW*>(trustee);
-    *result = {};
-    result->multiple_trustee_operation = abi::kNoMultipleTrustee;
-    result->trustee_form = abi::kTrusteeIsSid;
-    result->trustee_type = abi::kTrusteeIsUnknown;
-    result->name = sid;
+    abi::GuestTrusteeW result{};
+    result.multiple_trustee_operation = abi::kNoMultipleTrustee;
+    result.trustee_form = abi::kTrusteeIsSid;
+    result.trustee_type = abi::kTrusteeIsUnknown;
+    result.name = sid;
+    if (!write_guest_value(trustee, result)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return;
+    }
     set_last_error(abi::kErrorSuccess);
 }
 
