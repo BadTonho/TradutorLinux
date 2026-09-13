@@ -127,11 +127,13 @@ desreferenciar o ponteiro convidado no código C++. O resultado distingue
 
 Os testes cobrem ponteiro nulo, overflow de endereço, página desmontada com
 cópia parcial, destino somente leitura e alternância concorrente entre
-`PROT_NONE` e leitura/escrita. O validador de strings (`cstring`/UTF-16) e os
-buffers de entrada do MPR já usam essa cópia. A migração do runtime ainda não
-está completa: `validate_mapped_range` continua sendo uma fotografia de
-`/proc/self/maps`, e há APIs antigas com acesso direto após validação; essas
-rotas não são anunciadas como atômicas até serem migradas.
+`PROT_NONE` e leitura/escrita. O validador de strings (`cstring`/UTF-16), os
+buffers de entrada do MPR, os caminhos de arquivo (`ReadFile`/`WriteFile`),
+`FindFirstFileA/W`, as conversões comuns de caminhos e `GetMessageA` já usam
+essa cópia. A migração do runtime ainda não está completa:
+`validate_mapped_range` continua sendo uma fotografia de `/proc/self/maps`, e
+há APIs antigas com acesso direto após validação; essas rotas não são
+anunciadas como atômicas até serem migradas.
 
 ## GUI mínima (Fase 7)
 

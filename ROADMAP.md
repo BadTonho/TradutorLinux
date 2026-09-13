@@ -173,6 +173,13 @@ Esta aceitação continua pendente enquanto existirem consumidores de ponteiros
 convidados que façam acesso direto sem contrato equivalente; o progresso atual
 fecha a primitiva e os caminhos de strings/MPR, mas não toda a superfície.
 
+**Progresso 2026-09-12:** além da primitiva, `ReadFile`/`WriteFile`,
+`FindFirstFileA/W`, `GetMessageA`, conversões comuns de caminho e entradas de
+`WININET` usam cópias protegidas. Os testes focados de memória, arquivos,
+metadados, GUI, MPR e WININET passaram; a busca de auditoria ainda encontra
+rotas legadas em módulos como locale, segurança, GDI, sincronização e APIs de
+rede, portanto a aceitação final permanece aberta.
+
 ## Fora desta rodada
 
 Não entram neste roadmap, por enquanto:

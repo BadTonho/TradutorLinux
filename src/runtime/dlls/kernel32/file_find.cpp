@@ -91,8 +91,7 @@ void convert_find_data(const Win32FindDataA& source, LegacyFindDataW& target) no
 
 extern "C" {
 TL_MSABI void* tl_FindFirstFileA(const char* file_name, void* find_data) noexcept {
-    if (!mapped_guest_cstring(file_name) || file_name == nullptr || find_data == nullptr ||
-        !mapped_guest_range(find_data, sizeof(Win32FindDataA), true)) {
+    if (file_name == nullptr || find_data == nullptr) {
         set_last_error(abi::kErrorInvalidParameter);
         return kInvalidHandleValue;
     }
@@ -100,8 +99,7 @@ TL_MSABI void* tl_FindFirstFileA(const char* file_name, void* find_data) noexcep
 }
 TL_MSABI int tl_FindNextFileA(const void* handle, void* find_data) noexcept {
     FindSlot* slot = find_slot_for_handle(handle);
-    if (slot == nullptr || !slot->used || find_data == nullptr ||
-        !mapped_guest_range(find_data, sizeof(Win32FindDataA), true)) {
+    if (slot == nullptr || !slot->used || find_data == nullptr) {
         set_last_error(abi::kErrorInvalidHandle);
         return 0;
     }
@@ -112,27 +110,31 @@ TL_MSABI int tl_FindNextFileA(const void* handle, void* find_data) noexcept {
             continue;
         }
         if (win32_wildcard_match(slot->pattern, entry->d_name)) {
-            auto* data = static_cast<Win32FindDataA*>(find_data);
-            *data = {};
-            std::strncpy(data->c_file_name, entry->d_name, sizeof(data->c_file_name) - 1);
+            Win32FindDataA data{};
+            std::strncpy(data.c_file_name, entry->d_name, sizeof(data.c_file_name) - 1);
             std::string full_path = slot->directory + "/" + entry->d_name;
             struct stat st{};
             if (stat(full_path.c_str(), &st) == 0) {
-                data->dw_file_attributes = stat_to_win32_attributes(full_path.c_str(), st);
-                data->n_file_size_low = static_cast<std::uint32_t>(st.st_size & 0xFFFFFFFFU);
-                data->n_file_size_high = static_cast<std::uint32_t>(st.st_size >> 32);
+                data.dw_file_attributes = stat_to_win32_attributes(full_path.c_str(), st);
+                data.n_file_size_low = static_cast<std::uint32_t>(st.st_size & 0xFFFFFFFFU);
+                data.n_file_size_high = static_cast<std::uint32_t>(st.st_size >> 32);
                 GuestFileTime creation{};
                 GuestFileTime access{};
                 GuestFileTime write{};
                 filetime_from_unix(st.st_ctim.tv_sec, creation);
                 filetime_from_unix(st.st_atim.tv_sec, access);
                 filetime_from_unix(st.st_mtim.tv_sec, write);
-                data->ft_creation_time_lo = creation.low;
-                data->ft_creation_time_hi = creation.high;
-                data->ft_last_access_time_lo = access.low;
-                data->ft_last_access_time_hi = access.high;
-                data->ft_last_write_time_lo = write.low;
-                data->ft_last_write_time_hi = write.high;
+                data.ft_creation_time_lo = creation.low;
+                data.ft_creation_time_hi = creation.high;
+                data.ft_last_access_time_lo = access.low;
+                data.ft_last_access_time_hi = access.high;
+                data.ft_last_write_time_lo = write.low;
+                data.ft_last_write_time_hi = write.high;
+            }
+            if (runtime::write_guest_memory(find_data, &data, sizeof(data)).status !=
+                runtime::GuestMemoryAccessStatus::Success) {
+                set_last_error(abi::kErrorInvalidParameter);
+                return 0;
             }
             set_last_error(abi::kErrorSuccess);
             trace_filesystem("enumerate", "success", entry->d_name);
@@ -208,8 +210,7 @@ TL_MSABI int tl_ReadDirectoryChangesW(void* const hDirectory, void* const lpBuff
     return 1;
 }
 TL_MSABI void* tl_FindFirstFileW(const std::uint16_t* path, void* find_data) noexcept {
-    if (!mapped_guest_wstring(path) || find_data == nullptr ||
-        !mapped_guest_range(find_data, sizeof(LegacyFindDataW), true)) {
+    if (path == nullptr || find_data == nullptr) {
         set_last_error(abi::kErrorInvalidParameter);
         return reinterpret_cast<void*>(std::numeric_limits<std::uintptr_t>::max());
     }
@@ -223,7 +224,14 @@ TL_MSABI void* tl_FindFirstFileW(const std::uint16_t* path, void* find_data) noe
     if (handle == reinterpret_cast<void*>(std::numeric_limits<std::uintptr_t>::max())) {
         return handle;
     }
-    convert_find_data(ansi, *static_cast<LegacyFindDataW*>(find_data));
+    LegacyFindDataW wide{};
+    convert_find_data(ansi, wide);
+    if (runtime::write_guest_memory(find_data, &wide, sizeof(wide)).status !=
+        runtime::GuestMemoryAccessStatus::Success) {
+        tl_FindClose(handle);
+        set_last_error(abi::kErrorInvalidParameter);
+        return kInvalidHandleValue;
+    }
     return handle;
 }
 TL_MSABI void* tl_FindFirstFileExW(const std::uint16_t* const path, const int info_level,
@@ -248,7 +256,7 @@ TL_MSABI void* tl_FindFirstFileExW(const std::uint16_t* const path, const int in
     return handle;
 }
 TL_MSABI int tl_FindNextFileW(const void* handle, void* find_data) noexcept {
-    if (find_data == nullptr || !mapped_guest_range(find_data, sizeof(LegacyFindDataW), true)) {
+    if (find_data == nullptr) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
@@ -256,7 +264,13 @@ TL_MSABI int tl_FindNextFileW(const void* handle, void* find_data) noexcept {
     if (tl_FindNextFileA(handle, &ansi) == 0) {
         return 0;
     }
-    convert_find_data(ansi, *static_cast<LegacyFindDataW*>(find_data));
+    LegacyFindDataW wide{};
+    convert_find_data(ansi, wide);
+    if (runtime::write_guest_memory(find_data, &wide, sizeof(wide)).status !=
+        runtime::GuestMemoryAccessStatus::Success) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
     return 1;
 }
 }

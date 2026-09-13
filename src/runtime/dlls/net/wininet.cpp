@@ -244,38 +244,13 @@ bool copy_wide(const std::uint16_t* source, const std::size_t length,
 }
 
 bool copy_wide_z(const std::uint16_t* source, std::string& result) noexcept {
-    result.clear();
-    if (source == nullptr || reinterpret_cast<std::uintptr_t>(source) % alignof(std::uint16_t) != 0) {
+    std::u16string copy;
+    if (!runtime::copy_guest_wstring(source, kMaxUrlLength, copy)) {
+        result.clear();
         return false;
     }
-
-    std::vector<std::uint16_t> copy;
-    copy.reserve(kMaxUrlLength + 1U);
-    std::array<std::uint16_t, 2048> scratch{};
-    std::size_t checked = 0;
-    while (checked < kMaxUrlLength) {
-        const std::uintptr_t source_address = reinterpret_cast<std::uintptr_t>(source);
-        if (checked > (std::numeric_limits<std::uintptr_t>::max() - source_address) /
-                          sizeof(std::uint16_t)) {
-            return false;
-        }
-        const std::size_t chunk_count = std::min(scratch.size(), kMaxUrlLength - checked);
-        const runtime::GuestMemoryAccessResult access = runtime::read_guest_memory(
-            reinterpret_cast<const void*>(source_address + checked * sizeof(std::uint16_t)),
-            scratch.data(), chunk_count * sizeof(std::uint16_t));
-        if (access.status != runtime::GuestMemoryAccessStatus::Success) {
-            return false;
-        }
-        for (std::size_t index = 0; index < chunk_count; ++index) {
-            if (scratch[index] == 0) {
-                result = util::wide_to_utf8(copy.data(), copy.size());
-                return result.size() <= kMaxUrlLength;
-            }
-            copy.push_back(scratch[index]);
-        }
-        checked += chunk_count;
-    }
-    return false;
+    result = util::wide_to_utf8(reinterpret_cast<const std::uint16_t*>(copy.data()), copy.size());
+    return result.size() <= kMaxUrlLength;
 }
 
 std::string lower_ascii(std::string value) {

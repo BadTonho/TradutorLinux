@@ -9,6 +9,7 @@
 #include <fstream>
 #include <limits>
 #include <mutex>
+#include <new>
 #include <shared_mutex>
 #include <string>
 #include <vector>
@@ -213,6 +214,84 @@ GuestMemoryAccessResult write_guest_memory(void* const destination,
                                            const void* const source,
                                            const std::size_t size) noexcept {
     return copy_guest_memory(true, destination, source, size);
+}
+
+bool copy_guest_cstring(const char* const source, const std::size_t max_len,
+                        std::string& destination) noexcept {
+    destination.clear();
+    if (source == nullptr || max_len == 0) {
+        return false;
+    }
+
+    try {
+        std::array<char, 4096> scratch{};
+        const std::uintptr_t source_address = reinterpret_cast<std::uintptr_t>(source);
+        std::size_t checked = 0;
+        while (checked < max_len) {
+            if (checked > std::numeric_limits<std::uintptr_t>::max() - source_address) {
+                return false;
+            }
+            const std::size_t chunk_count = std::min(scratch.size(), max_len - checked);
+            const GuestMemoryAccessResult access = read_guest_memory(
+                reinterpret_cast<const void*>(source_address + checked), scratch.data(), chunk_count);
+            const std::size_t available = std::min(access.transferred, chunk_count);
+            for (std::size_t index = 0; index < available; ++index) {
+                if (scratch[index] == '\0') {
+                    return true;
+                }
+                destination.push_back(scratch[index]);
+            }
+            if (access.status != GuestMemoryAccessStatus::Success) {
+                return false;
+            }
+            checked += chunk_count;
+        }
+    } catch (const std::bad_alloc&) {
+        destination.clear();
+        return false;
+    }
+    return false;
+}
+
+bool copy_guest_wstring(const std::uint16_t* const source, const std::size_t max_len,
+                        std::u16string& destination) noexcept {
+    destination.clear();
+    if (source == nullptr || max_len == 0 ||
+        reinterpret_cast<std::uintptr_t>(source) % alignof(std::uint16_t) != 0) {
+        return false;
+    }
+
+    try {
+        std::array<std::uint16_t, 2048> scratch{};
+        const std::uintptr_t source_address = reinterpret_cast<std::uintptr_t>(source);
+        std::size_t checked = 0;
+        while (checked < max_len) {
+            if (checked > (std::numeric_limits<std::uintptr_t>::max() - source_address) /
+                              sizeof(std::uint16_t)) {
+                return false;
+            }
+            const std::size_t chunk_count = std::min(scratch.size(), max_len - checked);
+            const GuestMemoryAccessResult access = read_guest_memory(
+                reinterpret_cast<const void*>(source_address + checked * sizeof(std::uint16_t)),
+                scratch.data(), chunk_count * sizeof(std::uint16_t));
+            const std::size_t available = std::min(access.transferred / sizeof(std::uint16_t),
+                                                   chunk_count);
+            for (std::size_t index = 0; index < available; ++index) {
+                if (scratch[index] == 0) {
+                    return true;
+                }
+                destination.push_back(scratch[index]);
+            }
+            if (access.status != GuestMemoryAccessStatus::Success) {
+                return false;
+            }
+            checked += chunk_count;
+        }
+    } catch (const std::bad_alloc&) {
+        destination.clear();
+        return false;
+    }
+    return false;
 }
 
 void invalidate_memory_map_cache() noexcept {

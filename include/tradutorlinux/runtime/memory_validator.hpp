@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <string>
 
 namespace tradutorlinux::runtime {
 
@@ -29,6 +30,13 @@ struct GuestMemoryAccessResult {
 [[nodiscard]] GuestMemoryAccessResult write_guest_memory(void* destination,
                                                          const void* source,
                                                          std::size_t size) noexcept;
+
+// Copia strings terminadas em NUL para memória do host sem expor o ponteiro
+// convidado às rotinas de conversão de texto.
+[[nodiscard]] bool copy_guest_cstring(const char* source, std::size_t max_len,
+                                      std::string& destination) noexcept;
+[[nodiscard]] bool copy_guest_wstring(const std::uint16_t* source, std::size_t max_len,
+                                      std::u16string& destination) noexcept;
 
 // Valida se uma faixa de memória [address, address + size) está mapeada e acessível no espaço de endereço atual.
 [[nodiscard]] bool validate_mapped_range(const void* address, std::size_t size, bool writable) noexcept;

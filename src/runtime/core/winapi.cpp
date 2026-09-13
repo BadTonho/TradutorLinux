@@ -296,11 +296,12 @@ void trace_stub(const char* symbol) noexcept {
 bool translate_windows_path(const char* win_path,
                             char* linux_out,
                             std::size_t out_size) noexcept {
-    if (win_path == nullptr || win_path[0] == '\0') {
+    std::string guest_path;
+    if (!runtime::copy_guest_cstring(win_path, 4096, guest_path) || guest_path.empty()) {
         return false;
     }
 
-    std::string_view view{win_path};
+    const std::string_view view{guest_path};
     // Caminhos absolutos do hospedeiro ("/...") não são caminhos Windows válidos
     // para o convidado: rejeitar para o chamador reportar ERROR_INVALID_PARAMETER.
     if (view.starts_with('/')) {
@@ -319,11 +320,11 @@ bool translate_windows_path(const char* win_path,
     }
 
     std::size_t length = 0;
-    for (; win_path[length] != '\0'; ++length) {
+    for (; length < guest_path.size(); ++length) {
         if (length + 1 >= out_size) {
             return false;
         }
-        linux_out[length] = (win_path[length] == '\\') ? '/' : win_path[length];
+        linux_out[length] = (guest_path[length] == '\\') ? '/' : guest_path[length];
     }
     linux_out[length] = '\0';
     return true;
@@ -331,10 +332,12 @@ bool translate_windows_path(const char* win_path,
 
 bool wide_path_to_string(const std::uint16_t* path,
                          std::string& result) noexcept {
-    if (!mapped_guest_wstring(path) || path == nullptr || path[0] == 0) {
+    std::u16string guest_path;
+    if (!runtime::copy_guest_wstring(path, 4096, guest_path) || guest_path.empty()) {
         return false;
     }
-    result = util::wide_to_utf8(path);
+    result = util::wide_to_utf8(reinterpret_cast<const std::uint16_t*>(guest_path.data()),
+                                guest_path.size());
     return !result.empty();
 }
 
