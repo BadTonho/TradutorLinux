@@ -1366,6 +1366,38 @@ TEST(Win32FileTest, SetFilePointerFailsForNegativePosition) {
     tl_CloseHandle(handle);
 }
 
+TEST(Win32FileTest, ProtectedIoOutputsRejectUnmappedPointers) {
+    TempDirFixture ctx;
+    const std::string path = ctx.path("protected-io.tmp");
+    FILE* file = std::fopen(path.c_str(), "wb");
+    ASSERT_NE(file, nullptr);
+    std::fwrite("data", 1, 4, file);
+    std::fclose(file);
+    void* handle = tl_CreateFileA(path.c_str(), abi::kGenericRead | abi::kGenericWrite, 0,
+                                  nullptr, abi::kOpenExisting, 0, nullptr);
+    ASSERT_NE(handle, nullptr);
+    auto* const invalid = reinterpret_cast<void*>(static_cast<std::uintptr_t>(0x1000U));
+    char buffer[4]{};
+
+    EXPECT_EQ(tl_WriteFile(handle, buffer, sizeof(buffer),
+                           static_cast<std::uint32_t*>(invalid), nullptr), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_ReadFile(handle, buffer, sizeof(buffer),
+                          static_cast<std::uint32_t*>(invalid), nullptr), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_SetFilePointer(handle, 0, static_cast<std::int32_t*>(invalid), 0), -1);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_SetFilePointerEx(handle, 0, static_cast<std::int64_t*>(invalid), 0), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_DeviceIoControl(nullptr, 0, nullptr, 0, nullptr, 0,
+                                 static_cast<std::uint32_t*>(invalid), nullptr), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_DuplicateHandle(nullptr, handle, nullptr,
+                                 reinterpret_cast<void**>(invalid), 0, 0, 0), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_CloseHandle(handle), 1);
+}
+
 TEST(Win32WideFileTest, UnicodeFileMetadataPositionAndCopyAreConsistent) {
     TempDirFixture ctx;
     const auto to_wide = [](const std::u16string& value) {

@@ -347,6 +347,13 @@ agora passam pela cópia protegida, com a regressão
 `Win32FileMetadataTest.ProtectedMetadataBuffersRejectUnmappedPointers`; as
 11 coberturas de metadados, arquivo wide e memória passaram.
 
+O lote de I/O síncrono migrou as saídas de `ReadFile`, `WriteFile`,
+`SetFilePointer`, `SetFilePointerEx`, `DeviceIoControl` e `DuplicateHandle`
+para cópias protegidas. A mesma regressão de arquivo cobre ponteiros inválidos;
+as coberturas de I/O, duplicação de handles e memória passaram, e
+`CloseHandle` foi corrigido para respeitar `ref_count` e fechar o descritor
+somente no último handle.
+
 ## Fora desta rodada
 
 Não entram neste roadmap, por enquanto:

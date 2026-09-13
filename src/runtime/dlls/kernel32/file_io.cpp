@@ -51,8 +51,7 @@ TL_MSABI int tl_WriteFile(const void* const handle, const void* const buffer,
                           const std::uint32_t bytes_to_write,
                           std::uint32_t* const bytes_written,
                           void* const overlapped) noexcept {
-    if (bytes_written != nullptr &&
-        !mapped_guest_range(bytes_written, sizeof(*bytes_written), true)) {
+    if (!write_guest_u32(bytes_written, 0)) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
@@ -113,8 +112,7 @@ TL_MSABI int tl_ReadFile(const void* const handle, void* const buffer,
                          const std::uint32_t bytes_to_read,
                          std::uint32_t* const bytes_read,
                          void* const overlapped) noexcept {
-    if (bytes_read != nullptr &&
-        !mapped_guest_range(bytes_read, sizeof(*bytes_read), true)) {
+    if (!write_guest_u32(bytes_read, 0)) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
@@ -315,6 +313,11 @@ TL_MSABI int tl_CloseHandle(const void* const handle) noexcept {
     {
         FileSlotGuard file_guard(handle);
         if (FileSlot* const slot = file_guard.get(); slot != nullptr) {
+            if (slot->header.ref_count > 1) {
+                --slot->header.ref_count;
+                set_last_error(abi::kErrorSuccess);
+                return 1;
+            }
             const bool delete_pending = slot->delete_pending && !slot->unlinked;
             const std::string path = slot->path;
             ::close(slot->fd);
@@ -445,13 +448,14 @@ TL_MSABI std::int32_t tl_SetFilePointer(const void* handle, std::int32_t distanc
         set_last_error(abi::kErrorInvalidParameter);
         return -1;
     }
-    if (high_distance != nullptr && !mapped_guest_range(high_distance, sizeof(*high_distance), true)) {
+    std::int32_t high_value = 0;
+    if (high_distance != nullptr && !read_guest_value(high_distance, high_value)) {
         set_last_error(abi::kErrorInvalidParameter);
         return -1;
     }
     std::int64_t offset = distance;
     if (high_distance != nullptr) {
-        offset |= static_cast<std::int64_t>(*high_distance) << 32;
+        offset |= static_cast<std::int64_t>(high_value) << 32;
     }
     std::int64_t new_pos = 0;
     switch (move_method) {
@@ -469,8 +473,10 @@ TL_MSABI std::int32_t tl_SetFilePointer(const void* handle, std::int32_t distanc
         return -1;
     }
     slot->position = static_cast<std::int64_t>(result);
-    if (high_distance != nullptr) {
-        *high_distance = static_cast<std::int32_t>(slot->position >> 32);
+    if (high_distance != nullptr &&
+        !write_guest_value(high_distance, static_cast<std::int32_t>(slot->position >> 32))) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return -1;
     }
     set_last_error(abi::kErrorSuccess);
     return static_cast<std::int32_t>(slot->position & 0xFFFFFFFFU);
@@ -518,8 +524,9 @@ TL_MSABI int tl_SetFilePointerEx(const void* handle, const std::int64_t distance
         return 0;
     }
     slot->position = static_cast<std::int64_t>(result);
-    if (new_file_pointer != nullptr && mapped_guest_range(new_file_pointer, sizeof(std::int64_t), true)) {
-        *new_file_pointer = slot->position;
+    if (new_file_pointer != nullptr && !write_guest_value(new_file_pointer, slot->position)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
     }
     set_last_error(abi::kErrorSuccess);
     return 1;
@@ -536,8 +543,9 @@ TL_MSABI int tl_DeviceIoControl(void* const device, const std::uint32_t io_contr
     (void)out_buffer;
     (void)out_buffer_size;
     (void)overlapped;
-    if (bytes_returned != nullptr && mapped_guest_range(bytes_returned, sizeof(*bytes_returned), true)) {
-        *bytes_returned = 0;
+    if (bytes_returned != nullptr && !write_guest_value(bytes_returned, std::uint32_t{0})) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
     }
     set_last_error(abi::kErrorSuccess);
     return 1;
@@ -549,7 +557,7 @@ TL_MSABI int tl_DuplicateHandle(void* const src_process, void* const src_handle,
     (void)desired_access;
     (void)inherit_handle;
     (void)options;
-    if (target_handle == nullptr || !mapped_guest_range(target_handle, sizeof(void*), true)) {
+    if (target_handle == nullptr) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
@@ -558,15 +566,21 @@ TL_MSABI int tl_DuplicateHandle(void* const src_process, void* const src_handle,
         return 0;
     }
     if (src_handle == &kStdInputToken || src_handle == &kStdOutputToken || src_handle == &kStdErrorToken) {
-        *target_handle = src_handle;
+        if (!write_guest_value(target_handle, const_cast<void*>(src_handle))) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
+        }
         set_last_error(abi::kErrorSuccess);
         return 1;
     }
     {
         FileSlotGuard file_guard(src_handle);
         if (FileSlot* const slot = file_guard.get(); slot != nullptr) {
+            if (!write_guest_value(target_handle, const_cast<void*>(src_handle))) {
+                set_last_error(abi::kErrorInvalidParameter);
+                return 0;
+            }
             ++slot->header.ref_count;
-            *target_handle = src_handle;
             set_last_error(abi::kErrorSuccess);
             return 1;
         }
@@ -576,14 +590,20 @@ TL_MSABI int tl_DuplicateHandle(void* const src_process, void* const src_handle,
         }
     }
     if (runtime::ObjectHeader* header = runtime::get_object_header(src_handle); header != nullptr) {
+        if (!write_guest_value(target_handle, const_cast<void*>(src_handle))) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
+        }
         ++header->ref_count;
-        *target_handle = src_handle;
         set_last_error(abi::kErrorSuccess);
         return 1;
     }
     const auto addr = reinterpret_cast<std::uintptr_t>(src_handle);
     if (addr >= kProcessHandleBase && addr < kProcessHandleBase + kProcessHandleRange) {
-        *target_handle = src_handle;
+        if (!write_guest_value(target_handle, const_cast<void*>(src_handle))) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
+        }
         set_last_error(abi::kErrorSuccess);
         return 1;
     }

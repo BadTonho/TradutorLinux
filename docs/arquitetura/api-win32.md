@@ -87,6 +87,10 @@ controlado; isso não é suporte a todo o ABI de exceções C++.
 `GetFinalPathNameByHandleW`, `LockFile`, `LockFileEx`, `UnlockFile` e
 `UnlockFileEx` implement I/O regular síncrono no prefixo do aplicativo.
 
+`ReadFile`, `WriteFile`, `SetFilePointerEx`, `DeviceIoControl` e
+`DuplicateHandle` publicam saídas por cópias protegidas; handles duplicados
+mantêm o descritor aberto até o último `CloseHandle`.
+
 `DeleteFileA/W`, `MoveFileA/W`, `MoveFileExA/W`, `CopyFileW`, `CopyFileExW`,
 `ReplaceFileW`, `CreateDirectoryA/W`, `RemoveDirectoryW`,
 `GetFileAttributesA/W`, `GetFileAttributesExW`, `SetFileAttributesW`,

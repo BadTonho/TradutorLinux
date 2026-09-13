@@ -430,6 +430,7 @@ do host como argumentos.
 |---|---|---|---|
 | `KERNEL32.dll` | `GetFileSize` | Suportado | Retorna tamanho do arquivo aberto via `FileSlot.file_size`; suporta ponteiro `high_size` para arquivos > 4 GiB |
 | `KERNEL32.dll` | `SetFilePointer` | Suportado | Seek por `FILE_BEGIN`/`FILE_CURRENT`/`FILE_END`; suporta ponteiro `high_distance`; atualiza `FileSlot.position` |
+| `KERNEL32.dll` | `ReadFile` / `WriteFile` / `SetFilePointerEx` / `DeviceIoControl` / `DuplicateHandle` | Suportado no subconjunto | Buffers e saídas escalares usam cópias protegidas; I/O permanece síncrono e limitado ao prefixo; `DuplicateHandle` publica o novo destino antes de incrementar a referência e `CloseHandle` só fecha o descritor no último fechamento |
 | `KERNEL32.dll` | `GetFileAttributesA` | Suportado | `stat()` + bits `FILE_ATTRIBUTE_DIRECTORY`/`FILE_ATTRIBUTE_ARCHIVE`/`FILE_ATTRIBUTE_READONLY` |
 | `KERNEL32.dll` | `DeleteFileA` | Suportado | `unlink()` com mapeamento de erros |
 | `KERNEL32.dll` | `MoveFileA` / `MoveFileExA` | Suportado no subconjunto | `rename()` com mapeamento de erros; `MoveFileExA` aceita `MOVEFILE_REPLACE_EXISTING` e rejeita flags não implementadas |
