@@ -161,6 +161,12 @@ fronteira protegida; `InterlockedPushEntrySList` copia os ponteiros encadeados
 antes de publicá-los. A implementação SLIST continua sendo a emulação mínima
 de contexto convidado documentada no módulo.
 
+Os stubs comuns de WTS, impressão, SetupAPI, DirectX/DXGI, TDH e memória de
+processo também zeram saídas por cópia protegida e retornam
+`ERROR_INVALID_PARAMETER` quando o destino não é acessível. A enumeração WTS
+continua limitada à sessão local sintética, e as demais operações permanecem
+explicitamente não suportadas.
+
 ## GUI mínima (Fase 7)
 
 O protótipo registra um subconjunto de `USER32.dll` e `GDI32.dll` e usa X11

@@ -228,6 +228,12 @@ além dos ponteiros de `InterlockedPushEntrySList`. A regressão
 `Win32ConcurrencyTest.ProtectedThreadBuffersRejectUnmappedMemory` passou com
 os testes de concorrência e da primitiva protegida.
 
+O lote de stubs comuns migrou saídas de WTS, impressão, SetupAPI, TDH,
+memória de processo e DirectX/DXGI para cópias protegidas; `lstrcmpA` também
+passou a comparar cópias locais das strings convidadas. A regressão
+`Win32StubTest.ProtectedCoreStubOutputsRejectUnmappedGuestPointers` passou
+junto com `Win32StubTest.*`, `WtsApiTest.*` e os testes da primitiva.
+
 ## Fora desta rodada
 
 Não entram neste roadmap, por enquanto:

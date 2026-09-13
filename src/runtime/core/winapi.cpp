@@ -123,6 +123,23 @@ std::mutex g_registered_window_handles_mutex;
 std::deque<CrossThreadWindowMessage> g_cross_thread_window_messages;
 std::mutex g_cross_thread_window_messages_mutex;
 
+bool write_guest_zeroes(void* const destination, const std::size_t size) noexcept {
+    if (destination == nullptr) return size == 0U;
+    const std::array<std::byte, 256> zeroes{};
+    const std::uintptr_t base = reinterpret_cast<std::uintptr_t>(destination);
+    for (std::size_t offset = 0U; offset < size;) {
+        if (offset > std::numeric_limits<std::uintptr_t>::max() - base) return false;
+        const std::size_t chunk_size = std::min(zeroes.size(), size - offset);
+        if (runtime::write_guest_memory(reinterpret_cast<void*>(base + offset), zeroes.data(),
+                                        chunk_size).status !=
+            runtime::GuestMemoryAccessStatus::Success) {
+            return false;
+        }
+        offset += chunk_size;
+    }
+    return true;
+}
+
 }  // namespace
 
 std::array<MenuSlot, 256> g_menus{};
@@ -1179,7 +1196,9 @@ GuestExecutionResult execute_guest_entry(const std::uintptr_t entry_point,
         if (g_guest_tls_index_addr != 0 &&
             mapped_guest_range(reinterpret_cast<const void*>(g_guest_tls_index_addr),
                                sizeof(std::uint32_t), true)) {
-            *reinterpret_cast<std::uint32_t*>(g_guest_tls_index_addr) = 0;
+            static_cast<void>(write_guest_value(
+                reinterpret_cast<void*>(static_cast<std::uintptr_t>(g_guest_tls_index_addr)),
+                std::uint32_t{0}));
         }
 
         // Executa TLS callbacks antes do entry point principal (PROCESS_ATTACH e THREAD_ATTACH para thread 1)
@@ -1243,8 +1262,9 @@ TL_MSABI std::uint32_t tl_TdhGetPropertySize(void* const event_record, const std
     (void)tdh_context;
     (void)property_data_count;
     (void)property_data;
-    if (property_size != nullptr && mapped_guest_range(property_size, sizeof(*property_size), true)) {
-        *property_size = 0;
+    if (property_size != nullptr && !write_guest_value(property_size, std::uint32_t{0})) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return abi::kErrorInvalidParameter;
     }
     set_last_error(abi::kErrorSuccess);
     return 0; // ERROR_SUCCESS
@@ -1252,12 +1272,14 @@ TL_MSABI std::uint32_t tl_TdhGetPropertySize(void* const event_record, const std
 
 TL_MSABI int tl_OpenPrinterW(const std::uint16_t* const printer_name, void** const printer_handle, void* const defaults) noexcept {
     (void)defaults;
-    if (printer_handle == nullptr || !mapped_guest_range(printer_handle, sizeof(*printer_handle), true) ||
-        (printer_name != nullptr && !mapped_guest_wstring(printer_name))) {
+    std::u16string guest_printer_name;
+    if (printer_handle == nullptr ||
+        !write_guest_value(printer_handle, static_cast<void*>(nullptr)) ||
+        (printer_name != nullptr &&
+         !runtime::copy_guest_wstring(printer_name, 4096U, guest_printer_name))) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
-    *printer_handle = nullptr;
     set_last_error(abi::kErrorNotSupported);
     runtime_trace("OpenPrinterW", {
         diagnostics::TraceField{"symbol", "OpenPrinterW"},
@@ -1278,13 +1300,11 @@ TL_MSABI int tl_WTSEnumerateSessionsW(void* const server, const std::uint32_t re
                                       std::uint32_t* const count) noexcept {
     (void)server;
     if (reserved != 0U || version != 1U || session_info == nullptr || count == nullptr ||
-        !mapped_guest_range(session_info, sizeof(*session_info), true) ||
-        !mapped_guest_range(count, sizeof(*count), true)) {
+        !write_guest_value(session_info, static_cast<void*>(nullptr)) ||
+        !write_guest_value(count, std::uint32_t{0})) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
-    *session_info = nullptr;
-    *count = 0U;
 
     struct GuestWtsSessionInfo {
         std::uint32_t session_id{0};
@@ -1306,8 +1326,12 @@ TL_MSABI int tl_WTSEnumerateSessionsW(void* const server, const std::uint32_t re
         allocation + sizeof(GuestWtsSessionInfo));
     constexpr std::uint16_t kConsoleName[] = {u'C', u'o', u'n', u's', u'o', u'l', u'e', 0};
     std::memcpy(result->win_station_name, kConsoleName, sizeof(kConsoleName));
-    *session_info = allocation;
-    *count = 1U;
+    if (!write_guest_value(session_info, allocation) || !write_guest_value(count, std::uint32_t{1})) {
+        static_cast<void>(take_wts_allocation(allocation));
+        std::free(allocation);
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
     set_last_error(abi::kErrorSuccess);
     return 1;
 }
@@ -1319,13 +1343,11 @@ TL_MSABI int tl_WTSQuerySessionInformationW(
     (void)session_id;
     (void)info_class;
     if (buffer == nullptr || bytes_returned == nullptr ||
-        !mapped_guest_range(buffer, sizeof(*buffer), true) ||
-        !mapped_guest_range(bytes_returned, sizeof(*bytes_returned), true)) {
+        !write_guest_value(buffer, static_cast<std::uint16_t*>(nullptr)) ||
+        !write_guest_value(bytes_returned, std::uint32_t{0})) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
-    *buffer = nullptr;
-    *bytes_returned = 0U;
     set_last_error(abi::kErrorNotSupported);
     runtime_trace("WTSQuerySessionInformationW", {
         diagnostics::TraceField{"symbol", "WTSQuerySessionInformationW"},
@@ -1338,11 +1360,10 @@ TL_MSABI int tl_WTSQuerySessionInformationW(
 // --- RTSSHooks KERNEL32 ---
 TL_MSABI void* tl_CreateRemoteThread(void* const process, void* const attr, const std::size_t stack, void* const start, void* const param, const std::uint32_t flags, std::uint32_t* const tid) noexcept {
     (void)process; (void)attr; (void)stack; (void)start; (void)param; (void)flags;
-    if (tid != nullptr && !mapped_guest_range(tid, sizeof(*tid), true)) {
+    if (tid != nullptr && !write_guest_value(tid, std::uint32_t{0})) {
         set_last_error(abi::kErrorInvalidParameter);
         return nullptr;
     }
-    if (tid != nullptr) *tid = 0;
     set_last_error(abi::kErrorNotSupported);
     runtime_trace("CreateRemoteThread", {
         diagnostics::TraceField{"symbol", "CreateRemoteThread"},
@@ -1361,11 +1382,10 @@ TL_MSABI int tl_VirtualFreeEx(void* const process, void* const addr, const std::
 }
 TL_MSABI int tl_WriteProcessMemory(void* const process, void* const base, const void* const buf, const std::size_t size, std::size_t* const written) noexcept {
     (void)process; (void)base; (void)buf; (void)size;
-    if (written != nullptr && !mapped_guest_range(written, sizeof(*written), true)) {
+    if (written != nullptr && !write_guest_value(written, std::size_t{0})) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
-    if (written != nullptr) *written = 0;
     set_last_error(abi::kErrorNotSupported);
     runtime_trace("WriteProcessMemory", {
         diagnostics::TraceField{"symbol", "WriteProcessMemory"},
@@ -1434,7 +1454,10 @@ TL_MSABI int tl_SetThreadContext(void* const thread, const void* const ctx) noex
 }
 TL_MSABI int tl_GetThreadContext(void* const thread, void* const ctx) noexcept {
     (void)thread;
-    if (ctx != nullptr && mapped_guest_range(ctx, 1232, true)) std::memset(ctx, 0, 1232);
+    if (ctx != nullptr && !write_guest_zeroes(ctx, 1232U)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
     set_last_error(abi::kErrorSuccess);
     return 1;
 }
@@ -1451,16 +1474,27 @@ TL_MSABI int tl_lstrcmpA(const char* const s1, const char* const s2) noexcept {
     if (s1 == s2) return 0;
     if (s1 == nullptr) return -1;
     if (s2 == nullptr) return 1;
-    return std::strcmp(s1, s2);
+    std::string left;
+    std::string right;
+    if (!runtime::copy_guest_cstring(s1, 4096U, left) ||
+        !runtime::copy_guest_cstring(s2, 4096U, right)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    set_last_error(abi::kErrorSuccess);
+    return std::strcmp(left.c_str(), right.c_str());
 }
 TL_MSABI int tl_IsThreadAFiber(void) noexcept {
     return 0;
 }
 TL_MSABI void* tl_InterlockedFlushSList(void* const head) noexcept {
     if (head == nullptr) return nullptr;
-    void** h = static_cast<void**>(head);
-    void* first = *h;
-    *h = nullptr;
+    void* first = nullptr;
+    if (!read_guest_value(head, first) || !write_guest_value(head, static_cast<void*>(nullptr))) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return nullptr;
+    }
+    set_last_error(abi::kErrorSuccess);
     return first;
 }
 
@@ -1482,22 +1516,31 @@ TL_MSABI int tl_SetupDiEnumDeviceInterfaces(void* const dev_info, void* const de
 }
 TL_MSABI int tl_SetupDiGetDeviceInterfaceDetailA(void* const dev_info, void* const iface_data, void* const detail, const std::uint32_t size, std::uint32_t* const needed, void* const dev_data) noexcept {
     (void)dev_info; (void)iface_data; (void)detail; (void)size; (void)dev_data;
-    if (needed != nullptr && mapped_guest_range(needed, sizeof(*needed), true)) *needed = 0;
+    if (needed != nullptr && !write_guest_value(needed, std::uint32_t{0})) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
     set_last_error(abi::kErrorSuccess);
     return 0;
 }
 TL_MSABI int tl_SetupDiGetDeviceRegistryPropertyA(void* const dev_info, void* const dev_data, const std::uint32_t prop, std::uint32_t* const reg_type, std::uint8_t* const buf, const std::uint32_t buf_size, std::uint32_t* const needed) noexcept {
     (void)dev_info; (void)dev_data; (void)prop;
-    if (reg_type != nullptr && mapped_guest_range(reg_type, sizeof(*reg_type), true)) *reg_type = 1;
-    if (needed != nullptr && mapped_guest_range(needed, sizeof(*needed), true)) *needed = 0;
-    if (buf != nullptr && buf_size > 0 && mapped_guest_range(buf, buf_size, true)) buf[0]=0;
+    if ((reg_type != nullptr && !write_guest_value(reg_type, std::uint32_t{1})) ||
+        (needed != nullptr && !write_guest_value(needed, std::uint32_t{0})) ||
+        (buf != nullptr && buf_size > 0U && !write_guest_value(buf, std::uint8_t{0}))) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
     set_last_error(abi::kErrorSuccess);
     return 0;
 }
 TL_MSABI int tl_SetupDiGetDeviceInstanceIdA(void* const dev_info, void* const dev_data, char* const id, const std::uint32_t size, std::uint32_t* const needed) noexcept {
     (void)dev_info; (void)dev_data;
-    if (needed != nullptr && mapped_guest_range(needed, sizeof(*needed), true)) *needed = 0;
-    if (id != nullptr && size > 0 && mapped_guest_range(id, size, true)) id[0]='\0';
+    if ((needed != nullptr && !write_guest_value(needed, std::uint32_t{0})) ||
+        (id != nullptr && size > 0U && !write_guest_value(id, '\0'))) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
     set_last_error(abi::kErrorSuccess);
     return 0;
 }
@@ -1510,24 +1553,36 @@ TL_MSABI int tl_SetupDiDestroyDeviceInfoList(void* const dev_info) noexcept {
 // --- RTSSHooks DirectX stubs ---
 TL_MSABI int tl_D3DCompile(const void* const src, const std::size_t src_size, const char* const src_name, const void* const defines, void* const include, const char* const entry, const char* const target, const std::uint32_t flags1, const std::uint32_t flags2, void** const code, void** const errors) noexcept {
     (void)src; (void)src_size; (void)src_name; (void)defines; (void)include; (void)entry; (void)target; (void)flags1; (void)flags2;
-    if (code != nullptr && mapped_guest_range(code, sizeof(*code), true)) *code = nullptr;
-    if (errors != nullptr && mapped_guest_range(errors, sizeof(*errors), true)) *errors = nullptr;
+    if ((code != nullptr && !write_guest_value(code, static_cast<void*>(nullptr))) ||
+        (errors != nullptr && !write_guest_value(errors, static_cast<void*>(nullptr)))) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return static_cast<int>(0x80004005);
+    }
     return static_cast<int>(0x80004005); // E_FAIL
 }
 TL_MSABI int tl_D3D12SerializeRootSignature(const void* const root_sig, const std::uint32_t version, void** const blob, void** const error) noexcept {
     (void)root_sig; (void)version;
-    if (blob != nullptr && mapped_guest_range(blob, sizeof(*blob), true)) *blob = nullptr;
-    if (error != nullptr && mapped_guest_range(error, sizeof(*error), true)) *error = nullptr;
+    if ((blob != nullptr && !write_guest_value(blob, static_cast<void*>(nullptr))) ||
+        (error != nullptr && !write_guest_value(error, static_cast<void*>(nullptr)))) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return static_cast<int>(0x80004005);
+    }
     return static_cast<int>(0x80004005);
 }
 TL_MSABI int tl_CreateDXGIFactory1(const void* const riid, void** const factory) noexcept {
     (void)riid;
-    if (factory != nullptr && mapped_guest_range(factory, sizeof(*factory), true)) *factory = nullptr;
+    if (factory != nullptr && !write_guest_value(factory, static_cast<void*>(nullptr))) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return static_cast<int>(0x887A0004);
+    }
     return static_cast<int>(0x887A0004); // DXGI_ERROR_UNSUPPORTED
 }
 TL_MSABI int tl_DirectDrawCreateEx(const void* const guid, void** const dd, const void* const iid, void* const unk) noexcept {
     (void)guid; (void)iid; (void)unk;
-    if (dd != nullptr && mapped_guest_range(dd, sizeof(*dd), true)) *dd = nullptr;
+    if (dd != nullptr && !write_guest_value(dd, static_cast<void*>(nullptr))) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return static_cast<int>(0x80004002);
+    }
     return static_cast<int>(0x80004002); // E_NOINTERFACE
 }
 TL_MSABI int tl_Direct3DCreate9(const std::uint32_t version) noexcept {
@@ -1536,33 +1591,48 @@ TL_MSABI int tl_Direct3DCreate9(const std::uint32_t version) noexcept {
 }
 TL_MSABI int tl_Direct3DCreate9Ex(const std::uint32_t version, void** const d3d) noexcept {
     (void)version;
-    if (d3d != nullptr && mapped_guest_range(d3d, sizeof(*d3d), true)) *d3d = nullptr;
+    if (d3d != nullptr && !write_guest_value(d3d, static_cast<void*>(nullptr))) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return static_cast<int>(0x8876086A);
+    }
     return static_cast<int>(0x8876086A); // D3DERR_NOTAVAILABLE
 }
 TL_MSABI int tl_D3D10CreateDeviceAndSwapChain(void* const adapter, const std::uint32_t driver, void* const sw, const std::uint32_t flags, const std::uint32_t feature, void* const swap_desc, void** const swap_chain, void** const device) noexcept {
     (void)adapter; (void)driver; (void)sw; (void)flags; (void)feature; (void)swap_desc;
-    if (swap_chain != nullptr && mapped_guest_range(swap_chain, sizeof(*swap_chain), true)) *swap_chain = nullptr;
-    if (device != nullptr && mapped_guest_range(device, sizeof(*device), true)) *device = nullptr;
+    if ((swap_chain != nullptr && !write_guest_value(swap_chain, static_cast<void*>(nullptr))) ||
+        (device != nullptr && !write_guest_value(device, static_cast<void*>(nullptr)))) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return static_cast<int>(0x80004002);
+    }
     return static_cast<int>(0x80004002); // E_NOINTERFACE
 }
 TL_MSABI int tl_D3DX10CompileFromMemory(const char* const src, const std::size_t len, const char* const src_name, const void* const defines, void* const include, const char* const entry, const char* const profile, const std::uint32_t flags1, const std::uint32_t flags2, void* const pump, void** const shader, void** const errors, void** const hr) noexcept {
     (void)src; (void)len; (void)src_name; (void)defines; (void)include; (void)entry; (void)profile; (void)flags1; (void)flags2; (void)pump;
-    if (shader != nullptr && mapped_guest_range(shader, sizeof(*shader), true)) *shader = nullptr;
-    if (errors != nullptr && mapped_guest_range(errors, sizeof(*errors), true)) *errors = nullptr;
-    if (hr != nullptr && mapped_guest_range(hr, sizeof(*hr), true)) *hr = nullptr;
+    if ((shader != nullptr && !write_guest_value(shader, static_cast<void*>(nullptr))) ||
+        (errors != nullptr && !write_guest_value(errors, static_cast<void*>(nullptr))) ||
+        (hr != nullptr && !write_guest_value(hr, static_cast<void*>(nullptr)))) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return static_cast<int>(0x80004005);
+    }
     return static_cast<int>(0x80004005);
 }
 TL_MSABI int tl_D3D11CreateDeviceAndSwapChain(void* const adapter, const std::uint32_t driver, void* const sw, const std::uint32_t flags, const void* const feature_levels, const std::uint32_t levels, const std::uint32_t sdk, void* const swap_desc, void** const swap_chain, void** const device, void* const feature, void* const ctx) noexcept {
     (void)adapter; (void)driver; (void)sw; (void)flags; (void)feature_levels; (void)levels; (void)sdk; (void)swap_desc; (void)feature; (void)ctx;
-    if (swap_chain != nullptr && mapped_guest_range(swap_chain, sizeof(*swap_chain), true)) *swap_chain = nullptr;
-    if (device != nullptr && mapped_guest_range(device, sizeof(*device), true)) *device = nullptr;
+    if ((swap_chain != nullptr && !write_guest_value(swap_chain, static_cast<void*>(nullptr))) ||
+        (device != nullptr && !write_guest_value(device, static_cast<void*>(nullptr)))) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return static_cast<int>(0x887A0004);
+    }
     return static_cast<int>(0x887A0004); // DXGI_ERROR_UNSUPPORTED
 }
 TL_MSABI int tl_D3DX11CompileFromMemory(const char* const src, const std::size_t len, const char* const src_name, const void* const defines, void* const include, const char* const entry, const char* const target, const std::uint32_t flags1, const std::uint32_t flags2, void* const pump, void** const code, void** const errors, void** const hr) noexcept {
     (void)src; (void)len; (void)src_name; (void)defines; (void)include; (void)entry; (void)target; (void)flags1; (void)flags2; (void)pump;
-    if (code != nullptr && mapped_guest_range(code, sizeof(*code), true)) *code = nullptr;
-    if (errors != nullptr && mapped_guest_range(errors, sizeof(*errors), true)) *errors = nullptr;
-    if (hr != nullptr && mapped_guest_range(hr, sizeof(*hr), true)) *hr = nullptr;
+    if ((code != nullptr && !write_guest_value(code, static_cast<void*>(nullptr))) ||
+        (errors != nullptr && !write_guest_value(errors, static_cast<void*>(nullptr))) ||
+        (hr != nullptr && !write_guest_value(hr, static_cast<void*>(nullptr)))) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return static_cast<int>(0x80004005);
+    }
     return static_cast<int>(0x80004005);
 }
 

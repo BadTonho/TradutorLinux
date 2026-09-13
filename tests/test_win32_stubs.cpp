@@ -360,5 +360,32 @@ TEST(Win32StubTest, UnsupportedApisEmitTraceWithMechanismAndDetail) {
     std::filesystem::remove_all(directory);
 }
 
+TEST(Win32StubTest, ProtectedCoreStubOutputsRejectUnmappedGuestPointers) {
+    auto* const invalid = reinterpret_cast<void*>(static_cast<std::uintptr_t>(0x1000U));
+    EXPECT_EQ(tl_OpenPrinterW(nullptr, static_cast<void**>(invalid), nullptr), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+
+    EXPECT_EQ(tl_WTSEnumerateSessionsW(nullptr, 0U, 1U, static_cast<void**>(invalid), nullptr), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+
+    EXPECT_EQ(tl_WriteProcessMemory(nullptr, nullptr, nullptr, 8U,
+                                    static_cast<std::size_t*>(invalid)), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+
+    EXPECT_EQ(tl_SetupDiGetDeviceInterfaceDetailA(nullptr, nullptr, nullptr, 0U,
+                                                   static_cast<std::uint32_t*>(invalid), nullptr),
+              0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+
+    EXPECT_EQ(tl_D3DCompile(nullptr, 0U, nullptr, nullptr, nullptr, nullptr, nullptr, 0U, 0U,
+                             static_cast<void**>(invalid), nullptr),
+              static_cast<int>(0x80004005U));
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+
+    EXPECT_EQ(tl_TdhGetPropertySize(nullptr, 0U, nullptr, 0U, nullptr,
+                                    static_cast<std::uint32_t*>(invalid)), 87U);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+}
+
 }  // namespace
 }  // namespace tradutorlinux
