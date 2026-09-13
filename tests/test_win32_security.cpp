@@ -255,5 +255,68 @@ TEST(Win32SecurityTest, ProtectedTokenAndSidBuffersRejectUnmappedPointers) {
     EXPECT_EQ(tl_FreeSid(sid), nullptr);
 }
 
+TEST(Win32SecurityTest, ProtectedAclAndDescriptorBuffersRejectUnmappedPointers) {
+    SecurityPrefixFixture ctx;
+    auto* const invalid = reinterpret_cast<void*>(static_cast<std::uintptr_t>(0x1000U));
+    std::vector<std::uint16_t> name = ctx.file_name();
+
+    abi::GuestSecurityDescriptor descriptor{};
+    EXPECT_EQ(tl_InitializeSecurityDescriptor(invalid, abi::kSecurityDescriptorRevision), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    ASSERT_EQ(tl_InitializeSecurityDescriptor(&descriptor, abi::kSecurityDescriptorRevision), 1);
+    EXPECT_EQ(tl_SetSecurityDescriptorDacl(invalid, 1, nullptr, 0), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_SetSecurityDescriptorDacl(&descriptor, 1, invalid, 0), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+
+    void* owner = nullptr;
+    void* dacl = nullptr;
+    void* named_descriptor = nullptr;
+    ASSERT_EQ(tl_GetNamedSecurityInfoW(name.data(), abi::kSeFileObject,
+                                       abi::kOwnerSecurityInformation | abi::kDaclSecurityInformation,
+                                       &owner, nullptr, &dacl, nullptr, &named_descriptor),
+              abi::kErrorSuccess);
+    ASSERT_NE(owner, nullptr);
+    ASSERT_NE(dacl, nullptr);
+    ASSERT_NE(named_descriptor, nullptr);
+
+    abi::GuestTrusteeW trustee{};
+    tl_BuildTrusteeWithSidW(&trustee, owner);
+    abi::GuestExplicitAccessW entry{};
+    entry.access_permissions = abi::kGenericRead;
+    entry.access_mode = abi::kGrantAccess;
+    entry.trustee = trustee;
+
+    void* new_acl = nullptr;
+    EXPECT_EQ(tl_SetEntriesInAclW(1, invalid, dacl, &new_acl), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_SetEntriesInAclW(1, &entry, dacl, static_cast<void**>(invalid)),
+              abi::kErrorInvalidParameter);
+    ASSERT_EQ(tl_SetEntriesInAclW(1, &entry, dacl, &new_acl), abi::kErrorSuccess);
+    ASSERT_NE(new_acl, nullptr);
+
+    EXPECT_EQ(tl_SetSecurityDescriptorDacl(&descriptor, 1, new_acl, 0), 1);
+    EXPECT_EQ(tl_SetSecurityDescriptorDacl(invalid, 1, new_acl, 0), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+
+    EXPECT_EQ(tl_GetNamedSecurityInfoW(name.data(), abi::kSeFileObject,
+                                       abi::kDaclSecurityInformation, static_cast<void**>(invalid),
+                                       nullptr, nullptr, nullptr, &named_descriptor),
+              abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_GetNamedSecurityInfoW(name.data(), abi::kSeFileObject,
+                                       abi::kDaclSecurityInformation, nullptr, nullptr, nullptr,
+                                       nullptr, static_cast<void**>(invalid)),
+              abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_SetNamedSecurityInfoW(name.data(), abi::kSeFileObject,
+                                       abi::kDaclSecurityInformation, nullptr, nullptr, invalid,
+                                       nullptr, 0),
+              abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_SetFileSecurityW(name.data(), abi::kDaclSecurityInformation, invalid), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    ASSERT_EQ(tl_SetFileSecurityW(name.data(), abi::kDaclSecurityInformation, &descriptor), 1);
+
+    EXPECT_EQ(tl_LocalFree(named_descriptor), nullptr);
+    EXPECT_EQ(tl_LocalFree(new_acl), nullptr);
+}
+
 }  // namespace
 }  // namespace tradutorlinux

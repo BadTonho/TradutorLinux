@@ -293,8 +293,14 @@ além das publicações de `OpenProcessToken`, `GetTokenInformation`,
 `AllocateAndInitializeSid`, `CopySid`, `CreateWellKnownSid`,
 `CheckTokenMembership` e `BuildTrusteeWithSidW`. A regressão
 `Win32SecurityTest.ProtectedTokenAndSidBuffersRejectUnmappedPointers` passou
-com os testes existentes de token/SID e memória; ACLs e descritores ainda
-permanecem para o próximo lote de segurança.
+com os testes existentes de token/SID e memória.
+
+O lote seguinte migrou snapshots e publicações de ACLs e descritores em
+`InitializeSecurityDescriptor`, `SetSecurityDescriptorDacl`, `SetEntriesInAclW`,
+`GetNamedSecurityInfoW` e `SetFileSecurityW`; também removeu o consumo direto de
+`mapped_range` desse módulo. A regressão
+`Win32SecurityTest.ProtectedAclAndDescriptorBuffersRejectUnmappedPointers`
+protege entradas, saídas e rollback de alocações inválidas.
 
 ## Fora desta rodada
 

@@ -60,11 +60,6 @@ SecurityState g_state;
 std::array<TokenSlot, 16> g_tokens{};
 std::unordered_set<void*> g_allocated_sids;
 
-[[nodiscard]] bool mapped_range(const void* const address, const std::size_t size,
-                                const bool writable) noexcept {
-    return runtime::validate_mapped_range(address, size, writable);
-}
-
 void trace_security(const char* const operation, const char* const status,
                     const char* const detail) noexcept {
     const std::array<diagnostics::TraceField, 4> fields{
@@ -175,43 +170,58 @@ template <typename T>
 
 [[nodiscard]] std::uint32_t parse_acl(const void* const acl, std::vector<Ace>& output) noexcept {
     output.clear();
-    if (!mapped_range(acl, sizeof(abi::GuestAcl), false)) {
+    abi::GuestAcl header{};
+    if (!read_guest_value(acl, header)) {
         return abi::kErrorInvalidParameter;
     }
-    const auto* const header = static_cast<const abi::GuestAcl*>(acl);
-    if (header->revision != abi::kAclRevision || header->acl_size < sizeof(*header) ||
-        header->ace_count > kMaxAclEntries || !mapped_range(acl, header->acl_size, false)) {
+    if (header.revision != abi::kAclRevision || header.acl_size < sizeof(header) ||
+        header.ace_count > kMaxAclEntries) {
         return abi::kErrorInvalidParameter;
     }
-    const auto* const bytes = static_cast<const std::uint8_t*>(acl);
-    std::size_t offset = sizeof(*header);
-    for (std::uint16_t index = 0; index < header->ace_count; ++index) {
-        if (offset > header->acl_size || header->acl_size - offset < 8U) {
-            return abi::kErrorInvalidParameter;
-        }
-        const std::uint8_t type = bytes[offset];
-        const std::uint8_t flags = bytes[offset + 1];
-        std::uint16_t ace_size = 0;
-        std::uint32_t mask = 0;
-        std::memcpy(&ace_size, bytes + offset + 2, sizeof(ace_size));
-        std::memcpy(&mask, bytes + offset + 4, sizeof(mask));
-        if ((type != abi::kAccessAllowedAceType && type != abi::kAccessDeniedAceType) ||
-            flags != 0 || ace_size < 8U || ace_size > header->acl_size - offset) {
-            return abi::kErrorNotSupported;
-        }
-        const void* const sid = bytes + offset + 8;
-        std::size_t sid_size = 0;
-        if (!sid_length(sid, sid_size) || ace_size != 8U + sid_size) {
-            return abi::kErrorInvalidParameter;
-        }
-        SidBytes sid_copy;
-        if (!copy_sid(sid, sid_copy)) {
-            return abi::kErrorInvalidParameter;
-        }
-        output.push_back(Ace{type, mask, std::move(sid_copy)});
-        offset += ace_size;
+    std::vector<std::uint8_t> bytes;
+    try {
+        bytes.resize(header.acl_size);
+        output.reserve(header.ace_count);
+    } catch (...) {
+        return abi::kErrorNotEnoughMemory;
     }
-    return offset == header->acl_size ? abi::kErrorSuccess : abi::kErrorInvalidParameter;
+    if (runtime::read_guest_memory(acl, bytes.data(), bytes.size()).status !=
+        runtime::GuestMemoryAccessStatus::Success) {
+        return abi::kErrorInvalidParameter;
+    }
+    try {
+        std::size_t offset = sizeof(header);
+        for (std::uint16_t index = 0; index < header.ace_count; ++index) {
+            if (offset > header.acl_size || header.acl_size - offset < 8U) {
+                return abi::kErrorInvalidParameter;
+            }
+            const std::uint8_t type = bytes[offset];
+            const std::uint8_t flags = bytes[offset + 1];
+            std::uint16_t ace_size = 0;
+            std::uint32_t mask = 0;
+            std::memcpy(&ace_size, bytes.data() + offset + 2, sizeof(ace_size));
+            std::memcpy(&mask, bytes.data() + offset + 4, sizeof(mask));
+            if ((type != abi::kAccessAllowedAceType && type != abi::kAccessDeniedAceType) ||
+                flags != 0 || ace_size < 8U || ace_size > header.acl_size - offset) {
+                return abi::kErrorNotSupported;
+            }
+            const void* const sid = bytes.data() + offset + 8;
+            std::size_t sid_size = 0;
+            if (!sid_length(sid, sid_size) || ace_size != 8U + sid_size) {
+                return abi::kErrorInvalidParameter;
+            }
+            SidBytes sid_copy;
+            if (!copy_sid(sid, sid_copy)) {
+                return abi::kErrorInvalidParameter;
+            }
+            output.push_back(Ace{type, mask, std::move(sid_copy)});
+            offset += ace_size;
+        }
+        return offset == header.acl_size ? abi::kErrorSuccess : abi::kErrorInvalidParameter;
+    } catch (...) {
+        output.clear();
+        return abi::kErrorNotEnoughMemory;
+    }
 }
 
 [[nodiscard]] std::vector<std::uint8_t> default_acl(const SidBytes& user_sid) {
@@ -450,9 +460,7 @@ enum class PathStatus { Success, InvalidParameter, AccessDenied, FileNotFound, I
 
 [[nodiscard]] void* allocate_descriptor(const SidBytes& owner, const SidBytes& group,
                                          const std::vector<std::uint8_t>& dacl,
-                                         const std::uint32_t information,
-                                         void** owner_out, void** group_out,
-                                         void** dacl_out) noexcept {
+                                         const std::uint32_t information) noexcept {
     const bool include_owner = (information & abi::kOwnerSecurityInformation) != 0;
     const bool include_group = (information & abi::kGroupSecurityInformation) != 0;
     const bool include_dacl = (information & abi::kDaclSecurityInformation) != 0;
@@ -487,14 +495,7 @@ enum class PathStatus { Success, InvalidParameter, AccessDenied, FileNotFound, I
         descriptor->dacl = block + offset;
         std::memcpy(descriptor->dacl, dacl.data(), dacl.size());
     }
-    if (owner_out != nullptr) *owner_out = descriptor->owner;
-    if (group_out != nullptr) *group_out = descriptor->group;
-    if (dacl_out != nullptr) *dacl_out = descriptor->dacl;
     return descriptor;
-}
-
-[[nodiscard]] bool valid_output_pointer(void** const value) noexcept {
-    return value == nullptr || mapped_range(value, sizeof(*value), true);
 }
 
 }  // namespace
@@ -892,14 +893,16 @@ TL_ADVAPI_MSABI void tl_BuildTrusteeWithSidW(void* const trustee, void* const si
 
 TL_ADVAPI_MSABI int tl_InitializeSecurityDescriptor(void* const descriptor,
                                                      const std::uint32_t revision) noexcept {
-    if (descriptor == nullptr || revision != abi::kSecurityDescriptorRevision ||
-        !mapped_range(descriptor, sizeof(abi::GuestSecurityDescriptor), true)) {
+    if (descriptor == nullptr || revision != abi::kSecurityDescriptorRevision) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
-    auto* const result = static_cast<abi::GuestSecurityDescriptor*>(descriptor);
-    *result = {};
-    result->revision = static_cast<std::uint8_t>(revision);
+    abi::GuestSecurityDescriptor result{};
+    result.revision = static_cast<std::uint8_t>(revision);
+    if (!write_guest_value(descriptor, result)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
     set_last_error(abi::kErrorSuccess);
     return 1;
 }
@@ -908,10 +911,13 @@ TL_ADVAPI_MSABI int tl_SetSecurityDescriptorDacl(void* const descriptor, const i
                                                  void* const dacl, const int dacl_defaulted) noexcept {
     (void)dacl_defaulted;
     std::vector<Ace> parsed;
-    if (descriptor == nullptr || dacl_present == 0 || dacl == nullptr ||
-        !mapped_range(descriptor, sizeof(abi::GuestSecurityDescriptor), true) ||
-        static_cast<abi::GuestSecurityDescriptor*>(descriptor)->revision !=
-            abi::kSecurityDescriptorRevision) {
+    if (descriptor == nullptr || dacl_present == 0 || dacl == nullptr) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    abi::GuestSecurityDescriptor result{};
+    if (!read_guest_value(descriptor, result) ||
+        result.revision != abi::kSecurityDescriptorRevision) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
@@ -920,23 +926,33 @@ TL_ADVAPI_MSABI int tl_SetSecurityDescriptorDacl(void* const descriptor, const i
         set_last_error(acl_status);
         return 0;
     }
-    auto* const result = static_cast<abi::GuestSecurityDescriptor*>(descriptor);
-    result->control = static_cast<std::uint16_t>(result->control | abi::kSeDaclPresent);
-    result->dacl = dacl;
+    result.control = static_cast<std::uint16_t>(result.control | abi::kSeDaclPresent);
+    result.dacl = dacl;
+    if (!write_guest_value(descriptor, result)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
     set_last_error(abi::kErrorSuccess);
     return 1;
 }
 
 TL_ADVAPI_MSABI std::uint32_t tl_SetEntriesInAclW(const std::uint32_t entry_count,
-                                                  const void* const entries, const void* const old_acl,
+                                                  const void* const entries,
+                                                  const void* const old_acl,
                                                   void** const new_acl) noexcept {
     try {
-        if (new_acl == nullptr || !mapped_range(new_acl, sizeof(*new_acl), true) ||
-            entry_count > kMaxExplicitEntries ||
-            (entry_count != 0 && (entries == nullptr ||
-                                  !mapped_range(entries, entry_count * sizeof(abi::GuestExplicitAccessW),
-                                                false)))) {
+        if (new_acl == nullptr || entry_count > kMaxExplicitEntries ||
+            (entry_count != 0 && entries == nullptr)) {
             return abi::kErrorInvalidParameter;
+        }
+        std::vector<abi::GuestExplicitAccessW> list;
+        if (entry_count != 0) {
+            list.resize(entry_count);
+            if (runtime::read_guest_memory(entries, list.data(),
+                                           list.size() * sizeof(list.front())).status !=
+                runtime::GuestMemoryAccessStatus::Success) {
+                return abi::kErrorInvalidParameter;
+            }
         }
         std::vector<Ace> result;
         if (old_acl != nullptr) {
@@ -945,7 +961,6 @@ TL_ADVAPI_MSABI std::uint32_t tl_SetEntriesInAclW(const std::uint32_t entry_coun
                 return parsed;
             }
         }
-        const auto* const list = static_cast<const abi::GuestExplicitAccessW*>(entries);
         for (std::uint32_t index = 0; index < entry_count; ++index) {
             const abi::GuestExplicitAccessW& entry = list[index];
             if (entry.inheritance != 0 || entry.trustee.multiple_trustee != nullptr ||
@@ -996,7 +1011,11 @@ TL_ADVAPI_MSABI std::uint32_t tl_SetEntriesInAclW(const std::uint32_t entry_coun
             std::free(allocation);
             return abi::kErrorNotEnoughMemory;
         }
-        *new_acl = allocation;
+        if (!write_guest_value(new_acl, allocation)) {
+            static_cast<void>(take_local_free_block(allocation));
+            std::free(allocation);
+            return abi::kErrorInvalidParameter;
+        }
         trace_security("set-entries", "success", "dacl");
         return abi::kErrorSuccess;
     } catch (...) {
@@ -1009,10 +1028,7 @@ TL_ADVAPI_MSABI std::uint32_t tl_GetNamedSecurityInfoW(
     const std::uint32_t security_information, void** const owner, void** const group,
     void** const dacl, void** const sacl, void** const descriptor) noexcept {
     try {
-        if (object_type != abi::kSeFileObject || security_information == 0 || descriptor == nullptr ||
-            !valid_output_pointer(owner) ||
-            !valid_output_pointer(group) || !valid_output_pointer(dacl) ||
-            !mapped_range(descriptor, sizeof(*descriptor), true)) {
+        if (object_type != abi::kSeFileObject || security_information == 0 || descriptor == nullptr) {
             return abi::kErrorInvalidParameter;
         }
         if (sacl != nullptr || (security_information & abi::kSaclSecurityInformation) != 0) {
@@ -1031,13 +1047,38 @@ TL_ADVAPI_MSABI std::uint32_t tl_GetNamedSecurityInfoW(
         if (!load_state_locked()) {
             return abi::kErrorAccessDenied;
         }
-        if (owner != nullptr) *owner = nullptr;
-        if (group != nullptr) *group = nullptr;
-        if (dacl != nullptr) *dacl = nullptr;
-        *descriptor = allocate_descriptor(g_state.user_sid, g_state.user_sid, dacl_for_key_locked(key),
-                                          security_information, owner, group, dacl);
-        if (*descriptor == nullptr) {
+        auto* const descriptor_block = static_cast<abi::GuestSecurityDescriptor*>(
+            allocate_descriptor(g_state.user_sid, g_state.user_sid, dacl_for_key_locked(key),
+                                security_information));
+        if (descriptor_block == nullptr) {
             return abi::kErrorNotEnoughMemory;
+        }
+        std::array<void**, 3> published{};
+        std::size_t published_count = 0;
+        const auto publish = [&](void** const output, void* const value) {
+            if (output == nullptr) {
+                return true;
+            }
+            if (!write_guest_value(output, value)) {
+                for (std::size_t index = 0; index < published_count; ++index) {
+                    static_cast<void>(write_guest_value(published[index],
+                                                        static_cast<void*>(nullptr)));
+                }
+                return false;
+            }
+            published[published_count++] = output;
+            return true;
+        };
+        if (!publish(owner, descriptor_block->owner) ||
+            !publish(group, descriptor_block->group) ||
+            !publish(dacl, descriptor_block->dacl) ||
+            !write_guest_value(descriptor, static_cast<void*>(descriptor_block))) {
+            for (std::size_t index = 0; index < published_count; ++index) {
+                static_cast<void>(write_guest_value(published[index], static_cast<void*>(nullptr)));
+            }
+            static_cast<void>(take_local_free_block(descriptor_block));
+            std::free(descriptor_block);
+            return abi::kErrorInvalidParameter;
         }
         trace_security("named-get", "success", "descriptor");
         return abi::kErrorSuccess;
@@ -1082,14 +1123,14 @@ TL_ADVAPI_MSABI int tl_SetFileSecurityW(const std::uint16_t* const file_name,
             set_last_error(abi::kErrorNotSupported);
             return 0;
         }
-        if (security_information != abi::kDaclSecurityInformation || security_descriptor == nullptr ||
-            !mapped_range(security_descriptor, sizeof(abi::GuestSecurityDescriptor), false)) {
+        if (security_information != abi::kDaclSecurityInformation || security_descriptor == nullptr) {
             set_last_error(abi::kErrorInvalidParameter);
             return 0;
         }
-        const auto* const descriptor = static_cast<const abi::GuestSecurityDescriptor*>(security_descriptor);
-        if (descriptor->revision != abi::kSecurityDescriptorRevision ||
-            (descriptor->control & abi::kSeDaclPresent) == 0 || descriptor->dacl == nullptr) {
+        abi::GuestSecurityDescriptor descriptor{};
+        if (!read_guest_value(security_descriptor, descriptor) ||
+            descriptor.revision != abi::kSecurityDescriptorRevision ||
+            (descriptor.control & abi::kSeDaclPresent) == 0 || descriptor.dacl == nullptr) {
             set_last_error(abi::kErrorInvalidParameter);
             return 0;
         }
@@ -1104,7 +1145,7 @@ TL_ADVAPI_MSABI int tl_SetFileSecurityW(const std::uint16_t* const file_name,
             set_last_error(abi::kErrorAccessDenied);
             return 0;
         }
-        const std::uint32_t result = set_dacl_for_key_locked(key, descriptor->dacl);
+        const std::uint32_t result = set_dacl_for_key_locked(key, descriptor.dacl);
         set_last_error(result);
         if (result == abi::kErrorSuccess) {
             trace_security("file-set", "success", "dacl");

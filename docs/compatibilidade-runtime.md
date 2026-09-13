@@ -629,18 +629,19 @@ restaura o padrão.
 |---|---|---|---|
 | `ADVAPI32.dll` | `OpenProcessToken`, `GetTokenInformation` | Suportado no subconjunto | Só `GetCurrentProcess()` + `TOKEN_QUERY`; `TokenUser` usa protocolo de buffer e `TokenElevation` é `0`; ponteiros de saída e o SID embutido são publicados por cópia protegida |
 | `ADVAPI32.dll` | Operações de SID e `CheckTokenMembership` | Suportado no subconjunto | SID variável validado por snapshot protegido; World/Admin conhecidos; usuário virtual pertence apenas ao próprio SID; cópias e tamanhos de saída usam a fronteira protegida |
-| `ADVAPI32.dll` | `InitializeSecurityDescriptor`, `SetSecurityDescriptorDacl`, `SetEntriesInAclW` | Suportado no subconjunto | Descritor absoluto e ACE allow/deny; `GRANT`, `SET`, `DENY`, `REVOKE`; somente trustee SID |
-| `ADVAPI32.dll` | `GetNamedSecurityInfoW`, `SetNamedSecurityInfoW`, `SetFileSecurityW` | Suportado no subconjunto | Arquivo existente em `C:\` do prefixo; owner/group imutáveis e DACL persistente |
+| `ADVAPI32.dll` | `InitializeSecurityDescriptor`, `SetSecurityDescriptorDacl`, `SetEntriesInAclW` | Suportado no subconjunto | Descritor absoluto e ACE allow/deny; `GRANT`, `SET`, `DENY`, `REVOKE`; somente trustee SID; snapshots de entrada e publicações de saída protegidos |
+| `ADVAPI32.dll` | `GetNamedSecurityInfoW`, `SetNamedSecurityInfoW`, `SetFileSecurityW` | Suportado no subconjunto | Arquivo existente em `C:\` do prefixo; owner/group imutáveis e DACL persistente; descritores e ponteiros de saída publicados por cópia protegida |
 
 SACL, auditoria, herança complexa, trustees por nome, certificados, privilégios,
 elevação, `AccessCheck`, permissões POSIX e a identidade Linux não fazem parte
 do contrato. As DACLs não bloqueiam `CreateFile` e não constituem sandbox. Ver
 [seguranca-acl.md](arquitetura/seguranca-acl.md).
 
-As rotas de token e SID rejeitam ponteiros convidados não acessíveis sem
-desreferenciá-los diretamente; `Win32SecurityTest.ProtectedTokenAndSidBuffersRejectUnmappedPointers`
-cobre saídas de token, SID, trustee, associação e tamanhos. A proteção de ACL e
-descritores ainda é uma etapa separada.
+As rotas de token, SID, ACL e descritor rejeitam ponteiros convidados não
+acessíveis sem desreferenciá-los diretamente. `Win32SecurityTest.ProtectedTokenAndSidBuffersRejectUnmappedPointers`
+cobre saídas de token, SID, trustee, associação e tamanhos;
+`Win32SecurityTest.ProtectedAclAndDescriptorBuffersRejectUnmappedPointers`
+cobre snapshots e publicações das APIs de ACL e descritor.
 
 ## COM mínimo e streams em memória (ole32)
 
