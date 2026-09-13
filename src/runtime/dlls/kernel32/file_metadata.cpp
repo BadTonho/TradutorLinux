@@ -2,10 +2,24 @@
 
 #include "tradutorlinux/util/unicode.hpp"
 
-#include <cstring>
-
 namespace tradutorlinux {
 using namespace file_internal;
+
+namespace {
+
+template <typename T>
+bool read_guest_object(const void* const source, T& destination) noexcept {
+    return runtime::read_guest_memory(source, &destination, sizeof(destination)).status ==
+           runtime::GuestMemoryAccessStatus::Success;
+}
+
+template <typename T>
+bool write_guest_object(void* const destination, const T& source) noexcept {
+    return runtime::write_guest_memory(destination, &source, sizeof(source)).status ==
+           runtime::GuestMemoryAccessStatus::Success;
+}
+
+}  // namespace
 
 extern "C" {
 TL_MSABI std::uint32_t tl_GetFileSize(const void* handle, std::uint32_t* high_size) noexcept {
@@ -15,22 +29,18 @@ TL_MSABI std::uint32_t tl_GetFileSize(const void* handle, std::uint32_t* high_si
         set_last_error(abi::kErrorInvalidHandle);
         return 0xFFFFFFFFU;
     }
-    if (high_size != nullptr && !mapped_guest_range(high_size, sizeof(*high_size), true)) {
-        set_last_error(abi::kErrorInvalidParameter);
-        return 0xFFFFFFFFU;
-    }
     const std::uint64_t size = current_file_size(*slot);
     if (high_size != nullptr) {
-        *high_size = static_cast<std::uint32_t>(size >> 32);
+        const std::uint32_t high = static_cast<std::uint32_t>(size >> 32);
+        if (!write_guest_object(high_size, high)) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0xFFFFFFFFU;
+        }
     }
     set_last_error(abi::kErrorSuccess);
     return static_cast<std::uint32_t>(size & 0xFFFFFFFFU);
 }
 TL_MSABI std::uint32_t tl_GetFileAttributesA(const char* path) noexcept {
-    if (!mapped_guest_cstring(path) || path == nullptr || path[0] == '\0') {
-        set_last_error(abi::kErrorInvalidParameter);
-        return 0xFFFFFFFF;
-    }
     char normalized[4096]{};
     if (!translate_windows_path(path, normalized, sizeof(normalized))) {
         set_last_error(abi::kErrorInvalidParameter);
@@ -88,21 +98,34 @@ TL_MSABI int tl_GetVolumeInformationA(const char*, char* volume_name_buffer,
                                       std::uint32_t* maximum_component_length, std::uint32_t* file_system_flags,
                                       char* file_system_name_buffer, std::uint32_t file_system_name_size) noexcept {
     if (volume_name_buffer != nullptr && volume_name_size > 0 && mapped_guest_range(volume_name_buffer, volume_name_size, true)) {
-        std::strncpy(volume_name_buffer, "Local Disk", volume_name_size - 1);
-        volume_name_buffer[volume_name_size - 1] = '\0';
+        const char value[] = "Local Disk";
+        const std::size_t length = std::min<std::size_t>(std::size(value), volume_name_size) - 1U;
+        if (runtime::write_guest_memory(volume_name_buffer, value, length + 1U).status !=
+            runtime::GuestMemoryAccessStatus::Success) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
+        }
     }
     if (volume_serial_number != nullptr && mapped_guest_range(volume_serial_number, sizeof(std::uint32_t), true)) {
-        *volume_serial_number = 0x12345678U;
+        const std::uint32_t value = 0x12345678U;
+        if (!write_guest_object(volume_serial_number, value)) return 0;
     }
     if (maximum_component_length != nullptr && mapped_guest_range(maximum_component_length, sizeof(std::uint32_t), true)) {
-        *maximum_component_length = 255;
+        const std::uint32_t value = 255;
+        if (!write_guest_object(maximum_component_length, value)) return 0;
     }
     if (file_system_flags != nullptr && mapped_guest_range(file_system_flags, sizeof(std::uint32_t), true)) {
-        *file_system_flags = 0x00000002U | 0x00000004U;
+        const std::uint32_t value = 0x00000002U | 0x00000004U;
+        if (!write_guest_object(file_system_flags, value)) return 0;
     }
     if (file_system_name_buffer != nullptr && file_system_name_size > 0 && mapped_guest_range(file_system_name_buffer, file_system_name_size, true)) {
-        std::strncpy(file_system_name_buffer, "NTFS", file_system_name_size - 1);
-        file_system_name_buffer[file_system_name_size - 1] = '\0';
+        const char value[] = "NTFS";
+        const std::size_t length = std::min<std::size_t>(std::size(value), file_system_name_size) - 1U;
+        if (runtime::write_guest_memory(file_system_name_buffer, value, length + 1U).status !=
+            runtime::GuestMemoryAccessStatus::Success) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
+        }
     }
     set_last_error(abi::kErrorSuccess);
     return 1;
@@ -114,23 +137,36 @@ TL_MSABI int tl_GetVolumeInformationW(const std::uint16_t*, std::uint16_t* volum
     if (volume_name_buffer != nullptr && volume_name_size > 0 && mapped_guest_range(volume_name_buffer, volume_name_size * sizeof(std::uint16_t), true)) {
         const std::u16string u16 = util::utf8_to_wide("Local Disk");
         const std::size_t len = std::min<std::size_t>(u16.size(), volume_name_size - 1);
-        std::copy(u16.begin(), u16.begin() + static_cast<std::ptrdiff_t>(len), volume_name_buffer);
-        volume_name_buffer[len] = 0;
+        if (runtime::write_guest_memory(volume_name_buffer, u16.data(), len * sizeof(char16_t)).status !=
+                runtime::GuestMemoryAccessStatus::Success ||
+            runtime::write_guest_memory(volume_name_buffer + len, "\0", sizeof(char16_t)).status !=
+                runtime::GuestMemoryAccessStatus::Success) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
+        }
     }
     if (volume_serial_number != nullptr && mapped_guest_range(volume_serial_number, sizeof(std::uint32_t), true)) {
-        *volume_serial_number = 0x12345678U;
+        const std::uint32_t value = 0x12345678U;
+        if (!write_guest_object(volume_serial_number, value)) return 0;
     }
     if (maximum_component_length != nullptr && mapped_guest_range(maximum_component_length, sizeof(std::uint32_t), true)) {
-        *maximum_component_length = 255;
+        const std::uint32_t value = 255;
+        if (!write_guest_object(maximum_component_length, value)) return 0;
     }
     if (file_system_flags != nullptr && mapped_guest_range(file_system_flags, sizeof(std::uint32_t), true)) {
-        *file_system_flags = 0x00000002U | 0x00000004U;
+        const std::uint32_t value = 0x00000002U | 0x00000004U;
+        if (!write_guest_object(file_system_flags, value)) return 0;
     }
     if (file_system_name_buffer != nullptr && file_system_name_size > 0 && mapped_guest_range(file_system_name_buffer, file_system_name_size * sizeof(std::uint16_t), true)) {
         const std::u16string u16 = util::utf8_to_wide("NTFS");
         const std::size_t len = std::min<std::size_t>(u16.size(), file_system_name_size - 1);
-        std::copy(u16.begin(), u16.begin() + static_cast<std::ptrdiff_t>(len), file_system_name_buffer);
-        file_system_name_buffer[len] = 0;
+        if (runtime::write_guest_memory(file_system_name_buffer, u16.data(), len * sizeof(char16_t)).status !=
+                runtime::GuestMemoryAccessStatus::Success ||
+            runtime::write_guest_memory(file_system_name_buffer + len, "\0", sizeof(char16_t)).status !=
+                runtime::GuestMemoryAccessStatus::Success) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
+        }
     }
     set_last_error(abi::kErrorSuccess);
     return 1;
@@ -138,19 +174,20 @@ TL_MSABI int tl_GetVolumeInformationW(const std::uint16_t*, std::uint16_t* volum
 TL_MSABI int tl_GetFileSizeEx(const void* handle, std::int64_t* file_size) noexcept {
     FileSlotGuard slot_guard(handle);
     const FileSlot* const slot = slot_guard.get();
-    if (slot == nullptr || file_size == nullptr || !mapped_guest_range(file_size, sizeof(std::int64_t), true)) {
+    if (slot == nullptr || file_size == nullptr) {
         set_last_error(slot == nullptr ? abi::kErrorInvalidHandle : abi::kErrorInvalidParameter);
         return 0;
     }
-    *file_size = static_cast<std::int64_t>(current_file_size(*slot));
+    const std::int64_t value = static_cast<std::int64_t>(current_file_size(*slot));
+    if (!write_guest_object(file_size, value)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
     set_last_error(abi::kErrorSuccess);
     return 1;
 }
 TL_MSABI std::uint32_t tl_GetCompressedFileSizeW(const std::uint16_t* const file_name,
                                                  std::uint32_t* const high) noexcept {
-    if (high != nullptr && mapped_guest_range(high, sizeof(std::uint32_t), true)) {
-        *high = 0;
-    }
     return tl_GetFileSize(file_name != nullptr ? reinterpret_cast<void*>(0x1) : nullptr, high);
 }
 TL_MSABI int tl_GetFileAttributesExW(const std::uint16_t* path, int info_level, void* data) noexcept {
@@ -164,15 +201,18 @@ TL_MSABI int tl_GetFileAttributesExW(const std::uint16_t* path, int info_level, 
         set_last_error(errno_to_win32(errno));
         return 0;
     }
-    auto* result = static_cast<LegacyFileAttributeData*>(data);
-    *result = {};
-    result->attributes = stat_to_win32_attributes(normalized.c_str(), st);
-    write_filetime(st.st_ctim, result->creation);
-    write_filetime(st.st_atim, result->last_access);
-    write_filetime(st.st_mtim, result->last_write);
+    LegacyFileAttributeData result{};
+    result.attributes = stat_to_win32_attributes(normalized.c_str(), st);
+    write_filetime(st.st_ctim, result.creation);
+    write_filetime(st.st_atim, result.last_access);
+    write_filetime(st.st_mtim, result.last_write);
     const auto file_size = static_cast<std::uint64_t>(st.st_size);
-    result->size_low = static_cast<std::uint32_t>(file_size);
-    result->size_high = static_cast<std::uint32_t>(file_size >> 32U);
+    result.size_low = static_cast<std::uint32_t>(file_size);
+    result.size_high = static_cast<std::uint32_t>(file_size >> 32U);
+    if (!write_guest_object(data, result)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
     set_last_error(abi::kErrorSuccess);
     return 1;
 }
@@ -195,14 +235,23 @@ TL_MSABI int tl_GetFileTime(const void* handle, void* creation_time, void* acces
         set_last_error(errno_to_win32(errno));
         return 0;
     }
+    LegacyFileTime creation{};
+    LegacyFileTime access{};
+    LegacyFileTime write{};
     if (creation_time != nullptr) {
-        write_filetime(st.st_ctim, *static_cast<LegacyFileTime*>(creation_time));
+        write_filetime(st.st_ctim, creation);
     }
     if (access_time != nullptr) {
-        write_filetime(st.st_atim, *static_cast<LegacyFileTime*>(access_time));
+        write_filetime(st.st_atim, access);
     }
     if (write_time != nullptr) {
-        write_filetime(st.st_mtim, *static_cast<LegacyFileTime*>(write_time));
+        write_filetime(st.st_mtim, write);
+    }
+    if ((creation_time != nullptr && !write_guest_object(creation_time, creation)) ||
+        (access_time != nullptr && !write_guest_object(access_time, access)) ||
+        (write_time != nullptr && !write_guest_object(write_time, write))) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
     }
     set_last_error(abi::kErrorSuccess);
     return 1;
@@ -227,11 +276,21 @@ TL_MSABI int tl_SetFileTime(const void* handle, const void* creation_time,
         return 0;
     }
     timespec times[2]{st.st_atim, st.st_mtim};
-    if (access_time != nullptr && !filetime_to_timespec(*static_cast<const LegacyFileTime*>(access_time), times[0])) {
+    LegacyFileTime access{};
+    LegacyFileTime write{};
+    if (access_time != nullptr && !read_guest_object(access_time, access)) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
-    if (write_time != nullptr && !filetime_to_timespec(*static_cast<const LegacyFileTime*>(write_time), times[1])) {
+    if (write_time != nullptr && !read_guest_object(write_time, write)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    if (access_time != nullptr && !filetime_to_timespec(access, times[0])) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    if (write_time != nullptr && !filetime_to_timespec(write, times[1])) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
@@ -258,20 +317,23 @@ TL_MSABI int tl_GetFileInformationByHandle(const void* handle, void* information
         set_last_error(errno_to_win32(errno));
         return 0;
     }
-    auto* result = static_cast<LegacyByHandleFileInformation*>(information);
-    *result = {};
-    result->attributes = stat_to_win32_attributes(slot->path.c_str(), st);
-    write_filetime(st.st_ctim, result->creation);
-    write_filetime(st.st_atim, result->last_access);
-    write_filetime(st.st_mtim, result->last_write);
+    LegacyByHandleFileInformation result{};
+    result.attributes = stat_to_win32_attributes(slot->path.c_str(), st);
+    write_filetime(st.st_ctim, result.creation);
+    write_filetime(st.st_atim, result.last_access);
+    write_filetime(st.st_mtim, result.last_write);
     const auto file_size = static_cast<std::uint64_t>(st.st_size);
     const auto inode = static_cast<std::uint64_t>(st.st_ino);
-    result->volume_serial_number = static_cast<std::uint32_t>(st.st_dev);
-    result->size_low = static_cast<std::uint32_t>(file_size);
-    result->size_high = static_cast<std::uint32_t>(file_size >> 32U);
-    result->number_of_links = static_cast<std::uint32_t>(st.st_nlink);
-    result->file_index_low = static_cast<std::uint32_t>(inode);
-    result->file_index_high = static_cast<std::uint32_t>(inode >> 32U);
+    result.volume_serial_number = static_cast<std::uint32_t>(st.st_dev);
+    result.size_low = static_cast<std::uint32_t>(file_size);
+    result.size_high = static_cast<std::uint32_t>(file_size >> 32U);
+    result.number_of_links = static_cast<std::uint32_t>(st.st_nlink);
+    result.file_index_low = static_cast<std::uint32_t>(inode);
+    result.file_index_high = static_cast<std::uint32_t>(inode >> 32U);
+    if (!write_guest_object(information, result)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
     set_last_error(abi::kErrorSuccess);
     return 1;
 }
@@ -293,9 +355,13 @@ TL_MSABI int tl_GetFileInformationByHandleEx(const void* handle, int info_class,
         set_last_error(errno_to_win32(errno));
         return 0;
     }
-    *static_cast<LegacyBasicFileInformation*>(buffer) = {
+    const LegacyBasicFileInformation result{
         filetime_ticks(st.st_ctim), filetime_ticks(st.st_atim), filetime_ticks(st.st_mtim),
         filetime_ticks(st.st_ctim), stat_to_win32_attributes(slot->path.c_str(), st), 0};
+    if (!write_guest_object(buffer, result)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
     set_last_error(abi::kErrorSuccess);
     return 1;
 }
@@ -322,7 +388,11 @@ TL_MSABI int tl_SetFileInformationByHandle(const void* const handle, const int i
             trace_filesystem("set-information", "failed", "short-basic-info");
             return 0;
         }
-        const auto& info = *static_cast<const abi::GuestFileBasicInfo*>(buffer);
+        abi::GuestFileBasicInfo info{};
+        if (!read_guest_object(buffer, info)) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
+        }
         if (info.reserved != 0) {
             set_last_error(abi::kErrorInvalidParameter);
             return 0;
@@ -376,15 +446,24 @@ TL_MSABI int tl_SetFileInformationByHandle(const void* const handle, const int i
             set_last_error(abi::kErrorInvalidParameter);
             return 0;
         }
-        delete_file = static_cast<const abi::GuestFileDispositionInfo*>(buffer)->delete_file != 0;
+        abi::GuestFileDispositionInfo info{};
+        if (!read_guest_object(buffer, info)) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
+        }
+        delete_file = info.delete_file != 0;
     } else if (info_class == static_cast<int>(abi::kFileDispositionInfoEx)) {
         if (size < sizeof(abi::GuestFileDispositionInfoEx) ||
             !mapped_guest_range(buffer, sizeof(abi::GuestFileDispositionInfoEx), false)) {
             set_last_error(abi::kErrorInvalidParameter);
             return 0;
         }
-        const std::uint32_t flags =
-            static_cast<const abi::GuestFileDispositionInfoEx*>(buffer)->flags;
+        abi::GuestFileDispositionInfoEx info{};
+        if (!read_guest_object(buffer, info)) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
+        }
+        const std::uint32_t flags = info.flags;
         constexpr std::uint32_t kSupportedFlags = abi::kFileDispositionFlagDelete |
                                                    abi::kFileDispositionFlagPosixSemantics |
                                                    abi::kFileDispositionFlagOnClose |
