@@ -1604,6 +1604,27 @@ TEST(Win32ConcurrencyTest, GetCurrentThreadIdReturnsNonZero) {
     EXPECT_NE(tid, 0U);
 }
 
+TEST(Win32ConcurrencyTest, ProtectedThreadBuffersRejectUnmappedMemory) {
+    auto* const invalid = reinterpret_cast<void*>(static_cast<std::uintptr_t>(0x1000U));
+    EXPECT_EQ(tl_GetExitCodeThread(nullptr, static_cast<std::uint32_t*>(invalid)), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_GetThreadTimes(nullptr, invalid, nullptr, nullptr, nullptr), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+
+    std::size_t attribute_size = 64U;
+    EXPECT_EQ(tl_InitializeProcThreadAttributeList(invalid, 1U, 0U, &attribute_size), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_InitializeProcThreadAttributeList(nullptr, 1U, 0U,
+                                                    static_cast<std::size_t*>(invalid)), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+
+    tl_InitializeSListHead(reinterpret_cast<abi::GuestSListHeader*>(invalid));
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    std::array<std::byte, 16> entry{};
+    EXPECT_EQ(tl_InterlockedPushEntrySList(invalid, entry.data()), nullptr);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+}
+
 TEST(Win32ConcurrencyTest, CreateThreadRejectsInvalidStartWithoutPartialHandle) {
     std::uint32_t thread_id = 0xA5A5U;
     EXPECT_EQ(tl_CreateThread(nullptr, 0, 0, nullptr, 0, &thread_id), nullptr);

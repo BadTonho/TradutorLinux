@@ -222,6 +222,12 @@ arquivo é traduzido somente depois de estar em memória do host. A regressão
 `Win32FileTest.PrivateProfileStringsUseProtectedGuestBuffers` passou junto com
 os testes da primitiva de memória.
 
+O lote de threads migrou as saídas de `GetExitCodeThread`, `GetThreadTimes`,
+`CreateThread`, `InitializeSListHead` e `InitializeProcThreadAttributeList`,
+além dos ponteiros de `InterlockedPushEntrySList`. A regressão
+`Win32ConcurrencyTest.ProtectedThreadBuffersRejectUnmappedMemory` passou com
+os testes de concorrência e da primitiva protegida.
+
 ## Fora desta rodada
 
 Não entram neste roadmap, por enquanto:

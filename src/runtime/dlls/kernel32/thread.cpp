@@ -172,7 +172,12 @@ TL_MSABI void tl_InitializeSListHead(abi::GuestSListHeader* const list_head) noe
         set_last_error(abi::kErrorInvalidParameter);
         return;
     }
-    *list_head = {};
+    const abi::GuestSListHeader empty{};
+    if (runtime::write_guest_memory(list_head, &empty, sizeof(empty)).status !=
+        runtime::GuestMemoryAccessStatus::Success) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return;
+    }
     set_last_error(abi::kErrorSuccess);
     trace_process_console("process-context", "initialize-slist", "empty");
 }
@@ -284,7 +289,10 @@ TL_MSABI void* tl_CreateThread(const void* thread_attributes, const std::uintptr
         return nullptr;
     }
     if (thread_id != nullptr) {
-        *thread_id = it->thread_id;
+        if (!write_guest_value(thread_id, it->thread_id)) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return thread_slot_to_handle(*it);
+        }
     }
     trace_process_console(
         "thread-create", "guest-thread",
@@ -604,14 +612,17 @@ TL_MSABI std::uint32_t tl_ResumeThread(void* const thread) noexcept {
 }
 
 TL_MSABI int tl_GetExitCodeThread(void* const thread, std::uint32_t* const exit_code) noexcept {
-    if (exit_code == nullptr || !mapped_guest_range(exit_code, 4, true)) {
+    if (exit_code == nullptr) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
     constexpr std::uint32_t kStillActive = 259;
     if (thread == nullptr || thread == reinterpret_cast<void*>(~static_cast<std::uintptr_t>(1))) {
         // (HANDLE)-2: GetCurrentThread() ou handle nulo default
-        *exit_code = kStillActive;
+        if (!write_guest_value(exit_code, kStillActive)) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
+        }
         set_last_error(abi::kErrorSuccess);
         return 1;
     }
@@ -621,10 +632,15 @@ TL_MSABI int tl_GetExitCodeThread(void* const thread, std::uint32_t* const exit_
         return 0;
     }
     std::lock_guard<std::mutex> lock(g_threads_mutex);
+    std::uint32_t result = kStillActive;
     if (!slot->finished) {
-        *exit_code = kStillActive;
+        result = kStillActive;
     } else {
-        *exit_code = static_cast<std::uint32_t>(slot->exit_code);
+        result = static_cast<std::uint32_t>(slot->exit_code);
+    }
+    if (!write_guest_value(exit_code, result)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
     }
     set_last_error(abi::kErrorSuccess);
     return 1;
@@ -642,14 +658,18 @@ TL_MSABI std::uint16_t tl_SetThreadUILanguage(const std::uint16_t lang_id) noexc
 
 TL_MSABI void* tl_InterlockedPushEntrySList(void* const list_head, void* const list_entry) noexcept {
     if (list_head == nullptr || list_entry == nullptr) {
+        set_last_error(abi::kErrorInvalidParameter);
         return nullptr;
     }
     // Minimal atomic-compatible SLIST emulation for single guest context
-    void** entry_next = static_cast<void**>(list_entry);
-    void** head_ptr = static_cast<void**>(list_head);
-    void* old_head = *head_ptr;
-    *entry_next = old_head;
-    *head_ptr = list_entry;
+    void* old_head = nullptr;
+    if (!read_guest_value(list_head, old_head) ||
+        !write_guest_value(list_entry, old_head) ||
+        !write_guest_value(list_head, list_entry)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return nullptr;
+    }
+    set_last_error(abi::kErrorSuccess);
     return old_head;
 }
 
@@ -661,12 +681,46 @@ TL_MSABI int tl_InitializeProcThreadAttributeList(void* const attribute_list, co
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
+    std::size_t requested_size = 0;
+    if (!read_guest_value(size, requested_size)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    constexpr std::size_t kAttributeListSize = 64U;
+    constexpr std::size_t kMaximumAttributeListSize = 4096U;
     if (attribute_list == nullptr) {
-        *size = 64;
+        if (!write_guest_value(size, kAttributeListSize)) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
+        }
         set_last_error(abi::kErrorInsufficientBuffer);
         return 0;
     }
-    std::memset(attribute_list, 0, *size);
+    if (requested_size < kAttributeListSize) {
+        if (!write_guest_value(size, kAttributeListSize)) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
+        }
+        set_last_error(abi::kErrorInsufficientBuffer);
+        return 0;
+    }
+    if (requested_size > kMaximumAttributeListSize) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    const std::array<std::byte, 256> empty{};
+    const std::uintptr_t base = reinterpret_cast<std::uintptr_t>(attribute_list);
+    for (std::size_t offset = 0; offset < requested_size;) {
+        const std::size_t chunk_size = std::min(empty.size(), requested_size - offset);
+        if (offset > std::numeric_limits<std::uintptr_t>::max() - base ||
+            runtime::write_guest_memory(
+                reinterpret_cast<void*>(base + offset), empty.data(), chunk_size).status !=
+                runtime::GuestMemoryAccessStatus::Success) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
+        }
+        offset += chunk_size;
+    }
     set_last_error(abi::kErrorSuccess);
     return 1;
 }
@@ -704,17 +758,15 @@ TL_MSABI int tl_SwitchToThread() noexcept {
 TL_MSABI int tl_GetThreadTimes(void* const thread, void* const creation_time, void* const exit_time, void* const kernel_time, void* const user_time) noexcept {
     (void)thread;
     const std::uint64_t dummy_ft = 130000000000000000ULL;
-    if (creation_time != nullptr && mapped_guest_range(creation_time, 8, true)) {
-        *reinterpret_cast<std::uint64_t*>(creation_time) = dummy_ft;
-    }
-    if (exit_time != nullptr && mapped_guest_range(exit_time, 8, true)) {
-        *reinterpret_cast<std::uint64_t*>(exit_time) = dummy_ft;
-    }
-    if (kernel_time != nullptr && mapped_guest_range(kernel_time, 8, true)) {
-        *reinterpret_cast<std::uint64_t*>(kernel_time) = 1000000ULL;
-    }
-    if (user_time != nullptr && mapped_guest_range(user_time, 8, true)) {
-        *reinterpret_cast<std::uint64_t*>(user_time) = 2000000ULL;
+    const auto write_time = [](void* const destination, const std::uint64_t value) noexcept {
+        return destination == nullptr ||
+               runtime::write_guest_memory(destination, &value, sizeof(value)).status ==
+                   runtime::GuestMemoryAccessStatus::Success;
+    };
+    if (!write_time(creation_time, dummy_ft) || !write_time(exit_time, dummy_ft) ||
+        !write_time(kernel_time, 1000000ULL) || !write_time(user_time, 2000000ULL)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
     }
     set_last_error(abi::kErrorSuccess);
     return 1;

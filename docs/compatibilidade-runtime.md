@@ -155,6 +155,12 @@ strings de entrada para objetos host e publicam resultados ANSI/UTF-16 por
 `write_guest_memory`, preservando a truncagem e a terminação dos buffers. A
 leitura de arquivos INI continua limitada ao parser simples existente.
 
+As saídas de `GetExitCodeThread`, `GetThreadTimes`, `CreateThread`,
+`InitializeSListHead` e `InitializeProcThreadAttributeList` também passam pela
+fronteira protegida; `InterlockedPushEntrySList` copia os ponteiros encadeados
+antes de publicá-los. A implementação SLIST continua sendo a emulação mínima
+de contexto convidado documentada no módulo.
+
 ## GUI mínima (Fase 7)
 
 O protótipo registra um subconjunto de `USER32.dll` e `GDI32.dll` e usa X11
