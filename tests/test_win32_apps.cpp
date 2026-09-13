@@ -488,6 +488,32 @@ TEST(WinSockTest, AddressToStringValidatesCapacityAndFormatsIpv4) {
     EXPECT_EQ(short_output[3], 'X');
 }
 
+TEST(WinSockTest, ProtectedAddressBuffersRejectUnmappedGuestPointers) {
+    auto* const invalid = reinterpret_cast<void*>(static_cast<std::uintptr_t>(0x1000U));
+    EXPECT_EQ(tl_WSAStartup(0x0202U, invalid), 10022);
+    EXPECT_EQ(tl_gethostname(static_cast<char*>(invalid), 64), -1);
+    EXPECT_EQ(tl_WSAGetLastError(), 10014);
+
+    std::array<std::uint8_t, 16> address{};
+    address[0] = 2U;
+    address[4] = 127U;
+    address[7] = 1U;
+    char output[64]{};
+    std::uint32_t output_length = sizeof(output);
+    EXPECT_EQ(tl_WSAAddressToStringA(invalid, address.size(), nullptr, output, &output_length), -1);
+    EXPECT_EQ(tl_WSAGetLastError(), 10014);
+    EXPECT_EQ(tl_inet_ntop(2, invalid, output, sizeof(output)), nullptr);
+    EXPECT_EQ(tl_WSAGetLastError(), 10014);
+    EXPECT_EQ(tl_inet_pton(2, "127.0.0.1", invalid), -1);
+    EXPECT_EQ(tl_WSAGetLastError(), 10014);
+
+    void* address_info = reinterpret_cast<void*>(1U);
+    EXPECT_EQ(tl_getaddrinfo("localhost", "0", nullptr, invalid), 10022);
+    EXPECT_EQ(tl_getaddrinfo("localhost", "0", nullptr, &address_info), 0);
+    ASSERT_NE(address_info, nullptr);
+    tl_freeaddrinfo(address_info);
+}
+
 TEST(NotepadPlusPlusCoverageTest, AllApisAndModules) {
     // DWMAPI
     int comp_enabled = 0;

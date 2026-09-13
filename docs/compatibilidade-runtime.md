@@ -167,6 +167,12 @@ processo também zeram saídas por cópia protegida e retornam
 continua limitada à sessão local sintética, e as demais operações permanecem
 explicitamente não suportadas.
 
+No `WS2_32.dll`, `WSAStartup`, conversões de endereço, `WSAAddressToStringA`,
+`gethostname` e `getaddrinfo` copiam entradas e saídas entre memória host e
+convidada. Endereços retornados por `getaddrinfo` continuam sendo registros
+estáticos do runtime, e a implementação suporta apenas o subconjunto IPv4
+documentado.
+
 ## GUI mínima (Fase 7)
 
 O protótipo registra um subconjunto de `USER32.dll` e `GDI32.dll` e usa X11

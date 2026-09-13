@@ -26,6 +26,7 @@
 #include <unistd.h>
 
 #include "tradutorlinux/runtime/memory_validator.hpp"
+#include "../../core/runtime_state_common.hpp"
 
 namespace tradutorlinux {
 namespace {
@@ -242,11 +243,11 @@ int errno_to_wsa(const int error) noexcept {
 
 bool copy_guest_sockaddr(const void* address, const int length, sockaddr_in& result) noexcept {
     if (address == nullptr || length < static_cast<int>(sizeof(sockaddr_in)) ||
-        !mapped_range(address, sizeof(sockaddr_in), false)) {
+        runtime::read_guest_memory(address, &result, sizeof(result)).status !=
+            runtime::GuestMemoryAccessStatus::Success) {
         g_wsa_last_error = kWsaEInvalidArgument;
         return false;
     }
-    std::memcpy(&result, address, sizeof(result));
     if (result.sin_family != AF_INET) {
         g_wsa_last_error = kWsaEInvalidArgument;
         return false;
@@ -254,12 +255,17 @@ bool copy_guest_sockaddr(const void* address, const int length, sockaddr_in& res
     return true;
 }
 
-void copy_host_sockaddr(const sockaddr_in& source, void* address, int* length) noexcept {
-    if (address != nullptr && length != nullptr && *length >= static_cast<int>(sizeof(source)) &&
-        mapped_range(address, sizeof(source), true) && mapped_range(length, sizeof(*length), true)) {
-        std::memcpy(address, &source, sizeof(source));
-        *length = sizeof(source);
+bool copy_host_sockaddr(const sockaddr_in& source, void* address, int* length) noexcept {
+    if (address == nullptr && length == nullptr) return true;
+    if (address == nullptr || length == nullptr) return false;
+    int capacity = 0;
+    if (!read_guest_value(length, capacity) || capacity < static_cast<int>(sizeof(source)) ||
+        runtime::write_guest_memory(address, &source, sizeof(source)).status !=
+            runtime::GuestMemoryAccessStatus::Success ||
+        !write_guest_value(length, static_cast<int>(sizeof(source)))) {
+        return false;
     }
+    return true;
 }
 
 }  // namespace
@@ -267,7 +273,7 @@ void copy_host_sockaddr(const sockaddr_in& source, void* address, int* length) n
 extern "C" {
 
 TL_MSABI int tl_WSAStartup(const std::uint16_t version_requested, void* data) noexcept {
-    if (data == nullptr || !mapped_range(data, 400, true)) {
+    if (data == nullptr) {
         g_wsa_last_error = kWsaEInvalidArgument;
         return kWsaEInvalidArgument;
     }
@@ -277,18 +283,23 @@ TL_MSABI int tl_WSAStartup(const std::uint16_t version_requested, void* data) no
         g_wsa_last_error = 10092; // WSAVERNOTSUPPORTED
         return 10092;
     }
-    std::memset(data, 0, 400);
+    std::array<std::byte, 400> output{};
     // WSADATA: wVersion(0), wHighVersion(2), szDescription(4,257), szSystemStatus(261,128), iMaxSockets(389,2), iMaxUdpDg(391,2), lpVendorInfo(393,8)
     const std::uint16_t high_version = 0x0202U;
-    std::memcpy(static_cast<char*>(data), &version_requested, sizeof(version_requested));
-    std::memcpy(static_cast<char*>(data) + 2, &high_version, sizeof(high_version));
+    std::memcpy(output.data(), &version_requested, sizeof(version_requested));
+    std::memcpy(output.data() + 2, &high_version, sizeof(high_version));
     const char desc[] = "WinSock 2.0";
     const char status[] = "Running";
-    std::memcpy(static_cast<char*>(data) + 4, desc, sizeof(desc));
-    std::memcpy(static_cast<char*>(data) + 261, status, sizeof(status));
+    std::memcpy(output.data() + 4, desc, sizeof(desc));
+    std::memcpy(output.data() + 261, status, sizeof(status));
     const std::uint16_t zero = 0;
-    std::memcpy(static_cast<char*>(data) + 389, &zero, sizeof(zero));
-    std::memcpy(static_cast<char*>(data) + 391, &zero, sizeof(zero));
+    std::memcpy(output.data() + 389, &zero, sizeof(zero));
+    std::memcpy(output.data() + 391, &zero, sizeof(zero));
+    if (runtime::write_guest_memory(data, output.data(), output.size()).status !=
+        runtime::GuestMemoryAccessStatus::Success) {
+        g_wsa_last_error = kWsaEInvalidArgument;
+        return kWsaEInvalidArgument;
+    }
     g_wsa_last_error = 0;
     return 0;
 }
@@ -396,7 +407,11 @@ TL_MSABI std::uintptr_t tl_accept(const std::uintptr_t socket, void* name,
         g_wsa_last_error = ENOBUFS;
         return kInvalidSocket;
     }
-    copy_host_sockaddr(address, name, name_length);
+    if (!copy_host_sockaddr(address, name, name_length)) {
+        ::close(fd);
+        g_wsa_last_error = kWsaEFault;
+        return kInvalidSocket;
+    }
     free_it->used = true;
     free_it->fd = fd;
     free_it->type = kSockStream;
@@ -499,17 +514,20 @@ TL_MSABI int tl_recvfrom(const std::uintptr_t socket, char* buffer, const int le
         g_wsa_last_error = errno_to_wsa(errno);
         return -1;
     }
-    copy_host_sockaddr(address, from, from_length);
+    if (!copy_host_sockaddr(address, from, from_length)) {
+        g_wsa_last_error = kWsaEFault;
+        return -1;
+    }
     g_wsa_last_error = 0;
     return static_cast<int>(result);
 }
 
 TL_MSABI int tl_getsockname(const std::uintptr_t socket, void* name, int* name_length) noexcept {
     SocketSlot* slot = find_socket(socket);
+    int capacity = 0;
     if (slot == nullptr || name == nullptr || name_length == nullptr ||
-        !mapped_range(name_length, sizeof(*name_length), true) ||
-        *name_length < static_cast<int>(sizeof(sockaddr_in)) ||
-        !mapped_range(name, sizeof(sockaddr_in), true)) {
+        !read_guest_value(name_length, capacity) ||
+        capacity < static_cast<int>(sizeof(sockaddr_in))) {
         g_wsa_last_error = slot == nullptr ? kWsaENotSocket : kWsaEInvalidArgument;
         return -1;
     }
@@ -519,8 +537,12 @@ TL_MSABI int tl_getsockname(const std::uintptr_t socket, void* name, int* name_l
         g_wsa_last_error = errno_to_wsa(errno);
         return -1;
     }
-    std::memcpy(name, &address, sizeof(address));
-    *name_length = sizeof(address);
+    if (runtime::write_guest_memory(name, &address, sizeof(address)).status !=
+            runtime::GuestMemoryAccessStatus::Success ||
+        !write_guest_value(name_length, static_cast<int>(sizeof(address)))) {
+        g_wsa_last_error = kWsaEFault;
+        return -1;
+    }
     g_wsa_last_error = 0;
     return 0;
 }
@@ -537,18 +559,28 @@ TL_MSABI int tl_shutdown(const std::uintptr_t socket, const int how) noexcept {
 
 TL_MSABI int tl_getaddrinfo(const char* node, const char* service, const void* hints,
                             void* result) noexcept {
-    if (result == nullptr || !mapped_range(result, sizeof(void*), true) ||
-        !mapped_cstring(node) || !mapped_cstring(service)) {
+    std::string guest_node;
+    std::string guest_service;
+    if (result == nullptr ||
+        (node != nullptr && !runtime::copy_guest_cstring(node, 4096U, guest_node)) ||
+        (service != nullptr && !runtime::copy_guest_cstring(service, 4096U, guest_service)) ||
+        !write_guest_value(static_cast<void**>(result), static_cast<void*>(nullptr))) {
         g_wsa_last_error = kWsaEInvalidArgument;
         return kWsaEInvalidArgument;
     }
     int family = AF_INET;
     int type = SOCK_STREAM;
     int protocol = IPPROTO_TCP;
-    if (hints != nullptr && mapped_range(hints, 16, false)) {
-        std::memcpy(&family, hints, sizeof(int));
-        std::memcpy(&type, static_cast<const char*>(hints) + 8, sizeof(int));
-        std::memcpy(&protocol, static_cast<const char*>(hints) + 12, sizeof(int));
+    if (hints != nullptr) {
+        std::array<std::byte, 16> guest_hints{};
+        if (runtime::read_guest_memory(hints, guest_hints.data(), guest_hints.size()).status !=
+            runtime::GuestMemoryAccessStatus::Success) {
+            g_wsa_last_error = kWsaEInvalidArgument;
+            return kWsaEInvalidArgument;
+        }
+        std::memcpy(&family, guest_hints.data(), sizeof(int));
+        std::memcpy(&type, guest_hints.data() + 8, sizeof(int));
+        std::memcpy(&protocol, guest_hints.data() + 12, sizeof(int));
         if (family != 0 && family != AF_INET) {
             g_wsa_last_error = kWsaEAIFlags;
             return kWsaEAIFlags;
@@ -557,7 +589,8 @@ TL_MSABI int tl_getaddrinfo(const char* node, const char* service, const void* h
     std::lock_guard<std::mutex> lock(g_addrinfos_mutex);
     unsigned long port = 0;
     if (service != nullptr) {
-        const auto parsed = std::from_chars(service, service + std::strlen(service), port, 10);
+        const auto parsed = std::from_chars(guest_service.data(),
+                                            guest_service.data() + guest_service.size(), port, 10);
         if (parsed.ec != std::errc{} || port > 65535U) {
             g_wsa_last_error = kWsaEInvalidArgument;
             return kWsaEInvalidArgument;
@@ -565,14 +598,14 @@ TL_MSABI int tl_getaddrinfo(const char* node, const char* service, const void* h
     }
     struct in_addr resolved_addr{};
     resolved_addr.s_addr = htonl(INADDR_LOOPBACK);
-    if (node != nullptr && std::strcmp(node, "localhost") != 0 &&
-        std::strcmp(node, "127.0.0.1") != 0) {
+    if (node != nullptr && guest_node != "localhost" && guest_node != "127.0.0.1") {
         struct addrinfo hints_posix{};
         hints_posix.ai_family = family == 0 ? AF_INET : family;
         hints_posix.ai_socktype = type == 0 ? SOCK_STREAM : type;
         hints_posix.ai_protocol = protocol;
         struct addrinfo* res_posix = nullptr;
-        if (::getaddrinfo(node, service, &hints_posix, &res_posix) == 0 && res_posix != nullptr) {
+        if (::getaddrinfo(guest_node.c_str(), service == nullptr ? nullptr : guest_service.c_str(),
+                          &hints_posix, &res_posix) == 0 && res_posix != nullptr) {
             bool found = false;
             for (struct addrinfo* p = res_posix; p != nullptr; p = p->ai_next) {
                 if (p->ai_family == AF_INET && p->ai_addr != nullptr) {
@@ -608,10 +641,13 @@ TL_MSABI int tl_getaddrinfo(const char* node, const char* service, const void* h
     info.socket_address.sin_addr = resolved_addr;
     info.socket_address.sin_port = htons(static_cast<std::uint16_t>(port));
     info.address = &info.socket_address;
-    info.canon_name = node != nullptr ? node : "localhost";
+    info.canon_name = node != nullptr ? guest_node : "localhost";
     info.canonname = info.canon_name.data();
     info.next = nullptr;
-    *static_cast<void**>(result) = &info;
+    if (!write_guest_value(static_cast<void**>(result), static_cast<void*>(&info))) {
+        g_wsa_last_error = kWsaEFault;
+        return kWsaEFault;
+    }
     g_wsa_last_error = 0;
     return 0;
 }
@@ -648,12 +684,13 @@ TL_MSABI std::uint32_t tl_ntohl(const std::uint32_t network_long) noexcept {
 }
 
 TL_MSABI std::uint32_t tl_inet_addr(const char* address) noexcept {
-    if (!mapped_cstring(address)) {
+    std::string guest_address;
+    if (!runtime::copy_guest_cstring(address, 4096U, guest_address)) {
         g_wsa_last_error = kWsaEInvalidArgument;
         return 0xFFFFFFFFU;
     }
     in_addr parsed{};
-    if (::inet_aton(address, &parsed) == 0) {
+    if (::inet_aton(guest_address.c_str(), &parsed) == 0) {
         g_wsa_last_error = kWsaENoData;
         return 0xFFFFFFFFU;
     }
@@ -836,12 +873,18 @@ TL_MSABI int tl_ioctlsocket(const std::uintptr_t socket, const std::int32_t cmd,
 }
 
 TL_MSABI int tl_gethostname(char* name, const int namelen) noexcept {
-    if (name == nullptr || namelen <= 0 || !mapped_range(name, static_cast<std::size_t>(namelen), true)) {
+    if (name == nullptr || namelen <= 0 || namelen > 4096) {
         g_wsa_last_error = kWsaEInvalidArgument;
         return -1;
     }
-    if (::gethostname(name, static_cast<std::size_t>(namelen)) != 0) {
+    std::array<char, 4096> hostname{};
+    if (::gethostname(hostname.data(), static_cast<std::size_t>(namelen)) != 0) {
         g_wsa_last_error = errno_to_wsa(errno);
+        return -1;
+    }
+    if (runtime::write_guest_memory(name, hostname.data(), static_cast<std::size_t>(namelen)).status !=
+        runtime::GuestMemoryAccessStatus::Success) {
+        g_wsa_last_error = kWsaEFault;
         return -1;
     }
     g_wsa_last_error = 0;
@@ -849,28 +892,57 @@ TL_MSABI int tl_gethostname(char* name, const int namelen) noexcept {
 }
 
 TL_MSABI const char* tl_inet_ntop(const int af, const void* src, char* dst, const std::size_t size) noexcept {
-    if (src == nullptr || dst == nullptr || size == 0 || !mapped_range(dst, size, true)) {
+    if (src == nullptr || dst == nullptr || size == 0) {
         g_wsa_last_error = kWsaEInvalidArgument;
         return nullptr;
     }
-    const char* res = ::inet_ntop(af == kAfInet ? AF_INET : AF_INET6, src, dst, static_cast<socklen_t>(size));
+    const int host_family = af == kAfInet ? AF_INET : AF_INET6;
+    const std::size_t source_size = host_family == AF_INET ? sizeof(in_addr) : sizeof(in6_addr);
+    std::array<std::byte, sizeof(in6_addr)> source{};
+    if (runtime::read_guest_memory(src, source.data(), source_size).status !=
+        runtime::GuestMemoryAccessStatus::Success) {
+        g_wsa_last_error = kWsaEFault;
+        return nullptr;
+    }
+    std::array<char, INET6_ADDRSTRLEN> formatted{};
+    const char* res = ::inet_ntop(host_family, source.data(), formatted.data(), formatted.size());
     if (res == nullptr) {
         g_wsa_last_error = errno_to_wsa(errno);
         return nullptr;
     }
+    const std::size_t output_size = std::strlen(formatted.data()) + 1U;
+    if (output_size > size ||
+        runtime::write_guest_memory(dst, formatted.data(), output_size).status !=
+            runtime::GuestMemoryAccessStatus::Success) {
+        g_wsa_last_error = kWsaEFault;
+        return nullptr;
+    }
     g_wsa_last_error = 0;
-    return res;
+    return dst;
 }
 
 TL_MSABI int tl_inet_pton(const int af, const char* src, void* dst) noexcept {
-    if (src == nullptr || dst == nullptr || !mapped_cstring(src)) {
+    if (src == nullptr || dst == nullptr) {
         g_wsa_last_error = kWsaEInvalidArgument;
         return -1;
     }
-    const int res = ::inet_pton(af == kAfInet ? AF_INET : AF_INET6, src, dst);
+    std::string guest_source;
+    if (!runtime::copy_guest_cstring(src, 4096U, guest_source)) {
+        g_wsa_last_error = kWsaEFault;
+        return -1;
+    }
+    const int host_family = af == kAfInet ? AF_INET : AF_INET6;
+    std::array<std::byte, sizeof(in6_addr)> parsed{};
+    const int res = ::inet_pton(host_family, guest_source.c_str(), parsed.data());
     if (res <= 0) {
         g_wsa_last_error = (res == 0) ? kWsaEInvalidArgument : errno_to_wsa(errno);
         return res;
+    }
+    const std::size_t output_size = host_family == AF_INET ? sizeof(in_addr) : sizeof(in6_addr);
+    if (runtime::write_guest_memory(dst, parsed.data(), output_size).status !=
+        runtime::GuestMemoryAccessStatus::Success) {
+        g_wsa_last_error = kWsaEFault;
+        return -1;
     }
     g_wsa_last_error = 0;
     return res;
@@ -881,13 +953,18 @@ TL_MSABI int tl_WSAAddressToStringA(const void* const address, const std::uint32
                                     std::uint32_t* const address_string_length) noexcept {
     (void)protocol_info;
     if (address == nullptr || address_length < sizeof(sockaddr_in) ||
-        !mapped_range(address, sizeof(sockaddr_in), false) || address_string_length == nullptr ||
-        !mapped_range(address_string_length, sizeof(*address_string_length), true)) {
+        address_string_length == nullptr) {
         g_wsa_last_error = kWsaEInvalidArgument;
         return -1;
     }
     sockaddr_in socket_address{};
-    std::memcpy(&socket_address, address, sizeof(socket_address));
+    std::uint32_t capacity = 0;
+    if (runtime::read_guest_memory(address, &socket_address, sizeof(socket_address)).status !=
+            runtime::GuestMemoryAccessStatus::Success ||
+        !read_guest_value(address_string_length, capacity)) {
+        g_wsa_last_error = kWsaEFault;
+        return -1;
+    }
     if (socket_address.sin_family != AF_INET) {
         g_wsa_last_error = kWsaEInvalidArgument;
         return -1;
@@ -905,15 +982,20 @@ TL_MSABI int tl_WSAAddressToStringA(const void* const address, const std::uint32
         return -1;
     }
     const std::uint32_t required = static_cast<std::uint32_t>(written) + 1U;
-    const std::uint32_t capacity = *address_string_length;
-    if (address_string == nullptr || capacity < required ||
-        !mapped_range(address_string, capacity, true)) {
-        *address_string_length = required;
+    if (address_string == nullptr || capacity < required) {
+        if (!write_guest_value(address_string_length, required)) {
+            g_wsa_last_error = kWsaEFault;
+            return -1;
+        }
         g_wsa_last_error = kWsaEFault;
         return -1;
     }
-    std::memcpy(address_string, formatted, required);
-    *address_string_length = required;
+    if (runtime::write_guest_memory(address_string, formatted, required).status !=
+            runtime::GuestMemoryAccessStatus::Success ||
+        !write_guest_value(address_string_length, required)) {
+        g_wsa_last_error = kWsaEFault;
+        return -1;
+    }
     g_wsa_last_error = 0;
     return 0;
 }
@@ -934,11 +1016,23 @@ TL_MSABI int tl_getpeername(const std::uintptr_t socket, void* const name, int* 
         g_wsa_last_error = errno_to_wsa(errno);
         return -1;
     }
-    const int copy_len = std::min(*name_length, static_cast<int>(slen));
-    if (copy_len > 0) {
-        std::memcpy(name, &ss, static_cast<std::size_t>(copy_len));
+    int capacity = 0;
+    if (!read_guest_value(name_length, capacity) || capacity < 0) {
+        g_wsa_last_error = kWsaEFault;
+        return -1;
     }
-    *name_length = copy_len;
+    const int copy_len = std::min(capacity, static_cast<int>(slen));
+    if (copy_len > 0) {
+        if (runtime::write_guest_memory(name, &ss, static_cast<std::size_t>(copy_len)).status !=
+            runtime::GuestMemoryAccessStatus::Success) {
+            g_wsa_last_error = kWsaEFault;
+            return -1;
+        }
+    }
+    if (!write_guest_value(name_length, copy_len)) {
+        g_wsa_last_error = kWsaEFault;
+        return -1;
+    }
     g_wsa_last_error = 0;
     return 0;
 }

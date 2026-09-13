@@ -10,9 +10,9 @@ diferentes e um endereço aritmeticamente válido pode não estar mapeado.
 
 | Categoria | Exemplos no runtime | Risco | Tratamento atual |
 |---|---|---|---|
-| Strings de entrada | `validate_mapped_cstring`, `validate_mapped_wstring`, caminhos, `WININET`, `MPR`, `IPHLPAPI` e `GetPrivateProfile*` | Leitura após snapshot ou string sem terminador | Validação por blocos copiados com `read_guest_memory` nos caminhos migrados |
-| Estruturas de entrada | `NETRESOURCEW`, arrays de handles, `URL_COMPONENTS`, parâmetros de arquivos, rede, janela, thread e segurança | Tamanho/layout inválido e ponteiros internos inválidos | Validar faixa, copiar para objeto host e validar campos apontados quando o caminho já foi migrado |
-| Buffers de saída | `ReadFile`/`WriteFile`, `FindFirstFileA/W`, caminhos, `GetProcessMemoryInfo`, console/tempo, memória virtual, sincronização, `IPHLPAPI`, `GetPrivateProfile*`, thread, WININET, locale, GUI e handles | Escrita em página desmontada ou somente leitura | `write_guest_memory` nos caminhos migrados; outras APIs ainda usam validação seguida de escrita direta |
+| Strings de entrada | `validate_mapped_cstring`, `validate_mapped_wstring`, caminhos, `WININET`, `MPR`, `IPHLPAPI`, `GetPrivateProfile*` e `WS2_32` | Leitura após snapshot ou string sem terminador | Validação por blocos copiados com `read_guest_memory` nos caminhos migrados |
+| Estruturas de entrada | `NETRESOURCEW`, arrays de handles, `URL_COMPONENTS`, `sockaddr`, parâmetros de arquivos, rede, janela, thread e segurança | Tamanho/layout inválido e ponteiros internos inválidos | Validar faixa, copiar para objeto host e validar campos apontados quando o caminho já foi migrado |
+| Buffers de saída | `ReadFile`/`WriteFile`, `FindFirstFileA/W`, caminhos, `GetProcessMemoryInfo`, console/tempo, memória virtual, sincronização, `IPHLPAPI`, `GetPrivateProfile*`, thread, `WS2_32`, WININET, locale, GUI e handles | Escrita em página desmontada ou somente leitura | `write_guest_memory` nos caminhos migrados; outras APIs ainda usam validação seguida de escrita direta |
 | Imagem PE e contexto ABI | IAT, entry point, TEB, callbacks e registros de exceção | Endereços controlados pelo convidado e conversão de ABI | Imagem/contextos pertencem a regiões controladas pelo loader; callbacks e campos ABI têm validações próprias |
 | Handles opacos | Arquivos, threads, janelas, rede e side-tables | Token arbitrário confundido com ponteiro host | Tabelas de ownership e validação de tipo; não são cópia de memória |
 

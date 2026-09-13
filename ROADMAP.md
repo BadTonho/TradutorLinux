@@ -234,6 +234,12 @@ passou a comparar cópias locais das strings convidadas. A regressão
 `Win32StubTest.ProtectedCoreStubOutputsRejectUnmappedGuestPointers` passou
 junto com `Win32StubTest.*`, `WtsApiTest.*` e os testes da primitiva.
 
+O lote inicial de `WS2_32` migrou `WSAStartup`, cópia de `sockaddr`,
+`getsockname`/`getpeername`, `getaddrinfo`, `inet_addr`, `inet_ntop`,
+`inet_pton`, `WSAAddressToStringA` e `gethostname` para buffers host
+temporários e cópias protegidas. `WinSockTest.ProtectedAddressBuffersRejectUnmappedGuestPointers`
+passou junto com os testes de cobertura de PuTTY, Notepad++ e memória.
+
 ## Fora desta rodada
 
 Não entram neste roadmap, por enquanto:
