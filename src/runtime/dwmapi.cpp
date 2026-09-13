@@ -11,10 +11,6 @@ namespace tradutorlinux {
 
 namespace {
 
-inline bool mapped_range(const void* address, const std::size_t size, const bool writable) noexcept {
-    return runtime::validate_mapped_range(address, size, writable);
-}
-
 constexpr std::int32_t kDwmENotImpl = static_cast<std::int32_t>(0x80004001U);
 constexpr std::int32_t kDwmEInvalidArg = static_cast<std::int32_t>(0x80070057U);
 
@@ -40,7 +36,7 @@ TL_DWM_MSABI std::int32_t tl_DwmGetWindowAttribute(void* const hwnd, const std::
                                                   void* const attr_val, const std::uint32_t attr_sz) noexcept {
     (void)hwnd;
     (void)attr;
-    if (attr_val == nullptr || attr_sz == 0 || !mapped_range(attr_val, attr_sz, true)) {
+    if (attr_val == nullptr || attr_sz == 0) {
         set_last_error(abi::kErrorInvalidParameter);
         return kDwmEInvalidArg;
     }
@@ -60,7 +56,7 @@ TL_DWM_MSABI std::int32_t tl_DwmGetWindowAttribute(void* const hwnd, const std::
 }
 
 TL_DWM_MSABI std::int32_t tl_DwmIsCompositionEnabled(int* const enabled) noexcept {
-    if (enabled == nullptr || !mapped_range(enabled, sizeof(int), true)) {
+    if (enabled == nullptr) {
         set_last_error(abi::kErrorInvalidParameter);
         return kDwmEInvalidArg;
     }
@@ -77,11 +73,9 @@ TL_DWM_MSABI int tl_DwmDefWindowProc(void* const hwnd, const std::uint32_t msg, 
     (void)msg;
     (void)wparam;
     (void)lparam;
-    if (lresult != nullptr && mapped_range(lresult, sizeof(std::intptr_t), true)) {
-        if (!write_guest_value(lresult, static_cast<std::intptr_t>(0))) {
-            set_last_error(abi::kErrorInvalidParameter);
-            return 0;
-        }
+    if (lresult != nullptr && !write_guest_value(lresult, static_cast<std::intptr_t>(0))) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
     }
     return 0; // Not handled by DWM; this is the documented BOOL result.
 }
@@ -103,9 +97,7 @@ TL_DWM_MSABI std::int32_t tl_DwmFlush() noexcept {
 }
 
 TL_DWM_MSABI std::int32_t tl_DwmGetColorizationColor(std::uint32_t* const color, int* const opaque) noexcept {
-    if (color == nullptr || opaque == nullptr ||
-        !mapped_range(color, sizeof(std::uint32_t), true) ||
-        !mapped_range(opaque, sizeof(int), true)) {
+    if (color == nullptr || opaque == nullptr) {
         set_last_error(abi::kErrorInvalidParameter);
         return kDwmEInvalidArg;
     }

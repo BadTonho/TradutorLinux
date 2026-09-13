@@ -4,6 +4,7 @@
 #include "core/runtime_state_common.hpp"
 #include "core/runtime_gui_state.hpp"
 
+#include <array>
 #include <cstring>
 
 namespace tradutorlinux {
@@ -21,6 +22,12 @@ std::int32_t reject_theme() noexcept {
 void* reject_theme_handle() noexcept {
     set_last_error(abi::kErrorNotSupported);
     return nullptr;
+}
+
+bool clear_guest_buffer(void* const destination, const std::size_t size) noexcept {
+    std::array<std::byte, 92> zeroes{};
+    return runtime::write_guest_memory(destination, zeroes.data(), size).status ==
+           runtime::GuestMemoryAccessStatus::Success;
 }
 
 }  // namespace
@@ -104,11 +111,10 @@ TL_MSABI std::int32_t tl_GetThemeColor(void* const theme, const int part_id, con
     (void)part_id;
     (void)state_id;
     (void)prop_id;
-    if (color == nullptr || !mapped_guest_range(color, sizeof(std::uint32_t), true)) {
+    if (color == nullptr || !write_guest_value(color, std::uint32_t{0})) {
         set_last_error(abi::kErrorInvalidParameter);
         return kThemeEInvalidArg;
     }
-    *color = 0;
     return reject_theme();
 }
 
@@ -119,11 +125,10 @@ TL_MSABI std::int32_t tl_GetThemeFont(void* const theme, void* const hdc, const 
     (void)part_id;
     (void)state_id;
     (void)prop_id;
-    if (font == nullptr || !mapped_guest_range(font, 92, true)) { // LOGFONTW size
+    if (font == nullptr || !clear_guest_buffer(font, 92)) { // LOGFONTW size
         set_last_error(abi::kErrorInvalidParameter);
         return kThemeEInvalidArg;
     }
-    std::memset(font, 0, 92);
     return reject_theme();
 }
 
@@ -134,11 +139,10 @@ TL_MSABI std::int32_t tl_GetThemeMetric(void* const theme, void* const hdc, cons
     (void)part_id;
     (void)state_id;
     (void)prop_id;
-    if (val == nullptr || !mapped_guest_range(val, sizeof(int), true)) {
+    if (val == nullptr || !write_guest_value(val, 0)) {
         set_last_error(abi::kErrorInvalidParameter);
         return kThemeEInvalidArg;
     }
-    *val = 0;
     return reject_theme();
 }
 
@@ -151,11 +155,10 @@ TL_MSABI std::int32_t tl_GetThemePartSize(void* const theme, void* const hdc, co
     (void)state_id;
     (void)rect;
     (void)type;
-    if (size == nullptr || !mapped_guest_range(size, 8, true)) { // SIZE struct
+    if (size == nullptr || !clear_guest_buffer(size, 8)) { // SIZE struct
         set_last_error(abi::kErrorInvalidParameter);
         return kThemeEInvalidArg;
     }
-    std::memset(size, 0, 8);
     return reject_theme();
 }
 
@@ -204,12 +207,9 @@ TL_MSABI void* tl_BeginBufferedPaint(void* const hdc_target, const void* const t
     (void)format;
     (void)animation_params;
     (void)hdc_target;
-    if (hdc_out != nullptr) {
-        if (!mapped_guest_range(hdc_out, sizeof(void*), true)) {
-            set_last_error(abi::kErrorInvalidParameter);
-            return nullptr;
-        }
-        *hdc_out = nullptr;
+    if (hdc_out != nullptr && !write_guest_value(hdc_out, static_cast<void*>(nullptr))) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return nullptr;
     }
     return reject_theme_handle();
 }
@@ -239,11 +239,10 @@ TL_MSABI int tl_GetThemeTransitionDuration(void* const hTheme, const int iPartId
     (void)iStateIdFrom;
     (void)iStateIdTo;
     (void)iPropId;
-    if (pdwDuration == nullptr || !mapped_guest_range(pdwDuration, sizeof(int), true)) {
+    if (pdwDuration == nullptr || !write_guest_value(pdwDuration, 0)) {
         set_last_error(abi::kErrorInvalidParameter);
         return kThemeEInvalidArg;
     }
-    *pdwDuration = 0;
     return reject_theme();
 }
 
@@ -253,11 +252,10 @@ TL_MSABI int tl_GetThemeBackgroundContentRect(void* const hTheme, void* const hd
     (void)iPartId;
     (void)iStateId;
     (void)pBoundingRect;
-    if (pContentRect == nullptr || !mapped_guest_range(pContentRect, 16, true)) {
+    if (pContentRect == nullptr || !clear_guest_buffer(pContentRect, 16)) {
         set_last_error(abi::kErrorInvalidParameter);
         return kThemeEInvalidArg;
     }
-    std::memset(pContentRect, 0, 16);
     return reject_theme();
 }
 
@@ -279,19 +277,13 @@ TL_MSABI void* tl_BeginBufferedAnimation(void* const hwnd, void* const hdcTarget
     (void)pPaintParams;
     (void)pAnimationParams;
     (void)hdcTarget;
-    if (phdcFrom != nullptr) {
-        if (!mapped_guest_range(phdcFrom, sizeof(void*), true)) {
-            set_last_error(abi::kErrorInvalidParameter);
-            return nullptr;
-        }
-        *phdcFrom = nullptr;
+    if (phdcFrom != nullptr && !write_guest_value(phdcFrom, static_cast<void*>(nullptr))) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return nullptr;
     }
-    if (phdcTo != nullptr) {
-        if (!mapped_guest_range(phdcTo, sizeof(void*), true)) {
-            set_last_error(abi::kErrorInvalidParameter);
-            return nullptr;
-        }
-        *phdcTo = nullptr;
+    if (phdcTo != nullptr && !write_guest_value(phdcTo, static_cast<void*>(nullptr))) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return nullptr;
     }
     return reject_theme_handle();
 }

@@ -482,6 +482,8 @@ diagnosticar dependências de hardware; não enumeram drivers reais.
 `DwmFlush` e `DwmGetColorizationColor` (`DWMAPI.dll`) não criam uma composição
 Windows: as operações de composição retornam `E_NOTIMPL`, limpam saídas válidas
 e `DwmDefWindowProc` retorna somente “não tratado”.
+As saídas DWM válidas são limpas por cópias protegidas; ponteiros inválidos
+retornam `E_INVALIDARG` com diagnóstico controlado.
 `timeGetTime`, `timeBeginPeriod`, `timeEndPeriod`, `timeGetDevCaps`,
 `PlaySoundA/W`, `timeSetEvent` e `timeKillEvent` (`WINMM.dll`) não agendam
 callbacks multimídia nem acessam áudio do host; `timeGetDevCaps` publica apenas
@@ -494,8 +496,8 @@ capacidades determinísticas por cópia protegida.
 `IMM32.dll`, além de `SetWindowTheme`, `OpenThemeData`, `CloseThemeData` e
 funções `UxTheme`, são contratos de importação controlada. `IMM32` não cria
 contextos host nem processa composição; `UxTheme` não cria temas, brushes ou
-buffered-paints. Essas APIs não constituem IME, GDI+, tema visual ou depuração
-completos.
+buffered-paints. As saídas de GDI+ e UxTheme são limpas por cópias protegidas.
+Essas APIs não constituem IME, GDI+, tema visual ou depuração completos.
 
 ### Módulos de portfólio
 

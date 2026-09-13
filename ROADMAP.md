@@ -370,6 +370,11 @@ O lote de stubs pequenos migrou a validação do prefixo de estruturas do
 regressão `Win32StubTest.ComdlgStubsRejectFalseSuccessAndReportDialogFailure`
 e a cobertura de WINMM passaram dentro das 16 regressões de stubs e memória.
 
+O lote de composição e imagem migrou as saídas de `DWMAPI`, `gdiplus` e
+`UxTheme` para cópias protegidas, mantendo os stubs sem fabricar objetos ou
+estado visual. As regressões de stubs cobrem ponteiros nulos e inacessíveis;
+as 16 coberturas de stubs e memória passaram.
+
 ## Fora desta rodada
 
 Não entram neste roadmap, por enquanto:

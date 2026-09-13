@@ -10,11 +10,14 @@ extern "C" {
 TL_MSABI int tl_GdiplusStartup(void* token, const void* input, void* output) noexcept {
     (void)input;
     (void)output;
-    if (token == nullptr || !mapped_guest_range(token, sizeof(void*), true)) {
+    if (token == nullptr) {
         set_last_error(abi::kErrorInvalidParameter);
         return 1;
     }
-    *static_cast<void**>(token) = nullptr;
+    if (!write_guest_value(token, static_cast<void*>(nullptr))) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 1;
+    }
     set_last_error(abi::kErrorNotSupported);
     return 1; // GenericError: GDI+ is not initialized by this runtime.
 }
@@ -37,22 +40,20 @@ TL_MSABI void tl_GdipFree(void* ptr) noexcept {
 
 TL_MSABI int tl_GdipCreateBitmapFromStream(void* stream, void** bitmap) noexcept {
     (void)stream;
-    if (bitmap == nullptr || !mapped_guest_range(bitmap, sizeof(void*), true)) {
+    if (bitmap == nullptr || !write_guest_value(bitmap, static_cast<void*>(nullptr))) {
         set_last_error(abi::kErrorInvalidParameter);
         return 1;
     }
-    *bitmap = nullptr;
     set_last_error(abi::kErrorNotSupported);
     return 1; // GenericError: no GDI+ image backend is installed.
 }
 
 TL_MSABI int tl_GdipCloneImage(void* image, void** clone) noexcept {
     (void)image;
-    if (clone == nullptr || !mapped_guest_range(clone, sizeof(void*), true)) {
+    if (clone == nullptr || !write_guest_value(clone, static_cast<void*>(nullptr))) {
         set_last_error(abi::kErrorInvalidParameter);
         return 1;
     }
-    *clone = nullptr;
     set_last_error(abi::kErrorNotSupported);
     return 1; // GenericError: no GDI+ image backend is installed.
 }
@@ -66,11 +67,10 @@ TL_MSABI int tl_GdipDisposeImage(void* image) noexcept {
 TL_MSABI int tl_GdipCreateHBITMAPFromBitmap(void* bitmap, void** hbm, std::uint32_t background) noexcept {
     (void)bitmap;
     (void)background;
-    if (hbm == nullptr || !mapped_guest_range(hbm, sizeof(void*), true)) {
+    if (hbm == nullptr || !write_guest_value(hbm, static_cast<void*>(nullptr))) {
         set_last_error(abi::kErrorInvalidParameter);
         return 1;
     }
-    *hbm = nullptr;
     set_last_error(abi::kErrorNotSupported);
     return 1; // GenericError: bitmap conversion is not implemented.
 }

@@ -174,21 +174,33 @@ TEST(Win32StubTest, DebugAndShellDialogStubsReportUnsupported) {
 }
 
 TEST(Win32StubTest, GdiplusStubsRejectFakeObjectsAndClearOutputs) {
+    auto* const invalid = reinterpret_cast<void*>(static_cast<std::uintptr_t>(0x1000U));
+    EXPECT_EQ(tl_GdiplusStartup(invalid, nullptr, nullptr), 1);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+
     void* token = reinterpret_cast<void*>(0x1U);
     EXPECT_EQ(tl_GdiplusStartup(&token, nullptr, nullptr), 1);
     EXPECT_EQ(token, nullptr);
     EXPECT_EQ(tl_GetLastError(), abi::kErrorNotSupported);
 
+    EXPECT_EQ(tl_GdipCreateBitmapFromStream(nullptr,
+                                            reinterpret_cast<void**>(invalid)), 1);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
     void* bitmap = reinterpret_cast<void*>(0x2U);
     EXPECT_EQ(tl_GdipCreateBitmapFromStream(nullptr, &bitmap), 1);
     EXPECT_EQ(bitmap, nullptr);
     EXPECT_EQ(tl_GetLastError(), abi::kErrorNotSupported);
 
+    EXPECT_EQ(tl_GdipCloneImage(nullptr, reinterpret_cast<void**>(invalid)), 1);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
     void* clone = reinterpret_cast<void*>(0x3U);
     EXPECT_EQ(tl_GdipCloneImage(nullptr, &clone), 1);
     EXPECT_EQ(clone, nullptr);
     EXPECT_EQ(tl_GetLastError(), abi::kErrorNotSupported);
 
+    EXPECT_EQ(tl_GdipCreateHBITMAPFromBitmap(nullptr,
+                                              reinterpret_cast<void**>(invalid), 0), 1);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
     void* hbitmap = reinterpret_cast<void*>(0x4U);
     EXPECT_EQ(tl_GdipCreateHBITMAPFromBitmap(nullptr, &hbitmap, 0), 1);
     EXPECT_EQ(hbitmap, nullptr);
@@ -299,6 +311,10 @@ TEST(Win32StubTest, ImmStubsRejectFakeContextsAndCompositionSuccess) {
 
 TEST(Win32StubTest, DwmStubsRejectFakeCompositionAndClearOutputs) {
     constexpr std::int32_t kENotImpl = static_cast<std::int32_t>(0x80004001U);
+    auto* const invalid = reinterpret_cast<void*>(static_cast<std::uintptr_t>(0x1000U));
+    EXPECT_EQ(tl_DwmGetWindowAttribute(nullptr, 0, invalid, 16),
+              static_cast<std::int32_t>(0x80070057U));
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
     int enabled = 1;
     EXPECT_EQ(tl_DwmIsCompositionEnabled(&enabled), kENotImpl);
     EXPECT_EQ(enabled, 0);
@@ -312,6 +328,9 @@ TEST(Win32StubTest, DwmStubsRejectFakeCompositionAndClearOutputs) {
 
     std::uint32_t color = 0xFFFFFFFFU;
     int opaque = 1;
+    EXPECT_EQ(tl_DwmGetColorizationColor(static_cast<std::uint32_t*>(invalid), &opaque),
+                                         static_cast<std::int32_t>(0x80070057U));
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
     EXPECT_EQ(tl_DwmGetColorizationColor(&color, &opaque), kENotImpl);
     EXPECT_EQ(color, 0U);
     EXPECT_EQ(opaque, 0);
@@ -321,6 +340,9 @@ TEST(Win32StubTest, DwmStubsRejectFakeCompositionAndClearOutputs) {
     EXPECT_EQ(tl_DwmEnableBlurBehindWindow(nullptr, nullptr), kENotImpl);
     EXPECT_EQ(tl_DwmFlush(), kENotImpl);
     EXPECT_EQ(tl_DwmDefWindowProc(nullptr, 0, 0, 0, nullptr), 0);
+    EXPECT_EQ(tl_DwmDefWindowProc(nullptr, 0, 0, 0,
+                                  static_cast<std::intptr_t*>(invalid)), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
 
     EXPECT_EQ(tl_DwmIsCompositionEnabled(nullptr), static_cast<std::int32_t>(0x80070057U));
     EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
@@ -328,6 +350,7 @@ TEST(Win32StubTest, DwmStubsRejectFakeCompositionAndClearOutputs) {
 
 TEST(Win32StubTest, UxThemeStubsRejectFakeHandlesAndClearOutputs) {
     constexpr std::int32_t kENotImpl = static_cast<std::int32_t>(0x80004001U);
+    auto* const invalid = reinterpret_cast<void*>(static_cast<std::uintptr_t>(0x1000U));
     EXPECT_EQ(tl_SetWindowTheme(nullptr, nullptr, nullptr), kENotImpl);
     EXPECT_EQ(tl_GetLastError(), abi::kErrorNotSupported);
     EXPECT_EQ(tl_OpenThemeData(nullptr, nullptr), nullptr);
@@ -339,14 +362,27 @@ TEST(Win32StubTest, UxThemeStubsRejectFakeHandlesAndClearOutputs) {
     std::uint32_t color = 0xFFFFFFFFU;
     EXPECT_EQ(tl_GetThemeColor(nullptr, 0, 0, 0, &color), kENotImpl);
     EXPECT_EQ(color, 0U);
+    EXPECT_EQ(tl_GetThemeColor(nullptr, 0, 0, 0,
+                               static_cast<std::uint32_t*>(invalid)),
+              static_cast<std::int32_t>(0x80070057U));
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
     int metric = 123;
     EXPECT_EQ(tl_GetThemeMetric(nullptr, nullptr, 0, 0, 0, &metric), kENotImpl);
     EXPECT_EQ(metric, 0);
+    EXPECT_EQ(tl_GetThemeFont(nullptr, nullptr, 0, 0, 0, invalid),
+              static_cast<std::int32_t>(0x80070057U));
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_GetThemePartSize(nullptr, nullptr, 0, 0, nullptr, 0, invalid),
+              static_cast<std::int32_t>(0x80070057U));
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
 
     void* hdc_out = reinterpret_cast<void*>(0x1U);
     EXPECT_EQ(tl_BeginBufferedPaint(nullptr, nullptr, 0, nullptr, &hdc_out), nullptr);
     EXPECT_EQ(hdc_out, nullptr);
     EXPECT_EQ(tl_GetLastError(), abi::kErrorNotSupported);
+    EXPECT_EQ(tl_BeginBufferedPaint(nullptr, nullptr, 0, nullptr,
+                                    reinterpret_cast<void**>(invalid)), nullptr);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
     EXPECT_EQ(tl_BufferedPaintRenderAnimation(nullptr, nullptr), 0);
 }
 
