@@ -375,6 +375,11 @@ O lote de composição e imagem migrou as saídas de `DWMAPI`, `gdiplus` e
 estado visual. As regressões de stubs cobrem ponteiros nulos e inacessíveis;
 as 16 coberturas de stubs e memória passaram.
 
+O lote `POWRPROF` migrou o GUID de `PowerGetActiveScheme`, a validação dos
+buffers de entrada e a saída zerada de `CallNtPowerInformation` para cópias
+protegidas em blocos. A regressão cobre ponteiros de saída inacessíveis, sem
+alterar os retornos determinísticos das APIs.
+
 ## Fora desta rodada
 
 Não entram neste roadmap, por enquanto:

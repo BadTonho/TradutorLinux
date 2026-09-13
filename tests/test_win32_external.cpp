@@ -542,6 +542,12 @@ TEST(ShellAllocationTest, ReturnedBuffersUseTheDocumentedAllocators) {
     ASSERT_NE(guid, nullptr);
     EXPECT_EQ(tl_LocalFree(guid), nullptr);
 
+    void* const invalid_pointer = reinterpret_cast<void*>(static_cast<std::uintptr_t>(0x1000U));
+    EXPECT_EQ(tl_PowerGetActiveScheme(nullptr, reinterpret_cast<void**>(invalid_pointer)), 87U);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_CallNtPowerInformation(0, nullptr, 0, invalid_pointer, 16), 87U);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+
     set_guest_prefix_path({});
     std::error_code error;
     std::filesystem::remove_all(root, error);

@@ -471,6 +471,8 @@ tabela de enumeração MPR, `WNetOpenEnumW` deixa a saída nula e
 
 `PowerGetActiveScheme`, `PowerSetActiveScheme` e `CallNtPowerInformation`
 (`POWRPROF.dll`) têm retorno controlado para consultas de energia. As APIs
+validam entradas e publicam o GUID e as saídas de energia por cópias protegidas,
+sem desreferenciar ponteiros convidados diretamente. As APIs
 `CM_Get_Child`, `SetupDiGetClassDevsA`, `SetupDiEnumDeviceInfo`,
 `SetupDiEnumDeviceInterfaces`, `SetupDiGetDeviceInterfaceDetailA`,
 `SetupDiGetDeviceRegistryPropertyA`, `SetupDiGetDeviceInstanceIdA` e
