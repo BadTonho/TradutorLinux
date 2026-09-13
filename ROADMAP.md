@@ -234,6 +234,13 @@ passou a comparar cópias locais das strings convidadas. A regressão
 `Win32StubTest.ProtectedCoreStubOutputsRejectUnmappedGuestPointers` passou
 junto com `Win32StubTest.*`, `WtsApiTest.*` e os testes da primitiva.
 
+O primeiro lote de locale migrou `GetVersionExA/W`, `VerifyVersionInfoW`,
+`GetUserDefaultLocaleName`, `LocaleNameToLCID`, `FormatMessageA/W`,
+`GetSystemInfo` e `GetComputerNameA/W` para snapshots e publicações protegidas.
+`Win32LocaleTest.ProtectedSystemAndMessageBuffersRejectUnmappedPointers`
+passou junto com 23 testes de locale/code page, os testes de `FormatMessage` e
+a primitiva de memória; as APIs de locale restantes continuam pendentes.
+
 O lote inicial de `WS2_32` migrou `WSAStartup`, cópia de `sockaddr`,
 `getsockname`/`getpeername`, `getaddrinfo`, `inet_addr`, `inet_ntop`,
 `inet_pton`, `WSAAddressToStringA` e `gethostname` para buffers host

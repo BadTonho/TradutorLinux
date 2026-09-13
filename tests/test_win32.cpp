@@ -727,6 +727,37 @@ TEST(Win32LocaleTest, ExtendedLocaleFormatsStaticEnUsDateAndTime) {
     EXPECT_EQ(tl_GetLastError(), abi::kErrorInsufficientBuffer);
 }
 
+TEST(Win32LocaleTest, ProtectedSystemAndMessageBuffersRejectUnmappedPointers) {
+    auto* const invalid = reinterpret_cast<void*>(static_cast<std::uintptr_t>(0x1000U));
+    EXPECT_EQ(tl_GetVersionExA(invalid), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_GetVersionExW(invalid), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_VerifyVersionInfoW(invalid, 1, 0), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+
+    EXPECT_EQ(tl_GetUserDefaultLocaleName(static_cast<std::uint16_t*>(invalid), 6), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_FormatMessageA(abi::kFormatMessageFromSystem, nullptr,
+                                abi::kErrorFileNotFound, 0, static_cast<char*>(invalid), 64,
+                                nullptr), 0U);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_FormatMessageW(abi::kFormatMessageFromSystem, nullptr,
+                                abi::kErrorFileNotFound, 0,
+                                static_cast<std::uint16_t*>(invalid), 64, nullptr), 0U);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+
+    tl_GetSystemInfo(invalid);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+
+    std::uint32_t size = 64;
+    EXPECT_EQ(tl_GetComputerNameA(static_cast<char*>(invalid), &size), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    size = 64;
+    EXPECT_EQ(tl_GetComputerNameW(static_cast<std::uint16_t*>(invalid), &size), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+}
+
 TEST(Win32HeapTest, GetProcessHeapReturnsNonNull) {
     EXPECT_NE(tl_GetProcessHeap(), nullptr);
 }

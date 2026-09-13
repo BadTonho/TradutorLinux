@@ -290,18 +290,14 @@ TL_MSABI int tl_GetVersionExA(void* version_information) noexcept {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
-    // Ler dwOSVersionInfoSize (primeiro DWORD)
-    if (!mapped_guest_range(version_information, sizeof(std::uint32_t), false)) {
-        set_last_error(abi::kErrorInvalidParameter);
-        return 0;
-    }
     std::uint32_t size = 0;
-    std::memcpy(&size, version_information, sizeof(size));
-    if (size < 20U) {
+    if (!read_guest_value(version_information, size) || size < 20U || size > 284U) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
-    if (!mapped_guest_range(version_information, size, true)) {
+    std::array<std::uint8_t, 284> output{};
+    if (runtime::read_guest_memory(version_information, output.data(), size).status !=
+        runtime::GuestMemoryAccessStatus::Success) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
@@ -310,10 +306,10 @@ TL_MSABI int tl_GetVersionExA(void* version_information) noexcept {
     constexpr std::uint32_t kMinor = 0;
     constexpr std::uint32_t kBuild = 19044;
     constexpr std::uint32_t kPlatform = abi::kVerPlatformWin32Nt; // 2
-    auto* base = static_cast<std::uint8_t*>(version_information);
+    std::memcpy(output.data(), &size, sizeof(size));
     // Preenche campos comuns (offsets fixos Windows)
     auto write_u32 = [&](std::size_t off, std::uint32_t v) {
-        if (off + 4 <= size) std::memcpy(base + off, &v, 4);
+        if (off + 4 <= size) std::memcpy(output.data() + off, &v, 4);
     };
     write_u32(4, kMajor);
     write_u32(8, kMinor);
@@ -321,7 +317,7 @@ TL_MSABI int tl_GetVersionExA(void* version_information) noexcept {
     write_u32(16, kPlatform);
     // szCSDVersion (A): offset 20, 128 bytes char
     if (size >= 148U) {
-        std::memset(base + 20, 0, 128);
+        std::memset(output.data() + 20, 0, 128);
         if (size >= 156U) {
             // OSVERSIONINFOEXA
             std::uint16_t wMajor = 0;
@@ -329,13 +325,18 @@ TL_MSABI int tl_GetVersionExA(void* version_information) noexcept {
             std::uint16_t suite = 0;
             std::uint8_t prod = static_cast<std::uint8_t>(abi::kVerNtWorkstation);
             std::uint8_t reserved = 0;
-            if (148 + 2 <= size) std::memcpy(base + 148, &wMajor, 2);
-            if (150 + 2 <= size) std::memcpy(base + 150, &wMinor, 2);
-            if (152 + 2 <= size) std::memcpy(base + 152, &suite, 2);
-            if (154 + 1 <= size) std::memcpy(base + 154, &prod, 1);
-            if (155 + 1 <= size) std::memcpy(base + 155, &reserved, 1);
+            if (148 + 2 <= size) std::memcpy(output.data() + 148, &wMajor, 2);
+            if (150 + 2 <= size) std::memcpy(output.data() + 150, &wMinor, 2);
+            if (152 + 2 <= size) std::memcpy(output.data() + 152, &suite, 2);
+            if (154 + 1 <= size) std::memcpy(output.data() + 154, &prod, 1);
+            if (155 + 1 <= size) std::memcpy(output.data() + 155, &reserved, 1);
             // padding já zero se houver
         }
+    }
+    if (runtime::write_guest_memory(version_information, output.data(), size).status !=
+        runtime::GuestMemoryAccessStatus::Success) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
     }
     set_last_error(abi::kErrorSuccess);
     return 1;
@@ -346,17 +347,14 @@ TL_MSABI int tl_GetVersionExW(void* version_information) noexcept {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
-    if (!mapped_guest_range(version_information, sizeof(std::uint32_t), false)) {
-        set_last_error(abi::kErrorInvalidParameter);
-        return 0;
-    }
     std::uint32_t size = 0;
-    std::memcpy(&size, version_information, sizeof(size));
-    if (size < 20U) {
+    if (!read_guest_value(version_information, size) || size < 20U || size > 284U) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
-    if (!mapped_guest_range(version_information, size, true)) {
+    std::array<std::uint8_t, 284> output{};
+    if (runtime::read_guest_memory(version_information, output.data(), size).status !=
+        runtime::GuestMemoryAccessStatus::Success) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
@@ -364,9 +362,9 @@ TL_MSABI int tl_GetVersionExW(void* version_information) noexcept {
     constexpr std::uint32_t kMinor = 0;
     constexpr std::uint32_t kBuild = 19044;
     constexpr std::uint32_t kPlatform = abi::kVerPlatformWin32Nt;
-    auto* base = static_cast<std::uint8_t*>(version_information);
+    std::memcpy(output.data(), &size, sizeof(size));
     auto write_u32 = [&](std::size_t off, std::uint32_t v) {
-        if (off + 4 <= size) std::memcpy(base + off, &v, 4);
+        if (off + 4 <= size) std::memcpy(output.data() + off, &v, 4);
     };
     write_u32(4, kMajor);
     write_u32(8, kMinor);
@@ -374,19 +372,24 @@ TL_MSABI int tl_GetVersionExW(void* version_information) noexcept {
     write_u32(16, kPlatform);
     if (size >= 276U) {
         // szCSDVersion W: 128 WCHAR (256 bytes) a partir de 20
-        std::memset(base + 20, 0, 256);
+        std::memset(output.data() + 20, 0, 256);
         if (size >= 284U) {
             std::uint16_t wMajor = 0;
             std::uint16_t wMinor = 0;
             std::uint16_t suite = 0;
             std::uint8_t prod = static_cast<std::uint8_t>(abi::kVerNtWorkstation);
             std::uint8_t reserved = 0;
-            if (276 + 2 <= size) std::memcpy(base + 276, &wMajor, 2);
-            if (278 + 2 <= size) std::memcpy(base + 278, &wMinor, 2);
-            if (280 + 2 <= size) std::memcpy(base + 280, &suite, 2);
-            if (282 + 1 <= size) std::memcpy(base + 282, &prod, 1);
-            if (283 + 1 <= size) std::memcpy(base + 283, &reserved, 1);
+            if (276 + 2 <= size) std::memcpy(output.data() + 276, &wMajor, 2);
+            if (278 + 2 <= size) std::memcpy(output.data() + 278, &wMinor, 2);
+            if (280 + 2 <= size) std::memcpy(output.data() + 280, &suite, 2);
+            if (282 + 1 <= size) std::memcpy(output.data() + 282, &prod, 1);
+            if (283 + 1 <= size) std::memcpy(output.data() + 283, &reserved, 1);
         }
+    }
+    if (runtime::write_guest_memory(version_information, output.data(), size).status !=
+        runtime::GuestMemoryAccessStatus::Success) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
     }
     set_last_error(abi::kErrorSuccess);
     return 1;
@@ -399,14 +402,8 @@ TL_MSABI int tl_VerifyVersionInfoW(void* version_information, std::uint32_t type
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
-    // Ler size para validar range
-    if (!mapped_guest_range(version_information, sizeof(std::uint32_t), false)) {
-        set_last_error(abi::kErrorInvalidParameter);
-        return 0;
-    }
     std::uint32_t size = 0;
-    std::memcpy(&size, version_information, sizeof(size));
-    if (size < 20U || !mapped_guest_range(version_information, size, false)) {
+    if (!read_guest_value(version_information, size) || size < 20U || size > 284U) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
@@ -443,33 +440,28 @@ TL_MSABI int tl_GetUserDefaultLocaleName(std::uint16_t* locale_name, int locale_
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
-    if (!mapped_guest_range(locale_name, static_cast<std::size_t>(locale_name_length) * sizeof(std::uint16_t), true)) {
-        set_last_error(abi::kErrorInvalidParameter);
-        return 0;
-    }
     if (locale_name_length < kNeeded) {
         set_last_error(abi::kErrorInsufficientBuffer);
         return 0;
     }
-    for (std::size_t i = 0; i < 5; ++i) {
-        locale_name[i] = static_cast<std::uint16_t>(kDefault[i]);
+    if (runtime::write_guest_memory(locale_name, kDefault.data(), kDefault.size() * sizeof(std::uint16_t)).status !=
+        runtime::GuestMemoryAccessStatus::Success) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
     }
-    locale_name[5] = 0;
     set_last_error(abi::kErrorSuccess);
     return kNeeded;
 }
 
 TL_MSABI std::uint32_t tl_LocaleNameToLCID(const std::uint16_t* name, std::uint32_t flags) noexcept {
     (void)flags;
-    if (name == nullptr || !mapped_guest_wstring(name)) {
+    std::u16string guest_name;
+    if (name == nullptr || !runtime::copy_guest_wstring(name, 4096U, guest_name) || guest_name.empty()) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
-    if (name[0] == 0) {
-        set_last_error(abi::kErrorInvalidParameter);
-        return 0;
-    }
-    std::string utf8 = util::wide_to_utf8(name);
+    std::string utf8 = util::wide_to_utf8(reinterpret_cast<const std::uint16_t*>(guest_name.data()),
+                                          guest_name.size());
     std::string lower;
     lower.reserve(utf8.size());
     for (char c : utf8) lower.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(c))));
@@ -518,7 +510,7 @@ TL_MSABI std::uint32_t tl_FormatMessageW(const std::uint32_t flags, const void* 
     const std::u16string wide_text = util::utf8_to_wide(text);
     const std::size_t required = wide_text.size() + 1;
     if (allocate) {
-        if (buffer == nullptr || !mapped_guest_range(buffer, sizeof(std::uint16_t*), true)) {
+        if (buffer == nullptr) {
             set_last_error(abi::kErrorInvalidParameter);
             return 0;
         }
@@ -534,18 +526,26 @@ TL_MSABI std::uint32_t tl_FormatMessageW(const std::uint32_t flags, const void* 
             set_last_error(abi::kErrorNotEnoughMemory);
             return 0;
         }
-        auto** output = reinterpret_cast<std::uint16_t**>(buffer);
-        *output = storage;
+        if (!write_guest_value(reinterpret_cast<std::uint16_t**>(buffer), storage)) {
+            static_cast<void>(take_local_free_block(storage));
+            std::free(storage);
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
+        }
         set_last_error(abi::kErrorSuccess);
         return static_cast<std::uint32_t>(wide_text.size());
     }
-    if (buffer == nullptr || size == 0U || required > size ||
-        !mapped_guest_range(buffer, static_cast<std::size_t>(size) * sizeof(*buffer), true)) {
+    if (buffer == nullptr || size == 0U || required > size) {
         set_last_error(abi::kErrorInsufficientBuffer);
         return 0;
     }
-    std::copy(wide_text.begin(), wide_text.end(), buffer);
-    buffer[wide_text.size()] = 0;
+    std::u16string output = wide_text;
+    output.push_back(0);
+    if (runtime::write_guest_memory(buffer, output.data(), output.size() * sizeof(*buffer)).status !=
+        runtime::GuestMemoryAccessStatus::Success) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
     set_last_error(abi::kErrorSuccess);
     return static_cast<std::uint32_t>(wide_text.size());
 }
@@ -561,7 +561,7 @@ TL_MSABI std::uint32_t tl_FormatMessageA(const std::uint32_t flags, const void* 
     const std::string text = format_message_text(flags, message_id);
     const std::size_t required = text.size() + 1;
     if (allocate) {
-        if (buffer == nullptr || !mapped_guest_range(buffer, sizeof(char*), true)) {
+        if (buffer == nullptr) {
             set_last_error(abi::kErrorInvalidParameter);
             return 0;
         }
@@ -577,39 +577,51 @@ TL_MSABI std::uint32_t tl_FormatMessageA(const std::uint32_t flags, const void* 
             set_last_error(abi::kErrorNotEnoughMemory);
             return 0;
         }
-        *reinterpret_cast<char**>(buffer) = storage;
+        if (!write_guest_value(reinterpret_cast<char**>(buffer), storage)) {
+            static_cast<void>(take_local_free_block(storage));
+            std::free(storage);
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
+        }
         set_last_error(abi::kErrorSuccess);
         return static_cast<std::uint32_t>(text.size());
     }
-    if (buffer == nullptr || size == 0U || required > size ||
-        !mapped_guest_range(buffer, static_cast<std::size_t>(size), true)) {
+    if (buffer == nullptr || size == 0U || required > size) {
         set_last_error(abi::kErrorInsufficientBuffer);
         return 0;
     }
-    std::copy(text.begin(), text.end(), buffer);
-    buffer[text.size()] = '\0';
+    if (runtime::write_guest_memory(buffer, text.data(), required).status !=
+        runtime::GuestMemoryAccessStatus::Success) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
     set_last_error(abi::kErrorSuccess);
     return static_cast<std::uint32_t>(text.size());
 }
 
 TL_MSABI void tl_GetSystemInfo(void* system_info) noexcept {
-    if (system_info == nullptr || !mapped_guest_range(system_info, sizeof(abi::GuestSystemInfo), true)) {
+    if (system_info == nullptr) {
         set_last_error(abi::kErrorInvalidParameter);
         return;
     }
-    auto* si = static_cast<abi::GuestSystemInfo*>(system_info);
-    *si = {};
-    si->processor_architecture = 9;  // PROCESSOR_ARCHITECTURE_AMD64
-    si->page_size = 4096;
-    si->minimum_application_address = reinterpret_cast<void*>(0x10000);
-    si->maximum_application_address = reinterpret_cast<void*>(0x7FFFFFFF0000ULL);
+    abi::GuestSystemInfo si{};
+    si.processor_architecture = 9;  // PROCESSOR_ARCHITECTURE_AMD64
+    si.page_size = 4096;
+    si.minimum_application_address = reinterpret_cast<void*>(0x10000);
+    si.maximum_application_address = reinterpret_cast<void*>(0x7FFFFFFF0000ULL);
     long nprocs = sysconf(_SC_NPROCESSORS_ONLN);
     if (nprocs < 1) nprocs = 1;
-    si->number_of_processors = static_cast<std::uint32_t>(nprocs);
-    si->active_processor_mask = (1ULL << std::min<long>(nprocs, 64)) - 1ULL;
-    si->allocation_granularity = 65536;
-    si->processor_type = 8664; // PROCESSOR_AMD_X8664
-    si->processor_level = 6;
+    si.number_of_processors = static_cast<std::uint32_t>(nprocs);
+    si.active_processor_mask = nprocs >= 64 ? std::numeric_limits<std::uint64_t>::max()
+                                            : (1ULL << nprocs) - 1ULL;
+    si.allocation_granularity = 65536;
+    si.processor_type = 8664; // PROCESSOR_AMD_X8664
+    si.processor_level = 6;
+    if (runtime::write_guest_memory(system_info, &si, sizeof(si)).status !=
+        runtime::GuestMemoryAccessStatus::Success) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return;
+    }
     set_last_error(abi::kErrorSuccess);
 }
 
@@ -656,7 +668,8 @@ TL_MSABI std::uint32_t tl_GetSystemDefaultLCID() noexcept {
 }
 
 TL_MSABI int tl_GetComputerNameA(char* buffer, std::uint32_t* size) noexcept {
-    if (buffer == nullptr || size == nullptr || *size == 0 || !mapped_guest_range(buffer, *size, true)) {
+    std::uint32_t capacity = 0;
+    if (buffer == nullptr || size == nullptr || !read_guest_value(size, capacity) || capacity == 0) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
@@ -666,19 +679,27 @@ TL_MSABI int tl_GetComputerNameA(char* buffer, std::uint32_t* size) noexcept {
         return 0;
     }
     const std::size_t len = std::strlen(host);
-    if (*size <= len) {
-        *size = static_cast<std::uint32_t>(len + 1);
+    if (capacity <= len) {
+        if (!write_guest_value(size, static_cast<std::uint32_t>(len + 1))) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
+        }
         set_last_error(abi::kErrorInsufficientBuffer);
         return 0;
     }
-    std::memcpy(buffer, host, len + 1);
-    *size = static_cast<std::uint32_t>(len);
+    if (runtime::write_guest_memory(buffer, host, len + 1U).status !=
+            runtime::GuestMemoryAccessStatus::Success ||
+        !write_guest_value(size, static_cast<std::uint32_t>(len))) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
     set_last_error(abi::kErrorSuccess);
     return 1;
 }
 
 TL_MSABI int tl_GetComputerNameW(std::uint16_t* buffer, std::uint32_t* size) noexcept {
-    if (buffer == nullptr || size == nullptr || *size == 0 || !mapped_guest_range(buffer, *size * sizeof(std::uint16_t), true)) {
+    std::uint32_t capacity = 0;
+    if (buffer == nullptr || size == nullptr || !read_guest_value(size, capacity) || capacity == 0) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
@@ -688,14 +709,22 @@ TL_MSABI int tl_GetComputerNameW(std::uint16_t* buffer, std::uint32_t* size) noe
         return 0;
     }
     const std::u16string u16 = util::utf8_to_wide(host);
-    if (*size <= u16.size()) {
-        *size = static_cast<std::uint32_t>(u16.size() + 1);
+    if (capacity <= u16.size()) {
+        if (!write_guest_value(size, static_cast<std::uint32_t>(u16.size() + 1U))) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
+        }
         set_last_error(abi::kErrorInsufficientBuffer);
         return 0;
     }
-    std::copy(u16.begin(), u16.end(), buffer);
-    buffer[u16.size()] = 0;
-    *size = static_cast<std::uint32_t>(u16.size());
+    std::u16string output = u16;
+    output.push_back(0);
+    if (runtime::write_guest_memory(buffer, output.data(), output.size() * sizeof(*buffer)).status !=
+            runtime::GuestMemoryAccessStatus::Success ||
+        !write_guest_value(size, static_cast<std::uint32_t>(u16.size()))) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
     set_last_error(abi::kErrorSuccess);
     return 1;
 }
