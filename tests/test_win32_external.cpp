@@ -1,11 +1,32 @@
 #include "test_win32_common.hpp"
 #include "tradutorlinux/win32/kernel32.hpp"
+#include "tradutorlinux/runtime/psapi.hpp"
 #include "tradutorlinux/runtime/shlwapi.hpp"
 
 #include <atomic>
 
 namespace tradutorlinux {
 namespace {
+TEST(PsapiTest, ProtectedOutputBuffersRejectUnmappedPointers) {
+    auto* const invalid_u32 = reinterpret_cast<std::uint32_t*>(static_cast<std::uintptr_t>(0x1000U));
+    std::uint32_t bytes_returned = 0;
+    EXPECT_EQ(tl_EnumProcesses(invalid_u32, sizeof(std::uint32_t), &bytes_returned), 0);
+
+    auto* const invalid_modules = reinterpret_cast<void**>(static_cast<std::uintptr_t>(0x1000U));
+    std::uint32_t needed = 0;
+    EXPECT_EQ(tl_EnumProcessModules(nullptr, invalid_modules, sizeof(void*), &needed), 0);
+
+    auto* const invalid_narrow = reinterpret_cast<char*>(static_cast<std::uintptr_t>(0x1000U));
+    EXPECT_EQ(tl_GetModuleBaseNameA(nullptr, nullptr, invalid_narrow, 32), 0U);
+    EXPECT_EQ(tl_GetModuleFileNameExA(nullptr, nullptr, invalid_narrow, 32), 0U);
+
+    auto* const invalid_wide = reinterpret_cast<std::uint16_t*>(static_cast<std::uintptr_t>(0x1000U));
+    EXPECT_EQ(tl_GetModuleBaseNameW(nullptr, nullptr, invalid_wide, 32), 0U);
+    EXPECT_EQ(tl_GetModuleFileNameExW(nullptr, nullptr, invalid_wide, 32), 0U);
+
+    EXPECT_EQ(tl_GetProcessMemoryInfo(nullptr, invalid_u32, 128), 0);
+}
+
 TEST(WininetTest, RejectsExternalHostBeforeTransport) {
     constexpr std::uint16_t kAgent[] = {'t', 'e', 's', 't', 0};
     constexpr std::uint16_t kExternalHost[] = {'e', 'x', 'a', 'm', 'p', 'l', 'e', '.', 'c', 'o', 'm', 0};

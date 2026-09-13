@@ -30,18 +30,13 @@ struct GuestProcessMemoryCounters {
     std::size_t peak_pagefile_usage;
 };
 
-inline bool mapped_range(const void* address, const std::size_t size, const bool writable) noexcept {
-    return runtime::validate_mapped_range(address, size, writable);
-}
-
 }  // namespace
 
 extern "C" {
 
 TL_PSAPI_MSABI int tl_EnumProcesses(std::uint32_t* process_ids, const std::uint32_t size,
                                     std::uint32_t* bytes_returned) noexcept {
-    if (process_ids == nullptr || size < sizeof(std::uint32_t) || !mapped_range(process_ids, size, true) ||
-        bytes_returned == nullptr || !mapped_range(bytes_returned, sizeof(std::uint32_t), true)) {
+    if (process_ids == nullptr || size < sizeof(std::uint32_t) || bytes_returned == nullptr) {
         return 0;
     }
     const std::uint32_t process_id = static_cast<std::uint32_t>(::getpid());
@@ -55,13 +50,13 @@ TL_PSAPI_MSABI int tl_EnumProcesses(std::uint32_t* process_ids, const std::uint3
 TL_PSAPI_MSABI int tl_EnumProcessModules(const void* process, void** modules,
                                         const std::uint32_t size, std::uint32_t* needed) noexcept {
     (void)process;
-    if (needed == nullptr || !mapped_range(needed, sizeof(std::uint32_t), true)) {
+    if (needed == nullptr) {
         return 0;
     }
     if (!write_guest_value(needed, static_cast<std::uint32_t>(sizeof(void*)))) {
         return 0;
     }
-    if (modules == nullptr || size < sizeof(void*) || !mapped_range(modules, size, true)) {
+    if (modules == nullptr || size < sizeof(void*)) {
         return 1;
     }
     static char g_main_module_token = 0;
@@ -84,7 +79,7 @@ TL_PSAPI_MSABI std::uint32_t tl_GetModuleBaseNameA(const void* process, void* mo
                                                    char* base_name, const std::uint32_t size) noexcept {
     (void)process;
     (void)module;
-    if (base_name == nullptr || size == 0 || !mapped_range(base_name, size, true)) {
+    if (base_name == nullptr || size == 0) {
         return 0;
     }
     char full[4096]{};
@@ -109,7 +104,7 @@ TL_PSAPI_MSABI std::uint32_t tl_GetModuleBaseNameW(const void* process, void* mo
                                                    std::uint16_t* base_name, const std::uint32_t size) noexcept {
     (void)process;
     (void)module;
-    if (base_name == nullptr || size == 0 || !mapped_range(base_name, size * sizeof(std::uint16_t), true)) {
+    if (base_name == nullptr || size == 0) {
         return 0;
     }
     char buf[256]{};
@@ -137,8 +132,7 @@ TL_PSAPI_MSABI std::uint32_t tl_GetModuleFileNameExW(const void* process, void* 
                                                      std::uint16_t* filename, const std::uint32_t size) noexcept {
     (void)process;
     (void)module;
-    if (filename == nullptr || size == 0 ||
-        !mapped_range(filename, size * sizeof(std::uint16_t), true)) {
+    if (filename == nullptr || size == 0) {
         return 0;
     }
     char buf[4096]{};
@@ -158,8 +152,7 @@ TL_PSAPI_MSABI std::uint32_t tl_GetModuleFileNameExW(const void* process, void* 
 TL_PSAPI_MSABI int tl_GetProcessMemoryInfo(const void* process, void* counters,
                                           const std::uint32_t size) noexcept {
     (void)process;
-    if (counters == nullptr || size < sizeof(GuestProcessMemoryCounters) ||
-        !mapped_range(counters, sizeof(GuestProcessMemoryCounters), true)) {
+    if (counters == nullptr || size < sizeof(GuestProcessMemoryCounters)) {
         return 0;
     }
     GuestProcessMemoryCounters mem{};

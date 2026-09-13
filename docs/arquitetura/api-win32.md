@@ -418,6 +418,8 @@ processos Linux e handles de processo. `EnumProcesses`, `EnumProcessModules`,
 `GetProcessMemoryInfo`, `K32GetProcessMemoryInfo` e
 `K32GetProcessImageFileNameA` fazem o mesmo para PSAPI. Processos protegidos,
 módulos kernel e namespaces de outros usuários não são simulados.
+As saídas de enumeração, nomes, caminhos e contadores são publicadas por
+cópias protegidas; as APIs não dependem de um snapshot de `/proc/self/maps`.
 
 `FindResourceA/W`, `FindResourceExW`, `LoadResource`, `LockResource` e
 `SizeofResource` acessam recursos da imagem PE já validada. `FindResource` não

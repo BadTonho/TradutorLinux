@@ -385,6 +385,11 @@ O lote `version.dll` migrou as saídas de tamanho de arquivo e de
 metadados `RT_VERSION`, e a regressão cobre `handle` e ponteiro de consulta
 inacessíveis, preservando `ERROR_NOT_SUPPORTED` nas consultas válidas.
 
+O lote `PSAPI` removeu as validações prévias por snapshot de mapas nas
+enumerações, nomes de módulos e contadores de memória. As saídas agora usam
+cópias protegidas diretamente; a regressão cobre buffers inacessíveis nas
+rotas A/W, enumeração e `GetProcessMemoryInfo`.
+
 ## Fora desta rodada
 
 Não entram neste roadmap, por enquanto:
