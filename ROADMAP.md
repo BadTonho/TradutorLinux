@@ -365,6 +365,11 @@ dos atributos de segurança em criações de objetos e de `previous_count` em
 `Win32ConcurrencyTest.ProtectedSynchronizationPointersRejectUnmappedMemory`
 passou com as 28 coberturas de concorrência e memória.
 
+O lote de stubs pequenos migrou a validação do prefixo de estruturas do
+`COMDLG32` e a saída de `WINMM!timeGetDevCaps` para cópias protegidas. A
+regressão `Win32StubTest.ComdlgStubsRejectFalseSuccessAndReportDialogFailure`
+e a cobertura de WINMM passaram dentro das 16 regressões de stubs e memória.
+
 ## Fora desta rodada
 
 Não entram neste roadmap, por enquanto:

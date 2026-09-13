@@ -133,6 +133,11 @@ TEST(Win32StubTest, SensApiReportsItsConservativeNetworkContract) {
 }
 
 TEST(Win32StubTest, WinmmStubsKeepTheirExplicitCompatibilityContract) {
+    auto* const invalid = reinterpret_cast<void*>(static_cast<std::uintptr_t>(0x1000U));
+    std::array<std::byte, 8> time_caps{};
+    EXPECT_EQ(tl_timeGetDevCaps(invalid, time_caps.size()), 97U);
+    EXPECT_EQ(tl_timeGetDevCaps(time_caps.data(), 1), 97U);
+    EXPECT_EQ(tl_timeGetDevCaps(time_caps.data(), time_caps.size()), 0U);
     EXPECT_EQ(tl_PlaySoundA(nullptr, nullptr, 0), 1);
     constexpr std::uint16_t sound_name[] = {'t', 'e', 's', 't', 0};
     EXPECT_EQ(tl_PlaySoundW(sound_name, nullptr, 0), 1);
@@ -202,6 +207,11 @@ TEST(Win32StubTest, GdiplusStubsRejectFakeObjectsAndClearOutputs) {
 TEST(Win32StubTest, ComdlgStubsRejectFalseSuccessAndReportDialogFailure) {
     constexpr std::uint32_t kCdErrDialogFailure = 0xFFFFU;
     std::array<std::byte, 256> dialog{};
+    auto* const invalid = reinterpret_cast<void*>(static_cast<std::uintptr_t>(0x1000U));
+
+    EXPECT_EQ(tl_GetOpenFileNameA(invalid), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_CommDlgExtendedError(), 0x0001U);
 
     EXPECT_EQ(tl_GetOpenFileNameA(dialog.data()), 0);
     EXPECT_EQ(tl_GetLastError(), abi::kErrorNotSupported);

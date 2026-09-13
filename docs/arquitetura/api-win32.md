@@ -484,7 +484,8 @@ Windows: as operações de composição retornam `E_NOTIMPL`, limpam saídas vá
 e `DwmDefWindowProc` retorna somente “não tratado”.
 `timeGetTime`, `timeBeginPeriod`, `timeEndPeriod`, `timeGetDevCaps`,
 `PlaySoundA/W`, `timeSetEvent` e `timeKillEvent` (`WINMM.dll`) não agendam
-callbacks multimídia nem acessam áudio do host.
+callbacks multimídia nem acessam áudio do host; `timeGetDevCaps` publica apenas
+capacidades determinísticas por cópia protegida.
 
 `GdiplusStartup`, `GdiplusShutdown`, `GdipAlloc`, `GdipFree`,
 `GdipCreateBitmapFromStream`, `GdipCloneImage`, `GdipDisposeImage` e
@@ -568,6 +569,8 @@ ownership validado; descritores não emitidos pelo runtime são rejeitados.
 Não abrem seletor nativo, não retornam caminhos/seleções fictícios e não
 alteram as estruturas do convidado; falhas válidas retornam `FALSE`,
 `ERROR_NOT_SUPPORTED` e `CDERR_DIALOGFAILURE`.
+O prefixo das estruturas é lido por cópia protegida antes de classificar a
+falha; ponteiros nulos ou inacessíveis recebem erro de parâmetro.
 
 `InitCommonControls`, `InitCommonControlsEx`, `ImageList_Create`,
 `ImageList_Destroy`, `ImageList_Add`, `ImageList_AddMasked`,

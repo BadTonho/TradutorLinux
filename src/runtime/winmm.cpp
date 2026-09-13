@@ -22,10 +22,6 @@ struct GuestTimeCaps {
     std::uint32_t period_max{1000000};
 };
 
-inline bool mapped_range(const void* address, const std::size_t size, const bool writable) noexcept {
-    return runtime::validate_mapped_range(address, size, writable);
-}
-
 }  // namespace
 
 extern "C" {
@@ -51,7 +47,7 @@ TL_WINMM_MSABI std::uint32_t tl_timeEndPeriod(const std::uint32_t period) noexce
 }
 
 TL_WINMM_MSABI std::uint32_t tl_timeGetDevCaps(void* time_caps, const std::uint32_t size) noexcept {
-    if (time_caps == nullptr || size < sizeof(GuestTimeCaps) || !mapped_range(time_caps, sizeof(GuestTimeCaps), true)) {
+    if (time_caps == nullptr || size < sizeof(GuestTimeCaps)) {
         return kTimerrNocando;
     }
     GuestTimeCaps caps{};

@@ -12,12 +12,9 @@ constexpr std::uint32_t kCdErrDialogFailure = 0xFFFFU;
 constexpr std::uint32_t kCdErrStructSize = 0x0001U;
 thread_local std::uint32_t g_commdlg_extended_error = 0;
 
-inline bool mapped_range(const void* address, const std::size_t size, const bool writable) noexcept {
-    return runtime::validate_mapped_range(address, size, writable);
-}
-
 int reject_common_dialog(void* dialog) noexcept {
-    if (dialog == nullptr || !mapped_range(dialog, sizeof(std::uint32_t), false)) {
+    std::uint32_t ignored_size = 0;
+    if (dialog == nullptr || !read_guest_value(dialog, ignored_size)) {
         g_commdlg_extended_error = kCdErrStructSize;
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
