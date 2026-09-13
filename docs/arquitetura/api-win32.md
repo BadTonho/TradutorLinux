@@ -472,7 +472,9 @@ convidados; operações válidas que exigiriam um provedor MPR retornam
 `ERROR_NOT_SUPPORTED`, sem criar conexões, credenciais ou handles. Como não há
 tabela de enumeração MPR, `WNetOpenEnumW` deixa a saída nula e
 `WNetEnumResourceW`/`WNetCloseEnum` rejeitam handles desconhecidos com
-`ERROR_INVALID_HANDLE`.
+`ERROR_INVALID_HANDLE`. As saídas de handle e sistema são publicadas por cópias
+protegidas; buffers usados somente para validar a chamada continuam sem
+alteração quando o stub rejeita a operação.
 
 `PowerGetActiveScheme`, `PowerSetActiveScheme` e `CallNtPowerInformation`
 (`POWRPROF.dll`) têm retorno controlado para consultas de energia. As APIs

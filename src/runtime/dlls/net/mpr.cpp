@@ -97,7 +97,7 @@ TL_MPR_MSABI std::uint32_t tl_WNetOpenEnumW(const std::uint32_t scope, const std
     (void)scope;
     (void)type;
     (void)usage;
-    if (enum_handle == nullptr || !mapped_range(enum_handle, sizeof(void*), true)) {
+    if (enum_handle == nullptr) {
         invalid_parameter("WNetOpenEnumW", "saída enum_handle inválida");
         return abi::kErrorInvalidParameter;
     }
@@ -152,8 +152,7 @@ TL_MPR_MSABI std::uint32_t tl_WNetGetResourceInformationW(const void* const net_
     std::uint32_t requested_size = 0;
     if (runtime::read_guest_memory(buffer_size, &requested_size, sizeof(requested_size)).status !=
             runtime::GuestMemoryAccessStatus::Success ||
-        !valid_optional_buffer(buffer, requested_size) ||
-        (system != nullptr && !mapped_range(system, sizeof(*system), true))) {
+        !valid_optional_buffer(buffer, requested_size)) {
         invalid_parameter("WNetGetResourceInformationW", "buffer ou system inválido");
         return abi::kErrorInvalidParameter;
     }

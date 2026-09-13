@@ -390,6 +390,12 @@ enumerações, nomes de módulos e contadores de memória. As saídas agora usam
 cópias protegidas diretamente; a regressão cobre buffers inacessíveis nas
 rotas A/W, enumeração e `GetProcessMemoryInfo`.
 
+O lote MPR migrou as saídas `enum_handle` e `system` de `WNetOpenEnumW` e
+`WNetGetResourceInformationW` para cópias protegidas. Os stubs continuam sem
+criar conexões ou handles; buffers usados apenas para validar operações
+rejeitadas permanecem sem alteração, e a regressão cobre os dois ponteiros de
+saída inacessíveis.
+
 ## Fora desta rodada
 
 Não entram neste roadmap, por enquanto:

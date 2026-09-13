@@ -70,11 +70,24 @@ TEST(MprTest, RejectsInvalidArgumentsBeforeUnsupportedPath) {
     EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
     EXPECT_EQ(tl_WNetOpenEnumW(0, 0, 0, nullptr, nullptr), abi::kErrorInvalidParameter);
     EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+
+    auto* const invalid_enum_handle = reinterpret_cast<void**>(static_cast<std::uintptr_t>(0x1000U));
+    EXPECT_EQ(tl_WNetOpenEnumW(0, 0, 0, nullptr, invalid_enum_handle),
+              abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+
     EXPECT_EQ(tl_WNetEnumResourceW(enum_handle, nullptr, nullptr, nullptr),
               abi::kErrorInvalidParameter);
     EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
     EXPECT_EQ(tl_WNetCloseEnum(nullptr), abi::kErrorInvalidHandle);
     EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidHandle);
+
+    alignas(8) std::array<std::byte, 48> net_resource{};
+    auto* const invalid_system = reinterpret_cast<std::uint16_t**>(static_cast<std::uintptr_t>(0x1000U));
+    std::uint32_t buffer_size = 0;
+    EXPECT_EQ(tl_WNetGetResourceInformationW(net_resource.data(), nullptr, &buffer_size, invalid_system),
+              abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
 }
 
 TEST(WinRarCoverageTest, TickCountPrivilegeAndClsid) {
