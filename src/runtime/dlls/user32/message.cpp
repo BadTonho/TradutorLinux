@@ -754,7 +754,10 @@ TL_MSABI int tl_GetMessageA(void* const msg, const void* const window,
     (void)filter_max;
     if (g_quit_requested) {
         g_quit_requested = false;
-        write_guest_msg(msg, nullptr, abi::kWmQuit, g_quit_code, 0);
+        if (!write_guest_msg(msg, nullptr, abi::kWmQuit, g_quit_code, 0)) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return -1;
+        }
         const std::array<diagnostics::TraceField, 4> fields{
             diagnostics::TraceField{"symbol", "GetMessageA"},
             diagnostics::TraceField{"message", "WM_QUIT"},
@@ -770,8 +773,11 @@ TL_MSABI int tl_GetMessageA(void* const msg, const void* const window,
             continue;
         }
         if (slot.has_pending) {
-            write_guest_msg(msg, &slot, slot.pending.message, slot.pending.wparam,
-                            slot.pending.lparam);
+            if (!write_guest_msg(msg, &slot, slot.pending.message, slot.pending.wparam,
+                                 slot.pending.lparam)) {
+                set_last_error(abi::kErrorInvalidParameter);
+                return -1;
+            }
             slot.has_pending = false;
             set_last_error(abi::kErrorSuccess);
             return 1;
@@ -779,7 +785,10 @@ TL_MSABI int tl_GetMessageA(void* const msg, const void* const window,
         if (!slot.queued_messages.empty()) {
             const abi::GuestMsg queued = slot.queued_messages.front();
             slot.queued_messages.pop_front();
-            write_guest_msg(msg, queued.hwnd, queued.message, queued.wparam, queued.lparam);
+            if (!write_guest_msg(msg, queued.hwnd, queued.message, queued.wparam, queued.lparam)) {
+                set_last_error(abi::kErrorInvalidParameter);
+                return -1;
+            }
             set_last_error(abi::kErrorSuccess);
             return 1;
         }
@@ -791,8 +800,11 @@ TL_MSABI int tl_GetMessageA(void* const msg, const void* const window,
             if (find_window_slot(target) == nullptr) {
                 continue;
             }
-            write_guest_msg(msg, target, cross_thread_message.message,
-                            cross_thread_message.wparam, cross_thread_message.lparam);
+            if (!write_guest_msg(msg, target, cross_thread_message.message,
+                                 cross_thread_message.wparam, cross_thread_message.lparam)) {
+                set_last_error(abi::kErrorInvalidParameter);
+                return -1;
+            }
             set_last_error(abi::kErrorSuccess);
             return 1;
         }
@@ -803,7 +815,10 @@ TL_MSABI int tl_GetMessageA(void* const msg, const void* const window,
             const gui::WindowEvent event = gui::platform::next_window_event(slot.native);
             if (event.type == gui::WindowEventType::Redraw) {
                 render_controls(slot);
-                write_guest_msg(msg, &slot, abi::kWmPaint, 0, 0);
+                if (!write_guest_msg(msg, &slot, abi::kWmPaint, 0, 0)) {
+                    set_last_error(abi::kErrorInvalidParameter);
+                    return -1;
+                }
                 set_last_error(abi::kErrorSuccess);
                 return 1;
             }
@@ -815,12 +830,18 @@ TL_MSABI int tl_GetMessageA(void* const msg, const void* const window,
                                                        ? window_drawing_target(control)
                                                        : WindowDrawingTarget{};
                 if (logical_child_mouse_message(control) && target.native != nullptr) {
-                    write_guest_msg(msg, control, abi::kWmLButtonDown, abi::kMkLButton,
-                                    mouse_lparam(event.x - target.offset_x,
-                                                 event.y - target.offset_y));
+                    if (!write_guest_msg(msg, control, abi::kWmLButtonDown, abi::kMkLButton,
+                                         mouse_lparam(event.x - target.offset_x,
+                                                      event.y - target.offset_y))) {
+                        set_last_error(abi::kErrorInvalidParameter);
+                        return -1;
+                    }
                 } else {
-                    write_guest_msg(msg, &slot, abi::kWmLButtonDown, abi::kMkLButton,
-                                    mouse_lparam(event.x, event.y));
+                    if (!write_guest_msg(msg, &slot, abi::kWmLButtonDown, abi::kMkLButton,
+                                         mouse_lparam(event.x, event.y))) {
+                        set_last_error(abi::kErrorInvalidParameter);
+                        return -1;
+                    }
                 }
                 set_last_error(abi::kErrorSuccess);
                 return 1;
@@ -833,12 +854,18 @@ TL_MSABI int tl_GetMessageA(void* const msg, const void* const window,
                                                        ? window_drawing_target(control)
                                                        : WindowDrawingTarget{};
                 if (logical_child_mouse_message(control) && target.native != nullptr) {
-                    write_guest_msg(msg, control, abi::kWmLButtonUp, 0,
-                                    mouse_lparam(event.x - target.offset_x,
-                                                 event.y - target.offset_y));
+                    if (!write_guest_msg(msg, control, abi::kWmLButtonUp, 0,
+                                         mouse_lparam(event.x - target.offset_x,
+                                                      event.y - target.offset_y))) {
+                        set_last_error(abi::kErrorInvalidParameter);
+                        return -1;
+                    }
                 } else {
-                    write_guest_msg(msg, &slot, abi::kWmLButtonUp, 0,
-                                    mouse_lparam(event.x, event.y));
+                    if (!write_guest_msg(msg, &slot, abi::kWmLButtonUp, 0,
+                                         mouse_lparam(event.x, event.y))) {
+                        set_last_error(abi::kErrorInvalidParameter);
+                        return -1;
+                    }
                 }
                 set_last_error(abi::kErrorSuccess);
                 return 1;
@@ -858,30 +885,41 @@ TL_MSABI int tl_GetMessageA(void* const msg, const void* const window,
                                         ? event.y - target.offset_y
                                         : event.y;
                 const abi::Wparam wparam = slot.left_button_down ? abi::kMkLButton : 0;
-                write_guest_msg(msg,
-                                deliver_to_child ? control : &slot,
-                                abi::kWmMouseMove, wparam, mouse_lparam(local_x, local_y));
+                if (!write_guest_msg(msg, deliver_to_child ? control : &slot,
+                                     abi::kWmMouseMove, wparam, mouse_lparam(local_x, local_y))) {
+                    set_last_error(abi::kErrorInvalidParameter);
+                    return -1;
+                }
                 set_last_error(abi::kErrorSuccess);
                 return 1;
             }
             if (event.type == gui::WindowEventType::KeyDown) {
                 slot.last_key = event.character;
                 handle_control_key(slot, event);
-                write_guest_msg(msg, &slot, abi::kWmKeyDown,
-                                keydown_vkey(event.keysym, event.character), 0);
+                if (!write_guest_msg(msg, &slot, abi::kWmKeyDown,
+                                     keydown_vkey(event.keysym, event.character), 0)) {
+                    set_last_error(abi::kErrorInvalidParameter);
+                    return -1;
+                }
                 set_last_error(abi::kErrorSuccess);
                 return 1;
             }
             if (event.type == gui::WindowEventType::RightPress) {
                 if (slot.tray_registered) {
-                    write_guest_msg(msg, &slot,
-                                    slot.tray_callback_message != 0
-                                        ? slot.tray_callback_message
-                                        : abi::kWmTrayIcon,
-                                    slot.tray_icon_id, abi::kWmRButtonUp);
+                    if (!write_guest_msg(msg, &slot,
+                                         slot.tray_callback_message != 0
+                                             ? slot.tray_callback_message
+                                             : abi::kWmTrayIcon,
+                                         slot.tray_icon_id, abi::kWmRButtonUp)) {
+                        set_last_error(abi::kErrorInvalidParameter);
+                        return -1;
+                    }
                 } else {
-                    write_guest_msg(msg, &slot, abi::kWmRButtonDown, abi::kMkRButton,
-                                    mouse_lparam(event.x, event.y));
+                    if (!write_guest_msg(msg, &slot, abi::kWmRButtonDown, abi::kMkRButton,
+                                         mouse_lparam(event.x, event.y))) {
+                        set_last_error(abi::kErrorInvalidParameter);
+                        return -1;
+                    }
                 }
                 set_last_error(abi::kErrorSuccess);
                 return 1;
@@ -890,19 +928,28 @@ TL_MSABI int tl_GetMessageA(void* const msg, const void* const window,
                 if (slot.tray_registered) {
                     continue;
                 }
-                write_guest_msg(msg, &slot, abi::kWmRButtonUp, 0,
-                                mouse_lparam(event.x, event.y));
+                if (!write_guest_msg(msg, &slot, abi::kWmRButtonUp, 0,
+                                     mouse_lparam(event.x, event.y))) {
+                    set_last_error(abi::kErrorInvalidParameter);
+                    return -1;
+                }
                 set_last_error(abi::kErrorSuccess);
                 return 1;
             }
             if (event.type == gui::WindowEventType::KeyUp) {
-                write_guest_msg(msg, &slot, abi::kWmKeyUp,
-                                keydown_vkey(event.keysym, event.character), 0);
+                if (!write_guest_msg(msg, &slot, abi::kWmKeyUp,
+                                     keydown_vkey(event.keysym, event.character), 0)) {
+                    set_last_error(abi::kErrorInvalidParameter);
+                    return -1;
+                }
                 set_last_error(abi::kErrorSuccess);
                 return 1;
             }
             if (event.type == gui::WindowEventType::CloseRequested) {
-                write_guest_msg(msg, &slot, abi::kWmClose, 0, 0);
+                if (!write_guest_msg(msg, &slot, abi::kWmClose, 0, 0)) {
+                    set_last_error(abi::kErrorInvalidParameter);
+                    return -1;
+                }
                 set_last_error(abi::kErrorSuccess);
                 return 1;
             }
@@ -914,7 +961,10 @@ TL_MSABI int tl_GetMessageA(void* const msg, const void* const window,
             }
             for (GuestTimer& timer : slot.timers) {
                 if (now >= timer.deadline) {
-                    write_guest_msg(msg, &slot, abi::kWmTimer, timer.id, 0);
+                    if (!write_guest_msg(msg, &slot, abi::kWmTimer, timer.id, 0)) {
+                        set_last_error(abi::kErrorInvalidParameter);
+                        return -1;
+                    }
                     timer.deadline = std::chrono::steady_clock::now() + timer.interval;
                     const std::array<diagnostics::TraceField, 4> fields{
                         diagnostics::TraceField{"symbol", "GetMessageA"},
@@ -934,7 +984,10 @@ TL_MSABI int tl_GetMessageA(void* const msg, const void* const window,
                 continue;
             }
             slot.render_pending = false;
-            write_guest_msg(msg, &slot, abi::kWmPaint, 0, 0);
+            if (!write_guest_msg(msg, &slot, abi::kWmPaint, 0, 0)) {
+                set_last_error(abi::kErrorInvalidParameter);
+                return -1;
+            }
             set_last_error(abi::kErrorSuccess);
             return 1;
         }

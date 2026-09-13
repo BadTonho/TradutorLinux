@@ -175,17 +175,19 @@ inline void set_focus_control(WindowSlot* control) noexcept {
     runtime_gui::set_focus_control(control, g_focused_control);
 }
 
-inline void write_guest_msg(void* const msg, const abi::HWnd hwnd, const std::uint32_t message,
+inline bool write_guest_msg(void* const msg, const abi::HWnd hwnd, const std::uint32_t message,
                             const abi::Wparam wparam, const abi::Lparam lparam) noexcept {
-    abi::GuestMsg* const out = static_cast<abi::GuestMsg*>(msg);
-    out->hwnd = hwnd;
-    out->message = message;
-    out->padding = 0;
-    out->wparam = wparam;
-    out->lparam = lparam;
-    out->time = 0;
-    out->pt_x = 0;
-    out->pt_y = 0;
+    abi::GuestMsg out{};
+    out.hwnd = hwnd;
+    out.message = message;
+    out.padding = 0;
+    out.wparam = wparam;
+    out.lparam = lparam;
+    out.time = 0;
+    out.pt_x = 0;
+    out.pt_y = 0;
+    return runtime::write_guest_memory(msg, &out, sizeof(out)).status ==
+           runtime::GuestMemoryAccessStatus::Success;
 }
 
 constexpr unsigned long kKeysymBackspace = 0xFF08;
