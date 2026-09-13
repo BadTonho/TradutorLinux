@@ -302,6 +302,13 @@ O lote seguinte migrou snapshots e publicações de ACLs e descritores em
 `Win32SecurityTest.ProtectedAclAndDescriptorBuffersRejectUnmappedPointers`
 protege entradas, saídas e rollback de alocações inválidas.
 
+O lote inicial de registro migrou as entradas e saídas de
+`RegOpenKeyExA/W`, `RegCreateKeyExA/W`, `RegSetValueExA/W`,
+`RegQueryValueExA/W` e `RegDeleteValueA/W` para snapshots e cópias protegidas,
+incluindo dados contados, tamanhos e handles emitidos. A regressão
+`Win32RegistryTest.ProtectedRegistryInputsAndOutputsRejectUnmappedPointers`
+passou junto com as coberturas existentes de registro e conversão A/W.
+
 ## Fora desta rodada
 
 Não entram neste roadmap, por enquanto:

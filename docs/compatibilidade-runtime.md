@@ -614,6 +614,10 @@ COM e as demais APIs `CRYPT32` continuam fora deste contrato. A conversão
 `ProgramFilesDir` wide é protegida por
 `Win32RegistryTest.WideQueryConvertsDefaultProgramFilesValueToUtf16` e o
 round-trip A/W por `Win32RegistryTest.WideSetAndAnsiQueryUseTheSameStringValue`.
+As strings de entrada, dados contados, tamanhos e handles de saída das rotas
+principais usam snapshots e cópias protegidas; a regressão
+`Win32RegistryTest.ProtectedRegistryInputsAndOutputsRejectUnmappedPointers`
+cobre os ponteiros não acessíveis.
 
 ## Segurança virtual por prefixo
 

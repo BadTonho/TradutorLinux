@@ -566,6 +566,48 @@ TEST(Win32RegistryTest, WideSetAndAnsiQueryUseTheSameStringValue) {
     EXPECT_EQ(tl_RegCloseKey(key), abi::kErrorSuccess);
 }
 
+TEST(Win32RegistryTest, ProtectedRegistryInputsAndOutputsRejectUnmappedPointers) {
+    const void* current_user = reinterpret_cast<const void*>(0x80000001U);
+    auto* const invalid = reinterpret_cast<void*>(static_cast<std::uintptr_t>(0x1000U));
+    const char subkey[] = "Software\\TradutorLinux\\ProtectedRegistry";
+    const char value_name[] = "Payload";
+    void* key = nullptr;
+
+    EXPECT_EQ(tl_RegOpenKeyExA(current_user, subkey, 0, 0, static_cast<void**>(invalid)),
+              abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_RegOpenKeyExA(current_user, static_cast<const char*>(invalid), 0, 0, &key),
+              abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_RegCreateKeyExW(current_user, reinterpret_cast<const std::uint16_t*>(u"ProtectedRegistry"),
+                                 0, nullptr, 0, 0, invalid, &key, nullptr),
+              abi::kErrorInvalidParameter);
+    ASSERT_EQ(tl_RegCreateKeyExA(current_user, subkey, 0, nullptr, 0, 0, nullptr, &key, nullptr),
+              abi::kErrorSuccess);
+
+    const unsigned char payload[] = {'o', 'k', 0};
+    EXPECT_EQ(tl_RegSetValueExA(key, value_name, 0, 1,
+                                static_cast<const unsigned char*>(invalid), sizeof(payload)),
+              abi::kErrorInvalidParameter);
+    ASSERT_EQ(tl_RegSetValueExA(key, value_name, 0, 1, payload, sizeof(payload)),
+              abi::kErrorSuccess);
+
+    std::array<unsigned char, 16> output{};
+    std::uint32_t output_size = static_cast<std::uint32_t>(output.size());
+    EXPECT_EQ(tl_RegQueryValueExA(key, value_name, nullptr, nullptr, output.data(),
+                                  static_cast<std::uint32_t*>(invalid)),
+              abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_RegQueryValueExA(key, value_name, nullptr, nullptr,
+                                  static_cast<unsigned char*>(invalid), &output_size),
+              abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_RegQueryValueExA(key, static_cast<const char*>(invalid), nullptr, nullptr,
+                                  output.data(), &output_size),
+              abi::kErrorInvalidParameter);
+
+    EXPECT_EQ(tl_RegDeleteValueA(key, static_cast<const char*>(invalid)),
+              abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_RegDeleteValueA(key, value_name), abi::kErrorSuccess);
+    EXPECT_EQ(tl_RegCloseKey(key), abi::kErrorSuccess);
+}
+
 TEST(Win32EnvTest, GetEnvironmentVariableWConvertsResult) {
     const std::uint16_t name[] = {'P', 'A', 'T', 'H', 0};
     const std::uint32_t needed = tl_GetEnvironmentVariableW(name, nullptr, 0);

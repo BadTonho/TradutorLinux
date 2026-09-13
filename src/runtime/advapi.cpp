@@ -21,6 +21,7 @@
 
 #include "tradutorlinux/runtime/memory_validator.hpp"
 #include "tradutorlinux/util/unicode.hpp"
+#include "core/runtime_state_common.hpp"
 
 namespace tradutorlinux {
 namespace {
@@ -53,19 +54,23 @@ inline bool mapped_range(const void* address, const std::size_t size, const bool
     return runtime::validate_mapped_range(address, size, writable);
 }
 
-inline bool mapped_cstring(const char* value) noexcept {
-    return runtime::validate_mapped_cstring(value);
+bool copy_ansi_string(const char* const value, std::string& result) noexcept {
+    return runtime::copy_guest_cstring(value, 65535U, result);
 }
 
-inline bool mapped_wstring(const std::uint16_t* value) noexcept {
-    return runtime::validate_mapped_wstring(value);
-}
-
-std::string wide_to_utf8(const std::uint16_t* value) {
-    if (!mapped_wstring(value)) {
-        return {};
+bool copy_wide_string(const std::uint16_t* const value, std::string& result) noexcept {
+    std::u16string copy;
+    if (!runtime::copy_guest_wstring(value, 65535U, copy)) {
+        result.clear();
+        return false;
     }
-    return util::wide_to_utf8(value);
+    try {
+        result = util::wide_to_utf8(reinterpret_cast<const std::uint16_t*>(copy.data()), copy.size());
+    } catch (...) {
+        result.clear();
+        return false;
+    }
+    return true;
 }
 
 bool is_string_value(const std::uint32_t type) noexcept {
@@ -334,8 +339,7 @@ std::string compose_key_path(const void* key, const std::string& subkey, bool& v
 
 std::uint32_t open_key(const void* key, const std::string& subkey, void** result,
                        std::uint32_t* disposition, const bool create) noexcept {
-    if (result == nullptr || !mapped_range(result, sizeof(*result), true) ||
-        (disposition != nullptr && !mapped_range(disposition, sizeof(*disposition), true))) {
+    if (result == nullptr) {
         return kErrorInvalidParameter;
     }
     std::lock_guard<std::mutex> lock(g_registry_mutex);
@@ -358,9 +362,16 @@ std::uint32_t open_key(const void* key, const std::string& subkey, void** result
     });
     free_it->open = true;
     free_it->path = path;
-    *result = &*free_it;
-    if (disposition != nullptr) {
-        *disposition = existed ? 2U : 1U;
+    void* const handle = &*free_it;
+    if (!write_guest_value(result, handle)) {
+        *free_it = {};
+        return kErrorInvalidParameter;
+    }
+    if (disposition != nullptr &&
+        !write_guest_value(disposition, existed ? std::uint32_t{2} : std::uint32_t{1})) {
+        static_cast<void>(write_guest_value(result, static_cast<void*>(nullptr)));
+        *free_it = {};
+        return kErrorInvalidParameter;
     }
     return abi::kErrorSuccess;
 }
@@ -368,8 +379,20 @@ std::uint32_t open_key(const void* key, const std::string& subkey, void** result
 std::uint32_t set_value(const void* key, const std::string& name, const std::uint32_t type,
                         const unsigned char* data, const std::uint32_t data_size,
                         const bool wide) noexcept {
-    if (data_size != 0 && (data == nullptr || !mapped_range(data, data_size, false))) {
-        return abi::kErrorInvalidParameter;
+    std::vector<unsigned char> data_copy;
+    try {
+        if (data_size != 0) {
+            if (data == nullptr) {
+                return abi::kErrorInvalidParameter;
+            }
+            data_copy.resize(data_size);
+            if (runtime::read_guest_memory(data, data_copy.data(), data_copy.size()).status !=
+                runtime::GuestMemoryAccessStatus::Success) {
+                return abi::kErrorInvalidParameter;
+            }
+        }
+    } catch (...) {
+        return abi::kErrorNotEnoughMemory;
     }
     std::lock_guard<std::mutex> lock(g_registry_mutex);
     RegistryKey* open = find_key(key);
@@ -383,8 +406,8 @@ std::uint32_t set_value(const void* key, const std::string& name, const std::uin
     RegistryValue replacement{open->path, name, type, {}};
     if (data_size != 0) {
         replacement.data = is_string_value(type)
-                               ? string_value_to_utf8(data, data_size, wide)
-                               : std::vector<unsigned char>{data, data + data_size};
+                               ? string_value_to_utf8(data_copy.data(), data_size, wide)
+                               : std::move(data_copy);
         if (is_string_value(type) && replacement.data.empty()) {
             return kErrorInvalidParameter;
         }
@@ -401,8 +424,11 @@ std::uint32_t set_value(const void* key, const std::string& name, const std::uin
 std::uint32_t query_value(const void* key, const std::string& name, std::uint32_t* type,
                           unsigned char* data, std::uint32_t* data_size,
                           const bool wide) noexcept {
-    if (data_size == nullptr || !mapped_range(data_size, sizeof(*data_size), true) ||
-        (type != nullptr && !mapped_range(type, sizeof(*type), true))) {
+    if (data_size == nullptr) {
+        return abi::kErrorInvalidParameter;
+    }
+    std::uint32_t capacity = 0;
+    if (!read_guest_value(data_size, capacity)) {
         return abi::kErrorInvalidParameter;
     }
     std::lock_guard<std::mutex> lock(g_registry_mutex);
@@ -418,19 +444,25 @@ std::uint32_t query_value(const void* key, const std::string& name, std::uint32_
         return kErrorFileNotFound;
     }
     if (type != nullptr) {
-        *type = found->type;
+        if (!write_guest_value(type, found->type)) {
+            return abi::kErrorInvalidParameter;
+        }
     }
     const std::vector<unsigned char> output = registry_data_for_query(*found, wide);
     const std::uint32_t required = static_cast<std::uint32_t>(output.size());
-    if (data == nullptr || *data_size < required) {
-        *data_size = required;
+    if (data == nullptr || capacity < required) {
+        if (!write_guest_value(data_size, required)) {
+            return abi::kErrorInvalidParameter;
+        }
         return data == nullptr ? abi::kErrorSuccess : kErrorMoreData;
     }
-    if (required != 0 && !mapped_range(data, required, true)) {
+    if (required != 0 && runtime::write_guest_memory(data, output.data(), required).status !=
+                                  runtime::GuestMemoryAccessStatus::Success) {
         return abi::kErrorInvalidParameter;
     }
-    std::copy(output.begin(), output.end(), data);
-    *data_size = required;
+    if (!write_guest_value(data_size, required)) {
+        return abi::kErrorInvalidParameter;
+    }
     return abi::kErrorSuccess;
 }
 
@@ -469,10 +501,11 @@ TL_ADVAPI_MSABI std::uint32_t tl_RegOpenKeyExA(const void* key, const char* subk
                                                const std::uint32_t access, void** result) noexcept {
     (void)options;
     (void)access;
-    if (!mapped_cstring(subkey)) {
+    std::string subkey_copy;
+    if (!copy_ansi_string(subkey, subkey_copy)) {
         return kErrorInvalidParameter;
     }
-    return open_key(key, subkey, result, nullptr, false);
+    return open_key(key, subkey_copy, result, nullptr, false);
 }
 
 TL_ADVAPI_MSABI std::uint32_t tl_RegOpenKeyExW(const void* key, const std::uint16_t* subkey,
@@ -480,10 +513,11 @@ TL_ADVAPI_MSABI std::uint32_t tl_RegOpenKeyExW(const void* key, const std::uint1
                                                const std::uint32_t access, void** result) noexcept {
     (void)options;
     (void)access;
-    if (!mapped_wstring(subkey)) {
+    std::string subkey_copy;
+    if (!copy_wide_string(subkey, subkey_copy)) {
         return kErrorInvalidParameter;
     }
-    return open_key(key, wide_to_utf8(subkey), result, nullptr, false);
+    return open_key(key, subkey_copy, result, nullptr, false);
 }
 
 TL_ADVAPI_MSABI std::uint32_t tl_RegCreateKeyExA(const void* key, const char* subkey,
@@ -496,10 +530,14 @@ TL_ADVAPI_MSABI std::uint32_t tl_RegCreateKeyExA(const void* key, const char* su
     (void)class_name;
     (void)options;
     (void)access;
-    if ((security_attributes != nullptr && !mapped_range(security_attributes, sizeof(std::uint32_t), false)) || !mapped_cstring(subkey)) {
+    std::uint32_t security_attributes_prefix = 0;
+    std::string subkey_copy;
+    if ((security_attributes != nullptr && !read_guest_value(security_attributes,
+                                                              security_attributes_prefix)) ||
+        !copy_ansi_string(subkey, subkey_copy)) {
         return kErrorInvalidParameter;
     }
-    return open_key(key, subkey, result, disposition, true);
+    return open_key(key, subkey_copy, result, disposition, true);
 }
 
 TL_ADVAPI_MSABI std::uint32_t tl_RegCreateKeyExW(const void* key, const std::uint16_t* subkey,
@@ -513,10 +551,14 @@ TL_ADVAPI_MSABI std::uint32_t tl_RegCreateKeyExW(const void* key, const std::uin
     (void)class_name;
     (void)options;
     (void)access;
-    if ((security_attributes != nullptr && !mapped_range(security_attributes, sizeof(std::uint32_t), false)) || !mapped_wstring(subkey)) {
+    std::uint32_t security_attributes_prefix = 0;
+    std::string subkey_copy;
+    if ((security_attributes != nullptr && !read_guest_value(security_attributes,
+                                                              security_attributes_prefix)) ||
+        !copy_wide_string(subkey, subkey_copy)) {
         return kErrorInvalidParameter;
     }
-    return open_key(key, wide_to_utf8(subkey), result, disposition, true);
+    return open_key(key, subkey_copy, result, disposition, true);
 }
 
 TL_ADVAPI_MSABI std::uint32_t tl_RegQueryValueExA(const void* key, const char* value_name,
@@ -524,10 +566,11 @@ TL_ADVAPI_MSABI std::uint32_t tl_RegQueryValueExA(const void* key, const char* v
                                                   unsigned char* data,
                                                   std::uint32_t* data_size) noexcept {
     (void)reserved;
-    if (!mapped_cstring(value_name)) {
+    std::string value_name_copy;
+    if (!copy_ansi_string(value_name, value_name_copy)) {
         return kErrorInvalidParameter;
     }
-    return query_value(key, value_name, type, data, data_size, false);
+    return query_value(key, value_name_copy, type, data, data_size, false);
 }
 
 TL_ADVAPI_MSABI std::uint32_t tl_RegQueryValueExW(const void* key,
@@ -536,10 +579,11 @@ TL_ADVAPI_MSABI std::uint32_t tl_RegQueryValueExW(const void* key,
                                                   unsigned char* data,
                                                   std::uint32_t* data_size) noexcept {
     (void)reserved;
-    if (!mapped_wstring(value_name)) {
+    std::string value_name_copy;
+    if (!copy_wide_string(value_name, value_name_copy)) {
         return kErrorInvalidParameter;
     }
-    return query_value(key, wide_to_utf8(value_name), type, data, data_size, true);
+    return query_value(key, value_name_copy, type, data, data_size, true);
 }
 
 TL_ADVAPI_MSABI std::uint32_t tl_RegSetValueExA(const void* key, const char* value_name,
@@ -548,10 +592,11 @@ TL_ADVAPI_MSABI std::uint32_t tl_RegSetValueExA(const void* key, const char* val
                                                 const unsigned char* data,
                                                 const std::uint32_t data_size) noexcept {
     (void)reserved;
-    if (!mapped_cstring(value_name)) {
+    std::string value_name_copy;
+    if (!copy_ansi_string(value_name, value_name_copy)) {
         return kErrorInvalidParameter;
     }
-    return set_value(key, value_name, type, data, data_size, false);
+    return set_value(key, value_name_copy, type, data, data_size, false);
 }
 
 TL_ADVAPI_MSABI std::uint32_t tl_RegSetValueExW(const void* key,
@@ -561,25 +606,28 @@ TL_ADVAPI_MSABI std::uint32_t tl_RegSetValueExW(const void* key,
                                                 const unsigned char* data,
                                                 const std::uint32_t data_size) noexcept {
     (void)reserved;
-    if (!mapped_wstring(value_name)) {
+    std::string value_name_copy;
+    if (!copy_wide_string(value_name, value_name_copy)) {
         return kErrorInvalidParameter;
     }
-    return set_value(key, wide_to_utf8(value_name), type, data, data_size, true);
+    return set_value(key, value_name_copy, type, data, data_size, true);
 }
 
 TL_ADVAPI_MSABI std::uint32_t tl_RegDeleteValueA(const void* key, const char* value_name) noexcept {
-    if (!mapped_cstring(value_name)) {
+    std::string value_name_copy;
+    if (!copy_ansi_string(value_name, value_name_copy)) {
         return kErrorInvalidParameter;
     }
-    return delete_value(key, value_name);
+    return delete_value(key, value_name_copy);
 }
 
 TL_ADVAPI_MSABI std::uint32_t tl_RegDeleteValueW(const void* key,
                                                  const std::uint16_t* value_name) noexcept {
-    if (!mapped_wstring(value_name)) {
+    std::string value_name_copy;
+    if (!copy_wide_string(value_name, value_name_copy)) {
         return kErrorInvalidParameter;
     }
-    return delete_value(key, wide_to_utf8(value_name));
+    return delete_value(key, value_name_copy);
 }
 
 TL_ADVAPI_MSABI int tl_CryptAcquireContextA(void** prov_handle, const char* container,
