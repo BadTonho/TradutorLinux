@@ -12,6 +12,7 @@
 #include <fstream>
 #include <limits>
 #include <mutex>
+#include <new>
 #include <string>
 #include <thread>
 #include <vector>
@@ -268,6 +269,21 @@ bool copy_host_sockaddr(const sockaddr_in& source, void* address, int* length) n
     return true;
 }
 
+bool write_guest_text(const char* const source, char* const destination,
+                      const std::uint32_t capacity) noexcept {
+    if (destination == nullptr || capacity == 0U) return false;
+    const std::size_t source_length = std::strlen(source);
+    const std::size_t copy_length = std::min<std::size_t>(source_length, capacity - 1U);
+    const std::uintptr_t base = reinterpret_cast<std::uintptr_t>(destination);
+    if (copy_length > std::numeric_limits<std::uintptr_t>::max() - base ||
+        runtime::write_guest_memory(destination, source, copy_length).status !=
+            runtime::GuestMemoryAccessStatus::Success ||
+        !write_guest_value(reinterpret_cast<char*>(base + copy_length), static_cast<char>('\0'))) {
+        return false;
+    }
+    return true;
+}
+
 }  // namespace
 
 extern "C" {
@@ -447,12 +463,23 @@ TL_MSABI int tl_connect(const std::uintptr_t socket, const void* name,
 TL_MSABI int tl_send(const std::uintptr_t socket, const char* buffer, const int length,
                      const int flags) noexcept {
     SocketSlot* slot = find_socket(socket);
-    if (slot == nullptr || buffer == nullptr || length < 0 || flags != 0 ||
-        !mapped_range(buffer, static_cast<std::size_t>(length), false)) {
+    if (slot == nullptr || buffer == nullptr || length < 0 || flags != 0) {
         g_wsa_last_error = slot == nullptr ? kWsaENotSocket : kWsaEInvalidArgument;
         return -1;
     }
-    const ssize_t result = ::send(slot->fd, buffer, static_cast<std::size_t>(length), 0);
+    std::vector<char> host_buffer;
+    try {
+        host_buffer.resize(static_cast<std::size_t>(length));
+    } catch (const std::bad_alloc&) {
+        g_wsa_last_error = ENOBUFS;
+        return -1;
+    }
+    if (length > 0 && runtime::read_guest_memory(buffer, host_buffer.data(), host_buffer.size()).status !=
+                         runtime::GuestMemoryAccessStatus::Success) {
+        g_wsa_last_error = kWsaEFault;
+        return -1;
+    }
+    const ssize_t result = ::send(slot->fd, host_buffer.data(), host_buffer.size(), 0);
     if (result < 0) {
         g_wsa_last_error = errno_to_wsa(errno);
         return -1;
@@ -464,14 +491,26 @@ TL_MSABI int tl_send(const std::uintptr_t socket, const char* buffer, const int 
 TL_MSABI int tl_recv(const std::uintptr_t socket, char* buffer, const int length,
                      const int flags) noexcept {
     SocketSlot* slot = find_socket(socket);
-    if (slot == nullptr || buffer == nullptr || length < 0 || flags != 0 ||
-        !mapped_range(buffer, static_cast<std::size_t>(length), true)) {
+    if (slot == nullptr || buffer == nullptr || length < 0 || flags != 0) {
         g_wsa_last_error = slot == nullptr ? kWsaENotSocket : kWsaEInvalidArgument;
         return -1;
     }
-    const ssize_t result = ::recv(slot->fd, buffer, static_cast<std::size_t>(length), 0);
+    std::vector<char> host_buffer;
+    try {
+        host_buffer.resize(static_cast<std::size_t>(length));
+    } catch (const std::bad_alloc&) {
+        g_wsa_last_error = ENOBUFS;
+        return -1;
+    }
+    const ssize_t result = ::recv(slot->fd, host_buffer.data(), host_buffer.size(), 0);
     if (result < 0) {
         g_wsa_last_error = errno_to_wsa(errno);
+        return -1;
+    }
+    if (result > 0 && runtime::write_guest_memory(buffer, host_buffer.data(),
+                                                  static_cast<std::size_t>(result)).status !=
+                            runtime::GuestMemoryAccessStatus::Success) {
+        g_wsa_last_error = kWsaEFault;
         return -1;
     }
     g_wsa_last_error = 0;
@@ -483,12 +522,23 @@ TL_MSABI int tl_sendto(const std::uintptr_t socket, const char* buffer, const in
     SocketSlot* slot = find_socket(socket);
     sockaddr_in address{};
     if (slot == nullptr || buffer == nullptr || length < 0 || flags != 0 ||
-        !mapped_range(buffer, static_cast<std::size_t>(length), false) ||
         !copy_guest_sockaddr(to, to_length, address)) {
         g_wsa_last_error = slot == nullptr ? kWsaENotSocket : kWsaEInvalidArgument;
         return -1;
     }
-    const ssize_t result = ::sendto(slot->fd, buffer, static_cast<std::size_t>(length), 0,
+    std::vector<char> host_buffer;
+    try {
+        host_buffer.resize(static_cast<std::size_t>(length));
+    } catch (const std::bad_alloc&) {
+        g_wsa_last_error = ENOBUFS;
+        return -1;
+    }
+    if (length > 0 && runtime::read_guest_memory(buffer, host_buffer.data(), host_buffer.size()).status !=
+                         runtime::GuestMemoryAccessStatus::Success) {
+        g_wsa_last_error = kWsaEFault;
+        return -1;
+    }
+    const ssize_t result = ::sendto(slot->fd, host_buffer.data(), host_buffer.size(), 0,
                                     reinterpret_cast<const sockaddr*>(&address), sizeof(address));
     if (result < 0) {
         g_wsa_last_error = errno_to_wsa(errno);
@@ -502,19 +552,29 @@ TL_MSABI int tl_recvfrom(const std::uintptr_t socket, char* buffer, const int le
                          const int flags, void* from, int* from_length) noexcept {
     SocketSlot* slot = find_socket(socket);
     if (slot == nullptr || buffer == nullptr || length < 0 || flags != 0 ||
-        !mapped_range(buffer, static_cast<std::size_t>(length), true)) {
+        (from == nullptr) != (from_length == nullptr)) {
         g_wsa_last_error = slot == nullptr ? kWsaENotSocket : kWsaEInvalidArgument;
         return -1;
     }
     sockaddr_in address{};
     socklen_t host_length = sizeof(address);
-    const ssize_t result = ::recvfrom(slot->fd, buffer, static_cast<std::size_t>(length), 0,
+    std::vector<char> host_buffer;
+    try {
+        host_buffer.resize(static_cast<std::size_t>(length));
+    } catch (const std::bad_alloc&) {
+        g_wsa_last_error = ENOBUFS;
+        return -1;
+    }
+    const ssize_t result = ::recvfrom(slot->fd, host_buffer.data(), host_buffer.size(), 0,
                                       reinterpret_cast<sockaddr*>(&address), &host_length);
     if (result < 0) {
         g_wsa_last_error = errno_to_wsa(errno);
         return -1;
     }
-    if (!copy_host_sockaddr(address, from, from_length)) {
+    if ((result > 0 && runtime::write_guest_memory(buffer, host_buffer.data(),
+                                                   static_cast<std::size_t>(result)).status !=
+                               runtime::GuestMemoryAccessStatus::Success) ||
+        !copy_host_sockaddr(address, from, from_length)) {
         g_wsa_last_error = kWsaEFault;
         return -1;
     }
@@ -845,7 +905,8 @@ TL_MSABI int tl_select(const int nfds, void* readfds, void* writefds, void* exce
 
 TL_MSABI int tl_ioctlsocket(const std::uintptr_t socket, const std::int32_t cmd, std::uint32_t* argp) noexcept {
     SocketSlot* slot = find_socket(socket);
-    if (slot == nullptr || argp == nullptr || !mapped_range(argp, sizeof(*argp), true)) {
+    std::uint32_t argument = 0;
+    if (slot == nullptr || argp == nullptr || !read_guest_value(argp, argument)) {
         g_wsa_last_error = slot == nullptr ? kWsaENotSocket : kWsaEInvalidArgument;
         return -1;
     }
@@ -856,7 +917,7 @@ TL_MSABI int tl_ioctlsocket(const std::uintptr_t socket, const std::int32_t cmd,
             g_wsa_last_error = errno_to_wsa(errno);
             return -1;
         }
-        if (*argp != 0) {
+        if (argument != 0U) {
             flags |= O_NONBLOCK;
         } else {
             flags &= ~O_NONBLOCK;
@@ -1048,7 +1109,24 @@ TL_MSABI int tl_setsockopt(const std::uintptr_t socket, const int level, const i
     if (level == 0xFFFF) { // SOL_SOCKET Win32
         host_level = SOL_SOCKET;
     }
-    if (::setsockopt(slot->fd, host_level, optname, optval, static_cast<socklen_t>(optlen)) != 0) {
+    if (optlen < 0 || (optlen > 0 && optval == nullptr)) {
+        g_wsa_last_error = kWsaEInvalidArgument;
+        return -1;
+    }
+    std::vector<char> host_option;
+    try {
+        host_option.resize(static_cast<std::size_t>(optlen));
+    } catch (const std::bad_alloc&) {
+        g_wsa_last_error = ENOBUFS;
+        return -1;
+    }
+    if (optlen > 0 && runtime::read_guest_memory(optval, host_option.data(), host_option.size()).status !=
+                         runtime::GuestMemoryAccessStatus::Success) {
+        g_wsa_last_error = kWsaEFault;
+        return -1;
+    }
+    if (::setsockopt(slot->fd, host_level, optname, host_option.data(),
+                     static_cast<socklen_t>(optlen)) != 0) {
         g_wsa_last_error = errno_to_wsa(errno);
         return -1;
     }
@@ -1067,13 +1145,30 @@ TL_MSABI int tl_getsockopt(const std::uintptr_t socket, const int level, const i
     if (level == 0xFFFF) {
         host_level = SOL_SOCKET;
     }
-    socklen_t slen = optlen != nullptr ? static_cast<socklen_t>(*optlen) : 0;
-    if (::getsockopt(slot->fd, host_level, optname, optval, &slen) != 0) {
+    int capacity = 0;
+    if (optlen == nullptr || !read_guest_value(optlen, capacity) || capacity < 0 ||
+        (capacity > 0 && optval == nullptr)) {
+        g_wsa_last_error = kWsaEInvalidArgument;
+        return -1;
+    }
+    std::vector<char> host_option;
+    try {
+        host_option.resize(static_cast<std::size_t>(capacity));
+    } catch (const std::bad_alloc&) {
+        g_wsa_last_error = ENOBUFS;
+        return -1;
+    }
+    socklen_t slen = static_cast<socklen_t>(capacity);
+    if (::getsockopt(slot->fd, host_level, optname, host_option.data(), &slen) != 0) {
         g_wsa_last_error = errno_to_wsa(errno);
         return -1;
     }
-    if (optlen != nullptr) {
-        *optlen = static_cast<int>(slen);
+    if (slen > static_cast<socklen_t>(capacity) ||
+        (slen > 0U && runtime::write_guest_memory(optval, host_option.data(), slen).status !=
+                           runtime::GuestMemoryAccessStatus::Success) ||
+        !write_guest_value(optlen, static_cast<int>(slen))) {
+        g_wsa_last_error = kWsaEFault;
+        return -1;
     }
     g_wsa_last_error = 0;
     return 0;
@@ -1312,8 +1407,9 @@ TL_MSABI int tl_WSAIoctl(const std::uintptr_t socket, const std::uint32_t io_con
     (void)out_buffer_size;
     (void)overlapped;
     (void)completion_routine;
-    if (bytes_returned != nullptr && mapped_range(bytes_returned, sizeof(std::uint32_t), true)) {
-        *bytes_returned = 0;
+    if (bytes_returned != nullptr && !write_guest_value(bytes_returned, std::uint32_t{0})) {
+        g_wsa_last_error = kWsaEFault;
+        return -1;
     }
     g_wsa_last_error = 0;
     return 0;
@@ -1325,13 +1421,13 @@ TL_MSABI int tl_getnameinfo(const void* const sa, const int salen, char* const h
     (void)sa;
     (void)salen;
     (void)flags;
-    if (host != nullptr && hostlen > 0 && mapped_range(host, hostlen, true)) {
-        std::strncpy(host, "127.0.0.1", hostlen - 1);
-        host[hostlen - 1] = '\0';
+    if (host != nullptr && hostlen > 0U && !write_guest_text("127.0.0.1", host, hostlen)) {
+        g_wsa_last_error = kWsaEFault;
+        return -1;
     }
-    if (serv != nullptr && servlen > 0 && mapped_range(serv, servlen, true)) {
-        std::strncpy(serv, "80", servlen - 1);
-        serv[servlen - 1] = '\0';
+    if (serv != nullptr && servlen > 0U && !write_guest_text("80", serv, servlen)) {
+        g_wsa_last_error = kWsaEFault;
+        return -1;
     }
     g_wsa_last_error = 0;
     return 0;

@@ -514,6 +514,61 @@ TEST(WinSockTest, ProtectedAddressBuffersRejectUnmappedGuestPointers) {
     tl_freeaddrinfo(address_info);
 }
 
+TEST(WinSockTest, ProtectedPayloadAndOptionBuffersRejectUnmappedPointers) {
+    auto* const invalid = reinterpret_cast<void*>(static_cast<std::uintptr_t>(0x1000U));
+    EXPECT_EQ(tl_WSAIoctl(0, 0, nullptr, 0, nullptr, 0,
+                         static_cast<std::uint32_t*>(invalid), nullptr, nullptr), -1);
+    EXPECT_EQ(tl_WSAGetLastError(), 10014);
+    EXPECT_EQ(tl_getnameinfo(nullptr, 0, static_cast<char*>(invalid), 16,
+                             nullptr, 0, 0), -1);
+    EXPECT_EQ(tl_WSAGetLastError(), 10014);
+
+    const std::uintptr_t socket = tl_socket(2, 2, 17);
+    if (socket == kInvalidSocket) {
+        GTEST_SKIP() << "UDP loopback socket is unavailable";
+    }
+
+    EXPECT_EQ(tl_send(socket, static_cast<const char*>(invalid), 1, 0), -1);
+    EXPECT_EQ(tl_WSAGetLastError(), 10014);
+
+    std::array<std::uint8_t, 16> address{};
+    address[0] = 2U;
+    address[4] = 127U;
+    address[7] = 1U;
+    ASSERT_EQ(tl_bind(socket, address.data(), static_cast<int>(address.size())), 0);
+    int address_length = static_cast<int>(address.size());
+    ASSERT_EQ(tl_getsockname(socket, address.data(), &address_length), 0);
+
+    constexpr char payload[] = "udp";
+    ASSERT_EQ(tl_sendto(socket, payload, 3, 0, address.data(), static_cast<int>(address.size())), 3);
+    EXPECT_EQ(tl_recv(socket, static_cast<char*>(invalid), 3, 0), -1);
+    EXPECT_EQ(tl_WSAGetLastError(), 10014);
+
+    ASSERT_EQ(tl_sendto(socket, payload, 3, 0, address.data(), static_cast<int>(address.size())), 3);
+    address_length = static_cast<int>(address.size());
+    EXPECT_EQ(tl_recvfrom(socket, static_cast<char*>(invalid), 3, 0, address.data(), &address_length), -1);
+    EXPECT_EQ(tl_WSAGetLastError(), 10014);
+
+    EXPECT_EQ(tl_sendto(socket, static_cast<const char*>(invalid), 3, 0,
+                        address.data(), static_cast<int>(address.size())), -1);
+    EXPECT_EQ(tl_WSAGetLastError(), 10014);
+
+    EXPECT_EQ(tl_setsockopt(socket, 0xFFFF, 2, static_cast<const char*>(invalid), 4), -1);
+    EXPECT_EQ(tl_WSAGetLastError(), 10014);
+    int option_length = 4;
+    EXPECT_EQ(tl_getsockopt(socket, 0xFFFF, 2, nullptr, &option_length), -1);
+    EXPECT_EQ(tl_WSAGetLastError(), 10022);
+    option_length = 4;
+    EXPECT_EQ(tl_getsockopt(socket, 0xFFFF, 2, static_cast<char*>(invalid), &option_length), -1);
+    EXPECT_EQ(tl_WSAGetLastError(), 10014);
+
+    EXPECT_EQ(tl_ioctlsocket(socket, static_cast<std::int32_t>(0x8004667EU),
+                             static_cast<std::uint32_t*>(invalid)), -1);
+    EXPECT_EQ(tl_WSAGetLastError(), 10022);
+
+    EXPECT_EQ(tl_closesocket(socket), 0);
+}
+
 TEST(NotepadPlusPlusCoverageTest, AllApisAndModules) {
     // DWMAPI
     int comp_enabled = 0;

@@ -240,6 +240,15 @@ O lote inicial de `WS2_32` migrou `WSAStartup`, cópia de `sockaddr`,
 temporários e cópias protegidas. `WinSockTest.ProtectedAddressBuffersRejectUnmappedGuestPointers`
 passou junto com os testes de cobertura de PuTTY, Notepad++ e memória.
 
+O lote seguinte de `WS2_32` migrou payloads de `send`/`recv` e
+`sendto`/`recvfrom`, opções de socket, `ioctlsocket`, `WSAIoctl` e
+`getnameinfo`. Os syscalls de rede agora recebem cópias host dos dados de
+entrada e só publicam respostas após `write_guest_memory`; a regressão
+`WinSockTest.ProtectedPayloadAndOptionBuffersRejectUnmappedPointers` cobre
+ponteiros inválidos e é pulada de forma controlada quando o sandbox não
+permite sockets UDP locais. A cobertura de PuTTY, Notepad++ e memória também
+passou.
+
 ## Fora desta rodada
 
 Não entram neste roadmap, por enquanto:

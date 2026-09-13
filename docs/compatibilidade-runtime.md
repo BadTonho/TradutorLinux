@@ -169,9 +169,14 @@ explicitamente não suportadas.
 
 No `WS2_32.dll`, `WSAStartup`, conversões de endereço, `WSAAddressToStringA`,
 `gethostname` e `getaddrinfo` copiam entradas e saídas entre memória host e
-convidada. Endereços retornados por `getaddrinfo` continuam sendo registros
+convidada. `send`/`recv`, `sendto`/`recvfrom`, `getsockname`/`getpeername`,
+`setsockopt`/`getsockopt`, `ioctlsocket`, `WSAIoctl` e `getnameinfo` também
+usam buffers temporários do host e cópias protegidas; uma falha de acesso
+retorna erro Winsock controlado, sem entregar o ponteiro convidado ao syscall
+Linux. Endereços retornados por `getaddrinfo` continuam sendo registros
 estáticos do runtime, e a implementação suporta apenas o subconjunto IPv4
-documentado.
+documentado. A regressão dos buffers de payload/opções pode ser pulada quando
+o sandbox não permite criar sockets UDP locais.
 
 ## GUI mínima (Fase 7)
 
