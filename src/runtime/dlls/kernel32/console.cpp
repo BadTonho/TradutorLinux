@@ -3,7 +3,9 @@
 #include "tradutorlinux/runtime/msvcrt.hpp"
 #include "tradutorlinux/util/unicode.hpp"
 
+#include <array>
 #include <cstring>
+#include <new>
 
 namespace tradutorlinux {
 
@@ -83,7 +85,10 @@ TL_MSABI int tl_ReadConsoleW(const void* const console_input, std::uint16_t* con
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
-    *chars_read = 0;
+    if (!write_guest_value(chars_read, std::uint32_t{0})) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
     FileSlotGuard slot_guard(console_input);
     const int fd = slot_guard.get() != nullptr ? slot_guard.get()->fd
                                                 : (slot_guard.is_file_handle() ? -1 : handle_fd(console_input));
@@ -99,7 +104,13 @@ TL_MSABI int tl_ReadConsoleW(const void* const console_input, std::uint16_t* con
         set_last_error(abi::kErrorSuccess);
         return 1;
     }
-    std::vector<char> bytes(static_cast<std::size_t>(chars_to_read) * 4U);
+    std::vector<char> bytes;
+    try {
+        bytes.resize(static_cast<std::size_t>(chars_to_read) * 4U);
+    } catch (const std::bad_alloc&) {
+        set_last_error(abi::kErrorNotEnoughMemory);
+        return 0;
+    }
     ssize_t byte_count = -1;
     do {
         byte_count = ::read(fd, bytes.data(), bytes.size());
@@ -112,8 +123,12 @@ TL_MSABI int tl_ReadConsoleW(const void* const console_input, std::uint16_t* con
     const std::u16string wide = util::utf8_to_wide(
         std::string_view{bytes.data(), static_cast<std::size_t>(byte_count)});
     const std::size_t copied = std::min<std::size_t>(wide.size(), chars_to_read);
-    std::copy_n(wide.begin(), copied, buffer);
-    *chars_read = static_cast<std::uint32_t>(copied);
+    if (runtime::write_guest_memory(buffer, wide.data(), copied * sizeof(char16_t)).status !=
+            runtime::GuestMemoryAccessStatus::Success ||
+        !write_guest_value(chars_read, static_cast<std::uint32_t>(copied))) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
     set_last_error(abi::kErrorSuccess);
     trace_process_console("console", "read-wide", std::to_string(copied));
     return 1;
@@ -129,7 +144,10 @@ TL_MSABI int tl_WriteConsoleW(const void* const console_output,
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
-    *chars_written = 0;
+    if (!write_guest_value(chars_written, std::uint32_t{0})) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
     FileSlotGuard slot_guard(console_output);
     const int fd = slot_guard.get() != nullptr ? slot_guard.get()->fd
                                                 : (slot_guard.is_file_handle() ? -1 : handle_fd(console_output));
@@ -144,10 +162,23 @@ TL_MSABI int tl_WriteConsoleW(const void* const console_output,
         return 0;
     }
     std::string utf8;
+    std::vector<std::uint16_t> guest_buffer;
+    try {
+        guest_buffer.resize(chars_to_write);
+    } catch (const std::bad_alloc&) {
+        set_last_error(abi::kErrorNotEnoughMemory);
+        return 0;
+    }
+    if (runtime::read_guest_memory(buffer, guest_buffer.data(),
+                                   static_cast<std::size_t>(chars_to_write) * sizeof(*buffer)).status !=
+        runtime::GuestMemoryAccessStatus::Success) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
     utf8.reserve(chars_to_write);
     std::size_t position = 0;
     while (position < chars_to_write) {
-        const std::uint32_t codepoint = util::decode_utf16(buffer, chars_to_write, position);
+        const std::uint32_t codepoint = util::decode_utf16(guest_buffer.data(), chars_to_write, position);
         char encoded[4]{};
         const std::size_t encoded_size = util::utf8_bytes_for(
             codepoint == util::kInvalidCodepoint ? static_cast<std::uint32_t>('?') : codepoint,
@@ -159,7 +190,10 @@ TL_MSABI int tl_WriteConsoleW(const void* const console_output,
         set_last_error(error);
         return 0;
     }
-    *chars_written = chars_to_write;
+    if (!write_guest_value(chars_written, chars_to_write)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
     set_last_error(abi::kErrorSuccess);
     trace_process_console("console", "write-wide", std::to_string(chars_to_write));
     return 1;
@@ -203,8 +237,11 @@ TL_MSABI int tl_GetConsoleScreenBufferInfo(const void* console_handle, void* buf
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
-    auto* csbi = static_cast<abi::GuestConsoleScreenBufferInfo*>(buffer_info);
-    *csbi = {};
+    const abi::GuestConsoleScreenBufferInfo csbi{};
+    if (!write_guest_value(buffer_info, csbi)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
     set_last_error(abi::kErrorSuccess);
     return 1;
 }
@@ -247,10 +284,12 @@ TL_MSABI void tl_OutputDebugStringA(const char* const output_string) noexcept {
 }
 
 TL_MSABI void tl_OutputDebugStringW(const std::uint16_t* const output_string) noexcept {
-    if (output_string == nullptr || !mapped_guest_wstring(output_string)) {
+    std::u16string guest_string;
+    if (!runtime::copy_guest_wstring(output_string, 65535, guest_string)) {
         return;
     }
-    const std::string utf8 = util::wide_to_utf8(output_string);
+    const std::string utf8 = util::wide_to_utf8(
+        reinterpret_cast<const std::uint16_t*>(guest_string.data()), guest_string.size());
     const std::array<diagnostics::TraceField, 4> fields{
         diagnostics::TraceField{"symbol", "OutputDebugStringW"},
         diagnostics::TraceField{"message", utf8.c_str()},
@@ -320,13 +359,13 @@ TL_MSABI int tl_PeekNamedPipe(void* const named_pipe, void* const buffer, const 
     (void)buffer;
     (void)buffer_size;
     if (bytes_read != nullptr && mapped_guest_range(bytes_read, 4, true)) {
-        *bytes_read = 0;
+        static_cast<void>(write_guest_value(bytes_read, std::uint32_t{0}));
     }
     if (total_bytes_avail != nullptr && mapped_guest_range(total_bytes_avail, 4, true)) {
-        *total_bytes_avail = 0;
+        static_cast<void>(write_guest_value(total_bytes_avail, std::uint32_t{0}));
     }
     if (bytes_left_this_message != nullptr && mapped_guest_range(bytes_left_this_message, 4, true)) {
-        *bytes_left_this_message = 0;
+        static_cast<void>(write_guest_value(bytes_left_this_message, std::uint32_t{0}));
     }
     set_last_error(abi::kErrorSuccess);
     return 1;
@@ -341,7 +380,7 @@ TL_MSABI int tl_ReadConsoleA(void* const console_input, void* const buffer,
     (void)number_of_chars_to_read;
     (void)input_control;
     if (number_of_chars_read != nullptr && mapped_guest_range(number_of_chars_read, sizeof(std::uint32_t), true)) {
-        *number_of_chars_read = 0;
+        static_cast<void>(write_guest_value(number_of_chars_read, std::uint32_t{0}));
     }
     set_last_error(abi::kErrorSuccess);
     return 1;
@@ -388,10 +427,12 @@ TL_MSABI int tl_CreatePipe(void** const read_pipe, void** const write_pipe, void
     (void)pipe_attr;
     (void)size;
     if (read_pipe != nullptr && mapped_guest_range(read_pipe, sizeof(void*), true)) {
-        *read_pipe = reinterpret_cast<void*>(0x50524541ULL); // 'PREA'
+        void* const token = reinterpret_cast<void*>(0x50524541ULL); // 'PREA'
+        static_cast<void>(write_guest_value(read_pipe, token));
     }
     if (write_pipe != nullptr && mapped_guest_range(write_pipe, sizeof(void*), true)) {
-        *write_pipe = reinterpret_cast<void*>(0x50575249ULL); // 'PWRI'
+        void* const token = reinterpret_cast<void*>(0x50575249ULL); // 'PWRI'
+        static_cast<void>(write_guest_value(write_pipe, token));
     }
     set_last_error(abi::kErrorSuccess);
     return 1;
@@ -400,10 +441,14 @@ TL_MSABI int tl_CreatePipe(void** const read_pipe, void** const write_pipe, void
 TL_MSABI int tl_GetCommState(void* const file, void* const dcb) noexcept {
     (void)file;
     if (dcb != nullptr && mapped_guest_range(dcb, 28, true)) {
-        std::memset(dcb, 0, 28);
-        *reinterpret_cast<std::uint32_t*>(dcb) = 28; // DCBlength
-        *reinterpret_cast<std::uint32_t*>(static_cast<char*>(dcb) + 4) = 9600; // BaudRate
-        *reinterpret_cast<std::uint8_t*>(static_cast<char*>(dcb) + 18) = 8; // ByteSize
+        std::array<std::byte, 28> values{};
+        const std::uint32_t length = 28;
+        const std::uint32_t baud_rate = 9600;
+        const std::uint8_t byte_size = 8;
+        std::memcpy(values.data(), &length, sizeof(length)); // DCBlength
+        std::memcpy(values.data() + 4, &baud_rate, sizeof(baud_rate)); // BaudRate
+        values[18] = static_cast<std::byte>(byte_size); // ByteSize
+        static_cast<void>(runtime::write_guest_memory(dcb, values.data(), values.size()));
     }
     set_last_error(abi::kErrorSuccess);
     return 1;
@@ -414,7 +459,7 @@ TL_MSABI int tl_GetOverlappedResult(void* const file, void* const overlapped, st
     (void)overlapped;
     (void)wait;
     if (bytes_transferred != nullptr && mapped_guest_range(bytes_transferred, sizeof(std::uint32_t), true)) {
-        *bytes_transferred = 0;
+        static_cast<void>(write_guest_value(bytes_transferred, std::uint32_t{0}));
     }
     set_last_error(abi::kErrorSuccess);
     return 1;
@@ -459,7 +504,10 @@ TL_MSABI int tl_GetConsoleMode(const void* handle, std::uint32_t* mode) noexcept
         set_last_error(abi::kErrorInvalidHandle);
         return 0;
     }
-    *mode = 0x3U;
+    if (!write_guest_value(mode, 0x3U)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
     set_last_error(abi::kErrorSuccess);
     return 1;
 }

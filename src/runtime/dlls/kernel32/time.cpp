@@ -2,7 +2,7 @@
 #include "kernel32_file_internal.hpp"
 #include "tradutorlinux/util/unicode.hpp"
 
-#include <cstring>
+#include <array>
 
 namespace tradutorlinux {
 
@@ -33,13 +33,14 @@ TL_MSABI void tl_GetSystemTimeAsFileTime(void* file_time) noexcept {
         set_last_error(abi::kErrorInvalidParameter);
         return;
     }
-    auto* ft = static_cast<std::uint64_t*>(file_time);
     using namespace std::chrono;
     const auto now = system_clock::now().time_since_epoch();
     const auto since_epoch = duration_cast<nanoseconds>(now).count();
     const std::uint64_t ticks_100ns = static_cast<std::uint64_t>(since_epoch) / 100;
     const std::uint64_t epoch_diff = 116444736000000000ULL;
-    *ft = ticks_100ns + epoch_diff;
+    if (!write_guest_value(file_time, ticks_100ns + epoch_diff)) {
+        set_last_error(abi::kErrorInvalidParameter);
+    }
 }
 
 TL_MSABI int tl_QueryPerformanceCounter(std::int64_t* performance_count) noexcept {
@@ -53,7 +54,10 @@ TL_MSABI int tl_QueryPerformanceCounter(std::int64_t* performance_count) noexcep
     }
     const std::int64_t ticks = static_cast<std::int64_t>(ts.tv_sec) * 10000000LL +
                                static_cast<std::int64_t>(ts.tv_nsec) / 100LL;
-    *performance_count = ticks;
+    if (!write_guest_value(performance_count, ticks)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
     set_last_error(abi::kErrorSuccess);
     return 1;
 }
@@ -63,7 +67,10 @@ TL_MSABI int tl_QueryPerformanceFrequency(std::int64_t* frequency) noexcept {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
-    *frequency = 10000000LL;  // 10 MHz
+    if (!write_guest_value(frequency, std::int64_t{10000000LL})) {  // 10 MHz
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
     set_last_error(abi::kErrorSuccess);
     return 1;
 }
@@ -76,15 +83,19 @@ TL_MSABI void tl_GetSystemTime(void* system_time) noexcept {
     std::time_t t = std::time(nullptr);
     std::tm tm_utc{};
     gmtime_r(&t, &tm_utc);
-    auto* st = static_cast<abi::GuestSystemTime*>(system_time);
-    st->year = static_cast<std::uint16_t>(tm_utc.tm_year + 1900);
-    st->month = static_cast<std::uint16_t>(tm_utc.tm_mon + 1);
-    st->day_of_week = static_cast<std::uint16_t>(tm_utc.tm_wday);
-    st->day = static_cast<std::uint16_t>(tm_utc.tm_mday);
-    st->hour = static_cast<std::uint16_t>(tm_utc.tm_hour);
-    st->minute = static_cast<std::uint16_t>(tm_utc.tm_min);
-    st->second = static_cast<std::uint16_t>(tm_utc.tm_sec);
-    st->milliseconds = 0;
+    abi::GuestSystemTime st{};
+    st.year = static_cast<std::uint16_t>(tm_utc.tm_year + 1900);
+    st.month = static_cast<std::uint16_t>(tm_utc.tm_mon + 1);
+    st.day_of_week = static_cast<std::uint16_t>(tm_utc.tm_wday);
+    st.day = static_cast<std::uint16_t>(tm_utc.tm_mday);
+    st.hour = static_cast<std::uint16_t>(tm_utc.tm_hour);
+    st.minute = static_cast<std::uint16_t>(tm_utc.tm_min);
+    st.second = static_cast<std::uint16_t>(tm_utc.tm_sec);
+    st.milliseconds = 0;
+    if (!write_guest_value(system_time, st)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return;
+    }
     set_last_error(abi::kErrorSuccess);
 }
 
@@ -96,15 +107,19 @@ TL_MSABI void tl_GetLocalTime(void* system_time) noexcept {
     std::time_t t = std::time(nullptr);
     std::tm tm_loc{};
     localtime_r(&t, &tm_loc);
-    auto* st = static_cast<abi::GuestSystemTime*>(system_time);
-    st->year = static_cast<std::uint16_t>(tm_loc.tm_year + 1900);
-    st->month = static_cast<std::uint16_t>(tm_loc.tm_mon + 1);
-    st->day_of_week = static_cast<std::uint16_t>(tm_loc.tm_wday);
-    st->day = static_cast<std::uint16_t>(tm_loc.tm_mday);
-    st->hour = static_cast<std::uint16_t>(tm_loc.tm_hour);
-    st->minute = static_cast<std::uint16_t>(tm_loc.tm_min);
-    st->second = static_cast<std::uint16_t>(tm_loc.tm_sec);
-    st->milliseconds = 0;
+    abi::GuestSystemTime st{};
+    st.year = static_cast<std::uint16_t>(tm_loc.tm_year + 1900);
+    st.month = static_cast<std::uint16_t>(tm_loc.tm_mon + 1);
+    st.day_of_week = static_cast<std::uint16_t>(tm_loc.tm_wday);
+    st.day = static_cast<std::uint16_t>(tm_loc.tm_mday);
+    st.hour = static_cast<std::uint16_t>(tm_loc.tm_hour);
+    st.minute = static_cast<std::uint16_t>(tm_loc.tm_min);
+    st.second = static_cast<std::uint16_t>(tm_loc.tm_sec);
+    st.milliseconds = 0;
+    if (!write_guest_value(system_time, st)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return;
+    }
     set_last_error(abi::kErrorSuccess);
 }
 
@@ -115,19 +130,27 @@ TL_MSABI int tl_FileTimeToSystemTime(const void* file_time, void* system_time) n
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
-    const auto* ft = static_cast<const GuestFileTime*>(file_time);
-    const std::time_t t = filetime_to_unix_time(*ft);
+    GuestFileTime ft{};
+    if (!read_guest_value(file_time, ft)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    const std::time_t t = filetime_to_unix_time(ft);
     std::tm tm_utc{};
     gmtime_r(&t, &tm_utc);
-    auto* st = static_cast<abi::GuestSystemTime*>(system_time);
-    st->year = static_cast<std::uint16_t>(tm_utc.tm_year + 1900);
-    st->month = static_cast<std::uint16_t>(tm_utc.tm_mon + 1);
-    st->day_of_week = static_cast<std::uint16_t>(tm_utc.tm_wday);
-    st->day = static_cast<std::uint16_t>(tm_utc.tm_mday);
-    st->hour = static_cast<std::uint16_t>(tm_utc.tm_hour);
-    st->minute = static_cast<std::uint16_t>(tm_utc.tm_min);
-    st->second = static_cast<std::uint16_t>(tm_utc.tm_sec);
-    st->milliseconds = 0;
+    abi::GuestSystemTime st{};
+    st.year = static_cast<std::uint16_t>(tm_utc.tm_year + 1900);
+    st.month = static_cast<std::uint16_t>(tm_utc.tm_mon + 1);
+    st.day_of_week = static_cast<std::uint16_t>(tm_utc.tm_wday);
+    st.day = static_cast<std::uint16_t>(tm_utc.tm_mday);
+    st.hour = static_cast<std::uint16_t>(tm_utc.tm_hour);
+    st.minute = static_cast<std::uint16_t>(tm_utc.tm_min);
+    st.second = static_cast<std::uint16_t>(tm_utc.tm_sec);
+    st.milliseconds = 0;
+    if (!write_guest_value(system_time, st)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
     set_last_error(abi::kErrorSuccess);
     return 1;
 }
@@ -139,17 +162,25 @@ TL_MSABI int tl_SystemTimeToFileTime(const void* system_time, void* file_time) n
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
-    const auto* st = static_cast<const abi::GuestSystemTime*>(system_time);
+    abi::GuestSystemTime st{};
+    if (!read_guest_value(system_time, st)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
     std::tm tm_utc{};
-    tm_utc.tm_year = st->year - 1900;
-    tm_utc.tm_mon = st->month - 1;
-    tm_utc.tm_mday = st->day;
-    tm_utc.tm_hour = st->hour;
-    tm_utc.tm_min = st->minute;
-    tm_utc.tm_sec = st->second;
+    tm_utc.tm_year = st.year - 1900;
+    tm_utc.tm_mon = st.month - 1;
+    tm_utc.tm_mday = st.day;
+    tm_utc.tm_hour = st.hour;
+    tm_utc.tm_min = st.minute;
+    tm_utc.tm_sec = st.second;
     const std::time_t t = timegm(&tm_utc);
-    auto* ft = static_cast<GuestFileTime*>(file_time);
-    filetime_from_unix(t, *ft);
+    GuestFileTime ft{};
+    filetime_from_unix(t, ft);
+    if (!write_guest_value(file_time, ft)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
     set_last_error(abi::kErrorSuccess);
     return 1;
 }
@@ -159,11 +190,14 @@ TL_MSABI std::uint32_t tl_GetTimeZoneInformation(void* const tz_info) noexcept {
         set_last_error(abi::kErrorInvalidParameter);
         return 0xFFFFFFFFU;
     }
-    auto* const tzi = static_cast<GuestTimeZoneInformation*>(tz_info);
-    *tzi = GuestTimeZoneInformation{};
-    tzi->bias = 0;
+    GuestTimeZoneInformation tzi{};
+    tzi.bias = 0;
     const std::u16string std_name = util::utf8_to_wide("UTC");
-    std::copy(std_name.begin(), std_name.end(), tzi->standard_name);
+    std::copy(std_name.begin(), std_name.end(), tzi.standard_name);
+    if (!write_guest_value(tz_info, tzi)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0xFFFFFFFFU;
+    }
     set_last_error(abi::kErrorSuccess);
     return 1;
 }
@@ -175,7 +209,11 @@ TL_MSABI int tl_FileTimeToLocalFileTime(const void* const file_time, void* const
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
-    *static_cast<std::uint64_t*>(local_file_time) = *static_cast<const std::uint64_t*>(file_time);
+    std::uint64_t value = 0;
+    if (!read_guest_value(file_time, value) || !write_guest_value(local_file_time, value)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
     set_last_error(abi::kErrorSuccess);
     return 1;
 }
@@ -202,7 +240,11 @@ TL_MSABI int tl_SystemTimeToTzSpecificLocalTime(const void* const tz_info,
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
-    std::memcpy(local_time, universal_time, 16);
+    std::array<std::byte, 16> value{};
+    if (!read_guest_value(universal_time, value) || !write_guest_value(local_time, value)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
     set_last_error(abi::kErrorSuccess);
     return 1;
 }
@@ -218,8 +260,11 @@ TL_MSABI int tl_FileTimeToDosDateTime(const void* const file_time, std::uint16_t
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
-    *fat_date = 0x5821; // 2024-01-01
-    *fat_time = 0x0000; // 00:00:00
+    if (!write_guest_value(fat_date, std::uint16_t{0x5821}) ||
+        !write_guest_value(fat_time, std::uint16_t{0x0000})) { // 2024-01-01, 00:00:00
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
     set_last_error(abi::kErrorSuccess);
     return 1;
 }
@@ -261,8 +306,12 @@ TL_MSABI int tl_DosDateTimeToFileTime(const std::uint16_t fat_date, const std::u
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
-    auto* const out = static_cast<GuestFileTime*>(file_time);
-    filetime_from_unix(seconds, *out);
+    GuestFileTime out{};
+    filetime_from_unix(seconds, out);
+    if (!write_guest_value(file_time, out)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
     set_last_error(abi::kErrorSuccess);
     return 1;
 }
@@ -273,8 +322,9 @@ TL_MSABI std::int32_t tl_CompareFileTime(const void* const file_time1, const voi
     }
     std::uint64_t t1 = 0;
     std::uint64_t t2 = 0;
-    std::memcpy(&t1, file_time1, sizeof(t1));
-    std::memcpy(&t2, file_time2, sizeof(t2));
+    if (!read_guest_value(file_time1, t1) || !read_guest_value(file_time2, t2)) {
+        return 0;
+    }
     if (t1 < t2) return -1;
     if (t1 > t2) return 1;
     return 0;
@@ -291,7 +341,11 @@ TL_MSABI int tl_TzSpecificLocalTimeToSystemTime(const void* const tz_info, const
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
-    std::memcpy(universal_time, local_time, 16);
+    std::array<std::byte, 16> value{};
+    if (!read_guest_value(local_time, value) || !write_guest_value(universal_time, value)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
     set_last_error(abi::kErrorSuccess);
     return 1;
 }
@@ -299,7 +353,11 @@ TL_MSABI int tl_TzSpecificLocalTimeToSystemTime(const void* const tz_info, const
 TL_MSABI int tl_LocalFileTimeToFileTime(const void* const local_file_time, void* const file_time) noexcept {
     if (local_file_time != nullptr && file_time != nullptr &&
         mapped_guest_range(local_file_time, 8, false) && mapped_guest_range(file_time, 8, true)) {
-        *reinterpret_cast<std::uint64_t*>(file_time) = *reinterpret_cast<const std::uint64_t*>(local_file_time);
+        std::uint64_t value = 0;
+        if (!read_guest_value(local_file_time, value) || !write_guest_value(file_time, value)) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
+        }
         set_last_error(abi::kErrorSuccess);
         return 1;
     }

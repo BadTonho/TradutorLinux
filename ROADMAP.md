@@ -180,6 +180,10 @@ memória, arquivos, metadados, GUI, MPR, WININET e stubs auxiliares passaram; a 
 rotas legadas em módulos como locale, segurança, GDI, sincronização e APIs de
 rede, portanto a aceitação final permanece aberta.
 
+O lote seguinte migrou também estruturas e buffers de console/tempo, com os
+testes de `Win32ConsoleTest`, `Win32ProcessConsoleTest`, `Win32TimeTest` e
+`Win32WideTest` passando.
+
 ## Fora desta rodada
 
 Não entram neste roadmap, por enquanto:
