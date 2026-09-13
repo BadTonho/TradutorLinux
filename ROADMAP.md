@@ -10,6 +10,23 @@ O escopo abaixo contém somente pendências que permaneceram após a triagem de
 2026-09-12. Não são itens de compatibilidade já concluídos nem autorização
 para ampliar famílias de DLL sem alvo, contrato e regressão.
 
+## Auditoria das pendências — 2026-09-12
+
+- **R1 é um defeito confirmado:** `MPR.dll` retorna sucesso para operações não
+  realizadas e `WNetOpenEnumW` publica um handle literal que não pertence ao
+  runtime. A cobertura atual reproduz esse comportamento em vez de protegê-lo.
+- **R4 é um defeito de classificação confirmado:** `ExportSupport::Full` é o
+  padrão e os exports MPR aparecem como `full` no relatório por omissão. A
+  parte sobre `direct_export` é somente uma auditoria de regressão: endereços
+  zero já terminam como `NotImpl` no resolvedor.
+- **R2 não é um defeito de produção reproduzido:** o caminho de falha de
+  `ARCH_SET_GS` já existe e limpa o estado; falta uma injeção determinística
+  para comprovar esse caminho.
+- **R3 é uma limitação arquitetural real, mas ainda sem reproducer:** a
+  validação por `/proc/self/maps` não é atômica com o acesso posterior. A
+  etapa deve fechar essa lacuna sem alegar uma falha observada que ainda não
+  foi reproduzida.
+
 ## Regras de execução
 
 Cada etapa deve produzir:
@@ -52,11 +69,37 @@ se fosse um handle válido.
 nenhum handle inventado atravessa a ABI; os testes cobrem entradas válidas,
 inválidas e a limitação publicada; a matriz registra o resultado observado.
 
-### R2 — Fechar a falha controlada de inicialização de thread (E7)
+### R4 — Tornar explícita a classificação de exports
 
-**Problema:** a criação de thread já valida o endereço inicial e trata a falha
-de configuração do TEB, mas ainda não existe uma fixture capaz de provocar uma
-falha real de arch_prctl de modo determinístico.
+**Problema confirmado:** `ExportSupport::Full` ainda é o valor padrão de
+estruturas de registro. A omissão já faz os exports MPR parecerem completos no
+`--report`, embora a implementação atual seja um stub com falso sucesso.
+
+**Tarefas:**
+
+- [ ] levantar registros que dependem do valor padrão e separar os casos
+  intencionais dos acidentais, começando por MPR;
+- [ ] exigir classificação explícita para novos exports e migrar registros
+  existentes sem alterar a ABI dos módulos já publicados;
+- [ ] auditar aliases e `direct_export` somente para preservar a distinção
+  entre export de DLL convidada, stub, forwarder e endereço vazio; não mudar a
+  classificação de um export PE convidado sem um caso de regressão;
+- [ ] adicionar teste de registro e diagnóstico que detecte classificação
+  ausente ou incompatível com o contrato;
+- [ ] atualizar a documentação da API e a matriz quando uma classificação
+  mudar.
+
+**Aceitação:** cada exportação nova tem classificação, comportamento testado
+e limitação publicada; nenhum export MPR não implementado aparece como
+`Full`; endereço zero não é resolvido como função; nenhuma alteração de
+classificação é feita apenas por nome de símbolo ou resolução de import.
+
+### R2 — Adicionar regressão determinística para falha de inicialização de thread (E7)
+
+**Lacuna de evidência:** a criação de thread já valida o endereço inicial,
+trata falhas de alocação e possui um caminho de falha para a configuração de
+`ARCH_SET_GS`, mas ainda não existe uma fixture capaz de provocar essa falha de
+modo determinístico.
 
 **Tarefas:**
 
@@ -69,14 +112,16 @@ falha real de arch_prctl de modo determinístico.
 - [ ] atualizar a documentação de ABI e concorrência.
 
 **Aceitação:** a falha injetada produz resultado reproduzível, não deixa estado
-parcial observável e não permite execução convidada após arch_prctl falhar.
-O caminho normal de CreateThread permanece protegido pelos testes existentes.
+parcial observável e não permite execução convidada após `ARCH_SET_GS` falhar.
+O caminho normal de `CreateThread` permanece protegido pelos testes
+existentes, sem transformar uma lacuna de teste em alegação de incompatibilidade.
 
 ### R3 — Delimitar acesso seguro à memória convidada (E11)
 
-**Problema:** a validação por /proc/self/maps é uma fotografia. Entre a
-validação e o acesso, o mapeamento pode mudar; isso deixa uma janela TOCTOU em
-rotinas que leem ou escrevem memória do convidado.
+**Risco arquitetural:** a validação por `/proc/self/maps` é uma fotografia.
+Entre a validação e o acesso, o mapeamento pode mudar; isso deixa uma janela
+TOCTOU em rotinas que leem ou escrevem memória do convidado. Ainda não há um
+reproducer determinístico desse cenário no runtime atual.
 
 **Tarefas:**
 
@@ -91,31 +136,9 @@ rotinas que leem ou escrevem memória do convidado.
   e docs/compatibilidade-runtime.md.
 
 **Aceitação:** nenhum caminho documentado depende apenas de uma fotografia de
-/proc/self/maps sem declarar a limitação; acessos inválidos falham de forma
-controlada; os testes não permitem corrupção do host nem falso sucesso.
-
-### R4 — Tornar explícita a classificação de exports
-
-**Problema:** ExportSupport::Full ainda é o valor padrão de estruturas de
-registro. Uma nova exportação pode parecer completa por omissão, mesmo sem
-contrato funcional e regressão.
-
-**Tarefas:**
-
-- [ ] levantar registros que dependem do valor padrão e separar os casos
-  intencionais dos acidentais;
-- [ ] exigir classificação explícita para novas exportações sem alterar a ABI
-  dos módulos já publicados;
-- [ ] auditar aliases e direct_export para que não promovam stub ou retorno
-  vazio a Full;
-- [ ] adicionar teste de registro e diagnóstico que detecte classificação
-  ausente ou incompatível com o contrato;
-- [ ] atualizar a documentação da API e a matriz quando uma classificação
-  mudar.
-
-**Aceitação:** cada exportação nova tem classificação, comportamento testado e
-limitação publicada; nenhuma alteração de classificação é feita apenas por
-nome de símbolo ou por resolução de import.
+`/proc/self/maps` sem declarar a limitação; acessos inválidos falham de forma
+controlada no processo convidado, sem corrupção do host nem falso sucesso; os
+testes cobrem páginas desmontadas, permissões, overflow e buffers parciais.
 
 ## Fora desta rodada
 
