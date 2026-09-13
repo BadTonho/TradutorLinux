@@ -288,6 +288,21 @@ TEST(Win32ConsoleTest, SetConsoleModeRejectsUnknownHandle) {
     EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidHandle);
 }
 
+TEST(Win32ConsoleTest, ProtectedConsoleOutputsRejectUnmappedPointers) {
+    auto* const invalid = reinterpret_cast<void*>(static_cast<std::uintptr_t>(0x1000U));
+
+    EXPECT_EQ(tl_GetConsoleScreenBufferInfo(nullptr, invalid), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+
+    EXPECT_EQ(tl_PeekNamedPipe(nullptr, nullptr, 0, static_cast<std::uint32_t*>(invalid),
+                               static_cast<std::uint32_t*>(invalid),
+                               static_cast<std::uint32_t*>(invalid)), 1);
+    EXPECT_EQ(tl_ReadConsoleA(nullptr, nullptr, 0, static_cast<std::uint32_t*>(invalid), nullptr), 1);
+    EXPECT_EQ(tl_CreatePipe(static_cast<void**>(invalid), static_cast<void**>(invalid), nullptr, 0), 1);
+    EXPECT_EQ(tl_GetCommState(nullptr, invalid), 1);
+    EXPECT_EQ(tl_GetOverlappedResult(nullptr, nullptr, static_cast<std::uint32_t*>(invalid), 0), 1);
+}
+
 TEST(Win32ConsoleTest, IsDBCSLeadByteExAlwaysReturnsFalse) {
     EXPECT_EQ(tl_IsDBCSLeadByteEx(abi::kCp1252, 0x81), 0);
     EXPECT_EQ(tl_GetLastError(), abi::kErrorSuccess);

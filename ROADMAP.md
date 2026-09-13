@@ -396,6 +396,13 @@ criar conexões ou handles; buffers usados apenas para validar operações
 rejeitadas permanecem sem alteração, e a regressão cobre os dois ponteiros de
 saída inacessíveis.
 
+O lote de console migrou as saídas escalares e estruturas de
+`Read/WriteConsole`, `PeekNamedPipe`, `CreatePipe`, `GetCommState`,
+`GetOverlappedResult` e `GetConsoleScreenBufferInfo` para cópias protegidas.
+As validações de buffers que precedem I/O potencialmente bloqueante continuam
+explícitas; a regressão cobre saídas inacessíveis sem alterar os retornos
+limitados dessas APIs.
+
 ## Fora desta rodada
 
 Não entram neste roadmap, por enquanto:

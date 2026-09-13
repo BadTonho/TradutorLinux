@@ -156,7 +156,9 @@ slots por thread e limpam o estado no encerramento.
 `AttachConsole`, `FreeConsole`, `GetFileType`, `GetConsoleOutputCP`,
 `SetConsoleOutputCP` e `GetLastError/SetLastError` formam o contrato de console
 e erros. A saída do convidado permanece em `stdout`; trace e diagnóstico ficam
-em `stderr`.
+em `stderr`. As saídas escalares e estruturas de console são publicadas por
+cópias protegidas; as rotas de leitura/escrita ainda validam seus buffers antes
+de acessar os descritores do processo.
 
 `MultiByteToWideChar`, `WideCharToMultiByte`, `GetACP`, `GetOEMCP`, `GetCPInfo`,
 `IsDBCSLeadByte`, `IsDBCSLeadByteEx`, `AreFileApisANSI`, `CompareStringA/W`,

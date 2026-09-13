@@ -80,8 +80,7 @@ TL_MSABI int tl_ReadConsoleW(const void* const console_input, std::uint16_t* con
                              const std::uint32_t chars_to_read,
                              std::uint32_t* const chars_read,
                              const void* const input_control) noexcept {
-    if (chars_read == nullptr ||
-        !mapped_guest_range(chars_read, sizeof(*chars_read), true)) {
+    if (chars_read == nullptr) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
@@ -139,8 +138,7 @@ TL_MSABI int tl_WriteConsoleW(const void* const console_output,
                               const std::uint32_t chars_to_write,
                               std::uint32_t* const chars_written,
                               const void* const reserved) noexcept {
-    if (chars_written == nullptr ||
-        !mapped_guest_range(chars_written, sizeof(*chars_written), true)) {
+    if (chars_written == nullptr) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
@@ -233,7 +231,7 @@ TL_MSABI int tl_SetConsoleOutputCP(const std::uint32_t) noexcept {
 
 TL_MSABI int tl_GetConsoleScreenBufferInfo(const void* console_handle, void* buffer_info) noexcept {
     (void)console_handle;
-    if (buffer_info == nullptr || !mapped_guest_range(buffer_info, sizeof(abi::GuestConsoleScreenBufferInfo), true)) {
+    if (buffer_info == nullptr) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
@@ -358,13 +356,13 @@ TL_MSABI int tl_PeekNamedPipe(void* const named_pipe, void* const buffer, const 
     (void)named_pipe;
     (void)buffer;
     (void)buffer_size;
-    if (bytes_read != nullptr && mapped_guest_range(bytes_read, 4, true)) {
+    if (bytes_read != nullptr) {
         static_cast<void>(write_guest_value(bytes_read, std::uint32_t{0}));
     }
-    if (total_bytes_avail != nullptr && mapped_guest_range(total_bytes_avail, 4, true)) {
+    if (total_bytes_avail != nullptr) {
         static_cast<void>(write_guest_value(total_bytes_avail, std::uint32_t{0}));
     }
-    if (bytes_left_this_message != nullptr && mapped_guest_range(bytes_left_this_message, 4, true)) {
+    if (bytes_left_this_message != nullptr) {
         static_cast<void>(write_guest_value(bytes_left_this_message, std::uint32_t{0}));
     }
     set_last_error(abi::kErrorSuccess);
@@ -379,7 +377,7 @@ TL_MSABI int tl_ReadConsoleA(void* const console_input, void* const buffer,
     (void)buffer;
     (void)number_of_chars_to_read;
     (void)input_control;
-    if (number_of_chars_read != nullptr && mapped_guest_range(number_of_chars_read, sizeof(std::uint32_t), true)) {
+    if (number_of_chars_read != nullptr) {
         static_cast<void>(write_guest_value(number_of_chars_read, std::uint32_t{0}));
     }
     set_last_error(abi::kErrorSuccess);
@@ -426,11 +424,11 @@ TL_MSABI void* tl_CreateNamedPipeA(const char* const name, const std::uint32_t o
 TL_MSABI int tl_CreatePipe(void** const read_pipe, void** const write_pipe, void* const pipe_attr, const std::uint32_t size) noexcept {
     (void)pipe_attr;
     (void)size;
-    if (read_pipe != nullptr && mapped_guest_range(read_pipe, sizeof(void*), true)) {
+    if (read_pipe != nullptr) {
         void* const token = reinterpret_cast<void*>(0x50524541ULL); // 'PREA'
         static_cast<void>(write_guest_value(read_pipe, token));
     }
-    if (write_pipe != nullptr && mapped_guest_range(write_pipe, sizeof(void*), true)) {
+    if (write_pipe != nullptr) {
         void* const token = reinterpret_cast<void*>(0x50575249ULL); // 'PWRI'
         static_cast<void>(write_guest_value(write_pipe, token));
     }
@@ -440,7 +438,7 @@ TL_MSABI int tl_CreatePipe(void** const read_pipe, void** const write_pipe, void
 
 TL_MSABI int tl_GetCommState(void* const file, void* const dcb) noexcept {
     (void)file;
-    if (dcb != nullptr && mapped_guest_range(dcb, 28, true)) {
+    if (dcb != nullptr) {
         std::array<std::byte, 28> values{};
         const std::uint32_t length = 28;
         const std::uint32_t baud_rate = 9600;
@@ -458,7 +456,7 @@ TL_MSABI int tl_GetOverlappedResult(void* const file, void* const overlapped, st
     (void)file;
     (void)overlapped;
     (void)wait;
-    if (bytes_transferred != nullptr && mapped_guest_range(bytes_transferred, sizeof(std::uint32_t), true)) {
+    if (bytes_transferred != nullptr) {
         static_cast<void>(write_guest_value(bytes_transferred, std::uint32_t{0}));
     }
     set_last_error(abi::kErrorSuccess);
