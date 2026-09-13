@@ -713,6 +713,7 @@ processo filho; cada thread convidada recebe seu próprio TEB/GS, stack e
 | `KERNEL32.dll` | `SetDllDirectoryW` | Suportado | Define diretório adicional de busca de DLLs no runtime |
 | `KERNEL32.dll` | `VirtualQueryEx` | Suportado | Consulta mapeamento do processo via `tl_VirtualQuery` |
 | `KERNEL32.dll` | `GetTimeZoneInformation` | Suportado | Retorna fuso horário padrão UTC / `TIME_ZONE_ID_STANDARD` |
+| `KERNEL32.dll` | `QueryPerformanceCounter` / `QueryPerformanceFrequency` / `GetSystemTime` / `GetLocalTime` / conversões FILETIME/SYSTEMTIME/DOS | Suportado no subconjunto | Relógios e fusos determinísticos ou derivados do host; todas as entradas e saídas passam por cópias protegidas, e conversões sem representação de fuso usam transferência explícita dos campos |
 | `KERNEL32.dll` | `GetProcessId` | Suportado | Retorna PID do processo convidado ou handle associado |
 | `KERNEL32.dll` | `QueryFullProcessImageNameW` | Suportado | Preenche nome e caminho da imagem do processo convidado |
 | `KERNEL32.dll` | `FileTimeToLocalFileTime` | Suportado | Converte estrutura de tempo de arquivo |

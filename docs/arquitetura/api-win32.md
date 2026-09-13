@@ -172,6 +172,9 @@ determinísticas para as páginas de código e locales cobertas pelos testes.
 `FileTimeToLocalFileTime`, `SystemTimeToTzSpecificLocalTime`,
 `TzSpecificLocalTimeToSystemTime` e `CompareFileTime` usam relógios e fusos do
 host com conversão explícita para FILETIME.
+`QueryPerformanceCounter`, `QueryPerformanceFrequency` e as conversões DOS
+também publicam resultados por cópias protegidas e rejeitam entradas inválidas
+sem depender de snapshot de `/proc/self/maps`.
 
 ## USER32 e GDI32
 

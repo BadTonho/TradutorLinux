@@ -354,6 +354,11 @@ as coberturas de I/O, duplicação de handles e memória passaram, e
 `CloseHandle` foi corrigido para respeitar `ref_count` e fechar o descritor
 somente no último handle.
 
+O lote de tempo removeu as pré-validações por snapshot de contadores, relógios,
+fusos e conversões FILETIME/SYSTEMTIME/DOS. Leituras e publicações agora usam
+cópias protegidas; `Win32TimeTest.ProtectedTimeBuffersRejectUnmappedPointers`
+passou junto das três regressões de memória.
+
 ## Fora desta rodada
 
 Não entram neste roadmap, por enquanto:

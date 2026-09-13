@@ -1107,6 +1107,58 @@ TEST(Win32TimeTest, GetSystemTimeAsFileTimeRejectsInvalidDestination) {
     EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
 }
 
+TEST(Win32TimeTest, ProtectedTimeBuffersRejectUnmappedPointers) {
+    auto* const invalid = reinterpret_cast<void*>(static_cast<std::uintptr_t>(0x1000U));
+    std::uint64_t file_time = 0;
+    abi::GuestSystemTime system_time{};
+    std::uint16_t fat_date = 0;
+    std::uint16_t fat_time = 0;
+
+    EXPECT_EQ(tl_QueryPerformanceCounter(static_cast<std::int64_t*>(invalid)), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_QueryPerformanceFrequency(static_cast<std::int64_t*>(invalid)), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    tl_GetSystemTime(invalid);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    tl_GetLocalTime(invalid);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_GetTimeZoneInformation(invalid), 0xFFFFFFFFU);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+
+    EXPECT_EQ(tl_FileTimeToSystemTime(invalid, &system_time), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_FileTimeToSystemTime(&file_time, invalid), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_SystemTimeToFileTime(invalid, &file_time), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_SystemTimeToFileTime(&system_time, invalid), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_FileTimeToLocalFileTime(invalid, &file_time), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_FileTimeToLocalFileTime(&file_time, invalid), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_SystemTimeToTzSpecificLocalTime(nullptr, invalid, &system_time), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_SystemTimeToTzSpecificLocalTime(nullptr, &system_time, invalid), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_TzSpecificLocalTimeToSystemTime(nullptr, invalid, &system_time), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_TzSpecificLocalTimeToSystemTime(nullptr, &system_time, invalid), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_FileTimeToDosDateTime(invalid, &fat_date, &fat_time), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_FileTimeToDosDateTime(&file_time, static_cast<std::uint16_t*>(invalid),
+                                       &fat_time), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_DosDateTimeToFileTime(0x5821U, 0, invalid), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_LocalFileTimeToFileTime(invalid, &file_time), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_LocalFileTimeToFileTime(&file_time, invalid), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_CompareFileTime(invalid, &file_time), 0);
+}
+
 TEST(Win32FileTest, GetFileSizeReturnsCorrectSize) {
     TempDirFixture ctx;
     const std::string fpath = ctx.path("size_test.bin");

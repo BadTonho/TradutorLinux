@@ -29,7 +29,7 @@ TL_MSABI std::uint64_t tl_GetTickCount64() noexcept {
 }
 
 TL_MSABI void tl_GetSystemTimeAsFileTime(void* file_time) noexcept {
-    if (file_time == nullptr || !mapped_guest_range(file_time, sizeof(std::uint64_t), true)) {
+    if (file_time == nullptr) {
         set_last_error(abi::kErrorInvalidParameter);
         return;
     }
@@ -44,7 +44,7 @@ TL_MSABI void tl_GetSystemTimeAsFileTime(void* file_time) noexcept {
 }
 
 TL_MSABI int tl_QueryPerformanceCounter(std::int64_t* performance_count) noexcept {
-    if (performance_count == nullptr || !mapped_guest_range(performance_count, sizeof(*performance_count), true)) {
+    if (performance_count == nullptr) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
@@ -63,7 +63,7 @@ TL_MSABI int tl_QueryPerformanceCounter(std::int64_t* performance_count) noexcep
 }
 
 TL_MSABI int tl_QueryPerformanceFrequency(std::int64_t* frequency) noexcept {
-    if (frequency == nullptr || !mapped_guest_range(frequency, sizeof(*frequency), true)) {
+    if (frequency == nullptr) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
@@ -76,7 +76,7 @@ TL_MSABI int tl_QueryPerformanceFrequency(std::int64_t* frequency) noexcept {
 }
 
 TL_MSABI void tl_GetSystemTime(void* system_time) noexcept {
-    if (system_time == nullptr || !mapped_guest_range(system_time, sizeof(abi::GuestSystemTime), true)) {
+    if (system_time == nullptr) {
         set_last_error(abi::kErrorInvalidParameter);
         return;
     }
@@ -100,7 +100,7 @@ TL_MSABI void tl_GetSystemTime(void* system_time) noexcept {
 }
 
 TL_MSABI void tl_GetLocalTime(void* system_time) noexcept {
-    if (system_time == nullptr || !mapped_guest_range(system_time, sizeof(abi::GuestSystemTime), true)) {
+    if (system_time == nullptr) {
         set_last_error(abi::kErrorInvalidParameter);
         return;
     }
@@ -124,9 +124,7 @@ TL_MSABI void tl_GetLocalTime(void* system_time) noexcept {
 }
 
 TL_MSABI int tl_FileTimeToSystemTime(const void* file_time, void* system_time) noexcept {
-    if (file_time == nullptr || system_time == nullptr ||
-        !mapped_guest_range(file_time, 8, false) ||
-        !mapped_guest_range(system_time, sizeof(abi::GuestSystemTime), true)) {
+    if (file_time == nullptr || system_time == nullptr) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
@@ -156,9 +154,7 @@ TL_MSABI int tl_FileTimeToSystemTime(const void* file_time, void* system_time) n
 }
 
 TL_MSABI int tl_SystemTimeToFileTime(const void* system_time, void* file_time) noexcept {
-    if (system_time == nullptr || file_time == nullptr ||
-        !mapped_guest_range(system_time, sizeof(abi::GuestSystemTime), false) ||
-        !mapped_guest_range(file_time, 8, true)) {
+    if (system_time == nullptr || file_time == nullptr) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
@@ -186,7 +182,7 @@ TL_MSABI int tl_SystemTimeToFileTime(const void* system_time, void* file_time) n
 }
 
 TL_MSABI std::uint32_t tl_GetTimeZoneInformation(void* const tz_info) noexcept {
-    if (tz_info == nullptr || !mapped_guest_range(tz_info, sizeof(GuestTimeZoneInformation), true)) {
+    if (tz_info == nullptr) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0xFFFFFFFFU;
     }
@@ -203,9 +199,7 @@ TL_MSABI std::uint32_t tl_GetTimeZoneInformation(void* const tz_info) noexcept {
 }
 
 TL_MSABI int tl_FileTimeToLocalFileTime(const void* const file_time, void* const local_file_time) noexcept {
-    if (file_time == nullptr || local_file_time == nullptr ||
-        !mapped_guest_range(file_time, sizeof(std::uint64_t), false) ||
-        !mapped_guest_range(local_file_time, sizeof(std::uint64_t), true)) {
+    if (file_time == nullptr || local_file_time == nullptr) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
@@ -236,10 +230,6 @@ TL_MSABI int tl_SystemTimeToTzSpecificLocalTime(const void* const tz_info,
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
-    if (!mapped_guest_range(universal_time, 16, false) || !mapped_guest_range(local_time, 16, true)) {
-        set_last_error(abi::kErrorInvalidParameter);
-        return 0;
-    }
     std::array<std::byte, 16> value{};
     if (!read_guest_value(universal_time, value) || !write_guest_value(local_time, value)) {
         set_last_error(abi::kErrorInvalidParameter);
@@ -255,8 +245,8 @@ TL_MSABI int tl_FileTimeToDosDateTime(const void* const file_time, std::uint16_t
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
-    if (!mapped_guest_range(file_time, 8, false) || !mapped_guest_range(fat_date, 2, true) ||
-        !mapped_guest_range(fat_time, 2, true)) {
+    std::uint64_t ignored_file_time = 0;
+    if (!read_guest_value(file_time, ignored_file_time)) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
@@ -271,7 +261,7 @@ TL_MSABI int tl_FileTimeToDosDateTime(const void* const file_time, std::uint16_t
 
 TL_MSABI int tl_DosDateTimeToFileTime(const std::uint16_t fat_date, const std::uint16_t fat_time,
                                        void* const file_time) noexcept {
-    if (file_time == nullptr || !mapped_guest_range(file_time, 8, true)) {
+    if (file_time == nullptr) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
@@ -337,10 +327,6 @@ TL_MSABI int tl_TzSpecificLocalTimeToSystemTime(const void* const tz_info, const
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
-    if (!mapped_guest_range(local_time, 16, false) || !mapped_guest_range(universal_time, 16, true)) {
-        set_last_error(abi::kErrorInvalidParameter);
-        return 0;
-    }
     std::array<std::byte, 16> value{};
     if (!read_guest_value(local_time, value) || !write_guest_value(universal_time, value)) {
         set_last_error(abi::kErrorInvalidParameter);
@@ -351,8 +337,7 @@ TL_MSABI int tl_TzSpecificLocalTimeToSystemTime(const void* const tz_info, const
 }
 
 TL_MSABI int tl_LocalFileTimeToFileTime(const void* const local_file_time, void* const file_time) noexcept {
-    if (local_file_time != nullptr && file_time != nullptr &&
-        mapped_guest_range(local_file_time, 8, false) && mapped_guest_range(file_time, 8, true)) {
+    if (local_file_time != nullptr && file_time != nullptr) {
         std::uint64_t value = 0;
         if (!read_guest_value(local_file_time, value) || !write_guest_value(file_time, value)) {
             set_last_error(abi::kErrorInvalidParameter);
