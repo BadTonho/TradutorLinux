@@ -756,8 +756,10 @@ processo filho; cada thread convidada recebe seu próprio TEB/GS, stack e
 | `SHELL32.dll` | `SHGetMalloc` | Suportado | Obtenção do alocador de memória padrão do Shell; ponteiro de saída por cópia protegida |
 | `SHELL32.dll` | `SHChangeNotify` | Suportado | Emissão e notificação de eventos do sistema de arquivos para o shell |
 | `ole32.dll` | `CLSIDFromString` | Suportado | Conversão de strings de GUID/CLSID para estrutura binária `GUID` |
-| `SHLWAPI.dll` | `SHAutoComplete` | Suportado | Retorna `S_OK` para autocompletar em caixas de texto |
-| `SHLWAPI.dll` | `PathIsRelativeA` / `PathIsRelativeW` | Suportado | Identifica se um caminho é relativo ou absoluto |
+| `SHLWAPI.dll` | `PathFileExistsA/W` / `PathIsDirectoryA/W` / `PathCombineA/W` / `PathFindFileNameA/W` / `PathFindExtensionA/W` / `PathRemoveFileSpecA/W` / `PathAddBackslashA/W` / `PathRemoveBackslashA/W` | Suportado no subconjunto | Normalização e consulta de caminhos com strings copiadas da memória convidada e saídas publicadas por cópia protegida |
+| `SHLWAPI.dll` | `PathIsRelativeA/W` / `PathIsUNCA/W` / `PathStripToRootW` / `PathStripPathA/W` / `PathAddExtensionW` / `PathRemoveExtensionA/W` / `PathAppendW` / `PathRenameExtensionA` | Suportado no subconjunto | Classificação e mutação de caminhos em buffers host; resultados retornam somente após `write_guest_memory` |
+| `SHLWAPI.dll` | `StrStrIA/W` / `StrCmpIA/W` / `PathCompactPathExW` / `PathGetDriveNumberW` / `PathMatchSpecA/W` | Suportado no subconjunto | Comparação e cópia limitada de strings ANSI/UTF-16 sem desreferência direta de ponteiros convidados |
+| `SHLWAPI.dll` | `SHAutoComplete` / `AssocQueryStringW` / `ColorRGBToHLS` / `ColorHLSToRGB` / `ColorAdjustLuma` | Suportado no subconjunto | Stubs determinísticos; saídas de associação e conversão HLS usam cópia protegida |
 
 ### Limitações conhecidas
 

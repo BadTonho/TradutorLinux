@@ -546,6 +546,17 @@ texto do list-view são publicadas somente por `write_guest_memory`. A regressã
 arrays, strings aninhadas e buffers de saída inacessíveis; os testes de modelo
 lógico de toolbar, árvore e controles continuam passando.
 
+O sublote `SHLWAPI` migrou as strings de caminho e comparação para snapshots
+host e as mutações de `PathCombine`, `PathRemoveFileSpec`, `PathAddBackslash`,
+`PathRemoveBackslash`, `PathStripPath`, `PathAddExtension`, `PathAppend`,
+`PathRemoveExtension` e `PathRenameExtension` para publicações protegidas.
+`AssocQueryStringW` e `ColorRGBToHLS` também não escrevem mais diretamente em
+saídas convidadas; as variantes wide com assinatura `wchar_t*` reinterpretam
+somente o endereço como UTF-16 convidado depois da cópia. A regressão
+`ShlwapiTest.ProtectedPathInputsAndOutputsRejectUnmappedPointers` passou junto
+com os testes de caminho e as integrações `tl_shell_path` no preset
+`validation-sanitize`.
+
 ## Fora desta rodada
 
 Não entram neste roadmap, por enquanto:

@@ -167,6 +167,18 @@ copiadas para objetos host; saídas de item e texto do list-view são publicadas
 por `write_guest_memory`, sem desreferenciar ponteiros convidados depois de
 uma validação por fotografia.
 
+O sublote `SHLWAPI` copia strings ANSI/UTF-16 de caminhos e comparações antes
+de normalizar, buscar ou comparar seus caracteres. As APIs mutáveis publicam
+os resultados de `PathCombine`, `PathRemoveFileSpec`, `PathAddBackslash`,
+`PathRemoveBackslash`, `PathStripPath`, `PathAddExtension`, `PathAppend`,
+`PathRemoveExtension` e `PathRenameExtension` com `write_guest_memory`.
+`AssocQueryStringW` e `ColorRGBToHLS` usam a mesma fronteira para suas saídas.
+Nas funções wide declaradas com `wchar_t*`, `wchar_t` não é interpretado como
+um elemento do buffer: o endereço é tratado como unidades UTF-16 convidadas
+somente após a cópia protegida. `ShlwapiTest.ProtectedPathInputsAndOutputsRejectUnmappedPointers`
+protege entradas e saídas inacessíveis, e `tl_shell_path` mantém a integração
+válida.
+
 ## Limites residuais
 
 `validate_mapped_range` permanece deliberadamente como predicado advisory:

@@ -612,6 +612,151 @@ TEST(ShellPathTest, ProtectedShellOutputsRejectUnmappedPointers) {
     std::filesystem::remove_all(root, error);
 }
 
+TEST(ShlwapiTest, ProtectedPathInputsAndOutputsRejectUnmappedPointers) {
+    auto* const invalid_bytes = reinterpret_cast<char*>(static_cast<std::uintptr_t>(0x1000U));
+    auto* const invalid_u16 = reinterpret_cast<std::uint16_t*>(static_cast<std::uintptr_t>(0x1000U));
+    auto* const invalid_wchar = reinterpret_cast<wchar_t*>(static_cast<std::uintptr_t>(0x1000U));
+    auto* const invalid_u32 = reinterpret_cast<std::uint32_t*>(static_cast<std::uintptr_t>(0x1000U));
+    constexpr std::uint16_t kPathW[] = {u'C', u':', u'\\', u'f', u'i', u'l', u'e', 0};
+
+    EXPECT_EQ(tl_PathFileExistsA(invalid_bytes), 0);
+    EXPECT_EQ(tl_PathFileExistsW(invalid_u16), 0);
+    EXPECT_EQ(tl_PathIsDirectoryA(invalid_bytes), 0);
+    EXPECT_EQ(tl_PathIsDirectoryW(invalid_u16), 0);
+    EXPECT_EQ(tl_PathCombineA(invalid_bytes, "C:\\", "file"), nullptr);
+    EXPECT_EQ(tl_PathCombineW(invalid_u16, kPathW, kPathW), nullptr);
+    EXPECT_EQ(tl_PathFindFileNameA(invalid_bytes), nullptr);
+    EXPECT_EQ(tl_PathFindFileNameW(invalid_u16), nullptr);
+    EXPECT_EQ(tl_PathFindExtensionA(invalid_bytes), nullptr);
+    EXPECT_EQ(tl_PathFindExtensionW(invalid_u16), nullptr);
+    EXPECT_EQ(tl_PathRemoveFileSpecA(invalid_bytes), 0);
+    EXPECT_EQ(tl_PathRemoveFileSpecW(invalid_u16), 0);
+    EXPECT_EQ(tl_PathAddBackslashA(invalid_bytes), nullptr);
+    EXPECT_EQ(tl_PathAddBackslashW(invalid_u16), nullptr);
+    EXPECT_EQ(tl_PathRemoveBackslashA(invalid_bytes), nullptr);
+    EXPECT_EQ(tl_PathRemoveBackslashW(invalid_u16), nullptr);
+    EXPECT_EQ(tl_StrStrIA(invalid_bytes, "file"), nullptr);
+    EXPECT_EQ(tl_StrStrIW(invalid_u16, kPathW), nullptr);
+    EXPECT_EQ(tl_StrCmpIA(invalid_bytes, "file"), 0);
+    EXPECT_EQ(tl_StrCmpIW(invalid_u16, kPathW), 0);
+
+    EXPECT_EQ(tl_PathIsRelativeA(invalid_bytes), 1);
+    EXPECT_EQ(tl_PathIsRelativeW(invalid_u16), 1);
+    EXPECT_EQ(tl_PathIsUNCA(invalid_bytes), 0);
+    EXPECT_EQ(tl_PathIsUNCW(invalid_u16), 0);
+    EXPECT_EQ(tl_PathStripToRootW(invalid_u16), 0);
+    EXPECT_EQ(tl_PathRemoveExtensionA(invalid_bytes), 0);
+    EXPECT_EQ(tl_PathRenameExtensionA(invalid_bytes, ".bak"), 0);
+    EXPECT_EQ(tl_PathStripPathA(invalid_bytes), nullptr);
+    EXPECT_EQ(tl_PathMatchSpecA(invalid_bytes, "*"), 0);
+    EXPECT_EQ(tl_PathAddExtensionW(invalid_wchar, nullptr), 0);
+    EXPECT_EQ(tl_PathAppendW(invalid_wchar, invalid_wchar), 0);
+    tl_PathRemoveExtensionW(invalid_wchar);
+    EXPECT_EQ(tl_PathCompactPathExW(invalid_wchar, invalid_wchar, 8, 0), 0);
+    EXPECT_EQ(tl_PathGetDriveNumberW(invalid_wchar), -1);
+    EXPECT_EQ(tl_PathMatchSpecW(invalid_wchar, invalid_wchar), 0);
+
+    EXPECT_EQ(tl_AssocQueryStringW(0, 0, nullptr, nullptr, invalid_wchar, invalid_u32),
+              static_cast<int>(0x80004005U));
+    tl_ColorRGBToHLS(0, reinterpret_cast<std::uint16_t*>(invalid_u32),
+                     reinterpret_cast<std::uint16_t*>(invalid_u32),
+                     reinterpret_cast<std::uint16_t*>(invalid_u32));
+}
+
+TEST(ShlwapiTest, PathSubsetPreservesValidBufferBehavior) {
+    char combined[64]{};
+    ASSERT_EQ(tl_PathCombineA(combined, "C:\\base", "file"), combined);
+    EXPECT_STREQ(combined, "C:\\base\\file");
+
+    char path[] = "C:\\dir\\file.txt";
+    EXPECT_EQ(tl_PathFindFileNameA(path), path + 7);
+    EXPECT_EQ(tl_PathFindExtensionA(path), path + 11);
+    EXPECT_EQ(tl_StrStrIA(path, "FILE"), path + 7);
+    EXPECT_EQ(tl_StrCmpIA("AbC", "aBc"), 0);
+    EXPECT_EQ(tl_PathIsRelativeA(path), 0);
+    EXPECT_EQ(tl_PathIsUNCA("\\\\server\\share"), 1);
+
+    char remove_spec[] = "C:\\dir\\file";
+    EXPECT_EQ(tl_PathRemoveFileSpecA(remove_spec), 1);
+    EXPECT_STREQ(remove_spec, "C:\\dir");
+    char add_backslash[64] = "C:\\dir";
+    ASSERT_EQ(tl_PathAddBackslashA(add_backslash), add_backslash + 7);
+    EXPECT_STREQ(add_backslash, "C:\\dir\\");
+    EXPECT_EQ(tl_PathRemoveBackslashA(add_backslash), add_backslash + 6);
+    EXPECT_STREQ(add_backslash, "C:\\dir");
+    char remove_extension[] = "C:\\dir\\file.txt";
+    EXPECT_EQ(tl_PathRemoveExtensionA(remove_extension), 1);
+    EXPECT_STREQ(remove_extension, "C:\\dir\\file");
+    char rename_extension[] = "C:\\dir\\file.txt";
+    EXPECT_EQ(tl_PathRenameExtensionA(rename_extension, "bak"), 1);
+    EXPECT_STREQ(rename_extension, "C:\\dir\\file.bak");
+    char strip_path[] = "C:\\dir\\file.txt";
+    EXPECT_EQ(tl_PathStripPathA(strip_path), strip_path);
+    EXPECT_STREQ(strip_path, "file.txt");
+    EXPECT_EQ(tl_PathMatchSpecA("file.txt", "*.txt"), 1);
+
+    constexpr std::uint16_t kBaseW[] = {u'C', u':', u'\\', u'b', u'a', u's', u'e', 0};
+    constexpr std::uint16_t kFileW[] = {u'f', u'i', u'l', u'e', 0};
+    std::uint16_t combined_w[64]{};
+    ASSERT_EQ(tl_PathCombineW(combined_w, kBaseW, kFileW), combined_w);
+    EXPECT_EQ(std::u16string(reinterpret_cast<const char16_t*>(combined_w)), u"C:\\base\\file");
+    EXPECT_EQ(tl_PathIsRelativeW(combined_w), 0);
+    constexpr std::uint16_t kUncW[] = {u'\\', u'\\', u's', u'e', u'r', u'v', u'e', u'r', 0};
+    EXPECT_EQ(tl_PathIsUNCW(kUncW), 1);
+
+    std::uint16_t path_w[] = {u'C', u':', u'\\', u'd', u'i', u'r', u'\\', u'f', u'i', u'l', u'e', u'.', u't', u'x', u't', 0};
+    EXPECT_EQ(tl_PathFindFileNameW(path_w), path_w + 7);
+    EXPECT_EQ(tl_PathFindExtensionW(path_w), path_w + 11);
+    constexpr std::uint16_t kFileUpperW[] = {u'F', u'I', u'L', u'E', 0};
+    constexpr std::uint16_t kAbcUpperW[] = {u'A', u'b', u'C', 0};
+    constexpr std::uint16_t kAbcLowerW[] = {u'a', u'B', u'c', 0};
+    EXPECT_EQ(tl_StrStrIW(path_w, kFileUpperW), path_w + 7);
+    EXPECT_EQ(tl_StrCmpIW(kAbcUpperW, kAbcLowerW), 0);
+
+    std::uint16_t remove_spec_w[] = {u'C', u':', u'\\', u'd', u'i', u'r', u'\\', u'f', u'i', u'l', u'e', 0};
+    EXPECT_EQ(tl_PathRemoveFileSpecW(remove_spec_w), 1);
+    EXPECT_EQ(std::u16string(reinterpret_cast<const char16_t*>(remove_spec_w)), u"C:\\dir");
+    std::uint16_t add_backslash_w[64] = {u'C', u':', u'\\', u'd', u'i', u'r', 0};
+    ASSERT_EQ(tl_PathAddBackslashW(add_backslash_w), add_backslash_w + 7);
+    EXPECT_EQ(std::u16string(reinterpret_cast<const char16_t*>(add_backslash_w)), u"C:\\dir\\");
+    EXPECT_EQ(tl_PathRemoveBackslashW(add_backslash_w), add_backslash_w + 6);
+    EXPECT_EQ(std::u16string(reinterpret_cast<const char16_t*>(add_backslash_w)), u"C:\\dir");
+    std::uint16_t strip_root_w[] = {u'C', u':', u'\\', u'd', u'i', u'r', 0};
+    EXPECT_EQ(tl_PathStripToRootW(strip_root_w), 1);
+    EXPECT_EQ(std::u16string(reinterpret_cast<const char16_t*>(strip_root_w)), u"C:\\");
+
+    auto* const path_wchar = reinterpret_cast<wchar_t*>(path_w);
+    tl_PathStripPathW(path_wchar);
+    EXPECT_EQ(std::u16string(reinterpret_cast<const char16_t*>(path_w)), u"file.txt");
+    std::uint16_t add_extension_w[64] = {u'f', u'i', u'l', u'e', 0};
+    constexpr std::uint16_t kExtensionW[] = {u'.', u'b', u'a', u'k', 0};
+    EXPECT_EQ(tl_PathAddExtensionW(reinterpret_cast<wchar_t*>(add_extension_w),
+                                   reinterpret_cast<const wchar_t*>(kExtensionW)), 1);
+    EXPECT_EQ(std::u16string(reinterpret_cast<const char16_t*>(add_extension_w)), u"file.bak");
+    std::uint16_t append_w[64] = {u'C', u':', u'\\', u'd', u'i', u'r', 0};
+    EXPECT_EQ(tl_PathAppendW(reinterpret_cast<wchar_t*>(append_w),
+                             reinterpret_cast<const wchar_t*>(kFileW)), 1);
+    EXPECT_EQ(std::u16string(reinterpret_cast<const char16_t*>(append_w)), u"C:\\dir\\file");
+    std::uint16_t remove_extension_w[] = {u'f', u'i', u'l', u'e', u'.', u't', u'x', u't', 0};
+    tl_PathRemoveExtensionW(reinterpret_cast<wchar_t*>(remove_extension_w));
+    EXPECT_EQ(std::u16string(reinterpret_cast<const char16_t*>(remove_extension_w)), u"file");
+    std::uint16_t compact_w[16]{};
+    EXPECT_EQ(tl_PathCompactPathExW(reinterpret_cast<wchar_t*>(compact_w),
+                                    reinterpret_cast<const wchar_t*>(path_w), 6, 0), 1);
+    EXPECT_EQ(std::u16string(reinterpret_cast<const char16_t*>(compact_w)), u"file.");
+    EXPECT_EQ(tl_PathGetDriveNumberW(reinterpret_cast<const wchar_t*>(kBaseW)), 2);
+    EXPECT_EQ(tl_PathMatchSpecW(reinterpret_cast<const wchar_t*>(kFileW),
+                                reinterpret_cast<const wchar_t*>(kExtensionW)), 1);
+
+    std::uint16_t hue = 1;
+    std::uint16_t luminance = 1;
+    std::uint16_t saturation = 1;
+    tl_ColorRGBToHLS(0, &hue, &luminance, &saturation);
+    EXPECT_EQ(hue, 0);
+    EXPECT_EQ(luminance, 120);
+    EXPECT_EQ(saturation, 120);
+}
+
 TEST(ShellAllocationTest, ReturnedBuffersUseTheDocumentedAllocators) {
     const std::filesystem::path root = std::filesystem::temp_directory_path() /
         ("tl-shell-allocator-" + std::to_string(static_cast<unsigned long long>(::getpid())));
