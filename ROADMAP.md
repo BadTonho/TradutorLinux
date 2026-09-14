@@ -147,14 +147,14 @@ Os dois testes de rejeição de entry point inválido continuam passando.
 **Risco arquitetural:** a validação por `/proc/self/maps` é uma fotografia.
 Entre a validação e o acesso, o mapeamento pode mudar; isso deixa uma janela
 TOCTOU em rotinas que leem ou escrevem memória do convidado. A fronteira
-protegida e os primeiros consumidores já têm regressão determinística, mas a
-auditoria encontrou consumidores legados que ainda precisam de migração.
+protegida, os consumidores comuns e os contratos especiais de imagem/SEH têm
+regressões determinísticas e tratamento documentado.
 
 **Tarefas:**
 
 - [x] catalogar as categorias e os consumidores já auditados em
-  `docs/arquitetura/memoria-convidada.md`; a migração dos consumidores legados
-  continua sendo o trabalho restante desta etapa;
+  `docs/arquitetura/memoria-convidada.md`, incluindo os contratos especiais
+  de imagem/SEH;
 - [x] escolher `process_vm_readv`/`process_vm_writev`, com fallback controlado
   para `/proc/thread-self/mem`, sem exceção C++ atravessar a ABI;
 - [x] definir comportamento para páginas desmontadas, somente leitura,
@@ -174,12 +174,13 @@ parciais, estruturas Rtl e callbacks. Os contratos sem cópia genérica são
 explicitamente limitados a objetos locais mantidos vivos pelo despachante
 SEH/C++ e a endereços de código dentro da imagem ativa mantida pelo loader.
 
-**Progresso 2026-09-12:** além da primitiva, `ReadFile`/`WriteFile`,
+**Progresso da triagem 2026-09-12:** além da primitiva, `ReadFile`/`WriteFile`,
 `FindFirstFileA/W`, `GetMessageA`, conversões comuns de caminho e entradas de
 `WININET`, PSAPI, WINMM e DWM usam cópias protegidas. Os testes focados de
 memória, arquivos, metadados, GUI, MPR, WININET e stubs auxiliares passaram; a busca de auditoria ainda encontra
-rotas legadas em módulos como segurança, sincronização e APIs de processo/GUI,
-portanto a aceitação final permanece aberta.
+rotas legadas em módulos como segurança, sincronização e APIs de processo/GUI.
+Os sublotes registrados abaixo concluíram essa migração e encerraram a
+aceitação do R3/E11 em 2026-09-14.
 
 O lote seguinte migrou também estruturas e buffers de console/tempo, com os
 testes de `Win32ConsoleTest`, `Win32ProcessConsoleTest`, `Win32TimeTest` e
