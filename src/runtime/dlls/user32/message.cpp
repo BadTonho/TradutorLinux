@@ -745,7 +745,7 @@ TL_MSABI int tl_GetMessageA(void* const msg, const void* const window,
     if (!user32_gui_thread_allowed("GetMessageA")) {
         return -1;
     }
-    if (msg == nullptr || !mapped_guest_range(msg, sizeof(abi::GuestMsg), true)) {
+    if (msg == nullptr || !write_guest_msg(msg, nullptr, 0, 0, 0)) {
         set_last_error(abi::kErrorInvalidParameter);
         trace_guest_failure("GetMessageA", "output-message", "ponteiro sem permissão de escrita");
         return -1;
@@ -1005,13 +1005,13 @@ TL_MSABI int tl_TranslateMessage(const void* const msg) noexcept {
     if (!user32_gui_thread_allowed("TranslateMessage")) {
         return 0;
     }
-    if (msg == nullptr || !mapped_guest_range(msg, sizeof(abi::GuestMsg), false)) {
+    abi::GuestMsg message{};
+    if (msg == nullptr || !read_guest_value(msg, message)) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
-    const auto* const message = static_cast<const abi::GuestMsg*>(msg);
-    if (message->message == abi::kWmKeyDown) {
-        WindowSlot* const slot = find_window_slot(message->hwnd);
+    if (message.message == abi::kWmKeyDown) {
+        WindowSlot* const slot = find_window_slot(message.hwnd);
         if (slot != nullptr && slot->last_key != '\0' && !slot->has_pending) {
             slot->pending = {};
             slot->pending.message = abi::kWmChar;
@@ -1039,20 +1039,20 @@ TL_MSABI abi::Lresult tl_DispatchMessageA(const void* const msg) noexcept {
     if (!user32_gui_thread_allowed("DispatchMessageA")) {
         return 0;
     }
-    if (msg == nullptr || !mapped_guest_range(msg, sizeof(abi::GuestMsg), false)) {
+    abi::GuestMsg message{};
+    if (msg == nullptr || !read_guest_value(msg, message)) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
-    const auto* const message = static_cast<const abi::GuestMsg*>(msg);
-    WindowSlot* const slot = find_window_slot(message->hwnd);
+    WindowSlot* const slot = find_window_slot(message.hwnd);
     if (slot == nullptr || slot->wndproc == 0) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
     set_last_error(abi::kErrorSuccess);
-    const abi::Lresult result = call_wndproc(slot->wndproc, message->hwnd, message->message,
-                                             message->wparam, message->lparam);
-    if (message->message == abi::kWmPaint) {
+    const abi::Lresult result = call_wndproc(slot->wndproc, message.hwnd, message.message,
+                                             message.wparam, message.lparam);
+    if (message.message == abi::kWmPaint) {
         flush_dialog_render();
     }
     return result;
@@ -1527,14 +1527,25 @@ TL_MSABI std::uint32_t tl_MsgWaitForMultipleObjectsEx(const std::uint32_t count,
     }
     (void)wake_mask;
     (void)flags;
-    if (count > 64 || (count > 0 && (handles == nullptr || !mapped_guest_range(handles, count * sizeof(void*), false)))) {
+    if (count > 64 || count > std::numeric_limits<std::size_t>::max() / sizeof(void*) ||
+        (count > 0 && handles == nullptr)) {
         set_last_error(abi::kErrorInvalidParameter);
         return abi::kWaitFailed;
+    }
+    std::vector<const void*> handle_copy;
+    if (count > 0) {
+        handle_copy.resize(count);
+        if (runtime::read_guest_memory(handles, handle_copy.data(),
+                                       handle_copy.size() * sizeof(handle_copy[0])).status !=
+            runtime::GuestMemoryAccessStatus::Success) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return abi::kWaitFailed;
+        }
     }
     const auto start = std::chrono::steady_clock::now();
     while (true) {
         for (std::uint32_t i = 0; i < count; ++i) {
-            const std::uint32_t res = tl_WaitForSingleObject(handles[i], 0);
+            const std::uint32_t res = tl_WaitForSingleObject(handle_copy[i], 0);
             if (res == abi::kWaitObject0) {
                 set_last_error(abi::kErrorSuccess);
                 return abi::kWaitObject0 + i;
@@ -1591,7 +1602,7 @@ TL_MSABI int tl_PeekMessageA(void* const msg, const void* const window,
     }
     (void)filter_min;
     (void)filter_max;
-    if (msg == nullptr || !mapped_guest_range(msg, sizeof(abi::GuestMsg), true)) {
+    if (msg == nullptr || !write_guest_msg(msg, nullptr, 0, 0, 0)) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
@@ -1610,13 +1621,11 @@ TL_MSABI int tl_PeekMessageA(void* const msg, const void* const window,
             }
             cross_thread_message = removed;
         }
-        *static_cast<abi::GuestMsg*>(msg) = abi::GuestMsg{
-            .hwnd = target,
-            .message = cross_thread_message.message,
-            .padding = 0,
-            .wparam = cross_thread_message.wparam,
-            .lparam = cross_thread_message.lparam,
-        };
+        if (!write_guest_msg(msg, target, cross_thread_message.message,
+                             cross_thread_message.wparam, cross_thread_message.lparam)) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
+        }
         return 1;
     }
     WindowSlot* slot = find_window_slot(window);
@@ -1627,12 +1636,20 @@ TL_MSABI int tl_PeekMessageA(void* const msg, const void* const window,
     }
     if (slot == nullptr) return 0;
     if (slot->has_pending) {
-        *static_cast<abi::GuestMsg*>(msg) = slot->pending;
+        if (!write_guest_msg(msg, slot, slot->pending.message, slot->pending.wparam,
+                             slot->pending.lparam)) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
+        }
         if ((remove_msg & kPmRemove) != 0) slot->has_pending = false;
         return 1;
     }
     if (!slot->queued_messages.empty()) {
-        *static_cast<abi::GuestMsg*>(msg) = slot->queued_messages.front();
+        const abi::GuestMsg queued = slot->queued_messages.front();
+        if (!write_guest_msg(msg, queued.hwnd, queued.message, queued.wparam, queued.lparam)) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
+        }
         if ((remove_msg & kPmRemove) != 0) slot->queued_messages.pop_front();
         return 1;
     }
@@ -1679,8 +1696,15 @@ TL_MSABI void* tl_GetKeyboardLayout(const std::uint32_t thread_id) noexcept {
 }
 
 TL_MSABI int tl_GetKeyboardState(std::uint8_t* const key_states) noexcept {
-    if (key_states != nullptr && mapped_guest_range(key_states, 256, true)) {
-        std::memset(key_states, 0, 256);
+    if (key_states == nullptr) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    const std::array<std::uint8_t, 256> output{};
+    if (runtime::write_guest_memory(key_states, output.data(), output.size()).status !=
+        runtime::GuestMemoryAccessStatus::Success) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
     }
     set_last_error(abi::kErrorSuccess);
     return 1;
@@ -1712,10 +1736,14 @@ TL_MSABI int tl_ToAsciiEx(const std::uint32_t vk, const std::uint32_t scan_code,
     (void)key_state;
     (void)flags;
     (void)dwhkl;
-    if (char_out != nullptr && mapped_guest_range(char_out, sizeof(std::uint16_t), true)) {
-        *char_out = static_cast<std::uint16_t>(vk & 0xFF);
+    const std::uint16_t output = static_cast<std::uint16_t>(vk & 0xFF);
+    if (char_out != nullptr &&
+        runtime::write_guest_memory(char_out, &output, sizeof(output)).status ==
+            runtime::GuestMemoryAccessStatus::Success) {
+        set_last_error(abi::kErrorSuccess);
         return 1;
     }
+    set_last_error(abi::kErrorInvalidParameter);
     return 0;
 }
 
@@ -1785,8 +1813,13 @@ TL_MSABI std::intptr_t tl_SendMessageTimeoutA(void* const hwnd, const std::uint3
     (void)l_param;
     (void)flags;
     (void)timeout;
-    if (result != nullptr && mapped_guest_range(result, sizeof(*result), true)) {
-        *result = 0;
+    if (result != nullptr) {
+        const std::uintptr_t output = 0;
+        if (runtime::write_guest_memory(result, &output, sizeof(output)).status !=
+            runtime::GuestMemoryAccessStatus::Success) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
+        }
     }
     set_last_error(abi::kErrorSuccess);
     return 0;

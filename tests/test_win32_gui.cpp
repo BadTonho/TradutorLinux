@@ -425,6 +425,23 @@ TEST(Win32GuiTest, AllowsCrossThreadPostMessageToPrimaryQueue) {
     g_windows = {};
 }
 
+TEST(Win32GuiTest, ProtectedMessageInputsAndOutputsRejectUnmappedPointers) {
+    auto* const invalid = reinterpret_cast<void*>(static_cast<std::uintptr_t>(0x1000U));
+
+    EXPECT_EQ(tl_GetMessageA(invalid, nullptr, 0, 0), -1);
+    EXPECT_EQ(tl_PeekMessageA(invalid, nullptr, 0, 0, 0), 0);
+    EXPECT_EQ(tl_TranslateMessage(invalid), 0);
+    EXPECT_EQ(tl_DispatchMessageA(invalid), 0);
+    EXPECT_EQ(tl_MsgWaitForMultipleObjectsEx(1,
+                                             reinterpret_cast<const void* const*>(invalid), 0, 0, 0),
+              abi::kWaitFailed);
+    EXPECT_EQ(tl_GetKeyboardState(static_cast<std::uint8_t*>(invalid)), 0);
+    EXPECT_EQ(tl_ToAscii(0x41U, 0, nullptr, static_cast<std::uint16_t*>(invalid), 0), 0);
+    EXPECT_EQ(tl_SendMessageTimeoutA(nullptr, 0, 0, 0, 0, 0,
+                                     reinterpret_cast<std::uintptr_t*>(invalid)), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+}
+
 
 TEST(Win32DialogTemplateTest, ParsesAlignedStandardTemplateAndRejectsBounds) {
     EXPECT_EQ(sizeof(runtime::GuestDialogTemplate), 18U);

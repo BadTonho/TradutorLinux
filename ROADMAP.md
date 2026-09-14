@@ -463,6 +463,12 @@ modeless e modais, as entradas de `MessageBoxA/W`, `SetDlgItemTextW` e
 mensagens inválidos; os smokes existentes continuam protegendo o fluxo de
 diálogo válido.
 
+O sublote `USER32/message-core` migrou as estruturas de `GetMessageA/W`,
+`PeekMessageA/W`, `TranslateMessage`, `DispatchMessageA/W` e os arrays de
+`MsgWaitForMultipleObjectsEx` para transferências protegidas. Também protegeu
+`GetKeyboardState`, `ToAsciiEx` e a saída de `SendMessageTimeoutA`; a regressão
+cobre mensagens, handles, teclado e ponteiros de resultado inacessíveis.
+
 ## Fora desta rodada
 
 Não entram neste roadmap, por enquanto:

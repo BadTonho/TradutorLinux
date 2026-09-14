@@ -83,6 +83,12 @@ O sublote `USER32/dialog` aplica o contrato aos nomes de template de diálogos,
 templates, strings e mensagens são copiados para objetos host antes de buscar
 recursos, abrir a GUI ou despachar comandos.
 
+O sublote `USER32/message-core` aplica o contrato às estruturas de mensagem de
+`GetMessageA/W`, `PeekMessageA/W`, `TranslateMessage` e `DispatchMessageA/W`,
+aos arrays de handles de `MsgWaitForMultipleObjectsEx` e às saídas de teclado e
+timeout. Mensagens e arrays são lidos para objetos locais, e cada publicação
+usa a primitiva protegida.
+
 ## Limites residuais
 
 `validate_mapped_range` permanece deliberadamente como predicado advisory:
