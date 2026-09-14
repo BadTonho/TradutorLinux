@@ -427,6 +427,13 @@ O lote adicional de `USER32/misc` migrou `GetUpdateRect`,
 cópias protegidas. As estruturas continuam determinísticas, e a regressão
 cobre seus ponteiros de saída inacessíveis.
 
+O lote `SHELL32` migrou estruturas de entrada e strings de
+`Shell_NotifyIconA/W`, `SHGetKnownFolderPath`, `SHGetFolderPathAndSubDirW`,
+`ShellExecuteA/W`, `ShellExecuteExW`, `SHFileOperationW`, `SHGetFileInfoW` e
+`SHBrowseForFolderW` para snapshots e cópias protegidas. Os stubs continuam
+com falha controlada e sem iniciar processos ou alterar arquivos; a regressão
+também cobre GUID, `SHELLEXECUTEINFO`, `SHFILEOPSTRUCT` e strings inválidos.
+
 ## Fora desta rodada
 
 Não entram neste roadmap, por enquanto:

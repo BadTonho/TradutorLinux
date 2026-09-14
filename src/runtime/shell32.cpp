@@ -10,6 +10,7 @@
 #include "tradutorlinux/util/unicode.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cstddef>
 #include <cstdlib>
 #include <cstring>
@@ -52,16 +53,16 @@ bool update_tray_registration(const std::uint32_t message, void* const data) noe
     if (data == nullptr) {
         return true;
     }
-    if (!mapped_guest_range(data, sizeof(GuestNotifyIconDataPrefix), false)) {
+    GuestNotifyIconDataPrefix input{};
+    if (!read_guest_value(data, input)) {
         set_last_error(abi::kErrorInvalidParameter);
         return false;
     }
-    const auto* const input = static_cast<const GuestNotifyIconDataPrefix*>(data);
-    if (input->cb_size < sizeof(GuestNotifyIconDataPrefix)) {
+    if (input.cb_size < sizeof(GuestNotifyIconDataPrefix)) {
         set_last_error(abi::kErrorBadLength);
         return false;
     }
-    WindowSlot* const window = find_window_slot(input->hwnd);
+    WindowSlot* const window = find_window_slot(input.hwnd);
     if (window == nullptr) {
         set_last_error(abi::kErrorInvalidHandle);
         return false;
@@ -72,8 +73,8 @@ bool update_tray_registration(const std::uint32_t message, void* const data) noe
         window->tray_callback_message = 0;
     } else if (message == kNimAdd || message == kNimModify) {
         window->tray_registered = true;
-        window->tray_icon_id = input->icon_id;
-        window->tray_callback_message = input->callback_message;
+        window->tray_icon_id = input.icon_id;
+        window->tray_callback_message = input.callback_message;
     }
     return true;
 }
@@ -90,21 +91,16 @@ TL_MSABI std::uint16_t** tl_CommandLineToArgvW(const std::uint16_t* command_line
     if (command_line == nullptr || argument_count == nullptr) {
         return nullptr;
     }
+    std::u16string command_line_copy;
+    if (!runtime::copy_guest_wstring(command_line, 32768U, command_line_copy)) {
+        return nullptr;
+    }
     std::vector<std::string> arguments;
     std::string current;
     bool in_quotes = false;
-    const std::uint16_t* p = command_line;
-    for (;;) {
-        const std::uint16_t c = *p;
-        if (c == 0) {
-            if (!current.empty() || in_quotes) {
-                arguments.push_back(current);
-            }
-            break;
-        }
+    for (const std::uint16_t c : command_line_copy) {
         if (c == L'"') {
             in_quotes = !in_quotes;
-            ++p;
             continue;
         }
         if (c == L' ' || c == L'\t' || c == L'\n' || c == L'\r') {
@@ -113,13 +109,14 @@ TL_MSABI std::uint16_t** tl_CommandLineToArgvW(const std::uint16_t* command_line
                     arguments.push_back(current);
                     current.clear();
                 }
-                ++p;
                 continue;
             }
         }
         const std::uint16_t literal[2] = {c, 0};
         current += util::wide_to_utf8(literal);
-        ++p;
+    }
+    if (!current.empty() || in_quotes) {
+        arguments.push_back(current);
     }
     const std::size_t count = arguments.size();
     std::size_t total_units = 0;
@@ -249,13 +246,14 @@ TL_MSABI int tl_SHGetKnownFolderPath(const void* rfid, const std::uint32_t flags
         set_last_error(abi::kErrorInvalidParameter);
         return static_cast<int>(0x80070057); // E_INVALIDARG
     }
-    if (!mapped_guest_range(rfid, sizeof(Guid), false)) {
+    Guid guid{};
+    if (!read_guest_value(rfid, guid)) {
         set_last_error(abi::kErrorInvalidParameter);
         return static_cast<int>(0x80070057);
     }
     const prefix::EnvironmentPaths paths = prefix::get_environment_paths(guest_prefix_root());
     const std::filesystem::path native_path =
-        known_folder_path_for_guid(static_cast<const Guid*>(rfid), paths);
+        known_folder_path_for_guid(&guid, paths);
     if (native_path.empty()) {
         set_last_error(abi::kErrorInvalidParameter);
         return static_cast<int>(0x80070057);
@@ -320,11 +318,13 @@ TL_MSABI int tl_SHGetFolderPathAndSubDirW(void* hwnd, int csidl, void* token, st
     const prefix::EnvironmentPaths paths = prefix::get_environment_paths(guest_prefix_root());
     std::filesystem::path native_path = csidl_to_path(csidl, paths);
     if (sub_dir != nullptr) {
-        if (!mapped_guest_wstring(sub_dir)) {
+        std::u16string sub_copy;
+        if (!runtime::copy_guest_wstring(sub_dir, 4096U, sub_copy)) {
             set_last_error(abi::kErrorInvalidParameter);
             return static_cast<int>(0x80070057);
         }
-        std::string sub = util::wide_to_utf8(sub_dir);
+        std::string sub = util::wide_to_utf8(
+            reinterpret_cast<const std::uint16_t*>(sub_copy.data()), sub_copy.size());
         std::replace(sub.begin(), sub.end(), '\\', '/');
         if (!is_safe_relative_subdirectory(sub)) {
             set_last_error(abi::kErrorInvalidParameter);
@@ -352,14 +352,18 @@ TL_MSABI void* tl_ShellExecuteW(void* hwnd, const std::uint16_t* operation,
                                 const std::uint16_t* directory, int show) noexcept {
     (void)hwnd;
     (void)show;
-    if ((operation != nullptr && !mapped_guest_wstring(operation)) ||
-        (parameters != nullptr && !mapped_guest_wstring(parameters)) ||
-        (directory != nullptr && !mapped_guest_wstring(directory)) ||
-        (file != nullptr && !mapped_guest_wstring(file))) {
+    std::u16string operation_copy;
+    std::u16string file_copy;
+    std::u16string parameters_copy;
+    std::u16string directory_copy;
+    if ((operation != nullptr && !runtime::copy_guest_wstring(operation, 4096U, operation_copy)) ||
+        (parameters != nullptr && !runtime::copy_guest_wstring(parameters, 32768U, parameters_copy)) ||
+        (directory != nullptr && !runtime::copy_guest_wstring(directory, 4096U, directory_copy)) ||
+        (file != nullptr && !runtime::copy_guest_wstring(file, 32768U, file_copy))) {
         set_last_error(abi::kErrorInvalidParameter);
         return nullptr;
     }
-    if (file == nullptr || file[0] == 0) {
+    if (file == nullptr || file_copy.empty()) {
         set_last_error(abi::kErrorInvalidParameter);
         return nullptr;
     }
@@ -393,28 +397,42 @@ static_assert(offsetof(GuestShellExecuteInfoW, h_inst_app) == 56);
 static_assert(offsetof(GuestShellExecuteInfoW, h_process) == 104);
 
 TL_MSABI int tl_ShellExecuteExW(void* exec_info) noexcept {
-    if (exec_info == nullptr || !mapped_guest_range(exec_info, sizeof(std::uint32_t), false)) {
+    std::uint32_t cb_size = 0;
+    if (exec_info == nullptr || !read_guest_value(exec_info, cb_size)) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
-    std::uint32_t cbSize = 0;
-    std::memcpy(&cbSize, exec_info, sizeof(cbSize));
-    if (cbSize < sizeof(GuestShellExecuteInfoW) ||
-        !mapped_guest_range(exec_info, sizeof(GuestShellExecuteInfoW), true)) {
+    if (cb_size < sizeof(GuestShellExecuteInfoW)) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
-    auto* const info = static_cast<GuestShellExecuteInfoW*>(exec_info);
-    if (info->lp_file == nullptr || !mapped_guest_wstring(info->lp_file) || info->lp_file[0] == 0 ||
-        (info->lp_verb != nullptr && !mapped_guest_wstring(info->lp_verb)) ||
-        (info->lp_parameters != nullptr && !mapped_guest_wstring(info->lp_parameters)) ||
-        (info->lp_directory != nullptr && !mapped_guest_wstring(info->lp_directory)) ||
-        (info->lp_class != nullptr && !mapped_guest_wstring(info->lp_class))) {
+    GuestShellExecuteInfoW info{};
+    if (!read_guest_value(exec_info, info)) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
-    info->h_inst_app = nullptr;
-    info->h_process = nullptr;
+    std::u16string verb_copy;
+    std::u16string file_copy;
+    std::u16string parameters_copy;
+    std::u16string directory_copy;
+    std::u16string class_copy;
+    if (info.lp_file == nullptr ||
+        !runtime::copy_guest_wstring(info.lp_file, 32768U, file_copy) || file_copy.empty() ||
+        (info.lp_verb != nullptr && !runtime::copy_guest_wstring(info.lp_verb, 4096U, verb_copy)) ||
+        (info.lp_parameters != nullptr &&
+         !runtime::copy_guest_wstring(info.lp_parameters, 32768U, parameters_copy)) ||
+        (info.lp_directory != nullptr &&
+         !runtime::copy_guest_wstring(info.lp_directory, 4096U, directory_copy)) ||
+        (info.lp_class != nullptr && !runtime::copy_guest_wstring(info.lp_class, 4096U, class_copy))) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    info.h_inst_app = nullptr;
+    info.h_process = nullptr;
+    if (!write_guest_value(exec_info, info)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
     set_last_error(abi::kErrorNotSupported);
     return 0;
 }
@@ -431,17 +449,31 @@ struct GuestShFileOpStructW {
 };
 
 TL_MSABI int tl_SHFileOperationW(void* const file_op) noexcept {
-    if (file_op == nullptr || !mapped_guest_range(file_op, sizeof(GuestShFileOpStructW), true)) {
+    GuestShFileOpStructW operation{};
+    if (file_op == nullptr || !read_guest_value(file_op, operation)) {
         set_last_error(abi::kErrorInvalidParameter);
         return 1;
     }
-    auto* const operation = static_cast<GuestShFileOpStructW*>(file_op);
-    operation->any_operations_aborted = 1;
-    operation->name_mappings = nullptr;
+    std::u16string from_copy;
+    std::u16string to_copy;
+    std::u16string progress_title_copy;
+    if ((operation.from != nullptr && !runtime::copy_guest_wstring(operation.from, 32768U, from_copy)) ||
+        (operation.to != nullptr && !runtime::copy_guest_wstring(operation.to, 32768U, to_copy)) ||
+        (operation.progress_title != nullptr &&
+         !runtime::copy_guest_wstring(operation.progress_title, 4096U, progress_title_copy))) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 1;
+    }
+    operation.any_operations_aborted = 1;
+    operation.name_mappings = nullptr;
     // Cópia, movimentação, exclusão e renomeação do shell ainda não têm
     // implementação. Não sinalize sucesso sem ter alterado o sistema de
     // arquivos do prefixo.
     set_last_error(abi::kErrorNotSupported);
+    if (!write_guest_value(file_op, operation)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 1;
+    }
     return static_cast<int>(abi::kErrorNotSupported);
 }
 
@@ -456,14 +488,14 @@ struct GuestShFileInfoW {
 TL_MSABI std::uintptr_t tl_SHGetFileInfoW(const std::uint16_t* const path, const std::uint32_t file_attributes,
                                           void* const sfi, const std::uint32_t cb_file_info,
                                           const std::uint32_t flags) noexcept {
-    if (path != nullptr && !mapped_guest_wstring(path)) {
+    std::u16string path_copy;
+    if (path != nullptr && !runtime::copy_guest_wstring(path, 32768U, path_copy)) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
     (void)file_attributes;
     (void)flags;
-    if (sfi != nullptr && (cb_file_info < sizeof(GuestShFileInfoW) ||
-                           !mapped_guest_range(sfi, sizeof(GuestShFileInfoW), true))) {
+    if (sfi != nullptr && cb_file_info < sizeof(GuestShFileInfoW)) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
@@ -473,7 +505,7 @@ TL_MSABI std::uintptr_t tl_SHGetFileInfoW(const std::uint16_t* const path, const
 
 TL_MSABI int tl_SHGetPathFromIDListW(const void* const pidl, std::uint16_t* const path) noexcept {
     (void)pidl;
-    if (path == nullptr || !mapped_guest_range(path, 260 * sizeof(std::uint16_t), true)) {
+    if (path == nullptr) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
@@ -494,7 +526,9 @@ TL_MSABI int tl_SHGetPathFromIDListW(const void* const pidl, std::uint16_t* cons
 }
 
 TL_MSABI void* tl_SHBrowseForFolderW(void* const bi) noexcept {
-    if (bi == nullptr || !mapped_guest_range(bi, 64, false)) {
+    std::array<std::byte, 64> browse_info{};
+    if (bi == nullptr || runtime::read_guest_memory(bi, browse_info.data(), browse_info.size()).status !=
+                              runtime::GuestMemoryAccessStatus::Success) {
         set_last_error(abi::kErrorInvalidParameter);
         return nullptr;
     }
@@ -566,14 +600,18 @@ TL_MSABI int tl_ShellNotifyIconW(const std::uint32_t message, void* const data) 
 TL_MSABI void* tl_ShellExecuteA(void* const hwnd, const char* const operation, const char* const file, const char* const parameters, const char* const directory, const int show_cmd) noexcept {
     (void)hwnd;
     (void)show_cmd;
-    if ((operation != nullptr && !mapped_guest_cstring(operation)) ||
-        (parameters != nullptr && !mapped_guest_cstring(parameters)) ||
-        (directory != nullptr && !mapped_guest_cstring(directory)) ||
-        (file != nullptr && !mapped_guest_cstring(file))) {
+    std::string operation_copy;
+    std::string file_copy;
+    std::string parameters_copy;
+    std::string directory_copy;
+    if ((operation != nullptr && !runtime::copy_guest_cstring(operation, 4096U, operation_copy)) ||
+        (parameters != nullptr && !runtime::copy_guest_cstring(parameters, 32768U, parameters_copy)) ||
+        (directory != nullptr && !runtime::copy_guest_cstring(directory, 4096U, directory_copy)) ||
+        (file != nullptr && !runtime::copy_guest_cstring(file, 32768U, file_copy))) {
         set_last_error(abi::kErrorInvalidParameter);
         return nullptr;
     }
-    if (file == nullptr || file[0] == '\0') {
+    if (file == nullptr || file_copy.empty()) {
         set_last_error(abi::kErrorInvalidParameter);
         return nullptr;
     }

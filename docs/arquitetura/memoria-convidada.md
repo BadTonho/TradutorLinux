@@ -48,6 +48,13 @@ O host nunca transforma `Partial` em sucesso. Cada chamador deve rejeitar
 qualquer estado diferente de `Success` antes de interpretar a cópia ou publicar
 uma saída ao convidado.
 
+O lote `SHELL32` segue esse contrato para suas estruturas de entrada e strings:
+`NOTIFYICONDATA`, `GUID`, `SHELLEXECUTEINFO`, `SHFILEOPSTRUCT`,
+`CommandLineToArgvW` e as entradas de `ShellExecuteA/W` são primeiro copiados
+para objetos host. As saídas de `SHELLEXECUTEINFO` e `SHFILEOPSTRUCT` são
+publicadas de volta com `write_guest_memory`; nenhum desses caminhos
+desreferencia o ponteiro convidado após uma validação por snapshot.
+
 ## Limites residuais
 
 `validate_mapped_range` permanece deliberadamente como predicado advisory:

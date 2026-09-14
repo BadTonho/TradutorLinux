@@ -462,6 +462,15 @@ TEST(ShellPathTest, PathIsRelativeAndAutoComplete) {
     EXPECT_EQ(operation.any_operations_aborted, 1);
     EXPECT_EQ(operation.name_mappings, nullptr);
 
+    auto* const invalid = reinterpret_cast<const std::uint16_t*>(static_cast<std::uintptr_t>(0x1000U));
+    operation.from = invalid;
+    operation.any_operations_aborted = 0;
+    operation.name_mappings = reinterpret_cast<void*>(1);
+    EXPECT_EQ(tl_SHFileOperationW(&operation), 1);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(operation.any_operations_aborted, 0);
+    EXPECT_EQ(operation.name_mappings, reinterpret_cast<void*>(1));
+
     struct ShFileInfoW {
         void* icon{reinterpret_cast<void*>(1)};
         std::int32_t icon_index{};
@@ -553,6 +562,8 @@ TEST(ShellPathTest, ProtectedShellOutputsRejectUnmappedPointers) {
     constexpr Guid kRoamingAppData = {
         0x3EB685DBU, 0x65F9U, 0x4CF6U, {0xA0U, 0x3AU, 0xE3U, 0xEFU, 0x65U, 0x72U, 0x9FU, 0x3DU}};
 
+    EXPECT_NE(tl_SHGetKnownFolderPath(invalid, 0, nullptr, nullptr), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
     EXPECT_NE(tl_SHGetKnownFolderPath(&kRoamingAppData, 0, nullptr,
                                       static_cast<std::uint16_t**>(invalid)), 0);
     EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
@@ -683,6 +694,15 @@ TEST(ShellExecutionTest, UnsupportedCallsFailWithoutFabricatingAProcess) {
     EXPECT_EQ(info.h_inst_app, nullptr);
     EXPECT_EQ(info.h_process, nullptr);
 
+    info.lp_file = reinterpret_cast<const std::uint16_t*>(static_cast<std::uintptr_t>(0x1000U));
+    info.h_inst_app = reinterpret_cast<void*>(1);
+    info.h_process = reinterpret_cast<void*>(1);
+    EXPECT_EQ(tl_ShellExecuteExW(&info), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(info.h_inst_app, reinterpret_cast<void*>(1));
+    EXPECT_EQ(info.h_process, reinterpret_cast<void*>(1));
+
+    info.lp_file = kFileW;
     info.cb_size = sizeof(info) - 1;
     EXPECT_EQ(tl_ShellExecuteExW(&info), 0);
     EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
