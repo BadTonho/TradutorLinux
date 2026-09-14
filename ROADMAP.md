@@ -615,6 +615,12 @@ da consulta, sem desreferenciar `find_para` durante a varredura. A regressão de
 gestão de contexto cobre ponteiros inválidos e mantém a regra de não fabricar
 certificados em uma loja vazia.
 
+O sublote `WINTRUST/verify-input` migrou `WinVerifyTrust` para snapshots
+protegidos da ação, `WINTRUST_DATA`, `WINTRUST_BLOB_INFO` e payload `TLTC`, além
+de publicar `state_data` por escrita protegida. `WintrustTest` passou nos 3 casos
+de entrada e as oito integrações PE de `tl_trust`/`tl_wthelper` passaram no
+preset `validation-sanitize`.
+
 ## Fora desta rodada
 
 Não entram neste roadmap, por enquanto:

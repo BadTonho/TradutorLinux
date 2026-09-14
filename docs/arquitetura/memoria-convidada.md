@@ -240,6 +240,13 @@ O sublote `CRYPT32/store-query` copia para memória host os parâmetros de
 somente ponteiros de contextos emitidos pelo runtime; buscas inválidas falham
 antes da consulta.
 
+O sublote `WINTRUST/verify-input` lê a ação, `WINTRUST_DATA` e
+`WINTRUST_BLOB_INFO` com `read_guest_memory`, copia o payload `TLTC` antes do
+parser DER e publica o `state_data` de `VERIFY`/`CLOSE` por transferência
+protegida. O estado e os registros devolvidos pelos `WTHelper*` continuam em
+memória privada do runtime; ação, estruturas ou payload inacessíveis falham sem
+desreferenciação direta.
+
 ## Limites residuais
 
 `validate_mapped_range` permanece deliberadamente como predicado advisory:

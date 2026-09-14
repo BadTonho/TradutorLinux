@@ -273,6 +273,32 @@ TEST(WintrustTest, RejectsUnsupportedPolicyBeforeCertificateProvider) {
     EXPECT_EQ(tl_WinVerifyTrust(nullptr, wrong_action, &data), kTrustInvalidParameter);
 }
 
+TEST(WintrustTest, ProtectedVerifyInputsRejectUnmappedPointers) {
+    constexpr std::array<std::uint8_t, 16> action{
+        0x6B, 0xC5, 0xAA, 0x00, 0x44, 0xCD, 0xD0, 0x11,
+        0x8C, 0xC2, 0x00, 0xC0, 0x4F, 0xC2, 0x95, 0xEE,
+    };
+    auto* const invalid = reinterpret_cast<void*>(static_cast<std::uintptr_t>(0x1000U));
+    GuestWintrustData data{};
+    data.cb_struct = sizeof(data);
+    data.ui_choice = kWtdUiNone;
+    data.revocation_checks = kWtdRevokeNone;
+    data.union_choice = kWtdChoiceBlob;
+    data.union_data = invalid;
+
+    EXPECT_EQ(tl_WinVerifyTrust(nullptr, invalid, &data), kTrustInvalidParameter);
+    EXPECT_EQ(tl_WinVerifyTrust(nullptr, action.data(),
+                                static_cast<GuestWintrustData*>(invalid)),
+              kTrustInvalidParameter);
+
+    GuestWintrustBlobInfo blob{};
+    blob.cb_struct = sizeof(blob);
+    blob.cb_mem_object = 16U;
+    blob.pb_mem_object = static_cast<std::uint8_t*>(invalid);
+    data.union_data = &blob;
+    EXPECT_EQ(tl_WinVerifyTrust(nullptr, action.data(), &data), kTrustInvalidParameter);
+}
+
 TEST(WintrustTest, HelpersRejectUnknownStateAndChainPointers) {
     EXPECT_EQ(tl_WTHelperProvDataFromStateData(reinterpret_cast<void*>(1)), nullptr);
     EXPECT_EQ(tl_WTHelperGetProvSignerFromChain(nullptr, 0, 0, 0), nullptr);

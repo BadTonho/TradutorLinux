@@ -44,11 +44,6 @@ void trace_trust(const char* const operation, const char* const status,
                              diagnostics::TraceLevel::Info, "wintrust", fields);
 }
 
-bool mapped_range(const void* const address, const std::size_t size,
-                  const bool writable) noexcept {
-    return runtime::validate_mapped_range(address, size, writable);
-}
-
 struct OpenSslApi {
     using D2iX509 = OpenSslX509* (*)(OpenSslX509**, const unsigned char**, long);
     using X509Free = void (*)(OpenSslX509*);
@@ -132,25 +127,32 @@ bool read_u32(const std::vector<std::uint8_t>& payload, std::size_t& offset,
 bool parse_payload(const std::uint8_t* const source, const std::uint32_t size,
                    std::vector<std::vector<std::uint8_t>>& certificates) noexcept {
     certificates.clear();
-    if (source == nullptr || size < 12U || size > kMaxPayloadSize ||
-        !mapped_range(source, size, false)) return false;
-    std::vector<std::uint8_t> payload(size);
-    std::memcpy(payload.data(), source, size);
-    if (!std::equal(kPayloadMagic.begin(), kPayloadMagic.end(), payload.begin())) return false;
-    std::size_t offset = kPayloadMagic.size();
-    std::uint32_t version = 0;
-    std::uint32_t count = 0;
-    if (!read_u32(payload, offset, version) || !read_u32(payload, offset, count) ||
-        version != 1U || count != 2U) return false;
-    for (std::uint32_t index = 0; index < count; ++index) {
-        std::uint32_t length = 0;
-        if (!read_u32(payload, offset, length) || length == 0U || length > kMaxCertificateSize ||
-            offset > payload.size() || payload.size() - offset < length) return false;
-        certificates.emplace_back(payload.begin() + static_cast<std::ptrdiff_t>(offset),
-                                  payload.begin() + static_cast<std::ptrdiff_t>(offset + length));
-        offset += length;
+    if (source == nullptr || size < 12U || size > kMaxPayloadSize) return false;
+    try {
+        std::vector<std::uint8_t> payload(size);
+        if (runtime::read_guest_memory(source, payload.data(), payload.size()).status !=
+            runtime::GuestMemoryAccessStatus::Success) {
+            return false;
+        }
+        if (!std::equal(kPayloadMagic.begin(), kPayloadMagic.end(), payload.begin())) return false;
+        std::size_t offset = kPayloadMagic.size();
+        std::uint32_t version = 0;
+        std::uint32_t count = 0;
+        if (!read_u32(payload, offset, version) || !read_u32(payload, offset, count) ||
+            version != 1U || count != 2U) return false;
+        for (std::uint32_t index = 0; index < count; ++index) {
+            std::uint32_t length = 0;
+            if (!read_u32(payload, offset, length) || length == 0U || length > kMaxCertificateSize ||
+                offset > payload.size() || payload.size() - offset < length) return false;
+            certificates.emplace_back(payload.begin() + static_cast<std::ptrdiff_t>(offset),
+                                      payload.begin() + static_cast<std::ptrdiff_t>(offset + length));
+            offset += length;
+        }
+        return offset == payload.size();
+    } catch (...) {
+        certificates.clear();
+        return false;
     }
-    return offset == payload.size();
 }
 
 std::int32_t verify_payload(const std::vector<std::vector<std::uint8_t>>& certificates) noexcept {
@@ -266,8 +268,18 @@ TrustStateSlot* create_trust_state(
     }
     runtime::invalidate_memory_map_cache();
     free_state->used = true;
-    data->state_data = free_state;
     return free_state;
+}
+
+bool write_state_data(GuestWintrustData* const data, void* const state_data) noexcept {
+    const std::uintptr_t address = reinterpret_cast<std::uintptr_t>(data);
+    if (address > std::numeric_limits<std::uintptr_t>::max() -
+                      offsetof(GuestWintrustData, state_data)) {
+        return false;
+    }
+    return runtime::write_guest_memory(
+               reinterpret_cast<void*>(address + offsetof(GuestWintrustData, state_data)),
+               &state_data, sizeof(state_data)).status == runtime::GuestMemoryAccessStatus::Success;
 }
 
 bool close_trust_state(void* const state_data) noexcept {
@@ -293,51 +305,63 @@ extern "C" {
 TL_WINTRUST_MSABI std::int32_t tl_WinVerifyTrust(void* const hwnd, const void* const action,
                                                   GuestWintrustData* const data) noexcept {
     (void)hwnd;
-    if (action == nullptr || data == nullptr || !mapped_range(action, kGenericVerifyV2.size(), false) ||
-        !mapped_range(data, sizeof(*data), true) ||
-        std::memcmp(action, kGenericVerifyV2.data(), kGenericVerifyV2.size()) != 0 ||
-        data->cb_struct != sizeof(GuestWintrustData) || data->policy_callback_data != nullptr ||
-        data->sip_client_data != nullptr || data->ui_choice != kWtdUiNone ||
-        data->revocation_checks != kWtdRevokeNone || data->union_choice != kWtdChoiceBlob ||
-        data->url_reference != nullptr || data->provider_flags != 0U || data->ui_context != 0U ||
-        data->signature_settings != nullptr ||
-        (data->state_action != kWtdStateActionIgnore &&
-         data->state_action != kWtdStateActionVerify &&
-         data->state_action != kWtdStateActionClose)) {
+    std::array<std::uint8_t, kGenericVerifyV2.size()> action_copy{};
+    GuestWintrustData data_copy{};
+    if (action == nullptr || data == nullptr ||
+        runtime::read_guest_memory(action, action_copy.data(), action_copy.size()).status !=
+            runtime::GuestMemoryAccessStatus::Success ||
+        runtime::read_guest_memory(data, &data_copy, sizeof(data_copy)).status !=
+            runtime::GuestMemoryAccessStatus::Success ||
+        action_copy != kGenericVerifyV2 || data_copy.cb_struct != sizeof(GuestWintrustData) ||
+        data_copy.policy_callback_data != nullptr || data_copy.sip_client_data != nullptr ||
+        data_copy.ui_choice != kWtdUiNone || data_copy.revocation_checks != kWtdRevokeNone ||
+        data_copy.union_choice != kWtdChoiceBlob || data_copy.url_reference != nullptr ||
+        data_copy.provider_flags != 0U || data_copy.ui_context != 0U ||
+        data_copy.signature_settings != nullptr ||
+        (data_copy.state_action != kWtdStateActionIgnore &&
+         data_copy.state_action != kWtdStateActionVerify &&
+         data_copy.state_action != kWtdStateActionClose)) {
         trace_trust("verify", "invalid", "explicit-chain", "openssl");
         return kTrustInvalidParameter;
     }
 
-    if (data->state_action == kWtdStateActionClose) {
-        if (data->state_data == nullptr || !close_trust_state(data->state_data)) {
+    if (data_copy.state_action == kWtdStateActionClose) {
+        if (data_copy.state_data == nullptr || !close_trust_state(data_copy.state_data)) {
             trace_trust("close", "invalid", "explicit-chain", "state-table");
             return kTrustInvalidParameter;
         }
-        data->state_data = nullptr;
+        if (!write_state_data(data, nullptr)) {
+            trace_trust("close", "invalid", "explicit-chain", "guest-memory");
+            return kTrustInvalidParameter;
+        }
         trace_trust("close", "success", "explicit-chain", "state-table");
         return kTrustSuccess;
     }
-    if (data->state_data != nullptr || data->union_data == nullptr ||
-        !mapped_range(data->union_data, sizeof(GuestWintrustBlobInfo), true)) {
+    if (data_copy.state_data != nullptr || data_copy.union_data == nullptr) {
         trace_trust("verify", "invalid", "explicit-chain", "openssl");
         return kTrustInvalidParameter;
     }
-    auto* const blob = static_cast<GuestWintrustBlobInfo*>(data->union_data);
-    if (blob->cb_struct != sizeof(GuestWintrustBlobInfo) || blob->cb_mem_object == 0U ||
-        blob->pb_mem_object == nullptr || !mapped_range(blob->pb_mem_object, blob->cb_mem_object, false)) {
+    GuestWintrustBlobInfo blob_copy{};
+    if (runtime::read_guest_memory(data_copy.union_data, &blob_copy, sizeof(blob_copy)).status !=
+            runtime::GuestMemoryAccessStatus::Success ||
+        blob_copy.cb_struct != sizeof(GuestWintrustBlobInfo) || blob_copy.cb_mem_object == 0U ||
+        blob_copy.pb_mem_object == nullptr) {
         trace_trust("verify", "invalid", "explicit-chain", "openssl");
         return kTrustInvalidParameter;
     }
     std::vector<std::vector<std::uint8_t>> certificates;
-    if (!parse_payload(blob->pb_mem_object, blob->cb_mem_object, certificates)) {
+    if (!parse_payload(blob_copy.pb_mem_object, blob_copy.cb_mem_object, certificates)) {
         trace_trust("verify", "invalid", "explicit-chain", "openssl");
         return kTrustInvalidParameter;
     }
     const std::int32_t result = verify_payload(certificates);
-    if (result == kTrustSuccess && data->state_action == kWtdStateActionVerify &&
-        create_trust_state(certificates, data) == nullptr) {
-        trace_trust("verify", "unavailable", "explicit-chain", "state-table");
-        return kTrustProviderUnknown;
+    if (result == kTrustSuccess && data_copy.state_action == kWtdStateActionVerify) {
+        TrustStateSlot* const state = create_trust_state(certificates, data);
+        if (state == nullptr || !write_state_data(data, state)) {
+            if (state != nullptr) close_trust_state(state);
+            trace_trust("verify", "unavailable", "explicit-chain", "state-table");
+            return kTrustProviderUnknown;
+        }
     }
     const char* const status = result == kTrustSuccess ? "success" :
                                result == kTrustInvalidParameter ? "invalid" : "untrusted";

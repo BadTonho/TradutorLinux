@@ -616,6 +616,11 @@ inacessível resulta em erro/consulta controlada, sem fabricar certificados.
 o contrato de blob/cadeia explícita usado por `tl_trust`. `WTD_CHOICE_FILE`,
 revogação, loja Windows e Authenticode completo continuam fora do escopo.
 
+`WinVerifyTrust` fotografa a ação, `WINTRUST_DATA`, `WINTRUST_BLOB_INFO` e o
+payload `TLTC` antes de validar a cadeia; em `VERIFY` e `CLOSE`, o campo
+`state_data` é atualizado por cópia protegida. Os helpers só aceitam o estado
+emitido pelo runtime e não leem estruturas arbitrárias do convidado.
+
 ### OLEAUT32, COMDLG32 e controles comuns
 
 Além das operações BSTR, VARIANT e SAFEARRAY descritas acima, `OLEAUT32` expõe

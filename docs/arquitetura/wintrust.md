@@ -28,6 +28,11 @@ validade temporal e as restrições de CA da cadeia. A raiz é explícita e não
 revogação, intermediários adicionais, EKU de Authenticode, catálogo, arquivo
 PE, política de hostname ou loja do sistema.
 
+A fronteira de memória fotografa a ação, `WINTRUST_DATA`,
+`WINTRUST_BLOB_INFO` e o payload com transferências protegidas antes da
+validação. `VERIFY` e `CLOSE` publicam ou limpam `state_data` por escrita
+protegida; nenhum campo arbitrário do convidado é desreferenciado diretamente.
+
 ## Consulta da cadeia
 
 Depois de `VERIFY`, `WTHelperProvDataFromStateData` devolve o registro de
