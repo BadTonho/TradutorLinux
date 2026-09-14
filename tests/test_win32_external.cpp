@@ -162,6 +162,43 @@ TEST(OleStreamTest, RejectsExternalHGlobalAndUnknownInterface) {
     EXPECT_EQ(stream->vtable->release(stream), 0U);
 }
 
+TEST(OleStreamTest, ProtectedGuestBuffersRejectUnmappedPointers) {
+    GuestIStream* stream = nullptr;
+    ASSERT_EQ(tl_CreateStreamOnHGlobal(nullptr, 1, &stream), kSOk);
+    ASSERT_NE(stream, nullptr);
+    auto* const invalid = reinterpret_cast<void*>(static_cast<std::uintptr_t>(0x1000U));
+    constexpr std::uint8_t kIidIStream[16] = {
+        0x0C, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46,
+    };
+    char payload[] = "stream";
+    std::uint32_t count = 0;
+    std::uint64_t position = 0;
+    GuestStatStg stat{};
+    GuestIStream* clone = nullptr;
+    ASSERT_EQ(stream->vtable->write(stream, payload, sizeof(payload) - 1U, &count), kSOk);
+    ASSERT_EQ(stream->vtable->seek(stream, 0, 0, &position), kSOk);
+
+    EXPECT_EQ(stream->vtable->query_interface(stream, invalid, &clone), kEInvalidArg);
+    EXPECT_EQ(stream->vtable->query_interface(stream, kIidIStream,
+                                               static_cast<GuestIStream**>(invalid)), kEInvalidArg);
+    EXPECT_EQ(stream->vtable->read(stream, invalid, sizeof(payload) - 1U, &count), kEInvalidArg);
+    EXPECT_EQ(stream->vtable->read(stream, payload, 0, static_cast<std::uint32_t*>(invalid)), kEInvalidArg);
+    EXPECT_EQ(stream->vtable->write(stream, invalid, sizeof(payload) - 1U, &count), kEInvalidArg);
+    EXPECT_EQ(stream->vtable->write(stream, payload, sizeof(payload) - 1U,
+                                    static_cast<std::uint32_t*>(invalid)), kEInvalidArg);
+    EXPECT_EQ(stream->vtable->seek(stream, 0, 0, static_cast<std::uint64_t*>(invalid)), kEInvalidArg);
+    EXPECT_EQ(stream->vtable->stat(stream, static_cast<GuestStatStg*>(invalid), 0), kEInvalidArg);
+    EXPECT_EQ(stream->vtable->clone(stream, static_cast<GuestIStream**>(invalid)), kEInvalidArg);
+
+    EXPECT_EQ(stream->vtable->query_interface(stream, kIidIStream, &clone), kSOk);
+    EXPECT_EQ(clone, stream);
+    EXPECT_EQ(stream->vtable->release(stream), 1U);
+    EXPECT_EQ(stream->vtable->seek(stream, 0, 0, &position), kSOk);
+    EXPECT_EQ(stream->vtable->stat(stream, &stat, 0), kSOk);
+    EXPECT_EQ(stream->vtable->release(stream), 0U);
+}
+
 TEST(WintrustTest, RejectsUnsupportedPolicyBeforeCertificateProvider) {
     GuestWintrustData data{};
     EXPECT_EQ(tl_WinVerifyTrust(nullptr, nullptr, &data), kTrustInvalidParameter);

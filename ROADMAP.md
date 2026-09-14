@@ -563,6 +563,14 @@ somente o endereço como UTF-16 convidado depois da cópia. A regressão
 com os testes de caminho e as integrações `tl_shell_path` no preset
 `validation-sanitize`.
 
+O sublote `OLE32/istream` migrou `QueryInterface`, `Read`, `Write`, `Seek`,
+`Stat` e `Clone` da vtable `IStream` para transferências efetivas protegidas.
+Buffers de entrada são copiados antes da mutação do stream e estruturas,
+contadores, posições e referências de saída são publicados sem acesso direto
+após uma fotografia de mapas. `OleStreamTest.ProtectedGuestBuffersRejectUnmappedPointers`
+passou, assim como os cinco testes de stream e as integrações PE `tl_com` e
+`tl_stream`.
+
 ## Fora desta rodada
 
 Não entram neste roadmap, por enquanto:

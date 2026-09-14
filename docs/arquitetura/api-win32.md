@@ -319,6 +319,9 @@ validação dos buffers e descritores.
 `RevokeDragDrop`, `DoDragDrop`, `ReleaseStgMedium` e `CoGetMalloc` formam
 contratos mínimos de COM/OLE. O stream em memória implementa a vtable `IStream`
 testada (`Read`, `Write`, `Seek`, `SetSize`, `Stat`, `Commit`, `Revert`);
+`Read`, `Write`, `Seek`, `Stat`, `QueryInterface` e `Clone` transferem buffers
+pela fronteira protegida, enquanto o objeto e a vtable permanecem privados do
+runtime;
 registro COM, ActiveX e automação `IDispatch` ampla estão fora do escopo.
 
 `SHGetKnownFolderPath`, `SHGetFolderPathW`, `SHGetFolderPathAndSubDirW`,

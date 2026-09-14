@@ -680,7 +680,7 @@ cobre snapshots e publicações das APIs de ACL e descritor.
 | `ole32.dll` | `OleInitialize` | Suportado | Retorna `S_OK` |
 | `ole32.dll` | `CoCreateInstance` / `CoGetClassObject` | Suportado | Valida `rclsid`/`riid`/`ppv`, `unkOuter==nullptr` senão `CLASS_E_NOAGGREGATION`, senão `REGDB_E_CLASSNOTREG`, `*ppv=nullptr` |
 | `ole32.dll` | `CoTaskMemAlloc` / `CoTaskMemFree` / `CoTaskMemRealloc` | Suportado | `malloc`/`free`/`realloc` do host |
-| `ole32.dll` | `CreateStreamOnHGlobal` | Suportado no subconjunto | Aceita `hGlobal=NULL` ou um bloco válido de `GlobalAlloc`; cria `IStream` em memória e preserva o bloco conforme `delete-on-release`. Backing store externo desconhecido e expansão além da capacidade de `GlobalAlloc` são rejeitados. `Read`/`Write`/`Seek`/`SetSize`/`Stat`, `QueryInterface` e referência são cobertos pelos testes; cópia, clone e lock de região permanecem fora do contrato |
+| `ole32.dll` | `CreateStreamOnHGlobal` | Suportado no subconjunto | Aceita `hGlobal=NULL` ou um bloco válido de `GlobalAlloc`; cria `IStream` em memória e preserva o bloco conforme `delete-on-release`. Backing store externo desconhecido e expansão além da capacidade de `GlobalAlloc` são rejeitados. `Read`/`Write`/`Seek`/`SetSize`/`Stat`/`QueryInterface`/`Clone` e referência usam transferências protegidas para buffers convidados; cópia e lock de região permanecem fora do contrato |
 
 ## Concorrência (Fase 11)
 

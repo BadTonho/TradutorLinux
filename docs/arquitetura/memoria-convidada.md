@@ -179,6 +179,14 @@ somente após a cópia protegida. `ShlwapiTest.ProtectedPathInputsAndOutputsReje
 protege entradas e saídas inacessíveis, e `tl_shell_path` mantém a integração
 válida.
 
+O sublote `OLE32/istream` lê `riid` e buffers de `IStream::Write` com
+`read_guest_memory`, publica `Read`, `Seek`, `Stat`, `QueryInterface` e `Clone`
+com `write_guest_memory`/`write_guest_value`, e só altera o estado do stream
+depois da transferência necessária. A vtable e o objeto `IStream` são memória
+privada do runtime; os buffers apontados pelos métodos continuam pertencendo ao
+convidado. `OleStreamTest.ProtectedGuestBuffersRejectUnmappedPointers` cobre
+entradas e saídas inacessíveis, e `tl_com`/`tl_stream` cobrem a chamada pela ABI.
+
 O sublote `ADVAPI32/crypto-enumeration` copia a capacidade de
 `CryptEnumProvidersW` antes de enumerar e publica o tipo, o nome UTF-16 e o
 tamanho por transferências protegidas. A assinatura host usa `wchar_t*` por

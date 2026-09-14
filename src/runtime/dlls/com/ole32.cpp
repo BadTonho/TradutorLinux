@@ -15,6 +15,7 @@
 #include <mutex>
 #include <optional>
 #include <unordered_set>
+#include <vector>
 
 #include "tradutorlinux/diagnostics/trace.hpp"
 #include "tradutorlinux/runtime/memory_validator.hpp"
@@ -168,22 +169,29 @@ constexpr std::array<std::uint8_t, 16> kIidIStream{
 
 TL_OLE_MSABI std::int32_t stream_query_interface(GuestIStream* const self, const void* const riid,
                                                   GuestIStream** const object) noexcept {
-    if (find_stream(self) == nullptr || riid == nullptr || object == nullptr ||
-        !mapped_range(riid, kIidIUnknown.size(), false) ||
-        !mapped_range(object, sizeof(*object), true)) {
+    if (find_stream(self) == nullptr || riid == nullptr || object == nullptr) {
         trace_stream("query-interface", "invalid");
         return kEInvalidArg;
     }
-    *object = nullptr;
-    const auto* id = static_cast<const std::uint8_t*>(riid);
-    const bool supported = std::memcmp(id, kIidIUnknown.data(), kIidIUnknown.size()) == 0 ||
-                           std::memcmp(id, kIidIStream.data(), kIidIStream.size()) == 0;
+    std::array<std::uint8_t, kIidIUnknown.size()> id{};
+    if (runtime::read_guest_memory(riid, id.data(), id.size()).status !=
+            runtime::GuestMemoryAccessStatus::Success ||
+        !write_guest_value(object, static_cast<GuestIStream*>(nullptr))) {
+        trace_stream("query-interface", "invalid");
+        return kEInvalidArg;
+    }
+    const bool supported = std::memcmp(id.data(), kIidIUnknown.data(), kIidIUnknown.size()) == 0 ||
+                           std::memcmp(id.data(), kIidIStream.data(), kIidIStream.size()) == 0;
     if (!supported) {
         trace_stream("query-interface", "no-interface");
         return kENoInterface;
     }
     (void)stream_add_ref(self);
-    *object = self;
+    if (!write_guest_value(object, self)) {
+        (void)stream_release(self);
+        trace_stream("query-interface", "invalid");
+        return kEInvalidArg;
+    }
     trace_stream("query-interface", "success");
     return kSOk;
 }
@@ -227,16 +235,22 @@ TL_OLE_MSABI std::uint32_t stream_release(GuestIStream* const self) noexcept {
 TL_OLE_MSABI std::int32_t stream_read(GuestIStream* const self, void* const buffer,
                                        const std::uint32_t bytes, std::uint32_t* const read) noexcept {
     StreamState* const stream = find_stream(self);
-    if (stream == nullptr || (read != nullptr && !mapped_range(read, sizeof(*read), true)) ||
-        (bytes != 0 && (buffer == nullptr || !mapped_range(buffer, bytes, true)))) {
+    if (stream == nullptr || (bytes != 0 && buffer == nullptr)) {
         trace_stream("read", "invalid");
         return kEInvalidArg;
     }
     const std::size_t available = stream->size - stream->position;
     const std::size_t count = std::min<std::size_t>(available, bytes);
-    if (count != 0) std::memcpy(buffer, stream->data + stream->position, count);
+    if (count != 0 && runtime::write_guest_memory(buffer, stream->data + stream->position, count).status !=
+                              runtime::GuestMemoryAccessStatus::Success) {
+        trace_stream("read", "invalid");
+        return kEInvalidArg;
+    }
+    if (read != nullptr && !write_guest_value(read, static_cast<std::uint32_t>(count))) {
+        trace_stream("read", "invalid");
+        return kEInvalidArg;
+    }
     stream->position += count;
-    if (read != nullptr) *read = static_cast<std::uint32_t>(count);
     trace_stream("read", count == bytes ? "success" : "eof");
     return count == bytes ? kSOk : kSFalse;
 }
@@ -244,8 +258,7 @@ TL_OLE_MSABI std::int32_t stream_read(GuestIStream* const self, void* const buff
 TL_OLE_MSABI std::int32_t stream_write(GuestIStream* const self, const void* const buffer,
                                         const std::uint32_t bytes, std::uint32_t* const written) noexcept {
     StreamState* const stream = find_stream(self);
-    if (stream == nullptr || (written != nullptr && !mapped_range(written, sizeof(*written), true)) ||
-        (bytes != 0 && (buffer == nullptr || !mapped_range(buffer, bytes, false)))) {
+    if (stream == nullptr || (bytes != 0 && buffer == nullptr)) {
         trace_stream("write", "invalid");
         return kEInvalidArg;
     }
@@ -253,14 +266,29 @@ TL_OLE_MSABI std::int32_t stream_write(GuestIStream* const self, const void* con
         trace_stream("write", "too-large");
         return static_cast<std::int32_t>(0x8007000EU);
     }
+    std::vector<std::uint8_t> input;
+    try {
+        input.resize(bytes);
+    } catch (...) {
+        trace_stream("write", "out-of-memory");
+        return static_cast<std::int32_t>(0x8007000EU);
+    }
+    if (bytes != 0 && runtime::read_guest_memory(buffer, input.data(), input.size()).status !=
+                          runtime::GuestMemoryAccessStatus::Success) {
+        trace_stream("write", "invalid");
+        return kEInvalidArg;
+    }
     const std::size_t end = stream->position + bytes;
     if (!resize_stream(*stream, end)) {
         trace_stream("write", "out-of-memory");
         return static_cast<std::int32_t>(0x8007000EU);
     }
-    if (bytes != 0) std::memcpy(stream->data + stream->position, buffer, bytes);
+    if (bytes != 0) std::memcpy(stream->data + stream->position, input.data(), bytes);
+    if (written != nullptr && !write_guest_value(written, bytes)) {
+        trace_stream("write", "invalid");
+        return kEInvalidArg;
+    }
     stream->position = end;
-    if (written != nullptr) *written = bytes;
     trace_stream("write", "success");
     return kSOk;
 }
@@ -268,7 +296,7 @@ TL_OLE_MSABI std::int32_t stream_write(GuestIStream* const self, const void* con
 TL_OLE_MSABI std::int32_t stream_seek(GuestIStream* const self, const std::int64_t move,
                                        const std::uint32_t origin, std::uint64_t* const position) noexcept {
     StreamState* const stream = find_stream(self);
-    if (stream == nullptr || (position != nullptr && !mapped_range(position, sizeof(*position), true))) {
+    if (stream == nullptr) {
         trace_stream("seek", "invalid");
         return kEInvalidArg;
     }
@@ -289,8 +317,12 @@ TL_OLE_MSABI std::int32_t stream_seek(GuestIStream* const self, const std::int64
         trace_stream("seek", "range-error");
         return kStgESeekError;
     }
-    stream->position = static_cast<std::size_t>(target);
-    if (position != nullptr) *position = static_cast<std::uint64_t>(stream->position);
+    const std::size_t new_position = static_cast<std::size_t>(target);
+    if (position != nullptr && !write_guest_value(position, static_cast<std::uint64_t>(new_position))) {
+        trace_stream("seek", "invalid");
+        return kEInvalidArg;
+    }
+    stream->position = new_position;
     trace_stream("seek", "success");
     return kSOk;
 }
@@ -348,22 +380,27 @@ TL_OLE_MSABI std::int32_t stream_unlock_region(GuestIStream* const self, const s
 TL_OLE_MSABI std::int32_t stream_stat(GuestIStream* const self, GuestStatStg* const stat,
                                        const std::uint32_t flags) noexcept {
     StreamState* const stream = find_stream(self);
-    if (stream == nullptr || stat == nullptr || !mapped_range(stat, sizeof(*stat), true) || flags != 0U) {
+    if (stream == nullptr || stat == nullptr || flags != 0U) {
         trace_stream("stat", "invalid");
         return kEInvalidArg;
     }
-    *stat = GuestStatStg{};
-    stat->type = 2U;
-    stat->cb_size = static_cast<std::uint64_t>(stream->size);
+    GuestStatStg result{};
+    result.type = 2U;
+    result.cb_size = static_cast<std::uint64_t>(stream->size);
+    if (runtime::write_guest_memory(stat, &result, sizeof(result)).status !=
+        runtime::GuestMemoryAccessStatus::Success) {
+        trace_stream("stat", "invalid");
+        return kEInvalidArg;
+    }
     trace_stream("stat", "success");
     return kSOk;
 }
 
 TL_OLE_MSABI std::int32_t stream_clone(GuestIStream* const self, GuestIStream** const clone) noexcept {
-    if (find_stream(self) == nullptr || clone == nullptr || !mapped_range(clone, sizeof(*clone), true)) {
+    if (find_stream(self) == nullptr || clone == nullptr ||
+        !write_guest_value(clone, static_cast<GuestIStream*>(nullptr))) {
         return kEInvalidArg;
     }
-    *clone = nullptr;
     return kStgENotImplemented;
 }
 
