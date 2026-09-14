@@ -555,6 +555,38 @@ TEST(Crypt32Test, CryptMsgGetParamRejectsUnknownHandles) {
     EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
 }
 
+TEST(Crypt32Test, ProtectedUsageOutputsRejectUnmappedPointers) {
+    auto* const invalid = reinterpret_cast<void*>(static_cast<std::uintptr_t>(0x1000U));
+    std::uint32_t usage_size = 0;
+    EXPECT_EQ(tl_CertGetEnhancedKeyUsage(nullptr, 0, nullptr, &usage_size), nullptr);
+    EXPECT_EQ(usage_size, 32U);
+
+    std::array<std::uint8_t, 32> usage{};
+    usage_size = static_cast<std::uint32_t>(usage.size());
+    ASSERT_EQ(tl_CertGetEnhancedKeyUsage(nullptr, 0, usage.data(), &usage_size), usage.data());
+    EXPECT_EQ(usage_size, 32U);
+    EXPECT_TRUE(std::all_of(usage.begin(), usage.end(), [](const std::uint8_t value) {
+        return value == 0U;
+    }));
+
+    usage_size = 32U;
+    EXPECT_EQ(tl_CertGetEnhancedKeyUsage(nullptr, 0, invalid, &usage_size), nullptr);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_CertGetEnhancedKeyUsage(nullptr, 0, nullptr,
+                                          static_cast<std::uint32_t*>(invalid)), nullptr);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+
+    std::array<std::uint8_t, 8> intended{};
+    EXPECT_EQ(tl_CertGetIntendedKeyUsage(0, nullptr, intended.data(), intended.size()), 1);
+    EXPECT_TRUE(std::all_of(intended.begin(), intended.end(), [](const std::uint8_t value) {
+        return value == 0xFFU;
+    }));
+    EXPECT_EQ(tl_CertGetIntendedKeyUsage(0, nullptr, static_cast<std::uint8_t*>(invalid),
+                                         intended.size()),
+              0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+}
+
 TEST(Crypt32Test, CryptMsgCloseRejectsUnknownHandles) {
     EXPECT_EQ(tl_CryptMsgClose(nullptr), 0);
     EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidHandle);

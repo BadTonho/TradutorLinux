@@ -253,6 +253,12 @@ contextos externos em `CertFreeCertificateContext`, zerar `pcbData` em
 os caminhos de rejeição não escrevem diretamente em ponteiros convidados nem
 fabricam handles ou contextos.
 
+O sublote `CRYPT32/usage-output` lê `usage_size` com `read_guest_memory` e
+publica a estrutura vazia de `CertGetEnhancedKeyUsage` com
+`write_guest_memory`; `CertGetIntendedKeyUsage` preenche `key_usage` em blocos
+protegidos. Essas APIs permanecem stubs determinísticos e não interpretam
+certificados ou extensões EKU.
+
 ## Limites residuais
 
 `validate_mapped_range` permanece deliberadamente como predicado advisory:

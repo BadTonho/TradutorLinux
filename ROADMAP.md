@@ -628,6 +628,13 @@ leituras/escritas protegidas, mantendo handles não fabricados, tamanho zero e
 consulta de objeto, mensagem e fechamento passaram no preset
 `validation-sanitize`.
 
+O sublote `CRYPT32/usage-output` migrou as saídas de
+`CertGetEnhancedKeyUsage` e `CertGetIntendedKeyUsage` para leitura e escrita
+protegidas, incluindo preenchimento chunked para contagens maiores. O
+comportamento continua sendo o stub determinístico publicado (estrutura vazia
+ou bytes `0xFF`), sem afirmar parsing de EKU; `Crypt32Test` passou no caso novo
+de buffers de uso.
+
 ## Fora desta rodada
 
 Não entram neste roadmap, por enquanto:

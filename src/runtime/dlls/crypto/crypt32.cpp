@@ -1088,13 +1088,27 @@ TL_CRYPT32_MSABI void* tl_CertGetEnhancedKeyUsage(void* const cert_context, cons
         return nullptr;
     }
     constexpr std::uint32_t req_size = 32;
-    if (usage == nullptr || *usage_size < req_size) {
-        *usage_size = req_size;
+    std::uint32_t usage_capacity = 0;
+    if (runtime::read_guest_memory(usage_size, &usage_capacity, sizeof(usage_capacity)).status !=
+        runtime::GuestMemoryAccessStatus::Success) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return nullptr;
+    }
+    if (usage == nullptr || usage_capacity < req_size) {
+        if (!write_guest_value(usage_size, req_size)) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return nullptr;
+        }
         set_last_error(abi::kErrorSuccess);
         return nullptr;
     }
-    std::memset(usage, 0, req_size);
-    *usage_size = req_size;
+    const std::array<std::uint8_t, req_size> empty_usage{};
+    if (runtime::write_guest_memory(usage, empty_usage.data(), empty_usage.size()).status !=
+            runtime::GuestMemoryAccessStatus::Success ||
+        !write_guest_value(usage_size, req_size)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return nullptr;
+    }
     set_last_error(abi::kErrorSuccess);
     return usage;
 }
@@ -1104,7 +1118,29 @@ TL_CRYPT32_MSABI int tl_CertGetIntendedKeyUsage(const std::uint32_t cert_encodin
     (void)cert_encoding_type;
     (void)cert_info;
     if (key_usage != nullptr && byte_count > 0) {
-        std::memset(key_usage, 0xFF, byte_count);
+        constexpr std::size_t kChunkSize = 4096U;
+        const std::array<std::uint8_t, kChunkSize> filled_usage = [] {
+            std::array<std::uint8_t, kChunkSize> value{};
+            value.fill(0xFFU);
+            return value;
+        }();
+        const std::uintptr_t address = reinterpret_cast<std::uintptr_t>(key_usage);
+        std::size_t offset = 0;
+        while (offset < byte_count) {
+            if (offset > std::numeric_limits<std::uintptr_t>::max() - address) {
+                set_last_error(abi::kErrorInvalidParameter);
+                return 0;
+            }
+            const std::size_t count =
+                std::min<std::size_t>(filled_usage.size(), byte_count - offset);
+            if (runtime::write_guest_memory(reinterpret_cast<void*>(address + offset),
+                                             filled_usage.data(), count)
+                    .status != runtime::GuestMemoryAccessStatus::Success) {
+                set_last_error(abi::kErrorInvalidParameter);
+                return 0;
+            }
+            offset += count;
+        }
     }
     set_last_error(abi::kErrorSuccess);
     return 1;

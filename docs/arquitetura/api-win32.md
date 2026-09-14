@@ -616,6 +616,11 @@ quando não são handles rastreados. `CryptMsgGetParam` zera `pcbData` por cópi
 protegida antes de rejeitar o handle, e `CryptQueryObject` limpa suas saídas
 opcionais pela mesma fronteira antes de retornar `ERROR_NOT_SUPPORTED`.
 
+`CertGetEnhancedKeyUsage` e `CertGetIntendedKeyUsage` permanecem stubs
+determinísticos: a primeira consulta/publica 32 bytes vazios e a segunda
+preenche a contagem solicitada com `0xFF`. Capacidades e buffers são acessados
+por cópias protegidas; nenhuma delas afirma interpretar EKU de um certificado.
+
 `WinVerifyTrust`, `WTHelperProvDataFromStateData`,
 `WTHelperGetProvSignerFromChain` e `WTHelperGetProvCertFromChain` implementam
 o contrato de blob/cadeia explícita usado por `tl_trust`. `WTD_CHOICE_FILE`,
