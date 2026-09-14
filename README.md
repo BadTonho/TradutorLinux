@@ -89,3 +89,11 @@ registrados em [docs/compatibilidade.md](docs/compatibilidade.md).
 ## Qualidade
 
 O projeto usa C++20, CMake, Ninja, GoogleTest, CTest, clang-tidy, cppcheck e sanitizers. O GitHub Actions executa build, testes e análise estática para pushes e pull requests.
+
+## Licença e Comunidade / License & Community
+
+* **Licença / License:** [GNU Lesser General Public License v3.0 (LGPL-3.0)](LICENSE)
+* **Contribuição / Contributing:** [CONTRIBUTING.md](CONTRIBUTING.md)
+* **Código de Conduta / Code of Conduct:** [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)
+* **Segurança / Security:** [SECURITY.md](SECURITY.md)
+
