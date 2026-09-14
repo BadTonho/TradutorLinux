@@ -234,6 +234,12 @@ SHA-1 ou friendly name com `write_guest_memory`. A capacidade requerida e o
 caso `ERROR_MORE_DATA` também são publicados pela fronteira protegida; contexto,
 capacidade e buffers inacessíveis falham de modo controlado.
 
+O sublote `CRYPT32/store-query` copia para memória host os parâmetros de
+`CertFindCertificateInStore`: `GuestDataBlob`/SHA-1 usa snapshot do blob e dos
+20 bytes, enquanto subject wide usa `copy_guest_wstring`. A enumeração compara
+somente ponteiros de contextos emitidos pelo runtime; buscas inválidas falham
+antes da consulta.
+
 ## Limites residuais
 
 `validate_mapped_range` permanece deliberadamente como predicado advisory:

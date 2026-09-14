@@ -609,6 +609,12 @@ capacidade e `ERROR_MORE_DATA` permanecem preservadas; a regressão
 `Crypt32Test.CertContextAndStoreManagement` e as quatro integrações PE de
 `tl_certcontext` passaram no preset `validation-sanitize`.
 
+O sublote `CRYPT32/store-query` migrou os parâmetros de busca de
+`CertFindCertificateInStore`: o blob SHA-1 e o subject UTF-16 são copiados antes
+da consulta, sem desreferenciar `find_para` durante a varredura. A regressão de
+gestão de contexto cobre ponteiros inválidos e mantém a regra de não fabricar
+certificados em uma loja vazia.
+
 ## Fora desta rodada
 
 Não entram neste roadmap, por enquanto:

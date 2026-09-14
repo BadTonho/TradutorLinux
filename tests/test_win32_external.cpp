@@ -454,6 +454,13 @@ TEST(Crypt32Test, CertContextAndStoreManagement) {
     void* mem_store = tl_CertOpenStore(reinterpret_cast<const char*>(kCertStoreProvMemory), 0,
                                        nullptr, 0, nullptr);
     ASSERT_NE(mem_store, nullptr);
+    EXPECT_EQ(tl_CertFindCertificateInStore(mem_store, 0, 0, kCertFindSha1Hash, invalid, nullptr),
+              nullptr);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_CertFindCertificateInStore(mem_store, 0, 0, kCertFindSubjectStrW, invalid,
+                                           nullptr),
+              nullptr);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
     EXPECT_EQ(tl_CertCloseStore(nullptr, 0), 0U);
     EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidHandle);
     EXPECT_EQ(tl_CertCloseStore(mem_store, kCertCloseStoreCheckFlag), 1U);

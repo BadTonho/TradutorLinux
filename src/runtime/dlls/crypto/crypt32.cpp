@@ -882,6 +882,23 @@ TL_CRYPT32_MSABI const GuestCertContext* tl_CertFindCertificateInStore(
         return nullptr;
     }
 
+    GuestDataBlob hash_blob{};
+    std::vector<std::uint8_t> hash_storage;
+    std::u16string subject_target;
+    if (find_type == kCertFindSha1Hash && find_para != nullptr) {
+        if (!snapshot_data_blob(static_cast<const GuestDataBlob*>(find_para), hash_blob,
+                                hash_storage) ||
+            hash_blob.size != 20U) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return nullptr;
+        }
+    } else if (find_type == kCertFindSubjectStrW && find_para != nullptr &&
+               !runtime::copy_guest_wstring(static_cast<const std::uint16_t*>(find_para), 65535U,
+                                            subject_target)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return nullptr;
+    }
+
     std::lock_guard<std::mutex> lock(g_crypto_mutex);
     TrackedStore* target_store = nullptr;
     for (const auto& store : g_tracked_stores) {
@@ -918,16 +935,10 @@ TL_CRYPT32_MSABI const GuestCertContext* tl_CertFindCertificateInStore(
         bool matches = false;
         if (find_type == kCertFindAny) {
             matches = true;
-        } else if (find_type == kCertFindSha1Hash && find_para != nullptr &&
-                   runtime::validate_mapped_range(find_para, sizeof(GuestDataBlob), false)) {
-            const auto* const blob = static_cast<const GuestDataBlob*>(find_para);
-            if (blob->size == 20U && blob->data != nullptr &&
-                runtime::validate_mapped_range(blob->data, 20U, false)) {
-                const auto hash = compute_sha1(Bytes(candidate->encoded, candidate->encoded_size));
-                matches = (std::memcmp(hash.data(), blob->data, 20U) == 0);
-            }
-        } else if (find_type == kCertFindSubjectStrW && find_para != nullptr &&
-                   runtime::validate_mapped_wstring(static_cast<const std::uint16_t*>(find_para))) {
+        } else if (find_type == kCertFindSha1Hash && !hash_storage.empty()) {
+            const auto hash = compute_sha1(Bytes(candidate->encoded, candidate->encoded_size));
+            matches = (std::memcmp(hash.data(), hash_storage.data(), hash.size()) == 0);
+        } else if (find_type == kCertFindSubjectStrW && find_para != nullptr) {
             Bytes issuer{};
             Bytes subject{};
             if (extract_certificate_names(Bytes(candidate->encoded, candidate->encoded_size),
@@ -938,9 +949,7 @@ TL_CRYPT32_MSABI const GuestCertContext* tl_CertFindCertificateInStore(
                     const std::u16string name =
                         select_name(attrs, kCertNameSimpleDisplayType, nullptr, found);
                     if (found) {
-                        const std::u16string target(static_cast<const char16_t*>(
-                            static_cast<const void*>(find_para)));
-                        matches = (name.find(target) != std::u16string::npos);
+                        matches = (name.find(subject_target) != std::u16string::npos);
                     }
                 }
             }

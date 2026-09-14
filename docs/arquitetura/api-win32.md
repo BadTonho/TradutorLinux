@@ -606,6 +606,11 @@ SHA-1 e friendly name. Ele fotografa o contexto e o DER, lê e atualiza
 `pcbData` por cópias protegidas e publica bytes ou UTF-16 somente depois de
 verificar a capacidade; `ERROR_MORE_DATA` mantém o tamanho requerido.
 
+`CertEnumCertificatesInStore` usa somente handles e contextos emitidos pelo
+runtime ao avançar a enumeração. `CertFindCertificateInStore` copia os
+parâmetros SHA-1 e subject UTF-16 antes da busca; blob, string ou handle
+inacessível resulta em erro/consulta controlada, sem fabricar certificados.
+
 `WinVerifyTrust`, `WTHelperProvDataFromStateData`,
 `WTHelperGetProvSignerFromChain` e `WTHelperGetProvCertFromChain` implementam
 o contrato de blob/cadeia explícita usado por `tl_trust`. `WTD_CHOICE_FILE`,
