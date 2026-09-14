@@ -47,6 +47,17 @@ thread_local std::array<std::uint32_t, kMaxCleanupActions> g_cxx_cleanup_actions
 thread_local std::size_t g_cxx_cleanup_count = 0U;
 thread_local std::size_t g_cxx_cleanup_index = 0U;
 
+[[nodiscard]] bool write_guest_stack_value(const std::uint64_t stack_pointer,
+                                           const std::uint64_t value) noexcept {
+    void* const destination = reinterpret_cast<void*>(
+        static_cast<std::uintptr_t>(stack_pointer));
+    if (!validate_guest_stack_range(destination, sizeof(value), true)) {
+        return false;
+    }
+    return write_guest_memory(destination, &value, sizeof(value)).status ==
+           GuestMemoryAccessStatus::Success;
+}
+
 struct ImageReader {
     GuestUnwindView view{};
 
@@ -551,14 +562,13 @@ bool prepare_cxx_catch_transfer(ContextAmd64& context, void* const establisher_f
                                 void* const target_ip) noexcept {
     const std::uint64_t target = reinterpret_cast<std::uintptr_t>(target_ip);
     if (target == 0U || target != g_cxx_catch_target ||
-        !validate_guest_stack_range(reinterpret_cast<void*>(context.rsp), sizeof(std::uint64_t), true)) {
+        !write_guest_stack_value(context.rsp,
+                                 reinterpret_cast<std::uintptr_t>(&tl_cxx_catch_return_trampoline))) {
         trace_cxx_eh(diagnostics::TraceLevel::Error, "rejected", "invalid-catch-transfer");
         return false;
     }
     context.rdx = reinterpret_cast<std::uintptr_t>(establisher_frame);
     g_cxx_catch_context = context;
-    *reinterpret_cast<std::uint64_t*>(context.rsp) =
-        reinterpret_cast<std::uintptr_t>(&tl_cxx_catch_return_trampoline);
     g_cxx_catch_context_ready = true;
     g_cxx_funclet_active = true;
     g_cxx_cleanup_context_ready = false;
@@ -583,16 +593,20 @@ bool prepare_cxx_cleanup_transfer(ContextAmd64& action_context,
         return false;
     }
 
+    if (!write_guest_stack_value(action_context.rsp,
+                                 reinterpret_cast<std::uintptr_t>(&tl_cxx_cleanup_return_trampoline)) ||
+        !write_guest_stack_value(catch_context.rsp,
+                                 reinterpret_cast<std::uintptr_t>(&tl_cxx_catch_return_trampoline))) {
+        trace_cxx_eh(diagnostics::TraceLevel::Error, "rejected", "guest-stack-write-failed");
+        return false;
+    }
+
     action_context.rip = cleanup_target;
     action_context.rdx = reinterpret_cast<std::uintptr_t>(establisher_frame);
-    *reinterpret_cast<std::uint64_t*>(action_context.rsp) =
-        reinterpret_cast<std::uintptr_t>(&tl_cxx_cleanup_return_trampoline);
 
     g_cxx_catch_context = catch_context;
     g_cxx_catch_context.rip = catch_target;
     g_cxx_catch_context.rdx = reinterpret_cast<std::uintptr_t>(establisher_frame);
-    *reinterpret_cast<std::uint64_t*>(g_cxx_catch_context.rsp) =
-        reinterpret_cast<std::uintptr_t>(&tl_cxx_catch_return_trampoline);
     g_cxx_catch_context_ready = true;
     g_cxx_cleanup_context_ready = true;
     g_cxx_funclet_active = true;
@@ -632,8 +646,12 @@ extern "C" [[noreturn]] void tl_cxx_cleanup_return_from_asm(
         next_context.rip = base + next_rva;
         next_context.rsp = stack_pointer;
         next_context.rdx = g_cxx_cleanup_establisher;
-        *reinterpret_cast<std::uint64_t*>(next_context.rsp) =
-            reinterpret_cast<std::uintptr_t>(&tl_cxx_cleanup_return_trampoline);
+        if (!write_guest_stack_value(next_context.rsp,
+                                     reinterpret_cast<std::uintptr_t>(&tl_cxx_cleanup_return_trampoline))) {
+            trace_cxx_eh(diagnostics::TraceLevel::Error, "rejected", "guest-stack-write-failed");
+            tl_ExitThread(kCxxException);
+            std::abort();
+        }
         g_cxx_cleanup_index = next_index;
         g_cxx_cleanup_target = next_context.rip;
         g_cxx_cleanup_context_ready = true;
@@ -652,8 +670,12 @@ extern "C" [[noreturn]] void tl_cxx_cleanup_return_from_asm(
         tl_ExitThread(kCxxException);
         std::abort();
     }
-    *reinterpret_cast<std::uint64_t*>(g_cxx_catch_context.rsp) =
-        reinterpret_cast<std::uintptr_t>(&tl_cxx_catch_return_trampoline);
+    if (!write_guest_stack_value(g_cxx_catch_context.rsp,
+                                 reinterpret_cast<std::uintptr_t>(&tl_cxx_catch_return_trampoline))) {
+        trace_cxx_eh(diagnostics::TraceLevel::Error, "rejected", "guest-stack-write-failed");
+        tl_ExitThread(kCxxException);
+        std::abort();
+    }
     g_cxx_cleanup_target = 0U;
     g_cxx_cleanup_establisher = 0U;
     g_cxx_cleanup_actions.fill(0U);

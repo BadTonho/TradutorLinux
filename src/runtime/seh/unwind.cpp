@@ -148,8 +148,8 @@ constexpr std::uint32_t kStatusUnwindConsolidate = 0x80000029U;
     if (!validate_guest_stack_range(source, sizeof(out), false)) {
         return false;
     }
-    std::memcpy(&out, source, sizeof(out));
-    return true;
+    return read_guest_memory(source, &out, sizeof(out)).status ==
+           GuestMemoryAccessStatus::Success;
 }
 
 [[nodiscard]] bool read_m128(const std::uint64_t address, M128A& out) noexcept {
@@ -157,8 +157,8 @@ constexpr std::uint32_t kStatusUnwindConsolidate = 0x80000029U;
     if (!validate_guest_stack_range(source, sizeof(out), false)) {
         return false;
     }
-    std::memcpy(&out, source, sizeof(out));
-    return true;
+    return read_guest_memory(source, &out, sizeof(out)).status ==
+           GuestMemoryAccessStatus::Success;
 }
 
 [[nodiscard]] bool apply_unwind_code(const pe::UnwindCode& code, ContextAmd64& context,
@@ -415,6 +415,7 @@ void restore_guest_unwind_view(const GuestUnwindView view) noexcept {
 
 bool validate_guest_stack_range(const void* const address, const std::size_t size,
                                 const bool writable) noexcept {
+    (void)writable;
     if (address == nullptr || size == 0U) {
         return false;
     }
@@ -431,7 +432,10 @@ bool validate_guest_stack_range(const void* const address, const std::size_t siz
             return false;
         }
     }
-    return validate_mapped_range(address, size, writable);
+    // A transferência efetiva deve passar por read_guest_memory ou
+    // write_guest_memory. Esta função só limita a faixa à stack convidada e
+    // não usa a fotografia de mapas como garantia de acesso.
+    return true;
 }
 
 void* add_vectored_exception_handler(const std::uint32_t first, void* const handler) noexcept {

@@ -129,9 +129,9 @@ struct GuestUnwindView {
 [[nodiscard]] GuestUnwindView current_guest_unwind_view() noexcept;
 void restore_guest_unwind_view(GuestUnwindView view) noexcept;
 
-// Valida uma faixa pertencente à stack convidada ativa. Durante os testes de
-// APIs sem execução convidada, a função conserva o fallback para a validação
-// das regiões do processo hospedeiro.
+// Valida somente aritmética e pertencimento à stack convidada ativa. Acesso
+// efetivo à faixa deve usar read_guest_memory/write_guest_memory; esta função
+// não transforma a fotografia de mapas em garantia de acesso.
 [[nodiscard]] bool validate_guest_stack_range(const void* address, std::size_t size,
                                               bool writable) noexcept;
 

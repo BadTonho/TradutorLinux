@@ -13,7 +13,7 @@ diferentes e um endereço aritmeticamente válido pode não estar mapeado.
 | Strings de entrada | caminhos, `WININET`, `MPR`, `IPHLPAPI`, `GetPrivateProfile*` e `WS2_32` | Leitura após snapshot ou string sem terminador | Validação por blocos copiados com `copy_guest_cstring`/`copy_guest_wstring` nos caminhos migrados |
 | Estruturas de entrada | `NETRESOURCEW`, arrays de handles, `URL_COMPONENTS`, `sockaddr`, parâmetros de arquivos, rede, janela, thread e segurança | Tamanho/layout inválido e ponteiros internos inválidos | Validar faixa, copiar para objeto host e validar campos apontados quando o caminho já foi migrado |
 | Buffers de saída | `ReadFile`/`WriteFile`, `FindFirstFileA/W`, caminhos, `GetProcessMemoryInfo`, console/tempo, memória virtual, sincronização, `IPHLPAPI`, `GetPrivateProfile*`, thread, `WS2_32`, WININET, locale, GUI e handles | Escrita em página desmontada ou somente leitura | `write_guest_memory` nos caminhos migrados; stubs que rejeitam antes de consumir a saída validam somente o contrato nulo/tamanho |
-| Imagem PE e contexto ABI | IAT, entry point, TEB, callbacks e registros de exceção | Endereços controlados pelo convidado e conversão de ABI | Imagem/contextos pertencem a regiões controladas pelo loader; callbacks e campos ABI têm validações próprias |
+| Imagem PE e contexto ABI | IAT, entry point, TEB, callbacks e registros de exceção | Endereços controlados pelo convidado e conversão de ABI | Imagem/contextos pertencem a regiões controladas pelo loader; callbacks têm contrato de dados runtime-owned e a pilha SEH usa transferências protegidas |
 | Handles opacos | Arquivos, threads, janelas, rede e side-tables | Token arbitrário confundido com ponteiro host | Tabelas de ownership e validação de tipo; não são cópia de memória |
 
 O inventário completo deve ser mantido por busca de `memcpy`, atribuições por
@@ -55,6 +55,12 @@ ou `ERROR_INVALID_HANDLE` sem falso sucesso e sem escrever nesses buffers.
 `version.dll` segue o mesmo contrato para os blocos `RT_VERSION`: os stubs
 não fabricam metadados nem leem o bloco; `GetFileVersionInfoSize*` e
 `VerQueryValue*` publicam apenas suas saídas por cópia protegida.
+
+O desempilhamento x64 preserva a restrição adicional de que cada endereço de
+retorno e registro XMM lido da pilha passa por `read_guest_memory`. Os
+trampolins de C++ publicam palavras de retorno por `write_guest_memory` depois
+de conferir os limites do TEB; a conferência de limites não é usada como
+substituta da transferência protegida.
 
 O sublote `KERNEL32/file-input` usa o normalizador de caminhos como única
 fronteira para `CreateFileA/W`: ele copia o nome A/W para memória host antes de

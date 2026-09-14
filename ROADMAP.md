@@ -642,6 +642,12 @@ saídas efetivamente publicados continuam usando `read_guest_value`/
 `write_guest_memory`. As regressões de MPR e VERSION cobrem strings aninhadas,
 saídas inválidas e a rejeição controlada de blocos não consumidos.
 
+O sublote `SEH/stack-transfer` removeu `validate + memcpy` e desreferências
+diretas dos endereços de retorno e registros salvos na pilha convidada. O
+desempilhamento agora lê por `read_guest_memory`, e os trampolins C++ escrevem
+por `write_guest_memory` após a restrição de faixa do TEB; a suíte `UnwindTest`
+continua cobrindo pilha ativa, alocação, registradores salvos e cadeias.
+
 ## Fora desta rodada
 
 Não entram neste roadmap, por enquanto:
