@@ -121,6 +121,53 @@ TEST(Win32GuiTest, InsertsMenuItemWithMicrosoftMask) {
     EXPECT_EQ(tl_DestroyMenu(menu), 1);
 }
 
+TEST(Win32GuiTest, ProtectedMenuInputsAndOutputsRejectUnmappedPointers) {
+    g_menus = {};
+    void* const menu = tl_CreatePopupMenu();
+    ASSERT_NE(menu, nullptr);
+    auto* const invalid = reinterpret_cast<void*>(static_cast<std::uintptr_t>(0x1000U));
+
+    EXPECT_EQ(tl_AppendMenuA(menu, 0, 701, static_cast<const char*>(invalid)), 0);
+    EXPECT_EQ(tl_AppendMenuW(menu, 0, 702, static_cast<const std::uint16_t*>(invalid)), 0);
+    ASSERT_EQ(tl_AppendMenuA(menu, 0, 703, "Protected"), 1);
+
+    struct GuestMenuItemInfoW {
+        std::uint32_t cb_size;
+        std::uint32_t f_mask;
+        std::uint32_t f_type;
+        std::uint32_t f_state;
+        std::uint32_t item_id;
+        void* sub_menu;
+        void* checked_bitmap;
+        void* unchecked_bitmap;
+        std::uintptr_t item_data;
+        std::uint16_t* type_data;
+        std::uint32_t char_count;
+        void* item_bitmap;
+    };
+    static_assert(sizeof(GuestMenuItemInfoW) == 80);
+
+    GuestMenuItemInfoW input{};
+    input.cb_size = sizeof(input);
+    input.f_mask = 0x00000040U;
+    input.type_data = static_cast<std::uint16_t*>(invalid);
+    input.char_count = 8;
+    EXPECT_EQ(tl_InsertMenuItemW(menu, 0, 1, &input), 0);
+
+    GuestMenuItemInfoW output{};
+    output.cb_size = sizeof(output);
+    output.f_mask = 0x00000040U;
+    output.type_data = static_cast<std::uint16_t*>(invalid);
+    output.char_count = 8;
+    EXPECT_EQ(tl_GetMenuItemInfoW(menu, 0, 1, &output), 0);
+    EXPECT_EQ(tl_GetMenuBarInfo(nullptr, 0, 0, invalid), 0);
+    EXPECT_EQ(tl_GetMenuStringW(menu, 703, reinterpret_cast<wchar_t*>(invalid), 8, 0), 0);
+    EXPECT_EQ(tl_LoadMenuW(nullptr, static_cast<const std::uint16_t*>(invalid)), nullptr);
+
+    EXPECT_EQ(tl_DestroyMenu(menu), 1);
+    g_menus = {};
+}
+
 TEST(Win32GuiTest, LoadsExtendedMenuResourceAndExposesHierarchy) {
     std::vector<std::byte> image(512, std::byte{0});
     const auto write_u16 = [&image](const std::size_t offset, const std::uint16_t value) {

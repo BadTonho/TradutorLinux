@@ -451,6 +451,12 @@ cópias locais antes de qualquer consulta, conversão ou callback. A validação
 endereço do procedimento de janela continua separada da cópia dos dados, e a
 regressão cobre estruturas, nomes e criações com ponteiros inválidos.
 
+O sublote `USER32/menu` migrou `MENUITEMINFO` de entrada e saída, textos de
+`AppendMenuA/W`, o nome de recurso de `LoadMenuW` e as saídas de
+`GetMenuBarInfo`/`GetMenuStringW` para cópias e publicações protegidas. A
+regressão cobre strings, estruturas aninhadas e buffers inacessíveis, mantendo
+os retornos limitados dos stubs.
+
 ## Fora desta rodada
 
 Não entram neste roadmap, por enquanto:

@@ -72,6 +72,12 @@ antes de conversão, busca de classe ou montagem de `CREATESTRUCT`; o endereço 
 procedimento de janela é validado como callback convidado, sem desreferência
 direta de campos da estrutura original.
 
+O sublote `USER32/menu` aplica o contrato a `MENUITEMINFO`, aos textos de
+`AppendMenuA/W`, ao nome de recurso de `LoadMenuW` e às saídas de
+`GetMenuBarInfo`/`GetMenuStringW`. Estruturas aninhadas são lidas para objetos
+host, e buffers de texto e estruturas de saída são publicados somente por
+`write_guest_memory`.
+
 ## Limites residuais
 
 `validate_mapped_range` permanece deliberadamente como predicado advisory:

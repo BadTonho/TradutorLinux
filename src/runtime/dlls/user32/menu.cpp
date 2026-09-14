@@ -233,47 +233,50 @@ static_assert(sizeof(GuestMenuItemInfoW) == 80);
 }
 
 [[nodiscard]] bool read_guest_menu_item_info(const void* const mii, MenuItem& item) noexcept {
-    if (mii == nullptr || !mapped_guest_range(mii, sizeof(GuestMenuItemInfoW), false)) {
+    GuestMenuItemInfoW input{};
+    if (mii == nullptr || !read_guest_value(mii, input)) {
         set_last_error(abi::kErrorInvalidParameter);
         return false;
     }
-    const auto* const input = static_cast<const GuestMenuItemInfoW*>(mii);
-    if (input->cb_size < sizeof(GuestMenuItemInfoW)) {
+    if (input.cb_size < sizeof(GuestMenuItemInfoW)) {
         set_last_error(abi::kErrorBadLength);
         return false;
     }
-    if ((input->f_mask & (kMenuItemInfoData | kMenuItemInfoBitmap)) != 0U) {
+    if ((input.f_mask & (kMenuItemInfoData | kMenuItemInfoBitmap)) != 0U) {
         set_last_error(abi::kErrorNotSupported);
         return false;
     }
-    if ((input->f_mask & (kMenuItemInfoType | kMenuItemInfoFType)) != 0U) {
-        item.type = input->f_type;
+    if ((input.f_mask & (kMenuItemInfoType | kMenuItemInfoFType)) != 0U) {
+        item.type = input.f_type;
     }
-    if ((input->f_mask & kMenuItemInfoState) != 0U) {
-        item.state = input->f_state;
+    if ((input.f_mask & kMenuItemInfoState) != 0U) {
+        item.state = input.f_state;
     }
-    if ((input->f_mask & kMenuItemInfoId) != 0U) {
-        item.command_id = input->item_id;
+    if ((input.f_mask & kMenuItemInfoId) != 0U) {
+        item.command_id = input.item_id;
     }
-    if ((input->f_mask & kMenuItemInfoSubmenu) != 0U) {
-        if (input->sub_menu != nullptr && mutable_menu_slot(input->sub_menu) == nullptr) {
+    if ((input.f_mask & kMenuItemInfoSubmenu) != 0U) {
+        if (input.sub_menu != nullptr && mutable_menu_slot(input.sub_menu) == nullptr) {
             set_last_error(abi::kErrorInvalidHandle);
             return false;
         }
-        item.submenu = static_cast<MenuSlot*>(input->sub_menu);
+        item.submenu = static_cast<MenuSlot*>(input.sub_menu);
     }
-    if ((input->f_mask & (kMenuItemInfoType | kMenuItemInfoString)) != 0U) {
-        if (input->type_data == nullptr) {
+    if ((input.f_mask & (kMenuItemInfoType | kMenuItemInfoString)) != 0U) {
+        if (input.type_data == nullptr) {
             item.text.clear();
-        } else if (!mapped_guest_wstring(input->type_data)) {
-            set_last_error(abi::kErrorInvalidParameter);
-            return false;
         } else {
-            item.text = util::wide_to_utf8(input->type_data);
+            std::u16string text;
+            if (!runtime::copy_guest_wstring(input.type_data, 65535U, text)) {
+                set_last_error(abi::kErrorInvalidParameter);
+                return false;
+            }
+            item.text = util::wide_to_utf8(
+                reinterpret_cast<const std::uint16_t*>(text.data()), text.size());
         }
     }
-    if ((input->f_mask & kMenuItemInfoCheckmarks) != 0U &&
-        (input->checked_bitmap != nullptr || input->unchecked_bitmap != nullptr)) {
+    if ((input.f_mask & kMenuItemInfoCheckmarks) != 0U &&
+        (input.checked_bitmap != nullptr || input.unchecked_bitmap != nullptr)) {
         set_last_error(abi::kErrorNotSupported);
         return false;
     }
@@ -306,20 +309,26 @@ TL_MSABI int tl_AppendMenuA(const void* menu, std::uint32_t flags, std::uintptr_
     if (!user32_gui_thread_allowed("AppendMenuA")) {
         return 0;
     }
+    std::string text_copy;
+    if (text != nullptr && !runtime::copy_guest_cstring(text, 65535U, text_copy)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
     const auto it = std::find_if(g_menus.begin(), g_menus.end(),
                                  [menu](const MenuSlot& entry) { return entry.used && &entry == menu; });
     if (it == g_menus.end()) {
         set_last_error(abi::kErrorInvalidHandle);
         return 0;
     }
+    const char* const effective_text = text != nullptr ? text_copy.c_str() : nullptr;
     it->items.push_back(gui::PopupMenuItem{.command = static_cast<std::uint32_t>(command),
-                                           .text = text != nullptr ? text : "",
+                                           .text = effective_text != nullptr ? effective_text : "",
                                            .separator = (flags & 0x00000800U) != 0});
     it->logical_items.push_back(MenuItem{.type = flags,
                                          .state = 0,
                                          .command_id = static_cast<std::uint32_t>(command),
                                          .flags = 0,
-                                         .text = text != nullptr ? text : "",
+                                         .text = effective_text != nullptr ? effective_text : "",
                                          .submenu = nullptr});
     set_last_error(abi::kErrorSuccess);
     return 1;
@@ -327,12 +336,16 @@ TL_MSABI int tl_AppendMenuA(const void* menu, std::uint32_t flags, std::uintptr_
 
 TL_MSABI int tl_AppendMenuW(const void* menu, std::uint32_t flags, std::uintptr_t command,
                              const std::uint16_t* text) noexcept {
-    if (text != nullptr && !mapped_guest_wstring(text)) {
+    std::u16string text_copy;
+    if (text != nullptr && !runtime::copy_guest_wstring(text, 65535U, text_copy)) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
     std::string utf8;
-    if (text != nullptr) utf8 = util::wide_to_utf8(text);
+    if (text != nullptr) {
+        utf8 = util::wide_to_utf8(
+            reinterpret_cast<const std::uint16_t*>(text_copy.data()), text_copy.size());
+    }
     return tl_AppendMenuA(menu, flags, command, text != nullptr ? utf8.c_str() : nullptr);
 }
 
@@ -428,8 +441,8 @@ TL_MSABI int tl_GetMenuItemInfoW(void* const menu, const std::uint32_t item, con
                                 void* const mii) noexcept {
     MenuSlot* const actual = mutable_menu_slot(menu);
     MenuItem* const entry = actual == nullptr ? nullptr : menu_item_for(*actual, item, f_by_position);
-    if (mii == nullptr || !mapped_guest_range(mii, sizeof(GuestMenuItemInfoW), true) ||
-        entry == nullptr) {
+    GuestMenuItemInfoW output{};
+    if (mii == nullptr || entry == nullptr || !read_guest_value(mii, output)) {
         const std::array<diagnostics::TraceField, 4> fields{
             diagnostics::TraceField{"symbol", "GetMenuItemInfoW"},
             diagnostics::TraceField{"status", "invalid-output"},
@@ -439,42 +452,43 @@ TL_MSABI int tl_GetMenuItemInfoW(void* const menu, const std::uint32_t item, con
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
-    auto* const output = static_cast<GuestMenuItemInfoW*>(mii);
-    if (output->cb_size < sizeof(GuestMenuItemInfoW)) {
+    if (output.cb_size < sizeof(GuestMenuItemInfoW)) {
         set_last_error(abi::kErrorBadLength);
         return 0;
     }
-    if ((output->f_mask & (kMenuItemInfoType | kMenuItemInfoFType)) != 0U) {
-        output->f_type = entry->type;
+    if ((output.f_mask & (kMenuItemInfoType | kMenuItemInfoFType)) != 0U) {
+        output.f_type = entry->type;
     }
-    if ((output->f_mask & kMenuItemInfoState) != 0U) {
-        output->f_state = entry->state;
+    if ((output.f_mask & kMenuItemInfoState) != 0U) {
+        output.f_state = entry->state;
     }
-    if ((output->f_mask & kMenuItemInfoId) != 0U) {
-        output->item_id = entry->command_id;
+    if ((output.f_mask & kMenuItemInfoId) != 0U) {
+        output.item_id = entry->command_id;
     }
-    if ((output->f_mask & kMenuItemInfoSubmenu) != 0U) {
-        output->sub_menu = entry->submenu;
+    if ((output.f_mask & kMenuItemInfoSubmenu) != 0U) {
+        output.sub_menu = entry->submenu;
     }
-    if ((output->f_mask & (kMenuItemInfoType | kMenuItemInfoString)) != 0U) {
-        if (output->type_data == nullptr || output->char_count == 0U) {
+    if ((output.f_mask & (kMenuItemInfoType | kMenuItemInfoString)) != 0U) {
+        if (output.type_data == nullptr || output.char_count == 0U) {
             set_last_error(abi::kErrorInvalidParameter);
             return 0;
         }
         const std::u16string text = util::utf8_to_wide(entry->text);
-        const std::size_t capacity = output->char_count;
-        if (capacity > std::numeric_limits<std::size_t>::max() / sizeof(std::uint16_t)) {
-            set_last_error(abi::kErrorInvalidParameter);
-            return 0;
-        }
-        if (!mapped_guest_range(output->type_data, capacity * sizeof(std::uint16_t), true)) {
-            set_last_error(abi::kErrorInvalidParameter);
-            return 0;
-        }
+        const std::size_t capacity = output.char_count;
         const std::size_t copied = std::min(text.size(), capacity - 1U);
-        std::memcpy(output->type_data, text.data(), copied * sizeof(std::uint16_t));
-        output->type_data[copied] = 0;
-        output->char_count = static_cast<std::uint32_t>(copied);
+        std::u16string output_text = text.substr(0, copied);
+        output_text.push_back(0);
+        if (runtime::write_guest_memory(output.type_data, output_text.data(),
+                                        output_text.size() * sizeof(std::uint16_t)).status !=
+            runtime::GuestMemoryAccessStatus::Success) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
+        }
+        output.char_count = static_cast<std::uint32_t>(copied);
+    }
+    if (!write_guest_value(mii, output)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
     }
     const std::array<diagnostics::TraceField, 4> fields{
         diagnostics::TraceField{"symbol", "GetMenuItemInfoW"},
@@ -648,8 +662,19 @@ TL_MSABI int tl_TrackPopupMenuEx(void* const menu, const std::uint32_t flags, co
 }
 
 TL_MSABI void* tl_LoadMenuW(void* const instance, const std::uint16_t* const menu_name) noexcept {
+    std::u16string menu_name_copy;
+    const auto menu_raw = reinterpret_cast<std::uintptr_t>(menu_name);
+    if (menu_name != nullptr && menu_raw > 0xFFFFU &&
+        !runtime::copy_guest_wstring(menu_name, 4096U, menu_name_copy)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return nullptr;
+    }
+    const std::uint16_t* effective_menu_name = menu_name;
+    if (menu_raw > 0xFFFFU) {
+        effective_menu_name = reinterpret_cast<const std::uint16_t*>(menu_name_copy.data());
+    }
     const std::uint16_t* const type = reinterpret_cast<const std::uint16_t*>(kRtMenu);
-    void* const resource = tl_FindResourceW(instance, menu_name, type);
+    void* const resource = tl_FindResourceW(instance, effective_menu_name, type);
     void* const loaded = resource == nullptr ? nullptr : tl_LoadResource(instance, resource);
     const std::uint32_t resource_size =
         loaded == nullptr ? 0U : tl_SizeofResource(instance, resource);
@@ -760,10 +785,19 @@ TL_MSABI int tl_GetMenuBarInfo(void* const hwnd, const std::int32_t idObject, co
     (void)hwnd;
     (void)idObject;
     (void)idItem;
-    if (pmbi != nullptr && mapped_guest_range(pmbi, 32, true)) {
-        std::memset(pmbi, 0, 32);
-        *reinterpret_cast<std::uint32_t*>(pmbi) = 32;
+    if (pmbi == nullptr) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
     }
+    std::array<std::byte, 32> output{};
+    const std::uint32_t size = 32;
+    std::memcpy(output.data(), &size, sizeof(size));
+    if (runtime::write_guest_memory(pmbi, output.data(), output.size()).status !=
+        runtime::GuestMemoryAccessStatus::Success) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    set_last_error(abi::kErrorSuccess);
     return 1;
 }
 
@@ -777,9 +811,18 @@ TL_MSABI int tl_GetMenuStringW(void* const hMenu, const std::uint32_t uIDItem, w
     (void)hMenu;
     (void)uIDItem;
     (void)flags;
-    if (lpString != nullptr && cchMax > 0 && mapped_guest_range(lpString, static_cast<std::size_t>(cchMax) * sizeof(wchar_t), true)) {
-        lpString[0] = 0;
+    if (lpString == nullptr || cchMax <= 0) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
     }
+    const std::uint16_t terminator = 0;
+    if (runtime::write_guest_memory(reinterpret_cast<std::uint16_t*>(lpString), &terminator,
+                                    sizeof(terminator)).status !=
+        runtime::GuestMemoryAccessStatus::Success) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    set_last_error(abi::kErrorSuccess);
     return 0;
 }
 
