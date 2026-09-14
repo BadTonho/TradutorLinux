@@ -301,6 +301,8 @@ TEST(Win32ConsoleTest, ProtectedConsoleOutputsRejectUnmappedPointers) {
     EXPECT_EQ(tl_CreatePipe(static_cast<void**>(invalid), static_cast<void**>(invalid), nullptr, 0), 1);
     EXPECT_EQ(tl_GetCommState(nullptr, invalid), 1);
     EXPECT_EQ(tl_GetOverlappedResult(nullptr, nullptr, static_cast<std::uint32_t*>(invalid), 0), 1);
+    tl_OutputDebugStringA(reinterpret_cast<const char*>(invalid));
+    tl_OutputDebugStringW(reinterpret_cast<const std::uint16_t*>(invalid));
 }
 
 TEST(Win32ConsoleTest, IsDBCSLeadByteExAlwaysReturnsFalse) {

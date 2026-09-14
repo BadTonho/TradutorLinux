@@ -91,10 +91,7 @@ TL_MSABI int tl_ReadConsoleW(const void* const console_input, std::uint16_t* con
     FileSlotGuard slot_guard(console_input);
     const int fd = slot_guard.get() != nullptr ? slot_guard.get()->fd
                                                 : (slot_guard.is_file_handle() ? -1 : handle_fd(console_input));
-    if (input_control != nullptr || fd != STDIN_FILENO || chars_to_read > (1U << 20U) ||
-        (chars_to_read != 0 &&
-         !mapped_guest_range(buffer, static_cast<std::size_t>(chars_to_read) * sizeof(*buffer),
-                             true))) {
+    if (input_control != nullptr || fd != STDIN_FILENO || chars_to_read > (1U << 20U)) {
         set_last_error(fd != STDIN_FILENO ? abi::kErrorInvalidHandle
                                           : abi::kErrorInvalidParameter);
         return 0;
@@ -150,10 +147,7 @@ TL_MSABI int tl_WriteConsoleW(const void* const console_output,
     const int fd = slot_guard.get() != nullptr ? slot_guard.get()->fd
                                                 : (slot_guard.is_file_handle() ? -1 : handle_fd(console_output));
     if (reserved != nullptr || (fd != STDOUT_FILENO && fd != STDERR_FILENO) ||
-        chars_to_write > (1U << 20U) ||
-        (chars_to_write != 0 &&
-         !mapped_guest_range(buffer, static_cast<std::size_t>(chars_to_write) * sizeof(*buffer),
-                             false))) {
+        chars_to_write > (1U << 20U)) {
         set_last_error((fd != STDOUT_FILENO && fd != STDERR_FILENO)
                            ? abi::kErrorInvalidHandle
                            : abi::kErrorInvalidParameter);
@@ -271,12 +265,13 @@ TL_MSABI int tl_SetConsoleTextAttribute(const void* console_handle, const std::u
 }
 
 TL_MSABI void tl_OutputDebugStringA(const char* const output_string) noexcept {
-    if (output_string == nullptr || !mapped_guest_cstring(output_string)) {
+    std::string output_copy;
+    if (!runtime::copy_guest_cstring(output_string, 65535U, output_copy)) {
         return;
     }
     const std::array<diagnostics::TraceField, 4> fields{
         diagnostics::TraceField{"symbol", "OutputDebugStringA"},
-        diagnostics::TraceField{"message", output_string},
+        diagnostics::TraceField{"message", output_copy},
     };
     runtime_trace("OutputDebugStringA", fields, 2);
 }
@@ -491,7 +486,7 @@ TL_MSABI int tl_WaitNamedPipeA(const char* const name, const std::uint32_t timeo
 }
 
 TL_MSABI int tl_GetConsoleMode(const void* handle, std::uint32_t* mode) noexcept {
-    if (mode == nullptr || !mapped_guest_range(mode, sizeof(*mode), true)) {
+    if (mode == nullptr) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }

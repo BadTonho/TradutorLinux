@@ -64,6 +64,12 @@ motor de formatação também são copiados, e `%n` publica sua saída por
 `write_guest_memory`; o CRT não usa mais `validate_mapped_*` para ler essas
 entradas ou escrever esse contador.
 
+O sublote `KERNEL32/console-input` usa a transferência protegida diretamente
+para buffers de `ReadConsoleW`/`WriteConsoleW` e para a saída de
+`GetConsoleMode`, sem uma validação de mapa anterior. `OutputDebugStringA` copia
+a mensagem para memória host antes de gerar o trace, como já fazia a variante
+Wide.
+
 O lote `SHELL32` segue esse contrato para suas estruturas de entrada e strings:
 `NOTIFYICONDATA`, `GUID`, `SHELLEXECUTEINFO`, `SHFILEOPSTRUCT`,
 `CommandLineToArgvW` e as entradas de `ShellExecuteA/W` são primeiro copiados

@@ -184,6 +184,11 @@ O lote seguinte migrou também estruturas e buffers de console/tempo, com os
 testes de `Win32ConsoleTest`, `Win32ProcessConsoleTest`, `Win32TimeTest` e
 `Win32WideTest` passando.
 
+O sublote `KERNEL32/console-input` removeu pré-validações por fotografia nas
+leituras/escritas de console e migrou `OutputDebugStringA` para uma cópia de
+string protegida. As transferências efetivas continuam usando as primitivas
+de memória, e `Win32ConsoleTest.*`/`Win32ProcessConsoleTest.*` passaram.
+
 O lote de caminhos migrou as saídas de diretório, módulo, temporários,
 capacidade de disco, nomes completos/finais e `file_part`, além das leituras de
 strings A/W usadas por essas rotas. As coberturas existentes e a regressão
