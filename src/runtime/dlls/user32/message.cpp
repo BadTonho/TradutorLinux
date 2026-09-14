@@ -201,62 +201,18 @@ static_assert(sizeof(GuestTreeNotification) == kTreeNotificationSize);
         return false;
     }
 
+    const std::size_t capacity = cch > 0 ? static_cast<std::size_t>(cch)
+                                         : kTreeTextLimit + 1U;
     if (!wide) {
-        const auto* const text = reinterpret_cast<const char*>(pointer);
-        std::size_t length = 0;
-        if (cch > 0) {
-            const std::size_t capacity = static_cast<std::size_t>(cch);
-            if (!mapped_guest_range(text, capacity, false)) {
-                return false;
-            }
-            const void* const terminator = std::memchr(text, '\0', capacity);
-            if (terminator == nullptr) {
-                return false;
-            }
-            length = static_cast<std::size_t>(
-                reinterpret_cast<std::uintptr_t>(terminator) -
-                reinterpret_cast<std::uintptr_t>(text));
-        } else {
-            if (!runtime::validate_mapped_cstring(text, kTreeTextLimit + 1U)) {
-                return false;
-            }
-            while (length < kTreeTextLimit && text[length] != '\0') {
-                ++length;
-            }
-            if (length == kTreeTextLimit && text[length] != '\0') {
-                return false;
-            }
-        }
-        output.assign(text, length);
-        return true;
+        return runtime::copy_guest_cstring(reinterpret_cast<const char*>(pointer), capacity,
+                                           output);
     }
-
-    const auto* const text = reinterpret_cast<const std::uint16_t*>(pointer);
-    std::size_t length = 0;
-    if (cch > 0) {
-        const std::size_t capacity = static_cast<std::size_t>(cch);
-        if (capacity > std::numeric_limits<std::size_t>::max() / sizeof(std::uint16_t) ||
-            !mapped_guest_range(text, capacity * sizeof(std::uint16_t), false)) {
-            return false;
-        }
-        while (length < capacity && text[length] != 0U) {
-            ++length;
-        }
-        if (length == capacity) {
-            return false;
-        }
-    } else {
-        if (!runtime::validate_mapped_wstring(text, kTreeTextLimit + 1U)) {
-            return false;
-        }
-        while (length < kTreeTextLimit && text[length] != 0U) {
-            ++length;
-        }
-        if (length == kTreeTextLimit && text[length] != 0U) {
-            return false;
-        }
+    std::u16string text;
+    if (!runtime::copy_guest_wstring(reinterpret_cast<const std::uint16_t*>(pointer), capacity,
+                                     text)) {
+        return false;
     }
-    output = util::wide_to_utf8(text, length + 1U);
+    output = util::wide_to_utf8(reinterpret_cast<const std::uint16_t*>(text.data()), text.size());
     return true;
 }
 
@@ -310,17 +266,17 @@ static_assert(sizeof(GuestTreeNotification) == kTreeNotificationSize);
 
 [[nodiscard]] int tree_insert_item(WindowSlot& tree, const abi::Lparam lparam,
                                    const bool wide) {
-    if (lparam == 0 || !mapped_guest_range(reinterpret_cast<const void*>(lparam),
-                                           kTreeInsertBufferSize, false) ||
-        tree.tree_items.size() >= kTreeItemLimit) {
+    std::array<std::byte, kTreeInsertBufferSize> bytes{};
+    if (lparam == 0 || tree.tree_items.size() >= kTreeItemLimit ||
+        runtime::read_guest_memory(reinterpret_cast<const void*>(lparam), bytes.data(),
+                                   bytes.size()).status != runtime::GuestMemoryAccessStatus::Success) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
-    const auto* const bytes = reinterpret_cast<const std::byte*>(lparam);
-    const std::uint32_t mask = tree_u32(bytes, 16U);
-    const std::uintptr_t raw_parent = tree_pointer(bytes, 0U);
+    const std::uint32_t mask = tree_u32(bytes.data(), 16U);
+    const std::uintptr_t raw_parent = tree_pointer(bytes.data(), 0U);
     const std::uintptr_t parent = tree_parent_handle(raw_parent);
-    const std::uintptr_t insert_after = tree_pointer(bytes, 8U);
+    const std::uintptr_t insert_after = tree_pointer(bytes.data(), 8U);
     if (parent != 0U && tree_find_item(tree, parent) == nullptr) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
@@ -336,12 +292,12 @@ static_assert(sizeof(GuestTreeNotification) == kTreeNotificationSize);
 
     std::string text;
     if ((mask & kTreeItemText) != 0U &&
-        !read_tree_text(tree_pointer(bytes, 40U), tree_i32(bytes, 48U), wide, text)) {
+        !read_tree_text(tree_pointer(bytes.data(), 40U), tree_i32(bytes.data(), 48U), wide, text)) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
     const std::uintptr_t item_data = (mask & kTreeItemParam) != 0U
-                                         ? tree_pointer(bytes, 64U)
+                                         ? tree_pointer(bytes.data(), 64U)
                                          : 0U;
     if (tree.tree_next_handle == 0U ||
         tree.tree_next_handle > static_cast<std::uintptr_t>(std::numeric_limits<int>::max())) {
@@ -555,18 +511,17 @@ void notify_tree_selection(WindowSlot& tree, const std::uintptr_t old_handle,
 
 [[nodiscard]] bool read_tree_item_request(const abi::Lparam lparam,
                                           std::array<std::byte, kTreeItemBufferSize>& bytes) noexcept {
-    if (lparam == 0 || !mapped_guest_range(reinterpret_cast<const void*>(lparam),
-                                           kTreeItemBufferSize, false)) {
+    if (lparam == 0 ||
+        runtime::read_guest_memory(reinterpret_cast<const void*>(lparam), bytes.data(),
+                                   bytes.size()).status != runtime::GuestMemoryAccessStatus::Success) {
         return false;
     }
-    std::memcpy(bytes.data(), reinterpret_cast<const void*>(lparam), bytes.size());
     return true;
 }
 
 [[nodiscard]] int tree_get_item(WindowSlot& tree, const abi::Lparam lparam, const bool wide) {
     std::array<std::byte, kTreeItemBufferSize> bytes{};
-    if (!read_tree_item_request(lparam, bytes) ||
-        !mapped_guest_range(reinterpret_cast<const void*>(lparam), kTreeItemBufferSize, true)) {
+    if (!read_tree_item_request(lparam, bytes)) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
@@ -586,14 +541,6 @@ void notify_tree_selection(WindowSlot& tree, const std::uintptr_t old_handle,
             set_last_error(abi::kErrorInvalidParameter);
             return 0;
         }
-        const std::size_t byte_count = wide
-                                            ? static_cast<std::size_t>(output_capacity) *
-                                                  sizeof(std::uint16_t)
-                                            : static_cast<std::size_t>(output_capacity);
-        if (!mapped_guest_range(reinterpret_cast<const void*>(output_pointer), byte_count, true)) {
-            set_last_error(abi::kErrorInvalidParameter);
-            return 0;
-        }
         if (wide) {
             wide_text = util::utf8_to_wide(item->text);
         }
@@ -601,23 +548,37 @@ void notify_tree_selection(WindowSlot& tree, const std::uintptr_t old_handle,
     const std::uintptr_t item_data = item->item_data;
     if ((mask & kTreeItemText) != 0U) {
         if (!wide) {
-            auto* const output = reinterpret_cast<char*>(output_pointer);
             const std::size_t count = std::min<std::size_t>(
                 item->text.size(), static_cast<std::size_t>(output_capacity - 1));
-            std::memcpy(output, item->text.data(), count);
-            output[count] = '\0';
+            std::string output = item->text.substr(0, count);
+            output.push_back('\0');
+            if (runtime::write_guest_memory(reinterpret_cast<void*>(output_pointer), output.data(),
+                                             output.size()).status !=
+                runtime::GuestMemoryAccessStatus::Success) {
+                set_last_error(abi::kErrorInvalidParameter);
+                return 0;
+            }
         } else {
-            auto* const output = reinterpret_cast<std::uint16_t*>(output_pointer);
             const std::size_t count = std::min<std::size_t>(
                 wide_text.size(), static_cast<std::size_t>(output_capacity - 1));
-            std::memcpy(output, wide_text.data(), count * sizeof(std::uint16_t));
-            output[count] = 0U;
+            std::u16string output = wide_text.substr(0, count);
+            output.push_back(0);
+            if (runtime::write_guest_memory(reinterpret_cast<void*>(output_pointer), output.data(),
+                                             output.size() * sizeof(std::uint16_t)).status !=
+                runtime::GuestMemoryAccessStatus::Success) {
+                set_last_error(abi::kErrorInvalidParameter);
+                return 0;
+            }
         }
     }
     if ((mask & kTreeItemParam) != 0U) {
         const std::intptr_t parameter = static_cast<std::intptr_t>(item_data);
-        std::memcpy(reinterpret_cast<std::byte*>(reinterpret_cast<void*>(lparam)) + 48U,
-                    &parameter, sizeof(parameter));
+        std::memcpy(bytes.data() + 48U, &parameter, sizeof(parameter));
+        if (runtime::write_guest_memory(reinterpret_cast<void*>(lparam), bytes.data(), bytes.size()).status !=
+            runtime::GuestMemoryAccessStatus::Success) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
+        }
     }
     set_last_error(abi::kErrorSuccess);
     return 1;

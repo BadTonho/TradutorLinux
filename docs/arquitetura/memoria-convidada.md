@@ -89,6 +89,11 @@ aos arrays de handles de `MsgWaitForMultipleObjectsEx` e às saídas de teclado 
 timeout. Mensagens e arrays são lidos para objetos locais, e cada publicação
 usa a primitiva protegida.
 
+O sublote `USER32/message-tree` aplica o contrato às estruturas e textos do
+`SysTreeView32`. Os pedidos de inserção, alteração e consulta são copiados para
+buffers host; textos aninhados são lidos com cópias limitadas, e as respostas
+são publicadas por `write_guest_memory`.
+
 ## Limites residuais
 
 `validate_mapped_range` permanece deliberadamente como predicado advisory:

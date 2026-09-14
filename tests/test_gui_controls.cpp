@@ -440,6 +440,41 @@ TEST(CommonControls, TreeViewMaintainsItemsAndSelection) {
     g_focused_control = nullptr;
 }
 
+TEST(CommonControls, TreeViewRejectsUnmappedInputAndOutputBuffers) {
+    g_windows = {};
+    WindowSlot& tree = g_windows[0];
+    tree.used = true;
+    tree.is_control = true;
+    tree.class_name = "SysTreeView32";
+    tree.control_kind = ControlKind::Generic;
+
+    auto* const invalid = reinterpret_cast<void*>(static_cast<std::uintptr_t>(0x1000U));
+    EXPECT_EQ(tl_SendMessageA(&tree, kTestTreeInsertItemA, 0,
+                              reinterpret_cast<abi::Lparam>(invalid)), 0);
+
+    TestTreeInsertA insert{};
+    insert.item.mask = kTestTreeItemText;
+    insert.item.text = static_cast<char*>(invalid);
+    insert.item.text_capacity = 8;
+    EXPECT_EQ(tl_SendMessageA(&tree, kTestTreeInsertItemA, 0,
+                              reinterpret_cast<abi::Lparam>(&insert)), 0);
+
+    char label[] = "Node";
+    insert.item.text = label;
+    ASSERT_GT(tl_SendMessageA(&tree, kTestTreeInsertItemA, 0,
+                              reinterpret_cast<abi::Lparam>(&insert)), 0);
+
+    TestTreeItemA query{};
+    query.mask = kTestTreeItemText;
+    query.h_item = reinterpret_cast<void*>(static_cast<std::uintptr_t>(1U));
+    query.text = static_cast<char*>(invalid);
+    query.text_capacity = 8;
+    EXPECT_EQ(tl_SendMessageA(&tree, kTestTreeGetItemA, 0,
+                              reinterpret_cast<abi::Lparam>(&query)), 0);
+
+    g_windows = {};
+}
+
 TEST(CommonControls, ToolbarMessagesBuildLogicalButtonModel) {
     g_windows = {};
     WindowSlot& parent = g_windows[0];

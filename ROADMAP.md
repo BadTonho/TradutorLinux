@@ -469,6 +469,11 @@ O sublote `USER32/message-core` migrou as estruturas de `GetMessageA/W`,
 `GetKeyboardState`, `ToAsciiEx` e a saída de `SendMessageTimeoutA`; a regressão
 cobre mensagens, handles, teclado e ponteiros de resultado inacessíveis.
 
+O sublote `USER32/message-tree` migrou as estruturas e textos de inserção,
+alteração e consulta do `SysTreeView32` para snapshots, cópias locais e saídas
+protegidas. A regressão cobre buffers de entrada, texto aninhado e texto de
+saída inacessíveis, mantendo a seleção e o modelo lógico existentes.
+
 ## Fora desta rodada
 
 Não entram neste roadmap, por enquanto:
