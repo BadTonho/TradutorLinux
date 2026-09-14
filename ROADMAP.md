@@ -22,10 +22,11 @@ para ampliar famílias de DLL sem alvo, contrato e regressão.
 - **R2 não é um defeito de produção reproduzido:** o caminho de falha de
   `ARCH_SET_GS` já existe e limpa o estado; falta uma injeção determinística
   para comprovar esse caminho.
-- **R3 é uma limitação arquitetural real:** a validação por `/proc/self/maps`
-  não é atômica com o acesso posterior. A primeira parte da correção já possui
-  reproducer de página desmontada, permissões e mudança concorrente; a
-  migração de todos os consumidores ainda não terminou.
+- **R3 foi uma limitação arquitetural real e foi encerrada nesta rodada:** a
+  validação por `/proc/self/maps` não é atômica com o acesso posterior. A
+  primitiva protegida, os consumidores comuns e os contratos especiais de
+  imagem/SEH foram auditados e cobertos por regressões; o predicado advisory
+  permanece apenas como suporte interno da própria primitiva.
 
 ## Regras de execução
 
@@ -165,13 +166,13 @@ auditoria encontrou consumidores legados que ainda precisam de migração.
   `docs/arquitetura/memoria-convidada.md` e
   `docs/compatibilidade-runtime.md`.
 
-**Aceitação:** nenhum caminho documentado depende apenas de uma fotografia de
-`/proc/self/maps` sem declarar a limitação; acessos inválidos falham de forma
-controlada no processo convidado, sem corrupção do host nem falso sucesso; os
-testes cobrem páginas desmontadas, permissões, overflow e buffers parciais.
-Esta aceitação continua pendente enquanto existirem consumidores de ponteiros
-convidados que façam acesso direto sem contrato equivalente; o progresso atual
-fecha a primitiva e os caminhos de strings/MPR, mas não toda a superfície.
+**Aceitação — concluída em 2026-09-14:** nenhum caminho comum documentado
+depende apenas de uma fotografia de `/proc/self/maps`; acessos inválidos falham
+de forma controlada no processo convidado, sem corrupção do host nem falso
+sucesso; os testes cobrem páginas desmontadas, permissões, overflow, buffers
+parciais, estruturas Rtl e callbacks. Os contratos sem cópia genérica são
+explicitamente limitados a objetos locais mantidos vivos pelo despachante
+SEH/C++ e a endereços de código dentro da imagem ativa mantida pelo loader.
 
 **Progresso 2026-09-12:** além da primitiva, `ReadFile`/`WriteFile`,
 `FindFirstFileA/W`, `GetMessageA`, conversões comuns de caminho e entradas de
@@ -655,9 +656,24 @@ SEH/C++ recebem somente os objetos locais criados pelo despachante, e callbacks
 USER32 são validados pela imagem ativa mantida pelo loader; esses contratos
 especiais estão documentados em `docs/arquitetura/memoria-convidada.md`. A
 regressão `UnwindTest.ProtectedUnwindBoundariesRejectUnmappedPointers` cobre
-ponteiros inválidos nas fronteiras Rtl e no filtro não tratado; a aceitação
-final do R3 ainda depende da auditoria dos consumidores restantes e do CTest
-completo.
+ponteiros inválidos nas fronteiras Rtl e no filtro não tratado.
+
+O fechamento `R3/E11` removeu os wrappers `mapped_guest_*` sem consumidores e
+atualizou a matriz de compatibilidade para não descrever validações advisory
+como garantia de acesso. A busca final não encontra `mapped_guest_*` no código
+do runtime, e as ocorrências de `validate_mapped_*` ficam restritas ao
+validador, ao fallback protegido de escrita e aos testes da primitiva.
+
+**Evidência 2026-09-14:** o preset `validation-sanitize` compilou
+`tradutorlinux_unit_tests`; os 23 testes focados de memória, virtual memory,
+MPR, VERSION e unwind passaram; os cenários SEH/unwind, V2, C++ EH typed,
+nested e unhandled passaram, e os três cenários C++ EH sem relocations que o
+ASan não consegue mapear passaram com o binário debug atualizado. O CTest
+completo também foi executado: as falhas restantes são externas a R3/E11
+(isolamento de rede, backend X11 ausente, contratos Rust não construídos,
+limitação de matriz de `missing_dll`, testes dinâmicos de WS2/gui e a sombra do
+ASan para fixtures sem relocations); nenhuma falha pertence aos testes focados
+da etapa.
 
 ## Fora desta rodada
 
