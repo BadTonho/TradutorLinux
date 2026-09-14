@@ -1461,7 +1461,17 @@ TEST(Win32FileTest, ProtectedIoOutputsRejectUnmappedPointers) {
                                   nullptr, abi::kOpenExisting, 0, nullptr);
     ASSERT_NE(handle, nullptr);
     auto* const invalid = reinterpret_cast<void*>(static_cast<std::uintptr_t>(0x1000U));
+    auto* const invalid_handle = reinterpret_cast<void*>(static_cast<std::uintptr_t>(-1));
     char buffer[4]{};
+
+    EXPECT_EQ(tl_CreateFileA(reinterpret_cast<const char*>(invalid), abi::kGenericRead, 0,
+                             nullptr, abi::kOpenExisting, 0, nullptr),
+              invalid_handle);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_CreateFileW(reinterpret_cast<const std::uint16_t*>(invalid), abi::kGenericRead,
+                             0, nullptr, abi::kOpenExisting, 0, nullptr),
+              invalid_handle);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
 
     EXPECT_EQ(tl_WriteFile(handle, buffer, sizeof(buffer),
                            static_cast<std::uint32_t*>(invalid), nullptr), 0);

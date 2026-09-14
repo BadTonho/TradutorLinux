@@ -177,10 +177,6 @@ TL_MSABI void* tl_CreateFileA(const char* const file_name, const std::uint32_t d
     (void)security_attributes;
     (void)flags_and_attributes;
     (void)template_file;
-    if (!mapped_guest_cstring(file_name) || file_name == nullptr || file_name[0] == '\0') {
-        set_last_error(abi::kErrorInvalidParameter);
-        return kInvalidHandleValue;
-    }
     char normalized[4096]{};
     if (!translate_windows_path(file_name, normalized, sizeof(normalized))) {
         set_last_error(abi::kErrorInvalidParameter);
@@ -238,10 +234,6 @@ TL_MSABI void* tl_CreateFileW(const std::uint16_t* path, const std::uint32_t des
                               const std::uint32_t creation_disposition,
                               const std::uint32_t flags_and_attributes,
                               const void* template_file) noexcept {
-    if (!mapped_guest_wstring(path) || path == nullptr || path[0] == 0) {
-        set_last_error(abi::kErrorInvalidParameter);
-        return kInvalidHandleValue;
-    }
     (void)share_mode;
     (void)security_attributes;
     (void)flags_and_attributes;

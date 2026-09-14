@@ -189,6 +189,12 @@ capacidade de disco, nomes completos/finais e `file_part`, além das leituras de
 strings A/W usadas por essas rotas. As coberturas existentes e a regressão
 `Win32DirTest.ProtectedPathOutputsRejectUnmappedPointers` passaram.
 
+O sublote `KERNEL32/file-input` removeu as leituras diretas de nome em
+`CreateFileA/W`; o normalizador agora é a única etapa que copia e valida os
+caminhos convidados antes do acesso ao sistema de arquivos. A regressão
+`Win32FileTest.ProtectedIoOutputsRejectUnmappedPointers` também cobre entradas
+A/W inacessíveis.
+
 O lote de memória virtual migrou as estruturas e escalares de
 `GlobalMemoryStatusEx`, `GlobalMemoryStatus`, `VirtualQuery`, `VirtualQueryEx`,
 `VirtualProtect` e `GetPhysicallyInstalledSystemMemory`; a regressão

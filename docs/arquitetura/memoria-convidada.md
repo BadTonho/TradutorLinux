@@ -48,6 +48,11 @@ O host nunca transforma `Partial` em sucesso. Cada chamador deve rejeitar
 qualquer estado diferente de `Success` antes de interpretar a cópia ou publicar
 uma saída ao convidado.
 
+O sublote `KERNEL32/file-input` usa o normalizador de caminhos como única
+fronteira para `CreateFileA/W`: ele copia o nome A/W para memória host antes de
+validar o caminho e abrir o arquivo. Assim, a rotina não acessa novamente o
+ponteiro convidado depois de uma fotografia de `/proc/self/maps`.
+
 O lote `SHELL32` segue esse contrato para suas estruturas de entrada e strings:
 `NOTIFYICONDATA`, `GUID`, `SHELLEXECUTEINFO`, `SHFILEOPSTRUCT`,
 `CommandLineToArgvW` e as entradas de `ShellExecuteA/W` são primeiro copiados
