@@ -76,6 +76,27 @@ TEST(MsvcrtFileTest, FopenOfMissingFileReturnsNull) {
     EXPECT_EQ(tl_fopen("tl_msvcrt_nao_existe_12345.txt", "rb"), nullptr);
 }
 
+TEST(MsvcrtInputTest, ProtectedStringInputsRejectUnmappedPointers) {
+    auto* const invalid = reinterpret_cast<void*>(static_cast<std::uintptr_t>(0x1000U));
+    EXPECT_EQ(tl_atoi(reinterpret_cast<const char*>(invalid)), 0);
+    EXPECT_EQ(tl_getenv(reinterpret_cast<const char*>(invalid)), nullptr);
+    EXPECT_EQ(tl__open(reinterpret_cast<const char*>(invalid), 0), -1);
+    EXPECT_EQ(tl__fdopen(-1, reinterpret_cast<const char*>(invalid)), nullptr);
+    EXPECT_EQ(tl_fopen(reinterpret_cast<const char*>(invalid), "rb"), nullptr);
+    EXPECT_EQ(tl_fopen("tl_msvcrt_invalid_mode.txt", reinterpret_cast<const char*>(invalid)), nullptr);
+
+    const std::string path =
+        "tl_msvcrt_invalid_format_" + std::to_string(static_cast<long>(getpid())) + ".txt";
+    std::remove(path.c_str());
+    GuestFile* const file = tl_fopen(path.c_str(), "wb");
+    ASSERT_NE(file, nullptr);
+    EXPECT_EQ(tl_fprintf(file, "%s", reinterpret_cast<const char*>(invalid)), 6);
+    EXPECT_EQ(tl_fprintf(file, "%n", invalid), 0);
+    EXPECT_EQ(tl_fwprintf(file, reinterpret_cast<const std::uint16_t*>(invalid)), EOF);
+    EXPECT_EQ(tl_fclose(file), 0);
+    std::remove(path.c_str());
+}
+
 TEST(MsvcrtFileTest, FopenNormalizesWindowsPathSeparators) {
     const std::string directory =
         "tl_msvcrt_path_" + std::to_string(static_cast<long>(getpid()));

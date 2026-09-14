@@ -195,6 +195,12 @@ caminhos convidados antes do acesso ao sistema de arquivos. A regressão
 `Win32FileTest.ProtectedIoOutputsRejectUnmappedPointers` também cobre entradas
 A/W inacessíveis.
 
+O sublote `MSVCRT/input` migrou os caminhos de `_open`, `_fdopen` e `fopen`,
+`atoi`, `getenv`, os formatos `printf`/`fwprintf` e a saída `%n` para cópias e
+transferências protegidas. A regressão
+`MsvcrtInputTest.ProtectedStringInputsRejectUnmappedPointers` cobre formatos,
+strings de argumento, caminhos e modos inválidos.
+
 O lote de memória virtual migrou as estruturas e escalares de
 `GlobalMemoryStatusEx`, `GlobalMemoryStatus`, `VirtualQuery`, `VirtualQueryEx`,
 `VirtualProtect` e `GetPhysicallyInstalledSystemMemory`; a regressão

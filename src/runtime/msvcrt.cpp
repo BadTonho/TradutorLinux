@@ -104,11 +104,13 @@ void set_error(int error) {
 // absolutos são resolvidos dentro do prefixo do TradutorLinux.
 [[nodiscard]] bool translate_guest_path(const char* guest_path, char* host_path,
                                         const std::size_t host_path_size) noexcept {
-    if (guest_path == nullptr || guest_path[0] == '\0') {
+    std::string guest_path_copy;
+    if (!runtime::copy_guest_cstring(guest_path, 4096U, guest_path_copy) ||
+        guest_path_copy.empty()) {
         return false;
     }
 
-    std::string_view view{guest_path};
+    const std::string_view view{guest_path_copy};
     if ((view.size() >= 2 && (view[0] == 'C' || view[0] == 'c') && view[1] == ':') ||
         view.starts_with('\\')) {
         const std::filesystem::path resolved =
@@ -122,11 +124,11 @@ void set_error(int error) {
     }
 
     std::size_t length = 0;
-    for (; guest_path[length] != '\0'; ++length) {
-        if (length + 1U >= host_path_size || guest_path[length] == ':') {
+    for (; length < guest_path_copy.size(); ++length) {
+        if (length + 1U >= host_path_size || guest_path_copy[length] == ':') {
             return false;
         }
-        host_path[length] = guest_path[length] == '\\' ? '/' : guest_path[length];
+        host_path[length] = guest_path_copy[length] == '\\' ? '/' : guest_path_copy[length];
     }
     host_path[length] = '\0';
     return true;
@@ -379,29 +381,29 @@ std::string format_atom(const std::string& flags, int width, int precision, cons
         }
         case 's': {
             if (length == "l" || length == "w") {
-                const std::uint16_t* wide =
-                    reinterpret_cast<const std::uint16_t*>(read_ptr_slot(ap));
-                if (wide != nullptr && !runtime::validate_mapped_wstring(wide)) {
-                    wide = nullptr;
-                }
-                const std::string text = (wide != nullptr)
-                    ? utf16_to_utf8(wide, precision >= 0 ? static_cast<std::size_t>(precision)
-                                                         : std::numeric_limits<std::size_t>::max())
+                const auto* const wide = reinterpret_cast<const std::uint16_t*>(read_ptr_slot(ap));
+                std::u16string wide_copy;
+                const bool wide_valid = wide != nullptr &&
+                                        runtime::copy_guest_wstring(wide, 65535U, wide_copy);
+                const std::string text = wide_valid
+                    ? utf16_to_utf8(reinterpret_cast<const std::uint16_t*>(wide_copy.data()),
+                                    precision >= 0 ? static_cast<std::size_t>(precision)
+                                                   : std::numeric_limits<std::size_t>::max())
                     : "(null)";
                 const std::string format =
                     build_host_format(adjusted_flags, adjusted_width, -1, "", 's');
                 return sprint(format, text.c_str());
             }
-            const char* value = reinterpret_cast<const char*>(read_ptr_slot(ap));
-            if (value != nullptr && !runtime::validate_mapped_cstring(value)) {
-                value = nullptr;
-            }
-            if (value == nullptr) {
-                value = "(null)";
+            const auto* const value = reinterpret_cast<const char*>(read_ptr_slot(ap));
+            std::string value_copy;
+            const bool value_valid = value != nullptr &&
+                                     runtime::copy_guest_cstring(value, 65535U, value_copy);
+            if (!value_valid) {
+                value_copy = "(null)";
             }
             const std::string format =
                 build_host_format(adjusted_flags, adjusted_width, precision, "", 's');
-            return sprint(format, value);
+            return sprint(format, value_copy.c_str());
         }
         case 'p': {
             const std::uintptr_t value = read_ptr_slot(ap);
@@ -411,17 +413,21 @@ std::string format_atom(const std::string& flags, int width, int precision, cons
         }
         case 'n': {
             const std::uintptr_t target = read_ptr_slot(ap);
-            const std::size_t target_size = (length == "ll") ? sizeof(long long) : sizeof(int);
-            if (target != 0 && runtime::validate_mapped_range(reinterpret_cast<const void*>(target), target_size, true)) {
+            if (target != 0) {
                 if (length == "ll") {
-                    long long value = static_cast<long long>(count);
-                    std::memcpy(reinterpret_cast<void*>(target), &value, sizeof(value));
-                } else if (length == "l") {
-                    long value = static_cast<long>(count);
-                    std::memcpy(reinterpret_cast<void*>(target), &value, sizeof(value));
+                    const std::int64_t value = static_cast<std::int64_t>(count);
+                    if (runtime::write_guest_memory(reinterpret_cast<void*>(target), &value,
+                                                     sizeof(value)).status !=
+                        runtime::GuestMemoryAccessStatus::Success) {
+                        set_error(EINVAL);
+                    }
                 } else {
-                    int value = static_cast<int>(count);
-                    std::memcpy(reinterpret_cast<void*>(target), &value, sizeof(value));
+                    const std::int32_t value = static_cast<std::int32_t>(count);
+                    if (runtime::write_guest_memory(reinterpret_cast<void*>(target), &value,
+                                                     sizeof(value)).status !=
+                        runtime::GuestMemoryAccessStatus::Success) {
+                        set_error(EINVAL);
+                    }
                 }
             }
             return {};
@@ -435,13 +441,14 @@ std::string format_atom(const std::string& flags, int width, int precision, cons
 
 int vformat_into(GuestFile* file, const char* format, GuestVaList& ap) {
     std::string out;
+    std::string format_copy;
     long count = 0;
     try {
-        if (format == nullptr) {
+        if (!runtime::copy_guest_cstring(format, 65535U, format_copy)) {
             set_error(EINVAL);
             return EOF;
         }
-        const char* p = format;
+        const char* p = format_copy.c_str();
         while (*p != '\0') {
             if (*p != '%') {
                 out.push_back(*p++);
@@ -666,10 +673,11 @@ TL_CRT_MSABI int tl_atexit(void (*handler)(void)) noexcept {
 }
 
 TL_CRT_MSABI int tl_atoi(const char* const str) noexcept {
-    if (str == nullptr || !mapped_guest_cstring(str)) {
+    std::string str_copy;
+    if (!runtime::copy_guest_cstring(str, 65535U, str_copy)) {
         return 0;
     }
-    return std::atoi(str);
+    return std::atoi(str_copy.c_str());
 }
 
 TL_CRT_MSABI void tl_exit(int exit_code) noexcept {
@@ -707,11 +715,12 @@ TL_CRT_MSABI void tl__unlock(GuestFile* file) noexcept {
 }
 
 TL_CRT_MSABI char* tl_getenv(const char* name) noexcept {
-    if (name == nullptr || !mapped_guest_cstring(name)) {
+    std::string name_copy;
+    if (!runtime::copy_guest_cstring(name, 65535U, name_copy)) {
         set_error(EINVAL);
         return nullptr;
     }
-    return const_cast<char*>(runtime::guest_environment_cstring(name));
+    return const_cast<char*>(runtime::guest_environment_cstring(name_copy));
 }
 
 TL_CRT_MSABI unsigned int tl___lc_codepage_func() noexcept {
@@ -819,11 +828,12 @@ TL_CRT_MSABI int tl__open(const char* path, int oflag, ...) noexcept {
 
 TL_CRT_MSABI GuestFile* tl__fdopen(int file_descriptor, const char* mode) noexcept {
     ensure_standard_files();
-    if (mode == nullptr) {
+    std::string mode_copy;
+    if (!runtime::copy_guest_cstring(mode, 256U, mode_copy)) {
         set_error(EINVAL);
         return nullptr;
     }
-    const char* m = mode;
+    const char* m = mode_copy.c_str();
     int flag = 0;
     for (; *m != '\0'; ++m) {
         if (*m == 'r') {
@@ -848,15 +858,19 @@ TL_CRT_MSABI GuestFile* tl__fdopen(int file_descriptor, const char* mode) noexce
 
 TL_CRT_MSABI GuestFile* tl_fopen(const char* path, const char* mode) noexcept {
     ensure_standard_files();
-    if (path == nullptr || mode == nullptr || !mapped_guest_cstring(path) || !mapped_guest_cstring(mode)) {
+    std::string path_copy;
+    std::string mode_copy;
+    if (!runtime::copy_guest_cstring(path, 4096U, path_copy) ||
+        !runtime::copy_guest_cstring(mode, 256U, mode_copy)) {
         set_error(EINVAL);
         return nullptr;
     }
-    trace_crt(TraceLevel::Info, "fopen", {TraceField{"path", path}, TraceField{"mode", mode}});
+    trace_crt(TraceLevel::Info, "fopen",
+              {TraceField{"path", path_copy}, TraceField{"mode", mode_copy}});
     char kind = '\0';
     bool plus = false;
     bool binary = false;
-    for (const char* m = mode; *m != '\0'; ++m) {
+    for (const char* m = mode_copy.c_str(); *m != '\0'; ++m) {
         switch (*m) {
             case 'r':
                 kind = 'r';
@@ -899,7 +913,7 @@ mode_parsed:
         return nullptr;
     }
     char normalized_path[4096]{};
-    if (!translate_guest_path(path, normalized_path, sizeof(normalized_path))) {
+    if (!translate_guest_path(path_copy.c_str(), normalized_path, sizeof(normalized_path))) {
         set_error(EINVAL);
         return nullptr;
     }
@@ -1930,11 +1944,14 @@ std::string wformat_to_narrow(const std::uint16_t* format) {
 
 TL_CRT_MSABI int tl_fwprintf(GuestFile* file, const std::uint16_t* format, ...) noexcept {
     ensure_standard_files();
-    if (file == nullptr || format == nullptr) {
+    std::u16string format_copy;
+    if (file == nullptr ||
+        !runtime::copy_guest_wstring(format, 65535U, format_copy)) {
         set_error(EINVAL);
         return EOF;
     }
-    const std::string narrow = wformat_to_narrow(format);
+    const std::string narrow = wformat_to_narrow(
+        reinterpret_cast<const std::uint16_t*>(format_copy.data()));
     __builtin_ms_va_list ap;
     __builtin_ms_va_start(ap, format);
     const int result = tl_vfprintf(file, narrow.c_str(), ap);

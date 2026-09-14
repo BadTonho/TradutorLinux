@@ -58,6 +58,12 @@ O sublote `COMCTL32/input` lê `INITCOMMONCONTROLSEX` e o array de botões de
 `CreateStatusWindowW` a partir de uma cópia UTF-16 local. Nenhuma dessas rotas
 interpreta novamente a estrutura, o array ou a string convidada após a cópia.
 
+O sublote `MSVCRT/input` copia caminhos, modos, nomes de ambiente e formatos
+ANSI/Wide antes de interpretar seus caracteres. Argumentos `%s` e `%ls` do
+motor de formatação também são copiados, e `%n` publica sua saída por
+`write_guest_memory`; o CRT não usa mais `validate_mapped_*` para ler essas
+entradas ou escrever esse contador.
+
 O lote `SHELL32` segue esse contrato para suas estruturas de entrada e strings:
 `NOTIFYICONDATA`, `GUID`, `SHELLEXECUTEINFO`, `SHFILEOPSTRUCT`,
 `CommandLineToArgvW` e as entradas de `ShellExecuteA/W` são primeiro copiados
