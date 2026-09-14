@@ -53,6 +53,11 @@ fronteira para `CreateFileA/W`: ele copia o nome A/W para memória host antes de
 validar o caminho e abrir o arquivo. Assim, a rotina não acessa novamente o
 ponteiro convidado depois de uma fotografia de `/proc/self/maps`.
 
+O sublote `COMCTL32/input` lê `INITCOMMONCONTROLSEX` e o array de botões de
+`CreateToolbarEx` com `read_guest_memory`, e converte o texto inicial de
+`CreateStatusWindowW` a partir de uma cópia UTF-16 local. Nenhuma dessas rotas
+interpreta novamente a estrutura, o array ou a string convidada após a cópia.
+
 O lote `SHELL32` segue esse contrato para suas estruturas de entrada e strings:
 `NOTIFYICONDATA`, `GUID`, `SHELLEXECUTEINFO`, `SHFILEOPSTRUCT`,
 `CommandLineToArgvW` e as entradas de `ShellExecuteA/W` são primeiro copiados

@@ -414,6 +414,11 @@ image list e `LoadIconWithScaleDown` para cópias protegidas. Os contratos
 determinísticos dos stubs foram preservados; a regressão cobre todos esses
 ponteiros de saída inacessíveis.
 
+O sublote `COMCTL32/input` migrou `InitCommonControlsEx`, o texto inicial de
+`CreateStatusWindowW` e o array de botões de `CreateToolbarEx` para leituras
+protegidas e cópias locais. As regressões existentes de controles agora também
+cobrem estruturas, strings e arrays de entrada inacessíveis.
+
 O lote `SHELL32` migrou caminhos wide e saídas de `SHGetKnownFolderPath`,
 `SHGetMalloc`, ícones, pastas, item Shell e `DragQueryPoint` para cópias
 protegidas. As operações continuam limitadas ao prefixo ou a stubs

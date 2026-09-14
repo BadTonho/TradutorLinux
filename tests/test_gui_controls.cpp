@@ -173,6 +173,14 @@ TEST(CommonControls, RejectInvalidToolbarBufferAndParent) {
     parent.used = true;
     parent.width = 640;
     parent.height = 480;
+    auto* const invalid = reinterpret_cast<void*>(static_cast<std::uintptr_t>(0x1000U));
+    EXPECT_EQ(tl_CreateStatusWindowW(0, reinterpret_cast<const std::uint16_t*>(invalid), &parent,
+                                     2),
+              nullptr);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_CreateToolbarEx(&parent, 0, 2, 0, nullptr, 0, invalid, 1, 16, 16, 16, 16, 8),
+              nullptr);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
     EXPECT_EQ(tl_CreateToolbarEx(&parent, 0, 1, 0, nullptr, 0, nullptr, 1, 16, 16, 16, 16, 8),
               nullptr);
     EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);

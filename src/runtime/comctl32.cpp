@@ -28,10 +28,6 @@ struct InternalImageList {
 
 std::array<InternalImageList, 64> g_image_lists{};
 
-inline bool mapped_range(const void* address, const std::size_t size, const bool writable) noexcept {
-    return runtime::validate_mapped_range(address, size, writable);
-}
-
 }  // namespace
 
 extern "C" {
@@ -40,17 +36,16 @@ TL_COMCTL_MSABI void tl_InitCommonControls() noexcept {
 }
 
 TL_COMCTL_MSABI int tl_InitCommonControlsEx(const void* init_controls) noexcept {
-    if (init_controls == nullptr ||
-        !mapped_range(init_controls, sizeof(abi::GuestInitCommonControlsEx), false)) {
+    abi::GuestInitCommonControlsEx value{};
+    if (init_controls == nullptr || !read_guest_value(init_controls, value)) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
-    const auto* const value = static_cast<const abi::GuestInitCommonControlsEx*>(init_controls);
-    if (value->size != sizeof(abi::GuestInitCommonControlsEx)) {
+    if (value.size != sizeof(abi::GuestInitCommonControlsEx)) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
-    if (value->classes == 0U) {
+    if (value.classes == 0U) {
         set_last_error(abi::kErrorNotSupported);
         return 0;
     }
@@ -158,7 +153,9 @@ TL_COMCTL_MSABI std::intptr_t tl_DefSubclassProc(void* const hwnd, const std::ui
 
 TL_COMCTL_MSABI void* tl_CreateStatusWindowW(const std::int32_t style, const std::uint16_t* const text,
                                              void* const parent, const std::uint32_t id) noexcept {
-    if (parent == nullptr || (text != nullptr && !mapped_guest_wstring(text))) {
+    std::u16string text_copy;
+    if (parent == nullptr ||
+        (text != nullptr && !runtime::copy_guest_wstring(text, 65535U, text_copy))) {
         set_last_error(abi::kErrorInvalidParameter);
         return nullptr;
     }
@@ -167,7 +164,11 @@ TL_COMCTL_MSABI void* tl_CreateStatusWindowW(const std::int32_t style, const std
         set_last_error(abi::kErrorInvalidHandle);
         return nullptr;
     }
-    const std::string utf8_text = text == nullptr ? std::string{} : util::wide_to_utf8(text);
+    const std::string utf8_text = text == nullptr
+                                      ? std::string{}
+                                      : util::wide_to_utf8(
+                                            reinterpret_cast<const std::uint16_t*>(text_copy.data()),
+                                            text_copy.size());
     constexpr int kStatusHeight = 24;
     WindowSlot* const slot = create_logical_control(
         *parent_slot, "msctls_statusbar32", utf8_text, static_cast<std::uint32_t>(style), id, 0,
@@ -212,8 +213,11 @@ TL_COMCTL_MSABI void* tl_CreateToolbarEx(void* const hwnd, const std::uint32_t s
         set_last_error(abi::kErrorInvalidHandle);
         return nullptr;
     }
+    const std::size_t byte_count = static_cast<std::size_t>(num_buttons) * struct_size;
+    std::array<std::byte, 128U * 64U> button_bytes{};
     if (num_buttons > 0 &&
-        !mapped_range(buttons, static_cast<std::size_t>(num_buttons) * struct_size, false)) {
+        runtime::read_guest_memory(buttons, button_bytes.data(), byte_count).status !=
+            runtime::GuestMemoryAccessStatus::Success) {
         set_last_error(abi::kErrorInvalidParameter);
         return nullptr;
     }
@@ -234,7 +238,7 @@ TL_COMCTL_MSABI void* tl_CreateToolbarEx(void* const hwnd, const std::uint32_t s
     slot->toolbar_buttons.reserve(static_cast<std::size_t>(num_buttons));
     for (int index = 0; index < num_buttons; ++index) {
         std::int32_t command_id = 0;
-        const auto* const entry = static_cast<const std::byte*>(buttons) +
+        const auto* const entry = button_bytes.data() +
                                   static_cast<std::size_t>(index) * struct_size;
         std::memcpy(&command_id, entry + sizeof(std::int32_t), sizeof(command_id));
         slot->toolbar_buttons.push_back(ToolbarButton{command_id});
