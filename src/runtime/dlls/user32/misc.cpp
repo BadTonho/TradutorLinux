@@ -6,8 +6,7 @@ TL_MSABI void* tl_BeginPaint(const void* const window, void* const paint_struct)
     if (!user32_gui_thread_allowed("BeginPaint")) {
         return nullptr;
     }
-    if (paint_struct == nullptr ||
-        !mapped_guest_range(paint_struct, sizeof(abi::GuestPaintStruct), true)) {
+    if (paint_struct == nullptr) {
         set_last_error(abi::kErrorInvalidParameter);
         return nullptr;
     }
@@ -16,11 +15,14 @@ TL_MSABI void* tl_BeginPaint(const void* const window, void* const paint_struct)
         set_last_error(abi::kErrorInvalidHandle);
         return nullptr;
     }
-    auto* const ps = static_cast<abi::GuestPaintStruct*>(paint_struct);
-    *ps = {};
-    ps->hdc = const_cast<void*>(window);
-    ps->f_erase = 1;
-    ps->rc_paint = {0, 0, slot->width, slot->height};
+    abi::GuestPaintStruct ps{};
+    ps.hdc = const_cast<void*>(window);
+    ps.f_erase = 1;
+    ps.rc_paint = {0, 0, slot->width, slot->height};
+    if (!write_guest_value(paint_struct, ps)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return nullptr;
+    }
     slot->painting = true;
     const std::array<diagnostics::TraceField, 4> fields{
         diagnostics::TraceField{"symbol", "BeginPaint"},
@@ -28,15 +30,15 @@ TL_MSABI void* tl_BeginPaint(const void* const window, void* const paint_struct)
     };
     runtime_trace("BeginPaint", fields, 2);
     set_last_error(abi::kErrorSuccess);
-    return ps->hdc;
+    return ps.hdc;
 }
 
 TL_MSABI int tl_EndPaint(const void* const window, const void* const paint_struct) noexcept {
     if (!user32_gui_thread_allowed("EndPaint")) {
         return 0;
     }
-    if (paint_struct == nullptr ||
-        !mapped_guest_range(paint_struct, sizeof(abi::GuestPaintStruct), false)) {
+    abi::GuestPaintStruct ps{};
+    if (paint_struct == nullptr || !read_guest_value(paint_struct, ps)) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
@@ -75,7 +77,8 @@ TL_MSABI int tl_InvalidateRect(const void* window, const void* rect, int erase) 
         return 0;
     }
     (void)erase;
-    if (rect != nullptr && !mapped_guest_range(rect, sizeof(abi::GuestRect), false)) {
+    abi::GuestRect rect_copy{};
+    if (rect != nullptr && !read_guest_value(rect, rect_copy)) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
@@ -106,7 +109,8 @@ TL_MSABI std::uintptr_t tl_LoadCursorA(const void* instance, const char* name) n
 
 TL_MSABI std::uintptr_t tl_LoadCursorW(const void* instance, const std::uint16_t* name) noexcept {
     (void)instance;
-    if (name != nullptr && !mapped_guest_wstring(name)) {
+    std::u16string name_copy;
+    if (name != nullptr && !runtime::copy_guest_wstring(name, 4096U, name_copy)) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
@@ -122,7 +126,8 @@ TL_MSABI std::uintptr_t tl_LoadIconA(const void* instance, const char* name) noe
 
 TL_MSABI std::uintptr_t tl_LoadIconW(const void* instance, const std::uint16_t* name) noexcept {
     (void)instance;
-    if (name != nullptr && !mapped_guest_wstring(name)) {
+    std::u16string name_copy;
+    if (name != nullptr && !runtime::copy_guest_wstring(name, 4096U, name_copy)) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
@@ -241,26 +246,35 @@ TL_MSABI int tl_SetCursorPos(const int, const int) noexcept {
 }
 
 TL_MSABI int tl_LoadStringA(void* instance, const std::uint32_t id, char* buffer, const int buffer_max) noexcept {
-    if (buffer == nullptr || buffer_max <= 0 || !mapped_guest_range(buffer, static_cast<std::size_t>(buffer_max), true)) {
+    if (buffer == nullptr || buffer_max <= 0) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
     std::vector<std::uint16_t> wide(static_cast<std::size_t>(buffer_max), 0);
     const int length = tl_LoadStringW(instance, id, wide.data(), buffer_max);
     if (length <= 0) {
-        buffer[0] = '\0';
+        const char zero = '\0';
+        if (runtime::write_guest_memory(buffer, &zero, sizeof(zero)).status !=
+            runtime::GuestMemoryAccessStatus::Success) {
+            set_last_error(abi::kErrorInvalidParameter);
+        }
         return 0;
     }
     const std::string utf8 = util::wide_to_utf8(wide.data(), static_cast<std::size_t>(length));
     const std::size_t copied = std::min(utf8.size(), static_cast<std::size_t>(buffer_max - 1));
-    std::memcpy(buffer, utf8.data(), copied);
-    buffer[copied] = '\0';
+    std::vector<char> output(copied + 1U, '\0');
+    std::copy_n(utf8.data(), copied, output.data());
+    if (runtime::write_guest_memory(buffer, output.data(), output.size()).status !=
+        runtime::GuestMemoryAccessStatus::Success) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
     set_last_error(abi::kErrorSuccess);
     return static_cast<int>(copied);
 }
 
 TL_MSABI int tl_LoadStringW(void* instance, const std::uint32_t id, std::uint16_t* buffer, const int buffer_max) noexcept {
-    if (buffer == nullptr || buffer_max <= 0 || !mapped_guest_range(buffer, static_cast<std::size_t>(buffer_max) * sizeof(std::uint16_t), true)) {
+    if (buffer == nullptr || buffer_max <= 0) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
@@ -275,7 +289,12 @@ TL_MSABI int tl_LoadStringW(void* instance, const std::uint32_t id, std::uint16_
                                  : static_cast<const std::uint16_t*>(tl_LockResource(loaded));
     const std::uint32_t byte_size = resource == nullptr ? 0U : tl_SizeofResource(instance, resource);
     if (data == nullptr || byte_size < sizeof(std::uint16_t)) {
-        buffer[0] = 0;
+        const std::uint16_t zero = 0;
+        if (runtime::write_guest_memory(buffer, &zero, sizeof(zero)).status !=
+            runtime::GuestMemoryAccessStatus::Success) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
+        }
         set_last_error(abi::kErrorResourceNameNotFound);
         return 0;
     }
@@ -285,45 +304,64 @@ TL_MSABI int tl_LoadStringW(void* instance, const std::uint32_t id, std::uint16_
     const std::size_t index = id % 16U;
     for (std::size_t current = 0; current <= index; ++current) {
         if (offset >= unit_count) {
-            buffer[0] = 0;
+            const std::uint16_t zero = 0;
+            if (runtime::write_guest_memory(buffer, &zero, sizeof(zero)).status !=
+                runtime::GuestMemoryAccessStatus::Success) {
+                set_last_error(abi::kErrorInvalidParameter);
+                return 0;
+            }
             set_last_error(abi::kErrorResourceDataNotFound);
             return 0;
         }
         const std::size_t length = data[offset++];
         if (length > unit_count - offset) {
-            buffer[0] = 0;
+            const std::uint16_t zero = 0;
+            if (runtime::write_guest_memory(buffer, &zero, sizeof(zero)).status !=
+                runtime::GuestMemoryAccessStatus::Success) {
+                set_last_error(abi::kErrorInvalidParameter);
+                return 0;
+            }
             set_last_error(abi::kErrorResourceDataNotFound);
             return 0;
         }
         if (current == index) {
             const std::size_t copied = std::min(length, static_cast<std::size_t>(buffer_max - 1));
-            std::memcpy(buffer, data + offset, copied * sizeof(std::uint16_t));
-            buffer[copied] = 0;
+            std::vector<std::uint16_t> output(copied + 1U, 0);
+            std::copy_n(data + offset, copied, output.data());
+            if (runtime::write_guest_memory(buffer, output.data(), output.size() * sizeof(output[0])).status !=
+                runtime::GuestMemoryAccessStatus::Success) {
+                set_last_error(abi::kErrorInvalidParameter);
+                return 0;
+            }
             set_last_error(abi::kErrorSuccess);
             return static_cast<int>(copied);
         }
         offset += length;
     }
-    buffer[0] = 0;
+    const std::uint16_t zero = 0;
+    if (runtime::write_guest_memory(buffer, &zero, sizeof(zero)).status !=
+        runtime::GuestMemoryAccessStatus::Success) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
     set_last_error(abi::kErrorResourceNameNotFound);
     return 0;
 }
 
 TL_MSABI int tl_PtInRect(const void* const rect, const std::int32_t x, const std::int32_t y) noexcept {
-    if (rect == nullptr || !mapped_guest_range(rect, sizeof(abi::GuestRect), false)) {
+    abi::GuestRect r{};
+    if (rect == nullptr || !read_guest_value(rect, r)) {
         return 0;
     }
-    const auto* const r = static_cast<const abi::GuestRect*>(rect);
-    return (x >= r->left && x < r->right && y >= r->top && y < r->bottom) ? 1 : 0;
+    return (x >= r.left && x < r.right && y >= r.top && y < r.bottom) ? 1 : 0;
 }
 
 TL_MSABI int tl_CopyRect(void* const dest_rect, const void* const src_rect) noexcept {
-    if (dest_rect == nullptr || src_rect == nullptr ||
-        !mapped_guest_range(dest_rect, sizeof(abi::GuestRect), true) ||
-        !mapped_guest_range(src_rect, sizeof(abi::GuestRect), false)) {
+    abi::GuestRect source{};
+    if (dest_rect == nullptr || src_rect == nullptr || !read_guest_value(src_rect, source) ||
+        !write_guest_value(dest_rect, source)) {
         return 0;
     }
-    *static_cast<abi::GuestRect*>(dest_rect) = *static_cast<const abi::GuestRect*>(src_rect);
     return 1;
 }
 
@@ -357,12 +395,15 @@ TL_MSABI std::uint16_t* tl_CharUpperW(std::uint16_t* const str) noexcept {
         }
         return reinterpret_cast<std::uint16_t*>(static_cast<std::uintptr_t>(ch));
     }
-    if (!mapped_guest_wstring(str)) return str;
-    for (std::uint16_t* p = str; *p != 0; ++p) {
-        if (*p >= u'a' && *p <= u'z') {
-            *p = static_cast<std::uint16_t>(*p - u'a' + u'A');
+    std::u16string copy;
+    if (!runtime::copy_guest_wstring(str, 65535U, copy)) return str;
+    for (char16_t& value : copy) {
+        if (value >= u'a' && value <= u'z') {
+            value = static_cast<char16_t>(value - u'a' + u'A');
         }
     }
+    copy.push_back(0);
+    static_cast<void>(runtime::write_guest_memory(str, copy.data(), copy.size() * sizeof(copy[0])));
     return str;
 }
 
@@ -374,12 +415,15 @@ TL_MSABI std::uint16_t* tl_CharLowerW(std::uint16_t* const str) noexcept {
         }
         return reinterpret_cast<std::uint16_t*>(static_cast<std::uintptr_t>(ch));
     }
-    if (!mapped_guest_wstring(str)) return str;
-    for (std::uint16_t* p = str; *p != 0; ++p) {
-        if (*p >= u'A' && *p <= u'Z') {
-            *p = static_cast<std::uint16_t>(*p - u'A' + u'a');
+    std::u16string copy;
+    if (!runtime::copy_guest_wstring(str, 65535U, copy)) return str;
+    for (char16_t& value : copy) {
+        if (value >= u'A' && value <= u'Z') {
+            value = static_cast<char16_t>(value - u'A' + u'a');
         }
     }
+    copy.push_back(0);
+    static_cast<void>(runtime::write_guest_memory(str, copy.data(), copy.size() * sizeof(copy[0])));
     return str;
 }
 
@@ -391,7 +435,8 @@ TL_MSABI const char* tl_CharPrevExA(const std::uint32_t code_page, const char* c
         set_last_error(abi::kErrorInvalidParameter);
         return start;
     }
-    if (!mapped_guest_cstring(start)) {
+    std::string start_copy;
+    if (!runtime::copy_guest_cstring(start, 65535U, start_copy)) {
         set_last_error(abi::kErrorInvalidParameter);
         return start;
     }
@@ -405,7 +450,9 @@ TL_MSABI const char* tl_CharPrevExA(const std::uint32_t code_page, const char* c
         set_last_error(abi::kErrorInvalidParameter);
         return start;
     }
-    if (!mapped_guest_range(current - 1, 1, false)) {
+    char previous = 0;
+    if (runtime::read_guest_memory(current - 1, &previous, sizeof(previous)).status !=
+        runtime::GuestMemoryAccessStatus::Success) {
         set_last_error(abi::kErrorInvalidParameter);
         return start;
     }
@@ -417,48 +464,88 @@ TL_MSABI const char* tl_CharPrevExA(const std::uint32_t code_page, const char* c
 
 TL_MSABI int tl_DrawTextA(const void* const dc, const char* const text, const int count,
                           void* const rect, const std::uint32_t format) noexcept {
-    if (text == nullptr || rect == nullptr || !mapped_guest_range(rect, sizeof(abi::GuestRect), true)) {
+    if (text == nullptr || rect == nullptr) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
-    const std::size_t len = (count < 0) ? std::strlen(text) : static_cast<std::size_t>(count);
-    auto* const r = static_cast<abi::GuestRect*>(rect);
+    std::string text_copy;
+    if (count < 0) {
+        if (!runtime::copy_guest_cstring(text, 32768U, text_copy)) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
+        }
+    } else {
+        text_copy.resize(static_cast<std::size_t>(count));
+        if (count > 0 && runtime::read_guest_memory(text, text_copy.data(), text_copy.size()).status !=
+                              runtime::GuestMemoryAccessStatus::Success) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
+        }
+    }
+    const std::size_t len = text_copy.size();
+    abi::GuestRect r{};
+    if (!read_guest_value(rect, r)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
     constexpr int kLineHeight = 16;
     constexpr int kCharWidth = 8;
     if ((format & kDtCalcRect) != 0) {
-        r->right = r->left + static_cast<std::int32_t>(len * kCharWidth);
-        r->bottom = r->top + kLineHeight;
+        r.right = r.left + static_cast<std::int32_t>(len * kCharWidth);
+        r.bottom = r.top + kLineHeight;
+        if (!write_guest_value(rect, r)) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
+        }
         return kLineHeight;
     }
     if (dc != nullptr) {
-        (void)tl_TextOut(dc, r->left, r->top, text, static_cast<int>(len));
+        (void)tl_TextOut(dc, r.left, r.top, text_copy.data(), static_cast<int>(len));
     }
     return kLineHeight;
 }
 
 TL_MSABI int tl_DrawTextW(const void* const dc, const std::uint16_t* const text, const int count,
                           void* const rect, const std::uint32_t format) noexcept {
-    if (text == nullptr || rect == nullptr || !mapped_guest_range(rect, sizeof(abi::GuestRect), true)) {
+    if (text == nullptr || rect == nullptr) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
-    std::size_t len = 0;
+    std::u16string text_copy;
     if (count < 0) {
-        while (text[len] != 0) ++len;
+        if (!runtime::copy_guest_wstring(text, 32768U, text_copy)) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
+        }
     } else {
-        len = static_cast<std::size_t>(count);
+        text_copy.resize(static_cast<std::size_t>(count));
+        if (count > 0 && runtime::read_guest_memory(text, text_copy.data(), text_copy.size() * sizeof(text_copy[0])).status !=
+                              runtime::GuestMemoryAccessStatus::Success) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
+        }
     }
-    auto* const r = static_cast<abi::GuestRect*>(rect);
+    const std::size_t len = text_copy.size();
+    abi::GuestRect r{};
+    if (!read_guest_value(rect, r)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
     constexpr int kLineHeight = 16;
     constexpr int kCharWidth = 8;
     if ((format & kDtCalcRect) != 0) {
-        r->right = r->left + static_cast<std::int32_t>(len * kCharWidth);
-        r->bottom = r->top + kLineHeight;
+        r.right = r.left + static_cast<std::int32_t>(len * kCharWidth);
+        r.bottom = r.top + kLineHeight;
+        if (!write_guest_value(rect, r)) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
+        }
         return kLineHeight;
     }
     if (dc != nullptr) {
-        const std::string utf8 = util::wide_to_utf8(text, len);
-        (void)tl_TextOut(dc, r->left, r->top, utf8.c_str(), static_cast<int>(utf8.size()));
+        const std::string utf8 = util::wide_to_utf8(
+            reinterpret_cast<const std::uint16_t*>(text_copy.data()), len);
+        (void)tl_TextOut(dc, r.left, r.top, utf8.c_str(), static_cast<int>(utf8.size()));
     }
     return kLineHeight;
 }
@@ -809,7 +896,7 @@ TL_MSABI int tl_EnumDisplayDevicesA(const char* const device, const std::uint32_
                                     void* const display_device, const std::uint32_t flags) noexcept {
     (void)device;
     (void)flags;
-    if (dev_num > 0 || display_device == nullptr || !mapped_guest_range(display_device, 40, true)) {
+    if (dev_num > 0 || display_device == nullptr) {
         set_last_error(abi::kErrorSuccess);
         return 0;
     }
@@ -821,13 +908,23 @@ TL_MSABI int tl_EnumDisplayDevicesA(const char* const device, const std::uint32_
         std::uint32_t StateFlags;
         char DeviceID[128];
         char DeviceKey[128];
-    }* dd = reinterpret_cast<DummyDisplayDeviceA*>(display_device);
-    const std::uint32_t cb = dd->cb;
-    std::memset(display_device, 0, std::min<std::size_t>(cb, sizeof(DummyDisplayDeviceA)));
-    dd->cb = cb;
-    std::strncpy(dd->DeviceName, "\\\\.\\DISPLAY1", sizeof(dd->DeviceName) - 1);
-    std::strncpy(dd->DeviceString, "Generic PnP Monitor", sizeof(dd->DeviceString) - 1);
-    dd->StateFlags = 1 | 4; // DISPLAY_DEVICE_ATTACHED_TO_DESKTOP | DISPLAY_DEVICE_PRIMARY_DEVICE
+    } display{};
+    std::uint32_t cb = 0;
+    if (!read_guest_value(display_device, cb)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    std::memset(&display, 0, sizeof(display));
+    display.cb = cb;
+    std::strncpy(display.DeviceName, "\\\\.\\DISPLAY1", sizeof(display.DeviceName) - 1);
+    std::strncpy(display.DeviceString, "Generic PnP Monitor", sizeof(display.DeviceString) - 1);
+    display.StateFlags = 1 | 4; // DISPLAY_DEVICE_ATTACHED_TO_DESKTOP | DISPLAY_DEVICE_PRIMARY_DEVICE
+    const std::size_t output_size = std::min<std::size_t>(cb, sizeof(display));
+    if (output_size == 0 || runtime::write_guest_memory(display_device, &display, output_size).status !=
+                                runtime::GuestMemoryAccessStatus::Success) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
     set_last_error(abi::kErrorSuccess);
     return 1;
 }
@@ -857,12 +954,16 @@ TL_MSABI void* tl_LoadImageA(void* const instance, const char* const name, const
 }
 
 TL_MSABI int tl_OffsetRect(void* const rect, const int dx, const int dy) noexcept {
-    if (rect != nullptr && mapped_guest_range(rect, 16, true)) {
-        auto* const r = reinterpret_cast<std::int32_t*>(rect);
-        r[0] += dx; // left
-        r[1] += dy; // top
-        r[2] += dx; // right
-        r[3] += dy; // bottom
+    abi::GuestRect value{};
+    if (rect != nullptr && read_guest_value(rect, value)) {
+        value.left += dx;
+        value.top += dy;
+        value.right += dx;
+        value.bottom += dy;
+        if (!write_guest_value(rect, value)) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
+        }
         set_last_error(abi::kErrorSuccess);
         return 1;
     }
@@ -927,38 +1028,36 @@ TL_MSABI int tl_IsCharAlphaW(const wchar_t ch) noexcept {
 }
 
 TL_MSABI int tl_InflateRect(void* const lprc, const int dx, const int dy) noexcept {
-    if (lprc == nullptr || !mapped_guest_range(lprc, 16, true)) return 0;
-    auto* const r = reinterpret_cast<std::int32_t*>(lprc);
-    r[0] -= dx;
-    r[1] -= dy;
-    r[2] += dx;
-    r[3] += dy;
+    abi::GuestRect value{};
+    if (lprc == nullptr || !read_guest_value(lprc, value)) return 0;
+    value.left -= dx;
+    value.top -= dy;
+    value.right += dx;
+    value.bottom += dy;
+    if (!write_guest_value(lprc, value)) return 0;
     return 1;
 }
 
 TL_MSABI int tl_IntersectRect(void* const lprcDst, const void* const lprcSrc1, const void* const lprcSrc2) noexcept {
+    abi::GuestRect source1{};
+    abi::GuestRect source2{};
     if (lprcDst == nullptr || lprcSrc1 == nullptr || lprcSrc2 == nullptr ||
-        !mapped_guest_range(lprcDst, 16, true) ||
-        !mapped_guest_range(lprcSrc1, 16, false) ||
-        !mapped_guest_range(lprcSrc2, 16, false)) return 0;
-    const auto* const s1 = reinterpret_cast<const std::int32_t*>(lprcSrc1);
-    const auto* const s2 = reinterpret_cast<const std::int32_t*>(lprcSrc2);
-    auto* const d = reinterpret_cast<std::int32_t*>(lprcDst);
-    d[0] = std::max(s1[0], s2[0]);
-    d[1] = std::max(s1[1], s2[1]);
-    d[2] = std::min(s1[2], s2[2]);
-    d[3] = std::min(s1[3], s2[3]);
-    if (d[0] >= d[2] || d[1] >= d[3]) {
-        std::memset(lprcDst, 0, 16);
+        !read_guest_value(lprcSrc1, source1) || !read_guest_value(lprcSrc2, source2)) return 0;
+    abi::GuestRect destination{
+        std::max(source1.left, source2.left), std::max(source1.top, source2.top),
+        std::min(source1.right, source2.right), std::min(source1.bottom, source2.bottom)};
+    if (destination.left >= destination.right || destination.top >= destination.bottom) {
+        destination = {};
+        if (!write_guest_value(lprcDst, destination)) return 0;
         return 0;
     }
+    if (!write_guest_value(lprcDst, destination)) return 0;
     return 1;
 }
 
 TL_MSABI int tl_SetRectEmpty(void* const lprc) noexcept {
-    if (lprc == nullptr || !mapped_guest_range(lprc, 16, true)) return 0;
-    std::memset(lprc, 0, 16);
-    return 1;
+    const abi::GuestRect empty{};
+    return lprc != nullptr && write_guest_value(lprc, empty) ? 1 : 0;
 }
 
 TL_MSABI int tl_GetComboBoxInfo(void* const hwndCombo, void* const pcbi) noexcept {
@@ -974,13 +1073,19 @@ TL_MSABI int tl_GetComboBoxInfo(void* const hwndCombo, void* const pcbi) noexcep
 
 TL_MSABI int tl_wsprintfW(wchar_t* const lpOut, const wchar_t* const lpFmt, ...) noexcept {
     if (lpOut == nullptr || lpFmt == nullptr) return 0;
-    std::size_t i = 0;
-    while (lpFmt[i] != 0) {
-        lpOut[i] = lpFmt[i];
-        ++i;
+    std::u16string format_copy;
+    const auto* const guest_format = reinterpret_cast<const std::uint16_t*>(lpFmt);
+    if (!runtime::copy_guest_wstring(guest_format, 4096U, format_copy)) {
+        return 0;
     }
-    lpOut[i] = 0;
-    return static_cast<int>(i);
+    format_copy.push_back(0);
+    auto* const guest_output = reinterpret_cast<std::uint16_t*>(lpOut);
+    if (runtime::write_guest_memory(guest_output, format_copy.data(),
+                                    format_copy.size() * sizeof(format_copy[0])).status !=
+        runtime::GuestMemoryAccessStatus::Success) {
+        return 0;
+    }
+    return static_cast<int>(format_copy.size() - 1U);
 }
 
 TL_MSABI void* tl_GetDCEx(void* const hWnd, void* const hrgnClip, const std::uint32_t flags) noexcept {
@@ -994,45 +1099,49 @@ TL_MSABI int tl_EnumDisplaySettingsA(const char* const device, const std::uint32
     if (mode != 0) {
         return 0;
     }
-    if (dev_mode != nullptr && mapped_guest_range(dev_mode, 124, true)) {
-        std::memset(dev_mode, 0, 124);
-        *reinterpret_cast<std::uint32_t*>(dev_mode) = 124;
+    if (dev_mode != nullptr) {
+        std::array<std::byte, 124> output{};
+        const std::uint32_t size = 124;
+        std::memcpy(output.data(), &size, sizeof(size));
         // dmPelsWidth/Height at offset 104/108
-        *reinterpret_cast<std::uint32_t*>(static_cast<char*>(dev_mode) + 104) = 1920;
-        *reinterpret_cast<std::uint32_t*>(static_cast<char*>(dev_mode) + 108) = 1080;
-        *reinterpret_cast<std::uint32_t*>(static_cast<char*>(dev_mode) + 112) = 32;
+        const std::uint32_t width = 1920;
+        const std::uint32_t height = 1080;
+        const std::uint32_t bits = 32;
+        std::memcpy(output.data() + 104, &width, sizeof(width));
+        std::memcpy(output.data() + 108, &height, sizeof(height));
+        std::memcpy(output.data() + 112, &bits, sizeof(bits));
+        if (runtime::write_guest_memory(dev_mode, output.data(), output.size()).status !=
+            runtime::GuestMemoryAccessStatus::Success) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
+        }
     }
     set_last_error(abi::kErrorSuccess);
     return 1;
 }
 
 TL_MSABI int tl_IsRectEmpty(const void* const rect) noexcept {
-    if (rect == nullptr || !mapped_guest_range(rect, 16, false)) {
+    abi::GuestRect value{};
+    if (rect == nullptr || !read_guest_value(rect, value)) {
         return 1;
     }
-    const auto* r = static_cast<const std::int32_t*>(rect);
-    return (r[2] <= r[0] || r[3] <= r[1]) ? 1 : 0;
+    return (value.right <= value.left || value.bottom <= value.top) ? 1 : 0;
 }
 
 TL_MSABI int tl_SubtractRect(void* const dest, const void* const src1, const void* const src2) noexcept {
+    abi::GuestRect source1{};
+    abi::GuestRect source2{};
     if (dest == nullptr || src1 == nullptr || src2 == nullptr ||
-        !mapped_guest_range(dest, 16, true) || !mapped_guest_range(src1, 16, false) ||
-        !mapped_guest_range(src2, 16, false)) {
+        !read_guest_value(src1, source1) || !read_guest_value(src2, source2)) {
         return 0;
     }
-    const auto* s1 = static_cast<const std::int32_t*>(src1);
-    const auto* s2 = static_cast<const std::int32_t*>(src2);
-    auto* d = static_cast<std::int32_t*>(dest);
     // Simplificado: dest = src1 - intersecção
-    d[0] = s1[0];
-    d[1] = s1[1];
-    d[2] = s1[2];
-    d[3] = s1[3];
+    if (!write_guest_value(dest, source1)) return 0;
     // Se há intersecção, retorna 1
-    const int left = std::max(s1[0], s2[0]);
-    const int top = std::max(s1[1], s2[1]);
-    const int right = std::min(s1[2], s2[2]);
-    const int bottom = std::min(s1[3], s2[3]);
+    const int left = std::max(source1.left, source2.left);
+    const int top = std::max(source1.top, source2.top);
+    const int right = std::min(source1.right, source2.right);
+    const int bottom = std::min(source1.bottom, source2.bottom);
     return (left < right && top < bottom) ? 1 : 0;
 }
 

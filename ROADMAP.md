@@ -434,6 +434,12 @@ O lote `SHELL32` migrou estruturas de entrada e strings de
 com falha controlada e sem iniciar processos ou alterar arquivos; a regressão
 também cobre GUID, `SHELLEXECUTEINFO`, `SHFILEOPSTRUCT` e strings inválidos.
 
+O lote `USER32/misc` migrou `BeginPaint`/`EndPaint`, operações de `RECT`,
+`CharUpperW`/`CharLowerW`, `DrawTextA/W`, `LoadStringA/W`, enumeração de
+display e `wsprintfW` para snapshots e publicações protegidas. A regressão
+exercita ponteiros inválidos em entradas, retângulos e buffers de saída, e os
+smokes existentes de GUI continuam passando.
+
 ## Fora desta rodada
 
 Não entram neste roadmap, por enquanto:

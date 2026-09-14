@@ -399,6 +399,31 @@ TEST(User32ExtTest, DesktopCaptureAndRectOperations) {
     EXPECT_GT(calc_r.bottom, 0);
 }
 
+TEST(User32ExtTest, ProtectedMiscInputsAndOutputsRejectUnmappedPointers) {
+    auto* const invalid = reinterpret_cast<void*>(static_cast<std::uintptr_t>(0x1000U));
+    abi::GuestRect rect{1, 2, 30, 40};
+    abi::GuestRect output{9, 8, 7, 6};
+
+    EXPECT_EQ(tl_PtInRect(invalid, 1, 1), 0);
+    EXPECT_EQ(tl_CopyRect(&output, invalid), 0);
+    EXPECT_EQ(tl_CopyRect(invalid, &rect), 0);
+    EXPECT_EQ(tl_OffsetRect(invalid, 1, 1), 0);
+    EXPECT_EQ(tl_InflateRect(invalid, 1, 1), 0);
+    EXPECT_EQ(tl_IntersectRect(&output, invalid, &rect), 0);
+    EXPECT_EQ(tl_SubtractRect(&output, invalid, &rect), 0);
+    EXPECT_EQ(tl_SetRectEmpty(invalid), 0);
+    EXPECT_EQ(tl_IsRectEmpty(invalid), 1);
+
+    EXPECT_EQ(reinterpret_cast<std::uintptr_t>(tl_CharUpperW(
+                  static_cast<std::uint16_t*>(invalid))), reinterpret_cast<std::uintptr_t>(invalid));
+    EXPECT_EQ(reinterpret_cast<std::uintptr_t>(tl_CharLowerW(
+                  static_cast<std::uint16_t*>(invalid))), reinterpret_cast<std::uintptr_t>(invalid));
+    EXPECT_EQ(tl_DrawTextW(nullptr, static_cast<const std::uint16_t*>(invalid), -1,
+                           &output, kDtCalcRect), 0);
+    EXPECT_EQ(tl_EnumDisplayDevicesA(nullptr, 0, invalid, 0), 0);
+    EXPECT_EQ(tl_EnumDisplaySettingsA(nullptr, 0, invalid), 0);
+}
+
 TEST(Kernel32SystemTest, TimeZoneProcessAndAffinity) {
     tl_OutputDebugStringA("test A");
     std::uint16_t wstr[] = {u't', u'e', u's', u't', 0};

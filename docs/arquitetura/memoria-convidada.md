@@ -55,6 +55,11 @@ para objetos host. As saídas de `SHELLEXECUTEINFO` e `SHFILEOPSTRUCT` são
 publicadas de volta com `write_guest_memory`; nenhum desses caminhos
 desreferencia o ponteiro convidado após uma validação por snapshot.
 
+O lote `USER32/misc` aplica o mesmo contrato a `PAINTSTRUCT`, `RECT`,
+`DrawTextA/W`, `LoadStringA/W`, `CharUpperW`/`CharLowerW`, estruturas de
+display e `wsprintfW`. Os cálculos são feitos em cópias host e somente os
+resultados finais são publicados pela primitiva protegida.
+
 ## Limites residuais
 
 `validate_mapped_range` permanece deliberadamente como predicado advisory:
