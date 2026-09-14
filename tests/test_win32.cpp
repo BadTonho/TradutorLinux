@@ -515,6 +515,39 @@ TEST(Win32EnvTest, GetEnvironmentVariableAMissingReturnsZero) {
     EXPECT_EQ(tl_GetLastError(), abi::kErrorEnvvarNotFound);
 }
 
+TEST(Win32EnvTest, ProtectedEnvironmentInputsAndOutputsRejectUnmappedPointers) {
+    auto* const invalid = reinterpret_cast<void*>(static_cast<std::uintptr_t>(0x1000U));
+    const std::uint16_t wide_name[] = {'P', 'A', 'T', 'H', 0};
+    const std::uint16_t wide_value[] = {'x', 0};
+    const std::uint16_t expansion[] = {'%', 'P', 'A', 'T', 'H', '%', 0};
+
+    EXPECT_EQ(tl_GetEnvironmentVariableA(reinterpret_cast<const char*>(invalid), nullptr, 0), 0U);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_GetEnvironmentVariableA("PATH", static_cast<char*>(invalid), 4096), 0U);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+
+    EXPECT_EQ(tl_GetEnvironmentVariableW(reinterpret_cast<const std::uint16_t*>(invalid),
+                                         nullptr, 0), 0U);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_GetEnvironmentVariableW(wide_name, static_cast<std::uint16_t*>(invalid),
+                                         4096), 0U);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+
+    EXPECT_EQ(tl_SetEnvironmentVariableW(reinterpret_cast<const std::uint16_t*>(invalid),
+                                         wide_value), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_SetEnvironmentVariableW(wide_name,
+                                         reinterpret_cast<const std::uint16_t*>(invalid)), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+
+    EXPECT_EQ(tl_ExpandEnvironmentStringsW(reinterpret_cast<const std::uint16_t*>(invalid),
+                                           nullptr, 0), 0U);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_ExpandEnvironmentStringsW(expansion, static_cast<std::uint16_t*>(invalid),
+                                           4096), 0U);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+}
+
 TEST(Win32EnvTest, GetEnvironmentVariableAInsufficientBuffer) {
     std::array<char, 2> tiny{};
     const std::uint32_t needed = tl_GetEnvironmentVariableA("PATH", nullptr, 0);

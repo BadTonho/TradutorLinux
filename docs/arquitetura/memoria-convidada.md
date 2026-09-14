@@ -76,6 +76,13 @@ validada pelo loader, mas ainda faz a transferência efetiva por
 legada `OpenFile` não mantém uma validação de mapa própria: delega o nome à
 fronteira protegida de `CreateFileA`.
 
+O sublote `KERNEL32/environment` copia nomes, valores e textos de expansão
+UTF-16/ANSI para memória host antes de consultar o ambiente. Os resultados de
+`GetEnvironmentVariableA/W` e `ExpandEnvironmentStringsW` são publicados com
+`write_guest_memory`, incluindo o terminador, e a regressão
+`Win32EnvTest.ProtectedEnvironmentInputsAndOutputsRejectUnmappedPointers`
+cobre entradas e saídas inacessíveis.
+
 O lote `SHELL32` segue esse contrato para suas estruturas de entrada e strings:
 `NOTIFYICONDATA`, `GUID`, `SHELLEXECUTEINFO`, `SHFILEOPSTRUCT`,
 `CommandLineToArgvW` e as entradas de `ShellExecuteA/W` são primeiro copiados

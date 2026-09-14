@@ -195,6 +195,11 @@ O sublote `runtime/tls-loader` migrou a inicialização do template TLS para
 Os testes de TLS e de I/O protegido continuam passando, sem usar a fotografia
 de mapas como garantia de acesso.
 
+O sublote `KERNEL32/environment` migrou nomes, valores e expansões de ambiente
+ANSI/Wide para cópias host e resultados para `write_guest_memory`. A regressão
+`Win32EnvTest.ProtectedEnvironmentInputsAndOutputsRejectUnmappedPointers` e os
+demais oito testes de ambiente passaram no preset sanitizado.
+
 O lote de caminhos migrou as saídas de diretório, módulo, temporários,
 capacidade de disco, nomes completos/finais e `file_part`, além das leituras de
 strings A/W usadas por essas rotas. As coberturas existentes e a regressão

@@ -6,6 +6,29 @@ namespace {
 constexpr std::uint32_t kStillActive = 259U;
 constexpr std::uint32_t kChildProcessFailure = 0xC0000001U;
 constexpr std::size_t kChildProcessProtocolSize = 5;
+constexpr std::size_t kMaxEnvironmentStringUnits = 32768U;
+
+template <typename Unit>
+[[nodiscard]] bool write_guest_terminated_units(void* const destination,
+                                                const Unit* const source,
+                                                const std::size_t length) noexcept {
+    if (destination == nullptr || length > std::numeric_limits<std::size_t>::max() / sizeof(Unit)) {
+        return false;
+    }
+    const std::uintptr_t base = reinterpret_cast<std::uintptr_t>(destination);
+    const std::size_t bytes = length * sizeof(Unit);
+    if (base > std::numeric_limits<std::uintptr_t>::max() - bytes) {
+        return false;
+    }
+    if (bytes > 0 && runtime::write_guest_memory(destination, source, bytes).status !=
+                         runtime::GuestMemoryAccessStatus::Success) {
+        return false;
+    }
+    const Unit terminator{};
+    return runtime::write_guest_memory(reinterpret_cast<void*>(base + bytes), &terminator,
+                                       sizeof(terminator)).status ==
+           runtime::GuestMemoryAccessStatus::Success;
+}
 
 [[nodiscard]] std::uint64_t relocate_tls_va_for_child(
     const std::uint64_t value, const pe::PeInfo& info,
@@ -537,11 +560,12 @@ TL_MSABI void* tl_GetCurrentProcess() noexcept {
 
 TL_MSABI std::uint32_t tl_GetEnvironmentVariableA(const char* name, char* buffer,
                                                   std::uint32_t size) noexcept {
-    if (name == nullptr || !mapped_guest_cstring(name)) {
+    std::string guest_name;
+    if (!runtime::copy_guest_cstring(name, kMaxEnvironmentStringUnits, guest_name)) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
-    const std::optional<std::string> value = runtime::guest_environment_value(name);
+    const std::optional<std::string> value = runtime::guest_environment_value(guest_name);
     if (!value.has_value()) {
         set_last_error(abi::kErrorEnvvarNotFound);
         return 0;
@@ -550,29 +574,29 @@ TL_MSABI std::uint32_t tl_GetEnvironmentVariableA(const char* name, char* buffer
     if (buffer == nullptr || size == 0) {
         return static_cast<std::uint32_t>(len + 1);
     }
-    if (!mapped_guest_range(buffer, size, true)) {
-        set_last_error(abi::kErrorInvalidParameter);
-        return 0;
-    }
     if (size <= len) {
         set_last_error(abi::kErrorInsufficientBuffer);
         // MSDN: com buffer insuficiente, devolve o tamanho necessário
         // incluindo o terminador nulo.
         return static_cast<std::uint32_t>(len + 1);
     }
-    std::memcpy(buffer, value->data(), len);
-    buffer[len] = '\0';
+    if (!write_guest_terminated_units(buffer, value->data(), len)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
     set_last_error(abi::kErrorSuccess);
     return static_cast<std::uint32_t>(len);
 }
 
 TL_MSABI std::uint32_t tl_GetEnvironmentVariableW(const std::uint16_t* name, std::uint16_t* buffer,
                                                    std::uint32_t size) noexcept {
-    if (name == nullptr || !mapped_guest_wstring(name)) {
+    std::u16string guest_name;
+    if (!runtime::copy_guest_wstring(name, kMaxEnvironmentStringUnits, guest_name)) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
-    const std::string narrow_name = util::wide_to_utf8(name);
+    const std::string narrow_name = util::wide_to_utf8(
+        reinterpret_cast<const std::uint16_t*>(guest_name.data()), guest_name.size());
     const std::optional<std::string> value = runtime::guest_environment_value(narrow_name);
     if (!value.has_value()) {
         set_last_error(abi::kErrorEnvvarNotFound);
@@ -583,31 +607,34 @@ TL_MSABI std::uint32_t tl_GetEnvironmentVariableW(const std::uint16_t* name, std
     if (buffer == nullptr || size == 0) {
         return result;
     }
-    if (!mapped_guest_range(buffer, static_cast<std::size_t>(size) * sizeof(*buffer), true)) {
-        set_last_error(abi::kErrorInvalidParameter);
-        return 0;
-    }
     if (size <= wide_value.size()) {
         set_last_error(abi::kErrorInsufficientBuffer);
         return result;
     }
-    std::copy(wide_value.begin(), wide_value.end(), buffer);
-    buffer[wide_value.size()] = 0;
+    if (!write_guest_terminated_units(buffer, wide_value.data(), wide_value.size())) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
     set_last_error(abi::kErrorSuccess);
     return static_cast<std::uint32_t>(wide_value.size());
 }
 
 TL_MSABI int tl_SetEnvironmentVariableW(const std::uint16_t* const name,
                                         const std::uint16_t* const value) noexcept {
-    if (name == nullptr || !mapped_guest_wstring(name) ||
-        (value != nullptr && !mapped_guest_wstring(value))) {
+    std::u16string guest_name;
+    std::u16string guest_value;
+    if (!runtime::copy_guest_wstring(name, kMaxEnvironmentStringUnits, guest_name) ||
+        (value != nullptr &&
+         !runtime::copy_guest_wstring(value, kMaxEnvironmentStringUnits, guest_value))) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
-    const std::string narrow_name = util::wide_to_utf8(name);
+    const std::string narrow_name = util::wide_to_utf8(
+        reinterpret_cast<const std::uint16_t*>(guest_name.data()), guest_name.size());
     std::optional<std::string> narrow_value;
     if (value != nullptr) {
-        narrow_value = util::wide_to_utf8(value);
+        narrow_value = util::wide_to_utf8(
+            reinterpret_cast<const std::uint16_t*>(guest_value.data()), guest_value.size());
     }
     if (!runtime::set_guest_environment_value(narrow_name, narrow_value)) {
         set_last_error(abi::kErrorInvalidParameter);
@@ -653,15 +680,10 @@ TL_MSABI int tl_FreeEnvironmentStringsW(std::uint16_t* const block) noexcept {
 TL_MSABI std::uint32_t tl_ExpandEnvironmentStringsW(const std::uint16_t* const source,
                                                      std::uint16_t* const destination,
                                                      const std::uint32_t size) noexcept {
-    if (source == nullptr || !mapped_guest_wstring(source) ||
-        (destination != nullptr && size != 0 &&
-         !mapped_guest_range(destination, static_cast<std::size_t>(size) * sizeof(*destination), true))) {
+    std::u16string input;
+    if (!runtime::copy_guest_wstring(source, kMaxEnvironmentStringUnits, input)) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
-    }
-    std::u16string input;
-    for (std::size_t index = 0; source[index] != 0; ++index) {
-        input.push_back(static_cast<char16_t>(source[index]));
     }
     std::u16string expanded;
     for (std::size_t index = 0; index < input.size();) {
@@ -675,8 +697,8 @@ TL_MSABI std::uint32_t tl_ExpandEnvironmentStringsW(const std::uint16_t* const s
             continue;
         }
         const std::u16string variable = input.substr(index + 1U, closing - index - 1U);
-        const std::optional<std::string> value =
-            runtime::guest_environment_value(util::wide_to_utf8(reinterpret_cast<const std::uint16_t*>(variable.c_str())));
+        const std::optional<std::string> value = runtime::guest_environment_value(
+            util::wide_to_utf8(reinterpret_cast<const std::uint16_t*>(variable.data()), variable.size()));
         if (value.has_value()) {
             const std::u16string replacement = util::utf8_to_wide(*value);
             expanded.append(replacement);
@@ -693,8 +715,10 @@ TL_MSABI std::uint32_t tl_ExpandEnvironmentStringsW(const std::uint16_t* const s
         set_last_error(abi::kErrorInsufficientBuffer);
         return needed;
     }
-    std::copy(expanded.begin(), expanded.end(), destination);
-    destination[expanded.size()] = 0;
+    if (!write_guest_terminated_units(destination, expanded.data(), expanded.size())) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
     const std::array<diagnostics::TraceField, 4> fields{
         diagnostics::TraceField{"operation", "expand"},
         diagnostics::TraceField{"status", "success"},
