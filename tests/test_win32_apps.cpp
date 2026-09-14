@@ -90,6 +90,17 @@ TEST(MprTest, RejectsInvalidArgumentsBeforeUnsupportedPath) {
     EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
 }
 
+TEST(MprTest, CopiesNestedStringsBeforeRejectingUnsupportedOperation) {
+    alignas(8) std::array<std::byte, 48> net_resource{};
+    const auto* const invalid_name = reinterpret_cast<const std::uint16_t*>(
+        static_cast<std::uintptr_t>(0x1000U));
+    std::memcpy(net_resource.data() + 32U, &invalid_name, sizeof(invalid_name));
+
+    EXPECT_EQ(tl_WNetAddConnection2W(net_resource.data(), nullptr, nullptr, 0),
+              abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+}
+
 TEST(ComctlTest, ProtectedControlOutputsRejectUnmappedPointers) {
     auto* const invalid = reinterpret_cast<void*>(static_cast<std::uintptr_t>(0x1000U));
 

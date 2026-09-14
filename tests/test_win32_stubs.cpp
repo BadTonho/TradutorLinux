@@ -285,6 +285,11 @@ TEST(Win32StubTest, VersionStubsRejectFabricatedMetadataAndClearQueries) {
 
     EXPECT_EQ(tl_GetFileVersionInfoA(nullptr, 0, 0, nullptr), 0);
     EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+
+    EXPECT_EQ(tl_GetFileVersionInfoA("test.exe", 0, 64,
+                                     reinterpret_cast<void*>(static_cast<std::uintptr_t>(0x1000U))),
+              0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorNotSupported);
 }
 
 TEST(Win32StubTest, ImmStubsRejectFakeContextsAndCompositionSuccess) {

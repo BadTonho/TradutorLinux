@@ -4,13 +4,11 @@
 #include "tradutorlinux/runtime/memory_validator.hpp"
 #include "../../core/runtime_state_common.hpp"
 
+#include <string>
+
 namespace tradutorlinux {
 
 namespace {
-
-inline bool mapped_range(const void* address, const std::size_t size, const bool writable) noexcept {
-    return runtime::validate_mapped_range(address, size, writable);
-}
 
 // NETRESOURCEW usa quatro DWORDs seguidos de quatro ponteiros na ABI Win64.
 // A estrutura é copiada pela fronteira protegida para não exigir alinhamento
@@ -28,7 +26,8 @@ struct GuestNetResourceW {
 static_assert(sizeof(GuestNetResourceW) == 48);
 
 bool valid_optional_wstring(const std::uint16_t* const value) noexcept {
-    return value == nullptr || runtime::validate_mapped_wstring(value);
+    std::u16string copy;
+    return value == nullptr || runtime::copy_guest_wstring(value, 65535U, copy);
 }
 
 bool valid_net_resource(const void* const value) noexcept {
@@ -47,7 +46,11 @@ bool valid_net_resource(const void* const value) noexcept {
 }
 
 bool valid_optional_buffer(void* const buffer, const std::uint32_t size) noexcept {
-    return size == 0U || (buffer != nullptr && mapped_range(buffer, size, true));
+    // Os stubs rejeitam a operação antes de consumir este buffer. Não há
+    // motivo para transformar uma fotografia de mapas em uma escrita
+    // especulativa; apenas a combinação nulo/tamanho é parte do contrato
+    // estrutural que ainda pode ser verificada sem tocar no convidado.
+    return size == 0U || buffer != nullptr;
 }
 
 void invalid_parameter(const char* const symbol, const char* const detail) noexcept {
@@ -117,8 +120,7 @@ TL_MPR_MSABI std::uint32_t tl_WNetOpenEnumW(const std::uint32_t scope, const std
 TL_MPR_MSABI std::uint32_t tl_WNetEnumResourceW(void* const enum_handle, std::uint32_t* const count,
                                                 void* const buffer, std::uint32_t* const buffer_size) noexcept {
     (void)enum_handle;
-    if (count == nullptr || !mapped_range(count, sizeof(*count), true) ||
-        buffer_size == nullptr || !mapped_range(buffer_size, sizeof(*buffer_size), true)) {
+    if (count == nullptr || buffer_size == nullptr) {
         invalid_parameter("WNetEnumResourceW", "count ou buffer_size inválido");
         return abi::kErrorInvalidParameter;
     }
@@ -144,8 +146,7 @@ TL_MPR_MSABI std::uint32_t tl_WNetCloseEnum(void* const enum_handle) noexcept {
 TL_MPR_MSABI std::uint32_t tl_WNetGetResourceInformationW(const void* const net_resource, void* const buffer,
                                                           std::uint32_t* const buffer_size,
                                                           std::uint16_t** const system) noexcept {
-    if (!valid_net_resource(net_resource) || buffer_size == nullptr ||
-        !mapped_range(buffer_size, sizeof(*buffer_size), true)) {
+    if (!valid_net_resource(net_resource) || buffer_size == nullptr) {
         invalid_parameter("WNetGetResourceInformationW", "NETRESOURCEW ou buffer_size inválido");
         return abi::kErrorInvalidParameter;
     }
@@ -169,8 +170,7 @@ TL_MPR_MSABI std::uint32_t tl_WNetGetResourceInformationW(const void* const net_
 
 TL_MPR_MSABI std::uint32_t tl_WNetGetResourceParentW(const void* const net_resource, void* const buffer,
                                                      std::uint32_t* const buffer_size) noexcept {
-    if (!valid_net_resource(net_resource) || buffer_size == nullptr ||
-        !mapped_range(buffer_size, sizeof(*buffer_size), true)) {
+    if (!valid_net_resource(net_resource) || buffer_size == nullptr) {
         invalid_parameter("WNetGetResourceParentW", "NETRESOURCEW ou buffer_size inválido");
         return abi::kErrorInvalidParameter;
     }

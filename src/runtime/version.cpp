@@ -1,16 +1,11 @@
 #include "tradutorlinux/runtime/version.hpp"
 #include "tradutorlinux/loader/module.hpp"
 #include "tradutorlinux/loader/builtin_modules.hpp"
-#include "tradutorlinux/runtime/memory_validator.hpp"
 #include "core/runtime_state_common.hpp"
 
 namespace tradutorlinux {
 
 namespace {
-
-inline bool mapped_range(const void* address, const std::size_t size, const bool writable) noexcept {
-    return runtime::validate_mapped_range(address, size, writable);
-}
 
 std::uint32_t reject_version_size(std::uint32_t* const handle) noexcept {
     if (handle != nullptr) {
@@ -24,7 +19,11 @@ std::uint32_t reject_version_size(std::uint32_t* const handle) noexcept {
 }
 
 int reject_version_info(const std::uint32_t len, void* const data) noexcept {
-    if (data == nullptr || len == 0 || !mapped_range(data, len, true)) {
+    // A operação é rejeitada antes de consumir o bloco. Validar uma faixa de
+    // saída por snapshot acrescentaria uma janela TOCTOU sem produzir efeito
+    // observável; a transferência só é exigida quando o stub publica uma
+    // saída, como em reject_version_size/reject_version_query.
+    if (data == nullptr || len == 0) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }

@@ -635,6 +635,13 @@ comportamento continua sendo o stub determinístico publicado (estrutura vazia
 ou bytes `0xFF`), sem afirmar parsing de EKU; `Crypt32Test` passou no caso novo
 de buffers de uso.
 
+O sublote `MPR/VERSION/rejeicao` removeu as sondagens por fotografia de mapas
+dos stubs que rejeitam a operação antes de consumir seus buffers. `NETRESOURCEW`
+e suas strings aninhadas são copiados por `copy_guest_wstring`; tamanhos e
+saídas efetivamente publicados continuam usando `read_guest_value`/
+`write_guest_memory`. As regressões de MPR e VERSION cobrem strings aninhadas,
+saídas inválidas e a rejeição controlada de blocos não consumidos.
+
 ## Fora desta rodada
 
 Não entram neste roadmap, por enquanto:
