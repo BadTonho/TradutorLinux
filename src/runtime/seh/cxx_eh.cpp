@@ -477,10 +477,12 @@ std::int32_t cxx_frame_handler3(
     ContextAmd64* const context_record,
     DispatcherContextAmd64* const dispatcher_context) noexcept {
     (void)establisher_frame;
-    if (exception_record == nullptr || context_record == nullptr || dispatcher_context == nullptr ||
-        !validate_mapped_range(exception_record, sizeof(*exception_record), false) ||
-        !validate_mapped_range(context_record, sizeof(*context_record), true) ||
-        !validate_mapped_range(dispatcher_context, sizeof(*dispatcher_context), true)) {
+    // Estes três objetos são criados pelo despachante em memória do runtime e
+    // ficam vivos durante a chamada do handler convidado. Eles não são
+    // ponteiros arbitrários recebidos de uma API; callbacks convidados podem
+    // acessá-los diretamente pelo contrato ABI, enquanto dados externos são
+    // sempre copiados antes de chegar aqui.
+    if (exception_record == nullptr || context_record == nullptr || dispatcher_context == nullptr) {
         trace_cxx_eh(diagnostics::TraceLevel::Error, "rejected", "invalid-dispatcher-data");
         return kExceptionContinueSearch;
     }

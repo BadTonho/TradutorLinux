@@ -383,8 +383,7 @@ using VectoredRoutine = std::int32_t (TL_MSABI *)(ExceptionPointersAmd64*);
 }
 
 [[nodiscard]] bool validate_exception_record(const ExceptionRecordAmd64* const record) noexcept {
-    return record != nullptr && validate_mapped_range(record, sizeof(*record), false) &&
-           record->parameter_count <= record->parameters.size();
+    return record != nullptr && record->parameter_count <= record->parameters.size();
 }
 
 }  // namespace
@@ -487,8 +486,6 @@ std::int32_t c_specific_handler(ExceptionRecordAmd64* const exception_record,
                                 void*, ContextAmd64* const context_record,
                                 DispatcherContextAmd64* const dispatcher) noexcept {
     if (!validate_exception_record(exception_record) || context_record == nullptr || dispatcher == nullptr ||
-        !validate_mapped_range(context_record, sizeof(*context_record), true) ||
-        !validate_mapped_range(dispatcher, sizeof(*dispatcher), true) ||
         dispatcher->handler_data == nullptr || g_unwind_image.base == nullptr) {
         trace_seh("failed", exception_record != nullptr ? exception_record->code : 0U,
                   "dados de __C_specific_handler inválidos");
@@ -552,25 +549,38 @@ std::int32_t c_specific_handler(ExceptionRecordAmd64* const exception_record,
                                    void* const return_value, ContextAmd64* const context,
                                    void*) noexcept {
     if (target_frame == nullptr || target_ip == nullptr || context == nullptr ||
-        !validate_mapped_range(context, sizeof(*context), true) ||
-        (exception_record != nullptr && !validate_exception_record(exception_record)) ||
         !valid_guest_code(target_ip)) {
-        fail_seh(exception_record != nullptr ? exception_record->code : 0U, "alvo de unwind inválido");
+        fail_seh(0U, "alvo de unwind inválido");
     }
+    ContextAmd64 current_context{};
+    if (read_guest_memory(context, &current_context, sizeof(current_context)).status !=
+        GuestMemoryAccessStatus::Success) {
+        fail_seh(0U, "contexto de unwind inacessível");
+    }
+    ExceptionRecordAmd64 copied_record{};
+    ExceptionRecordAmd64* active_record = nullptr;
     if (exception_record != nullptr) {
-        exception_record->flags = kExceptionUnwinding;
+        if (read_guest_memory(exception_record, &copied_record, sizeof(copied_record)).status !=
+                GuestMemoryAccessStatus::Success ||
+            !validate_exception_record(&copied_record)) {
+            fail_seh(0U, "registro de exceção inacessível");
+        }
+        active_record = &copied_record;
     }
-    ContextAmd64 cursor = *context;
+    if (active_record != nullptr) {
+        active_record->flags = kExceptionUnwinding;
+    }
+    ContextAmd64 cursor = current_context;
     cursor.rax = reinterpret_cast<std::uintptr_t>(return_value);
     for (std::size_t depth = 0; depth <= g_unwind_image.functions.size() + 64U; ++depth) {
         const ContextAmd64 before = cursor;
         UnwoundFrame frame{};
         const char* error = nullptr;
         if (!unwind_one(cursor, 0x2U, frame, error)) {
-            fail_seh(exception_record != nullptr ? exception_record->code : 0U, error);
+            fail_seh(active_record != nullptr ? active_record->code : 0U, error);
         }
         if (frame.has_function) {
-            trace_seh("frame", exception_record != nullptr ? exception_record->code : 0U,
+            trace_seh("frame", active_record != nullptr ? active_record->code : 0U,
                       "unwind");
         }
         if (frame.has_function && reinterpret_cast<void*>(frame.establisher_frame) == target_frame) {
@@ -579,31 +589,31 @@ std::int32_t c_specific_handler(ExceptionRecordAmd64* const exception_record,
             // language handler that can live behind this callback; Win32
             // images also use private handlers for explicit unwind records
             // such as STATUS_UNWIND_CONSOLIDATE.
-            if (exception_record != nullptr) {
-                exception_record->flags |= kExceptionTargetUnwind;
+            if (active_record != nullptr) {
+                active_record->flags |= kExceptionTargetUnwind;
             }
-            const bool cxx_exception = exception_record != nullptr &&
-                                       exception_record->code == 0xE06D7363U;
+            const bool cxx_exception = active_record != nullptr &&
+                                       active_record->code == 0xE06D7363U;
             const bool supported_cxx_handler =
                 cxx_exception && is_supported_cxx_handler_data(frame.handler_data);
             if (cxx_exception && frame.handler != nullptr && !supported_cxx_handler) {
-                trace_seh_handler("skipped", exception_record->code,
+                trace_seh_handler("skipped", active_record->code,
                                   "unsupported-cxx-handler-during-unwind", frame.handler,
                                   frame.handler_data, frame.index);
-            } else if (exception_record != nullptr && frame.handler != nullptr) {
+            } else if (active_record != nullptr && frame.handler != nullptr) {
                 DispatcherContextAmd64 dispatcher{
                     .control_pc = before.rip,
                     .image_base = reinterpret_cast<std::uintptr_t>(g_unwind_image.base),
                     .function_entry = static_cast<std::uint32_t*>(raw_function_entry(frame.index)),
                     .establisher_frame = frame.establisher_frame,
                     .target_ip = reinterpret_cast<std::uintptr_t>(target_ip),
-                    .context_record = context,
+                    .context_record = &current_context,
                     .language_handler = frame.handler,
                     .handler_data = frame.handler_data};
-                trace_seh_handler("handler", exception_record->code, "termination", frame.handler,
+                trace_seh_handler("handler", active_record->code, "termination", frame.handler,
                                   frame.handler_data, frame.index);
                 const std::int32_t disposition = invoke_language_handler(
-                    frame.handler, exception_record, frame.establisher_frame, context, &dispatcher);
+                    frame.handler, active_record, frame.establisher_frame, &current_context, &dispatcher);
                 if (supported_cxx_handler &&
                     disposition == kExceptionExecuteHandler && dispatcher.target_ip != 0U) {
                     ContextAmd64 action_context = cursor;
@@ -611,76 +621,76 @@ std::int32_t c_specific_handler(ExceptionRecordAmd64* const exception_record,
                             action_context, before,
                             reinterpret_cast<void*>(frame.establisher_frame),
                             reinterpret_cast<void*>(dispatcher.target_ip), target_ip)) {
-                        fail_seh(exception_record->code, "transferência de cleanup inválida");
+                        fail_seh(active_record->code, "transferência de cleanup inválida");
                     }
-                    trace_seh("unwind", exception_record->code, "cxx-cleanup");
+                    trace_seh("unwind", active_record->code, "cxx-cleanup");
                     tl_restore_guest_context_and_jump(&action_context);
                 }
                 if (disposition != kExceptionContinueSearch &&
                     disposition != kExceptionExecuteHandler) {
-                    fail_seh(exception_record->code,
+                    fail_seh(active_record->code,
                              "disposição de termination handler C++ inválida");
                 }
                 if (disposition == kExceptionExecuteHandler && !supported_cxx_handler) {
-                    trace_seh("continued", exception_record->code,
+                    trace_seh("continued", active_record->code,
                               "static-handler-target");
                 }
             }
             ContextAmd64 result = before;
             result.rip = reinterpret_cast<std::uintptr_t>(target_ip);
             result.rax = reinterpret_cast<std::uintptr_t>(return_value);
-            if (exception_record != nullptr &&
-                exception_record->code == kStatusUnwindConsolidate) {
+            if (active_record != nullptr &&
+                active_record->code == kStatusUnwindConsolidate) {
                 std::uint64_t consolidated_ip = 0;
-                if (!invoke_consolidation_callback(exception_record, consolidated_ip)) {
-                    fail_seh(exception_record->code,
+                if (!invoke_consolidation_callback(active_record, consolidated_ip)) {
+                    fail_seh(active_record->code,
                              "callback de consolidação inválido");
                 }
                 result.rip = consolidated_ip;
-                trace_seh("unwind", exception_record->code, "consolidated");
+                trace_seh("unwind", active_record->code, "consolidated");
             }
             if (supported_cxx_handler &&
                 !prepare_cxx_catch_transfer(result, target_frame, target_ip)) {
-                fail_seh(exception_record->code, "transferência de catch funclet inválida");
+                fail_seh(active_record->code, "transferência de catch funclet inválida");
             }
-            trace_seh("unwind", exception_record != nullptr ? exception_record->code : 0U, "target");
+            trace_seh("unwind", active_record != nullptr ? active_record->code : 0U, "target");
             tl_restore_guest_context_and_jump(&result);
         }
         if (frame.handler != nullptr) {
             const bool unsupported_cxx_handler =
-                exception_record != nullptr && exception_record->code == 0xE06D7363U &&
+                active_record != nullptr && active_record->code == 0xE06D7363U &&
                 !is_supported_cxx_handler_data(frame.handler_data);
             if (unsupported_cxx_handler) {
-                trace_seh_handler("skipped", exception_record->code,
+                trace_seh_handler("skipped", active_record->code,
                                   "unsupported-cxx-handler-during-unwind", frame.handler,
                                   frame.handler_data, frame.index);
-                *context = cursor;
+                current_context = cursor;
                 continue;
             }
             DispatcherContextAmd64 dispatcher{.control_pc = before.rip,
                                               .image_base = reinterpret_cast<std::uintptr_t>(g_unwind_image.base),
                                               .function_entry = static_cast<std::uint32_t*>(raw_function_entry(frame.index)),
                                               .establisher_frame = frame.establisher_frame,
-                                              .target_ip = exception_record != nullptr &&
-                                                               exception_record->code == 0xE06D7363U
+                                              .target_ip = active_record != nullptr &&
+                                                               active_record->code == 0xE06D7363U
                                                            ? 0U
                                                            : reinterpret_cast<std::uintptr_t>(target_ip),
-                                              .context_record = context,
+                                              .context_record = &current_context,
                                               .language_handler = frame.handler,
                                               .handler_data = frame.handler_data};
-            trace_seh_handler("handler", exception_record != nullptr ? exception_record->code : 0U,
+            trace_seh_handler("handler", active_record != nullptr ? active_record->code : 0U,
                               "termination", frame.handler, frame.handler_data, frame.index);
             const std::int32_t disposition = invoke_language_handler(
-                frame.handler, exception_record, frame.establisher_frame, context, &dispatcher);
+                frame.handler, active_record, frame.establisher_frame, &current_context, &dispatcher);
             if (disposition == kInvalidDisposition ||
                 (disposition != kExceptionContinueSearch && disposition != kExceptionContinueExecution)) {
-                fail_seh(exception_record != nullptr ? exception_record->code : 0U,
+                fail_seh(active_record != nullptr ? active_record->code : 0U,
                          "disposição de termination handler inválida");
             }
         }
-        *context = cursor;
+        current_context = cursor;
     }
-    fail_seh(exception_record != nullptr ? exception_record->code : 0U, "frame alvo não encontrado");
+    fail_seh(active_record != nullptr ? active_record->code : 0U, "frame alvo não encontrado");
 }
 
 [[noreturn]] void dispatch_raised_exception(ContextAmd64 context, const std::uint32_t code,
@@ -688,9 +698,7 @@ std::int32_t c_specific_handler(ExceptionRecordAmd64* const exception_record,
                                             const std::uint32_t parameter_count,
                                             const std::uint64_t* const parameters) noexcept {
     if ((flags & ~kExceptionNoncontinuable) != 0U || parameter_count > 15U ||
-        (parameter_count != 0U &&
-         (parameters == nullptr || !validate_mapped_range(parameters,
-                                                           parameter_count * sizeof(*parameters), false)))) {
+        (parameter_count != 0U && parameters == nullptr)) {
         fail_seh(code, "argumentos de RaiseException inválidos");
     }
     if (code == 0xE06D7363U && cxx_eh_funclet_active()) {
@@ -705,51 +713,14 @@ std::int32_t c_specific_handler(ExceptionRecordAmd64* const exception_record,
     record.address = reinterpret_cast<void*>(context.rip);
     record.parameter_count = parameter_count;
     if (parameter_count != 0U) {
-        std::memcpy(record.parameters.data(), parameters, parameter_count * sizeof(*parameters));
-    }
-    ExceptionPointersAmd64 pointers{&record, &context};
-    std::string exc_desc = "RaiseException";
-    if (code == 0xE06D7363 && parameter_count >= 3 && parameters != nullptr) {
-        const auto image_base = reinterpret_cast<std::uintptr_t>(g_unwind_image.base);
-        const auto* const throw_info = reinterpret_cast<const std::uint32_t*>(parameters[2]);
-        if (throw_info != nullptr && validate_mapped_range(throw_info, 16, false)) {
-            const std::uint32_t cta_rva = throw_info[3];
-            const auto* const cta = reinterpret_cast<const std::int32_t*>(image_base + cta_rva);
-            if (cta_rva != 0 && validate_mapped_range(cta, 8, false) && cta[0] > 0) {
-                const std::uint32_t ct_rva = static_cast<std::uint32_t>(cta[1]);
-                const auto* const ct = reinterpret_cast<const std::uint32_t*>(image_base + ct_rva);
-                if (ct_rva != 0 && validate_mapped_range(ct, 8, false)) {
-                    const std::uint32_t td_rva = ct[1];
-                    const auto* const td = reinterpret_cast<const char*>(image_base + td_rva + 16);
-                    if (td_rva != 0 && validate_mapped_range(td, 8, false)) {
-                        exc_desc = std::string("cxx-throw: ") + td;
-                        if (std::strstr(td, "basic_string") != nullptr && parameters[1] != 0) {
-                            const auto* const str_obj = reinterpret_cast<const char*>(parameters[1]);
-                            if (validate_mapped_range(str_obj, 32, false)) {
-                                const auto my_res = *reinterpret_cast<const std::size_t*>(str_obj + 24);
-                                const auto my_size = *reinterpret_cast<const std::size_t*>(str_obj + 16);
-                                (void)my_size;
-                                const char* str_data = nullptr;
-                                if (my_res < 16) {
-                                    str_data = str_obj;
-                                } else {
-                                    str_data = *reinterpret_cast<const char* const*>(str_obj);
-                                }
-                                if (str_data != nullptr && validate_mapped_range(str_data, 1, false)) {
-                                    exc_desc += " [msg: \"";
-                                    for (std::size_t i = 0; i < 64 && str_data[i] != '\0'; ++i) {
-                                        exc_desc += str_data[i];
-                                    }
-                                    exc_desc += "\"]";
-                                }
-                            }
-                        }
-                    }
-                }
-            }
+        if (read_guest_memory(parameters, record.parameters.data(),
+                              parameter_count * sizeof(*parameters)).status !=
+            GuestMemoryAccessStatus::Success) {
+            fail_seh(code, "argumentos de RaiseException inacessíveis");
         }
     }
-    trace_seh("raised", code, exc_desc.c_str());
+    ExceptionPointersAmd64 pointers{&record, &context};
+    trace_seh("raised", code, "RaiseException");
 
     struct Callback {
         void* routine{};
@@ -858,7 +829,12 @@ extern "C" [[noreturn]] void tl_dispatch_raised_exception_from_asm(
     if (context == nullptr) {
         std::abort();
     }
-    runtime::dispatch_raised_exception(*context, code, flags, parameter_count, parameters);
+    runtime::ContextAmd64 copied_context{};
+    if (runtime::read_guest_memory(context, &copied_context, sizeof(copied_context)).status !=
+        runtime::GuestMemoryAccessStatus::Success) {
+        trace_guest_failure("RaiseException", "guest-memory", "contexto inacessível");
+    }
+    runtime::dispatch_raised_exception(copied_context, code, flags, parameter_count, parameters);
 }
 
 extern "C" [[noreturn]] void tl_dispatch_rtl_unwind_from_asm(
@@ -879,8 +855,7 @@ extern "C" [[noreturn]] void tl_dispatch_rtl_unwind_ex_from_asm(
     diagnostics::write_json_trace(diagnostics::TraceComponent::Runtime,
                                   diagnostics::TraceLevel::Debug, "function-enter", fields);
     runtime::ContextAmd64* working_context = captured_context;
-    if (working_context == nullptr && context_record != nullptr &&
-        runtime::validate_mapped_range(context_record, sizeof(*context_record), true)) {
+    if (working_context == nullptr) {
         working_context = context_record;
     }
     runtime::unwind_to_target(target_frame, target_ip, exception_record, return_value,
@@ -889,17 +864,26 @@ extern "C" [[noreturn]] void tl_dispatch_rtl_unwind_ex_from_asm(
 
 extern "C" TL_MSABI std::uint32_t* tl_RtlLookupFunctionEntry(
     const std::uint64_t control_pc, std::uint64_t* const image_base, void*) noexcept {
-    if (image_base == nullptr || !runtime::validate_mapped_range(image_base, sizeof(*image_base), true)) {
+    if (image_base == nullptr) {
         runtime::trace_unwind_failure("RtlLookupFunctionEntry", "ImageBase inválido");
         return nullptr;
     }
-    *image_base = 0;
+    std::uint64_t result_base = 0;
     const std::optional<std::size_t> found = runtime::find_function_by_pc(control_pc);
     if (!found.has_value()) {
+        if (runtime::write_guest_memory(image_base, &result_base, sizeof(result_base)).status !=
+            runtime::GuestMemoryAccessStatus::Success) {
+            runtime::trace_unwind_failure("RtlLookupFunctionEntry", "ImageBase inacessível");
+        }
         return nullptr;
     }
     const auto base = reinterpret_cast<std::uintptr_t>(runtime::g_unwind_image.base);
-    *image_base = base;
+    result_base = base;
+    if (runtime::write_guest_memory(image_base, &result_base, sizeof(result_base)).status !=
+        runtime::GuestMemoryAccessStatus::Success) {
+        runtime::trace_unwind_failure("RtlLookupFunctionEntry", "ImageBase inacessível");
+        return nullptr;
+    }
     return reinterpret_cast<std::uint32_t*>(
         const_cast<std::byte*>(runtime::g_unwind_image.base) +
         runtime::g_unwind_image.exception_directory_rva + *found * 12U);
@@ -907,20 +891,28 @@ extern "C" TL_MSABI std::uint32_t* tl_RtlLookupFunctionEntry(
 
 extern "C" TL_MSABI void* tl_RtlPcToFileHeader(void* const pc_value,
                                                 void** const base_of_image) noexcept {
-    if (base_of_image == nullptr ||
-        !runtime::validate_mapped_range(base_of_image, sizeof(*base_of_image), true)) {
+    if (base_of_image == nullptr) {
         runtime::trace_unwind_failure("RtlPcToFileHeader", "BaseOfImage inválido");
         return nullptr;
     }
-    *base_of_image = nullptr;
+    void* result = nullptr;
     const std::uint64_t pc = reinterpret_cast<std::uintptr_t>(pc_value);
     const std::uint64_t base = reinterpret_cast<std::uintptr_t>(runtime::g_unwind_image.base);
     if (runtime::g_unwind_image.base == nullptr || pc < base ||
         pc - base >= runtime::g_unwind_image.size) {
+        if (runtime::write_guest_memory(base_of_image, &result, sizeof(result)).status !=
+            runtime::GuestMemoryAccessStatus::Success) {
+            runtime::trace_unwind_failure("RtlPcToFileHeader", "BaseOfImage inacessível");
+        }
         return nullptr;
     }
-    *base_of_image = const_cast<std::byte*>(runtime::g_unwind_image.base);
-    return *base_of_image;
+    result = const_cast<std::byte*>(runtime::g_unwind_image.base);
+    if (runtime::write_guest_memory(base_of_image, &result, sizeof(result)).status !=
+        runtime::GuestMemoryAccessStatus::Success) {
+        runtime::trace_unwind_failure("RtlPcToFileHeader", "BaseOfImage inacessível");
+        return nullptr;
+    }
+    return result;
 }
 
 extern "C" TL_MSABI void* tl_RtlVirtualUnwind(
@@ -928,19 +920,14 @@ extern "C" TL_MSABI void* tl_RtlVirtualUnwind(
     const std::uint64_t control_pc, std::uint32_t* const function_entry,
     runtime::ContextAmd64* const context, void** const handler_data,
     std::uint64_t* const establisher_frame, void*) noexcept {
-    if (context == nullptr ||
-        !runtime::validate_mapped_range(context, sizeof(*context), true)) {
+    if (context == nullptr) {
         runtime::trace_unwind_failure("RtlVirtualUnwind", "ContextRecord inválido");
         return nullptr;
     }
-    if (handler_data != nullptr &&
-        !runtime::validate_mapped_range(handler_data, sizeof(*handler_data), true)) {
-        runtime::trace_unwind_failure("RtlVirtualUnwind", "HandlerData inválido");
-        return nullptr;
-    }
-    if (establisher_frame != nullptr &&
-        !runtime::validate_mapped_range(establisher_frame, sizeof(*establisher_frame), true)) {
-        runtime::trace_unwind_failure("RtlVirtualUnwind", "EstablisherFrame inválido");
+    runtime::ContextAmd64 updated{};
+    if (runtime::read_guest_memory(context, &updated, sizeof(updated)).status !=
+        runtime::GuestMemoryAccessStatus::Success) {
+        runtime::trace_unwind_failure("RtlVirtualUnwind", "ContextRecord inacessível");
         return nullptr;
     }
     const auto expected_base = reinterpret_cast<std::uintptr_t>(runtime::g_unwind_image.base);
@@ -957,7 +944,6 @@ extern "C" TL_MSABI void* tl_RtlVirtualUnwind(
         return nullptr;
     }
 
-    runtime::ContextAmd64 updated = *context;
     std::size_t current = *first;
     bool machine_frame = false;
     const pe::RuntimeFunction* terminal = nullptr;
@@ -1002,9 +988,7 @@ extern "C" TL_MSABI void* tl_RtlVirtualUnwind(
         runtime::trace_unwind_failure("RtlVirtualUnwind", "CHAININFO cíclico");
         return nullptr;
     }
-    if (establisher_frame != nullptr) {
-        *establisher_frame = updated.rsp;
-    }
+    const std::uint64_t establisher_value = updated.rsp;
     if (!machine_frame) {
         std::uint64_t return_address{};
         if (!runtime::read_u64(updated.rsp, return_address) ||
@@ -1014,35 +998,78 @@ extern "C" TL_MSABI void* tl_RtlVirtualUnwind(
         }
         updated.rip = return_address;
     }
-    *context = updated;
-
     const std::uint8_t flags = terminal->unwind.flags;
     const pe::RuntimeFunction& initial = runtime::g_unwind_image.functions[*first];
     const std::uint64_t initial_offset = control_pc - expected_base - initial.begin_rva;
     const bool in_prolog = initial_offset < initial.unwind.prolog_size;
     if (in_prolog || handler_type == 0U || (flags & (0x1U | 0x2U)) == 0U ||
         (handler_type & flags) == 0U) {
-        if (handler_data != nullptr) {
-            *handler_data = nullptr;
+        void* result_handler_data = nullptr;
+        if (establisher_frame != nullptr &&
+            runtime::write_guest_memory(establisher_frame, &establisher_value,
+                                        sizeof(establisher_value)).status !=
+                runtime::GuestMemoryAccessStatus::Success) {
+            runtime::trace_unwind_failure("RtlVirtualUnwind", "EstablisherFrame inacessível");
+            return nullptr;
+        }
+        if (handler_data != nullptr &&
+            runtime::write_guest_memory(handler_data, &result_handler_data, sizeof(result_handler_data)).status !=
+                runtime::GuestMemoryAccessStatus::Success) {
+            runtime::trace_unwind_failure("RtlVirtualUnwind", "HandlerData inacessível");
+            return nullptr;
+        }
+        if (runtime::write_guest_memory(context, &updated, sizeof(updated)).status !=
+            runtime::GuestMemoryAccessStatus::Success) {
+            runtime::trace_unwind_failure("RtlVirtualUnwind", "ContextRecord inacessível");
+            return nullptr;
         }
         return nullptr;
     }
+    if (establisher_frame != nullptr &&
+        runtime::write_guest_memory(establisher_frame, &establisher_value,
+                                    sizeof(establisher_value)).status !=
+            runtime::GuestMemoryAccessStatus::Success) {
+        runtime::trace_unwind_failure("RtlVirtualUnwind", "EstablisherFrame inacessível");
+        return nullptr;
+    }
+    void* result_handler_data = const_cast<std::byte*>(runtime::g_unwind_image.base) +
+                                terminal->unwind.handler_data_rva;
     if (handler_data != nullptr) {
-        *handler_data = const_cast<std::byte*>(runtime::g_unwind_image.base) +
-                        terminal->unwind.handler_data_rva;
+        if (runtime::write_guest_memory(handler_data, &result_handler_data,
+                                        sizeof(result_handler_data)).status !=
+            runtime::GuestMemoryAccessStatus::Success) {
+            runtime::trace_unwind_failure("RtlVirtualUnwind", "HandlerData inacessível");
+            return nullptr;
+        }
+    }
+    if (runtime::write_guest_memory(context, &updated, sizeof(updated)).status !=
+        runtime::GuestMemoryAccessStatus::Success) {
+        runtime::trace_unwind_failure("RtlVirtualUnwind", "ContextRecord inacessível");
+        return nullptr;
     }
     return const_cast<std::byte*>(runtime::g_unwind_image.base) + terminal->unwind.handler_rva;
 }
 
 extern "C" TL_MSABI std::int32_t tl_UnhandledExceptionFilter(
     runtime::ExceptionPointersAmd64* const pointers) noexcept {
-    if (pointers == nullptr ||
-        !runtime::validate_mapped_range(pointers, sizeof(*pointers), false) ||
-        pointers->exception_record == nullptr || pointers->context_record == nullptr ||
-        !runtime::validate_mapped_range(pointers->exception_record,
-                                        sizeof(*pointers->exception_record), false) ||
-        !runtime::validate_mapped_range(pointers->context_record,
-                                        sizeof(*pointers->context_record), true)) {
+    if (pointers == nullptr) {
+        return runtime::kVectoredContinueSearch;
+    }
+    runtime::ExceptionPointersAmd64 pointers_copy{};
+    if (runtime::read_guest_memory(pointers, &pointers_copy, sizeof(pointers_copy)).status !=
+            runtime::GuestMemoryAccessStatus::Success ||
+        pointers_copy.exception_record == nullptr || pointers_copy.context_record == nullptr) {
+        return runtime::kVectoredContinueSearch;
+    }
+    runtime::ExceptionRecordAmd64 record_copy{};
+    runtime::ContextAmd64 context_copy{};
+    if (runtime::read_guest_memory(pointers_copy.exception_record, &record_copy,
+                                   sizeof(record_copy)).status !=
+            runtime::GuestMemoryAccessStatus::Success ||
+        runtime::read_guest_memory(pointers_copy.context_record, &context_copy,
+                                   sizeof(context_copy)).status !=
+            runtime::GuestMemoryAccessStatus::Success ||
+        record_copy.parameter_count > record_copy.parameters.size()) {
         return runtime::kVectoredContinueSearch;
     }
     const std::uintptr_t filter = g_unhandled_exception_filter.load(std::memory_order_acquire);
@@ -1050,8 +1077,17 @@ extern "C" TL_MSABI std::int32_t tl_UnhandledExceptionFilter(
         return runtime::kVectoredContinueSearch;
     }
     using FilterRoutine = std::int32_t (TL_MSABI *)(runtime::ExceptionPointersAmd64*);
-    const std::int32_t result = reinterpret_cast<FilterRoutine>(filter)(pointers);
-    return result == runtime::kVectoredContinueExecution ? result : runtime::kVectoredContinueSearch;
+    runtime::ExceptionPointersAmd64 callback_pointers{&record_copy, &context_copy};
+    const std::int32_t result = reinterpret_cast<FilterRoutine>(filter)(&callback_pointers);
+    if (result != runtime::kVectoredContinueExecution) {
+        return runtime::kVectoredContinueSearch;
+    }
+    if (runtime::write_guest_memory(pointers_copy.context_record, &context_copy,
+                                    sizeof(context_copy)).status !=
+        runtime::GuestMemoryAccessStatus::Success) {
+        return runtime::kVectoredContinueSearch;
+    }
+    return result;
 }
 
 }  // namespace tradutorlinux

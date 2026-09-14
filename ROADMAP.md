@@ -648,6 +648,17 @@ desempilhamento agora lê por `read_guest_memory`, e os trampolins C++ escrevem
 por `write_guest_memory` após a restrição de faixa do TEB; a suíte `UnwindTest`
 continua cobrindo pilha ativa, alocação, registradores salvos e cadeias.
 
+O sublote `SEH/callback-boundary` migrou `RaiseException`,
+`RtlVirtualUnwind`, `RtlLookupFunctionEntry`, `RtlPcToFileHeader` e
+`UnhandledExceptionFilter` para cópias e publicações protegidas. Os handlers
+SEH/C++ recebem somente os objetos locais criados pelo despachante, e callbacks
+USER32 são validados pela imagem ativa mantida pelo loader; esses contratos
+especiais estão documentados em `docs/arquitetura/memoria-convidada.md`. A
+regressão `UnwindTest.ProtectedUnwindBoundariesRejectUnmappedPointers` cobre
+ponteiros inválidos nas fronteiras Rtl e no filtro não tratado; a aceitação
+final do R3 ainda depende da auditoria dos consumidores restantes e do CTest
+completo.
+
 ## Fora desta rodada
 
 Não entram neste roadmap, por enquanto:

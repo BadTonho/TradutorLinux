@@ -236,12 +236,10 @@ inline InternalMenu g_dummy_menu{0x4D454E55, 5, &g_dummy_sub_menu, {}};
         address - reinterpret_cast<std::uintptr_t>(g_guest_image_base) >= g_guest_image_size) {
         return false;
     }
-    return runtime::validate_mapped_range(reinterpret_cast<const void*>(address), 1, false);
-}
-
-[[nodiscard]] inline bool guest_resource_or_wstring_valid(const std::uint16_t* value) noexcept {
-    const auto raw = reinterpret_cast<std::uintptr_t>(value);
-    return raw <= 0xFFFFU || mapped_guest_wstring(value);
+    // O loader mantém a imagem convidada mapeada durante todo o callback. O
+    // endereço é um alvo de execução validado pela faixa da imagem, não um
+    // buffer que o runtime deva ler após uma fotografia de mapas.
+    return true;
 }
 
 [[nodiscard]] inline WindowSlot* dialog_control_by_id(WindowSlot& dialog, const int identifier) noexcept {

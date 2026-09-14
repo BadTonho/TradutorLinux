@@ -95,6 +95,34 @@ TEST_F(UnwindTest, LookupAndPcToFileHeaderUseActiveImageOnly) {
     EXPECT_EQ(header, nullptr);
 }
 
+TEST_F(UnwindTest, ProtectedUnwindBoundariesRejectUnmappedPointers) {
+    set_functions({function(0x100, 0x200)});
+    const std::uintptr_t base = reinterpret_cast<std::uintptr_t>(image.data());
+    constexpr std::uintptr_t kInvalid = 1U;
+
+    EXPECT_EQ(tl_RtlLookupFunctionEntry(base + 0x150,
+                                        reinterpret_cast<std::uint64_t*>(kInvalid), nullptr),
+              nullptr);
+    EXPECT_EQ(tl_RtlPcToFileHeader(reinterpret_cast<void*>(base + 0x150),
+                                   reinterpret_cast<void**>(kInvalid)),
+              nullptr);
+    EXPECT_EQ(tl_RtlVirtualUnwind(0, base, base + 0x150, raw_entry(),
+                                  reinterpret_cast<ContextAmd64*>(kInvalid), nullptr,
+                                  nullptr, nullptr),
+              nullptr);
+    EXPECT_EQ(tl_UnhandledExceptionFilter(
+                  reinterpret_cast<runtime::ExceptionPointersAmd64*>(kInvalid)),
+              runtime::kVectoredContinueSearch);
+
+    std::array<std::uint64_t, 2> stack{};
+    ContextAmd64 context{};
+    context.rsp = reinterpret_cast<std::uintptr_t>(stack.data());
+    EXPECT_EQ(tl_RtlVirtualUnwind(0, base, base + 0x150, raw_entry(), &context,
+                                  reinterpret_cast<void**>(kInvalid),
+                                  reinterpret_cast<std::uint64_t*>(kInvalid), nullptr),
+              nullptr);
+}
+
 TEST_F(UnwindTest, CapturesAmd64ControlAndFloatingContext) {
     ContextAmd64 context{};
     const runtime::M128A xmm6{.low = 0xAABBCCDDEEFF0011U, .high = 0x102030405060708};

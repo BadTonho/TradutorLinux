@@ -60,7 +60,17 @@ O desempilhamento x64 preserva a restrição adicional de que cada endereço de
 retorno e registro XMM lido da pilha passa por `read_guest_memory`. Os
 trampolins de C++ publicam palavras de retorno por `write_guest_memory` depois
 de conferir os limites do TEB; a conferência de limites não é usada como
-substituta da transferência protegida.
+substituta da transferência protegida. `RtlVirtualUnwind`,
+`RtlLookupFunctionEntry`, `RtlPcToFileHeader` e `UnhandledExceptionFilter`
+também copiam estruturas e publicam resultados pela mesma fronteira.
+
+Há dois contratos especiais que não são rotas genéricas de buffers. Handlers
+SEH/C++ recebem `EXCEPTION_RECORD`, `CONTEXT` e `DISPATCHER_CONTEXT` locais,
+criados e mantidos vivos pelo despachante durante o callback; callbacks USER32
+recebem apenas endereços de código dentro da imagem ativa, que o loader mantém
+executável durante a chamada. Esses objetos não são lidos por validação de
+`/proc/self/maps`; qualquer estrutura convidada que alimenta esses contratos é
+copiada antes do callback.
 
 O sublote `KERNEL32/file-input` usa o normalizador de caminhos como única
 fronteira para `CreateFileA/W`: ele copia o nome A/W para memória host antes de
