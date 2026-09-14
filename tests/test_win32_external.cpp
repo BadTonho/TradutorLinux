@@ -3,6 +3,7 @@
 #include "tradutorlinux/runtime/psapi.hpp"
 #include "tradutorlinux/runtime/shlwapi.hpp"
 
+#include <algorithm>
 #include <atomic>
 
 namespace tradutorlinux {
@@ -197,6 +198,70 @@ TEST(OleStreamTest, ProtectedGuestBuffersRejectUnmappedPointers) {
     EXPECT_EQ(stream->vtable->seek(stream, 0, 0, &position), kSOk);
     EXPECT_EQ(stream->vtable->stat(stream, &stat, 0), kSOk);
     EXPECT_EQ(stream->vtable->release(stream), 0U);
+}
+
+TEST(Ole32Test, ProtectedGuidAllocatorAndDragOutputsRejectUnmappedPointers) {
+    auto* const invalid = reinterpret_cast<void*>(static_cast<std::uintptr_t>(0x1000U));
+    std::array<std::uint8_t, 16> guid{};
+    EXPECT_EQ(tl_CoCreateGuid(invalid), kEInvalidArg);
+    ASSERT_EQ(tl_CoCreateGuid(guid.data()), kSOk);
+
+    void* allocator = nullptr;
+    EXPECT_EQ(tl_CoGetMalloc(0, static_cast<void**>(invalid)), kEInvalidArg);
+    ASSERT_EQ(tl_CoGetMalloc(0, &allocator), kSOk);
+    EXPECT_EQ(allocator, static_cast<void*>(&g_guest_imalloc));
+    void* queried_allocator = nullptr;
+    EXPECT_EQ(g_guest_imalloc.vtable->query_interface(&g_guest_imalloc, nullptr,
+                                                       static_cast<void**>(invalid)), kEInvalidArg);
+    ASSERT_EQ(g_guest_imalloc.vtable->query_interface(&g_guest_imalloc, nullptr,
+                                                      &queried_allocator), kSOk);
+    EXPECT_EQ(queried_allocator, static_cast<void*>(&g_guest_imalloc));
+
+    GuestIStream* stream = nullptr;
+    EXPECT_EQ(tl_CreateStreamOnHGlobal(nullptr, 1, static_cast<GuestIStream**>(invalid)),
+              kEInvalidArg);
+    ASSERT_EQ(tl_CreateStreamOnHGlobal(nullptr, 1, &stream), kSOk);
+    ASSERT_NE(stream, nullptr);
+    EXPECT_EQ(stream->vtable->release(stream), 0U);
+
+    constexpr std::uint8_t kClassId[16]{};
+    void* object = reinterpret_cast<void*>(1);
+    EXPECT_EQ(tl_CoCreateInstance(invalid, nullptr, 0, kClassId, &object), kEInvalidArg);
+    EXPECT_EQ(tl_CoCreateInstance(kClassId, nullptr, 0, invalid, &object), kEInvalidArg);
+    EXPECT_EQ(tl_CoCreateInstance(kClassId, nullptr, 0, kClassId,
+                                  static_cast<void**>(invalid)), kEInvalidArg);
+    EXPECT_EQ(tl_CoCreateInstance(kClassId, nullptr, 0, kClassId, &object),
+              static_cast<std::int32_t>(0x80040154U));
+    EXPECT_EQ(object, nullptr);
+
+    constexpr std::uint16_t kClsidText[] = {u'{', u'0', u'0', u'0', 0};
+    EXPECT_EQ(tl_CLSIDFromString(kClsidText, invalid), kEInvalidArg);
+    ASSERT_EQ(tl_CLSIDFromString(kClsidText, guid.data()), kSOk);
+    EXPECT_TRUE(std::all_of(guid.begin(), guid.end(), [](const std::uint8_t byte) {
+        return byte == 0;
+    }));
+
+    std::uint32_t effect = 1;
+    EXPECT_EQ(tl_DoDragDrop(nullptr, nullptr, 0, static_cast<std::uint32_t*>(invalid)),
+              kEInvalidArg);
+    EXPECT_EQ(tl_DoDragDrop(nullptr, nullptr, 0, &effect), 0x00040100);
+    EXPECT_EQ(effect, 0U);
+
+    std::array<std::uint16_t, 39> guid_text{};
+    EXPECT_EQ(tl_StringFromGUID2(invalid, reinterpret_cast<wchar_t*>(guid_text.data()),
+                                 static_cast<int>(guid_text.size())), 0);
+    EXPECT_EQ(tl_StringFromGUID2(guid.data(), reinterpret_cast<wchar_t*>(invalid), 39), 0);
+    ASSERT_EQ(tl_StringFromGUID2(guid.data(), reinterpret_cast<wchar_t*>(guid_text.data()),
+                                 static_cast<int>(guid_text.size())), 39);
+    EXPECT_EQ(std::u16string(reinterpret_cast<const char16_t*>(guid_text.data())),
+              u"{00000000-0000-0000-0000-000000000000}");
+
+    constexpr std::uint16_t kProgId[] = {u'T', u'e', u's', u't', 0};
+    EXPECT_EQ(tl_CLSIDFromProgID(reinterpret_cast<const wchar_t*>(invalid), guid.data()),
+              kEInvalidArg);
+    EXPECT_EQ(tl_CLSIDFromProgID(reinterpret_cast<const wchar_t*>(kProgId), invalid),
+              kEInvalidArg);
+    ASSERT_EQ(tl_CLSIDFromProgID(reinterpret_cast<const wchar_t*>(kProgId), guid.data()), kSOk);
 }
 
 TEST(WintrustTest, RejectsUnsupportedPolicyBeforeCertificateProvider) {

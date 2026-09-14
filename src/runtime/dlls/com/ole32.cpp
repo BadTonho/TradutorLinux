@@ -156,8 +156,6 @@ const GuestIStreamVtable kStreamVtable{
     &stream_clone,
 };
 
-inline bool mapped_range(const void* address, std::size_t size, bool writable) noexcept;
-
 constexpr std::array<std::uint8_t, 16> kIidIUnknown{
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
     0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46,
@@ -404,10 +402,6 @@ TL_OLE_MSABI std::int32_t stream_clone(GuestIStream* const self, GuestIStream** 
     return kStgENotImplemented;
 }
 
-inline bool mapped_range(const void* address, const std::size_t size, const bool writable) noexcept {
-    return runtime::validate_mapped_range(address, size, writable);
-}
-
 }  // namespace
 
 extern "C" {
@@ -427,23 +421,26 @@ TL_OLE_MSABI void tl_CoUninitialize() noexcept {
 }
 
 TL_OLE_MSABI std::int32_t tl_CoCreateGuid(void* guid) noexcept {
-    if (guid == nullptr || !mapped_range(guid, sizeof(Win32Guid), true)) {
+    if (guid == nullptr) {
         return kEInvalidArg;
     }
-    auto* out = static_cast<Win32Guid*>(guid);
+    Win32Guid result{};
     std::ifstream urandom{"/dev/urandom", std::ios::binary};
     if (urandom) {
-        urandom.read(reinterpret_cast<char*>(out), sizeof(Win32Guid));
+        urandom.read(reinterpret_cast<char*>(&result), sizeof(result));
     } else {
-        std::uint8_t* raw = reinterpret_cast<std::uint8_t*>(out);
+        std::uint8_t* raw = reinterpret_cast<std::uint8_t*>(&result);
         for (std::size_t i = 0; i < sizeof(Win32Guid); ++i) {
             raw[i] = static_cast<std::uint8_t>(std::rand() & 0xFF);
         }
     }
     // UUID v4 format
-    out->data3 = (out->data3 & 0x0FFFU) | 0x4000U;
-    out->data4[0] = (out->data4[0] & 0x3FU) | 0x80U;
-    return kSOk;
+    result.data3 = (result.data3 & 0x0FFFU) | 0x4000U;
+    result.data4[0] = (result.data4[0] & 0x3FU) | 0x80U;
+    return runtime::write_guest_memory(guid, &result, sizeof(result)).status ==
+                   runtime::GuestMemoryAccessStatus::Success
+               ? kSOk
+               : kEInvalidArg;
 }
 
 TL_OLE_MSABI void* tl_CoTaskMemAlloc(const std::size_t size) noexcept {
@@ -504,8 +501,7 @@ TL_OLE_MSABI std::int32_t imalloc_query_interface(GuestIMalloc*, const void*, vo
     if (object == nullptr) {
         return kEInvalidArg;
     }
-    *object = &g_guest_imalloc;
-    return kSOk;
+    return write_guest_value(object, static_cast<void*>(&g_guest_imalloc)) ? kSOk : kEInvalidArg;
 }
 
 TL_OLE_MSABI std::uint32_t imalloc_add_ref(GuestIMalloc*) noexcept {
@@ -556,17 +552,17 @@ GuestIMalloc g_guest_imalloc = { &g_imalloc_vtable };
 
 TL_OLE_MSABI std::int32_t tl_CoGetMalloc(const std::uint32_t context, void** const pp_malloc) noexcept {
     (void)context;
-    if (pp_malloc == nullptr || !mapped_range(pp_malloc, sizeof(void*), true)) {
+    if (pp_malloc == nullptr ||
+        !write_guest_value(pp_malloc, static_cast<void*>(&g_guest_imalloc))) {
         return kEInvalidArg;
     }
-    *pp_malloc = &g_guest_imalloc;
     return kSOk;
 }
 
 TL_OLE_MSABI std::int32_t tl_CreateStreamOnHGlobal(const OleHGlobal hglobal,
                                                    const std::int32_t delete_on_release,
                                                    GuestIStream** stream) noexcept {
-    if (stream == nullptr || !mapped_range(stream, sizeof(*stream), true)) {
+    if (stream == nullptr || !write_guest_value(stream, static_cast<GuestIStream*>(nullptr))) {
         trace_stream("create", "invalid");
         return kEInvalidArg;
     }
@@ -591,7 +587,20 @@ TL_OLE_MSABI std::int32_t tl_CreateStreamOnHGlobal(const OleHGlobal hglobal,
         state->global_backing = true;
         state->delete_global_on_release = delete_on_release != 0;
     }
-    *stream = &state->interface;
+    if (!write_guest_value(stream, &state->interface)) {
+        {
+            std::lock_guard lock(g_streams_mutex);
+            for (StreamState*& candidate : g_streams) {
+                if (candidate == state) {
+                    candidate = nullptr;
+                    break;
+                }
+            }
+        }
+        std::free(state);
+        trace_stream("create", "invalid");
+        return kEInvalidArg;
+    }
     trace_stream("create", "success");
     return kSOk;
 }
@@ -599,15 +608,23 @@ TL_OLE_MSABI std::int32_t tl_CreateStreamOnHGlobal(const OleHGlobal hglobal,
 TL_OLE_MSABI std::int32_t tl_CoCreateInstance(const void* rclsid, void* unkOuter, const std::uint32_t clsContext,
                                               const void* riid, void** ppv) noexcept {
     (void)clsContext;
-    if (rclsid == nullptr || riid == nullptr || ppv == nullptr ||
-        !mapped_range(rclsid, sizeof(Win32Guid), false) || !mapped_range(riid, sizeof(Win32Guid), false) ||
-        !mapped_range(ppv, sizeof(void*), true)) {
+    if (rclsid == nullptr || riid == nullptr || ppv == nullptr) {
+        return kEInvalidArg;
+    }
+    Win32Guid clsid{};
+    Win32Guid interface_id{};
+    if (runtime::read_guest_memory(rclsid, &clsid, sizeof(clsid)).status !=
+            runtime::GuestMemoryAccessStatus::Success ||
+        runtime::read_guest_memory(riid, &interface_id, sizeof(interface_id)).status !=
+            runtime::GuestMemoryAccessStatus::Success) {
         return kEInvalidArg;
     }
     if (unkOuter != nullptr) {
         return static_cast<std::int32_t>(0x80040110U); // CLASS_E_NOAGGREGATION
     }
-    *ppv = nullptr;
+    if (!write_guest_value(ppv, static_cast<void*>(nullptr))) {
+        return kEInvalidArg;
+    }
     return static_cast<std::int32_t>(0x80040154U); // REGDB_E_CLASSNOTREG
 }
 
@@ -629,11 +646,15 @@ TL_OLE_MSABI std::int32_t tl_CLSIDFromString(const std::uint16_t* lpsz, void* pc
     if (pclsid == nullptr) {
         return kEInvalidArg;
     }
-    std::memset(pclsid, 0, 16);
-    if (lpsz == nullptr) {
-        return kSOk;
+    std::u16string text;
+    if (lpsz != nullptr && !runtime::copy_guest_wstring(lpsz, 4096U, text)) {
+        return kEInvalidArg;
     }
-    return kSOk;
+    const std::array<std::uint8_t, 16> result{};
+    return runtime::write_guest_memory(pclsid, result.data(), result.size()).status ==
+                   runtime::GuestMemoryAccessStatus::Success
+               ? kSOk
+               : kEInvalidArg;
 }
 
 TL_OLE_MSABI std::int32_t tl_RegisterDragDrop(void* const hwnd, void* const drop_target) noexcept {
@@ -652,8 +673,8 @@ TL_OLE_MSABI std::int32_t tl_DoDragDrop(void* const data_obj, void* const drop_s
     (void)data_obj;
     (void)drop_source;
     (void)ok_effects;
-    if (effect != nullptr) {
-        *effect = 0; // DROPEFFECT_NONE
+    if (effect != nullptr && !write_guest_value(effect, std::uint32_t{0})) {
+        return kEInvalidArg;
     }
     return 0x00040100; // DRAGDROP_S_CANCEL
 }
@@ -663,18 +684,35 @@ TL_OLE_MSABI void tl_ReleaseStgMedium(void* const medium) noexcept {
 }
 
 TL_OLE_MSABI int tl_StringFromGUID2(const void* const rguid, wchar_t* const lpsz, const int cchMax) noexcept {
-    if (rguid == nullptr || lpsz == nullptr || cchMax < 39 || !mapped_range(lpsz, static_cast<std::size_t>(cchMax) * sizeof(wchar_t), true)) {
+    if (rguid == nullptr || lpsz == nullptr || cchMax < 39) {
         return 0;
     }
-    const wchar_t dummy_guid[] = L"{00000000-0000-0000-0000-000000000000}";
-    std::memcpy(lpsz, dummy_guid, sizeof(dummy_guid));
+    Win32Guid guid{};
+    constexpr char16_t kGuidText[] = u"{00000000-0000-0000-0000-000000000000}";
+    static_assert(std::size(kGuidText) == 39U);
+    if (runtime::read_guest_memory(rguid, &guid, sizeof(guid)).status !=
+            runtime::GuestMemoryAccessStatus::Success ||
+        runtime::write_guest_memory(lpsz, kGuidText, sizeof(kGuidText)).status !=
+            runtime::GuestMemoryAccessStatus::Success) {
+        return 0;
+    }
     return 39;
 }
 
 TL_OLE_MSABI int tl_CLSIDFromProgID(const wchar_t* const lpszProgID, void* const lpclsid) noexcept {
-    (void)lpszProgID;
-    if (lpclsid != nullptr && mapped_range(lpclsid, 16, true)) {
-        std::memset(lpclsid, 0, 16);
+    if (lpszProgID != nullptr) {
+        std::u16string progid;
+        if (!runtime::copy_guest_wstring(reinterpret_cast<const std::uint16_t*>(lpszProgID),
+                                          4096U, progid)) {
+            return kEInvalidArg;
+        }
+    }
+    if (lpclsid != nullptr) {
+        const std::array<std::uint8_t, 16> result{};
+        if (runtime::write_guest_memory(lpclsid, result.data(), result.size()).status !=
+            runtime::GuestMemoryAccessStatus::Success) {
+            return kEInvalidArg;
+        }
     }
     return 0; // S_OK
 }

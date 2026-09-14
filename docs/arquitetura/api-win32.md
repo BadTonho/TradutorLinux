@@ -322,6 +322,8 @@ testada (`Read`, `Write`, `Seek`, `SetSize`, `Stat`, `Commit`, `Revert`);
 `Read`, `Write`, `Seek`, `Stat`, `QueryInterface` e `Clone` transferem buffers
 pela fronteira protegida, enquanto o objeto e a vtable permanecem privados do
 runtime;
+GUIDs, objetos retornados, efeitos de drag/drop e buffers de
+`StringFromGUID2`/`CLSIDFromProgID` também usam transferências protegidas;
 registro COM, ActiveX e automação `IDispatch` ampla estão fora do escopo.
 
 `SHGetKnownFolderPath`, `SHGetFolderPathW`, `SHGetFolderPathAndSubDirW`,

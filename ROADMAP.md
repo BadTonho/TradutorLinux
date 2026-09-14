@@ -571,6 +571,12 @@ após uma fotografia de mapas. `OleStreamTest.ProtectedGuestBuffersRejectUnmappe
 passou, assim como os cinco testes de stream e as integrações PE `tl_com` e
 `tl_stream`.
 
+O sublote `OLE32/basic-outputs` migrou `CoCreateGuid`, `CoGetMalloc`,
+`CreateStreamOnHGlobal`, `CoCreateInstance`, `CLSIDFromString`, `DoDragDrop`,
+`StringFromGUID2` e `CLSIDFromProgID` para cópias protegidas de estruturas,
+GUIDs, nomes UTF-16 e ponteiros de saída. `Ole32Test.ProtectedGuidAllocatorAndDragOutputsRejectUnmappedPointers`
+passou junto com os testes de `IStream` e as integrações PE de COM/stream.
+
 ## Fora desta rodada
 
 Não entram neste roadmap, por enquanto:

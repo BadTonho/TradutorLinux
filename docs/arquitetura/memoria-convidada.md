@@ -187,6 +187,14 @@ privada do runtime; os buffers apontados pelos métodos continuam pertencendo ao
 convidado. `OleStreamTest.ProtectedGuestBuffersRejectUnmappedPointers` cobre
 entradas e saídas inacessíveis, e `tl_com`/`tl_stream` cobrem a chamada pela ABI.
 
+O sublote `OLE32/basic-outputs` usa cópias protegidas para GUIDs, objetos COM,
+alocadores, efeitos de drag/drop e estruturas de saída. `StringFromGUID2` e
+`CLSIDFromProgID` tratam seus parâmetros wide como UTF-16 convidado, apesar da
+assinatura host com `wchar_t*`; `CoCreateInstance` lê os identificadores para
+objetos host antes de publicar `ppv`. A regressão
+`Ole32Test.ProtectedGuidAllocatorAndDragOutputsRejectUnmappedPointers` cobre
+entradas e saídas inacessíveis.
+
 O sublote `ADVAPI32/crypto-enumeration` copia a capacidade de
 `CryptEnumProvidersW` antes de enumerar e publica o tipo, o nome UTF-16 e o
 tamanho por transferências protegidas. A assinatura host usa `wchar_t*` por
