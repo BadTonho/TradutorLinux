@@ -563,6 +563,28 @@ TEST(Win32ProcessTest, ProtectedProcessOutputsRejectUnmappedPointers) {
     EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
 }
 
+TEST(Win32ProcessTest, ProtectedCreateProcessInputsAndOutputsRejectUnmappedPointers) {
+    auto* const invalid = reinterpret_cast<void*>(static_cast<std::uintptr_t>(0x1000U));
+    const std::uint16_t missing_application[] = {
+        'C', ':', '\\', 'm', 'i', 's', 's', 'i', 'n', 'g', '.', 'e', 'x', 'e', 0};
+    std::array<std::byte, 24> process_information{};
+
+    EXPECT_EQ(tl_CreateProcessA(reinterpret_cast<const char*>(invalid), nullptr, nullptr, nullptr,
+                                0, 0, nullptr, nullptr, nullptr, process_information.data()), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_CreateProcessW(reinterpret_cast<const std::uint16_t*>(invalid), nullptr, nullptr,
+                                nullptr, 0, 0, nullptr, nullptr, nullptr,
+                                process_information.data()), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+
+    EXPECT_EQ(tl_CreateProcessA("C:\\missing.exe", nullptr, nullptr, nullptr, 0, 0, nullptr,
+                                nullptr, nullptr, invalid), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_CreateProcessW(missing_application, nullptr, nullptr, nullptr, 0, 0, nullptr,
+                                nullptr, nullptr, invalid), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+}
+
 TEST(Win32CommandLineTest, GetCommandLineAReturnsNonEmpty) {
     const char* cmdline = tl_GetCommandLineA();
     ASSERT_NE(cmdline, nullptr);

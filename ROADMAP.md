@@ -218,6 +218,14 @@ estado de rede para transferências protegidas. A regressão
 unitárias relacionadas e as fixtures `tl_k32_system`/`tl_process_parent`
 passaram no preset sanitizado.
 
+O sublote `KERNEL32/process-create` migrou os nomes e diretórios de
+`CreateProcessA/W` para cópias protegidas e a publicação de
+`PROCESS_INFORMATION` para `write_guest_memory`, com limpeza do filho em caso
+de falha na saída. A regressão
+`Win32ProcessTest.ProtectedCreateProcessInputsAndOutputsRejectUnmappedPointers`
+e a fixture `tl_process_parent` passaram após reconstruir o executável do
+runtime.
+
 O lote de caminhos migrou as saídas de diretório, módulo, temporários,
 capacidade de disco, nomes completos/finais e `file_part`, além das leituras de
 strings A/W usadas por essas rotas. As coberturas existentes e a regressão

@@ -1452,21 +1452,20 @@ TL_MSABI int tl_CreateProcessA(const char* application_name, char* command_line,
     if (process_attributes != nullptr || thread_attributes != nullptr || inherit_handles != 0 ||
         creation_flags != 0 || environment != nullptr ||
         process_information == nullptr ||
-        !mapped_guest_range(process_information, sizeof(GuestProcessInformation), true) ||
-        (application_name != nullptr && !mapped_guest_cstring(application_name)) ||
-        (application_name == nullptr && (command_line == nullptr || !mapped_guest_cstring(command_line))) ||
-        (current_directory != nullptr && !mapped_guest_cstring(current_directory))) {
+        (application_name == nullptr && command_line == nullptr)) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
-    std::string guest_path;
-    if (application_name != nullptr) {
-        guest_path = application_name;
-    } else {
-        guest_path = command_line;
+    GuestProcessInformation empty_information{};
+    if (runtime::write_guest_memory(process_information, &empty_information,
+                                    sizeof(empty_information)).status !=
+        runtime::GuestMemoryAccessStatus::Success) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
     }
     char normalized_path[4096]{};
-    if (!translate_windows_path(guest_path.c_str(), normalized_path, sizeof(normalized_path))) {
+    const char* const path_source = application_name != nullptr ? application_name : command_line;
+    if (!translate_windows_path(path_source, normalized_path, sizeof(normalized_path))) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
@@ -1581,11 +1580,19 @@ TL_MSABI int tl_CreateProcessA(const char* application_name, char* command_line,
         allocated->child_result_fd = result_pipe[0];
         // process_running já true
     }
-    auto* information = static_cast<GuestProcessInformation*>(process_information);
-    *information = {.process_handle = sync_slot_handle(*allocated),
-                    .thread_handle = nullptr,
-                    .process_id = static_cast<std::uint32_t>(child),
-                    .thread_id = 0};
+    const GuestProcessInformation information{.process_handle = sync_slot_handle(*allocated),
+                                              .thread_handle = nullptr,
+                                              .process_id = static_cast<std::uint32_t>(child),
+                                              .thread_id = 0};
+    if (runtime::write_guest_memory(process_information, &information, sizeof(information)).status !=
+        runtime::GuestMemoryAccessStatus::Success) {
+        static_cast<void>(::kill(child, SIGKILL));
+        static_cast<void>(::waitpid(child, nullptr, 0));
+        std::lock_guard<std::mutex> lock(g_sync_mutex);
+        clear_sync_slot(*allocated);
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
     set_last_error(abi::kErrorSuccess);
     return 1;
 }
@@ -1946,16 +1953,34 @@ TL_MSABI int tl_CreateProcessW(const std::uint16_t* application_name,
                                std::uint32_t creation_flags, const void* environment,
                                const std::uint16_t* current_directory, void* startup_info,
                                void* process_information) noexcept {
-    if ((current_directory != nullptr && !mapped_guest_wstring(current_directory)) ||
-        (application_name != nullptr && !mapped_guest_wstring(application_name)) ||
-        (application_name == nullptr && !mapped_guest_wstring(command_line))) {
+    std::u16string guest_application;
+    std::u16string guest_command_line;
+    std::u16string guest_directory;
+    if ((application_name != nullptr &&
+         !runtime::copy_guest_wstring(application_name, kMaxModuleStringUnits, guest_application)) ||
+        (command_line != nullptr &&
+         !runtime::copy_guest_wstring(command_line, kMaxModuleStringUnits, guest_command_line)) ||
+        (current_directory != nullptr &&
+         !runtime::copy_guest_wstring(current_directory, kMaxModuleStringUnits, guest_directory)) ||
+        (application_name == nullptr && command_line == nullptr)) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
-    const std::string application = application_name != nullptr ? util::wide_to_utf8(application_name) : "";
-    std::string command = command_line != nullptr ? util::wide_to_utf8(command_line) : "";
-    const std::string directory =
-        current_directory != nullptr ? util::wide_to_utf8(current_directory) : "";
+    const std::string application = application_name != nullptr
+                                        ? util::wide_to_utf8(
+                                              reinterpret_cast<const std::uint16_t*>(guest_application.data()),
+                                              guest_application.size())
+                                        : "";
+    std::string command = command_line != nullptr
+                              ? util::wide_to_utf8(
+                                    reinterpret_cast<const std::uint16_t*>(guest_command_line.data()),
+                                    guest_command_line.size())
+                              : "";
+    const std::string directory = current_directory != nullptr
+                                      ? util::wide_to_utf8(
+                                            reinterpret_cast<const std::uint16_t*>(guest_directory.data()),
+                                            guest_directory.size())
+                                      : "";
     char* command_pointer = command.empty() ? nullptr : command.data();
     const char* application_pointer = application.empty() ? nullptr : application.c_str();
     const char* directory_pointer = directory.empty() ? nullptr : directory.c_str();

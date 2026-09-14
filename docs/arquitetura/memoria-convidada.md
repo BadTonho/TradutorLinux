@@ -103,6 +103,11 @@ tamanhos são lidos com `read_guest_value`; saídas, inclusive o tamanho
 necessário de `QueryFullProcessImageNameW`, usam `write_guest_memory` ou
 `write_guest_value` e rejeitam falhas de transferência.
 
+O sublote `KERNEL32/process-create` usa `translate_windows_path` e cópias
+UTF-16 locais para os nomes/diretórios de `CreateProcessA/W`. O
+`PROCESS_INFORMATION` é inicializado e publicado por `write_guest_memory`; se
+a publicação final falhar, o filho criado é encerrado e o slot é liberado.
+
 O lote `SHELL32` segue esse contrato para suas estruturas de entrada e strings:
 `NOTIFYICONDATA`, `GUID`, `SHELLEXECUTEINFO`, `SHFILEOPSTRUCT`,
 `CommandLineToArgvW` e as entradas de `ShellExecuteA/W` são primeiro copiados
