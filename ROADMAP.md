@@ -577,6 +577,13 @@ O sublote `OLE32/basic-outputs` migrou `CoCreateGuid`, `CoGetMalloc`,
 GUIDs, nomes UTF-16 e ponteiros de saída. `Ole32Test.ProtectedGuidAllocatorAndDragOutputsRejectUnmappedPointers`
 passou junto com os testes de `IStream` e as integrações PE de COM/stream.
 
+O sublote `CRYPT32/name-output` migrou `CertGetNameStringW` para uma fotografia
+protegida de `CERT_CONTEXT` e do certificado DER, cópia do OID convidado e
+publicação UTF-16 por `write_guest_memory`. A regressão
+`Crypt32Test.CertGetNameStringReadsSubjectIssuerAndValidatesBuffers` passou com
+os seis testes `Crypt32Test` e as quatro integrações PE de `tl_crypt32` no
+preset `validation-sanitize`.
+
 ## Fora desta rodada
 
 Não entram neste roadmap, por enquanto:

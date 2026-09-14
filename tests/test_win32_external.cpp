@@ -314,6 +314,17 @@ TEST(Crypt32Test, CertGetNameStringReadsSubjectIssuerAndValidatesBuffers) {
     EXPECT_EQ(tl_GetLastError(), abi::kErrorInsufficientBuffer);
     EXPECT_EQ(tl_CertGetNameStringW(&context, 7, 0, nullptr, name, 32), 0U);
     EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+
+    auto* const invalid = reinterpret_cast<void*>(static_cast<std::uintptr_t>(0x1000U));
+    EXPECT_EQ(tl_CertGetNameStringW(static_cast<const GuestCertContext*>(invalid),
+                                    kCertNameSimpleDisplayType, 0, nullptr, name, 32), 0U);
+    EXPECT_EQ(tl_CertGetNameStringW(&context, kCertNameSimpleDisplayType, 0, nullptr,
+                                    static_cast<std::uint16_t*>(invalid), 32), 0U);
+    EXPECT_EQ(tl_CertGetNameStringW(&context, kCertNameAttrType, 0, invalid, name, 32), 0U);
+    GuestCertContext invalid_blob = context;
+    invalid_blob.encoded = static_cast<std::uint8_t*>(invalid);
+    EXPECT_EQ(tl_CertGetNameStringW(&invalid_blob, kCertNameSimpleDisplayType, 0,
+                                    nullptr, name, 32), 0U);
 }
 
 TEST(Crypt32Test, CertNameToStrConvertsValidatedNameBlobAndBoundsOutput) {

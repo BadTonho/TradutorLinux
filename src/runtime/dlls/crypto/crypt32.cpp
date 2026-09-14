@@ -209,8 +209,9 @@ const std::u16string* find_attribute(const std::vector<NameAttribute>& attribute
 
 std::u16string select_name(const std::vector<NameAttribute>& attributes,
                            const std::uint32_t type, const void* const type_parameter,
-                           bool& found) noexcept {
+                           bool& found, bool& valid) noexcept {
     found = false;
+    valid = true;
     constexpr std::string_view kCommonName = "2.5.4.3";
     constexpr std::string_view kOrganizationUnit = "2.5.4.11";
     constexpr std::string_view kOrganization = "2.5.4.10";
@@ -224,11 +225,12 @@ std::u16string select_name(const std::vector<NameAttribute>& attributes,
         return {};
     }
     if (type == kCertNameAttrType) {
-        if (type_parameter == nullptr || !runtime::validate_mapped_cstring(
-                                             static_cast<const char*>(type_parameter), 128U)) {
+        std::string oid;
+        if (type_parameter == nullptr ||
+            !runtime::copy_guest_cstring(static_cast<const char*>(type_parameter), 128U, oid)) {
+            valid = false;
             return {};
         }
-        const std::string oid(static_cast<const char*>(type_parameter));
         if (const auto* value = find_attribute(attributes, oid); value != nullptr) {
             found = true;
             return *value;
@@ -258,6 +260,50 @@ std::u16string select_name(const std::vector<NameAttribute>& attributes,
         return attributes.front().value;
     }
     return {};
+}
+
+std::u16string select_name(const std::vector<NameAttribute>& attributes,
+                           const std::uint32_t type, const void* const type_parameter,
+                           bool& found) noexcept {
+    bool valid = true;
+    return select_name(attributes, type, type_parameter, found, valid);
+}
+
+bool snapshot_cert_context(const GuestCertContext* const source, GuestCertContext& context,
+                           std::vector<std::uint8_t>& encoded) noexcept {
+    if (source == nullptr ||
+        runtime::read_guest_memory(source, &context, sizeof(context)).status !=
+            runtime::GuestMemoryAccessStatus::Success ||
+        (context.encoding_type != kX509AsnEncoding &&
+         context.encoding_type != (kX509AsnEncoding | kPkcs7AsnEncoding)) ||
+        context.encoded == nullptr || context.encoded_size == 0U ||
+        context.encoded_size > kMaxCertificateSize) {
+        return false;
+    }
+    try {
+        encoded.resize(context.encoded_size);
+    } catch (...) {
+        return false;
+    }
+    if (runtime::read_guest_memory(context.encoded, encoded.data(), encoded.size()).status !=
+        runtime::GuestMemoryAccessStatus::Success) {
+        return false;
+    }
+    context.encoded = encoded.data();
+    return true;
+}
+
+bool write_guest_wstring(std::uint16_t* const destination,
+                         const std::u16string& value) noexcept {
+    try {
+        std::vector<std::uint16_t> output(value.begin(), value.end());
+        output.push_back(0);
+        return runtime::write_guest_memory(destination, output.data(),
+                                            output.size() * sizeof(std::uint16_t)).status ==
+               runtime::GuestMemoryAccessStatus::Success;
+    } catch (...) {
+        return false;
+    }
 }
 
 std::u16string name_label(const std::string_view oid, const std::uint32_t string_type) {
@@ -474,32 +520,19 @@ TL_CRYPT32_MSABI std::uint32_t tl_CertGetNameStringW(
     const std::uint32_t flags, const void* const type_parameter,
     std::uint16_t* const name_string, const std::uint32_t name_string_capacity) noexcept {
     constexpr std::uint32_t kSupportedFlags = kCertNameIssuerFlag;
-    if (cert_context == nullptr ||
-        !runtime::validate_mapped_range(cert_context, sizeof(*cert_context), false) ||
+    GuestCertContext context{};
+    std::vector<std::uint8_t> encoded_storage;
+    if (!snapshot_cert_context(cert_context, context, encoded_storage) ||
         (type < kCertNameEmailType || type > kCertNameDnsType || type == kCertNameRdnType) ||
         (type == kCertNameAttrType && type_parameter == nullptr) ||
-        (flags & ~kSupportedFlags) != 0U ||
-        (cert_context->encoding_type != kX509AsnEncoding &&
-         cert_context->encoding_type != (kX509AsnEncoding | kPkcs7AsnEncoding)) ||
-        cert_context->encoded == nullptr || cert_context->encoded_size == 0U ||
-        cert_context->encoded_size > kMaxCertificateSize ||
-        !runtime::validate_mapped_range(cert_context->encoded, cert_context->encoded_size, false)) {
-        set_last_error(abi::kErrorInvalidParameter);
-        return 0;
-    }
-    if (name_string != nullptr && name_string_capacity != 0U &&
-        (static_cast<std::size_t>(name_string_capacity) >
-             std::numeric_limits<std::size_t>::max() / sizeof(*name_string) ||
-         !runtime::validate_mapped_range(
-             name_string, static_cast<std::size_t>(name_string_capacity) * sizeof(*name_string),
-             true))) {
+        (flags & ~kSupportedFlags) != 0U) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
 
     Bytes issuer{};
     Bytes subject{};
-    const Bytes encoded(cert_context->encoded, cert_context->encoded_size);
+    const Bytes encoded(context.encoded, context.encoded_size);
     if (!extract_certificate_names(encoded, issuer, subject)) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
@@ -510,7 +543,13 @@ TL_CRYPT32_MSABI std::uint32_t tl_CertGetNameStringW(
         return 0;
     }
     bool found = false;
-    const std::u16string selected = select_name(attributes, type, type_parameter, found);
+    bool selection_valid = true;
+    const std::u16string selected =
+        select_name(attributes, type, type_parameter, found, selection_valid);
+    if (!selection_valid) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
     const std::size_t required = selected.size() + 1U;
     if (required > std::numeric_limits<std::uint32_t>::max()) {
         set_last_error(abi::kErrorNotEnoughMemory);
@@ -524,8 +563,10 @@ TL_CRYPT32_MSABI std::uint32_t tl_CertGetNameStringW(
         set_last_error(abi::kErrorInsufficientBuffer);
         return 0;
     }
-    std::copy(selected.begin(), selected.end(), name_string);
-    name_string[selected.size()] = 0;
+    if (!write_guest_wstring(name_string, selected)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
     set_last_error(abi::kErrorSuccess);
     return static_cast<std::uint32_t>(required);
 }

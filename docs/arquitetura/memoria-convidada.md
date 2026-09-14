@@ -202,6 +202,13 @@ compatibilidade, mas o conteúdo convidado é tratado como unidades UTF-16; a
 regressão `Win32CryptoTest.CryptEnumProvidersUsesProtectedUtf16Buffers` cobre
 consulta de capacidade, enumeração válida e destinos inacessíveis.
 
+O sublote `CRYPT32/name-output` fotografa `CERT_CONTEXT` e o blob DER por
+`read_guest_memory`, copia o OID usado por `CERT_NAME_ATTR_TYPE` e publica o
+nome UTF-16 de `CertGetNameStringW` por `write_guest_memory`. Contextos, blobs,
+OID e saídas inacessíveis são rejeitados sem desreferenciar memória convidada;
+`Crypt32Test.CertGetNameStringReadsSubjectIssuerAndValidatesBuffers` e as
+integrações de `tl_crypt32` protegem esse contrato.
+
 ## Limites residuais
 
 `validate_mapped_range` permanece deliberadamente como predicado advisory:

@@ -578,6 +578,12 @@ subconjunto, lê a capacidade e publica nome/tipo por cópias protegidas; o nome
 `CERT_CONTEXT` e handles emitidos por este runtime. Entradas inválidas ou
 handles desconhecidos retornam erro controlado.
 
+`CertGetNameStringW` aceita no subconjunto os tipos de nome publicados pela
+matriz de compatibilidade, lê `CERT_CONTEXT`, o certificado DER e o OID de
+atributo por cópias protegidas e publica o resultado em UTF-16. A capacidade
+é calculada antes da escrita; contexto, blob, OID ou destino inacessível
+retornam erro controlado.
+
 `WinVerifyTrust`, `WTHelperProvDataFromStateData`,
 `WTHelperGetProvSignerFromChain` e `WTHelperGetProvCertFromChain` implementam
 o contrato de blob/cadeia explícita usado por `tl_trust`. `WTD_CHOICE_FILE`,
