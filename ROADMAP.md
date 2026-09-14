@@ -621,6 +621,13 @@ de publicar `state_data` por escrita protegida. `WintrustTest` passou nos 3 caso
 de entrada e as oito integrações PE de `tl_trust`/`tl_wthelper` passaram no
 preset `validation-sanitize`.
 
+O sublote `CRYPT32/rejection-output` migrou as saídas de rejeição de
+`CertFreeCertificateContext`, `CryptMsgGetParam` e `CryptQueryObject` para
+leituras/escritas protegidas, mantendo handles não fabricados, tamanho zero e
+`ERROR_NOT_SUPPORTED` nos caminhos publicados. Os 4 testes CRYPT32 de contexto,
+consulta de objeto, mensagem e fechamento passaram no preset
+`validation-sanitize`.
+
 ## Fora desta rodada
 
 Não entram neste roadmap, por enquanto:

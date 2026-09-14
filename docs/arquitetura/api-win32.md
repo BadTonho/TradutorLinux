@@ -611,6 +611,11 @@ runtime ao avançar a enumeração. `CertFindCertificateInStore` copia os
 parâmetros SHA-1 e subject UTF-16 antes da busca; blob, string ou handle
 inacessível resulta em erro/consulta controlada, sem fabricar certificados.
 
+`CertFreeCertificateContext` confirma contextos externos por leitura protegida
+quando não são handles rastreados. `CryptMsgGetParam` zera `pcbData` por cópia
+protegida antes de rejeitar o handle, e `CryptQueryObject` limpa suas saídas
+opcionais pela mesma fronteira antes de retornar `ERROR_NOT_SUPPORTED`.
+
 `WinVerifyTrust`, `WTHelperProvDataFromStateData`,
 `WTHelperGetProvSignerFromChain` e `WTHelperGetProvCertFromChain` implementam
 o contrato de blob/cadeia explícita usado por `tl_trust`. `WTD_CHOICE_FILE`,

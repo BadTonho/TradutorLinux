@@ -456,6 +456,7 @@ TEST(Crypt32Test, CertContextAndStoreManagement) {
     // Free context
     EXPECT_EQ(tl_CertFreeCertificateContext(nullptr), 1U);
     EXPECT_EQ(tl_CertFreeCertificateContext(dup), 1U);
+    EXPECT_EQ(tl_CertFreeCertificateContext(static_cast<const GuestCertContext*>(invalid)), 0U);
 
     // Store operations
     EXPECT_EQ(tl_CertOpenStore(nullptr, 0, nullptr, 0, nullptr), nullptr);
@@ -524,6 +525,12 @@ TEST(Crypt32Test, CryptQueryObjectRejectsUnsupportedInputWithoutFabricatedHandle
                                   reinterpret_cast<std::uint32_t*>(1), nullptr, nullptr,
                                   nullptr, nullptr, nullptr), 0);
     EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+
+    EXPECT_EQ(tl_CryptQueryObject(1U, nullptr, 0U, 0U, 0U, nullptr, nullptr, nullptr, nullptr,
+                                  nullptr,
+                                  reinterpret_cast<const void**>(static_cast<std::uintptr_t>(1U))),
+              0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
 }
 
 TEST(Crypt32Test, CryptMsgGetParamRejectsUnknownHandles) {
@@ -540,6 +547,11 @@ TEST(Crypt32Test, CryptMsgGetParamRejectsUnknownHandles) {
     EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidHandle);
 
     EXPECT_EQ(tl_CryptMsgGetParam(reinterpret_cast<void*>(1), 0U, 0U, data, nullptr), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+
+    EXPECT_EQ(tl_CryptMsgGetParam(reinterpret_cast<void*>(1), 0U, 0U, data,
+                                  static_cast<std::uint32_t*>(reinterpret_cast<void*>(1))),
+              0);
     EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
 }
 

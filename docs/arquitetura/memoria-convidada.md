@@ -247,6 +247,12 @@ protegida. O estado e os registros devolvidos pelos `WTHelper*` continuam em
 memória privada do runtime; ação, estruturas ou payload inacessíveis falham sem
 desreferenciação direta.
 
+O sublote `CRYPT32/rejection-output` usa transferências protegidas para validar
+contextos externos em `CertFreeCertificateContext`, zerar `pcbData` em
+`CryptMsgGetParam` e limpar as saídas opcionais de `CryptQueryObject`. Assim,
+os caminhos de rejeição não escrevem diretamente em ponteiros convidados nem
+fabricam handles ou contextos.
+
 ## Limites residuais
 
 `validate_mapped_range` permanece deliberadamente como predicado advisory:

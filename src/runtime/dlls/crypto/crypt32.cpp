@@ -667,10 +667,6 @@ TL_CRYPT32_MSABI const GuestCertContext* tl_CertDuplicateCertificateContext(
     if (cert_context == nullptr) {
         return nullptr;
     }
-    if (!runtime::validate_mapped_range(cert_context, sizeof(*cert_context), false)) {
-        set_last_error(abi::kErrorInvalidParameter);
-        return nullptr;
-    }
 
     std::lock_guard<std::mutex> lock(g_crypto_mutex);
     for (const auto& tracked : g_tracked_contexts) {
@@ -722,7 +718,9 @@ TL_CRYPT32_MSABI std::uint32_t tl_CertFreeCertificateContext(
         }
     }
 
-    if (!runtime::validate_mapped_range(cert_context, sizeof(*cert_context), false)) {
+    GuestCertContext ignored_context{};
+    if (runtime::read_guest_memory(cert_context, &ignored_context, sizeof(ignored_context)).status !=
+        runtime::GuestMemoryAccessStatus::Success) {
         return 0U;
     }
     return 1U;
@@ -1126,8 +1124,9 @@ TL_CRYPT32_MSABI int tl_CryptMsgGetParam(void* const hCryptMsg, const std::uint3
     (void)dwParamType;
     (void)dwIndex;
     (void)pvData;
-    if (pcbData != nullptr) {
-        *pcbData = 0;
+    if (pcbData != nullptr && !write_guest_value(pcbData, std::uint32_t{0})) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
     }
     if (hCryptMsg == nullptr) {
         set_last_error(abi::kErrorInvalidHandle);
@@ -1147,25 +1146,28 @@ TL_CRYPT32_MSABI int tl_CryptQueryObject(const std::uint32_t dwObjectType, const
     (void)dwExpectedContentTypeFlags;
     (void)dwExpectedFormatTypeFlags;
     (void)dwFlags;
-    const auto valid_output = [](const void* const pointer, const std::size_t size,
-                                 const bool writable) noexcept {
-        return pointer == nullptr || runtime::validate_mapped_range(pointer, size, writable);
+    const auto clear_u32 = [](std::uint32_t* const pointer) noexcept {
+        return pointer == nullptr || write_guest_value(pointer, std::uint32_t{0});
     };
-    if (!valid_output(pdwMsgAndCertEncodingType, sizeof(*pdwMsgAndCertEncodingType), true) ||
-        !valid_output(pdwContentType, sizeof(*pdwContentType), true) ||
-        !valid_output(pdwFormatType, sizeof(*pdwFormatType), true) ||
-        !valid_output(phCertStore, sizeof(*phCertStore), true) ||
-        !valid_output(phMsg, sizeof(*phMsg), true) ||
-        !valid_output(ppvContext, sizeof(*ppvContext), true)) {
+    const auto clear_handle = [](void** const pointer) noexcept {
+        void* null_handle = nullptr;
+        return pointer == nullptr ||
+               runtime::write_guest_memory(pointer, &null_handle, sizeof(null_handle)).status ==
+                   runtime::GuestMemoryAccessStatus::Success;
+    };
+    const auto clear_context = [](const void** const pointer) noexcept {
+        const void* null_context = nullptr;
+        return pointer == nullptr ||
+               runtime::write_guest_memory(const_cast<void*>(reinterpret_cast<const void*>(pointer)),
+                                           &null_context, sizeof(null_context))
+                       .status == runtime::GuestMemoryAccessStatus::Success;
+    };
+    if (!clear_u32(pdwMsgAndCertEncodingType) || !clear_u32(pdwContentType) ||
+        !clear_u32(pdwFormatType) || !clear_handle(phCertStore) || !clear_handle(phMsg) ||
+        !clear_context(ppvContext)) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
-    if (pdwMsgAndCertEncodingType != nullptr) *pdwMsgAndCertEncodingType = 0;
-    if (pdwContentType != nullptr) *pdwContentType = 0;
-    if (pdwFormatType != nullptr) *pdwFormatType = 0;
-    if (phCertStore != nullptr) *phCertStore = nullptr;
-    if (phMsg != nullptr) *phMsg = nullptr;
-    if (ppvContext != nullptr) *ppvContext = nullptr;
     set_last_error(abi::kErrorNotSupported);
     return 0;
 }
