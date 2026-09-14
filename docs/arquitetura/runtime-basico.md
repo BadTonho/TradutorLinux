@@ -50,8 +50,9 @@ argumento inválido ou erro do sistema; a cópia não desreferencia diretamente 
 endereço convidado no código do host.
 
 `validate_mapped_range` continua sendo uma verificação de permissão baseada em
-uma fotografia de `/proc/self/maps`, útil para contratos que precisam apenas
-validar uma faixa. Ela não é uma garantia de posse da página entre a validação
-e um acesso posterior. Strings ANSI e UTF-16 migradas para o validador usam
-cópia protegida em blocos; caminhos legados que ainda leem ou escrevem ponteiros
-diretamente permanecem fora dessa garantia até serem migrados.
+uma fotografia de `/proc/self/maps`, útil apenas como predicado advisory. Ela
+não é uma garantia de posse da página entre a validação e um acesso posterior.
+As APIs do runtime usam `read_guest_memory`/`write_guest_memory` para transferir
+buffers e strings; estruturas mantidas pelo próprio runtime e dados da imagem
+PE seguem os contratos internos descritos em
+[`memoria-convidada.md`](memoria-convidada.md).

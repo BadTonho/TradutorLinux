@@ -287,11 +287,12 @@ certificados ou extensões EKU.
 
 `validate_mapped_range` permanece deliberadamente como predicado advisory:
 consulta `/proc/self/maps` e pode ficar desatualizado imediatamente depois.
-Ainda existem módulos que fazem `memcpy`, atribuição escalar ou conversão
-`wide_to_utf8` diretamente depois dessa validação. A R3 só poderá ser marcada
-como concluída quando esses caminhos forem catalogados, migrados para cópia
-protegida ou tiverem um contrato separado que prove que o endereço é uma região
-controlada pelo runtime.
+A auditoria dos consumidores comuns não encontra mais chamadas que usem esse
+predicado como garantia para um acesso posterior; os usos restantes ficam no
+próprio validador/fallback interno e nos testes da primitiva. Os únicos
+contratos sem cópia genérica são as estruturas locais mantidas vivas pelo
+despachante SEH/C++ e os endereços de código dentro da imagem ativa para
+callbacks, ambos descritos acima e controlados pelo loader.
 
 O fallback de `/proc/thread-self/mem` é uma compatibilidade de ambiente, não
 uma sandbox. Ele não transforma a execução de um `.exe` em operação segura e

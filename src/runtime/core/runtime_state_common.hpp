@@ -33,19 +33,6 @@ inline void set_last_error(const std::uint32_t error) noexcept {
 
 #define g_last_error (::tradutorlinux::g_thread_last_error)
 
-inline bool mapped_guest_range(const void* address, const std::size_t size,
-                               const bool writable) noexcept {
-    return runtime::validate_mapped_range(address, size, writable);
-}
-
-inline bool mapped_guest_cstring(const char* value) noexcept {
-    return runtime::validate_mapped_cstring(value);
-}
-
-inline bool mapped_guest_wstring(const std::uint16_t* value) noexcept {
-    return runtime::validate_mapped_wstring(value);
-}
-
 template <typename T>
 inline bool read_guest_value(const void* const source, T& destination) noexcept {
     return runtime::read_guest_memory(source, &destination, sizeof(destination)).status ==
