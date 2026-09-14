@@ -457,6 +457,12 @@ O sublote `USER32/menu` migrou `MENUITEMINFO` de entrada e saída, textos de
 regressão cobre strings, estruturas aninhadas e buffers inacessíveis, mantendo
 os retornos limitados dos stubs.
 
+O sublote `USER32/dialog` migrou os nomes de template usados por diálogos
+modeless e modais, as entradas de `MessageBoxA/W`, `SetDlgItemTextW` e
+`IsDialogMessageW` para cópias locais. A regressão cobre texto, caption e
+mensagens inválidos; os smokes existentes continuam protegendo o fluxo de
+diálogo válido.
+
 ## Fora desta rodada
 
 Não entram neste roadmap, por enquanto:

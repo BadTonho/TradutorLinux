@@ -78,6 +78,11 @@ O sublote `USER32/menu` aplica o contrato a `MENUITEMINFO`, aos textos de
 host, e buffers de texto e estruturas de saída são publicados somente por
 `write_guest_memory`.
 
+O sublote `USER32/dialog` aplica o contrato aos nomes de template de diálogos,
+às entradas de `MessageBoxA/W`, `SetDlgItemTextW` e `IsDialogMessageW`. Os
+templates, strings e mensagens são copiados para objetos host antes de buscar
+recursos, abrir a GUI ou despachar comandos.
+
 ## Limites residuais
 
 `validate_mapped_range` permanece deliberadamente como predicado advisory:

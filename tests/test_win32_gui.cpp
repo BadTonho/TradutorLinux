@@ -591,6 +591,28 @@ TEST(Win32DialogTest, ProtectedSimpleOutputsRejectUnmappedPointers) {
     EXPECT_EQ(tl_GetDlgItemInt(nullptr, 0, static_cast<int*>(invalid), 0), 0U);
 }
 
+TEST(Win32DialogTest, ProtectedDialogInputsRejectUnmappedPointers) {
+    auto* const invalid = reinterpret_cast<void*>(static_cast<std::uintptr_t>(0x1000U));
+    const char valid_text[] = "text";
+    const char valid_caption[] = "caption";
+    EXPECT_EQ(tl_MessageBoxA(nullptr, static_cast<const char*>(invalid), valid_caption, 0), 0);
+    EXPECT_EQ(tl_MessageBoxA(nullptr, valid_text, static_cast<const char*>(invalid), 0), 0);
+
+    const std::uint16_t wide_text[] = {'t', 'e', 'x', 't', 0};
+    const std::uint16_t wide_caption[] = {'c', 'a', 'p', 't', 'i', 'o', 'n', 0};
+    EXPECT_EQ(tl_MessageBoxW(nullptr, static_cast<const std::uint16_t*>(invalid), wide_caption, 0), 0);
+    EXPECT_EQ(tl_MessageBoxW(nullptr, wide_text, static_cast<const std::uint16_t*>(invalid), 0), 0);
+
+    g_windows = {};
+    WindowSlot& dialog = g_windows[0];
+    dialog.used = true;
+    dialog.is_dialog = true;
+    EXPECT_EQ(tl_IsDialogMessageW(&dialog, invalid), 0);
+    EXPECT_EQ(tl_SetDlgItemTextW(&dialog, 1, static_cast<const std::uint16_t*>(invalid)), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    g_windows = {};
+}
+
 
 TEST(Gdi32Test, BitmapAndHardLinkOperations) {
     void* bmp = tl_CreateBitmap(64, 64, 1, 32, nullptr);

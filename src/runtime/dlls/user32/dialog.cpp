@@ -41,8 +41,20 @@ namespace {
         }
     }
 
+    std::u16string template_name_copy;
+    const auto template_raw = reinterpret_cast<std::uintptr_t>(template_name);
+    if (template_raw > 0xFFFFU &&
+        !runtime::copy_guest_wstring(template_name, 4096U, template_name_copy)) {
+        trace_failure("arguments", "nome do template inválido");
+        set_last_error(abi::kErrorInvalidParameter);
+        return nullptr;
+    }
+    const std::uint16_t* effective_template_name = template_name;
+    if (template_raw > 0xFFFFU) {
+        effective_template_name = reinterpret_cast<const std::uint16_t*>(template_name_copy.data());
+    }
     const auto* const resource_type = reinterpret_cast<const std::uint16_t*>(5U);
-    void* const resource = tl_FindResourceW(nullptr, template_name, resource_type);
+    void* const resource = tl_FindResourceW(nullptr, effective_template_name, resource_type);
     void* const loaded = resource == nullptr ? nullptr : tl_LoadResource(nullptr, resource);
     const std::uint32_t resource_size = loaded == nullptr ? 0 : tl_SizeofResource(nullptr, resource);
     const void* const resource_data = loaded == nullptr ? nullptr : tl_LockResource(loaded);
@@ -182,11 +194,15 @@ TL_MSABI int tl_MessageBoxA(const void* const window, const char* const text,
         return 0;
     }
     (void)window;
-    if (type != 0 || !mapped_guest_cstring(text) || !mapped_guest_cstring(caption)) {
+    std::string text_copy;
+    std::string caption_copy;
+    if (type != 0 || text == nullptr || caption == nullptr ||
+        !runtime::copy_guest_cstring(text, 65535U, text_copy) ||
+        !runtime::copy_guest_cstring(caption, 4096U, caption_copy)) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
-    const std::uint32_t result = gui::platform::message_box(text, caption);
+    const std::uint32_t result = gui::platform::message_box(text_copy.c_str(), caption_copy.c_str());
     set_last_error(result == 0 ? abi::kErrorAccessDenied : abi::kErrorSuccess);
     return static_cast<int>(result);
 }
@@ -207,7 +223,8 @@ TL_MSABI void* tl_GetDlgItem(const void* dialog, const int identifier) noexcept 
 
 TL_MSABI int tl_SetDlgItemTextW(const void* dialog, const int identifier,
                                 const std::uint16_t* const text) noexcept {
-    if (text == nullptr || !mapped_guest_wstring(text)) {
+    std::u16string text_copy;
+    if (text == nullptr || !runtime::copy_guest_wstring(text, 65535U, text_copy)) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
@@ -215,7 +232,9 @@ TL_MSABI int tl_SetDlgItemTextW(const void* dialog, const int identifier,
     if (child == nullptr) {
         return 0;
     }
-    return tl_SetWindowTextW(child, text);
+    const std::string utf8 = util::wide_to_utf8(
+        reinterpret_cast<const std::uint16_t*>(text_copy.data()), text_copy.size());
+    return tl_SetWindowTextA(child, utf8.c_str());
 }
 
 TL_MSABI abi::Lresult tl_SendDlgItemMessageW(const void* dialog, const int identifier,
@@ -257,17 +276,17 @@ TL_MSABI int tl_IsDialogMessageW(const void* dialog, const void* message) noexce
         return 0;
     }
     WindowSlot* const slot = find_window_slot(dialog);
+    abi::GuestMsg input{};
     if (slot == nullptr || !slot->is_dialog || message == nullptr ||
-        !mapped_guest_range(message, sizeof(abi::GuestMsg), false)) {
+        !read_guest_value(message, input)) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
-    const auto* const input = static_cast<const abi::GuestMsg*>(message);
-    if (input->message != abi::kWmKeyDown || input->hwnd != slot) {
+    if (input.message != abi::kWmKeyDown || input.hwnd != slot) {
         set_last_error(abi::kErrorSuccess);
         return 0;
     }
-    if (input->wparam == abi::kVkTab) {
+    if (input.wparam == abi::kVkTab) {
         WindowSlot* const next = next_dialog_tab_item(*slot, g_focused_control, false);
         if (next == nullptr) {
             set_last_error(abi::kErrorSuccess);
@@ -286,10 +305,10 @@ TL_MSABI int tl_IsDialogMessageW(const void* dialog, const void* message) noexce
     }
     int command_id = 0;
     const char* action = nullptr;
-    if (input->wparam == abi::kVkReturn) {
+    if (input.wparam == abi::kVkReturn) {
         command_id = kIdOk;
         action = "enter";
-    } else if (input->wparam == abi::kVkEscape) {
+    } else if (input.wparam == abi::kVkEscape) {
         command_id = kIdCancel;
         action = "escape";
     }
@@ -383,7 +402,17 @@ TL_MSABI std::intptr_t tl_DialogBoxParamW(const void* const instance,
             return -1;
         }
     }
-    const auto* const resource_name = template_name;
+    std::u16string template_name_copy;
+    const auto template_raw = reinterpret_cast<std::uintptr_t>(template_name);
+    if (template_raw > 0xFFFFU &&
+        !runtime::copy_guest_wstring(template_name, 4096U, template_name_copy)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return -1;
+    }
+    const std::uint16_t* resource_name = template_name;
+    if (template_raw > 0xFFFFU) {
+        resource_name = reinterpret_cast<const std::uint16_t*>(template_name_copy.data());
+    }
     const auto* const resource_type = reinterpret_cast<const std::uint16_t*>(5U);
     void* const resource = tl_FindResourceW(nullptr, resource_name, resource_type);
     void* const loaded = resource == nullptr ? nullptr : tl_LoadResource(nullptr, resource);
@@ -596,12 +625,18 @@ TL_MSABI int tl_MessageBoxW(const void* window, const std::uint16_t* text,
         return 0;
     }
     (void)window;
-    if (type != 0 || !mapped_guest_wstring(text) || !mapped_guest_wstring(caption)) {
+    std::u16string text_copy;
+    std::u16string caption_copy;
+    if (type != 0 || text == nullptr || caption == nullptr ||
+        !runtime::copy_guest_wstring(text, 65535U, text_copy) ||
+        !runtime::copy_guest_wstring(caption, 4096U, caption_copy)) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
-    const std::string utf8_text = util::wide_to_utf8(text);
-    const std::string utf8_cap = util::wide_to_utf8(caption);
+    const std::string utf8_text = util::wide_to_utf8(
+        reinterpret_cast<const std::uint16_t*>(text_copy.data()), text_copy.size());
+    const std::string utf8_cap = util::wide_to_utf8(
+        reinterpret_cast<const std::uint16_t*>(caption_copy.data()), caption_copy.size());
     const std::uint32_t result = gui::platform::message_box(utf8_text.c_str(), utf8_cap.c_str());
     set_last_error(result == 0 ? abi::kErrorAccessDenied : abi::kErrorSuccess);
     return static_cast<int>(result);
