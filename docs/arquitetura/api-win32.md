@@ -601,6 +601,11 @@ do subconjunto; provedores nomeados e parâmetros de `CertOpenSystemStoreA/W`
 são copiados para strings host antes da decisão. A loja criada permanece em
 memória do runtime, e nomes ANSI/UTF-16 inacessíveis produzem erro controlado.
 
+`CertGetCertificateContextProperty` suporta no subconjunto as propriedades
+SHA-1 e friendly name. Ele fotografa o contexto e o DER, lê e atualiza
+`pcbData` por cópias protegidas e publica bytes ou UTF-16 somente depois de
+verificar a capacidade; `ERROR_MORE_DATA` mantém o tamanho requerido.
+
 `WinVerifyTrust`, `WTHelperProvDataFromStateData`,
 `WTHelperGetProvSignerFromChain` e `WTHelperGetProvCertFromChain` implementam
 o contrato de blob/cadeia explícita usado por `tl_trust`. `WTD_CHOICE_FILE`,

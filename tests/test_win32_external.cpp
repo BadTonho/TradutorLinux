@@ -400,6 +400,33 @@ TEST(Crypt32Test, CertContextAndStoreManagement) {
     EXPECT_EQ(tl_CertGetCertificateContextProperty(dup, kCertSha1HashPropId, full_hash, &hash_size), 1U);
     EXPECT_EQ(hash_size, 20U);
 
+    std::uint16_t friendly_name[32]{};
+    std::uint32_t friendly_size = sizeof(friendly_name);
+    EXPECT_EQ(tl_CertGetCertificateContextProperty(dup, kCertFriendlyNamePropId, friendly_name,
+                                                   &friendly_size),
+              1U);
+    EXPECT_EQ(friendly_size, 22U);
+    EXPECT_EQ(std::u16string(reinterpret_cast<const char16_t*>(friendly_name)), u"TL Fixture");
+
+    hash_size = 20U;
+    EXPECT_EQ(tl_CertGetCertificateContextProperty(dup, kCertSha1HashPropId,
+                                                   static_cast<void*>(invalid), &hash_size),
+              0U);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_CertGetCertificateContextProperty(dup, kCertSha1HashPropId, full_hash,
+                                                   static_cast<std::uint32_t*>(invalid)),
+              0U);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_CertGetCertificateContextProperty(
+                  static_cast<const GuestCertContext*>(invalid), kCertSha1HashPropId, nullptr,
+                  &hash_size),
+              0U);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_CertGetCertificateContextProperty(&invalid_blob, kCertSha1HashPropId, nullptr,
+                                                   &hash_size),
+              0U);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+
     // Free context
     EXPECT_EQ(tl_CertFreeCertificateContext(nullptr), 1U);
     EXPECT_EQ(tl_CertFreeCertificateContext(dup), 1U);

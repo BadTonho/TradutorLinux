@@ -228,6 +228,12 @@ subconjunto e criar o handle. Os identificadores especiais de provedor não são
 tratados como strings; nomes ANSI/UTF-16 inválidos são rejeitados sem acesso
 direto à memória convidada.
 
+O sublote `CRYPT32/property-output` fotografa `CERT_CONTEXT`, lê a capacidade
+de `CertGetCertificateContextProperty` com `read_guest_memory` e publica hash
+SHA-1 ou friendly name com `write_guest_memory`. A capacidade requerida e o
+caso `ERROR_MORE_DATA` também são publicados pela fronteira protegida; contexto,
+capacidade e buffers inacessíveis falham de modo controlado.
+
 ## Limites residuais
 
 `validate_mapped_range` permanece deliberadamente como predicado advisory:

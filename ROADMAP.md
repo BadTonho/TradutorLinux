@@ -602,6 +602,13 @@ ANSI/UTF-16, preservando os identificadores especiais dos provedores de memória
 e sistema. A mesma regressão de gestão de contexto e as quatro integrações PE
 de `tl_certcontext` passaram novamente no preset `validation-sanitize`.
 
+O sublote `CRYPT32/property-output` migrou `CertGetCertificateContextProperty`
+para fotografia protegida de `CERT_CONTEXT`, leitura protegida de `data_size` e
+publicação protegida das propriedades SHA-1 e friendly name. As respostas de
+capacidade e `ERROR_MORE_DATA` permanecem preservadas; a regressão
+`Crypt32Test.CertContextAndStoreManagement` e as quatro integrações PE de
+`tl_certcontext` passaram no preset `validation-sanitize`.
+
 ## Fora desta rodada
 
 Não entram neste roadmap, por enquanto:

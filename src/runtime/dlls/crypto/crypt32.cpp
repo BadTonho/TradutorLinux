@@ -964,37 +964,46 @@ TL_CRYPT32_MSABI const GuestCertContext* tl_CertFindCertificateInStore(
 TL_CRYPT32_MSABI std::uint32_t tl_CertGetCertificateContextProperty(
     const GuestCertContext* const cert_context, const std::uint32_t prop_id, void* const data,
     std::uint32_t* const data_size) noexcept {
-    if (cert_context == nullptr || data_size == nullptr ||
-        !runtime::validate_mapped_range(cert_context, sizeof(*cert_context), false) ||
-        !runtime::validate_mapped_range(data_size, sizeof(*data_size), true)) {
+    GuestCertContext context{};
+    std::vector<std::uint8_t> encoded_storage;
+    if (!snapshot_cert_context(cert_context, context, encoded_storage) || data_size == nullptr) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0U;
     }
-    if (cert_context->encoded == nullptr || cert_context->encoded_size == 0U ||
-        cert_context->encoded_size > kMaxCertificateSize ||
-        !runtime::validate_mapped_range(cert_context->encoded, cert_context->encoded_size, false)) {
+    std::uint32_t data_capacity = 0;
+    if (runtime::read_guest_memory(data_size, &data_capacity, sizeof(data_capacity)).status !=
+        runtime::GuestMemoryAccessStatus::Success) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0U;
     }
 
     if (prop_id == kCertSha1HashPropId) {
-        const auto hash = compute_sha1(Bytes(cert_context->encoded, cert_context->encoded_size));
+        const auto hash = compute_sha1(Bytes(context.encoded, context.encoded_size));
         if (data == nullptr) {
-            *data_size = 20U;
+            if (!write_guest_value(data_size, static_cast<std::uint32_t>(20U))) {
+                set_last_error(abi::kErrorInvalidParameter);
+                return 0U;
+            }
             set_last_error(abi::kErrorSuccess);
             return 1U;
         }
-        if (*data_size < 20U) {
-            *data_size = 20U;
+        if (data_capacity < 20U) {
+            if (!write_guest_value(data_size, static_cast<std::uint32_t>(20U))) {
+                set_last_error(abi::kErrorInvalidParameter);
+                return 0U;
+            }
             set_last_error(kErrorMoreData);
             return 0U;
         }
-        if (!runtime::validate_mapped_range(data, 20U, true)) {
+        if (runtime::write_guest_memory(data, hash.data(), hash.size()).status !=
+            runtime::GuestMemoryAccessStatus::Success) {
             set_last_error(abi::kErrorInvalidParameter);
             return 0U;
         }
-        std::copy(hash.begin(), hash.end(), static_cast<std::uint8_t*>(data));
-        *data_size = 20U;
+        if (!write_guest_value(data_size, static_cast<std::uint32_t>(20U))) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0U;
+        }
         set_last_error(abi::kErrorSuccess);
         return 1U;
     }
@@ -1002,7 +1011,7 @@ TL_CRYPT32_MSABI std::uint32_t tl_CertGetCertificateContextProperty(
     if (prop_id == kCertFriendlyNamePropId) {
         Bytes issuer{};
         Bytes subject{};
-        if (!extract_certificate_names(Bytes(cert_context->encoded, cert_context->encoded_size),
+        if (!extract_certificate_names(Bytes(context.encoded, context.encoded_size),
                                       issuer, subject)) {
             set_last_error(kCryptENotFound);
             return 0U;
@@ -1020,22 +1029,29 @@ TL_CRYPT32_MSABI std::uint32_t tl_CertGetCertificateContextProperty(
         }
         const std::size_t required = (selected.size() + 1U) * sizeof(std::uint16_t);
         if (data == nullptr) {
-            *data_size = static_cast<std::uint32_t>(required);
+            if (!write_guest_value(data_size, static_cast<std::uint32_t>(required))) {
+                set_last_error(abi::kErrorInvalidParameter);
+                return 0U;
+            }
             set_last_error(abi::kErrorSuccess);
             return 1U;
         }
-        if (static_cast<std::size_t>(*data_size) < required) {
-            *data_size = static_cast<std::uint32_t>(required);
+        if (static_cast<std::size_t>(data_capacity) < required) {
+            if (!write_guest_value(data_size, static_cast<std::uint32_t>(required))) {
+                set_last_error(abi::kErrorInvalidParameter);
+                return 0U;
+            }
             set_last_error(kErrorMoreData);
             return 0U;
         }
-        if (!runtime::validate_mapped_range(data, required, true)) {
+        if (!write_guest_wstring(static_cast<std::uint16_t*>(data), selected)) {
             set_last_error(abi::kErrorInvalidParameter);
             return 0U;
         }
-        std::copy(selected.begin(), selected.end(), static_cast<std::uint16_t*>(data));
-        static_cast<std::uint16_t*>(data)[selected.size()] = 0;
-        *data_size = static_cast<std::uint32_t>(required);
+        if (!write_guest_value(data_size, static_cast<std::uint32_t>(required))) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0U;
+        }
         set_last_error(abi::kErrorSuccess);
         return 1U;
     }
