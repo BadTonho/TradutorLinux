@@ -1474,6 +1474,8 @@ TEST(Win32FileTest, ProtectedIoOutputsRejectUnmappedPointers) {
                              0, nullptr, abi::kOpenExisting, 0, nullptr),
               invalid_handle);
     EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_OpenFile(reinterpret_cast<const char*>(invalid), nullptr, 0), -1);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
 
     EXPECT_EQ(tl_WriteFile(handle, buffer, sizeof(buffer),
                            static_cast<std::uint32_t*>(invalid), nullptr), 0);

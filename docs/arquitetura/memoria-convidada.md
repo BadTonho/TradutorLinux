@@ -70,6 +70,12 @@ para buffers de `ReadConsoleW`/`WriteConsoleW` e para a saída de
 a mensagem para memória host antes de gerar o trace, como já fazia a variante
 Wide.
 
+O sublote `runtime/tls-loader` trata o template TLS como imagem convidada já
+validada pelo loader, mas ainda faz a transferência efetiva por
+`read_guest_memory`; o índice TLS é publicado por `write_guest_memory`. A API
+legada `OpenFile` não mantém uma validação de mapa própria: delega o nome à
+fronteira protegida de `CreateFileA`.
+
 O lote `SHELL32` segue esse contrato para suas estruturas de entrada e strings:
 `NOTIFYICONDATA`, `GUID`, `SHELLEXECUTEINFO`, `SHFILEOPSTRUCT`,
 `CommandLineToArgvW` e as entradas de `ShellExecuteA/W` são primeiro copiados

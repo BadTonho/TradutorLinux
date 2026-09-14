@@ -189,6 +189,12 @@ leituras/escritas de console e migrou `OutputDebugStringA` para uma cópia de
 string protegida. As transferências efetivas continuam usando as primitivas
 de memória, e `Win32ConsoleTest.*`/`Win32ProcessConsoleTest.*` passaram.
 
+O sublote `runtime/tls-loader` migrou a inicialização do template TLS para
+`read_guest_memory` e a publicação do índice TLS para `write_guest_memory`;
+`OpenFile` passou a delegar a validação de nome diretamente a `CreateFileA`.
+Os testes de TLS e de I/O protegido continuam passando, sem usar a fotografia
+de mapas como garantia de acesso.
+
 O lote de caminhos migrou as saídas de diretório, módulo, temporários,
 capacidade de disco, nomes completos/finais e `file_part`, além das leituras de
 strings A/W usadas por essas rotas. As coberturas existentes e a regressão

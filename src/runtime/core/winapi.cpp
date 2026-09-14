@@ -1070,8 +1070,11 @@ void initialize_thread_tls(void* teb_ptr) noexcept {
         const std::size_t template_size = static_cast<std::size_t>(template_size_raw);
         const auto* src = reinterpret_cast<const std::uint8_t*>(g_guest_tls_start_raw);
         const std::size_t copy_size = std::min(template_size, teb->tls_module0_data.size());
-        if (copy_size > 0 && mapped_guest_range(src, copy_size, false)) {
-            std::memcpy(teb->tls_module0_data.data(), src, copy_size);
+        if (copy_size > 0) {
+            if (runtime::read_guest_memory(src, teb->tls_module0_data.data(), copy_size).status !=
+                runtime::GuestMemoryAccessStatus::Success) {
+                return;
+            }
         }
     }
 }
@@ -1193,9 +1196,7 @@ GuestExecutionResult execute_guest_entry(const std::uintptr_t entry_point,
 
         // Inicializa template TLS e índice
         initialize_thread_tls(g_current_teb);
-        if (g_guest_tls_index_addr != 0 &&
-            mapped_guest_range(reinterpret_cast<const void*>(g_guest_tls_index_addr),
-                               sizeof(std::uint32_t), true)) {
+        if (g_guest_tls_index_addr != 0) {
             static_cast<void>(write_guest_value(
                 reinterpret_cast<void*>(static_cast<std::uintptr_t>(g_guest_tls_index_addr)),
                 std::uint32_t{0}));
@@ -1396,10 +1397,6 @@ TL_MSABI int tl_WriteProcessMemory(void* const process, void* const base, const 
 }
 TL_MSABI int tl_OpenFile(const char* const file, void* const of_struct, const std::uint32_t style) noexcept {
     (void)of_struct; (void)style;
-    if (file == nullptr || !mapped_guest_cstring(file)) {
-        set_last_error(abi::kErrorInvalidParameter);
-        return -1;
-    }
     void* handle = tl_CreateFileA(file, abi::kGenericRead | abi::kGenericWrite, 0, nullptr, abi::kOpenExisting, 0, nullptr);
     if (handle == reinterpret_cast<void*>(~static_cast<std::uintptr_t>(0)) || handle == nullptr) {
         return -1;
