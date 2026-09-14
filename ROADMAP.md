@@ -440,6 +440,11 @@ display e `wsprintfW` para snapshots e publicações protegidas. A regressão
 exercita ponteiros inválidos em entradas, retângulos e buffers de saída, e os
 smokes existentes de GUI continuam passando.
 
+O lote `USER32/window` migrou saídas de geometria, texto e nome de classe,
+`FindWindowA/W`, `GetClassInfoW`, identificação de processo, transformação de
+pontos e saídas de região para snapshots e cópias protegidas. A regressão cobre
+buffers inválidos de janela, texto, classe, pontos e retângulos.
+
 ## Fora desta rodada
 
 Não entram neste roadmap, por enquanto:

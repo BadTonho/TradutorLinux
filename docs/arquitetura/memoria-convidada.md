@@ -60,6 +60,11 @@ O lote `USER32/misc` aplica o mesmo contrato a `PAINTSTRUCT`, `RECT`,
 display e `wsprintfW`. Os cálculos são feitos em cópias host e somente os
 resultados finais são publicados pela primitiva protegida.
 
+O lote `USER32/window` aplica o contrato a saídas de geometria, texto e
+classe, a `FindWindowA/W`, `GetClassInfoW`, `MapWindowPoints` e às saídas de
+região. Os nomes são copiados antes da busca e as estruturas/arrays são
+transformados em objetos host antes da publicação.
+
 ## Limites residuais
 
 `validate_mapped_range` permanece deliberadamente como predicado advisory:

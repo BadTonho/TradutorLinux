@@ -662,20 +662,22 @@ TL_MSABI int tl_DestroyWindow(const void* const window) noexcept {
 
 TL_MSABI int tl_GetClientRect(const void* window, void* rect) noexcept {
     WindowSlot* slot = find_window_slot(window);
-    if (slot == nullptr || rect == nullptr || !mapped_guest_range(rect, sizeof(abi::GuestRect), true)) {
+    if (slot == nullptr || rect == nullptr) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
-    auto* out = static_cast<abi::GuestRect*>(rect);
-    *out = {0, 0, slot->width, slot->height};
+    const abi::GuestRect output{0, 0, slot->width, slot->height};
+    if (!write_guest_value(rect, output)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
     set_last_error(abi::kErrorSuccess);
     return 1;
 }
 
 TL_MSABI int tl_GetWindowRect(const void* window, void* rect) noexcept {
     const WindowSlot* slot = find_window_slot(window);
-    if (slot == nullptr || rect == nullptr ||
-        !mapped_guest_range(rect, sizeof(abi::GuestRect), true)) {
+    if (slot == nullptr || rect == nullptr) {
         set_last_error(slot == nullptr ? abi::kErrorInvalidHandle : abi::kErrorInvalidParameter);
         return 0;
     }
@@ -685,8 +687,11 @@ TL_MSABI int tl_GetWindowRect(const void* window, void* rect) noexcept {
         left += parent->x;
         top += parent->y;
     }
-    auto* const output = static_cast<abi::GuestRect*>(rect);
-    *output = {left, top, left + slot->width, top + slot->height};
+    const abi::GuestRect output{left, top, left + slot->width, top + slot->height};
+    if (!write_guest_value(rect, output)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
     set_last_error(abi::kErrorSuccess);
     return 1;
 }
@@ -719,11 +724,12 @@ TL_MSABI std::intptr_t tl_SetWindowPos(const void* window, const void* insert_af
 
 TL_MSABI int tl_SetWindowTextA(const void* window, const char* text) noexcept {
     WindowSlot* slot = find_window_slot(window);
-    if (slot == nullptr || text == nullptr || !mapped_guest_cstring(text)) {
+    std::string text_copy;
+    if (slot == nullptr || text == nullptr || !runtime::copy_guest_cstring(text, 65535U, text_copy)) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
-    slot->text = text;
+    slot->text = text_copy;
     if (slot->parent != nullptr) {
         request_dialog_render(*slot->parent);
     }
@@ -733,44 +739,51 @@ TL_MSABI int tl_SetWindowTextA(const void* window, const char* text) noexcept {
 
 TL_MSABI int tl_GetWindowTextA(const void* window, char* text, int capacity) noexcept {
     WindowSlot* slot = find_window_slot(window);
-    if (slot == nullptr || text == nullptr || capacity <= 0 ||
-        !mapped_guest_range(text, static_cast<std::size_t>(capacity), true)) {
+    if (slot == nullptr || text == nullptr || capacity <= 0) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
-    runtime_gui::copy_control_text(*slot, text, capacity);
+    const std::size_t count = std::min<std::size_t>(slot->text.size(),
+                                                    static_cast<std::size_t>(capacity - 1));
+    std::vector<char> output(count + 1U, '\0');
+    std::copy_n(slot->text.data(), count, output.data());
+    if (runtime::write_guest_memory(text, output.data(), output.size()).status !=
+        runtime::GuestMemoryAccessStatus::Success) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
     set_last_error(abi::kErrorSuccess);
-    return static_cast<int>(std::strlen(text));
+    return static_cast<int>(count);
 }
 
 TL_MSABI int tl_SetWindowTextW(const void* window, const std::uint16_t* text) noexcept {
-    if (text == nullptr || !mapped_guest_wstring(text)) {
+    std::u16string text_copy;
+    if (text == nullptr || !runtime::copy_guest_wstring(text, 65535U, text_copy)) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
-    const std::string utf8 = util::wide_to_utf8(text);
+    const std::string utf8 = util::wide_to_utf8(
+        reinterpret_cast<const std::uint16_t*>(text_copy.data()), text_copy.size());
     return tl_SetWindowTextA(window, utf8.c_str());
 }
 
 TL_MSABI int tl_GetWindowTextW(const void* window, std::uint16_t* text, int capacity) noexcept {
     WindowSlot* slot = find_window_slot(window);
-    if (slot == nullptr || text == nullptr || capacity <= 0 ||
-        !mapped_guest_range(text, static_cast<std::size_t>(capacity) * sizeof(std::uint16_t), true)) {
+    if (slot == nullptr || text == nullptr || capacity <= 0) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
     std::string utf8;
-    {
-        // copy_control_text já cuida de truncamento; pegamos utf8 do slot
-        char tmp[512] = {};
-        runtime_gui::copy_control_text(*slot, tmp, sizeof(tmp));
-        utf8 = tmp;
-        if (utf8.empty()) utf8 = slot->text;
-    }
+    utf8 = slot->text;
     const std::u16string wide = util::utf8_to_wide(utf8);
     const std::size_t to_copy = std::min<std::size_t>(wide.size(), static_cast<std::size_t>(capacity - 1));
-    for (std::size_t i = 0; i < to_copy; ++i) text[i] = wide[i];
-    text[to_copy] = 0;
+    std::vector<std::uint16_t> output(to_copy + 1U, 0);
+    std::copy_n(wide.data(), to_copy, output.data());
+    if (runtime::write_guest_memory(text, output.data(), output.size() * sizeof(output[0])).status !=
+        runtime::GuestMemoryAccessStatus::Success) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
     set_last_error(abi::kErrorSuccess);
     return static_cast<int>(to_copy);
 }
@@ -835,13 +848,19 @@ TL_MSABI const void* tl_FindWindowA(const char* class_name, const char* window_n
     if (!user32_gui_thread_allowed("FindWindowA")) {
         return nullptr;
     }
+    std::string class_copy;
+    std::string window_copy;
+    if ((class_name != nullptr && !runtime::copy_guest_cstring(class_name, 4096U, class_copy)) ||
+        (window_name != nullptr && !runtime::copy_guest_cstring(window_name, 4096U, window_copy))) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return nullptr;
+    }
     for (const WindowSlot& slot : g_windows) {
         if (!slot.used || slot.native == nullptr ||
-            (class_name != nullptr && !util::ascii_iequals(slot.class_name, class_name))) {
+            (class_name != nullptr && !util::ascii_iequals(slot.class_name, class_copy))) {
             continue;
         }
-        if (window_name == nullptr || window_name[0] == '\0' ||
-            slot.window_title == window_name) {
+        if (window_name == nullptr || window_copy.empty() || slot.window_title == window_copy) {
             return &slot;
         }
     }
@@ -856,22 +875,26 @@ TL_MSABI const void* tl_FindWindowW(const std::uint16_t* class_name, const std::
     const char* class_cstr = nullptr;
     const char* window_cstr = nullptr;
     if (class_name != nullptr) {
-        if (!mapped_guest_wstring(class_name)) {
+        std::u16string class_copy;
+        if (!runtime::copy_guest_wstring(class_name, 4096U, class_copy)) {
             set_last_error(abi::kErrorInvalidParameter);
             return nullptr;
         }
-        if (class_name[0] != 0) {
-            utf8_class = util::wide_to_utf8(class_name);
+        if (!class_copy.empty()) {
+            utf8_class = util::wide_to_utf8(
+                reinterpret_cast<const std::uint16_t*>(class_copy.data()), class_copy.size());
             class_cstr = utf8_class.c_str();
         }
     }
     if (window_name != nullptr) {
-        if (!mapped_guest_wstring(window_name)) {
+        std::u16string window_copy;
+        if (!runtime::copy_guest_wstring(window_name, 4096U, window_copy)) {
             set_last_error(abi::kErrorInvalidParameter);
             return nullptr;
         }
-        if (window_name[0] != 0) {
-            utf8_window = util::wide_to_utf8(window_name);
+        if (!window_copy.empty()) {
+            utf8_window = util::wide_to_utf8(
+                reinterpret_cast<const std::uint16_t*>(window_copy.data()), window_copy.size());
             window_cstr = utf8_window.c_str();
         }
     }
@@ -1129,15 +1152,19 @@ TL_MSABI void* tl_GetWindow(const void* const window, const std::uint32_t cmd) n
 TL_MSABI int tl_GetClassNameA(const void* const window, char* const class_name,
                               const int max_count) noexcept {
     const WindowSlot* const slot = find_window_slot(window);
-    if (slot == nullptr || class_name == nullptr || max_count <= 0 ||
-        !mapped_guest_range(class_name, static_cast<std::size_t>(max_count), true)) {
+    if (slot == nullptr || class_name == nullptr || max_count <= 0) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
     const std::string& name = slot->class_name;
     const std::size_t len = std::min(name.size(), static_cast<std::size_t>(max_count - 1));
-    std::copy_n(name.data(), len, class_name);
-    class_name[len] = '\0';
+    std::vector<char> output(len + 1U, '\0');
+    std::copy_n(name.data(), len, output.data());
+    if (runtime::write_guest_memory(class_name, output.data(), output.size()).status !=
+        runtime::GuestMemoryAccessStatus::Success) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
     set_last_error(abi::kErrorSuccess);
     return static_cast<int>(len);
 }
@@ -1145,15 +1172,19 @@ TL_MSABI int tl_GetClassNameA(const void* const window, char* const class_name,
 TL_MSABI int tl_GetClassNameW(const void* const window, std::uint16_t* const class_name,
                               const int max_count) noexcept {
     const WindowSlot* const slot = find_window_slot(window);
-    if (slot == nullptr || class_name == nullptr || max_count <= 0 ||
-        !mapped_guest_range(class_name, static_cast<std::size_t>(max_count) * sizeof(std::uint16_t), true)) {
+    if (slot == nullptr || class_name == nullptr || max_count <= 0) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
     const std::u16string wide = util::utf8_to_wide(slot->class_name);
     const std::size_t len = std::min(wide.size(), static_cast<std::size_t>(max_count - 1));
-    std::copy_n(wide.data(), len, class_name);
-    class_name[len] = 0;
+    std::vector<std::uint16_t> output(len + 1U, 0);
+    std::copy_n(wide.data(), len, output.data());
+    if (runtime::write_guest_memory(class_name, output.data(), output.size() * sizeof(output[0])).status !=
+        runtime::GuestMemoryAccessStatus::Success) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
     set_last_error(abi::kErrorSuccess);
     return static_cast<int>(len);
 }
@@ -1161,8 +1192,11 @@ TL_MSABI int tl_GetClassNameW(const void* const window, std::uint16_t* const cla
 TL_MSABI std::uint32_t tl_GetWindowThreadProcessId(const void* const window,
                                                    std::uint32_t* const process_id) noexcept {
     (void)window;
-    if (process_id != nullptr && mapped_guest_range(process_id, sizeof(*process_id), true)) {
-        *process_id = static_cast<std::uint32_t>(getpid());
+    if (process_id != nullptr) {
+        const std::uint32_t process = static_cast<std::uint32_t>(getpid());
+        if (!write_guest_value(process_id, process)) {
+            set_last_error(abi::kErrorInvalidParameter);
+        }
     }
     return g_current_thread_id != 0 ? g_current_thread_id : kMainThreadId;
 }
@@ -1199,7 +1233,7 @@ TL_MSABI int tl_RedrawWindow(const void* const window, const void* const update_
 TL_MSABI int tl_MapWindowPoints(const void* const from_window, const void* const to_window,
                                 void* const points, const std::uint32_t count) noexcept {
     if (points == nullptr || count == 0 ||
-        !mapped_guest_range(points, sizeof(GuestPoint) * count, true)) {
+        count > std::numeric_limits<std::size_t>::max() / sizeof(GuestPoint)) {
         return 0;
     }
     int dx = 0;
@@ -1216,10 +1250,18 @@ TL_MSABI int tl_MapWindowPoints(const void* const from_window, const void* const
             dy -= to_slot->y;
         }
     }
-    auto* const pts = static_cast<GuestPoint*>(points);
+    std::vector<GuestPoint> pts(count);
+    if (runtime::read_guest_memory(points, pts.data(), pts.size() * sizeof(GuestPoint)).status !=
+        runtime::GuestMemoryAccessStatus::Success) {
+        return 0;
+    }
     for (std::uint32_t i = 0; i < count; ++i) {
         pts[i].x += dx;
         pts[i].y += dy;
+    }
+    if (runtime::write_guest_memory(points, pts.data(), pts.size() * sizeof(GuestPoint)).status !=
+        runtime::GuestMemoryAccessStatus::Success) {
+        return 0;
     }
     return (dy << 16) | (dx & 0xFFFF);
 }
@@ -1281,12 +1323,14 @@ TL_MSABI int tl_IsZoomed(void* const hwnd) noexcept {
 TL_MSABI int tl_GetClassInfoW(void* const instance, const std::uint16_t* const class_name,
                               void* const wnd_class) noexcept {
     (void)instance;
+    std::u16string class_copy;
     if (!user32_gui_thread_allowed("GetClassInfoW") || class_name == nullptr ||
-        !mapped_guest_wstring(class_name)) {
+        !runtime::copy_guest_wstring(class_name, 4096U, class_copy)) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
-    const std::string utf8_class = util::wide_to_utf8(class_name);
+    const std::string utf8_class = util::wide_to_utf8(
+        reinterpret_cast<const std::uint16_t*>(class_copy.data()), class_copy.size());
     ClassSlot* const cls = find_class_slot(utf8_class.c_str());
     if (cls == nullptr) {
         set_last_error(abi::kErrorClassDoesNotExist);
@@ -1299,15 +1343,18 @@ TL_MSABI int tl_GetClassInfoW(void* const instance, const std::uint16_t* const c
         runtime_trace("GetClassInfoW", fields, 4);
         return 0;
     }
-    if (wnd_class == nullptr || !mapped_guest_range(wnd_class, sizeof(abi::GuestWndClassW), true)) {
+    if (wnd_class == nullptr) {
         set_last_error(abi::kErrorInvalidParameter);
         trace_guest_failure("GetClassInfoW", "wnd-class", "estrutura WNDCLASSW inválida");
         return 0;
     }
-    auto* const output = static_cast<abi::GuestWndClassW*>(wnd_class);
-    *output = {};
-    output->window_proc = cls->wndproc;
-    output->class_name = class_name;
+    abi::GuestWndClassW output{};
+    output.window_proc = cls->wndproc;
+    output.class_name = class_name;
+    if (!write_guest_value(wnd_class, output)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
     set_last_error(abi::kErrorSuccess);
     const std::array<diagnostics::TraceField, 4> fields{
         diagnostics::TraceField{"symbol", "GetClassInfoW"},
@@ -1341,9 +1388,7 @@ TL_MSABI int tl_AdjustWindowRectExForDpi(void* const rect, const std::uint32_t s
     (void)menu;
     (void)ex_style;
     (void)dpi;
-    if (rect != nullptr && mapped_guest_range(rect, 16, true)) {
-        // Adjust borders if needed
-    }
+    (void)rect;
     set_last_error(abi::kErrorSuccess);
     return 1;
 }
@@ -1365,11 +1410,12 @@ TL_MSABI int tl_GetWindowRgn(void* const hwnd, void* const rgn) noexcept {
 
 TL_MSABI int tl_GetWindowRgnBox(void* const hwnd, void* const rect) noexcept {
     (void)hwnd;
-    if (rect != nullptr && mapped_guest_range(rect, 16, true)) {
-        *reinterpret_cast<std::int32_t*>(static_cast<char*>(rect) + 0) = 0;
-        *reinterpret_cast<std::int32_t*>(static_cast<char*>(rect) + 4) = 0;
-        *reinterpret_cast<std::int32_t*>(static_cast<char*>(rect) + 8) = 1024;
-        *reinterpret_cast<std::int32_t*>(static_cast<char*>(rect) + 12) = 768;
+    if (rect != nullptr) {
+        const abi::GuestRect output{0, 0, 1024, 768};
+        if (!write_guest_value(rect, output)) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
+        }
     }
     set_last_error(abi::kErrorSuccess);
     return 2; // SIMPLEREGION
@@ -1403,11 +1449,12 @@ TL_MSABI int tl_ScrollWindowEx(void* const hwnd, const int dx, const int dy, con
     (void)clip_rect;
     (void)update_rgn;
     (void)flags;
-    if (update_rect != nullptr && mapped_guest_range(update_rect, 16, true)) {
-        *reinterpret_cast<std::int32_t*>(static_cast<char*>(update_rect) + 0) = 0;
-        *reinterpret_cast<std::int32_t*>(static_cast<char*>(update_rect) + 4) = 0;
-        *reinterpret_cast<std::int32_t*>(static_cast<char*>(update_rect) + 8) = 1024;
-        *reinterpret_cast<std::int32_t*>(static_cast<char*>(update_rect) + 12) = 768;
+    if (update_rect != nullptr) {
+        const abi::GuestRect output{0, 0, 1024, 768};
+        if (!write_guest_value(update_rect, output)) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
+        }
     }
     set_last_error(abi::kErrorSuccess);
     return 2; // SIMPLEREGION

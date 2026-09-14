@@ -244,6 +244,31 @@ TEST(Win32GuiTest, InvalidateRectQueuesPaintForLogicalWindow) {
     g_windows = {};
 }
 
+TEST(Win32GuiTest, ProtectedWindowInputsAndOutputsRejectUnmappedPointers) {
+    g_windows = {};
+    WindowSlot& window = g_windows[0];
+    window.used = true;
+    window.class_name = "protected-window";
+    window.text = "caption";
+    auto* const invalid = reinterpret_cast<void*>(static_cast<std::uintptr_t>(0x1000U));
+
+    EXPECT_EQ(tl_GetClientRect(&window, invalid), 0);
+    EXPECT_EQ(tl_GetWindowRect(&window, invalid), 0);
+    EXPECT_EQ(tl_GetWindowTextA(&window, static_cast<char*>(invalid), 16), 0);
+    EXPECT_EQ(tl_GetWindowTextW(&window, static_cast<std::uint16_t*>(invalid), 16), 0);
+    EXPECT_EQ(tl_GetClassNameA(&window, static_cast<char*>(invalid), 16), 0);
+    EXPECT_EQ(tl_GetClassNameW(&window, static_cast<std::uint16_t*>(invalid), 16), 0);
+    EXPECT_EQ(tl_MapWindowPoints(nullptr, nullptr, invalid, 1), 0);
+    EXPECT_EQ(tl_GetWindowRgnBox(&window, invalid), 0);
+    EXPECT_EQ(tl_ScrollWindowEx(&window, 0, 0, nullptr, nullptr, nullptr, invalid, 0), 0);
+    EXPECT_EQ(tl_SetWindowTextA(&window, static_cast<const char*>(invalid)), 0);
+    EXPECT_EQ(tl_SetWindowTextW(&window, static_cast<const std::uint16_t*>(invalid)), 0);
+    EXPECT_EQ(tl_FindWindowA(static_cast<const char*>(invalid), nullptr), nullptr);
+    EXPECT_EQ(tl_FindWindowW(static_cast<const std::uint16_t*>(invalid), nullptr), nullptr);
+
+    g_windows = {};
+}
+
 TEST(Win32GuiTest, RejectsStatefulGuiCallsFromNonPrimaryGuestThread) {
     void* worker_menu = nullptr;
     std::uint32_t worker_menu_error = abi::kErrorSuccess;
