@@ -740,7 +740,9 @@ TL_CRYPT32_MSABI void* tl_CertOpenStore(
     const std::uintptr_t provider = reinterpret_cast<std::uintptr_t>(store_provider);
     if (provider != kCertStoreProvMemory && provider != kCertStoreProvSystemA &&
         provider != kCertStoreProvSystemW) {
-        if (provider < 4096U || !runtime::validate_mapped_cstring(store_provider)) {
+        std::string provider_name;
+        if (provider < 4096U ||
+            !runtime::copy_guest_cstring(store_provider, 65535U, provider_name)) {
             set_last_error(abi::kErrorInvalidParameter);
             return nullptr;
         }
@@ -748,26 +750,35 @@ TL_CRYPT32_MSABI void* tl_CertOpenStore(
         return nullptr;
     }
     if (provider == kCertStoreProvSystemA) {
-        if (para == nullptr || !runtime::validate_mapped_cstring(static_cast<const char*>(para))) {
+        std::string store_name;
+        if (para == nullptr ||
+            !runtime::copy_guest_cstring(static_cast<const char*>(para), 65535U, store_name)) {
             set_last_error(abi::kErrorInvalidParameter);
             return nullptr;
         }
     } else if (provider == kCertStoreProvSystemW) {
+        std::u16string store_name;
         if (para == nullptr ||
-            !runtime::validate_mapped_wstring(static_cast<const std::uint16_t*>(para))) {
+            !runtime::copy_guest_wstring(static_cast<const std::uint16_t*>(para), 65535U,
+                                         store_name)) {
             set_last_error(abi::kErrorInvalidParameter);
             return nullptr;
         }
     }
 
     std::lock_guard<std::mutex> lock(g_crypto_mutex);
-    auto store = std::make_unique<TrackedStore>();
-    store->encoding_type = encoding_type;
-    store->flags = flags;
-    void* const handle = store.get();
-    g_tracked_stores.push_back(std::move(store));
-    set_last_error(abi::kErrorSuccess);
-    return handle;
+    try {
+        auto store = std::make_unique<TrackedStore>();
+        store->encoding_type = encoding_type;
+        store->flags = flags;
+        void* const handle = store.get();
+        g_tracked_stores.push_back(std::move(store));
+        set_last_error(abi::kErrorSuccess);
+        return handle;
+    } catch (...) {
+        set_last_error(abi::kErrorNotEnoughMemory);
+        return nullptr;
+    }
 }
 
 TL_CRYPT32_MSABI std::uint32_t tl_CertCloseStore(

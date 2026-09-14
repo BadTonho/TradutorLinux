@@ -409,6 +409,20 @@ TEST(Crypt32Test, CertContextAndStoreManagement) {
     EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
     EXPECT_EQ(tl_CertOpenStore("TL_UNKNOWN_STORE_PROVIDER", 0, nullptr, 0, nullptr), nullptr);
     EXPECT_EQ(tl_GetLastError(), abi::kErrorNotSupported);
+    auto* const invalid_store_pointer =
+        reinterpret_cast<void*>(static_cast<std::uintptr_t>(0x1000U));
+    EXPECT_EQ(tl_CertOpenStore(static_cast<const char*>(invalid_store_pointer), 0, nullptr, 0,
+                               nullptr),
+              nullptr);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_CertOpenStore(reinterpret_cast<const char*>(kCertStoreProvSystemA), 0, nullptr,
+                               0, invalid_store_pointer),
+              nullptr);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_CertOpenStore(reinterpret_cast<const char*>(kCertStoreProvSystemW), 0, nullptr,
+                               0, invalid_store_pointer),
+              nullptr);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
 
     void* mem_store = tl_CertOpenStore(reinterpret_cast<const char*>(kCertStoreProvMemory), 0,
                                        nullptr, 0, nullptr);

@@ -596,6 +596,12 @@ refcount internos do runtime. Contextos ou blobs inválidos falham sem leitura
 direta; `Crypt32Test.CertContextAndStoreManagement` e as quatro integrações PE
 de `tl_certcontext` passaram no preset `validation-sanitize`.
 
+O sublote `CRYPT32/store-input` migrou `CertOpenStore` e os wrappers
+`CertOpenSystemStoreA/W` para cópia protegida dos nomes de provedor e parâmetros
+ANSI/UTF-16, preservando os identificadores especiais dos provedores de memória
+e sistema. A mesma regressão de gestão de contexto e as quatro integrações PE
+de `tl_certcontext` passaram novamente no preset `validation-sanitize`.
+
 ## Fora desta rodada
 
 Não entram neste roadmap, por enquanto:

@@ -222,6 +222,12 @@ publicado é memória privada do runtime, e entradas convidadas inválidas são
 rejeitadas sem desreferenciação direta; `Crypt32Test.CertContextAndStoreManagement`
 e `tl_certcontext` cobrem o fluxo.
 
+O sublote `CRYPT32/store-input` copia os nomes de provedor de `CertOpenStore` e
+os parâmetros de `CertOpenSystemStoreA/W` para strings host antes de validar o
+subconjunto e criar o handle. Os identificadores especiais de provedor não são
+tratados como strings; nomes ANSI/UTF-16 inválidos são rejeitados sem acesso
+direto à memória convidada.
+
 ## Limites residuais
 
 `validate_mapped_range` permanece deliberadamente como predicado advisory:

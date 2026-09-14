@@ -596,6 +596,11 @@ contador interno e `CertFreeCertificateContext` libera essa cópia quando ele
 chega a zero. O contexto e o blob de entrada precisam ser acessíveis e usar o
 encoding X.509 suportado.
 
+`CertOpenStore` reconhece os identificadores de provedor de memória e sistema
+do subconjunto; provedores nomeados e parâmetros de `CertOpenSystemStoreA/W`
+são copiados para strings host antes da decisão. A loja criada permanece em
+memória do runtime, e nomes ANSI/UTF-16 inacessíveis produzem erro controlado.
+
 `WinVerifyTrust`, `WTHelperProvDataFromStateData`,
 `WTHelperGetProvSignerFromChain` e `WTHelperGetProvCertFromChain` implementam
 o contrato de blob/cadeia explícita usado por `tl_trust`. `WTD_CHOICE_FILE`,
