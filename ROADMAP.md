@@ -705,6 +705,46 @@ execução nativa (`6/6`) e instalação (`8/8`) passaram nos builds Rust ON e C
 OFF. O corpus recursivo ficou classificado como `24` sucessos, `3` rejeições
 estruturais e `37` formatos/arquiteturas não suportados.
 
+### R6 — Despachar catches C++ FH4 do Notepad++
+
+**Problema reproduzido:** o `notepad++.exe` real usa `__GSHandlerCheck_EH4` e
+metadados FH4 comprimidos. O runtime reconhecia apenas `FuncInfo` v3, ignorava
+os handlers FH4 e terminava no primeiro `0xE06D7363`, embora os imports e a
+inicialização anterior já estivessem validados.
+
+**Tarefas:**
+
+- [x] identificar FH4 sem confundir seus dados com `__C_specific_handler`;
+- [x] decodificar com limites `FuncInfo4`, `UnwindMap`, `TryBlockMap`, `IPMap`
+  e `HandlerMap` relativos à imagem ativa;
+- [x] selecionar `catch` tipado/catch-all e materializar captura por referência
+  com `PMD` validado, mantendo cópia arbitrária fora do subconjunto seguro;
+- [x] preparar o funclet convidado com retorno sintético alinhado e restaurar a
+  continuação FH4 sem deslocar o frame em 8 bytes;
+- [x] criar o smoke real headless do Notepad++ e atualizar a matriz/diagnóstico.
+
+**Aceitação:** um executável real com FH4 atravessa seleção, objeto de captura
+e `catchret` sem executar `__GSHandlerCheck_EH4` como handler v3; o caso não
+produz `guest-signal` nem `guest-timeout` e termina com `ExitProcess(0)` no
+smoke. Cleanups FH4, copy constructors arbitrários e GUI completa permanecem
+fora da aceitação desta etapa.
+
+**Evidência 2026-09-14:** `notepadpp_fh4_headless_smoke` passou no build C++
+OFF (`build/debug`), confirmando dois `fh4-catch-typed`, os retornos pelo
+trampoline e `ExitProcess(0)`. A suíte focada C++ EH/unwind passou com 23/23
+testes. O smoke GUI foi pulado porque o Xvfb do ambiente não conseguiu abrir
+`/tmp/.X11-unix`; isso é limitação ambiental, não resultado do convidado.
+
+### R7 — Executar cleanup FH4 com fixture genérica
+
+O próximo passo é deixar de apenas registrar `fh4-cleanup-not-supported` no
+unwind. Antes de ampliar o suporte do Notepad++ ou declarar fluxo GUI, esta
+etapa deve criar uma fixture PE32+ com `UnwindMap` FH4 e funclets de destruição,
+validar `ScopeIndex`/estado e executar somente ações com destino e pilha
+checados. A aceitação exige regressão de ciclo/limite, paridade Rust ON/C++ OFF
+e uma nova execução do Notepad++ sem regressão. Copy constructors complexos,
+rethrow e GUI interativa continuam dependentes de evidência própria.
+
 ## Fora desta rodada
 
 Não entram neste roadmap, por enquanto:

@@ -173,6 +173,27 @@ TEST_F(UnwindTest, DistinguishesCxxFuncInfoFromStaticSehHandlerData) {
     EXPECT_FALSE(runtime::is_supported_cxx_handler_data(image.data() + 0x120U));
 }
 
+TEST_F(UnwindTest, RecognizesCheckedFh4HandlerData) {
+    set_functions({});
+    constexpr std::uint32_t handler_data_rva = 0x100U;
+    constexpr std::uint32_t func_info_rva = 0x200U;
+    constexpr std::uint8_t fh4_header = 0x18U;  // unwind, try and IP maps
+    constexpr std::uint32_t gs_unwind_flags = 0x3U;
+    constexpr std::uint32_t map_rvas[] = {0x300U, 0x320U, 0x340U};
+
+    std::memcpy(image.data() + handler_data_rva, &func_info_rva, sizeof(func_info_rva));
+    std::memcpy(image.data() + handler_data_rva + sizeof(func_info_rva), &gs_unwind_flags,
+                sizeof(gs_unwind_flags));
+    std::memcpy(image.data() + func_info_rva, &fh4_header, sizeof(fh4_header));
+    std::memcpy(image.data() + func_info_rva + sizeof(fh4_header), map_rvas,
+                sizeof(map_rvas));
+
+    EXPECT_TRUE(runtime::is_supported_cxx_handler_data(image.data() + handler_data_rva));
+
+    image[func_info_rva] = std::byte{0x98U};  // reserved FH4 header bit
+    EXPECT_FALSE(runtime::is_supported_cxx_handler_data(image.data() + handler_data_rva));
+}
+
 TEST_F(UnwindTest, RestrictsUnwindReadsToActiveGuestStack) {
     std::array<std::uint64_t, 4> stack{};
     runtime::GuestTeb teb{};
@@ -227,7 +248,7 @@ TEST_F(UnwindTest, UnwindsStackAllocationAndPushedNonvolatileRegister) {
     EXPECT_EQ(context.rbx, 0xBEEFU);
     EXPECT_EQ(context.rip, 0xDEADBEEFU);
     EXPECT_EQ(context.rsp, reinterpret_cast<std::uintptr_t>(stack.data() + 7));
-    EXPECT_EQ(frame, reinterpret_cast<std::uintptr_t>(stack.data() + 6));
+    EXPECT_EQ(frame, reinterpret_cast<std::uintptr_t>(stack.data()));
 }
 
 TEST_F(UnwindTest, UnwindsV2BodyAndLeavesContextUntouchedInV2Epilog) {

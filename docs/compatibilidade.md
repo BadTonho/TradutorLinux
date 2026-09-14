@@ -57,6 +57,13 @@ exceções virtual-only e o GUP do Notepad++ é rejeitado com `5` quando a cadei
 timeout; isso é evidência de comportamento controlado, não uma promoção geral
 de compatibilidade.
 
+O teste `notepadpp_fh4_headless_smoke` acrescenta uma execução real do
+`Notepad++/notepad++.exe` sem display: o runtime seleciona os catches FH4
+tipados, não produz `guest-signal` nem `guest-timeout` e termina com
+`ExitProcess(0)`. Isso valida apenas o caminho de inicialização e C++ EH
+observado; o fluxo GUI continua dependente do smoke Xvfb e não é promovido a
+suporte diário.
+
 O teste `popular_apps_install_matrix` cobre as instalações autorizadas de
 Roblox (`3` após `RBXCRASH`), G HUB e seu alias (`1` após `ExitProcess(1)`) e
 Affinity (`4` antes da extração), além das rejeições pré-extração de CPU-Z,

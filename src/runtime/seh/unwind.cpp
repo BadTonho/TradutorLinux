@@ -366,6 +366,17 @@ using VectoredRoutine = std::int32_t (TL_MSABI *)(ExceptionPointersAmd64*);
         record, reinterpret_cast<void*>(establisher), context, dispatcher);
 }
 
+[[nodiscard]] std::int32_t invoke_cxx_or_language_handler(
+    const void* const routine, const bool fh4, ExceptionRecordAmd64* const record,
+    const std::uint64_t establisher, ContextAmd64* const context,
+    DispatcherContextAmd64* const dispatcher) noexcept {
+    if (fh4) {
+        return cxx_frame_handler4(record, reinterpret_cast<void*>(establisher), context,
+                                  dispatcher);
+    }
+    return invoke_language_handler(routine, record, establisher, context, dispatcher);
+}
+
 [[nodiscard]] bool invoke_consolidation_callback(
     ExceptionRecordAmd64* const record, std::uint64_t& target_ip) noexcept {
     if (record == nullptr || record->code != kStatusUnwindConsolidate ||
@@ -594,6 +605,8 @@ std::int32_t c_specific_handler(ExceptionRecordAmd64* const exception_record,
             }
             const bool cxx_exception = active_record != nullptr &&
                                        active_record->code == 0xE06D7363U;
+            const bool fh4_cxx_handler =
+                cxx_exception && is_fh4_cxx_handler_data(frame.handler_data);
             const bool supported_cxx_handler =
                 cxx_exception && is_supported_cxx_handler_data(frame.handler_data);
             if (cxx_exception && frame.handler != nullptr && !supported_cxx_handler) {
@@ -612,8 +625,9 @@ std::int32_t c_specific_handler(ExceptionRecordAmd64* const exception_record,
                     .handler_data = frame.handler_data};
                 trace_seh_handler("handler", active_record->code, "termination", frame.handler,
                                   frame.handler_data, frame.index);
-                const std::int32_t disposition = invoke_language_handler(
-                    frame.handler, active_record, frame.establisher_frame, &current_context, &dispatcher);
+                const std::int32_t disposition = invoke_cxx_or_language_handler(
+                    frame.handler, fh4_cxx_handler, active_record, frame.establisher_frame,
+                    &current_context, &dispatcher);
                 if (supported_cxx_handler &&
                     disposition == kExceptionExecuteHandler && dispatcher.target_ip != 0U) {
                     ContextAmd64 action_context = cursor;
@@ -660,6 +674,9 @@ std::int32_t c_specific_handler(ExceptionRecordAmd64* const exception_record,
             const bool unsupported_cxx_handler =
                 active_record != nullptr && active_record->code == 0xE06D7363U &&
                 !is_supported_cxx_handler_data(frame.handler_data);
+            const bool fh4_cxx_handler =
+                active_record != nullptr && active_record->code == 0xE06D7363U &&
+                is_fh4_cxx_handler_data(frame.handler_data);
             if (unsupported_cxx_handler) {
                 trace_seh_handler("skipped", active_record->code,
                                   "unsupported-cxx-handler-during-unwind", frame.handler,
@@ -680,8 +697,9 @@ std::int32_t c_specific_handler(ExceptionRecordAmd64* const exception_record,
                                               .handler_data = frame.handler_data};
             trace_seh_handler("handler", active_record != nullptr ? active_record->code : 0U,
                               "termination", frame.handler, frame.handler_data, frame.index);
-            const std::int32_t disposition = invoke_language_handler(
-                frame.handler, active_record, frame.establisher_frame, &current_context, &dispatcher);
+            const std::int32_t disposition = invoke_cxx_or_language_handler(
+                frame.handler, fh4_cxx_handler, active_record, frame.establisher_frame,
+                &current_context, &dispatcher);
             if (disposition == kInvalidDisposition ||
                 (disposition != kExceptionContinueSearch && disposition != kExceptionContinueExecution)) {
                 fail_seh(active_record != nullptr ? active_record->code : 0U,
@@ -788,8 +806,10 @@ std::int32_t c_specific_handler(ExceptionRecordAmd64* const exception_record,
                                           .handler_data = frame.handler_data};
         trace_seh_handler("handler", code, "search", frame.handler, frame.handler_data,
                           frame.index);
-        const std::int32_t disposition = invoke_language_handler(
-            frame.handler, &record, frame.establisher_frame, &context, &dispatcher);
+        const std::int32_t disposition = invoke_cxx_or_language_handler(
+            frame.handler, code == 0xE06D7363U &&
+                              is_fh4_cxx_handler_data(frame.handler_data),
+            &record, frame.establisher_frame, &context, &dispatcher);
         if (disposition == kExceptionContinueExecution) {
             if ((record.flags & kExceptionNoncontinuable) != 0U) {
                 fail_seh(code, "exceção não continuável");
@@ -944,6 +964,11 @@ extern "C" TL_MSABI void* tl_RtlVirtualUnwind(
         return nullptr;
     }
 
+    // No x64, o EstablisherFrame de uma função sem frame register é o RSP do
+    // corpo da função, não o RSP do quadro do chamador produzido depois de
+    // aplicar os códigos de unwind. Isso é observável por handlers /GS, que
+    // localizam o cookie com offsets relativos ao frame ainda ativo.
+    std::uint64_t establisher_value = updated.rsp;
     std::size_t current = *first;
     bool machine_frame = false;
     const pe::RuntimeFunction* terminal = nullptr;
@@ -965,6 +990,7 @@ extern "C" TL_MSABI void* tl_RtlVirtualUnwind(
                     runtime::trace_unwind_failure("RtlVirtualUnwind", "frame pointer inválido");
                     return nullptr;
                 }
+                establisher_value = frame - displacement;
                 updated.rsp = frame - displacement;
                 continue;
             }
@@ -988,7 +1014,6 @@ extern "C" TL_MSABI void* tl_RtlVirtualUnwind(
         runtime::trace_unwind_failure("RtlVirtualUnwind", "CHAININFO cíclico");
         return nullptr;
     }
-    const std::uint64_t establisher_value = updated.rsp;
     if (!machine_frame) {
         std::uint64_t return_address{};
         if (!runtime::read_u64(updated.rsp, return_address) ||

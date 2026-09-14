@@ -2,8 +2,9 @@
 
 Este contrato cobre o desempilhamento AMD64 e o despacho SEH explícito de uma
 imagem PE32+ já mapeada. O subconjunto executa `__try/__except` com
-`__C_specific_handler` e implementa uma parcela validada de exceções C++ por
-`__CxxFrameHandler3`; não implementa `__finally`, sinais Linux nem epílogos V2.
+`__C_specific_handler` e implementa parcelas validadas de exceções C++ por
+`__CxxFrameHandler3` e pelo formato comprimido FH4; não implementa `__finally`,
+sinais Linux nem epílogos V2.
 
 ## Metadados PE
 
@@ -81,15 +82,21 @@ código fora da imagem ativa.
 ## Limites explícitos
 
 Não há tradução de `SIGSEGV`/`SIGFPE`, `__finally`, function tables dinâmicas ou
-VEH em DLLs externas. O suporte C++ x64 é deliberadamente limitado ao
-`__CxxFrameHandler3` com `FuncInfo` v3 relativo à imagem, um cleanup de término
-do frame-alvo emitido por `stateUnwindMap`, `catch(...)` sem tipo, captura por
-`type descriptor` exato e transferência
-para funclets LLVM. A cadeia de ações do frame-alvo é percorrida com limite de
-64 estados, rejeição de ciclos e `RVA=0`/`0xffffffff` como fim sem ação; cada
-funclet retorna pelo trampoline para o próximo cleanup ou para o catch. Cleanups
-de frames intermediários, conversões entre tipos, rethrow e
-`__CxxFrameHandler` legado ainda seguem a busca controlada e não são declarados
+VEH em DLLs externas. O suporte C++ x64 inclui o `__CxxFrameHandler3` com
+`FuncInfo` v3 relativo à imagem e o despacho host-side do formato FH4
+comprimido, além de um cleanup de término do frame-alvo emitido por
+`stateUnwindMap`, `catch(...)` sem tipo, captura por `type descriptor` exato e
+transferência para funclets LLVM. No FH4, o runtime decodifica `FuncInfo4`,
+`UnwindMap`, `TryBlockMap`, `IPMap` e `HandlerMap` com limites checked; captura
+por referência aplica o `PMD` validado e cópia por valor só é aceita para tipo
+simples sem copy constructor e até 4096 bytes. O wrapper guest
+`__GSHandlerCheck_EH4` não é executado como se fosse um handler v3.
+A cadeia de ações do frame-alvo v3 é percorrida com limite de 64 estados,
+rejeição de ciclos e `RVA=0`/`0xffffffff` como fim sem ação; cada funclet
+retorna pelo trampoline para o próximo cleanup ou para o catch. Cleanups FH4 de
+frames intermediários ou do frame-alvo ainda são registrados como
+`fh4-cleanup-not-supported`; copy constructors arbitrários, rethrow e
+`__CxxFrameHandler` legado seguem a busca controlada e não são declarados
 suportados. Uma nova exceção C++ durante um `catch` ou cleanup ativo é rejeitada
 com `nested-cxx-exception-unsupported`; isso evita redirecionar a exceção ao
 mesmo handler indefinidamente. Uma exceção C++ sem handler termina com o
@@ -99,7 +106,7 @@ Leituras de endereços de retorno, registradores salvos e slots de funclet só
 são válidas dentro da stack convidada ativa (`TEB.StackLimit` inclusive até
 `TEB.StackBase` exclusivo); uma faixa hospedeira que apenas pareça mapeada não
 é aceita.
-Quando `handler-data` não representa um `FuncInfo` v3 validável — por exemplo,
+Quando `handler-data` não representa um `FuncInfo` v3 ou FH4 validável — por exemplo,
 uma tabela estática de `__C_specific_handler` — o dispatcher não chama esse
 handler como C++ nem prepara um cleanup/catch transferido; registra
 `unsupported-cxx-handler-during-search` ou
@@ -146,17 +153,19 @@ ação, e qualquer outra ação precisa estar dentro da imagem. O leitor usa
 desconhecidos retornam `ContinueSearch` e deixam a decisão no dispatcher
 controlado. Nenhum `FuncInfo` ou ponteiro do convidado é mantido fora da
 chamada. Antes de tratar `0xE06D7363` como exceção C++, o dispatcher valida o
-primeiro RVA de `handler-data` como `FuncInfo` v3 completo; formatos estáticos
-de SEH não passam por essa ponte.
+primeiro RVA de `handler-data` como `FuncInfo` v3 ou FH4 completo; formatos
+estáticos de SEH não passam por essa ponte.
 
 Durante a transferência, o contexto Microsoft x64 é salvo por thread, o frame
 é passado no `RDX` exigido pelo funclet e o retorno de `cleanupret` passa por um
-trampoline que restaura o contexto original do frame. O endereço de retorno do
-catch é revalidado e reescrito depois da chamada host, pois a ponte pode usar
-temporariamente a pilha convidada. O retorno do `catchret` passa por outro
-trampoline que valida o destino na imagem antes de restaurar o contexto. Isso
-evita saltar diretamente para um endereço devolvido pelo funclet ou executar
-um ponteiro externo à imagem.
+trampoline que restaura o contexto original do frame. O catch FH4 recebe um
+endereço de retorno sintético em `RSP-8`, mantendo o alinhamento esperado pelo
+prólogo MS x64; após o `RET`, a continuação restaura o RSP original do ponto que
+lançou a exceção. O endereço de retorno do catch é revalidado e reescrito depois
+da chamada host, pois a ponte pode usar temporariamente a pilha convidada. O
+retorno do `catchret` passa por outro trampoline que valida o destino na imagem
+antes de restaurar o contexto. Isso evita saltar diretamente para um endereço
+devolvido pelo funclet ou executar um ponteiro externo à imagem.
 
 A fixture `tl_cxx_eh` cobre a busca e a captura de `catch(...)`; `tl_cxx_eh_typed`
 cobre uma captura por `type descriptor` exato usando
@@ -170,3 +179,9 @@ e execução terminam em `ExitProcess(0)` nos builds Rust ON e C++ OFF.
 catch, sem loop; `tl_cxx_eh_unhandled` comprova o caminho sem handler. O rethrow
 nativo da ABI MSVC, cleanups de frames intermediários e conversões de tipo
 continuam fora do contrato antes de repetir o cenário de extração do WinRAR.
+
+O teste real `notepadpp_fh4_headless_smoke` executa o `notepad++.exe` do corpus
+sem servidor gráfico, confirma os catches FH4 tipados, ausência de
+`guest-signal`/`guest-timeout` e saída convidada `ExitProcess(0)`. O smoke GUI
+`notepadpp_real_gui_smoke` permanece separado e pode ser ignorado quando o
+Xvfb não consegue abrir um display.

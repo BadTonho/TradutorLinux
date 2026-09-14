@@ -6,18 +6,29 @@
 
 namespace tradutorlinux::runtime {
 
-// Subconjunto seguro do handler MSVC x64. O parser aceita somente FuncInfo v3
-// relativo à imagem, cleanups de término com funclets retornáveis e handlers
-// catch-all ou de tipo exato; conversões e metadados desconhecidos continuam
-// em busca de outro handler e acabam no caminho controlado de exceção não tratada.
+// Subconjunto seguro dos handlers MSVC x64. O parser aceita FuncInfo v3 e a
+// representação comprimida FH4 relativa à imagem; conversões e metadados
+// desconhecidos continuam em busca de outro handler e acabam no caminho
+// controlado de exceção não tratada.
 [[nodiscard]] std::int32_t cxx_frame_handler3(
     ExceptionRecordAmd64* exception_record, void* establisher_frame,
     ContextAmd64* context_record, DispatcherContextAmd64* dispatcher_context) noexcept;
 
-// Identifica somente a representação FuncInfo v3 que o subconjunto C++ do
-// runtime consegue interpretar. Handlers estáticos de __C_specific_handler
-// podem receber a mesma exceção, mas usam outro formato de handler data.
+// Identifica as representações C++ que o runtime consegue interpretar.
+// Handlers estáticos de __C_specific_handler podem receber a mesma exceção,
+// mas usam outro formato de handler data.
 [[nodiscard]] bool is_supported_cxx_handler_data(void* handler_data) noexcept;
+
+// Identifica a variante FH4 para que o despachante possa usar o decodificador
+// do runtime em vez de executar __GSHandlerCheck_EH4 do convidado.
+[[nodiscard]] bool is_fh4_cxx_handler_data(void* handler_data) noexcept;
+
+// Handler host-side da ABI FH4. O código de catch continua sendo executado
+// pelo convidado; somente a leitura das tabelas comprimidas e a seleção do
+// funclet atravessam esta fronteira.
+[[nodiscard]] std::int32_t cxx_frame_handler4(
+    ExceptionRecordAmd64* exception_record, void* establisher_frame,
+    ContextAmd64* context_record, DispatcherContextAmd64* dispatcher_context) noexcept;
 
 // Prepara a transferência para um catch funclet. O estado é thread-local:
 // nenhum ponteiro do convidado atravessa a chamada de retorno do trampoline.

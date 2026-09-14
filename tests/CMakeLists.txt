@@ -60,6 +60,21 @@ if(TL_POPULAR_APPS_DIR AND TARGET tradutorlinux)
         TIMEOUT 180
     )
 
+    if(EXISTS "${TL_POPULAR_APPS_DIR}/Notepad++/notepad++.exe")
+        add_test(
+            NAME notepadpp_fh4_headless_smoke
+            COMMAND ${CMAKE_COMMAND}
+                "-DTL_RUNTIME=$<TARGET_FILE:tradutorlinux>"
+                "-DTL_TARGET=${TL_POPULAR_APPS_DIR}/Notepad++/notepad++.exe"
+                "-DTL_STAGING_ROOT=${CMAKE_BINARY_DIR}/notepadpp-fh4-headless"
+                -P "${PROJECT_SOURCE_DIR}/tests/apps/verify_notepadpp_fh4.cmake"
+        )
+        set_tests_properties(notepadpp_fh4_headless_smoke PROPERTIES
+            LABELS "runtime;apps;notepadpp;cxx-eh;headless"
+            TIMEOUT 45
+        )
+    endif()
+
     add_test(
         NAME popular_apps_install_matrix
         COMMAND ${CMAKE_COMMAND}

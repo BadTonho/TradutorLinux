@@ -85,8 +85,9 @@ void put_le64(std::vector<std::uint8_t>& output, const std::size_t offset,
 
 [[nodiscard]] std::uint16_t read_le16(const std::vector<std::uint8_t>& input,
                                        const std::size_t offset) {
-    return static_cast<std::uint16_t>(input[offset]) |
-           (static_cast<std::uint16_t>(input[offset + 1U]) << 8U);
+    const std::uint32_t value = static_cast<std::uint32_t>(input[offset]) |
+                                (static_cast<std::uint32_t>(input[offset + 1U]) << 8U);
+    return static_cast<std::uint16_t>(value);
 }
 
 [[nodiscard]] std::uint64_t read_le64(const std::vector<std::uint8_t>& input,

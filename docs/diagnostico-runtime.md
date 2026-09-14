@@ -299,9 +299,9 @@ validados. Por exemplo:
 
 Uma falha SEH controlada não executa o entry point seguinte nem código fora da
 imagem; o convidado termina com o código da exceção. O subconjunto C++ x64
-aceito cobre `__CxxFrameHandler3`, catch-all, tipo exato e cleanups de término.
-Para `0xE06D7363`, o dispatcher só encaminha handlers cujo `handler-data`
-passa pela validação de `FuncInfo` v3; tabelas estáticas de
+aceito cobre `__CxxFrameHandler3` e o formato FH4 comprimido, catch-all, tipo
+exato e cleanups de término v3. Para `0xE06D7363`, o dispatcher só encaminha
+handlers cujo `handler-data` passa pela validação de `FuncInfo` v3 ou FH4; tabelas estáticas de
 `__C_specific_handler` e outros formatos não reconhecidos são registrados como
 `seh state="skipped"` com `detail="unsupported-cxx-handler-during-search"`
 ou `unsupported-cxx-handler-during-unwind`, sem usar a ponte de cleanup C++.
@@ -310,6 +310,23 @@ nova exceção durante um funclet ativo termina com
 `detail="nested-cxx-exception-unsupported"`, sem fallback ou repetição. O
 rethrow nativo completo, `__finally`, sinais Linux e epílogos V2 continuam fora
 desse mecanismo.
+
+No FH4, a seleção host-side registra `detail="fh4-catch-typed"` ou
+`detail="fh4-catch-all"`. O objeto de uma captura por referência é convertido
+com o `PMD` validado e publicado no slot do frame; cópias por valor fora do
+subconjunto simples são rejeitadas com `unsupported-fh4-catch-copy`. Durante o
+unwind FH4 ainda não executado, o diagnóstico é
+`detail="fh4-cleanup-not-supported"`. A transferência usa um retorno sintético
+em `RSP-8` e restaura o RSP original na continuação, para preservar o
+alinhamento MS x64 e o frame da função convidada.
+
+Exemplo de captura FH4 validada:
+
+```text
+[tl][runtime][info] cxx-eh state="matched" detail="fh4-catch-typed" mechanism="msvc-x64"
+[tl][runtime][info] cxx-eh state="search" detail="fh4-cleanup-not-supported" mechanism="msvc-x64" control-rva="455738" current-state="11"
+[tl][runtime][info] ExitProcess symbol="ExitProcess" exit-code="0" status="success" mechanism="guest-transfer"
+```
 
 Exemplos de rejeição controlada:
 
