@@ -445,6 +445,12 @@ O lote `USER32/window` migrou saídas de geometria, texto e nome de classe,
 pontos e saídas de região para snapshots e cópias protegidas. A regressão cobre
 buffers inválidos de janela, texto, classe, pontos e retângulos.
 
+O sublote `USER32/window-registration` migrou `RegisterClass(A/W)`,
+`RegisterClassEx(A/W)` e as strings de `CreateWindowExA/W` para estruturas e
+cópias locais antes de qualquer consulta, conversão ou callback. A validação do
+endereço do procedimento de janela continua separada da cópia dos dados, e a
+regressão cobre estruturas, nomes e criações com ponteiros inválidos.
+
 ## Fora desta rodada
 
 Não entram neste roadmap, por enquanto:

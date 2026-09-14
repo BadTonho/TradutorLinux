@@ -65,6 +65,13 @@ classe, a `FindWindowA/W`, `GetClassInfoW`, `MapWindowPoints` e às saídas de
 região. Os nomes são copiados antes da busca e as estruturas/arrays são
 transformados em objetos host antes da publicação.
 
+O sublote `USER32/window-registration` aplica o contrato a
+`RegisterClass(A/W)`, `RegisterClassEx(A/W)` e às strings de
+`CreateWindowExA/W`. As estruturas e nomes são copiados para objetos locais
+antes de conversão, busca de classe ou montagem de `CREATESTRUCT`; o endereço do
+procedimento de janela é validado como callback convidado, sem desreferência
+direta de campos da estrutura original.
+
 ## Limites residuais
 
 `validate_mapped_range` permanece deliberadamente como predicado advisory:

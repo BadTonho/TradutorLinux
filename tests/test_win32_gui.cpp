@@ -269,6 +269,43 @@ TEST(Win32GuiTest, ProtectedWindowInputsAndOutputsRejectUnmappedPointers) {
     g_windows = {};
 }
 
+TEST(Win32GuiTest, ProtectedWindowRegistrationInputsRejectUnmappedPointers) {
+    g_classes = {};
+    g_windows = {};
+    auto* const invalid = reinterpret_cast<void*>(static_cast<std::uintptr_t>(0x1000U));
+
+    EXPECT_EQ(tl_RegisterClassA(invalid), 0U);
+    EXPECT_EQ(tl_RegisterClassExA(invalid), 0U);
+    EXPECT_EQ(tl_RegisterClassW(invalid), 0U);
+    EXPECT_EQ(tl_RegisterClassExW(invalid), 0U);
+
+    abi::GuestWndClassExA class_a{};
+    class_a.cb_size = sizeof(class_a);
+    class_a.window_proc = reinterpret_cast<std::uintptr_t>(invalid);
+    class_a.class_name = static_cast<const char*>(invalid);
+    EXPECT_EQ(tl_RegisterClassExA(&class_a), 0U);
+
+    abi::GuestWndClassExW class_w{};
+    class_w.cb_size = sizeof(class_w);
+    class_w.window_proc = reinterpret_cast<std::uintptr_t>(invalid);
+    class_w.class_name = static_cast<const std::uint16_t*>(invalid);
+    EXPECT_EQ(tl_RegisterClassExW(&class_w), 0U);
+
+    const char valid_class_a[] = "unregistered-window-class";
+    EXPECT_EQ(tl_CreateWindowExA(0, valid_class_a, static_cast<const char*>(invalid), 0, 0, 0,
+                                 0, 0, nullptr, nullptr, nullptr, nullptr), nullptr);
+    const std::uint16_t valid_class_w[] = {'u', 'n', 'r', 'e', 'g', 'i', 's', 't', 'e', 'r',
+                                            'e', 'd', '-', 'w', 'i', 'n', 'd', 'o', 'w', '-',
+                                            'c', 'l', 'a', 's', 's', 0};
+    EXPECT_EQ(tl_CreateWindowExW(0, valid_class_w,
+                                 static_cast<const std::uint16_t*>(invalid), 0, 0, 0, 0, 0,
+                                 nullptr, nullptr, nullptr, nullptr), nullptr);
+    EXPECT_TRUE(std::all_of(g_classes.begin(), g_classes.end(),
+                            [](const ClassSlot& slot) { return !slot.used; }));
+    EXPECT_TRUE(std::all_of(g_windows.begin(), g_windows.end(),
+                            [](const WindowSlot& slot) { return !slot.used; }));
+}
+
 TEST(Win32GuiTest, RejectsStatefulGuiCallsFromNonPrimaryGuestThread) {
     void* worker_menu = nullptr;
     std::uint32_t worker_menu_error = abi::kErrorSuccess;

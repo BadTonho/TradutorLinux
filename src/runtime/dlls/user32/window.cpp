@@ -37,21 +37,24 @@ TL_MSABI abi::Atom tl_RegisterClassExA(const void* const wnd_class) noexcept {
     if (!user32_gui_thread_allowed("RegisterClassExA")) {
         return 0;
     }
-    if (wnd_class == nullptr ||
-        !mapped_guest_range(wnd_class, sizeof(abi::GuestWndClassExA), false)) {
+    abi::GuestWndClassExA wc{};
+    if (wnd_class == nullptr || !read_guest_value(wnd_class, wc)) {
         set_last_error(abi::kErrorInvalidParameter);
         trace_guest_failure("RegisterClassExA", "wnd-class", "estrutura WNDCLASSEXA inválida");
         return 0;
     }
-    const auto* const wc = static_cast<const abi::GuestWndClassExA*>(wnd_class);
-    if (wc->cb_size < sizeof(abi::GuestWndClassExA) || wc->window_proc == 0 ||
-        wc->class_name == nullptr || !mapped_guest_cstring(wc->class_name) ||
-        !mapped_guest_range(std::bit_cast<const void*>(wc->window_proc), 1, false)) {
+    std::string class_name;
+    std::string menu_name;
+    const std::uintptr_t menu_raw = reinterpret_cast<std::uintptr_t>(wc.menu_name);
+    if (wc.cb_size < sizeof(abi::GuestWndClassExA) || wc.window_proc == 0 ||
+        wc.class_name == nullptr || !runtime::copy_guest_cstring(wc.class_name, 4096U, class_name) ||
+        !guest_callback_address_valid(wc.window_proc) ||
+        (menu_raw > 0xFFFFU && !runtime::copy_guest_cstring(wc.menu_name, 4096U, menu_name))) {
         set_last_error(abi::kErrorInvalidParameter);
         trace_guest_failure("RegisterClassExA", "wnd-class", "cbSize, window_proc ou class_name inválido");
         return 0;
     }
-    if (find_class_slot(wc->class_name) != nullptr) {
+    if (find_class_slot(class_name.c_str()) != nullptr) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
@@ -63,18 +66,11 @@ TL_MSABI abi::Atom tl_RegisterClassExA(const void* const wnd_class) noexcept {
     }
     ClassSlot& slot = *free_it;
     slot.used = true;
-    slot.name = wc->class_name;
-    slot.wndproc = wc->window_proc;
-    slot.menu_name_raw = reinterpret_cast<std::uintptr_t>(wc->menu_name) <= 0xFFFFU
-                             ? reinterpret_cast<std::uintptr_t>(wc->menu_name)
-                             : 0;
-    if (wc->menu_name != nullptr && slot.menu_name_raw == 0) {
-        if (!mapped_guest_cstring(wc->menu_name)) {
-            slot = {};
-            set_last_error(abi::kErrorInvalidParameter);
-            return 0;
-        }
-        slot.menu_name_text = util::utf8_to_wide(wc->menu_name);
+    slot.name = class_name;
+    slot.wndproc = wc.window_proc;
+    slot.menu_name_raw = menu_raw <= 0xFFFFU ? menu_raw : 0;
+    if (menu_raw > 0xFFFFU) {
+        slot.menu_name_text = util::utf8_to_wide(menu_name);
     }
     const abi::Atom atom =
         static_cast<abi::Atom>(static_cast<std::size_t>(free_it - g_classes.begin()) + 1U);
@@ -91,23 +87,23 @@ TL_MSABI abi::Atom tl_RegisterClassExA(const void* const wnd_class) noexcept {
 }
 
 TL_MSABI abi::Atom tl_RegisterClassA(const void* wnd_class) noexcept {
-    if (wnd_class == nullptr || !mapped_guest_range(wnd_class, sizeof(abi::GuestWndClassA), false)) {
+    abi::GuestWndClassA wc{};
+    if (wnd_class == nullptr || !read_guest_value(wnd_class, wc)) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
-    const auto* wc = static_cast<const abi::GuestWndClassA*>(wnd_class);
     abi::GuestWndClassExA ex{};
     ex.cb_size = sizeof(ex);
-    ex.style = wc->style;
-    ex.window_proc = wc->window_proc;
-    ex.class_extra = wc->class_extra;
-    ex.window_extra = wc->window_extra;
-    ex.instance = wc->instance;
-    ex.icon = wc->icon;
-    ex.cursor = wc->cursor;
-    ex.background = wc->background;
-    ex.menu_name = wc->menu_name;
-    ex.class_name = wc->class_name;
+    ex.style = wc.style;
+    ex.window_proc = wc.window_proc;
+    ex.class_extra = wc.class_extra;
+    ex.window_extra = wc.window_extra;
+    ex.instance = wc.instance;
+    ex.icon = wc.icon;
+    ex.cursor = wc.cursor;
+    ex.background = wc.background;
+    ex.menu_name = wc.menu_name;
+    ex.class_name = wc.class_name;
     return tl_RegisterClassExA(&ex);
 }
 
@@ -115,49 +111,51 @@ TL_MSABI abi::Atom tl_RegisterClassExW(const void* const wnd_class) noexcept {
     if (!user32_gui_thread_allowed("RegisterClassExW")) {
         return 0;
     }
-    if (wnd_class == nullptr ||
-        !mapped_guest_range(wnd_class, sizeof(abi::GuestWndClassExW), false)) {
+    abi::GuestWndClassExW wc{};
+    if (wnd_class == nullptr || !read_guest_value(wnd_class, wc)) {
         set_last_error(abi::kErrorInvalidParameter);
         trace_guest_failure("RegisterClassExW", "wnd-class", "estrutura WNDCLASSEXW inválida");
         return 0;
     }
-    const auto* const wc = static_cast<const abi::GuestWndClassExW*>(wnd_class);
-    if (wc->cb_size < sizeof(abi::GuestWndClassExW) || wc->window_proc == 0 ||
-        wc->class_name == nullptr || !mapped_guest_wstring(wc->class_name) ||
-        (wc->menu_name != nullptr && !guest_resource_or_wstring_valid(wc->menu_name)) ||
-        !mapped_guest_range(std::bit_cast<const void*>(wc->window_proc), 1, false)) {
+    std::u16string class_name;
+    std::u16string menu_name;
+    const std::uintptr_t menu_raw = reinterpret_cast<std::uintptr_t>(wc.menu_name);
+    if (wc.cb_size < sizeof(abi::GuestWndClassExW) || wc.window_proc == 0 ||
+        wc.class_name == nullptr || !runtime::copy_guest_wstring(wc.class_name, 4096U, class_name) ||
+        !guest_callback_address_valid(wc.window_proc) ||
+        (menu_raw > 0xFFFFU && !runtime::copy_guest_wstring(wc.menu_name, 4096U, menu_name))) {
         set_last_error(abi::kErrorInvalidParameter);
         trace_guest_failure("RegisterClassExW", "wnd-class", "cbSize, window_proc ou class_name inválido");
         return 0;
     }
-    std::string utf8_class = util::wide_to_utf8(wc->class_name);
+    std::string utf8_class = util::wide_to_utf8(
+        reinterpret_cast<const std::uint16_t*>(class_name.data()), class_name.size());
     std::string utf8_menu;
     const char* menu_cstr = nullptr;
-    if (wc->menu_name != nullptr && reinterpret_cast<std::uintptr_t>(wc->menu_name) > 0xFFFFU) {
-        utf8_menu = util::wide_to_utf8(wc->menu_name);
+    if (menu_raw > 0xFFFFU) {
+        utf8_menu = util::wide_to_utf8(
+            reinterpret_cast<const std::uint16_t*>(menu_name.data()), menu_name.size());
         menu_cstr = utf8_menu.c_str();
     }
     abi::GuestWndClassExA exA{};
     exA.cb_size = sizeof(exA);
-    exA.style = wc->style;
-    exA.window_proc = wc->window_proc;
-    exA.class_extra = wc->class_extra;
-    exA.window_extra = wc->window_extra;
-    exA.instance = wc->instance;
-    exA.icon = wc->icon;
-    exA.cursor = wc->cursor;
-    exA.background = wc->background;
+    exA.style = wc.style;
+    exA.window_proc = wc.window_proc;
+    exA.class_extra = wc.class_extra;
+    exA.window_extra = wc.window_extra;
+    exA.instance = wc.instance;
+    exA.icon = wc.icon;
+    exA.cursor = wc.cursor;
+    exA.background = wc.background;
     exA.menu_name = menu_cstr;
     exA.class_name = utf8_class.c_str();
-    exA.icon_sm = wc->icon_sm;
+    exA.icon_sm = wc.icon_sm;
     const abi::Atom atom = tl_RegisterClassExA(&exA);
     if (atom != 0) {
         if (ClassSlot* const slot = find_class_slot(utf8_class.c_str()); slot != nullptr) {
-            const std::uintptr_t raw = reinterpret_cast<std::uintptr_t>(wc->menu_name);
-            slot->menu_name_raw = raw <= 0xFFFFU ? raw : 0;
-            if (raw > 0xFFFFU) {
-                const auto* const menu_text = reinterpret_cast<const char16_t*>(wc->menu_name);
-                slot->menu_name_text.assign(menu_text, std::char_traits<char16_t>::length(menu_text));
+            slot->menu_name_raw = menu_raw <= 0xFFFFU ? menu_raw : 0;
+            if (menu_raw > 0xFFFFU) {
+                slot->menu_name_text.assign(menu_name.begin(), menu_name.end());
             } else {
                 slot->menu_name_text.clear();
             }
@@ -170,24 +168,23 @@ TL_MSABI abi::Atom tl_RegisterClassW(const void* wnd_class) noexcept {
     if (!user32_gui_thread_allowed("RegisterClassW")) {
         return 0;
     }
-    if (wnd_class == nullptr || !mapped_guest_range(wnd_class, sizeof(abi::GuestWndClassW), false)) {
+    abi::GuestWndClassW wc{};
+    if (wnd_class == nullptr || !read_guest_value(wnd_class, wc)) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
-    const auto* wc = static_cast<const abi::GuestWndClassW*>(wnd_class);
-    if (wc->window_proc == 0 || wc->class_name == nullptr || !mapped_guest_wstring(wc->class_name) ||
-        (wc->menu_name != nullptr && !guest_resource_or_wstring_valid(wc->menu_name))) {
+    std::u16string class_name;
+    std::u16string menu_name;
+    const std::uintptr_t menu_raw = reinterpret_cast<std::uintptr_t>(wc.menu_name);
+    if (wc.window_proc == 0 || wc.class_name == nullptr ||
+        !runtime::copy_guest_wstring(wc.class_name, 4096U, class_name) ||
+        !guest_callback_address_valid(wc.window_proc) ||
+        (menu_raw > 0xFFFFU && !runtime::copy_guest_wstring(wc.menu_name, 4096U, menu_name))) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
-    std::string utf8_class = util::wide_to_utf8(wc->class_name);
-    std::string utf8_menu;
-    const char* menu_cstr = nullptr;
-    if (wc->menu_name != nullptr && reinterpret_cast<std::uintptr_t>(wc->menu_name) > 0xFFFFU) {
-        utf8_menu = util::wide_to_utf8(wc->menu_name);
-        menu_cstr = utf8_menu.c_str();
-    }
-    (void)menu_cstr;
+    const std::string utf8_class = util::wide_to_utf8(
+        reinterpret_cast<const std::uint16_t*>(class_name.data()), class_name.size());
     if (find_class_slot(utf8_class.c_str()) != nullptr) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
@@ -201,12 +198,10 @@ TL_MSABI abi::Atom tl_RegisterClassW(const void* wnd_class) noexcept {
     ClassSlot& slot = *free_it;
     slot.used = true;
     slot.name = utf8_class;
-    slot.wndproc = wc->window_proc;
-    const std::uintptr_t menu_raw = reinterpret_cast<std::uintptr_t>(wc->menu_name);
+    slot.wndproc = wc.window_proc;
     slot.menu_name_raw = menu_raw <= 0xFFFFU ? menu_raw : 0;
     if (menu_raw > 0xFFFFU) {
-        const auto* const menu_text = reinterpret_cast<const char16_t*>(wc->menu_name);
-        slot.menu_name_text.assign(menu_text, std::char_traits<char16_t>::length(menu_text));
+        slot.menu_name_text.assign(menu_name.begin(), menu_name.end());
     }
     slot.atom = static_cast<abi::Atom>(static_cast<std::size_t>(free_it - g_classes.begin()) + 1U);
     set_last_error(abi::kErrorSuccess);
@@ -240,18 +235,30 @@ TL_MSABI abi::HWnd tl_CreateWindowExA(const std::uint32_t ex_style,
     const int resolved_x = normalize_geometry ? 0 : x;
     const int resolved_y = normalize_geometry ? 0 : y;
     const bool strings_from_bridge = g_create_window_w_bridge;
+    std::string class_name_copy;
+    std::string window_name_copy;
+    const char* effective_class_name = class_name;
+    const char* effective_window_name = window_name;
     if (class_name == nullptr ||
-        (class_val > 0xFFFFU && !strings_from_bridge && !mapped_guest_cstring(class_name)) ||
-        (window_name != nullptr && !strings_from_bridge && !mapped_guest_cstring(window_name))) {
+        (class_val > 0xFFFFU && !strings_from_bridge &&
+         !runtime::copy_guest_cstring(class_name, 4096U, class_name_copy)) ||
+        (window_name != nullptr && !strings_from_bridge &&
+         !runtime::copy_guest_cstring(window_name, 4096U, window_name_copy))) {
         set_last_error(abi::kErrorInvalidParameter);
         trace_guest_failure("CreateWindowExA", "strings", "nome de classe ou janela inválido");
         return nullptr;
     }
-    ClassSlot* const cls = find_class_slot(class_name);
+    if (class_val > 0xFFFFU && !strings_from_bridge) {
+        effective_class_name = class_name_copy.c_str();
+    }
+    if (window_name != nullptr && !strings_from_bridge) {
+        effective_window_name = window_name_copy.c_str();
+    }
+    ClassSlot* const cls = find_class_slot(effective_class_name);
     const bool generic_child = cls == nullptr && class_val > 0xFFFFU && parent != nullptr;
     const bool registered_child = cls != nullptr && parent != nullptr;
     if (cls == nullptr && (class_val <= 0xFFFFU ||
-                           (!runtime_gui::is_builtin_control(class_name) && !generic_child))) {
+                           (!runtime_gui::is_builtin_control(effective_class_name) && !generic_child))) {
         set_last_error(abi::kErrorInvalidParameter);
         trace_guest_failure("CreateWindowExA", "class-lookup", "classe não registrada");
         return nullptr;
@@ -280,7 +287,7 @@ TL_MSABI abi::HWnd tl_CreateWindowExA(const std::uint32_t ex_style,
         std::uint32_t pad1;
     };
     if (class_val > 0xFFFFU &&
-        (runtime_gui::is_builtin_control(class_name) || generic_child || registered_child)) {
+        (runtime_gui::is_builtin_control(effective_class_name) || generic_child || registered_child)) {
         WindowSlot& slot = *free_it;
         WindowSlot* parent_slot = find_window_slot(parent);
         if (parent_slot == nullptr || parent_slot->is_control) {
@@ -290,13 +297,13 @@ TL_MSABI abi::HWnd tl_CreateWindowExA(const std::uint32_t ex_style,
         slot = {};
         slot.used = true;
         slot.wndproc = cls != nullptr ? cls->wndproc : 0;
-        slot.class_name = class_name;
-        slot.window_title = window_name != nullptr ? window_name : "";
+        slot.class_name = effective_class_name;
+        slot.window_title = effective_window_name != nullptr ? effective_window_name : "";
         slot.native = registered_child ? parent_slot->native : nullptr;
         slot.mapped = registered_child ? parent_slot->mapped : false;
         slot.is_control = true;
-        slot.control_kind = runtime_gui::is_builtin_control(class_name)
-                                ? runtime_gui::control_kind_for(class_name)
+        slot.control_kind = runtime_gui::is_builtin_control(effective_class_name)
+                                ? runtime_gui::control_kind_for(effective_class_name)
                                 : runtime_gui::ControlKind::Generic;
         slot.parent = parent_slot;
         slot.control_id = reinterpret_cast<std::uintptr_t>(menu);
@@ -305,7 +312,7 @@ TL_MSABI abi::HWnd tl_CreateWindowExA(const std::uint32_t ex_style,
         slot.y = y;
         slot.width = guest_window_dimension(width, 1);
         slot.height = guest_window_dimension(height, 1);
-        slot.text = window_name != nullptr ? window_name : "";
+        slot.text = effective_window_name != nullptr ? effective_window_name : "";
         slot.visible = (style & kWsVisible) != 0U || style == 0U;
         slot.enabled = (style & kWsDisabled) == 0U;
         slot.combo_selection = -1;
@@ -320,8 +327,8 @@ TL_MSABI abi::HWnd tl_CreateWindowExA(const std::uint32_t ex_style,
             cs.y = y;
             cs.x = x;
             cs.style = style;
-            cs.lpszName = window_name;
-            cs.lpszClass = class_name;
+            cs.lpszName = effective_window_name;
+            cs.lpszClass = effective_class_name;
             cs.dwExStyle = ex_style;
             const abi::Lresult create_result = call_wndproc(
                 slot.wndproc, &slot, abi::kWmCreate, 0,
@@ -343,7 +350,7 @@ TL_MSABI abi::HWnd tl_CreateWindowExA(const std::uint32_t ex_style,
         }
         if (generic_child) {
             const std::array<diagnostics::TraceField, 4> fields{
-                diagnostics::TraceField{"class", class_name},
+                diagnostics::TraceField{"class", effective_class_name},
                 diagnostics::TraceField{"status", "generic-child"},
                 diagnostics::TraceField{"position", std::to_string(slot.x) + "," +
                                              std::to_string(slot.y)},
@@ -352,7 +359,7 @@ TL_MSABI abi::HWnd tl_CreateWindowExA(const std::uint32_t ex_style,
             runtime_trace("CreateWindowExA", fields, 4);
         } else if (registered_child) {
             const std::array<diagnostics::TraceField, 4> fields{
-                diagnostics::TraceField{"class", class_name},
+                diagnostics::TraceField{"class", effective_class_name},
                 diagnostics::TraceField{"status", "registered-child"},
                 diagnostics::TraceField{"position", std::to_string(slot.x) + "," +
                                              std::to_string(slot.y)},
@@ -364,7 +371,7 @@ TL_MSABI abi::HWnd tl_CreateWindowExA(const std::uint32_t ex_style,
         set_last_error(abi::kErrorSuccess);
         return &slot;
     }
-    const char* const caption = window_name != nullptr ? window_name : cls->name.c_str();
+    const char* const caption = effective_window_name != nullptr ? effective_window_name : cls->name.c_str();
     gui::NativeWindow native = gui::platform::create_window(caption, resolved_width, resolved_height);
     if (native == nullptr) {
         set_last_error(abi::kErrorAccessDenied);
@@ -503,8 +510,12 @@ TL_MSABI abi::HWnd tl_CreateWindowExW(const std::uint32_t ex_style,
                                       const void* const instance,
                                       const void* const param) noexcept {
     const auto class_val = reinterpret_cast<std::uintptr_t>(class_name);
-    if (class_name == nullptr || (class_val > 0xFFFFU && !mapped_guest_wstring(class_name)) ||
-        (window_name != nullptr && !mapped_guest_wstring(window_name))) {
+    std::u16string class_name_copy;
+    std::u16string window_name_copy;
+    if (class_name == nullptr ||
+        (class_val > 0xFFFFU && !runtime::copy_guest_wstring(class_name, 4096U, class_name_copy)) ||
+        (window_name != nullptr &&
+         !runtime::copy_guest_wstring(window_name, 4096U, window_name_copy))) {
         set_last_error(abi::kErrorInvalidParameter);
         trace_guest_failure("CreateWindowExW", "strings", "nome de classe ou janela inválido");
         return nullptr;
@@ -512,7 +523,8 @@ TL_MSABI abi::HWnd tl_CreateWindowExW(const std::uint32_t ex_style,
     std::string utf8_window;
     const char* win_cstr = nullptr;
     if (window_name != nullptr) {
-        utf8_window = util::wide_to_utf8(window_name);
+        utf8_window = util::wide_to_utf8(
+            reinterpret_cast<const std::uint16_t*>(window_name_copy.data()), window_name_copy.size());
         win_cstr = utf8_window.c_str();
     }
     if (class_val <= 0xFFFFU) {
@@ -523,7 +535,8 @@ TL_MSABI abi::HWnd tl_CreateWindowExW(const std::uint32_t ex_style,
         g_create_window_w_bridge = previous_bridge;
         return result;
     }
-    const std::string utf8_class = util::wide_to_utf8(class_name);
+    const std::string utf8_class = util::wide_to_utf8(
+        reinterpret_cast<const std::uint16_t*>(class_name_copy.data()), class_name_copy.size());
     const bool previous_bridge = g_create_window_w_bridge;
     g_create_window_w_bridge = true;
     abi::HWnd result = tl_CreateWindowExA(ex_style, utf8_class.c_str(), win_cstr, style, x, y, width,
