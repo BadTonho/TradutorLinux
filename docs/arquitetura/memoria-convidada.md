@@ -216,6 +216,12 @@ DER e destino inacessíveis falham de modo controlado. A regressão
 `Crypt32Test.CertNameToStrConvertsValidatedNameBlobAndBoundsOutput` cobre esse
 contrato na integração `tl_crypt32`.
 
+O sublote `CRYPT32/context-copy` fotografa `CERT_CONTEXT` e o DER antes de
+criar a cópia rastreada de `CertDuplicateCertificateContext`. O contexto
+publicado é memória privada do runtime, e entradas convidadas inválidas são
+rejeitadas sem desreferenciação direta; `Crypt32Test.CertContextAndStoreManagement`
+e `tl_certcontext` cobrem o fluxo.
+
 ## Limites residuais
 
 `validate_mapped_range` permanece deliberadamente como predicado advisory:

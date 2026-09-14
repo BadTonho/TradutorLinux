@@ -590,6 +590,12 @@ de buffer insuficiente que precisa zerar somente a primeira unidade. A regressã
 `Crypt32Test.CertNameToStrConvertsValidatedNameBlobAndBoundsOutput` passou junto
 com as mesmas seis validações unitárias e quatro integrações PE de `tl_crypt32`.
 
+O sublote `CRYPT32/context-copy` migrou `CertDuplicateCertificateContext` para
+fotografia protegida de `CERT_CONTEXT` e do DER, mantendo a cópia rastreada e o
+refcount internos do runtime. Contextos ou blobs inválidos falham sem leitura
+direta; `Crypt32Test.CertContextAndStoreManagement` e as quatro integrações PE
+de `tl_certcontext` passaram no preset `validation-sanitize`.
+
 ## Fora desta rodada
 
 Não entram neste roadmap, por enquanto:

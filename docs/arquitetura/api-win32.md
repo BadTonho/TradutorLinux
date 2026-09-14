@@ -590,6 +590,12 @@ protegida. Em capacidade insuficiente, zera a primeira unidade quando o
 destino é acessível e retorna o tamanho requerido; blob, DER ou destino
 inacessível retornam erro controlado.
 
+`CertDuplicateCertificateContext` fotografa `CERT_CONTEXT` e o certificado DER
+para uma cópia rastreada pelo runtime; referências duplicadas incrementam o
+contador interno e `CertFreeCertificateContext` libera essa cópia quando ele
+chega a zero. O contexto e o blob de entrada precisam ser acessíveis e usar o
+encoding X.509 suportado.
+
 `WinVerifyTrust`, `WTHelperProvDataFromStateData`,
 `WTHelperGetProvSignerFromChain` e `WTHelperGetProvCertFromChain` implementam
 o contrato de blob/cadeia explícita usado por `tl_trust`. `WTD_CHOICE_FILE`,

@@ -375,6 +375,12 @@ TEST(Crypt32Test, CertContextAndStoreManagement) {
 
     // Duplicate context
     EXPECT_EQ(tl_CertDuplicateCertificateContext(nullptr), nullptr);
+    auto* const invalid = reinterpret_cast<void*>(static_cast<std::uintptr_t>(0x1000U));
+    EXPECT_EQ(tl_CertDuplicateCertificateContext(static_cast<const GuestCertContext*>(invalid)),
+              nullptr);
+    GuestCertContext invalid_blob = context;
+    invalid_blob.encoded = static_cast<std::uint8_t*>(invalid);
+    EXPECT_EQ(tl_CertDuplicateCertificateContext(&invalid_blob), nullptr);
     const GuestCertContext* dup = tl_CertDuplicateCertificateContext(&context);
     ASSERT_NE(dup, nullptr);
     EXPECT_EQ(dup->encoded_size, context.encoded_size);

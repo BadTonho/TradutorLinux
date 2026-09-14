@@ -680,26 +680,30 @@ TL_CRYPT32_MSABI const GuestCertContext* tl_CertDuplicateCertificateContext(
         }
     }
 
-    if (cert_context->encoded == nullptr || cert_context->encoded_size == 0U ||
-        cert_context->encoded_size > kMaxCertificateSize ||
-        !runtime::validate_mapped_range(cert_context->encoded, cert_context->encoded_size, false)) {
+    GuestCertContext context{};
+    std::vector<std::uint8_t> encoded_storage;
+    if (!snapshot_cert_context(cert_context, context, encoded_storage)) {
         set_last_error(abi::kErrorInvalidParameter);
         return nullptr;
     }
 
-    auto tracked = std::make_unique<TrackedContext>();
-    tracked->encoded_storage.assign(cert_context->encoded,
-                                   cert_context->encoded + cert_context->encoded_size);
-    tracked->guest_context.encoding_type = cert_context->encoding_type;
-    tracked->guest_context.encoded = tracked->encoded_storage.data();
-    tracked->guest_context.encoded_size = cert_context->encoded_size;
-    tracked->guest_context.cert_info = cert_context->cert_info;
-    tracked->guest_context.cert_store = cert_context->cert_store;
-    tracked->refcount = 1U;
+    try {
+        auto tracked = std::make_unique<TrackedContext>();
+        tracked->encoded_storage = std::move(encoded_storage);
+        tracked->guest_context.encoding_type = context.encoding_type;
+        tracked->guest_context.encoded = tracked->encoded_storage.data();
+        tracked->guest_context.encoded_size = context.encoded_size;
+        tracked->guest_context.cert_info = context.cert_info;
+        tracked->guest_context.cert_store = context.cert_store;
+        tracked->refcount = 1U;
 
-    const GuestCertContext* result = &tracked->guest_context;
-    g_tracked_contexts.push_back(std::move(tracked));
-    return result;
+        const GuestCertContext* result = &tracked->guest_context;
+        g_tracked_contexts.push_back(std::move(tracked));
+        return result;
+    } catch (...) {
+        set_last_error(abi::kErrorNotEnoughMemory);
+        return nullptr;
+    }
 }
 
 TL_CRYPT32_MSABI std::uint32_t tl_CertFreeCertificateContext(
