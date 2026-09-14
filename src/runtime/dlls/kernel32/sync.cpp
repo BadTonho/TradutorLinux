@@ -4,6 +4,7 @@
 
 #include <cstring>
 #include <shared_mutex>
+#include <string>
 
 namespace tradutorlinux {
 
@@ -260,8 +261,9 @@ TL_MSABI std::uint32_t tl_WaitForMultipleObjects(const std::uint32_t count,
 
 TL_MSABI void* tl_CreateMutexA(const void* security_attributes, const int initial_owner,
                                const char* name) noexcept {
+    std::string name_copy;
     if (!read_security_attributes(security_attributes) ||
-        (name != nullptr && !mapped_guest_cstring(name)) ||
+        (name != nullptr && !runtime::copy_guest_cstring(name, 65535U, name_copy)) ||
         (initial_owner != 0 && initial_owner != 1)) {
         set_last_error(abi::kErrorInvalidParameter);
         return nullptr;
@@ -287,8 +289,9 @@ TL_MSABI void* tl_CreateMutexA(const void* security_attributes, const int initia
 
 TL_MSABI void* tl_CreateMutexW(const void* security_attributes, const int initial_owner,
                                const std::uint16_t* name) noexcept {
+    std::u16string name_copy;
     if (!read_security_attributes(security_attributes) ||
-        (name != nullptr && !mapped_guest_wstring(name)) ||
+        (name != nullptr && !runtime::copy_guest_wstring(name, 65535U, name_copy)) ||
         (initial_owner != 0 && initial_owner != 1)) {
         set_last_error(abi::kErrorInvalidParameter);
         return nullptr;
@@ -298,8 +301,9 @@ TL_MSABI void* tl_CreateMutexW(const void* security_attributes, const int initia
 
 TL_MSABI void* tl_CreateEventA(const void* security_attributes, const int manual_reset,
                                const int initial_state, const char* name) noexcept {
+    std::string name_copy;
     if (!read_security_attributes(security_attributes) ||
-        (name != nullptr && !mapped_guest_cstring(name)) ||
+        (name != nullptr && !runtime::copy_guest_cstring(name, 65535U, name_copy)) ||
         (manual_reset != 0 && manual_reset != 1) || (initial_state != 0 && initial_state != 1)) {
         set_last_error(abi::kErrorInvalidParameter);
         return nullptr;
@@ -329,8 +333,9 @@ TL_MSABI void* tl_CreateEventA(const void* security_attributes, const int manual
 
 TL_MSABI void* tl_CreateEventW(const void* security_attributes, const int manual_reset,
                                const int initial_state, const std::uint16_t* name) noexcept {
+    std::u16string name_copy;
     if (!read_security_attributes(security_attributes) ||
-        (name != nullptr && !mapped_guest_wstring(name)) ||
+        (name != nullptr && !runtime::copy_guest_wstring(name, 65535U, name_copy)) ||
         (manual_reset != 0 && manual_reset != 1) || (initial_state != 0 && initial_state != 1)) {
         set_last_error(abi::kErrorInvalidParameter);
         return nullptr;
@@ -398,8 +403,9 @@ TL_MSABI void* tl_CreateSemaphoreA(const void* security_attributes,
                                    const std::int32_t initial_count,
                                    const std::int32_t maximum_count,
                                    const char* name) noexcept {
+    std::string name_copy;
     if (!read_security_attributes(security_attributes) ||
-        (name != nullptr && !mapped_guest_cstring(name)) ||
+        (name != nullptr && !runtime::copy_guest_cstring(name, 65535U, name_copy)) ||
         initial_count < 0 || maximum_count <= 0 || initial_count > maximum_count) {
         set_last_error(abi::kErrorInvalidParameter);
         return nullptr;
@@ -425,11 +431,14 @@ TL_MSABI void* tl_CreateSemaphoreW(const void* security_attributes,
                                    const std::int32_t initial_count,
                                    const std::int32_t maximum_count,
                                    const std::uint16_t* name) noexcept {
-    if (name != nullptr && !mapped_guest_wstring(name)) {
+    std::u16string name_copy;
+    if (!read_security_attributes(security_attributes) ||
+        (name != nullptr && !runtime::copy_guest_wstring(name, 65535U, name_copy)) ||
+        initial_count < 0 || maximum_count <= 0 || initial_count > maximum_count) {
         set_last_error(abi::kErrorInvalidParameter);
         return nullptr;
     }
-    return tl_CreateSemaphoreA(security_attributes, initial_count, maximum_count, nullptr);
+    return tl_CreateSemaphoreA(nullptr, initial_count, maximum_count, nullptr);
 }
 
 TL_MSABI int tl_ReleaseSemaphore(const void* semaphore, const std::int32_t release_count,

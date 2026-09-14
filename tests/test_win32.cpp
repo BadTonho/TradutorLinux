@@ -2455,6 +2455,24 @@ TEST(Win32ConcurrencyTest, ProtectedSynchronizationPointersRejectUnmappedMemory)
     EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
 }
 
+TEST(Win32ConcurrencyTest, ProtectedNamedSynchronizationInputsRejectUnmappedMemory) {
+    auto* const invalid = reinterpret_cast<const char*>(static_cast<std::uintptr_t>(0x1000));
+    EXPECT_EQ(tl_CreateMutexA(nullptr, 0, invalid), nullptr);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_CreateEventA(nullptr, 0, 0, invalid), nullptr);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_CreateSemaphoreA(nullptr, 0, 1, invalid), nullptr);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+
+    auto* const invalid_wide = reinterpret_cast<const std::uint16_t*>(static_cast<std::uintptr_t>(0x1000));
+    EXPECT_EQ(tl_CreateMutexW(nullptr, 0, invalid_wide), nullptr);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_CreateEventW(nullptr, 0, 0, invalid_wide), nullptr);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_CreateSemaphoreW(nullptr, 0, 1, invalid_wide), nullptr);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+}
+
 TEST(Win32ConcurrencyTest, TlsGetValueInvalidIndexReturnsNull) {
     // TlsGetValue on an index that was allocated then freed should return nullptr
     // (slot 0 is TEB self pointer and may be set).

@@ -369,6 +369,13 @@ TEST(Win32StubTest, UxThemeStubsRejectFakeHandlesAndClearOutputs) {
     EXPECT_EQ(tl_IsThemeActive(), 0);
     EXPECT_EQ(tl_IsAppThemed(), 0);
 
+    auto* const invalid_wide = reinterpret_cast<const std::uint16_t*>(static_cast<std::uintptr_t>(0x1000U));
+    EXPECT_EQ(tl_SetWindowTheme(nullptr, invalid_wide, nullptr),
+              static_cast<std::int32_t>(0x80070057U));
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_OpenThemeData(nullptr, invalid_wide), nullptr);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+
     std::uint32_t color = 0xFFFFFFFFU;
     EXPECT_EQ(tl_GetThemeColor(nullptr, 0, 0, 0, &color), kENotImpl);
     EXPECT_EQ(color, 0U);

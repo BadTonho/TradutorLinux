@@ -6,6 +6,7 @@
 
 #include <array>
 #include <cstring>
+#include <string>
 
 namespace tradutorlinux {
 
@@ -35,23 +36,23 @@ bool clear_guest_buffer(void* const destination, const std::size_t size) noexcep
 extern "C" {
 
 TL_MSABI int tl_SetWindowTheme(void* hwnd, const std::uint16_t* subAppName, const std::uint16_t* subIdList) noexcept {
+    std::u16string sub_app_name;
+    std::u16string sub_id_list;
     if (hwnd != nullptr && find_window_slot(hwnd) == nullptr) {
         // Permitir hwnd
     }
-    if (subAppName != nullptr && !mapped_guest_wstring(subAppName)) {
+    if ((subAppName != nullptr && !runtime::copy_guest_wstring(subAppName, 65535U, sub_app_name)) ||
+        (subIdList != nullptr && !runtime::copy_guest_wstring(subIdList, 65535U, sub_id_list))) {
         set_last_error(abi::kErrorInvalidParameter);
         return static_cast<int>(0x80070057); // E_INVALIDARG
-    }
-    if (subIdList != nullptr && !mapped_guest_wstring(subIdList)) {
-        set_last_error(abi::kErrorInvalidParameter);
-        return static_cast<int>(0x80070057);
     }
     return reject_theme();
 }
 
 TL_MSABI void* tl_OpenThemeData(void* const hwnd, const std::uint16_t* const class_list) noexcept {
     (void)hwnd;
-    if (class_list != nullptr && !mapped_guest_wstring(class_list)) {
+    std::u16string class_list_copy;
+    if (class_list != nullptr && !runtime::copy_guest_wstring(class_list, 65535U, class_list_copy)) {
         set_last_error(abi::kErrorInvalidParameter);
         return nullptr;
     }
