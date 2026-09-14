@@ -32,7 +32,7 @@ set(CASES
     "RTSSSetup737.exe|5"
     "RobloxPlayerInstaller.exe|0"
     "Rockstar-Games-Launcher.exe|0"
-    "Rufus_x64.exe|0"
+    "Rufus_x64.exe|4"
     "WinRAR_x64.exe|0"
     "lghub_installer.exe|0"
     "notepad++.exe|0"

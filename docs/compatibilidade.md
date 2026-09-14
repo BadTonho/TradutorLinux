@@ -44,14 +44,15 @@ builds Rust ON e C++ OFF.
 O teste `popular_apps_recursive_report_matrix` amplia essa verificação para
 todos os 64 arquivos PE, DLL e MSIX encontrados recursivamente no corpus
 pinado, incluindo os diretórios extraídos de 7-Zip e Notepad++. Ele executa
-somente `--report`, sem iniciar DLLs, instaladores ou pacotes rejeitados; os
-builds Rust ON e C++ OFF retornaram `25` sucessos, `2` rejeições estruturais e
-`37` formatos/arquiteturas não suportados em ambos os casos.
+somente `--report`, sem iniciar DLLs, instaladores ou pacotes rejeitados; após a
+validação file-backed do diretório de exceções do Rufus, os builds Rust ON e
+C++ OFF retornam `24` sucessos, `3` rejeições estruturais e `37`
+formatos/arquiteturas não suportados em ambos os casos.
 
 O teste `popular_apps_native_matrix` cobre seis casos de execução direta ou
 rejeição pré-entry: 7-Zip e os dois WinRAR terminam com `0`, Rockstar preserva
-seu `ExitProcess(3)`, Rufus é rejeitado com `4` por `map-failed` e o GUP do
-Notepad++ é rejeitado com `5` quando a cadeia `libcurl.dll` exige
+seu `ExitProcess(3)`, Rufus é rejeitado com `4` no parsing do diretório de
+exceções virtual-only e o GUP do Notepad++ é rejeitado com `5` quando a cadeia `libcurl.dll` exige
 `WLDAP32.dll`. Cada caso recebe prefixo temporário, limites de CPU/memória e
 timeout; isso é evidência de comportamento controlado, não uma promoção geral
 de compatibilidade.

@@ -24,7 +24,7 @@ set(CASES
     "WinRAR_x64.exe|0|exit exit-code=\"0\" explicit=\"sim\""
     "winrar-x64-723.exe|0|exit exit-code=\"0\" explicit=\"sim\""
     "Rockstar-Games-Launcher.exe|3|exit exit-code=\"3\" explicit=\"sim\""
-    "Rufus_x64.exe|4|map-failed"
+    "Rufus_x64.exe|4|diretório de exceções fora da imagem"
     "Notepad++/updater/GUP.exe|5|provider-rejected module=\"libcurl.dll\" provider=\"drive_c\" detail=\"WLDAP32.dll!ordinal(46): módulo não registrado\""
 )
 

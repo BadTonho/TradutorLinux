@@ -676,6 +676,35 @@ limitação de matriz de `missing_dll`, testes dinâmicos de WS2/gui e a sombra 
 ASan para fixtures sem relocations); nenhuma falha pertence aos testes focados
 da etapa.
 
+### R5 — Alinhar a validação Rust/C++ de diretórios de exceções file-backed
+
+**Problema reproduzido:** `Rufus_x64.exe` declara `.pdata` em `RVA 0xc5000`,
+dentro da seção virtual-only `UPX0` (`SizeOfRawData=0`). O parser C++ rejeitava
+essa tabela antes do mapeamento, mas o parser Rust a aceitava silenciosamente e
+produzia um relatório divergente para a mesma imagem.
+
+**Tarefas:**
+
+- [x] reproduzir a divergência em ambos os backends com o Rufus real;
+- [x] exigir que o diretório de exceções possua intervalo file-backed também no
+  parser Rust, preservando a rejeição segura do C++;
+- [x] adicionar regressão diferencial para uma tabela `.pdata` virtual-only;
+- [x] atualizar as matrizes de `--report`/execução e a documentação corrente;
+- [x] validar o corpus selecionado, recursivo, nativo e de instalação nos dois
+  backends.
+
+**Aceitação:** Rust ON e C++ OFF produzem a mesma categoria e código para o
+Rufus e para as matrizes do corpus; nenhuma tabela virtual-only é lida ou
+mapeada, e imagens empacotadas continuam exigindo uma etapa explícita de
+desempacotamento fora deste runtime.
+
+**Evidência 2026-09-14:** o teste
+`RustPeParserTest.RejectsVirtualOnlyExceptionDirectoryLikeCpp` passou. As
+matrizes de relatório selecionado (`27/27`), relatório recursivo (`64/64`),
+execução nativa (`6/6`) e instalação (`8/8`) passaram nos builds Rust ON e C++
+OFF. O corpus recursivo ficou classificado como `24` sucessos, `3` rejeições
+estruturais e `37` formatos/arquiteturas não suportados.
+
 ## Fora desta rodada
 
 Não entram neste roadmap, por enquanto:

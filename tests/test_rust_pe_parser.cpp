@@ -264,6 +264,18 @@ ByteVector make_unwind_fixture(const bool version2) {
     return build(spec);
 }
 
+ByteVector make_virtual_only_exception_fixture() {
+    BuildSpec spec;
+    spec.section_names = {".text", ".pdata"};
+    spec.section_data = {std::vector<std::byte>(0x10), std::vector<std::byte>(12)};
+    spec.exception_rva = 0x2000;
+    spec.exception_size = 12;
+    std::vector<std::byte> result = build(spec);
+    constexpr std::size_t kSecondSectionRawSizeOffset = 0x148 + 40 + 16;
+    write_u32(result, kSecondSectionRawSizeOffset, 0);
+    return result;
+}
+
 ByteVector make_all_unwind_fixture() {
     constexpr std::uint32_t pdata_rva = 0x2000;
     std::vector<std::byte> data;
@@ -411,6 +423,16 @@ TEST(RustPeParserTest, ExtendedSetFpRegRepeatsFrameOffset) {
     const RustCall rejected_rust = parse_rust(rejected);
     EXPECT_EQ(rejected_rust.status, TL_PE_STATUS_UNSUPPORTED_MECHANISM);
     EXPECT_EQ(rejected_rust.error.code, TL_PE_ERROR_UNWIND_DIRECTORY);
+}
+
+TEST(RustPeParserTest, RejectsVirtualOnlyExceptionDirectoryLikeCpp) {
+    const ByteVector input = make_virtual_only_exception_fixture();
+    const ParseResult cpp = tradutorlinux::pe::parse_pe(input);
+    ASSERT_EQ(cpp.status, tradutorlinux::pe::ParseStatus::Malformed);
+
+    const RustCall rust = parse_rust(input);
+    EXPECT_EQ(rust.status, TL_PE_STATUS_MALFORMED);
+    EXPECT_EQ(rust.error.code, TL_PE_ERROR_UNWIND_DIRECTORY);
 }
 
 TEST(RustPeParserTest, DifferentiallyMatchesGeneratedPeCorpus) {

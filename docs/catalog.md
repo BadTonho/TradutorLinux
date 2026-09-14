@@ -140,6 +140,8 @@ de integração para avaliar o nível real de suporte:
   é Mono/.NET e permanece não executado
 - `native-fixture.msix`: fixture reproduzível de pacote MSIX nativo; o CTest
   `integration_msix_install` valida relatório, extração, catálogo e `app run`
-- `HWiNFO64.exe`: **inicia**; `OpenPrinterW` retorna `ERROR_NOT_SUPPORTED` de forma controlada
-- `Rufus_x64.exe`: **inicia**; o fluxo de uso não foi validado
+- `HWiNFO64.exe`: rejeitado na análise estrutural; o diretório de exports aponta
+  para a seção virtual-only `UPX0` e o desempacotamento não é implementado
+- `Rufus_x64.exe`: rejeitado na análise estrutural; o diretório `.pdata` aponta
+  para a seção virtual-only `UPX0` e o desempacotamento não é implementado
 - Wrappers 32-bit (NSIS/Inno): rejeitados com segurança pelo filtro de arquitetura x64

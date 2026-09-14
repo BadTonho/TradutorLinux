@@ -1633,18 +1633,7 @@ impl<'a> Parser<'a> {
             match self.rva_to_file_offset(rva, size as usize, PHASE_UNWIND, ERROR_UNWIND_DIRECTORY)
             {
                 Ok(value) => value,
-                Err(error) => {
-                    let virtual_only = self.model.sections.iter().any(|section| {
-                        u64::from(rva) >= u64::from(section.virtual_address)
-                            && u64::from(rva) + u64::from(size)
-                                <= u64::from(section.virtual_address)
-                                    + u64::from(section.virtual_size)
-                    });
-                    if virtual_only {
-                        return Ok(());
-                    }
-                    return Err(error);
-                }
+                Err(error) => return Err(error),
             };
         let count = size as usize / RUNTIME_FUNCTION_SIZE;
         if count > MAX_RUNTIME_FUNCTIONS {
