@@ -106,12 +106,16 @@ struct ResourceKey {
         key.id = static_cast<std::uint16_t>(raw);
         return true;
     }
-    if (!mapped_guest_wstring(value)) {
+    std::u16string guest_name;
+    if (!runtime::copy_guest_wstring(value, kMaxModuleStringUnits, guest_name)) {
         return false;
     }
     key.named = true;
-    for (std::size_t index = 0; value[index] != 0; ++index) {
-        key.name.push_back(static_cast<char16_t>(value[index]));
+    try {
+        key.name.assign(guest_name.begin(), guest_name.end());
+    } catch (const std::bad_alloc&) {
+        key.name.clear();
+        return false;
     }
     return true;
 }

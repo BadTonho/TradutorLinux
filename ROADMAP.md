@@ -226,6 +226,11 @@ de falha na saída. A regressão
 e a fixture `tl_process_parent` passaram após reconstruir o executável do
 runtime.
 
+O sublote `KERNEL32/resource-input` migrou nomes nomeados de `FindResourceW`
+ para cópias UTF-16 host, preservando IDs `MAKEINTRESOURCE` como tokens. A
+ regressão `Win32ResourceTest.ProtectedResourceNamesRejectUnmappedPointers` e
+ a fixture `tl_resources` passaram.
+
 O lote de caminhos migrou as saídas de diretório, módulo, temporários,
 capacidade de disco, nomes completos/finais e `file_part`, além das leituras de
 strings A/W usadas por essas rotas. As coberturas existentes e a regressão

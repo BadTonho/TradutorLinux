@@ -108,6 +108,12 @@ UTF-16 locais para os nomes/diretórios de `CreateProcessA/W`. O
 `PROCESS_INFORMATION` é inicializado e publicado por `write_guest_memory`; se
 a publicação final falhar, o filho criado é encerrado e o slot é liberado.
 
+O sublote `KERNEL32/resource-input` copia nomes UTF-16 nomeados antes de
+consultar a árvore de recursos. IDs pequenos continuam sendo tokens
+`MAKEINTRESOURCE`; a árvore PE, por outro lado, é lida somente na imagem já
+validada pelo loader. `Win32ResourceTest.ProtectedResourceNamesRejectUnmappedPointers`
+e a fixture `tl_resources` cobrem a fronteira.
+
 O lote `SHELL32` segue esse contrato para suas estruturas de entrada e strings:
 `NOTIFYICONDATA`, `GUID`, `SHELLEXECUTEINFO`, `SHFILEOPSTRUCT`,
 `CommandLineToArgvW` e as entradas de `ShellExecuteA/W` são primeiro copiados

@@ -585,6 +585,13 @@ TEST(Win32ProcessTest, ProtectedCreateProcessInputsAndOutputsRejectUnmappedPoint
     EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
 }
 
+TEST(Win32ResourceTest, ProtectedResourceNamesRejectUnmappedPointers) {
+    auto* const invalid = reinterpret_cast<const std::uint16_t*>(static_cast<std::uintptr_t>(0x100000U));
+    EXPECT_EQ(tl_FindResourceW(nullptr, invalid,
+                               reinterpret_cast<const std::uint16_t*>(10U)), nullptr);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorResourceNotFound);
+}
+
 TEST(Win32CommandLineTest, GetCommandLineAReturnsNonEmpty) {
     const char* cmdline = tl_GetCommandLineA();
     ASSERT_NE(cmdline, nullptr);
