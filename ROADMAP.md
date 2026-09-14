@@ -474,6 +474,14 @@ alteração e consulta do `SysTreeView32` para snapshots, cópias locais e saíd
 protegidas. A regressão cobre buffers de entrada, texto aninhado e texto de
 saída inacessíveis, mantendo a seleção e o modelo lógico existentes.
 
+O sublote `USER32/message-controls` migrou as mensagens estruturadas de
+toolbar e list-view, os arrays de partes da status bar e as strings ANSI/Wide
+de status bar, edit e combo box para cópias protegidas. As saídas de item e
+texto do list-view são publicadas somente por `write_guest_memory`. A regressão
+`CommonControls.ControlMessagesRejectUnmappedNestedBuffers` cobre estruturas,
+arrays, strings aninhadas e buffers de saída inacessíveis; os testes de modelo
+lógico de toolbar, árvore e controles continuam passando.
+
 ## Fora desta rodada
 
 Não entram neste roadmap, por enquanto:

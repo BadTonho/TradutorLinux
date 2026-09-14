@@ -1161,17 +1161,22 @@ TL_MSABI int tl_SendMessageA(const void* window, const std::uint32_t message,
                 if (count > kMaxToolbarButtons || count > kMaxToolbarButtons - slot->toolbar_buttons.size() ||
                     lparam == 0 || struct_size < sizeof(std::int32_t) * 2U ||
                     struct_size > kMaxToolbarStructSize ||
-                    count > std::numeric_limits<std::size_t>::max() / struct_size ||
-                    !mapped_guest_range(reinterpret_cast<const void*>(lparam), count * struct_size,
-                                        false)) {
+                    count > std::numeric_limits<std::size_t>::max() / struct_size) {
+                    set_last_error(abi::kErrorInvalidParameter);
+                    return 0;
+                }
+                const std::size_t byte_count = count * struct_size;
+                std::array<std::byte, kMaxToolbarButtons * kMaxToolbarStructSize> bytes{};
+                if (runtime::read_guest_memory(reinterpret_cast<const void*>(lparam), bytes.data(),
+                                               byte_count).status !=
+                    runtime::GuestMemoryAccessStatus::Success) {
                     set_last_error(abi::kErrorInvalidParameter);
                     return 0;
                 }
                 slot->toolbar_button_struct_size = static_cast<std::uint32_t>(struct_size);
-                const auto* const bytes = reinterpret_cast<const std::byte*>(lparam);
                 for (std::size_t index = 0; index < count; ++index) {
                     std::int32_t command_id = 0;
-                    std::memcpy(&command_id, bytes + index * struct_size + sizeof(std::int32_t),
+                    std::memcpy(&command_id, bytes.data() + index * struct_size + sizeof(std::int32_t),
                                 sizeof(command_id));
                     slot->toolbar_buttons.push_back(ToolbarButton{command_id});
                 }
@@ -1229,11 +1234,14 @@ TL_MSABI int tl_SendMessageA(const void* window, const std::uint32_t message,
             if (message == abi::kSbSetTextA || message == abi::kSbSetTextW) {
                 if (lparam == 0) {
                     slot->text.clear();
-                } else if (!mapped_guest_cstring(reinterpret_cast<const char*>(lparam))) {
-                    set_last_error(abi::kErrorInvalidParameter);
-                    return 0;
                 } else {
-                    slot->text = reinterpret_cast<const char*>(lparam);
+                    std::string text_copy;
+                    if (!runtime::copy_guest_cstring(reinterpret_cast<const char*>(lparam), 65535U,
+                                                     text_copy)) {
+                        set_last_error(abi::kErrorInvalidParameter);
+                        return 0;
+                    }
+                    slot->text = std::move(text_copy);
                 }
                 if (slot->parent != nullptr) {
                     request_dialog_render(*slot->parent);
@@ -1243,12 +1251,18 @@ TL_MSABI int tl_SendMessageA(const void* window, const std::uint32_t message,
             }
             if (message == abi::kSbSetParts) {
                 const std::size_t count = static_cast<std::size_t>(wparam);
-                if (count > 128U || (count > 0U &&
-                                     (lparam == 0 || !mapped_guest_range(
-                                                           reinterpret_cast<const void*>(lparam),
-                                                           count * sizeof(std::int32_t), false)))) {
+                if (count > 128U || (count > 0U && lparam == 0)) {
                     set_last_error(abi::kErrorInvalidParameter);
                     return 0;
+                }
+                if (count > 0U) {
+                    std::array<std::int32_t, 128> parts{};
+                    if (runtime::read_guest_memory(reinterpret_cast<const void*>(lparam), parts.data(),
+                                                   count * sizeof(std::int32_t)).status !=
+                        runtime::GuestMemoryAccessStatus::Success) {
+                        set_last_error(abi::kErrorInvalidParameter);
+                        return 0;
+                    }
                 }
                 set_last_error(abi::kErrorSuccess);
                 return 1;
@@ -1271,19 +1285,31 @@ TL_MSABI int tl_SendMessageA(const void* window, const std::uint32_t message,
             }
         }
         if (slot->control_kind == ControlKind::Edit) {
-            if (message == 0x000C && lparam != 0 &&
-                mapped_guest_cstring(reinterpret_cast<const char*>(lparam))) {
-                slot->text = reinterpret_cast<const char*>(lparam);
+            if (message == 0x000C && lparam != 0) {
+                std::string text_copy;
+                if (!runtime::copy_guest_cstring(reinterpret_cast<const char*>(lparam), 65535U,
+                                                 text_copy)) {
+                    set_last_error(abi::kErrorInvalidParameter);
+                    return 0;
+                }
+                slot->text = std::move(text_copy);
                 if (slot->parent != nullptr) {
                     request_dialog_render(*slot->parent);
                 }
+                set_last_error(abi::kErrorSuccess);
                 return 1;
             }
         }
         if (slot->control_kind == ControlKind::ComboBox) {
-            if (message == abi::kCbAddString && lparam != 0 &&
-                mapped_guest_cstring(reinterpret_cast<const char*>(lparam))) {
-                slot->combo_items.emplace_back(reinterpret_cast<const char*>(lparam));
+            if (message == abi::kCbAddString && lparam != 0) {
+                std::string text_copy;
+                if (!runtime::copy_guest_cstring(reinterpret_cast<const char*>(lparam), 65535U,
+                                                 text_copy)) {
+                    set_last_error(abi::kErrorInvalidParameter);
+                    return 0;
+                }
+                slot->combo_items.emplace_back(std::move(text_copy));
+                set_last_error(abi::kErrorSuccess);
                 return static_cast<int>(slot->combo_items.size() - 1U);
             }
             if (message == abi::kCbSetCurSel) {
@@ -1312,17 +1338,24 @@ TL_MSABI int tl_SendMessageA(const void* window, const std::uint32_t message,
                 }
                 return 1;
             }
-            if (message == abi::kLvmInsertItemA && lparam != 0 &&
-                mapped_guest_range(reinterpret_cast<const void*>(lparam), sizeof(abi::GuestLvItemA),
-                                    false)) {
-                const auto* item = reinterpret_cast<const abi::GuestLvItemA*>(lparam);
+            if (message == abi::kLvmInsertItemA) {
+                abi::GuestLvItemA item{};
+                if (lparam == 0 || !read_guest_value(reinterpret_cast<const void*>(lparam), item)) {
+                    set_last_error(abi::kErrorInvalidParameter);
+                    return 0;
+                }
                 ListViewRow row;
                 row.columns.resize(6);
-                row.param = item->param;
-                if (item->text != nullptr && mapped_guest_cstring(item->text)) {
-                    row.columns[0] = item->text;
+                row.param = item.param;
+                if (item.text != nullptr) {
+                    std::string text_copy;
+                    if (!runtime::copy_guest_cstring(item.text, 65535U, text_copy)) {
+                        set_last_error(abi::kErrorInvalidParameter);
+                        return 0;
+                    }
+                    row.columns[0] = std::move(text_copy);
                 }
-                int index = item->item;
+                int index = item.item;
                 if (index < 0 || index > static_cast<int>(slot->list_rows.size())) {
                     index = static_cast<int>(slot->list_rows.size());
                 }
@@ -1332,16 +1365,22 @@ TL_MSABI int tl_SendMessageA(const void* window, const std::uint32_t message,
                 }
                 return index;
             }
-            if (message == abi::kLvmSetItemTextA && lparam != 0 &&
-                mapped_guest_range(reinterpret_cast<const void*>(lparam), sizeof(abi::GuestLvItemA),
-                                    false)) {
+            if (message == abi::kLvmSetItemTextA) {
                 const int index = static_cast<int>(wparam);
-                const auto* item = reinterpret_cast<const abi::GuestLvItemA*>(lparam);
+                abi::GuestLvItemA item{};
+                if (lparam == 0 || !read_guest_value(reinterpret_cast<const void*>(lparam), item)) {
+                    set_last_error(abi::kErrorInvalidParameter);
+                    return 0;
+                }
                 if (index >= 0 && static_cast<std::size_t>(index) < slot->list_rows.size() &&
-                    item->subitem >= 0 && item->subitem < 6 && item->text != nullptr &&
-                    mapped_guest_cstring(item->text)) {
-                    slot->list_rows[static_cast<std::size_t>(index)].columns[static_cast<std::size_t>(item->subitem)] =
-                        item->text;
+                    item.subitem >= 0 && item.subitem < 6 && item.text != nullptr) {
+                    std::string text_copy;
+                    if (!runtime::copy_guest_cstring(item.text, 65535U, text_copy)) {
+                        set_last_error(abi::kErrorInvalidParameter);
+                        return 0;
+                    }
+                    slot->list_rows[static_cast<std::size_t>(index)].columns[static_cast<std::size_t>(item.subitem)] =
+                        std::move(text_copy);
                     if (slot->parent != nullptr) {
                         request_dialog_render(*slot->parent);
                     }
@@ -1357,32 +1396,44 @@ TL_MSABI int tl_SendMessageA(const void* window, const std::uint32_t message,
                 }
                 return slot->list_selection;
             }
-            if (message == abi::kLvmGetItemA && lparam != 0 &&
-                mapped_guest_range(reinterpret_cast<const void*>(lparam), sizeof(abi::GuestLvItemA),
-                                    true)) {
+            if (message == abi::kLvmGetItemA) {
                 const int index = static_cast<int>(wparam);
-                auto* item = reinterpret_cast<abi::GuestLvItemA*>(lparam);
+                abi::GuestLvItemA item{};
+                if (lparam == 0 || !read_guest_value(reinterpret_cast<const void*>(lparam), item)) {
+                    set_last_error(abi::kErrorInvalidParameter);
+                    return 0;
+                }
                 if (index >= 0 && static_cast<std::size_t>(index) < slot->list_rows.size()) {
-                    item->param = slot->list_rows[static_cast<std::size_t>(index)].param;
+                    item.param = slot->list_rows[static_cast<std::size_t>(index)].param;
+                    if (!write_guest_value(reinterpret_cast<void*>(lparam), item)) {
+                        set_last_error(abi::kErrorInvalidParameter);
+                        return 0;
+                    }
                     return 1;
                 }
                 return 0;
             }
-            if (message == abi::kLvmGetItemTextA && lparam != 0 &&
-                mapped_guest_range(reinterpret_cast<const void*>(lparam), sizeof(abi::GuestLvItemA),
-                                    true)) {
+            if (message == abi::kLvmGetItemTextA) {
                 const int index = static_cast<int>(wparam);
-                auto* item = reinterpret_cast<abi::GuestLvItemA*>(lparam);
+                abi::GuestLvItemA item{};
+                if (lparam == 0 || !read_guest_value(reinterpret_cast<const void*>(lparam), item)) {
+                    set_last_error(abi::kErrorInvalidParameter);
+                    return 0;
+                }
                 if (index >= 0 && static_cast<std::size_t>(index) < slot->list_rows.size() &&
-                    item->subitem >= 0 && item->subitem < 6 && item->text != nullptr &&
-                    item->text_capacity > 0 &&
-                    mapped_guest_range(item->text, static_cast<std::size_t>(item->text_capacity), true)) {
+                    item.subitem >= 0 && item.subitem < 6 && item.text != nullptr &&
+                    item.text_capacity > 0) {
                     const std::string& value = slot->list_rows[static_cast<std::size_t>(index)].columns[
-                        static_cast<std::size_t>(item->subitem)];
+                        static_cast<std::size_t>(item.subitem)];
                     const std::size_t count = std::min<std::size_t>(value.size(),
-                                                                     static_cast<std::size_t>(item->text_capacity - 1));
-                    std::memcpy(item->text, value.data(), count);
-                    item->text[count] = '\0';
+                                                                     static_cast<std::size_t>(item.text_capacity - 1));
+                    std::array<char, 65536> output{};
+                    std::memcpy(output.data(), value.data(), count);
+                    if (runtime::write_guest_memory(item.text, output.data(), count + 1U).status !=
+                        runtime::GuestMemoryAccessStatus::Success) {
+                        set_last_error(abi::kErrorInvalidParameter);
+                        return 0;
+                    }
                     return static_cast<int>(count);
                 }
                 return 0;
@@ -1417,23 +1468,37 @@ TL_MSABI int tl_SendMessageW(const void* window, const std::uint32_t message,
             if (lparam == 0) {
                 return tl_SendMessageA(window, abi::kSbSetTextA, wparam, 0);
             }
-            if (!mapped_guest_wstring(reinterpret_cast<const std::uint16_t*>(lparam))) {
+            std::u16string wide_text;
+            if (!runtime::copy_guest_wstring(reinterpret_cast<const std::uint16_t*>(lparam), 65535U,
+                                              wide_text)) {
                 set_last_error(abi::kErrorInvalidParameter);
                 return 0;
             }
-            const std::string utf8 =
-                util::wide_to_utf8(reinterpret_cast<const std::uint16_t*>(lparam));
+            const std::string utf8 = util::wide_to_utf8(
+                reinterpret_cast<const std::uint16_t*>(wide_text.data()), wide_text.size());
             return tl_SendMessageA(window, abi::kSbSetTextA, wparam,
                                    reinterpret_cast<abi::Lparam>(utf8.c_str()));
         }
-        if (message == 0x000C && lparam != 0 &&
-            mapped_guest_wstring(reinterpret_cast<const std::uint16_t*>(lparam))) {
-            const std::string utf8 = util::wide_to_utf8(reinterpret_cast<const std::uint16_t*>(lparam));
+        if (message == 0x000C && lparam != 0) {
+            std::u16string wide_text;
+            if (!runtime::copy_guest_wstring(reinterpret_cast<const std::uint16_t*>(lparam), 65535U,
+                                              wide_text)) {
+                set_last_error(abi::kErrorInvalidParameter);
+                return 0;
+            }
+            const std::string utf8 = util::wide_to_utf8(
+                reinterpret_cast<const std::uint16_t*>(wide_text.data()), wide_text.size());
             return tl_SendMessageA(window, message, wparam, reinterpret_cast<abi::Lparam>(utf8.c_str()));
         }
-        if (message == abi::kCbAddString && lparam != 0 &&
-            mapped_guest_wstring(reinterpret_cast<const std::uint16_t*>(lparam))) {
-            const std::string utf8 = util::wide_to_utf8(reinterpret_cast<const std::uint16_t*>(lparam));
+        if (message == abi::kCbAddString && lparam != 0) {
+            std::u16string wide_text;
+            if (!runtime::copy_guest_wstring(reinterpret_cast<const std::uint16_t*>(lparam), 65535U,
+                                              wide_text)) {
+                set_last_error(abi::kErrorInvalidParameter);
+                return 0;
+            }
+            const std::string utf8 = util::wide_to_utf8(
+                reinterpret_cast<const std::uint16_t*>(wide_text.data()), wide_text.size());
             return tl_SendMessageA(window, message, wparam, reinterpret_cast<abi::Lparam>(utf8.c_str()));
         }
         return tl_SendMessageA(window, message, wparam, lparam);

@@ -475,6 +475,122 @@ TEST(CommonControls, TreeViewRejectsUnmappedInputAndOutputBuffers) {
     g_windows = {};
 }
 
+TEST(CommonControls, ControlMessagesRejectUnmappedNestedBuffers) {
+    g_windows = {};
+    WindowSlot& parent = g_windows[0];
+    parent.used = true;
+    parent.width = 640;
+    parent.height = 480;
+
+    auto* const invalid = reinterpret_cast<void*>(static_cast<std::uintptr_t>(0x1000U));
+
+    WindowSlot& toolbar = g_windows[1];
+    toolbar.used = true;
+    toolbar.is_control = true;
+    toolbar.parent = &parent;
+    toolbar.control_kind = ControlKind::Toolbar;
+    EXPECT_EQ(tl_SendMessageA(&toolbar, abi::kTbButtonStructSize, 8, 0), 1);
+    EXPECT_EQ(tl_SendMessageA(&toolbar, abi::kTbAddButtons, 1,
+                              reinterpret_cast<abi::Lparam>(invalid)),
+              0);
+
+    WindowSlot& status = g_windows[2];
+    status.used = true;
+    status.is_control = true;
+    status.parent = &parent;
+    status.control_kind = ControlKind::StatusBar;
+    EXPECT_EQ(tl_SendMessageA(&status, abi::kSbSetTextA, 0,
+                              reinterpret_cast<abi::Lparam>(invalid)),
+              0);
+    EXPECT_EQ(tl_SendMessageW(&status, abi::kSbSetTextW, 0,
+                              reinterpret_cast<abi::Lparam>(invalid)),
+              0);
+    EXPECT_EQ(tl_SendMessageA(&status, abi::kSbSetParts, 1,
+                              reinterpret_cast<abi::Lparam>(invalid)),
+              0);
+
+    WindowSlot& edit = g_windows[3];
+    edit.used = true;
+    edit.is_control = true;
+    edit.parent = &parent;
+    edit.control_kind = ControlKind::Edit;
+    EXPECT_EQ(tl_SendMessageA(&edit, 0x000C, 0, reinterpret_cast<abi::Lparam>(invalid)), 0);
+    EXPECT_EQ(tl_SendMessageW(&edit, 0x000C, 0, reinterpret_cast<abi::Lparam>(invalid)), 0);
+
+    WindowSlot& combo = g_windows[4];
+    combo.used = true;
+    combo.is_control = true;
+    combo.parent = &parent;
+    combo.control_kind = ControlKind::ComboBox;
+    EXPECT_EQ(tl_SendMessageA(&combo, abi::kCbAddString, 0,
+                              reinterpret_cast<abi::Lparam>(invalid)),
+              0);
+    EXPECT_EQ(tl_SendMessageW(&combo, abi::kCbAddString, 0,
+                              reinterpret_cast<abi::Lparam>(invalid)),
+              0);
+
+    WindowSlot& list = g_windows[5];
+    list.used = true;
+    list.is_control = true;
+    list.parent = &parent;
+    list.control_kind = ControlKind::ListView;
+    EXPECT_EQ(tl_SendMessageA(&list, abi::kLvmInsertItemA, 0,
+                              reinterpret_cast<abi::Lparam>(invalid)),
+              0);
+
+    abi::GuestLvItemA item{};
+    item.text = static_cast<char*>(invalid);
+    EXPECT_EQ(tl_SendMessageA(&list, abi::kLvmInsertItemA, 0,
+                              reinterpret_cast<abi::Lparam>(&item)),
+              0);
+
+    char row_text[] = "Row";
+    item.text = row_text;
+    ASSERT_EQ(tl_SendMessageA(&list, abi::kLvmInsertItemA, 0,
+                              reinterpret_cast<abi::Lparam>(&item)),
+              0);
+
+    char updated_text[] = "Updated";
+    item.subitem = 0;
+    item.text = updated_text;
+    EXPECT_EQ(tl_SendMessageA(&list, abi::kLvmSetItemTextA, 0,
+                              reinterpret_cast<abi::Lparam>(&item)),
+              1);
+    item.text = static_cast<char*>(invalid);
+    EXPECT_EQ(tl_SendMessageA(&list, abi::kLvmSetItemTextA, 0,
+                              reinterpret_cast<abi::Lparam>(&item)),
+              0);
+
+    abi::GuestLvItemA item_query{};
+    ASSERT_EQ(tl_SendMessageA(&list, abi::kLvmGetItemA, 0,
+                              reinterpret_cast<abi::Lparam>(&item_query)),
+              1);
+
+    char output[16]{};
+    abi::GuestLvItemA text_query{};
+    text_query.subitem = 0;
+    text_query.text = output;
+    text_query.text_capacity = static_cast<std::int32_t>(sizeof(output));
+    ASSERT_EQ(tl_SendMessageA(&list, abi::kLvmGetItemTextA, 0,
+                              reinterpret_cast<abi::Lparam>(&text_query)),
+              7);
+    EXPECT_STREQ(output, "Updated");
+
+    EXPECT_EQ(tl_SendMessageA(&list, abi::kLvmGetItemA, 0,
+                              reinterpret_cast<abi::Lparam>(invalid)),
+              0);
+
+    abi::GuestLvItemA query{};
+    query.subitem = 0;
+    query.text = static_cast<char*>(invalid);
+    query.text_capacity = 8;
+    EXPECT_EQ(tl_SendMessageA(&list, abi::kLvmGetItemTextA, 0,
+                              reinterpret_cast<abi::Lparam>(&query)),
+              0);
+
+    g_windows = {};
+}
+
 TEST(CommonControls, ToolbarMessagesBuildLogicalButtonModel) {
     g_windows = {};
     WindowSlot& parent = g_windows[0];

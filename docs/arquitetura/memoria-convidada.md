@@ -94,6 +94,13 @@ O sublote `USER32/message-tree` aplica o contrato às estruturas e textos do
 buffers host; textos aninhados são lidos com cópias limitadas, e as respostas
 são publicadas por `write_guest_memory`.
 
+O sublote `USER32/message-controls` aplica o contrato às estruturas de
+`TB_ADDBUTTONS` e `LVM_*`, ao array de `SB_SETTEXT`/partes e às strings de
+status bar, edit e combo box em variantes ANSI/Wide. Estruturas e strings são
+copiadas para objetos host; saídas de item e texto do list-view são publicadas
+por `write_guest_memory`, sem desreferenciar ponteiros convidados depois de
+uma validação por fotografia.
+
 ## Limites residuais
 
 `validate_mapped_range` permanece deliberadamente como predicado advisory:
