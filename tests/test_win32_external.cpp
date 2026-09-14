@@ -348,6 +348,14 @@ TEST(Crypt32Test, CertNameToStrConvertsValidatedNameBlobAndBoundsOutput) {
 
     EXPECT_EQ(tl_CertNameToStrW(2, &name, 3, output, 32), 0U);
     EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+
+    auto* const invalid = reinterpret_cast<void*>(static_cast<std::uintptr_t>(0x1000U));
+    EXPECT_EQ(tl_CertNameToStrW(1, static_cast<const GuestDataBlob*>(invalid), 3, output, 32),
+              0U);
+    GuestDataBlob invalid_data = name;
+    invalid_data.data = static_cast<std::uint8_t*>(invalid);
+    EXPECT_EQ(tl_CertNameToStrW(1, &invalid_data, 3, output, 32), 0U);
+    EXPECT_EQ(tl_CertNameToStrW(1, &name, 3, static_cast<std::uint16_t*>(invalid), 32), 0U);
 }
 
 TEST(Crypt32Test, CertContextAndStoreManagement) {

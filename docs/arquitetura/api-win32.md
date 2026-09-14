@@ -584,6 +584,12 @@ atributo por cópias protegidas e publica o resultado em UTF-16. A capacidade
 é calculada antes da escrita; contexto, blob, OID ou destino inacessível
 retornam erro controlado.
 
+`CertNameToStrW` lê `CERT_NAME_BLOB` e seu DER por cópias protegidas, preserva
+os tipos e flags X.500 já publicados e publica a string UTF-16 pela fronteira
+protegida. Em capacidade insuficiente, zera a primeira unidade quando o
+destino é acessível e retorna o tamanho requerido; blob, DER ou destino
+inacessível retornam erro controlado.
+
 `WinVerifyTrust`, `WTHelperProvDataFromStateData`,
 `WTHelperGetProvSignerFromChain` e `WTHelperGetProvCertFromChain` implementam
 o contrato de blob/cadeia explícita usado por `tl_trust`. `WTD_CHOICE_FILE`,

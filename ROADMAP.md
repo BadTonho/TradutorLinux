@@ -584,6 +584,12 @@ publicação UTF-16 por `write_guest_memory`. A regressão
 os seis testes `Crypt32Test` e as quatro integrações PE de `tl_crypt32` no
 preset `validation-sanitize`.
 
+O sublote `CRYPT32/blob-output` migrou `CertNameToStrW` para fotografia
+protegida de `CERT_NAME_BLOB` e publicação UTF-16 protegida, incluindo o caso
+de buffer insuficiente que precisa zerar somente a primeira unidade. A regressão
+`Crypt32Test.CertNameToStrConvertsValidatedNameBlobAndBoundsOutput` passou junto
+com as mesmas seis validações unitárias e quatro integrações PE de `tl_crypt32`.
+
 ## Fora desta rodada
 
 Não entram neste roadmap, por enquanto:

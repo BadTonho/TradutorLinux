@@ -209,6 +209,13 @@ OID e saídas inacessíveis são rejeitados sem desreferenciar memória convidad
 `Crypt32Test.CertGetNameStringReadsSubjectIssuerAndValidatesBuffers` e as
 integrações de `tl_crypt32` protegem esse contrato.
 
+O sublote `CRYPT32/blob-output` fotografa `GuestDataBlob` e seu DER por
+`read_guest_memory` e publica `CertNameToStrW` por `write_guest_memory`. No
+buffer insuficiente, a primeira unidade é zerada pela mesma primitiva; blob,
+DER e destino inacessíveis falham de modo controlado. A regressão
+`Crypt32Test.CertNameToStrConvertsValidatedNameBlobAndBoundsOutput` cobre esse
+contrato na integração `tl_crypt32`.
+
 ## Limites residuais
 
 `validate_mapped_range` permanece deliberadamente como predicado advisory:

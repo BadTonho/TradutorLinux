@@ -293,6 +293,27 @@ bool snapshot_cert_context(const GuestCertContext* const source, GuestCertContex
     return true;
 }
 
+bool snapshot_data_blob(const GuestDataBlob* const source, GuestDataBlob& blob,
+                        std::vector<std::uint8_t>& data) noexcept {
+    if (source == nullptr ||
+        runtime::read_guest_memory(source, &blob, sizeof(blob)).status !=
+            runtime::GuestMemoryAccessStatus::Success ||
+        blob.data == nullptr || blob.size == 0U || blob.size > kMaxCertificateSize) {
+        return false;
+    }
+    try {
+        data.resize(blob.size);
+    } catch (...) {
+        return false;
+    }
+    if (runtime::read_guest_memory(blob.data, data.data(), data.size()).status !=
+        runtime::GuestMemoryAccessStatus::Success) {
+        return false;
+    }
+    blob.data = data.data();
+    return true;
+}
+
 bool write_guest_wstring(std::uint16_t* const destination,
                          const std::u16string& value) noexcept {
     try {
@@ -585,26 +606,17 @@ TL_CRYPT32_MSABI std::uint32_t tl_CertNameToStrW(
     constexpr std::uint32_t kSupportedFlags =
         kSemicolonFlag | kCrlfFlag | kNoPlusFlag | kNoQuotingFlag | kReverseFlag;
 
-    if ((encoding_type & 0xFFFFU) != kSupportedEncoding || name == nullptr ||
-        !runtime::validate_mapped_range(name, sizeof(*name), false) ||
-        (string_type & 0xFFU) == 0U ||
+    GuestDataBlob name_copy{};
+    std::vector<std::uint8_t> encoded_storage;
+    if (!snapshot_data_blob(name, name_copy, encoded_storage) ||
+        (encoding_type & 0xFFFFU) != kSupportedEncoding || (string_type & 0xFFU) == 0U ||
         (string_type & 0xFFU) > kSupportedStringTypes ||
-        (string_type & ~(0xFFU | kSupportedFlags)) != 0U || name->data == nullptr ||
-        name->size == 0U || name->size > kMaxCertificateSize ||
-        !runtime::validate_mapped_range(name->data, name->size, false)) {
-        set_last_error(abi::kErrorInvalidParameter);
-        return 0;
-    }
-    if (string != nullptr && string_capacity != 0U &&
-        (static_cast<std::size_t>(string_capacity) >
-             std::numeric_limits<std::size_t>::max() / sizeof(*string) ||
-         !runtime::validate_mapped_range(
-             string, static_cast<std::size_t>(string_capacity) * sizeof(*string), true))) {
+        (string_type & ~(0xFFU | kSupportedFlags)) != 0U) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
 
-    Bytes encoded_name{name->data, name->size};
+    Bytes encoded_name{name_copy.data, name_copy.size};
     if (!encoded_name.empty() && encoded_name.front() == 0x30U) {
         std::size_t offset = 0;
         Bytes sequence{};
@@ -635,12 +647,17 @@ TL_CRYPT32_MSABI std::uint32_t tl_CertNameToStrW(
         return static_cast<std::uint32_t>(required);
     }
     if (string_capacity < required) {
-        string[0] = 0;
+        if (!write_guest_wstring(string, {})) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
+        }
         set_last_error(abi::kErrorInsufficientBuffer);
         return static_cast<std::uint32_t>(required);
     }
-    std::copy(formatted.begin(), formatted.end(), string);
-    string[formatted.size()] = 0;
+    if (!write_guest_wstring(string, formatted)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
     set_last_error(abi::kErrorSuccess);
     return static_cast<std::uint32_t>(required);
 }
