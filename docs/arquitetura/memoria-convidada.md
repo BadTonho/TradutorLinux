@@ -97,6 +97,12 @@ O sublote `KERNEL32/toolhelp-process` lê `dwSize` por `read_guest_value`, monta
 local. `Win32ToolhelpTest.ProtectedProcessEntriesRejectUnmappedPointers` e a
 fixture `tl_toolhelp` cobrem os caminhos inválido e de enumeração real.
 
+O sublote `KERNEL32/process-outputs` monta startup info, tempos, máscaras,
+contadores, informações de CPU e estado de rede em objetos host. Capacidades e
+tamanhos são lidos com `read_guest_value`; saídas, inclusive o tamanho
+necessário de `QueryFullProcessImageNameW`, usam `write_guest_memory` ou
+`write_guest_value` e rejeitam falhas de transferência.
+
 O lote `SHELL32` segue esse contrato para suas estruturas de entrada e strings:
 `NOTIFYICONDATA`, `GUID`, `SHELLEXECUTEINFO`, `SHFILEOPSTRUCT`,
 `CommandLineToArgvW` e as entradas de `ShellExecuteA/W` são primeiro copiados

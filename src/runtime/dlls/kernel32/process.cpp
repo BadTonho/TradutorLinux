@@ -513,19 +513,23 @@ static std::string g_custom_dll_directory;
 extern "C" {
 
 TL_MSABI void tl_GetStartupInfoW(abi::GuestStartupInfoW* const startup_info) noexcept {
-    if (startup_info == nullptr ||
-        !mapped_guest_range(startup_info, sizeof(*startup_info), true)) {
+    if (startup_info == nullptr) {
         set_last_error(abi::kErrorInvalidParameter);
         return;
     }
-    *startup_info = {};
-    startup_info->cb = sizeof(*startup_info);
-    startup_info->flags = abi::kStartfUseStdHandles;
+    abi::GuestStartupInfoW output{};
+    output.cb = sizeof(output);
+    output.flags = abi::kStartfUseStdHandles;
     {
         std::lock_guard lock(g_process_context_mutex);
-        startup_info->std_input = g_standard_handles[0];
-        startup_info->std_output = g_standard_handles[1];
-        startup_info->std_error = g_standard_handles[2];
+        output.std_input = g_standard_handles[0];
+        output.std_output = g_standard_handles[1];
+        output.std_error = g_standard_handles[2];
+    }
+    if (runtime::write_guest_memory(startup_info, &output, sizeof(output)).status !=
+        runtime::GuestMemoryAccessStatus::Success) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return;
     }
     set_last_error(abi::kErrorSuccess);
     trace_process_console("process-context", "startup-info", "wide");
@@ -1349,8 +1353,14 @@ TL_MSABI void* tl_OpenProcess(std::uint32_t desired_access, int inherit_handle, 
 
 TL_MSABI void tl_GetStartupInfoA(void* startup_info) noexcept {
     if (startup_info != nullptr) {
-        std::memset(startup_info, 0, 104);
-        *static_cast<std::uint32_t*>(startup_info) = 104;
+        std::array<std::byte, 104> output{};
+        const std::uint32_t size = 104;
+        std::memcpy(output.data(), &size, sizeof(size));
+        if (runtime::write_guest_memory(startup_info, output.data(), output.size()).status !=
+            runtime::GuestMemoryAccessStatus::Success) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return;
+        }
     }
     set_last_error(abi::kErrorSuccess);
 }
@@ -1582,13 +1592,16 @@ TL_MSABI int tl_CreateProcessA(const char* application_name, char* command_line,
 
 TL_MSABI int tl_GetExitCodeProcess(const void* process, std::uint32_t* exit_code) noexcept {
     SyncSlot* slot = find_sync_slot(process);
-    if (slot == nullptr || slot->kind != SyncKind::Process || exit_code == nullptr ||
-        !mapped_guest_range(exit_code, sizeof(*exit_code), true)) {
+    if (slot == nullptr || slot->kind != SyncKind::Process || exit_code == nullptr) {
         set_last_error(slot == nullptr ? abi::kErrorInvalidHandle : abi::kErrorInvalidParameter);
         return 0;
     }
     static_cast<void>(wait_process_slot(*slot, 0));
-    *exit_code = slot->process_running ? kStillActive : slot->process_exit_code;
+    const std::uint32_t result = slot->process_running ? kStillActive : slot->process_exit_code;
+    if (!write_guest_value(exit_code, result)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
     set_last_error(abi::kErrorSuccess);
     return 1;
 }
@@ -1615,11 +1628,13 @@ TL_MSABI int tl_SetDllDirectoryW(const std::uint16_t* const path_name) noexcept 
         set_last_error(abi::kErrorSuccess);
         return 1;
     }
-    if (!mapped_guest_wstring(path_name)) {
+    std::u16string guest_path_name;
+    if (!runtime::copy_guest_wstring(path_name, kMaxModuleStringUnits, guest_path_name)) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
-    g_custom_dll_directory = util::wide_to_utf8(path_name);
+    g_custom_dll_directory = util::wide_to_utf8(
+        reinterpret_cast<const std::uint16_t*>(guest_path_name.data()), guest_path_name.size());
     set_last_error(abi::kErrorSuccess);
     return 1;
 }
@@ -1644,26 +1659,33 @@ TL_MSABI int tl_QueryFullProcessImageNameW(const void* const process, const std:
                                            std::uint16_t* const exe_name, std::uint32_t* const size) noexcept {
     (void)process;
     (void)flags;
-    if (exe_name == nullptr || size == nullptr || !mapped_guest_range(size, sizeof(*size), true)) {
+    if (exe_name == nullptr || size == nullptr) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    std::uint32_t capacity = 0;
+    if (!read_guest_value(size, capacity)) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
     const std::string path =
         prefix::to_windows_path(std::filesystem::path(g_module_file_name), guest_prefix_root());
     const std::u16string wide_path = util::utf8_to_wide(path);
-    const std::uint32_t capacity = *size;
     if (capacity <= wide_path.size()) {
-        *size = static_cast<std::uint32_t>(wide_path.size() + 1);
+        const std::uint32_t required = static_cast<std::uint32_t>(wide_path.size() + 1U);
+        if (!write_guest_value(size, required)) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
+        }
         set_last_error(abi::kErrorInsufficientBuffer);
         return 0;
     }
-    if (!mapped_guest_range(exe_name, sizeof(std::uint16_t) * (wide_path.size() + 1), true)) {
+    if (!write_guest_terminated_units(
+            exe_name, reinterpret_cast<const std::uint16_t*>(wide_path.data()), wide_path.size()) ||
+        !write_guest_value(size, static_cast<std::uint32_t>(wide_path.size()))) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
-    std::copy(wide_path.begin(), wide_path.end(), exe_name);
-    exe_name[wide_path.size()] = 0;
-    *size = static_cast<std::uint32_t>(wide_path.size());
     set_last_error(abi::kErrorSuccess);
     return 1;
 }
@@ -1672,11 +1694,14 @@ TL_MSABI int tl_GetProcessAffinityMask(const void* const process_handle,
                                        std::uintptr_t* const process_affinity_mask,
                                        std::uintptr_t* const system_affinity_mask) noexcept {
     (void)process_handle;
-    if (process_affinity_mask != nullptr && mapped_guest_range(process_affinity_mask, sizeof(*process_affinity_mask), true)) {
-        *process_affinity_mask = 0x0000000FULL;
+    const std::uintptr_t mask = 0x0000000FULL;
+    if (process_affinity_mask != nullptr && !write_guest_value(process_affinity_mask, mask)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
     }
-    if (system_affinity_mask != nullptr && mapped_guest_range(system_affinity_mask, sizeof(*system_affinity_mask), true)) {
-        *system_affinity_mask = 0x0000000FULL;
+    if (system_affinity_mask != nullptr && !write_guest_value(system_affinity_mask, mask)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
     }
     set_last_error(abi::kErrorSuccess);
     return 1;
@@ -1690,17 +1715,29 @@ TL_MSABI int tl_GetProcessTimes(void* const process, void* const creation_time, 
         std::uint32_t high_date_time;
     };
     const ProcessTimesGuestFileTime dummy_time{0, 0};
-    if (creation_time != nullptr && mapped_guest_range(creation_time, sizeof(dummy_time), true)) {
-        std::memcpy(creation_time, &dummy_time, sizeof(dummy_time));
+    if (creation_time != nullptr && runtime::write_guest_memory(
+                                         creation_time, &dummy_time, sizeof(dummy_time)).status !=
+                                         runtime::GuestMemoryAccessStatus::Success) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
     }
-    if (exit_time != nullptr && mapped_guest_range(exit_time, sizeof(dummy_time), true)) {
-        std::memcpy(exit_time, &dummy_time, sizeof(dummy_time));
+    if (exit_time != nullptr && runtime::write_guest_memory(
+                                     exit_time, &dummy_time, sizeof(dummy_time)).status !=
+                                     runtime::GuestMemoryAccessStatus::Success) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
     }
-    if (kernel_time != nullptr && mapped_guest_range(kernel_time, sizeof(dummy_time), true)) {
-        std::memcpy(kernel_time, &dummy_time, sizeof(dummy_time));
+    if (kernel_time != nullptr && runtime::write_guest_memory(
+                                       kernel_time, &dummy_time, sizeof(dummy_time)).status !=
+                                       runtime::GuestMemoryAccessStatus::Success) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
     }
-    if (user_time != nullptr && mapped_guest_range(user_time, sizeof(dummy_time), true)) {
-        std::memcpy(user_time, &dummy_time, sizeof(dummy_time));
+    if (user_time != nullptr && runtime::write_guest_memory(
+                                     user_time, &dummy_time, sizeof(dummy_time)).status !=
+                                     runtime::GuestMemoryAccessStatus::Success) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
     }
     set_last_error(abi::kErrorSuccess);
     return 1;
@@ -1727,11 +1764,10 @@ TL_MSABI int tl_SetPriorityClass(void* const process, const std::uint32_t priori
 
 TL_MSABI int tl_K32GetProcessMemoryInfo(void* const process, void* const counters, const std::uint32_t cb) noexcept {
     (void)process;
-    if (counters == nullptr || cb < 32 || !mapped_guest_range(counters, cb, true)) {
+    if (counters == nullptr || cb < 32 || cb > 4096U) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
-    std::memset(counters, 0, cb);
     struct DummyCounters {
         std::uint32_t cb;
         std::uint32_t page_fault_count;
@@ -1748,7 +1784,23 @@ TL_MSABI int tl_K32GetProcessMemoryInfo(void* const process, void* const counter
     dummy.working_set = 64 * 1024 * 1024;
     dummy.peak_working_set = 128 * 1024 * 1024;
     dummy.pagefile_usage = 64 * 1024 * 1024;
-    std::memcpy(counters, &dummy, std::min<std::size_t>(cb, sizeof(dummy)));
+    std::array<std::byte, 256> zeroes{};
+    const std::uintptr_t base = reinterpret_cast<std::uintptr_t>(counters);
+    for (std::size_t offset = 0; offset < cb;) {
+        const std::size_t chunk = std::min<std::size_t>(zeroes.size(), cb - offset);
+        if (offset > std::numeric_limits<std::uintptr_t>::max() - base ||
+            runtime::write_guest_memory(reinterpret_cast<void*>(base + offset), zeroes.data(), chunk).status !=
+                runtime::GuestMemoryAccessStatus::Success) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
+        }
+        offset += chunk;
+    }
+    if (runtime::write_guest_memory(counters, &dummy, std::min<std::size_t>(cb, sizeof(dummy))).status !=
+        runtime::GuestMemoryAccessStatus::Success) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
     set_last_error(abi::kErrorSuccess);
     return 1;
 }
@@ -1821,12 +1873,25 @@ TL_MSABI int tl_GetLogicalProcessorInformation(void* const buffer, std::uint32_t
         return 0;
     }
     constexpr std::uint32_t req_size = 64;
-    if (buffer == nullptr || *returned_length < req_size) {
-        *returned_length = req_size;
+    std::uint32_t capacity = 0;
+    if (!read_guest_value(returned_length, capacity)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    if (buffer == nullptr || capacity < req_size) {
+        if (!write_guest_value(returned_length, req_size)) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
+        }
         set_last_error(abi::kErrorInsufficientBuffer);
         return 0;
     }
-    std::memset(buffer, 0, req_size);
+    const std::array<std::byte, req_size> output{};
+    if (runtime::write_guest_memory(buffer, output.data(), output.size()).status !=
+        runtime::GuestMemoryAccessStatus::Success) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
     set_last_error(abi::kErrorSuccess);
     return 1;
 }
@@ -1845,8 +1910,9 @@ TL_MSABI int tl_IsDestinationReachableW(const wchar_t* const lpszDestination, vo
 }
 
 TL_MSABI int tl_IsNetworkAlive(std::uint32_t* const lpdwFlags) noexcept {
-    if (lpdwFlags != nullptr && mapped_guest_range(lpdwFlags, sizeof(std::uint32_t), true)) {
-        *lpdwFlags = 1; // NETWORK_ALIVE_LAN
+    if (lpdwFlags != nullptr && !write_guest_value(lpdwFlags, std::uint32_t{1})) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
     }
     return 1;
 }

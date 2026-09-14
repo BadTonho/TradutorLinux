@@ -211,6 +211,13 @@ O sublote `KERNEL32/toolhelp-process` migrou os registros de
 `write_guest_memory`. A regressão de ponteiro inválido, a fixture `tl_toolhelp`
 e seus testes de metadados, execução e relatório passaram.
 
+O sublote `KERNEL32/process-outputs` migrou startup info, código de saída,
+nome completo, afinidade, tempos, contadores de memória, informação de CPU e
+estado de rede para transferências protegidas. A regressão
+`Win32ProcessTest.ProtectedProcessOutputsRejectUnmappedPointers`, as coberturas
+unitárias relacionadas e as fixtures `tl_k32_system`/`tl_process_parent`
+passaram no preset sanitizado.
+
 O lote de caminhos migrou as saídas de diretório, módulo, temporários,
 capacidade de disco, nomes completos/finais e `file_part`, além das leituras de
 strings A/W usadas por essas rotas. As coberturas existentes e a regressão

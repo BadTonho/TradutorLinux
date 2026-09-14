@@ -529,6 +529,40 @@ TEST(Win32ToolhelpTest, ProtectedProcessEntriesRejectUnmappedPointers) {
     EXPECT_EQ(tl_CloseHandle(snapshot), 1);
 }
 
+TEST(Win32ProcessTest, ProtectedProcessOutputsRejectUnmappedPointers) {
+    auto* const invalid = reinterpret_cast<void*>(static_cast<std::uintptr_t>(0x1000U));
+    std::uint32_t size = 4096;
+    std::uint32_t returned_length = 64;
+
+    tl_GetStartupInfoA(invalid);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    tl_GetStartupInfoW(reinterpret_cast<abi::GuestStartupInfoW*>(invalid));
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+
+    EXPECT_EQ(tl_QueryFullProcessImageNameW(
+                  nullptr, 0, reinterpret_cast<std::uint16_t*>(invalid), &size), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_QueryFullProcessImageNameW(
+                  nullptr, 0, nullptr, reinterpret_cast<std::uint32_t*>(invalid)), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+
+    EXPECT_EQ(tl_GetProcessAffinityMask(nullptr,
+                                        reinterpret_cast<std::uintptr_t*>(invalid), nullptr), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_GetProcessTimes(nullptr, invalid, nullptr, nullptr, nullptr), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_K32GetProcessMemoryInfo(nullptr, invalid, 64), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+
+    EXPECT_EQ(tl_GetLogicalProcessorInformation(invalid, &returned_length), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_GetLogicalProcessorInformation(nullptr,
+                                                reinterpret_cast<std::uint32_t*>(invalid)), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_IsNetworkAlive(reinterpret_cast<std::uint32_t*>(invalid)), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+}
+
 TEST(Win32CommandLineTest, GetCommandLineAReturnsNonEmpty) {
     const char* cmdline = tl_GetCommandLineA();
     ASSERT_NE(cmdline, nullptr);
