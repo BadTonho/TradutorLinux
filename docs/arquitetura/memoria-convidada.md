@@ -91,6 +91,12 @@ tratados como tokens, não como strings. A regressão
 `Win32ModuleTest.ProtectedModuleNamesAndOutputsRejectUnmappedPointers` cobre
 nomes e saídas inacessíveis.
 
+O sublote `KERNEL32/toolhelp-process` lê `dwSize` por `read_guest_value`, monta
+`PROCESSENTRY32W` em memória host e publica o registro completo com
+`write_guest_memory`; a variante ANSI usa a mesma separação para seu registro
+local. `Win32ToolhelpTest.ProtectedProcessEntriesRejectUnmappedPointers` e a
+fixture `tl_toolhelp` cobrem os caminhos inválido e de enumeração real.
+
 O lote `SHELL32` segue esse contrato para suas estruturas de entrada e strings:
 `NOTIFYICONDATA`, `GUID`, `SHELLEXECUTEINFO`, `SHFILEOPSTRUCT`,
 `CommandLineToArgvW` e as entradas de `ShellExecuteA/W` são primeiro copiados

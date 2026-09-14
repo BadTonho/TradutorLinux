@@ -511,6 +511,24 @@ TEST(Win32ModuleTest, GetProcAddressReturnsNullForStub) {
     EXPECT_EQ(tl_GetProcAddress(handle, "SomeFunction"), nullptr);
 }
 
+TEST(Win32ToolhelpTest, ProtectedProcessEntriesRejectUnmappedPointers) {
+    auto* const invalid = reinterpret_cast<void*>(static_cast<std::uintptr_t>(0x1000U));
+    void* const snapshot = tl_CreateToolhelp32Snapshot(abi::kTh32csSnapProcess, 0);
+    ASSERT_NE(snapshot, reinterpret_cast<void*>(static_cast<std::uintptr_t>(-1)));
+
+    EXPECT_EQ(tl_Process32FirstW(snapshot, invalid), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_Process32NextW(snapshot, invalid), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+
+    abi::GuestProcessEntry32W entry{};
+    entry.dwSize = sizeof(entry);
+    EXPECT_EQ(tl_Process32FirstW(snapshot, &entry), 1);
+    EXPECT_EQ(entry.dwSize, sizeof(entry));
+    EXPECT_NE(entry.th32ProcessID, 0U);
+    EXPECT_EQ(tl_CloseHandle(snapshot), 1);
+}
+
 TEST(Win32CommandLineTest, GetCommandLineAReturnsNonEmpty) {
     const char* cmdline = tl_GetCommandLineA();
     ASSERT_NE(cmdline, nullptr);

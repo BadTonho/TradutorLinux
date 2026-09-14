@@ -468,8 +468,7 @@ bool read_proc_status_field(const std::uint32_t pid, const char* field, std::str
     return false;
 }
 
-bool fill_process_entry(const std::uint32_t pid, abi::GuestProcessEntry32W* out) {
-    if (out == nullptr) return false;
+bool fill_process_entry(const std::uint32_t pid, abi::GuestProcessEntry32W& out) {
     std::string ppid_str, threads_str, name_str;
     std::uint32_t ppid = 0;
     std::uint32_t threads = 1;
@@ -486,24 +485,24 @@ bool fill_process_entry(const std::uint32_t pid, abi::GuestProcessEntry32W* out)
         if (comm) std::getline(comm, name_str);
         if (name_str.empty()) name_str = "unknown";
     }
-    std::uint32_t saved_size = out->dwSize;
-    *out = {};
-    out->dwSize = saved_size;
-    out->cntUsage = 0;
-    out->th32ProcessID = pid;
-    out->th32DefaultHeapID = 0;
-    out->th32ModuleID = 0;
-    out->cntThreads = threads;
-    out->th32ParentProcessID = ppid;
-    out->pcPriClassBase = 8;
-    out->dwFlags = 0;
+    const std::uint32_t saved_size = out.dwSize;
+    out = {};
+    out.dwSize = saved_size;
+    out.cntUsage = 0;
+    out.th32ProcessID = pid;
+    out.th32DefaultHeapID = 0;
+    out.th32ModuleID = 0;
+    out.cntThreads = threads;
+    out.th32ParentProcessID = ppid;
+    out.pcPriClassBase = 8;
+    out.dwFlags = 0;
     std::u16string wname = util::utf8_to_wide(name_str);
     for (std::size_t i = 0; i < wname.size() && i < 259; ++i) {
-        out->szExeFile[i] = static_cast<std::uint16_t>(wname[i]);
+        out.szExeFile[i] = static_cast<std::uint16_t>(wname[i]);
     }
-    out->szExeFile[std::min<std::size_t>(wname.size(), 259)] = 0;
-    out->padding1 = 0;
-    out->padding2 = 0;
+    out.szExeFile[std::min<std::size_t>(wname.size(), 259)] = 0;
+    out.padding1 = 0;
+    out.padding2 = 0;
     return true;
 }
 
@@ -1257,17 +1256,12 @@ TL_MSABI int tl_Process32FirstW(void* snapshot, void* entry) noexcept {
         set_last_error(abi::kErrorInvalidHandle);
         return 0;
     }
-    if (!mapped_guest_range(entry, sizeof(std::uint32_t), false)) {
-        set_last_error(abi::kErrorInvalidParameter);
-        return 0;
-    }
     std::uint32_t dwSize = 0;
-    std::memcpy(&dwSize, entry, sizeof(dwSize));
-    if (dwSize != sizeof(abi::GuestProcessEntry32W)) {
+    if (!read_guest_value(entry, dwSize)) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
-    if (!mapped_guest_range(entry, dwSize, true)) {
+    if (dwSize != sizeof(abi::GuestProcessEntry32W)) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
@@ -1278,14 +1272,14 @@ TL_MSABI int tl_Process32FirstW(void* snapshot, void* entry) noexcept {
         return 0;
     }
     slot->next_index = 0;
-    auto* out = static_cast<abi::GuestProcessEntry32W*>(entry);
-    std::uint32_t saved = out->dwSize;
-    (void)saved;
-    if (!fill_process_entry(slot->pids[0], out)) {
+    abi::GuestProcessEntry32W output{};
+    output.dwSize = dwSize;
+    if (!fill_process_entry(slot->pids[0], output) ||
+        runtime::write_guest_memory(entry, &output, sizeof(output)).status !=
+            runtime::GuestMemoryAccessStatus::Success) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
-    out->dwSize = dwSize;
     slot->next_index = 1;
     set_last_error(abi::kErrorSuccess);
     return 1;
@@ -1306,17 +1300,12 @@ TL_MSABI int tl_Process32NextW(void* snapshot, void* entry) noexcept {
         set_last_error(abi::kErrorInvalidHandle);
         return 0;
     }
-    if (!mapped_guest_range(entry, sizeof(std::uint32_t), false)) {
-        set_last_error(abi::kErrorInvalidParameter);
-        return 0;
-    }
     std::uint32_t dwSize = 0;
-    std::memcpy(&dwSize, entry, sizeof(dwSize));
-    if (dwSize != sizeof(abi::GuestProcessEntry32W)) {
+    if (!read_guest_value(entry, dwSize)) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
-    if (!mapped_guest_range(entry, dwSize, true)) {
+    if (dwSize != sizeof(abi::GuestProcessEntry32W)) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
@@ -1325,12 +1314,14 @@ TL_MSABI int tl_Process32NextW(void* snapshot, void* entry) noexcept {
         set_last_error(abi::kErrorNoMoreFiles);
         return 0;
     }
-    auto* out = static_cast<abi::GuestProcessEntry32W*>(entry);
-    if (!fill_process_entry(slot->pids[slot->next_index], out)) {
+    abi::GuestProcessEntry32W output{};
+    output.dwSize = dwSize;
+    if (!fill_process_entry(slot->pids[slot->next_index], output) ||
+        runtime::write_guest_memory(entry, &output, sizeof(output)).status !=
+            runtime::GuestMemoryAccessStatus::Success) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
-    out->dwSize = dwSize;
     slot->next_index++;
     set_last_error(abi::kErrorSuccess);
     return 1;
@@ -1764,7 +1755,7 @@ TL_MSABI int tl_K32GetProcessMemoryInfo(void* const process, void* const counter
 
 TL_MSABI int tl_Process32First(void* const snapshot, void* const entry) noexcept {
     (void)snapshot;
-    if (entry == nullptr || !mapped_guest_range(entry, 36, true)) {
+    if (entry == nullptr) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
@@ -1780,13 +1771,24 @@ TL_MSABI int tl_Process32First(void* const snapshot, void* const entry) noexcept
         std::int32_t pcPriClassBase;
         std::uint32_t dwFlags;
         char szExeFile[260];
-    }* e = reinterpret_cast<DummyEntryA*>(entry);
-    const std::uint32_t in_size = e->dwSize;
-    std::memset(entry, 0, std::min<std::size_t>(in_size, sizeof(DummyEntryA)));
-    e->dwSize = in_size;
-    e->th32ProcessID = 1000;
-    e->cntThreads = 4;
-    std::strncpy(e->szExeFile, "process.exe", sizeof(e->szExeFile) - 1);
+    } output{};
+    if (!read_guest_value(entry, output.dwSize)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    const std::uint32_t in_size = output.dwSize;
+    output = {};
+    output.dwSize = in_size;
+    output.th32ProcessID = 1000;
+    output.cntThreads = 4;
+    std::strncpy(output.szExeFile, "process.exe", sizeof(output.szExeFile) - 1);
+    const std::size_t bytes_to_write = std::min<std::size_t>(in_size, sizeof(output));
+    if (bytes_to_write > 0 &&
+        runtime::write_guest_memory(entry, &output, bytes_to_write).status !=
+            runtime::GuestMemoryAccessStatus::Success) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
     set_last_error(abi::kErrorSuccess);
     return 1;
 }

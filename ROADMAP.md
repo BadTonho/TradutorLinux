@@ -206,6 +206,11 @@ Ordinais e endereços continuam seguindo seus contratos de token. A regressão
 `Win32ModuleTest.ProtectedModuleNamesAndOutputsRejectUnmappedPointers` passou
 junto com os 15 testes de registro/loader e as demais APIs de módulo.
 
+O sublote `KERNEL32/toolhelp-process` migrou os registros de
+`Process32FirstW/NextW` e da variante ANSI para objetos host e
+`write_guest_memory`. A regressão de ponteiro inválido, a fixture `tl_toolhelp`
+e seus testes de metadados, execução e relatório passaram.
+
 O lote de caminhos migrou as saídas de diretório, módulo, temporários,
 capacidade de disco, nomes completos/finais e `file_part`, além das leituras de
 strings A/W usadas por essas rotas. As coberturas existentes e a regressão
