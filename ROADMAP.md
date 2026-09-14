@@ -388,6 +388,12 @@ de entrada e publicação protegida do indicador. A regressão
 `Win32AdvapiTest.ProtectedIsTextUnicodeBuffersRejectUnmappedPointers` passou
 com as coberturas de ADVAPI32, registro, memória e segurança.
 
+O sublote final de `ADVAPI32/crypto-enumeration` migrou `CryptEnumProvidersW`:
+capacidade, tipo do provedor, nome UTF-16 e tamanho agora atravessam
+`read_guest_value`, `write_guest_value` e `write_guest_memory`. A regressão
+`Win32CryptoTest.CryptEnumProvidersUsesProtectedUtf16Buffers` cobre entradas e
+saídas inacessíveis, consulta de capacidade e enumeração válida.
+
 O lote de `dbghelp.dll` migrou `SymFromAddr` e `ImageNtHeader` para snapshots
 e publicações protegidas, preservando o stub controlado de símbolos e a leitura
 mínima da assinatura PE. A cobertura `Win32StubTest.DebugAndShellDialogStubsReportUnsupported`

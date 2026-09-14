@@ -854,6 +854,27 @@ TEST(Win32CryptoTest, ProtectedCryptoBuffersRejectUnmappedPointers) {
                                    static_cast<std::uint32_t>(random_bytes.size())), 1);
 }
 
+TEST(Win32CryptoTest, CryptEnumProvidersUsesProtectedUtf16Buffers) {
+    auto* const invalid = reinterpret_cast<void*>(static_cast<std::uintptr_t>(0x1000U));
+    std::uint32_t name_len = 128;
+    EXPECT_EQ(tl_CryptEnumProvidersW(0, nullptr, 0, static_cast<std::uint32_t*>(invalid),
+                                     nullptr, &name_len), 0);
+    EXPECT_EQ(tl_CryptEnumProvidersW(0, nullptr, 0, nullptr,
+                                     reinterpret_cast<wchar_t*>(invalid), &name_len), 0);
+    EXPECT_EQ(tl_CryptEnumProvidersW(0, nullptr, 0, nullptr, nullptr,
+                                     static_cast<std::uint32_t*>(invalid)), 0);
+
+    std::array<std::uint16_t, 128> provider_name{};
+    std::uint32_t provider_type = 0;
+    name_len = static_cast<std::uint32_t>(provider_name.size());
+    ASSERT_EQ(tl_CryptEnumProvidersW(0, nullptr, 0, &provider_type,
+                                     reinterpret_cast<wchar_t*>(provider_name.data()), &name_len), 1);
+    EXPECT_EQ(provider_type, 24U);
+    EXPECT_EQ(std::u16string(reinterpret_cast<const char16_t*>(provider_name.data())),
+              u"Microsoft Enhanced RSA and AES Cryptographic Provider");
+    EXPECT_EQ(name_len, 54U);
+}
+
 TEST(Win32AdvapiTest, ProtectedIdentityAndRegistryQueryOutputsRejectUnmappedPointers) {
     auto* const invalid = reinterpret_cast<void*>(static_cast<std::uintptr_t>(0x1000U));
 

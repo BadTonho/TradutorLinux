@@ -558,6 +558,9 @@ chaves privadas e armazenamento criptográfico do Windows não são expostos. As
 rotas de hash, assinatura, exportação e aleatoriedade usam snapshots e cópias
 protegidas para seus tamanhos, entradas e buffers de saída; `IsTextUnicode`
 também usa snapshot da entrada e publicação protegida do resultado.
+`CryptEnumProvidersW` limita a enumeração ao provedor determinístico do
+subconjunto, lê a capacidade e publica nome/tipo por cópias protegidas; o nome
+é UTF-16 convidado mesmo quando a declaração host usa `wchar_t*`.
 
 ### Certificados e confiança
 

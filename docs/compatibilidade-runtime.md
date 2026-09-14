@@ -632,6 +632,10 @@ assinatura e exportação, assim como seus tamanhos e handles de saída, também
 passam pela cópia protegida. `Win32CryptoTest.ProtectedCryptoBuffersRejectUnmappedPointers`
 protege esse contrato sem transformar os stubs em provedores criptográficos
 reais.
+`CryptEnumProvidersW` expõe apenas o nome/tipo determinístico do subconjunto e
+usa cópias protegidas para a capacidade, o nome UTF-16 e suas saídas; a
+regressão `Win32CryptoTest.CryptEnumProvidersUsesProtectedUtf16Buffers` cobre
+enumeração válida e ponteiros inacessíveis.
 `IsTextUnicode` também copia o buffer de entrada e publica o indicador por
 escrita protegida; a regressão
 `Win32AdvapiTest.ProtectedIsTextUnicodeBuffersRejectUnmappedPointers` cobre

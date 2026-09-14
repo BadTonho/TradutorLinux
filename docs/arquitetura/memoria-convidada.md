@@ -179,6 +179,13 @@ somente após a cópia protegida. `ShlwapiTest.ProtectedPathInputsAndOutputsReje
 protege entradas e saídas inacessíveis, e `tl_shell_path` mantém a integração
 válida.
 
+O sublote `ADVAPI32/crypto-enumeration` copia a capacidade de
+`CryptEnumProvidersW` antes de enumerar e publica o tipo, o nome UTF-16 e o
+tamanho por transferências protegidas. A assinatura host usa `wchar_t*` por
+compatibilidade, mas o conteúdo convidado é tratado como unidades UTF-16; a
+regressão `Win32CryptoTest.CryptEnumProvidersUsesProtectedUtf16Buffers` cobre
+consulta de capacidade, enumeração válida e destinos inacessíveis.
+
 ## Limites residuais
 
 `validate_mapped_range` permanece deliberadamente como predicado advisory:

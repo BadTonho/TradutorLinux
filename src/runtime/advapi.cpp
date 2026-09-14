@@ -50,10 +50,6 @@ std::array<RegistryKey, 256> g_keys{};
 std::vector<RegistryValue> g_values;
 bool g_loaded = false;
 
-inline bool mapped_range(const void* address, const std::size_t size, const bool writable) noexcept {
-    return runtime::validate_mapped_range(address, size, writable);
-}
-
 bool copy_ansi_string(const char* const value, std::string& result) noexcept {
     return runtime::copy_guest_cstring(value, 65535U, result);
 }
@@ -1249,17 +1245,34 @@ TL_ADVAPI_MSABI int tl_CryptEnumProvidersW(const std::uint32_t index, std::uint3
         tl_SetLastError(259); // ERROR_NO_MORE_ITEMS
         return 0;
     }
-    const wchar_t dummy_name[] = L"Microsoft Enhanced RSA and AES Cryptographic Provider";
-    const std::uint32_t len = static_cast<std::uint32_t>(std::wcslen(dummy_name)) + 1;
-    if (prov_type != nullptr) {
-        *prov_type = 24; // PROV_RSA_AES
+    constexpr std::uint16_t kProviderName[] = {
+        u'M', u'i', u'c', u'r', u'o', u's', u'o', u'f', u't', u' ', u'E', u'n', u'h', u'a',
+        u'n', u'c', u'e', u'd', u' ', u'R', u'S', u'A', u' ', u'a', u'n', u'd', u' ', u'A',
+        u'E', u'S', u' ', u'C', u'r', u'y', u'p', u't', u'o', u'g', u'r', u'a', u'p', u'h',
+        u'i', u'c', u' ', u'P', u'r', u'o', u'v', u'i', u'd', u'e', u'r', 0};
+    constexpr std::uint32_t len = static_cast<std::uint32_t>(std::size(kProviderName));
+    std::uint32_t capacity = 0;
+    if (!read_guest_value(name_len, capacity)) {
+        tl_SetLastError(kErrorInvalidParameter);
+        return 0;
     }
-    if (prov_name == nullptr || *name_len < len) {
-        *name_len = len;
+    if (prov_type != nullptr && !write_guest_value(prov_type, std::uint32_t{24})) {
+        tl_SetLastError(kErrorInvalidParameter);
+        return 0;
+    }
+    if (prov_name == nullptr || capacity < len) {
+        if (!write_guest_value(name_len, len)) {
+            tl_SetLastError(kErrorInvalidParameter);
+            return 0;
+        }
         return 1;
     }
-    std::memcpy(prov_name, dummy_name, len * sizeof(wchar_t));
-    *name_len = len;
+    if (runtime::write_guest_memory(prov_name, kProviderName, sizeof(kProviderName)).status !=
+            runtime::GuestMemoryAccessStatus::Success ||
+        !write_guest_value(name_len, len)) {
+        tl_SetLastError(kErrorInvalidParameter);
+        return 0;
+    }
     tl_SetLastError(static_cast<std::uint32_t>(abi::kErrorSuccess));
     return 1;
 }
