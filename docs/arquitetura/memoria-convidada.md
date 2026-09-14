@@ -83,6 +83,14 @@ UTF-16/ANSI para memória host antes de consultar o ambiente. Os resultados de
 `Win32EnvTest.ProtectedEnvironmentInputsAndOutputsRejectUnmappedPointers`
 cobre entradas e saídas inacessíveis.
 
+O sublote `KERNEL32/module` copia nomes de módulos e símbolos antes de buscar
+handles, bibliotecas ou exports. Os handles de `GetModuleHandleExA/W` são
+publicados por `write_guest_value`; ordinais e endereços usados pelo contrato
+de `GetProcAddress`/`GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS` continuam sendo
+tratados como tokens, não como strings. A regressão
+`Win32ModuleTest.ProtectedModuleNamesAndOutputsRejectUnmappedPointers` cobre
+nomes e saídas inacessíveis.
+
 O lote `SHELL32` segue esse contrato para suas estruturas de entrada e strings:
 `NOTIFYICONDATA`, `GUID`, `SHELLEXECUTEINFO`, `SHFILEOPSTRUCT`,
 `CommandLineToArgvW` e as entradas de `ShellExecuteA/W` são primeiro copiados

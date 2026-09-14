@@ -480,6 +480,32 @@ TEST(Win32ModuleTest, GetModuleHandleWConvertsToA) {
     EXPECT_NE(tl_GetModuleHandleW(name), nullptr);
 }
 
+TEST(Win32ModuleTest, ProtectedModuleNamesAndOutputsRejectUnmappedPointers) {
+    auto* const invalid = reinterpret_cast<void*>(static_cast<std::uintptr_t>(0x1000U));
+    auto* const invalid_string = reinterpret_cast<void*>(static_cast<std::uintptr_t>(0x100000U));
+    const std::uint16_t wide_name[] = {'k', 'e', 'r', 'n', 'e', 'l', '3', '2', '.', 'd', 'l', 'l', 0};
+    void* module = nullptr;
+
+    EXPECT_EQ(tl_GetModuleHandleA(reinterpret_cast<const char*>(invalid)), nullptr);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_GetModuleHandleW(reinterpret_cast<const std::uint16_t*>(invalid)), nullptr);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+
+    EXPECT_EQ(tl_GetModuleHandleExA(0, "kernel32.dll", static_cast<void**>(invalid)), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_GetModuleHandleExW(0, wide_name, static_cast<void**>(invalid)), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    ASSERT_EQ(tl_GetModuleHandleExA(0, "kernel32.dll", &module), 1);
+    ASSERT_NE(module, nullptr);
+
+    EXPECT_EQ(tl_LoadLibraryA(reinterpret_cast<const char*>(invalid)), nullptr);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_LoadLibraryW(reinterpret_cast<const std::uint16_t*>(invalid)), nullptr);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_GetProcAddress(module, reinterpret_cast<const char*>(invalid_string)), nullptr);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+}
+
 TEST(Win32ModuleTest, GetProcAddressReturnsNullForStub) {
     void* handle = tl_GetModuleHandleA("kernel32.dll");
     EXPECT_EQ(tl_GetProcAddress(handle, "SomeFunction"), nullptr);

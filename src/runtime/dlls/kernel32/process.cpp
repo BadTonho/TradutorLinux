@@ -7,6 +7,7 @@ constexpr std::uint32_t kStillActive = 259U;
 constexpr std::uint32_t kChildProcessFailure = 0xC0000001U;
 constexpr std::size_t kChildProcessProtocolSize = 5;
 constexpr std::size_t kMaxEnvironmentStringUnits = 32768U;
+constexpr std::size_t kMaxModuleStringUnits = 4096U;
 
 template <typename Unit>
 [[nodiscard]] bool write_guest_terminated_units(void* const destination,
@@ -738,15 +739,16 @@ TL_MSABI void* tl_GetModuleHandleA(const char* module_name) noexcept {
         }
         return reinterpret_cast<void*>(0x1000U);
     }
-    if (!mapped_guest_cstring(module_name)) {
+    std::string guest_module_name;
+    if (!runtime::copy_guest_cstring(module_name, kMaxModuleStringUnits, guest_module_name)) {
         set_last_error(abi::kErrorInvalidParameter);
         return nullptr;
     }
-    if (module_name[0] == '\0') {
+    if (guest_module_name.empty()) {
         set_last_error(abi::kErrorInvalidParameter);
         return nullptr;
     }
-    const std::string normalized = normalize_module_name(module_name);
+    const std::string normalized = normalize_module_name(guest_module_name.c_str());
     if (normalized.empty()) {
         set_last_error(abi::kErrorInvalidParameter);
         return nullptr;
@@ -764,15 +766,17 @@ TL_MSABI void* tl_GetModuleHandleW(const std::uint16_t* module_name) noexcept {
     if (module_name == nullptr) {
         return tl_GetModuleHandleA(nullptr);
     }
-    if (!mapped_guest_wstring(module_name)) {
+    std::u16string guest_module_name;
+    if (!runtime::copy_guest_wstring(module_name, kMaxModuleStringUnits, guest_module_name)) {
         set_last_error(abi::kErrorInvalidParameter);
         return nullptr;
     }
-    if (module_name[0] == 0) {
+    if (guest_module_name.empty()) {
         set_last_error(abi::kErrorInvalidParameter);
         return nullptr;
     }
-    const std::string utf8 = util::wide_to_utf8(module_name);
+    const std::string utf8 = util::wide_to_utf8(
+        reinterpret_cast<const std::uint16_t*>(guest_module_name.data()), guest_module_name.size());
     if (utf8.empty()) {
         set_last_error(abi::kErrorInvalidParameter);
         return nullptr;
@@ -799,10 +803,12 @@ TL_MSABI int tl_GetModuleHandleExA(std::uint32_t flags, const char* module_name,
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
-    if (module == nullptr || !mapped_guest_range(module, sizeof(*module), true)) {
+    if (module == nullptr) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
+    std::string guest_module_name;
+    bool module_name_copied = false;
     const bool from_address = (flags & abi::kGetModuleHandleExFlagFromAddress) != 0;
     if (from_address) {
         if (module_name == nullptr) {
@@ -812,14 +818,20 @@ TL_MSABI int tl_GetModuleHandleExA(std::uint32_t flags, const char* module_name,
         const auto addr = reinterpret_cast<std::uintptr_t>(module_name);
         // Se o endereço estiver dentro da imagem do convidado ou for o token de módulo, trata como handle do exe.
         if (addr == 0x1000U) {
-            *module = reinterpret_cast<void*>(0x1000U);
+            if (!write_guest_value(module, reinterpret_cast<void*>(0x1000U))) {
+                set_last_error(abi::kErrorInvalidParameter);
+                return 0;
+            }
             set_last_error(abi::kErrorSuccess);
             return 1;
         }
         if (g_guest_image_base != nullptr && g_guest_image_size > 0) {
             const auto base = reinterpret_cast<std::uintptr_t>(g_guest_image_base);
             if (addr >= base && addr < base + g_guest_image_size) {
-                *module = const_cast<std::byte*>(g_guest_image_base);
+                if (!write_guest_value(module, const_cast<std::byte*>(g_guest_image_base))) {
+                    set_last_error(abi::kErrorInvalidParameter);
+                    return 0;
+                }
                 set_last_error(abi::kErrorSuccess);
                 return 1;
             }
@@ -827,45 +839,56 @@ TL_MSABI int tl_GetModuleHandleExA(std::uint32_t flags, const char* module_name,
         if (runtime::guest_context().module_graph != nullptr) {
             if (void* const handle = runtime::guest_context().module_graph->module_handle_from_address(addr);
                 handle != nullptr) {
-                *module = handle;
+                if (!write_guest_value(module, handle)) {
+                    set_last_error(abi::kErrorInvalidParameter);
+                    return 0;
+                }
                 set_last_error(abi::kErrorSuccess);
                 return 1;
             }
         }
         // Tenta interpretar module_name como string se estiver em memória de convidado e falhar o range check acima.
         // Para manter compatibilidade, se o ponteiro for uma string válida, cai no caminho normal.
-        if (mapped_guest_cstring(module_name)) {
-            // Não é um endereço de código, trata como nome abaixo.
-        } else {
+        if (!runtime::copy_guest_cstring(module_name, kMaxModuleStringUnits, guest_module_name)) {
             set_last_error(abi::kErrorInvalidParameter);
             return 0;
         }
+        module_name_copied = true;
     }
     if (!from_address && module_name == nullptr) {
         void* handle = tl_GetModuleHandleA(nullptr);
         if (handle == nullptr) return 0;
-        *module = handle;
+        if (!write_guest_value(module, handle)) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
+        }
         set_last_error(abi::kErrorSuccess);
         return 1;
     }
     // module_name é nome (A). Validar.
-    if (module_name == nullptr || !mapped_guest_cstring(module_name)) {
+    if (module_name == nullptr ||
+        (!module_name_copied &&
+         !runtime::copy_guest_cstring(module_name, kMaxModuleStringUnits, guest_module_name))) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
-    if (module_name[0] == '\0') {
+    if (guest_module_name.empty()) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
-    const std::string normalized = normalize_module_name(module_name);
+    const std::string normalized = normalize_module_name(guest_module_name.c_str());
     if (normalized.empty()) {
         set_last_error(abi::kErrorFileNotFound);
         return 0;
     }
     if (runtime::guest_context().module_graph != nullptr) {
-        *module = runtime::guest_context().module_graph->get_module_handle(normalized);
-        if (*module == nullptr) {
+        void* const handle = runtime::guest_context().module_graph->get_module_handle(normalized);
+        if (handle == nullptr) {
             set_last_error(abi::kErrorFileNotFound);
+            return 0;
+        }
+        if (!write_guest_value(module, handle)) {
+            set_last_error(abi::kErrorInvalidParameter);
             return 0;
         }
     } else {
@@ -873,7 +896,10 @@ TL_MSABI int tl_GetModuleHandleExA(std::uint32_t flags, const char* module_name,
             set_last_error(abi::kErrorFileNotFound);
             return 0;
         }
-        *module = reinterpret_cast<void*>(0x1000U);
+        if (!write_guest_value(module, reinterpret_cast<void*>(0x1000U))) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
+        }
     }
     set_last_error(abi::kErrorSuccess);
     return 1;
@@ -887,10 +913,12 @@ TL_MSABI int tl_GetModuleHandleExW(std::uint32_t flags, const std::uint16_t* mod
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
-    if (module == nullptr || !mapped_guest_range(module, sizeof(*module), true)) {
+    if (module == nullptr) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
+    std::u16string guest_module_name;
+    bool module_name_copied = false;
     const bool from_address = (flags & abi::kGetModuleHandleExFlagFromAddress) != 0;
     if (from_address) {
         if (module_name == nullptr) {
@@ -899,14 +927,20 @@ TL_MSABI int tl_GetModuleHandleExW(std::uint32_t flags, const std::uint16_t* mod
         }
         const auto addr = reinterpret_cast<std::uintptr_t>(module_name);
         if (addr == 0x1000U) {
-            *module = reinterpret_cast<void*>(0x1000U);
+            if (!write_guest_value(module, reinterpret_cast<void*>(0x1000U))) {
+                set_last_error(abi::kErrorInvalidParameter);
+                return 0;
+            }
             set_last_error(abi::kErrorSuccess);
             return 1;
         }
         if (g_guest_image_base != nullptr && g_guest_image_size > 0) {
             const auto base = reinterpret_cast<std::uintptr_t>(g_guest_image_base);
             if (addr >= base && addr < base + g_guest_image_size) {
-                *module = const_cast<std::byte*>(g_guest_image_base);
+                if (!write_guest_value(module, const_cast<std::byte*>(g_guest_image_base))) {
+                    set_last_error(abi::kErrorInvalidParameter);
+                    return 0;
+                }
                 set_last_error(abi::kErrorSuccess);
                 return 1;
             }
@@ -914,34 +948,42 @@ TL_MSABI int tl_GetModuleHandleExW(std::uint32_t flags, const std::uint16_t* mod
         if (runtime::guest_context().module_graph != nullptr) {
             if (void* const handle = runtime::guest_context().module_graph->module_handle_from_address(addr);
                 handle != nullptr) {
-                *module = handle;
+                if (!write_guest_value(module, handle)) {
+                    set_last_error(abi::kErrorInvalidParameter);
+                    return 0;
+                }
                 set_last_error(abi::kErrorSuccess);
                 return 1;
             }
         }
-        if (mapped_guest_wstring(module_name)) {
-            // Trata como nome abaixo.
-        } else {
+        if (!runtime::copy_guest_wstring(module_name, kMaxModuleStringUnits, guest_module_name)) {
             set_last_error(abi::kErrorInvalidParameter);
             return 0;
         }
+        module_name_copied = true;
     }
     if (!from_address && module_name == nullptr) {
         void* handle = tl_GetModuleHandleW(nullptr);
         if (handle == nullptr) return 0;
-        *module = handle;
+        if (!write_guest_value(module, handle)) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
+        }
         set_last_error(abi::kErrorSuccess);
         return 1;
     }
-    if (module_name == nullptr || !mapped_guest_wstring(module_name)) {
+    if (module_name == nullptr ||
+        (!module_name_copied &&
+         !runtime::copy_guest_wstring(module_name, kMaxModuleStringUnits, guest_module_name))) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
-    if (module_name[0] == 0) {
+    if (guest_module_name.empty()) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
-    const std::string utf8 = util::wide_to_utf8(module_name);
+    const std::string utf8 = util::wide_to_utf8(
+        reinterpret_cast<const std::uint16_t*>(guest_module_name.data()), guest_module_name.size());
     if (utf8.empty()) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
@@ -952,9 +994,13 @@ TL_MSABI int tl_GetModuleHandleExW(std::uint32_t flags, const std::uint16_t* mod
         return 0;
     }
     if (runtime::guest_context().module_graph != nullptr) {
-        *module = runtime::guest_context().module_graph->get_module_handle(normalized);
-        if (*module == nullptr) {
+        void* const handle = runtime::guest_context().module_graph->get_module_handle(normalized);
+        if (handle == nullptr) {
             set_last_error(abi::kErrorFileNotFound);
+            return 0;
+        }
+        if (!write_guest_value(module, handle)) {
+            set_last_error(abi::kErrorInvalidParameter);
             return 0;
         }
     } else {
@@ -962,18 +1008,23 @@ TL_MSABI int tl_GetModuleHandleExW(std::uint32_t flags, const std::uint16_t* mod
             set_last_error(abi::kErrorFileNotFound);
             return 0;
         }
-        *module = reinterpret_cast<void*>(0x1000U);
+        if (!write_guest_value(module, reinterpret_cast<void*>(0x1000U))) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
+        }
     }
     set_last_error(abi::kErrorSuccess);
     return 1;
 }
 
 TL_MSABI void* tl_LoadLibraryA(const char* file_name) noexcept {
-    if (file_name == nullptr || !mapped_guest_cstring(file_name) || file_name[0] == '\0') {
+    std::string guest_file_name;
+    if (!runtime::copy_guest_cstring(file_name, kMaxModuleStringUnits, guest_file_name) ||
+        guest_file_name.empty()) {
         set_last_error(abi::kErrorInvalidParameter);
         return nullptr;
     }
-    const std::string normalized = normalize_module_name(file_name);
+    const std::string normalized = normalize_module_name(guest_file_name.c_str());
     if (normalized.empty()) {
         set_last_error(abi::kErrorModNotFound);
         return nullptr;
@@ -988,11 +1039,14 @@ TL_MSABI void* tl_LoadLibraryA(const char* file_name) noexcept {
 }
 
 TL_MSABI void* tl_LoadLibraryW(const std::uint16_t* file_name) noexcept {
-    if (file_name == nullptr || !mapped_guest_wstring(file_name) || file_name[0] == 0) {
+    std::u16string guest_file_name;
+    if (!runtime::copy_guest_wstring(file_name, kMaxModuleStringUnits, guest_file_name) ||
+        guest_file_name.empty()) {
         set_last_error(abi::kErrorInvalidParameter);
         return nullptr;
     }
-    const std::string utf8 = util::wide_to_utf8(file_name);
+    const std::string utf8 = util::wide_to_utf8(
+        reinterpret_cast<const std::uint16_t*>(guest_file_name.data()), guest_file_name.size());
     if (utf8.empty()) {
         set_last_error(abi::kErrorInvalidParameter);
         return nullptr;
@@ -1086,11 +1140,12 @@ TL_MSABI void* tl_GetProcAddress(void* module, const char* proc_name) noexcept {
         set_last_error(abi::kErrorProcNotFound);
         return nullptr;
     }
-    if (!mapped_guest_cstring(proc_name)) {
+    std::string guest_proc_name;
+    if (!runtime::copy_guest_cstring(proc_name, kMaxModuleStringUnits, guest_proc_name)) {
         set_last_error(abi::kErrorInvalidParameter);
         return nullptr;
     }
-    if (proc_name[0] == '\0') {
+    if (guest_proc_name.empty()) {
         set_last_error(abi::kErrorProcNotFound);
         return nullptr;
     }
@@ -1104,7 +1159,7 @@ TL_MSABI void* tl_GetProcAddress(void* module, const char* proc_name) noexcept {
             return nullptr;
         }
         const loader::GraphExportLookup found =
-            runtime::guest_context().module_graph->get_proc_address(module, proc_name);
+            runtime::guest_context().module_graph->get_proc_address(module, guest_proc_name.c_str());
         if (found.lookup.found && found.lookup.address != 0) {
             set_last_error(abi::kErrorSuccess);
             return reinterpret_cast<void*>(found.lookup.address);
@@ -1126,7 +1181,7 @@ TL_MSABI void* tl_GetProcAddress(void* module, const char* proc_name) noexcept {
     }
     loader::ExportLookup found{};
     // Token único 0x1000 representa qualquer DLL registrada; busca global cobre apisets.
-    found = loader::find_export_global(proc_name);
+    found = loader::find_export_global(guest_proc_name.c_str());
     if (found.found && found.address != 0) {
         set_last_error(abi::kErrorSuccess);
         return reinterpret_cast<void*>(found.address);

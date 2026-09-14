@@ -200,6 +200,12 @@ ANSI/Wide para cópias host e resultados para `write_guest_memory`. A regressão
 `Win32EnvTest.ProtectedEnvironmentInputsAndOutputsRejectUnmappedPointers` e os
 demais oito testes de ambiente passaram no preset sanitizado.
 
+O sublote `KERNEL32/module` migrou nomes de módulos e símbolos para cópias
+host, além dos handles de `GetModuleHandleExA/W` para `write_guest_value`.
+Ordinais e endereços continuam seguindo seus contratos de token. A regressão
+`Win32ModuleTest.ProtectedModuleNamesAndOutputsRejectUnmappedPointers` passou
+junto com os 15 testes de registro/loader e as demais APIs de módulo.
+
 O lote de caminhos migrou as saídas de diretório, módulo, temporários,
 capacidade de disco, nomes completos/finais e `file_part`, além das leituras de
 strings A/W usadas por essas rotas. As coberturas existentes e a regressão
