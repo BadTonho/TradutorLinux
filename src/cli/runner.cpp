@@ -1573,6 +1573,10 @@ ExitCode run_command(const CommandLine& command_line, std::ostream& stdout_strea
                 !timeout_context.valid
             ? diagnostics::describe_host_address(outcome.timeout_rip)
             : diagnostics::HostAddressContext{};
+    const diagnostics::HostAddressContext timeout_stack_top_context =
+        outcome.kind == process::GuestOutcomeKind::TimedOut && outcome.timeout_stack_top_recorded
+            ? diagnostics::describe_host_address(outcome.timeout_stack_top)
+            : diagnostics::HostAddressContext{};
     std::size_t timeout_pe_samples = 0;
     if (outcome.kind == process::GuestOutcomeKind::TimedOut && process.image.size != 0) {
         const std::uint64_t image_end =
@@ -1826,7 +1830,7 @@ ExitCode run_command(const CommandLine& command_line, std::ostream& stdout_strea
     if (outcome.kind == process::GuestOutcomeKind::TimedOut) {
         if (effective_cmd.trace_enabled) {
             std::vector<diagnostics::TraceField> fields;
-            fields.reserve(10);
+            fields.reserve(14);
             fields.emplace_back(
                 "category",
                 std::string{diagnostics::failure_category_name(
@@ -1858,6 +1862,20 @@ ExitCode run_command(const CommandLine& command_line, std::ostream& stdout_strea
                         fields.emplace_back("host-symbol", timeout_host_context.symbol);
                         fields.emplace_back("host-offset",
                                             util::format_hex(timeout_host_context.symbol_offset));
+                    }
+                }
+                if (timeout_stack_top_context.valid) {
+                    if (!timeout_stack_top_context.module.empty()) {
+                        fields.emplace_back("timeout-stack-top-module",
+                                            timeout_stack_top_context.module);
+                    }
+                    fields.emplace_back("timeout-stack-top-module-offset",
+                                        util::format_hex(timeout_stack_top_context.module_offset));
+                    if (!timeout_stack_top_context.symbol.empty()) {
+                        fields.emplace_back("timeout-stack-top-symbol",
+                                            timeout_stack_top_context.symbol);
+                        fields.emplace_back("timeout-stack-top-offset",
+                                            util::format_hex(timeout_stack_top_context.symbol_offset));
                     }
                 }
             }

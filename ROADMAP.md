@@ -1127,6 +1127,45 @@ direta é obter o contexto de retorno/stack do caminho hospedeiro e correlacion�
 lo com o código convidado após a criação da janela, mantendo PuTTY como
 limitação controlada.
 
+### R18 — Entregar o transporte inicial assíncrono de WinSock
+
+A auditoria da R17 e a correção de `DeleteMenu` removeram o loop de inicialização
+da janela de sessão. A reprodução seguinte mostrou uma nova fronteira real e
+genérica: o PuTTY registra `WSAAsyncSelect`, conecta em modo não bloqueante,
+envia o banner e depende de mensagens `FD_CONNECT`/`FD_READ` no message loop.
+
+- [x] dar semântica mínima real a `WSAAsyncSelect`, associando janela, mensagem,
+  eventos e estado de notificação ao socket;
+- [x] integrar o bombeamento de prontidão POSIX ao `GetMessageA`, `PeekMessageA`
+  e `MsgWaitForMultipleObjectsEx`, sem thread ou regra específica de aplicativo;
+- [x] publicar `wParam`/`lParam` conforme o contrato WinSock e rearmar eventos
+  após `connect`, `send`, `recv` e `accept`;
+- [x] corrigir `EINPROGRESS`/`EALREADY` para `WSAEWOULDBLOCK` e proteger o
+  caminho com `Win32GuiTest.WsaAsyncSelectPostsReadableSocketMessage`;
+- [x] atualizar o smoke local do PuTTY para exigir `FD_READ`/`recv` antes de
+  aceitar a limitação controlada, mantendo o protocolo SSH completo fora do
+  suporte.
+
+**Critério de aceite:** uma janela Win32 registrada deve receber duas
+notificações de leitura distintas quando duas cargas chegam separadas por
+`recv`; uma conexão não bloqueante deve não ser classificada como
+`WSAENOTSOCK`; o smoke do PuTTY deve alcançar o banner e a resposta mínima do
+listener sem loop de `DeleteMenu`; nenhum resultado deve promover SSH completo.
+
+**Evidência 2026-09-15:** o teste unitário passou fora do sandbox com loopback
+TCP e foi skip controlado dentro do sandbox sem permissão de socket. O smoke
+`putty_ssh_local_probe` passou com exit `0` do harness e registrou, em ordem,
+`FD_CONNECT`, `FD_WRITE`, `FD_READ`, `send` e `recv`; o listener confirmou o
+banner `SSH-*` e respondeu. O resultado funcional continua sendo a limitação
+`guest-timeout 72`, pois o servidor do probe não implementa a troca restante do
+SSH. A implementação é genérica, sem DLL, shim ou regra específica do PuTTY.
+
+Conclusão: o transporte inicial de loopback agora é reproduzível. A próxima
+etapa direta é substituir a resposta mínima do harness por um fixture de
+protocolo SSH controlado ou, antes disso, localizar a primeira chamada genérica
+faltante após o `recv`; não se deve ampliar o escopo para autenticação, chaves
+ou suporte SSH geral sem um contrato e testes próprios.
+
 ## Fora desta rodada
 
 Não entram neste roadmap, por enquanto:

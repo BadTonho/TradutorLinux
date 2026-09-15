@@ -1,4 +1,5 @@
 #include "tradutorlinux/runtime/ws2_32.hpp"
+#include "tradutorlinux/win32/user32.hpp"
 #include "tradutorlinux/loader/module.hpp"
 #include "tradutorlinux/loader/builtin_modules.hpp"
 
@@ -83,6 +84,10 @@ struct SocketSlot {
     long network_events{0};
     long pending_events{0};
     std::array<int, 10> event_errors{};
+    void* async_window{nullptr};
+    unsigned int async_message{0};
+    long async_events{0};
+    long async_notified_events{0};
 };
 std::array<SocketSlot, 256> g_sockets{};
 std::mutex g_sockets_mutex;
@@ -94,6 +99,93 @@ struct WsaEventSlot {
 std::array<WsaEventSlot, kMaxWsaEvents> g_wsa_events{};
 
 int errno_to_wsa(int error) noexcept;
+std::uintptr_t socket_handle(const SocketSlot& slot) noexcept;
+
+void clear_async_notification(SocketSlot& slot, const long events) noexcept {
+    slot.async_notified_events &= ~events;
+}
+
+void trace_async_notification(const SocketSlot& slot, const long event,
+                              const int error, const char* const status) noexcept {
+    const std::string detail =
+        "socket=" + std::to_string(socket_handle(slot)) +
+        ",message=" + std::to_string(slot.async_message) +
+        ",event=" + std::to_string(event) +
+        ",error=" + std::to_string(error);
+    runtime_trace("WSAAsyncSelect", {
+        diagnostics::TraceField{"symbol", "WSAAsyncSelect"},
+        diagnostics::TraceField{"phase", "notify"},
+        diagnostics::TraceField{"detail", detail},
+        diagnostics::TraceField{"status", status},
+    }, 4);
+}
+
+void post_async_event_locked(SocketSlot& slot, const long event, const int error) noexcept {
+    if (slot.async_window == nullptr || (slot.async_events & event) == 0 ||
+        (slot.async_notified_events & event) != 0) {
+        return;
+    }
+    const std::uint32_t packed_lparam =
+        (static_cast<std::uint32_t>(error) & 0xFFFFU) << 16U |
+        (static_cast<std::uint32_t>(event) & 0xFFFFU);
+    const int result = tl_PostMessageA(
+        slot.async_window, slot.async_message, socket_handle(slot),
+        static_cast<abi::Lparam>(packed_lparam));
+    slot.async_notified_events |= event;
+    trace_async_notification(slot, event, error, result != 0 ? "posted" : "rejected");
+}
+
+void refresh_async_select_locked() noexcept {
+    for (SocketSlot& slot : g_sockets) {
+        if (!slot.used || slot.async_window == nullptr || slot.async_events == 0) {
+            continue;
+        }
+
+        pollfd descriptor{};
+        descriptor.fd = slot.fd;
+        if ((slot.async_events & (kFdRead | kFdAccept | kFdClose)) != 0) {
+            descriptor.events |= POLLIN;
+        }
+        if ((slot.async_events & (kFdWrite | kFdConnect)) != 0) {
+            descriptor.events |= POLLOUT;
+        }
+        if ((slot.async_events & kFdOob) != 0) {
+            descriptor.events |= POLLPRI;
+        }
+        if (::poll(&descriptor, 1, 0) < 0) {
+            if (errno != EINTR) {
+                post_async_event_locked(slot, kFdClose, errno_to_wsa(errno));
+            }
+            continue;
+        }
+
+        if (slot.connecting && (descriptor.revents & (POLLOUT | POLLERR | POLLHUP)) != 0) {
+            int error = 0;
+            socklen_t error_length = sizeof(error);
+            int wsa_error = 0;
+            if (::getsockopt(slot.fd, SOL_SOCKET, SO_ERROR, &error, &error_length) != 0) {
+                wsa_error = errno_to_wsa(errno);
+            } else if (error != 0) {
+                wsa_error = errno_to_wsa(error);
+            }
+            slot.connecting = false;
+            post_async_event_locked(slot, kFdConnect, wsa_error);
+        }
+        if ((descriptor.revents & POLLPRI) != 0) {
+            post_async_event_locked(slot, kFdOob, 0);
+        }
+        if ((descriptor.revents & POLLOUT) != 0 && !slot.connecting) {
+            post_async_event_locked(slot, kFdWrite, 0);
+        }
+        if ((descriptor.revents & POLLIN) != 0) {
+            post_async_event_locked(slot, slot.listening ? kFdAccept : kFdRead, 0);
+        }
+        if ((descriptor.revents & (POLLERR | POLLHUP | POLLNVAL)) != 0) {
+            post_async_event_locked(
+                slot, kFdClose, (descriptor.revents & POLLNVAL) != 0 ? kWsaENotSocket : 0);
+        }
+    }
+}
 
 struct GuestAddrInfo {
     int flags{};
@@ -133,7 +225,7 @@ SocketSlot* find_socket(const std::uintptr_t handle) noexcept {
     return slot.used ? &slot : nullptr;
 }
 
-std::uintptr_t socket_handle(SocketSlot& slot) noexcept {
+std::uintptr_t socket_handle(const SocketSlot& slot) noexcept {
     return kSocketHandleBase + static_cast<std::uintptr_t>(&slot - g_sockets.data());
 }
 
@@ -236,6 +328,11 @@ int errno_to_wsa(const int error) noexcept {
         case EADDRINUSE:
             return kWsaEAddressInUse;
         case EAGAIN:
+#if EWOULDBLOCK != EAGAIN
+        case EWOULDBLOCK:
+#endif
+        case EINPROGRESS:
+        case EALREADY:
             return kWsaEWouldBlock;
         case ECONNREFUSED:
             return kWsaEConnectionRefused;
@@ -293,6 +390,11 @@ bool write_guest_text(const char* const source, char* const destination,
 }  // namespace
 
 extern "C" {
+
+void tl_WSAPumpAsyncSelect() noexcept {
+    std::lock_guard<std::mutex> lock(g_sockets_mutex);
+    refresh_async_select_locked();
+}
 
 TL_MSABI int tl_WSAStartup(const std::uint16_t version_requested, void* data) noexcept {
     trace_ws2_call("WSAStartup", "version=" + std::to_string(version_requested));
@@ -363,6 +465,10 @@ TL_MSABI std::uintptr_t tl_socket(const int address_family, const int type,
     free_it->used = true;
     free_it->fd = fd;
     free_it->type = type;
+    free_it->async_window = nullptr;
+    free_it->async_message = 0;
+    free_it->async_events = 0;
+    free_it->async_notified_events = 0;
     g_wsa_last_error = 0;
     return socket_handle(*free_it);
 }
@@ -426,6 +532,7 @@ TL_MSABI std::uintptr_t tl_accept(const std::uintptr_t socket, void* name,
     const int fd = ::accept(listener->fd, reinterpret_cast<sockaddr*>(&address), &length);
     if (fd < 0) {
         g_wsa_last_error = errno_to_wsa(errno);
+        clear_async_notification(*listener, kFdAccept);
         return kInvalidSocket;
     }
     auto free_it = std::find_if(g_sockets.begin(), g_sockets.end(),
@@ -433,16 +540,23 @@ TL_MSABI std::uintptr_t tl_accept(const std::uintptr_t socket, void* name,
     if (free_it == g_sockets.end()) {
         ::close(fd);
         g_wsa_last_error = ENOBUFS;
+        clear_async_notification(*listener, kFdAccept);
         return kInvalidSocket;
     }
     if (!copy_host_sockaddr(address, name, name_length)) {
         ::close(fd);
         g_wsa_last_error = kWsaEFault;
+        clear_async_notification(*listener, kFdAccept);
         return kInvalidSocket;
     }
     free_it->used = true;
     free_it->fd = fd;
     free_it->type = kSockStream;
+    free_it->async_window = nullptr;
+    free_it->async_message = 0;
+    free_it->async_events = 0;
+    free_it->async_notified_events = 0;
+    clear_async_notification(*listener, kFdAccept);
     g_wsa_last_error = 0;
     return socket_handle(*free_it);
 }
@@ -467,9 +581,11 @@ TL_MSABI int tl_connect(const std::uintptr_t socket, const void* name,
         if (g_wsa_last_error == 0) {
             g_wsa_last_error = errno_to_wsa(errno);
         }
+        clear_async_notification(*slot, kFdConnect);
         return -1;
     }
     slot->connecting = false;
+    clear_async_notification(*slot, kFdConnect);
     g_wsa_last_error = 0;
     return 0;
 }
@@ -498,8 +614,10 @@ TL_MSABI int tl_send(const std::uintptr_t socket, const char* buffer, const int 
     const ssize_t result = ::send(slot->fd, host_buffer.data(), host_buffer.size(), 0);
     if (result < 0) {
         g_wsa_last_error = errno_to_wsa(errno);
+        clear_async_notification(*slot, kFdWrite);
         return -1;
     }
+    clear_async_notification(*slot, kFdWrite);
     g_wsa_last_error = 0;
     return static_cast<int>(result);
 }
@@ -523,8 +641,10 @@ TL_MSABI int tl_recv(const std::uintptr_t socket, char* buffer, const int length
     const ssize_t result = ::recv(slot->fd, host_buffer.data(), host_buffer.size(), 0);
     if (result < 0) {
         g_wsa_last_error = errno_to_wsa(errno);
+        clear_async_notification(*slot, kFdRead | kFdClose);
         return -1;
     }
+    clear_async_notification(*slot, kFdRead | kFdClose);
     if (result > 0 && runtime::write_guest_memory(buffer, host_buffer.data(),
                                                   static_cast<std::size_t>(result)).status !=
                             runtime::GuestMemoryAccessStatus::Success) {
@@ -1200,11 +1320,31 @@ TL_MSABI int tl_getsockopt(const std::uintptr_t socket, const int level, const i
 TL_MSABI int tl_WSAAsyncSelect(const std::uintptr_t socket, void* const hwnd,
                               const unsigned int msg, const long events) noexcept {
     trace_ws2_call("WSAAsyncSelect", "socket=" + std::to_string(socket) +
-                                     ",events=" + std::to_string(events));
-    (void)socket;
-    (void)hwnd;
-    (void)msg;
-    (void)events;
+                                     ",events=" + std::to_string(events) +
+                                     ",hwnd=" + (hwnd != nullptr ? "present" : "null") +
+                                     ",message=" + std::to_string(msg));
+    std::lock_guard<std::mutex> lock(g_sockets_mutex);
+    SocketSlot* const slot = find_socket(socket);
+    if (slot == nullptr || events < 0 || (events & ~kSupportedNetworkEvents) != 0 ||
+        (events != 0 && (hwnd == nullptr || msg == 0))) {
+        g_wsa_last_error = slot == nullptr ? kWsaENotSocket : kWsaEInvalidArgument;
+        return -1;
+    }
+    if (events != 0) {
+        const int flags = fcntl(slot->fd, F_GETFL, 0);
+        if (flags < 0 || fcntl(slot->fd, F_SETFL, flags | O_NONBLOCK) < 0) {
+            g_wsa_last_error = errno_to_wsa(errno);
+            return -1;
+        }
+    }
+    slot->event_handle = nullptr;
+    slot->network_events = 0;
+    slot->pending_events = 0;
+    slot->event_errors.fill(0);
+    slot->async_window = hwnd;
+    slot->async_message = msg;
+    slot->async_events = events;
+    slot->async_notified_events = 0;
     g_wsa_last_error = 0;
     return 0;
 }
@@ -1233,6 +1373,10 @@ TL_MSABI int tl_WSAEventSelect(const std::uintptr_t socket, void* const event_ha
     slot->network_events = network_events;
     slot->pending_events = 0;
     slot->event_errors.fill(0);
+    slot->async_window = nullptr;
+    slot->async_message = 0;
+    slot->async_events = 0;
+    slot->async_notified_events = 0;
     if (event != nullptr) {
         event->signaled = false;
     }

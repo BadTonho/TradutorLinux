@@ -428,6 +428,10 @@ TEST(CommandRunTest, ReturnsGuestTimeoutWhenGuestHangs) {
     if (stderr_stream.str().find("timeout-rip=\"0x") == std::string::npos) {
         GTEST_SKIP() << "captura de registradores indisponível neste ambiente";
     }
+    if (stderr_stream.str().find("timeout-stack-top-module-offset=\"0x") ==
+        std::string::npos) {
+        GTEST_SKIP() << "leitura do topo da pilha indisponível neste ambiente";
+    }
     EXPECT_EQ(stderr_stream.str().find("exit exit-code="), std::string::npos);
 }
 

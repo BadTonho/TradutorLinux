@@ -252,6 +252,26 @@ timeout ocorre sem JSON. Nenhuma API Win32, DLL, shim ou regra específica do
 PuTTY foi adicionada. A investigação seguinte deve capturar o contexto de
 retorno/stack e correlacioná-lo com o código convidado após a criação da janela.
 
+## Evidência E39 — notificações assíncronas de WinSock no PuTTY
+
+A implementação genérica de `WSAAsyncSelect` passou a associar a janela e o
+evento solicitados ao token do socket, habilitar o modo não bloqueante e
+integrar a consulta de prontidão ao `GetMessageA`, `PeekMessageA` e
+`MsgWaitForMultipleObjectsEx`. A notificação usa `wParam` para o socket e
+`lParam` para evento/erro; `recv`, `send`, `accept` e `connect` rearma a
+notificação correspondente. O mapeamento de `EINPROGRESS`/`EALREADY` para
+`WSAEWOULDBLOCK` também foi corrigido.
+
+A regressão `Win32GuiTest.WsaAsyncSelectPostsReadableSocketMessage` passou fora
+do sandbox com um servidor TCP de loopback, confirmou duas chegadas
+`FD_READ` separadas por `recv` e foi skip controlado quando o sandbox bloqueou
+o socket. No `putty_ssh_local_probe` em `build/debug`, o trace registra
+`FD_CONNECT`, `FD_WRITE`, `FD_READ`, `send` e `recv`; o listener valida o banner
+do cliente e envia uma resposta mínima. O processo ainda termina com
+`guest-timeout 72` porque o servidor do probe não implementa o restante do
+protocolo SSH. Essa evidência promove somente o transporte inicial genérico,
+não o PuTTY nem o SSH completo.
+
 ## Evidência D2 — cenários GUI
 
 O smoke externo do 7-Zip File Manager passou nos builds C++ OFF e Rust ON. Ele

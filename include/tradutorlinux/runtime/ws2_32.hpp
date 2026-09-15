@@ -51,6 +51,7 @@ TL_MSABI int tl_getpeername(std::uintptr_t socket, void* name, int* name_length)
 TL_MSABI int tl_setsockopt(std::uintptr_t socket, int level, int optname, const char* optval, int optlen) noexcept;
 TL_MSABI int tl_getsockopt(std::uintptr_t socket, int level, int optname, char* optval, int* optlen) noexcept;
 TL_MSABI int tl_WSAAsyncSelect(std::uintptr_t socket, void* hwnd, unsigned int msg, long events) noexcept;
+void tl_WSAPumpAsyncSelect() noexcept;
 TL_MSABI int tl_WSAEventSelect(std::uintptr_t socket, void* event_handle, long network_events) noexcept;
 TL_MSABI void* tl_WSACreateEvent() noexcept;
 TL_MSABI int tl_WSACloseEvent(void* event_handle) noexcept;

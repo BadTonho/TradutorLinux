@@ -1,5 +1,10 @@
 #include "test_win32_common.hpp"
 
+#include <arpa/inet.h>
+#include <netinet/in.h>
+#include <sys/socket.h>
+#include <unistd.h>
+
 namespace tradutorlinux {
 namespace {
 TEST(Win32GuiAbiTest, TargetControlLayoutsMatchMicrosoftX64) {
@@ -21,6 +26,37 @@ TEST(Win32GuiTest, PopupMenuHandleHasLifecycle) {
     void* menu = tl_CreatePopupMenu();
     ASSERT_NE(menu, nullptr);
     EXPECT_EQ(tl_AppendMenuA(menu, 0, 101, "Exit"), 1);
+    EXPECT_EQ(tl_DestroyMenu(menu), 1);
+}
+
+TEST(Win32GuiTest, DeleteMenuStopsWhenSystemMenuIsEmpty) {
+    void* const menu = tl_GetSystemMenu(nullptr, 1);
+    ASSERT_NE(menu, nullptr);
+    ASSERT_EQ(tl_GetMenuItemCount(menu), 5);
+
+    for (int index = 0; index < 5; ++index) {
+        EXPECT_EQ(tl_DeleteMenu(menu, 0, 0x400U), 1);
+    }
+    EXPECT_EQ(tl_DeleteMenu(menu, 0, 0x400U), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_GetMenuItemCount(menu), 0);
+
+    EXPECT_EQ(tl_GetSystemMenu(nullptr, 1), menu);
+    EXPECT_EQ(tl_GetMenuItemCount(menu), 5);
+}
+
+TEST(Win32GuiTest, DeleteMenuRemovesLogicalItemByCommand) {
+    void* const menu = tl_CreatePopupMenu();
+    ASSERT_NE(menu, nullptr);
+    ASSERT_EQ(tl_AppendMenuA(menu, 0, 101, "One"), 1);
+    ASSERT_EQ(tl_AppendMenuA(menu, 0, 102, "Two"), 1);
+
+    EXPECT_EQ(tl_DeleteMenu(menu, 101, 0), 1);
+    EXPECT_EQ(tl_GetMenuItemCount(menu), 1);
+    EXPECT_EQ(tl_DeleteMenu(menu, 101, 0), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_DeleteMenu(menu, 0, 0x400U), 1);
+    EXPECT_EQ(tl_GetMenuItemCount(menu), 0);
     EXPECT_EQ(tl_DestroyMenu(menu), 1);
 }
 
@@ -422,6 +458,79 @@ TEST(Win32GuiTest, AllowsCrossThreadPostMessageToPrimaryQueue) {
 
     unregister_window_handle(&window);
     clear_cross_thread_window_messages();
+    g_windows = {};
+}
+
+TEST(Win32GuiTest, WsaAsyncSelectPostsReadableSocketMessage) {
+    for (WindowSlot& slot : g_windows) {
+        unregister_window_handle(&slot);
+    }
+    clear_cross_thread_window_messages();
+    g_windows = {};
+    g_quit_requested = false;
+
+    WindowSlot& window = g_windows[0];
+    window.used = true;
+    ASSERT_TRUE(register_window_handle(&window));
+
+    const int listener = ::socket(AF_INET, SOCK_STREAM, 0);
+    if (listener < 0) {
+        unregister_window_handle(&window);
+        g_windows = {};
+        GTEST_SKIP() << "TCP loopback socket is unavailable";
+    }
+    sockaddr_in address{};
+    address.sin_family = AF_INET;
+    address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    address.sin_port = 0;
+    ASSERT_EQ(::bind(listener, reinterpret_cast<const sockaddr*>(&address), sizeof(address)), 0);
+    ASSERT_EQ(::listen(listener, 1), 0);
+    socklen_t address_length = sizeof(address);
+    ASSERT_EQ(::getsockname(listener, reinterpret_cast<sockaddr*>(&address), &address_length), 0);
+
+    std::array<std::uint8_t, 400> wsa_data{};
+    ASSERT_EQ(tl_WSAStartup(0x0202U, wsa_data.data()), 0);
+    const std::uintptr_t client = tl_socket(2, 1, 0);
+    if (client == kInvalidSocket) {
+        ::close(listener);
+        unregister_window_handle(&window);
+        g_windows = {};
+        GTEST_SKIP() << "WinSock loopback socket is unavailable";
+    }
+
+    ASSERT_EQ(tl_connect(client, &address, sizeof(address)), 0);
+    constexpr std::uint32_t kAsyncMessage = 0x8004U;
+    ASSERT_EQ(tl_WSAAsyncSelect(client, &window, kAsyncMessage, 0x0001L | 0x0020L), 0);
+
+    const int accepted = ::accept(listener, nullptr, nullptr);
+    ASSERT_GE(accepted, 0);
+    ASSERT_EQ(::send(accepted, "one", 3, 0), 3);
+
+    abi::GuestMsg message{};
+    ASSERT_EQ(tl_GetMessageA(&message, &window, 0, 0), 1);
+    EXPECT_EQ(message.hwnd, &window);
+    EXPECT_EQ(message.message, kAsyncMessage);
+    EXPECT_EQ(message.wparam, client);
+    EXPECT_EQ(static_cast<std::uint32_t>(message.lparam) & 0xFFFFU, 0x0001U);
+    EXPECT_EQ(static_cast<std::uint32_t>(message.lparam) >> 16U, 0U);
+
+    char buffer[8]{};
+    EXPECT_EQ(tl_recv(client, buffer, 3, 0), 3);
+    EXPECT_EQ(std::string(buffer, 3), "one");
+
+    ASSERT_EQ(::send(accepted, "two", 3, 0), 3);
+    message = {};
+    ASSERT_EQ(tl_GetMessageA(&message, &window, 0, 0), 1);
+    EXPECT_EQ(message.message, kAsyncMessage);
+    EXPECT_EQ(static_cast<std::uint32_t>(message.lparam) & 0xFFFFU, 0x0001U);
+    EXPECT_EQ(tl_recv(client, buffer, 3, 0), 3);
+    EXPECT_EQ(std::string(buffer, 3), "two");
+
+    EXPECT_EQ(tl_closesocket(client), 0);
+    EXPECT_EQ(tl_WSACleanup(), 0);
+    ::close(accepted);
+    ::close(listener);
+    unregister_window_handle(&window);
     g_windows = {};
 }
 

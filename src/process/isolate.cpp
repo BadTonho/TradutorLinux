@@ -111,7 +111,27 @@ void kill_process_group(const ::pid_t child) noexcept {
 struct TimeoutSnapshot {
     bool recorded{};
     std::uint64_t rip{};
+    bool stack_top_recorded{};
+    std::uint64_t stack_top{};
 };
+
+[[nodiscard]] bool read_timeout_stack_top(const ::pid_t child, const std::uintptr_t stack_pointer,
+                                          std::uint64_t& value) noexcept {
+#if defined(__linux__) && defined(__x86_64__)
+    if (child <= 0 || stack_pointer == 0) return false;
+    errno = 0;
+    const long word = ::ptrace(
+        PTRACE_PEEKDATA, child, reinterpret_cast<void*>(stack_pointer), nullptr);
+    if (word == -1L && errno != 0) return false;
+    value = static_cast<std::uint64_t>(static_cast<unsigned long>(word));
+    return true;
+#else
+    static_cast<void>(child);
+    static_cast<void>(stack_pointer);
+    static_cast<void>(value);
+    return false;
+#endif
+}
 
 // O filho do isolamento é descendente direto do hospedeiro. Em Linux, isso
 // permite obter os registradores da thread principal sem depender de um
@@ -138,9 +158,16 @@ struct TimeoutSnapshot {
     struct ::user_regs_struct registers_snapshot {};
     const bool read_ok = ::ptrace(PTRACE_GETREGS, child, nullptr,
                                   &registers_snapshot) == 0;
+    std::uint64_t stack_top = 0;
+    const bool stack_top_recorded =
+        read_ok && read_timeout_stack_top(child, static_cast<std::uintptr_t>(registers_snapshot.rsp),
+                                           stack_top);
     static_cast<void>(::ptrace(PTRACE_DETACH, child, nullptr, nullptr));
     if (!read_ok) return {};
-    return {.recorded = true, .rip = static_cast<std::uint64_t>(registers_snapshot.rip)};
+    return {.recorded = true,
+            .rip = static_cast<std::uint64_t>(registers_snapshot.rip),
+            .stack_top_recorded = stack_top_recorded,
+            .stack_top = stack_top};
 #else
     static_cast<void>(child);
     return {};
@@ -592,6 +619,8 @@ GuestOutcome run_guest_isolated(const std::uintptr_t entry_point,
                 .signal_number = SIGKILL,
                 .timeout_recorded = snapshot.recorded,
                 .timeout_rip = snapshot.rip,
+                .timeout_stack_top_recorded = snapshot.stack_top_recorded,
+                .timeout_stack_top = snapshot.stack_top,
                 .timeout_rip_samples = std::move(timeout_rip_samples)};
     }
 

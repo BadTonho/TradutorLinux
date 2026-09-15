@@ -597,6 +597,11 @@ int main(const int argc, char** const argv) {
                                    has_ws2_call("connect");
     const bool network_exchanged = has_ws2_call("socket") && has_ws2_call("connect") &&
                                    has_ws2_call("send") && has_ws2_call("recv");
+    const bool async_read_notified =
+        runtime_result.trace.find("WSAAsyncSelect symbol=\"WSAAsyncSelect\" phase=\"notify\"") !=
+            std::string::npos &&
+        runtime_result.trace.find("event=1,error=0\" status=\"posted\"") !=
+            std::string::npos;
     const std::string idle_marker =
         "GetMessageA symbol=\"GetMessageA\" status=\"idle\" mechanism=\"native-poll\"";
     const std::size_t idle_position = runtime_result.trace.find(idle_marker);
@@ -630,9 +635,12 @@ int main(const int argc, char** const argv) {
                                         session_window_position);
     const std::size_t timeout_position =
         runtime_result.trace.find("terminated category=\"guest-timeout\"");
+    const bool delete_menu_observed =
+        runtime_result.trace.find("DeleteMenu symbol=\"DeleteMenu\"") != std::string::npos;
     const bool session_initialization_stalled =
         session_window_position != std::string::npos && oemcp_position != std::string::npos &&
         timeout_position != std::string::npos && oemcp_position < timeout_position &&
+        delete_menu_observed &&
         idle_after_session == std::string::npos &&
         dispatch_after_session == std::string::npos;
 
@@ -653,7 +661,21 @@ int main(const int argc, char** const argv) {
                                            std::string::npos &&
                                        runtime_result.trace.find("guest-signal") == std::string::npos &&
                                        runtime_result.stdout_text.empty();
-    const bool ok = successful_exchange || controlled_limitation;
+    const bool banner_exchange_limitation = configured && session_reached && banner_received &&
+                                             server_result_available && server_exited &&
+                                             WIFEXITED(server_status) &&
+                                             WEXITSTATUS(server_status) == 0 &&
+                                             runtime_result.exited && runtime_result.exit_code == 72 &&
+                                             wsa_started && has_ws2_call("getaddrinfo") &&
+                                             has_ws2_call("socket") && has_ws2_call("connect") &&
+                                             has_ws2_call("send") &&
+                                             has_ws2_call("recv") && async_read_notified &&
+                                             runtime_result.trace.find("guest-timeout") !=
+                                                 std::string::npos &&
+                                             runtime_result.trace.find("guest-signal") ==
+                                                 std::string::npos &&
+                                             runtime_result.stdout_text.empty();
+    const bool ok = successful_exchange || controlled_limitation || banner_exchange_limitation;
     if (!ok) {
         std::cerr << "smoke SSH local do PuTTY falhou em " << staging << '\n'
                   << "display-open=" << display_open << " about-found=" << about_found
@@ -661,7 +683,9 @@ int main(const int argc, char** const argv) {
                   << " configuration=" << (configuration != 0)
                   << " configured=" << configured << " session=" << session_reached
                   << " message-loop-before-session=" << message_loop_reached_before_session
+                  << " delete-menu=" << delete_menu_observed
                   << " session-init-stalled=" << session_initialization_stalled
+                  << " banner-exchange-limitation=" << banner_exchange_limitation
                   << " banner=" << banner_received
                   << " server-exited=" << server_exited << " runtime-exited="
                   << runtime_result.exited << " runtime-timeout=" << runtime_result.timed_out
@@ -676,6 +700,9 @@ int main(const int argc, char** const argv) {
 
     if (successful_exchange) {
         std::cout << "PuTTY SSH local version exchange and controlled termination: ok\n";
+    } else if (banner_exchange_limitation) {
+        std::cout << "PuTTY SSH local probe: banner exchange reached, "
+                     "guest-timeout 72 (limitation recorded)\n";
     } else {
         std::cout << "PuTTY SSH local probe: configuration reached, no bytes sent, "
                      "guest-timeout 72 (limitation recorded)\n";

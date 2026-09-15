@@ -187,8 +187,13 @@ sockets UDP locais.
 As entradas de `WSAStartup`, `getaddrinfo`, `socket`, `connect`, `send`, `recv`,
 `WSAAsyncSelect` e `WSAEventSelect` emitem um evento de trace com
 `phase="call"`, `module="WS2_32.dll"` e parâmetros não sensíveis. Esse evento
-serve para separar import resolvido de API efetivamente chamada; não altera o
-contrato de rede nem libera acesso externo.
+serve para separar import resolvido de API efetivamente chamada. Quando o
+modelo assíncrono entrega uma mensagem à janela, `WSAAsyncSelect` também emite
+`phase="notify"`, com `detail` contendo socket, mensagem, evento e erro e
+`status="posted"` ou `"rejected"`. O evento `FD_READ` só é rearmado após uma
+chamada de `recv`; isso evita notificações repetidas enquanto a mesma leitura
+continua pendente. O contrato continua limitado ao loopback e não libera
+acesso externo.
 
 No message loop, uma chamada bloqueante de `GetMessageA` emite uma única marca
 `symbol="GetMessageA" status="idle" mechanism="native-poll"` antes de dormir
@@ -583,9 +588,11 @@ pendente.
 `getaddrinfo` para `localhost`/loopback, `WSAAddressToStringA` para converter
 endpoints IPv4, conversões de ordem de bytes, `WSAPoll` e o subconjunto de
 eventos WSA (`WSAEventSelect`, objetos manuais, espera e enumeração de
-eventos). A fixture nunca acessa Internet; no sandbox sem permissão de
-socket, o teste retorna um skip controlado, enquanto a validação com loopback
-permitido passa de ponta a ponta.
+eventos), além de `WSAAsyncSelect` integrado às filas de mensagem GUI para
+`FD_CONNECT`/`FD_READ`/`FD_WRITE`/`FD_CLOSE`. A fixture e o smoke local nunca
+acessam Internet; no sandbox sem permissão de socket, os testes retornam skip
+controlado, enquanto a validação com loopback permitido passa pelo transporte
+inicial.
 
 `WININET.dll` é separado de `WS2_32.dll` e atende somente um cliente HTTPS
 direto de loopback: `localhost`/`127.0.0.1`, `INTERNET_FLAG_SECURE`,

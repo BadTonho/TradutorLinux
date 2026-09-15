@@ -54,6 +54,11 @@ struct GuestOutcome {
     // principal do filho isolado, quando ptrace conseguiu obter os registradores.
     bool timeout_recorded{};
     std::uint64_t timeout_rip{};
+    // Palavra no topo de RSP no mesmo snapshot. Só é publicada como contexto
+    // host quando dladdr a reconhece; pode estar ausente em uma pilha guest ou
+    // quando a leitura best-effort não é permitida pelo kernel.
+    bool timeout_stack_top_recorded{};
+    std::uint64_t timeout_stack_top{};
     // Amostras best-effort da mesma thread durante um timeout, coletadas apenas
     // quando o trace foi solicitado. Permitem separar execução na imagem PE
     // de execução no hospedeiro sem atribuir uma API por inferência.

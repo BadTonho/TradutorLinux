@@ -1,4 +1,5 @@
 #include "user32_internal.hpp"
+#include "tradutorlinux/runtime/ws2_32.hpp"
 
 #include <cstddef>
 #include <cstring>
@@ -895,6 +896,7 @@ TL_MSABI int tl_GetMessageA(void* const msg, const void* const window,
         set_last_error(abi::kErrorSuccess);
         return 0;
     }
+    tl_WSAPumpAsyncSelect();
     for (WindowSlot& slot : g_windows) {
         if (!slot.used || (window != nullptr && window != &slot)) {
             continue;
@@ -930,6 +932,7 @@ TL_MSABI int tl_GetMessageA(void* const msg, const void* const window,
     }
     bool idle_traced = false;
     for (;;) {
+        tl_WSAPumpAsyncSelect();
         CrossThreadWindowMessage cross_thread_message{};
         while (take_cross_thread_window_message(window, cross_thread_message)) {
             void* const target = reinterpret_cast<void*>(cross_thread_message.window);
@@ -1764,6 +1767,7 @@ TL_MSABI std::uint32_t tl_MsgWaitForMultipleObjectsEx(const std::uint32_t count,
     }
     const auto start = std::chrono::steady_clock::now();
     while (true) {
+        tl_WSAPumpAsyncSelect();
         for (std::uint32_t i = 0; i < count; ++i) {
             const std::uint32_t res = tl_WaitForSingleObject(handle_copy[i], 0);
             if (res == abi::kWaitObject0) {
@@ -1826,6 +1830,7 @@ TL_MSABI int tl_PeekMessageA(void* const msg, const void* const window,
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
+    tl_WSAPumpAsyncSelect();
     CrossThreadWindowMessage cross_thread_message{};
     while (peek_cross_thread_window_message(window, cross_thread_message)) {
         void* const target = reinterpret_cast<void*>(cross_thread_message.window);

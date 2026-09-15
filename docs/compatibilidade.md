@@ -23,6 +23,11 @@ Há três dimensões independentes:
 Assim, um aplicativo pode ter `supported` na resolução de imports e continuar
 `execution-failed` ou sem nível funcional no catálogo.
 
+O probe local do PuTTY mantém essa distinção: a etapa E39 valida o transporte
+inicial de loopback e as notificações `WSAAsyncSelect`, mas a resposta mínima do
+servidor ainda termina em `GuestTimeout 72`; isso não promove o aplicativo nem
+o protocolo SSH a suporte funcional.
+
 ### Análise aprofundada de requisitos com `--report`
 
 O comando `tradutorlinux --report <app.exe>` realiza inspeção estática aprofundada sem executar a aplicação, antecipando requisitos de infraestrutura e limitações conhecidas:

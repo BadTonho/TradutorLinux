@@ -195,6 +195,10 @@ alterar o resultado `GuestTimeout`. Quando disponível, o evento inclui:
 | `host-module-offset` | Deslocamento do `timeout-rip` em relação à base do módulo nativo. |
 | `host-symbol` | Símbolo nativo resolvido para o `timeout-rip`, quando disponível. |
 | `host-offset` | Deslocamento do `timeout-rip` em relação ao início do símbolo nativo, quando disponível. |
+| `timeout-stack-top-module` | Nome do módulo nativo que contém a palavra no topo de `RSP`, quando `dladdr` a resolve; é omitido para uma palavra guest ou uma leitura indisponível. |
+| `timeout-stack-top-module-offset` | Deslocamento da palavra resolvida no topo de `RSP` em relação à base do módulo nativo. |
+| `timeout-stack-top-symbol` | Símbolo nativo da palavra resolvida no topo de `RSP`, quando disponível. |
+| `timeout-stack-top-offset` | Deslocamento da palavra resolvida no topo de `RSP` em relação ao símbolo nativo. |
 | `rva` | `timeout-rip − base` quando o RIP cai dentro da imagem PE. |
 | `section` | Seção PE que contém o RIP. |
 | `nearest-import` | Slot de IAT resolvido mais próximo abaixo do RIP. |
@@ -217,6 +221,11 @@ o evento também informa o módulo pelo nome curto, o símbolo e seu deslocament
 ```text
 [tl][process][error] terminated category="guest-timeout" timeout-ms="8000" timeout-samples="33" timeout-pe-samples="0" timeout-host-samples="33" timeout-rip="0x7f0012345da1" host-module="tradutorlinux" host-module-offset="0x3d58ee" host-symbol="__cyg_profile_func_enter" host-offset="0x21"
 ```
+
+Quando a leitura best-effort do topo de `RSP` também resolve para código nativo,
+o evento acrescenta `timeout-stack-top-*`. Esses campos ajudam a localizar um
+retorno host provável, mas não são um unwinder: uma palavra guest, uma pilha
+corrompida ou uma restrição de `ptrace` simplesmente não produz contexto.
 
 ### Evento JSON `guest-execution`
 

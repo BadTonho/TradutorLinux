@@ -1,4 +1,7 @@
 #include "user32_internal.hpp"
+
+#include <atomic>
+
 namespace tradutorlinux {
 
 namespace {
@@ -19,6 +22,7 @@ constexpr std::uint32_t kMenuItemInfoFType = 0x00000100U;
 constexpr std::uint32_t kMenuByPosition = 0x00000400U;
 constexpr std::uint32_t kMenuStateEnabledMask = 0x00000003U;
 constexpr std::uint32_t kMenuStateChecked = 0x00000008U;
+std::atomic<std::uint64_t> g_delete_menu_call_count{};
 
 [[nodiscard]] MenuSlot* mutable_menu_slot(const void* const menu) noexcept {
     if (menu == nullptr) {
@@ -434,7 +438,7 @@ TL_MSABI int tl_GetMenuItemCount(void* const menu) noexcept {
     if (const MenuSlot* const actual = find_menu_slot(menu); actual != nullptr) {
         return static_cast<int>(actual->logical_items.size());
     }
-    return menu == &g_dummy_menu ? 5 : -1;
+    return menu == &g_dummy_menu ? static_cast<int>(g_dummy_menu.count) : -1;
 }
 
 TL_MSABI int tl_GetMenuItemInfoW(void* const menu, const std::uint32_t item, const int f_by_position,
@@ -721,18 +725,64 @@ TL_MSABI void* tl_CreateMenu() noexcept {
 }
 
 TL_MSABI int tl_DeleteMenu(void* const menu, const std::uint32_t position, const std::uint32_t flags) noexcept {
-    (void)menu;
-    (void)position;
-    (void)flags;
+    const std::uint64_t call_count =
+        g_delete_menu_call_count.fetch_add(1U, std::memory_order_relaxed) + 1U;
+    const bool by_position = (flags & kMenuByPosition) != 0U;
+    bool valid_menu = menu == &g_dummy_menu;
+    bool deleted = false;
+
+    if (menu == &g_dummy_menu) {
+        if (by_position && position < g_dummy_menu.count) {
+            --g_dummy_menu.count;
+            deleted = true;
+        }
+    } else if (MenuSlot* const actual = mutable_menu_slot(menu); actual != nullptr) {
+        valid_menu = true;
+        auto item = by_position
+                         ? (position < actual->logical_items.size()
+                                ? actual->logical_items.begin() + position
+                                : actual->logical_items.end())
+                         : std::find_if(actual->logical_items.begin(), actual->logical_items.end(),
+                                        [position](const MenuItem& entry) {
+                                            return entry.command_id == position;
+                                        });
+        if (item != actual->logical_items.end()) {
+            if (item->submenu != nullptr && item->submenu->used) {
+                destroy_menu_tree(*item->submenu);
+            }
+            try {
+                actual->logical_items.erase(item);
+                rebuild_popup_items(*actual);
+                deleted = true;
+            } catch (...) {
+                set_last_error(abi::kErrorNotEnoughMemory);
+            }
+        }
+    }
+
+    if (call_count <= 4U || (call_count & (call_count - 1U)) == 0U || !deleted) {
+        const std::array<diagnostics::TraceField, 4> fields{
+            diagnostics::TraceField{"symbol", "DeleteMenu"},
+            diagnostics::TraceField{"status", deleted ? "success" : "not-found"},
+            diagnostics::TraceField{"call-count", std::to_string(call_count)},
+            diagnostics::TraceField{"flags", std::to_string(flags)}};
+        runtime_trace("DeleteMenu", fields, 4);
+    }
+    if (!deleted) {
+        set_last_error(valid_menu ? abi::kErrorInvalidParameter : abi::kErrorInvalidHandle);
+        return 0;
+    }
     set_last_error(abi::kErrorSuccess);
     return 1;
 }
 
 TL_MSABI void* tl_GetSystemMenu(void* const hwnd, const int b_revert) noexcept {
     (void)hwnd;
-    (void)b_revert;
+    if (b_revert != 0) {
+        g_dummy_menu.count = 5;
+    }
     set_last_error(abi::kErrorSuccess);
-    return reinterpret_cast<void*>(0x5359534DULL); // 'SYSM'
+    return &g_dummy_menu;
 }
 
 TL_MSABI int tl_InsertMenuA(void* const menu, const std::uint32_t position, const std::uint32_t flags, const std::uintptr_t id_new_item, const char* const new_item) noexcept {
