@@ -203,6 +203,8 @@ As APIs de janela emitem eventos do componente `runtime`:
 [tl][runtime][info] SetTimer symbol="SetTimer" id="1" elapsed-ms="200" status="success"
 [tl][runtime][info] GetMessageA symbol="GetMessageA" message="WM_TIMER" id="1" status="delivered"
 [tl][runtime][info] KillTimer symbol="KillTimer" id="1" status="success" result="killed"
+[tl][runtime][info] DispatchMessageA symbol="DispatchMessageA" message="15" phase="call" status="begin"
+[tl][runtime][info] DispatchMessageA symbol="DispatchMessageA" message="15" result="0" status="success"
 [tl][runtime][info] GetStockObject symbol="GetStockObject" object="0" status="success" mechanism="token"
 [tl][runtime][info] BeginPaint symbol="BeginPaint" status="success" mechanism="hdc=hwnd" result="painting"
 [tl][runtime][info] TextOut symbol="TextOut" x="10" y="10" length="17"
@@ -210,12 +212,16 @@ As APIs de janela emitem eventos do componente `runtime`:
 [tl][runtime][info] GetMessageA symbol="GetMessageA" message="WM_QUIT" exit-code="0" result="quit"
 ```
 
-`GetMessageA` registra somente eventos notáveis: o fim do loop (`WM_QUIT`),
-confirmando que `PostQuitMessage` foi acionado, e cada timer expirado entregue
-(`WM_TIMER` com `id` e `status` `delivered`). As mensagens ordinárias não são
-registradas para não poluir o trace. `TranslateMessage` registra a conversão de
-um `WM_KEYDOWN` em `WM_CHAR` com o `wparam` (código do caractere) e `status`
-(`translated` quando houve conversão; o evento só é emitido nesse caso).
+`GetMessageA` registra somente eventos notáveis: o estado ocioso alcançado uma
+vez por chamada bloqueante (`status="idle" mechanism="native-poll"`), o fim do
+loop (`WM_QUIT`), confirmando que `PostQuitMessage` foi acionado, e cada timer
+expirado entregue (`WM_TIMER` com `id` e `status` `delivered`).
+`DispatchMessageA` registra o início e o retorno do `WNDPROC`, com o número da
+mensagem e o resultado escalar; isso permite ordenar a última chamada GUI antes
+da espera sem registrar ponteiros convidados. `TranslateMessage` registra a
+conversão de um `WM_KEYDOWN` em `WM_CHAR` com o `wparam` (código do caractere) e
+`status` (`translated` quando houve conversão; o evento só é emitido nesse
+caso).
 
 As APIs do GDI mínimo emitem eventos do mesmo componente: `SetTimer`/`KillTimer`
 confirmam criação e remoção de timers; `GetStockObject` registra o objeto e o

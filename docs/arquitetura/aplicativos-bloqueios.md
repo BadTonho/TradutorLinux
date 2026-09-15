@@ -169,6 +169,22 @@ envia bytes ao listener local e termina com `guest-timeout 72`. A evidência
 localiza o bloqueio depois do trabalho GUI observável e antes da rede; não
 justifica implementar um shim específico ou declarar SSH suportado.
 
+## Evidência E35 — bloqueio ativo do convidado após a janela de sessão
+
+Uma captura ordenada do `putty_ssh_local_probe` mostrou que o primeiro
+`GetMessageA status="idle"` ocorre antes de `CreateWindowExA` criar a janela
+`PuTTY`. Depois dessa criação, o último diagnóstico genérico é
+`locale operation="oemcp"`; não aparecem novo `DispatchMessageA`, novo estado
+ocioso do `GetMessageA` nem chamadas de rede antes de
+`terminated category="guest-timeout"`.
+
+Durante a mesma reprodução, o processo filho que executa o código convidado
+ficou em estado `R` e consumiu aproximadamente 99% de CPU, enquanto o
+processo-pai do runtime aguardava o resultado. Isso distingue um loop ativo do
+convidado de uma espera no backend X11 ou no message loop. Nenhum callback
+Win32 genérico reproduzível foi localizado após a janela; a limitação continua
+publicada e não há base para adicionar API ou shim específico do PuTTY.
+
 As matrizes nativas e de instalação controlada continuam separadas: 5/5
 execuções e 4/4 instalações passaram nos dois builds. PE32/x86, imagens
 empacotadas e pacotes incompatíveis continuam sendo rejeitados antes de

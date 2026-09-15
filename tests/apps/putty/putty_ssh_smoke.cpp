@@ -589,16 +589,42 @@ int main(const int argc, char** const argv) {
             ? std::string::npos
             : runtime_result.trace.rfind("DispatchMessageA symbol=\"DispatchMessageA\"",
                                          idle_position);
-    const bool session_transition_observed =
+    const bool message_loop_reached_before_session =
         idle_position != std::string::npos && last_dispatch_before_idle != std::string::npos &&
         last_dispatch_before_idle < idle_position;
+    const std::string session_window_marker =
+        "CreateWindowExA symbol=\"CreateWindowExA\" class=\"PuTTY\" "
+        "window=\"PuTTY\" status=\"success\"";
+    const std::size_t session_window_position = runtime_result.trace.find(session_window_marker);
+    const std::string oemcp_marker =
+        "locale operation=\"oemcp\" code-page=\"437\" locale=\"en-US\" "
+        "status=\"success\"";
+    const std::size_t oemcp_position =
+        session_window_position == std::string::npos
+            ? std::string::npos
+            : runtime_result.trace.find(oemcp_marker, session_window_position);
+    const std::size_t idle_after_session =
+        session_window_position == std::string::npos
+            ? std::string::npos
+            : runtime_result.trace.find(idle_marker, session_window_position);
+    const std::size_t dispatch_after_session =
+        session_window_position == std::string::npos
+            ? std::string::npos
+            : runtime_result.trace.find("DispatchMessageA symbol=\"DispatchMessageA\"",
+                                        session_window_position);
+    const std::size_t timeout_position =
+        runtime_result.trace.find("terminated category=\"guest-timeout\"");
+    const bool session_initialization_stalled =
+        session_window_position != std::string::npos && oemcp_position != std::string::npos &&
+        timeout_position != std::string::npos && oemcp_position < timeout_position &&
+        idle_after_session == std::string::npos &&
+        dispatch_after_session == std::string::npos;
 
     const bool successful_exchange = configured && session_reached && banner_received &&
                     server_result_available &&
                     server_exited &&
                     WIFEXITED(server_status) && WEXITSTATUS(server_status) == 0 &&
                     has_controlled_exit(runtime_result) && network_exchanged &&
-                    session_transition_observed &&
                     runtime_result.stdout_text.empty();
     const bool controlled_limitation = configured && session_reached && !banner_received &&
                                        server_result_available &&
@@ -606,7 +632,7 @@ int main(const int argc, char** const argv) {
                                        WEXITSTATUS(server_status) == 1 && runtime_result.exited &&
                                        runtime_result.exit_code == 72 &&
                                        wsa_started && !network_attempted &&
-                                       session_transition_observed &&
+                                       session_initialization_stalled &&
                                        runtime_result.trace.find("category=\"guest-timeout\"") !=
                                            std::string::npos &&
                                        runtime_result.trace.find("guest-signal") == std::string::npos &&
@@ -618,7 +644,8 @@ int main(const int argc, char** const argv) {
                   << " about-closed=" << about_closed
                   << " configuration=" << (configuration != 0)
                   << " configured=" << configured << " session=" << session_reached
-                  << " session-transition=" << session_transition_observed
+                  << " message-loop-before-session=" << message_loop_reached_before_session
+                  << " session-init-stalled=" << session_initialization_stalled
                   << " banner=" << banner_received
                   << " server-exited=" << server_exited << " runtime-exited="
                   << runtime_result.exited << " runtime-timeout=" << runtime_result.timed_out

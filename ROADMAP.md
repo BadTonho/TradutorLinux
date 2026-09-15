@@ -890,6 +890,44 @@ de inicialização que antecede essa espera; se não houver uma chamada Win32
 reproduzível, a limitação deve permanecer publicada em vez de receber uma
 implementação sintética.
 
+### R12 — Confirmar o bloqueio pós-criação sem atribuí-lo ao message loop
+
+A R11 mostrou uma marca de espera antes da criação da janela de sessão, mas
+isso não provava que o PuTTY voltava ao message loop depois de `Open`. Era
+necessário separar essa lacuna temporal de um bloqueio interno do código
+convidado e evitar a implementação especulativa de uma API.
+
+- [x] capturar o trace completo do probe e ordenar `CreateWindowExA` da janela
+  `PuTTY`, o último diagnóstico genérico observável e o timeout;
+- [x] proteger no teste a ausência de novo `DispatchMessageA` e de novo
+  `GetMessageA` ocioso depois da criação da janela de sessão;
+- [x] observar o processo filho do convidado durante esse intervalo, usando
+  somente estado/CPU do sistema, para distinguir execução ativa de espera;
+- [x] manter o runtime sem nova API, chamada sintética ou regra específica do
+  PuTTY enquanto não houver um callback Win32 reproduzível.
+
+**Critério de aceite:** o probe deve continuar alcançando a janela `PuTTY`,
+registrar o último diagnóstico genérico antes do timeout, não registrar rede,
+message loop ou dispatch posteriores à janela e retornar a limitação controlada
+`guest-timeout 72`. A observação do processo deve confirmar execução ativa do
+convidado, sem promovê-la a suporte.
+
+**Evidência 2026-09-15:** o trace do `putty_ssh_local_probe` mostra
+`CreateWindowExA ... class="PuTTY" ... status="success"`, seguido de
+`locale operation="oemcp" ... status="success"` e então
+`terminated category="guest-timeout"`; não há `DispatchMessageA`,
+`GetMessageA status="idle"` ou `getaddrinfo`/`socket`/`connect`/`send`/`recv`
+depois da janela. Durante a reprodução, o processo filho do convidado ficou
+em estado `R` com aproximadamente 99% de CPU, enquanto o processo-pai do
+runtime permaneceu aguardando. O probe atualizado passou no build
+`build/debug` (Rust OFF), sem alteração do comportamento WinSock.
+
+Conclusão: o bloqueio atual está no código convidado após a criação da janela
+de sessão e antes do retorno ao message loop; não há callback de inicialização
+Win32 genérico reproduzido que justifique uma mudança no runtime. O próximo
+trabalho deve ser uma análise de execução do código convidado (ou uma fixture
+que isole o mesmo contrato), não uma nova API escolhida por inferência.
+
 ## Fora desta rodada
 
 Não entram neste roadmap, por enquanto:
