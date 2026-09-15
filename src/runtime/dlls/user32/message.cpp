@@ -8,6 +8,19 @@ namespace tradutorlinux {
 
 namespace {
 
+struct PendingNativeMessage {
+    abi::GuestMsg message{};
+    bool has_message{false};
+    bool is_timer{false};
+    bool is_paint{false};
+};
+
+std::array<PendingNativeMessage, 32> g_pending_native{};
+
+[[nodiscard]] PendingNativeMessage& pending_native(WindowSlot& slot) noexcept {
+    return g_pending_native[static_cast<std::size_t>(&slot - g_windows.data())];
+}
+
 [[nodiscard]] abi::Lparam mouse_lparam(const int x, const int y) noexcept {
     return (static_cast<std::intptr_t>(y & 0xFFFF) << 16) |
            static_cast<std::intptr_t>(x & 0xFFFF);
@@ -695,8 +708,151 @@ void notify_tree_selection(WindowSlot& tree, const std::uintptr_t old_handle,
     }
 }
 
+[[nodiscard]] bool translate_native_window_event(WindowSlot& slot,
+                                                 const gui::WindowEvent& event,
+                                                 abi::GuestMsg& message) noexcept {
+    const auto set_message = [&message](const abi::HWnd hwnd, const std::uint32_t id,
+                                         const abi::Wparam wparam,
+                                         const abi::Lparam lparam) noexcept {
+        message = {};
+        message.hwnd = hwnd;
+        message.message = id;
+        message.wparam = wparam;
+        message.lparam = lparam;
+    };
+
+    if (event.type == gui::WindowEventType::Redraw) {
+        render_controls(slot);
+        set_message(&slot, abi::kWmPaint, 0, 0);
+        return true;
+    }
+    if (event.type == gui::WindowEventType::Press) {
+        WindowSlot* const control = event_control(slot, event);
+        handle_control_mouse(slot, event);
+        slot.left_button_down = true;
+        const WindowDrawingTarget target = logical_child_mouse_message(control)
+                                               ? window_drawing_target(control)
+                                               : WindowDrawingTarget{};
+        if (logical_child_mouse_message(control) && target.native != nullptr) {
+            set_message(control, abi::kWmLButtonDown, abi::kMkLButton,
+                        mouse_lparam(event.x - target.offset_x, event.y - target.offset_y));
+        } else {
+            set_message(&slot, abi::kWmLButtonDown, abi::kMkLButton,
+                        mouse_lparam(event.x, event.y));
+        }
+        return true;
+    }
+    if (event.type == gui::WindowEventType::Release) {
+        WindowSlot* const control = event_control(slot, event);
+        handle_control_mouse(slot, event);
+        slot.left_button_down = false;
+        const WindowDrawingTarget target = logical_child_mouse_message(control)
+                                               ? window_drawing_target(control)
+                                               : WindowDrawingTarget{};
+        if (logical_child_mouse_message(control) && target.native != nullptr) {
+            set_message(control, abi::kWmLButtonUp, 0,
+                        mouse_lparam(event.x - target.offset_x, event.y - target.offset_y));
+        } else {
+            set_message(&slot, abi::kWmLButtonUp, 0, mouse_lparam(event.x, event.y));
+        }
+        return true;
+    }
+    if (event.type == gui::WindowEventType::MouseMove) {
+        WindowSlot* const control = event_control(slot, event);
+        handle_control_mouse(slot, event);
+        const WindowDrawingTarget target = logical_child_mouse_message(control)
+                                               ? window_drawing_target(control)
+                                               : WindowDrawingTarget{};
+        const bool deliver_to_child = logical_child_mouse_message(control) &&
+                                       target.native != nullptr;
+        const int local_x = deliver_to_child ? event.x - target.offset_x : event.x;
+        const int local_y = deliver_to_child ? event.y - target.offset_y : event.y;
+        const abi::Wparam wparam = slot.left_button_down ? abi::kMkLButton : 0;
+        set_message(deliver_to_child ? control : &slot, abi::kWmMouseMove, wparam,
+                    mouse_lparam(local_x, local_y));
+        return true;
+    }
+    if (event.type == gui::WindowEventType::KeyDown) {
+        slot.last_key = event.character;
+        handle_control_key(slot, event);
+        set_message(&slot, abi::kWmKeyDown,
+                    keydown_vkey(event.keysym, event.character), 0);
+        return true;
+    }
+    if (event.type == gui::WindowEventType::RightPress) {
+        if (slot.tray_registered) {
+            set_message(&slot, slot.tray_callback_message != 0
+                                  ? slot.tray_callback_message
+                                  : abi::kWmTrayIcon,
+                        slot.tray_icon_id, abi::kWmRButtonUp);
+        } else {
+            set_message(&slot, abi::kWmRButtonDown, abi::kMkRButton,
+                        mouse_lparam(event.x, event.y));
+        }
+        return true;
+    }
+    if (event.type == gui::WindowEventType::RightRelease) {
+        if (slot.tray_registered) {
+            return false;
+        }
+        set_message(&slot, abi::kWmRButtonUp, 0, mouse_lparam(event.x, event.y));
+        return true;
+    }
+    if (event.type == gui::WindowEventType::KeyUp) {
+        set_message(&slot, abi::kWmKeyUp,
+                    keydown_vkey(event.keysym, event.character), 0);
+        return true;
+    }
+    if (event.type == gui::WindowEventType::CloseRequested) {
+        set_message(&slot, abi::kWmClose, 0, 0);
+        return true;
+    }
+    return false;
+}
+
+void reset_pending_native(WindowSlot& slot) noexcept {
+    PendingNativeMessage& pending = pending_native(slot);
+    if (pending.is_timer) {
+        const auto found = std::find_if(
+            slot.timers.begin(), slot.timers.end(),
+            [&pending](const GuestTimer& timer) {
+                return timer.id == pending.message.wparam;
+            });
+        if (found != slot.timers.end()) {
+            found->deadline = std::chrono::steady_clock::now() + found->interval;
+        }
+    }
+    if (pending.is_paint) {
+        slot.render_pending = false;
+    }
+    pending = {};
+}
+
+bool deliver_pending_native(void* const msg, WindowSlot& slot) noexcept {
+    const PendingNativeMessage& pending = pending_native(slot);
+    if (!write_guest_msg(msg, pending.message.hwnd, pending.message.message,
+                         pending.message.wparam, pending.message.lparam)) {
+        return false;
+    }
+    reset_pending_native(slot);
+    return true;
+}
+
+void trace_peek_message(const abi::GuestMsg& message, const std::uint32_t remove_msg) noexcept {
+    const std::array<diagnostics::TraceField, 4> fields{
+        diagnostics::TraceField{"symbol", "PeekMessageA"},
+        diagnostics::TraceField{"message", std::to_string(message.message)},
+        diagnostics::TraceField{"remove", std::to_string(remove_msg & kPmRemove)},
+        diagnostics::TraceField{"status", "available"},
+    };
+    runtime_trace("PeekMessageA", fields, 4);
+}
 
 }  // namespace
+
+void clear_pending_native(WindowSlot& slot) noexcept {
+    pending_native(slot) = {};
+}
 
 extern "C" {
 
@@ -732,6 +888,14 @@ TL_MSABI int tl_GetMessageA(void* const msg, const void* const window,
     for (WindowSlot& slot : g_windows) {
         if (!slot.used || (window != nullptr && window != &slot)) {
             continue;
+        }
+        if (pending_native(slot).has_message) {
+            if (!deliver_pending_native(msg, slot)) {
+                set_last_error(abi::kErrorInvalidParameter);
+                return -1;
+            }
+            set_last_error(abi::kErrorSuccess);
+            return 1;
         }
         if (slot.has_pending) {
             if (!write_guest_msg(msg, &slot, slot.pending.message, slot.pending.wparam,
@@ -1654,29 +1818,128 @@ TL_MSABI int tl_PeekMessageA(void* const msg, const void* const window,
         }
         return 1;
     }
-    WindowSlot* slot = find_window_slot(window);
-    if (slot == nullptr && window == nullptr) {
-        for (auto& w : g_windows) {
-            if (w.used) { slot = &w; break; }
+    const auto matches_window = [window](const WindowSlot& candidate) noexcept {
+        return candidate.used && (window == nullptr || window == &candidate);
+    };
+    const auto write_message = [msg, remove_msg](WindowSlot& slot,
+                                                  const abi::GuestMsg& message) noexcept {
+        if (!write_guest_msg(msg, message.hwnd, message.message, message.wparam,
+                             message.lparam)) {
+            return false;
+        }
+        trace_peek_message(message, remove_msg);
+        if ((remove_msg & kPmRemove) != 0U && pending_native(slot).has_message) {
+            reset_pending_native(slot);
+        }
+        return true;
+    };
+
+    for (WindowSlot& slot : g_windows) {
+        if (!matches_window(slot)) {
+            continue;
+        }
+        if (pending_native(slot).has_message) {
+            if (!write_message(slot, pending_native(slot).message)) {
+                set_last_error(abi::kErrorInvalidParameter);
+                return 0;
+            }
+            set_last_error(abi::kErrorSuccess);
+            return 1;
+        }
+        if (slot.has_pending) {
+            const abi::GuestMsg pending = slot.pending;
+            if (!write_guest_msg(msg, pending.hwnd, pending.message, pending.wparam,
+                                 pending.lparam)) {
+                set_last_error(abi::kErrorInvalidParameter);
+                return 0;
+            }
+            trace_peek_message(pending, remove_msg);
+            if ((remove_msg & kPmRemove) != 0U) {
+                slot.has_pending = false;
+            }
+            set_last_error(abi::kErrorSuccess);
+            return 1;
+        }
+        if (!slot.queued_messages.empty()) {
+            const abi::GuestMsg queued = slot.queued_messages.front();
+            if (!write_guest_msg(msg, queued.hwnd, queued.message, queued.wparam,
+                                 queued.lparam)) {
+                set_last_error(abi::kErrorInvalidParameter);
+                return 0;
+            }
+            trace_peek_message(queued, remove_msg);
+            if ((remove_msg & kPmRemove) != 0U) {
+                slot.queued_messages.pop_front();
+            }
+            set_last_error(abi::kErrorSuccess);
+            return 1;
         }
     }
-    if (slot == nullptr) return 0;
-    if (slot->has_pending) {
-        if (!write_guest_msg(msg, slot, slot->pending.message, slot->pending.wparam,
-                             slot->pending.lparam)) {
+
+    for (WindowSlot& slot : g_windows) {
+        if (!matches_window(slot) || slot.native == nullptr) {
+            continue;
+        }
+        const gui::WindowEvent event = gui::platform::next_window_event(slot.native);
+        if (event.type == gui::WindowEventType::Idle) {
+            continue;
+        }
+        abi::GuestMsg translated{};
+        if (!translate_native_window_event(slot, event, translated)) {
+            continue;
+        }
+        PendingNativeMessage& pending = pending_native(slot);
+        pending.message = translated;
+        pending.has_message = true;
+        pending.is_paint = translated.message == abi::kWmPaint;
+        if (!write_message(slot, pending.message)) {
             set_last_error(abi::kErrorInvalidParameter);
             return 0;
         }
-        if ((remove_msg & kPmRemove) != 0) slot->has_pending = false;
+        set_last_error(abi::kErrorSuccess);
         return 1;
     }
-    if (!slot->queued_messages.empty()) {
-        const abi::GuestMsg queued = slot->queued_messages.front();
-        if (!write_guest_msg(msg, queued.hwnd, queued.message, queued.wparam, queued.lparam)) {
+
+    const auto now = std::chrono::steady_clock::now();
+    for (WindowSlot& slot : g_windows) {
+        if (!matches_window(slot)) {
+            continue;
+        }
+        for (const GuestTimer& timer : slot.timers) {
+            if (now < timer.deadline) {
+                continue;
+            }
+            PendingNativeMessage& pending = pending_native(slot);
+            pending = {};
+            pending.message.hwnd = &slot;
+            pending.message.message = abi::kWmTimer;
+            pending.message.wparam = timer.id;
+            pending.has_message = true;
+            pending.is_timer = true;
+            if (!write_message(slot, pending.message)) {
+                set_last_error(abi::kErrorInvalidParameter);
+                return 0;
+            }
+            set_last_error(abi::kErrorSuccess);
+            return 1;
+        }
+    }
+
+    for (WindowSlot& slot : g_windows) {
+        if (!matches_window(slot) || !slot.render_pending) {
+            continue;
+        }
+        PendingNativeMessage& pending = pending_native(slot);
+        pending = {};
+        pending.message.hwnd = &slot;
+        pending.message.message = abi::kWmPaint;
+        pending.has_message = true;
+        pending.is_paint = true;
+        if (!write_message(slot, pending.message)) {
             set_last_error(abi::kErrorInvalidParameter);
             return 0;
         }
-        if ((remove_msg & kPmRemove) != 0) slot->queued_messages.pop_front();
+        set_last_error(abi::kErrorSuccess);
         return 1;
     }
     return 0;

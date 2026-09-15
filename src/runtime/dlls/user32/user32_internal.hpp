@@ -44,6 +44,7 @@ constexpr int kMaxGuestWindowDimension = 8192;
 }
 
 void paint_registered_children(WindowSlot& parent) noexcept;
+void clear_pending_native(WindowSlot& slot) noexcept;
 
 inline void render_controls(WindowSlot& parent) noexcept {
     runtime_gui::render_controls(parent, std::span<WindowSlot>{g_windows});

@@ -295,6 +295,7 @@ TL_MSABI abi::HWnd tl_CreateWindowExA(const std::uint32_t ex_style,
             return nullptr;
         }
         slot = {};
+        clear_pending_native(slot);
         slot.used = true;
         slot.wndproc = cls != nullptr ? cls->wndproc : 0;
         slot.class_name = effective_class_name;
@@ -335,6 +336,7 @@ TL_MSABI abi::HWnd tl_CreateWindowExA(const std::uint32_t ex_style,
                 reinterpret_cast<abi::Lparam>(&cs));
             if (create_result == -1) {
                 slot = {};
+                clear_pending_native(slot);
                 set_last_error(abi::kErrorInvalidParameter);
                 trace_guest_failure("CreateWindowExA", "wm-create",
                                     "WM_CREATE do filho rejeitou a criação");
@@ -379,6 +381,7 @@ TL_MSABI abi::HWnd tl_CreateWindowExA(const std::uint32_t ex_style,
         return nullptr;
     }
     WindowSlot& slot = *free_it;
+    clear_pending_native(slot);
     slot.used = true;
     slot.wndproc = cls->wndproc;
     slot.class_name = cls->name;
@@ -485,6 +488,7 @@ TL_MSABI abi::HWnd tl_CreateWindowExA(const std::uint32_t ex_style,
         unregister_window_handle(&slot);
         gui::platform::destroy_window(slot.native);
         slot = {};
+        clear_pending_native(slot);
         set_last_error(abi::kErrorInvalidParameter);
         trace_guest_failure("CreateWindowExA", "wm-create", "WM_CREATE rejeitou a criação");
         return nullptr;
@@ -643,6 +647,7 @@ TL_MSABI int tl_DestroyWindow(const void* const window) noexcept {
             if (g_focused_control == &child) {
                 g_focused_control = nullptr;
             }
+            clear_pending_native(child);
             child = {};
         }
     }
@@ -665,6 +670,7 @@ TL_MSABI int tl_DestroyWindow(const void* const window) noexcept {
                                           parent->dialog_children.end(), slot);
         parent->dialog_children.erase(child_it, parent->dialog_children.end());
     }
+    clear_pending_native(*slot);
     *slot = {};
     if (parent != nullptr) {
         request_dialog_render(*parent);

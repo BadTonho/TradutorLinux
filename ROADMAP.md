@@ -783,9 +783,41 @@ sem contrato e binários PE32/x86 não devem ser iniciados por esta matriz.
 `build/debug` (Rust OFF) e `build/debug-rust` (Rust ON), sem divergência. Os
 seis casos nativos autorizados e os oito casos de instalação reproduziram os
 códigos e diagnósticos já publicados. Nenhum novo defeito do runtime foi
-reproduzido nesta rodada. O próximo alvo direto é o fluxo SSH local do PuTTY,
-que permanece limitado ao timeout controlado por ainda não entregar dados ao
-listener.
+reproduzido nesta rodada.
+
+### R9 — Corrigir `PeekMessageA/W` para eventos nativos e pendências GUI
+
+A auditoria do fluxo GUI encontrou um problema real: embora os exports de
+`PeekMessageA/W` estivessem marcados como disponíveis, a implementação só
+consultava mensagens internas e cross-thread. Ela não fazia polling dos eventos
+nativos, timers expirados ou pinturas pendentes; uma aplicação que dependesse de
+polling não receberia entrada X11 e poderia girar indefinidamente.
+
+- [x] preservar `PM_NOREMOVE` numa cache por janela e remover a mesma mensagem
+  somente com `PM_REMOVE`;
+- [x] traduzir eventos nativos de teclado, mouse, fechamento e pintura para o
+  caminho não bloqueante, além de expor timers expirados;
+- [x] adicionar a fixture PE32+ `tl_peek.exe` e o cenário `peek` do
+  `runtime_gui_smoke`;
+- [x] repetir o smoke GUI e os testes de metadata/`--report` no build C++ OFF,
+  registrando o subconjunto suportado.
+
+**Critério de aceite:** `tl_peek.exe` termina com exit `7` depois de observar
+`WM_KEYDOWN('Q')` com `PM_NOREMOVE` e removê-lo com `PM_REMOVE`; o trace contém
+as duas chamadas; os cenários GUI anteriores continuam passando.
+
+**Evidência 2026-09-15:** `runtime_gui_smoke` passou no build `build/debug`
+(Rust OFF), incluindo autoclose, fechamento, teclado, duas janelas, timer,
+GDI, pintura, diálogo e `PeekMessageA`. O cenário `peek` registrou as chamadas
+com `remove="0"` e `remove="1"`. Os filtros `wMsgFilterMin`/`wMsgFilterMax`
+continuam fora deste subconjunto. A validação do PuTTY permanece separada:
+configuração e janela de sessão são alcançadas, mas o fluxo ainda não chega a
+`socket`/`connect` nem envia dados ao listener local, portanto não há promoção
+para suporte SSH.
+
+O próximo alvo direto, após esta etapa, é instrumentar e validar o contrato de
+inicialização da sessão do PuTTY que precede a rede; a implementação de sockets
+não deve ser ampliada sem reproduzir uma chamada convidada correspondente.
 
 ## Fora desta rodada
 

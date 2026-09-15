@@ -563,9 +563,10 @@ if(TL_XVFB_EXECUTABLE AND TARGET tradutorlinux_samples AND TARGET tradutorlinux)
             "${CMAKE_CURRENT_BINARY_DIR}/samples/generated/tl_gdi.exe"
             "${CMAKE_CURRENT_BINARY_DIR}/samples/generated/tl_paint.exe"
             "${CMAKE_CURRENT_BINARY_DIR}/samples/generated/tl_dialog.exe"
+            "${CMAKE_CURRENT_BINARY_DIR}/samples/generated/tl_peek.exe"
     )
     set_tests_properties(runtime_gui_smoke PROPERTIES
-        DEPENDS "fixture_tl_win_metadata;fixture_tl_win2_metadata;fixture_tl_key_metadata;fixture_tl_timer_metadata;fixture_tl_gdi_metadata;fixture_tl_paint_metadata;fixture_tl_dialog_metadata"
+        DEPENDS "fixture_tl_win_metadata;fixture_tl_win2_metadata;fixture_tl_key_metadata;fixture_tl_timer_metadata;fixture_tl_gdi_metadata;fixture_tl_paint_metadata;fixture_tl_dialog_metadata;fixture_tl_peek_metadata"
         LABELS "runtime;pe32plus;gui"
         TIMEOUT 90
         SKIP_RETURN_CODE 77

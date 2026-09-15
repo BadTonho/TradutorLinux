@@ -115,6 +115,26 @@ termina no `guest-timeout 72`; uma observação com `strace` confirmou que não
 há `socket`/`connect` do convidado depois dessa ação. Portanto a etapa valida
 configuração e ativação da janela, não o handshake SSH.
 
+## Evidência E32 — contrato não bloqueante de `PeekMessageA/W` (2026-09-15)
+
+A auditoria da GUI encontrou uma lacuna reproduzível: `PeekMessageA/W` estava
+resolvível, mas consultava apenas filas internas e cross-thread. Eventos nativos,
+timers expirados e pinturas pendentes não entravam no caminho não bloqueante.
+Isso afetava aplicações que usam polling em vez de `GetMessage`.
+
+A fixture genérica `tl_peek.exe` foi criada para isolar o contrato: sob Xvfb,
+ela cria uma janela, recebe `WM_KEYDOWN('Q')`, observa a mensagem com
+`PM_NOREMOVE`, observa a mesma mensagem novamente com `PM_REMOVE` e termina com
+exit `7`. O cenário `runtime_gui_smoke` passou com o trace das duas chamadas,
+sem alterar regras específicas de aplicativo. O suporte continua limitado: os
+filtros de faixa de mensagem não são aplicados.
+
+Essa correção não muda o resultado do PuTTY. A investigação local ainda mostra
+que, após a configuração e a janela de sessão, o convidado não chama
+`socket`/`connect` nem envia bytes ao listener. O próximo bloqueio é o contrato
+de inicialização da sessão que precede a rede, não uma ausência comprovada de
+API WinSock.
+
 As matrizes nativas e de instalação controlada continuam separadas: 5/5
 execuções e 4/4 instalações passaram nos dois builds. PE32/x86, imagens
 empacotadas e pacotes incompatíveis continuam sendo rejeitados antes de

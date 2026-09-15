@@ -1208,6 +1208,9 @@ tl_add_pe_fixture(tl_dialog src/tl_dialog.c manifests/tl_dialog.json
 tl_add_pe_fixture(tl_key src/tl_key.c manifests/tl_key.json
     LINK_KERNEL32 LINK_USER32 EXPECT_RESOLVED REPORT_ONLY RELOCATABLE
     REPORT_SYMBOL "RegisterClassExA")
+tl_add_pe_fixture(tl_peek src/tl_peek.c manifests/tl_peek.json
+    LINK_KERNEL32 LINK_USER32 EXPECT_RESOLVED REPORT_ONLY RELOCATABLE
+    REPORT_SYMBOL "PeekMessageA")
 tl_add_pe_fixture(tl_timer src/tl_timer.c manifests/tl_timer.json
     LINK_KERNEL32 LINK_USER32 EXPECT_RESOLVED REPORT_ONLY RELOCATABLE
     REPORT_SYMBOL "SetTimer")

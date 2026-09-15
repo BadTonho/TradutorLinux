@@ -99,6 +99,7 @@ namespace {
     }
     WindowSlot& dialog = *free_it;
     dialog = {};
+    clear_pending_native(dialog);
     dialog.used = true;
     dialog.wndproc = dialog_proc;
     dialog.class_name = "#32770";
@@ -126,6 +127,7 @@ namespace {
         }
         WindowSlot& child = *child_it;
         child = {};
+        clear_pending_native(child);
         child.used = true;
         child.is_control = true;
         child.parent = &dialog;
@@ -471,6 +473,7 @@ TL_MSABI std::intptr_t tl_DialogBoxParamW(const void* const instance,
     }
     WindowSlot& dialog = *free_it;
     dialog = {};
+    clear_pending_native(dialog);
     dialog.used = true;
     dialog.wndproc = dialog_proc;
     dialog.class_name = "#32770";
@@ -501,6 +504,7 @@ TL_MSABI std::intptr_t tl_DialogBoxParamW(const void* const instance,
         }
         WindowSlot& child = *child_it;
         child = {};
+        clear_pending_native(child);
         child.used = true;
         child.is_control = true;
         child.parent = &dialog;
