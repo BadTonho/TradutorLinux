@@ -502,7 +502,7 @@ TEST(Win32GuiTest, WsaAsyncSelectPostsReadableSocketMessage) {
     constexpr std::uint32_t kAsyncMessage = 0x8004U;
     ASSERT_EQ(tl_WSAAsyncSelect(client, &window, kAsyncMessage, 0x0001L | 0x0020L), 0);
 
-    const int accepted = ::accept(listener, nullptr, nullptr);
+    int accepted = ::accept(listener, nullptr, nullptr);
     ASSERT_GE(accepted, 0);
     ASSERT_EQ(::send(accepted, "one", 3, 0), 3);
 
@@ -526,9 +526,18 @@ TEST(Win32GuiTest, WsaAsyncSelectPostsReadableSocketMessage) {
     EXPECT_EQ(tl_recv(client, buffer, 3, 0), 3);
     EXPECT_EQ(std::string(buffer, 3), "two");
 
+    ASSERT_EQ(tl_WSAAsyncSelect(client, &window, kAsyncMessage, 0x0020L), 0);
+    ::close(accepted);
+    accepted = -1;
+    message = {};
+    ASSERT_EQ(tl_GetMessageA(&message, &window, 0, 0), 1);
+    EXPECT_EQ(message.message, kAsyncMessage);
+    EXPECT_EQ(static_cast<std::uint32_t>(message.lparam) & 0xFFFFU, 0x0020U);
+    EXPECT_EQ(static_cast<std::uint32_t>(message.lparam) >> 16U, 0U);
+
     EXPECT_EQ(tl_closesocket(client), 0);
     EXPECT_EQ(tl_WSACleanup(), 0);
-    ::close(accepted);
+    if (accepted >= 0) ::close(accepted);
     ::close(listener);
     unregister_window_handle(&window);
     g_windows = {};

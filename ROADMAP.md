@@ -1166,6 +1166,42 @@ protocolo SSH controlado ou, antes disso, localizar a primeira chamada genérica
 faltante após o `recv`; não se deve ampliar o escopo para autenticação, chaves
 ou suporte SSH geral sem um contrato e testes próprios.
 
+### R19 — Corrigir EOF no transporte assíncrono de WinSock
+
+A análise pós-R18 mostrou que o PuTTY recebia `FD_READ` e consumia a resposta
+mínima, mas o fechamento ordenado do listener podia aparecer somente como
+prontidão de leitura. Sem uma notificação `FD_CLOSE`, o message loop permanecia
+esperando mesmo depois de o socket não possuir mais bytes. Trata-se de uma
+lacuna genérica de tradução POSIX→WinSock, reproduzida sem depender de regra do
+PuTTY.
+
+- [x] proteger o fechamento do peer com
+  `Win32GuiTest.WsaAsyncSelectPostsReadableSocketMessage`;
+- [x] sondar EOF de forma não destrutiva no bombeamento de `WSAAsyncSelect`;
+- [x] publicar `FD_CLOSE` e evitar um novo `FD_READ` quando não houver dados;
+- [x] exigir `FD_CLOSE` no smoke local do PuTTY e atualizar a matriz e os
+  contratos publicados, mantendo o protocolo SSH completo fora do suporte.
+
+**Critério de aceite:** o teste genérico deve receber duas notificações
+`FD_READ` separadas por `recv` e depois uma notificação `FD_CLOSE` quando o peer
+for fechado; o smoke do PuTTY deve registrar `FD_READ`, `recv` e `FD_CLOSE`,
+continuando como limitação controlada `guest-timeout 72`; nenhuma etapa pode
+promover SSH completo ou adicionar código específico do aplicativo.
+
+**Evidência 2026-09-15:** o build incremental dos alvos
+`tradutorlinux_unit_tests`, `tradutorlinux` e `putty_ssh_smoke` passou. A
+regressão TCP executada fora do sandbox passou e registrou `event=32,error=0`
+(`FD_CLOSE`) após o fechamento do peer. O `putty_ssh_local_probe` também
+passou com exit `0` do harness e registrou no JSON `FD_CONNECT`, `FD_WRITE`,
+`FD_READ`, `send`, `recv` e `FD_CLOSE`; o listener validou o banner e enviou a
+resposta mínima. O processo continuou terminando com `guest-timeout 72`, que é
+agora o limite do protocolo SSH restante, não uma falha de entrega de EOF.
+
+Conclusão: a tradução genérica do transporte inicial está protegida. A próxima
+etapa direta é criar um fixture de protocolo SSH controlado ou localizar, no
+trace/disassembly convidado, a primeira dependência genérica após o recebimento
+e fechamento; não implementar autenticação, chaves ou SSH geral por inferência.
+
 ## Fora desta rodada
 
 Não entram neste roadmap, por enquanto:

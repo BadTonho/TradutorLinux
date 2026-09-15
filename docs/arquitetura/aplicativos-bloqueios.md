@@ -272,6 +272,22 @@ do cliente e envia uma resposta mínima. O processo ainda termina com
 protocolo SSH. Essa evidência promove somente o transporte inicial genérico,
 não o PuTTY nem o SSH completo.
 
+## Evidência E40 — EOF assíncrono convertido em `FD_CLOSE`
+
+A regressão `Win32GuiTest.WsaAsyncSelectPostsReadableSocketMessage` revelou que
+o fechamento ordenado do peer podia aparecer como prontidão de leitura sem uma
+notificação `FD_CLOSE`. Isso deixava uma janela registrada em espera mesmo
+depois de o socket não possuir mais bytes. O backend genérico agora faz uma
+sondagem não destrutiva do EOF: publica `FD_CLOSE` e não publica um novo
+`FD_READ` quando a leitura já foi consumida.
+
+O teste fora do sandbox passou com duas cargas separadas por `recv` e, depois,
+com o fechamento do peer. O `putty_ssh_local_probe` também passou com
+`FD_CONNECT`, `FD_WRITE`, `FD_READ`, `send`, `recv` e `FD_CLOSE` no trace JSON;
+o banner foi validado pelo listener e o processo continuou terminando com a
+limitação controlada `guest-timeout 72`. A correção é genérica e não promove
+PuTTY ou SSH completo.
+
 ## Evidência D2 — cenários GUI
 
 O smoke externo do 7-Zip File Manager passou nos builds C++ OFF e Rust ON. Ele

@@ -192,8 +192,9 @@ modelo assíncrono entrega uma mensagem à janela, `WSAAsyncSelect` também emit
 `phase="notify"`, com `detail` contendo socket, mensagem, evento e erro e
 `status="posted"` ou `"rejected"`. O evento `FD_READ` só é rearmado após uma
 chamada de `recv`; isso evita notificações repetidas enquanto a mesma leitura
-continua pendente. O contrato continua limitado ao loopback e não libera
-acesso externo.
+continua pendente. EOF observado no socket é publicado como `FD_CLOSE`, sem
+fabricar um novo `FD_READ` quando não há dados restantes. O contrato continua
+limitado ao loopback e não libera acesso externo.
 
 No message loop, uma chamada bloqueante de `GetMessageA` emite uma única marca
 `symbol="GetMessageA" status="idle" mechanism="native-poll"` antes de dormir

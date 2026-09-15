@@ -177,10 +177,16 @@ void refresh_async_select_locked() noexcept {
         if ((descriptor.revents & POLLOUT) != 0 && !slot.connecting) {
             post_async_event_locked(slot, kFdWrite, 0);
         }
-        if ((descriptor.revents & POLLIN) != 0) {
+        bool peer_closed = false;
+        if ((descriptor.revents & POLLIN) != 0 && !slot.listening) {
+            char probe = 0;
+            const ssize_t result = ::recv(slot.fd, &probe, sizeof(probe), MSG_PEEK | MSG_DONTWAIT);
+            peer_closed = result == 0;
+        }
+        if ((descriptor.revents & POLLIN) != 0 && !peer_closed) {
             post_async_event_locked(slot, slot.listening ? kFdAccept : kFdRead, 0);
         }
-        if ((descriptor.revents & (POLLERR | POLLHUP | POLLNVAL)) != 0) {
+        if (peer_closed || (descriptor.revents & (POLLERR | POLLHUP | POLLNVAL)) != 0) {
             post_async_event_locked(
                 slot, kFdClose, (descriptor.revents & POLLNVAL) != 0 ? kWsaENotSocket : 0);
         }

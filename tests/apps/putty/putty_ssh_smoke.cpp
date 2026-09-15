@@ -602,6 +602,11 @@ int main(const int argc, char** const argv) {
             std::string::npos &&
         runtime_result.trace.find("event=1,error=0\" status=\"posted\"") !=
             std::string::npos;
+    const bool async_close_notified =
+        runtime_result.trace.find("WSAAsyncSelect symbol=\"WSAAsyncSelect\" phase=\"notify\"") !=
+            std::string::npos &&
+        runtime_result.trace.find("event=32,error=0\" status=\"posted\"") !=
+            std::string::npos;
     const std::string idle_marker =
         "GetMessageA symbol=\"GetMessageA\" status=\"idle\" mechanism=\"native-poll\"";
     const std::size_t idle_position = runtime_result.trace.find(idle_marker);
@@ -670,6 +675,7 @@ int main(const int argc, char** const argv) {
                                              has_ws2_call("socket") && has_ws2_call("connect") &&
                                              has_ws2_call("send") &&
                                              has_ws2_call("recv") && async_read_notified &&
+                                             async_close_notified &&
                                              runtime_result.trace.find("guest-timeout") !=
                                                  std::string::npos &&
                                              runtime_result.trace.find("guest-signal") ==
@@ -686,6 +692,7 @@ int main(const int argc, char** const argv) {
                   << " delete-menu=" << delete_menu_observed
                   << " session-init-stalled=" << session_initialization_stalled
                   << " banner-exchange-limitation=" << banner_exchange_limitation
+                  << " async-close=" << async_close_notified
                   << " banner=" << banner_received
                   << " server-exited=" << server_exited << " runtime-exited="
                   << runtime_result.exited << " runtime-timeout=" << runtime_result.timed_out
