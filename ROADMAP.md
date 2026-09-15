@@ -967,6 +967,45 @@ O próximo alvo direto é uma comparação controlada do caminho hospedeiro de
 instrumentação/trace e de sua fronteira com o retorno do convidado, preservando
 o diagnóstico e sem desabilitar a observabilidade dos smokes.
 
+### R14 — Corrigir a reentrância do gravador de trace JSON
+
+A comparação revelou que o timeout amostrado em `__cyg_profile_func_enter` não
+era, por si só, prova de um loop do runtime. O caminho reproduzível era outro:
+com `--trace-json`, a thread que consumia a fila destruía uma string enquanto
+segurava `g_trace_json_queue_mutex`; a instrumentação dessa destruição chamava
+o hook, que tentava adquirir a mesma mutex. Isso congelava o gravador e a
+thread principal, inclusive durante `--report`.
+
+- [x] capturar as pilhas das threads com `gdb` e identificar a reentrada exata
+  em `deque::pop_front` → `__cyg_profile_func_enter` → fila JSON;
+- [x] impedir que somente a thread interna do gravador enfileire callbacks de
+  instrumentação sobre sua própria fila;
+- [x] proteger a correção com uma regressão que consome 256 eventos JSON e
+  confirmar o `--report` normal e o `--trace-json --report` do PuTTY;
+- [x] documentar que a instrumentação continua disponível para o runtime e o
+  convidado, mas não para o código interno de consumo da fila.
+
+**Critério de aceite:** o `--report` do PuTTY deve terminar com exit `0` nos
+modos normal e JSON; a variante JSON deve criar `events-<pid>.jsonl`; a suíte
+`TraceTest.*` deve passar sem espera indefinida; e o PuTTY interativo deve
+continuar classificado como limitação `guest-timeout 72` quando o smoke GUI
+estiver disponível.
+
+**Evidência 2026-09-15:** `gdb` confirmou a autoespera na mutex da fila. Após a
+correção, `TraceTest.*` passou 6/6; o `--report` normal do
+`putty_x64.exe` passou com `result: supported`,
+`compatibility: 100% (348/348 imports resolved)` e `execution: not-attempted`;
+a variante
+`--trace-json --report` passou em menos de 15 s e gerou um JSONL de 831237
+bytes. O smoke GUI PuTTY foi tentado, mas esta execução encontrou
+`XOpenDisplay` indisponível (`display :2`); isso foi registrado como falha
+ambiental da reprodução, sem alterar a conclusão sobre o deadlock.
+
+Com a fronteira do diagnóstico corrigida, o próximo trabalho volta ao bloqueio
+real do aplicativo: reproduzir ou isolar o caminho convidado entre a criação da
+janela de sessão e a primeira chamada de rede, sem inferir uma nova API a partir
+de um RIP do hospedeiro.
+
 ## Fora desta rodada
 
 Não entram neste roadmap, por enquanto:

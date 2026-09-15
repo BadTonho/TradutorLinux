@@ -204,6 +204,24 @@ matriz continua registrando `guest-timeout 72` e não promove SSH. A causa do
 loop hospedeiro ainda requer uma comparação específica do caminho de
 instrumentação/trace; nenhum shim ou regra do PuTTY foi criado.
 
+## Evidência E37 — reentrância do gravador JSON (2026-09-15)
+
+Uma captura com `gdb` reproduziu o travamento de `--trace-json --report` no
+PuTTY. A thread do gravador segurava `g_trace_json_queue_mutex` durante
+`deque::pop_front`; a destruição de uma `std::string` instrumentada entrou em
+`__cyg_profile_func_enter`, que tentou reenfileirar o próprio evento pela mesma
+mutex. A thread principal ficou bloqueada no mesmo caminho durante
+`PeParser::parse_unwind_info`. O problema era do diagnóstico do hospedeiro,
+não do código convidado nem de WinSock.
+
+O gravador agora marca sua thread interna e o hook ignora somente callbacks
+originados nela. A regressão
+`TraceTest.JsonWriterDoesNotDeadlockOnInstrumentedQueueDestruction` passou, e
+`--trace-json --report putty_x64.exe` concluiu com exit `0`, gerando
+`events-<pid>.jsonl` com 831237 bytes. O `--report` normal também concluiu com
+exit `0` e os mesmos 348/348 imports resolvidos. Nenhuma API, shim ou regra
+específica do PuTTY foi adicionada.
+
 As matrizes nativas e de instalação controlada continuam separadas: 5/5
 execuções e 4/4 instalações passaram nos dois builds. PE32/x86, imagens
 empacotadas e pacotes incompatíveis continuam sendo rejeitados antes de

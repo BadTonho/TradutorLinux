@@ -65,6 +65,28 @@ TEST(TraceTest, WritesJsonEventImmediately) {
     std::filesystem::remove_all(directory);
 }
 
+TEST(TraceTest, JsonWriterDoesNotDeadlockOnInstrumentedQueueDestruction) {
+    const auto directory = std::filesystem::temp_directory_path() /
+                           "tl-trace-json-queue-test";
+    std::filesystem::remove_all(directory);
+    ASSERT_TRUE(configure_trace_json_directory(directory));
+
+    for (std::size_t index = 0; index < 256U; ++index) {
+        const std::array fields{TraceField{"iteration", std::to_string(index)}};
+        write_json_trace(TraceComponent::Runtime, TraceLevel::Debug,
+                         "queue-regression", fields);
+    }
+    disable_trace_json_directory();
+
+    std::filesystem::path json_path;
+    for (const auto& entry : std::filesystem::directory_iterator(directory)) {
+        if (entry.path().extension() == ".jsonl") json_path = entry.path();
+    }
+    ASSERT_FALSE(json_path.empty());
+    EXPECT_GT(std::filesystem::file_size(json_path), 0U);
+    std::filesystem::remove_all(directory);
+}
+
 TEST(TraceTest, FunctionScopeWritesEntryAndExit) {
     const auto directory = std::filesystem::temp_directory_path() / "tl-function-scope-test";
     std::filesystem::remove_all(directory);

@@ -154,6 +154,7 @@ std::condition_variable g_trace_json_queue_cv;
 std::deque<std::string> g_trace_json_queue;
 std::thread g_trace_json_writer;
 bool g_trace_json_writer_stop = false;
+thread_local bool g_trace_json_writer_thread = false;
 pid_t g_trace_json_owner_pid = -1;
 bool g_trace_json_atexit_registered = false;
 struct FunctionTraceRecord {
@@ -193,6 +194,10 @@ void write_json_record_locked(const std::string& record) {
 }
 
 void json_writer_loop() {
+    // A fila contém strings e a destruição de um item pode passar por uma
+    // função instrumentada. O hook não pode tentar reenfileirar um evento
+    // enquanto a própria thread ainda segura g_trace_json_queue_mutex.
+    g_trace_json_writer_thread = true;
     for (;;) {
         std::string record;
         FunctionTraceRecord function_record{};
@@ -487,6 +492,7 @@ FunctionTraceScope::~FunctionTraceScope() noexcept {
 void enqueue_function_json_trace(const bool entering, const std::uintptr_t function,
                                  const std::uintptr_t caller) noexcept {
     if (!is_trace_json_enabled()) return;
+    if (g_trace_json_writer_thread) return;
     if (!remember_function(function)) return;
     try {
         if (::getpid() != g_trace_json_owner_pid) return;

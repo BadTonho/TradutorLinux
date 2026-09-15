@@ -5,6 +5,7 @@
 #include <chrono>
 #include <csignal>
 #include <cstdint>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -399,6 +400,11 @@ void close_session_windows(Display* const display) {
     std::vector<std::string> arguments{
         runtime.string(), "--trace=loader,process,runtime,gui", "--timeout", "8", "--cpu",
         "10", "--memory", "512", target.string()};
+    if (const char* const trace_json = ::getenv("TL_PUTTY_TRACE_JSON");
+        trace_json != nullptr && trace_json[0] != '\0') {
+        arguments.emplace(arguments.end() - 1, "--trace-json");
+        arguments.emplace(arguments.end() - 1, trace_json);
+    }
     std::vector<char*> argv;
     argv.reserve(arguments.size() + 1U);
     for (std::string& argument : arguments) argv.push_back(argument.data());

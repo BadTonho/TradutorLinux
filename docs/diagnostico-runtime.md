@@ -200,6 +200,21 @@ da imagem continua exigindo análise adicional. Exemplo:
 [tl][process][error] terminated category="guest-timeout" timeout-ms="1000" timeout-rip="0x140001010" rva="0x1010" section=".text"
 ```
 
+## Trace JSON e instrumentação do hospedeiro
+
+`--trace-json <diretório>` mantém o trace textual em `stderr` e grava eventos
+estruturados em `events-<pid>.jsonl`. O gravador usa uma fila assíncrona para
+não bloquear o caminho observado; eventos de instrumentação de funções incluem
+`function-enter`/`function-exit` em nível `debug`, com endereço, caller e
+símbolo quando resolvidos pelo hospedeiro.
+
+A thread interna do gravador não é instrumentada no próprio caminho de consumo
+da fila. Isso evita reentrância ao destruir registros, sem desabilitar a
+instrumentação das threads do runtime ou do convidado. Um travamento no
+`function_trace.cpp` durante um timeout continua sendo apenas uma amostra do
+estado do hospedeiro; a classificação de suporte depende do evento de processo
+e dos smokes reproduzíveis.
+
 Quando a falta recai na guard page da pilha alocada para o processo convidado,
 o diagnóstico identifica o estouro de pilha e adiciona `fault-type="stack-overflow"`:
 
