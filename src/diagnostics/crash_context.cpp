@@ -1,5 +1,7 @@
 #include "tradutorlinux/diagnostics/crash_context.hpp"
 
+#include <dlfcn.h>
+
 namespace tradutorlinux::diagnostics {
 
 GuestCrashContext describe_guest_crash(const loader::MappedImage& image,
@@ -42,6 +44,44 @@ GuestCrashContext describe_guest_crash(const loader::MappedImage& image,
         }
     }
 
+    return context;
+}
+
+HostAddressContext describe_host_address(const std::uint64_t address) {
+    HostAddressContext context;
+    if (address == 0) {
+        return context;
+    }
+
+    Dl_info info{};
+    if (::dladdr(reinterpret_cast<void*>(static_cast<std::uintptr_t>(address)), &info) == 0) {
+        return context;
+    }
+
+    context.valid = true;
+    if (info.dli_fname != nullptr) {
+        const std::string_view path{info.dli_fname};
+        const std::size_t separator = path.rfind('/');
+        context.module = std::string{path.substr(
+            separator == std::string_view::npos ? 0 : separator + 1)};
+    }
+    if (info.dli_sname != nullptr) {
+        context.symbol = info.dli_sname;
+    }
+    if (info.dli_fbase != nullptr) {
+        const auto module_address = reinterpret_cast<std::uintptr_t>(info.dli_fbase);
+        const auto queried_address = static_cast<std::uintptr_t>(address);
+        if (queried_address >= module_address) {
+            context.module_offset = queried_address - module_address;
+        }
+    }
+    if (info.dli_saddr != nullptr) {
+        const auto symbol_address = reinterpret_cast<std::uintptr_t>(info.dli_saddr);
+        const auto queried_address = static_cast<std::uintptr_t>(address);
+        if (queried_address >= symbol_address) {
+            context.symbol_offset = queried_address - symbol_address;
+        }
+    }
     return context;
 }
 

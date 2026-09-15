@@ -1,8 +1,11 @@
 #include "tradutorlinux/cli.hpp"
 #include "tradutorlinux/catalog/app_catalog.hpp"
+#include "tradutorlinux/diagnostics/trace.hpp"
 
 #include <cstdlib>
 #include <filesystem>
+#include <fstream>
+#include <iterator>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -428,6 +431,35 @@ TEST(CommandRunTest, ReturnsGuestTimeoutWhenGuestHangs) {
     EXPECT_EQ(stderr_stream.str().find("exit exit-code="), std::string::npos);
 }
 
+TEST(CommandRunTest, TraceJsonRecordsGuestExecutionBoundary) {
+    const std::filesystem::path trace_directory =
+        std::filesystem::temp_directory_path() / "tl-guest-execution-boundary-test";
+    std::filesystem::remove_all(trace_directory);
+
+    CommandLine command_line;
+    command_line.trace_enabled = true;
+    command_line.trace_json_directory = trace_directory;
+    command_line.executable_path =
+        std::filesystem::path{TL_FIXTURE_OUTPUT_DIRECTORY} / "tl_nop.exe";
+    std::ostringstream stdout_stream;
+    std::ostringstream stderr_stream;
+
+    const ExitCode exit_code = run_command(command_line, stdout_stream, stderr_stream);
+    diagnostics::disable_trace_json_directory();
+
+    ASSERT_EQ(exit_code, ExitCode::Success);
+    std::string trace;
+    for (const auto& entry : std::filesystem::directory_iterator(trace_directory)) {
+        if (entry.path().extension() != ".jsonl") continue;
+        std::ifstream input(entry.path());
+        trace.append(std::istreambuf_iterator<char>{input}, std::istreambuf_iterator<char>{});
+    }
+    EXPECT_NE(trace.find("\"event\": \"guest-execution\""), std::string::npos);
+    EXPECT_NE(trace.find("\"phase\": \"enter\""), std::string::npos);
+    EXPECT_NE(trace.find("\"phase\": \"return\""), std::string::npos);
+    std::filesystem::remove_all(trace_directory);
+}
+
 TEST(CommandRunTest, ReportOutputsResourcesWhenPresent) {
     CommandLine command_line;
     command_line.report_only = true;
@@ -667,4 +699,3 @@ TEST(CommandLineTest, RejectsDuplicateNetworkOption) {
 
 }  // namespace
 }  // namespace tradutorlinux
-

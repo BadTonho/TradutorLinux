@@ -191,6 +191,10 @@ alterar o resultado `GuestTimeout`. Quando disponível, o evento inclui:
 | `timeout-samples` | Número de amostras best-effort da mesma thread durante o timeout. Só é coletado com `--trace`. |
 | `timeout-pe-samples` | Amostras cujo RIP caiu dentro da imagem PE. |
 | `timeout-host-samples` | Amostras cujo RIP ficou fora da imagem PE, no hospedeiro ou em uma biblioteca nativa. |
+| `host-module` | Nome do módulo nativo que contém o `timeout-rip`, sem caminho absoluto. |
+| `host-module-offset` | Deslocamento do `timeout-rip` em relação à base do módulo nativo. |
+| `host-symbol` | Símbolo nativo resolvido para o `timeout-rip`, quando disponível. |
+| `host-offset` | Deslocamento do `timeout-rip` em relação ao início do símbolo nativo, quando disponível. |
 | `rva` | `timeout-rip − base` quando o RIP cai dentro da imagem PE. |
 | `section` | Seção PE que contém o RIP. |
 | `nearest-import` | Slot de IAT resolvido mais próximo abaixo do RIP. |
@@ -206,6 +210,38 @@ hospedeiro ou exigem correlação adicional. Exemplo:
 ```text
 [tl][process][error] terminated category="guest-timeout" timeout-ms="1000" timeout-samples="4" timeout-pe-samples="4" timeout-host-samples="0" timeout-rip="0x140001010" rva="0x1010" section=".text"
 ```
+
+Quando o snapshot final está fora da imagem PE e `dladdr` consegue resolvê-lo,
+o evento também informa o módulo pelo nome curto, o símbolo e seu deslocamento:
+
+```text
+[tl][process][error] terminated category="guest-timeout" timeout-ms="8000" timeout-samples="33" timeout-pe-samples="0" timeout-host-samples="33" timeout-rip="0x7f0012345da1" host-module="tradutorlinux" host-module-offset="0x3d58ee" host-symbol="__cyg_profile_func_enter" host-offset="0x21"
+```
+
+### Evento JSON `guest-execution`
+
+Quando `--trace-json` está ativo, o runtime marca a fronteira genérica da
+execução no trampoline que troca para a pilha Microsoft x64:
+
+```json
+{
+  "event": "guest-execution",
+  "fields": {
+    "phase": "enter",
+    "mechanism": "tl_call_guest_on_stack"
+  }
+}
+```
+
+Esses marcadores são gravados imediatamente, em vez de passar pela fila
+assíncrona, para que a entrada continue disponível mesmo quando o hospedeiro
+precisa terminar o filho com `SIGKILL` por timeout. A instrumentação de funções
+continua assíncrona.
+
+O mesmo evento com `phase="return"` e `exit-code` só é emitido depois que o
+entry point retorna. Portanto, um timeout com `guest-execution` de entrada e
+sem o evento de retorno confirma que a execução não atravessou essa fronteira
+de volta; ele não atribui a causa a uma API Win32 específica.
 
 ## Trace JSON e instrumentação do hospedeiro
 

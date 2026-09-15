@@ -1208,8 +1208,27 @@ GuestExecutionResult execute_guest_entry(const std::uintptr_t entry_point,
         initialize_pointer_backed_tls_slot(g_current_teb);
 
         diagnostics::FunctionTraceScope assembly_scope{"tl_call_guest_on_stack"};
+        if (diagnostics::is_trace_json_enabled()) {
+            const std::array fields{
+                diagnostics::TraceField{"phase", "enter"},
+                diagnostics::TraceField{"mechanism", "tl_call_guest_on_stack"},
+            };
+            diagnostics::write_json_trace_immediately(diagnostics::TraceComponent::Runtime,
+                                                      diagnostics::TraceLevel::Debug,
+                                                      "guest-execution", fields);
+        }
         const std::uint32_t natural_code =
             tl_call_guest_on_stack(std::bit_cast<std::uintptr_t>(entry), stack_top);
+        if (diagnostics::is_trace_json_enabled()) {
+            const std::array fields{
+                diagnostics::TraceField{"phase", "return"},
+                diagnostics::TraceField{"mechanism", "tl_call_guest_on_stack"},
+                diagnostics::TraceField{"exit-code", std::to_string(natural_code)},
+            };
+            diagnostics::write_json_trace_immediately(diagnostics::TraceComponent::Runtime,
+                                                      diagnostics::TraceLevel::Debug,
+                                                      "guest-execution", fields);
+        }
         invoke_thread_tls_callbacks(3U /* DLL_THREAD_DETACH */);
         if (runtime::guest_context().module_graph != nullptr) {
             runtime::guest_context().module_graph->process_detach();

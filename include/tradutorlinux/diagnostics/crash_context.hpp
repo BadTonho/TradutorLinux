@@ -25,9 +25,22 @@ struct GuestCrashContext {
     std::string nearest_import;
 };
 
+// Contexto mínimo de um endereço no código nativo do hospedeiro. O módulo é
+// apenas o nome do arquivo, sem o caminho absoluto, para manter o diagnóstico
+// útil sem expor a topologia do sistema de arquivos.
+struct HostAddressContext {
+    bool valid{};
+    std::string module;
+    std::string symbol;
+    std::uint64_t module_offset{};
+    std::uint64_t symbol_offset{};
+};
+
 [[nodiscard]] GuestCrashContext describe_guest_crash(const loader::MappedImage& image,
                                                      const loader::ResolveResult& imports,
                                                      std::uint64_t fault_address);
+
+[[nodiscard]] HostAddressContext describe_host_address(std::uint64_t address);
 
 // Verifica se o endereço de falta recai na guard page da pilha do processo.
 [[nodiscard]] constexpr bool is_stack_overflow_fault(const std::uint64_t fault_address,

@@ -78,6 +78,11 @@ void write_trace(std::ostream& stream, TraceComponent component, TraceLevel leve
                  std::string_view event, std::span<const TraceField> fields = {});
 void write_json_trace(TraceComponent component, TraceLevel level,
                       std::string_view event, std::span<const TraceField> fields = {});
+// Grava o evento no arquivo JSON imediatamente. Reservado para marcadores de
+// fronteira que precisam sobreviver ao SIGKILL aplicado em um timeout.
+void write_json_trace_immediately(TraceComponent component, TraceLevel level,
+                                  std::string_view event,
+                                  std::span<const TraceField> fields = {});
 void enqueue_function_json_trace(bool entering, std::uintptr_t function,
                                  std::uintptr_t caller) noexcept;
 extern "C" void trace_assembly_function_entry(const char* function) noexcept;

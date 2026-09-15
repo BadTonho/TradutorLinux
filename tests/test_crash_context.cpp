@@ -1,10 +1,13 @@
 #include "tradutorlinux/diagnostics/crash_context.hpp"
 
+#include <dlfcn.h>
+
 #include <gtest/gtest.h>
 
 namespace {
 
 using tradutorlinux::diagnostics::describe_guest_crash;
+using tradutorlinux::diagnostics::describe_host_address;
 using tradutorlinux::loader::ImportStatus;
 using tradutorlinux::loader::MappedImage;
 using tradutorlinux::loader::MapRegion;
@@ -82,6 +85,24 @@ TEST(CrashContextTest, NullAddressIsOutsideTheImage) {
     const auto context = describe_guest_crash(image, imports, 0);
     EXPECT_FALSE(context.valid);
     EXPECT_TRUE(context.nearest_import.empty());
+}
+
+TEST(CrashContextTest, NullHostAddressHasNoContext) {
+    const auto context = describe_host_address(0);
+    EXPECT_FALSE(context.valid);
+    EXPECT_TRUE(context.module.empty());
+    EXPECT_TRUE(context.symbol.empty());
+}
+
+TEST(CrashContextTest, HostFunctionCanBeResolvedWithoutAbsolutePath) {
+    const auto context = describe_host_address(
+        reinterpret_cast<std::uintptr_t>(&::dladdr));
+    ASSERT_TRUE(context.valid);
+    EXPECT_FALSE(context.module.empty());
+    ASSERT_FALSE(context.symbol.empty());
+    EXPECT_EQ(context.symbol_offset, 0U);
+    EXPECT_NE(context.module_offset, 0U);
+    EXPECT_EQ(context.module.find('/'), std::string::npos);
 }
 
 TEST(CrashContextTest, AddressAtEndOfImageIsOutside) {

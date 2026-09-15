@@ -472,6 +472,13 @@ void write_json_trace(const TraceComponent component, const TraceLevel level,
     write_json_event_locked(component, level, event, fields);
 }
 
+void write_json_trace_immediately(const TraceComponent component, const TraceLevel level,
+                                  const std::string_view event,
+                                  const std::span<const TraceField> fields) {
+    std::lock_guard<std::mutex> lock(g_trace_mutex);
+    write_json_event_locked(component, level, event, fields, true);
+}
+
 FunctionTraceScope::FunctionTraceScope(const std::string_view function) noexcept
     : function_(function) {
     try {

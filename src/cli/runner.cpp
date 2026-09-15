@@ -1568,6 +1568,11 @@ ExitCode run_command(const CommandLine& command_line, std::ostream& stdout_strea
             ? diagnostics::describe_guest_crash(process.image, process.imports,
                                                 outcome.timeout_rip)
             : diagnostics::GuestCrashContext{};
+    const diagnostics::HostAddressContext timeout_host_context =
+        outcome.kind == process::GuestOutcomeKind::TimedOut && outcome.timeout_recorded &&
+                !timeout_context.valid
+            ? diagnostics::describe_host_address(outcome.timeout_rip)
+            : diagnostics::HostAddressContext{};
     std::size_t timeout_pe_samples = 0;
     if (outcome.kind == process::GuestOutcomeKind::TimedOut && process.image.size != 0) {
         const std::uint64_t image_end =
@@ -1842,6 +1847,17 @@ ExitCode run_command(const CommandLine& command_line, std::ostream& stdout_strea
                     }
                     if (!timeout_context.nearest_import.empty()) {
                         fields.emplace_back("nearest-import", timeout_context.nearest_import);
+                    }
+                } else if (timeout_host_context.valid) {
+                    if (!timeout_host_context.module.empty()) {
+                        fields.emplace_back("host-module", timeout_host_context.module);
+                    }
+                    fields.emplace_back("host-module-offset",
+                                        util::format_hex(timeout_host_context.module_offset));
+                    if (!timeout_host_context.symbol.empty()) {
+                        fields.emplace_back("host-symbol", timeout_host_context.symbol);
+                        fields.emplace_back("host-offset",
+                                            util::format_hex(timeout_host_context.symbol_offset));
                     }
                 }
             }

@@ -1054,6 +1054,42 @@ não autoriza atribuir a causa a uma API Win32 ou declarar suporte SSH. A próxi
 etapa direta é identificar a fronteira hospedeiro/guest desse caminho, mantendo
 o smoke como limitação até existir uma causa reproduzível e um contrato geral.
 
+### R16 — Identificar a fronteira hospedeiro/guest do timeout
+
+A R15 separou os domínios de endereço, mas ainda não mostrava se a execução
+havia retornado do trampoline de troca de pilha nem qual símbolo nativo
+correspondia ao RIP fora da imagem PE. Esta etapa acrescenta somente
+observabilidade genérica para fechar essa fronteira.
+
+- [x] marcar no trace JSON a entrada e o retorno de
+  `tl_call_guest_on_stack`;
+- [x] resolver o `timeout-rip` hospedeiro para módulo curto, símbolo e offset,
+  omitindo o caminho absoluto;
+- [x] proteger os eventos de fronteira com a fixture `tl_nop.exe` (retorno
+  natural) e manter o
+  timeout `tl_hang.exe` controlado;
+- [x] repetir o smoke PuTTY textual e JSON e confirmar que o resultado continua
+  sendo limitação, sem nova API ou shim específico.
+
+**Critério de aceite:** uma execução concluída deve conter entrada e retorno da
+fronteira no JSON; um timeout deve conter entrada sem retorno, quando o trace
+JSON estiver ativo, e o RIP host deve ser simbolizado quando `dladdr` permitir.
+Nenhum desses eventos pode promover o PuTTY a suporte SSH ou alterar o
+comportamento do runtime.
+
+**Evidência registrada:**
+
+- `tradutorlinux` e `tradutorlinux_unit_tests` recompilados no preset `build/debug`;
+- 9 testes direcionados passaram, incluindo a entrada/retorno JSON com
+  `tl_nop.exe` e a resolução de endereço host com `dladdr`;
+- `tl_hang.exe` terminou com exit code 72, cinco amostras PE e evento JSON de
+  entrada sem retorno;
+- os smokes textual e JSON do PuTTY terminaram com exit code 0 do probe, sem
+  bytes enviados e com a limitação `guest-timeout 72`; no JSON foram 33
+  amostras host e nenhuma PE, com módulo `tradutorlinux` e símbolo
+  `enqueue_function_json_trace` (`host-offset=0x3b`);
+- não foi adicionada API Win32, DLL, shim ou regra específica do PuTTY.
+
 ## Fora desta rodada
 
 Não entram neste roadmap, por enquanto:
