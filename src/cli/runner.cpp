@@ -1568,6 +1568,18 @@ ExitCode run_command(const CommandLine& command_line, std::ostream& stdout_strea
             ? diagnostics::describe_guest_crash(process.image, process.imports,
                                                 outcome.timeout_rip)
             : diagnostics::GuestCrashContext{};
+    std::size_t timeout_pe_samples = 0;
+    if (outcome.kind == process::GuestOutcomeKind::TimedOut && process.image.size != 0) {
+        const std::uint64_t image_end =
+            process.image.base > std::numeric_limits<std::uint64_t>::max() - process.image.size
+                ? std::numeric_limits<std::uint64_t>::max()
+                : process.image.base + process.image.size;
+        for (const std::uint64_t sample : outcome.timeout_rip_samples) {
+            if (sample >= process.image.base && sample < image_end) {
+                ++timeout_pe_samples;
+            }
+        }
+    }
     const bool is_stack_overflow =
         outcome.kind == process::GuestOutcomeKind::Signaled && outcome.signal_number == SIGSEGV &&
         outcome.fault_recorded &&
@@ -1809,12 +1821,18 @@ ExitCode run_command(const CommandLine& command_line, std::ostream& stdout_strea
     if (outcome.kind == process::GuestOutcomeKind::TimedOut) {
         if (effective_cmd.trace_enabled) {
             std::vector<diagnostics::TraceField> fields;
-            fields.reserve(7);
+            fields.reserve(10);
             fields.emplace_back(
                 "category",
                 std::string{diagnostics::failure_category_name(
                     diagnostics::FailureCategory::GuestTimeout)});
             fields.emplace_back("timeout-ms", std::to_string(effective_cmd.timeout_ms));
+            fields.emplace_back("timeout-samples",
+                                std::to_string(outcome.timeout_rip_samples.size()));
+            fields.emplace_back("timeout-pe-samples", std::to_string(timeout_pe_samples));
+            fields.emplace_back(
+                "timeout-host-samples",
+                std::to_string(outcome.timeout_rip_samples.size() - timeout_pe_samples));
             if (outcome.timeout_recorded) {
                 fields.emplace_back("timeout-rip", util::format_hex(outcome.timeout_rip));
                 if (timeout_context.valid) {

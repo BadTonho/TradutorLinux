@@ -1006,6 +1006,54 @@ real do aplicativo: reproduzir ou isolar o caminho convidado entre a criação d
 janela de sessão e a primeira chamada de rede, sem inferir uma nova API a partir
 de um RIP do hospedeiro.
 
+### R15 — Separar amostras PE e hospedeiro no timeout
+
+A R14 eliminou a reentrância do gravador JSON, mas uma única captura de RIP
+continua insuficiente para explicar um timeout que atravessa código convidado e
+instrumentação do runtime. A próxima etapa deve aumentar a resolução do
+diagnóstico sem alterar o comportamento do guest nem escolher uma API por
+inferência.
+
+- [x] coletar, somente quando `--trace` estiver ativo, amostras best-effort do
+  RIP da thread principal durante o timeout;
+- [x] publicar a contagem de amostras dentro da imagem PE e fora dela no evento
+  `terminated category="guest-timeout"`;
+- [x] proteger a coleta com a fixture `tl_hang.exe` e repetir o smoke GUI local
+  do PuTTY nos modos textual e JSON;
+- [x] tornar a abertura do display no smoke tolerante à pequena janela entre o
+  anúncio do Xvfb e a aceitação do primeiro cliente X11;
+- [x] manter o runtime sem nova API, shim ou regra específica do PuTTY até que
+  uma chamada Win32 reproduzível seja demonstrada.
+
+**Critério de aceite:** `tl_hang.exe` deve continuar retornando
+`guest-timeout 72`, o smoke PuTTY deve alcançar a janela de sessão e retornar a
+limitação controlada, e o trace deve permitir distinguir execução na imagem PE
+de execução no hospedeiro. A ausência de amostras por restrição de `ptrace`
+deve continuar sendo um resultado best-effort, não uma falha do runtime.
+
+**Evidência 2026-09-15:** o build `build/debug` recompilou apenas
+`tradutorlinux` e `putty_ssh_smoke`. A fixture `tl_hang.exe` retornou `72`;
+fora do sandbox produziu cinco amostras, todas na imagem PE
+(`timeout-pe-samples="5"`, `timeout-host-samples="0"`), enquanto o sandbox
+sem permissão de `ptrace` publicou contagens zero e o teste existente fez skip
+somente da parte dependente dos registradores. Os testes direcionados de
+timeout/trace passaram sem falhas.
+
+O smoke PuTTY passou nos modos textual e `TL_PUTTY_TRACE_JSON`, sempre como
+limitação controlada: configuração alcançada, zero bytes enviados e
+`guest-timeout 72`. No JSON, o processo-pai registrou 33 amostras, todas fora
+da imagem PE (`timeout-pe-samples="0"`, `timeout-host-samples="33"`); o JSON do
+filho terminou sua sequência observável em chamadas genéricas de GUI/GDI,
+incluindo `GetDoubleClickTime`, `GetSystemMenu`, `CreatePopupMenu` e
+`AppendMenuA`, sem nova chamada de rede. A correção de prontidão do Xvfb
+eliminou a corrida de `XOpenDisplay` sem mudar o runtime genérico.
+
+Conclusão: o timeout do PuTTY continua depois da criação da janela e antes da
+rede, mas a thread principal está no hospedeiro no instante das amostras; isso
+não autoriza atribuir a causa a uma API Win32 ou declarar suporte SSH. A próxima
+etapa direta é identificar a fronteira hospedeiro/guest desse caminho, mantendo
+o smoke como limitação até existir uma causa reproduzível e um contrato geral.
+
 ## Fora desta rodada
 
 Não entram neste roadmap, por enquanto:

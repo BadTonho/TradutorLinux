@@ -166,6 +166,16 @@ void stop_process(const pid_t pid) {
     return sent;
 }
 
+[[nodiscard]] Display* open_display_with_retry(const std::string& display_name) {
+    for (int attempt = 0; attempt < 50; ++attempt) {
+        if (Display* const display = ::XOpenDisplay(display_name.c_str()); display != nullptr) {
+            return display;
+        }
+        std::this_thread::sleep_for(20ms);
+    }
+    return nullptr;
+}
+
 [[nodiscard]] bool send_key_event(Display* const display, const Window window,
                                    const KeySym key, const int type,
                                    const unsigned int state = 0) {
@@ -526,7 +536,7 @@ int main(const int argc, char** const argv) {
         return 1;
     }
 
-    Display* const display = ::XOpenDisplay(xvfb.display.c_str());
+    Display* const display = open_display_with_retry(xvfb.display);
     Window about = 0;
     const bool display_open = display != nullptr;
     bool about_found = false;

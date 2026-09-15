@@ -419,6 +419,9 @@ TEST(CommandRunTest, ReturnsGuestTimeoutWhenGuestHangs) {
     EXPECT_TRUE(stdout_stream.str().empty());
     EXPECT_NE(stderr_stream.str().find("terminated category=\"guest-timeout\""),
               std::string::npos);
+    EXPECT_NE(stderr_stream.str().find("timeout-samples=\""), std::string::npos);
+    EXPECT_NE(stderr_stream.str().find("timeout-pe-samples=\""), std::string::npos);
+    EXPECT_NE(stderr_stream.str().find("timeout-host-samples=\""), std::string::npos);
     if (stderr_stream.str().find("timeout-rip=\"0x") == std::string::npos) {
         GTEST_SKIP() << "captura de registradores indisponível neste ambiente";
     }

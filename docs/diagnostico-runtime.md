@@ -188,16 +188,23 @@ alterar o resultado `GuestTimeout`. Quando disponível, o evento inclui:
 | Campo | Significado |
 |---|---|
 | `timeout-rip` | RIP da thread principal no instante do timeout. |
+| `timeout-samples` | Número de amostras best-effort da mesma thread durante o timeout. Só é coletado com `--trace`. |
+| `timeout-pe-samples` | Amostras cujo RIP caiu dentro da imagem PE. |
+| `timeout-host-samples` | Amostras cujo RIP ficou fora da imagem PE, no hospedeiro ou em uma biblioteca nativa. |
 | `rva` | `timeout-rip − base` quando o RIP cai dentro da imagem PE. |
 | `section` | Seção PE que contém o RIP. |
 | `nearest-import` | Slot de IAT resolvido mais próximo abaixo do RIP. |
 
-O diagnóstico não inventa uma API responsável pelo loop: um `timeout-rip` em
-`.text` identifica código convidado ativo, enquanto um snapshot ausente ou fora
-da imagem continua exigindo análise adicional. Exemplo:
+As amostras são tentadas aproximadamente a cada 250 ms por `ptrace` e são
+best-effort: uma política do kernel, uma saída concorrente ou uma thread que já
+terminou pode reduzir a contagem. `timeout-rip` continua sendo o snapshot final;
+ele não é necessariamente a última amostra da lista. O diagnóstico não inventa
+uma API responsável pelo loop: amostras na imagem PE identificam execução do
+processo convidado, enquanto amostras fora da imagem identificam atividade no
+hospedeiro ou exigem correlação adicional. Exemplo:
 
 ```text
-[tl][process][error] terminated category="guest-timeout" timeout-ms="1000" timeout-rip="0x140001010" rva="0x1010" section=".text"
+[tl][process][error] terminated category="guest-timeout" timeout-ms="1000" timeout-samples="4" timeout-pe-samples="4" timeout-host-samples="0" timeout-rip="0x140001010" rva="0x1010" section=".text"
 ```
 
 ## Trace JSON e instrumentação do hospedeiro

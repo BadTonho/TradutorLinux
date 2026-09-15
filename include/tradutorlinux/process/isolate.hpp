@@ -54,6 +54,10 @@ struct GuestOutcome {
     // principal do filho isolado, quando ptrace conseguiu obter os registradores.
     bool timeout_recorded{};
     std::uint64_t timeout_rip{};
+    // Amostras best-effort da mesma thread durante um timeout, coletadas apenas
+    // quando o trace foi solicitado. Permitem separar execução na imagem PE
+    // de execução no hospedeiro sem atribuir uma API por inferência.
+    std::vector<std::uint64_t> timeout_rip_samples{};
     ResourceLimitKind resource{ResourceLimitKind::None};
 };
 

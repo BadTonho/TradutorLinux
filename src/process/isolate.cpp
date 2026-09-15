@@ -36,6 +36,7 @@
 #include <sys/ptrace.h>
 #include <sys/user.h>
 #endif
+#include <utility>
 #include <vector>
 
 extern char** environ;
@@ -44,6 +45,7 @@ namespace tradutorlinux::process {
 namespace {
 
 constexpr std::size_t kProtocolSize = 7;  // [kind:1][resource:1][explicit:1][exit-code:4 LE]
+constexpr std::uint64_t kTimeoutSampleIntervalMs = 250;
 
 enum class ChildMessageKind : unsigned char {
     Exited = 0,
@@ -516,6 +518,12 @@ GuestOutcome run_guest_isolated(const std::uintptr_t entry_point,
     // também aplicar o limite de tempo do convidado (timeout_ms; 0 = ilimitado).
     bool timed_out = false;
     int status = 0;
+    const bool collect_timeout_samples =
+        timeout_ms != 0 && diagnostics::is_trace_requested();
+    std::vector<std::uint64_t> timeout_rip_samples;
+    if (collect_timeout_samples) {
+        timeout_rip_samples.reserve(32);
+    }
     const std::uint64_t deadline =
         timeout_ms == 0 ? 0 : monotonic_ms() + timeout_ms;
     while (true) {
@@ -529,6 +537,9 @@ GuestOutcome run_guest_isolated(const std::uintptr_t entry_point,
             remaining = deadline - now;
             if (remaining > static_cast<std::uint64_t>(std::numeric_limits<int>::max())) {
                 remaining = static_cast<std::uint64_t>(std::numeric_limits<int>::max());
+            }
+            if (collect_timeout_samples && remaining > kTimeoutSampleIntervalMs) {
+                remaining = kTimeoutSampleIntervalMs;
             }
         }
         struct ::pollfd descriptor {};
@@ -559,10 +570,19 @@ GuestOutcome run_guest_isolated(const std::uintptr_t entry_point,
             ::close(fault_fds[0]);
             return {.kind = GuestOutcomeKind::SpawnFailed};
         }
+        if (collect_timeout_samples && poll_result == 0 && waited != child) {
+            const TimeoutSnapshot sample = snapshot_timeout_rip(child);
+            if (sample.recorded) {
+                timeout_rip_samples.push_back(sample.rip);
+            }
+        }
     }
 
     if (timed_out) {
         const TimeoutSnapshot snapshot = snapshot_timeout_rip(child);
+        if (collect_timeout_samples && snapshot.recorded) {
+            timeout_rip_samples.push_back(snapshot.rip);
+        }
         kill_process_group(child);
         while (::waitpid(child, &status, 0) < 0 && errno == EINTR) {
         }
@@ -571,7 +591,8 @@ GuestOutcome run_guest_isolated(const std::uintptr_t entry_point,
         return {.kind = GuestOutcomeKind::TimedOut,
                 .signal_number = SIGKILL,
                 .timeout_recorded = snapshot.recorded,
-                .timeout_rip = snapshot.rip};
+                .timeout_rip = snapshot.rip,
+                .timeout_rip_samples = std::move(timeout_rip_samples)};
     }
 
     GuestOutcome outcome{};
