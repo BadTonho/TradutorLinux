@@ -319,30 +319,52 @@ void close_session_windows(Display* const display) {
     });
 }
 
-[[nodiscard]] bool send_controlled_disconnect(const int client) {
-    constexpr std::string_view description = "TL probe complete";
-    constexpr std::size_t padding_length = 5;
-    constexpr std::size_t payload_length = 1U + 4U + 4U + description.size() + 4U;
-    constexpr std::size_t packet_length = 1U + payload_length + padding_length;
+void write_u32_be(std::uint8_t* const destination, const std::uint32_t value) {
+    destination[0] = static_cast<std::uint8_t>((value >> 24U) & 0xFFU);
+    destination[1] = static_cast<std::uint8_t>((value >> 16U) & 0xFFU);
+    destination[2] = static_cast<std::uint8_t>((value >> 8U) & 0xFFU);
+    destination[3] = static_cast<std::uint8_t>(value & 0xFFU);
+}
+
+template <std::size_t PayloadSize, std::size_t PaddingLength>
+[[nodiscard]] bool send_ssh_packet(
+    const int client, const std::array<std::uint8_t, PayloadSize>& payload) {
+    constexpr std::size_t packet_length = 1U + PayloadSize + PaddingLength;
     constexpr std::size_t packet_size = 4U + packet_length;
+    static_assert(PaddingLength >= 4U);
     static_assert(packet_size % 8U == 0U);
+    static_assert(packet_length <= 0xFFFFFFFFU);
 
     std::array<std::uint8_t, packet_size> packet{};
-    const auto write_u32 = [&packet](const std::size_t offset, const std::uint32_t value) {
-        packet[offset] = static_cast<std::uint8_t>((value >> 24U) & 0xFFU);
-        packet[offset + 1U] = static_cast<std::uint8_t>((value >> 16U) & 0xFFU);
-        packet[offset + 2U] = static_cast<std::uint8_t>((value >> 8U) & 0xFFU);
-        packet[offset + 3U] = static_cast<std::uint8_t>(value & 0xFFU);
-    };
-    write_u32(0, static_cast<std::uint32_t>(packet_length));
-    packet[4] = static_cast<std::uint8_t>(padding_length);
-    packet[5] = 1U;
-    write_u32(6, 2U);
-    write_u32(10, static_cast<std::uint32_t>(description.size()));
-    std::memcpy(packet.data() + 14U, description.data(), description.size());
-    write_u32(14U + description.size(), 0U);
+    write_u32_be(packet.data(), static_cast<std::uint32_t>(packet_length));
+    packet[4] = static_cast<std::uint8_t>(PaddingLength);
+    std::copy(payload.begin(), payload.end(), packet.begin() + 5U);
     return ::send(client, packet.data(), packet.size(), MSG_NOSIGNAL) ==
            static_cast<ssize_t>(packet.size());
+}
+
+[[nodiscard]] bool send_controlled_ignore(const int client) {
+    constexpr std::string_view data = "TL probe ignored";
+    constexpr std::size_t payload_length = 1U + 4U + data.size();
+
+    std::array<std::uint8_t, payload_length> payload{};
+    payload[0] = 2U;
+    write_u32_be(payload.data() + 1U, static_cast<std::uint32_t>(data.size()));
+    std::memcpy(payload.data() + 5U, data.data(), data.size());
+    return send_ssh_packet< payload_length, 6U >(client, payload);
+}
+
+[[nodiscard]] bool send_controlled_disconnect(const int client) {
+    constexpr std::string_view description = "TL probe complete";
+    constexpr std::size_t payload_length = 1U + 4U + 4U + description.size() + 4U;
+
+    std::array<std::uint8_t, payload_length> payload{};
+    payload[0] = 1U;
+    write_u32_be(payload.data() + 1U, 2U);
+    write_u32_be(payload.data() + 5U, static_cast<std::uint32_t>(description.size()));
+    std::memcpy(payload.data() + 9U, description.data(), description.size());
+    write_u32_be(payload.data() + 9U + description.size(), 0U);
+    return send_ssh_packet< payload_length, 5U >(client, payload);
 }
 
 [[nodiscard]] ServerProcess start_server(int& listener_out) {
@@ -413,6 +435,7 @@ void close_session_windows(Display* const display) {
                                received.find("\r\n") != std::string_view::npos;
                 constexpr std::string_view response = "SSH-2.0-TLProbe_1.0\r\n";
                 (void)::send(client, response.data(), response.size(), MSG_NOSIGNAL);
+                (void)send_controlled_ignore(client);
                 (void)send_controlled_disconnect(client);
                 ::close(client);
             }

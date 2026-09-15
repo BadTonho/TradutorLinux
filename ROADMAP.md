@@ -1239,6 +1239,40 @@ estão cobertos. A próxima etapa direta exige um contrato próprio para uma
 mensagem SSH adicional ou uma nova chamada genérica observada; não avançar para
 KEX, chaves ou autenticação por inferência.
 
+### R21 — Validar sequência SSH binária com `SSH_MSG_IGNORE`
+
+A etapa R20 comprovou que o PuTTY processa um pacote binário de encerramento,
+mas ainda não exercitou uma sequência de mensagens SSH válidas. Esta etapa
+adiciona somente `SSH_MSG_IGNORE` antes do `SSH_MSG_DISCONNECT` no fixture
+local. A mensagem deve ser ignorada pelo receptor e não exige negociação de
+chaves, autenticação ou qualquer implementação geral de SSH.
+
+- [x] construir e enviar um pacote `SSH_MSG_IGNORE` com string UTF-8 e
+  enquadramento SSH válido;
+- [x] manter o `SSH_MSG_DISCONNECT` como encerramento controlado, usando um
+  emissor comum para validar comprimento, padding e alinhamento dos pacotes;
+- [x] exigir no smoke a mesma observação do diálogo `PuTTY Fatal Error`, além
+  de `FD_READ`, `recv` e `FD_CLOSE`;
+- [x] atualizar a matriz e a evidência sem promover PuTTY ou SSH geral.
+
+**Critério de aceite:** o listener deve validar o banner e enviar, em ordem,
+`SSH_MSG_IGNORE` e `SSH_MSG_DISCONNECT`; o smoke deve observar o diálogo de
+erro no X11 e terminar com a limitação reproduzível `guest-timeout 72`. A
+fixture não pode introduzir KEX, chaves, autenticação ou código específico do
+PuTTY no runtime.
+
+**Evidência 2026-09-15:** `putty_ssh_smoke` foi recompilado no `build/debug`.
+O `putty_ssh_local_probe` passou fora do sandbox com exit `0` do harness; a
+sequência controlada foi aceita pelo PuTTY, o trace manteve `FD_READ`,
+`recv` e `FD_CLOSE`, e a inspeção X11 confirmou o diálogo `PuTTY Fatal Error`.
+O processo continuou terminando com `guest-timeout 72`, sem suporte declarado
+ao restante do protocolo SSH.
+
+Conclusão: duas mensagens SSH binárias controladas agora são exercitadas em
+sequência. A próxima etapa direta exige um contrato próprio para a primeira
+mensagem de KEX ou outra chamada genérica observada; não implementar KEX,
+chaves ou autenticação por inferência.
+
 ## Fora desta rodada
 
 Não entram neste roadmap, por enquanto:

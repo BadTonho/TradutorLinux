@@ -306,6 +306,20 @@ com `guest-timeout 72`, porque a fixture não implementa negociação de chaves,
 autenticação ou o restante do SSH. Nenhum código específico do PuTTY foi
 adicionado ao runtime.
 
+## Evidência E42 — sequência SSH binária controlada
+
+O fixture do PuTTY passou a enviar duas mensagens SSH válidas em sequência
+depois do banner: `SSH_MSG_IGNORE`, com uma string de dados controlada, e
+`SSH_MSG_DISCONNECT`, que encerra a conexão. O enquadramento é montado por um
+emissor comum que valida comprimento, padding e alinhamento; não há negociação
+de chaves, autenticação ou regra específica do aplicativo no runtime.
+
+O `putty_ssh_local_probe` foi recompilado e passou fora do sandbox. O trace
+continuou registrando `FD_READ`, `recv` e `FD_CLOSE`, a inspeção X11 confirmou
+o diálogo `PuTTY Fatal Error` e o processo terminou com a limitação controlada
+`guest-timeout 72`. A sequência valida somente o transporte e o processamento
+controlado dessas mensagens; PuTTY e SSH geral continuam sem suporte declarado.
+
 ## Evidência D2 — cenários GUI
 
 O smoke externo do 7-Zip File Manager passou nos builds C++ OFF e Rust ON. Ele

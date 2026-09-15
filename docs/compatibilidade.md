@@ -23,9 +23,9 @@ Há três dimensões independentes:
 Assim, um aplicativo pode ter `supported` na resolução de imports e continuar
 `execution-failed` ou sem nível funcional no catálogo.
 
-O probe local do PuTTY mantém essa distinção: as etapas E39–E41 validam o
+O probe local do PuTTY mantém essa distinção: as etapas E39–E42 validam o
 transporte inicial de loopback, as notificações `WSAAsyncSelect` e `FD_CLOSE`,
-e um `SSH_MSG_DISCONNECT` controlado, mas o fluxo ainda termina em
+e a sequência controlada `SSH_MSG_IGNORE` + `SSH_MSG_DISCONNECT`, mas o fluxo ainda termina em
 `GuestTimeout 72`; isso não promove o aplicativo nem o protocolo SSH a suporte
 funcional.
 
