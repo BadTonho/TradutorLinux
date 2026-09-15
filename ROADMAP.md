@@ -1202,6 +1202,43 @@ etapa direta é criar um fixture de protocolo SSH controlado ou localizar, no
 trace/disassembly convidado, a primeira dependência genérica após o recebimento
 e fechamento; não implementar autenticação, chaves ou SSH geral por inferência.
 
+### R20 — Exercitar o primeiro pacote SSH binário controlado
+
+A análise pós-R19 mostrou que o listener mínimo já entregava banner, EOF e
+`FD_CLOSE`, mas o PuTTY chamava `MessageBoxA` com flags de ícone ao tratar a
+resposta. O runtime rejeitava qualquer `uType` diferente de zero. Esta etapa
+introduz somente um pacote `SSH_MSG_DISCONNECT` válido no fixture local e o
+subconjunto genérico de caixa modal necessário para observá-lo; não é uma
+implementação do protocolo SSH completo.
+
+- [x] substituir a resposta textual mínima por um pacote binário
+  `SSH_MSG_DISCONNECT` com comprimento, padding e strings válidos;
+- [x] aceitar `MB_OK` e flags de ícone em `MessageBoxA/W`, mantendo botões
+  alternativos como rejeição controlada;
+- [x] exigir no smoke a observação do diálogo `PuTTY Fatal Error`, além de
+  `FD_READ`, `recv` e `FD_CLOSE`;
+- [x] atualizar os contratos, a matriz e a evidência sem promover PuTTY ou SSH
+  geral.
+
+**Critério de aceite:** o listener deve validar o banner, enviar o pacote
+controlado e fechar a conexão; o smoke deve observar o diálogo de erro no X11,
+terminar com a limitação reproduzível `guest-timeout 72` e não produzir
+`guest-signal`; combinações `MessageBox` com botões diferentes de `MB_OK` não
+podem ser aceitas silenciosamente.
+
+**Evidência 2026-09-15:** os alvos `tradutorlinux`, `tradutorlinux_unit_tests`
+e `putty_ssh_smoke` foram recompilados no `build/debug`. O smoke fora do
+sandbox passou com exit `0` do harness; o trace registrou o envio do banner,
+dois `recv`, `FD_CLOSE` e o caminho de `MessageBoxA`, enquanto a inspeção X11
+confirmou o diálogo `PuTTY Fatal Error` antes do fechamento pelo harness. O
+resultado continuou sendo `guest-timeout 72`, sem suporte declarado a
+negociação de chaves, autenticação ou SSH completo.
+
+Conclusão: o primeiro pacote SSH binário controlado e a resposta GUI de erro
+estão cobertos. A próxima etapa direta exige um contrato próprio para uma
+mensagem SSH adicional ou uma nova chamada genérica observada; não avançar para
+KEX, chaves ou autenticação por inferência.
+
 ## Fora desta rodada
 
 Não entram neste roadmap, por enquanto:

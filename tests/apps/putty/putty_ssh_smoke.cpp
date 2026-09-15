@@ -2,10 +2,13 @@
 #include <X11/keysym.h>
 #include <X11/Xlib.h>
 
+#include <algorithm>
+#include <array>
 #include <chrono>
 #include <csignal>
 #include <cstdint>
 #include <cstdlib>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -307,6 +310,41 @@ void close_session_windows(Display* const display) {
     }
 }
 
+[[nodiscard]] bool has_window_name_fragment(Display* const display, const Window root,
+                                             const std::string_view fragment) {
+    std::vector<std::pair<Window, std::string>> windows;
+    collect_windows(display, root, windows);
+    return std::any_of(windows.begin(), windows.end(), [fragment](const auto& entry) {
+        return entry.second.find(fragment) != std::string::npos;
+    });
+}
+
+[[nodiscard]] bool send_controlled_disconnect(const int client) {
+    constexpr std::string_view description = "TL probe complete";
+    constexpr std::size_t padding_length = 5;
+    constexpr std::size_t payload_length = 1U + 4U + 4U + description.size() + 4U;
+    constexpr std::size_t packet_length = 1U + payload_length + padding_length;
+    constexpr std::size_t packet_size = 4U + packet_length;
+    static_assert(packet_size % 8U == 0U);
+
+    std::array<std::uint8_t, packet_size> packet{};
+    const auto write_u32 = [&packet](const std::size_t offset, const std::uint32_t value) {
+        packet[offset] = static_cast<std::uint8_t>((value >> 24U) & 0xFFU);
+        packet[offset + 1U] = static_cast<std::uint8_t>((value >> 16U) & 0xFFU);
+        packet[offset + 2U] = static_cast<std::uint8_t>((value >> 8U) & 0xFFU);
+        packet[offset + 3U] = static_cast<std::uint8_t>(value & 0xFFU);
+    };
+    write_u32(0, static_cast<std::uint32_t>(packet_length));
+    packet[4] = static_cast<std::uint8_t>(padding_length);
+    packet[5] = 1U;
+    write_u32(6, 2U);
+    write_u32(10, static_cast<std::uint32_t>(description.size()));
+    std::memcpy(packet.data() + 14U, description.data(), description.size());
+    write_u32(14U + description.size(), 0U);
+    return ::send(client, packet.data(), packet.size(), MSG_NOSIGNAL) ==
+           static_cast<ssize_t>(packet.size());
+}
+
 [[nodiscard]] ServerProcess start_server(int& listener_out) {
     listener_out = ::socket(AF_INET, SOCK_STREAM, 0);
     if (listener_out < 0) return {};
@@ -375,6 +413,7 @@ void close_session_windows(Display* const display) {
                                received.find("\r\n") != std::string_view::npos;
                 constexpr std::string_view response = "SSH-2.0-TLProbe_1.0\r\n";
                 (void)::send(client, response.data(), response.size(), MSG_NOSIGNAL);
+                (void)send_controlled_disconnect(client);
                 ::close(client);
             }
         }
@@ -562,6 +601,7 @@ int main(const int argc, char** const argv) {
     bool session_reached = false;
     bool banner_received = false;
     bool server_result_available = false;
+    bool controlled_dialog_observed = false;
     if (configured) {
         for (int attempt = 0; attempt < 100 && !server_result_available; ++attempt) {
             if (!session_reached) {
@@ -571,7 +611,14 @@ int main(const int argc, char** const argv) {
             if (server_result_available) break;
             std::this_thread::sleep_for(50ms);
         }
-        if (banner_received) close_session_windows(display);
+        if (banner_received) {
+            for (int attempt = 0; attempt < 20 && !controlled_dialog_observed; ++attempt) {
+                controlled_dialog_observed = has_window_name_fragment(
+                    display, DefaultRootWindow(display), "PuTTY Fatal Error");
+                if (!controlled_dialog_observed) std::this_thread::sleep_for(50ms);
+            }
+            close_session_windows(display);
+        }
     }
     if (!session_reached && display != nullptr) {
         session_reached = find_window_by_name(display, DefaultRootWindow(display), "PuTTY") != 0;
@@ -676,6 +723,7 @@ int main(const int argc, char** const argv) {
                                              has_ws2_call("send") &&
                                              has_ws2_call("recv") && async_read_notified &&
                                              async_close_notified &&
+                                             controlled_dialog_observed &&
                                              runtime_result.trace.find("guest-timeout") !=
                                                  std::string::npos &&
                                              runtime_result.trace.find("guest-signal") ==
@@ -693,6 +741,7 @@ int main(const int argc, char** const argv) {
                   << " session-init-stalled=" << session_initialization_stalled
                   << " banner-exchange-limitation=" << banner_exchange_limitation
                   << " async-close=" << async_close_notified
+                  << " controlled-dialog=" << controlled_dialog_observed
                   << " banner=" << banner_received
                   << " server-exited=" << server_exited << " runtime-exited="
                   << runtime_result.exited << " runtime-timeout=" << runtime_result.timed_out

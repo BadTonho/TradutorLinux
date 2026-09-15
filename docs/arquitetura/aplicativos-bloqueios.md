@@ -288,6 +288,24 @@ o banner foi validado pelo listener e o processo continuou terminando com a
 limitação controlada `guest-timeout 72`. A correção é genérica e não promove
 PuTTY ou SSH completo.
 
+## Evidência E41 — primeiro pacote SSH binário controlado
+
+Depois de `FD_CLOSE`, a investigação encontrou uma dependência real e
+reproduzível: o PuTTY chama `MessageBoxA` com flags de ícone ao tratar o
+resultado do servidor. O runtime rejeitava todo `uType` diferente de zero,
+impedindo a caixa de erro. O contrato foi ampliado somente para `MB_OK` com
+flags de ícone, para `MessageBoxA/W`; botões alternativos continuam sendo
+rejeitados com erro controlado.
+
+O servidor do smoke agora envia, após o banner, um pacote SSH válido de
+`SSH_MSG_DISCONNECT`, com comprimento, padding e strings em ordem de bytes de
+rede, e fecha a conexão. O `putty_ssh_local_probe` passou fora do sandbox: o
+trace confirmou `recv`/`FD_CLOSE` e a inspeção X11 observou o diálogo `PuTTY
+Fatal Error`, que o harness fecha de forma explícita. O processo ainda termina
+com `guest-timeout 72`, porque a fixture não implementa negociação de chaves,
+autenticação ou o restante do SSH. Nenhum código específico do PuTTY foi
+adicionado ao runtime.
+
 ## Evidência D2 — cenários GUI
 
 O smoke externo do 7-Zip File Manager passou nos builds C++ OFF e Rust ON. Ele

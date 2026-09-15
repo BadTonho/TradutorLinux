@@ -76,12 +76,15 @@ completa com o modelo Win32. A expansão futura para janelas associadas a
 threads diferentes exigirá filas thread-safe, ciclo de vida de handles e
 despacho cross-thread testados em conjunto.
 
-## `MessageBoxA`
+## `MessageBoxA/W`
 
-`USER32.dll!MessageBoxA` aceita `hWnd == NULL`, texto e título ANSI, e somente
-`uType == 0`. Cria uma janela modal simples com texto e botão `OK`; clicar no
-botão retorna `1`. Fechar a janela ou não conseguir abrir o display retorna
-`0`. O runtime atualiza `GetLastError` em caso de falha.
+`USER32.dll!MessageBoxA/W` aceita `hWnd == NULL`, texto/título no encoding da
+variante, `MB_OK` e flags de ícone. Os ícones são aceitos no contrato, mas não
+são desenhados pela janela mínima. Cria uma janela modal simples com texto e
+botão `OK`; clicar no botão retorna `1`. Fechar a janela ou não conseguir abrir
+o display retorna `0`. Combinações com botões diferentes de `MB_OK` são
+rejeitadas com `ERROR_INVALID_PARAMETER`; o runtime atualiza `GetLastError` em
+caso de falha.
 
 ## Subsistema de janela e eventos
 

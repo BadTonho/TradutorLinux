@@ -276,8 +276,8 @@ o diagnóstico identifica o estouro de pilha e adiciona `fault-type="stack-overf
 
 ## Componente `gui`
 
-O protótipo X11 usa um subconjunto de `USER32.dll`: `MessageBoxA` (somente com
-`hWnd == NULL` e `type == 0`) e as APIs de janela/eventos documentadas em
+O protótipo X11 usa um subconjunto de `USER32.dll`: `MessageBoxA/W` (somente com
+`hWnd == NULL`, `MB_OK` e flags de ícone) e as APIs de janela/eventos documentadas em
 [`gui-x11.md`](arquitetura/gui-x11.md). Falha ao abrir o display, fechar a janela
 sem confirmação ou criar uma janela retorna o comportamento documentado ao
 programa convidado; a chamada não lança exceções nem compromete o diagnóstico

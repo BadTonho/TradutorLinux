@@ -3,6 +3,14 @@ namespace tradutorlinux {
 
 namespace {
 
+constexpr std::uint32_t kMessageBoxButtonMask = 0x0000000FU;
+constexpr std::uint32_t kMessageBoxIconMask = 0x000000F0U;
+
+[[nodiscard]] bool message_box_type_supported(const std::uint32_t type) noexcept {
+    return (type & kMessageBoxButtonMask) == 0U &&
+           (type & ~(kMessageBoxButtonMask | kMessageBoxIconMask)) == 0U;
+}
+
 [[nodiscard]] WindowSlot* create_modeless_dialog(const void* const instance,
                                                  const std::uint16_t* const template_name,
                                                  const void* const parent,
@@ -198,7 +206,7 @@ TL_MSABI int tl_MessageBoxA(const void* const window, const char* const text,
     (void)window;
     std::string text_copy;
     std::string caption_copy;
-    if (type != 0 || text == nullptr || caption == nullptr ||
+    if (!message_box_type_supported(type) || text == nullptr || caption == nullptr ||
         !runtime::copy_guest_cstring(text, 65535U, text_copy) ||
         !runtime::copy_guest_cstring(caption, 4096U, caption_copy)) {
         set_last_error(abi::kErrorInvalidParameter);
@@ -631,7 +639,7 @@ TL_MSABI int tl_MessageBoxW(const void* window, const std::uint16_t* text,
     (void)window;
     std::u16string text_copy;
     std::u16string caption_copy;
-    if (type != 0 || text == nullptr || caption == nullptr ||
+    if (!message_box_type_supported(type) || text == nullptr || caption == nullptr ||
         !runtime::copy_guest_wstring(text, 65535U, text_copy) ||
         !runtime::copy_guest_wstring(caption, 4096U, caption_copy)) {
         set_last_error(abi::kErrorInvalidParameter);

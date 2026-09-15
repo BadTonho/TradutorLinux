@@ -207,12 +207,11 @@ alteram o despacho, a fila ou a semântica de bloqueio.
 ## GUI mínima (Fase 7)
 
 O protótipo registra um subconjunto de `USER32.dll` e `GDI32.dll` e usa X11
-diretamente. Ele é experimental, não altera o subsistema de console e só aceita
-`type == 0` em `MessageBoxA`.
+diretamente. Ele é experimental e não altera o subsistema de console.
 
 | Módulo | API | Estado | Comportamento suportado |
 |---|---|---|---|
-| `USER32.dll` | `MessageBoxA` | Suportado | Caixa modal com `hWnd == NULL` e `uType == 0`; OK retorna `1`, fechar retorna `0` |
+| `USER32.dll` | `MessageBoxA` / `MessageBoxW` | Suportado no subconjunto | Caixa modal com `hWnd == NULL`, botão `MB_OK` e flags de ícone; o desenho do ícone é omitido, OK retorna `1` e fechar retorna `0`; combinações com outros botões retornam `ERROR_INVALID_PARAMETER` |
 | `USER32.dll` | `RegisterClassExA` | Suportado | Classe única por nome (case-insensitive); retorna atom `>= 1` |
 | `USER32.dll` | `CreateWindowExA` | Suportado no subconjunto | Cria janela X11 a partir da classe registrada e despacha `WM_CREATE` ao `WNDPROC`; classes próprias usadas como filhos ficam em uma side-table, não viram janelas X11 individuais e participam do hit-test de mouse |
 | `USER32.dll` | `ShowWindow` | Suportado | Mostra/esconde a janela X11 |
