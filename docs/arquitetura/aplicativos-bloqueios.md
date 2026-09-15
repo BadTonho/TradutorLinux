@@ -350,6 +350,20 @@ negociação criptográfica: o fixture não possui chave de host, não seleciona
 algoritmos efetivamente, não envia `KEXDH` e não implementa autenticação ou
 regra específica do PuTTY.
 
+## Evidência E45 — seleção de algoritmos do `KEXINIT`
+
+O fixture passou a extrair as dez name-lists do `SSH_MSG_KEXINIT` do PuTTY e a
+selecionar o primeiro nome comum, na ordem do cliente, para as oito famílias
+obrigatórias: KEX, host key, cifras nos dois sentidos, MACs nos dois sentidos
+e compressão nos dois sentidos. O `SSH_MSG_KEXINIT` do servidor só é enviado
+quando todas possuem uma opção compatível; a seleção permanece interna ao
+fixture e nenhuma cifra é ativada.
+
+O `putty_ssh_local_probe` foi recompilado e passou fora do sandbox, reportando
+`KEXINIT selection reached`, mantendo `FD_READ`, `recv`, `FD_CLOSE`, o diálogo
+`PuTTY Fatal Error` e `guest-timeout 72`. Não houve chave de host, assinatura,
+troca de chaves, criptografia, autenticação ou regra específica do PuTTY.
+
 ## Evidência D2 — cenários GUI
 
 O smoke externo do 7-Zip File Manager passou nos builds C++ OFF e Rust ON. Ele

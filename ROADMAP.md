@@ -1344,6 +1344,41 @@ regressão. A próxima etapa só deve tratar seleção de algoritmos e uma chave
 host de teste depois de contrato, fixture e validação próprios; não avançar
 para troca de chaves ou autenticação por inferência.
 
+### R24 — Selecionar algoritmos comuns do `SSH_MSG_KEXINIT`
+
+O R23 enviava listas fixas, mas ainda não verificava se elas tinham interseção
+com as preferências reais do PuTTY. Esta etapa analisa as oito listas que
+participam da escolha inicial, encontra o primeiro nome comum na ordem do
+cliente e só envia a resposta do servidor quando KEX, host key, cifras, MACs e
+compressão possuem uma opção compatível. Os nomes selecionados permanecem
+apenas no fixture; nenhuma cifra é ativada.
+
+- [x] extrair as dez name-lists do `KEXINIT` do cliente com limites protegidos;
+- [x] selecionar o primeiro algoritmo comum nas oito listas relevantes;
+- [x] impedir o envio do `KEXINIT` do servidor quando uma família obrigatória
+  não tiver interseção;
+- [x] manter o encerramento controlado e atualizar a matriz e a evidência sem
+  declarar negociação criptográfica concluída.
+
+**Critério de aceite:** o listener deve validar o `KEXINIT` do cliente,
+selecionar opções comuns para KEX, host key, cifras, MACs e compressão, enviar
+o `KEXINIT` do servidor e então `SSH_MSG_DISCONNECT`. O smoke deve reportar
+`KEXINIT selection reached`, manter o diálogo de erro e terminar com
+`guest-timeout 72`. Não podem ser adicionadas chaves privadas, cifragem,
+autenticação ou regras específicas do PuTTY.
+
+**Evidência 2026-09-15:** `putty_ssh_smoke` foi recompilado no `build/debug`.
+O `putty_ssh_local_probe` passou fora do sandbox com exit `0` do harness e
+reportou `KEXINIT selection reached, guest-timeout 72`; o listener encontrou
+opções comuns nas listas do PuTTY e enviou a resposta controlada. As
+verificações de `FD_READ`/`recv`/`FD_CLOSE` e do diálogo `PuTTY Fatal Error`
+continuaram passando. Nenhuma troca criptográfica foi executada.
+
+Conclusão: a compatibilidade nominal das listas está coberta, mas não há
+chave de host nem seleção observável pelo convidado. A próxima etapa deve
+definir uma chave de host de teste e o contrato de assinatura antes de enviar
+qualquer mensagem `KEXDH`; não implementar autenticação por inferência.
+
 ## Fora desta rodada
 
 Não entram neste roadmap, por enquanto:

@@ -404,8 +404,41 @@ template <std::size_t PayloadSize, std::size_t PaddingLength>
     return padding_length >= 4U && padding_length + 2U <= packet.size();
 }
 
-[[nodiscard]] bool is_kexinit_packet(const std::vector<std::uint8_t>& packet) {
-    if (packet.size() < 2U || packet[1] != 20U) return false;
+struct KexInitView {
+    std::array<std::string_view, 10> name_lists{};
+};
+
+struct KexSelection {
+    std::array<std::string_view, 8> algorithms{};
+};
+
+constexpr std::array<std::string_view, 10> kControlledKexInitNameLists{
+    "diffie-hellman-group14-sha256",
+    "rsa-sha2-512,rsa-sha2-256,ssh-rsa",
+    "aes128-ctr",
+    "aes128-ctr",
+    "hmac-sha2-256",
+    "hmac-sha2-256",
+    "none",
+    "none",
+    "",
+    "",
+};
+
+constexpr std::size_t kControlledKexInitNameListsSize = [] {
+    std::size_t size = 0;
+    for (const std::string_view name_list : kControlledKexInitNameLists) {
+        size += 4U + name_list.size();
+    }
+    return size;
+}();
+
+[[nodiscard]] bool parse_kexinit_packet(const std::vector<std::uint8_t>& packet,
+                                        KexInitView& view) {
+    if (packet.size() < 2U || packet[0] < 4U ||
+        static_cast<std::size_t>(packet[0]) + 2U > packet.size() || packet[1] != 20U) {
+        return false;
+    }
 
     const std::size_t payload_end = packet.size() - packet[0];
     std::size_t offset = 2U;
@@ -417,31 +450,61 @@ template <std::size_t PayloadSize, std::size_t PaddingLength>
         const std::size_t length = read_u32_be(packet.data() + offset);
         offset += 4U;
         if (length > payload_end - offset) return false;
+        view.name_lists[static_cast<std::size_t>(name_list)] =
+            std::string_view{reinterpret_cast<const char*>(packet.data() + offset), length};
         offset += length;
     }
 
-    return payload_end - offset == 5U;
+    return payload_end - offset == 5U && packet[payload_end - 5U] <= 1U &&
+           read_u32_be(packet.data() + payload_end - 4U) == 0U;
+}
+
+[[nodiscard]] bool select_common_algorithm(const std::string_view client_list,
+                                            const std::string_view server_list,
+                                            std::string_view& selected) {
+    selected = {};
+    std::size_t begin = 0;
+    while (begin < client_list.size()) {
+        const std::size_t end = client_list.find(',', begin);
+        const std::string_view candidate =
+            client_list.substr(begin, end == std::string_view::npos ? end : end - begin);
+        const bool found = [&] {
+            std::size_t server_begin = 0;
+            while (server_begin < server_list.size()) {
+                const std::size_t server_end = server_list.find(',', server_begin);
+                const std::string_view server_candidate = server_list.substr(
+                    server_begin,
+                    server_end == std::string_view::npos ? server_end : server_end - server_begin);
+                if (candidate == server_candidate) return true;
+                if (server_end == std::string_view::npos) break;
+                server_begin = server_end + 1U;
+            }
+            return false;
+        }();
+        if (found) {
+            selected = candidate;
+            return true;
+        }
+        if (end == std::string_view::npos) break;
+        begin = end + 1U;
+    }
+    return false;
+}
+
+[[nodiscard]] bool select_compatible_algorithms(const KexInitView& client_view,
+                                                KexSelection& selection) {
+    for (std::size_t index = 0; index < 8U; ++index) {
+        if (!select_common_algorithm(client_view.name_lists[index],
+                                     kControlledKexInitNameLists[index],
+                                     selection.algorithms[index])) {
+            return false;
+        }
+    }
+    return true;
 }
 
 [[nodiscard]] bool send_controlled_kexinit(const int client) {
-    constexpr std::array<std::string_view, 10> name_lists{
-        "diffie-hellman-group14-sha256",
-        "rsa-sha2-512,rsa-sha2-256,ssh-rsa",
-        "aes128-ctr",
-        "aes128-ctr",
-        "hmac-sha2-256",
-        "hmac-sha2-256",
-        "none",
-        "none",
-        "",
-        "",
-    };
-    constexpr std::size_t name_lists_size = [&] {
-        std::size_t size = 0;
-        for (const std::string_view name_list : name_lists) size += 4U + name_list.size();
-        return size;
-    }();
-    constexpr std::size_t payload_size = 1U + 16U + name_lists_size + 1U + 4U;
+    constexpr std::size_t payload_size = 1U + 16U + kControlledKexInitNameListsSize + 1U + 4U;
 
     std::array<std::uint8_t, payload_size> payload{};
     payload[0] = 20U;
@@ -450,7 +513,7 @@ template <std::size_t PayloadSize, std::size_t PaddingLength>
     }
 
     std::size_t offset = 17U;
-    for (const std::string_view name_list : name_lists) {
+    for (const std::string_view name_list : kControlledKexInitNameLists) {
         write_u32_be(payload.data() + offset, static_cast<std::uint32_t>(name_list.size()));
         offset += 4U;
         std::memcpy(payload.data() + offset, name_list.data(), name_list.size());
@@ -506,6 +569,7 @@ template <std::size_t PayloadSize, std::size_t PaddingLength>
         const int ready = ::poll(&listener_descriptor, 1, 10000);
         bool valid_banner = false;
         bool valid_kexinit = false;
+        bool algorithms_selected = false;
         bool server_kexinit_sent = false;
         if (ready > 0 && (listener_descriptor.revents & POLLIN) != 0) {
             const int client = ::accept(listener_out, nullptr, nullptr);
@@ -532,19 +596,27 @@ template <std::size_t PayloadSize, std::size_t PaddingLength>
                 (void)::send(client, response.data(), response.size(), MSG_NOSIGNAL);
                 (void)send_controlled_ignore(client);
                 std::vector<std::uint8_t> packet;
-                valid_kexinit = receive_ssh_packet(client, packet) && is_kexinit_packet(packet);
-                server_kexinit_sent = valid_kexinit && send_controlled_kexinit(client);
+                KexInitView client_kexinit;
+                KexSelection algorithm_selection;
+                valid_kexinit = receive_ssh_packet(client, packet) &&
+                                parse_kexinit_packet(packet, client_kexinit);
+                algorithms_selected = valid_kexinit &&
+                                      select_compatible_algorithms(client_kexinit,
+                                                                  algorithm_selection);
+                server_kexinit_sent = algorithms_selected && send_controlled_kexinit(client);
                 (void)send_controlled_disconnect(client);
                 ::close(client);
             }
         }
         const unsigned char result = static_cast<unsigned char>((valid_banner ? 1U : 0U) |
                                                                  (valid_kexinit ? 2U : 0U) |
-                                                                 (server_kexinit_sent ? 4U : 0U));
+                                                                 (server_kexinit_sent ? 4U : 0U) |
+                                                                 (algorithms_selected ? 8U : 0U));
         (void)::write(status_pipe[1], &result, sizeof(result));
         ::close(status_pipe[1]);
         ::close(listener_out);
-        ::_exit(valid_banner && valid_kexinit && server_kexinit_sent ? 0 : 1);
+        ::_exit(valid_banner && valid_kexinit && algorithms_selected && server_kexinit_sent ? 0
+                                                                                              : 1);
     }
 
     ::close(status_pipe[1]);
@@ -628,9 +700,12 @@ template <std::size_t PayloadSize, std::size_t PaddingLength>
 
 [[nodiscard]] bool take_server_result(ServerProcess& server, const int timeout_ms,
                                        bool* const valid_banner, bool* const valid_kexinit,
-                                       bool* const server_kexinit_sent) {
+                                       bool* const server_kexinit_sent,
+                                       bool* const algorithms_selected) {
     if (valid_banner == nullptr || valid_kexinit == nullptr || server_kexinit_sent == nullptr ||
-        server.status_fd < 0) return false;
+        algorithms_selected == nullptr || server.status_fd < 0) {
+        return false;
+    }
     struct pollfd descriptor{server.status_fd, POLLIN | POLLHUP, 0};
     if (::poll(&descriptor, 1, timeout_ms) <= 0) return false;
     unsigned char result = 0;
@@ -642,6 +717,7 @@ template <std::size_t PayloadSize, std::size_t PaddingLength>
     *valid_banner = (result & 1U) != 0U;
     *valid_kexinit = (result & 2U) != 0U;
     *server_kexinit_sent = (result & 4U) != 0U;
+    *algorithms_selected = (result & 8U) != 0U;
     return true;
 }
 
@@ -729,6 +805,7 @@ int main(const int argc, char** const argv) {
     bool banner_received = false;
     bool kexinit_received = false;
     bool server_kexinit_sent = false;
+    bool algorithms_selected = false;
     bool server_result_available = false;
     bool controlled_dialog_observed = false;
     if (configured) {
@@ -738,7 +815,7 @@ int main(const int argc, char** const argv) {
             }
             server_result_available =
                 take_server_result(server, 100, &banner_received, &kexinit_received,
-                                   &server_kexinit_sent);
+                                   &server_kexinit_sent, &algorithms_selected);
             if (server_result_available) break;
             std::this_thread::sleep_for(50ms);
         }
@@ -760,7 +837,7 @@ int main(const int argc, char** const argv) {
     if (!server_result_available) {
         server_result_available =
             take_server_result(server, 100, &banner_received, &kexinit_received,
-                               &server_kexinit_sent);
+                               &server_kexinit_sent, &algorithms_selected);
     }
     int server_status = 0;
     const bool server_exited = wait_for_exit(server.pid, 3000ms, &server_status);
@@ -833,7 +910,7 @@ int main(const int argc, char** const argv) {
                     server_result_available &&
                     server_exited &&
                     WIFEXITED(server_status) && WEXITSTATUS(server_status) == 0 &&
-                    kexinit_received && server_kexinit_sent &&
+                    kexinit_received && algorithms_selected && server_kexinit_sent &&
                     has_controlled_exit(runtime_result) && network_exchanged &&
                     runtime_result.stdout_text.empty();
     const bool controlled_limitation = configured && session_reached && !banner_received &&
@@ -849,6 +926,7 @@ int main(const int argc, char** const argv) {
                                        runtime_result.stdout_text.empty();
     const bool kexinit_exchange_limitation = configured && session_reached && banner_received &&
                                              kexinit_received &&
+                                             algorithms_selected &&
                                              server_kexinit_sent &&
                                              server_result_available && server_exited &&
                                              WIFEXITED(server_status) &&
@@ -880,6 +958,7 @@ int main(const int argc, char** const argv) {
                   << " controlled-dialog=" << controlled_dialog_observed
                   << " banner=" << banner_received << " kexinit=" << kexinit_received
                   << " server-kexinit=" << server_kexinit_sent
+                  << " algorithms=" << algorithms_selected
                   << " server-exited=" << server_exited << " runtime-exited="
                   << runtime_result.exited << " runtime-timeout=" << runtime_result.timed_out
                   << " runtime-exit=" << runtime_result.exit_code << '\n';
@@ -894,7 +973,7 @@ int main(const int argc, char** const argv) {
     if (successful_exchange) {
         std::cout << "PuTTY SSH local version exchange and controlled termination: ok\n";
     } else if (kexinit_exchange_limitation) {
-        std::cout << "PuTTY SSH local probe: KEXINIT exchange reached, "
+        std::cout << "PuTTY SSH local probe: KEXINIT selection reached, "
                      "guest-timeout 72 (limitation recorded)\n";
     } else {
         std::cout << "PuTTY SSH local probe: configuration reached, no bytes sent, "
