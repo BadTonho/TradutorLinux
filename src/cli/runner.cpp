@@ -1563,6 +1563,11 @@ ExitCode run_command(const CommandLine& command_line, std::ostream& stdout_strea
             ? diagnostics::describe_guest_crash(process.image, process.imports,
                                                 outcome.fault_rip != 0 ? outcome.fault_rip : outcome.fault_address)
             : diagnostics::GuestCrashContext{};
+    const diagnostics::GuestCrashContext timeout_context =
+        outcome.kind == process::GuestOutcomeKind::TimedOut && outcome.timeout_recorded
+            ? diagnostics::describe_guest_crash(process.image, process.imports,
+                                                outcome.timeout_rip)
+            : diagnostics::GuestCrashContext{};
     const bool is_stack_overflow =
         outcome.kind == process::GuestOutcomeKind::Signaled && outcome.signal_number == SIGSEGV &&
         outcome.fault_recorded &&
@@ -1803,12 +1808,25 @@ ExitCode run_command(const CommandLine& command_line, std::ostream& stdout_strea
 
     if (outcome.kind == process::GuestOutcomeKind::TimedOut) {
         if (effective_cmd.trace_enabled) {
-            const std::array fields{
-                diagnostics::TraceField{"category",
-                                        std::string{diagnostics::failure_category_name(
-                                            diagnostics::FailureCategory::GuestTimeout)}},
-                diagnostics::TraceField{"timeout-ms", std::to_string(effective_cmd.timeout_ms)},
-            };
+            std::vector<diagnostics::TraceField> fields;
+            fields.reserve(7);
+            fields.emplace_back(
+                "category",
+                std::string{diagnostics::failure_category_name(
+                    diagnostics::FailureCategory::GuestTimeout)});
+            fields.emplace_back("timeout-ms", std::to_string(effective_cmd.timeout_ms));
+            if (outcome.timeout_recorded) {
+                fields.emplace_back("timeout-rip", util::format_hex(outcome.timeout_rip));
+                if (timeout_context.valid) {
+                    fields.emplace_back("rva", util::format_hex(timeout_context.rva));
+                    if (!timeout_context.section.empty()) {
+                        fields.emplace_back("section", std::string{timeout_context.section});
+                    }
+                    if (!timeout_context.nearest_import.empty()) {
+                        fields.emplace_back("nearest-import", timeout_context.nearest_import);
+                    }
+                }
+            }
             diagnostics::write_trace(stderr_stream, diagnostics::TraceComponent::Process,
                                      diagnostics::TraceLevel::Error, "terminated", fields);
             write_unmap_trace(stderr_stream, unmap_base);

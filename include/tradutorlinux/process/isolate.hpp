@@ -50,6 +50,10 @@ struct GuestOutcome {
     bool fault_recorded{};
     std::uint64_t fault_address{};
     std::uint64_t fault_rip{};
+    // Melhor esforço do hospedeiro no instante de um timeout: RIP da thread
+    // principal do filho isolado, quando ptrace conseguiu obter os registradores.
+    bool timeout_recorded{};
+    std::uint64_t timeout_rip{};
     ResourceLimitKind resource{ResourceLimitKind::None};
 };
 

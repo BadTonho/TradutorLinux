@@ -178,6 +178,28 @@ Exemplo real da fixture `tl_crash.exe` (desreferência de nulo):
 [tl][process][error] terminated category="guest-signal" signal="SIGSEGV" detail="acesso inválido à memória" fault-address="0x0"
 ```
 
+### Evento `terminated category="guest-timeout"`
+
+Quando o limite de tempo expira, o hospedeiro tenta obter os registradores da
+thread principal do filho isolado antes de encerrá-lo. O snapshot é best-effort:
+restrições do kernel ou uma saída concorrente podem impedir sua coleta sem
+alterar o resultado `GuestTimeout`. Quando disponível, o evento inclui:
+
+| Campo | Significado |
+|---|---|
+| `timeout-rip` | RIP da thread principal no instante do timeout. |
+| `rva` | `timeout-rip − base` quando o RIP cai dentro da imagem PE. |
+| `section` | Seção PE que contém o RIP. |
+| `nearest-import` | Slot de IAT resolvido mais próximo abaixo do RIP. |
+
+O diagnóstico não inventa uma API responsável pelo loop: um `timeout-rip` em
+`.text` identifica código convidado ativo, enquanto um snapshot ausente ou fora
+da imagem continua exigindo análise adicional. Exemplo:
+
+```text
+[tl][process][error] terminated category="guest-timeout" timeout-ms="1000" timeout-rip="0x140001010" rva="0x1010" section=".text"
+```
+
 Quando a falta recai na guard page da pilha alocada para o processo convidado,
 o diagnóstico identifica o estouro de pilha e adiciona `fault-type="stack-overflow"`:
 

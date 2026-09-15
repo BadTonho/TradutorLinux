@@ -32,6 +32,10 @@
 #include <string_view>
 #include <sys/ioctl.h>
 #include <sys/socket.h>
+#if defined(__linux__) && defined(__x86_64__)
+#include <sys/ptrace.h>
+#include <sys/user.h>
+#endif
 #include <vector>
 
 extern char** environ;
@@ -100,6 +104,45 @@ void kill_process_group(const ::pid_t child) noexcept {
     if (::kill(-child, SIGKILL) != 0) {
         static_cast<void>(::kill(child, SIGKILL));
     }
+}
+
+struct TimeoutSnapshot {
+    bool recorded{};
+    std::uint64_t rip{};
+};
+
+// O filho do isolamento é descendente direto do hospedeiro. Em Linux, isso
+// permite obter os registradores da thread principal sem depender de um
+// depurador externo. O snapshot é deliberadamente best-effort: restrições do
+// kernel, uma saída concorrente ou um filho multithread que já tenha terminado
+// não podem transformar um timeout controlado em falha do runtime.
+[[nodiscard]] TimeoutSnapshot snapshot_timeout_rip(const ::pid_t child) noexcept {
+#if defined(__linux__) && defined(__x86_64__)
+    if (child <= 0 || ::ptrace(PTRACE_ATTACH, child, nullptr, nullptr) != 0) {
+        return {};
+    }
+
+    int wait_status = 0;
+    ::pid_t waited = -1;
+    do {
+        waited = ::waitpid(child, &wait_status, WUNTRACED);
+    } while (waited < 0 && errno == EINTR);
+
+    if (waited != child || !WIFSTOPPED(wait_status)) {
+        static_cast<void>(::ptrace(PTRACE_DETACH, child, nullptr, nullptr));
+        return {};
+    }
+
+    struct ::user_regs_struct registers_snapshot {};
+    const bool read_ok = ::ptrace(PTRACE_GETREGS, child, nullptr,
+                                  &registers_snapshot) == 0;
+    static_cast<void>(::ptrace(PTRACE_DETACH, child, nullptr, nullptr));
+    if (!read_ok) return {};
+    return {.recorded = true, .rip = static_cast<std::uint64_t>(registers_snapshot.rip)};
+#else
+    static_cast<void>(child);
+    return {};
+#endif
 }
 
 // O convidado precisa terminar com a disposição padrão dos sinais fatais para
@@ -519,12 +562,16 @@ GuestOutcome run_guest_isolated(const std::uintptr_t entry_point,
     }
 
     if (timed_out) {
+        const TimeoutSnapshot snapshot = snapshot_timeout_rip(child);
         kill_process_group(child);
         while (::waitpid(child, &status, 0) < 0 && errno == EINTR) {
         }
         ::close(pipe_fds[0]);
         ::close(fault_fds[0]);
-        return {.kind = GuestOutcomeKind::TimedOut, .signal_number = SIGKILL};
+        return {.kind = GuestOutcomeKind::TimedOut,
+                .signal_number = SIGKILL,
+                .timeout_recorded = snapshot.recorded,
+                .timeout_rip = snapshot.rip};
     }
 
     GuestOutcome outcome{};

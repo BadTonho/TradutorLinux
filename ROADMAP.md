@@ -928,6 +928,45 @@ Win32 genérico reproduzido que justifique uma mudança no runtime. O próximo
 trabalho deve ser uma análise de execução do código convidado (ou uma fixture
 que isole o mesmo contrato), não uma nova API escolhida por inferência.
 
+### R13 — Registrar o RIP do timeout para separar guest de hospedeiro
+
+A observação de CPU da R12 distinguiu execução ativa de espera, mas ainda não
+identificava em qual espaço de endereços a thread estava no instante do
+timeout. Sem essa informação, uma amostra transitória no runtime poderia ser
+confundida com um loop PE, ou vice-versa.
+
+- [x] capturar, de forma best-effort e somente no Linux x86-64, os registradores
+  da thread principal do filho antes do `SIGKILL` do timeout;
+- [x] publicar `timeout-rip` no evento `terminated category="guest-timeout"` e
+  derivar `rva`, `section` e `nearest-import` somente quando o endereço estiver
+  dentro da imagem PE;
+- [x] proteger o comportamento com a fixture `tl_hang.exe`, aceitando skip
+  explícito quando a política do ambiente bloqueia `ptrace`;
+- [x] repetir `putty_ssh_local_probe` fora do sandbox, correlacionando o RIP
+  capturado com os mapas do mesmo processo e com o disassembly do runtime.
+
+**Critério de aceite:** a fixture simples deve produzir `timeout-rip` dentro de
+`.text` quando a captura estiver disponível; o PuTTY deve continuar retornando
+`guest-timeout 72`, sem promoção de suporte, e o diagnóstico não pode inventar
+uma API responsável quando o RIP estiver fora da imagem PE.
+
+**Evidência 2026-09-15:** a fixture `tl_hang.exe` produziu
+`timeout-rip="0x140001012" rva="0x1012" section=".text"` e retornou `72`.
+No sandbox, `ptrace` é bloqueado e o teste foi marcado como skip; fora dele, o
+mesmo teste passou com a captura ativa. O probe PuTTY continuou passando como
+limitação controlada: depois de `CreateWindowExA` da janela `PuTTY` e de
+`GetOEMCP`, não houve `GetMessageA` ocioso, `DispatchMessageA` ou rede. No
+mesmo processo, o RIP capturado ficou fora da imagem PE em `0x140000000` e
+correspondeu ao offset ELF `0x3d25ce` de
+`__cyg_profile_func_enter` (`src/runtime/function_trace.cpp:30`), no código
+executável do runtime. Isso elimina a hipótese de atribuir automaticamente o
+timeout a uma API Win32 ou ao message loop, mas ainda não prova a causa do
+loop hospedeiro; nenhuma API, shim ou regra específica do PuTTY foi adicionada.
+
+O próximo alvo direto é uma comparação controlada do caminho hospedeiro de
+instrumentação/trace e de sua fronteira com o retorno do convidado, preservando
+o diagnóstico e sem desabilitar a observabilidade dos smokes.
+
 ## Fora desta rodada
 
 Não entram neste roadmap, por enquanto:

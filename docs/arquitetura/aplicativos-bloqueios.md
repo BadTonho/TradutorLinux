@@ -185,6 +185,25 @@ convidado de uma espera no backend X11 ou no message loop. Nenhum callback
 Win32 genérico reproduzível foi localizado após a janela; a limitação continua
 publicada e não há base para adicionar API ou shim específico do PuTTY.
 
+## Evidência E36 — RIP do timeout e separação de espaços de endereços
+
+O isolamento passou a tentar, antes do `SIGKILL`, um snapshot dos registradores
+da thread principal do filho. O evento textual continua controlado quando o
+kernel nega `ptrace`, mas, quando a captura está disponível, publica
+`timeout-rip`; `rva`, `section` e `nearest-import` só aparecem se o endereço
+estiver dentro da imagem PE. A fixture `tl_hang.exe` confirmou
+`timeout-rip=0x140001012`, `rva=0x1012` e `section=.text`.
+
+No `putty_ssh_local_probe`, uma execução fora do sandbox correlacionou o RIP
+capturado com os mapas do mesmo processo: o endereço estava fora da imagem PE
+em `0x140000000` e dentro do segmento executável do binário do runtime. O
+offset ELF `0x3d25ce` resolve para `__cyg_profile_func_enter`, em
+`src/runtime/function_trace.cpp:30`. Essa amostra identifica código do
+hospedeiro no instante do timeout, não uma API Win32 responsável; por isso a
+matriz continua registrando `guest-timeout 72` e não promove SSH. A causa do
+loop hospedeiro ainda requer uma comparação específica do caminho de
+instrumentação/trace; nenhum shim ou regra do PuTTY foi criado.
+
 As matrizes nativas e de instalação controlada continuam separadas: 5/5
 execuções e 4/4 instalações passaram nos dois builds. PE32/x86, imagens
 empacotadas e pacotes incompatíveis continuam sendo rejeitados antes de
