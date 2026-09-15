@@ -59,10 +59,12 @@ de compatibilidade.
 
 O teste `notepadpp_fh4_headless_smoke` acrescenta uma execução real do
 `Notepad++/notepad++.exe` sem display: o runtime seleciona os catches FH4
-tipados, não produz `guest-signal` nem `guest-timeout` e termina com
-`ExitProcess(0)`. Isso valida apenas o caminho de inicialização e C++ EH
-observado; o fluxo GUI continua dependente do smoke Xvfb e não é promovido a
-suporte diário.
+tipados, limita uma cadeia observada de 13 cleanups a quatro ações seguras,
+registra `fh4-cleanup-limit`, não produz `guest-signal` nem `guest-timeout` e
+termina com `ExitProcess(0)`. A fixture FH4 também rejeita um auto-link cíclico
+com diagnóstico controlado. Isso valida apenas o caminho de inicialização e
+C++ EH observado; o fluxo GUI continua dependente do smoke Xvfb e não é
+promovido a suporte diário.
 
 O teste `popular_apps_install_matrix` cobre as instalações autorizadas de
 Roblox (`3` após `RBXCRASH`), G HUB e seu alias (`1` após `ExitProcess(1)`) e

@@ -50,7 +50,7 @@ endif()
 foreach(marker
         "cxx-eh state=\"matched\" detail=\"fh4-catch-typed\""
         "ExitProcess symbol=\"ExitProcess\" exit-code=\"0\""
-        "fh4-cleanup-not-supported")
+        "cxx-eh state=\"search\" detail=\"fh4-cleanup-limit\"")
     string(FIND "${run_stderr}" "${marker}" marker_position)
     if(marker_position EQUAL -1)
         file(REMOVE_RECURSE "${TL_STAGING_ROOT}")

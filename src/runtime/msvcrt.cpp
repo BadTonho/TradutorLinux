@@ -2048,6 +2048,14 @@ TL_CRT_MSABI int tl___CxxFrameHandler3(void* const rec, void* const frame,
         static_cast<runtime::DispatcherContextAmd64*>(disp));
 }
 
+TL_CRT_MSABI int tl___GSHandlerCheck_EH4(void* const rec, void* const frame,
+                                         void* const context, void* const disp) noexcept {
+    return runtime::cxx_frame_handler4(
+        static_cast<runtime::ExceptionRecordAmd64*>(rec), frame,
+        static_cast<runtime::ContextAmd64*>(context),
+        static_cast<runtime::DispatcherContextAmd64*>(disp));
+}
+
 TL_CRT_MSABI void tl__CxxThrowException(void* pexcept, void* pthrow_info) noexcept {
     (void)pexcept;
     (void)pthrow_info;
@@ -2190,6 +2198,7 @@ void register_msvcrt_module() {
         {"wcsstr", 104, reinterpret_cast<std::uintptr_t>(&tl_wcsstr), ExportSupport::Full},
         {"__CxxFrameHandler", 105, reinterpret_cast<std::uintptr_t>(&tl___CxxFrameHandler), ExportSupport::Full},
         {"__CxxFrameHandler3", 113, reinterpret_cast<std::uintptr_t>(&tl___CxxFrameHandler3), ExportSupport::Full},
+        {"__GSHandlerCheck_EH4", 114, reinterpret_cast<std::uintptr_t>(&tl___GSHandlerCheck_EH4), ExportSupport::Full},
         {"_CxxThrowException", 106, reinterpret_cast<std::uintptr_t>(&tl__CxxThrowException), ExportSupport::Full},
         {"_purecall", 107, reinterpret_cast<std::uintptr_t>(&tl__purecall), ExportSupport::Full},
         {"?terminate@@YAXXZ", 108, reinterpret_cast<std::uintptr_t>(&tl_terminate), ExportSupport::Full},

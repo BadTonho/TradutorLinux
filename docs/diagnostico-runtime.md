@@ -316,15 +316,19 @@ No FH4, a seleção host-side registra `detail="fh4-catch-typed"` ou
 com o `PMD` validado e publicado no slot do frame; cópias por valor fora do
 subconjunto simples são rejeitadas com `unsupported-fh4-catch-copy`. Durante o
 unwind FH4 ainda não executado, o diagnóstico é
-`detail="fh4-cleanup-not-supported"`. A transferência usa um retorno sintético
-em `RSP-8` e restaura o RSP original na continuação, para preservar o
-alinhamento MS x64 e o frame da função convidada.
+`detail="fh4-termination-cleanup"`; cadeias com mais de quatro ações recebem
+`fh4-cleanup-limit`, cadeias vazias/incompatíveis recebem
+`no-supported-fh4-cleanup` e mapas inválidos são rejeitados como
+`invalid-fh4-unwind-map`, sempre seguindo para a falha controlada. A
+transferência usa um retorno sintético em uma área validada da stack convidada,
+preserva os slots de retorno e restaura o RSP original na continuação, para
+preservar o alinhamento MS x64 e o frame da função convidada.
 
 Exemplo de captura FH4 validada:
 
 ```text
 [tl][runtime][info] cxx-eh state="matched" detail="fh4-catch-typed" mechanism="msvc-x64"
-[tl][runtime][info] cxx-eh state="search" detail="fh4-cleanup-not-supported" mechanism="msvc-x64" control-rva="455738" current-state="11"
+[tl][runtime][info] cxx-eh state="search" detail="fh4-termination-cleanup" mechanism="msvc-x64" control-rva="455738" current-state="11"
 [tl][runtime][info] ExitProcess symbol="ExitProcess" exit-code="0" status="success" mechanism="guest-transfer"
 ```
 

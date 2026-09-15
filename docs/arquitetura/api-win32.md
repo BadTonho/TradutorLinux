@@ -300,7 +300,8 @@ O `msvcrt.dll` mínimo inclui os argumentos de processo (`__getmainargs`,
 `realloc`, `free`), strings/memória (`memcpy`, `memmove`, `memset`, `strlen`,
 `strcmp`, `strcpy`, `strstr`, variantes wide), conversão (`strtol`, `strtoul`,
 `atoi`, `mbstowcs`, `wcstombs`), locale, tempo, sinais, `_beginthreadex`,
-terminação C++ (`__CxxFrameHandler3`, `_CxxThrowException`, `_purecall`) e
+terminação C++ (`__CxxFrameHandler3`, `__GSHandlerCheck_EH4`,
+`_CxxThrowException`, `_purecall`) e
 funções de arquivo `_stat64`, `_wfopen`, `_wrename`, `_wunlink`.
 
 Esse é um subconjunto de CRT orientado aos fixtures e aplicativos-alvo. Ele não

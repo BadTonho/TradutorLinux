@@ -158,6 +158,7 @@ TL_CRT_MSABI int tl_wcscmp(const std::uint16_t* string1, const std::uint16_t* st
 TL_CRT_MSABI std::uint16_t* tl_wcsstr(const std::uint16_t* string, const std::uint16_t* str_char_set) noexcept;
 TL_CRT_MSABI int tl___CxxFrameHandler(void* rec, void* frame, void* context, void* disp) noexcept;
 TL_CRT_MSABI int tl___CxxFrameHandler3(void* rec, void* frame, void* context, void* disp) noexcept;
+TL_CRT_MSABI int tl___GSHandlerCheck_EH4(void* rec, void* frame, void* context, void* disp) noexcept;
 TL_CRT_MSABI void tl__CxxThrowException(void* pexcept, void* pthrow_info) noexcept;
 TL_CRT_MSABI void tl__purecall() noexcept;
 TL_CRT_MSABI void tl_terminate() noexcept;

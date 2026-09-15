@@ -93,9 +93,12 @@ simples sem copy constructor e até 4096 bytes. O wrapper guest
 `__GSHandlerCheck_EH4` não é executado como se fosse um handler v3.
 A cadeia de ações do frame-alvo v3 é percorrida com limite de 64 estados,
 rejeição de ciclos e `RVA=0`/`0xffffffff` como fim sem ação; cada funclet
-retorna pelo trampoline para o próximo cleanup ou para o catch. Cleanups FH4 de
-frames intermediários ou do frame-alvo ainda são registrados como
-`fh4-cleanup-not-supported`; copy constructors arbitrários, rethrow e
+retorna pelo trampoline para o próximo cleanup ou para o catch. Cleanups FH4 do
+frame-alvo são executados somente quando a cadeia tem até quatro ações com
+destino e argumentos validados; cadeias maiores seguem ao diagnóstico
+controlado `fh4-cleanup-limit`, e mapas cíclicos/inválidos são rejeitados
+como `invalid-fh4-unwind-map`. Cleanups de frames intermediários, copy
+constructors arbitrários, rethrow e
 `__CxxFrameHandler` legado seguem a busca controlada e não são declarados
 suportados. Uma nova exceção C++ durante um `catch` ou cleanup ativo é rejeitada
 com `nested-cxx-exception-unsupported`; isso evita redirecionar a exceção ao

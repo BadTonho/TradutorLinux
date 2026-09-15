@@ -543,6 +543,12 @@ add_executable(tl_delay_import_generator
 target_include_directories(tl_delay_import_generator PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/..")
 tl_enable_warnings(tl_delay_import_generator)
 
+add_executable(tl_fh4_cleanup_generator
+    generate_fh4_cleanup_fixture.cpp
+)
+target_include_directories(tl_fh4_cleanup_generator PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/..")
+tl_enable_warnings(tl_fh4_cleanup_generator)
+
 set(TL_DELAY_IMPORT_FIXTURE "${TL_FIXTURE_OUTPUT_DIRECTORY}/tl_delay_import.exe")
 set(TL_DELAY_IMPORT_MISSING_FIXTURE "${TL_FIXTURE_OUTPUT_DIRECTORY}/tl_delay_import_missing.exe")
 add_custom_command(
@@ -837,6 +843,111 @@ if(TARGET tradutorlinux)
     set_tests_properties(runtime_tl_cxx_eh_cleanup PROPERTIES
         DEPENDS fixture_tl_cxx_eh_cleanup_metadata
         LABELS "runtime;pe32plus;cxx-eh"
+    )
+endif()
+
+set(TL_CXX_EH_FH4_CLEANUP_OBJECT "${TL_FIXTURE_OUTPUT_DIRECTORY}/tl_cxx_eh_fh4_cleanup.o")
+set(TL_CXX_EH_FH4_CLEANUP_IMPORT_LIB "${TL_FIXTURE_OUTPUT_DIRECTORY}/tl_cxx_eh_fh4_cleanup.imports.a")
+set(TL_CXX_EH_FH4_CLEANUP_SEED "${TL_FIXTURE_OUTPUT_DIRECTORY}/tl_cxx_eh_fh4_cleanup_seed.exe")
+set(TL_CXX_EH_FH4_CLEANUP_FIXTURE "${TL_FIXTURE_OUTPUT_DIRECTORY}/tl_cxx_eh_fh4_cleanup.exe")
+set(TL_CXX_EH_FH4_CLEANUP_CYCLE_FIXTURE "${TL_FIXTURE_OUTPUT_DIRECTORY}/tl_cxx_eh_fh4_cleanup_cycle.exe")
+add_custom_command(
+    OUTPUT "${TL_CXX_EH_FH4_CLEANUP_OBJECT}"
+    COMMAND "${CMAKE_COMMAND}" -E make_directory "${TL_FIXTURE_OUTPUT_DIRECTORY}"
+    COMMAND "${TL_LLVM_LLC}" -mtriple=x86_64-pc-windows-msvc -filetype=obj
+        -o "${TL_CXX_EH_FH4_CLEANUP_OBJECT}"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/tl_cxx_eh_fh4_cleanup.ll"
+    DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/tl_cxx_eh_fh4_cleanup.ll"
+    VERBATIM
+    COMMENT "Generating FH4 cleanup seed object"
+)
+add_custom_command(
+    OUTPUT "${TL_CXX_EH_FH4_CLEANUP_IMPORT_LIB}"
+    COMMAND "${CMAKE_COMMAND}" -E make_directory "${TL_FIXTURE_OUTPUT_DIRECTORY}"
+    COMMAND "${TL_MINGW_DLLTOOL}" -m i386:x86-64
+        -d "${CMAKE_CURRENT_SOURCE_DIR}/defs/tl_cxx_eh_fh4.def"
+        -l "${TL_CXX_EH_FH4_CLEANUP_IMPORT_LIB}"
+    DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/defs/tl_cxx_eh_fh4.def"
+    VERBATIM
+    COMMENT "Generating FH4 cleanup import library"
+)
+add_custom_command(
+    OUTPUT "${TL_CXX_EH_FH4_CLEANUP_SEED}"
+    COMMAND "${CMAKE_COMMAND}" -E make_directory "${TL_FIXTURE_OUTPUT_DIRECTORY}"
+    COMMAND "${TL_MINGW_CC}" -nostdlib
+        -Wl,--entry=tl_entry -Wl,--subsystem,console
+        -Wl,--no-insert-timestamp -Wl,--dynamicbase
+        -o "${TL_CXX_EH_FH4_CLEANUP_SEED}"
+        "${TL_CXX_EH_FH4_CLEANUP_OBJECT}"
+        "${TL_CXX_EH_FH4_CLEANUP_IMPORT_LIB}" -lkernel32
+    DEPENDS "${TL_CXX_EH_FH4_CLEANUP_OBJECT}" "${TL_CXX_EH_FH4_CLEANUP_IMPORT_LIB}"
+    VERBATIM
+    COMMENT "Linking FH4 cleanup seed"
+)
+add_custom_command(
+    OUTPUT "${TL_CXX_EH_FH4_CLEANUP_FIXTURE}" "${TL_CXX_EH_FH4_CLEANUP_CYCLE_FIXTURE}"
+    COMMAND "${CMAKE_COMMAND}" -E make_directory "${TL_FIXTURE_OUTPUT_DIRECTORY}"
+    COMMAND "$<TARGET_FILE:tl_fh4_cleanup_generator>"
+        "${TL_CXX_EH_FH4_CLEANUP_SEED}" "${TL_CXX_EH_FH4_CLEANUP_FIXTURE}"
+    COMMAND "$<TARGET_FILE:tl_fh4_cleanup_generator>"
+        "${TL_CXX_EH_FH4_CLEANUP_SEED}" "${TL_CXX_EH_FH4_CLEANUP_CYCLE_FIXTURE}" cycle
+    DEPENDS "${TL_CXX_EH_FH4_CLEANUP_SEED}" tl_fh4_cleanup_generator
+    VERBATIM
+    COMMENT "Promoting FH4 cleanup metadata"
+)
+add_custom_target(tl_cxx_eh_fh4_cleanup_fixture DEPENDS
+    "${TL_CXX_EH_FH4_CLEANUP_FIXTURE}" "${TL_CXX_EH_FH4_CLEANUP_CYCLE_FIXTURE}")
+add_dependencies(tradutorlinux_samples tl_cxx_eh_fh4_cleanup_fixture)
+add_test(
+    NAME fixture_tl_cxx_eh_fh4_cleanup_metadata
+    COMMAND "${CMAKE_COMMAND}"
+        "-DINPUT=${TL_CXX_EH_FH4_CLEANUP_FIXTURE}"
+        "-DMANIFEST=${CMAKE_CURRENT_SOURCE_DIR}/manifests/tl_cxx_eh_fh4_cleanup.json"
+        "-DLLVM_READOBJ=${TL_LLVM_READOBJ}"
+        -P "${CMAKE_CURRENT_SOURCE_DIR}/verify_fixture.cmake"
+)
+set_tests_properties(fixture_tl_cxx_eh_fh4_cleanup_metadata PROPERTIES
+    DEPENDS tl_cxx_eh_fh4_cleanup_fixture
+    LABELS "fixture;pe32plus;cxx-eh;fh4"
+)
+add_test(
+    NAME fixture_tl_cxx_eh_fh4_cleanup_cycle_metadata
+    COMMAND "${CMAKE_COMMAND}"
+        "-DINPUT=${TL_CXX_EH_FH4_CLEANUP_CYCLE_FIXTURE}"
+        "-DMANIFEST=${CMAKE_CURRENT_SOURCE_DIR}/manifests/tl_cxx_eh_fh4_cleanup.json"
+        "-DLLVM_READOBJ=${TL_LLVM_READOBJ}"
+        -P "${CMAKE_CURRENT_SOURCE_DIR}/verify_fixture.cmake"
+)
+set_tests_properties(fixture_tl_cxx_eh_fh4_cleanup_cycle_metadata PROPERTIES
+    DEPENDS tl_cxx_eh_fh4_cleanup_fixture
+    LABELS "fixture;pe32plus;cxx-eh;fh4"
+)
+if(TARGET tradutorlinux)
+    add_test(
+        NAME runtime_tl_cxx_eh_fh4_cleanup
+        COMMAND "${CMAKE_COMMAND}"
+            "-DINPUT=${TL_CXX_EH_FH4_CLEANUP_FIXTURE}"
+            "-DRUNTIME=$<TARGET_FILE:tradutorlinux>"
+            "-DEXPECTED_EXIT=0"
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/verify_cxx_eh_fh4_cleanup.cmake"
+    )
+    set_tests_properties(runtime_tl_cxx_eh_fh4_cleanup PROPERTIES
+        DEPENDS fixture_tl_cxx_eh_fh4_cleanup_metadata
+        LABELS "runtime;pe32plus;cxx-eh;fh4"
+        TIMEOUT 15
+    )
+    add_test(
+        NAME runtime_tl_cxx_eh_fh4_cleanup_cycle
+        COMMAND "${CMAKE_COMMAND}"
+            "-DINPUT=${TL_CXX_EH_FH4_CLEANUP_CYCLE_FIXTURE}"
+            "-DRUNTIME=$<TARGET_FILE:tradutorlinux>"
+            "-DEXPECTED_EXIT=99"
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/verify_cxx_eh_fh4_cleanup_rejected.cmake"
+    )
+    set_tests_properties(runtime_tl_cxx_eh_fh4_cleanup_cycle PROPERTIES
+        DEPENDS fixture_tl_cxx_eh_fh4_cleanup_cycle_metadata
+        LABELS "runtime;pe32plus;cxx-eh;fh4"
+        TIMEOUT 15
     )
 endif()
 

@@ -43,9 +43,31 @@ constexpr std::uint32_t kCatchableTypeByReferenceOnly = 0x00000002U;
 constexpr std::uint32_t kHandlerTypeReference = 0x00000008U;
 constexpr std::size_t kMaxCatchObjectSize = 4096U;
 constexpr std::size_t kMaxCleanupActions = 64U;
+constexpr std::size_t kCxxCallbackStackSize = 65536U;
+constexpr std::uint64_t kCxxCleanupStackOffset = 0x1000U;
+// A cadeia FH4 pode conter destruidores arbitrários, inclusive thunks de
+// destrutor virtual. O subconjunto executável desta etapa permanece pequeno;
+// cadeias maiores continuam no caminho legado de unwind até haver uma fixture
+// que proteja sua semântica completa.
+constexpr std::size_t kMaxFh4ExecutableCleanupActions = 4U;
+
+enum class CleanupActionKind : std::uint8_t {
+    LegacyFrame,
+    DtorWithObject,
+    DtorWithPointerToObject,
+    Rva,
+};
+
+struct CleanupAction {
+    std::uint32_t action_rva{};
+    std::uint32_t object_offset{};
+    CleanupActionKind kind{CleanupActionKind::LegacyFrame};
+};
 
 thread_local ContextAmd64 g_cxx_catch_context{};
 thread_local bool g_cxx_catch_context_ready = false;
+thread_local ContextAmd64 g_cxx_catch_resume_context{};
+thread_local bool g_cxx_catch_resume_context_ready = false;
 thread_local bool g_cxx_funclet_active = false;
 thread_local std::uint64_t g_cxx_catch_target = 0U;
 thread_local std::uint64_t g_cxx_catch_continuation = 0U;
@@ -54,12 +76,27 @@ thread_local std::uint64_t g_cxx_catch_return_target = 0U;
 thread_local bool g_cxx_catch_return_target_ready = false;
 thread_local bool g_cxx_catch_return_preserve_stack = false;
 thread_local std::uint64_t g_cxx_catch_resume_stack = 0U;
+alignas(16) thread_local std::array<std::byte, kCxxCallbackStackSize>
+    g_cxx_callback_stack{};
 thread_local bool g_cxx_cleanup_context_ready = false;
 thread_local std::uint64_t g_cxx_cleanup_target = 0U;
 thread_local std::uint64_t g_cxx_cleanup_establisher = 0U;
-thread_local std::array<std::uint32_t, kMaxCleanupActions> g_cxx_cleanup_actions{};
+thread_local std::array<struct CleanupAction, kMaxCleanupActions> g_cxx_cleanup_actions{};
 thread_local std::size_t g_cxx_cleanup_count = 0U;
 thread_local std::size_t g_cxx_cleanup_index = 0U;
+thread_local std::array<std::uint64_t, kMaxCleanupActions>
+    g_cxx_cleanup_return_slots{};
+thread_local std::array<std::uint64_t, kMaxCleanupActions>
+    g_cxx_cleanup_return_values{};
+thread_local std::size_t g_cxx_cleanup_return_slot_count = 0U;
+thread_local std::uint64_t g_cxx_catch_return_slot = 0U;
+thread_local std::uint64_t g_cxx_catch_return_value = 0U;
+thread_local bool g_cxx_catch_return_slot_ready = false;
+
+extern "C" std::uintptr_t tl_cxx_callback_stack_top() noexcept {
+    return reinterpret_cast<std::uintptr_t>(g_cxx_callback_stack.data() +
+                                             g_cxx_callback_stack.size());
+}
 
 [[nodiscard]] bool write_guest_stack_value(const std::uint64_t stack_pointer,
                                            const std::uint64_t value) noexcept {
@@ -70,6 +107,42 @@ thread_local std::size_t g_cxx_cleanup_index = 0U;
     }
     return write_guest_memory(destination, &value, sizeof(value)).status ==
            GuestMemoryAccessStatus::Success;
+}
+
+[[nodiscard]] bool save_guest_stack_value(const std::uint64_t stack_pointer,
+                                          std::uint64_t& value) noexcept {
+    if (!validate_guest_stack_range(reinterpret_cast<void*>(stack_pointer),
+                                    sizeof(value), false) ||
+        read_guest_memory(reinterpret_cast<const void*>(
+                              static_cast<std::uintptr_t>(stack_pointer)),
+                          &value, sizeof(value)).status != GuestMemoryAccessStatus::Success) {
+        return false;
+    }
+    return true;
+}
+
+[[nodiscard]] bool save_cleanup_return_slot(const std::uint64_t stack_pointer) noexcept {
+    if (g_cxx_cleanup_return_slot_count >= g_cxx_cleanup_return_slots.size()) {
+        return false;
+    }
+    std::uint64_t value{};
+    if (!save_guest_stack_value(stack_pointer, value)) {
+        return false;
+    }
+    const std::size_t index = g_cxx_cleanup_return_slot_count++;
+    g_cxx_cleanup_return_slots[index] = stack_pointer;
+    g_cxx_cleanup_return_values[index] = value;
+    return true;
+}
+
+[[nodiscard]] bool restore_cleanup_return_slot(const std::size_t index,
+                                               const std::uint64_t stack_pointer) noexcept {
+    if (index >= g_cxx_cleanup_return_slot_count || stack_pointer < sizeof(std::uint64_t) ||
+        g_cxx_cleanup_return_slots[index] != stack_pointer - sizeof(std::uint64_t)) {
+        return false;
+    }
+    return write_guest_stack_value(g_cxx_cleanup_return_slots[index],
+                                   g_cxx_cleanup_return_values[index]);
 }
 
 struct ImageReader {
@@ -343,7 +416,7 @@ struct UnwindAction {
 };
 
 struct CleanupPlan {
-    std::array<std::uint32_t, kMaxCleanupActions> actions{};
+    std::array<CleanupAction, kMaxCleanupActions> actions{};
     std::size_t count{};
 };
 
@@ -727,9 +800,84 @@ void trace_cxx_eh_transfer(const diagnostics::TraceLevel level, const char* cons
         if (plan.count >= plan.actions.size()) {
             return false;
         }
-        plan.actions[plan.count++] = action.action_rva;
+        plan.actions[plan.count++] = CleanupAction{
+            .action_rva = action.action_rva,
+            .object_offset = 0U,
+            .kind = CleanupActionKind::LegacyFrame};
         state = action.to_state;
     }
+    return true;
+}
+
+[[nodiscard]] bool build_fh4_cleanup_plan(const Fh4UnwindMap& unwind_map,
+                                          const std::int32_t initial_state,
+                                          CleanupPlan& plan) noexcept {
+    std::array<bool, kMaxFh4Entries> visited{};
+    std::int32_t state = initial_state;
+    while (state != kInvalidState) {
+        if (state < 0 || state >= static_cast<std::int32_t>(unwind_map.count) ||
+            visited[static_cast<std::size_t>(state)]) {
+            return false;
+        }
+        visited[static_cast<std::size_t>(state)] = true;
+        const Fh4UnwindEntry& entry = unwind_map.entries[static_cast<std::size_t>(state)];
+        if (entry.type != 0U) {
+            if (plan.count >= plan.actions.size() || entry.action_rva == 0U ||
+                entry.action_rva == 0xFFFFFFFFU) {
+                return false;
+            }
+            const CleanupActionKind kind = entry.type == 1U
+                                               ? CleanupActionKind::DtorWithObject
+                                               : entry.type == 2U
+                                                     ? CleanupActionKind::DtorWithPointerToObject
+                                                     : CleanupActionKind::Rva;
+            plan.actions[plan.count++] = CleanupAction{
+                .action_rva = entry.action_rva,
+                .object_offset = entry.object,
+                .kind = kind};
+        }
+        state = entry.next_state;
+    }
+    return true;
+}
+
+[[nodiscard]] bool resolve_cleanup_object(const CleanupAction& action,
+                                          const std::uintptr_t establisher_frame,
+                                          std::uint64_t& object_argument,
+                                          bool& has_object_argument) noexcept {
+    has_object_argument = false;
+    if (action.kind != CleanupActionKind::DtorWithObject &&
+        action.kind != CleanupActionKind::DtorWithPointerToObject) {
+        return true;
+    }
+    // The runtime's establisher frame is the lower stack base used by the
+    // guest's FH4 funclets. Object offsets are positive displacements from
+    // that base; check the addition before forming the guest address.
+    if (action.object_offset > std::numeric_limits<std::uintptr_t>::max() -
+                                  establisher_frame) {
+        return false;
+    }
+    const std::uintptr_t object_slot = establisher_frame + action.object_offset;
+    if (action.kind == CleanupActionKind::DtorWithObject) {
+        if (!validate_mapped_range(reinterpret_cast<const void*>(object_slot), 1U, true)) {
+            return false;
+        }
+        object_argument = object_slot;
+        has_object_argument = true;
+        return true;
+    }
+
+    if (!validate_mapped_range(reinterpret_cast<const void*>(object_slot),
+                               sizeof(object_argument), false) ||
+        read_guest_memory(reinterpret_cast<const void*>(object_slot), &object_argument,
+                          sizeof(object_argument)).status != GuestMemoryAccessStatus::Success ||
+        object_argument == 0U ||
+        !validate_mapped_range(reinterpret_cast<const void*>(
+                                   static_cast<std::uintptr_t>(object_argument)),
+                               1U, true)) {
+        return false;
+    }
+    has_object_argument = true;
     return true;
 }
 
@@ -1235,18 +1383,47 @@ std::int32_t cxx_frame_handler4(
     }
 
     if (unwinding) {
-        // O mapa comprimido de destruidores ainda não participa do protocolo
-        // de cleanup do runtime. Continuar a busca evita executar o wrapper
-        // guest __GSHandlerCheck_EH4 com objetos DispatcherContext do host.
-        trace_cxx_eh_state(diagnostics::TraceLevel::Info, "fh4-cleanup-not-supported",
+        // O wrapper guest __GSHandlerCheck_EH4 recebe objetos DispatcherContext
+        // do host durante o unwind; por isso o mapa comprimido é interpretado
+        // aqui e somente o funclet validado atravessa a fronteira ABI.
+        if (dispatcher_context->target_ip == 0U) {
+            return kExceptionContinueSearch;
+        }
+        CleanupPlan plan{};
+        if (!build_fh4_cleanup_plan(unwind_map, state, plan) || plan.count == 0U) {
+            trace_cxx_eh_state(diagnostics::TraceLevel::Info, "no-supported-fh4-cleanup",
+                               control_rva, state);
+            return kExceptionContinueSearch;
+        }
+        if (plan.count > kMaxFh4ExecutableCleanupActions) {
+            trace_cxx_eh_state(diagnostics::TraceLevel::Info, "fh4-cleanup-limit",
+                               control_rva, state);
+            return kExceptionContinueSearch;
+        }
+        if (base > std::numeric_limits<std::uintptr_t>::max() - plan.actions[0].action_rva) {
+            trace_cxx_eh(diagnostics::TraceLevel::Warning, "rejected",
+                         "invalid-fh4-cleanup-target");
+            return kExceptionContinueSearch;
+        }
+        dispatcher_context->target_ip = base + plan.actions[0].action_rva;
+        g_cxx_cleanup_actions = plan.actions;
+        g_cxx_cleanup_count = plan.count;
+        g_cxx_cleanup_index = 0U;
+        g_cxx_cleanup_target = dispatcher_context->target_ip;
+        trace_cxx_eh_state(diagnostics::TraceLevel::Info, "fh4-termination-cleanup",
                            control_rva, state);
-        return kExceptionContinueSearch;
+        return kExceptionExecuteHandler;
     }
 
     CatchTarget target{};
     if (!find_fh4_catch(image, info, try_map, *exception_record, state, target)) {
         trace_cxx_eh_state(diagnostics::TraceLevel::Info, "no-supported-fh4-catch",
                            control_rva, state);
+        return kExceptionContinueSearch;
+    }
+    if (target.scope_index >= try_map.count) {
+        trace_cxx_eh(diagnostics::TraceLevel::Warning, "rejected",
+                     "invalid-fh4-scope-index");
         return kExceptionContinueSearch;
     }
     if (target.has_catch_object) {
@@ -1382,7 +1559,7 @@ std::int32_t cxx_frame_handler3(
                                state);
             return kExceptionContinueSearch;
         }
-        dispatcher_context->target_ip = base + plan.actions[0];
+        dispatcher_context->target_ip = base + plan.actions[0].action_rva;
         g_cxx_cleanup_actions = plan.actions;
         g_cxx_cleanup_count = plan.count;
         g_cxx_cleanup_index = 0U;
@@ -1415,12 +1592,20 @@ bool prepare_cxx_catch_transfer(ContextAmd64& context, void* const establisher_f
     }
     const std::uint64_t resume_stack = context.rsp;
     const std::uint64_t funclet_stack = resume_stack - sizeof(std::uint64_t);
+    std::uint64_t original_return{};
     if (target == 0U || target != g_cxx_catch_target ||
+        !save_guest_stack_value(funclet_stack, original_return) ||
         !write_guest_stack_value(funclet_stack,
-                                 reinterpret_cast<std::uintptr_t>(&tl_cxx_catch_return_trampoline))) {
+                                  reinterpret_cast<std::uintptr_t>(&tl_cxx_catch_return_trampoline))) {
         trace_cxx_eh(diagnostics::TraceLevel::Error, "rejected", "invalid-catch-transfer");
         return false;
     }
+    g_cxx_cleanup_return_slot_count = 0U;
+    g_cxx_catch_return_slot = funclet_stack;
+    g_cxx_catch_return_value = original_return;
+    g_cxx_catch_return_slot_ready = true;
+    g_cxx_catch_resume_context = context;
+    g_cxx_catch_resume_context_ready = true;
     context.rsp = funclet_stack;
     context.rdx = reinterpret_cast<std::uintptr_t>(establisher_frame);
     g_cxx_catch_context = context;
@@ -1447,31 +1632,68 @@ bool prepare_cxx_cleanup_transfer(ContextAmd64& action_context,
                                   void* const catch_ip) noexcept {
     const std::uint64_t cleanup_target = reinterpret_cast<std::uintptr_t>(cleanup_ip);
     const std::uint64_t catch_target = reinterpret_cast<std::uintptr_t>(catch_ip);
+    std::uint64_t object_argument{};
+    bool has_object_argument = false;
+    const std::uint64_t catch_return_slot = catch_context.rsp - sizeof(std::uint64_t);
+    const std::uint64_t cleanup_stack =
+        catch_context.rsp >= kCxxCleanupStackOffset + sizeof(std::uint64_t)
+            ? (((catch_context.rsp - kCxxCleanupStackOffset - sizeof(std::uint64_t)) &
+                ~std::uint64_t{0x0FU}) + sizeof(std::uint64_t))
+            : 0U;
+    std::uint64_t original_catch_return{};
     if (cleanup_target == 0U || cleanup_target != g_cxx_cleanup_target ||
         catch_target == 0U || catch_target != g_cxx_catch_target ||
-        !validate_guest_stack_range(reinterpret_cast<void*>(action_context.rsp),
+        g_cxx_cleanup_count == 0U || g_cxx_cleanup_index >= g_cxx_cleanup_count ||
+        !resolve_cleanup_object(g_cxx_cleanup_actions[g_cxx_cleanup_index],
+                                reinterpret_cast<std::uintptr_t>(establisher_frame),
+                                object_argument, has_object_argument) ||
+        catch_context.rsp < sizeof(std::uint64_t) ||
+        cleanup_stack == 0U ||
+        !validate_guest_stack_range(reinterpret_cast<void*>(cleanup_stack),
                                     sizeof(std::uint64_t), true) ||
-        !validate_guest_stack_range(reinterpret_cast<void*>(catch_context.rsp),
+        !validate_guest_stack_range(reinterpret_cast<void*>(catch_return_slot),
                                     sizeof(std::uint64_t), true)) {
         trace_cxx_eh(diagnostics::TraceLevel::Error, "rejected", "invalid-cleanup-transfer");
         return false;
     }
 
-    if (!write_guest_stack_value(action_context.rsp,
+    g_cxx_cleanup_return_slot_count = 0U;
+    g_cxx_catch_return_slot_ready = false;
+    if (!save_cleanup_return_slot(cleanup_stack) ||
+        !save_guest_stack_value(catch_return_slot, original_catch_return) ||
+        !write_guest_stack_value(cleanup_stack,
                                  reinterpret_cast<std::uintptr_t>(&tl_cxx_cleanup_return_trampoline)) ||
-        !write_guest_stack_value(catch_context.rsp,
+        !write_guest_stack_value(catch_return_slot,
                                  reinterpret_cast<std::uintptr_t>(&tl_cxx_catch_return_trampoline))) {
         trace_cxx_eh(diagnostics::TraceLevel::Error, "rejected", "guest-stack-write-failed");
         return false;
     }
+    g_cxx_catch_return_slot = catch_return_slot;
+    g_cxx_catch_return_value = original_catch_return;
+    g_cxx_catch_return_slot_ready = true;
 
+    // A synthetic return slot must enter the guest funclet with RSP % 16 == 8,
+    // exactly as after a normal MS x64 call. The cleanup stack is kept below
+    // the original frame so prologues cannot overwrite its saved return data.
+    action_context.rsp = cleanup_stack;
     action_context.rip = cleanup_target;
     action_context.rdx = reinterpret_cast<std::uintptr_t>(establisher_frame);
+    if (has_object_argument) {
+        action_context.rcx = object_argument;
+    }
 
+    g_cxx_catch_resume_context = catch_context;
+    g_cxx_catch_resume_context_ready = true;
     g_cxx_catch_context = catch_context;
+    const std::uint64_t catch_resume_stack = catch_context.rsp;
+    g_cxx_catch_context.rsp = catch_resume_stack - sizeof(std::uint64_t);
     g_cxx_catch_context.rip = catch_target;
     g_cxx_catch_context.rdx = reinterpret_cast<std::uintptr_t>(establisher_frame);
     g_cxx_catch_context_ready = true;
+    g_cxx_catch_return_target = g_cxx_catch_continuation;
+    g_cxx_catch_return_target_ready = g_cxx_catch_continuation_ready;
+    g_cxx_catch_return_preserve_stack = g_cxx_catch_return_target_ready;
+    g_cxx_catch_resume_stack = catch_resume_stack;
     g_cxx_cleanup_context_ready = true;
     g_cxx_funclet_active = true;
     g_cxx_cleanup_establisher = reinterpret_cast<std::uintptr_t>(establisher_frame);
@@ -1486,6 +1708,7 @@ extern "C" [[noreturn]] void tl_cxx_cleanup_return_from_asm(
     if (view.image_base == nullptr ||
         !validate_guest_stack_range(reinterpret_cast<void*>(stack_pointer), 1U, false) ||
         !g_cxx_cleanup_context_ready || !g_cxx_catch_context_ready ||
+        !g_cxx_catch_resume_context_ready ||
         g_cxx_cleanup_count == 0U || g_cxx_cleanup_index >= g_cxx_cleanup_count ||
         g_cxx_catch_context.rip < base ||
         g_cxx_catch_context.rip - base >= view.image_size) {
@@ -1494,13 +1717,22 @@ extern "C" [[noreturn]] void tl_cxx_cleanup_return_from_asm(
         std::abort();
     }
 
+    if (!restore_cleanup_return_slot(g_cxx_cleanup_index, stack_pointer)) {
+        trace_cxx_eh(diagnostics::TraceLevel::Error, "rejected", "invalid-cleanup-return-slot");
+        tl_ExitThread(kCxxException);
+        std::abort();
+    }
+
     if (g_cxx_cleanup_index + 1U < g_cxx_cleanup_count) {
         const std::size_t next_index = g_cxx_cleanup_index + 1U;
-        const std::uint32_t next_rva = g_cxx_cleanup_actions[next_index];
+        const CleanupAction& next_action = g_cxx_cleanup_actions[next_index];
+        const std::uint32_t next_rva = next_action.action_rva;
+        std::uint64_t object_argument{};
+        bool has_object_argument = false;
         if (next_rva >= view.image_size ||
             base > std::numeric_limits<std::uintptr_t>::max() - next_rva ||
-            !validate_guest_stack_range(reinterpret_cast<void*>(stack_pointer),
-                                        sizeof(std::uint64_t), true)) {
+            !resolve_cleanup_object(next_action, g_cxx_cleanup_establisher,
+                                    object_argument, has_object_argument)) {
             trace_cxx_eh(diagnostics::TraceLevel::Error, "rejected",
                          "invalid-chained-cleanup-target");
             tl_ExitThread(kCxxException);
@@ -1508,9 +1740,37 @@ extern "C" [[noreturn]] void tl_cxx_cleanup_return_from_asm(
         }
         ContextAmd64 next_context = g_cxx_catch_context;
         next_context.rip = base + next_rva;
-        next_context.rsp = stack_pointer;
+        // O cleanup anterior chegou ao trampoline depois de consumir sua
+        // palavra de retorno. Cada novo funclet deve, porém, entrar como uma
+        // chamada Win64 normal: RSP+8 fica alinhado a 16 bytes no prólogo.
+        // Quando o retorno anterior deixou RSP em 0 mod 16, salte uma palavra
+        // de pilha antes de instalar o próximo trampoline.
+        std::uint64_t next_stack_pointer = stack_pointer;
+        if ((next_stack_pointer & 0x0FU) == 0U) {
+            if (next_stack_pointer > std::numeric_limits<std::uint64_t>::max() -
+                                         sizeof(std::uint64_t)) {
+                trace_cxx_eh(diagnostics::TraceLevel::Error, "rejected",
+                             "invalid-chained-cleanup-stack");
+                tl_ExitThread(kCxxException);
+                std::abort();
+            }
+            next_stack_pointer += sizeof(std::uint64_t);
+        }
+        next_context.rsp = next_stack_pointer;
+        if (!validate_guest_stack_range(reinterpret_cast<void*>(next_context.rsp),
+                                        sizeof(std::uint64_t), true)) {
+            trace_cxx_eh(diagnostics::TraceLevel::Error, "rejected",
+                         "invalid-chained-cleanup-stack");
+            tl_ExitThread(kCxxException);
+            std::abort();
+        }
         next_context.rdx = g_cxx_cleanup_establisher;
-        if (!write_guest_stack_value(next_context.rsp,
+        if (has_object_argument) {
+            next_context.rcx = object_argument;
+        }
+        if (g_cxx_cleanup_return_slot_count != next_index ||
+            !save_cleanup_return_slot(next_context.rsp) ||
+            !write_guest_stack_value(next_context.rsp,
                                      reinterpret_cast<std::uintptr_t>(&tl_cxx_cleanup_return_trampoline))) {
             trace_cxx_eh(diagnostics::TraceLevel::Error, "rejected", "guest-stack-write-failed");
             tl_ExitThread(kCxxException);
@@ -1524,27 +1784,22 @@ extern "C" [[noreturn]] void tl_cxx_cleanup_return_from_asm(
 
     g_cxx_cleanup_context_ready = false;
     g_cxx_funclet_active = false;
-    // O cleanup funclet chamou este callback usando temporariamente a pilha
-    // convidada. O prólogo/locals do callback podem ter coberto a palavra de
-    // retorno reservada no frame original; reescreva-a antes do salto para o
-    // catch, sem confiar no conteúdo que atravessou a fronteira host/guest.
-    if (!validate_guest_stack_range(reinterpret_cast<void*>(g_cxx_catch_context.rsp),
+    if (!g_cxx_catch_return_slot_ready ||
+        g_cxx_catch_context.rsp != g_cxx_catch_return_slot ||
+        !validate_guest_stack_range(reinterpret_cast<void*>(g_cxx_catch_return_slot),
                                     sizeof(std::uint64_t), true)) {
         trace_cxx_eh(diagnostics::TraceLevel::Error, "rejected", "invalid-catch-return-slot");
         tl_ExitThread(kCxxException);
         std::abort();
     }
-    if (!write_guest_stack_value(g_cxx_catch_context.rsp,
-                                 reinterpret_cast<std::uintptr_t>(&tl_cxx_catch_return_trampoline))) {
-        trace_cxx_eh(diagnostics::TraceLevel::Error, "rejected", "guest-stack-write-failed");
-        tl_ExitThread(kCxxException);
-        std::abort();
-    }
     g_cxx_cleanup_target = 0U;
     g_cxx_cleanup_establisher = 0U;
-    g_cxx_cleanup_actions.fill(0U);
+    g_cxx_cleanup_actions.fill(CleanupAction{});
     g_cxx_cleanup_count = 0U;
     g_cxx_cleanup_index = 0U;
+    g_cxx_cleanup_return_slots.fill(0U);
+    g_cxx_cleanup_return_values.fill(0U);
+    g_cxx_cleanup_return_slot_count = 0U;
     tl_restore_guest_context_and_jump(&g_cxx_catch_context);
 }
 
@@ -1559,7 +1814,7 @@ extern "C" [[noreturn]] void tl_cxx_catch_return_from_asm(
     if (view.image_base == nullptr || effective_target < base ||
         effective_target - base >= view.image_size ||
         !validate_guest_stack_range(reinterpret_cast<void*>(stack_pointer), 1U, false) ||
-        !g_cxx_catch_context_ready) {
+        !g_cxx_catch_context_ready || !g_cxx_catch_resume_context_ready) {
         trace_cxx_eh(diagnostics::TraceLevel::Error, "rejected", "invalid-catchret-target");
         tl_ExitThread(kCxxException);
         std::abort();
@@ -1567,23 +1822,35 @@ extern "C" [[noreturn]] void tl_cxx_catch_return_from_asm(
     trace_cxx_eh_transfer(diagnostics::TraceLevel::Debug, "return-from-catch",
                           g_cxx_catch_resume_stack, stack_pointer, effective_target,
                           g_cxx_catch_return_target_ready ? g_cxx_catch_return_target : 0U);
-    g_cxx_catch_context.rip = effective_target;
+    ContextAmd64 resume_context = g_cxx_catch_resume_context;
+    resume_context.rip = effective_target;
     // Para catchret com continuação FH4, o CONTEXT salvo já representa o ponto
     // de retorno da chamada que lançou a exceção: seu RSP é o valor após o
     // retorno normal ao corpo da função. O RSP após o RET sintético aponta para
     // além desse frame e só é usado para validar a travessia do trampoline.
     if (g_cxx_catch_return_preserve_stack) {
-        g_cxx_catch_context.rsp = g_cxx_catch_resume_stack;
+        resume_context.rsp = g_cxx_catch_resume_stack;
     } else {
-        g_cxx_catch_context.rsp = stack_pointer;
+        resume_context.rsp = stack_pointer;
+    }
+    if (!g_cxx_catch_return_slot_ready || stack_pointer < sizeof(std::uint64_t) ||
+        g_cxx_catch_return_slot != stack_pointer - sizeof(std::uint64_t) ||
+        !write_guest_stack_value(g_cxx_catch_return_slot, g_cxx_catch_return_value)) {
+        trace_cxx_eh(diagnostics::TraceLevel::Error, "rejected", "invalid-catch-return-slot");
+        tl_ExitThread(kCxxException);
+        std::abort();
     }
     g_cxx_catch_context_ready = false;
+    g_cxx_catch_resume_context_ready = false;
     g_cxx_catch_return_target = 0U;
     g_cxx_catch_return_target_ready = false;
     g_cxx_catch_return_preserve_stack = false;
     g_cxx_catch_resume_stack = 0U;
+    g_cxx_catch_return_slot = 0U;
+    g_cxx_catch_return_value = 0U;
+    g_cxx_catch_return_slot_ready = false;
     g_cxx_funclet_active = false;
-    tl_restore_guest_context_and_jump(&g_cxx_catch_context);
+    tl_restore_guest_context_and_jump(&resume_context);
 }
 
 bool cxx_eh_funclet_active() noexcept {

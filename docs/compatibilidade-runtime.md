@@ -33,7 +33,9 @@ O CLI expõe o leitor via `--trace` (eventos do componente `pe`, ver `docs/diagn
 O contrato de desempilhamento e despacho SEH fica em
 [`arquitetura/unwinding-x64.md`](arquitetura/unwinding-x64.md). O runtime
 suporta exceções explícitas V1/V2 fora de epílogos e um subconjunto checked de
-C++ `__CxxFrameHandler3`; `__finally`, rethrow nativo completo e sinais Linux
+C++ `__CxxFrameHandler3` e `__GSHandlerCheck_EH4`; no FH4, cleanups do
+frame-alvo são limitados a quatro ações validadas e mapas cíclicos/inválidos
+falham de forma controlada. `__finally`, rethrow nativo completo e sinais Linux
 continuam fora do contrato.
 
 ## Mapeamento de imagem (Fase 2)

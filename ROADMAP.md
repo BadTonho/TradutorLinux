@@ -737,13 +737,28 @@ testes. O smoke GUI foi pulado porque o Xvfb do ambiente não conseguiu abrir
 
 ### R7 — Executar cleanup FH4 com fixture genérica
 
-O próximo passo é deixar de apenas registrar `fh4-cleanup-not-supported` no
-unwind. Antes de ampliar o suporte do Notepad++ ou declarar fluxo GUI, esta
-etapa deve criar uma fixture PE32+ com `UnwindMap` FH4 e funclets de destruição,
-validar `ScopeIndex`/estado e executar somente ações com destino e pilha
-checados. A aceitação exige regressão de ciclo/limite, paridade Rust ON/C++ OFF
-e uma nova execução do Notepad++ sem regressão. Copy constructors complexos,
-rethrow e GUI interativa continuam dependentes de evidência própria.
+O cleanup FH4 do frame-alvo agora possui um subconjunto executável explícito.
+A fixture PE32+ cobre `UnwindMap` FH4 com destrutor por objeto e ação por RVA;
+o dispatcher valida `ScopeIndex`/estado, rejeita auto-links cíclicos e limita a
+cadeia executável a quatro ações com destino, argumentos, stack e slots de
+retorno validados. Cadeias maiores continuam no caminho legado e registram
+`fh4-cleanup-limit`; copy constructors complexos, rethrow e GUI interativa
+continuam dependentes de evidência própria.
+
+- [x] criar fixture genérica FH4 e verificar metadata/imports;
+- [x] executar destrutor por objeto e ação por RVA por trampolines MS x64;
+- [x] proteger ciclos, estado, `ScopeIndex`, stack e limite de quatro ações;
+- [x] repetir a fixture e o smoke headless do Notepad++ nos builds Rust ON e
+  C++ OFF, sem `guest-signal`/`guest-timeout`.
+
+**Evidência 2026-09-15:** nos builds `build/debug` (Rust OFF) e
+`build/debug-rust` (Rust ON), os testes
+`fixture_tl_cxx_eh_fh4_cleanup_metadata`,
+`fixture_tl_cxx_eh_fh4_cleanup_cycle_metadata`,
+`runtime_tl_cxx_eh_fh4_cleanup`, `runtime_tl_cxx_eh_fh4_cleanup_cycle` e
+`notepadpp_fh4_headless_smoke` passaram (5/5 em cada build). A variante cíclica
+foi rejeitada como `invalid-fh4-unwind-map` e terminou com o código controlado
+da exceção; o Notepad++ terminou com `ExitProcess(0)` e `fh4-cleanup-limit`.
 
 ## Fora desta rodada
 
