@@ -760,6 +760,33 @@ continuam dependentes de evidência própria.
 foi rejeitada como `invalid-fh4-unwind-map` e terminou com o código controlado
 da exceção; o Notepad++ terminou com `ExitProcess(0)` e `fh4-cleanup-limit`.
 
+### R8 — Revalidar o corpus de aplicativos populares nos dois backends
+
+Com a R7 fechada, a próxima unidade de evidência é repetir a análise e os
+cenários autorizados do diretório `Aplicativos_Windows_Populares/`. A análise
+estática deve cobrir todos os PE/DLL/MSIX encontrados recursivamente, mas a
+execução direta permanece limitada a casos PE32+ já definidos e as instalações
+continuam isoladas em prefixos temporários. DLLs independentes, instaladores
+sem contrato e binários PE32/x86 não devem ser iniciados por esta matriz.
+
+- [x] executar `popular_apps_report_matrix` e
+  `popular_apps_recursive_report_matrix` nos builds Rust ON e C++ OFF;
+- [x] executar `popular_apps_native_matrix` nos dois builds, com timeout e
+  limites de CPU/memória;
+- [x] executar `popular_apps_install_matrix` nos dois builds, verificando
+  rejeição pré-extração e ausência de arquivos/cadastro parcial;
+- [x] comparar os resultados e atualizar a matriz sem promover limitações a
+  suporte geral.
+
+**Evidência 2026-09-15:** o corpus contém 64 PE/DLL/MSIX; as duas matrizes de
+`--report`, a matriz nativa e a matriz de instalação passaram nos builds
+`build/debug` (Rust OFF) e `build/debug-rust` (Rust ON), sem divergência. Os
+seis casos nativos autorizados e os oito casos de instalação reproduziram os
+códigos e diagnósticos já publicados. Nenhum novo defeito do runtime foi
+reproduzido nesta rodada. O próximo alvo direto é o fluxo SSH local do PuTTY,
+que permanece limitado ao timeout controlado por ainda não entregar dados ao
+listener.
+
 ## Fora desta rodada
 
 Não entram neste roadmap, por enquanto:
