@@ -135,6 +135,23 @@ que, após a configuração e a janela de sessão, o convidado não chama
 de inicialização da sessão que precede a rede, não uma ausência comprovada de
 API WinSock.
 
+## Evidência E33 — fronteira WinSock observável no PuTTY (2026-09-15)
+
+O runtime passou a registrar a entrada das APIs WinSock relevantes com
+`phase="call"`. A fixture `tl_dynamic_ws2.exe` confirma o caminho positivo de
+`WSAStartup` → `socket` → `closesocket` → `WSACleanup` quando o ambiente permite
+syscalls de socket.
+
+No `putty_ssh_local_probe`, o trace registra `WSAStartup`, mas não registra
+`getaddrinfo`, `socket`, `connect`, `send` ou `recv` depois de `Open`. A captura
+de rede do processo confirma que os únicos `AF_INET` pertencem ao listener do
+harness; o convidado não chegou à fase de abertura de conexão. Isso fecha a
+ambiguidade entre “WinSock ausente” e “fluxo da aplicação não chegou à rede”.
+
+O resultado continua sendo limitação controlada (`guest-timeout 72`). O próximo
+trabalho deve localizar a transição interna da sessão antes do `GetMessageA`
+ocioso, sem introduzir chamadas sintéticas nem regras específicas do PuTTY.
+
 As matrizes nativas e de instalação controlada continuam separadas: 5/5
 execuções e 4/4 instalações passaram nos dois builds. PE32/x86, imagens
 empacotadas e pacotes incompatíveis continuam sendo rejeitados antes de

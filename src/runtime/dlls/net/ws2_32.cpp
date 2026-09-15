@@ -64,6 +64,15 @@ constexpr long kSupportedNetworkEvents = kFdRead | kFdWrite | kFdOob | kFdAccept
 
 thread_local int g_wsa_last_error = 0;
 
+void trace_ws2_call(const char* const symbol, const std::string& detail) noexcept {
+    runtime_trace(symbol, {
+        diagnostics::TraceField{"symbol", symbol},
+        diagnostics::TraceField{"phase", "call"},
+        diagnostics::TraceField{"detail", detail},
+        diagnostics::TraceField{"module", "WS2_32.dll"},
+    }, 4);
+}
+
 struct SocketSlot {
     bool used{false};
     int fd{-1};
@@ -286,6 +295,7 @@ bool write_guest_text(const char* const source, char* const destination,
 extern "C" {
 
 TL_MSABI int tl_WSAStartup(const std::uint16_t version_requested, void* data) noexcept {
+    trace_ws2_call("WSAStartup", "version=" + std::to_string(version_requested));
     if (data == nullptr) {
         g_wsa_last_error = kWsaEInvalidArgument;
         return kWsaEInvalidArgument;
@@ -318,6 +328,7 @@ TL_MSABI int tl_WSAStartup(const std::uint16_t version_requested, void* data) no
 }
 
 TL_MSABI int tl_WSACleanup() noexcept {
+    trace_ws2_call("WSACleanup", "");
     g_wsa_last_error = 0;
     return 0;
 }
@@ -328,6 +339,9 @@ TL_MSABI int tl_WSAGetLastError() noexcept {
 
 TL_MSABI std::uintptr_t tl_socket(const int address_family, const int type,
                                   const int protocol) noexcept {
+    trace_ws2_call("socket", "af=" + std::to_string(address_family) +
+                               ",type=" + std::to_string(type) +
+                               ",protocol=" + std::to_string(protocol));
     if (address_family != kAfInet || (type != kSockStream && type != kSockDgram) ||
         (protocol != 0 && protocol != kIpProtoTcp && protocol != kIpProtoUdp)) {
         g_wsa_last_error = kWsaEInvalidArgument;
@@ -354,6 +368,7 @@ TL_MSABI std::uintptr_t tl_socket(const int address_family, const int type,
 }
 
 TL_MSABI int tl_closesocket(const std::uintptr_t socket) noexcept {
+    trace_ws2_call("closesocket", "socket=" + std::to_string(socket));
     std::lock_guard<std::mutex> lock(g_sockets_mutex);
     SocketSlot* slot = find_socket(socket);
     if (slot == nullptr) {
@@ -434,6 +449,8 @@ TL_MSABI std::uintptr_t tl_accept(const std::uintptr_t socket, void* name,
 
 TL_MSABI int tl_connect(const std::uintptr_t socket, const void* name,
                         const int name_length) noexcept {
+    trace_ws2_call("connect", "socket=" + std::to_string(socket) +
+                                ",name-length=" + std::to_string(name_length));
     SocketSlot* slot = find_socket(socket);
     sockaddr_in address{};
     if (slot == nullptr) {
@@ -459,6 +476,8 @@ TL_MSABI int tl_connect(const std::uintptr_t socket, const void* name,
 
 TL_MSABI int tl_send(const std::uintptr_t socket, const char* buffer, const int length,
                      const int flags) noexcept {
+    trace_ws2_call("send", "socket=" + std::to_string(socket) +
+                            ",length=" + std::to_string(length));
     SocketSlot* slot = find_socket(socket);
     if (slot == nullptr || buffer == nullptr || length < 0 || flags != 0) {
         g_wsa_last_error = slot == nullptr ? kWsaENotSocket : kWsaEInvalidArgument;
@@ -487,6 +506,8 @@ TL_MSABI int tl_send(const std::uintptr_t socket, const char* buffer, const int 
 
 TL_MSABI int tl_recv(const std::uintptr_t socket, char* buffer, const int length,
                      const int flags) noexcept {
+    trace_ws2_call("recv", "socket=" + std::to_string(socket) +
+                            ",length=" + std::to_string(length));
     SocketSlot* slot = find_socket(socket);
     if (slot == nullptr || buffer == nullptr || length < 0 || flags != 0) {
         g_wsa_last_error = slot == nullptr ? kWsaENotSocket : kWsaEInvalidArgument;
@@ -616,6 +637,8 @@ TL_MSABI int tl_shutdown(const std::uintptr_t socket, const int how) noexcept {
 
 TL_MSABI int tl_getaddrinfo(const char* node, const char* service, const void* hints,
                             void* result) noexcept {
+    trace_ws2_call("getaddrinfo", std::string{"node="} + (node != nullptr ? "present" : "null") +
+                                      ",service=" + (service != nullptr ? "present" : "null"));
     std::string guest_node;
     std::string guest_service;
     if (result == nullptr ||
@@ -1176,6 +1199,8 @@ TL_MSABI int tl_getsockopt(const std::uintptr_t socket, const int level, const i
 
 TL_MSABI int tl_WSAAsyncSelect(const std::uintptr_t socket, void* const hwnd,
                               const unsigned int msg, const long events) noexcept {
+    trace_ws2_call("WSAAsyncSelect", "socket=" + std::to_string(socket) +
+                                     ",events=" + std::to_string(events));
     (void)socket;
     (void)hwnd;
     (void)msg;
@@ -1186,6 +1211,8 @@ TL_MSABI int tl_WSAAsyncSelect(const std::uintptr_t socket, void* const hwnd,
 
 TL_MSABI int tl_WSAEventSelect(const std::uintptr_t socket, void* const event_handle,
                               const long network_events) noexcept {
+    trace_ws2_call("WSAEventSelect", "socket=" + std::to_string(socket) +
+                                     ",events=" + std::to_string(network_events));
     std::lock_guard<std::mutex> lock(g_sockets_mutex);
     SocketSlot* const slot = find_socket(socket);
     WsaEventSlot* const event = event_handle != nullptr ? find_wsa_event(event_handle) : nullptr;

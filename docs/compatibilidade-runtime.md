@@ -184,6 +184,12 @@ implementação suporta apenas o subconjunto IPv4 documentado. A regressão dos
 buffers de payload/opções pode ser pulada quando o sandbox não permite criar
 sockets UDP locais.
 
+As entradas de `WSAStartup`, `getaddrinfo`, `socket`, `connect`, `send`, `recv`,
+`WSAAsyncSelect` e `WSAEventSelect` emitem um evento de trace com
+`phase="call"`, `module="WS2_32.dll"` e parâmetros não sensíveis. Esse evento
+serve para separar import resolvido de API efetivamente chamada; não altera o
+contrato de rede nem libera acesso externo.
+
 ## GUI mínima (Fase 7)
 
 O protótipo registra um subconjunto de `USER32.dll` e `GDI32.dll` e usa X11

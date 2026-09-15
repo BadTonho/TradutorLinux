@@ -571,16 +571,29 @@ int main(const int argc, char** const argv) {
     if (!server_exited) stop_process(server.pid);
     stop_process(xvfb.pid);
 
+    const auto has_ws2_call = [&runtime_result](const char* const symbol) {
+        return runtime_result.trace.find(std::string{symbol} + " symbol=\"" + symbol +
+                                         "\" phase=\"call\"") != std::string::npos;
+    };
+    const bool wsa_started = has_ws2_call("WSAStartup");
+    const bool network_attempted = has_ws2_call("getaddrinfo") ||
+                                   has_ws2_call("socket") ||
+                                   has_ws2_call("connect");
+    const bool network_exchanged = has_ws2_call("socket") && has_ws2_call("connect") &&
+                                   has_ws2_call("send") && has_ws2_call("recv");
+
     const bool successful_exchange = configured && session_reached && banner_received &&
                     server_result_available &&
                     server_exited &&
                     WIFEXITED(server_status) && WEXITSTATUS(server_status) == 0 &&
-                    has_controlled_exit(runtime_result) && runtime_result.stdout_text.empty();
+                    has_controlled_exit(runtime_result) && network_exchanged &&
+                    runtime_result.stdout_text.empty();
     const bool controlled_limitation = configured && session_reached && !banner_received &&
                                        server_result_available &&
                                        server_exited && WIFEXITED(server_status) &&
                                        WEXITSTATUS(server_status) == 1 && runtime_result.exited &&
                                        runtime_result.exit_code == 72 &&
+                                       wsa_started && !network_attempted &&
                                        runtime_result.trace.find("category=\"guest-timeout\"") !=
                                            std::string::npos &&
                                        runtime_result.trace.find("guest-signal") == std::string::npos &&

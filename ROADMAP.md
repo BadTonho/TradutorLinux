@@ -819,6 +819,41 @@ O próximo alvo direto, após esta etapa, é instrumentar e validar o contrato d
 inicialização da sessão do PuTTY que precede a rede; a implementação de sockets
 não deve ser ampliada sem reproduzir uma chamada convidada correspondente.
 
+### R10 — Tornar observável a fronteira WinSock do fluxo PuTTY
+
+A investigação do PuTTY tinha uma ambiguidade operacional: os imports de
+`WS2_32.dll` eram resolvidos, mas o trace não distinguia uma API nunca chamada
+de uma API chamada e mal implementada. Isso impedia atribuir o timeout à fase
+de inicialização da sessão com evidência do runtime.
+
+- [x] registrar no trace a entrada de `WSAStartup`, `getaddrinfo`, `socket`,
+  `connect`, `send`, `recv`, `WSAAsyncSelect` e `WSAEventSelect`;
+- [x] proteger a fixture positiva `tl_dynamic_ws2.exe` com os eventos de
+  `WSAStartup`, `socket`, `closesocket` e `WSACleanup`;
+- [x] fazer o probe SSH local exigir `WSAStartup` e rejeitar como limitação
+  qualquer tentativa de `getaddrinfo`/`socket`/`connect` sem troca de dados;
+- [x] repetir o probe PuTTY e confirmar a ausência de syscalls de rede do
+  convidado com um listener TCP local.
+
+**Critério de aceite:** a fixture dinâmica passa com os eventos de fronteira;
+o PuTTY alcança a janela de sessão, registra `WSAStartup`, não registra
+`getaddrinfo`/`socket`/`connect`/`send`/`recv` e termina com `guest-timeout 72`
+como limitação controlada. Nenhum socket é implementado ou alterado nesta
+etapa.
+
+**Evidência 2026-09-15:** `putty_ssh_local_probe` passou no build `build/debug`
+(Rust OFF), agora verificando o contrato de diagnóstico. A fixture
+`tl_dynamic_ws2.exe` passou com acesso de rede controlado; sem essa permissão,
+o runtime rejeitou a syscall Linux com o erro esperado de ambiente. A captura
+`strace -f -e trace=network` do probe PuTTY mostrou somente o `socket`/`bind`/
+`listen` do listener do harness, sem `AF_INET` do convidado. O bloqueio seguinte
+continua sendo localizar a transição interna após a criação da janela de
+sessão; não há evidência para ampliar WinSock ou promover SSH.
+
+O próximo alvo é um smoke de transição da sessão que registre a última chamada
+GUI/worker antes do `GetMessageA` ocioso, mantendo o critério de não adicionar
+regras específicas do PuTTY ao runtime genérico.
+
 ## Fora desta rodada
 
 Não entram neste roadmap, por enquanto:

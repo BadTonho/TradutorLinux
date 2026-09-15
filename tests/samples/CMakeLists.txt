@@ -274,7 +274,8 @@ function(tl_add_pe_fixture target_name source_file manifest_file)
                     "-DEXPECTED_HEX=64796e6c6f61640a")
             elseif(target_name STREQUAL "tl_dynamic_ws2")
                 set(runtime_extra_args
-                    "-DEXPECTED_HEX=64796e616d69632d7773320a")
+                    "-DEXPECTED_HEX=64796e616d69632d7773320a"
+                    "-DREQUIRED_TRACE=WSAStartup,socket,closesocket,WSACleanup")
             elseif(target_name STREQUAL "tl_gui_dynamic_ws2")
                 set(runtime_extra_args
                     "-DEXPECTED_HEX=6775692d64796e616d69632d7773320a")
