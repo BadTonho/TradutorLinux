@@ -1090,6 +1090,43 @@ comportamento do runtime.
   `enqueue_function_json_trace` (`host-offset=0x3b`);
 - não foi adicionada API Win32, DLL, shim ou regra específica do PuTTY.
 
+### R17 — Auditar o efeito da instrumentação no bloqueio do PuTTY
+
+A R16 mostrou que o timeout não retorna do trampoline, mas o RIP hospedeiro
+variava entre funções do próprio diagnóstico. Esta etapa compara o mesmo smoke
+com trace textual e com `--trace-json`, sem mudar o comportamento do runtime,
+para separar custo de observabilidade da causa do bloqueio convidado.
+
+- [x] repetir o smoke PuTTY textual e JSON com o mesmo alvo, timeout e cenário
+  X11;
+- [x] capturar a sequência textual após a criação da janela de sessão e
+  confirmar a ausência de nova chamada Win32 ou de rede;
+- [x] medir o custo observado da instrumentação JSON, identificando o
+  resultado como amostra diagnóstica e não como benchmark;
+- [x] manter o timeout `guest-timeout 72` e a matriz sem promoção de suporte,
+  API nova ou shim específico.
+
+**Critério de aceite:** os dois modos devem reproduzir a mesma limitação
+controlada; a diferença de custo deve ser registrada sem ser confundida com a
+causa do bloqueio. O próximo diagnóstico deve voltar ao stack/código convidado
+ou a uma fixture que isole esse contrato.
+
+**Evidência 2026-09-15:** no modo textual, o smoke terminou em `10,15s` (`user
+8,17s`); no modo JSON terminou em `10,86s` (`user 11,57s`). A diferença é
+observável, mas foi medida em uma única execução de cada modo. Ambos alcançaram
+a janela `PuTTY`, não enviaram bytes e retornaram a limitação
+`guest-timeout 72`. O trace textual terminou em `CreateWindowExA class="PuTTY"`,
+`locale operation="oemcp"` e timeout, sem nova chamada Win32 ou de rede. O
+snapshot textual caiu em `__cyg_profile_func_exit`; no JSON, em uma função do
+gravador (`is_trace_json_enabled`/`enqueue_function_json_trace`, conforme a
+amostra), confirmando que o diagnóstico pode alterar o custo e o local do
+snapshot, mas não explica sozinho o bloqueio que também ocorre sem JSON.
+
+Conclusão: não há correção de API justificada nesta rodada. A próxima etapa
+direta é obter o contexto de retorno/stack do caminho hospedeiro e correlacioná-
+lo com o código convidado após a criação da janela, mantendo PuTTY como
+limitação controlada.
+
 ## Fora desta rodada
 
 Não entram neste roadmap, por enquanto:

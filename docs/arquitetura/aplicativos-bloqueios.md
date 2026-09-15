@@ -228,6 +228,30 @@ empacotadas e pacotes incompatíveis continuam sendo rejeitados antes de
 execução, e não há fallback, DLL ou tratamento específico de aplicativo no
 runtime.
 
+## Evidência E38 — custo da instrumentação no timeout do PuTTY
+
+Em 2026-09-15, o mesmo `putty_ssh_local_probe` foi repetido com o trace textual
+e com `TL_PUTTY_TRACE_JSON`. O modo textual terminou em `10,15s` (`user 8,17s`)
+e o modo JSON em `10,86s` (`user 11,57s`). É uma comparação diagnóstica de uma
+execução por modo, não um benchmark; ela mostra custo adicional mensurável da
+instrumentação de funções e da fila JSON.
+
+O resultado funcional foi idêntico: a configuração e a janela `PuTTY` foram
+alcançadas, o listener recebeu zero bytes e o processo terminou com a
+limitação controlada `guest-timeout 72`. No trace textual, depois de
+`CreateWindowExA class="PuTTY"`, a última chamada genérica foi
+`locale operation="oemcp"`; não houve nova chamada Win32 observável nem
+`getaddrinfo`/`socket`/`connect`/`send`/`recv` antes do timeout. O snapshot textual
+ficou em `__cyg_profile_func_exit`; no JSON, os snapshots ficaram em funções do
+próprio gravador, variando entre `is_trace_json_enabled` e
+`enqueue_function_json_trace`.
+
+Assim, `--trace-json` é uma observabilidade intrusiva em custo e pode mudar o
+local exato de uma amostra, mas não é causa suficiente do bloqueio: o mesmo
+timeout ocorre sem JSON. Nenhuma API Win32, DLL, shim ou regra específica do
+PuTTY foi adicionada. A investigação seguinte deve capturar o contexto de
+retorno/stack e correlacioná-lo com o código convidado após a criação da janela.
+
 ## Evidência D2 — cenários GUI
 
 O smoke externo do 7-Zip File Manager passou nos builds C++ OFF e Rust ON. Ele
