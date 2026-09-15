@@ -152,6 +152,23 @@ O resultado continua sendo limitação controlada (`guest-timeout 72`). O próxi
 trabalho deve localizar a transição interna da sessão antes do `GetMessageA`
 ocioso, sem introduzir chamadas sintéticas nem regras específicas do PuTTY.
 
+## Evidência E34 — transição GUI observável antes do message loop ocioso
+
+O runtime passou a registrar uma única entrada em estado ocioso por chamada
+bloqueante de `GetMessageA`, depois de esgotar filas internas, eventos nativos,
+timers e pintura pendente. Também registra o início e o retorno de
+`DispatchMessageA`. Assim, o trace permite localizar a última chamada GUI
+observável antes de o thread voltar ao polling nativo, sem publicar ponteiros
+do convidado nem alterar o comportamento da fila.
+
+O `runtime_gui_smoke` passou com essa regressão genérica, e o
+`putty_ssh_local_probe` passou exigindo um `DispatchMessageA` anterior à marca
+`GetMessageA status="idle" mechanism="native-poll"`. O PuTTY ainda alcança a
+janela de sessão, não chama `getaddrinfo`/`socket`/`connect`/`send`/`recv`, não
+envia bytes ao listener local e termina com `guest-timeout 72`. A evidência
+localiza o bloqueio depois do trabalho GUI observável e antes da rede; não
+justifica implementar um shim específico ou declarar SSH suportado.
+
 As matrizes nativas e de instalação controlada continuam separadas: 5/5
 execuções e 4/4 instalações passaram nos dois builds. PE32/x86, imagens
 empacotadas e pacotes incompatíveis continuam sendo rejeitados antes de

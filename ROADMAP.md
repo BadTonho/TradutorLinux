@@ -854,6 +854,42 @@ O próximo alvo é um smoke de transição da sessão que registre a última cha
 GUI/worker antes do `GetMessageA` ocioso, mantendo o critério de não adicionar
 regras específicas do PuTTY ao runtime genérico.
 
+### R11 — Registrar a transição da sessão para o `GetMessageA` ocioso
+
+Havia uma lacuna entre a janela de sessão do PuTTY e o timeout: o trace
+registrava a criação da GUI e a entrada em WinSock, mas não marcava o momento
+em que o thread convidado terminava o trabalho observável e voltava ao message
+loop. Sem essa fronteira, não era possível distinguir uma sessão parada no
+callback GUI de uma sessão que apenas aguardava eventos nativos.
+
+- [x] emitir uma marca única de `GetMessageA` ocioso por chamada bloqueante,
+  identificando o mecanismo de polling nativo e sem expor ponteiros convidados;
+- [x] registrar início e retorno de `DispatchMessageA` para que a última
+  chamada GUI observável antes da espera possa ser localizada no trace;
+- [x] fazer o smoke SSH local exigir um `DispatchMessageA` antes da transição
+  ociosa, tanto no caminho de limitação quanto em eventual troca positiva;
+- [x] manter a regressão genérica `runtime_gui_smoke` cobrindo dispatch e
+  entrada em espera, sem código específico do PuTTY no runtime.
+
+**Critério de aceite:** o trace deve conter
+`GetMessageA status="idle" mechanism="native-poll"` depois de uma chamada
+`DispatchMessageA`; o probe do PuTTY deve continuar classificando a ausência
+de `getaddrinfo`/`socket`/`connect`/`send`/`recv` como limitação controlada,
+sem alterar o contrato de WinSock.
+
+**Evidência 2026-09-15:** o build `build/debug` (Rust OFF) recompilou somente
+`tradutorlinux`, `runtime_gui_smoke` e `putty_ssh_smoke`. Os testes
+`putty_ssh_local_probe` e `runtime_gui_smoke` passaram 2/2 sob Xvfb, com a
+transição ordenada observada no trace. O PuTTY continua alcançando a janela de
+sessão, sem enviar bytes ao listener, e terminando com `guest-timeout 72`;
+isso localiza o limite depois do dispatch e antes da rede, mas não constitui
+suporte SSH nem justifica shim específico.
+
+O próximo alvo direto é isolar, por fixture ou trace já existente, o callback
+de inicialização que antecede essa espera; se não houver uma chamada Win32
+reproduzível, a limitação deve permanecer publicada em vez de receber uma
+implementação sintética.
+
 ## Fora desta rodada
 
 Não entram neste roadmap, por enquanto:

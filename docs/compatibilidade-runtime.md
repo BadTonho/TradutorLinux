@@ -190,6 +190,14 @@ As entradas de `WSAStartup`, `getaddrinfo`, `socket`, `connect`, `send`, `recv`,
 serve para separar import resolvido de API efetivamente chamada; não altera o
 contrato de rede nem libera acesso externo.
 
+No message loop, uma chamada bloqueante de `GetMessageA` emite uma única marca
+`symbol="GetMessageA" status="idle" mechanism="native-poll"` antes de dormir
+aguardando eventos nativos; o campo `window` informa apenas `all` ou
+`filtered`, nunca o endereço convidado. `DispatchMessageA` emite eventos de
+início e retorno com o número da mensagem e resultado escalar. Esses eventos
+servem para ordenar a última chamada GUI observável antes da espera e não
+alteram o despacho, a fila ou a semântica de bloqueio.
+
 ## GUI mínima (Fase 7)
 
 O protótipo registra um subconjunto de `USER32.dll` e `GDI32.dll` e usa X11
@@ -204,13 +212,13 @@ diretamente. Ele é experimental, não altera o subsistema de console e só acei
 | `USER32.dll` | `ShowWindow` | Suportado | Mostra/esconde a janela X11 |
 | `USER32.dll` | `UpdateWindow` | Suportado | Despacha `WM_PAINT` diretamente ao `WNDPROC` |
 | `USER32.dll` | `InvalidateRect` | Suportado no subconjunto | Valida o `RECT` opcional, enfileira um `WM_PAINT` por janela até a entrega e faz flush da superfície X11 projetada para filhos lógicos |
-| `USER32.dll` | `GetMessageA` | Suportado no subconjunto | Traduz eventos X11 para `WM_PAINT`/`WM_LBUTTONDOWN`/`WM_LBUTTONUP`/`WM_RBUTTONDOWN`/`WM_RBUTTONUP`/`WM_KEYDOWN`/`WM_KEYUP`/`WM_CLOSE`; o hit-test entrega mouse a filhos lógicos customizados com `HWND` e coordenadas locais, enquanto controles comuns sem `WNDPROC` preservam suas notificações no parent; um botão secundário só vira callback de bandeja quando a janela registrou `Shell_NotifyIconA/W`; entrega mensagens pendentes antes dos eventos X11, despacha `WM_TIMER` expirados e retorna `0` com `WM_QUIT` após `PostQuitMessage` |
+| `USER32.dll` | `GetMessageA` | Suportado no subconjunto | Traduz eventos X11 para `WM_PAINT`/`WM_LBUTTONDOWN`/`WM_LBUTTONUP`/`WM_RBUTTONDOWN`/`WM_RBUTTONUP`/`WM_KEYDOWN`/`WM_KEYUP`/`WM_CLOSE`; o hit-test entrega mouse a filhos lógicos customizados com `HWND` e coordenadas locais, enquanto controles comuns sem `WNDPROC` preservam suas notificações no parent; um botão secundário só vira callback de bandeja quando a janela registrou `Shell_NotifyIconA/W`; entrega mensagens pendentes antes dos eventos X11, despacha `WM_TIMER` expirados e retorna `0` com `WM_QUIT` após `PostQuitMessage`; quando precisa aguardar, emite uma marca única de estado ocioso por chamada com `mechanism="native-poll"` |
 | `USER32.dll` | `PeekMessageA/W` | Suportado no subconjunto | Polling não bloqueante de mensagens internas, cross-thread, eventos nativos do backend, timers expirados e pinturas pendentes; `PM_NOREMOVE` preserva a mensagem numa cache por janela e `PM_REMOVE` a remove. Filtros `wMsgFilterMin`/`wMsgFilterMax` ainda não são aplicados |
 | `USER32.dll` | `PostMessageA` / `PostMessageW` | Suportado no subconjunto | Thread principal enfileira diretamente; threads convidadas secundárias podem postar para um `HWND` registrado, e a mensagem é entregue pela fila do thread principal; a fila cross-thread é limitada a 4096 mensagens e não copia payload apontado por `lParam` |
 | `USER32.dll` | `TranslateMessage` | Suportado | Converte o `WM_KEYDOWN` mais recente em `WM_CHAR` com o caractere real (sem `WM_CHAR` para teclas sem caractere) |
 | `USER32.dll` | `SetTimer` | Suportado | Timer periódico por janela → `WM_TIMER`; só `lpTimerFunc == NULL` |
 | `USER32.dll` | `KillTimer` | Suportado | Remove um timer ativo |
-| `USER32.dll` | `DispatchMessageA` | Suportado | Invoca o `WNDPROC` do convidado (`TL_MSABI`, host→convidado) |
+| `USER32.dll` | `DispatchMessageA` | Suportado | Invoca o `WNDPROC` do convidado (`TL_MSABI`, host→convidado) e registra início/retorno no trace para diagnóstico de transição do message loop |
 | `USER32.dll` | `DefWindowProcA` | Suportado | `WM_CLOSE` → `DestroyWindow`; demais retornam `0` |
 | `USER32.dll` | `RegisterClassExW`/`CreateWindowExW`/`DefWindowProcW`/`GetMessageW`/`DispatchMessageW`/`SetWindowTextW`/`GetWindowTextW`/`FindWindowW`/`LoadCursorW`/`SendMessageW` etc. | Suportado | Wrappers para `A` via `wide_to_utf8`/`utf8_to_wide`; `RegisterClassExW` converte `WNDCLASSEXW` (80 bytes), `CreateWindowExW` converte classe/título, `SetWindowTextW`/`GetWindowTextW`/`GetWindowTextLengthW` convertem, `FindWindowW`/`SendMessageW`/`AppendMenuW` delegam |
 | `USER32.dll` | `GetClassInfoW` | Suportado no subconjunto | Consulta a tabela de classes registrada, preenche `WNDCLASSW` quando há saída válida e retorna `ERROR_CLASS_DOES_NOT_EXIST` (`141`) para classe ausente |

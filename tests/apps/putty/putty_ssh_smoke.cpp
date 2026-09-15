@@ -581,12 +581,24 @@ int main(const int argc, char** const argv) {
                                    has_ws2_call("connect");
     const bool network_exchanged = has_ws2_call("socket") && has_ws2_call("connect") &&
                                    has_ws2_call("send") && has_ws2_call("recv");
+    const std::string idle_marker =
+        "GetMessageA symbol=\"GetMessageA\" status=\"idle\" mechanism=\"native-poll\"";
+    const std::size_t idle_position = runtime_result.trace.find(idle_marker);
+    const std::size_t last_dispatch_before_idle =
+        idle_position == std::string::npos
+            ? std::string::npos
+            : runtime_result.trace.rfind("DispatchMessageA symbol=\"DispatchMessageA\"",
+                                         idle_position);
+    const bool session_transition_observed =
+        idle_position != std::string::npos && last_dispatch_before_idle != std::string::npos &&
+        last_dispatch_before_idle < idle_position;
 
     const bool successful_exchange = configured && session_reached && banner_received &&
                     server_result_available &&
                     server_exited &&
                     WIFEXITED(server_status) && WEXITSTATUS(server_status) == 0 &&
                     has_controlled_exit(runtime_result) && network_exchanged &&
+                    session_transition_observed &&
                     runtime_result.stdout_text.empty();
     const bool controlled_limitation = configured && session_reached && !banner_received &&
                                        server_result_available &&
@@ -594,6 +606,7 @@ int main(const int argc, char** const argv) {
                                        WEXITSTATUS(server_status) == 1 && runtime_result.exited &&
                                        runtime_result.exit_code == 72 &&
                                        wsa_started && !network_attempted &&
+                                       session_transition_observed &&
                                        runtime_result.trace.find("category=\"guest-timeout\"") !=
                                            std::string::npos &&
                                        runtime_result.trace.find("guest-signal") == std::string::npos &&
@@ -605,6 +618,7 @@ int main(const int argc, char** const argv) {
                   << " about-closed=" << about_closed
                   << " configuration=" << (configuration != 0)
                   << " configured=" << configured << " session=" << session_reached
+                  << " session-transition=" << session_transition_observed
                   << " banner=" << banner_received
                   << " server-exited=" << server_exited << " runtime-exited="
                   << runtime_result.exited << " runtime-timeout=" << runtime_result.timed_out

@@ -848,6 +848,16 @@ void trace_peek_message(const abi::GuestMsg& message, const std::uint32_t remove
     runtime_trace("PeekMessageA", fields, 4);
 }
 
+void trace_message_loop_idle(const void* const window) noexcept {
+    const std::array<diagnostics::TraceField, 4> fields{
+        diagnostics::TraceField{"symbol", "GetMessageA"},
+        diagnostics::TraceField{"status", "idle"},
+        diagnostics::TraceField{"mechanism", "native-poll"},
+        diagnostics::TraceField{"window", window == nullptr ? "all" : "filtered"},
+    };
+    runtime_trace("GetMessageA", fields, 4);
+}
+
 }  // namespace
 
 void clear_pending_native(WindowSlot& slot) noexcept {
@@ -918,6 +928,7 @@ TL_MSABI int tl_GetMessageA(void* const msg, const void* const window,
             return 1;
         }
     }
+    bool idle_traced = false;
     for (;;) {
         CrossThreadWindowMessage cross_thread_message{};
         while (take_cross_thread_window_message(window, cross_thread_message)) {
@@ -1116,6 +1127,10 @@ TL_MSABI int tl_GetMessageA(void* const msg, const void* const window,
             set_last_error(abi::kErrorSuccess);
             return 1;
         }
+        if (!idle_traced) {
+            trace_message_loop_idle(window);
+            idle_traced = true;
+        }
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
 }
@@ -1174,12 +1189,27 @@ TL_MSABI abi::Lresult tl_DispatchMessageA(const void* const msg) noexcept {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
+    const std::string message_id = std::to_string(message.message);
+    const std::array<diagnostics::TraceField, 4> begin_fields{
+        diagnostics::TraceField{"symbol", "DispatchMessageA"},
+        diagnostics::TraceField{"message", message_id},
+        diagnostics::TraceField{"phase", "call"},
+        diagnostics::TraceField{"status", "begin"},
+    };
+    runtime_trace("DispatchMessageA", begin_fields, 4);
     set_last_error(abi::kErrorSuccess);
     const abi::Lresult result = call_wndproc(slot->wndproc, message.hwnd, message.message,
                                              message.wparam, message.lparam);
     if (message.message == abi::kWmPaint) {
         flush_dialog_render();
     }
+    const std::array<diagnostics::TraceField, 4> end_fields{
+        diagnostics::TraceField{"symbol", "DispatchMessageA"},
+        diagnostics::TraceField{"message", message_id},
+        diagnostics::TraceField{"result", std::to_string(static_cast<long long>(result))},
+        diagnostics::TraceField{"status", "success"},
+    };
+    runtime_trace("DispatchMessageA", end_fields, 4);
     return result;
 }
 

@@ -563,7 +563,14 @@ int main(const int argc, char** argv) {
     };
     run_runtime(runtime, input, display, key_options);
     verify_run(work_dir, "key",
-               RunExpectations{3, {kWinRegisters[0]}, {kWinCreates[0]}, {kWinKeyChar}, {}});
+               RunExpectations{
+                   3,
+                   {kWinRegisters[0]},
+                   {kWinCreates[0]},
+                   {kWinKeyChar},
+                   {"DispatchMessageA symbol=\"DispatchMessageA\" message=\"",
+                    "GetMessageA symbol=\"GetMessageA\" status=\"idle\" "
+                    "mechanism=\"native-poll\" window=\"all\""}});
 
     if (!input2.empty()) {
         const RunOptions windows_options{
