@@ -1308,6 +1308,42 @@ por uma regressão estrutural. A próxima etapa só deve enviar um `KEXINIT` de
 servidor depois de definir listas de algoritmos, seleção e testes próprios;
 não avançar para chaves ou autenticação por inferência.
 
+### R23 — Enviar `SSH_MSG_KEXINIT` controlado do servidor
+
+Com o `KEXINIT` do cliente identificado, esta etapa acrescenta a resposta
+estrutural mínima do servidor. O fixture envia listas de algoritmos explícitas,
+cookie determinístico, `first_kex_packet_follows=false` e campo reservado zero,
+e encerra depois do pacote. Não há chave de host, seleção efetiva de
+algoritmos, criptografia, `KEXDH` ou autenticação.
+
+- [x] definir listas de KEX, chave de host, cifra, MAC e compressão para o
+  pacote controlado;
+- [x] construir o payload `SSH_MSG_KEXINIT` com strings contadas, padding e
+  alinhamento de 8 bytes;
+- [x] exigir que o servidor envie o `KEXINIT` somente após validar o pacote do
+  cliente e registrar o resultado no status do smoke;
+- [x] enviar o `SSH_MSG_DISCONNECT` depois da resposta e atualizar a matriz e
+  a evidência sem promover SSH criptográfico.
+
+**Critério de aceite:** o listener deve validar o banner, enviar
+`SSH_MSG_IGNORE`, receber o `SSH_MSG_KEXINIT` do cliente, enviar um
+`SSH_MSG_KEXINIT` estruturalmente válido e então encerrar com
+`SSH_MSG_DISCONNECT`. O smoke deve reportar `KEXINIT exchange reached`, manter
+o diálogo de erro e terminar com `guest-timeout 72`. Nenhuma chave privada,
+criptografia, autenticação ou regra específica do PuTTY pode ser adicionada.
+
+**Evidência 2026-09-15:** `putty_ssh_smoke` foi recompilado no `build/debug`.
+O `putty_ssh_local_probe` passou fora do sandbox com exit `0` do harness e
+reportou `KEXINIT exchange reached, guest-timeout 72`; o PuTTY aceitou o
+pacote controlado do servidor e o smoke manteve as verificações de
+`FD_READ`/`recv`/`FD_CLOSE` e do diálogo `PuTTY Fatal Error`. Não houve
+negociação de chaves nem suporte SSH geral.
+
+Conclusão: o enquadramento bidirecional de `KEXINIT` está protegido por uma
+regressão. A próxima etapa só deve tratar seleção de algoritmos e uma chave de
+host de teste depois de contrato, fixture e validação próprios; não avançar
+para troca de chaves ou autenticação por inferência.
+
 ## Fora desta rodada
 
 Não entram neste roadmap, por enquanto:

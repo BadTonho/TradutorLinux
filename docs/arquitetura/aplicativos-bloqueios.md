@@ -335,6 +335,21 @@ O `putty_ssh_local_probe` foi recompilado e passou fora do sandbox, reportando
 `KEXINIT` de servidor, não negocia algoritmos e não implementa criptografia,
 autenticação ou regra específica do PuTTY; SSH geral continua sem suporte.
 
+## Evidência E44 — `SSH_MSG_KEXINIT` controlado do servidor
+
+Depois de validar o `SSH_MSG_KEXINIT` do cliente, o fixture passou a enviar um
+`SSH_MSG_KEXINIT` próprio com listas explícitas de KEX, chave de host, cifra,
+MAC e compressão. O pacote usa strings contadas, cookie controlado,
+`first_kex_packet_follows=false`, campo reservado zero e padding alinhado; em
+seguida o listener envia `SSH_MSG_DISCONNECT`.
+
+O `putty_ssh_local_probe` foi recompilado e passou fora do sandbox, reportando
+`KEXINIT exchange reached`, mantendo `FD_READ`, `recv`, `FD_CLOSE`, o diálogo
+`PuTTY Fatal Error` e a limitação `guest-timeout 72`. Isso não constitui
+negociação criptográfica: o fixture não possui chave de host, não seleciona
+algoritmos efetivamente, não envia `KEXDH` e não implementa autenticação ou
+regra específica do PuTTY.
+
 ## Evidência D2 — cenários GUI
 
 O smoke externo do 7-Zip File Manager passou nos builds C++ OFF e Rust ON. Ele

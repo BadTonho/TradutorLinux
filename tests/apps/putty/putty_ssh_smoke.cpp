@@ -423,6 +423,44 @@ template <std::size_t PayloadSize, std::size_t PaddingLength>
     return payload_end - offset == 5U;
 }
 
+[[nodiscard]] bool send_controlled_kexinit(const int client) {
+    constexpr std::array<std::string_view, 10> name_lists{
+        "diffie-hellman-group14-sha256",
+        "rsa-sha2-512,rsa-sha2-256,ssh-rsa",
+        "aes128-ctr",
+        "aes128-ctr",
+        "hmac-sha2-256",
+        "hmac-sha2-256",
+        "none",
+        "none",
+        "",
+        "",
+    };
+    constexpr std::size_t name_lists_size = [&] {
+        std::size_t size = 0;
+        for (const std::string_view name_list : name_lists) size += 4U + name_list.size();
+        return size;
+    }();
+    constexpr std::size_t payload_size = 1U + 16U + name_lists_size + 1U + 4U;
+
+    std::array<std::uint8_t, payload_size> payload{};
+    payload[0] = 20U;
+    for (std::size_t index = 0; index < 16U; ++index) {
+        payload[1U + index] = static_cast<std::uint8_t>(0xA0U + index);
+    }
+
+    std::size_t offset = 17U;
+    for (const std::string_view name_list : name_lists) {
+        write_u32_be(payload.data() + offset, static_cast<std::uint32_t>(name_list.size()));
+        offset += 4U;
+        std::memcpy(payload.data() + offset, name_list.data(), name_list.size());
+        offset += name_list.size();
+    }
+    payload[offset++] = 0U;
+    write_u32_be(payload.data() + offset, 0U);
+    return send_ssh_packet< payload_size, 9U >(client, payload);
+}
+
 [[nodiscard]] ServerProcess start_server(int& listener_out) {
     listener_out = ::socket(AF_INET, SOCK_STREAM, 0);
     if (listener_out < 0) return {};
@@ -468,6 +506,7 @@ template <std::size_t PayloadSize, std::size_t PaddingLength>
         const int ready = ::poll(&listener_descriptor, 1, 10000);
         bool valid_banner = false;
         bool valid_kexinit = false;
+        bool server_kexinit_sent = false;
         if (ready > 0 && (listener_descriptor.revents & POLLIN) != 0) {
             const int client = ::accept(listener_out, nullptr, nullptr);
             if (client >= 0) {
@@ -494,16 +533,18 @@ template <std::size_t PayloadSize, std::size_t PaddingLength>
                 (void)send_controlled_ignore(client);
                 std::vector<std::uint8_t> packet;
                 valid_kexinit = receive_ssh_packet(client, packet) && is_kexinit_packet(packet);
+                server_kexinit_sent = valid_kexinit && send_controlled_kexinit(client);
                 (void)send_controlled_disconnect(client);
                 ::close(client);
             }
         }
         const unsigned char result = static_cast<unsigned char>((valid_banner ? 1U : 0U) |
-                                                                 (valid_kexinit ? 2U : 0U));
+                                                                 (valid_kexinit ? 2U : 0U) |
+                                                                 (server_kexinit_sent ? 4U : 0U));
         (void)::write(status_pipe[1], &result, sizeof(result));
         ::close(status_pipe[1]);
         ::close(listener_out);
-        ::_exit(valid_banner && valid_kexinit ? 0 : 1);
+        ::_exit(valid_banner && valid_kexinit && server_kexinit_sent ? 0 : 1);
     }
 
     ::close(status_pipe[1]);
@@ -586,8 +627,10 @@ template <std::size_t PayloadSize, std::size_t PaddingLength>
 }
 
 [[nodiscard]] bool take_server_result(ServerProcess& server, const int timeout_ms,
-                                       bool* const valid_banner, bool* const valid_kexinit) {
-    if (valid_banner == nullptr || valid_kexinit == nullptr || server.status_fd < 0) return false;
+                                       bool* const valid_banner, bool* const valid_kexinit,
+                                       bool* const server_kexinit_sent) {
+    if (valid_banner == nullptr || valid_kexinit == nullptr || server_kexinit_sent == nullptr ||
+        server.status_fd < 0) return false;
     struct pollfd descriptor{server.status_fd, POLLIN | POLLHUP, 0};
     if (::poll(&descriptor, 1, timeout_ms) <= 0) return false;
     unsigned char result = 0;
@@ -598,6 +641,7 @@ template <std::size_t PayloadSize, std::size_t PaddingLength>
     if (!read_ok) return false;
     *valid_banner = (result & 1U) != 0U;
     *valid_kexinit = (result & 2U) != 0U;
+    *server_kexinit_sent = (result & 4U) != 0U;
     return true;
 }
 
@@ -684,6 +728,7 @@ int main(const int argc, char** const argv) {
     bool session_reached = false;
     bool banner_received = false;
     bool kexinit_received = false;
+    bool server_kexinit_sent = false;
     bool server_result_available = false;
     bool controlled_dialog_observed = false;
     if (configured) {
@@ -692,7 +737,8 @@ int main(const int argc, char** const argv) {
                 session_reached = find_window_by_name(display, DefaultRootWindow(display), "PuTTY") != 0;
             }
             server_result_available =
-                take_server_result(server, 100, &banner_received, &kexinit_received);
+                take_server_result(server, 100, &banner_received, &kexinit_received,
+                                   &server_kexinit_sent);
             if (server_result_available) break;
             std::this_thread::sleep_for(50ms);
         }
@@ -713,7 +759,8 @@ int main(const int argc, char** const argv) {
     const RuntimeResult runtime_result = collect_runtime(runtime_pid, trace_path, stdout_path);
     if (!server_result_available) {
         server_result_available =
-            take_server_result(server, 100, &banner_received, &kexinit_received);
+            take_server_result(server, 100, &banner_received, &kexinit_received,
+                               &server_kexinit_sent);
     }
     int server_status = 0;
     const bool server_exited = wait_for_exit(server.pid, 3000ms, &server_status);
@@ -786,7 +833,8 @@ int main(const int argc, char** const argv) {
                     server_result_available &&
                     server_exited &&
                     WIFEXITED(server_status) && WEXITSTATUS(server_status) == 0 &&
-                    kexinit_received && has_controlled_exit(runtime_result) && network_exchanged &&
+                    kexinit_received && server_kexinit_sent &&
+                    has_controlled_exit(runtime_result) && network_exchanged &&
                     runtime_result.stdout_text.empty();
     const bool controlled_limitation = configured && session_reached && !banner_received &&
                                        server_result_available &&
@@ -801,6 +849,7 @@ int main(const int argc, char** const argv) {
                                        runtime_result.stdout_text.empty();
     const bool kexinit_exchange_limitation = configured && session_reached && banner_received &&
                                              kexinit_received &&
+                                             server_kexinit_sent &&
                                              server_result_available && server_exited &&
                                              WIFEXITED(server_status) &&
                                              WEXITSTATUS(server_status) == 0 &&
@@ -830,6 +879,7 @@ int main(const int argc, char** const argv) {
                   << " async-close=" << async_close_notified
                   << " controlled-dialog=" << controlled_dialog_observed
                   << " banner=" << banner_received << " kexinit=" << kexinit_received
+                  << " server-kexinit=" << server_kexinit_sent
                   << " server-exited=" << server_exited << " runtime-exited="
                   << runtime_result.exited << " runtime-timeout=" << runtime_result.timed_out
                   << " runtime-exit=" << runtime_result.exit_code << '\n';
@@ -844,7 +894,7 @@ int main(const int argc, char** const argv) {
     if (successful_exchange) {
         std::cout << "PuTTY SSH local version exchange and controlled termination: ok\n";
     } else if (kexinit_exchange_limitation) {
-        std::cout << "PuTTY SSH local probe: KEXINIT observed, "
+        std::cout << "PuTTY SSH local probe: KEXINIT exchange reached, "
                      "guest-timeout 72 (limitation recorded)\n";
     } else {
         std::cout << "PuTTY SSH local probe: configuration reached, no bytes sent, "
