@@ -1273,6 +1273,41 @@ sequência. A próxima etapa direta exige um contrato próprio para a primeira
 mensagem de KEX ou outra chamada genérica observada; não implementar KEX,
 chaves ou autenticação por inferência.
 
+### R22 — Observar e validar o `SSH_MSG_KEXINIT` do PuTTY
+
+O R21 fechava a conexão depois de enviar `SSH_MSG_IGNORE`, impedindo observar
+qual mensagem binária o cliente emitia em seguida. Esta etapa mantém o pacote
+de ignorar, aguarda o primeiro pacote do cliente e valida somente o contrato
+estrutural de `SSH_MSG_KEXINIT`: tipo, cookie, dez name-lists, flag booleana e
+campo reservado. O fixture não envia um `KEXINIT` de servidor nem negocia
+algoritmos; a etapa é uma observação delimitada, não uma implementação de KEX.
+
+- [x] preservar bytes do cliente após o banner sem descartar dados binários;
+- [x] receber um pacote SSH com limites de tamanho, padding e leitura exata;
+- [x] validar a estrutura de `SSH_MSG_KEXINIT` e publicar o resultado no
+  status do servidor do smoke;
+- [x] enviar o `SSH_MSG_DISCONNECT` somente depois da observação e atualizar a
+  matriz e a evidência sem promover SSH completo.
+
+**Critério de aceite:** o listener deve validar o banner, enviar
+`SSH_MSG_IGNORE`, receber um `SSH_MSG_KEXINIT` estruturalmente válido do
+cliente e então enviar `SSH_MSG_DISCONNECT`. O smoke deve registrar
+`KEXINIT observed`, observar o diálogo de erro e terminar com
+`guest-timeout 72`. Nenhuma API nova do runtime, criptografia, autenticação ou
+regra específica do PuTTY pode ser adicionada.
+
+**Evidência 2026-09-15:** `putty_ssh_smoke` foi recompilado no `build/debug`.
+O `putty_ssh_local_probe` passou fora do sandbox com exit `0` do harness e
+reportou `KEXINIT observed, guest-timeout 72`; o parser do listener aceitou o
+pacote enviado pelo PuTTY, e o smoke manteve as verificações de
+`FD_READ`/`recv`/`FD_CLOSE` e do diálogo `PuTTY Fatal Error`. Não houve
+negociação de chaves nem suporte SSH geral.
+
+Conclusão: a primeira mensagem de KEX do cliente está identificada e protegida
+por uma regressão estrutural. A próxima etapa só deve enviar um `KEXINIT` de
+servidor depois de definir listas de algoritmos, seleção e testes próprios;
+não avançar para chaves ou autenticação por inferência.
+
 ## Fora desta rodada
 
 Não entram neste roadmap, por enquanto:

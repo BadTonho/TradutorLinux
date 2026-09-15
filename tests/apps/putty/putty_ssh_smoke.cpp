@@ -367,6 +367,62 @@ template <std::size_t PayloadSize, std::size_t PaddingLength>
     return send_ssh_packet< payload_length, 5U >(client, payload);
 }
 
+[[nodiscard]] std::uint32_t read_u32_be(const std::uint8_t* const source) {
+    return (static_cast<std::uint32_t>(source[0]) << 24U) |
+           (static_cast<std::uint32_t>(source[1]) << 16U) |
+           (static_cast<std::uint32_t>(source[2]) << 8U) |
+           static_cast<std::uint32_t>(source[3]);
+}
+
+[[nodiscard]] bool receive_exact(const int client, std::uint8_t* const destination,
+                                  const std::size_t size,
+                                  const std::chrono::steady_clock::time_point deadline) {
+    std::size_t received = 0;
+    while (received < size && std::chrono::steady_clock::now() < deadline) {
+        struct pollfd descriptor{client, POLLIN, 0};
+        if (::poll(&descriptor, 1, 100) <= 0) continue;
+        if ((descriptor.revents & POLLIN) == 0) return false;
+        const ::ssize_t count = ::recv(client, destination + received, size - received, 0);
+        if (count <= 0) return false;
+        received += static_cast<std::size_t>(count);
+    }
+    return received == size;
+}
+
+[[nodiscard]] bool receive_ssh_packet(const int client, std::vector<std::uint8_t>& packet) {
+    std::array<std::uint8_t, 4> header{};
+    const auto deadline = std::chrono::steady_clock::now() + 3s;
+    if (!receive_exact(client, header.data(), header.size(), deadline)) return false;
+
+    constexpr std::uint32_t maximum_packet_length = 1024U * 1024U;
+    const std::uint32_t packet_length = read_u32_be(header.data());
+    if (packet_length < 2U || packet_length > maximum_packet_length) return false;
+    packet.resize(packet_length);
+    if (!receive_exact(client, packet.data(), packet.size(), deadline)) return false;
+
+    const std::size_t padding_length = packet[0];
+    return padding_length >= 4U && padding_length + 2U <= packet.size();
+}
+
+[[nodiscard]] bool is_kexinit_packet(const std::vector<std::uint8_t>& packet) {
+    if (packet.size() < 2U || packet[1] != 20U) return false;
+
+    const std::size_t payload_end = packet.size() - packet[0];
+    std::size_t offset = 2U;
+    if (payload_end < offset + 16U) return false;
+    offset += 16U;
+
+    for (int name_list = 0; name_list < 10; ++name_list) {
+        if (payload_end - offset < 4U) return false;
+        const std::size_t length = read_u32_be(packet.data() + offset);
+        offset += 4U;
+        if (length > payload_end - offset) return false;
+        offset += length;
+    }
+
+    return payload_end - offset == 5U;
+}
+
 [[nodiscard]] ServerProcess start_server(int& listener_out) {
     listener_out = ::socket(AF_INET, SOCK_STREAM, 0);
     if (listener_out < 0) return {};
@@ -411,6 +467,7 @@ template <std::size_t PayloadSize, std::size_t PaddingLength>
         struct pollfd listener_descriptor{listener_out, POLLIN, 0};
         const int ready = ::poll(&listener_descriptor, 1, 10000);
         bool valid_banner = false;
+        bool valid_kexinit = false;
         if (ready > 0 && (listener_descriptor.revents & POLLIN) != 0) {
             const int client = ::accept(listener_out, nullptr, nullptr);
             if (client >= 0) {
@@ -421,8 +478,7 @@ template <std::size_t PayloadSize, std::size_t PaddingLength>
                        std::chrono::steady_clock::now() < deadline) {
                     struct pollfd client_descriptor{client, POLLIN, 0};
                     if (::poll(&client_descriptor, 1, 100) <= 0) continue;
-                    const ::ssize_t count = ::recv(client, buffer + used,
-                                                   sizeof(buffer) - 1U - used, 0);
+                    const ::ssize_t count = ::recv(client, buffer + used, 1U, 0);
                     if (count <= 0) break;
                     used += static_cast<std::size_t>(count);
                     buffer[used] = '\0';
@@ -436,15 +492,18 @@ template <std::size_t PayloadSize, std::size_t PaddingLength>
                 constexpr std::string_view response = "SSH-2.0-TLProbe_1.0\r\n";
                 (void)::send(client, response.data(), response.size(), MSG_NOSIGNAL);
                 (void)send_controlled_ignore(client);
+                std::vector<std::uint8_t> packet;
+                valid_kexinit = receive_ssh_packet(client, packet) && is_kexinit_packet(packet);
                 (void)send_controlled_disconnect(client);
                 ::close(client);
             }
         }
-        const unsigned char result = valid_banner ? 1U : 0U;
+        const unsigned char result = static_cast<unsigned char>((valid_banner ? 1U : 0U) |
+                                                                 (valid_kexinit ? 2U : 0U));
         (void)::write(status_pipe[1], &result, sizeof(result));
         ::close(status_pipe[1]);
         ::close(listener_out);
-        ::_exit(valid_banner ? 0 : 1);
+        ::_exit(valid_banner && valid_kexinit ? 0 : 1);
     }
 
     ::close(status_pipe[1]);
@@ -527,8 +586,8 @@ template <std::size_t PayloadSize, std::size_t PaddingLength>
 }
 
 [[nodiscard]] bool take_server_result(ServerProcess& server, const int timeout_ms,
-                                       bool* const valid) {
-    if (valid == nullptr || server.status_fd < 0) return false;
+                                       bool* const valid_banner, bool* const valid_kexinit) {
+    if (valid_banner == nullptr || valid_kexinit == nullptr || server.status_fd < 0) return false;
     struct pollfd descriptor{server.status_fd, POLLIN | POLLHUP, 0};
     if (::poll(&descriptor, 1, timeout_ms) <= 0) return false;
     unsigned char result = 0;
@@ -537,7 +596,8 @@ template <std::size_t PayloadSize, std::size_t PaddingLength>
     ::close(server.status_fd);
     server.status_fd = -1;
     if (!read_ok) return false;
-    *valid = result == 1U;
+    *valid_banner = (result & 1U) != 0U;
+    *valid_kexinit = (result & 2U) != 0U;
     return true;
 }
 
@@ -623,6 +683,7 @@ int main(const int argc, char** const argv) {
 
     bool session_reached = false;
     bool banner_received = false;
+    bool kexinit_received = false;
     bool server_result_available = false;
     bool controlled_dialog_observed = false;
     if (configured) {
@@ -630,7 +691,8 @@ int main(const int argc, char** const argv) {
             if (!session_reached) {
                 session_reached = find_window_by_name(display, DefaultRootWindow(display), "PuTTY") != 0;
             }
-            server_result_available = take_server_result(server, 100, &banner_received);
+            server_result_available =
+                take_server_result(server, 100, &banner_received, &kexinit_received);
             if (server_result_available) break;
             std::this_thread::sleep_for(50ms);
         }
@@ -650,7 +712,8 @@ int main(const int argc, char** const argv) {
 
     const RuntimeResult runtime_result = collect_runtime(runtime_pid, trace_path, stdout_path);
     if (!server_result_available) {
-        server_result_available = take_server_result(server, 100, &banner_received);
+        server_result_available =
+            take_server_result(server, 100, &banner_received, &kexinit_received);
     }
     int server_status = 0;
     const bool server_exited = wait_for_exit(server.pid, 3000ms, &server_status);
@@ -723,7 +786,7 @@ int main(const int argc, char** const argv) {
                     server_result_available &&
                     server_exited &&
                     WIFEXITED(server_status) && WEXITSTATUS(server_status) == 0 &&
-                    has_controlled_exit(runtime_result) && network_exchanged &&
+                    kexinit_received && has_controlled_exit(runtime_result) && network_exchanged &&
                     runtime_result.stdout_text.empty();
     const bool controlled_limitation = configured && session_reached && !banner_received &&
                                        server_result_available &&
@@ -736,7 +799,8 @@ int main(const int argc, char** const argv) {
                                            std::string::npos &&
                                        runtime_result.trace.find("guest-signal") == std::string::npos &&
                                        runtime_result.stdout_text.empty();
-    const bool banner_exchange_limitation = configured && session_reached && banner_received &&
+    const bool kexinit_exchange_limitation = configured && session_reached && banner_received &&
+                                             kexinit_received &&
                                              server_result_available && server_exited &&
                                              WIFEXITED(server_status) &&
                                              WEXITSTATUS(server_status) == 0 &&
@@ -752,7 +816,7 @@ int main(const int argc, char** const argv) {
                                              runtime_result.trace.find("guest-signal") ==
                                                  std::string::npos &&
                                              runtime_result.stdout_text.empty();
-    const bool ok = successful_exchange || controlled_limitation || banner_exchange_limitation;
+    const bool ok = successful_exchange || controlled_limitation || kexinit_exchange_limitation;
     if (!ok) {
         std::cerr << "smoke SSH local do PuTTY falhou em " << staging << '\n'
                   << "display-open=" << display_open << " about-found=" << about_found
@@ -762,10 +826,10 @@ int main(const int argc, char** const argv) {
                   << " message-loop-before-session=" << message_loop_reached_before_session
                   << " delete-menu=" << delete_menu_observed
                   << " session-init-stalled=" << session_initialization_stalled
-                  << " banner-exchange-limitation=" << banner_exchange_limitation
+                  << " kexinit-exchange-limitation=" << kexinit_exchange_limitation
                   << " async-close=" << async_close_notified
                   << " controlled-dialog=" << controlled_dialog_observed
-                  << " banner=" << banner_received
+                  << " banner=" << banner_received << " kexinit=" << kexinit_received
                   << " server-exited=" << server_exited << " runtime-exited="
                   << runtime_result.exited << " runtime-timeout=" << runtime_result.timed_out
                   << " runtime-exit=" << runtime_result.exit_code << '\n';
@@ -779,8 +843,8 @@ int main(const int argc, char** const argv) {
 
     if (successful_exchange) {
         std::cout << "PuTTY SSH local version exchange and controlled termination: ok\n";
-    } else if (banner_exchange_limitation) {
-        std::cout << "PuTTY SSH local probe: banner exchange reached, "
+    } else if (kexinit_exchange_limitation) {
+        std::cout << "PuTTY SSH local probe: KEXINIT observed, "
                      "guest-timeout 72 (limitation recorded)\n";
     } else {
         std::cout << "PuTTY SSH local probe: configuration reached, no bytes sent, "

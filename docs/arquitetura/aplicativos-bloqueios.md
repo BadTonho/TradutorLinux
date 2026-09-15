@@ -320,6 +320,21 @@ o diálogo `PuTTY Fatal Error` e o processo terminou com a limitação controlad
 `guest-timeout 72`. A sequência valida somente o transporte e o processamento
 controlado dessas mensagens; PuTTY e SSH geral continuam sem suporte declarado.
 
+## Evidência E43 — `SSH_MSG_KEXINIT` observado no PuTTY
+
+O fixture passou a preservar o fluxo binário depois do banner, enviar
+`SSH_MSG_IGNORE` e aguardar o primeiro pacote emitido pelo cliente. O listener
+recebeu e validou um `SSH_MSG_KEXINIT` estruturalmente completo: tipo 20,
+cookie, dez name-lists, flag `first_kex_packet_follows` e campo reservado,
+com limites de tamanho, padding e leitura exata. Depois da observação, enviou
+o `SSH_MSG_DISCONNECT` controlado.
+
+O `putty_ssh_local_probe` foi recompilado e passou fora do sandbox, reportando
+`KEXINIT observed` e mantendo `FD_READ`, `recv`, `FD_CLOSE`, o diálogo
+`PuTTY Fatal Error` e a limitação `guest-timeout 72`. O fixture não envia um
+`KEXINIT` de servidor, não negocia algoritmos e não implementa criptografia,
+autenticação ou regra específica do PuTTY; SSH geral continua sem suporte.
+
 ## Evidência D2 — cenários GUI
 
 O smoke externo do 7-Zip File Manager passou nos builds C++ OFF e Rust ON. Ele
