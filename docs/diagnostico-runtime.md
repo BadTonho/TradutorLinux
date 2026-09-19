@@ -411,7 +411,9 @@ No FH4, a seleção host-side registra `detail="fh4-catch-typed"` ou
 com o `PMD` validado e publicado no slot do frame; cópias por valor fora do
 subconjunto simples são rejeitadas com `unsupported-fh4-catch-copy`. Durante o
 unwind FH4 ainda não executado, o diagnóstico é
-`detail="fh4-termination-cleanup"`; cadeias com mais de quatro ações recebem
+`detail="fh4-termination-cleanup"`; o plano de execução delimita os cleanups até
+o `target_state` (`try_low` do bloco try associado ao catch funclet) para não destruir
+objetos vivos fora do bloco try; cadeias com mais de 16 ações recebem
 `fh4-cleanup-limit`, cadeias vazias/incompatíveis recebem
 `no-supported-fh4-cleanup` e mapas inválidos são rejeitados como
 `invalid-fh4-unwind-map`, sempre seguindo para a falha controlada. A

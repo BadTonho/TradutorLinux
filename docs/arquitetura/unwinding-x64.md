@@ -94,11 +94,13 @@ simples sem copy constructor e até 4096 bytes. O wrapper guest
 A cadeia de ações do frame-alvo v3 é percorrida com limite de 64 estados,
 rejeição de ciclos e `RVA=0`/`0xffffffff` como fim sem ação; cada funclet
 retorna pelo trampoline para o próximo cleanup ou para o catch. Cleanups FH4 do
-frame-alvo são executados somente quando a cadeia tem até quatro ações com
-destino e argumentos validados; cadeias maiores seguem ao diagnóstico
-controlado `fh4-cleanup-limit`, e mapas cíclicos/inválidos são rejeitados
-como `invalid-fh4-unwind-map`. Cleanups de frames intermediários, copy
-constructors arbitrários, rethrow e
+frame-alvo são executados com limite seguro estendido de até 16 ações com
+destino e argumentos validados; o plano de destruição delimita o encadeamento
+até o `target_state` (`try_low` do bloco try associado ao catch funclet),
+evitando a destruição indevida de variáveis locais fora do bloco try.
+Cadeias maiores seguem ao diagnóstico controlado `fh4-cleanup-limit`, e mapas
+cíclicos/inválidos são rejeitados como `invalid-fh4-unwind-map`. Cleanups de frames
+intermediários, copy constructors arbitrários, rethrow e
 `__CxxFrameHandler` legado seguem a busca controlada e não são declarados
 suportados. Uma nova exceção C++ durante um `catch` ou cleanup ativo é rejeitada
 com `nested-cxx-exception-unsupported`; isso evita redirecionar a exceção ao
@@ -184,7 +186,8 @@ nativo da ABI MSVC, cleanups de frames intermediários e conversões de tipo
 continuam fora do contrato antes de repetir o cenário de extração do WinRAR.
 
 O teste real `notepadpp_fh4_headless_smoke` executa o `notepad++.exe` do corpus
-sem servidor gráfico, confirma os catches FH4 tipados, ausência de
-`guest-signal`/`guest-timeout` e saída convidada `ExitProcess(0)`. O smoke GUI
-`notepadpp_real_gui_smoke` permanece separado e pode ser ignorado quando o
-Xvfb não consegue abrir um display.
+sem servidor gráfico, confirma os catches FH4 tipados e a execução dos cleanups
+do frame-alvo (`fh4-termination-cleanup`), a ausência de `fh4-cleanup-limit`, a
+ausência de `guest-signal`/`guest-timeout` e a saída convidada `ExitProcess(0)`.
+O smoke GUI `notepadpp_real_gui_smoke` permanece separado e pode ser ignorado
+quando o Xvfb não consegue abrir um display.

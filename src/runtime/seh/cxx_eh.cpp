@@ -46,10 +46,9 @@ constexpr std::size_t kMaxCleanupActions = 64U;
 constexpr std::size_t kCxxCallbackStackSize = 65536U;
 constexpr std::uint64_t kCxxCleanupStackOffset = 0x1000U;
 // A cadeia FH4 pode conter destruidores arbitrários, inclusive thunks de
-// destrutor virtual. O subconjunto executável desta etapa permanece pequeno;
-// cadeias maiores continuam no caminho legado de unwind até haver uma fixture
-// que proteja sua semântica completa.
-constexpr std::size_t kMaxFh4ExecutableCleanupActions = 4U;
+// destrutor virtual. O subconjunto executável cobre a profundidade observada
+// no Notepad++ (até 13 estados) protegendo contra ciclos e corrupção de stack.
+constexpr std::size_t kMaxFh4ExecutableCleanupActions = 16U;
 
 enum class CleanupActionKind : std::uint8_t {
     LegacyFrame,
@@ -811,10 +810,12 @@ void trace_cxx_eh_transfer(const diagnostics::TraceLevel level, const char* cons
 
 [[nodiscard]] bool build_fh4_cleanup_plan(const Fh4UnwindMap& unwind_map,
                                           const std::int32_t initial_state,
+                                          const std::int32_t target_state,
                                           CleanupPlan& plan) noexcept {
     std::array<bool, kMaxFh4Entries> visited{};
     std::int32_t state = initial_state;
-    while (state != kInvalidState) {
+    while (state != kInvalidState &&
+           (target_state == kInvalidState || state >= target_state)) {
         if (state < 0 || state >= static_cast<std::int32_t>(unwind_map.count) ||
             visited[static_cast<std::size_t>(state)]) {
             return false;
@@ -1237,6 +1238,35 @@ void trace_cxx_eh_catch(const CatchTarget& target, const std::uint64_t source_po
     return false;
 }
 
+[[nodiscard]] std::int32_t find_fh4_target_state(const ImageReader& image,
+                                                 const Fh4FuncInfo& info,
+                                                 const Fh4TryBlockMap& try_map,
+                                                 const std::uint32_t target_rva) noexcept {
+    for (std::uint32_t try_index = 0U; try_index < try_map.count; ++try_index) {
+        const Fh4TryBlock& try_block = try_map.entries[try_index];
+        if (try_block.handler_map == 0U) {
+            continue;
+        }
+        std::uint32_t cursor = try_block.handler_map;
+        std::uint32_t handler_count{};
+        if (!read_fh4_unsigned(image, cursor, handler_count) ||
+            handler_count > kMaxFh4Handlers) {
+            continue;
+        }
+        for (std::uint32_t handler_index = 0U; handler_index < handler_count;
+             ++handler_index) {
+            Fh4Handler handler{};
+            if (!read_fh4_handler(image, cursor, info.function_begin, handler)) {
+                break;
+            }
+            if (handler.handler_rva == target_rva) {
+                return static_cast<std::int32_t>(try_block.try_low);
+            }
+        }
+    }
+    return kInvalidState;
+}
+
 [[nodiscard]] bool current_state(const ImageReader& image, const FuncInfo& info,
                                  const std::uint32_t control_rva,
                                  std::int32_t& state) noexcept {
@@ -1389,8 +1419,15 @@ std::int32_t cxx_frame_handler4(
         if (dispatcher_context->target_ip == 0U) {
             return kExceptionContinueSearch;
         }
+        const std::uint32_t target_rva =
+            dispatcher_context->target_ip > base
+                ? static_cast<std::uint32_t>(dispatcher_context->target_ip - base)
+                : 0U;
+        const std::int32_t target_state =
+            target_rva != 0U ? find_fh4_target_state(image, info, try_map, target_rva)
+                             : kInvalidState;
         CleanupPlan plan{};
-        if (!build_fh4_cleanup_plan(unwind_map, state, plan) || plan.count == 0U) {
+        if (!build_fh4_cleanup_plan(unwind_map, state, target_state, plan) || plan.count == 0U) {
             trace_cxx_eh_state(diagnostics::TraceLevel::Info, "no-supported-fh4-cleanup",
                                control_rva, state);
             return kExceptionContinueSearch;

@@ -50,7 +50,7 @@ endif()
 foreach(marker
         "cxx-eh state=\"matched\" detail=\"fh4-catch-typed\""
         "ExitProcess symbol=\"ExitProcess\" exit-code=\"0\""
-        "cxx-eh state=\"search\" detail=\"fh4-cleanup-limit\"")
+        "cxx-eh state=\"search\" detail=\"fh4-termination-cleanup\"")
     string(FIND "${run_stderr}" "${marker}" marker_position)
     if(marker_position EQUAL -1)
         file(REMOVE_RECURSE "${TL_STAGING_ROOT}")
@@ -70,12 +70,12 @@ if(NOT typed_catch_count EQUAL 2)
         "stderr:\n${run_stderr}")
 endif()
 
-foreach(uncontrolled "guest-signal" "guest-timeout")
+foreach(uncontrolled "guest-signal" "guest-timeout" "fh4-cleanup-limit")
     string(FIND "${run_stderr}" "${uncontrolled}" uncontrolled_position)
     if(NOT uncontrolled_position EQUAL -1)
         file(REMOVE_RECURSE "${TL_STAGING_ROOT}")
         message(FATAL_ERROR
-            "Notepad++ FH4: término não controlado (${uncontrolled}):\n${run_stderr}")
+            "Notepad++ FH4: término não controlado ou limite atingido (${uncontrolled}):\n${run_stderr}")
     endif()
 endforeach()
 

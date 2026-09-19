@@ -594,10 +594,12 @@ std::int32_t c_specific_handler(ExceptionRecordAmd64* const exception_record,
             trace_seh("frame", active_record != nullptr ? active_record->code : 0U,
                       "unwind");
         }
+        const bool cxx_exception = active_record != nullptr &&
+                                   active_record->code == 0xE06D7363U;
         const bool matches_target =
             reinterpret_cast<void*>(frame.establisher_frame) == target_frame ||
-            reinterpret_cast<void*>(cursor.rsp - 8U) == target_frame ||
-            reinterpret_cast<void*>(cursor.rsp) == target_frame;
+            (!cxx_exception && (reinterpret_cast<void*>(cursor.rsp - 8U) == target_frame ||
+                                reinterpret_cast<void*>(cursor.rsp) == target_frame));
         if (frame.has_function && matches_target) {
             // RtlUnwindEx invokes every UHANDLER while it walks toward the
             // target, regardless of the exception code.  C++ EH is only one
@@ -607,8 +609,6 @@ std::int32_t c_specific_handler(ExceptionRecordAmd64* const exception_record,
             if (active_record != nullptr) {
                 active_record->flags |= kExceptionTargetUnwind;
             }
-            const bool cxx_exception = active_record != nullptr &&
-                                       active_record->code == 0xE06D7363U;
             const bool fh4_cxx_handler =
                 cxx_exception && is_fh4_cxx_handler_data(frame.handler_data);
             const bool supported_cxx_handler =

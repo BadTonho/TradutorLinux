@@ -66,30 +66,31 @@ algoritmos selecionados, aguarda o `SSH_MSG_KEXDH_INIT` do PuTTY com
 
 ---
 
-### R26 — Despacho polimórfico e ampliação de cleanups C++ FH4
+### ~~R26 — Despacho polimórfico e ampliação de cleanups C++ FH4~~ ✓ Concluído
 
 **Contexto:** As etapas R6 e R7 implementaram decodificação host-side de
 cabeçalhos FH4, despacho de catches tipados e execução do prefixo seguro de até
 quatro cleanups de término observados no Notepad++. O aplicativo possui uma
-cadeia mais longa de destruição observada (até 13 estados) que atualmente aciona
+cadeia mais longa de destruição observada (até 13 estados) que anteriormente acionava
 o limite protetivo `fh4-cleanup-limit`.
 
 **Tarefas:**
 
-- [ ] analisar os estados subsequentes da cadeia de cleanups do frame-alvo com
-  fixture reproduzível de C++ EH;
-- [ ] validar com segurança os funclets de destruição seguintes, assegurando o
-  alinhamento estrito de 16 bytes da pilha e a preservação de registradores não-voláteis;
-- [ ] estender o limite seguro de cleanups de 4 para a profundidade observada,
+- [x] analisar os estados subsequentes da cadeia de cleanups do frame-alvo com
+  fixture reproduzível de C++ EH e inspecionar o matching de `target_frame`;
+- [x] validar com segurança os funclets de destruição seguintes, assegurando o
+  alinhamento estrito de 16 bytes da pilha, a preservação de registradores não-voláteis
+  e a delimitação ao `target_state` (`try_low`);
+- [x] estender o limite seguro de cleanups de 4 para 16 ações (profundidade observada),
   mantendo a proteção contra ciclos infinitos e mapas corrompidos;
-- [ ] verificar a integridade da stack no retorno via `catchret` e a transição
+- [x] verificar a integridade da stack no retorno via `catchret` e a transição
   estável para o fluxo seguinte do Notepad++;
-- [ ] registrar os novos eventos e limites em `docs/arquitetura/unwinding-x64.md`
-  e `docs/diagnostico-runtime.md`.
+- [x] registrar os novos eventos e limites em `docs/arquitetura/unwinding-x64.md`,
+  `docs/diagnostico-runtime.md`, `docs/compatibilidade-aplicativos.md` e `docs/compatibilidade.md`.
 
-**Critério de aceite:** O smoke `notepadpp_fh4_headless_smoke` deve executar a
-cadeia estendida de cleanups sem atingir `fh4-cleanup-limit`, mantendo exit code
-`0`, ausência de `guest-signal 71` e sem corrupção do frame do chamador.
+**Critério de aceite:** O smoke `notepadpp_fh4_headless_smoke` executa a
+cadeia estendida de cleanups (`fh4-termination-cleanup`) sem atingir `fh4-cleanup-limit`, mantendo exit code
+`0`, ausência de `guest-signal 71` e sem corrupção do frame do chamador (validado com CTest 635: Passed).
 
 ---
 
