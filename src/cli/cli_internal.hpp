@@ -38,7 +38,8 @@ void print_imports_summary(std::ostream& stream, const loader::ResolveResult& im
     std::ostream& stream,
     const pe::PeInfo& info,
     std::span<const std::byte> file_bytes = {},
-    bool json_output = false);
+    bool json_output = false,
+    const std::filesystem::path& executable_path = {});
 [[nodiscard]] ExitCode run_doctor(
     std::ostream& stdout_stream,
     std::ostream& stderr_stream,

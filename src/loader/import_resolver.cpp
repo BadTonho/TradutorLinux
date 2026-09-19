@@ -4,8 +4,13 @@
 #include "tradutorlinux/loader/module.hpp"
 #include "tradutorlinux/loader/module_graph.hpp"
 
+#include "tradutorlinux/util/basics.hpp"
+
+#include <algorithm>
 #include <array>
 #include <cstdint>
+#include <fstream>
+#include <unordered_map>
 #include <utility>
 
 namespace tradutorlinux::loader {
@@ -52,8 +57,46 @@ void fail(ResolveResult& result, ResolvedImport& entry, const ImportStatus statu
     }
 }
 
+[[nodiscard]] std::optional<std::filesystem::path> find_side_by_side_dll(
+    const std::filesystem::path& requester, const std::string_view dll_name) {
+    if (requester.empty()) return std::nullopt;
+    const std::filesystem::path parent = requester.parent_path();
+    if (parent.empty()) return std::nullopt;
+    std::error_code ec;
+    const std::filesystem::path direct = parent / dll_name;
+    if (std::filesystem::is_regular_file(direct, ec)) {
+        return direct;
+    }
+    std::filesystem::directory_iterator it{parent, ec};
+    if (ec) return std::nullopt;
+    for (const auto& entry : it) {
+        if (!entry.is_regular_file(ec)) continue;
+        if (util::ascii_iequals(entry.path().filename().string(), dll_name)) {
+            return entry.path();
+        }
+    }
+    return std::nullopt;
+}
+
+[[nodiscard]] std::optional<std::vector<std::byte>> read_file_bytes(
+    const std::filesystem::path& path) {
+    std::ifstream stream{path, std::ios::binary};
+    if (!stream) return std::nullopt;
+    stream.seekg(0, std::ios::end);
+    const std::streamoff end = stream.tellg();
+    if (end <= 0) return std::nullopt;
+    stream.seekg(0, std::ios::beg);
+    std::vector<std::byte> bytes(static_cast<std::size_t>(end));
+    stream.read(reinterpret_cast<char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
+    if (!stream) return std::nullopt;
+    return bytes;
+}
+
 void inspect_group(ResolveResult& result, const std::vector<pe::ImportedDll>& dlls,
-                   const ImportMechanism mechanism) {
+                   const ImportMechanism mechanism,
+                   const std::filesystem::path& requester) {
+    std::unordered_map<std::string, std::optional<pe::PeInfo>> guest_dll_cache;
+
     for (const pe::ImportedDll& dll : dlls) {
         for (const pe::ImportedSymbol& symbol : dll.symbols) {
             ResolvedImport entry;
@@ -66,6 +109,50 @@ void inspect_group(ResolveResult& result, const std::vector<pe::ImportedDll>& dl
 
             const bool forwarded_known = is_module_registered_forwarded(dll.name);
             if (!is_module_registered(dll.name) && !forwarded_known) {
+                if (!requester.empty()) {
+                    auto cache_it = guest_dll_cache.find(dll.name);
+                    if (cache_it == guest_dll_cache.end()) {
+                        std::optional<pe::PeInfo> cached_info;
+                        if (const auto dll_path = find_side_by_side_dll(requester, dll.name)) {
+                            if (const auto file_bytes = read_file_bytes(*dll_path)) {
+                                pe::ParseResult parsed = pe::parse_pe(*file_bytes);
+                                if (parsed.status == pe::ParseStatus::Success &&
+                                    parsed.info.is_dll && parsed.info.is_pe32_plus &&
+                                    parsed.info.machine == 0x8664) {
+                                    cached_info = std::move(parsed.info);
+                                }
+                            }
+                        }
+                        cache_it = guest_dll_cache.emplace(dll.name, std::move(cached_info)).first;
+                    }
+
+                    if (cache_it->second.has_value()) {
+                        const pe::PeInfo& guest_info = *cache_it->second;
+                        const auto export_it = std::find_if(
+                            guest_info.exports.begin(), guest_info.exports.end(),
+                            [&](const pe::ExportedSymbol& exp) {
+                                return symbol.by_ordinal
+                                           ? (exp.ordinal == symbol.ordinal)
+                                           : (exp.by_name && exp.name == symbol.name);
+                            });
+                        if (export_it != guest_info.exports.end()) {
+                            entry.ordinal = export_it->ordinal;
+                            entry.address = 0x10000;
+                            entry.support = ExportSupport::Full;
+                            entry.provider = "guest";
+                            result.imports.push_back(std::move(entry));
+                            continue;
+                        }
+                        fail(result, entry,
+                             symbol.by_ordinal ? ImportStatus::UnknownOrdinal
+                                               : ImportStatus::UnknownSymbol,
+                             symbol.by_ordinal ? "ordinal não exportado pela DLL convidada"
+                                               : "símbolo não exportado pela DLL convidada");
+                        result.imports.push_back(std::move(entry));
+                        continue;
+                    }
+                }
+
                 fail(result, entry, ImportStatus::UnknownDll, "módulo não registrado");
                 result.imports.push_back(std::move(entry));
                 continue;
@@ -99,10 +186,10 @@ void inspect_group(ResolveResult& result, const std::vector<pe::ImportedDll>& dl
 
 }  // namespace
 
-ResolveResult inspect_imports(const pe::PeInfo& info) {
+ResolveResult inspect_imports(const pe::PeInfo& info, const std::filesystem::path& requester) {
     ResolveResult result;
-    inspect_group(result, info.imports, ImportMechanism::Static);
-    inspect_group(result, info.delay_imports, ImportMechanism::Delay);
+    inspect_group(result, info.imports, ImportMechanism::Static, requester);
+    inspect_group(result, info.delay_imports, ImportMechanism::Delay, requester);
     return result;
 }
 

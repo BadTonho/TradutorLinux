@@ -744,9 +744,10 @@ void print_support_report_json(
     std::ostream& stream,
     const pe::PeInfo& info,
     const std::span<const std::byte> file_bytes,
-    const bool json_output) {
+    const bool json_output,
+    const std::filesystem::path& executable_path) {
     TL_TRACE_FUNCTION();
-    const loader::ResolveResult result = loader::inspect_imports(info);
+    const loader::ResolveResult result = loader::inspect_imports(info, executable_path);
     const pe::PackerInspectionResult packer = pe::inspect_pe_packers(info);
     const pe::FrameworkInspectionResult frameworks = pe::inspect_pe_frameworks(info, file_bytes);
     const pe::SecurityServiceInspectionResult security = pe::inspect_pe_security_services(info);

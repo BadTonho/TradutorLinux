@@ -349,5 +349,40 @@ TEST_F(ImportResolverTest, RestoresDelayIatPagePermissionsAfterPatch) {
     EXPECT_EQ(maps_permissions_for(page_address), "r--p");
 }
 
+TEST_F(ImportResolverTest, InspectImportsResolvesSideBySideGuestDllWhenPresent) {
+    register_builtin_modules();
+    const std::filesystem::path gup_path =
+        "/home/tonho/Área de trabalho/Aplicativos_Windows_Populares/Notepad++/updater/GUP.exe";
+    std::error_code ec;
+    if (!std::filesystem::exists(gup_path, ec)) {
+        GTEST_SKIP() << "GUP.exe fixture não disponível no ambiente";
+    }
+    std::ifstream stream{gup_path, std::ios::binary};
+    ASSERT_TRUE(stream);
+    stream.seekg(0, std::ios::end);
+    const std::streamoff end = stream.tellg();
+    ASSERT_GT(end, 0);
+    stream.seekg(0, std::ios::beg);
+    std::vector<std::byte> file_bytes(static_cast<std::size_t>(end));
+    stream.read(reinterpret_cast<char*>(file_bytes.data()), static_cast<std::streamsize>(file_bytes.size()));
+    ASSERT_TRUE(stream);
+
+    const pe::ParseResult parse_result = pe::parse_pe(file_bytes);
+    ASSERT_EQ(parse_result.status, pe::ParseStatus::Success);
+
+    // Sem requester: libcurl.dll não é builtin e deve falhar como unknown-dll
+    const ResolveResult without_requester = inspect_imports(parse_result.info);
+    EXPECT_EQ(without_requester.status, ImportStatus::UnknownDll);
+
+    // Com requester: libcurl.dll é encontrada lado a lado e resolvida como guest
+    const ResolveResult with_requester = inspect_imports(parse_result.info, gup_path);
+    EXPECT_EQ(with_requester.status, ImportStatus::Resolved);
+    auto it = std::find_if(with_requester.imports.begin(), with_requester.imports.end(),
+                           [](const ResolvedImport& imp) { return imp.dll == "libcurl.dll"; });
+    ASSERT_NE(it, with_requester.imports.end());
+    EXPECT_EQ(it->status, ImportStatus::Resolved);
+    EXPECT_EQ(it->provider, "guest");
+}
+
 }  // namespace
 }  // namespace tradutorlinux::loader

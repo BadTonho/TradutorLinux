@@ -147,7 +147,7 @@ Executada via `./build/debug/src/tradutorlinux` sobre os 27 alvos do corpus
 | `putty_x64.exe` | exit 0 (100% imports) | exit 72 (`GuestTimeout`) | — | `clock_nanosleep` timeout aguardando transporte de rede/diálogo |
 | `notepad++.exe` | exit 0 (100% imports) | exit 0 | — | Inicialização headless válida / `CreateWindowExA` requer display |
 | `Notepad++/notepad++.exe` | exit 0 (100% imports) | exit 0 | — | Inicialização headless válida |
-| `Notepad++/updater/GUP.exe` | exit 5 (`unsupported`) | exit 5 | — | `libcurl.dll (0/4)` status=`unknown-dll` |
+| `Notepad++/updater/GUP.exe` | exit 0 (100% imports) | exit 255 (ExitProcess -1) | — | Sucesso na resolução PE64 + libcurl.dll side-by-side |
 | `7-Zip/7zG.exe` | exit 0 (100% imports) | exit 0 | — | Operação gráfica do 7-Zip |
 | `RTSS.exe` | exit 5 (`unsupported-arch`) | exit 5 | — | Arquitetura 32-bit x86 (`0x14c`) não suportada |
 | `RTSSHooks64.dll` | exit 0 (100% imports) | — | — | DLL x64 válida |
@@ -224,17 +224,10 @@ Executada via `./build/debug/src/tradutorlinux` sobre os 27 alvos do corpus
     ```
   - **Causa:** O instalador detecta falta de serviços de background (`advapi32!OpenSCManagerW` / gerenciador de serviços) ou caminhos de diretório de instalação não inicializados e aborta com código 1.
 
-#### 5. Dependências Dinâmicas Ausentes — Exit Code 5
+#### 5. Dependências Dinâmicas Ausentes / Lado a Lado — Resolvido
 - **Notepad++/updater/GUP.exe:**
-  - **Imports ausentes:**
-    ```text
-    dll: libcurl.dll (0/4 resolved)
-      import: curl_easy_setopt status=unknown-dll
-      import: curl_easy_cleanup status=unknown-dll
-      import: curl_easy_init status=unknown-dll
-      import: curl_easy_perform status=unknown-dll
-    ```
-  - **Causa:** `GUP.exe` depende da `libcurl.dll` que acompanha o executável, porém o resolvedor não encontra a biblioteca no caminho de busca local ou a cadeia de dependências de `libcurl.dll` não resolve.
+  - **Status:** 100% resolvido (153/153 imports).
+  - **Resolução Técnica:** O validador de imports (`loader::inspect_imports`) agora inspeciona DLLs convidadas presentes lado a lado no diretório do executável (`libcurl.dll`). Com as exportações de criptografia (`Normaliz.dll`, `bcrypt.dll`, `WLDAP32` e `CRYPT32`), a cadeia de `libcurl.dll` e `GUP.exe` resolve integralmente tanto em `--report` quanto em execução direta.
 
 #### 6. Timeout de Conexão e Espera de Mensagens — Exit Code 72
 - **putty_x64.exe:**

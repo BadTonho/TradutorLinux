@@ -48,8 +48,8 @@ struct ResolveResult {
 };
 
 // Inspeciona imports estáticos e atrasados contra o registro de módulos sem
-// alterar a imagem. É a fonte única para o modo --report e para o resolvedor.
-[[nodiscard]] ResolveResult inspect_imports(const pe::PeInfo& info);
+[[nodiscard]] ResolveResult inspect_imports(const pe::PeInfo& info,
+                                            const std::filesystem::path& requester = {});
 
 // Resolves every import of the image and writes the resolved addresses into the
 // import address table of the mapped memory. The image must already be mapped
