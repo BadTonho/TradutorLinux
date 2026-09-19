@@ -12,12 +12,40 @@ namespace tradutorlinux {
 
 namespace {
 
+constexpr std::uint32_t kHeapMagic = 0x544C4850U; // 'TLHP'
+constexpr std::uint64_t kHeapCanary = 0xDEADBEEFCAFEFACEULL;
+constexpr std::size_t kHeapHeaderSize = 48U;
+constexpr std::size_t kHeapTrailerSize = 64U;
+constexpr std::uint8_t kTrailerCanaryByte = 0xAAU;
+
+struct alignas(16) HeapHeader {
+    std::uint32_t magic{kHeapMagic};
+    std::uint32_t flags{0};
+    std::size_t requested_size{0};
+    std::size_t alloc_size{0};
+    std::uint64_t canary{kHeapCanary};
+    std::uint64_t reserved{0};
+};
+static_assert(sizeof(HeapHeader) == kHeapHeaderSize);
+
 struct HeapBlockInfo {
     std::size_t size{0};
 };
 
 std::mutex g_heap_mutex;
 std::unordered_map<void*, HeapBlockInfo> g_heap_blocks;
+
+[[nodiscard]] HeapHeader* get_heap_header(void* const user_ptr) noexcept {
+    if (user_ptr == nullptr || (reinterpret_cast<std::uintptr_t>(user_ptr) % 16U) != 0U) {
+        return nullptr;
+    }
+    auto* const raw = static_cast<std::byte*>(user_ptr) - kHeapHeaderSize;
+    auto* const header = reinterpret_cast<HeapHeader*>(raw);
+    if (header->magic != kHeapMagic || header->canary != kHeapCanary) {
+        return nullptr;
+    }
+    return header;
+}
 
 [[nodiscard]] GlobalMemorySlot* find_global_memory_slot_locked(const void* memory,
                                                                 const bool global_only) noexcept {
@@ -178,21 +206,37 @@ TL_MSABI void* tl_GetProcessHeap() noexcept {
 
 TL_MSABI void* tl_HeapAlloc(void* heap, std::uint32_t flags, std::uintptr_t size) noexcept {
     (void)heap;
-    const std::size_t alloc_size = (size == 0) ? 1 : static_cast<std::size_t>(size);
-    void* memory = nullptr;
+    const std::size_t requested = static_cast<std::size_t>(size);
+    const std::size_t payload_size = (requested == 0) ? 16U : ((requested + 15U) & ~15U);
+    const std::size_t total_size = kHeapHeaderSize + payload_size + kHeapTrailerSize;
+
+    void* const raw = std::malloc(total_size);
+    if (raw == nullptr) {
+        set_last_error(abi::kErrorNotEnoughMemory);
+        return nullptr;
+    }
+
+    auto* const header = reinterpret_cast<HeapHeader*>(raw);
+    header->magic = kHeapMagic;
+    header->flags = flags;
+    header->requested_size = requested;
+    header->alloc_size = payload_size;
+    header->canary = kHeapCanary;
+    header->reserved = 0;
+
+    void* const user_ptr = static_cast<std::byte*>(raw) + kHeapHeaderSize;
     if ((flags & 0x0008) != 0) {
-        memory = std::calloc(1, alloc_size);
-    } else {
-        memory = std::malloc(alloc_size);
+        std::memset(user_ptr, 0, payload_size);
     }
-    if (memory != nullptr) {
-        {
-            std::lock_guard lock(g_heap_mutex);
-            g_heap_blocks[memory] = HeapBlockInfo{static_cast<std::size_t>(size)};
-        }
-        bump_guest_allocation_generation();
+    std::memset(static_cast<std::byte*>(user_ptr) + payload_size, kTrailerCanaryByte, kHeapTrailerSize);
+
+    {
+        std::lock_guard lock(g_heap_mutex);
+        g_heap_blocks[user_ptr] = HeapBlockInfo{requested};
     }
-    return memory;
+    bump_guest_allocation_generation();
+    set_last_error(abi::kErrorSuccess);
+    return user_ptr;
 }
 
 TL_MSABI int tl_HeapFree(void* heap, std::uint32_t flags, void* memory) noexcept {
@@ -211,51 +255,59 @@ TL_MSABI int tl_HeapFree(void* heap, std::uint32_t flags, void* memory) noexcept
         }
     }
     if (!found) {
-        // Ponteiro não alocado por HeapAlloc ou double-free do convidado.
-        // Rejeitar com erro Win32 em vez de corromper o heap do host.
+        if (take_local_free_block(memory)) {
+            std::free(memory);
+            bump_guest_allocation_generation();
+            set_last_error(abi::kErrorSuccess);
+            return 1;
+        }
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
-    std::free(memory);
+
+    HeapHeader* const header = get_heap_header(memory);
+    if (header != nullptr) {
+        header->magic = 0;
+        header->canary = 0;
+        std::free(static_cast<void*>(header));
+    } else {
+        std::free(memory);
+    }
     bump_guest_allocation_generation();
+    set_last_error(abi::kErrorSuccess);
     return 1;
 }
 
 TL_MSABI void* tl_HeapReAlloc(void* heap, std::uint32_t flags, void* memory,
                               std::uintptr_t new_size) noexcept {
     (void)heap;
-    (void)flags;
     if (memory == nullptr) {
         return tl_HeapAlloc(heap, flags, new_size);
     }
-    const std::size_t alloc_size = (new_size == 0) ? 1 : static_cast<std::size_t>(new_size);
-    bool found = false;
+    std::size_t old_size = 0;
     {
         std::lock_guard lock(g_heap_mutex);
         auto it = g_heap_blocks.find(memory);
-        if (it != g_heap_blocks.end()) {
-            g_heap_blocks.erase(it);
-            found = true;
+        if (it == g_heap_blocks.end()) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return nullptr;
         }
+        old_size = it->second.size;
     }
-    if (!found) {
-        set_last_error(abi::kErrorInvalidParameter);
+
+    void* const new_memory = tl_HeapAlloc(heap, flags, new_size);
+    if (new_memory == nullptr) {
+        set_last_error(abi::kErrorNotEnoughMemory);
         return nullptr;
     }
 
-    void* const result = std::realloc(memory, alloc_size);
-    if (result != nullptr) {
-        {
-            std::lock_guard lock(g_heap_mutex);
-            g_heap_blocks[result] = HeapBlockInfo{static_cast<std::size_t>(new_size)};
-        }
-        bump_guest_allocation_generation();
-    } else {
-        std::lock_guard lock(g_heap_mutex);
-        g_heap_blocks[memory] = HeapBlockInfo{alloc_size};
-        set_last_error(abi::kErrorNotEnoughMemory);
+    const std::size_t copy_bytes = std::min(old_size, static_cast<std::size_t>(new_size));
+    if (copy_bytes > 0) {
+        std::memcpy(new_memory, memory, copy_bytes);
     }
-    return result;
+
+    tl_HeapFree(heap, 0, memory);
+    return new_memory;
 }
 
 TL_MSABI void* tl_GlobalAlloc(const std::uint32_t flags, const std::size_t bytes) noexcept {
@@ -266,9 +318,9 @@ TL_MSABI void* tl_GlobalAlloc(const std::uint32_t flags, const std::size_t bytes
         return nullptr;
     }
     const std::size_t allocation_size = bytes == 0 ? 1 : bytes;
-    void* const memory = (flags & abi::kGmemZeroinit) != 0
-                             ? std::calloc(1, allocation_size)
-                             : std::malloc(allocation_size);
+    void* const memory = tl_HeapAlloc(tl_GetProcessHeap(),
+                                      (flags & abi::kGmemZeroinit) != 0 ? 0x0008U : 0U,
+                                      allocation_size);
     if (memory == nullptr) {
         set_last_error(abi::kErrorNotEnoughMemory);
         return nullptr;
@@ -278,7 +330,7 @@ TL_MSABI void* tl_GlobalAlloc(const std::uint32_t flags, const std::size_t bytes
         auto it = std::find_if(g_global_memory.begin(), g_global_memory.end(),
                                [](const GlobalMemorySlot& slot) { return !slot.used; });
         if (it == g_global_memory.end()) {
-            std::free(memory);
+            tl_HeapFree(tl_GetProcessHeap(), 0, memory);
             set_last_error(abi::kErrorNotEnoughMemory);
             return nullptr;
         }
@@ -322,14 +374,20 @@ TL_MSABI void* tl_GlobalFree(void* const memory) noexcept {
         set_last_error(abi::kErrorSuccess);
         return nullptr;
     }
-    std::lock_guard lock(g_global_memory_mutex);
-    GlobalMemorySlot* const slot = find_global_memory_slot_locked(memory, true);
-    if (slot == nullptr) {
-        set_last_error(abi::kErrorInvalidHandle);
-        return memory;
+    void* addr_to_free = nullptr;
+    {
+        std::lock_guard lock(g_global_memory_mutex);
+        GlobalMemorySlot* const slot = find_global_memory_slot_locked(memory, true);
+        if (slot == nullptr) {
+            set_last_error(abi::kErrorInvalidHandle);
+            return memory;
+        }
+        addr_to_free = slot->address;
+        *slot = GlobalMemorySlot{};
     }
-    std::free(slot->address);
-    *slot = GlobalMemorySlot{};
+    if (addr_to_free != nullptr) {
+        tl_HeapFree(tl_GetProcessHeap(), 0, addr_to_free);
+    }
     bump_guest_allocation_generation();
     set_last_error(abi::kErrorSuccess);
     return nullptr;
@@ -343,9 +401,9 @@ TL_MSABI void* tl_LocalAlloc(const std::uint32_t flags, const std::size_t bytes)
         return nullptr;
     }
     const std::size_t allocation_size = bytes == 0 ? 1 : bytes;
-    void* const memory = (flags & abi::kGmemZeroinit) != 0
-                             ? std::calloc(1, allocation_size)
-                             : std::malloc(allocation_size);
+    void* const memory = tl_HeapAlloc(tl_GetProcessHeap(),
+                                      (flags & abi::kGmemZeroinit) != 0 ? 0x0008U : 0U,
+                                      allocation_size);
     if (memory == nullptr) {
         set_last_error(abi::kErrorNotEnoughMemory);
         return nullptr;
@@ -355,7 +413,7 @@ TL_MSABI void* tl_LocalAlloc(const std::uint32_t flags, const std::size_t bytes)
         auto it = std::find_if(g_global_memory.begin(), g_global_memory.end(),
                                [](const GlobalMemorySlot& slot) { return !slot.used; });
         if (it == g_global_memory.end()) {
-            std::free(memory);
+            tl_HeapFree(tl_GetProcessHeap(), 0, memory);
             set_last_error(abi::kErrorNotEnoughMemory);
             return nullptr;
         }
@@ -371,6 +429,7 @@ TL_MSABI void* tl_LocalFree(void* memory) noexcept {
         set_last_error(abi::kErrorSuccess);
         return nullptr;
     }
+    void* addr_to_free = nullptr;
     {
         std::lock_guard lock(g_global_memory_mutex);
         if (GlobalMemorySlot* const slot = find_global_memory_slot_locked(memory, false);
@@ -379,16 +438,23 @@ TL_MSABI void* tl_LocalFree(void* memory) noexcept {
                 set_last_error(abi::kErrorInvalidHandle);
                 return memory;
             }
-            std::free(slot->address);
+            addr_to_free = slot->address;
             *slot = GlobalMemorySlot{};
-            bump_guest_allocation_generation();
-            set_last_error(abi::kErrorSuccess);
-            return nullptr;
         }
+    }
+    if (addr_to_free != nullptr) {
+        tl_HeapFree(tl_GetProcessHeap(), 0, addr_to_free);
+        bump_guest_allocation_generation();
+        set_last_error(abi::kErrorSuccess);
+        return nullptr;
     }
     if (take_local_free_block(memory)) {
         std::free(memory);
         bump_guest_allocation_generation();
+        set_last_error(abi::kErrorSuccess);
+        return nullptr;
+    }
+    if (tl_HeapFree(tl_GetProcessHeap(), 0, memory) != 0) {
         set_last_error(abi::kErrorSuccess);
         return nullptr;
     }
