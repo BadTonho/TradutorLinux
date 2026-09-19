@@ -187,7 +187,12 @@ TEST(MsvcrtIoTest, SetmodeReportsPreviousMode) {
 }
 
 TEST(MsvcrtIoTest, IsattyOnPipeIsFalse) {
-    EXPECT_EQ(tl__isatty(STDIN_FILENO), 0);
+    int pipe_fds[2] = {-1, -1};
+    ASSERT_EQ(::pipe(pipe_fds), 0);
+    EXPECT_EQ(tl__isatty(pipe_fds[0]), 0);
+    EXPECT_EQ(tl__isatty(pipe_fds[1]), 0);
+    ::close(pipe_fds[0]);
+    ::close(pipe_fds[1]);
 }
 
 TEST(MsvcrtEnvTest, GetenvFindsPath) {
