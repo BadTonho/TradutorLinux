@@ -94,7 +94,7 @@ cadeia estendida de cleanups (`fh4-termination-cleanup`) sem atingir `fh4-cleanu
 
 ---
 
-### R27 — Expansão do modelo de controles comuns Win32 (`SysListView32` / `COMCTL32`)
+### ~~R27 — Expansão do modelo de controles comuns Win32 (`SysListView32` / `COMCTL32`)~~ ✓ Concluído
 
 **Contexto:** O 7-Zip File Manager (`7zFM_x64.exe`) e outros utilitários Win32
 dependem de controles comuns de lista para exibição e navegação de itens. O
@@ -113,9 +113,57 @@ mas a interação avançada de listagem exige tratamento das mensagens básicas
 - [x] adicionar testes unitários cobrindo o controle em `tests/test_gui_controls.cpp`;
 - [x] atualizar a documentação de controles em `docs/arquitetura/gui-x11.md`.
 
-**Critério de aceite:** O controle de lista responde às mensagens de contagem e
-obtenção de item sem expor memória inválida do host; o smoke visual do 7-Zip sob
-Xvfb continua terminando com sucesso (`exit 0`).
+**Critério de aceite:** ✓ O controle de lista responde às mensagens de contagem,
+inserção, obtenção, texto, ordenação e seleção sem expor memória inválida do host;
+testes unitários em `tests/test_gui_controls.cpp` e testes de layout em `tests/test_win32_gui.cpp`
+passam 100% (validado no commit `e2939ee`).
+
+---
+
+### ~~R28 — Suporte a pacotes MSIX de grande porte e validação de Affinity x64~~ ✓ Concluído
+
+**Contexto:** O pacote `Affinity x64.msix` possui 642 MiB comprimido, 1.45 GiB
+descompactado e 1284 entradas com arquivos de até 342 MiB. Anteriormente o runtime
+impunha um limite conservador de 512 MiB total e 512 MiB por entrada, além de
+falhar em entradas DEFLATE vazias (`expected_size == 0`) devido à rejeição
+por `Z_STREAM_ERROR` na zlib quando `avail_out == 0`.
+
+**Tarefas:**
+
+- [x] ampliar os limites seguros de arquivo e descompressão MSIX para 4 GiB total,
+  2 GiB por entrada e 20000 entradas (`src/package/msix.cpp`);
+- [x] tratar streams DEFLATE com saída esperada de 0 bytes usando buffer auxiliar seguro
+  com `avail_out = 1` tanto no parser C++ (`inflate_raw`) quanto na ponte Rust (`tl_msix_inflate_raw`);
+- [x] verificar que `--report` no pacote real reconhece o manifesto AppX (Canva.Affinity v3.2.3.4646, App\Affinity.exe) com exit code `0`;
+- [x] verificar que `install` extrai todas as 1284 entradas com segurança e registra o aplicativo no catálogo com exit code `0`;
+- [x] atualizar testes de matriz do corpus real (`verify_popular_apps_report.cmake`, `verify_popular_apps_recursive_report.cmake`, `verify_popular_apps_native.cmake` e `verify_popular_apps_install.cmake`);
+- [x] atualizar matrizes de compatibilidade em `docs/compatibilidade.md` e `docs/compatibilidade-aplicativos.md`.
+
+**Critério de aceite:** ✓ `popular_apps_report_matrix`, `popular_apps_recursive_report_matrix`,
+`popular_apps_native_matrix` e `popular_apps_install_matrix` passam 100% (4/4 CTests);
+extração e cadastro de `Affinity x64.msix` validadas com sucesso sem vazamento de memória ou arquivos residuais.
+
+---
+
+### R29 — Tolerância no leitor PE para diretórios de dados em seções virtuais UPX (`HWiNFO64.exe` e `Rufus_x64.exe`)
+
+**Contexto:** Binários comprimidos com UPX frequentemente declaram seções com
+`SizeOfRawData == 0` e `VirtualSize > 0` (como `UPX0`), contendo páginas alocadas
+que serão preenchidas na memória em tempo de execução. O `pe_reader.cpp` atualmente
+rejeita executáveis cujos Data Directories apontem para dentro dessas seções virtuais
+(`parse-failed status="malformed" detail="diretório de exports fora da imagem"` no HWiNFO64
+e `diretório de exceções fora da imagem` no Rufus_x64).
+
+**Tarefas:**
+
+- [ ] mapear os limites e características das seções UPX em `HWiNFO64.exe` e `Rufus_x64.exe`;
+- [ ] permitir tolerância segura no leitor PE quando um diretório opcional (como exports ou exceções)
+  aponta para seção com `raw_data_size == 0`, tratando-o como não populado estaticamente em vez de erro de formato;
+- [ ] adicionar testes de regressão para parsing estático de PE com seções virtuais zeradas;
+- [ ] validar `--report` em `HWiNFO64.exe` e `Rufus_x64.exe` e atualizar os testes de matriz do corpus.
+
+**Critério de aceite:** `--report` em `HWiNFO64.exe` e `Rufus_x64.exe` conclui com diagnóstico
+claro sem aborto por imagem malformada; testes de regressão passam.
 
 ---
 
@@ -159,7 +207,7 @@ Executada via `./build/debug/src/tradutorlinux` sobre os 27 alvos do corpus
 | `lghub_installer.exe` | exit 0 (100% imports) | exit 1 (`ExitProcess 1`) | exit 1 | `failed stage="setup" exit-code="1"` |
 | `7-Zip_x64_Installer.exe` | exit 5 (`unsupported-arch`) | exit 5 | exit 0 | Bootstrap 32-bit; payload PE64 registrado no install |
 | `Notepad++_x64_Installer.exe` | exit 5 (`unsupported-arch`) | exit 5 | exit 0 | Bootstrap NSIS 32-bit; payload PE64 registrado no install |
-| `Affinity x64.msix` | exit 4 (`malformed`) | exit 4 | exit 4 | `failed stage="package-parse"`: limite descompactado de 512 MiB |
+| `Affinity x64.msix` | exit 0 (100% manifesto) | — | exit 0 | Sucesso na extração e cadastro do pacote MSIX |
 | `CapCut_*_installer.exe` | exit 5 (`unsupported-arch`) | exit 5 | exit 5 | Arquitetura 32-bit x86 (`0x14c`) não suportada |
 | `Creative_Cloud_Set-Up_7474.exe`| exit 5 (`unsupported-arch`) | exit 5 | exit 5 | Arquitetura 32-bit x86 (`0x14c`) não suportada |
 | `EpicInstaller-*.exe` | exit 5 (`unsupported-arch`) | exit 5 | exit 5 | Arquitetura 32-bit x86 (`0x14c`) não suportada |

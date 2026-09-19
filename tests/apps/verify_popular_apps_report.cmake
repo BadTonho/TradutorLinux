@@ -39,7 +39,7 @@ set(CASES
     "officedeploymenttool_20228-20124.exe|5"
     "putty_x64.exe|0"
     "winrar-x64-723.exe|0"
-    "Affinity x64.msix|4"
+    "Affinity x64.msix|0"
 )
 
 set(passed 0)

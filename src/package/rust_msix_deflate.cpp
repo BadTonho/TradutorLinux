@@ -21,7 +21,7 @@ extern "C" std::int32_t tl_msix_inflate_raw(
     stream.next_out = output_length == 0
                           ? &empty_output
                           : reinterpret_cast<Bytef*>(output);
-    stream.avail_out = static_cast<uInt>(output_length);
+    stream.avail_out = output_length == 0 ? 1U : static_cast<uInt>(output_length);
     if (inflateInit2(&stream, -MAX_WBITS) != Z_OK) return -3;
     const int result = inflate(&stream, Z_FINISH);
     const bool valid = result == Z_STREAM_END && stream.avail_in == 0 &&

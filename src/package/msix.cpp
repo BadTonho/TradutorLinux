@@ -26,13 +26,13 @@ constexpr std::uint32_t kZipEndOfCentralDirectoryMagic = 0x06054b50;
 constexpr std::uint32_t kZip64EndOfCentralDirectoryMagic = 0x06064b50;
 constexpr std::uint32_t kZip64LocatorMagic = 0x07064b50;
 constexpr std::uint16_t kZip64ExtraFieldId = 0x0001;
-constexpr std::uint64_t kMaxPackageFileSize = 2ULL * 1024 * 1024 * 1024; // 2 GiB
+constexpr std::uint64_t kMaxPackageFileSize = 4ULL * 1024ULL * 1024ULL * 1024ULL; // 4 GiB
 constexpr std::size_t kMaxManifestSize = 16U * 1024U * 1024U; // 16 MiB
 constexpr std::size_t kMaxManifestCompressedSize = 64U * 1024U * 1024U; // 64 MiB
-constexpr std::uint32_t kMaxZipEntries = 10000;
+constexpr std::uint32_t kMaxZipEntries = 20000;
 constexpr std::size_t kMaxZipFilenameSize = 4096;
-constexpr std::uint64_t kMaxZipEntryUncompressedSize = 512ULL * 1024ULL * 1024ULL;
-constexpr std::uint64_t kMaxPackageUncompressedSize = 512ULL * 1024ULL * 1024ULL;
+constexpr std::uint64_t kMaxZipEntryUncompressedSize = 2ULL * 1024ULL * 1024ULL * 1024ULL; // 2 GiB
+constexpr std::uint64_t kMaxPackageUncompressedSize = 4ULL * 1024ULL * 1024ULL * 1024ULL; // 4 GiB
 constexpr std::size_t kMaxXmlDepth = 128;
 constexpr std::size_t kMaxXmlAttributesPerElement = 256;
 
@@ -591,11 +591,12 @@ struct ZipCentralEntry {
         return std::nullopt;
     }
     std::vector<unsigned char> decompressed(expected_size);
+    unsigned char dummy_output = 0;
     z_stream stream{};
     stream.next_in = const_cast<Bytef*>(compressed.data());
     stream.avail_in = static_cast<uInt>(compressed.size());
-    stream.next_out = decompressed.data();
-    stream.avail_out = static_cast<uInt>(decompressed.size());
+    stream.next_out = expected_size == 0 ? &dummy_output : decompressed.data();
+    stream.avail_out = expected_size == 0 ? 1U : static_cast<uInt>(decompressed.size());
     if (inflateInit2(&stream, -MAX_WBITS) != Z_OK) return std::nullopt;
     const int result = inflate(&stream, Z_FINISH);
     const bool valid = result == Z_STREAM_END && stream.avail_in == 0 &&

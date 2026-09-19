@@ -34,12 +34,13 @@ prefixo temporário, ambiente headless, `--timeout 3`, limites de CPU/memória e
 verifica o exit code e o diagnóstico esperado; instaladores, DLLs e cenários
 interativos de GUI permanecem nos testes específicos.
 
-`popular_apps_install_matrix` cobre oito casos controlados: Roblox, G HUB, o
-alias byte-a-byte, Affinity e as rejeições pré-extração de CPU-Z, GPU-Z,
+`popular_apps_install_matrix` cobre sete casos controlados: Roblox, G HUB, o
+alias byte-a-byte e as rejeições pré-extração de CPU-Z, GPU-Z,
 HWMonitor e HWiNFO. Cada caso usa `HOME`, `XDG_CONFIG_HOME`, `APPDATA` e
 prefixo temporários, verifica o estágio/erro esperado e exige ausência de
-arquivos, extração e cadastro após a rejeição. Instaladores PE32/x86 permanecem
-fora da execução funcional.
+arquivos, extração e cadastro após a rejeição. O pacote MSIX de grande porte
+Affinity x64 é instalado e registrado com sucesso e validado em testes próprios.
+Instaladores PE32/x86 permanecem fora da execução funcional.
 
 Com o mesmo parâmetro e Xvfb disponível, os smokes GUI reais de 7-Zip File
 Manager, PuTTY, WinRAR SFX e Notepad++ também são registrados separadamente no

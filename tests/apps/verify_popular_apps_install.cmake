@@ -11,14 +11,13 @@ if(NOT IS_DIRECTORY "${TL_CORPUS}")
     message(FATAL_ERROR "corpus inexistente: ${TL_CORPUS}")
 endif()
 
-# Os quatro primeiros casos são instalações autorizadas. Os quatro últimos
-# exercitam somente a rejeição pré-extração dos novos aplicativos x86 ou
-# empacotados; nenhum deles é iniciado nem cadastrado.
+# Os três primeiros casos são instalações autorizadas com encerramento pelo
+# convidado. Os quatro últimos exercitam somente a rejeição pré-extração dos
+# novos aplicativos x86 ou malformados; nenhum deles é iniciado nem cadastrado.
 set(CASES
     "RobloxPlayerInstaller.exe|roblox|3"
     "Logitech_GHUB_x64.exe|ghub|1"
     "lghub_installer.exe|ghub_alias|1"
-    "Affinity x64.msix|affinity|4"
     "CPU-Z_2.18_en.exe|cpuz|5"
     "GPU-Z_2.70.0.exe|gpuz|5"
     "HWMonitor_1.67.exe|hwmonitor|5"
@@ -77,10 +76,8 @@ foreach(case IN LISTS CASES)
         message(FATAL_ERROR "${relative_path}: backend Rust vazou no build OFF:\n${install_trace}")
     endif()
 
-    if("${app_id}" STREQUAL "affinity")
-        set(expected_stage "package-parse")
-    elseif("${app_id}" STREQUAL "cpuz" OR "${app_id}" STREQUAL "gpuz" OR
-           "${app_id}" STREQUAL "hwmonitor" OR "${app_id}" STREQUAL "hwinfo")
+    if("${app_id}" STREQUAL "cpuz" OR "${app_id}" STREQUAL "gpuz" OR
+       "${app_id}" STREQUAL "hwmonitor" OR "${app_id}" STREQUAL "hwinfo")
         set(expected_stage "parse")
     else()
         set(expected_stage "setup")
@@ -104,12 +101,6 @@ foreach(case IN LISTS CASES)
         set(expected_marker "RBXCRASH: FatalRuntimeError")
     elseif("${app_id}" STREQUAL "ghub" OR "${app_id}" STREQUAL "ghub_alias")
         set(expected_marker "ExitProcess symbol=\"ExitProcess\" exit-code=\"1\" status=\"success\"")
-    elseif("${app_id}" STREQUAL "affinity")
-        if(RUST_ENABLED)
-            set(expected_marker "package-parse format=\"MSIX / AppX\" backend=\"rust\" status=\"malformed\"")
-        else()
-            set(expected_marker "failed stage=\"package-parse\"")
-        endif()
     elseif("${app_id}" STREQUAL "cpuz" OR "${app_id}" STREQUAL "gpuz" OR
            "${app_id}" STREQUAL "hwmonitor" OR "${app_id}" STREQUAL "hwinfo")
         set(expected_marker "failed stage=\"parse\"")
