@@ -485,5 +485,37 @@ TEST(Win32StubTest, Wldap32ModuleExportsRequiredOrdinals) {
     }
 }
 
+TEST(Win32StubTest, NormalizAndBcryptModulesExportFunctionalSymbols) {
+    loader::register_builtin_modules();
+    EXPECT_TRUE(loader::is_module_registered("Normaliz.dll"));
+    EXPECT_TRUE(loader::is_module_registered("bcrypt.dll"));
+
+    const loader::ExportLookup idn_ascii = loader::find_export(loader::ExportQuery{"Normaliz.dll", "IdnToAscii"});
+    EXPECT_TRUE(idn_ascii.found);
+    EXPECT_NE(idn_ascii.address, 0U);
+
+    const loader::ExportLookup idn_unicode = loader::find_export(loader::ExportQuery{"Normaliz.dll", "IdnToUnicode"});
+    EXPECT_TRUE(idn_unicode.found);
+    EXPECT_NE(idn_unicode.address, 0U);
+
+    const loader::ExportLookup bcrypt_random = loader::find_export(loader::ExportQuery{"bcrypt.dll", "BCryptGenRandom"});
+    EXPECT_TRUE(bcrypt_random.found);
+    EXPECT_NE(bcrypt_random.address, 0U);
+
+    std::uint8_t random_bytes[16]{};
+    EXPECT_EQ(tl_BCryptGenRandom(nullptr, random_bytes, sizeof(random_bytes), 2), 0U);
+    bool has_nonzero = false;
+    for (const auto b : random_bytes) {
+        if (b != 0) has_nonzero = true;
+    }
+    EXPECT_TRUE(has_nonzero);
+
+    const std::uint16_t sample_domain[] = {'e', 'x', 'a', 'm', 'p', 'l', 'e', '.', 'c', 'o', 'm', 0};
+    std::uint16_t output_domain[32]{};
+    int written = tl_IdnToAscii(0, sample_domain, -1, output_domain, 32);
+    EXPECT_EQ(written, 12);
+    EXPECT_EQ(output_domain[0], 'e');
+}
+
 }  // namespace
 }  // namespace tradutorlinux

@@ -269,6 +269,12 @@ TL_MSABI void* tl_ldap_null_stub() noexcept;
 TL_MSABI std::uint32_t tl_ldap_unavailable_stub() noexcept;
 TL_MSABI std::uint32_t tl_ldap_success_stub() noexcept;
 TL_MSABI void tl_ldap_void_stub() noexcept;
+TL_MSABI int tl_IdnToAscii(std::uint32_t flags, const std::uint16_t* src, int src_len,
+                           std::uint16_t* dst, int dst_len) noexcept;
+TL_MSABI int tl_IdnToUnicode(std::uint32_t flags, const std::uint16_t* src, int src_len,
+                             std::uint16_t* dst, int dst_len) noexcept;
+TL_MSABI std::uint32_t tl_BCryptGenRandom(void* algorithm, std::uint8_t* buffer,
+                                          std::uint32_t count, std::uint32_t flags) noexcept;
 TL_MSABI int dummy_worker_check() noexcept;
 
 }  // extern "C"

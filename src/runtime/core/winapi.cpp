@@ -1683,6 +1683,88 @@ TL_MSABI std::uint32_t tl_ldap_success_stub() noexcept {
 TL_MSABI void tl_ldap_void_stub() noexcept {
 }
 
+TL_MSABI int tl_IdnToAscii(std::uint32_t flags, const std::uint16_t* src, int src_len,
+                           std::uint16_t* dst, int dst_len) noexcept {
+    (void)flags;
+    if (src == nullptr) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    int len = src_len;
+    if (len < 0) {
+        len = 0;
+        while (src[len] != 0) {
+            ++len;
+        }
+        ++len;
+    }
+    if (dst_len == 0) {
+        return len;
+    }
+    if (dst == nullptr || dst_len < len) {
+        set_last_error(abi::kErrorInsufficientBuffer);
+        return 0;
+    }
+    for (int i = 0; i < len; ++i) {
+        dst[i] = src[i];
+    }
+    return len;
+}
+
+TL_MSABI int tl_IdnToUnicode(std::uint32_t flags, const std::uint16_t* src, int src_len,
+                             std::uint16_t* dst, int dst_len) noexcept {
+    (void)flags;
+    if (src == nullptr) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    int len = src_len;
+    if (len < 0) {
+        len = 0;
+        while (src[len] != 0) {
+            ++len;
+        }
+        ++len;
+    }
+    if (dst_len == 0) {
+        return len;
+    }
+    if (dst == nullptr || dst_len < len) {
+        set_last_error(abi::kErrorInsufficientBuffer);
+        return 0;
+    }
+    for (int i = 0; i < len; ++i) {
+        dst[i] = src[i];
+    }
+    return len;
+}
+
+TL_MSABI std::uint32_t tl_BCryptGenRandom(void* algorithm, std::uint8_t* buffer,
+                                          std::uint32_t count, std::uint32_t flags) noexcept {
+    (void)algorithm;
+    (void)flags;
+    if (count == 0) {
+        return 0;
+    }
+    if (buffer == nullptr) {
+        return 0xC000000DU; // STATUS_INVALID_PARAMETER
+    }
+    long ret = ::syscall(SYS_getrandom, buffer, static_cast<std::size_t>(count), 0);
+    if (ret < 0) {
+        int fd = ::open("/dev/urandom", O_RDONLY | O_CLOEXEC);
+        if (fd >= 0) {
+            std::size_t total = 0;
+            while (total < count) {
+                ssize_t n = ::read(fd, buffer + total, count - total);
+                if (n <= 0) break;
+                total += static_cast<std::size_t>(n);
+            }
+            ::close(fd);
+        }
+    }
+    return 0; // STATUS_SUCCESS
+}
+
 }  // extern "C"
 }  // namespace tradutorlinux
 
@@ -1807,6 +1889,17 @@ void register_winapi_stubs_module() {
     };
     static const InternalModule kWldap32Module{"WLDAP32.dll", kWldap32Exports};
     register_module(kWldap32Module);
+    static const ExportedFunction kNormalizExports[] = {
+        {"IdnToAscii", 1, reinterpret_cast<std::uintptr_t>(&tl_IdnToAscii), ExportSupport::Full},
+        {"IdnToUnicode", 2, reinterpret_cast<std::uintptr_t>(&tl_IdnToUnicode), ExportSupport::Full},
+    };
+    static const InternalModule kNormalizModule{"Normaliz.dll", kNormalizExports};
+    register_module(kNormalizModule);
+    static const ExportedFunction kBcryptExports[] = {
+        {"BCryptGenRandom", 1, reinterpret_cast<std::uintptr_t>(&tl_BCryptGenRandom), ExportSupport::Full},
+    };
+    static const InternalModule kBcryptModule{"bcrypt.dll", kBcryptExports};
+    register_module(kBcryptModule);
 }
 
 }  // namespace tradutorlinux::loader
