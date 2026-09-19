@@ -501,7 +501,7 @@ function(tl_add_pe_fixture target_name source_file manifest_file)
             COMMAND "${CMAKE_COMMAND}"
                 "-DFIXTURE=${target_name}.exe"
                 "-DLIMITATION=${ARG_KNOWN_LIMITATION}"
-                "-DMATRIX=${CMAKE_SOURCE_DIR}/docs/compatibilidade.md"
+                "-DMATRIX=${CMAKE_SOURCE_DIR}/docs/compatibilidade-aplicativos.md"
                 -P "${CMAKE_CURRENT_SOURCE_DIR}/verify_known_limitation.cmake"
         )
         set_tests_properties(fixture_${target_name}_limitation_metadata PROPERTIES
