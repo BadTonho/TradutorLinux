@@ -125,7 +125,124 @@ Continuam estritamente fora do escopo desta rodada:
 - grandes refatorações estruturais ou reescrita de subsistemas estáveis;
 - suporte a binários PE32 de 32 bits (x86), ARM ou WOW64;
 - emulação de drivers de kernel, serviços Windows, anticheat e DirectX nativo;
-- inclusão de DLLs binárias ou shims proprietários fora de `compat/apps/<app-id>/`.
+---
+
+## Auditoria de Erros e Bloqueios do Corpus Real (2026-09-19)
+
+Executada via `./build/debug/src/tradutorlinux` sobre os 27 alvos do corpus
+`Aplicativos_Windows_Populares/`. A rodada cobriu:
+1. `--report`: análise estática de PE, seções, mitigação, recursos e imports;
+2. execução direta: limites de segurança `--timeout 3 --cpu 3 --memory 512 --trace` em ambiente isolado;
+3. `install`: tentativa de instalação com prefixos temporários isolados em `/tmp/` para pacotes e instaladores.
+
+### Tabela de Resultados
+
+| Aplicativo / Pacote | Análise (`--report`) | Execução (`run`) | Instalação (`install`) | Diagnóstico do Erro Principal |
+|---|---|---|---|---|
+| `7z_x64.exe` | exit 0 (100% imports) | exit 0 | — | Sucesso funcional |
+| `7zFM_x64.exe` | exit 0 (100% imports) | exit 0 | — | Sucesso sob display / `CreateWindowExA` requer backend gráfico |
+| `7z.dll` | exit 0 (100% imports) | — | — | DLL dependente válida |
+| `winrar-x64-723.exe` | exit 0 (100% imports) | exit 0 | — | Sucesso SFX |
+| `WinRAR_x64.exe` | exit 0 (100% imports) | exit 0 | — | Sucesso SFX |
+| `putty_x64.exe` | exit 0 (100% imports) | exit 72 (`GuestTimeout`) | — | `clock_nanosleep` timeout aguardando transporte de rede/diálogo |
+| `notepad++.exe` | exit 0 (100% imports) | exit 0 | — | Inicialização headless válida / `CreateWindowExA` requer display |
+| `Notepad++/notepad++.exe` | exit 0 (100% imports) | exit 0 | — | Inicialização headless válida |
+| `Notepad++/updater/GUP.exe` | exit 5 (`unsupported`) | exit 5 | — | `libcurl.dll (0/4)` status=`unknown-dll` |
+| `7-Zip/7zG.exe` | exit 0 (100% imports) | exit 0 | — | Operação gráfica do 7-Zip |
+| `RTSS.exe` | exit 5 (`unsupported-arch`) | exit 5 | — | Arquitetura 32-bit x86 (`0x14c`) não suportada |
+| `RTSSHooks64.dll` | exit 0 (100% imports) | — | — | DLL x64 válida |
+| `RobloxPlayerInstaller.exe` | exit 0 (100% imports) | exit 3 (`ExitProcess 3`) | exit 3 | `RBXCRASH: FatalRuntimeError (RSL - panic: e374e9c-Worker,28)` |
+| `Rockstar-Games-Launcher.exe` | exit 0 (100% imports) | exit 3 (`ExitProcess 3`) | — | `ExitProcess(3)` explícito do convidado |
+| `Logitech_GHUB_x64.exe` | exit 0 (100% imports) | exit 1 (`ExitProcess 1`) | exit 1 | `failed stage="setup" exit-code="1"` |
+| `lghub_installer.exe` | exit 0 (100% imports) | exit 1 (`ExitProcess 1`) | exit 1 | `failed stage="setup" exit-code="1"` |
+| `7-Zip_x64_Installer.exe` | exit 5 (`unsupported-arch`) | exit 5 | exit 0 | Bootstrap 32-bit; payload PE64 registrado no install |
+| `Notepad++_x64_Installer.exe` | exit 5 (`unsupported-arch`) | exit 5 | exit 0 | Bootstrap NSIS 32-bit; payload PE64 registrado no install |
+| `Affinity x64.msix` | exit 4 (`malformed`) | exit 4 | exit 4 | `failed stage="package-parse"`: limite descompactado de 512 MiB |
+| `CapCut_*_installer.exe` | exit 5 (`unsupported-arch`) | exit 5 | exit 5 | Arquitetura 32-bit x86 (`0x14c`) não suportada |
+| `Creative_Cloud_Set-Up_7474.exe`| exit 5 (`unsupported-arch`) | exit 5 | exit 5 | Arquitetura 32-bit x86 (`0x14c`) não suportada |
+| `EpicInstaller-*.exe` | exit 5 (`unsupported-arch`) | exit 5 | exit 5 | Arquitetura 32-bit x86 (`0x14c`) não suportada |
+| `Everything_Search_x64.exe` | exit 5 (`unsupported-arch`) | exit 5 | — | Arquitetura 32-bit x86 (`0x14c`) não suportada |
+| `CPU-Z_2.18_en.exe` | exit 5 (`unsupported-arch`) | exit 5 | — | Arquitetura 32-bit x86 (`0x14c`) não suportada |
+| `GPU-Z_2.70.0.exe` | exit 5 (`unsupported-arch`) | exit 5 | — | Arquitetura 32-bit x86 (`0x14c`) não suportada |
+| `HWMonitor_1.67.exe` | exit 5 (`unsupported-arch`) | exit 5 | — | Arquitetura 32-bit x86 (`0x14c`) não suportada |
+| `HWiNFO64.exe` | exit 4 (`malformed`) | exit 4 | — | `parse-failed status="malformed" detail="diretório de exports fora da imagem"` |
+| `officedeploymenttool_*.exe` | exit 5 (`unsupported-arch`) | exit 5 | exit 5 | Arquitetura 32-bit x86 (`0x14c`) não suportada |
+| `RTSSSetup737.exe` | exit 5 (`unsupported-arch`) | exit 5 | exit 0 | Bootstrap 32-bit; payload PE64 registrado no install |
+| `Rufus_x64.exe` | exit 4 (`malformed`) | exit 4 | — | `parse-failed status="malformed" detail="diretório de exceções fora da imagem (RVA 0xc5000 size 0x4ae8)"` |
+
+---
+
+### Detalhamento dos Erros por Causa-Raiz Técnica
+
+#### 1. Rejeição Estrutural: Arquitetura 32-bit (x86 / Machine 0x14c) — Exit Code 5
+- **Mensagem do Runtime:**
+  ```text
+  [tl][pe][error] parse-failed status="unsupported-architecture" detail="arquitetura de máquina 0x14c não suportada (esperado AMD64)"
+  ```
+- **Aplicativos afetados:** 12 binários (`CapCut`, `Creative Cloud`, `EpicInstaller`, `Everything Search`, `CPU-Z`, `GPU-Z`, `HWMonitor`, `Office Deployment`, `RTSS.exe`, e os bootstraps de instalação de `7-Zip`, `Notepad++` e `RTSS`).
+- **Causa Técnica:** O cabeçalho COFF possui `Machine = 0x14c` (i386). O TradutorLinux tem como alvo estrito PE32+ (AMD64 0x8664). O comando `install` consegue contornar instaladores cujo payload PE32+ seja descompactável para o prefixo, mas a execução direta do wrapper 32-bit é rejeitada por contrato.
+
+#### 2. Rejeição de Packers / Seções UPX Anômalas — Exit Code 4
+- **HWiNFO64.exe:**
+  ```text
+  [tl][pe][error] parse-failed status="malformed" detail="diretório de exports fora da imagem"
+  ```
+  - **Causa:** O cabeçalho PE aponta o diretório de exports para um RVA pertencente à seção virtual `UPX0` (`SizeOfRawData = 0`), sem bytes físicos no arquivo. O leitor rejeita com segurança para evitar dereferência nula.
+- **Rufus_x64.exe:**
+  ```text
+  [tl][pe][error] parse-failed status="malformed" detail="diretório de exceções fora da imagem (RVA 0xc5000 size 0x4ae8)"
+  ```
+  - **Causa:** Tabela `.pdata` aponta para RVA virtual `0xc5000` em seção sem dados no arquivo e seção `UPX1` marcada com permissões W+X simultâneas, violando a política de memória W^X.
+
+#### 3. Limite de Pacote MSIX / AppX — Exit Code 4
+- **Affinity x64.msix:**
+  ```text
+  [tl][install][error] failed stage="package-parse" prefix="/tmp/.../pfx" app-id="test_affinity_x64"
+  erro: pacote MSIX / AppX inválido ou não suportado
+  ```
+  - **Causa:** O parser ZIP64/MSIX impõe um limite máximo de segurança descompactado de 512 MiB para contenção contra abusos de descompressão (ZIP bomb). O arquivo do Affinity excede esse limite e requer streaming ou ajuste do validador.
+
+#### 4. Erros de Inicialização e Término do Convidado (Exit Codes 3 e 1)
+- **RobloxPlayerInstaller.exe:**
+  - **Relatório de Imports:** 100% resolvidos (430/430).
+  - **Erro observado:**
+    ```text
+    RBXCRASH: FatalRuntimeError (RSL - panic: e374e9c-Worker,28)
+    [tl][runtime][info] ExitProcess symbol="ExitProcess" exit-code="3" status="success" mechanism="guest-transfer"
+    [tl][install][error] failed stage="setup" exit-code="3"
+    ```
+  - **Causa:** O worker interno do instalador da Roblox falha ao consultar componentes de sessão/rede ou slots de TLS específicos, disparando o panic `RBXCRASH` interno do binário Windows.
+- **Rockstar-Games-Launcher.exe:**
+  - **Relatório de Imports:** 100% resolvidos (338/338).
+  - **Erro observado:** Encerramento imediato do entry point com `ExitProcess(3)` sem mensagem adicional de erro.
+- **Logitech_GHUB_x64.exe / lghub_installer.exe:**
+  - **Relatório de Imports:** 100% resolvidos (114/114).
+  - **Erro observado:**
+    ```text
+    [tl][runtime][info] ExitProcess symbol="ExitProcess" exit-code="1" status="success" mechanism="guest-transfer"
+    [tl][install][error] failed stage="setup" exit-code="1"
+    ```
+  - **Causa:** O instalador detecta falta de serviços de background (`advapi32!OpenSCManagerW` / gerenciador de serviços) ou caminhos de diretório de instalação não inicializados e aborta com código 1.
+
+#### 5. Dependências Dinâmicas Ausentes — Exit Code 5
+- **Notepad++/updater/GUP.exe:**
+  - **Imports ausentes:**
+    ```text
+    dll: libcurl.dll (0/4 resolved)
+      import: curl_easy_setopt status=unknown-dll
+      import: curl_easy_cleanup status=unknown-dll
+      import: curl_easy_init status=unknown-dll
+      import: curl_easy_perform status=unknown-dll
+    ```
+  - **Causa:** `GUP.exe` depende da `libcurl.dll` que acompanha o executável, porém o resolvedor não encontra a biblioteca no caminho de busca local ou a cadeia de dependências de `libcurl.dll` não resolve.
+
+#### 6. Timeout de Conexão e Espera de Mensagens — Exit Code 72
+- **putty_x64.exe:**
+  - **Erro observado:**
+    ```text
+    [tl][process][error] terminated category="guest-timeout" timeout-ms="3000" timeout-samples="13" timeout-pe-samples="0" timeout-host-samples="13" host-symbol="clock_nanosleep"
+    ```
+  - **Causa:** Em execução direta sem servidor SSH local ou sem interação GUI, a thread principal entra no loop ocioso de espera (`clock_nanosleep` / `GetMessageA`) até o timeout do hospedeiro (`72`).
 
 ---
 
