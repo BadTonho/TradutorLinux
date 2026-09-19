@@ -515,7 +515,11 @@ TL_MSABI int tl_SetFileInformationByHandle(const void* const handle, const int i
         return 0;
     }
     if (posix_semantics) {
-        if (!slot->unlinked && ::unlink(slot->path.c_str()) != 0) {
+        bool removed = (::unlink(slot->path.c_str()) == 0);
+        if (!removed && (errno == EISDIR || errno == EPERM)) {
+            removed = (::rmdir(slot->path.c_str()) == 0);
+        }
+        if (!slot->unlinked && !removed) {
             const std::uint32_t error = errno_to_win32(errno);
             set_last_error(error);
             trace_filesystem("set-information", "failed", "posix-delete");

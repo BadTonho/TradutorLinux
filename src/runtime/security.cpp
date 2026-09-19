@@ -40,6 +40,7 @@ constexpr std::size_t kMaxExplicitEntries = 128;
 
 struct Ace {
     std::uint8_t type{};
+    std::uint8_t flags{};
     std::uint32_t mask{};
     SidBytes sid;
 };
@@ -158,6 +159,7 @@ template <typename T>
     std::size_t offset = sizeof(abi::GuestAcl);
     for (const Ace& ace : aces) {
         result[offset] = ace.type;
+        result[offset + 1] = ace.flags;
         const std::uint16_t ace_size = static_cast<std::uint16_t>(8U + ace.sid.size());
         std::memcpy(result.data() + offset + 2, &ace_size, sizeof(ace_size));
         std::memcpy(result.data() + offset + 4, &ace.mask, sizeof(ace.mask));
@@ -202,7 +204,7 @@ template <typename T>
             std::memcpy(&ace_size, bytes.data() + offset + 2, sizeof(ace_size));
             std::memcpy(&mask, bytes.data() + offset + 4, sizeof(mask));
             if ((type != abi::kAccessAllowedAceType && type != abi::kAccessDeniedAceType) ||
-                flags != 0 || ace_size < 8U || ace_size > header.acl_size - offset) {
+                (flags & ~0x1f) != 0 || ace_size < 8U || ace_size > header.acl_size - offset) {
                 return abi::kErrorNotSupported;
             }
             const void* const sid = bytes.data() + offset + 8;
@@ -214,7 +216,7 @@ template <typename T>
             if (!copy_sid(sid, sid_copy)) {
                 return abi::kErrorInvalidParameter;
             }
-            output.push_back(Ace{type, mask, std::move(sid_copy)});
+            output.push_back(Ace{type, flags, mask, std::move(sid_copy)});
             offset += ace_size;
         }
         return offset == header.acl_size ? abi::kErrorSuccess : abi::kErrorInvalidParameter;
@@ -225,7 +227,7 @@ template <typename T>
 }
 
 [[nodiscard]] std::vector<std::uint8_t> default_acl(const SidBytes& user_sid) {
-    return make_acl({Ace{static_cast<std::uint8_t>(abi::kAccessAllowedAceType), abi::kGenericAll,
+    return make_acl({Ace{static_cast<std::uint8_t>(abi::kAccessAllowedAceType), 0, abi::kGenericAll,
                          user_sid}});
 }
 
@@ -965,8 +967,7 @@ TL_ADVAPI_MSABI std::uint32_t tl_SetEntriesInAclW(const std::uint32_t entry_coun
             const abi::GuestExplicitAccessW& entry = list[index];
             if (entry.inheritance != 0 || entry.trustee.multiple_trustee != nullptr ||
                 entry.trustee.multiple_trustee_operation != abi::kNoMultipleTrustee ||
-                entry.trustee.trustee_form != abi::kTrusteeIsSid ||
-                entry.trustee.trustee_type != abi::kTrusteeIsUnknown) {
+                entry.trustee.trustee_form != abi::kTrusteeIsSid) {
                 return abi::kErrorNotSupported;
             }
             SidBytes sid;
@@ -988,7 +989,8 @@ TL_ADVAPI_MSABI std::uint32_t tl_SetEntriesInAclW(const std::uint32_t entry_coun
                 entry.access_mode != abi::kDenyAccess) {
                 return abi::kErrorNotSupported;
             }
-            Ace new_ace{type, entry.access_permissions, std::move(sid)};
+            const std::uint8_t ace_flags = static_cast<std::uint8_t>(entry.inheritance & 0x1f);
+            Ace new_ace{type, ace_flags, entry.access_permissions, std::move(sid)};
             if (type == abi::kAccessDeniedAceType) {
                 result.insert(result.begin(), std::move(new_ace));
             } else {
@@ -1090,10 +1092,10 @@ TL_ADVAPI_MSABI std::uint32_t tl_GetNamedSecurityInfoW(
 TL_ADVAPI_MSABI std::uint32_t tl_SetNamedSecurityInfoW(
     std::uint16_t* const object_name, const std::uint32_t object_type,
     const std::uint32_t security_information, void* const owner, void* const group,
-    void* const dacl, void* const sacl, const std::uint32_t inheritance) noexcept {
+    void* const dacl, void* const sacl) noexcept {
     try {
         if (object_type != abi::kSeFileObject || security_information != abi::kDaclSecurityInformation ||
-            owner != nullptr || group != nullptr || sacl != nullptr || inheritance != 0 || dacl == nullptr) {
+            owner != nullptr || group != nullptr || sacl != nullptr || dacl == nullptr) {
             return abi::kErrorNotSupported;
         }
         std::string key;

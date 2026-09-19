@@ -82,7 +82,9 @@ void convert_find_data(const Win32FindDataA& source, LegacyFindDataW& target) no
     const void* handle = reinterpret_cast<const void*>(
         kFindHandleBase + static_cast<std::uintptr_t>(it - g_find_slots.begin()));
     if (tl_FindNextFileA(handle, find_data) == 0) {
+        const auto err = tl_GetLastError();
         tl_FindClose(handle);
+        set_last_error(err);
         return kInvalidHandleValue;
     }
     return const_cast<void*>(handle);
@@ -160,6 +162,11 @@ TL_MSABI int tl_FindClose(const void* handle) noexcept {
     }
     *slot = {};
     set_last_error(abi::kErrorSuccess);
+    slot->dir = nullptr;
+    slot->used = false;
+    slot->directory.clear();
+    slot->pattern.clear();
+    slot->header = {};
     return 1;
 }
 TL_MSABI void* tl_FindFirstStreamW(const std::uint16_t* const file_name, const int info_level,

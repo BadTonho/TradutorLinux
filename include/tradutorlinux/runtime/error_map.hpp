@@ -54,6 +54,10 @@ constexpr std::uint32_t kAddressInUse = 10048;
             return win_error::kBrokenPipe;
         case ENOTEMPTY:
             return win_error::kDirectoryNotEmpty;
+        case EISDIR:
+            return win_error::kAccessDenied;
+        case ENOTDIR:
+            return win_error::kPathNotFound;
 #ifdef ECONNREFUSED
         case ECONNREFUSED:
             return win_error::kConnectionRefused;

@@ -449,6 +449,7 @@ void register_kernel32_module() {
         {"IsThreadAFiber", 415, reinterpret_cast<std::uintptr_t>(&tl_IsThreadAFiber), ExportSupport::Full},
         {"InterlockedFlushSList", 416, reinterpret_cast<std::uintptr_t>(&tl_InterlockedFlushSList), ExportSupport::Full},
         {"lstrcatW", 417, reinterpret_cast<std::uintptr_t>(&tl_lstrcatW), ExportSupport::Full},
+        {"SetDefaultDllDirectories", 418, reinterpret_cast<std::uintptr_t>(&tl_SetDefaultDllDirectories), ExportSupport::Full},
     };
     static const InternalModule kKernel32Module{"KERNEL32.dll", kKernel32Exports};
     register_module(kKernel32Module);

@@ -315,17 +315,24 @@ TL_MSABI int tl_CloseHandle(const void* const handle) noexcept {
             ::close(slot->fd);
             *slot = {};
             slot->fd = -1;
-            if (delete_pending && ::unlink(path.c_str()) != 0 && errno != ENOENT) {
-                const std::uint32_t error = errno_to_win32(errno);
-                set_last_error(error);
-                trace_filesystem("delete-on-close", "failed", std::to_string(error));
-                return 0;
+            bool removed = false;
+            if (delete_pending) {
+                removed = (::unlink(path.c_str()) == 0);
+                if (!removed && (errno == EISDIR || errno == EPERM)) {
+                    removed = (::rmdir(path.c_str()) == 0);
+                }
+                if (!removed && errno != ENOENT) {
+                    const std::uint32_t error = errno_to_win32(errno);
+                    set_last_error(error);
+                    trace_filesystem("delete-on-close", "failed", std::to_string(error));
+                    return 0;
+                }
+                if (removed) {
+                    runtime::security::remove_path(path);
+                    trace_filesystem("delete-on-close", "success", "removed");
+                }
             }
             set_last_error(abi::kErrorSuccess);
-            if (delete_pending) {
-                runtime::security::remove_path(path);
-                trace_filesystem("delete-on-close", "success", "removed");
-            }
             return 1;
         }
         if (file_guard.is_file_handle()) {

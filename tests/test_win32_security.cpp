@@ -123,7 +123,7 @@ TEST(Win32SecurityTest, NamedDaclPersistsAndPrefixesRemainIsolated) {
     ASSERT_NE(new_acl, nullptr);
     ASSERT_EQ(tl_SetNamedSecurityInfoW(name.data(), abi::kSeFileObject,
                                        abi::kDaclSecurityInformation, nullptr, nullptr, new_acl,
-                                       nullptr, 0),
+                                       nullptr),
               abi::kErrorSuccess);
     EXPECT_EQ(tl_LocalFree(descriptor), nullptr);
     EXPECT_EQ(tl_LocalFree(new_acl), nullptr);
@@ -308,7 +308,7 @@ TEST(Win32SecurityTest, ProtectedAclAndDescriptorBuffersRejectUnmappedPointers) 
               abi::kErrorInvalidParameter);
     EXPECT_EQ(tl_SetNamedSecurityInfoW(name.data(), abi::kSeFileObject,
                                        abi::kDaclSecurityInformation, nullptr, nullptr, invalid,
-                                       nullptr, 0),
+                                       nullptr),
               abi::kErrorInvalidParameter);
     EXPECT_EQ(tl_SetFileSecurityW(name.data(), abi::kDaclSecurityInformation, invalid), 0);
     EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);

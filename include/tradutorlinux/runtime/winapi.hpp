@@ -276,6 +276,7 @@ TL_MSABI int tl_IdnToUnicode(std::uint32_t flags, const std::uint16_t* src, int 
 TL_MSABI std::uint32_t tl_BCryptGenRandom(void* algorithm, std::uint8_t* buffer,
                                           std::uint32_t count, std::uint32_t flags) noexcept;
 TL_MSABI int dummy_worker_check() noexcept;
+TL_MSABI int tl_SetDefaultDllDirectories(std::uint32_t directory_flags) noexcept;
 
 }  // extern "C"
 

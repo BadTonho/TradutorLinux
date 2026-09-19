@@ -1,4 +1,5 @@
 #include "tradutorlinux/runtime/winapi.hpp"
+#include "tradutorlinux/win32/kernel32.hpp"
 #include "tradutorlinux/loader/module.hpp"
 #include "tradutorlinux/loader/builtin_modules.hpp"
 #include "tradutorlinux/runtime/ole32.hpp"
@@ -429,12 +430,52 @@ TL_MSABI int tl_ShellExecuteExW(void* exec_info) noexcept {
     }
     info.h_inst_app = nullptr;
     info.h_process = nullptr;
+    std::u16string command_line;
+    if (!file_copy.empty()) {
+        command_line = u"\"" + file_copy + u"\"";
+        if (!parameters_copy.empty()) {
+            command_line += u" " + parameters_copy;
+        }
+    }
+
+    struct LocalProcessInformation {
+        void* process_handle{nullptr};
+        void* thread_handle{nullptr};
+        std::uint32_t process_id{0};
+        std::uint32_t thread_id{0};
+    } pi{};
+
+    const int created = tl_CreateProcessW(
+        info.lp_file,
+        command_line.empty() ? nullptr : reinterpret_cast<std::uint16_t*>(command_line.data()),
+        nullptr, nullptr, 0, 0, nullptr,
+        info.lp_directory, nullptr, &pi);
+
+    if (created == 0) {
+        info.h_inst_app = reinterpret_cast<void*>(static_cast<std::uintptr_t>(2)); // SE_ERR_FNF
+        info.h_process = nullptr;
+        write_guest_value(exec_info, info);
+        return 0;
+    }
+
+    info.h_inst_app = reinterpret_cast<void*>(static_cast<std::uintptr_t>(42)); // > 32 = success
+    if ((info.f_mask & 0x00000040U) != 0) { // SEE_MASK_NOCLOSEPROCESS
+        info.h_process = pi.process_handle;
+    } else {
+        info.h_process = nullptr;
+        if (pi.process_handle != nullptr) {
+            tl_CloseHandle(pi.process_handle);
+        }
+    }
+    if (pi.thread_handle != nullptr) {
+        tl_CloseHandle(pi.thread_handle);
+    }
     if (!write_guest_value(exec_info, info)) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
-    set_last_error(abi::kErrorNotSupported);
-    return 0;
+    set_last_error(abi::kErrorSuccess);
+    return 1;
 }
 
 struct GuestShFileOpStructW {

@@ -1453,8 +1453,10 @@ TL_MSABI int tl_CreateProcessA(const char* application_name, char* command_line,
                                const void* environment, const char* current_directory,
                                const void* startup_info, void* process_information) noexcept {
     (void)startup_info;
-    if (process_attributes != nullptr || thread_attributes != nullptr || inherit_handles != 0 ||
-        creation_flags != 0 || environment != nullptr ||
+    (void)inherit_handles;
+    (void)creation_flags;
+    (void)environment;
+    if (process_attributes != nullptr || thread_attributes != nullptr ||
         process_information == nullptr ||
         (application_name == nullptr && command_line == nullptr)) {
         set_last_error(abi::kErrorInvalidParameter);
