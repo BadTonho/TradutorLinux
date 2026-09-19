@@ -1,6 +1,9 @@
 # Roadmaps legados do TradutorLinux
 
-Este arquivo preserva integralmente os três roadmaps anteriores. Ele é somente histórico; o novo roadmap será definido em documento separado.
+Este arquivo preserva integralmente os roadmaps fundacionais anteriores.
+O ciclo intermediário de auditoria e estabilização (etapas R1 a R24, concluído em 2026-09-15)
+está preservado em [ROADMAP-R1-R24.md](ROADMAP-R1-R24.md).
+As etapas ativas estão no [ROADMAP.md](../ROADMAP.md) principal.
 
 ---
 
