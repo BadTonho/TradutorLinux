@@ -100,6 +100,31 @@ TL_CRYPT32_MSABI void* tl_CertOpenSystemStoreA(
 TL_CRYPT32_MSABI void* tl_CertOpenSystemStoreW(
     void* crypt_prov, const std::uint16_t* system_store_name) noexcept;
 
+TL_CRYPT32_MSABI std::uint32_t tl_CertGetNameStringA(
+    const GuestCertContext* cert_context, std::uint32_t type, std::uint32_t flags,
+    const void* type_parameter, char* name_string, std::uint32_t name_string_capacity) noexcept;
+
+TL_CRYPT32_MSABI void tl_CertFreeCertificateChain(void* chain_context) noexcept;
+TL_CRYPT32_MSABI void tl_CertFreeCertificateChainEngine(void* engine) noexcept;
+TL_CRYPT32_MSABI int tl_CertCreateCertificateChainEngine(void* config, void** engine) noexcept;
+TL_CRYPT32_MSABI int tl_CertGetCertificateChain(void* engine, void* cert_context, void* time,
+                                                void* additional_store, void* chain_para,
+                                                std::uint32_t flags, void* reserved,
+                                                void** chain_context) noexcept;
+TL_CRYPT32_MSABI void* tl_CertFindExtension(const char* oid, std::uint32_t count, void* extensions) noexcept;
+TL_CRYPT32_MSABI int tl_CertAddCertificateContextToStore(void* store, void* cert_context,
+                                                         std::uint32_t add_disp, void** store_context) noexcept;
+TL_CRYPT32_MSABI void* tl_PFXImportCertStore(void* pfx_blob, const std::uint16_t* password,
+                                             std::uint32_t flags) noexcept;
+TL_CRYPT32_MSABI int tl_CryptStringToBinaryA(const char* string, std::uint32_t string_len,
+                                             std::uint32_t flags, std::uint8_t* binary,
+                                             std::uint32_t* binary_len, std::uint32_t* skip,
+                                             std::uint32_t* flags_out) noexcept;
+TL_CRYPT32_MSABI int tl_CryptDecodeObjectEx(std::uint32_t cert_encoding_type, const char* struct_type,
+                                            const std::uint8_t* encoded, std::uint32_t encoded_len,
+                                            std::uint32_t flags, void* decode_para,
+                                            void* struct_info, std::uint32_t* struct_info_len) noexcept;
+
 }  // extern "C"
 
 }  // namespace tradutorlinux

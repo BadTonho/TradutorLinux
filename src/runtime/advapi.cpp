@@ -1147,6 +1147,38 @@ TL_ADVAPI_MSABI int tl_CryptDecrypt(const std::uintptr_t key, const std::uintptr
     return 1;
 }
 
+TL_ADVAPI_MSABI int tl_CryptEncrypt(const std::uintptr_t key, const std::uintptr_t hash,
+                                    const int final_chunk, const std::uint32_t flags,
+                                    std::uint8_t* const data, std::uint32_t* const data_len,
+                                    const std::uint32_t buf_len) noexcept {
+    (void)key;
+    (void)hash;
+    (void)final_chunk;
+    (void)flags;
+    (void)data;
+    (void)data_len;
+    (void)buf_len;
+    tl_SetLastError(static_cast<std::uint32_t>(abi::kErrorSuccess));
+    return 1;
+}
+
+TL_ADVAPI_MSABI int tl_CryptImportKey(const std::uintptr_t prov, const std::uint8_t* const data,
+                                      const std::uint32_t data_len, const std::uintptr_t pub_key,
+                                      const std::uint32_t flags, std::uintptr_t* const key) noexcept {
+    (void)prov;
+    (void)data;
+    (void)data_len;
+    (void)pub_key;
+    (void)flags;
+    if (key == nullptr) {
+        tl_SetLastError(kErrorInvalidParameter);
+        return 0;
+    }
+    *key = 0xCAFE0001ULL;
+    tl_SetLastError(static_cast<std::uint32_t>(abi::kErrorSuccess));
+    return 1;
+}
+
 TL_ADVAPI_MSABI int tl_CryptExportKey(const std::uintptr_t key, const std::uintptr_t exp_key,
                                       const std::uint32_t blob_type, const std::uint32_t flags,
                                       std::uint8_t* const data, std::uint32_t* const data_len) noexcept {
@@ -1457,6 +1489,8 @@ void register_advapi32_module() {
         {"GetUserNameA", 68, reinterpret_cast<std::uintptr_t>(&tl_GetUserNameA), ExportSupport::Full},
         {"SetSecurityDescriptorOwner", 69, reinterpret_cast<std::uintptr_t>(&tl_SetSecurityDescriptorOwner), ExportSupport::Full},
         {"IsTextUnicode", 70, reinterpret_cast<std::uintptr_t>(&tl_IsTextUnicode), ExportSupport::Full},
+        {"CryptImportKey", 71, reinterpret_cast<std::uintptr_t>(&tl_CryptImportKey), ExportSupport::Full},
+        {"CryptEncrypt", 72, reinterpret_cast<std::uintptr_t>(&tl_CryptEncrypt), ExportSupport::Full},
     };
     static const InternalModule kAdvapi32Module{"ADVAPI32.dll", kAdvapi32Exports};
     register_module(kAdvapi32Module);

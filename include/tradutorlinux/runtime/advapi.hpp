@@ -61,6 +61,13 @@ TL_ADVAPI_MSABI int tl_CryptAcquireContextW(void** prov_handle, const std::uint1
 TL_ADVAPI_MSABI int tl_CryptGenRandom(void* prov_handle, std::uint32_t length,
                                       std::uint8_t* buffer) noexcept;
 TL_ADVAPI_MSABI int tl_CryptReleaseContext(void* prov_handle, std::uint32_t flags) noexcept;
+TL_ADVAPI_MSABI int tl_CryptImportKey(std::uintptr_t prov, const std::uint8_t* data,
+                                      std::uint32_t data_len, std::uintptr_t pub_key,
+                                      std::uint32_t flags, std::uintptr_t* key) noexcept;
+TL_ADVAPI_MSABI int tl_CryptEncrypt(std::uintptr_t key, std::uintptr_t hash,
+                                    int final_chunk, std::uint32_t flags,
+                                    std::uint8_t* data, std::uint32_t* data_len,
+                                    std::uint32_t buf_len) noexcept;
 
 TL_ADVAPI_MSABI int tl_OpenProcessToken(const void* process, std::uint32_t desired_access,
                                         void** token) noexcept;

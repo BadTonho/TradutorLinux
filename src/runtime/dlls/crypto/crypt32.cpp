@@ -327,6 +327,20 @@ bool write_guest_wstring(std::uint16_t* const destination,
     }
 }
 
+bool write_guest_cstring(char* const destination,
+                         const std::string& value) noexcept {
+    try {
+        std::vector<char> output(value.begin(), value.end());
+        output.push_back('\0');
+        return runtime::write_guest_memory(destination, output.data(),
+                                            output.size() * sizeof(char)).status ==
+               runtime::GuestMemoryAccessStatus::Success;
+    } catch (...) {
+        return false;
+    }
+}
+
+
 std::u16string name_label(const std::string_view oid, const std::uint32_t string_type) {
     if (string_type == 1U) {
         return {};
@@ -1208,6 +1222,340 @@ TL_CRYPT32_MSABI int tl_CryptQueryObject(const std::uint32_t dwObjectType, const
     return 0;
 }
 
+TL_CRYPT32_MSABI std::uint32_t tl_CertGetNameStringA(
+    const GuestCertContext* const cert_context, const std::uint32_t type,
+    const std::uint32_t flags, const void* const type_parameter,
+    char* const name_string, const std::uint32_t name_string_capacity) noexcept {
+    constexpr std::uint32_t kSupportedFlags = kCertNameIssuerFlag;
+    GuestCertContext context{};
+    std::vector<std::uint8_t> encoded_storage;
+    if (!snapshot_cert_context(cert_context, context, encoded_storage) ||
+        (type < kCertNameEmailType || type > kCertNameDnsType || type == kCertNameRdnType) ||
+        (type == kCertNameAttrType && type_parameter == nullptr) ||
+        (flags & ~kSupportedFlags) != 0U) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+
+    Bytes issuer{};
+    Bytes subject{};
+    const Bytes encoded(context.encoded, context.encoded_size);
+    if (!extract_certificate_names(encoded, issuer, subject)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    std::vector<NameAttribute> attributes;
+    if (!parse_name((flags & kCertNameIssuerFlag) != 0U ? issuer : subject, attributes)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    bool found = false;
+    bool selection_valid = true;
+    const std::u16string selected_w =
+        select_name(attributes, type, type_parameter, found, selection_valid);
+    if (!selection_valid) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    const std::string selected =
+        util::wide_to_utf8(reinterpret_cast<const std::uint16_t*>(selected_w.data()), selected_w.size());
+    const std::size_t required = selected.size() + 1U;
+    if (required > std::numeric_limits<std::uint32_t>::max()) {
+        set_last_error(abi::kErrorNotEnoughMemory);
+        return 0;
+    }
+    if (name_string == nullptr || name_string_capacity == 0U) {
+        set_last_error(abi::kErrorSuccess);
+        return static_cast<std::uint32_t>(required);
+    }
+    if (name_string_capacity < required) {
+        set_last_error(abi::kErrorInsufficientBuffer);
+        return 0;
+    }
+    if (!write_guest_cstring(name_string, selected)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    set_last_error(abi::kErrorSuccess);
+    return static_cast<std::uint32_t>(required);
+}
+
+struct GuestChainContext {
+    std::uint32_t cbSize{48};
+    std::uint32_t dwErrorStatus{0};
+    std::uint32_t dwInfoStatus{0};
+    std::uint32_t cChain{0};
+    void* rgpChain{nullptr};
+    std::uint32_t cLowerQualityChainContext{0};
+    void* rgpLowerQualityChainContext{nullptr};
+    std::uint32_t fHasRevocationFreshnessTime{0};
+    std::uint32_t dwRevocationFreshnessTime{0};
+};
+
+TL_CRYPT32_MSABI void tl_CertFreeCertificateChain(void* const chain_context) noexcept {
+    delete static_cast<GuestChainContext*>(chain_context);
+}
+
+TL_CRYPT32_MSABI void tl_CertFreeCertificateChainEngine(void* const engine) noexcept {
+    (void)engine;
+}
+
+TL_CRYPT32_MSABI int tl_CertCreateCertificateChainEngine(void* const config, void** const engine) noexcept {
+    (void)config;
+    if (engine == nullptr) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    void* const dummy_engine = reinterpret_cast<void*>(0xCCE0001);
+    if (!write_guest_value(engine, dummy_engine)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_CRYPT32_MSABI int tl_CertGetCertificateChain(
+    void* const engine, void* const cert_context, void* const time,
+    void* const additional_store, void* const chain_para,
+    const std::uint32_t flags, void* const reserved,
+    void** const chain_context) noexcept {
+    (void)engine;
+    (void)cert_context;
+    (void)time;
+    (void)additional_store;
+    (void)chain_para;
+    (void)flags;
+    (void)reserved;
+    if (chain_context == nullptr) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    auto* ctx = new (std::nothrow) GuestChainContext();
+    if (ctx == nullptr) {
+        set_last_error(abi::kErrorNotEnoughMemory);
+        return 0;
+    }
+    if (!write_guest_value(chain_context, ctx)) {
+        delete ctx;
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_CRYPT32_MSABI void* tl_CertFindExtension(const char* const oid, const std::uint32_t count,
+                                            void* const extensions) noexcept {
+    if (oid == nullptr || extensions == nullptr || count == 0) {
+        return nullptr;
+    }
+    struct GuestExtension {
+        const char* pszObjId;
+        std::int32_t fCritical;
+        std::uint32_t cbData;
+        const std::uint8_t* pbData;
+    };
+    const auto* ext_array = static_cast<const GuestExtension*>(extensions);
+    for (std::uint32_t i = 0; i < count; ++i) {
+        GuestExtension ext{};
+        if (!read_guest_value(&ext_array[i], ext)) {
+            break;
+        }
+        if (ext.pszObjId != nullptr) {
+            std::string ext_oid;
+            if (runtime::copy_guest_cstring(ext.pszObjId, 128, ext_oid)) {
+                if (ext_oid == oid) {
+                    return const_cast<GuestExtension*>(&ext_array[i]);
+                }
+            }
+        }
+    }
+    return nullptr;
+}
+
+TL_CRYPT32_MSABI int tl_CertAddCertificateContextToStore(
+    void* const store, void* const cert_context,
+    const std::uint32_t add_disp, void** const store_context) noexcept {
+    (void)add_disp;
+    if (store == nullptr || cert_context == nullptr) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    std::lock_guard<std::mutex> lock(g_crypto_mutex);
+    auto* tracked_store = static_cast<TrackedStore*>(store);
+    auto it = std::find_if(g_tracked_stores.begin(), g_tracked_stores.end(),
+                           [tracked_store](const auto& s) { return s.get() == tracked_store; });
+    if (it == g_tracked_stores.end()) {
+        set_last_error(abi::kErrorInvalidHandle);
+        return 0;
+    }
+    const auto* ctx = static_cast<const GuestCertContext*>(cert_context);
+    tracked_store->certs.push_back(ctx);
+    if (store_context != nullptr) {
+        if (!write_guest_value(store_context, ctx)) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
+        }
+    }
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_CRYPT32_MSABI void* tl_PFXImportCertStore(
+    void* const pfx_blob, const std::uint16_t* const password,
+    const std::uint32_t flags) noexcept {
+    (void)password;
+    (void)flags;
+    if (pfx_blob == nullptr) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return nullptr;
+    }
+    return tl_CertOpenStore(reinterpret_cast<const char*>(kCertStoreProvMemory),
+                            kX509AsnEncoding | kPkcs7AsnEncoding, nullptr, 0, nullptr);
+}
+
+TL_CRYPT32_MSABI int tl_CryptStringToBinaryA(
+    const char* const string, const std::uint32_t string_len,
+    const std::uint32_t flags, std::uint8_t* const binary,
+    std::uint32_t* const binary_len, std::uint32_t* const skip,
+    std::uint32_t* const flags_out) noexcept {
+    (void)flags;
+    if (string == nullptr || binary_len == nullptr) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    std::string input;
+    const std::size_t max_len = (string_len != 0) ? string_len : 1024U * 1024U;
+    if (!runtime::copy_guest_cstring(string, max_len, input)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    if (string_len != 0 && input.size() > string_len) {
+        input.resize(string_len);
+    }
+
+    auto b64_val = [](char c) noexcept -> int {
+        if (c >= 'A' && c <= 'Z') return c - 'A';
+        if (c >= 'a' && c <= 'z') return c - 'a' + 26;
+        if (c >= '0' && c <= '9') return c - '0' + 52;
+        if (c == '+') return 62;
+        if (c == '/') return 63;
+        return -1;
+    };
+
+    std::vector<std::uint8_t> decoded;
+    decoded.reserve(input.size() * 3 / 4);
+    int val = 0, valb = -8;
+    for (char c : input) {
+        if (c == '=') break;
+        int d = b64_val(c);
+        if (d < 0) continue;
+        val = (val << 6) | d;
+        valb += 6;
+        if (valb >= 0) {
+            decoded.push_back(static_cast<std::uint8_t>((val >> valb) & 0xFF));
+            valb -= 8;
+        }
+    }
+
+    std::uint32_t dest_len = 0;
+    if (!read_guest_value(binary_len, dest_len)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+
+    const std::uint32_t needed = static_cast<std::uint32_t>(decoded.size());
+    if (binary == nullptr) {
+        if (!write_guest_value(binary_len, needed)) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
+        }
+        if (skip != nullptr) (void)write_guest_value(skip, std::uint32_t{0});
+        if (flags_out != nullptr) (void)write_guest_value(flags_out, std::uint32_t{1});
+        set_last_error(abi::kErrorSuccess);
+        return 1;
+    }
+
+    if (dest_len < needed) {
+        (void)write_guest_value(binary_len, needed);
+        set_last_error(kErrorMoreData);
+        return 0;
+    }
+
+    if (!decoded.empty() && runtime::write_guest_memory(binary, decoded.data(), decoded.size()).status !=
+                                runtime::GuestMemoryAccessStatus::Success) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+
+    if (!write_guest_value(binary_len, needed)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    if (skip != nullptr) (void)write_guest_value(skip, std::uint32_t{0});
+    if (flags_out != nullptr) (void)write_guest_value(flags_out, std::uint32_t{1});
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_CRYPT32_MSABI int tl_CryptDecodeObjectEx(
+    const std::uint32_t cert_encoding_type, const char* const struct_type,
+    const std::uint8_t* const encoded, const std::uint32_t encoded_len,
+    const std::uint32_t flags, void* const decode_para,
+    void* const struct_info, std::uint32_t* const struct_info_len) noexcept {
+    (void)cert_encoding_type;
+    (void)struct_type;
+    (void)flags;
+    (void)decode_para;
+    if (struct_info_len == nullptr) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    if (encoded == nullptr && encoded_len > 0) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    std::uint32_t dest_len = 0;
+    if (!read_guest_value(struct_info_len, dest_len)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    const std::uint32_t needed = (encoded_len > 0) ? encoded_len : 16U;
+    if (struct_info == nullptr) {
+        if (!write_guest_value(struct_info_len, needed)) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
+        }
+        set_last_error(abi::kErrorSuccess);
+        return 1;
+    }
+    if (dest_len < needed) {
+        (void)write_guest_value(struct_info_len, needed);
+        set_last_error(kErrorMoreData);
+        return 0;
+    }
+    std::vector<std::uint8_t> temp(needed, 0);
+    if (encoded != nullptr && encoded_len > 0) {
+        if (runtime::read_guest_memory(encoded, temp.data(), std::min(dest_len, encoded_len)).status !=
+            runtime::GuestMemoryAccessStatus::Success) {
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
+        }
+    }
+    if (runtime::write_guest_memory(struct_info, temp.data(), temp.size()).status !=
+        runtime::GuestMemoryAccessStatus::Success) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    if (!write_guest_value(struct_info_len, needed)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
 }  // extern "C"
 }  // namespace tradutorlinux
 
@@ -1236,9 +1584,20 @@ void register_crypt32_module() {
         {"CryptMsgGetParam", 14, reinterpret_cast<std::uintptr_t>(&tl_CryptMsgGetParam), ExportSupport::Full},
         {"CryptQueryObject", 15, reinterpret_cast<std::uintptr_t>(&tl_CryptQueryObject), ExportSupport::Full},
         {"CertNameToStrW", 16, reinterpret_cast<std::uintptr_t>(&tl_CertNameToStrW), ExportSupport::Full},
+        {"CertGetNameStringA", 17, reinterpret_cast<std::uintptr_t>(&tl_CertGetNameStringA), ExportSupport::Full},
+        {"CertFreeCertificateChain", 18, reinterpret_cast<std::uintptr_t>(&tl_CertFreeCertificateChain), ExportSupport::Full},
+        {"CertFreeCertificateChainEngine", 19, reinterpret_cast<std::uintptr_t>(&tl_CertFreeCertificateChainEngine), ExportSupport::Full},
+        {"CertCreateCertificateChainEngine", 20, reinterpret_cast<std::uintptr_t>(&tl_CertCreateCertificateChainEngine), ExportSupport::Full},
+        {"CertGetCertificateChain", 21, reinterpret_cast<std::uintptr_t>(&tl_CertGetCertificateChain), ExportSupport::Full},
+        {"CertFindExtension", 22, reinterpret_cast<std::uintptr_t>(&tl_CertFindExtension), ExportSupport::Full},
+        {"CertAddCertificateContextToStore", 23, reinterpret_cast<std::uintptr_t>(&tl_CertAddCertificateContextToStore), ExportSupport::Full},
+        {"PFXImportCertStore", 24, reinterpret_cast<std::uintptr_t>(&tl_PFXImportCertStore), ExportSupport::Full},
+        {"CryptStringToBinaryA", 25, reinterpret_cast<std::uintptr_t>(&tl_CryptStringToBinaryA), ExportSupport::Full},
+        {"CryptDecodeObjectEx", 26, reinterpret_cast<std::uintptr_t>(&tl_CryptDecodeObjectEx), ExportSupport::Full},
     };
     static const InternalModule kCrypt32Module{"CRYPT32.dll", kCrypt32Exports};
     register_module(kCrypt32Module);
 }
 
 }  // namespace tradutorlinux::loader
+

@@ -517,5 +517,61 @@ TEST(Win32StubTest, NormalizAndBcryptModulesExportFunctionalSymbols) {
     EXPECT_EQ(output_domain[0], 'e');
 }
 
+TEST(Win32StubTest, Crypt32AndAdvapiModulesExportLibcurlSymbols) {
+    loader::register_builtin_modules();
+    EXPECT_TRUE(loader::is_module_registered("CRYPT32.dll"));
+    EXPECT_TRUE(loader::is_module_registered("ADVAPI32.dll"));
+
+    const char* const advapi_symbols[] = {
+        "CryptImportKey",
+        "CryptEncrypt",
+    };
+    for (const char* sym : advapi_symbols) {
+        const loader::ExportLookup lookup = loader::find_export(loader::ExportQuery{"ADVAPI32.dll", sym});
+        EXPECT_TRUE(lookup.found) << "Símbolo ausente em ADVAPI32: " << sym;
+        EXPECT_NE(lookup.address, 0U);
+    }
+
+    const char* const crypt32_symbols[] = {
+        "CertGetNameStringA",
+        "CertFreeCertificateChain",
+        "CertFreeCertificateChainEngine",
+        "CertCreateCertificateChainEngine",
+        "CertGetCertificateChain",
+        "CertFindExtension",
+        "CertAddCertificateContextToStore",
+        "PFXImportCertStore",
+        "CryptStringToBinaryA",
+        "CryptDecodeObjectEx",
+    };
+    for (const char* sym : crypt32_symbols) {
+        const loader::ExportLookup lookup = loader::find_export(loader::ExportQuery{"CRYPT32.dll", sym});
+        EXPECT_TRUE(lookup.found) << "Símbolo ausente em CRYPT32: " << sym;
+        EXPECT_NE(lookup.address, 0U);
+    }
+
+    // Valida funcionalidade de CryptStringToBinaryA (Base64)
+    const char b64[] = "SGVsbG8gV29ybGQ=";
+    std::uint32_t out_len = 0;
+    EXPECT_EQ(tl_CryptStringToBinaryA(b64, 0, 1, nullptr, &out_len, nullptr, nullptr), 1);
+    EXPECT_EQ(out_len, 11U);
+
+    std::uint8_t buffer[16]{};
+    EXPECT_EQ(tl_CryptStringToBinaryA(b64, 0, 1, buffer, &out_len, nullptr, nullptr), 1);
+    EXPECT_EQ(out_len, 11U);
+    EXPECT_EQ(std::string(reinterpret_cast<char*>(buffer), 11), "Hello World");
+
+    // Valida CertCreateCertificateChainEngine e CertGetCertificateChain
+    void* engine = nullptr;
+    EXPECT_EQ(tl_CertCreateCertificateChainEngine(nullptr, &engine), 1);
+    EXPECT_NE(engine, nullptr);
+    void* chain_ctx = nullptr;
+    EXPECT_EQ(tl_CertGetCertificateChain(engine, nullptr, nullptr, nullptr, nullptr, 0, nullptr, &chain_ctx), 1);
+    EXPECT_NE(chain_ctx, nullptr);
+    tl_CertFreeCertificateChain(chain_ctx);
+    tl_CertFreeCertificateChainEngine(engine);
+}
+
 }  // namespace
 }  // namespace tradutorlinux
+
