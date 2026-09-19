@@ -423,6 +423,27 @@ private:
         return std::nullopt;
     }
 
+    [[nodiscard]] bool is_rva_in_uninitialized_section(const RvaRange& range) const {
+        if (range.length == 0) {
+            return false;
+        }
+        for (const SectionInfo& section : parser_state_.sections) {
+            const std::uint64_t section_span =
+                std::max<std::uint64_t>(section.virtual_size, section.raw_data_size);
+            const std::uint64_t section_end =
+                static_cast<std::uint64_t>(section.virtual_address) + section_span;
+            if (static_cast<std::uint64_t>(range.rva) >= section.virtual_address &&
+                static_cast<std::uint64_t>(range.rva) + range.length <= section_end) {
+                const std::uint64_t delta =
+                    static_cast<std::uint64_t>(range.rva) - section.virtual_address;
+                if (section.raw_data_size == 0 || delta >= section.raw_data_size) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
     [[nodiscard]] std::optional<ParseResult> parse_exports() {
         if (parser_state_.export_directory_rva == 0 &&
             parser_state_.export_directory_size == 0) {
@@ -435,6 +456,10 @@ private:
         const std::optional<std::size_t> directory = rva_to_file_offset(
             {parser_state_.export_directory_rva, parser_state_.export_directory_size});
         if (!directory.has_value()) {
+            if (is_rva_in_uninitialized_section(
+                    {parser_state_.export_directory_rva, parser_state_.export_directory_size})) {
+                return std::nullopt;
+            }
             return fail(ParseStatus::Malformed,
                         "diretório de exports fora da imagem");
         }
@@ -873,6 +898,10 @@ private:
         const std::optional<std::size_t> directory = rva_to_file_offset(
             {parser_state_.tls_directory_rva, parser_state_.tls_directory_size});
         if (!directory.has_value()) {
+            if (is_rva_in_uninitialized_section(
+                    {parser_state_.tls_directory_rva, parser_state_.tls_directory_size})) {
+                return std::nullopt;
+            }
             return fail(ParseStatus::Malformed,
                         "diretório TLS fora dos dados físicos da imagem");
         }
@@ -1264,6 +1293,10 @@ private:
         const std::optional<std::size_t> directory = rva_to_file_offset(
             {parser_state_.exception_directory_rva, parser_state_.exception_directory_size});
         if (!directory.has_value()) {
+            if (is_rva_in_uninitialized_section(
+                    {parser_state_.exception_directory_rva, parser_state_.exception_directory_size})) {
+                return std::nullopt;
+            }
             return fail(ParseStatus::Malformed, "diretório de exceções fora da imagem (RVA " +
                         util::format_hex(parser_state_.exception_directory_rva) + " size " +
                         util::format_hex(parser_state_.exception_directory_size) + ")");
@@ -1368,6 +1401,10 @@ private:
         const std::optional<std::size_t> directory = rva_to_file_offset(
             {parser_state_.relocation_directory_rva, parser_state_.relocation_directory_size});
         if (!directory.has_value()) {
+            if (is_rva_in_uninitialized_section(
+                    {parser_state_.relocation_directory_rva, parser_state_.relocation_directory_size})) {
+                return std::nullopt;
+            }
             return fail(ParseStatus::Malformed,
                         "diretório de relocations em RVA " +
                             util::format_hex(parser_state_.relocation_directory_rva) +

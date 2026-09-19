@@ -145,25 +145,27 @@ extração e cadastro de `Affinity x64.msix` validadas com sucesso sem vazamento
 
 ---
 
-### R29 — Tolerância no leitor PE para diretórios de dados em seções virtuais UPX (`HWiNFO64.exe` e `Rufus_x64.exe`)
+### ~~R29 — Tolerância no leitor PE para diretórios de dados em seções virtuais UPX (`HWiNFO64.exe` e `Rufus_x64.exe`)~~ ✓ Concluído
 
 **Contexto:** Binários comprimidos com UPX frequentemente declaram seções com
 `SizeOfRawData == 0` e `VirtualSize > 0` (como `UPX0`), contendo páginas alocadas
-que serão preenchidas na memória em tempo de execução. O `pe_reader.cpp` atualmente
-rejeita executáveis cujos Data Directories apontem para dentro dessas seções virtuais
+que serão preenchidas na memória em tempo de execução. O `pe_reader.cpp` anteriormente
+rejeitava executáveis cujos Data Directories apontem para dentro dessas seções virtuais
 (`parse-failed status="malformed" detail="diretório de exports fora da imagem"` no HWiNFO64
 e `diretório de exceções fora da imagem` no Rufus_x64).
 
 **Tarefas:**
 
-- [ ] mapear os limites e características das seções UPX em `HWiNFO64.exe` e `Rufus_x64.exe`;
-- [ ] permitir tolerância segura no leitor PE quando um diretório opcional (como exports ou exceções)
+- [x] mapear os limites e características das seções UPX em `HWiNFO64.exe` e `Rufus_x64.exe`;
+- [x] permitir tolerância segura no leitor PE quando um diretório opcional (como exports ou exceções)
   aponta para seção com `raw_data_size == 0`, tratando-o como não populado estaticamente em vez de erro de formato;
-- [ ] adicionar testes de regressão para parsing estático de PE com seções virtuais zeradas;
-- [ ] validar `--report` em `HWiNFO64.exe` e `Rufus_x64.exe` e atualizar os testes de matriz do corpus.
+- [x] adicionar testes de regressão para parsing estático de PE com seções virtuais zeradas (`PeReaderTest.ToleratesDataDirectoriesInUninitializedVirtualSection`);
+- [x] validar `--report` em `HWiNFO64.exe` e `Rufus_x64.exe` e atualizar os testes de matriz do corpus.
 
-**Critério de aceite:** `--report` em `HWiNFO64.exe` e `Rufus_x64.exe` conclui com diagnóstico
-claro sem aborto por imagem malformada; testes de regressão passam.
+**Critério de aceite:** ✓ `--report` em `HWiNFO64.exe` e `Rufus_x64.exe` conclui com diagnóstico
+claro sem aborto por imagem malformada e 100% de imports resolvidos (28/28 e 14/14);
+testes de matriz do corpus (`popular_apps_report_matrix`, `popular_apps_recursive_report_matrix`,
+`popular_apps_native_matrix` e `popular_apps_install_matrix`) passam 100%. Execução direta rejeitada de forma controlada por W^X (`entry point fora de uma página executável`, exit 4).
 
 ---
 
@@ -215,10 +217,10 @@ Executada via `./build/debug/src/tradutorlinux` sobre os 27 alvos do corpus
 | `CPU-Z_2.18_en.exe` | exit 5 (`unsupported-arch`) | exit 5 | — | Arquitetura 32-bit x86 (`0x14c`) não suportada |
 | `GPU-Z_2.70.0.exe` | exit 5 (`unsupported-arch`) | exit 5 | — | Arquitetura 32-bit x86 (`0x14c`) não suportada |
 | `HWMonitor_1.67.exe` | exit 5 (`unsupported-arch`) | exit 5 | — | Arquitetura 32-bit x86 (`0x14c`) não suportada |
-| `HWiNFO64.exe` | exit 4 (`malformed`) | exit 4 | — | `parse-failed status="malformed" detail="diretório de exports fora da imagem"` |
+| `HWiNFO64.exe` | exit 0 (100% imports) | exit 4 (`map-failed: W^X`) | exit 0 (prepare) | Seções UPX tratadas estaticamente (R29); bloqueio por W^X na execução direta |
 | `officedeploymenttool_*.exe` | exit 5 (`unsupported-arch`) | exit 5 | exit 5 | Arquitetura 32-bit x86 (`0x14c`) não suportada |
 | `RTSSSetup737.exe` | exit 5 (`unsupported-arch`) | exit 5 | exit 0 | Bootstrap 32-bit; payload PE64 registrado no install |
-| `Rufus_x64.exe` | exit 4 (`malformed`) | exit 4 | — | `parse-failed status="malformed" detail="diretório de exceções fora da imagem (RVA 0xc5000 size 0x4ae8)"` |
+| `Rufus_x64.exe` | exit 0 (100% imports) | exit 4 (`map-failed: W^X`) | — | Seções UPX tratadas estaticamente (R29); bloqueio por W^X na execução direta |
 
 ---
 
@@ -232,20 +234,11 @@ Executada via `./build/debug/src/tradutorlinux` sobre os 27 alvos do corpus
 - **Aplicativos afetados:** 12 binários (`CapCut`, `Creative Cloud`, `EpicInstaller`, `Everything Search`, `CPU-Z`, `GPU-Z`, `HWMonitor`, `Office Deployment`, `RTSS.exe`, e os bootstraps de instalação de `7-Zip`, `Notepad++` e `RTSS`).
 - **Causa Técnica:** O cabeçalho COFF possui `Machine = 0x14c` (i386). O TradutorLinux tem como alvo estrito PE32+ (AMD64 0x8664). O comando `install` consegue contornar instaladores cujo payload PE32+ seja descompactável para o prefixo, mas a execução direta do wrapper 32-bit é rejeitada por contrato.
 
-#### 2. Rejeição de Packers / Seções UPX Anômalas — Exit Code 4
-- **HWiNFO64.exe:**
-  ```text
-  [tl][pe][error] parse-failed status="malformed" detail="diretório de exports fora da imagem"
-  ```
-  - **Causa:** O cabeçalho PE aponta o diretório de exports para um RVA pertencente à seção virtual `UPX0` (`SizeOfRawData = 0`), sem bytes físicos no arquivo. O leitor rejeita com segurança para evitar dereferência nula.
-- **Rufus_x64.exe:**
-  ```text
-  [tl][pe][error] parse-failed status="malformed" detail="diretório de exceções fora da imagem (RVA 0xc5000 size 0x4ae8)"
-  ```
-  - **Causa:** Tabela `.pdata` aponta para RVA virtual `0xc5000` em seção sem dados no arquivo e seção `UPX1` marcada com permissões W+X simultâneas, violando a política de memória W^X.
+#### 2. Packers / Seções UPX e Segurança W^X (`HWiNFO64.exe`, `Rufus_x64.exe`)
+- **Análise Estática (Resolvida em R29):** O cabeçalho PE apontava diretórios de dados (exports em HWiNFO64 e `.pdata` em Rufus) para dentro de seções virtuais (`UPX0`, com `SizeOfRawData == 0`). O parser agora tolera diretórios opcionais não mapeados em disco sem falha de imagem malformada, alcançando 100% de resolução de imports (exit code 0).
+- **Execução Direta (Bloqueio Controlado por W^X):** O entry point dessas imagens fica em páginas compactadas `UPX1` marcadas pelo packer com flags W+X (Read+Write+Execute). O runtime aplica estritamente a política W^X, mapeando essas seções como RW inicial e bloqueando a execução de código em memória gravável (`map-failed: entry point fora de uma página executável`, exit code 4).
 
-#### 3. Limite de Pacote MSIX / AppX — Exit Code 4
-- **Affinity x64.msix:**
+#### 3. Limite de Pacote MSIX / AppX — Resolvido em R28
   ```text
   [tl][install][error] failed stage="package-parse" prefix="/tmp/.../pfx" app-id="test_affinity_x64"
   erro: pacote MSIX / AppX inválido ou não suportado

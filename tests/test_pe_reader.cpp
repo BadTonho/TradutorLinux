@@ -983,5 +983,27 @@ TEST(PeReaderTest, RejectsRelocationEntriesNotWordAligned) {
     EXPECT_EQ(parse_pe(bytes).status, ParseStatus::Malformed);
 }
 
+TEST(PeReaderTest, ToleratesDataDirectoriesInUninitializedVirtualSection) {
+    std::vector<std::byte> bytes = make_minimal();
+    // Seção 1 (RVA 0x2000): VirtualSize = 0x1000, SizeOfRawData = 0 (seção virtual não inicializada tipo UPX0)
+    write_u32(bytes, 0x178, 0x1000);
+    write_u32(bytes, 0x180, 0);
+    // Export Directory em 0x2000 (tamanho 0x40)
+    write_u32(bytes, 0xC8, 0x2000);
+    write_u32(bytes, 0xCC, 0x40);
+    // Exception Directory em 0x2040 (tamanho 12)
+    write_u32(bytes, 0xE0, 0x2040);
+    write_u32(bytes, 0xE4, 12);
+
+    const ParseResult result = parse_pe(bytes);
+    ASSERT_EQ(result.status, ParseStatus::Success) << result.error_message;
+    EXPECT_TRUE(result.info.exports.empty());
+    EXPECT_TRUE(result.info.runtime_functions.empty());
+
+    // Se o RVA apontar para fora de qualquer seção, deve continuar rejeitando
+    write_u32(bytes, 0xC8, 0x99000);
+    EXPECT_EQ(parse_pe(bytes).status, ParseStatus::Malformed);
+}
+
 }  // namespace
 }  // namespace tradutorlinux::pe

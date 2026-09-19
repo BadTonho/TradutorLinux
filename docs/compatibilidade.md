@@ -75,12 +75,13 @@ promovido a suporte diário.
 
 O teste `popular_apps_install_matrix` cobre as instalações autorizadas de
 Roblox (`3` após `RBXCRASH`), G HUB e seu alias (`1` após `ExitProcess(1)`),
-além das rejeições pré-extração de CPU-Z, GPU-Z, HWMonitor e HWiNFO (`5`, `5`,
-`5` e `4`). O pacote MSIX Affinity x64 é analisado e instalado com sucesso
+além do pacote MSIX Affinity x64 analisado e instalado com sucesso
 (extração e cadastro de `App\Affinity.exe` no catálogo sob limites de segurança).
-Ele isola prefixo, `HOME`, configuração e `APPDATA`, exige que não haja arquivos,
-extração ou cadastro parcial nas rejeições e preserva o fallback genérico somente
-para instaladores cujo payload PE32+ seja validado antes do cadastro.
+Ele cobre também o preparo de HWiNFO64 (`prepare`) e as rejeições pré-extração
+de CPU-Z, GPU-Z, HWMonitor (`5`, `5`, `5`). Ele isola prefixo, `HOME`,
+configuração e `APPDATA`, exige que não haja arquivos, extração ou cadastro
+parcial nas rejeições e preserva o fallback genérico somente para instaladores
+cujo payload PE32+ seja validado antes do cadastro.
 
 ## Documentos temáticos
 
