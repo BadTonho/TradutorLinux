@@ -1,6 +1,7 @@
 #include "test_win32_common.hpp"
 
 #include "tradutorlinux/diagnostics/trace.hpp"
+#include "tradutorlinux/loader/builtin_modules.hpp"
 #include "tradutorlinux/runtime/comdlg32.hpp"
 #include "tradutorlinux/runtime/imm32.hpp"
 #include "tradutorlinux/runtime/winmm.hpp"
@@ -468,6 +469,20 @@ TEST(Win32StubTest, ProtectedCoreStubOutputsRejectUnmappedGuestPointers) {
     EXPECT_EQ(tl_TdhGetPropertySize(nullptr, 0U, nullptr, 0U, nullptr,
                                     static_cast<std::uint32_t*>(invalid)), 87U);
     EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+}
+
+TEST(Win32StubTest, Wldap32ModuleExportsRequiredOrdinals) {
+    loader::register_builtin_modules();
+    EXPECT_TRUE(loader::is_module_registered("WLDAP32.dll"));
+    const std::uint16_t expected_ordinals[] = {
+        22, 26, 27, 30, 32, 33, 35, 41, 45, 46, 50, 60, 79, 143, 200, 211, 217, 301
+    };
+    for (const std::uint16_t ord : expected_ordinals) {
+        const loader::ExportLookup lookup = loader::find_export_by_ordinal("WLDAP32.dll", ord);
+        EXPECT_TRUE(lookup.found) << "Ordinal ausente: " << ord;
+        EXPECT_NE(lookup.address, 0U) << "Endereço nulo no ordinal: " << ord;
+        EXPECT_EQ(lookup.support, loader::ExportSupport::Stub);
+    }
 }
 
 }  // namespace

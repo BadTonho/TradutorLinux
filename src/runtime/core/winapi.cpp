@@ -1663,6 +1663,26 @@ TL_MSABI std::uint32_t tl_CM_Get_Child(void* pdnDevInst, std::uintptr_t dnDevIns
     return 0x0000000DU; // CR_NO_SUCH_DEVNODE
 }
 
+TL_MSABI const char* tl_ldap_err2string(std::int32_t err) noexcept {
+    (void)err;
+    return "LDAP unavailable";
+}
+
+TL_MSABI void* tl_ldap_null_stub() noexcept {
+    return nullptr;
+}
+
+TL_MSABI std::uint32_t tl_ldap_unavailable_stub() noexcept {
+    return 0x51U; // LDAP_SERVER_DOWN
+}
+
+TL_MSABI std::uint32_t tl_ldap_success_stub() noexcept {
+    return 0U; // LDAP_SUCCESS
+}
+
+TL_MSABI void tl_ldap_void_stub() noexcept {
+}
+
 }  // extern "C"
 }  // namespace tradutorlinux
 
@@ -1765,6 +1785,28 @@ void register_winapi_stubs_module() {
     };
     static const InternalModule kD3dx11Module{"d3dx11_42.dll", kD3dx11Exports};
     register_module(kD3dx11Module);
+    static const ExportedFunction kWldap32Exports[] = {
+        {"ldap_err2string", 22, reinterpret_cast<std::uintptr_t>(&tl_ldap_err2string), ExportSupport::Stub},
+        {"ldap_first_entry", 26, reinterpret_cast<std::uintptr_t>(&tl_ldap_null_stub), ExportSupport::Stub},
+        {"ldap_next_entry", 27, reinterpret_cast<std::uintptr_t>(&tl_ldap_null_stub), ExportSupport::Stub},
+        {"ldap_get_dn", 30, reinterpret_cast<std::uintptr_t>(&tl_ldap_null_stub), ExportSupport::Stub},
+        {"ldap_first_attribute", 32, reinterpret_cast<std::uintptr_t>(&tl_ldap_null_stub), ExportSupport::Stub},
+        {"ldap_next_attribute", 33, reinterpret_cast<std::uintptr_t>(&tl_ldap_null_stub), ExportSupport::Stub},
+        {"ldap_get_values_len", 35, reinterpret_cast<std::uintptr_t>(&tl_ldap_null_stub), ExportSupport::Stub},
+        {"ldap_msgfree", 41, reinterpret_cast<std::uintptr_t>(&tl_ldap_success_stub), ExportSupport::Stub},
+        {"ldap_bind_s", 45, reinterpret_cast<std::uintptr_t>(&tl_ldap_unavailable_stub), ExportSupport::Stub},
+        {"ldap_unbind_s", 46, reinterpret_cast<std::uintptr_t>(&tl_ldap_success_stub), ExportSupport::Stub},
+        {"ldap_search_s", 50, reinterpret_cast<std::uintptr_t>(&tl_ldap_unavailable_stub), ExportSupport::Stub},
+        {"ldap_simple_bind_s", 60, reinterpret_cast<std::uintptr_t>(&tl_ldap_unavailable_stub), ExportSupport::Stub},
+        {"ldap_value_free_len", 79, reinterpret_cast<std::uintptr_t>(&tl_ldap_success_stub), ExportSupport::Stub},
+        {"ldap_init", 143, reinterpret_cast<std::uintptr_t>(&tl_ldap_null_stub), ExportSupport::Stub},
+        {"ldap_memfree", 200, reinterpret_cast<std::uintptr_t>(&tl_ldap_void_stub), ExportSupport::Stub},
+        {"ldap_set_option", 211, reinterpret_cast<std::uintptr_t>(&tl_ldap_unavailable_stub), ExportSupport::Stub},
+        {"ldap_sslinit", 217, reinterpret_cast<std::uintptr_t>(&tl_ldap_null_stub), ExportSupport::Stub},
+        {"ber_free", 301, reinterpret_cast<std::uintptr_t>(&tl_ldap_void_stub), ExportSupport::Stub},
+    };
+    static const InternalModule kWldap32Module{"WLDAP32.dll", kWldap32Exports};
+    register_module(kWldap32Module);
 }
 
 }  // namespace tradutorlinux::loader
