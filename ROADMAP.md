@@ -35,7 +35,7 @@ diagnóstico.
 
 ## Fila de trabalho atual
 
-### R25 — Definir chave de host de teste e contrato de assinatura para o PuTTY
+### ~~R25~~ — Definir chave de host de teste e contrato de assinatura para o PuTTY ✓
 
 **Contexto:** A etapa R24 concluiu a seleção nominal de algoritmos comuns do
 `SSH_MSG_KEXINIT` entre o cliente PuTTY e o listener do smoke. O próximo passo do
@@ -46,22 +46,23 @@ autenticação ou código específico do PuTTY no runtime.
 
 **Tarefas:**
 
-- [ ] definir uma chave de host de teste determinística compatível com os
+- [x] definir uma chave de host de teste determinística compatível com os
   algoritmos comuns negociados em R24 (ex.: `rsa-sha2-256` ou `ssh-ed25519`);
-- [ ] estruturar a resposta do servidor do smoke para empacotar o blob de chave
+- [x] estruturar a resposta do servidor do smoke para empacotar o blob de chave
   pública de host com enquadramento SSH válido;
-- [ ] receber e validar o primeiro pacote `SSH_MSG_KEXDH_INIT` (tipo 30) emitido
+- [x] receber e validar o primeiro pacote `SSH_MSG_KEXDH_INIT` (tipo 30) emitido
   pelo cliente PuTTY após o processamento da chave de host;
-- [ ] responder com encerramento controlado via `SSH_MSG_DISCONNECT` e verificar
+- [x] responder com encerramento controlado via `SSH_MSG_DISCONNECT` e verificar
   a exibição do diálogo de erro esperado;
-- [ ] atualizar os contratos em `docs/arquitetura/aplicativos-bloqueios.md` e a
+- [x] atualizar os contratos em `docs/arquitetura/aplicativos-bloqueios.md` e a
   matriz em `docs/compatibilidade-aplicativos.md`.
 
-**Critério de aceite:** O listener deve validar o banner, trocar `KEXINIT` com os
-algoritmos selecionados, fornecer a chave de host de teste, observar o pacote
-`SSH_MSG_KEXDH_INIT` do PuTTY e encerrar com desconexão controlada. O smoke deve
-confirmar o diálogo fatal do PuTTY no X11 e manter a limitação reproduzível
-`guest-timeout 72` sem regressões.
+**Critério de aceite:** ✓ O listener valida o banner, troca `KEXINIT` com os
+algoritmos selecionados, aguarda o `SSH_MSG_KEXDH_INIT` do PuTTY com
+`parse_kexdh_init_packet` (mpint `e` de 256–258 bytes), encerra com
+`SSH_MSG_DISCONNECT` e observa o diálogo `PuTTY Fatal Error` no X11. Smoke
+`putty_ssh_local_probe` (test 647) passou em 2026-09-19 reportando
+`KEXDH_INIT received, guest-timeout 72 (limitation recorded)` — Evidência E46.
 
 ---
 

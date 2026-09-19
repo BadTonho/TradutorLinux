@@ -359,10 +359,34 @@ e compressão nos dois sentidos. O `SSH_MSG_KEXINIT` do servidor só é enviado
 quando todas possuem uma opção compatível; a seleção permanece interna ao
 fixture e nenhuma cifra é ativada.
 
+
 O `putty_ssh_local_probe` foi recompilado e passou fora do sandbox, reportando
 `KEXINIT selection reached`, mantendo `FD_READ`, `recv`, `FD_CLOSE`, o diálogo
 `PuTTY Fatal Error` e `guest-timeout 72`. Não houve chave de host, assinatura,
 troca de chaves, criptografia, autenticação ou regra específica do PuTTY.
+
+## Evidência E46 — `SSH_MSG_KEXDH_INIT` observado no PuTTY (R25 — 2026-09-19)
+
+Após o servidor de probe enviar `SSH_MSG_KEXINIT` com algoritmos selecionados
+(E45), o fixture aguarda a chegada do próximo pacote binário do PuTTY. O
+parser `parse_kexdh_init_packet` valida:
+
+- `msg_type == 30` (`SSH_MSG_KEXDH_INIT`);
+- presença do campo mpint `e` com 256–258 bytes (valor público DH group14
+  de 2048 bits).
+
+Em 2026-09-19, o `putty_ssh_local_probe` (`test 647`) passou reportando
+`KEXDH_INIT received, guest-timeout 72 (limitation recorded)`. O PuTTY
+processou o `KEXINIT` do servidor, selecionou `diffie-hellman-group14-sha256`
+e enviou seu valor público `e` antes do desconect controlado. Evidência
+reproduzível no trace: `FD_READ`, `recv`, `FD_CLOSE` e diálogo `PuTTY Fatal
+Error` sob Xvfb, com `guest-timeout 72` e saída de `ExitProcess`.
+
+Não houve assinatura digital, troca de segredo compartilhado (`K`), geração
+de chaves de sessão, criptografia, autenticação ou qualquer regra específica
+do PuTTY no runtime. O próximo passo (R26+) é responder com
+`SSH_MSG_KEXDH_REPLY` com chave de host sintética e verificar o diálogo de
+aceitação de chave desconhecida.
 
 ## Evidência D2 — cenários GUI
 

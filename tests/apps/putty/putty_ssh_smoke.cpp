@@ -524,6 +524,25 @@ constexpr std::size_t kControlledKexInitNameListsSize = [] {
     return send_ssh_packet< payload_size, 9U >(client, payload);
 }
 
+
+[[nodiscard]] bool parse_kexdh_init_packet(const std::vector<std::uint8_t>& packet,
+                                           std::vector<std::uint8_t>& client_e) {
+    // packet layout: [padding_len][msg_type=30][uint32 e_len][e_bytes...]
+    client_e.clear();
+    if (packet.size() < 2U || packet[0] < 4U ||
+        static_cast<std::size_t>(packet[0]) + 2U > packet.size() || packet[1] != 30U) {
+        return false;
+    }
+    const std::size_t payload_end = packet.size() - static_cast<std::size_t>(packet[0]);
+    if (payload_end < 6U) return false;
+    const std::size_t e_len = read_u32_be(packet.data() + 2U);
+    if (e_len == 0U || payload_end - 6U != e_len) return false;
+    // DH group14 with 2048-bit modulus: client's 'e' mpint is 256..258 bytes
+    if (e_len < 256U || e_len > 258U) return false;
+    client_e.assign(packet.data() + 6U, packet.data() + 6U + e_len);
+    return true;
+}
+
 [[nodiscard]] ServerProcess start_server(int& listener_out) {
     listener_out = ::socket(AF_INET, SOCK_STREAM, 0);
     if (listener_out < 0) return {};
@@ -571,6 +590,7 @@ constexpr std::size_t kControlledKexInitNameListsSize = [] {
         bool valid_kexinit = false;
         bool algorithms_selected = false;
         bool server_kexinit_sent = false;
+        bool kexdh_init_received = false;
         if (ready > 0 && (listener_descriptor.revents & POLLIN) != 0) {
             const int client = ::accept(listener_out, nullptr, nullptr);
             if (client >= 0) {
@@ -604,6 +624,14 @@ constexpr std::size_t kControlledKexInitNameListsSize = [] {
                                       select_compatible_algorithms(client_kexinit,
                                                                   algorithm_selection);
                 server_kexinit_sent = algorithms_selected && send_controlled_kexinit(client);
+                std::vector<std::uint8_t> client_dh_e;
+                if (server_kexinit_sent) {
+                    std::vector<std::uint8_t> kexdh_packet;
+                    if (receive_ssh_packet(client, kexdh_packet) &&
+                        parse_kexdh_init_packet(kexdh_packet, client_dh_e)) {
+                        kexdh_init_received = true;
+                    }
+                }
                 (void)send_controlled_disconnect(client);
                 ::close(client);
             }
@@ -611,12 +639,13 @@ constexpr std::size_t kControlledKexInitNameListsSize = [] {
         const unsigned char result = static_cast<unsigned char>((valid_banner ? 1U : 0U) |
                                                                  (valid_kexinit ? 2U : 0U) |
                                                                  (server_kexinit_sent ? 4U : 0U) |
-                                                                 (algorithms_selected ? 8U : 0U));
+                                                                 (algorithms_selected ? 8U : 0U) |
+                                                                 (kexdh_init_received ? 16U : 0U));
         (void)::write(status_pipe[1], &result, sizeof(result));
         ::close(status_pipe[1]);
         ::close(listener_out);
-        ::_exit(valid_banner && valid_kexinit && algorithms_selected && server_kexinit_sent ? 0
-                                                                                              : 1);
+        ::_exit(valid_banner && valid_kexinit && algorithms_selected && server_kexinit_sent &&
+                kexdh_init_received ? 0 : 1);
     }
 
     ::close(status_pipe[1]);
@@ -701,9 +730,11 @@ constexpr std::size_t kControlledKexInitNameListsSize = [] {
 [[nodiscard]] bool take_server_result(ServerProcess& server, const int timeout_ms,
                                        bool* const valid_banner, bool* const valid_kexinit,
                                        bool* const server_kexinit_sent,
-                                       bool* const algorithms_selected) {
+                                       bool* const algorithms_selected,
+                                       bool* const kexdh_init_received) {
     if (valid_banner == nullptr || valid_kexinit == nullptr || server_kexinit_sent == nullptr ||
-        algorithms_selected == nullptr || server.status_fd < 0) {
+        algorithms_selected == nullptr || kexdh_init_received == nullptr ||
+        server.status_fd < 0) {
         return false;
     }
     struct pollfd descriptor{server.status_fd, POLLIN | POLLHUP, 0};
@@ -718,6 +749,7 @@ constexpr std::size_t kControlledKexInitNameListsSize = [] {
     *valid_kexinit = (result & 2U) != 0U;
     *server_kexinit_sent = (result & 4U) != 0U;
     *algorithms_selected = (result & 8U) != 0U;
+    *kexdh_init_received = (result & 16U) != 0U;
     return true;
 }
 
@@ -806,6 +838,7 @@ int main(const int argc, char** const argv) {
     bool kexinit_received = false;
     bool server_kexinit_sent = false;
     bool algorithms_selected = false;
+    bool kexdh_init_received = false;
     bool server_result_available = false;
     bool controlled_dialog_observed = false;
     if (configured) {
@@ -815,7 +848,8 @@ int main(const int argc, char** const argv) {
             }
             server_result_available =
                 take_server_result(server, 100, &banner_received, &kexinit_received,
-                                   &server_kexinit_sent, &algorithms_selected);
+                                   &server_kexinit_sent, &algorithms_selected,
+                                   &kexdh_init_received);
             if (server_result_available) break;
             std::this_thread::sleep_for(50ms);
         }
@@ -837,7 +871,8 @@ int main(const int argc, char** const argv) {
     if (!server_result_available) {
         server_result_available =
             take_server_result(server, 100, &banner_received, &kexinit_received,
-                               &server_kexinit_sent, &algorithms_selected);
+                               &server_kexinit_sent, &algorithms_selected,
+                               &kexdh_init_received);
     }
     int server_status = 0;
     const bool server_exited = wait_for_exit(server.pid, 3000ms, &server_status);
@@ -911,6 +946,7 @@ int main(const int argc, char** const argv) {
                     server_exited &&
                     WIFEXITED(server_status) && WEXITSTATUS(server_status) == 0 &&
                     kexinit_received && algorithms_selected && server_kexinit_sent &&
+                    kexdh_init_received &&
                     has_controlled_exit(runtime_result) && network_exchanged &&
                     runtime_result.stdout_text.empty();
     const bool controlled_limitation = configured && session_reached && !banner_received &&
@@ -924,13 +960,33 @@ int main(const int argc, char** const argv) {
                                            std::string::npos &&
                                        runtime_result.trace.find("guest-signal") == std::string::npos &&
                                        runtime_result.stdout_text.empty();
+    // kexdh_limitation: KEXDH_INIT recebido + timeout 72 (avanço além do KEXINIT)
+    const bool kexdh_limitation = configured && session_reached && banner_received &&
+                                  kexinit_received && algorithms_selected &&
+                                  server_kexinit_sent && kexdh_init_received &&
+                                  server_result_available && server_exited &&
+                                  WIFEXITED(server_status) && WEXITSTATUS(server_status) == 0 &&
+                                  runtime_result.exited && runtime_result.exit_code == 72 &&
+                                  wsa_started && has_ws2_call("getaddrinfo") &&
+                                  has_ws2_call("socket") && has_ws2_call("connect") &&
+                                  has_ws2_call("send") &&
+                                  has_ws2_call("recv") && async_read_notified &&
+                                  async_close_notified &&
+                                  controlled_dialog_observed &&
+                                  runtime_result.trace.find("guest-timeout") !=
+                                      std::string::npos &&
+                                  runtime_result.trace.find("guest-signal") ==
+                                      std::string::npos &&
+                                  runtime_result.stdout_text.empty();
+    // kexinit_exchange_limitation: KEXINIT trocado mas KEXDH_INIT ainda não recebido
     const bool kexinit_exchange_limitation = configured && session_reached && banner_received &&
                                              kexinit_received &&
                                              algorithms_selected &&
                                              server_kexinit_sent &&
+                                             !kexdh_init_received &&
                                              server_result_available && server_exited &&
                                              WIFEXITED(server_status) &&
-                                             WEXITSTATUS(server_status) == 0 &&
+                                             WEXITSTATUS(server_status) == 1 &&
                                              runtime_result.exited && runtime_result.exit_code == 72 &&
                                              wsa_started && has_ws2_call("getaddrinfo") &&
                                              has_ws2_call("socket") && has_ws2_call("connect") &&
@@ -943,7 +999,8 @@ int main(const int argc, char** const argv) {
                                              runtime_result.trace.find("guest-signal") ==
                                                  std::string::npos &&
                                              runtime_result.stdout_text.empty();
-    const bool ok = successful_exchange || controlled_limitation || kexinit_exchange_limitation;
+    const bool ok = successful_exchange || controlled_limitation || kexdh_limitation ||
+                    kexinit_exchange_limitation;
     if (!ok) {
         std::cerr << "smoke SSH local do PuTTY falhou em " << staging << '\n'
                   << "display-open=" << display_open << " about-found=" << about_found
@@ -953,12 +1010,14 @@ int main(const int argc, char** const argv) {
                   << " message-loop-before-session=" << message_loop_reached_before_session
                   << " delete-menu=" << delete_menu_observed
                   << " session-init-stalled=" << session_initialization_stalled
+                  << " kexdh-limitation=" << kexdh_limitation
                   << " kexinit-exchange-limitation=" << kexinit_exchange_limitation
                   << " async-close=" << async_close_notified
                   << " controlled-dialog=" << controlled_dialog_observed
                   << " banner=" << banner_received << " kexinit=" << kexinit_received
                   << " server-kexinit=" << server_kexinit_sent
                   << " algorithms=" << algorithms_selected
+                  << " kexdh-init=" << kexdh_init_received
                   << " server-exited=" << server_exited << " runtime-exited="
                   << runtime_result.exited << " runtime-timeout=" << runtime_result.timed_out
                   << " runtime-exit=" << runtime_result.exit_code << '\n';
@@ -972,6 +1031,9 @@ int main(const int argc, char** const argv) {
 
     if (successful_exchange) {
         std::cout << "PuTTY SSH local version exchange and controlled termination: ok\n";
+    } else if (kexdh_limitation) {
+        std::cout << "PuTTY SSH local probe: KEXDH_INIT received, "
+                     "guest-timeout 72 (limitation recorded)\n";
     } else if (kexinit_exchange_limitation) {
         std::cout << "PuTTY SSH local probe: KEXINIT selection reached, "
                      "guest-timeout 72 (limitation recorded)\n";
