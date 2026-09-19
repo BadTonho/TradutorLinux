@@ -1245,6 +1245,43 @@ TEST(Win32HeapTest, HeapReAllocGrowsBlock) {
     tl_HeapFree(heap, 0, grown);
 }
 
+TEST(Win32HeapTest, HeapFreeNullSucceeds) {
+    void* heap = tl_GetProcessHeap();
+    EXPECT_EQ(tl_HeapFree(heap, 0, nullptr), 1);
+}
+
+TEST(Win32HeapTest, HeapFreeDoubleFreeRejectedSafely) {
+    void* heap = tl_GetProcessHeap();
+    void* block = tl_HeapAlloc(heap, 0, 48);
+    ASSERT_NE(block, nullptr);
+    EXPECT_EQ(tl_HeapFree(heap, 0, block), 1);
+    // Segunda tentativa de liberar o mesmo ponteiro não deve abortar o processo
+    EXPECT_EQ(tl_HeapFree(heap, 0, block), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+}
+
+TEST(Win32HeapTest, HeapFreeForeignPointerRejectedSafely) {
+    void* heap = tl_GetProcessHeap();
+    int local_var = 42;
+    EXPECT_EQ(tl_HeapFree(heap, 0, &local_var), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+}
+
+TEST(Win32HeapTest, HeapSizeAndValidateTrackAllocations) {
+    void* heap = tl_GetProcessHeap();
+    void* block = tl_HeapAlloc(heap, 0, 96);
+    ASSERT_NE(block, nullptr);
+    EXPECT_EQ(tl_HeapSize(heap, 0, block), 96U);
+    EXPECT_EQ(tl_HeapValidate(heap, 0, block), 1);
+
+    int stack_var = 0;
+    EXPECT_EQ(tl_HeapSize(heap, 0, &stack_var), static_cast<std::size_t>(-1));
+    EXPECT_EQ(tl_HeapValidate(heap, 0, &stack_var), 0);
+
+    EXPECT_EQ(tl_HeapFree(heap, 0, block), 1);
+    EXPECT_EQ(tl_HeapValidate(heap, 0, block), 0);
+}
+
 TEST(Win32GlobalMemoryTest, MoveableZeroInitializedBlockLocksAndFrees) {
     void* const handle = tl_GlobalAlloc(abi::kGmemMoveable | abi::kGmemZeroinit, 32);
     ASSERT_NE(handle, nullptr);

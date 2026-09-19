@@ -4,11 +4,20 @@
 
 #include <charconv>
 #include <cstring>
+#include <mutex>
 #include <sys/mman.h>
+#include <unordered_map>
 
 namespace tradutorlinux {
 
 namespace {
+
+struct HeapBlockInfo {
+    std::size_t size{0};
+};
+
+std::mutex g_heap_mutex;
+std::unordered_map<void*, HeapBlockInfo> g_heap_blocks;
 
 [[nodiscard]] GlobalMemorySlot* find_global_memory_slot_locked(const void* memory,
                                                                 const bool global_only) noexcept {
@@ -169,13 +178,18 @@ TL_MSABI void* tl_GetProcessHeap() noexcept {
 
 TL_MSABI void* tl_HeapAlloc(void* heap, std::uint32_t flags, std::uintptr_t size) noexcept {
     (void)heap;
+    const std::size_t alloc_size = (size == 0) ? 1 : static_cast<std::size_t>(size);
     void* memory = nullptr;
     if ((flags & 0x0008) != 0) {
-        memory = std::calloc(1, size);
+        memory = std::calloc(1, alloc_size);
     } else {
-        memory = std::malloc(size);
+        memory = std::malloc(alloc_size);
     }
     if (memory != nullptr) {
+        {
+            std::lock_guard lock(g_heap_mutex);
+            g_heap_blocks[memory] = HeapBlockInfo{static_cast<std::size_t>(size)};
+        }
         bump_guest_allocation_generation();
     }
     return memory;
@@ -184,6 +198,24 @@ TL_MSABI void* tl_HeapAlloc(void* heap, std::uint32_t flags, std::uintptr_t size
 TL_MSABI int tl_HeapFree(void* heap, std::uint32_t flags, void* memory) noexcept {
     (void)heap;
     (void)flags;
+    if (memory == nullptr) {
+        return 1;
+    }
+    bool found = false;
+    {
+        std::lock_guard lock(g_heap_mutex);
+        auto it = g_heap_blocks.find(memory);
+        if (it != g_heap_blocks.end()) {
+            g_heap_blocks.erase(it);
+            found = true;
+        }
+    }
+    if (!found) {
+        // Ponteiro não alocado por HeapAlloc ou double-free do convidado.
+        // Rejeitar com erro Win32 em vez de corromper o heap do host.
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
     std::free(memory);
     bump_guest_allocation_generation();
     return 1;
@@ -193,9 +225,35 @@ TL_MSABI void* tl_HeapReAlloc(void* heap, std::uint32_t flags, void* memory,
                               std::uintptr_t new_size) noexcept {
     (void)heap;
     (void)flags;
-    void* const result = std::realloc(memory, new_size);
+    if (memory == nullptr) {
+        return tl_HeapAlloc(heap, flags, new_size);
+    }
+    const std::size_t alloc_size = (new_size == 0) ? 1 : static_cast<std::size_t>(new_size);
+    bool found = false;
+    {
+        std::lock_guard lock(g_heap_mutex);
+        auto it = g_heap_blocks.find(memory);
+        if (it != g_heap_blocks.end()) {
+            g_heap_blocks.erase(it);
+            found = true;
+        }
+    }
+    if (!found) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return nullptr;
+    }
+
+    void* const result = std::realloc(memory, alloc_size);
     if (result != nullptr) {
+        {
+            std::lock_guard lock(g_heap_mutex);
+            g_heap_blocks[result] = HeapBlockInfo{static_cast<std::size_t>(new_size)};
+        }
         bump_guest_allocation_generation();
+    } else {
+        std::lock_guard lock(g_heap_mutex);
+        g_heap_blocks[memory] = HeapBlockInfo{alloc_size};
+        set_last_error(abi::kErrorNotEnoughMemory);
     }
     return result;
 }
@@ -562,8 +620,11 @@ TL_MSABI int tl_HeapDestroy(void* heap) noexcept {
 TL_MSABI int tl_HeapValidate(void* heap, const std::uint32_t flags, const void* memory) noexcept {
     (void)heap;
     (void)flags;
-    (void)memory;
-    return 1;
+    if (memory == nullptr) {
+        return 1;
+    }
+    std::lock_guard lock(g_heap_mutex);
+    return g_heap_blocks.find(const_cast<void*>(memory)) != g_heap_blocks.end() ? 1 : 0;
 }
 
 TL_MSABI std::size_t tl_HeapSize(void* heap, const std::uint32_t flags, const void* memory) noexcept {
@@ -573,8 +634,16 @@ TL_MSABI std::size_t tl_HeapSize(void* heap, const std::uint32_t flags, const vo
         set_last_error(abi::kErrorInvalidParameter);
         return static_cast<std::size_t>(-1);
     }
-    set_last_error(abi::kErrorSuccess);
-    return malloc_usable_size(const_cast<void*>(memory));
+    {
+        std::lock_guard lock(g_heap_mutex);
+        auto it = g_heap_blocks.find(const_cast<void*>(memory));
+        if (it != g_heap_blocks.end()) {
+            set_last_error(abi::kErrorSuccess);
+            return it->second.size;
+        }
+    }
+    set_last_error(abi::kErrorInvalidParameter);
+    return static_cast<std::size_t>(-1);
 }
 
 TL_MSABI std::size_t tl_HeapCompact(void* heap, const std::uint32_t flags) noexcept {
