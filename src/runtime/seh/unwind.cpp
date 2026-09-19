@@ -594,7 +594,11 @@ std::int32_t c_specific_handler(ExceptionRecordAmd64* const exception_record,
             trace_seh("frame", active_record != nullptr ? active_record->code : 0U,
                       "unwind");
         }
-        if (frame.has_function && reinterpret_cast<void*>(frame.establisher_frame) == target_frame) {
+        const bool matches_target =
+            reinterpret_cast<void*>(frame.establisher_frame) == target_frame ||
+            reinterpret_cast<void*>(cursor.rsp - 8U) == target_frame ||
+            reinterpret_cast<void*>(cursor.rsp) == target_frame;
+        if (frame.has_function && matches_target) {
             // RtlUnwindEx invokes every UHANDLER while it walks toward the
             // target, regardless of the exception code.  C++ EH is only one
             // language handler that can live behind this callback; Win32
