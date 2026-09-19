@@ -277,15 +277,39 @@ constexpr std::uint32_t kSbSetParts = 0x0404;
 constexpr std::uint32_t kSbSetMinHeight = 0x0408;
 constexpr std::uint32_t kSbSimple = 0x0409;
 constexpr std::uint32_t kSbSetTextW = 0x040B;
-constexpr std::uint32_t kLvmDeleteAllItems = 0x1009;
+constexpr std::uint32_t kLvmGetItemCount = 0x1004;
 constexpr std::uint32_t kLvmGetItemA = 0x1005;
-constexpr std::uint32_t kLvmSetItemTextA = 0x1006;
+constexpr std::uint32_t kLvmSetItemA = 0x1006;
 constexpr std::uint32_t kLvmInsertItemA = 0x1007;
+constexpr std::uint32_t kLvmDeleteItem = 0x1008;
+constexpr std::uint32_t kLvmDeleteAllItems = 0x1009;
 constexpr std::uint32_t kLvmGetNextItem = 0x100C;
+constexpr std::uint32_t kLvmEnsureVisible = 0x1013;
 constexpr std::uint32_t kLvmInsertColumnA = 0x101B;
+constexpr std::uint32_t kLvmSetItemState = 0x102B;
+constexpr std::uint32_t kLvmGetItemState = 0x102C;
 constexpr std::uint32_t kLvmGetItemTextA = 0x102D;
+constexpr std::uint32_t kLvmSetItemTextA = 0x102E;
+constexpr std::uint32_t kLvmGetSelectedCount = 0x1032;
 constexpr std::uint32_t kLvmSetExtendedListViewStyle = 0x1036;
+constexpr std::uint32_t kLvmGetItemW = 0x104B;
+constexpr std::uint32_t kLvmSetItemW = 0x104C;
+constexpr std::uint32_t kLvmInsertItemW = 0x104D;
 constexpr std::uint32_t kLvmSortItemsEx = 0x1051;
+constexpr std::uint32_t kLvmInsertColumnW = 0x1061;
+constexpr std::uint32_t kLvmGetItemTextW = 0x1073;
+constexpr std::uint32_t kLvmSetItemTextW = 0x1074;
+
+constexpr std::uint32_t kLvifText = 0x0001;
+constexpr std::uint32_t kLvifImage = 0x0002;
+constexpr std::uint32_t kLvifParam = 0x0004;
+constexpr std::uint32_t kLvifState = 0x0008;
+constexpr std::uint32_t kLvifIndent = 0x0010;
+
+constexpr std::uint32_t kLvisFocused = 0x0001;
+constexpr std::uint32_t kLvisSelected = 0x0002;
+constexpr std::uint32_t kLvisCut = 0x0004;
+constexpr std::uint32_t kLvisDrophilited = 0x0008;
 
 // WNDCLASSA usado pelo alvo (sem o campo cbSize de WNDCLASSEXA).
 struct GuestWndClassA {
@@ -313,6 +337,16 @@ struct GuestLvColumnA {
 };
 static_assert(sizeof(GuestLvColumnA) == 32);
 
+struct GuestLvColumnW {
+    std::uint32_t mask{};
+    std::int32_t format{};
+    std::int32_t width{};
+    const std::uint16_t* text{};
+    std::int32_t text_capacity{};
+    std::int32_t subitem{};
+};
+static_assert(sizeof(GuestLvColumnW) == 32);
+
 struct GuestLvItemA {
     std::uint32_t mask{};
     std::int32_t item{};
@@ -329,6 +363,23 @@ struct GuestLvItemA {
     const void* column_data{};
 };
 static_assert(sizeof(GuestLvItemA) == 72);
+
+struct GuestLvItemW {
+    std::uint32_t mask{};
+    std::int32_t item{};
+    std::int32_t subitem{};
+    std::uint32_t state{};
+    std::uint32_t state_mask{};
+    std::uint16_t* text{};
+    std::int32_t text_capacity{};
+    std::int32_t image{};
+    std::intptr_t param{};
+    std::int32_t indent{};
+    std::int32_t group_id{};
+    std::int32_t columns{};
+    const void* column_data{};
+};
+static_assert(sizeof(GuestLvItemW) == 72);
 
 struct GuestNmListView {
     void* hwnd_from{};

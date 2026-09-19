@@ -11,7 +11,9 @@ TEST(Win32GuiAbiTest, TargetControlLayoutsMatchMicrosoftX64) {
     EXPECT_EQ(sizeof(abi::GuestWndClassA), 72U);
     EXPECT_EQ(sizeof(abi::GuestWndClassExA), 80U);
     EXPECT_EQ(sizeof(abi::GuestLvColumnA), 32U);
+    EXPECT_EQ(sizeof(abi::GuestLvColumnW), 32U);
     EXPECT_EQ(sizeof(abi::GuestLvItemA), 72U);
+    EXPECT_EQ(sizeof(abi::GuestLvItemW), 72U);
     EXPECT_EQ(sizeof(abi::GuestNmListView), 64U);
 }
 

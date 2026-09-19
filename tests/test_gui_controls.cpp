@@ -599,6 +599,99 @@ TEST(CommonControls, ControlMessagesRejectUnmappedNestedBuffers) {
     g_windows = {};
 }
 
+TEST(CommonControls, ListViewSupportsExtendedMessagesAndUnicode) {
+    g_windows = {};
+    WindowSlot& parent = g_windows[0];
+    parent.used = true;
+    WindowSlot& list = g_windows[1];
+    list.used = true;
+    list.is_control = true;
+    list.parent = &parent;
+    list.control_kind = ControlKind::ListView;
+
+    EXPECT_EQ(tl_SendMessageW(&list, abi::kLvmGetItemCount, 0, 0), 0);
+
+    std::u16string name = u"Archive.7z";
+    abi::GuestLvItemW item{};
+    item.mask = abi::kLvifText | abi::kLvifState | abi::kLvifParam;
+    item.item = 0;
+    item.state = abi::kLvisSelected;
+    item.state_mask = abi::kLvisSelected;
+    item.text = reinterpret_cast<std::uint16_t*>(name.data());
+    item.param = 0x1234;
+
+    EXPECT_EQ(tl_SendMessageW(&list, abi::kLvmInsertItemW, 0,
+                              reinterpret_cast<abi::Lparam>(&item)),
+              0);
+    EXPECT_EQ(tl_SendMessageW(&list, abi::kLvmGetItemCount, 0, 0), 1);
+    EXPECT_EQ(list.list_selection, 0);
+
+    EXPECT_EQ(tl_SendMessageW(&list, abi::kLvmGetItemState, 0, abi::kLvisSelected),
+              static_cast<int>(abi::kLvisSelected));
+    EXPECT_EQ(tl_SendMessageW(&list, abi::kLvmGetItemState, 0, abi::kLvisFocused), 0);
+
+    abi::GuestLvItemW state_item{};
+    state_item.state = abi::kLvisFocused;
+    state_item.state_mask = abi::kLvisFocused;
+    EXPECT_EQ(tl_SendMessageW(&list, abi::kLvmSetItemState, 0,
+                              reinterpret_cast<abi::Lparam>(&state_item)),
+              1);
+    EXPECT_EQ(tl_SendMessageW(&list, abi::kLvmGetItemState, 0,
+                              abi::kLvisSelected | abi::kLvisFocused),
+              static_cast<int>(abi::kLvisSelected | abi::kLvisFocused));
+
+    char16_t text_buffer[32]{};
+    abi::GuestLvItemW query_item{};
+    query_item.mask = abi::kLvifText | abi::kLvifState | abi::kLvifParam;
+    query_item.item = 0;
+    query_item.subitem = 0;
+    query_item.text = reinterpret_cast<std::uint16_t*>(text_buffer);
+    query_item.text_capacity = 32;
+    query_item.state_mask = 0xFFFF;
+    EXPECT_EQ(tl_SendMessageW(&list, abi::kLvmGetItemW, 0,
+                              reinterpret_cast<abi::Lparam>(&query_item)),
+              1);
+    EXPECT_EQ(query_item.param, 0x1234);
+    EXPECT_EQ(query_item.state, abi::kLvisSelected | abi::kLvisFocused);
+    EXPECT_EQ(std::u16string(reinterpret_cast<char16_t*>(query_item.text)), u"Archive.7z");
+
+    std::u16string size_text = u"2048 KB";
+    abi::GuestLvItemW text_item{};
+    text_item.item = 0;
+    text_item.subitem = 1;
+    text_item.text = reinterpret_cast<std::uint16_t*>(size_text.data());
+    EXPECT_EQ(tl_SendMessageW(&list, abi::kLvmSetItemTextW, 0,
+                              reinterpret_cast<abi::Lparam>(&text_item)),
+              1);
+
+    char16_t subitem_buf[32]{};
+    abi::GuestLvItemW subitem_query{};
+    subitem_query.subitem = 1;
+    subitem_query.text = reinterpret_cast<std::uint16_t*>(subitem_buf);
+    subitem_query.text_capacity = 32;
+    EXPECT_EQ(tl_SendMessageW(&list, abi::kLvmGetItemTextW, 0,
+                              reinterpret_cast<abi::Lparam>(&subitem_query)),
+              7);
+    EXPECT_EQ(std::u16string(subitem_buf), u"2048 KB");
+
+    std::u16string item2_name = u"Document.txt";
+    abi::GuestLvItemW item2{};
+    item2.item = 1;
+    item2.text = reinterpret_cast<std::uint16_t*>(item2_name.data());
+    EXPECT_EQ(tl_SendMessageW(&list, abi::kLvmInsertItemW, 0,
+                              reinterpret_cast<abi::Lparam>(&item2)),
+              1);
+    EXPECT_EQ(tl_SendMessageW(&list, abi::kLvmGetItemCount, 0, 0), 2);
+
+    EXPECT_EQ(tl_SendMessageW(&list, abi::kLvmDeleteItem, 0, 0), 1);
+    EXPECT_EQ(tl_SendMessageW(&list, abi::kLvmGetItemCount, 0, 0), 1);
+
+    EXPECT_EQ(tl_SendMessageW(&list, abi::kLvmDeleteAllItems, 0, 0), 1);
+    EXPECT_EQ(tl_SendMessageW(&list, abi::kLvmGetItemCount, 0, 0), 0);
+
+    g_windows = {};
+}
+
 TEST(CommonControls, ToolbarMessagesBuildLogicalButtonModel) {
     g_windows = {};
     WindowSlot& parent = g_windows[0];

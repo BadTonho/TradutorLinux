@@ -298,11 +298,23 @@ toolbar sob o popup receba o mesmo clique. As setas `Up`/`Down`, `Right`, `Left`
 pelo parser MENUEX. Mutações de menu ainda exigem contratos próprios, e esse
 despacho não implica que as operações de arquivo já estejam implementadas.
 
-`SendMessageA` implementa os contratos usados pelo alvo para `WM_SETFONT`,
-`CB_ADDSTRING`, `CB_SETCURSEL`, `CB_GETCURSEL` e as mensagens de list view de
-colunas, itens, seleção, texto, limpeza e ordenação. O mouse usa hit-testing
-dos controles; foco de edição produz `EN_SETFOCUS`, `EN_KILLFOCUS` e
-`EN_CHANGE`; botões produzem `BN_CLICKED`; a lista produz `LVN_ITEMCHANGED`.
+`SendMessageA` e `SendMessageW` implementam os contratos usados pelos alvos
+para `WM_SETFONT`, `CB_ADDSTRING`, `CB_SETCURSEL`, `CB_GETCURSEL` e o modelo
+completo de controle de lista `SysListView32`.
+As mensagens de lista suportadas compreendem:
+- Contagem e seleção: `LVM_GETITEMCOUNT`, `LVM_GETSELECTEDCOUNT`, `LVM_GETNEXTITEM`;
+- Inserção e remoção: `LVM_INSERTITEMA`/`W`, `LVM_DELETEITEM`, `LVM_DELETEALLITEMS`, `LVM_INSERTCOLUMNA`/`W`;
+- Obtenção e modificação de atributos: `LVM_GETITEMA`/`W`, `LVM_SETITEMA`/`W`, `LVM_SETITEMSTATE`, `LVM_GETITEMSTATE`;
+- Texto de subitens: `LVM_GETITEMTEXTA`/`W`, `LVM_SETITEMTEXTA`/`W`;
+- Estilo e renderização: `LVM_SETEXTENDEDLISTVIEWSTYLE`, `LVM_SORTITEMSEX`, `LVM_ENSUREVISIBLE`.
+
+O estado lógico (`ListViewRow`) armazena colunas textuais, `param` e `state`
+(reconhecendo `LVIS_SELECTED` e `LVIS_FOCUSED`). O tráfego de dados para a memória
+convidada é protegido pelas primitivas seguras `read_guest_value`, `write_guest_value`,
+`copy_guest_cstring`, `copy_guest_wstring` e `write_guest_memory`, prevenindo
+exposição ou vazamento de ponteiros do host.
+O mouse usa hit-testing dos controles; foco de edição produz `EN_SETFOCUS`, `EN_KILLFOCUS`
+e `EN_CHANGE`; botões produzem `BN_CLICKED`; a lista produz `LVN_ITEMCHANGED`.
 Essas notificações são enfileiradas no `HWND` pai e atravessam o mesmo
 `GetMessageA`/`DispatchMessageA` do aplicativo.
 

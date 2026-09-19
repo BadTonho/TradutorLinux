@@ -104,14 +104,14 @@ mas a interação avançada de listagem exige tratamento das mensagens básicas
 
 **Tarefas:**
 
-- [ ] inventariar as mensagens `LVM_*` consumidas pelo 7-Zip File Manager no fluxo
+- [x] inventariar as mensagens `LVM_*` consumidas pelo 7-Zip File Manager no fluxo
   de visualização de pastas (`LVM_GETITEMCOUNT`, `LVM_GETITEMW`, `LVM_SETITEMSTATE`);
-- [ ] implementar tratamento controlado dessas mensagens no controle lógico de
+- [x] implementar tratamento controlado dessas mensagens no controle lógico de
   lista do runtime (`src/runtime/gui_controls.cpp`);
-- [ ] assegurar que cópias de texto e estruturas `LVITEMW` utilizem a primitiva
+- [x] assegurar que cópias de texto e estruturas `LVITEMW` utilizem a primitiva
   segura de memória convidada (`write_guest_memory`);
-- [ ] adicionar testes unitários cobrindo o controle em `tests/test_gui_controls.cpp`;
-- [ ] atualizar a documentação de controles em `docs/arquitetura/gui-x11.md`.
+- [x] adicionar testes unitários cobrindo o controle em `tests/test_gui_controls.cpp`;
+- [x] atualizar a documentação de controles em `docs/arquitetura/gui-x11.md`.
 
 **Critério de aceite:** O controle de lista responde às mensagens de contagem e
 obtenção de item sem expor memória inválida do host; o smoke visual do 7-Zip sob

@@ -1520,124 +1520,9 @@ TL_MSABI int tl_SendMessageA(const void* window, const std::uint32_t message,
                 return slot->combo_selection;
             }
         }
-        if (slot->control_kind == ControlKind::ListView) {
-            if (message == abi::kLvmSetExtendedListViewStyle) {
-                return 0;
-            }
-            if (message == abi::kLvmInsertColumnA) {
-                return static_cast<int>(wparam);
-            }
-            if (message == abi::kLvmDeleteAllItems) {
-                slot->list_rows.clear();
-                slot->list_selection = -1;
-                if (slot->parent != nullptr) {
-                    request_dialog_render(*slot->parent);
-                }
-                return 1;
-            }
-            if (message == abi::kLvmInsertItemA) {
-                abi::GuestLvItemA item{};
-                if (lparam == 0 || !read_guest_value(reinterpret_cast<const void*>(lparam), item)) {
-                    set_last_error(abi::kErrorInvalidParameter);
-                    return 0;
-                }
-                ListViewRow row;
-                row.columns.resize(6);
-                row.param = item.param;
-                if (item.text != nullptr) {
-                    std::string text_copy;
-                    if (!runtime::copy_guest_cstring(item.text, 65535U, text_copy)) {
-                        set_last_error(abi::kErrorInvalidParameter);
-                        return 0;
-                    }
-                    row.columns[0] = std::move(text_copy);
-                }
-                int index = item.item;
-                if (index < 0 || index > static_cast<int>(slot->list_rows.size())) {
-                    index = static_cast<int>(slot->list_rows.size());
-                }
-                slot->list_rows.insert(slot->list_rows.begin() + index, std::move(row));
-                if (slot->parent != nullptr) {
-                    request_dialog_render(*slot->parent);
-                }
-                return index;
-            }
-            if (message == abi::kLvmSetItemTextA) {
-                const int index = static_cast<int>(wparam);
-                abi::GuestLvItemA item{};
-                if (lparam == 0 || !read_guest_value(reinterpret_cast<const void*>(lparam), item)) {
-                    set_last_error(abi::kErrorInvalidParameter);
-                    return 0;
-                }
-                if (index >= 0 && static_cast<std::size_t>(index) < slot->list_rows.size() &&
-                    item.subitem >= 0 && item.subitem < 6 && item.text != nullptr) {
-                    std::string text_copy;
-                    if (!runtime::copy_guest_cstring(item.text, 65535U, text_copy)) {
-                        set_last_error(abi::kErrorInvalidParameter);
-                        return 0;
-                    }
-                    slot->list_rows[static_cast<std::size_t>(index)].columns[static_cast<std::size_t>(item.subitem)] =
-                        std::move(text_copy);
-                    if (slot->parent != nullptr) {
-                        request_dialog_render(*slot->parent);
-                    }
-                    return 1;
-                }
-                return 0;
-            }
-            if (message == abi::kLvmGetNextItem) {
-                const std::int32_t start = static_cast<std::int32_t>(wparam);
-                if (slot->list_selection < 0 ||
-                    (start >= 0 && slot->list_selection <= start)) {
-                    return -1;
-                }
-                return slot->list_selection;
-            }
-            if (message == abi::kLvmGetItemA) {
-                const int index = static_cast<int>(wparam);
-                abi::GuestLvItemA item{};
-                if (lparam == 0 || !read_guest_value(reinterpret_cast<const void*>(lparam), item)) {
-                    set_last_error(abi::kErrorInvalidParameter);
-                    return 0;
-                }
-                if (index >= 0 && static_cast<std::size_t>(index) < slot->list_rows.size()) {
-                    item.param = slot->list_rows[static_cast<std::size_t>(index)].param;
-                    if (!write_guest_value(reinterpret_cast<void*>(lparam), item)) {
-                        set_last_error(abi::kErrorInvalidParameter);
-                        return 0;
-                    }
-                    return 1;
-                }
-                return 0;
-            }
-            if (message == abi::kLvmGetItemTextA) {
-                const int index = static_cast<int>(wparam);
-                abi::GuestLvItemA item{};
-                if (lparam == 0 || !read_guest_value(reinterpret_cast<const void*>(lparam), item)) {
-                    set_last_error(abi::kErrorInvalidParameter);
-                    return 0;
-                }
-                if (index >= 0 && static_cast<std::size_t>(index) < slot->list_rows.size() &&
-                    item.subitem >= 0 && item.subitem < 6 && item.text != nullptr &&
-                    item.text_capacity > 0) {
-                    const std::string& value = slot->list_rows[static_cast<std::size_t>(index)].columns[
-                        static_cast<std::size_t>(item.subitem)];
-                    const std::size_t count = std::min<std::size_t>(value.size(),
-                                                                     static_cast<std::size_t>(item.text_capacity - 1));
-                    std::array<char, 65536> output{};
-                    std::memcpy(output.data(), value.data(), count);
-                    if (runtime::write_guest_memory(item.text, output.data(), count + 1U).status !=
-                        runtime::GuestMemoryAccessStatus::Success) {
-                        set_last_error(abi::kErrorInvalidParameter);
-                        return 0;
-                    }
-                    return static_cast<int>(count);
-                }
-                return 0;
-            }
-            if (message == abi::kLvmSortItemsEx) {
-                return 1;
-            }
+        if (slot->control_kind == ControlKind::ListView ||
+            util::ascii_iequals(slot->class_name, "SysListView32")) {
+            return runtime_gui::handle_listview_message(*slot, message, wparam, lparam, false);
         }
         set_last_error(abi::kErrorSuccess);
         return 0;
@@ -1660,6 +1545,10 @@ TL_MSABI int tl_SendMessageW(const void* window, const std::uint32_t message,
     if (slot->is_control) {
         if (util::ascii_iequals(slot->class_name, "SysTreeView32")) {
             return handle_tree_message(*slot, message, wparam, lparam, true);
+        }
+        if (slot->control_kind == ControlKind::ListView ||
+            util::ascii_iequals(slot->class_name, "SysListView32")) {
+            return runtime_gui::handle_listview_message(*slot, message, wparam, lparam, true);
         }
         if (slot->control_kind == ControlKind::StatusBar && message == abi::kSbSetTextW) {
             if (lparam == 0) {

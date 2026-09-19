@@ -21,6 +21,7 @@ struct ToolbarButton {
 struct ListViewRow {
     std::vector<std::string> columns;
     std::intptr_t param{};
+    std::uint32_t state{0};
 };
 
 struct TreeItem {
@@ -100,6 +101,9 @@ void queue_command(WindowSlot& control, std::uint32_t notification) noexcept;
 void queue_command_id(WindowSlot& control, std::uint32_t notification,
                       std::uintptr_t command_id) noexcept;
 void queue_list_notification(WindowSlot& list, std::int32_t code, int item) noexcept;
+[[nodiscard]] int handle_listview_message(WindowSlot& slot, std::uint32_t message,
+                                          abi::Wparam wparam, abi::Lparam lparam,
+                                          bool wide) noexcept;
 
 [[nodiscard]] WindowSlot* find_control_at(WindowSlot& parent, std::span<WindowSlot> windows,
                                           int x, int y) noexcept;
