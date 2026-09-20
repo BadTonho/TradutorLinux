@@ -55,6 +55,19 @@ TL_MSABI void* tl_ImageNtHeader(void* const base) noexcept {
     return const_cast<std::uint32_t*>(nt_header);
 }
 
+TL_MSABI int tl_MiniDumpWriteDump(void* hProcess, std::uint32_t processId, void* hFile,
+                                  std::uint32_t dumpType, void* exceptionParam,
+                                  void* userStreamParam, void* callbackParam) noexcept {
+    (void)hProcess;
+    (void)processId;
+    (void)hFile;
+    (void)dumpType;
+    (void)exceptionParam;
+    (void)userStreamParam;
+    (void)callbackParam;
+    return 1;
+}
+
 } // extern "C"
 } // namespace tradutorlinux
 
@@ -65,6 +78,7 @@ void register_dbghelp_module() {
         {"SymFromAddr", 1, reinterpret_cast<std::uintptr_t>(&tl_SymFromAddr),
          ExportSupport::Stub},
         {"ImageNtHeader", 2, reinterpret_cast<std::uintptr_t>(&tl_ImageNtHeader), ExportSupport::Full},
+        {"MiniDumpWriteDump", 3, reinterpret_cast<std::uintptr_t>(&tl_MiniDumpWriteDump), ExportSupport::Stub},
     };
     static const InternalModule kDbghelpModule{"dbghelp.dll", kDbghelpExports};
     register_module(kDbghelpModule);

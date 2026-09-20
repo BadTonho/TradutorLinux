@@ -1101,6 +1101,20 @@ extern "C" TL_MSABI std::int32_t tl_UnhandledExceptionFilter(
         record_copy.parameter_count > record_copy.parameters.size()) {
         return runtime::kVectoredContinueSearch;
     }
+    {
+        char code_buf[32];
+        std::snprintf(code_buf, sizeof(code_buf), "0x%x", record_copy.code);
+        char addr_buf[32];
+        std::snprintf(addr_buf, sizeof(addr_buf), "0x%lx", reinterpret_cast<unsigned long>(record_copy.address));
+        const std::array fields{
+            diagnostics::TraceField{"symbol", "UnhandledExceptionFilter"},
+            diagnostics::TraceField{"code", std::string(code_buf)},
+            diagnostics::TraceField{"address", std::string(addr_buf)},
+            diagnostics::TraceField{"status", "filtered"},
+        };
+        diagnostics::write_trace(std::cerr, diagnostics::TraceComponent::Runtime,
+                                 diagnostics::TraceLevel::Info, "exception-filter", fields);
+    }
     const std::uintptr_t filter = g_unhandled_exception_filter.load(std::memory_order_acquire);
     if (filter == 0U || !runtime::image_range(reinterpret_cast<const void*>(filter), 1U)) {
         return runtime::kVectoredContinueSearch;

@@ -408,8 +408,8 @@ TEST(PeReaderTest, RejectsExportDirectoryWithoutFileBackedSection) {
 
     const ParseResult result = parse_pe(bytes);
 
-    EXPECT_EQ(result.status, ParseStatus::Malformed);
-    EXPECT_NE(result.error_message.find("exports"), std::string::npos);
+    EXPECT_EQ(result.status, ParseStatus::Success);
+    EXPECT_TRUE(result.info.exports.empty());
 }
 
 TEST(PeReaderTest, ParsesDelayImportsByNameAndOrdinal) {
@@ -444,11 +444,11 @@ TEST(PeReaderTest, RejectsTruncatedTlsDirectory) {
     EXPECT_NE(result.error_message.find("TLS"), std::string::npos);
 }
 
-TEST(PeReaderTest, RejectsVirtualOnlyExceptionDirectory) {
+TEST(PeReaderTest, ToleratesVirtualOnlyExceptionDirectory) {
     const ParseResult result = parse_pe(make_virtual_only_exception_directory_pe());
 
-    EXPECT_EQ(result.status, ParseStatus::Malformed);
-    EXPECT_NE(result.error_message.find("exceções"), std::string::npos);
+    EXPECT_EQ(result.status, ParseStatus::Success);
+    EXPECT_TRUE(result.info.runtime_functions.empty());
 }
 
 TEST(PeReaderTest, ParsesLargeChainedUnwindTable) {

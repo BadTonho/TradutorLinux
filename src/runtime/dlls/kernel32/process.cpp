@@ -545,11 +545,15 @@ TL_MSABI void tl_ExitProcess(const std::uint32_t exit_code) noexcept {
         return;
     }
     {
+        const void* caller = __builtin_return_address(0);
+        char mechanism_buf[64];
+        std::snprintf(mechanism_buf, sizeof(mechanism_buf), "guest-transfer caller=0x%lx",
+                      reinterpret_cast<unsigned long>(caller));
         const std::array<diagnostics::TraceField, 4> fields{
             diagnostics::TraceField{"symbol", "ExitProcess"},
             diagnostics::TraceField{"exit-code", std::to_string(exit_code)},
             diagnostics::TraceField{"status", "success"},
-            diagnostics::TraceField{"mechanism", "guest-transfer"},
+            diagnostics::TraceField{"mechanism", std::string(mechanism_buf)},
         };
         runtime_trace("ExitProcess", fields, 4);
     }
@@ -1993,6 +1997,62 @@ TL_MSABI int tl_CreateProcessW(const std::uint16_t* application_name,
     return tl_CreateProcessA(application_pointer, command_pointer, process_attributes, thread_attributes,
                              inherit_handles, creation_flags, environment, directory_pointer, startup_info,
                              process_information);
+}
+
+TL_MSABI std::int32_t tl_AppPolicyGetProcessTerminationMethod(void* token, std::uint32_t* policy) noexcept {
+    (void)token;
+    if (policy == nullptr) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 87;
+    }
+    if (!write_guest_value(policy, std::uint32_t{0})) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 87;
+    }
+    set_last_error(abi::kErrorSuccess);
+    return 0;
+}
+
+TL_MSABI std::int32_t tl_AppPolicyGetShowDeveloperDiagnostic(void* token, std::uint32_t* policy) noexcept {
+    (void)token;
+    if (policy == nullptr) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 87;
+    }
+    if (!write_guest_value(policy, std::uint32_t{1})) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 87;
+    }
+    set_last_error(abi::kErrorSuccess);
+    return 0;
+}
+
+TL_MSABI std::int32_t tl_AppPolicyGetThreadInitializationType(void* token, std::uint32_t* policy) noexcept {
+    (void)token;
+    if (policy == nullptr) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 87;
+    }
+    if (!write_guest_value(policy, std::uint32_t{0})) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 87;
+    }
+    set_last_error(abi::kErrorSuccess);
+    return 0;
+}
+
+TL_MSABI std::int32_t tl_AppPolicyGetWindowingModel(void* token, std::uint32_t* policy) noexcept {
+    (void)token;
+    if (policy == nullptr) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 87;
+    }
+    if (!write_guest_value(policy, std::uint32_t{2})) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 87;
+    }
+    set_last_error(abi::kErrorSuccess);
+    return 0;
 }
 
 }  // extern "C"

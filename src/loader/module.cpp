@@ -73,7 +73,8 @@ bool is_kernelbase_dll(const std::string_view dll) noexcept {
         }
         return true;
     };
-    if (starts_with_ci(dll, "api-ms-win-core-") || starts_with_ci(dll, "ext-ms-win-kernel32-")) {
+    if (starts_with_ci(dll, "api-ms-win-core-") || starts_with_ci(dll, "ext-ms-win-kernel32-") ||
+        starts_with_ci(dll, "api-ms-win-appmodel-")) {
         return "KERNEL32.dll";
     }
     if (starts_with_ci(dll, "api-ms-win-crt-") || starts_with_ci(dll, "api-ms-win-core-crt-")) {
@@ -242,6 +243,7 @@ ExportLookup resolve_forwarder_named(const ForwarderQuery& query,
         "KERNEL32.dll", "USER32.dll",  "GDI32.dll",   "ADVAPI32.dll", "WS2_32.dll",
         "SHELL32.dll",  "ole32.dll",   "SHLWAPI.dll", "version.dll",  "WINMM.dll",
         "COMCTL32.dll", "COMDLG32.dll", "IMM32.dll",  "PSAPI.dll",    "msvcrt.dll",
+        "rpcrt4.dll",   "dbghelp.dll",
     };
     const std::string_view preferred = preferred_api_set_module(query.dll);
     const auto try_module = [&](const std::string_view module) -> std::optional<ExportLookup> {
@@ -286,7 +288,7 @@ bool is_module_registered_forwarded(const std::string_view dll) noexcept {
            is_module_registered("version.dll") || is_module_registered("WINMM.dll") ||
            is_module_registered("COMCTL32.dll") || is_module_registered("COMDLG32.dll") ||
            is_module_registered("IMM32.dll") || is_module_registered("PSAPI.dll") ||
-           is_module_registered("msvcrt.dll");
+           is_module_registered("msvcrt.dll") || is_module_registered("rpcrt4.dll");
 }
 
 bool register_module(const InternalModule& module) {
@@ -350,6 +352,7 @@ void register_builtin_modules() {
     register_psapi_module();
     register_mpr_module();
     register_dwmapi_module();
+    register_rpcrt4_module();
     register_winapi_stubs_module();
 }
 

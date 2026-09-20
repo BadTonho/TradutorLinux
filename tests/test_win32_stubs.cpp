@@ -4,6 +4,7 @@
 #include "tradutorlinux/loader/builtin_modules.hpp"
 #include "tradutorlinux/runtime/comdlg32.hpp"
 #include "tradutorlinux/runtime/imm32.hpp"
+#include "tradutorlinux/runtime/rpcrt4.hpp"
 #include "tradutorlinux/runtime/winmm.hpp"
 
 #include <algorithm>
@@ -570,6 +571,55 @@ TEST(Win32StubTest, Crypt32AndAdvapiModulesExportLibcurlSymbols) {
     EXPECT_NE(chain_ctx, nullptr);
     tl_CertFreeCertificateChain(chain_ctx);
     tl_CertFreeCertificateChainEngine(engine);
+}
+
+TEST(Win32StubTest, Rpcrt4UuidCreateAndFormat) {
+    if (loader::registered_module_count() == 0) {
+        loader::register_builtin_modules();
+    }
+    const loader::ExportLookup lookup = loader::find_export(loader::ExportQuery{"rpcrt4.dll", "UuidCreate"});
+    EXPECT_TRUE(lookup.found);
+    EXPECT_NE(lookup.address, 0U);
+
+    struct TestUuid {
+        std::uint32_t data1{};
+        std::uint16_t data2{};
+        std::uint16_t data3{};
+        std::uint8_t data4[8]{};
+    } uuid{};
+
+    EXPECT_EQ(tl_UuidCreate(&uuid), 0);
+    EXPECT_EQ(uuid.data3 & 0xF000U, 0x4000U);
+    EXPECT_EQ(uuid.data4[0] & 0xC0U, 0x80U);
+
+    char* str_uuid = nullptr;
+    EXPECT_EQ(tl_UuidToStringA(&uuid, &str_uuid), 0);
+    ASSERT_NE(str_uuid, nullptr);
+    EXPECT_EQ(std::strlen(str_uuid), 36U);
+    EXPECT_EQ(str_uuid[8], '-');
+    EXPECT_EQ(str_uuid[13], '-');
+    EXPECT_EQ(str_uuid[18], '-');
+    EXPECT_EQ(str_uuid[23], '-');
+    EXPECT_EQ(tl_RpcStringFreeA(&str_uuid), 0);
+    EXPECT_EQ(str_uuid, nullptr);
+}
+
+TEST(Win32StubTest, AppPolicyGetClassicDesktopDefaults) {
+    std::uint32_t policy = 999;
+    EXPECT_EQ(tl_AppPolicyGetProcessTerminationMethod(nullptr, &policy), 0);
+    EXPECT_EQ(policy, 0U);
+
+    policy = 999;
+    EXPECT_EQ(tl_AppPolicyGetShowDeveloperDiagnostic(nullptr, &policy), 0);
+    EXPECT_EQ(policy, 1U);
+
+    policy = 999;
+    EXPECT_EQ(tl_AppPolicyGetThreadInitializationType(nullptr, &policy), 0);
+    EXPECT_EQ(policy, 0U);
+
+    policy = 999;
+    EXPECT_EQ(tl_AppPolicyGetWindowingModel(nullptr, &policy), 0);
+    EXPECT_EQ(policy, 2U);
 }
 
 }  // namespace

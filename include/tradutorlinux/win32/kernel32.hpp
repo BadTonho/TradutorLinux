@@ -594,6 +594,10 @@ TL_MSABI int tl_VirtualProtectEx(void* process, void* addr, std::size_t size, st
 TL_MSABI int tl_lstrcmpA(const char* s1, const char* s2) noexcept;
 TL_MSABI int tl_IsThreadAFiber(void) noexcept;
 TL_MSABI void* tl_InterlockedFlushSList(void* head) noexcept;
+TL_MSABI std::int32_t tl_AppPolicyGetProcessTerminationMethod(void* token, std::uint32_t* policy) noexcept;
+TL_MSABI std::int32_t tl_AppPolicyGetShowDeveloperDiagnostic(void* token, std::uint32_t* policy) noexcept;
+TL_MSABI std::int32_t tl_AppPolicyGetThreadInitializationType(void* token, std::uint32_t* policy) noexcept;
+TL_MSABI std::int32_t tl_AppPolicyGetWindowingModel(void* token, std::uint32_t* policy) noexcept;
 
 }  // extern "C"
 }  // namespace tradutorlinux

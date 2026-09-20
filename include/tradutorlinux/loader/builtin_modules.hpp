@@ -28,6 +28,7 @@ void register_imm32_module();
 void register_psapi_module();
 void register_mpr_module();
 void register_dwmapi_module();
+void register_rpcrt4_module();
 void register_winapi_stubs_module();
 
 }  // namespace tradutorlinux::loader

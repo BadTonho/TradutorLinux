@@ -85,6 +85,7 @@ add_library(tradutorlinux_core STATIC
     runtime/dbghelp.cpp
     runtime/powrprof.cpp
     runtime/dwmapi.cpp
+    runtime/rpcrt4.cpp
     runtime/function_trace.cpp
     compat/materializer.cpp
     util/sha256.cpp
@@ -151,6 +152,7 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
         runtime/winmm.cpp runtime/comctl32.cpp runtime/comdlg32.cpp runtime/imm32.cpp
         runtime/psapi.cpp runtime/gdiplus.cpp runtime/uxtheme.cpp runtime/dbghelp.cpp
         runtime/powrprof.cpp runtime/dlls/net/iphlpapi.cpp runtime/dlls/net/mpr.cpp runtime/dwmapi.cpp
+        runtime/rpcrt4.cpp
         util/unicode.cpp catalog/app_catalog.cpp package/msix.cpp
         diagnostics/crash_context.cpp gui/platform.cpp gui/wayland.cpp gui/x11.cpp
         loader/dll_overrides.cpp loader/image_mapper.cpp loader/import_resolver.cpp

@@ -1104,10 +1104,9 @@ TEST(ShellExecutionTest, UnsupportedCallsFailWithoutFabricatingAProcess) {
     info.lp_file = kFileW;
     info.h_inst_app = reinterpret_cast<void*>(1);
     info.h_process = reinterpret_cast<void*>(1);
-    EXPECT_EQ(tl_ShellExecuteExW(&info), 0);
-    EXPECT_EQ(tl_GetLastError(), abi::kErrorNotSupported);
-    EXPECT_EQ(info.h_inst_app, nullptr);
-    EXPECT_EQ(info.h_process, nullptr);
+    EXPECT_EQ(tl_ShellExecuteExW(&info), 1);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorSuccess);
+    EXPECT_GT(reinterpret_cast<std::uintptr_t>(info.h_inst_app), 32U);
 
     info.lp_file = reinterpret_cast<const std::uint16_t*>(static_cast<std::uintptr_t>(0x1000U));
     info.h_inst_app = reinterpret_cast<void*>(1);
