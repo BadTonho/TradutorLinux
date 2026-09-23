@@ -247,7 +247,8 @@ inline InternalMenu g_dummy_menu{0x4D454E55, 5, &g_dummy_sub_menu, {}};
     for (WindowSlot* const child : dialog.dialog_children) {
         if (child != nullptr && child->used &&
             child->parent == &dialog &&
-            child->control_id == static_cast<std::uint16_t>(identifier)) {
+            (child->control_id == static_cast<std::uint32_t>(identifier) ||
+             (child->control_id <= 0xFFFFU && child->control_id == static_cast<std::uint16_t>(identifier)))) {
             return child;
         }
     }

@@ -171,6 +171,53 @@ inline std::vector<std::byte> valid_dialog_template() {
     return bytes;
 }
 
+inline std::vector<std::byte> valid_dialog_ex_template() {
+    std::vector<std::byte> bytes;
+    append_u16(bytes, 1);           // dlgVer
+    append_u16(bytes, 0xFFFFU);     // signature
+    append_u32(bytes, 0);           // helpID
+    append_u32(bytes, 0);           // exStyle
+    append_u32(bytes, 0x00000040U); // style (kDsSetFont)
+    append_u16(bytes, 1);           // cDlgItems
+    append_u16(bytes, 0);           // x
+    append_u16(bytes, 0);           // y
+    append_u16(bytes, 200);         // width
+    append_u16(bytes, 100);         // height
+    append_u16(bytes, 0);           // menu
+    append_u16(bytes, 0);           // windowClass
+    append_u16(bytes, 'D');         // title: "Dlg"
+    append_u16(bytes, 'l');
+    append_u16(bytes, 'g');
+    append_u16(bytes, 0);
+    append_u16(bytes, 9);           // pointsize
+    append_u16(bytes, 400);         // weight (FW_NORMAL)
+    bytes.push_back(std::byte{0});  // italic = 0
+    bytes.push_back(std::byte{1});  // charset = 1 (DEFAULT_CHARSET)
+    append_u16(bytes, 'S');         // typeface: "Segoe"
+    append_u16(bytes, 'e');
+    append_u16(bytes, 'g');
+    append_u16(bytes, 'o');
+    append_u16(bytes, 'e');
+    append_u16(bytes, 0);
+    while ((bytes.size() & 3U) != 0U) bytes.push_back(std::byte{0});
+    // Control 0:
+    append_u32(bytes, 0);           // helpID
+    append_u32(bytes, 0);           // exStyle
+    append_u32(bytes, 0x50010000U); // style
+    append_u16(bytes, 10);          // x
+    append_u16(bytes, 10);          // y
+    append_u16(bytes, 80);          // width
+    append_u16(bytes, 24);          // height
+    append_u32(bytes, 1001);        // id (DWORD)
+    append_u16(bytes, 0xFFFFU);     // class ordinal
+    append_u16(bytes, 0x0080U);     // Button
+    append_u16(bytes, 'O');         // title: "OK"
+    append_u16(bytes, 'K');
+    append_u16(bytes, 0);
+    append_u16(bytes, 0);           // extraCount
+    return bytes;
+}
+
 class TempDirFixture {
 public:
     TempDirFixture() { mkdir("_tl_test", 0777); }

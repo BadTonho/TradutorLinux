@@ -8,7 +8,17 @@ namespace tradutorlinux::runtime {
 namespace {
 
 constexpr std::uint32_t kDsSetFont = 0x00000040U;
-constexpr std::size_t kMaxDialogControls = 64;
+constexpr std::size_t kMaxDialogControls = 256;
+
+[[nodiscard]] bool read_u8(std::span<const std::byte> bytes, std::size_t& offset,
+                           std::uint8_t& value) noexcept {
+    if (offset >= bytes.size()) {
+        return false;
+    }
+    value = static_cast<std::uint8_t>(bytes[offset]);
+    offset += 1;
+    return true;
+}
 
 [[nodiscard]] bool read_u16(std::span<const std::byte> bytes, std::size_t& offset,
                             std::uint16_t& value) noexcept {
@@ -155,30 +165,55 @@ DialogTemplateStatus parse_dialog_template(const std::span<const std::byte> byte
     if (!read_u32(bytes, offset, first_dword)) {
         return DialogTemplateStatus::Malformed;
     }
-    if ((first_dword & 0xFFFFU) == 1U && (first_dword >> 16U) == 0xFFFFU) {
-        return DialogTemplateStatus::DialogEx;
-    }
-    output.style = first_dword;
-    if (!read_u32(bytes, offset, output.extended_style)) {
-        return DialogTemplateStatus::Malformed;
-    }
+    const bool is_dialog_ex = ((first_dword & 0xFFFFU) == 1U && (first_dword >> 16U) == 0xFFFFU);
+
     std::uint16_t item_count = 0;
-    if (!read_u16(bytes, offset, item_count) || !read_i16(bytes, offset, output.x) ||
-        !read_i16(bytes, offset, output.y) || !read_i16(bytes, offset, output.width) ||
-        !read_i16(bytes, offset, output.height)) {
-        return DialogTemplateStatus::Malformed;
+    if (is_dialog_ex) {
+        if (bytes.size() < sizeof(GuestDialogTemplateEx)) {
+            return DialogTemplateStatus::Malformed;
+        }
+        std::uint32_t help_id = 0;
+        if (!read_u32(bytes, offset, help_id) ||
+            !read_u32(bytes, offset, output.extended_style) ||
+            !read_u32(bytes, offset, output.style) ||
+            !read_u16(bytes, offset, item_count) ||
+            !read_i16(bytes, offset, output.x) ||
+            !read_i16(bytes, offset, output.y) ||
+            !read_i16(bytes, offset, output.width) ||
+            !read_i16(bytes, offset, output.height)) {
+            return DialogTemplateStatus::Malformed;
+        }
+    } else {
+        output.style = first_dword;
+        if (!read_u32(bytes, offset, output.extended_style) ||
+            !read_u16(bytes, offset, item_count) ||
+            !read_i16(bytes, offset, output.x) ||
+            !read_i16(bytes, offset, output.y) ||
+            !read_i16(bytes, offset, output.width) ||
+            !read_i16(bytes, offset, output.height)) {
+            return DialogTemplateStatus::Malformed;
+        }
     }
+
     if (item_count > kMaxDialogControls) {
         return DialogTemplateStatus::Unsupported;
     }
 
-    std::uint16_t marker = 0;
-    if (!read_u16(bytes, offset, marker)) {
-        return DialogTemplateStatus::Malformed;
+    if (is_dialog_ex) {
+        std::u16string dialog_menu;
+        if (!read_field(bytes, offset, dialog_menu)) {
+            return DialogTemplateStatus::Malformed;
+        }
+    } else {
+        std::uint16_t marker = 0;
+        if (!read_u16(bytes, offset, marker)) {
+            return DialogTemplateStatus::Malformed;
+        }
+        if (marker != 0) {
+            return DialogTemplateStatus::Unsupported;
+        }
     }
-    if (marker != 0) {
-        return DialogTemplateStatus::Unsupported;
-    }
+
     std::u16string dialog_class;
     if (!read_field(bytes, offset, dialog_class)) {
         return DialogTemplateStatus::Malformed;
@@ -188,8 +223,21 @@ DialogTemplateStatus parse_dialog_template(const std::span<const std::byte> byte
     }
     if ((output.style & kDsSetFont) != 0U) {
         std::uint16_t point_size = 0;
+        if (!read_u16(bytes, offset, point_size)) {
+            return DialogTemplateStatus::Malformed;
+        }
+        if (is_dialog_ex) {
+            std::uint16_t weight = 0;
+            std::uint8_t italic = 0;
+            std::uint8_t charset = 0;
+            if (!read_u16(bytes, offset, weight) ||
+                !read_u8(bytes, offset, italic) ||
+                !read_u8(bytes, offset, charset)) {
+                return DialogTemplateStatus::Malformed;
+            }
+        }
         std::u16string typeface;
-        if (!read_u16(bytes, offset, point_size) || !read_utf16z(bytes, offset, typeface)) {
+        if (!read_utf16z(bytes, offset, typeface)) {
             return DialogTemplateStatus::Malformed;
         }
     }
@@ -199,15 +247,44 @@ DialogTemplateStatus parse_dialog_template(const std::span<const std::byte> byte
 
     output.controls.reserve(item_count);
     for (std::uint16_t index = 0; index < item_count; ++index) {
-        if (!align_dword(bytes, offset) || bytes.size() - offset < sizeof(GuestDialogItemTemplate)) {
+        if (!align_dword(bytes, offset)) {
             return DialogTemplateStatus::Malformed;
         }
         DialogControl control{};
-        if (!read_u32(bytes, offset, control.style) ||
-            !read_u32(bytes, offset, control.extended_style) || !read_i16(bytes, offset, control.x) ||
-            !read_i16(bytes, offset, control.y) || !read_i16(bytes, offset, control.width) ||
-            !read_i16(bytes, offset, control.height) || !read_u16(bytes, offset, control.id) ||
-            !read_u16(bytes, offset, marker)) {
+        if (is_dialog_ex) {
+            if (bytes.size() - offset < sizeof(GuestDialogItemTemplateEx)) {
+                return DialogTemplateStatus::Malformed;
+            }
+            std::uint32_t help_id = 0;
+            if (!read_u32(bytes, offset, help_id) ||
+                !read_u32(bytes, offset, control.extended_style) ||
+                !read_u32(bytes, offset, control.style) ||
+                !read_i16(bytes, offset, control.x) ||
+                !read_i16(bytes, offset, control.y) ||
+                !read_i16(bytes, offset, control.width) ||
+                !read_i16(bytes, offset, control.height) ||
+                !read_u32(bytes, offset, control.id)) {
+                return DialogTemplateStatus::Malformed;
+            }
+        } else {
+            if (bytes.size() - offset < sizeof(GuestDialogItemTemplate)) {
+                return DialogTemplateStatus::Malformed;
+            }
+            std::uint16_t item_id = 0;
+            if (!read_u32(bytes, offset, control.style) ||
+                !read_u32(bytes, offset, control.extended_style) ||
+                !read_i16(bytes, offset, control.x) ||
+                !read_i16(bytes, offset, control.y) ||
+                !read_i16(bytes, offset, control.width) ||
+                !read_i16(bytes, offset, control.height) ||
+                !read_u16(bytes, offset, item_id)) {
+                return DialogTemplateStatus::Malformed;
+            }
+            control.id = item_id;
+        }
+
+        std::uint16_t marker = 0;
+        if (!read_u16(bytes, offset, marker)) {
             return DialogTemplateStatus::Malformed;
         }
         if (marker == 0xFFFFU) {
@@ -255,14 +332,18 @@ DialogTemplateStatus parse_dialog_template(const std::span<const std::byte> byte
             control.class_name = std::move(class_name);
             (void)classify_control_name(control.class_name, control.control_class);
         }
-        if (!read_field(bytes, offset, control.title) || !read_u16(bytes, offset, marker)) {
+        if (!read_field(bytes, offset, control.title)) {
             return DialogTemplateStatus::Malformed;
         }
-        if (marker != 0) {
-            if (offset > bytes.size() || bytes.size() - offset < marker) {
+        std::uint16_t extra_count = 0;
+        if (!read_u16(bytes, offset, extra_count)) {
+            return DialogTemplateStatus::Malformed;
+        }
+        if (extra_count != 0) {
+            if (offset > bytes.size() || bytes.size() - offset < extra_count) {
                 return DialogTemplateStatus::Malformed;
             }
-            offset += marker;
+            offset += extra_count;
         }
         output.controls.push_back(std::move(control));
     }

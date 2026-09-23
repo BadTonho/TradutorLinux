@@ -580,13 +580,21 @@ TEST(Win32DialogTemplateTest, ParsesAlignedStandardTemplateAndRejectsBounds) {
     EXPECT_EQ(runtime::parse_dialog_template(truncated, parsed),
               runtime::DialogTemplateStatus::Malformed);
 
-    std::vector<std::byte> dialog_ex = bytes;
-    dialog_ex[0] = std::byte{1};
-    dialog_ex[1] = std::byte{0};
-    dialog_ex[2] = std::byte{0xFF};
-    dialog_ex[3] = std::byte{0xFF};
-    EXPECT_EQ(runtime::parse_dialog_template(dialog_ex, parsed),
-              runtime::DialogTemplateStatus::DialogEx);
+    const std::vector<std::byte> ex_bytes = valid_dialog_ex_template();
+    EXPECT_EQ(runtime::parse_dialog_template(ex_bytes, parsed),
+              runtime::DialogTemplateStatus::Success);
+    ASSERT_EQ(parsed.controls.size(), 1U);
+    EXPECT_EQ(parsed.controls[0].id, 1001U);
+    EXPECT_EQ(parsed.controls[0].title, u"OK");
+    EXPECT_EQ(parsed.controls[0].control_class, runtime::DialogControlClass::Button);
+    EXPECT_EQ(parsed.title, u"Dlg");
+    EXPECT_EQ(parsed.width, 200);
+    EXPECT_EQ(parsed.height, 100);
+
+    std::vector<std::byte> truncated_ex = ex_bytes;
+    truncated_ex.pop_back();
+    EXPECT_EQ(runtime::parse_dialog_template(truncated_ex, parsed),
+              runtime::DialogTemplateStatus::Malformed);
 }
 
 TEST(Win32DialogTemplateTest, RejectsUnsupportedMenuAndParsesGenericControlsAndFont) {

@@ -806,7 +806,7 @@ WindowSlot* create_logical_control(WindowSlot& parent, const std::string_view cl
                                    const std::string_view title, const std::uint32_t style,
                                    const std::uintptr_t control_id, const int x, const int y,
                                    const int width, const int height) noexcept {
-    if (find_window_slot(&parent) != &parent || parent.is_control || class_name.empty()) {
+    if (find_window_slot(&parent) != &parent || class_name.empty()) {
         return nullptr;
     }
     const auto free_it = std::find_if(g_windows.begin(), g_windows.end(),

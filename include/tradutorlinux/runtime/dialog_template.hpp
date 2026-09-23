@@ -33,6 +33,32 @@ struct __attribute__((packed)) GuestDialogItemTemplate {
 };
 static_assert(sizeof(GuestDialogItemTemplate) == 18);
 
+struct __attribute__((packed)) GuestDialogTemplateEx {
+    std::uint16_t version{};
+    std::uint16_t signature{};
+    std::uint32_t help_id{};
+    std::uint32_t extended_style{};
+    std::uint32_t style{};
+    std::uint16_t item_count{};
+    std::int16_t x{};
+    std::int16_t y{};
+    std::int16_t width{};
+    std::int16_t height{};
+};
+static_assert(sizeof(GuestDialogTemplateEx) == 26);
+
+struct __attribute__((packed)) GuestDialogItemTemplateEx {
+    std::uint32_t help_id{};
+    std::uint32_t extended_style{};
+    std::uint32_t style{};
+    std::int16_t x{};
+    std::int16_t y{};
+    std::int16_t width{};
+    std::int16_t height{};
+    std::uint32_t id{};
+};
+static_assert(sizeof(GuestDialogItemTemplateEx) == 24);
+
 enum class DialogControlClass : std::uint8_t { Button, Edit, Static, ComboBox, Generic };
 
 struct DialogControl {
@@ -44,7 +70,7 @@ struct DialogControl {
     std::int16_t y{};
     std::int16_t width{};
     std::int16_t height{};
-    std::uint16_t id{};
+    std::uint32_t id{};
     std::u16string title;
 };
 

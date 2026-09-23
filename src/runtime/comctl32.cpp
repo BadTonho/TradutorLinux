@@ -160,7 +160,7 @@ TL_COMCTL_MSABI void* tl_CreateStatusWindowW(const std::int32_t style, const std
         return nullptr;
     }
     WindowSlot* const parent_slot = find_window_slot(parent);
-    if (parent_slot == nullptr || parent_slot->is_control) {
+    if (parent_slot == nullptr) {
         set_last_error(abi::kErrorInvalidHandle);
         return nullptr;
     }
@@ -209,7 +209,7 @@ TL_COMCTL_MSABI void* tl_CreateToolbarEx(void* const hwnd, const std::uint32_t s
         return nullptr;
     }
     WindowSlot* const parent_slot = find_window_slot(hwnd);
-    if (parent_slot == nullptr || parent_slot->is_control) {
+    if (parent_slot == nullptr) {
         set_last_error(abi::kErrorInvalidHandle);
         return nullptr;
     }

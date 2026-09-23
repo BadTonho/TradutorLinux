@@ -42,7 +42,7 @@ constexpr std::uint32_t kMessageBoxIconMask = 0x000000F0U;
     WindowSlot* parent_slot = nullptr;
     if (parent != nullptr) {
         parent_slot = find_window_slot(parent);
-        if (parent_slot == nullptr || parent_slot->is_control) {
+        if (parent_slot == nullptr) {
             trace_failure("parent", "janela pai inválida");
             set_last_error(abi::kErrorInvalidHandle);
             return nullptr;
@@ -414,7 +414,7 @@ TL_MSABI std::intptr_t tl_DialogBoxParamW(const void* const instance,
     WindowSlot* parent_slot = nullptr;
     if (parent != nullptr) {
         parent_slot = find_window_slot(parent);
-        if (parent_slot == nullptr || parent_slot->is_control) {
+        if (parent_slot == nullptr) {
             set_last_error(abi::kErrorInvalidHandle);
             return -1;
         }

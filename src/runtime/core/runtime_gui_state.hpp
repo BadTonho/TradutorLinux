@@ -34,7 +34,7 @@ struct ClassSlot {
 };
 
 constexpr std::size_t kMaxGuestClasses = 64;
-constexpr std::size_t kMaxGuestWindows = 256;
+constexpr std::size_t kMaxGuestWindows = 512;
 
 extern std::array<ClassSlot, kMaxGuestClasses> g_classes;
 extern std::array<WindowSlot, kMaxGuestWindows> g_windows;
