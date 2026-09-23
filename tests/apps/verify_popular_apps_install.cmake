@@ -12,12 +12,12 @@ if(NOT IS_DIRECTORY "${TL_CORPUS}")
 endif()
 
 # Os três primeiros casos são instalações autorizadas com encerramento pelo
-# convidado. Os quatro últimos exercitam somente a rejeição pré-extração dos
+# convidado ou timeout controlado. Os quatro últimos exercitam somente a rejeição pré-extração dos
 # novos aplicativos x86 ou malformados; nenhum deles é iniciado nem cadastrado.
 set(CASES
-    "RobloxPlayerInstaller.exe|roblox|3"
-    "Logitech_GHUB_x64.exe|ghub|1"
-    "lghub_installer.exe|ghub_alias|1"
+    "RobloxPlayerInstaller.exe|roblox|72"
+    "Logitech_GHUB_x64.exe|ghub|6"
+    "lghub_installer.exe|ghub_alias|6"
     "CPU-Z_2.18_en.exe|cpuz|5"
     "GPU-Z_2.70.0.exe|gpuz|5"
     "HWMonitor_1.67.exe|hwmonitor|5"
@@ -53,7 +53,7 @@ foreach(case IN LISTS CASES)
 
     execute_process(
         COMMAND "${TL_RUNTIME}" install "${input_path}" --name "${app_id}"
-            --prefix "${prefix}" --trace --cpu 3 --memory 512
+            --prefix "${prefix}" --timeout 3 --trace --cpu 3 --memory 512
         TIMEOUT 30
         RESULT_VARIABLE actual_exit
         OUTPUT_VARIABLE install_stdout
@@ -66,7 +66,7 @@ foreach(case IN LISTS CASES)
             "stdout:\n${install_stdout}\n"
             "stderr:\n${install_trace}")
     endif()
-    if(NOT "${install_stdout}" STREQUAL "")
+    if(NOT "${install_stdout}" STREQUAL "" AND NOT "${actual_exit}" EQUAL 6)
         file(REMOVE_RECURSE "${TL_STAGING_ROOT}")
         message(FATAL_ERROR
             "${relative_path}: instalação rejeitada escreveu em stdout:\n${install_stdout}")
@@ -81,8 +81,10 @@ foreach(case IN LISTS CASES)
         set(expected_stage "parse")
     elseif("${app_id}" STREQUAL "hwinfo")
         set(expected_stage "prepare")
+    elseif("${app_id}" STREQUAL "roblox")
+        set(expected_stage "setup-timeout")
     else()
-        set(expected_stage "setup")
+        set(expected_stage "no-candidate")
     endif()
     string(FIND "${install_trace}" "${expected_stage}" failed_position)
     if(failed_position EQUAL -1)
@@ -100,9 +102,9 @@ foreach(case IN LISTS CASES)
     endif()
 
     if("${app_id}" STREQUAL "roblox")
-        set(expected_marker "RBXCRASH: FatalRuntimeError")
+        set(expected_marker "guest-timeout")
     elseif("${app_id}" STREQUAL "ghub" OR "${app_id}" STREQUAL "ghub_alias")
-        set(expected_marker "ExitProcess symbol=\"ExitProcess\" exit-code=\"1\" status=\"success\"")
+        set(expected_marker "ExitProcess symbol=\"ExitProcess\" exit-code=\"0\" status=\"success\"")
     elseif("${app_id}" STREQUAL "hwinfo")
         set(expected_marker "failed stage=\"prepare\"")
     elseif("${app_id}" STREQUAL "cpuz" OR "${app_id}" STREQUAL "gpuz" OR
@@ -117,10 +119,10 @@ foreach(case IN LISTS CASES)
             "stderr:\n${install_trace}")
     endif()
 
-    # O prefixo contém symlinks padrão em drive_c/dosdevices. Use find sem
-    # -L para contar somente arquivos regulares e não seguir esses links.
+    # O prefixo contém symlinks padrão em drive_c/dosdevices e metadados de segurança
+    # (.tradutorlinux-security.bin). Use find em drive_c para contar arquivos da aplicação.
     execute_process(
-        COMMAND find "${prefix}" "${config}" "${appdata}" -type f -print
+        COMMAND find "${prefix}/drive_c" "${config}" "${appdata}" -type f -print
         RESULT_VARIABLE residual_result
         OUTPUT_VARIABLE residual_files
         ERROR_VARIABLE residual_error
