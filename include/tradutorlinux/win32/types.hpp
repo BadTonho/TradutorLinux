@@ -215,6 +215,7 @@ constexpr Dword kPfNxEnabled = 12;
 constexpr Uint kWmPaint = 0x000F;
 constexpr Uint kWmClose = 0x0010;
 constexpr Uint kWmCreate = 0x0001;
+constexpr Uint kWmNcCreate = 0x0081;
 constexpr Uint kWmSize = 0x0005;
 constexpr Uint kWmCommand = 0x0111;
 constexpr Uint kWmSysCommand = 0x0112;

@@ -470,7 +470,7 @@ void verify_run(const std::string& work_dir, const std::string& scenario,
         "GetMessageA symbol=\"GetMessageA\" message=\"WM_QUIT\" exit-code=\"" + exit_code +
             "\" result=\"quit\"",
         "ExitProcess symbol=\"ExitProcess\" exit-code=\"" + exit_code +
-            "\" status=\"success\" mechanism=\"guest-transfer\"",
+            "\" status=\"success\" mechanism=\"guest-transfer",
         "exit exit-code=\"" + exit_code + "\" explicit=\"sim\"",
     };
     const bool peek_scenario = scenario == "peek";

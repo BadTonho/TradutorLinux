@@ -49,6 +49,11 @@ TEST(AbiTest, ExposesMouseMessageConstants) {
     EXPECT_EQ(abi::kMkLButton, 0x0001U);
 }
 
+TEST(AbiTest, ExposesWindowCreationConstants) {
+    EXPECT_EQ(abi::kWmCreate, 0x0001U);
+    EXPECT_EQ(abi::kWmNcCreate, 0x0081U);
+}
+
 TEST(AbiTest, ConsoleApisAreReachableThroughMsAbiPointers) {
     const GetStdHandleFn get_std_handle = &tl_GetStdHandle;
     EXPECT_NE(get_std_handle(abi::kStdOutputHandle), nullptr);

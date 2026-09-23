@@ -317,6 +317,7 @@ TL_MSABI abi::HWnd tl_CreateWindowExA(const std::uint32_t ex_style,
         slot.visible = (style & kWsVisible) != 0U || style == 0U;
         slot.enabled = (style & kWsDisabled) == 0U;
         slot.combo_selection = -1;
+        static_cast<void>(register_window_handle(&slot));
         if (registered_child) {
             GuestCreateStructA cs{};
             cs.lpCreateParams = param;
@@ -331,10 +332,23 @@ TL_MSABI abi::HWnd tl_CreateWindowExA(const std::uint32_t ex_style,
             cs.lpszName = effective_window_name;
             cs.lpszClass = effective_class_name;
             cs.dwExStyle = ex_style;
+            const abi::Lresult nc_create_result = call_wndproc(
+                slot.wndproc, &slot, abi::kWmNcCreate, 0,
+                reinterpret_cast<abi::Lparam>(&cs));
+            if (nc_create_result == 0) {
+                unregister_window_handle(&slot);
+                slot = {};
+                clear_pending_native(slot);
+                set_last_error(abi::kErrorInvalidParameter);
+                trace_guest_failure("CreateWindowExA", "wm-nccreate",
+                                    "WM_NCCREATE do filho rejeitou a criação");
+                return nullptr;
+            }
             const abi::Lresult create_result = call_wndproc(
                 slot.wndproc, &slot, abi::kWmCreate, 0,
                 reinterpret_cast<abi::Lparam>(&cs));
             if (create_result == -1) {
+                unregister_window_handle(&slot);
                 slot = {};
                 clear_pending_native(slot);
                 set_last_error(abi::kErrorInvalidParameter);
@@ -369,7 +383,6 @@ TL_MSABI abi::HWnd tl_CreateWindowExA(const std::uint32_t ex_style,
                                              std::to_string(slot.height)}};
             runtime_trace("CreateWindowExA", fields, 4);
         }
-        static_cast<void>(register_window_handle(&slot));
         set_last_error(abi::kErrorSuccess);
         return &slot;
     }
@@ -464,6 +477,36 @@ TL_MSABI abi::HWnd tl_CreateWindowExA(const std::uint32_t ex_style,
     cs.lpszName = caption;
     cs.lpszClass = cls->name.c_str();
     cs.dwExStyle = ex_style;
+    const bool skip_toplevel_create = std::getenv("TL_SKIP_TOPLEVEL_WM_CREATE") != nullptr &&
+                                      slot.parent == nullptr;
+    const std::array<diagnostics::TraceField, 4> nc_create_begin_fields{
+        diagnostics::TraceField{"symbol", "CreateWindowExA"},
+        diagnostics::TraceField{"stage", "WM_NCCREATE-begin"},
+        diagnostics::TraceField{},
+        diagnostics::TraceField{},
+    };
+    runtime_trace("CreateWindowExA", nc_create_begin_fields, 2);
+    const abi::Lresult nc_create_result = skip_toplevel_create
+                                              ? 1
+                                              : call_wndproc(slot.wndproc, &slot, abi::kWmNcCreate, 0,
+                                                             reinterpret_cast<abi::Lparam>(&cs));
+    const std::array<diagnostics::TraceField, 4> nc_create_end_fields{
+        diagnostics::TraceField{"symbol", "CreateWindowExA"},
+        diagnostics::TraceField{"stage", "WM_NCCREATE-end"},
+        diagnostics::TraceField{"result", std::to_string(nc_create_result)},
+        diagnostics::TraceField{},
+    };
+    runtime_trace("CreateWindowExA", nc_create_end_fields, 3);
+    if (nc_create_result == 0) {
+        unregister_window_handle(&slot);
+        gui::platform::destroy_window(slot.native);
+        slot = {};
+        clear_pending_native(slot);
+        set_last_error(abi::kErrorInvalidParameter);
+        trace_guest_failure("CreateWindowExA", "wm-nccreate", "WM_NCCREATE rejeitou a criação");
+        return nullptr;
+    }
+
     const std::array<diagnostics::TraceField, 4> create_begin_fields{
         diagnostics::TraceField{"symbol", "CreateWindowExA"},
         diagnostics::TraceField{"stage", "WM_CREATE-begin"},
@@ -471,8 +514,6 @@ TL_MSABI abi::HWnd tl_CreateWindowExA(const std::uint32_t ex_style,
         diagnostics::TraceField{},
     };
     runtime_trace("CreateWindowExA", create_begin_fields, 2);
-    const bool skip_toplevel_create = std::getenv("TL_SKIP_TOPLEVEL_WM_CREATE") != nullptr &&
-                                      slot.parent == nullptr;
     const abi::Lresult create_result = skip_toplevel_create
                                             ? 0
                                             : call_wndproc(slot.wndproc, &slot, abi::kWmCreate, 0,
@@ -614,6 +655,9 @@ TL_MSABI abi::Lresult tl_DefWindowProcA(const void* const window,
     if (message == abi::kWmClose) {
         tl_DestroyWindow(window);
         return 0;
+    }
+    if (message == abi::kWmNcCreate) {
+        return 1;
     }
     return 0;
 }
