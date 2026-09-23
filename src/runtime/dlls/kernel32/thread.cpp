@@ -186,9 +186,16 @@ TL_MSABI void* tl_CreateThread(const void* thread_attributes, const std::uintptr
                                 const std::uint32_t creation_flags,
                                 std::uint32_t* thread_id) noexcept {
     (void)thread_attributes;
+    constexpr std::uint32_t kCreateSuspended = 0x00000004U;
+    constexpr std::uint32_t kStackSizeParamIsAReservation = 0x00010000U;
+    constexpr std::uint32_t kValidCreationFlags = kCreateSuspended | kStackSizeParamIsAReservation;
     if (start_address == 0 ||
         !is_guest_executable_address(start_address) ||
-        (creation_flags != 0 && creation_flags != 0x00000004)) {
+        (creation_flags & ~kValidCreationFlags) != 0) {
+        trace_guest_failure("CreateThread", "params",
+            ("invalid params start=" + std::to_string(start_address) +
+            " exec=" + std::to_string(is_guest_executable_address(start_address)) +
+            " flags=" + std::to_string(creation_flags)).c_str());
         set_last_error(abi::kErrorInvalidParameter);
         return nullptr;
     }

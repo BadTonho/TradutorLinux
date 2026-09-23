@@ -2296,6 +2296,11 @@ TEST(Win32ConcurrencyTest, CreateThreadRejectsReadableNonExecutableStart) {
     EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
 }
 
+TEST(Win32ConcurrencyTest, CreateThreadRejectsUnknownCreationFlags) {
+    EXPECT_EQ(tl_CreateThread(nullptr, 0, 0, nullptr, 0x00020000U, nullptr), nullptr);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+}
+
 TEST(Win32ConcurrencyTest, CreateThreadCleansUpAfterInjectedGsFailure) {
     g_gs_failure_entry_calls.store(0, std::memory_order_relaxed);
     const std::filesystem::path trace_directory =
