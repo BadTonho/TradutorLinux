@@ -70,10 +70,10 @@ TL_MSABI std::intptr_t tl_SetClassLongPtrA(const void* window, int index,
 TL_MSABI std::intptr_t tl_SetClassLongPtrW(const void* window, int index,
                                              std::intptr_t value) noexcept;
 TL_MSABI int tl_SetForegroundWindow(const void* window) noexcept;
-TL_MSABI int tl_SendMessageA(const void* window, std::uint32_t message, abi::Wparam wparam,
-                              abi::Lparam lparam) noexcept;
-TL_MSABI int tl_SendMessageW(const void* window, std::uint32_t message, abi::Wparam wparam,
-                              abi::Lparam lparam) noexcept;
+TL_MSABI abi::Lresult tl_SendMessageA(const void* window, std::uint32_t message, abi::Wparam wparam,
+                                      abi::Lparam lparam) noexcept;
+TL_MSABI abi::Lresult tl_SendMessageW(const void* window, std::uint32_t message, abi::Wparam wparam,
+                                      abi::Lparam lparam) noexcept;
 TL_MSABI std::intptr_t tl_DialogBoxParamW(const void* instance, const std::uint16_t* template_name,
                                            const void* parent, std::uintptr_t dialog_proc,
                                            abi::Lparam init_param) noexcept;

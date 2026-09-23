@@ -62,6 +62,7 @@ TL_MSABI abi::Atom tl_RegisterClassExA(const void* const wnd_class) noexcept {
                                       [](const ClassSlot& slot) { return !slot.used; });
     if (free_it == g_classes.end()) {
         set_last_error(abi::kErrorNotEnoughMemory);
+        trace_guest_failure("RegisterClassExA", "class-slots", "limite de slots de classes esgotado");
         return 0;
     }
     ClassSlot& slot = *free_it;
@@ -268,6 +269,7 @@ TL_MSABI abi::HWnd tl_CreateWindowExA(const std::uint32_t ex_style,
                                       [](const WindowSlot& slot) { return !slot.used; });
     if (free_it == g_windows.end()) {
         set_last_error(abi::kErrorNotEnoughMemory);
+        trace_guest_failure("CreateWindowExA", "window-slots", "limite de slots de janelas esgotado");
         return nullptr;
     }
     struct GuestCreateStructA {
@@ -290,8 +292,9 @@ TL_MSABI abi::HWnd tl_CreateWindowExA(const std::uint32_t ex_style,
         (runtime_gui::is_builtin_control(effective_class_name) || generic_child || registered_child)) {
         WindowSlot& slot = *free_it;
         WindowSlot* parent_slot = find_window_slot(parent);
-        if (parent_slot == nullptr || parent_slot->is_control) {
+        if (parent_slot == nullptr) {
             set_last_error(abi::kErrorInvalidHandle);
+            trace_guest_failure("CreateWindowExA", "parent-lookup", "handle de janela pai inválido");
             return nullptr;
         }
         slot = {};

@@ -394,7 +394,7 @@ TEST(CommonControls, TreeViewMaintainsItemsAndSelection) {
     session.item.mask = kTestTreeItemText | kTestTreeItemParam;
     session.item.text = session_text;
     session.item.item_data = 0x1111;
-    const int session_handle = tl_SendMessageA(
+    const auto session_handle = tl_SendMessageA(
         &tree, kTestTreeInsertItemA, 0,
         reinterpret_cast<abi::Lparam>(&session));
     ASSERT_GT(session_handle, 0);
@@ -406,7 +406,7 @@ TEST(CommonControls, TreeViewMaintainsItemsAndSelection) {
     ssh.item.mask = kTestTreeItemText | kTestTreeItemParam;
     ssh.item.text = ssh_text;
     ssh.item.item_data = 0x2222;
-    const int ssh_handle = tl_SendMessageA(
+    const auto ssh_handle = tl_SendMessageA(
         &tree, kTestTreeInsertItemA, 0,
         reinterpret_cast<abi::Lparam>(&ssh));
     ASSERT_GT(ssh_handle, session_handle);

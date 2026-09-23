@@ -33,8 +33,11 @@ struct ClassSlot {
     std::u16string menu_name_text;
 };
 
-extern std::array<ClassSlot, 32> g_classes;
-extern std::array<WindowSlot, 32> g_windows;
+constexpr std::size_t kMaxGuestClasses = 64;
+constexpr std::size_t kMaxGuestWindows = 256;
+
+extern std::array<ClassSlot, kMaxGuestClasses> g_classes;
+extern std::array<WindowSlot, kMaxGuestWindows> g_windows;
 extern WindowSlot* g_focused_control;
 extern WindowSlot* g_active_dialog;
 extern std::mutex g_modal_mutex;

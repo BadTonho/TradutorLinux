@@ -16,7 +16,7 @@ struct PendingNativeMessage {
     bool is_paint{false};
 };
 
-std::array<PendingNativeMessage, 32> g_pending_native{};
+std::array<PendingNativeMessage, kMaxGuestWindows> g_pending_native{};
 
 [[nodiscard]] PendingNativeMessage& pending_native(WindowSlot& slot) noexcept {
     return g_pending_native[static_cast<std::size_t>(&slot - g_windows.data())];
@@ -1290,8 +1290,8 @@ TL_MSABI int tl_KillTimer(const void* const window, const std::uintptr_t id) noe
     return 1;
 }
 
-TL_MSABI int tl_SendMessageA(const void* window, const std::uint32_t message,
-                             const abi::Wparam wparam, const abi::Lparam lparam) noexcept {
+TL_MSABI abi::Lresult tl_SendMessageA(const void* window, const std::uint32_t message,
+                                     const abi::Wparam wparam, const abi::Lparam lparam) noexcept {
     if (!user32_gui_thread_allowed("SendMessageA")) {
         return 0;
     }
@@ -1524,19 +1524,23 @@ TL_MSABI int tl_SendMessageA(const void* window, const std::uint32_t message,
             util::ascii_iequals(slot->class_name, "SysListView32")) {
             return runtime_gui::handle_listview_message(*slot, message, wparam, lparam, false);
         }
+        if (slot->wndproc != 0) {
+            return call_wndproc(slot->wndproc, const_cast<abi::HWnd>(window), message,
+                                wparam, lparam);
+        }
         set_last_error(abi::kErrorSuccess);
         return 0;
     }
     if (slot->wndproc != 0) {
-        return static_cast<int>(call_wndproc(slot->wndproc, const_cast<abi::HWnd>(window), message,
-                                             wparam, lparam));
+        return call_wndproc(slot->wndproc, const_cast<abi::HWnd>(window), message,
+                            wparam, lparam);
     }
     set_last_error(abi::kErrorSuccess);
     return 0;
 }
 
-TL_MSABI int tl_SendMessageW(const void* window, const std::uint32_t message,
-                              const abi::Wparam wparam, const abi::Lparam lparam) noexcept {
+TL_MSABI abi::Lresult tl_SendMessageW(const void* window, const std::uint32_t message,
+                                     const abi::Wparam wparam, const abi::Lparam lparam) noexcept {
     WindowSlot* const slot = find_window_slot(window);
     if (slot == nullptr) {
         set_last_error(abi::kErrorInvalidHandle);
@@ -1587,11 +1591,15 @@ TL_MSABI int tl_SendMessageW(const void* window, const std::uint32_t message,
                 reinterpret_cast<const std::uint16_t*>(wide_text.data()), wide_text.size());
             return tl_SendMessageA(window, message, wparam, reinterpret_cast<abi::Lparam>(utf8.c_str()));
         }
+        if (slot->wndproc != 0) {
+            return call_wndproc(slot->wndproc, const_cast<abi::HWnd>(window), message,
+                                wparam, lparam);
+        }
         return tl_SendMessageA(window, message, wparam, lparam);
     }
     if (slot->wndproc != 0) {
-        return static_cast<int>(call_wndproc(slot->wndproc, const_cast<abi::HWnd>(window), message,
-                                             wparam, lparam));
+        return call_wndproc(slot->wndproc, const_cast<abi::HWnd>(window), message,
+                            wparam, lparam);
     }
     set_last_error(abi::kErrorSuccess);
     return 0;

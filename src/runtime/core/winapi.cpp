@@ -103,8 +103,8 @@ thread_local std::shared_ptr<FlsThreadValues> g_current_fls_values{};
 std::mutex g_cs_mutex;
 std::array<CriticalSectionEntry, 256> g_critical_sections{};
 
-std::array<ClassSlot, 32> g_classes{};
-std::array<WindowSlot, 32> g_windows{};
+std::array<ClassSlot, kMaxGuestClasses> g_classes{};
+std::array<WindowSlot, kMaxGuestWindows> g_windows{};
 WindowSlot* g_focused_control = nullptr;
 WindowSlot* g_active_dialog = nullptr;
 std::mutex g_modal_mutex;
@@ -118,7 +118,7 @@ std::uint32_t g_quit_code = 0;
 namespace {
 
 constexpr std::size_t kMaxCrossThreadWindowMessages = 4096;
-std::array<const void*, 32> g_registered_window_handles{};
+std::array<const void*, kMaxGuestWindows> g_registered_window_handles{};
 std::mutex g_registered_window_handles_mutex;
 std::deque<CrossThreadWindowMessage> g_cross_thread_window_messages;
 std::mutex g_cross_thread_window_messages_mutex;

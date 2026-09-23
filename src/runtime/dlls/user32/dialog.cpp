@@ -212,6 +212,13 @@ TL_MSABI int tl_MessageBoxA(const void* const window, const char* const text,
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
+    const std::array<diagnostics::TraceField, 4> fields{
+        diagnostics::TraceField{"symbol", "MessageBoxA"},
+        diagnostics::TraceField{"caption", caption_copy},
+        diagnostics::TraceField{"text", text_copy},
+        diagnostics::TraceField{},
+    };
+    runtime_trace("MessageBoxA", fields, 3);
     const std::uint32_t result = gui::platform::message_box(text_copy.c_str(), caption_copy.c_str());
     set_last_error(result == 0 ? abi::kErrorAccessDenied : abi::kErrorSuccess);
     return static_cast<int>(result);
@@ -649,6 +656,13 @@ TL_MSABI int tl_MessageBoxW(const void* window, const std::uint16_t* text,
         reinterpret_cast<const std::uint16_t*>(text_copy.data()), text_copy.size());
     const std::string utf8_cap = util::wide_to_utf8(
         reinterpret_cast<const std::uint16_t*>(caption_copy.data()), caption_copy.size());
+    const std::array<diagnostics::TraceField, 4> fields{
+        diagnostics::TraceField{"symbol", "MessageBoxW"},
+        diagnostics::TraceField{"caption", utf8_cap},
+        diagnostics::TraceField{"text", utf8_text},
+        diagnostics::TraceField{},
+    };
+    runtime_trace("MessageBoxW", fields, 3);
     const std::uint32_t result = gui::platform::message_box(utf8_text.c_str(), utf8_cap.c_str());
     set_last_error(result == 0 ? abi::kErrorAccessDenied : abi::kErrorSuccess);
     return static_cast<int>(result);
