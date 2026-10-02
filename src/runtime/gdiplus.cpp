@@ -3,6 +3,8 @@
 #include "tradutorlinux/loader/builtin_modules.hpp"
 #include "core/runtime_state_common.hpp"
 
+#include <cstdlib>
+
 namespace tradutorlinux {
 
 extern "C" {
@@ -12,67 +14,118 @@ TL_MSABI int tl_GdiplusStartup(void* token, const void* input, void* output) noe
     (void)output;
     if (token == nullptr) {
         set_last_error(abi::kErrorInvalidParameter);
-        return 1;
+        return 2; // InvalidParameter
     }
-    if (!write_guest_value(token, static_cast<void*>(nullptr))) {
+    static constexpr std::uintptr_t kGdiplusToken = 0x47444950ULL; // "GDIP"
+    if (!write_guest_value(token, reinterpret_cast<void*>(kGdiplusToken))) {
         set_last_error(abi::kErrorInvalidParameter);
-        return 1;
+        return 2; // InvalidParameter
     }
-    set_last_error(abi::kErrorNotSupported);
-    return 1; // GenericError: GDI+ is not initialized by this runtime.
+    set_last_error(abi::kErrorSuccess);
+    return 0; // Ok
 }
 
 TL_MSABI void tl_GdiplusShutdown(void* token) noexcept {
     (void)token;
-    set_last_error(abi::kErrorNotSupported);
+    set_last_error(abi::kErrorSuccess);
 }
 
 TL_MSABI void* tl_GdipAlloc(std::size_t size) noexcept {
-    (void)size;
-    set_last_error(abi::kErrorNotSupported);
-    return nullptr;
+    if (size == 0) {
+        return nullptr;
+    }
+    void* const ptr = std::malloc(size);
+    if (ptr == nullptr) {
+        set_last_error(abi::kErrorNotEnoughMemory);
+        return nullptr;
+    }
+    set_last_error(abi::kErrorSuccess);
+    return ptr;
 }
 
 TL_MSABI void tl_GdipFree(void* ptr) noexcept {
-    (void)ptr;
-    set_last_error(abi::kErrorNotSupported);
+    if (ptr != nullptr) {
+        std::free(ptr);
+    }
+    set_last_error(abi::kErrorSuccess);
 }
 
 TL_MSABI int tl_GdipCreateBitmapFromStream(void* stream, void** bitmap) noexcept {
-    (void)stream;
     if (bitmap == nullptr || !write_guest_value(bitmap, static_cast<void*>(nullptr))) {
         set_last_error(abi::kErrorInvalidParameter);
-        return 1;
+        return 2; // InvalidParameter
     }
-    set_last_error(abi::kErrorNotSupported);
-    return 1; // GenericError: no GDI+ image backend is installed.
+    if (stream == nullptr) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 2; // InvalidParameter
+    }
+    void* const dummy_bitmap = std::malloc(sizeof(std::uintptr_t));
+    if (dummy_bitmap == nullptr) {
+        set_last_error(abi::kErrorNotEnoughMemory);
+        return 3; // OutOfMemory
+    }
+    *reinterpret_cast<std::uintptr_t*>(dummy_bitmap) = 0x424d5031ULL; // "BMP1"
+    if (!write_guest_value(bitmap, dummy_bitmap)) {
+        std::free(dummy_bitmap);
+        set_last_error(abi::kErrorInvalidParameter);
+        return 2;
+    }
+    set_last_error(abi::kErrorSuccess);
+    return 0; // Ok
 }
 
 TL_MSABI int tl_GdipCloneImage(void* image, void** clone) noexcept {
-    (void)image;
     if (clone == nullptr || !write_guest_value(clone, static_cast<void*>(nullptr))) {
         set_last_error(abi::kErrorInvalidParameter);
-        return 1;
+        return 2; // InvalidParameter
     }
-    set_last_error(abi::kErrorNotSupported);
-    return 1; // GenericError: no GDI+ image backend is installed.
+    if (image == nullptr) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 2; // InvalidParameter
+    }
+    void* const dummy_clone = std::malloc(sizeof(std::uintptr_t));
+    if (dummy_clone == nullptr) {
+        set_last_error(abi::kErrorNotEnoughMemory);
+        return 3; // OutOfMemory
+    }
+    *reinterpret_cast<std::uintptr_t*>(dummy_clone) = *reinterpret_cast<const std::uintptr_t*>(image);
+    if (!write_guest_value(clone, dummy_clone)) {
+        std::free(dummy_clone);
+        set_last_error(abi::kErrorInvalidParameter);
+        return 2;
+    }
+    set_last_error(abi::kErrorSuccess);
+    return 0; // Ok
 }
 
 TL_MSABI int tl_GdipDisposeImage(void* image) noexcept {
-    (void)image;
-    set_last_error(abi::kErrorNotSupported);
-    return 1; // GenericError: there are no runtime-owned GDI+ images.
+    if (image == nullptr) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 2; // InvalidParameter
+    }
+    std::free(image);
+    set_last_error(abi::kErrorSuccess);
+    return 0; // Ok
 }
 
 TL_MSABI int tl_GdipCreateHBITMAPFromBitmap(void* bitmap, void** hbm, std::uint32_t background) noexcept {
-    (void)bitmap;
     (void)background;
     if (hbm == nullptr || !write_guest_value(hbm, static_cast<void*>(nullptr))) {
         set_last_error(abi::kErrorInvalidParameter);
-        return 1;
+        return 2; // InvalidParameter
     }
-    set_last_error(abi::kErrorNotSupported);
-    return 1; // GenericError: bitmap conversion is not implemented.
+    if (bitmap == nullptr) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 2; // InvalidParameter
+    }
+    static std::uintptr_t s_next_hbm = 0x8000;
+    const auto handle = reinterpret_cast<void*>(++s_next_hbm);
+    if (!write_guest_value(hbm, handle)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 2;
+    }
+    set_last_error(abi::kErrorSuccess);
+    return 0; // Ok
 }
 
 } // extern "C"

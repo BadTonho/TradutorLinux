@@ -176,47 +176,51 @@ TEST(Win32StubTest, DebugAndShellDialogStubsReportUnsupported) {
     EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
 }
 
-TEST(Win32StubTest, GdiplusStubsRejectFakeObjectsAndClearOutputs) {
+TEST(Win32StubTest, GdiplusLifecycleAndMemoryManagementWork) {
     auto* const invalid = reinterpret_cast<void*>(static_cast<std::uintptr_t>(0x1000U));
-    EXPECT_EQ(tl_GdiplusStartup(invalid, nullptr, nullptr), 1);
+    EXPECT_EQ(tl_GdiplusStartup(invalid, nullptr, nullptr), 2);
     EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
 
-    void* token = reinterpret_cast<void*>(0x1U);
-    EXPECT_EQ(tl_GdiplusStartup(&token, nullptr, nullptr), 1);
-    EXPECT_EQ(token, nullptr);
-    EXPECT_EQ(tl_GetLastError(), abi::kErrorNotSupported);
+    void* token = nullptr;
+    EXPECT_EQ(tl_GdiplusStartup(&token, nullptr, nullptr), 0);
+    EXPECT_NE(token, nullptr);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorSuccess);
+
+    tl_GdiplusShutdown(token);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorSuccess);
+
+    void* mem = tl_GdipAlloc(64);
+    EXPECT_NE(mem, nullptr);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorSuccess);
+    tl_GdipFree(mem);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorSuccess);
+    EXPECT_EQ(tl_GdipAlloc(0), nullptr);
 
     EXPECT_EQ(tl_GdipCreateBitmapFromStream(nullptr,
-                                            reinterpret_cast<void**>(invalid)), 1);
+                                            reinterpret_cast<void**>(invalid)), 2);
     EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
     void* bitmap = reinterpret_cast<void*>(0x2U);
-    EXPECT_EQ(tl_GdipCreateBitmapFromStream(nullptr, &bitmap), 1);
+    EXPECT_EQ(tl_GdipCreateBitmapFromStream(nullptr, &bitmap), 2);
     EXPECT_EQ(bitmap, nullptr);
-    EXPECT_EQ(tl_GetLastError(), abi::kErrorNotSupported);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
 
-    EXPECT_EQ(tl_GdipCloneImage(nullptr, reinterpret_cast<void**>(invalid)), 1);
+    EXPECT_EQ(tl_GdipCloneImage(nullptr, reinterpret_cast<void**>(invalid)), 2);
     EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
     void* clone = reinterpret_cast<void*>(0x3U);
-    EXPECT_EQ(tl_GdipCloneImage(nullptr, &clone), 1);
+    EXPECT_EQ(tl_GdipCloneImage(nullptr, &clone), 2);
     EXPECT_EQ(clone, nullptr);
-    EXPECT_EQ(tl_GetLastError(), abi::kErrorNotSupported);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
 
     EXPECT_EQ(tl_GdipCreateHBITMAPFromBitmap(nullptr,
-                                              reinterpret_cast<void**>(invalid), 0), 1);
+                                              reinterpret_cast<void**>(invalid), 0), 2);
     EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
     void* hbitmap = reinterpret_cast<void*>(0x4U);
-    EXPECT_EQ(tl_GdipCreateHBITMAPFromBitmap(nullptr, &hbitmap, 0), 1);
+    EXPECT_EQ(tl_GdipCreateHBITMAPFromBitmap(nullptr, &hbitmap, 0), 2);
     EXPECT_EQ(hbitmap, nullptr);
-    EXPECT_EQ(tl_GetLastError(), abi::kErrorNotSupported);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
 
-    EXPECT_EQ(tl_GdipDisposeImage(nullptr), 1);
-    EXPECT_EQ(tl_GetLastError(), abi::kErrorNotSupported);
-    EXPECT_EQ(tl_GdipAlloc(32), nullptr);
-    EXPECT_EQ(tl_GetLastError(), abi::kErrorNotSupported);
-    tl_GdipFree(nullptr);
-    EXPECT_EQ(tl_GetLastError(), abi::kErrorNotSupported);
-    tl_GdiplusShutdown(nullptr);
-    EXPECT_EQ(tl_GetLastError(), abi::kErrorNotSupported);
+    EXPECT_EQ(tl_GdipDisposeImage(nullptr), 2);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
 }
 
 TEST(Win32StubTest, ComdlgStubsRejectFalseSuccessAndReportDialogFailure) {
