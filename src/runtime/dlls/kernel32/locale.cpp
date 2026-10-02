@@ -127,6 +127,32 @@ constexpr std::size_t kMaxLocaleUnits = 1U << 20U;
                              runtime::GuestMemoryAccessStatus::Success;
 }
 
+// WinNls locale constants
+constexpr std::uint32_t kLocaleSAbbrevLangName = 0x00000003U;
+constexpr std::uint32_t kLocaleSNativeLangName = 0x00000004U;
+constexpr std::uint32_t kLocaleSAbbrevCtryName = 0x00000007U;
+constexpr std::uint32_t kLocaleSNativeCtryName = 0x00000008U;
+constexpr std::uint32_t kLocaleIDefaultMacCodePage = 0x0000000CU;
+constexpr std::uint32_t kLocaleIDigits = 0x00000011U;
+constexpr std::uint32_t kLocaleSIntlSymbol = 0x00000015U;
+constexpr std::uint32_t kLocaleICurrDigits = 0x00000019U;
+constexpr std::uint32_t kLocaleICurrency = 0x0000001BU;
+constexpr std::uint32_t kLocaleINegCurr = 0x0000001CU;
+constexpr std::uint32_t kLocaleSShortDate = 0x0000001FU;
+constexpr std::uint32_t kLocaleSLongDate = 0x00000020U;
+constexpr std::uint32_t kLocaleIGeoId = 0x0000005BU;
+constexpr std::uint32_t kLocaleSName = 0x0000005CU;
+constexpr std::uint32_t kLocaleSShortestAM = 0x00000060U;
+constexpr std::uint32_t kLocaleSShortestPM = 0x00000061U;
+constexpr std::uint32_t kLocaleSISO639LangName2 = 0x00000067U;
+constexpr std::uint32_t kLocaleSISO3166CtryName2 = 0x00000068U;
+constexpr std::uint32_t kLocaleSParent = 0x0000006DU;
+constexpr std::uint32_t kLocaleSEnglishDisplayName = 0x00000072U;
+constexpr std::uint32_t kLocaleSNativeDisplayName = 0x00000073U;
+constexpr std::uint32_t kLocaleSTimeFormat = 0x00001003U;
+constexpr std::uint32_t kLocaleIDefaultAnsiCodePage = 0x00001004U;
+constexpr std::uint32_t kLocaleIDigitSubstitution = 0x00001014U;
+
 [[nodiscard]] std::optional<std::u16string> locale_string(const std::uint32_t locale_type) {
     switch (locale_type & ~abi::kLocaleReturnNumber) {
         case abi::kLocaleILanguage: return u"0409";
@@ -142,6 +168,30 @@ constexpr std::size_t kMaxLocaleUnits = 1U << 20U;
         case abi::kLocaleS1159: return u"AM";
         case abi::kLocaleS2359: return u"PM";
         case abi::kLocaleIDefaultCodePage: return u"1252";
+        case kLocaleSName: return u"en-US";
+        case kLocaleSEnglishDisplayName: return u"English (United States)";
+        case kLocaleSNativeDisplayName: return u"English (United States)";
+        case kLocaleSNativeLangName: return u"English";
+        case kLocaleSNativeCtryName: return u"United States";
+        case kLocaleSAbbrevLangName: return u"ENU";
+        case kLocaleSAbbrevCtryName: return u"USA";
+        case kLocaleSIntlSymbol: return u"USD";
+        case kLocaleSISO639LangName2: return u"eng";
+        case kLocaleSISO3166CtryName2: return u"USA";
+        case kLocaleSParent: return u"en";
+        case kLocaleSShortestAM: return u"AM";
+        case kLocaleSShortestPM: return u"PM";
+        case kLocaleSShortDate: return u"M/d/yyyy";
+        case kLocaleSLongDate: return u"dddd, MMMM d, yyyy";
+        case kLocaleSTimeFormat: return u"h:mm:ss tt";
+        case kLocaleIDefaultAnsiCodePage: return u"1252";
+        case kLocaleIDefaultMacCodePage: return u"10000";
+        case kLocaleIDigitSubstitution: return u"0";
+        case kLocaleIDigits: return u"2";
+        case kLocaleICurrDigits: return u"2";
+        case kLocaleICurrency: return u"0";
+        case kLocaleINegCurr: return u"0";
+        case kLocaleIGeoId: return u"244";
         default: return std::nullopt;
     }
 }
@@ -150,28 +200,36 @@ constexpr std::size_t kMaxLocaleUnits = 1U << 20U;
     switch (locale_type & ~abi::kLocaleReturnNumber) {
         case abi::kLocaleILanguage: return abi::kLocaleEnglishUnitedStates;
         case abi::kLocaleIDefaultCodePage: return abi::kCp1252;
+        case kLocaleIDefaultAnsiCodePage: return abi::kCp1252;
+        case kLocaleIDefaultMacCodePage: return 10000U;
+        case kLocaleIDigitSubstitution: return 0U;
+        case kLocaleIDigits: return 2U;
+        case kLocaleICurrDigits: return 2U;
+        case kLocaleICurrency: return 0U;
+        case kLocaleINegCurr: return 0U;
+        case kLocaleIGeoId: return 244U;
         default: return std::nullopt;
     }
 }
 
 [[nodiscard]] bool locale_name_is_en_us(const std::uint16_t* const name) noexcept {
+    if (name == nullptr) {
+        return true;
+    }
     std::u16string guest_name;
-    if (name == nullptr || !runtime::copy_guest_wstring(name, 64U, guest_name)) {
+    if (!runtime::copy_guest_wstring(name, 64U, guest_name)) {
         return false;
     }
-    static constexpr std::uint16_t kEnUs[] = {'e', 'n', '-', 'U', 'S', 0};
-    for (std::size_t index = 0; index < std::size(kEnUs); ++index) {
-        const std::uint16_t left = index < guest_name.size() ? guest_name[index] : 0;
-        const std::uint16_t right = kEnUs[index];
-        const std::uint16_t normalized =
-            left >= 'A' && left <= 'Z' ? static_cast<std::uint16_t>(left + ('a' - 'A')) : left;
-        const std::uint16_t expected =
-            right >= 'A' && right <= 'Z' ? static_cast<std::uint16_t>(right + ('a' - 'A')) : right;
-        if (normalized != expected) {
-            return false;
-        }
+    if (guest_name.empty()) {
+        return true;
     }
-    return true;
+    std::string utf8 = util::wide_to_utf8(reinterpret_cast<const std::uint16_t*>(guest_name.data()),
+                                          guest_name.size());
+    std::string lower;
+    lower.reserve(utf8.size());
+    for (char c : utf8) lower.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(c))));
+    return lower == "en-us" || lower == "en" || lower == "c" || lower == "posix" ||
+           lower == "!sys-default-locale" || lower == "pt-br" || lower == "pt";
 }
 
 [[nodiscard]] std::uint16_t locale_case_map(const std::uint16_t unit,
@@ -483,10 +541,9 @@ TL_MSABI std::uint64_t tl_VerSetConditionMask(std::uint64_t condition_mask, std:
 }
 
 TL_MSABI int tl_GetUserDefaultLocaleName(std::uint16_t* locale_name, int locale_name_length) noexcept {
-    constexpr std::u16string_view kDefault = u"en-US";
-    constexpr int kNeeded = 6; // inclui NUL: e n - U S \0
+    constexpr int kNeeded = 6; // inclui NUL: 'e','n','-','U','S','\0'
     if (locale_name == nullptr || locale_name_length == 0) {
-        // Retorna tamanho necessário incluindo NUL, como no Windows quando buffer null
+        set_last_error(abi::kErrorSuccess);
         return kNeeded;
     }
     if (locale_name_length < 0) {
@@ -497,29 +554,40 @@ TL_MSABI int tl_GetUserDefaultLocaleName(std::uint16_t* locale_name, int locale_
         set_last_error(abi::kErrorInsufficientBuffer);
         return 0;
     }
-    if (runtime::write_guest_memory(locale_name, kDefault.data(), kDefault.size() * sizeof(std::uint16_t)).status !=
-        runtime::GuestMemoryAccessStatus::Success) {
-        set_last_error(abi::kErrorInvalidParameter);
+    std::uint32_t error = abi::kErrorSuccess;
+    if (!copy_wide_string(u"en-US", locale_name, static_cast<std::size_t>(locale_name_length), error)) {
+        set_last_error(error);
         return 0;
     }
     set_last_error(abi::kErrorSuccess);
     return kNeeded;
 }
 
+TL_MSABI int tl_GetSystemDefaultLocaleName(std::uint16_t* locale_name, int locale_name_length) noexcept {
+    return tl_GetUserDefaultLocaleName(locale_name, locale_name_length);
+}
+
 TL_MSABI std::uint32_t tl_LocaleNameToLCID(const std::uint16_t* name, std::uint32_t flags) noexcept {
     (void)flags;
-    std::u16string guest_name;
-    if (name == nullptr || !runtime::copy_guest_wstring(name, 4096U, guest_name) || guest_name.empty()) {
+    if (name == nullptr) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
+    }
+    std::u16string guest_name;
+    if (!runtime::copy_guest_wstring(name, 4096U, guest_name)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    if (guest_name.empty()) {
+        set_last_error(abi::kErrorSuccess);
+        return 0x007fU; // LOCALE_INVARIANT
     }
     std::string utf8 = util::wide_to_utf8(reinterpret_cast<const std::uint16_t*>(guest_name.data()),
                                           guest_name.size());
     std::string lower;
     lower.reserve(utf8.size());
     for (char c : utf8) lower.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(c))));
-    // remove trailing spaces?
-    if (lower == "en-us") {
+    if (lower == "en-us" || lower == "!sys-default-locale") {
         set_last_error(abi::kErrorSuccess);
         return 0x0409U;
     }
@@ -535,8 +603,60 @@ TL_MSABI std::uint32_t tl_LocaleNameToLCID(const std::uint16_t* name, std::uint3
         set_last_error(abi::kErrorSuccess);
         return 0x0016U;
     }
+    if (lower == "c" || lower == "posix") {
+        set_last_error(abi::kErrorSuccess);
+        return 0x007fU;
+    }
     set_last_error(abi::kErrorInvalidParameter);
     return 0;
+}
+
+TL_MSABI int tl_IsValidLocaleName(const std::uint16_t* locale_name) noexcept {
+    if (locale_name == nullptr) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    if (locale_name_is_en_us(locale_name)) {
+        set_last_error(abi::kErrorSuccess);
+        return 1;
+    }
+    set_last_error(abi::kErrorInvalidParameter);
+    return 0;
+}
+
+TL_MSABI int tl_LCIDToLocaleName(const std::uint32_t locale,
+                                 std::uint16_t* const locale_name,
+                                 const int locale_name_length,
+                                 const std::uint32_t flags) noexcept {
+    (void)flags;
+    std::u16string target_name;
+    if (locale == 0x0416U || locale == 0x0016U) {
+        target_name = u"pt-BR";
+    } else if (locale == 0x007fU) {
+        target_name = u"";
+    } else if (locale == 0x0409U || locale == 0x0009U || locale == abi::kLocaleUserDefault ||
+               locale == abi::kLocaleSystemDefault) {
+        target_name = u"en-US";
+    } else {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    const int needed = static_cast<int>(target_name.size() + 1U);
+    if (locale_name == nullptr || locale_name_length == 0) {
+        set_last_error(abi::kErrorSuccess);
+        return needed;
+    }
+    if (locale_name_length < needed) {
+        set_last_error(abi::kErrorInsufficientBuffer);
+        return 0;
+    }
+    std::uint32_t error = abi::kErrorSuccess;
+    if (!copy_wide_string(target_name, locale_name, static_cast<std::size_t>(locale_name_length), error)) {
+        set_last_error(error);
+        return 0;
+    }
+    set_last_error(abi::kErrorSuccess);
+    return needed;
 }
 
 TL_MSABI int tl_MulDiv(const int number, const int numerator, const int denominator) noexcept {
@@ -964,19 +1084,32 @@ TL_MSABI std::uint32_t tl_GetSystemFirmwareTable(const std::uint32_t firmware_ta
 
 TL_MSABI int tl_GetLocaleInfoA(const std::uint32_t lcid, const std::uint32_t lctype, char* const lcdata, const int cch_data) noexcept {
     (void)lcid;
-    (void)lctype;
-    if (cch_data <= 0 || lcdata == nullptr) {
-        return 5;
+    if (cch_data < 0 || (cch_data != 0 && lcdata == nullptr)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
     }
-    char output[] = "0409";
-    const std::size_t copy_length = std::min<std::size_t>(static_cast<std::size_t>(cch_data), sizeof(output));
-    output[copy_length - 1U] = '\0';
-    if (runtime::write_guest_memory(lcdata, output, copy_length).status !=
+    const std::optional<std::u16string> wide_val = locale_string(lctype);
+    std::string ansi_val = "0409";
+    if (wide_val.has_value()) {
+        ansi_val = util::wide_to_utf8(reinterpret_cast<const std::uint16_t*>(wide_val->data()),
+                                      wide_val->size());
+    }
+    const int needed = static_cast<int>(ansi_val.size() + 1U);
+    if (lcdata == nullptr || cch_data == 0) {
+        set_last_error(abi::kErrorSuccess);
+        return needed;
+    }
+    if (cch_data < needed) {
+        set_last_error(abi::kErrorInsufficientBuffer);
+        return 0;
+    }
+    if (runtime::write_guest_memory(lcdata, ansi_val.c_str(), static_cast<std::size_t>(needed)).status !=
         runtime::GuestMemoryAccessStatus::Success) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
-    return static_cast<int>(copy_length);
+    set_last_error(abi::kErrorSuccess);
+    return needed;
 }
 
 TL_MSABI std::uint32_t tl_GetWindowsDirectoryA(char* const buffer, const std::uint32_t size) noexcept {
@@ -1561,6 +1694,31 @@ TL_MSABI int tl_EnumSystemLocalesW(const std::uintptr_t callback,
         return 0;
     }
     trace_locale_extension("enumerate", "1");
+    set_last_error(abi::kErrorSuccess);
+    return 1;
+}
+
+TL_MSABI int tl_EnumSystemLocalesEx(const std::uintptr_t callback,
+                                    const std::uint32_t flags,
+                                    const std::uintptr_t lparam,
+                                    const void* const reserved) noexcept {
+    (void)reserved;
+    if (flags == 0U) {
+        set_last_error(abi::kErrorInvalidFlags);
+        return 0;
+    }
+    if (callback == 0 || !guest_executable_callback(callback)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    static std::uint16_t kEnglishUnitedStates[] = {'e', 'n', '-', 'U', 'S', 0};
+    using LocaleEnumProcEx = int (TL_MSABI *)(std::uint16_t*, std::uint32_t, std::uintptr_t);
+    const auto procedure = reinterpret_cast<LocaleEnumProcEx>(callback);
+    if (procedure(kEnglishUnitedStates, flags, lparam) == 0) {
+        set_last_error(abi::kErrorSuccess);
+        return 0;
+    }
+    trace_locale_extension("enumerate-ex", "en-US");
     set_last_error(abi::kErrorSuccess);
     return 1;
 }

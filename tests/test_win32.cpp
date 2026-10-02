@@ -1110,6 +1110,46 @@ TEST(Win32LocaleTest, ExtendedLocaleFormatsStaticEnUsDateAndTime) {
     EXPECT_EQ(tl_GetLastError(), abi::kErrorInsufficientBuffer);
 }
 
+TEST(Win32LocaleTest, LocaleNamesAndExtendedEnumeration) {
+    std::uint16_t buffer[16];
+    std::fill(std::begin(buffer), std::end(buffer), static_cast<std::uint16_t>(0xABCDU));
+    EXPECT_EQ(tl_GetUserDefaultLocaleName(buffer, std::size(buffer)), 6);
+    EXPECT_EQ(std::u16string_view(reinterpret_cast<char16_t*>(buffer)), u"en-US");
+    EXPECT_EQ(buffer[5], 0U);
+
+    std::fill(std::begin(buffer), std::end(buffer), static_cast<std::uint16_t>(0xABCDU));
+    EXPECT_EQ(tl_GetSystemDefaultLocaleName(buffer, std::size(buffer)), 6);
+    EXPECT_EQ(std::u16string_view(reinterpret_cast<char16_t*>(buffer)), u"en-US");
+    EXPECT_EQ(buffer[5], 0U);
+
+    const std::uint16_t en_us[] = {'e', 'n', '-', 'U', 'S', 0};
+    const std::uint16_t empty_loc[] = {0};
+    const std::uint16_t bad_loc[] = {'z', 'z', '-', 'Z', 'Z', 0};
+    EXPECT_EQ(tl_IsValidLocaleName(en_us), 1);
+    EXPECT_EQ(tl_IsValidLocaleName(empty_loc), 1);
+    EXPECT_EQ(tl_IsValidLocaleName(bad_loc), 0);
+    EXPECT_EQ(tl_IsValidLocaleName(nullptr), 0);
+
+    std::fill(std::begin(buffer), std::end(buffer), static_cast<std::uint16_t>(0xABCDU));
+    EXPECT_EQ(tl_LCIDToLocaleName(abi::kLocaleEnglishUnitedStates, buffer, std::size(buffer), 0), 6);
+    EXPECT_EQ(std::u16string_view(reinterpret_cast<char16_t*>(buffer)), u"en-US");
+
+    EXPECT_EQ(tl_LocaleNameToLCID(en_us, 0), abi::kLocaleEnglishUnitedStates);
+    EXPECT_EQ(tl_LocaleNameToLCID(empty_loc, 0), 0x007fU);
+
+    std::uint16_t info_buf[32]{};
+    EXPECT_EQ(tl_GetLocaleInfoW(abi::kLocaleEnglishUnitedStates, 0x0000005CU, info_buf, std::size(info_buf)), 6);
+    EXPECT_EQ(std::u16string_view(reinterpret_cast<char16_t*>(info_buf)), u"en-US");
+    EXPECT_EQ(tl_GetLocaleInfoW(abi::kLocaleEnglishUnitedStates, 0x00001004U, info_buf, std::size(info_buf)), 5);
+    EXPECT_EQ(std::u16string_view(reinterpret_cast<char16_t*>(info_buf)), u"1252");
+
+    // EnumSystemLocalesEx
+    EXPECT_EQ(tl_EnumSystemLocalesEx(0, 1, 0, nullptr), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+    EXPECT_EQ(tl_EnumSystemLocalesEx(0, 0, 0, nullptr), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidFlags);
+}
+
 TEST(Win32LocaleTest, ProtectedSystemAndMessageBuffersRejectUnmappedPointers) {
     auto* const invalid = reinterpret_cast<void*>(static_cast<std::uintptr_t>(0x1000U));
     EXPECT_EQ(tl_GetVersionExA(invalid), 0);

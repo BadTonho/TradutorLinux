@@ -118,7 +118,11 @@ TL_MSABI int tl_VerifyVersionInfoW(void* version_information, std::uint32_t type
 TL_MSABI std::uint64_t tl_VerSetConditionMask(std::uint64_t condition_mask, std::uint32_t type_mask,
                                               std::uint8_t condition) noexcept;
 TL_MSABI int tl_GetUserDefaultLocaleName(std::uint16_t* locale_name, int locale_name_length) noexcept;
+TL_MSABI int tl_GetSystemDefaultLocaleName(std::uint16_t* locale_name, int locale_name_length) noexcept;
 TL_MSABI std::uint32_t tl_LocaleNameToLCID(const std::uint16_t* name, std::uint32_t flags) noexcept;
+TL_MSABI int tl_IsValidLocaleName(const std::uint16_t* locale_name) noexcept;
+TL_MSABI int tl_LCIDToLocaleName(const std::uint32_t locale, std::uint16_t* locale_name, int locale_name_length, std::uint32_t flags) noexcept;
+TL_MSABI int tl_EnumSystemLocalesEx(std::uintptr_t callback, std::uint32_t flags, std::uintptr_t lparam, const void* reserved) noexcept;
 TL_MSABI int tl_WaitOnAddress(void* address, void* compare_address, std::size_t address_size,
                               std::uint32_t milliseconds) noexcept;
 TL_MSABI void tl_WakeByAddressSingle(void* address) noexcept;
