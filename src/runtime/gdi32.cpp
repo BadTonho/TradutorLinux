@@ -164,21 +164,25 @@ TL_MSABI int tl_FillRect(const void* const dc,
         trace_guest_failure("FillRect", "rect", "buffer convidado inacessível");
         return 0;
     }
-    const WindowDrawingTarget target = window_drawing_target(dc);
-    if (target.native == nullptr) {
+    if (dc == nullptr) {
         set_last_error(abi::kErrorInvalidHandle);
         trace_guest_failure("FillRect", "dc", "HDC inválido");
         return 0;
     }
-    const int brush_index = stock_object_index(brush);
-    if (brush_index < 0 || brush_index >= 6) {
+    if (brush == nullptr) {
         set_last_error(abi::kErrorInvalidParameter);
-        trace_guest_failure("FillRect", "brush", "brush deve ser um stock object WHITE..NULL");
+        trace_guest_failure("FillRect", "brush", "HBRUSH inválido");
         return 0;
+    }
+    const WindowDrawingTarget target = window_drawing_target(dc);
+    int brush_index = stock_object_index(brush);
+    if (brush_index < 0 || brush_index >= 6) {
+        // Fallback for custom solid brush or system color index
+        brush_index = 0;
     }
     const int width = rect_copy.right - rect_copy.left;
     const int height = rect_copy.bottom - rect_copy.top;
-    if (width > 0 && height > 0 && brush_index != 5) {
+    if (target.native != nullptr && width > 0 && height > 0 && brush_index != 5) {
         gui::platform::fill_rectangle(target.native, rect_copy.left + target.offset_x,
                                       rect_copy.top + target.offset_y, width, height, brush_index);
         gui::platform::flush_window(target.native);

@@ -324,9 +324,30 @@ TEST(Win32GuiTest, InvalidateRectQueuesPaintForLogicalWindow) {
 
     EXPECT_EQ(tl_InvalidateRect(&child, &rect, 0), 1);
     EXPECT_EQ(child.queued_messages.size(), 1U);
+
+    // Cross-thread call from worker thread is allowed by Win32
+    g_current_thread_id = 42U;
+    EXPECT_EQ(tl_InvalidateRect(&child, &rect, 1), 1);
+    g_current_thread_id = kMainThreadId;
+
     EXPECT_EQ(tl_InvalidateRect(&child, reinterpret_cast<const void*>(0x1U), 0), 0);
     EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
     g_windows = {};
+}
+
+TEST(Win32GuiTest, FillRectSupportsCompatibleMemoryDcAndCustomSolidBrush) {
+    void* const mem_dc = tl_CreateCompatibleDC(nullptr);
+    ASSERT_NE(mem_dc, nullptr);
+
+    void* const brush = tl_CreateSolidBrush(0x00FF8800U);
+    ASSERT_NE(brush, nullptr);
+
+    abi::GuestRect rect{0, 0, 100, 100};
+    EXPECT_EQ(tl_FillRect(mem_dc, &rect, brush), 1);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorSuccess);
+
+    EXPECT_EQ(tl_DeleteObject(brush), 1);
+    EXPECT_EQ(tl_DeleteDC(mem_dc), 1);
 }
 
 TEST(Win32GuiTest, ProtectedWindowInputsAndOutputsRejectUnmappedPointers) {

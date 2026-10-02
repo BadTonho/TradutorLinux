@@ -73,9 +73,6 @@ TL_MSABI int tl_GetCursorPos(void* point) noexcept {
 }
 
 TL_MSABI int tl_InvalidateRect(const void* window, const void* rect, int erase) noexcept {
-    if (!user32_gui_thread_allowed("InvalidateRect")) {
-        return 0;
-    }
     (void)erase;
     abi::GuestRect rect_copy{};
     if (rect != nullptr && !read_guest_value(rect, rect_copy)) {
