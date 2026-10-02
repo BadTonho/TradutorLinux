@@ -249,9 +249,9 @@ TEST(Win32StubTest, VersionStubsRejectFabricatedMetadataAndClearQueries) {
     std::uint32_t handle = 123U;
     EXPECT_EQ(tl_GetFileVersionInfoSizeA("test.exe", &handle), 0U);
     EXPECT_EQ(handle, 0U);
-    EXPECT_EQ(tl_GetLastError(), abi::kErrorNotSupported);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorResourceNotFound);
     EXPECT_EQ(tl_GetFileVersionInfoSizeExW(0, nullptr, &handle), 0U);
-    EXPECT_EQ(tl_GetLastError(), abi::kErrorNotSupported);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorResourceNotFound);
 
     auto* const invalid_handle = reinterpret_cast<std::uint32_t*>(static_cast<std::uintptr_t>(0x1000U));
     EXPECT_EQ(tl_GetFileVersionInfoSizeA("test.exe", invalid_handle), 0U);
@@ -261,23 +261,23 @@ TEST(Win32StubTest, VersionStubsRejectFabricatedMetadataAndClearQueries) {
     data.fill(std::byte{0xA5});
     EXPECT_EQ(tl_GetFileVersionInfoA("test.exe", 0, data.size(), data.data()), 0);
     EXPECT_EQ(data.front(), std::byte{0xA5});
-    EXPECT_EQ(tl_GetLastError(), abi::kErrorNotSupported);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorResourceNotFound);
     EXPECT_EQ(tl_GetFileVersionInfoExW(0, nullptr, 0, data.size(), data.data()), 0);
-    EXPECT_EQ(tl_GetLastError(), abi::kErrorNotSupported);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorResourceNotFound);
 
     void* buffer = reinterpret_cast<void*>(0x1U);
     std::uint32_t length = 123U;
     EXPECT_EQ(tl_VerQueryValueA(nullptr, "\\", &buffer, &length), 0);
     EXPECT_EQ(buffer, nullptr);
     EXPECT_EQ(length, 0U);
-    EXPECT_EQ(tl_GetLastError(), abi::kErrorNotSupported);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
 
     buffer = reinterpret_cast<void*>(0x2U);
     length = 456U;
     EXPECT_EQ(tl_VerQueryValueW(nullptr, nullptr, &buffer, &length), 0);
     EXPECT_EQ(buffer, nullptr);
     EXPECT_EQ(length, 0U);
-    EXPECT_EQ(tl_GetLastError(), abi::kErrorNotSupported);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
 
     auto* const invalid_buffer = reinterpret_cast<void**>(static_cast<std::uintptr_t>(0x1000U));
     length = 456U;
@@ -291,7 +291,7 @@ TEST(Win32StubTest, VersionStubsRejectFabricatedMetadataAndClearQueries) {
     EXPECT_EQ(tl_GetFileVersionInfoA("test.exe", 0, 64,
                                      reinterpret_cast<void*>(static_cast<std::uintptr_t>(0x1000U))),
               0);
-    EXPECT_EQ(tl_GetLastError(), abi::kErrorNotSupported);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorResourceNotFound);
 }
 
 TEST(Win32StubTest, ImmStubsRejectFakeContextsAndCompositionSuccess) {

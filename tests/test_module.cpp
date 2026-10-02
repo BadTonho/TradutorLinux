@@ -253,9 +253,9 @@ TEST_F(ModuleTest, RegistersBuiltinKernel32Exports) {
     EXPECT_EQ(find_export(ExportQuery{"COMDLG32.dll", "GetOpenFileNameW"}).support,
               ExportSupport::Stub);
     EXPECT_EQ(find_export(ExportQuery{"version.dll", "GetFileVersionInfoA"}).support,
-              ExportSupport::Stub);
+              ExportSupport::Full);
     EXPECT_EQ(find_export(ExportQuery{"version.dll", "VerQueryValueW"}).support,
-              ExportSupport::Stub);
+              ExportSupport::Full);
     EXPECT_EQ(find_export(ExportQuery{"IMM32.dll", "ImmGetContext"}).support,
               ExportSupport::Stub);
     EXPECT_EQ(find_export(ExportQuery{"IMM32.dll", "ImmGetVirtualKey"}).support,

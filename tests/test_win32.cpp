@@ -1763,6 +1763,52 @@ TEST(Win32FileTest, CreateFileSupportsFileAppendDataAndAutomaticParentDirectorie
     EXPECT_EQ(tl_CloseHandle(handle_rw), 1);
 }
 
+TEST(Win32VersionTest, VersionApiExtractsRealPeMetadataAndQueriesValues) {
+    const char fixture_path[] = "tests/fixtures/npp/notepad++.exe";
+    std::uint32_t handle = 123;
+    const std::uint32_t size = tl_GetFileVersionInfoSizeA(fixture_path, &handle);
+    ASSERT_GT(size, 0U);
+    EXPECT_EQ(handle, 0U);
+
+    std::vector<std::byte> buffer(size);
+    ASSERT_EQ(tl_GetFileVersionInfoA(fixture_path, 0, static_cast<std::uint32_t>(buffer.size()), buffer.data()), 1);
+
+    void* fixed_info = nullptr;
+    std::uint32_t fixed_len = 0;
+    ASSERT_EQ(tl_VerQueryValueA(buffer.data(), "\\", &fixed_info, &fixed_len), 1);
+    EXPECT_NE(fixed_info, nullptr);
+    EXPECT_EQ(fixed_len, 52U);
+
+    const auto sig = *reinterpret_cast<const std::uint32_t*>(fixed_info);
+    EXPECT_EQ(sig, 0xFEEF04BDU);
+
+    void* prod_ver_a = nullptr;
+    std::uint32_t prod_len_a = 0;
+    ASSERT_EQ(tl_VerQueryValueA(buffer.data(), "\\StringFileInfo\\040904b0\\ProductVersion", &prod_ver_a, &prod_len_a), 1);
+    EXPECT_NE(prod_ver_a, nullptr);
+    EXPECT_STREQ(static_cast<const char*>(prod_ver_a), "8.6.9");
+    EXPECT_EQ(prod_len_a, static_cast<std::uint32_t>(std::strlen("8.6.9") + 1));
+
+    void* prod_ver_w = nullptr;
+    std::uint32_t prod_len_w = 0;
+    const std::u16string sub_w = u"\\StringFileInfo\\040904b0\\ProductVersion";
+    ASSERT_EQ(tl_VerQueryValueW(buffer.data(), reinterpret_cast<const std::uint16_t*>(sub_w.c_str()), &prod_ver_w, &prod_len_w), 1);
+    EXPECT_NE(prod_ver_w, nullptr);
+    const auto* const wide_str = reinterpret_cast<const char16_t*>(prod_ver_w);
+    EXPECT_EQ(std::u16string(wide_str), u"8.6.9");
+
+    void* trans = nullptr;
+    std::uint32_t trans_len = 0;
+    ASSERT_EQ(tl_VerQueryValueA(buffer.data(), "\\VarFileInfo\\Translation", &trans, &trans_len), 1);
+    EXPECT_NE(trans, nullptr);
+    EXPECT_GE(trans_len, 4U);
+
+    void* missing_val = nullptr;
+    std::uint32_t missing_len = 0;
+    EXPECT_EQ(tl_VerQueryValueA(buffer.data(), "\\StringFileInfo\\040904b0\\NonExistentKey", &missing_val, &missing_len), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorResourceNameNotFound);
+}
+
 TEST(Win32WideFileTest, UnicodeFileMetadataPositionAndCopyAreConsistent) {
     TempDirFixture ctx;
     const auto to_wide = [](const std::u16string& value) {

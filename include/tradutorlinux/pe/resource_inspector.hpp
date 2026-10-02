@@ -56,4 +56,9 @@ struct ResourceInspectionResult {
     std::span<const std::byte> file_bytes,
     const PeInfo& info);
 
+// Extrai os bytes binários do bloco RT_VERSION (VS_VERSIONINFO) do PE de forma segura.
+[[nodiscard]] std::vector<std::byte> extract_version_resource_bytes(
+    std::span<const std::byte> file_bytes,
+    const PeInfo& info);
+
 }  // namespace tradutorlinux::pe

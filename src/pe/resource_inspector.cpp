@@ -516,4 +516,117 @@ ResourceInspectionResult inspect_pe_resources(
     return result;
 }
 
+
+std::vector<std::byte> extract_version_resource_bytes(
+    const std::span<const std::byte> file_bytes,
+    const PeInfo& info) {
+    const auto rsrc_opt = resolve_resource_span(file_bytes, info);
+    if (!rsrc_opt.has_value()) {
+        return {};
+    }
+
+    const std::span<const std::byte> rsrc = *rsrc_opt;
+    if (rsrc.size() < 16) {
+        return {};
+    }
+
+    const std::uint16_t num_named = read_u16(rsrc, 12);
+    const std::uint16_t num_id = read_u16(rsrc, 14);
+    const std::uint32_t total_entries = static_cast<std::uint32_t>(num_named) + num_id;
+    if (total_entries == 0 || total_entries > 1024 || 16 + total_entries * 8 > rsrc.size()) {
+        return {};
+    }
+
+    using ResourceData = std::pair<std::uint32_t, std::uint32_t>;
+    const auto collect_leaf_resources = [&](const std::uint32_t root_offset) {
+        std::vector<ResourceData> resources;
+        const auto has_range = [&rsrc](const std::size_t offset, const std::size_t length) {
+            return offset <= rsrc.size() && length <= rsrc.size() - offset;
+        };
+        std::function<void(std::uint32_t, std::size_t)> visit_directory;
+        visit_directory = [&](const std::uint32_t encoded_offset, const std::size_t depth) {
+            if (depth > 3 || (encoded_offset & 0x80000000U) == 0) {
+                if ((encoded_offset & 0x80000000U) == 0 && has_range(encoded_offset, 16)) {
+                    resources.emplace_back(read_u32(rsrc, encoded_offset),
+                                           read_u32(rsrc, encoded_offset + 4));
+                }
+                return;
+            }
+
+            const std::size_t directory_offset = encoded_offset & 0x7FFFFFFFU;
+            if (!has_range(directory_offset, 16)) {
+                return;
+            }
+            const std::uint16_t named = read_u16(rsrc, directory_offset + 12);
+            const std::uint16_t ids = read_u16(rsrc, directory_offset + 14);
+            const std::size_t entry_count = static_cast<std::size_t>(named) + ids;
+            if (entry_count == 0 || entry_count > 1024 ||
+                entry_count > (rsrc.size() - directory_offset - 16) / 8) {
+                return;
+            }
+            for (std::size_t index = 0; index < entry_count; ++index) {
+                const std::size_t entry_offset = directory_offset + 16 + index * 8;
+                visit_directory(read_u32(rsrc, entry_offset + 4), depth + 1);
+            }
+        };
+        visit_directory(root_offset, 0);
+        return resources;
+    };
+
+    auto resolve_span_from_rva = [&](const std::uint32_t rva, const std::uint32_t len) -> std::span<const std::byte> {
+        for (const SectionInfo& sec : info.sections) {
+            const std::uint64_t span = std::max<std::uint64_t>(sec.virtual_size, sec.raw_data_size);
+            const std::uint64_t sec_end = static_cast<std::uint64_t>(sec.virtual_address) + span;
+            if (static_cast<std::uint64_t>(rva) >= sec.virtual_address && rva < sec_end) {
+                const std::uint64_t delta = static_cast<std::uint64_t>(rva) - sec.virtual_address;
+                if (delta < sec.raw_data_size) {
+                    const std::uint64_t file_offset = static_cast<std::uint64_t>(sec.raw_data_pointer) + delta;
+                    if (file_offset < file_bytes.size()) {
+                        const std::uint64_t avail = std::min({
+                            static_cast<std::uint64_t>(len),
+                            sec.raw_data_size - delta,
+                            file_bytes.size() - file_offset
+                        });
+                        if (avail > 0) {
+                            return file_bytes.subspan(static_cast<std::size_t>(file_offset),
+                                                      static_cast<std::size_t>(avail));
+                        }
+                    }
+                }
+                break;
+            }
+        }
+        return {};
+    };
+
+    std::vector<std::byte> candidate;
+    for (std::uint32_t i = 0; i < total_entries; ++i) {
+        const std::size_t entry_offset = 16 + i * 8;
+        const std::uint32_t name_or_id = read_u32(rsrc, entry_offset);
+        const std::uint32_t offset_to_data = read_u32(rsrc, entry_offset + 4);
+
+        if (name_or_id == 16) { // RT_VERSION
+            for (const auto& [data_rva, data_size] : collect_leaf_resources(offset_to_data)) {
+                if (data_size == 0) {
+                    continue;
+                }
+                constexpr std::uint32_t kMaxVersionSize = 64 * 1024;
+                const auto ver_bytes = resolve_span_from_rva(
+                    data_rva, std::min(data_size, kMaxVersionSize));
+                if (!ver_bytes.empty()) {
+                    const auto vi = parse_version_info(ver_bytes);
+                    if (vi.has_version_info) {
+                        return std::vector<std::byte>(ver_bytes.begin(), ver_bytes.end());
+                    }
+                    if (candidate.empty()) {
+                        candidate.assign(ver_bytes.begin(), ver_bytes.end());
+                    }
+                }
+            }
+        }
+    }
+    return candidate;
+}
+
 }  // namespace tradutorlinux::pe
+
