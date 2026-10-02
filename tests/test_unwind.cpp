@@ -194,6 +194,26 @@ TEST_F(UnwindTest, RecognizesCheckedFh4HandlerData) {
     EXPECT_FALSE(runtime::is_supported_cxx_handler_data(image.data() + handler_data_rva));
 }
 
+TEST_F(UnwindTest, RecognizesPureFh4HandlerDataWithoutGsFlags) {
+    set_functions({});
+    constexpr std::uint32_t handler_data_rva = 0x100U;
+    constexpr std::uint32_t func_info_rva = 0x200U;
+    constexpr std::uint8_t fh4_header = 0x18U;  // unwind, try and IP maps
+    constexpr std::uint32_t map_rvas[] = {0x300U, 0x320U, 0x340U};
+
+    // In pure __CxxFrameHandler4, handler_data only contains func_info_rva.
+    // The following DWORD may be arbitrary data without GS flag bits (0x01/0x02).
+    constexpr std::uint32_t arbitrary_trailing_data = 0x28U;
+    std::memcpy(image.data() + handler_data_rva, &func_info_rva, sizeof(func_info_rva));
+    std::memcpy(image.data() + handler_data_rva + sizeof(func_info_rva), &arbitrary_trailing_data,
+                sizeof(arbitrary_trailing_data));
+    std::memcpy(image.data() + func_info_rva, &fh4_header, sizeof(fh4_header));
+    std::memcpy(image.data() + func_info_rva + sizeof(fh4_header), map_rvas,
+                sizeof(map_rvas));
+
+    EXPECT_TRUE(runtime::is_supported_cxx_handler_data(image.data() + handler_data_rva));
+}
+
 TEST_F(UnwindTest, RestrictsUnwindReadsToActiveGuestStack) {
     std::array<std::uint64_t, 4> stack{};
     runtime::GuestTeb teb{};

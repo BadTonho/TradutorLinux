@@ -1309,15 +1309,14 @@ bool is_fh4_cxx_handler_data(void* const handler_data) noexcept {
         return false;
     }
 
-    // MSVC FH4 protects its compressed FuncInfo with __GSHandlerCheck_EH4.
-    // The first DWORD is still an image-relative pointer to the FuncInfo;
-    // the following DWORD is the GS/unwind flag word.
-    std::uint32_t gs_unwind_info{};
+    // MSVC FH4 protects its compressed FuncInfo with __GSHandlerCheck_EH4 (which
+    // appends a GS/unwind flag word after the FuncInfo RVA), or invokes __CxxFrameHandler4
+    // directly (where handler_data is just the FuncInfo RVA).
     Fh4FuncInfo fh4_info{};
-    if (handler_data_rva > std::numeric_limits<std::uint32_t>::max() - sizeof(std::uint32_t) ||
-        !image.read_u32(handler_data_rva + sizeof(std::uint32_t), gs_unwind_info) ||
-        (gs_unwind_info & 0x03U) == 0U ||
-        !read_fh4_func_info(image, func_info_rva, 0U, fh4_info)) {
+    if (!read_fh4_func_info(image, func_info_rva, 0U, fh4_info)) {
+        return false;
+    }
+    if ((fh4_info.header & 0x18U) == 0U) {
         return false;
     }
     return true;
@@ -1356,19 +1355,22 @@ std::int32_t cxx_frame_handler4(
     const auto handler_data = static_cast<const std::byte*>(dispatcher_context->handler_data);
     std::uint32_t handler_data_rva{};
     std::uint32_t func_info_rva{};
-    std::uint32_t gs_unwind_info{};
     if (!image.rva_of(handler_data, handler_data_rva) ||
-        !image.read_u32(handler_data_rva, func_info_rva) ||
-        !image.add_rva(handler_data_rva, sizeof(std::uint32_t), handler_data_rva) ||
-        !image.read_u32(handler_data_rva, gs_unwind_info)) {
+        !image.read_u32(handler_data_rva, func_info_rva)) {
         trace_cxx_eh(diagnostics::TraceLevel::Warning, "rejected", "invalid-fh4-handler-data");
         return kExceptionContinueSearch;
     }
 
     const bool unwinding = (exception_record->flags & kExceptionUnwinding) != 0U;
-    const std::uint32_t required_gs_flag = unwinding ? 0x02U : 0x01U;
-    if ((gs_unwind_info & required_gs_flag) == 0U) {
-        return kExceptionContinueSearch;
+    std::uint32_t gs_unwind_info{};
+    if (handler_data_rva <= std::numeric_limits<std::uint32_t>::max() - sizeof(std::uint32_t) &&
+        handler_data_rva + sizeof(std::uint32_t) != func_info_rva &&
+        image.read_u32(handler_data_rva + sizeof(std::uint32_t), gs_unwind_info) &&
+        (gs_unwind_info & 0x03U) != 0U) {
+        const std::uint32_t required_gs_flag = unwinding ? 0x02U : 0x01U;
+        if ((gs_unwind_info & required_gs_flag) == 0U) {
+            return kExceptionContinueSearch;
+        }
     }
 
     std::uint32_t function_entry_rva{};
