@@ -277,6 +277,8 @@ TL_MSABI std::uint32_t tl_BCryptGenRandom(void* algorithm, std::uint8_t* buffer,
                                           std::uint32_t count, std::uint32_t flags) noexcept;
 TL_MSABI int dummy_worker_check() noexcept;
 TL_MSABI int tl_SetDefaultDllDirectories(std::uint32_t directory_flags) noexcept;
+TL_MSABI std::int32_t tl_CreateTextServices(void* punkOuter, void* pITextHost, void** ppUnk) noexcept;
+TL_MSABI std::int32_t tl_DllGetVersion(void* version_info) noexcept;
 
 }  // extern "C"
 

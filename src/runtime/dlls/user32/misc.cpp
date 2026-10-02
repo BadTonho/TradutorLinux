@@ -274,7 +274,7 @@ TL_MSABI int tl_LoadStringA(void* instance, const std::uint32_t id, char* buffer
 }
 
 TL_MSABI int tl_LoadStringW(void* instance, const std::uint32_t id, std::uint16_t* buffer, const int buffer_max) noexcept {
-    if (buffer == nullptr || buffer_max <= 0) {
+    if (buffer == nullptr || buffer_max < 0) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
     }
@@ -288,13 +288,17 @@ TL_MSABI int tl_LoadStringW(void* instance, const std::uint32_t id, std::uint16_
                                  ? nullptr
                                  : static_cast<const std::uint16_t*>(tl_LockResource(loaded));
     const std::uint32_t byte_size = resource == nullptr ? 0U : tl_SizeofResource(instance, resource);
-    if (data == nullptr || byte_size < sizeof(std::uint16_t)) {
-        const std::uint16_t zero = 0;
-        if (runtime::write_guest_memory(buffer, &zero, sizeof(zero)).status !=
-            runtime::GuestMemoryAccessStatus::Success) {
-            set_last_error(abi::kErrorInvalidParameter);
-            return 0;
+    const auto write_null_fallback = [&]() noexcept {
+        if (buffer_max > 0) {
+            const std::uint16_t zero = 0;
+            static_cast<void>(runtime::write_guest_memory(buffer, &zero, sizeof(zero)));
+        } else {
+            const void* const null_ptr = nullptr;
+            static_cast<void>(runtime::write_guest_memory(buffer, &null_ptr, sizeof(null_ptr)));
         }
+    };
+    if (data == nullptr || byte_size < sizeof(std::uint16_t)) {
+        write_null_fallback();
         set_last_error(abi::kErrorResourceNameNotFound);
         return 0;
     }
@@ -304,27 +308,30 @@ TL_MSABI int tl_LoadStringW(void* instance, const std::uint32_t id, std::uint16_
     const std::size_t index = id % 16U;
     for (std::size_t current = 0; current <= index; ++current) {
         if (offset >= unit_count) {
-            const std::uint16_t zero = 0;
-            if (runtime::write_guest_memory(buffer, &zero, sizeof(zero)).status !=
-                runtime::GuestMemoryAccessStatus::Success) {
-                set_last_error(abi::kErrorInvalidParameter);
-                return 0;
-            }
+            write_null_fallback();
             set_last_error(abi::kErrorResourceDataNotFound);
             return 0;
         }
         const std::size_t length = data[offset++];
         if (length > unit_count - offset) {
-            const std::uint16_t zero = 0;
-            if (runtime::write_guest_memory(buffer, &zero, sizeof(zero)).status !=
-                runtime::GuestMemoryAccessStatus::Success) {
-                set_last_error(abi::kErrorInvalidParameter);
-                return 0;
-            }
+            write_null_fallback();
             set_last_error(abi::kErrorResourceDataNotFound);
             return 0;
         }
         if (current == index) {
+            if (buffer_max == 0) {
+                // Modo ponteiro somente-leitura (MSVC/MFC/SDK standard):
+                // buffer aponta para um ponteiro de 64-bit (const wchar_t**) que recebe o endereco
+                // dos caracteres dentro da secao de recurso. Retorna a contagem de caracteres.
+                const auto* const string_ptr = data + offset;
+                if (runtime::write_guest_memory(buffer, &string_ptr, sizeof(string_ptr)).status !=
+                    runtime::GuestMemoryAccessStatus::Success) {
+                    set_last_error(abi::kErrorInvalidParameter);
+                    return 0;
+                }
+                set_last_error(abi::kErrorSuccess);
+                return static_cast<int>(length);
+            }
             const std::size_t copied = std::min(length, static_cast<std::size_t>(buffer_max - 1));
             std::vector<std::uint16_t> output(copied + 1U, 0);
             std::copy_n(data + offset, copied, output.data());
@@ -338,13 +345,8 @@ TL_MSABI int tl_LoadStringW(void* instance, const std::uint32_t id, std::uint16_
         }
         offset += length;
     }
-    const std::uint16_t zero = 0;
-    if (runtime::write_guest_memory(buffer, &zero, sizeof(zero)).status !=
-        runtime::GuestMemoryAccessStatus::Success) {
-        set_last_error(abi::kErrorInvalidParameter);
-        return 0;
-    }
-    set_last_error(abi::kErrorResourceNameNotFound);
+    write_null_fallback();
+    set_last_error(abi::kErrorResourceDataNotFound);
     return 0;
 }
 

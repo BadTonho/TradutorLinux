@@ -5,6 +5,7 @@
 #include "tradutorlinux/runtime/comdlg32.hpp"
 #include "tradutorlinux/runtime/imm32.hpp"
 #include "tradutorlinux/runtime/rpcrt4.hpp"
+#include "tradutorlinux/runtime/winapi.hpp"
 #include "tradutorlinux/runtime/winmm.hpp"
 
 #include <algorithm>
@@ -620,6 +621,41 @@ TEST(Win32StubTest, AppPolicyGetClassicDesktopDefaults) {
     policy = 999;
     EXPECT_EQ(tl_AppPolicyGetWindowingModel(nullptr, &policy), 0);
     EXPECT_EQ(policy, 2U);
+}
+
+TEST(Win32StubTest, MsfteditModuleExportsRequiredSymbolsAndFunctionsWork) {
+    if (loader::registered_module_count() == 0) {
+        loader::register_builtin_modules();
+    }
+    const loader::ExportLookup text_lookup = loader::find_export(loader::ExportQuery{"msftedit.dll", "CreateTextServices"});
+    EXPECT_TRUE(text_lookup.found);
+    EXPECT_NE(text_lookup.address, 0U);
+
+    const loader::ExportLookup ver_lookup = loader::find_export(loader::ExportQuery{"msftedit.dll", "DllGetVersion"});
+    EXPECT_TRUE(ver_lookup.found);
+    EXPECT_NE(ver_lookup.address, 0U);
+
+    const loader::ExportLookup riched_lookup = loader::find_export(loader::ExportQuery{"riched20.dll", "CreateTextServices"});
+    EXPECT_TRUE(riched_lookup.found);
+    EXPECT_NE(riched_lookup.address, 0U);
+
+    void* punk = reinterpret_cast<void*>(0x1234ULL);
+    EXPECT_EQ(tl_CreateTextServices(nullptr, nullptr, &punk), static_cast<std::int32_t>(0x80004001));
+    EXPECT_EQ(punk, nullptr);
+
+    EXPECT_EQ(tl_DllGetVersion(nullptr), static_cast<std::int32_t>(0x80070057));
+
+    struct GuestDllVersionInfo {
+        std::uint32_t cb_size{sizeof(GuestDllVersionInfo)};
+        std::uint32_t major{0};
+        std::uint32_t minor{0};
+        std::uint32_t build{0};
+        std::uint32_t platform{0};
+    } dvi{};
+    EXPECT_EQ(tl_DllGetVersion(&dvi), 0);
+    EXPECT_EQ(dvi.major, 10U);
+    EXPECT_EQ(dvi.minor, 0U);
+    EXPECT_EQ(dvi.platform, 2U);
 }
 
 }  // namespace

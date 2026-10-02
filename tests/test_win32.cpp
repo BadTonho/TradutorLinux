@@ -3105,5 +3105,74 @@ TEST(Win32CodePageTest, GetCPInfoSucceedsForExpandedPages) {
     EXPECT_EQ(tl_GetCPInfo(932U, &info), 0);
 }
 
+TEST(Win32StringResourceTest, LoadStringWSupportsReadOnlyPointerModeAndBufferCopies) {
+    std::vector<std::byte> image(1024, std::byte{0});
+    const auto write_u16 = [&image](std::size_t offset, std::uint16_t value) {
+        std::memcpy(image.data() + offset, &value, sizeof(value));
+    };
+    const auto write_u32 = [&image](std::size_t offset, std::uint32_t value) {
+        std::memcpy(image.data() + offset, &value, sizeof(value));
+    };
+
+    // Root dir (Type)
+    write_u16(14, 1);
+    write_u32(16, 6); // RT_STRING
+    write_u32(20, 0x80000020U);
+
+    // Type dir (Block ID 1 -> IDs 0..15)
+    write_u16(0x20 + 14, 1);
+    write_u32(0x20 + 16, 1);
+    write_u32(0x20 + 20, 0x80000040U);
+
+    // Lang dir
+    write_u16(0x40 + 14, 1);
+    write_u32(0x40 + 16, 0x409);
+    write_u32(0x40 + 20, 0x00000060U);
+
+    // Data entry
+    constexpr std::uint32_t kDataOffset = 0x100;
+    write_u32(0x60, kDataOffset);
+
+    // Dados do bloco de strings:
+    // String ID 0: len 0
+    // String ID 1: "TradutorLinux" (13 chars)
+    write_u16(kDataOffset, 0);
+    const std::u16string test_str = u"TradutorLinux";
+    write_u16(kDataOffset + 2, static_cast<std::uint16_t>(test_str.size()));
+    for (std::size_t i = 0; i < test_str.size(); ++i) {
+        write_u16(kDataOffset + 4 + i * 2, static_cast<std::uint16_t>(test_str[i]));
+    }
+    const std::uint32_t data_size = static_cast<std::uint32_t>(4 + test_str.size() * 2);
+    write_u32(0x64, data_size);
+
+    set_guest_image_view(image.data(), image.size(), 0, static_cast<std::uint32_t>(image.size()));
+
+    // 1. Cópia normal em buffer
+    std::array<std::uint16_t, 32> buffer{};
+    int len = tl_LoadStringW(nullptr, 1, buffer.data(), static_cast<int>(buffer.size()));
+    EXPECT_EQ(len, 13);
+    EXPECT_EQ(buffer[13], 0);
+    EXPECT_EQ(std::u16string_view(reinterpret_cast<char16_t*>(buffer.data())), u"TradutorLinux");
+
+    // 2. Modo ponteiro somente-leitura (buffer_max == 0)
+    const std::uint16_t* ro_ptr = nullptr;
+    len = tl_LoadStringW(nullptr, 1, reinterpret_cast<std::uint16_t*>(&ro_ptr), 0);
+    EXPECT_EQ(len, 13);
+    ASSERT_NE(ro_ptr, nullptr);
+    EXPECT_EQ(std::u16string_view(reinterpret_cast<const char16_t*>(ro_ptr), 13), u"TradutorLinux");
+
+    // 3. String inexistente com buffer_max == 0 zera o ponteiro e retorna 0
+    ro_ptr = reinterpret_cast<const std::uint16_t*>(0x12345678ULL);
+    len = tl_LoadStringW(nullptr, 999, reinterpret_cast<std::uint16_t*>(&ro_ptr), 0);
+    EXPECT_EQ(len, 0);
+    EXPECT_EQ(ro_ptr, nullptr);
+
+    // 4. Parâmetros inválidos
+    EXPECT_EQ(tl_LoadStringW(nullptr, 1, nullptr, 0), 0);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
+
+    set_guest_image_view(nullptr, 0, 0, 0);
+}
+
 }  // namespace
 }  // namespace tradutorlinux

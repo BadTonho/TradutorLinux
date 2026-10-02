@@ -1765,6 +1765,39 @@ TL_MSABI std::uint32_t tl_BCryptGenRandom(void* algorithm, std::uint8_t* buffer,
     return 0; // STATUS_SUCCESS
 }
 
+TL_MSABI std::int32_t tl_CreateTextServices(void* punkOuter, void* pITextHost, void** ppUnk) noexcept {
+    (void)punkOuter;
+    (void)pITextHost;
+    if (ppUnk != nullptr) {
+        const void* const null_ptr = nullptr;
+        static_cast<void>(runtime::write_guest_memory(ppUnk, &null_ptr, sizeof(null_ptr)));
+    }
+    return static_cast<std::int32_t>(0x80004001); // E_NOTIMPL
+}
+
+TL_MSABI std::int32_t tl_DllGetVersion(void* version_info) noexcept {
+    if (version_info == nullptr) {
+        return static_cast<std::int32_t>(0x80070057); // E_INVALIDARG
+    }
+    std::uint32_t cb_size = 0;
+    if (runtime::read_guest_memory(version_info, &cb_size, sizeof(cb_size)).status !=
+        runtime::GuestMemoryAccessStatus::Success || cb_size < 20U) {
+        return static_cast<std::int32_t>(0x80070057);
+    }
+    struct VersionPayload {
+        std::uint32_t major{10};
+        std::uint32_t minor{0};
+        std::uint32_t build{19041};
+        std::uint32_t platform{2}; // DLLVER_PLATFORM_NT
+    } payload;
+    if (runtime::write_guest_memory(reinterpret_cast<std::byte*>(version_info) + sizeof(std::uint32_t),
+                                    &payload, sizeof(payload)).status !=
+        runtime::GuestMemoryAccessStatus::Success) {
+        return static_cast<std::int32_t>(0x80070057);
+    }
+    return 0; // S_OK
+}
+
 }  // extern "C"
 }  // namespace tradutorlinux
 
@@ -1900,6 +1933,14 @@ void register_winapi_stubs_module() {
     };
     static const InternalModule kBcryptModule{"bcrypt.dll", kBcryptExports};
     register_module(kBcryptModule);
+    static const ExportedFunction kMsfteditExports[] = {
+        {"CreateTextServices", 1, reinterpret_cast<std::uintptr_t>(&tl_CreateTextServices), ExportSupport::Stub},
+        {"DllGetVersion", 2, reinterpret_cast<std::uintptr_t>(&tl_DllGetVersion), ExportSupport::Full},
+    };
+    static const InternalModule kMsfteditModule{"msftedit.dll", kMsfteditExports};
+    register_module(kMsfteditModule);
+    static const InternalModule kRiched20Module{"riched20.dll", kMsfteditExports};
+    register_module(kRiched20Module);
 }
 
 }  // namespace tradutorlinux::loader

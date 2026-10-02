@@ -646,11 +646,14 @@ TL_MSABI int tl_MessageBoxW(const void* window, const std::uint16_t* text,
     (void)window;
     std::u16string text_copy;
     std::u16string caption_copy;
-    if (!message_box_type_supported(type) || text == nullptr || caption == nullptr ||
-        !runtime::copy_guest_wstring(text, 65535U, text_copy) ||
-        !runtime::copy_guest_wstring(caption, 4096U, caption_copy)) {
+    if (!message_box_type_supported(type) ||
+        (text != nullptr && !runtime::copy_guest_wstring(text, 65535U, text_copy)) ||
+        (caption != nullptr && !runtime::copy_guest_wstring(caption, 4096U, caption_copy))) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;
+    }
+    if (caption == nullptr) {
+        caption_copy = u"Error";
     }
     const std::string utf8_text = util::wide_to_utf8(
         reinterpret_cast<const std::uint16_t*>(text_copy.data()), text_copy.size());
@@ -660,9 +663,9 @@ TL_MSABI int tl_MessageBoxW(const void* window, const std::uint16_t* text,
         diagnostics::TraceField{"symbol", "MessageBoxW"},
         diagnostics::TraceField{"caption", utf8_cap},
         diagnostics::TraceField{"text", utf8_text},
-        diagnostics::TraceField{},
+        diagnostics::TraceField{"type", std::to_string(type)},
     };
-    runtime_trace("MessageBoxW", fields, 3);
+    runtime_trace("MessageBoxW", fields, 4);
     const std::uint32_t result = gui::platform::message_box(utf8_text.c_str(), utf8_cap.c_str());
     set_last_error(result == 0 ? abi::kErrorAccessDenied : abi::kErrorSuccess);
     return static_cast<int>(result);
