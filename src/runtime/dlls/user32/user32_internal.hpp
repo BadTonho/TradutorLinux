@@ -19,6 +19,8 @@
 #include <chrono>
 #include <cstdint>
 #include <cstring>
+#include <dlfcn.h>
+#include <mutex>
 #include <span>
 #include <string>
 #include <thread>
@@ -231,16 +233,49 @@ struct InternalMenu {
 inline InternalMenu g_dummy_sub_menu{0x5355424D, 1, nullptr, {}};
 inline InternalMenu g_dummy_menu{0x4D454E55, 5, &g_dummy_sub_menu, {}};
 
-[[nodiscard]] inline bool guest_callback_address_valid(const std::uintptr_t address) noexcept {
-    if (address == 0 || g_guest_image_base == nullptr ||
-        address < reinterpret_cast<std::uintptr_t>(g_guest_image_base) ||
-        address - reinterpret_cast<std::uintptr_t>(g_guest_image_base) >= g_guest_image_size) {
+[[nodiscard]] inline bool is_builtin_runtime_callback(const std::uintptr_t address) noexcept {
+    if (address == 0) {
         return false;
     }
-    // O loader mantém a imagem convidada mapeada durante todo o callback. O
-    // endereço é um alvo de execução validado pela faixa da imagem, não um
-    // buffer que o runtime deva ler após uma fotografia de mapas.
-    return true;
+    if (address == reinterpret_cast<std::uintptr_t>(&tl_DefWindowProcA) ||
+        address == reinterpret_cast<std::uintptr_t>(&tl_DefWindowProcW) ||
+        address == reinterpret_cast<std::uintptr_t>(&tl_DefDlgProcA)) {
+        return true;
+    }
+    Dl_info info{};
+    if (::dladdr(reinterpret_cast<void*>(address), &info) != 0 && info.dli_sname != nullptr) {
+        if (std::strncmp(info.dli_sname, "tl_", 3) == 0) {
+            return true;
+        }
+    }
+    std::lock_guard<std::mutex> lock(runtime::guest_context().modules_mutex);
+    for (const auto& mod : runtime::guest_context().modules) {
+        for (const auto& exp : mod.exports) {
+            if (exp.address == address) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+[[nodiscard]] inline bool guest_callback_address_valid(const std::uintptr_t address) noexcept {
+    if (address == 0) {
+        return false;
+    }
+    if (is_builtin_runtime_callback(address)) {
+        return true;
+    }
+    if (runtime::guest_context().module_graph != nullptr &&
+        runtime::guest_context().module_graph->is_guest_executable_address(address)) {
+        return true;
+    }
+    if (g_guest_image_base != nullptr &&
+        address >= reinterpret_cast<std::uintptr_t>(g_guest_image_base) &&
+        address - reinterpret_cast<std::uintptr_t>(g_guest_image_base) < g_guest_image_size) {
+        return true;
+    }
+    return false;
 }
 
 [[nodiscard]] inline WindowSlot* dialog_control_by_id(WindowSlot& dialog, const int identifier) noexcept {

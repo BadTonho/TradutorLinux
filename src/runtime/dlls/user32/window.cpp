@@ -46,12 +46,24 @@ TL_MSABI abi::Atom tl_RegisterClassExA(const void* const wnd_class) noexcept {
     std::string class_name;
     std::string menu_name;
     const std::uintptr_t menu_raw = reinterpret_cast<std::uintptr_t>(wc.menu_name);
-    if (wc.cb_size < sizeof(abi::GuestWndClassExA) || wc.window_proc == 0 ||
-        wc.class_name == nullptr || !runtime::copy_guest_cstring(wc.class_name, 4096U, class_name) ||
-        !guest_callback_address_valid(wc.window_proc) ||
-        (menu_raw > 0xFFFFU && !runtime::copy_guest_cstring(wc.menu_name, 4096U, menu_name))) {
+    if (wc.cb_size < sizeof(abi::GuestWndClassExA)) {
         set_last_error(abi::kErrorInvalidParameter);
-        trace_guest_failure("RegisterClassExA", "wnd-class", "cbSize, window_proc ou class_name inválido");
+        trace_guest_failure("RegisterClassExA", "wnd-class", "cbSize menor que sizeof(WNDCLASSEXA)");
+        return 0;
+    }
+    if (wc.class_name == nullptr || !runtime::copy_guest_cstring(wc.class_name, 4096U, class_name)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        trace_guest_failure("RegisterClassExA", "wnd-class", "class_name nulo ou string inacessível");
+        return 0;
+    }
+    if (wc.window_proc == 0 || !guest_callback_address_valid(wc.window_proc)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        trace_guest_failure("RegisterClassExA", "wnd-class", "window_proc inválido ou fora da faixa");
+        return 0;
+    }
+    if (menu_raw > 0xFFFFU && !runtime::copy_guest_cstring(wc.menu_name, 4096U, menu_name)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        trace_guest_failure("RegisterClassExA", "wnd-class", "menu_name ponteiro inacessível");
         return 0;
     }
     if (find_class_slot(class_name.c_str()) != nullptr) {
@@ -121,12 +133,24 @@ TL_MSABI abi::Atom tl_RegisterClassExW(const void* const wnd_class) noexcept {
     std::u16string class_name;
     std::u16string menu_name;
     const std::uintptr_t menu_raw = reinterpret_cast<std::uintptr_t>(wc.menu_name);
-    if (wc.cb_size < sizeof(abi::GuestWndClassExW) || wc.window_proc == 0 ||
-        wc.class_name == nullptr || !runtime::copy_guest_wstring(wc.class_name, 4096U, class_name) ||
-        !guest_callback_address_valid(wc.window_proc) ||
-        (menu_raw > 0xFFFFU && !runtime::copy_guest_wstring(wc.menu_name, 4096U, menu_name))) {
+    if (wc.cb_size < sizeof(abi::GuestWndClassExW)) {
         set_last_error(abi::kErrorInvalidParameter);
-        trace_guest_failure("RegisterClassExW", "wnd-class", "cbSize, window_proc ou class_name inválido");
+        trace_guest_failure("RegisterClassExW", "wnd-class", "cbSize menor que sizeof(WNDCLASSEXW)");
+        return 0;
+    }
+    if (wc.window_proc == 0 || !guest_callback_address_valid(wc.window_proc)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        trace_guest_failure("RegisterClassExW", "wnd-class", "window_proc inválido ou fora da faixa");
+        return 0;
+    }
+    if (wc.class_name == nullptr || !runtime::copy_guest_wstring(wc.class_name, 4096U, class_name)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        trace_guest_failure("RegisterClassExW", "wnd-class", "class_name nulo ou string inacessível");
+        return 0;
+    }
+    if (menu_raw > 0xFFFFU && !runtime::copy_guest_wstring(wc.menu_name, 4096U, menu_name)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        trace_guest_failure("RegisterClassExW", "wnd-class", "menu_name ponteiro inacessível");
         return 0;
     }
     std::string utf8_class = util::wide_to_utf8(

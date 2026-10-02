@@ -391,6 +391,22 @@ TEST(Win32GuiTest, ProtectedWindowRegistrationInputsRejectUnmappedPointers) {
                             [](const WindowSlot& slot) { return !slot.used; }));
 }
 
+TEST(Win32GuiTest, RegistersClassWithBuiltinRuntimeWindowProcedure) {
+    g_classes = {};
+    const char class_name[] = "TestBuiltinCallbackClass";
+    abi::GuestWndClassExA class_a{};
+    class_a.cb_size = sizeof(class_a);
+    class_a.window_proc = reinterpret_cast<std::uintptr_t>(&tl_DefDlgProcA);
+    class_a.class_name = class_name;
+
+    const abi::Atom atom = tl_RegisterClassExA(&class_a);
+    EXPECT_NE(atom, 0U);
+    EXPECT_EQ(tl_GetLastError(), abi::kErrorSuccess);
+
+    // Re-registration of the same class name fails
+    EXPECT_EQ(tl_RegisterClassExA(&class_a), 0U);
+}
+
 TEST(Win32GuiTest, RejectsStatefulGuiCallsFromNonPrimaryGuestThread) {
     void* worker_menu = nullptr;
     std::uint32_t worker_menu_error = abi::kErrorSuccess;
