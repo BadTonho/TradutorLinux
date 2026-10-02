@@ -1734,6 +1734,35 @@ TEST(Win32FileTest, ProtectedIoOutputsRejectUnmappedPointers) {
     EXPECT_EQ(tl_CloseHandle(handle), 1);
 }
 
+TEST(Win32FileTest, CreateFileSupportsFileAppendDataAndAutomaticParentDirectories) {
+    TempDirFixture ctx;
+    const std::string nested_path = ctx.path("nested/sub_dir/test_log.txt");
+
+    void* handle = tl_CreateFileA(nested_path.c_str(), abi::kFileAppendData, 0,
+                                  nullptr, abi::kCreateAlways, 0, nullptr);
+    ASSERT_NE(handle, reinterpret_cast<void*>(static_cast<std::uintptr_t>(-1)));
+    ASSERT_NE(handle, nullptr);
+
+    const char log_entry[] = "log line 1\n";
+    std::uint32_t bytes_written = 0;
+    EXPECT_EQ(tl_WriteFile(handle, log_entry, static_cast<std::uint32_t>(sizeof(log_entry) - 1),
+                           &bytes_written, nullptr), 1);
+    EXPECT_EQ(bytes_written, sizeof(log_entry) - 1);
+    EXPECT_EQ(tl_CloseHandle(handle), 1);
+
+    void* handle_rw = tl_CreateFileA(nested_path.c_str(), abi::kFileWriteData | abi::kFileReadData, 0,
+                                     nullptr, abi::kOpenExisting, 0, nullptr);
+    ASSERT_NE(handle_rw, reinterpret_cast<void*>(static_cast<std::uintptr_t>(-1)));
+    ASSERT_NE(handle_rw, nullptr);
+
+    char read_buffer[32]{};
+    std::uint32_t bytes_read = 0;
+    EXPECT_EQ(tl_ReadFile(handle_rw, read_buffer, sizeof(read_buffer) - 1, &bytes_read, nullptr), 1);
+    EXPECT_EQ(bytes_read, sizeof(log_entry) - 1);
+    EXPECT_STREQ(read_buffer, log_entry);
+    EXPECT_EQ(tl_CloseHandle(handle_rw), 1);
+}
+
 TEST(Win32WideFileTest, UnicodeFileMetadataPositionAndCopyAreConsistent) {
     TempDirFixture ctx;
     const auto to_wide = [](const std::u16string& value) {

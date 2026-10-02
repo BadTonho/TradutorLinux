@@ -3,6 +3,7 @@
 #include "kernel32_memory_internal.hpp"
 
 #include <fcntl.h>
+#include <filesystem>
 #include <new>
 #include <sys/mman.h>
 #include <vector>
@@ -16,6 +17,42 @@ bool write_guest_u32(std::uint32_t* const destination, const std::uint32_t value
     return destination == nullptr ||
            runtime::write_guest_memory(destination, &value, sizeof(value)).status ==
                runtime::GuestMemoryAccessStatus::Success;
+}
+
+[[nodiscard]] int compute_file_access_flags(const std::uint32_t desired_access) noexcept {
+    constexpr std::uint32_t kAnyWriteAccess =
+        abi::kGenericWrite | abi::kGenericAll | abi::kFileWriteData |
+        abi::kFileAppendData | abi::kFileWriteAttributes | abi::kFileWriteEa |
+        abi::kFileAllAccess;
+
+    constexpr std::uint32_t kAnyReadAccess =
+        abi::kGenericRead | abi::kGenericAll | abi::kFileReadData |
+        abi::kFileReadAttributes | abi::kFileReadEa;
+
+    const bool write = (desired_access & kAnyWriteAccess) != 0U;
+    const bool read = (desired_access & kAnyReadAccess) != 0U;
+
+    int flags = 0;
+    if (write && read) {
+        flags = O_RDWR;
+    } else if (write) {
+        flags = O_WRONLY;
+    } else {
+        flags = O_RDONLY;
+    }
+    if ((desired_access & abi::kFileAppendData) != 0U && (desired_access & abi::kFileWriteData) == 0U &&
+        (desired_access & abi::kGenericWrite) == 0U) {
+        flags |= O_APPEND;
+    }
+    return flags;
+}
+
+void ensure_parent_directory(const char* const normalized) noexcept {
+    std::error_code ec;
+    const std::filesystem::path p(normalized);
+    if (p.has_parent_path()) {
+        std::filesystem::create_directories(p.parent_path(), ec);
+    }
 }
 
 }  // namespace
@@ -182,16 +219,7 @@ TL_MSABI void* tl_CreateFileA(const char* const file_name, const std::uint32_t d
         set_last_error(abi::kErrorInvalidParameter);
         return kInvalidHandleValue;
     }
-    int flags = 0;
-    const bool read = (desired_access & abi::kGenericRead) != 0;
-    const bool write = (desired_access & abi::kGenericWrite) != 0;
-    if (read && write) {
-        flags |= O_RDWR;
-    } else if (write) {
-        flags |= O_WRONLY;
-    } else {
-        flags |= O_RDONLY;
-    }
+    int flags = compute_file_access_flags(desired_access);
     switch (creation_disposition) {
         case abi::kCreateAlways: flags |= O_CREAT | O_TRUNC; break;
         case abi::kCreateNew: flags |= O_CREAT | O_EXCL; break;
@@ -201,6 +229,9 @@ TL_MSABI void* tl_CreateFileA(const char* const file_name, const std::uint32_t d
         default:
             set_last_error(abi::kErrorInvalidParameter);
             return kInvalidHandleValue;
+    }
+    if ((flags & O_CREAT) != 0) {
+        ensure_parent_directory(normalized);
     }
     const int fd = ::open(normalized, flags, 0644);
     if (fd < 0) {
@@ -243,16 +274,7 @@ TL_MSABI void* tl_CreateFileW(const std::uint16_t* path, const std::uint32_t des
         set_last_error(abi::kErrorInvalidParameter);
         return kInvalidHandleValue;
     }
-    int flags = 0;
-    const bool read = (desired_access & abi::kGenericRead) != 0;
-    const bool write = (desired_access & abi::kGenericWrite) != 0;
-    if (read && write) {
-        flags |= O_RDWR;
-    } else if (write) {
-        flags |= O_WRONLY;
-    } else {
-        flags |= O_RDONLY;
-    }
+    int flags = compute_file_access_flags(desired_access);
     switch (creation_disposition) {
         case abi::kCreateAlways: flags |= O_CREAT | O_TRUNC; break;
         case abi::kCreateNew: flags |= O_CREAT | O_EXCL; break;
@@ -262,6 +284,9 @@ TL_MSABI void* tl_CreateFileW(const std::uint16_t* path, const std::uint32_t des
         default:
             set_last_error(abi::kErrorInvalidParameter);
             return kInvalidHandleValue;
+    }
+    if ((flags & O_CREAT) != 0) {
+        ensure_parent_directory(normalized);
     }
     const int fd = ::open(normalized, flags, 0644);
     if (fd < 0) {
