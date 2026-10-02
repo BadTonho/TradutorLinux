@@ -941,5 +941,47 @@ TEST(Gdi32Test, ProtectedAuxiliaryTextAndDeviceBuffersRejectUnmappedPointers) {
     EXPECT_EQ(tl_GetDeviceGammaRamp(nullptr, invalid), 0);
     EXPECT_EQ(tl_GetLastError(), abi::kErrorInvalidParameter);
 }
+TEST(Win32GuiTest, CrossThreadReadOnlyAndChildWindowOperationsArePermitted) {
+    g_classes = {};
+    g_windows = {};
+
+    const char class_name[] = "CrossThreadWorkerClass";
+    abi::GuestWndClassExA class_a{};
+    class_a.cb_size = sizeof(class_a);
+    class_a.window_proc = reinterpret_cast<std::uintptr_t>(&tl_DefDlgProcA);
+    class_a.class_name = class_name;
+    ASSERT_NE(tl_RegisterClassExA(&class_a), 0U);
+
+    WindowSlot& parent = g_windows[0];
+    parent.used = true;
+    parent.native = reinterpret_cast<gui::NativeWindow>(0x1234U);
+    parent.class_name = class_name;
+    parent.window_title = "ParentWindow";
+    register_window_handle(&parent);
+
+    std::thread worker([&] {
+        g_current_thread_id = 99U;
+
+        EXPECT_NE(find_class_slot(class_name), nullptr);
+        EXPECT_EQ(tl_FindWindowA(class_name, "ParentWindow"), &parent);
+
+        void* dc = tl_GetDC(nullptr);
+        EXPECT_NE(dc, nullptr);
+
+        abi::HWnd child = tl_CreateWindowExA(0, "BUTTON", "OK", 0, 0, 0, 10, 10,
+                                             &parent, nullptr, nullptr, nullptr);
+        EXPECT_NE(child, nullptr);
+        EXPECT_EQ(tl_GetLastError(), abi::kErrorSuccess);
+
+        EXPECT_EQ(tl_DestroyWindow(child), 1);
+    });
+    worker.join();
+    g_current_thread_id = kMainThreadId;
+
+    unregister_window_handle(&parent);
+    g_windows = {};
+    g_classes = {};
+}
+
 }  // namespace
 }  // namespace tradutorlinux

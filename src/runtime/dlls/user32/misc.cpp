@@ -203,9 +203,6 @@ TL_MSABI int tl_GetSystemMetrics(const int index) noexcept {
 }
 
 TL_MSABI void* tl_GetDC(const void* window) noexcept {
-    if (!user32_gui_thread_allowed("GetDC")) {
-        return nullptr;
-    }
     if (window == nullptr) {
         static char g_screen_dc_token = 0;
         set_last_error(abi::kErrorSuccess);

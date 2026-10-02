@@ -246,8 +246,10 @@ TL_MSABI abi::HWnd tl_CreateWindowExA(const std::uint32_t ex_style,
                                       const int width, const int height, const void* const parent,
                                       const void* const menu, const void* const instance,
                                       const void* const param) noexcept {
-    if (!user32_gui_thread_allowed("CreateWindowExA")) {
-        return nullptr;
+    if (g_current_thread_id != kMainThreadId && parent == nullptr) {
+        if (!user32_gui_thread_allowed("CreateWindowExA")) {
+            return nullptr;
+        }
     }
     (void)ex_style;
     (void)instance;
@@ -696,9 +698,6 @@ TL_MSABI abi::Lresult tl_DefWindowProcW(const void* const window,
 }
 
 TL_MSABI int tl_DestroyWindow(const void* const window) noexcept {
-    if (!user32_gui_thread_allowed("DestroyWindow")) {
-        return 0;
-    }
     WindowSlot* slot = find_window_slot(window);
     if (slot == nullptr) {
         set_last_error(abi::kErrorInvalidHandle);
@@ -935,9 +934,6 @@ TL_MSABI int tl_IsWindowVisible(const void* window) noexcept {
 }
 
 TL_MSABI const void* tl_FindWindowA(const char* class_name, const char* window_name) noexcept {
-    if (!user32_gui_thread_allowed("FindWindowA")) {
-        return nullptr;
-    }
     std::string class_copy;
     std::string window_copy;
     if ((class_name != nullptr && !runtime::copy_guest_cstring(class_name, 4096U, class_copy)) ||
@@ -958,9 +954,6 @@ TL_MSABI const void* tl_FindWindowA(const char* class_name, const char* window_n
 }
 
 TL_MSABI const void* tl_FindWindowW(const std::uint16_t* class_name, const std::uint16_t* window_name) noexcept {
-    if (!user32_gui_thread_allowed("FindWindowW")) {
-        return nullptr;
-    }
     std::string utf8_class, utf8_window;
     const char* class_cstr = nullptr;
     const char* window_cstr = nullptr;
@@ -1414,7 +1407,7 @@ TL_MSABI int tl_GetClassInfoW(void* const instance, const std::uint16_t* const c
                               void* const wnd_class) noexcept {
     (void)instance;
     std::u16string class_copy;
-    if (!user32_gui_thread_allowed("GetClassInfoW") || class_name == nullptr ||
+    if (class_name == nullptr ||
         !runtime::copy_guest_wstring(class_name, 4096U, class_copy)) {
         set_last_error(abi::kErrorInvalidParameter);
         return 0;

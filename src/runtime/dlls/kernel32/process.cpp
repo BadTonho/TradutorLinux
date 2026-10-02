@@ -1508,6 +1508,10 @@ TL_MSABI int tl_CreateProcessA(const char* application_name, char* command_line,
             }
         }
     }
+    if (::access(normalized_path, F_OK) != 0) {
+        set_last_error(abi::kErrorFileNotFound);
+        return 0;
+    }
 
     std::string child_working_directory;
     if (current_directory != nullptr) {

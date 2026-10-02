@@ -675,7 +675,7 @@ CriticalSectionEntry* alloc_cs_entry(void* cs) noexcept {
 }
 
 ClassSlot* find_class_slot(const char* const name) noexcept {
-    if (name == nullptr || g_current_thread_id != kMainThreadId) {
+    if (name == nullptr) {
         return nullptr;
     }
     const auto found = std::find_if(g_classes.begin(), g_classes.end(),

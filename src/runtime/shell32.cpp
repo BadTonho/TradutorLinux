@@ -452,9 +452,10 @@ TL_MSABI int tl_ShellExecuteExW(void* exec_info) noexcept {
         info.lp_directory, nullptr, &pi);
 
     if (created == 0) {
-        info.h_inst_app = reinterpret_cast<void*>(static_cast<std::uintptr_t>(2)); // SE_ERR_FNF
+        info.h_inst_app = nullptr;
         info.h_process = nullptr;
         write_guest_value(exec_info, info);
+        set_last_error(abi::kErrorFileNotFound);
         return 0;
     }
 
