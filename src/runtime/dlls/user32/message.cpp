@@ -1524,6 +1524,10 @@ TL_MSABI abi::Lresult tl_SendMessageA(const void* window, const std::uint32_t me
             util::ascii_iequals(slot->class_name, "SysListView32")) {
             return runtime_gui::handle_listview_message(*slot, message, wparam, lparam, false);
         }
+        if (slot->control_kind == ControlKind::Tab ||
+            util::ascii_iequals(slot->class_name, "SysTabControl32")) {
+            return runtime_gui::handle_tabcontrol_message(*slot, message, wparam, lparam, false);
+        }
         if (slot->wndproc != 0) {
             return call_wndproc(slot->wndproc, const_cast<abi::HWnd>(window), message,
                                 wparam, lparam);
@@ -1553,6 +1557,10 @@ TL_MSABI abi::Lresult tl_SendMessageW(const void* window, const std::uint32_t me
         if (slot->control_kind == ControlKind::ListView ||
             util::ascii_iequals(slot->class_name, "SysListView32")) {
             return runtime_gui::handle_listview_message(*slot, message, wparam, lparam, true);
+        }
+        if (slot->control_kind == ControlKind::Tab ||
+            util::ascii_iequals(slot->class_name, "SysTabControl32")) {
+            return runtime_gui::handle_tabcontrol_message(*slot, message, wparam, lparam, true);
         }
         if (slot->control_kind == ControlKind::StatusBar && message == abi::kSbSetTextW) {
             if (lparam == 0) {

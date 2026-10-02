@@ -134,6 +134,9 @@ ControlKind control_kind_for(const char* const name) noexcept {
     if (util::ascii_iequals(name, "msctls_statusbar32")) {
         return ControlKind::StatusBar;
     }
+    if (util::ascii_iequals(name, "SysTabControl32")) {
+        return ControlKind::Tab;
+    }
     return ControlKind::Generic;
 }
 
@@ -637,6 +640,334 @@ int handle_listview_message(WindowSlot& slot, const std::uint32_t message,
             return 0;
         }
         if (message == abi::kLvmSortItemsEx || message == abi::kLvmEnsureVisible) {
+            set_last_error(abi::kErrorSuccess);
+            return 1;
+        }
+    } catch (...) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    set_last_error(abi::kErrorSuccess);
+    return 0;
+}
+
+
+namespace {
+
+constexpr std::uint32_t kTcifText = 0x0001U;
+constexpr std::uint32_t kTcifImage = 0x0002U;
+constexpr std::uint32_t kTcifRtlReading = 0x0004U;
+constexpr std::uint32_t kTcifParam = 0x0008U;
+constexpr std::uint32_t kTcifState = 0x0010U;
+
+constexpr std::uint32_t kTcmGetItemCount = 0x1304U;
+constexpr std::uint32_t kTcmGetItemA = 0x1305U;
+constexpr std::uint32_t kTcmSetItemA = 0x1306U;
+constexpr std::uint32_t kTcmInsertItemA = 0x1307U;
+constexpr std::uint32_t kTcmDeleteItem = 0x1308U;
+constexpr std::uint32_t kTcmDeleteAllItems = 0x1309U;
+constexpr std::uint32_t kTcmGetItemRect = 0x130AU;
+constexpr std::uint32_t kTcmGetCurSel = 0x130BU;
+constexpr std::uint32_t kTcmSetCurSel = 0x130CU;
+constexpr std::uint32_t kTcmSetItemExtra = 0x130EU;
+constexpr std::uint32_t kTcmAdjustRect = 0x1328U;
+constexpr std::uint32_t kTcmGetItemW = 0x133CU;
+constexpr std::uint32_t kTcmSetItemW = 0x133DU;
+constexpr std::uint32_t kTcmInsertItemW = 0x133EU;
+
+struct GuestTcItemA {
+    std::uint32_t mask{};
+    std::uint32_t state{};
+    std::uint32_t state_mask{};
+    std::uint32_t padding{};
+    const char* text{nullptr};
+    std::int32_t text_max{0};
+    std::int32_t image{-1};
+    std::intptr_t lparam{0};
+};
+static_assert(sizeof(GuestTcItemA) == 40);
+
+struct GuestTcItemW {
+    std::uint32_t mask{};
+    std::uint32_t state{};
+    std::uint32_t state_mask{};
+    std::uint32_t padding{};
+    const std::uint16_t* text{nullptr};
+    std::int32_t text_max{0};
+    std::int32_t image{-1};
+    std::intptr_t lparam{0};
+};
+static_assert(sizeof(GuestTcItemW) == 40);
+
+}  // namespace
+
+abi::Lresult handle_tabcontrol_message(WindowSlot& slot, const std::uint32_t message,
+                                       const abi::Wparam wparam, const abi::Lparam lparam,
+                                       [[maybe_unused]] const bool wide) noexcept {
+    try {
+        if (message == kTcmGetItemCount) {
+            set_last_error(abi::kErrorSuccess);
+            return static_cast<abi::Lresult>(slot.tabs.size());
+        }
+        if (message == kTcmGetCurSel) {
+            set_last_error(abi::kErrorSuccess);
+            return static_cast<abi::Lresult>(slot.tab_selection);
+        }
+        if (message == kTcmSetCurSel) {
+            const int prev = slot.tab_selection;
+            const int next = static_cast<int>(wparam);
+            if (next >= -1 && next < static_cast<int>(slot.tabs.size())) {
+                slot.tab_selection = next;
+                if (slot.parent != nullptr) {
+                    slot.parent->render_pending = true;
+                }
+            }
+            set_last_error(abi::kErrorSuccess);
+            return static_cast<abi::Lresult>(prev);
+        }
+        if (message == kTcmDeleteAllItems) {
+            slot.tabs.clear();
+            slot.tab_selection = -1;
+            if (slot.parent != nullptr) {
+                slot.parent->render_pending = true;
+            }
+            set_last_error(abi::kErrorSuccess);
+            return 1;
+        }
+        if (message == kTcmDeleteItem) {
+            const int index = static_cast<int>(wparam);
+            if (index >= 0 && static_cast<std::size_t>(index) < slot.tabs.size()) {
+                slot.tabs.erase(slot.tabs.begin() + index);
+                if (slot.tab_selection == index) {
+                    slot.tab_selection = slot.tabs.empty() ? -1 : std::min(index, static_cast<int>(slot.tabs.size() - 1));
+                } else if (slot.tab_selection > index) {
+                    slot.tab_selection--;
+                }
+                if (slot.parent != nullptr) {
+                    slot.parent->render_pending = true;
+                }
+                set_last_error(abi::kErrorSuccess);
+                return 1;
+            }
+            set_last_error(abi::kErrorInvalidParameter);
+            return 0;
+        }
+        if (message == kTcmInsertItemA) {
+            GuestTcItemA item{};
+            if (lparam == 0 || !read_guest_value(reinterpret_cast<const void*>(lparam), item)) {
+                set_last_error(abi::kErrorInvalidParameter);
+                return -1;
+            }
+            TabItem tab{};
+            if ((item.mask & kTcifParam) != 0U) {
+                tab.param = item.lparam;
+            }
+            if ((item.mask & kTcifImage) != 0U) {
+                tab.image = item.image;
+            }
+            if ((item.mask & kTcifState) != 0U) {
+                tab.state = item.state & item.state_mask;
+            }
+            if ((item.mask & kTcifText) != 0U && item.text != nullptr) {
+                std::string text_copy;
+                if (runtime::copy_guest_cstring(item.text, 65535U, text_copy)) {
+                    tab.text = std::move(text_copy);
+                }
+            }
+            int index = static_cast<int>(wparam);
+            if (index < 0 || index > static_cast<int>(slot.tabs.size())) {
+                index = static_cast<int>(slot.tabs.size());
+            }
+            slot.tabs.insert(slot.tabs.begin() + index, std::move(tab));
+            if (slot.tab_selection == -1) {
+                slot.tab_selection = index;
+            }
+            if (slot.parent != nullptr) {
+                slot.parent->render_pending = true;
+            }
+            set_last_error(abi::kErrorSuccess);
+            return static_cast<abi::Lresult>(index);
+        }
+        if (message == kTcmInsertItemW) {
+            GuestTcItemW item{};
+            if (lparam == 0 || !read_guest_value(reinterpret_cast<const void*>(lparam), item)) {
+                set_last_error(abi::kErrorInvalidParameter);
+                return -1;
+            }
+            TabItem tab{};
+            if ((item.mask & kTcifParam) != 0U) {
+                tab.param = item.lparam;
+            }
+            if ((item.mask & kTcifImage) != 0U) {
+                tab.image = item.image;
+            }
+            if ((item.mask & kTcifState) != 0U) {
+                tab.state = item.state & item.state_mask;
+            }
+            if ((item.mask & kTcifText) != 0U && item.text != nullptr) {
+                std::u16string wide_text;
+                if (runtime::copy_guest_wstring(item.text, 65535U, wide_text)) {
+                    tab.text = util::wide_to_utf8(reinterpret_cast<const std::uint16_t*>(wide_text.data()), wide_text.size());
+                }
+            }
+            int index = static_cast<int>(wparam);
+            if (index < 0 || index > static_cast<int>(slot.tabs.size())) {
+                index = static_cast<int>(slot.tabs.size());
+            }
+            slot.tabs.insert(slot.tabs.begin() + index, std::move(tab));
+            if (slot.tab_selection == -1) {
+                slot.tab_selection = index;
+            }
+            if (slot.parent != nullptr) {
+                slot.parent->render_pending = true;
+            }
+            set_last_error(abi::kErrorSuccess);
+            return static_cast<abi::Lresult>(index);
+        }
+        if (message == kTcmGetItemA) {
+            const int index = static_cast<int>(wparam);
+            if (index < 0 || static_cast<std::size_t>(index) >= slot.tabs.size() || lparam == 0) {
+                set_last_error(abi::kErrorInvalidParameter);
+                return 0;
+            }
+            GuestTcItemA item{};
+            if (!read_guest_value(reinterpret_cast<const void*>(lparam), item)) {
+                set_last_error(abi::kErrorInvalidParameter);
+                return 0;
+            }
+            const TabItem& tab = slot.tabs[static_cast<std::size_t>(index)];
+            if ((item.mask & kTcifParam) != 0U) {
+                item.lparam = tab.param;
+            }
+            if ((item.mask & kTcifImage) != 0U) {
+                item.image = tab.image;
+            }
+            if ((item.mask & kTcifState) != 0U) {
+                item.state = tab.state & item.state_mask;
+            }
+            if ((item.mask & kTcifText) != 0U && item.text != nullptr && item.text_max > 0) {
+                const std::size_t copy_len = std::min(static_cast<std::size_t>(item.text_max - 1), tab.text.size());
+                auto* const out_ptr = const_cast<char*>(item.text);
+                if (runtime::write_guest_memory(out_ptr, tab.text.data(), copy_len).status == runtime::GuestMemoryAccessStatus::Success) {
+                    const char zero = '\0';
+                    static_cast<void>(runtime::write_guest_memory(out_ptr + copy_len, &zero, 1));
+                }
+            }
+            if (!write_guest_value(reinterpret_cast<void*>(lparam), item)) {
+                set_last_error(abi::kErrorInvalidParameter);
+                return 0;
+            }
+            set_last_error(abi::kErrorSuccess);
+            return 1;
+        }
+        if (message == kTcmGetItemW) {
+            const int index = static_cast<int>(wparam);
+            if (index < 0 || static_cast<std::size_t>(index) >= slot.tabs.size() || lparam == 0) {
+                set_last_error(abi::kErrorInvalidParameter);
+                return 0;
+            }
+            GuestTcItemW item{};
+            if (!read_guest_value(reinterpret_cast<const void*>(lparam), item)) {
+                set_last_error(abi::kErrorInvalidParameter);
+                return 0;
+            }
+            const TabItem& tab = slot.tabs[static_cast<std::size_t>(index)];
+            if ((item.mask & kTcifParam) != 0U) {
+                item.lparam = tab.param;
+            }
+            if ((item.mask & kTcifImage) != 0U) {
+                item.image = tab.image;
+            }
+            if ((item.mask & kTcifState) != 0U) {
+                item.state = tab.state & item.state_mask;
+            }
+            if ((item.mask & kTcifText) != 0U && item.text != nullptr && item.text_max > 0) {
+                const std::u16string u16_text = util::utf8_to_wide(tab.text);
+                const std::size_t copy_len = std::min(static_cast<std::size_t>(item.text_max - 1), u16_text.size());
+                auto* const out_ptr = const_cast<std::uint16_t*>(item.text);
+                if (runtime::write_guest_memory(out_ptr, u16_text.data(), copy_len * sizeof(std::uint16_t)).status == runtime::GuestMemoryAccessStatus::Success) {
+                    const std::uint16_t zero = 0;
+                    static_cast<void>(runtime::write_guest_memory(out_ptr + copy_len, &zero, sizeof(zero)));
+                }
+            }
+            if (!write_guest_value(reinterpret_cast<void*>(lparam), item)) {
+                set_last_error(abi::kErrorInvalidParameter);
+                return 0;
+            }
+            set_last_error(abi::kErrorSuccess);
+            return 1;
+        }
+        if (message == kTcmSetItemA) {
+            const int index = static_cast<int>(wparam);
+            if (index < 0 || static_cast<std::size_t>(index) >= slot.tabs.size() || lparam == 0) {
+                set_last_error(abi::kErrorInvalidParameter);
+                return 0;
+            }
+            GuestTcItemA item{};
+            if (!read_guest_value(reinterpret_cast<const void*>(lparam), item)) {
+                set_last_error(abi::kErrorInvalidParameter);
+                return 0;
+            }
+            TabItem& tab = slot.tabs[static_cast<std::size_t>(index)];
+            if ((item.mask & kTcifParam) != 0U) {
+                tab.param = item.lparam;
+            }
+            if ((item.mask & kTcifImage) != 0U) {
+                tab.image = item.image;
+            }
+            if ((item.mask & kTcifState) != 0U) {
+                tab.state = (tab.state & ~item.state_mask) | (item.state & item.state_mask);
+            }
+            if ((item.mask & kTcifText) != 0U && item.text != nullptr) {
+                std::string text_copy;
+                if (runtime::copy_guest_cstring(item.text, 65535U, text_copy)) {
+                    tab.text = std::move(text_copy);
+                }
+            }
+            if (slot.parent != nullptr) {
+                slot.parent->render_pending = true;
+            }
+            set_last_error(abi::kErrorSuccess);
+            return 1;
+        }
+        if (message == kTcmSetItemW) {
+            const int index = static_cast<int>(wparam);
+            if (index < 0 || static_cast<std::size_t>(index) >= slot.tabs.size() || lparam == 0) {
+                set_last_error(abi::kErrorInvalidParameter);
+                return 0;
+            }
+            GuestTcItemW item{};
+            if (!read_guest_value(reinterpret_cast<const void*>(lparam), item)) {
+                set_last_error(abi::kErrorInvalidParameter);
+                return 0;
+            }
+            TabItem& tab = slot.tabs[static_cast<std::size_t>(index)];
+            if ((item.mask & kTcifParam) != 0U) {
+                tab.param = item.lparam;
+            }
+            if ((item.mask & kTcifImage) != 0U) {
+                tab.image = item.image;
+            }
+            if ((item.mask & kTcifState) != 0U) {
+                tab.state = (tab.state & ~item.state_mask) | (item.state & item.state_mask);
+            }
+            if ((item.mask & kTcifText) != 0U && item.text != nullptr) {
+                std::u16string wide_text;
+                if (runtime::copy_guest_wstring(item.text, 65535U, wide_text)) {
+                    tab.text = util::wide_to_utf8(reinterpret_cast<const std::uint16_t*>(wide_text.data()), wide_text.size());
+                }
+            }
+            if (slot.parent != nullptr) {
+                slot.parent->render_pending = true;
+            }
+            set_last_error(abi::kErrorSuccess);
+            return 1;
+        }
+        if (message == kTcmAdjustRect) {
+            set_last_error(abi::kErrorSuccess);
+            return 0;
+        }
+        if (message == kTcmSetItemExtra) {
             set_last_error(abi::kErrorSuccess);
             return 1;
         }

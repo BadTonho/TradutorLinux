@@ -12,7 +12,14 @@
 
 namespace tradutorlinux::runtime_gui {
 
-enum class ControlKind { None, Edit, Button, ComboBox, Static, ListView, Toolbar, StatusBar, Generic };
+enum class ControlKind { None, Edit, Button, ComboBox, Static, ListView, Toolbar, StatusBar, Tab, Generic };
+
+struct TabItem {
+    std::string text;
+    std::intptr_t param{0};
+    int image{-1};
+    std::uint32_t state{0};
+};
 
 struct ToolbarButton {
     std::int32_t command_id{0};
@@ -84,6 +91,8 @@ struct WindowSlot {
     std::vector<TreeItem> tree_items;
     std::uintptr_t tree_next_handle{1};
     std::uintptr_t tree_selected{0};
+    std::vector<TabItem> tabs;
+    int tab_selection{-1};
     void* user_data{nullptr};
     std::uint32_t style{0};
     std::uint32_t extended_style{0};
@@ -104,6 +113,9 @@ void queue_list_notification(WindowSlot& list, std::int32_t code, int item) noex
 [[nodiscard]] int handle_listview_message(WindowSlot& slot, std::uint32_t message,
                                           abi::Wparam wparam, abi::Lparam lparam,
                                           bool wide) noexcept;
+[[nodiscard]] abi::Lresult handle_tabcontrol_message(WindowSlot& slot, std::uint32_t message,
+                                                    abi::Wparam wparam, abi::Lparam lparam,
+                                                    bool wide) noexcept;
 
 [[nodiscard]] WindowSlot* find_control_at(WindowSlot& parent, std::span<WindowSlot> windows,
                                           int x, int y) noexcept;

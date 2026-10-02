@@ -719,5 +719,106 @@ TEST(CommonControls, ToolbarMessagesBuildLogicalButtonModel) {
     g_windows = {};
 }
 
+TEST(CommonControls, TabControlManagesItemsSelectionAndQueries) {
+    g_windows = {};
+    WindowSlot& parent = g_windows[0];
+    parent.used = true;
+    parent.width = 640;
+    parent.height = 480;
+    WindowSlot* const tabctrl = create_logical_control(
+        parent, "SysTabControl32", {}, 0, 801, 0, 0, 400, 200);
+    ASSERT_NE(tabctrl, nullptr);
+
+    constexpr std::uint32_t kTcmGetItemCount = 0x1304U;
+    constexpr std::uint32_t kTcmGetItemA = 0x1305U;
+    constexpr std::uint32_t kTcmInsertItemA = 0x1307U;
+    constexpr std::uint32_t kTcmDeleteItem = 0x1308U;
+    constexpr std::uint32_t kTcmDeleteAllItems = 0x1309U;
+    constexpr std::uint32_t kTcmGetCurSel = 0x130BU;
+    constexpr std::uint32_t kTcmSetCurSel = 0x130CU;
+    constexpr std::uint32_t kTcmGetItemW = 0x133CU;
+    constexpr std::uint32_t kTcmInsertItemW = 0x133EU;
+    constexpr std::uint32_t kTcifText = 0x0001U;
+    constexpr std::uint32_t kTcifParam = 0x0008U;
+
+    struct TestTcItemA {
+        std::uint32_t mask{};
+        std::uint32_t state{};
+        std::uint32_t state_mask{};
+        std::uint32_t padding{};
+        const char* text{nullptr};
+        std::int32_t text_max{0};
+        std::int32_t image{-1};
+        std::intptr_t lparam{0};
+    };
+
+    struct TestTcItemW {
+        std::uint32_t mask{};
+        std::uint32_t state{};
+        std::uint32_t state_mask{};
+        std::uint32_t padding{};
+        const std::uint16_t* text{nullptr};
+        std::int32_t text_max{0};
+        std::int32_t image{-1};
+        std::intptr_t lparam{0};
+    };
+
+    EXPECT_EQ(tl_SendMessageA(tabctrl, kTcmGetItemCount, 0, 0), 0);
+    EXPECT_EQ(tl_SendMessageA(tabctrl, kTcmGetCurSel, 0, 0), -1);
+
+    TestTcItemW query_empty{};
+    query_empty.mask = kTcifParam;
+    query_empty.lparam = -1;
+    EXPECT_EQ(tl_SendMessageW(tabctrl, kTcmGetItemW, 0, reinterpret_cast<abi::Lparam>(&query_empty)), 0);
+
+    TestTcItemA item1{};
+    item1.mask = kTcifText | kTcifParam;
+    item1.text = "FirstTab";
+    item1.lparam = 0x11223344;
+    EXPECT_EQ(tl_SendMessageA(tabctrl, kTcmInsertItemA, 0, reinterpret_cast<abi::Lparam>(&item1)), 0);
+    EXPECT_EQ(tl_SendMessageA(tabctrl, kTcmGetItemCount, 0, 0), 1);
+    EXPECT_EQ(tl_SendMessageA(tabctrl, kTcmGetCurSel, 0, 0), 0);
+
+    const std::u16string tab2_text = u"SecondTab";
+    TestTcItemW item2{};
+    item2.mask = kTcifText | kTcifParam;
+    item2.text = reinterpret_cast<const std::uint16_t*>(tab2_text.c_str());
+    item2.lparam = 0x55667788;
+    EXPECT_EQ(tl_SendMessageW(tabctrl, kTcmInsertItemW, 1, reinterpret_cast<abi::Lparam>(&item2)), 1);
+    EXPECT_EQ(tl_SendMessageW(tabctrl, kTcmGetItemCount, 0, 0), 2);
+
+    TestTcItemW query{};
+    query.mask = kTcifParam;
+    query.lparam = 0;
+    EXPECT_EQ(tl_SendMessageW(tabctrl, kTcmGetItemW, 0, reinterpret_cast<abi::Lparam>(&query)), 1);
+    EXPECT_EQ(query.lparam, 0x11223344);
+
+    query.lparam = 0;
+    EXPECT_EQ(tl_SendMessageW(tabctrl, kTcmGetItemW, 1, reinterpret_cast<abi::Lparam>(&query)), 1);
+    EXPECT_EQ(query.lparam, 0x55667788);
+
+    TestTcItemA queryA{};
+    char text_buf[32]{};
+    queryA.mask = kTcifText | kTcifParam;
+    queryA.text = text_buf;
+    queryA.text_max = sizeof(text_buf);
+    EXPECT_EQ(tl_SendMessageA(tabctrl, kTcmGetItemA, 0, reinterpret_cast<abi::Lparam>(&queryA)), 1);
+    EXPECT_STREQ(text_buf, "FirstTab");
+    EXPECT_EQ(queryA.lparam, 0x11223344);
+
+    EXPECT_EQ(tl_SendMessageA(tabctrl, kTcmSetCurSel, 1, 0), 0);
+    EXPECT_EQ(tl_SendMessageA(tabctrl, kTcmGetCurSel, 0, 0), 1);
+
+    EXPECT_EQ(tl_SendMessageA(tabctrl, kTcmDeleteItem, 0, 0), 1);
+    EXPECT_EQ(tl_SendMessageA(tabctrl, kTcmGetItemCount, 0, 0), 1);
+    EXPECT_EQ(tl_SendMessageA(tabctrl, kTcmGetCurSel, 0, 0), 0);
+
+    EXPECT_EQ(tl_SendMessageA(tabctrl, kTcmDeleteAllItems, 0, 0), 1);
+    EXPECT_EQ(tl_SendMessageA(tabctrl, kTcmGetItemCount, 0, 0), 0);
+    EXPECT_EQ(tl_SendMessageA(tabctrl, kTcmGetCurSel, 0, 0), -1);
+
+    g_windows = {};
+}
+
 }  // namespace
 }  // namespace tradutorlinux::runtime_gui
