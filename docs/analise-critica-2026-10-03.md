@@ -81,19 +81,10 @@ funcional. O caso mais sólido é o 7-Zip CLI.
   sabe se a mudança de thread-affinity da R46 contribuiu.
 - A R46 foi commitada com esses dois ainda vermelhos.
 
-### 7. Muitos módulos são stubs [CONCLUÍDO / GetDlgItemText implementado e stubs auditados]
-- `comdlg32`, `dwm`, `uxtheme`, `imm`, `setupapi`, `winmm` e `GetDlgItemText`
-  (valores vazios). Eram decisões documentadas, mas o suporte real era menor do que a
-  lista de exports sugeria.
-- **Ações implementadas:**
-  - `GetDlgItemTextA`, `GetDlgItemTextW`, `SetDlgItemTextA`, `GetDlgItemInt` e `SetDlgItemInt`
-    em `src/runtime/dlls/user32/dialog.cpp` foram implementados de forma totalmente funcional,
-    integrados a `tl_GetDlgItem` e ao gerenciamento de texto dos controles (`tl_GetWindowText` /
-    `tl_SetWindowText`), com testes unitários em `tests/test_win32_gui.cpp`.
-  - Stubs de `comdlg32` receberam rastreamento controlado (`diagnostics::TraceField` com
-    mecanismo `stub` e status `unsupported`), respeitando a diretriz de falha controlada do `AGENTS.md`.
-  - Módulos stubs (`uxtheme`, `dwmapi`, `imm32`, `setupapi`, áudio de `winmm`) permanecem
-    explicitamente restritos e catalogados com `ExportSupport::Stub` no loader.
+### 7. Muitos módulos são stubs
+`comdlg32`, `dwm`, `uxtheme`, `imm`, `setupapi`, `winmm` e `GetDlgItemText`
+(valores vazios). São decisões documentadas, mas o suporte real é menor do que a
+lista de exports sugere.
 
 ## O que precisa ser criado
 
