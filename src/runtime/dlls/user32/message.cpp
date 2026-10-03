@@ -897,43 +897,48 @@ TL_MSABI int tl_GetMessageA(void* const msg, const void* const window,
         return 0;
     }
     tl_WSAPumpAsyncSelect();
-    for (WindowSlot& slot : g_windows) {
-        if (!slot.used || (window != nullptr && window != &slot)) {
-            continue;
-        }
-        if (pending_native(slot).has_message) {
-            if (!deliver_pending_native(msg, slot)) {
-                set_last_error(abi::kErrorInvalidParameter);
-                return -1;
+    {
+        std::lock_guard lock(g_gui_state_mutex);
+        for (WindowSlot& slot : g_windows) {
+            if (!slot.used || (window != nullptr && window != &slot)) {
+                continue;
             }
-            set_last_error(abi::kErrorSuccess);
-            return 1;
-        }
-        if (slot.has_pending) {
-            if (!write_guest_msg(msg, &slot, slot.pending.message, slot.pending.wparam,
-                                 slot.pending.lparam)) {
-                set_last_error(abi::kErrorInvalidParameter);
-                return -1;
+            if (pending_native(slot).has_message) {
+                if (!deliver_pending_native(msg, slot)) {
+                    set_last_error(abi::kErrorInvalidParameter);
+                    return -1;
+                }
+                set_last_error(abi::kErrorSuccess);
+                return 1;
             }
-            slot.has_pending = false;
-            set_last_error(abi::kErrorSuccess);
-            return 1;
-        }
-        if (!slot.queued_messages.empty()) {
-            const abi::GuestMsg queued = slot.queued_messages.front();
-            slot.queued_messages.pop_front();
-            if (!write_guest_msg(msg, queued.hwnd, queued.message, queued.wparam, queued.lparam)) {
-                set_last_error(abi::kErrorInvalidParameter);
-                return -1;
+            if (slot.has_pending) {
+                if (!write_guest_msg(msg, &slot, slot.pending.message, slot.pending.wparam,
+                                     slot.pending.lparam)) {
+                    set_last_error(abi::kErrorInvalidParameter);
+                    return -1;
+                }
+                slot.has_pending = false;
+                set_last_error(abi::kErrorSuccess);
+                return 1;
             }
-            set_last_error(abi::kErrorSuccess);
-            return 1;
+            if (!slot.queued_messages.empty()) {
+                const abi::GuestMsg queued = slot.queued_messages.front();
+                slot.queued_messages.pop_front();
+                if (!write_guest_msg(msg, queued.hwnd, queued.message, queued.wparam, queued.lparam)) {
+                    set_last_error(abi::kErrorInvalidParameter);
+                    return -1;
+                }
+                set_last_error(abi::kErrorSuccess);
+                return 1;
+            }
         }
     }
     bool idle_traced = false;
     for (;;) {
         tl_WSAPumpAsyncSelect();
-        CrossThreadWindowMessage cross_thread_message{};
+        {
+            std::unique_lock lock(g_gui_state_mutex);
+            CrossThreadWindowMessage cross_thread_message{};
         while (take_cross_thread_window_message(window, cross_thread_message)) {
             void* const target = reinterpret_cast<void*>(cross_thread_message.window);
             if (find_window_slot(target) == nullptr) {
@@ -1130,6 +1135,7 @@ TL_MSABI int tl_GetMessageA(void* const msg, const void* const window,
             set_last_error(abi::kErrorSuccess);
             return 1;
         }
+        }
         if (!idle_traced) {
             trace_message_loop_idle(window);
             idle_traced = true;
@@ -1295,6 +1301,7 @@ TL_MSABI abi::Lresult tl_SendMessageA(const void* window, const std::uint32_t me
     if (!user32_gui_thread_allowed("SendMessageA")) {
         return 0;
     }
+    std::lock_guard lock(g_gui_state_mutex);
     WindowSlot* slot = find_window_slot(window);
     if (slot == nullptr) {
         set_last_error(abi::kErrorInvalidHandle);
@@ -1630,6 +1637,7 @@ TL_MSABI int tl_PostMessageA(const void* window, const std::uint32_t message,
     if (!user32_gui_thread_allowed("PostMessageA")) {
         return 0;
     }
+    std::lock_guard lock(g_gui_state_mutex);
     WindowSlot* slot = find_window_slot(window);
     if (slot == nullptr) {
         set_last_error(abi::kErrorInvalidHandle);
@@ -1680,10 +1688,13 @@ TL_MSABI std::uint32_t tl_MsgWaitForMultipleObjectsEx(const std::uint32_t count,
                 return abi::kWaitObject0 + i;
             }
         }
-        for (const auto& w : g_windows) {
-            if (w.used && (w.has_pending || !w.queued_messages.empty())) {
-                set_last_error(abi::kErrorSuccess);
-                return abi::kWaitObject0 + count;
+        {
+            std::lock_guard lock(g_gui_state_mutex);
+            for (const auto& w : g_windows) {
+                if (w.used && (w.has_pending || !w.queued_messages.empty())) {
+                    set_last_error(abi::kErrorSuccess);
+                    return abi::kWaitObject0 + count;
+                }
             }
         }
         if (g_quit_requested) {
@@ -1736,6 +1747,7 @@ TL_MSABI int tl_PeekMessageA(void* const msg, const void* const window,
         return 0;
     }
     tl_WSAPumpAsyncSelect();
+    std::lock_guard lock(g_gui_state_mutex);
     CrossThreadWindowMessage cross_thread_message{};
     while (peek_cross_thread_window_message(window, cross_thread_message)) {
         void* const target = reinterpret_cast<void*>(cross_thread_message.window);

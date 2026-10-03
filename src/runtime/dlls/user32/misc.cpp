@@ -6,6 +6,7 @@ TL_MSABI void* tl_BeginPaint(const void* const window, void* const paint_struct)
     if (!user32_gui_thread_allowed("BeginPaint")) {
         return nullptr;
     }
+    std::lock_guard lock(g_gui_state_mutex);
     if (paint_struct == nullptr) {
         set_last_error(abi::kErrorInvalidParameter);
         return nullptr;
@@ -37,6 +38,7 @@ TL_MSABI int tl_EndPaint(const void* const window, const void* const paint_struc
     if (!user32_gui_thread_allowed("EndPaint")) {
         return 0;
     }
+    std::lock_guard lock(g_gui_state_mutex);
     abi::GuestPaintStruct ps{};
     if (paint_struct == nullptr || !read_guest_value(paint_struct, ps)) {
         set_last_error(abi::kErrorInvalidParameter);
@@ -74,6 +76,7 @@ TL_MSABI int tl_GetCursorPos(void* point) noexcept {
 
 TL_MSABI int tl_InvalidateRect(const void* window, const void* rect, int erase) noexcept {
     (void)erase;
+    std::lock_guard lock(g_gui_state_mutex);
     abi::GuestRect rect_copy{};
     if (rect != nullptr && !read_guest_value(rect, rect_copy)) {
         set_last_error(abi::kErrorInvalidParameter);
@@ -208,6 +211,7 @@ TL_MSABI void* tl_GetDC(const void* window) noexcept {
         set_last_error(abi::kErrorSuccess);
         return &g_screen_dc_token;
     }
+    std::lock_guard lock(g_gui_state_mutex);
     WindowSlot* slot = find_window_slot(window);
     if (slot == nullptr || window_drawing_target(window).native == nullptr) {
         set_last_error(abi::kErrorInvalidHandle);
@@ -220,6 +224,7 @@ TL_MSABI void* tl_GetDC(const void* window) noexcept {
 TL_MSABI int tl_ReleaseDC(const void* window, const void* dc) noexcept {
     (void)window;
     (void)dc;
+    std::lock_guard lock(g_gui_state_mutex);
     set_last_error(abi::kErrorSuccess);
     return 1;
 }

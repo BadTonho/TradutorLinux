@@ -1100,6 +1100,10 @@ TEST(ShellExecutionTest, UnsupportedCallsFailWithoutFabricatingAProcess) {
     static_assert(sizeof(ShellExecuteInfoW) == 112);
     static_assert(offsetof(ShellExecuteInfoW, h_process) == 104);
 
+    std::ofstream dummy_file("test.txt");
+    dummy_file << "test";
+    dummy_file.close();
+
     info.cb_size = sizeof(info);
     info.lp_file = kFileW;
     info.h_inst_app = reinterpret_cast<void*>(1);
@@ -1107,6 +1111,8 @@ TEST(ShellExecutionTest, UnsupportedCallsFailWithoutFabricatingAProcess) {
     EXPECT_EQ(tl_ShellExecuteExW(&info), 1);
     EXPECT_EQ(tl_GetLastError(), abi::kErrorSuccess);
     EXPECT_GT(reinterpret_cast<std::uintptr_t>(info.h_inst_app), 32U);
+
+    std::filesystem::remove("test.txt");
 
     info.lp_file = reinterpret_cast<const std::uint16_t*>(static_cast<std::uintptr_t>(0x1000U));
     info.h_inst_app = reinterpret_cast<void*>(1);

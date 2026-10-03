@@ -105,6 +105,7 @@ std::array<CriticalSectionEntry, 256> g_critical_sections{};
 
 std::array<ClassSlot, kMaxGuestClasses> g_classes{};
 std::array<WindowSlot, kMaxGuestWindows> g_windows{};
+std::recursive_mutex g_gui_state_mutex;
 WindowSlot* g_focused_control = nullptr;
 WindowSlot* g_active_dialog = nullptr;
 std::mutex g_modal_mutex;
@@ -678,6 +679,7 @@ ClassSlot* find_class_slot(const char* const name) noexcept {
     if (name == nullptr) {
         return nullptr;
     }
+    std::lock_guard lock(g_gui_state_mutex);
     const auto found = std::find_if(g_classes.begin(), g_classes.end(),
                                     [name](const ClassSlot& slot) {
                                         return slot.used && util::ascii_iequals(slot.name, name);
@@ -689,6 +691,7 @@ ClassSlot* find_class_slot(const char* const name) noexcept {
 }
 
 WindowSlot* find_window_slot(const void* const handle) noexcept {
+    std::lock_guard lock(g_gui_state_mutex);
     const auto found = std::find_if(g_windows.begin(), g_windows.end(),
                                     [handle](const WindowSlot& slot) {
                                         return slot.used && handle == &slot;
@@ -843,6 +846,7 @@ WindowSlot* create_logical_control(WindowSlot& parent, const std::string_view cl
 }
 
 WindowDrawingTarget window_drawing_target(const void* const handle) noexcept {
+    std::lock_guard lock(g_gui_state_mutex);
     WindowSlot* current = find_window_slot(handle);
     if (current == nullptr) {
         return {};

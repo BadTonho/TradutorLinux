@@ -61,6 +61,14 @@
       "cacheVariables": {
         "TL_BUILD_RUST": "ON"
       }
+    },
+    {
+      "name": "tsan",
+      "displayName": "Debug with ThreadSanitizer",
+      "inherits": "base",
+      "cacheVariables": {
+        "TL_ENABLE_TSAN": "ON"
+      }
     }
   ],
   "buildPresets": [
@@ -87,6 +95,10 @@
     {
       "name": "sanitize-rust",
       "configurePreset": "sanitize-rust"
+    },
+    {
+      "name": "tsan",
+      "configurePreset": "tsan"
     }
   ],
   "testPresets": [
@@ -137,6 +149,16 @@
         "ASAN_OPTIONS": "detect_leaks=0:halt_on_error=1",
         "LSAN_OPTIONS": "detect_leaks=0",
         "UBSAN_OPTIONS": "halt_on_error=1:print_stacktrace=1"
+      },
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "tsan",
+      "configurePreset": "tsan",
+      "environment": {
+        "TSAN_OPTIONS": "halt_on_error=1:second_deadlock_stack=1"
       },
       "output": {
         "outputOnFailure": true

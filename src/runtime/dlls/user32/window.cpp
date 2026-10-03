@@ -8,6 +8,7 @@ thread_local bool g_create_window_w_bridge = false;
 }  // namespace
 
 void paint_registered_children(WindowSlot& parent) noexcept {
+    std::lock_guard lock(g_gui_state_mutex);
     for (WindowSlot& child : g_windows) {
         if (!child.used || !child.is_control || child.parent != &parent || child.wndproc == 0 ||
             !child.visible) {
@@ -37,6 +38,7 @@ TL_MSABI abi::Atom tl_RegisterClassExA(const void* const wnd_class) noexcept {
     if (!user32_gui_thread_allowed("RegisterClassExA")) {
         return 0;
     }
+    std::lock_guard lock(g_gui_state_mutex);
     abi::GuestWndClassExA wc{};
     if (wnd_class == nullptr || !read_guest_value(wnd_class, wc)) {
         set_last_error(abi::kErrorInvalidParameter);
@@ -193,6 +195,7 @@ TL_MSABI abi::Atom tl_RegisterClassW(const void* wnd_class) noexcept {
     if (!user32_gui_thread_allowed("RegisterClassW")) {
         return 0;
     }
+    std::lock_guard lock(g_gui_state_mutex);
     abi::GuestWndClassW wc{};
     if (wnd_class == nullptr || !read_guest_value(wnd_class, wc)) {
         set_last_error(abi::kErrorInvalidParameter);
@@ -251,6 +254,7 @@ TL_MSABI abi::HWnd tl_CreateWindowExA(const std::uint32_t ex_style,
             return nullptr;
         }
     }
+    std::lock_guard lock(g_gui_state_mutex);
     (void)ex_style;
     (void)instance;
     (void)param;
@@ -624,6 +628,7 @@ TL_MSABI int tl_ShowWindow(const void* const window, const int cmd_show) noexcep
         diagnostics::TraceField{"symbol", "ShowWindow"},
         diagnostics::TraceField{"stage", "begin"}, diagnostics::TraceField{}, diagnostics::TraceField{}};
     runtime_trace("ShowWindow", show_begin, 2);
+    std::lock_guard lock(g_gui_state_mutex);
     WindowSlot* slot = find_window_slot(window);
     if (slot == nullptr) {
         set_last_error(abi::kErrorInvalidHandle);
@@ -658,6 +663,7 @@ TL_MSABI int tl_UpdateWindow(const void* const window) noexcept {
         diagnostics::TraceField{"symbol", "UpdateWindow"},
         diagnostics::TraceField{"stage", "begin"}, diagnostics::TraceField{}, diagnostics::TraceField{}};
     runtime_trace("UpdateWindow", update_begin, 2);
+    std::lock_guard lock(g_gui_state_mutex);
     WindowSlot* slot = find_window_slot(window);
     if (slot == nullptr) {
         set_last_error(abi::kErrorInvalidHandle);
@@ -698,6 +704,7 @@ TL_MSABI abi::Lresult tl_DefWindowProcW(const void* const window,
 }
 
 TL_MSABI int tl_DestroyWindow(const void* const window) noexcept {
+    std::lock_guard lock(g_gui_state_mutex);
     WindowSlot* slot = find_window_slot(window);
     if (slot == nullptr) {
         set_last_error(abi::kErrorInvalidHandle);
@@ -750,6 +757,7 @@ TL_MSABI int tl_DestroyWindow(const void* const window) noexcept {
 }
 
 TL_MSABI int tl_GetClientRect(const void* window, void* rect) noexcept {
+    std::lock_guard lock(g_gui_state_mutex);
     WindowSlot* slot = find_window_slot(window);
     if (slot == nullptr || rect == nullptr) {
         set_last_error(abi::kErrorInvalidParameter);
@@ -765,6 +773,7 @@ TL_MSABI int tl_GetClientRect(const void* window, void* rect) noexcept {
 }
 
 TL_MSABI int tl_GetWindowRect(const void* window, void* rect) noexcept {
+    std::lock_guard lock(g_gui_state_mutex);
     const WindowSlot* slot = find_window_slot(window);
     if (slot == nullptr || rect == nullptr) {
         set_last_error(slot == nullptr ? abi::kErrorInvalidHandle : abi::kErrorInvalidParameter);
@@ -788,6 +797,7 @@ TL_MSABI int tl_GetWindowRect(const void* window, void* rect) noexcept {
 TL_MSABI int tl_MoveWindow(const void* window, int x, int y, int width, int height,
                            int repaint) noexcept {
     (void)repaint;
+    std::lock_guard lock(g_gui_state_mutex);
     WindowSlot* slot = find_window_slot(window);
     if (slot == nullptr) {
         set_last_error(abi::kErrorInvalidHandle);
@@ -812,6 +822,7 @@ TL_MSABI std::intptr_t tl_SetWindowPos(const void* window, const void* insert_af
 }
 
 TL_MSABI int tl_SetWindowTextA(const void* window, const char* text) noexcept {
+    std::lock_guard lock(g_gui_state_mutex);
     WindowSlot* slot = find_window_slot(window);
     std::string text_copy;
     if (slot == nullptr || text == nullptr || !runtime::copy_guest_cstring(text, 65535U, text_copy)) {
@@ -827,6 +838,7 @@ TL_MSABI int tl_SetWindowTextA(const void* window, const char* text) noexcept {
 }
 
 TL_MSABI int tl_GetWindowTextA(const void* window, char* text, int capacity) noexcept {
+    std::lock_guard lock(g_gui_state_mutex);
     WindowSlot* slot = find_window_slot(window);
     if (slot == nullptr || text == nullptr || capacity <= 0) {
         set_last_error(abi::kErrorInvalidParameter);
@@ -857,6 +869,7 @@ TL_MSABI int tl_SetWindowTextW(const void* window, const std::uint16_t* text) no
 }
 
 TL_MSABI int tl_GetWindowTextW(const void* window, std::uint16_t* text, int capacity) noexcept {
+    std::lock_guard lock(g_gui_state_mutex);
     WindowSlot* slot = find_window_slot(window);
     if (slot == nullptr || text == nullptr || capacity <= 0) {
         set_last_error(abi::kErrorInvalidParameter);
@@ -878,6 +891,7 @@ TL_MSABI int tl_GetWindowTextW(const void* window, std::uint16_t* text, int capa
 }
 
 TL_MSABI int tl_GetWindowTextLengthA(const void* window) noexcept {
+    std::lock_guard lock(g_gui_state_mutex);
     WindowSlot* slot = find_window_slot(window);
     if (slot == nullptr) {
         set_last_error(abi::kErrorInvalidHandle);
@@ -890,6 +904,7 @@ TL_MSABI int tl_GetWindowTextLengthA(const void* window) noexcept {
 }
 
 TL_MSABI int tl_GetWindowTextLengthW(const void* window) noexcept {
+    std::lock_guard lock(g_gui_state_mutex);
     WindowSlot* slot = find_window_slot(window);
     if (slot == nullptr) {
         set_last_error(abi::kErrorInvalidHandle);
@@ -902,6 +917,7 @@ TL_MSABI int tl_GetWindowTextLengthW(const void* window) noexcept {
 }
 
 TL_MSABI int tl_EnableWindow(const void* window, int enable) noexcept {
+    std::lock_guard lock(g_gui_state_mutex);
     WindowSlot* slot = find_window_slot(window);
     if (slot == nullptr) {
         set_last_error(abi::kErrorInvalidHandle);
@@ -917,6 +933,7 @@ TL_MSABI const void* tl_SetFocus(const void* window) noexcept {
     if (!user32_gui_thread_allowed("SetFocus")) {
         return nullptr;
     }
+    std::lock_guard lock(g_gui_state_mutex);
     WindowSlot* slot = find_window_slot(window);
     if (slot == nullptr || !slot->is_control) {
         set_last_error(abi::kErrorInvalidHandle);
@@ -934,6 +951,7 @@ TL_MSABI int tl_IsWindowVisible(const void* window) noexcept {
 }
 
 TL_MSABI const void* tl_FindWindowA(const char* class_name, const char* window_name) noexcept {
+    std::lock_guard lock(g_gui_state_mutex);
     std::string class_copy;
     std::string window_copy;
     if ((class_name != nullptr && !runtime::copy_guest_cstring(class_name, 4096U, class_copy)) ||
@@ -1005,6 +1023,7 @@ TL_MSABI int tl_SetForegroundWindow(const void* window) noexcept {
 }
 
 TL_MSABI std::intptr_t tl_GetWindowLongPtrA(const void* window, const int index) noexcept {
+    std::lock_guard lock(g_gui_state_mutex);
     WindowSlot* slot = find_window_slot(window);
     if (slot == nullptr) {
         set_last_error(abi::kErrorInvalidHandle);
@@ -1034,6 +1053,7 @@ TL_MSABI std::intptr_t tl_GetWindowLongPtrW(const void* window, const int index)
 }
 
 TL_MSABI std::intptr_t tl_SetWindowLongPtrA(const void* window, const int index, const std::intptr_t new_long) noexcept {
+    std::lock_guard lock(g_gui_state_mutex);
     WindowSlot* slot = find_window_slot(window);
     if (slot == nullptr) {
         set_last_error(abi::kErrorInvalidHandle);
@@ -1098,6 +1118,7 @@ TL_MSABI std::int32_t tl_SetWindowLongW(const void* window, const int index,
 }
 
 TL_MSABI void* tl_GetParent(const void* window) noexcept {
+    std::lock_guard lock(g_gui_state_mutex);
     WindowSlot* slot = find_window_slot(window);
     if (slot == nullptr) {
         set_last_error(abi::kErrorInvalidHandle);
@@ -1108,6 +1129,7 @@ TL_MSABI void* tl_GetParent(const void* window) noexcept {
 }
 
 TL_MSABI void* tl_SetParent(const void* child_window, const void* new_parent_window) noexcept {
+    std::lock_guard lock(g_gui_state_mutex);
     WindowSlot* child = find_window_slot(child_window);
     if (child == nullptr) {
         set_last_error(abi::kErrorInvalidHandle);
@@ -1142,6 +1164,7 @@ TL_MSABI void* tl_SetCapture(const void* const window) noexcept {
     if (!user32_gui_thread_allowed("SetCapture")) {
         return nullptr;
     }
+    std::lock_guard lock(g_gui_state_mutex);
     void* const prev = g_captured_window;
     if (window == nullptr) {
         g_captured_window = nullptr;
@@ -1155,6 +1178,7 @@ TL_MSABI int tl_ReleaseCapture() noexcept {
     if (!user32_gui_thread_allowed("ReleaseCapture")) {
         return 0;
     }
+    std::lock_guard lock(g_gui_state_mutex);
     g_captured_window = nullptr;
     return 1;
 }
@@ -1163,6 +1187,7 @@ TL_MSABI void* tl_GetCapture() noexcept {
     if (!user32_gui_thread_allowed("GetCapture")) {
         return nullptr;
     }
+    std::lock_guard lock(g_gui_state_mutex);
     return g_captured_window;
 }
 
@@ -1183,6 +1208,7 @@ TL_MSABI void* tl_GetWindow(const void* const window, const std::uint32_t cmd) n
     if (!user32_gui_thread_allowed("GetWindow")) {
         return nullptr;
     }
+    std::lock_guard lock(g_gui_state_mutex);
     WindowSlot* const slot = find_window_slot(window);
     if (slot == nullptr) {
         set_last_error(abi::kErrorInvalidHandle);
@@ -1234,6 +1260,7 @@ TL_MSABI void* tl_GetWindow(const void* const window, const std::uint32_t cmd) n
 
 TL_MSABI int tl_GetClassNameA(const void* const window, char* const class_name,
                               const int max_count) noexcept {
+    std::lock_guard lock(g_gui_state_mutex);
     const WindowSlot* const slot = find_window_slot(window);
     if (slot == nullptr || class_name == nullptr || max_count <= 0) {
         set_last_error(abi::kErrorInvalidParameter);
@@ -1254,6 +1281,7 @@ TL_MSABI int tl_GetClassNameA(const void* const window, char* const class_name,
 
 TL_MSABI int tl_GetClassNameW(const void* const window, std::uint16_t* const class_name,
                               const int max_count) noexcept {
+    std::lock_guard lock(g_gui_state_mutex);
     const WindowSlot* const slot = find_window_slot(window);
     if (slot == nullptr || class_name == nullptr || max_count <= 0) {
         set_last_error(abi::kErrorInvalidParameter);
@@ -1406,6 +1434,7 @@ TL_MSABI int tl_IsZoomed(void* const hwnd) noexcept {
 TL_MSABI int tl_GetClassInfoW(void* const instance, const std::uint16_t* const class_name,
                               void* const wnd_class) noexcept {
     (void)instance;
+    std::lock_guard lock(g_gui_state_mutex);
     std::u16string class_copy;
     if (class_name == nullptr ||
         !runtime::copy_guest_wstring(class_name, 4096U, class_copy)) {

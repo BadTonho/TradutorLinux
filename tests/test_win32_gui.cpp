@@ -983,5 +983,82 @@ TEST(Win32GuiTest, CrossThreadReadOnlyAndChildWindowOperationsArePermitted) {
     g_classes = {};
 }
 
+TEST(Win32GuiTest, ConcurrentMultiThreadWindowOperationsAreThreadSafe) {
+    g_classes = {};
+    g_windows = {};
+
+    const char class_name[] = "StressConcurrentClass";
+    abi::GuestWndClassExA class_a{};
+    class_a.cb_size = sizeof(class_a);
+    class_a.window_proc = reinterpret_cast<std::uintptr_t>(&tl_DefDlgProcA);
+    class_a.class_name = class_name;
+    ASSERT_NE(tl_RegisterClassExA(&class_a), 0U);
+
+    WindowSlot& parent = g_windows[0];
+    parent.used = true;
+    parent.native = reinterpret_cast<gui::NativeWindow>(0x5678U);
+    parent.class_name = class_name;
+    parent.window_title = "StressParent";
+    register_window_handle(&parent);
+
+    std::atomic<bool> running{true};
+    std::vector<std::thread> workers;
+
+    for (std::uint32_t thread_idx = 1; thread_idx <= 4; ++thread_idx) {
+        workers.emplace_back([&, thread_idx] {
+            g_current_thread_id = 100U + thread_idx;
+            for (int iter = 0; iter < 40; ++iter) {
+                const void* found = tl_FindWindowA(class_name, "StressParent");
+                EXPECT_EQ(found, &parent);
+
+                std::string btn_name = "Btn_" + std::to_string(thread_idx) + "_" + std::to_string(iter);
+                abi::HWnd child = tl_CreateWindowExA(0, "BUTTON", btn_name.c_str(), 0, 0, 0, 50, 20,
+                                                     &parent, nullptr, nullptr, nullptr);
+                if (child != nullptr) {
+                    char text_buf[64]{};
+                    tl_GetWindowTextA(child, text_buf, sizeof(text_buf));
+                    EXPECT_STREQ(text_buf, btn_name.c_str());
+
+                    tl_SetWindowTextA(child, "Updated");
+                    EXPECT_EQ(tl_GetWindowTextLengthA(child), 7);
+
+                    abi::GuestRect rc{};
+                    tl_GetClientRect(child, &rc);
+                    EXPECT_EQ(rc.right, 50);
+
+                    tl_MoveWindow(child, 10, 10, 60, 30, 0);
+
+                    void* dc = tl_GetDC(child);
+                    if (dc != nullptr) {
+                        tl_ReleaseDC(child, dc);
+                    }
+
+                    tl_DestroyWindow(child);
+                }
+            }
+        });
+    }
+
+    std::thread peeker([&] {
+        g_current_thread_id = 200U;
+        while (running.load(std::memory_order_relaxed)) {
+            abi::GuestMsg msg{};
+            tl_PeekMessageA(&msg, &parent, 0, 0, 0);
+            std::this_thread::yield();
+        }
+    });
+
+    for (auto& w : workers) {
+        w.join();
+    }
+    running.store(false, std::memory_order_relaxed);
+    peeker.join();
+
+    g_current_thread_id = kMainThreadId;
+    unregister_window_handle(&parent);
+    g_windows = {};
+    g_classes = {};
+}
+
 }  // namespace
 }  // namespace tradutorlinux

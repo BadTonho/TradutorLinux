@@ -14,6 +14,7 @@ find_package(Qt6 REQUIRED COMPONENTS Widgets)
 find_package(ZLIB REQUIRED)
 
 option(TL_ENABLE_SANITIZERS "Enable AddressSanitizer and UndefinedBehaviorSanitizer" OFF)
+option(TL_ENABLE_TSAN "Enable ThreadSanitizer" OFF)
 option(TL_BUILD_SAMPLES "Build PE32+ integration fixtures" ON)
 option(TL_BUILD_TARGET_APPS "Cross-compile real target applications (downloads pinned sources)" OFF)
 option(TL_BUILD_RUST "Build and use the opt-in Rust validators" OFF)
