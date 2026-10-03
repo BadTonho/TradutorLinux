@@ -36,11 +36,16 @@ risco, não como fato verificado.
   - Teste unitário de estresse multithread `ConcurrentMultiThreadWindowOperationsAreThreadSafe`
     com 4 workers criando, alterando e destruindo janelas em concorrência com peeker de mensagens.
 
-### 2. Roadmap desatualizado
-- `ROADMAP.md` termina na R29, e a tabela de apps ainda diz que o Rockstar sai
-  com `ExitProcess(3)`. O projeto está na R46.
-- `AGENTS.md` define o roadmap vigente como fonte de verdade; hoje ele não é.
-- **Ação:** mover R25–R46 para `feitos/` e criar um roadmap novo com a fila real.
+### 2. Roadmap desatualizado [CONCLUÍDO]
+- `ROADMAP.md` terminava na R29, e a tabela de apps ainda dizia que o Rockstar saía
+  com `ExitProcess(3)`.
+- **Implementado:**
+  - Todas as etapas concluídas R25 a R47 foram documentadas e consolidadas no arquivo histórico
+    `feitos/ROADMAP-R25-R47.md`, preservando hashes de commit, datas e critérios de aceite.
+  - Criado o novo `ROADMAP.md` com a fila de trabalho real (R48 a R52), regras de execução
+    e tabela de auditoria atualizada refletindo o avanço gráfico de Rockstar Launcher,
+    7-Zip FM e Notepad++.
+  - O documento vigente volta a estar estritamente alinhado com `AGENTS.md`.
 
 ### 3. Artefatos versionados no git
 - `Testing/Temporary/*` e `_CPack_Packages/**` (inclusive o binário
