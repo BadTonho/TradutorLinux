@@ -795,6 +795,64 @@ TEST(Win32DialogTest, ProtectedDialogInputsRejectUnmappedPointers) {
     g_windows = {};
 }
 
+TEST(Win32DialogTest, GetAndSetDlgItemTextAndIntOperations) {
+    g_windows = {};
+    WindowSlot& dialog = g_windows[0];
+    dialog.used = true;
+    dialog.is_dialog = true;
+    WindowSlot& edit = g_windows[1];
+    edit.used = true;
+    edit.is_control = true;
+    edit.parent = &dialog;
+    edit.control_id = 101;
+    edit.control_kind = ControlKind::Edit;
+    edit.text = "Initial";
+    dialog.dialog_children = {&edit};
+
+    // Test SetDlgItemTextA and GetDlgItemTextA
+    EXPECT_EQ(tl_SetDlgItemTextA(&dialog, 101, "Hello World"), 1);
+    EXPECT_EQ(edit.text, "Hello World");
+
+    char buffer[32]{};
+    EXPECT_EQ(tl_GetDlgItemTextA(&dialog, 101, buffer, sizeof(buffer)), 11U);
+    EXPECT_STREQ(buffer, "Hello World");
+
+    // Test GetDlgItemTextW
+    std::uint16_t wbuffer[32]{};
+    EXPECT_EQ(tl_GetDlgItemTextW(&dialog, 101, reinterpret_cast<wchar_t*>(wbuffer), 32), 11U);
+    EXPECT_EQ(wbuffer[0], static_cast<std::uint16_t>('H'));
+    EXPECT_EQ(wbuffer[5], static_cast<std::uint16_t>(' '));
+    EXPECT_EQ(wbuffer[10], static_cast<std::uint16_t>('d'));
+    EXPECT_EQ(wbuffer[11], static_cast<std::uint16_t>('\0'));
+
+    // Test SetDlgItemInt and GetDlgItemInt (positive signed/unsigned)
+    EXPECT_EQ(tl_SetDlgItemInt(&dialog, 101, 12345, 1), 1);
+    EXPECT_EQ(edit.text, "12345");
+    int translated = 0;
+    EXPECT_EQ(tl_GetDlgItemInt(&dialog, 101, &translated, 1), 12345U);
+    EXPECT_EQ(translated, 1);
+
+    // Test SetDlgItemInt and GetDlgItemInt (negative signed)
+    EXPECT_EQ(tl_SetDlgItemInt(&dialog, 101, static_cast<std::uint32_t>(-42), 1), 1);
+    EXPECT_EQ(edit.text, "-42");
+    translated = 0;
+    EXPECT_EQ(static_cast<std::int32_t>(tl_GetDlgItemInt(&dialog, 101, &translated, 1)), -42);
+    EXPECT_EQ(translated, 1);
+
+    // Unsigned on negative text should fail translation
+    translated = 1;
+    EXPECT_EQ(tl_GetDlgItemInt(&dialog, 101, &translated, 0), 0U);
+    EXPECT_EQ(translated, 0);
+
+    // Missing control
+    EXPECT_EQ(tl_SetDlgItemTextA(&dialog, 999, "missing"), 0);
+    buffer[0] = 'X';
+    EXPECT_EQ(tl_GetDlgItemTextA(&dialog, 999, buffer, sizeof(buffer)), 0U);
+    EXPECT_EQ(buffer[0], '\0');
+
+    g_windows = {};
+}
+
 
 TEST(Gdi32Test, BitmapAndHardLinkOperations) {
     void* bmp = tl_CreateBitmap(64, 64, 1, 32, nullptr);

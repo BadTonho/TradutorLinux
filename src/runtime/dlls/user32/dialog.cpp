@@ -772,47 +772,116 @@ TL_MSABI std::intptr_t tl_SendDlgItemMessageA(void* const hwnd, const int id_dlg
 }
 
 TL_MSABI int tl_SetDlgItemTextA(void* const hwnd, const int id_dlg_item, const char* const text) noexcept {
-    (void)hwnd;
-    (void)id_dlg_item;
-    (void)text;
-    set_last_error(abi::kErrorSuccess);
-    return 1;
+    if (!user32_gui_thread_allowed("SetDlgItemTextA")) {
+        return 0;
+    }
+    void* const child = tl_GetDlgItem(hwnd, id_dlg_item);
+    if (child == nullptr) {
+        return 0;
+    }
+    std::string text_copy;
+    if (text != nullptr && !runtime::copy_guest_cstring(text, 65535U, text_copy)) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    return tl_SetWindowTextA(child, text != nullptr ? text_copy.c_str() : "");
 }
 
 TL_MSABI std::uint32_t tl_GetDlgItemTextA(void* const hDlg, const int nIDDlgItem, char* const lpString, const int cchMax) noexcept {
-    (void)hDlg;
-    (void)nIDDlgItem;
-    if (lpString != nullptr && cchMax > 0) {
-        static_cast<void>(write_guest_value(lpString, char{0}));
+    if (!user32_gui_thread_allowed("GetDlgItemTextA")) {
+        return 0;
     }
-    return 0;
+    if (lpString == nullptr || cchMax <= 0) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    void* const child = tl_GetDlgItem(hDlg, nIDDlgItem);
+    if (child == nullptr) {
+        static_cast<void>(write_guest_value(lpString, '\0'));
+        return 0;
+    }
+    const int written = tl_GetWindowTextA(child, lpString, cchMax);
+    return written > 0 ? static_cast<std::uint32_t>(written) : 0U;
 }
 
 TL_MSABI std::uint32_t tl_GetDlgItemTextW(void* const hDlg, const int nIDDlgItem, wchar_t* const lpString, const int cchMax) noexcept {
-    (void)hDlg;
-    (void)nIDDlgItem;
-    if (lpString != nullptr && cchMax > 0) {
-        static_cast<void>(write_guest_value(lpString, wchar_t{0}));
+    if (!user32_gui_thread_allowed("GetDlgItemTextW")) {
+        return 0;
     }
-    return 0;
+    if (lpString == nullptr || cchMax <= 0) {
+        set_last_error(abi::kErrorInvalidParameter);
+        return 0;
+    }
+    void* const child = tl_GetDlgItem(hDlg, nIDDlgItem);
+    if (child == nullptr) {
+        static_cast<void>(write_guest_value(lpString, wchar_t{0}));
+        return 0;
+    }
+    const int written = tl_GetWindowTextW(child, reinterpret_cast<std::uint16_t*>(lpString), cchMax);
+    return written > 0 ? static_cast<std::uint32_t>(written) : 0U;
 }
 
 TL_MSABI std::uint32_t tl_GetDlgItemInt(void* const hDlg, const int nIDDlgItem, int* const lpTranslated, const int bSigned) noexcept {
-    (void)hDlg;
-    (void)nIDDlgItem;
-    (void)bSigned;
-    if (lpTranslated != nullptr) {
-        static_cast<void>(write_guest_value(lpTranslated, 1));
+    if (!user32_gui_thread_allowed("GetDlgItemInt")) {
+        if (lpTranslated != nullptr) {
+            static_cast<void>(write_guest_value(lpTranslated, 0));
+        }
+        return 0;
     }
-    return 0;
+    char buffer[64]{};
+    const std::uint32_t len = tl_GetDlgItemTextA(hDlg, nIDDlgItem, buffer, sizeof(buffer));
+    if (len == 0) {
+        if (lpTranslated != nullptr) {
+            static_cast<void>(write_guest_value(lpTranslated, 0));
+        }
+        return 0;
+    }
+    const char* p = buffer;
+    while (*p && std::isspace(static_cast<unsigned char>(*p))) {
+        ++p;
+    }
+    if (*p == '\0') {
+        if (lpTranslated != nullptr) {
+            static_cast<void>(write_guest_value(lpTranslated, 0));
+        }
+        return 0;
+    }
+    char* end = nullptr;
+    errno = 0;
+    if (bSigned) {
+        const long val = std::strtol(p, &end, 10);
+        const bool ok = (end != p) && (errno == 0);
+        if (lpTranslated != nullptr) {
+            static_cast<void>(write_guest_value(lpTranslated, ok ? 1 : 0));
+        }
+        return static_cast<std::uint32_t>(val);
+    } else {
+        if (*p == '-') {
+            if (lpTranslated != nullptr) {
+                static_cast<void>(write_guest_value(lpTranslated, 0));
+            }
+            return 0;
+        }
+        const unsigned long val = std::strtoul(p, &end, 10);
+        const bool ok = (end != p) && (errno == 0);
+        if (lpTranslated != nullptr) {
+            static_cast<void>(write_guest_value(lpTranslated, ok ? 1 : 0));
+        }
+        return static_cast<std::uint32_t>(val);
+    }
 }
 
 TL_MSABI int tl_SetDlgItemInt(void* const hDlg, const int nIDDlgItem, const std::uint32_t uValue, const int bSigned) noexcept {
-    (void)hDlg;
-    (void)nIDDlgItem;
-    (void)uValue;
-    (void)bSigned;
-    return 1;
+    if (!user32_gui_thread_allowed("SetDlgItemInt")) {
+        return 0;
+    }
+    char buffer[64];
+    if (bSigned) {
+        std::snprintf(buffer, sizeof(buffer), "%d", static_cast<int>(uValue));
+    } else {
+        std::snprintf(buffer, sizeof(buffer), "%u", uValue);
+    }
+    return tl_SetDlgItemTextA(hDlg, nIDDlgItem, buffer);
 }
 
 TL_MSABI void* tl_CreateDialogParamW(void* const hInstance,
