@@ -1764,14 +1764,27 @@ TEST(Win32FileTest, CreateFileSupportsFileAppendDataAndAutomaticParentDirectorie
 }
 
 TEST(Win32VersionTest, VersionApiExtractsRealPeMetadataAndQueriesValues) {
-    const char fixture_path[] = "tests/fixtures/npp/notepad++.exe";
+    std::filesystem::path fixture_path = "tests/fixtures/npp/notepad++.exe";
+    if (!std::filesystem::exists(fixture_path)) {
+        fixture_path = std::filesystem::path("..") / ".." / "tests/fixtures/npp/notepad++.exe";
+    }
+#if defined(TL_PROJECT_SOURCE_DIR)
+    if (!std::filesystem::exists(fixture_path)) {
+        fixture_path = std::filesystem::path(TL_PROJECT_SOURCE_DIR) / "tests/fixtures/npp/notepad++.exe";
+    }
+#endif
+    if (!std::filesystem::exists(fixture_path)) {
+        GTEST_SKIP() << "notepad++.exe fixture não encontrada em " << fixture_path;
+    }
+    const std::string fixture_str = fixture_path.string();
+    const char* const fixture_path_cstr = fixture_str.c_str();
     std::uint32_t handle = 123;
-    const std::uint32_t size = tl_GetFileVersionInfoSizeA(fixture_path, &handle);
+    const std::uint32_t size = tl_GetFileVersionInfoSizeA(fixture_path_cstr, &handle);
     ASSERT_GT(size, 0U);
     EXPECT_EQ(handle, 0U);
 
     std::vector<std::byte> buffer(size);
-    ASSERT_EQ(tl_GetFileVersionInfoA(fixture_path, 0, static_cast<std::uint32_t>(buffer.size()), buffer.data()), 1);
+    ASSERT_EQ(tl_GetFileVersionInfoA(fixture_path_cstr, 0, static_cast<std::uint32_t>(buffer.size()), buffer.data()), 1);
 
     void* fixed_info = nullptr;
     std::uint32_t fixed_len = 0;

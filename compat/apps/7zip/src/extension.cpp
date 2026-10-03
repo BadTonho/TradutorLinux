@@ -304,14 +304,14 @@ void perform_seven_zip_copy(WindowSlot& parent) noexcept {
     trace_seven_zip_operation("copy", "success", source, destination);
 }
 
-void perform_seven_zip_command(WindowSlot& parent, const std::uintptr_t command_id) noexcept {
+[[nodiscard]] bool perform_seven_zip_command(WindowSlot& parent, const std::uintptr_t command_id) noexcept {
     switch (command_id) {
         case 546U:  // Copy, conforme o idCommand da toolbar real do 7-Zip.
             perform_seven_zip_copy(parent);
-            return;
+            return true;
         default:
             trace_seven_zip_operation("command", "not-supported", {}, {});
-            return;
+            return false;
     }
 }
 
@@ -706,9 +706,10 @@ void activate_seven_zip_menu_item(WindowSlot& parent, const SevenZipPopupGeometr
     }
     const MenuItem& item = geometry.menu->logical_items[static_cast<std::size_t>(index)];
     if (seven_zip_menu_item_selectable(item)) {
-        perform_seven_zip_command(parent, item.command_id);
-        queue_window_message(parent, abi::kWmCommand,
-                             static_cast<abi::Wparam>(item.command_id), 0);
+        if (!perform_seven_zip_command(parent, item.command_id)) {
+            queue_window_message(parent, abi::kWmCommand,
+                                 static_cast<abi::Wparam>(item.command_id), 0);
+        }
     }
 }
 
@@ -1487,8 +1488,9 @@ public:
                 static_cast<std::size_t>(index) < toolbar->toolbar_buttons.size()) {
                 const std::uintptr_t command_id = static_cast<std::uintptr_t>(
                     toolbar->toolbar_buttons[static_cast<std::size_t>(index)].command_id);
-                perform_seven_zip_command(parent, command_id);
-                queue_command_id(*toolbar, 0, command_id);
+                if (!perform_seven_zip_command(parent, command_id)) {
+                    queue_command_id(*toolbar, 0, command_id);
+                }
             }
             toolbar->hovered_toolbar_index = index;
             toolbar->pressed_toolbar_index = -1;

@@ -466,6 +466,11 @@ if(TARGET tradutorlinux_samples)
     add_dependencies(tradutorlinux_unit_tests tradutorlinux_samples)
     target_compile_definitions(tradutorlinux_unit_tests PRIVATE
         TL_FIXTURE_OUTPUT_DIRECTORY="${CMAKE_CURRENT_BINARY_DIR}/samples/generated"
+        TL_PROJECT_SOURCE_DIR="${PROJECT_SOURCE_DIR}"
+    )
+else()
+    target_compile_definitions(tradutorlinux_unit_tests PRIVATE
+        TL_PROJECT_SOURCE_DIR="${PROJECT_SOURCE_DIR}"
     )
 endif()
 

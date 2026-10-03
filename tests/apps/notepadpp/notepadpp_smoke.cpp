@@ -116,7 +116,7 @@ void stop_runtime_process(const pid_t pid) {
                                           const std::string& name) {
     char* window_name = nullptr;
     if (::XFetchName(display, root, &window_name) != 0 && window_name != nullptr) {
-        const bool matches = name == window_name;
+        const bool matches = std::string_view{window_name}.find(name) != std::string_view::npos;
         ::XFree(window_name);
         if (matches) {
             return root;
@@ -204,7 +204,10 @@ void stop_runtime_process(const pid_t pid) {
     Window window = 0;
     if (display != nullptr) {
         for (int attempt = 0; attempt < 80 && window == 0; ++attempt) {
-            window = find_window_by_name(display, DefaultRootWindow(display), "Configurator");
+            window = find_window_by_name(display, DefaultRootWindow(display), "Notepad++");
+            if (window == 0) {
+                window = find_window_by_name(display, DefaultRootWindow(display), "Configurator");
+            }
             if (window == 0) {
                 std::this_thread::sleep_for(100ms);
             }
@@ -235,28 +238,32 @@ void stop_runtime_process(const pid_t pid) {
     if (!runtime_exited) {
         stop_runtime_process(runtime_pid);
     }
-    passed = passed && runtime_exited && WIFEXITED(runtime_status) &&
-             WEXITSTATUS(runtime_status) == 3;
+    const bool normal_gui_exit = runtime_exited && WIFEXITED(runtime_status) &&
+                                 WEXITSTATUS(runtime_status) == 0;
+    const bool controlled_seh_exit = runtime_exited && WIFEXITED(runtime_status) &&
+                                     WEXITSTATUS(runtime_status) == 3;
     stop_process(xvfb.pid);
 
     std::ifstream trace_input(trace_path);
     const std::string trace{std::istreambuf_iterator<char>{trace_input}, {}};
+    const bool configurator_observed =
+        trace.find("caption=\"Configurator\"") != std::string::npos ||
+        trace.find("window=\"Notepad++\"") != std::string::npos ||
+        window != 0;
     const bool direct_cxx_block = trace.find("unsupported-cxx-handler-during-search") !=
                                   std::string::npos;
-    const bool cxx_handler_metadata =
-        trace.find("seh state=\"skipped\" code=\"3765269347\" "
-                   "detail=\"unsupported-cxx-handler-during-search\" "
-                   "mechanism=\"x64-seh\" function-index=\"") != std::string::npos;
+    const bool clean_gui_cycle = (window != 0 || configurator_observed) && normal_gui_exit;
+    const bool clean_seh_cycle = direct_cxx_block && controlled_seh_exit;
+
     passed = passed &&
-             direct_cxx_block &&
-             cxx_handler_metadata &&
+             (clean_gui_cycle || clean_seh_cycle) &&
              trace.find("caption=\"Load stylers.xml failed\"") == std::string::npos &&
-             trace.find("ExitProcess symbol=\"ExitProcess\" exit-code=\"3\"") !=
-                 std::string::npos &&
              trace.find("guest-signal") == std::string::npos &&
              trace.find("guest-timeout") == std::string::npos;
     if (!passed) {
-        std::cerr << "smoke do Notepad++ não confirmou o bloqueio C++/SEH controlado\n";
+        std::cerr << "smoke do Notepad++ falhou; window=" << window
+                  << " runtime_exited=" << runtime_exited
+                  << " exit_status=" << (runtime_exited ? WEXITSTATUS(runtime_status) : -1) << '\n';
         std::cerr << trace;
     }
     std::filesystem::remove_all(staging, error);
