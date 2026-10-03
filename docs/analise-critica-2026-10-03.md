@@ -71,13 +71,15 @@ risco, não como fato verificado.
 O projeto mede "janela abriu" e "imports 100%", que não equivalem a suporte
 funcional. O caso mais sólido é o 7-Zip CLI.
 
-### 6. Testes vermelhos no CTest completo [CONCLUÍDO]
-- Falhavam: `Win32VersionTest` (dependente do CWD do teste), `seven_zip_gui_smoke` e `notepadpp_real_gui_smoke`.
-- **Implementado e corrigido:**
-  - `Win32VersionTest`: corrigida a resolução do caminho da fixture `notepad++.exe` usando `std::filesystem::exists` e macro `TL_PROJECT_SOURCE_DIR` definida no `tests/CMakeLists.txt`, tornando a suíte independente do diretório de trabalho ao rodar via CTest (`build/debug`).
-  - `seven_zip_gui_smoke`: `perform_seven_zip_command` na extensão host do 7-Zip (`compat/apps/7zip/src/extension.cpp`) agora retorna `bool`; ao processar com sucesso o comando de cópia (546), o encaminhamento redundante de `WM_COMMAND` para o 7-Zip é omitido, prevenindo o `MessageBoxW("Operation is not supported.")` modal que bloqueava o encerramento da janela principal.
-  - `notepadpp_real_gui_smoke`: `find_window_by_name` atualizado para busca por substring do título da janela (`"Notepad++"`) e ciclo de vida do smoke ajustado para aceitar a execução completa com interface real (`window != 0` e encerramento limpo via `WM_DELETE_WINDOW` com exit code 0), mantendo tolerância ao retorno SEH controlado.
-  - Todos os 3 testes agora passam com 100% de sucesso no CTest.
+### 6. Testes vermelhos no CTest completo
+- Falharam 5: `Win32VersionTest` (passa isolado: flaky ou dependente de ordem),
+  `seven_zip_gui_smoke`, `notepadpp_real_gui_smoke`, e os dois do `tl_shell`.
+- Os dois do `tl_shell` foram corrigidos na R46.
+- Os smokes do 7-Zip e do Notepad++ **não foram investigados**. O do Notepad++
+  espera `exit 3` e `unsupported-cxx-handler-during-search`, e o aplicativo agora
+  chega ao message loop, então o teste pode medir comportamento antigo. Não se
+  sabe se a mudança de thread-affinity da R46 contribuiu.
+- A R46 foi commitada com esses dois ainda vermelhos.
 
 ### 7. Muitos módulos são stubs
 `comdlg32`, `dwm`, `uxtheme`, `imm`, `setupapi`, `winmm` e `GetDlgItemText`
