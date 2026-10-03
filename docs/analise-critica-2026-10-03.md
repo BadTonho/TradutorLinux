@@ -49,11 +49,18 @@ risco, não como fato verificado.
 - Também aparecem `tl_phase5_data.bin`, o `.deb` e `_tl_test` na raiz.
 - **Ação:** `git rm -r --cached` neles.
 
-### 4. Arquivos muito grandes
+### 4. Arquivos muito grandes [Modularização iniciada / process.cpp CONCLUÍDO]
 - `msvcrt.cpp` (2215 linhas), `process.cpp` (2063), `message.cpp` (2058);
   `runner.cpp`, `winapi.cpp` e `cxx_eh.cpp` perto de 1900.
 - Cerca de 66 mil linhas em 96 arquivos `.cpp`. Encarece a revisão e esconde
   bugs como o item 1.
+- **Implementado na modularização de `kernel32`:**
+  - `process.cpp` (originalmente com 2063 linhas) foi fatiado em submódulos lógicos:
+    - `src/runtime/dlls/kernel32/environment.cpp` (180 linhas): APIs de variáveis e blocos de ambiente (`GetEnvironmentVariableA/W`, `SetEnvironmentVariableW`, `GetEnvironmentStringsW`, `FreeEnvironmentStringsW`, `ExpandEnvironmentStringsW`).
+    - `src/runtime/dlls/kernel32/resource.cpp` (302 linhas): parser de árvore de recursos PE e APIs de resource (`FindResourceW/ExW/A`, `LoadResource`, `LockResource`, `SizeofResource`).
+    - `src/runtime/dlls/kernel32/toolhelp.cpp` (252 linhas): leitura de `/proc/` e snapshot de processos (`CreateToolhelp32Snapshot`, `Process32First/Next/W`).
+    - `src/runtime/dlls/kernel32/module_loader.cpp` (568 linhas): resolução, carregamento dinâmico e diretórios de DLLs (`GetModuleHandleA/W/ExA/ExW`, `LoadLibraryA/W/ExA/ExW`, `FreeLibrary*`, `GetProcAddress`, `SetDllDirectoryW`, etc.).
+    - `src/runtime/dlls/kernel32/process.cpp` reduzido para 768 linhas: focado estritamente no ciclo de vida de processos convidados e consultas de processo/CPU do hospedeiro.
 
 ## Problemas de produto
 

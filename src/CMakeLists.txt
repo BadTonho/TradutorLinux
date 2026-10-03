@@ -43,6 +43,10 @@ add_library(tradutorlinux_core STATIC
     runtime/dlls/kernel32/file_paths.cpp
     runtime/dlls/kernel32/file_ini.cpp
     runtime/dlls/kernel32/process.cpp
+    runtime/dlls/kernel32/environment.cpp
+    runtime/dlls/kernel32/module_loader.cpp
+    runtime/dlls/kernel32/resource.cpp
+    runtime/dlls/kernel32/toolhelp.cpp
     runtime/dlls/kernel32/thread.cpp
     runtime/dlls/kernel32/sync.cpp
     runtime/dlls/kernel32/memory.cpp
@@ -139,7 +143,9 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
         runtime/dlls/kernel32/file_common.cpp runtime/dlls/kernel32/file_io.cpp
         runtime/dlls/kernel32/file_find.cpp runtime/dlls/kernel32/file_metadata.cpp
         runtime/dlls/kernel32/file_paths.cpp runtime/dlls/kernel32/file_ini.cpp
-        runtime/dlls/kernel32/process.cpp runtime/dlls/kernel32/thread.cpp
+        runtime/dlls/kernel32/process.cpp runtime/dlls/kernel32/environment.cpp
+        runtime/dlls/kernel32/module_loader.cpp runtime/dlls/kernel32/resource.cpp runtime/dlls/kernel32/toolhelp.cpp
+        runtime/dlls/kernel32/thread.cpp
         runtime/dlls/kernel32/sync.cpp runtime/dlls/kernel32/memory.cpp runtime/dlls/kernel32/time.cpp
         runtime/dlls/kernel32/console.cpp runtime/dlls/kernel32/locale.cpp runtime/dlls/kernel32/module.cpp
         runtime/dlls/user32/window.cpp runtime/dlls/user32/message.cpp runtime/dlls/user32/dialog.cpp
