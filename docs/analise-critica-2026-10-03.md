@@ -42,14 +42,12 @@ risco, não como fato verificado.
 - `AGENTS.md` define o roadmap vigente como fonte de verdade; hoje ele não é.
 - **Ação:** mover R25–R46 para `feitos/` e criar um roadmap novo com a fila real.
 
-### 3. Artefatos versionados no git [CONCLUÍDO]
-- `Testing/Temporary/*`, `_CPack_Packages/**` (incluindo binários compilados `tradutorlinux` e pacotes deb),
-  `tl_phase5_data.bin` e `tradutorlinux_0.0.0_amd64.deb` estavam indevidamente rastreados no índice do Git.
-- **Implementado:**
-  - Executado `git rm -r --cached` removendo todos os artefatos de build, CTest, CPack e pacotes deb do Git.
-  - Atualizado `.gitignore` adicionando `tl_phase5_data.bin` aos artefatos de teste ignorados.
-  - Removidos os arquivos temporários e binários residuais do disco local, liberando espaço.
-  - Índice e working tree limpos.
+### 3. Artefatos versionados no git
+- `Testing/Temporary/*` e `_CPack_Packages/**` (inclusive o binário
+  `usr/bin/tradutorlinux`) estão rastreados apesar do `.gitignore`, que não
+  retroage sobre arquivos já commitados.
+- Também aparecem `tl_phase5_data.bin`, o `.deb` e `_tl_test` na raiz.
+- **Ação:** `git rm -r --cached` neles.
 
 ### 4. Arquivos muito grandes
 - `msvcrt.cpp` (2215 linhas), `process.cpp` (2063), `message.cpp` (2058);
