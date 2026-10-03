@@ -12,6 +12,7 @@ _tl_wide_dir/
 _tl_*
 _tl_test/
 *.input
+tl_phase5_data.bin
 
 # IDEs and operating systems
 .idea/
